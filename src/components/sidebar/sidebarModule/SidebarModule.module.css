@@ -1,0 +1,49 @@
+.sidebarModule {
+  width: 100%;
+  box-sizing: border-box;
+  transition: opacity 0.3s;
+  padding-top: 1em;
+  padding-bottom: 1em;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 0.5em;
+  padding-right: 0.5em;
+  height: 2em;
+}
+
+.sidebarModule h4 {
+  margin: 0;
+}
+
+.content {
+  display: flex;
+  box-sizing: border-box;
+  flex-direction: column;
+  width: 100%;
+  transition: max-height 0.3s, opacity 0.3s;
+  overflow: hidden;
+}
+
+.toggleButton {
+  width: 1.5em;
+  max-width: 1.5em;
+  height: 1.5em;
+  max-height: 1.5em;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.arrow {
+  width: 1.5em;
+  height: 1.5em;
+  transform: rotate(90deg);
+  transition: transform 0.3s;
+}

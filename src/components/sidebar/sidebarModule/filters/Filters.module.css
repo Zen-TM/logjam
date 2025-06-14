@@ -1,0 +1,21 @@
+.filterOptions {
+  padding: 1em;
+  padding-top: 0.5em;
+}
+
+.searchContainer {
+  padding-bottom: 1em;
+}
+
+.search {
+  width: 1em; 
+  height: 1em;
+}
+
+.buttonContainer {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  justify-content: space-between;
+  gap: 1em;
+}
