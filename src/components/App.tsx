@@ -2,7 +2,8 @@ import { useState } from "react";
 import Sidebar from "./sidebar/Sidebar";
 import Map from "./map/Map";
 import classes from "./App.module.css";
-import type { TCanyon, TFilters } from "../canyonUtils";
+import type { TFilters } from "../canyonUtils";
+import { useCanyons } from "../canyonUtils";
 
 function App() {
   const [filters, setFilters] = useState<TFilters>({
@@ -16,12 +17,12 @@ function App() {
     hours: null,
     wetsuits: null,
   });
-  const [canyons, setCanyons] = useState<TCanyon[]>([]);
+  let canyons = useCanyons();
 
   return (
     <div className={classes.app}>
       <Sidebar onChangeFilters={setFilters} filters={filters} />
-      <Map filters={filters} />
+      <Map filters={filters} canyons={canyons} />
     </div>
   );
 }

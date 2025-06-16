@@ -1,5 +1,4 @@
 .sidebar {
-  width: 250px;
   background-color: var(--sandstone-dark);
   transition: width 0.3s;
   display: flex;

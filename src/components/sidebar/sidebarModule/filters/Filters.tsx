@@ -1,7 +1,7 @@
 import { useState } from "react";
 import classes from "./Filters.module.css";
 import Search from "../../../../assets/search.svg";
-import { Slider, TextField, Button } from "@mui/material";
+import { Slider, TextField, Button, Select, MenuItem } from "@mui/material";
 import type { TFilters } from "../../../../canyonUtils";
 
 function Filters({
@@ -17,7 +17,92 @@ function Filters({
     a_grade: filters.a_grade || [1, 7],
     commitment: filters.commitment || [1, 6],
     quality: filters.quality || [1, 5],
+    pitches: filters.pitches || ["Any", 0],
+    longest_pitch: filters.longest_pitch || ["Any", 0],
+    hours: filters.hours || ["Any", 0],
+    wetsuits: filters.wetsuits || [1, 5],
   });
+
+  function sliderFilterInput(
+    name: keyof TFilters,
+    displayName: string,
+    range: [number, number] = [1, 7],
+    step: number = 1
+  ) {
+    return (
+      <>
+        <h4>{displayName}</h4>
+        <Slider
+          id={name}
+          style={{ width: "100%" }}
+          marks={step === 1}
+          step={step}
+          min={range[0]}
+          max={range[1]}
+          value={
+            Array.isArray(filterInputs[name]) &&
+            typeof filterInputs[name][0] === "number"
+              ? (filterInputs[name] as number[])
+              : [1, 7]
+          }
+          valueLabelDisplay="auto"
+          onChange={(_e, value) => {
+            if (Array.isArray(value) && value.length === 2) {
+              setFilterInputs({
+                ...filterInputs,
+                [name]: value,
+              });
+            }
+          }}
+        />
+      </>
+    );
+  }
+
+  function selectNumberFilterInput(name: keyof TFilters, displayName: string) {
+    return (
+      <>
+        <h4>{displayName}</h4>
+        <div className={classes.selectContainer}>
+          <Select
+            id={`${name}Operator`}
+            className={classes.select}
+            size="small"
+            value={filterInputs[name][0] || "Any"}
+            onChange={(e) => {
+              setFilterInputs({
+                ...filterInputs,
+                [name]: [e.target.value, filterInputs[name][1] || 0],
+              });
+            }}
+          >
+            <MenuItem value="Any">Any</MenuItem>
+            <MenuItem value="Less than">Less than</MenuItem>
+            <MenuItem value="More than">More than</MenuItem>
+            <MenuItem value="Exactly">Exactly</MenuItem>
+          </Select>
+          {filterInputs[name][0] === "Any" || (
+            <TextField
+              id={`${name}Count`}
+              className={classes.numberInput}
+              type="number"
+              size="small"
+              value={filterInputs[name][1] || 0}
+              onChange={(e) => {
+                const value = parseInt(e.target.value, 10);
+                if (!isNaN(value)) {
+                  setFilterInputs({
+                    ...filterInputs,
+                    [name]: [filterInputs[name][0], value],
+                  });
+                }
+              }}
+            />
+          )}
+        </div>
+      </>
+    );
+  }
 
   return (
     <div className={classes.filterOptions}>
@@ -45,82 +130,14 @@ function Filters({
           }}
         />
       </div>
-      <h4>Vertical Grade</h4>
-      <Slider
-        id="v_grade"
-        style={{ width: "100%" }}
-        marks
-        step={1}
-        min={1}
-        max={7}
-        value={filterInputs.v_grade || [1, 7]}
-        valueLabelDisplay="auto"
-        onChange={(_e, value) => {
-          if (Array.isArray(value) && value.length === 2) {
-            setFilterInputs({
-              ...filterInputs,
-              v_grade: value,
-            });
-          }
-        }}
-      />
-      <h4>Aquatic Grade</h4>
-      <Slider
-        id="a_grade"
-        style={{ width: "100%" }}
-        marks
-        step={1}
-        min={1}
-        max={7}
-        value={filterInputs.a_grade || [1, 7]}
-        valueLabelDisplay="auto"
-        onChange={(_e, value) => {
-          if (Array.isArray(value) && value.length === 2) {
-            setFilterInputs({
-              ...filterInputs,
-              a_grade: value,
-            });
-          }
-        }}
-      />
-      <h4>Commitment</h4>
-      <Slider
-        id="commitment"
-        style={{ width: "100%" }}
-        marks
-        step={1}
-        min={1}
-        max={6}
-        value={filterInputs.commitment || [1, 6]}
-        valueLabelDisplay="auto"
-        onChange={(_e, value) => {
-          if (Array.isArray(value) && value.length === 2) {
-            setFilterInputs({
-              ...filterInputs,
-              commitment: value,
-            });
-          }
-        }}
-      />
-      <h4>Quality</h4>
-      <Slider
-        id="quality"
-        style={{ width: "100%" }}
-        step={0.1}
-        min={1}
-        max={5}
-        value={filterInputs.quality || [1, 5]}
-        valueLabelDisplay="auto"
-        onChange={(_e, value) => {
-          if (Array.isArray(value) && value.length === 2) {
-            setFilterInputs({
-              ...filterInputs,
-              quality: value,
-            });
-          }
-        }}
-      />
-      {/* Additional filters will be added for pitches, longest pitch, hours, wetsuits */}
+      {sliderFilterInput("v_grade", "Vertical Grade")}
+      {sliderFilterInput("a_grade", "Aquatic Grade")}
+      {sliderFilterInput("commitment", "Commitment", [1, 6])}
+      {sliderFilterInput("quality", "Quality", [1, 5], 0.1)}
+      {selectNumberFilterInput("pitches", "Pitches")}
+      {selectNumberFilterInput("longest_pitch", "Longest Pitch")}
+      {selectNumberFilterInput("hours", "Hours")}
+      {sliderFilterInput("wetsuits", "Wetsuits", [1, 5])}
       <div className={classes.buttonContainer}>
         <Button
           variant="contained"
@@ -149,6 +166,10 @@ function Filters({
                 a_grade: [1, 7],
                 commitment: [1, 6],
                 quality: [1, 5],
+                pitches: ["Any", 0],
+                longest_pitch: ["Any", 0],
+                hours: ["Any", 0],
+                wetsuits: [1, 5],
               });
           }}
         >

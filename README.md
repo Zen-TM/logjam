@@ -14,12 +14,10 @@ LOGJAM is a mapping and logbook app designed for canyoning in New South Wales.
 
 ## Installation
 
-To run the app locally:
-
 1. Clone the repository:
 
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/Zen-TM/logjam.git
    ```
 
 2. Switch to the `dev` branch:
@@ -28,13 +26,20 @@ To run the app locally:
    git checkout dev
    ```
 
-3. Install dependencies:
+3. Ensure you have Node.js and npm installed on your machine. You can download them from [Node.js official website](https://nodejs.org/).
+
+4. Install dependencies:
 
    ```bash
    npm install
    ```
 
-4. Start the development server:
-   ```bash
-   npm start
-   ```
+## Usage
+
+To run the app locally, navigate to the project directory and use the following command:
+
+```bash
+npm start
+```
+
+NOTE: This is a custom script that runs `npm run dev` and `node tile-proxy.js` concurrently. This will start the development server and the tile proxy server for SIX Maps tiles. Access the app in your web browser at the URL that is displayed in the terminal.

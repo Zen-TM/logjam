@@ -17,6 +17,12 @@ function SidebarModule({
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!sidebarOpen) {
+      setModuleOpen(false);
+    }
+  }, [sidebarOpen]);
+
+  useEffect(() => {
     if (moduleOpen) {
       setShouldRenderContent(true);
       setTimeout(() => {

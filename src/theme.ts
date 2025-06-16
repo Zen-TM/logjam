@@ -37,6 +37,22 @@ const theme = createTheme({
         },
       },
     },
+    MuiSelect: {
+      styleOverrides: {
+        root: {
+          color: "var(--content-color)",
+          "& .MuiOutlinedInput-notchedOutline": {
+            borderColor: "var(--content-color)",
+          },
+          "&:hover:not(.Mui-focused) .MuiOutlinedInput-notchedOutline": {
+            borderColor: "var(--content-color)",
+          },
+        },
+        icon: {
+          color: "var(--content-color)",
+        },
+      },
+    },
   },
 });
 
