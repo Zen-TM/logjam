@@ -26,9 +26,9 @@ export type TFilters = {
   a_grade: number[] | null;
   commitment: number[] | null;
   quality: number[] | null;
-  pitches: number[] | null;
-  longest_pitch: number[] | null;
-  hours: number[] | null;
+  pitches: ["Any" | "Less than" | "More than" | "Exactly", number] | null;
+  longest_pitch: ["Any" | "Less than" | "More than" | "Exactly", number] | null;
+  hours: ["Any" | "Less than" | "More than" | "Exactly", number] | null;
   wetsuits: number[] | null;
 };
 
@@ -84,6 +84,43 @@ export function useCanyons() {
 }
 
 export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
+  function passesSliderFilter(name: keyof TFilters, range: [number, number]) {
+    if (
+      filters[name] &&
+      (!Array.isArray(filters[name]) ||
+        filters[name].length !== 2 ||
+        filters[name][0] !== range[0] ||
+        filters[name][1] !== range[1])
+    ) {
+      if (canyon[name] == null) {
+        return false;
+      } else if (
+        canyon[name] < filters[name][0] ||
+        canyon[name] > filters[name][1]
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function passesSelectNumberFilter(name: keyof TFilters) {
+    if (filters[name] && filters[name][0] !== "Any") {
+      if (canyon[name] == null) {
+        return false;
+      } else if (
+        (filters[name][0] === "Less than" &&
+          canyon[name] >= filters[name][1]) ||
+        (filters[name][0] === "More than" &&
+          canyon[name] <= filters[name][1]) ||
+        (filters[name][0] === "Exactly" && canyon[name] !== filters[name][1])
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   if (
     typeof filters.name === "string" &&
     filters.name.trim() !== "" &&
@@ -94,70 +131,14 @@ export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
   ) {
     return false;
   }
-  if (
-    filters.v_grade &&
-    (!Array.isArray(filters.v_grade) ||
-      filters.v_grade.length !== 2 ||
-      filters.v_grade[0] !== 1 ||
-      filters.v_grade[1] !== 7)
-  ) {
-    if (!canyon.v_grade) {
-      return false;
-    } else if (
-      canyon.v_grade < filters.v_grade[0] ||
-      canyon.v_grade > filters.v_grade[1]
-    ) {
-      return false;
-    }
-  }
-  if (
-    filters.a_grade &&
-    (!Array.isArray(filters.a_grade) ||
-      filters.a_grade.length !== 2 ||
-      filters.a_grade[0] !== 1 ||
-      filters.a_grade[1] !== 7)
-  ) {
-    if (!canyon.a_grade) {
-      return false;
-    } else if (
-      canyon.a_grade < filters.a_grade[0] ||
-      canyon.a_grade > filters.a_grade[1]
-    ) {
-      return false;
-    }
-  }
-  if (
-    filters.commitment &&
-    (!Array.isArray(filters.commitment) ||
-      filters.commitment.length !== 2 ||
-      filters.commitment[0] !== 1 ||
-      filters.commitment[1] !== 6)
-  ) {
-    if (!canyon.commitment) {
-      return false;
-    } else if (
-      canyon.commitment < filters.commitment[0] ||
-      canyon.commitment > filters.commitment[1]
-    ) {
-      return false;
-    }
-  }
-  if (
-    filters.quality &&
-    (!Array.isArray(filters.quality) ||
-      filters.quality.length !== 2 ||
-      filters.quality[0] !== 1 ||
-      filters.quality[1] !== 6)
-  ) {
-    if (!canyon.quality) {
-      return false;
-    } else if (
-      canyon.quality < filters.quality[0] ||
-      canyon.quality > filters.quality[1]
-    ) {
-      return false;
-    }
-  }
-  // will check for uther filters when added
+
+  if (!passesSliderFilter("v_grade", [1, 7])) return false;
+  if (!passesSliderFilter("a_grade", [1, 7])) return false;
+  if (!passesSliderFilter("commitment", [1, 6])) return false;
+  if (!passesSliderFilter("quality", [1, 5])) return false;
+  if (!passesSelectNumberFilter("pitches")) return false;
+  if (!passesSelectNumberFilter("longest_pitch")) return false;
+  if (!passesSelectNumberFilter("hours")) return false;
+  if (!passesSliderFilter("wetsuits", [1, 5])) return false;
   return true;
 }

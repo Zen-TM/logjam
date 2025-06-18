@@ -8,12 +8,10 @@ import {
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import classes from "./Map.module.css";
-import { useCanyons } from "../../canyonUtils";
-import type { TFilters } from "../../canyonUtils";
+import type { TCanyon, TFilters } from "../../canyonUtils";
 import { passesFilters } from "../../canyonUtils";
 
-function Map({ filters }: { filters: TFilters }) {
-  let canyons = useCanyons();
+function Map({ filters, canyons }: { filters: TFilters; canyons: TCanyon[] }) {
   const layers = [
     {
       name: "Default",

@@ -18,7 +18,7 @@ function Sidebar({
     <div
       className={classes.sidebar}
       style={{
-        width: sidebarOpen ? "250px" : "50px",
+        width: sidebarOpen ? "300px" : "50px",
       }}
     >
       <h2
