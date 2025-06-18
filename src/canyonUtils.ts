@@ -92,7 +92,7 @@ export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
         filters[name][0] !== range[0] ||
         filters[name][1] !== range[1])
     ) {
-      if (!canyon[name]) {
+      if (canyon[name] == null) {
         return false;
       } else if (
         canyon[name] < filters[name][0] ||
@@ -106,7 +106,7 @@ export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
 
   function passesSelectNumberFilter(name: keyof TFilters) {
     if (filters[name] && filters[name][0] !== "Any") {
-      if (!canyon[name]) {
+      if (canyon[name] == null) {
         return false;
       } else if (
         (filters[name][0] === "Less than" &&

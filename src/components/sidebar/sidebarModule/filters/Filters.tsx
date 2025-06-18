@@ -43,7 +43,7 @@ function Filters({
             Array.isArray(filterInputs[name]) &&
             typeof filterInputs[name][0] === "number"
               ? (filterInputs[name] as number[])
-              : [1, 7]
+              : range
           }
           valueLabelDisplay="auto"
           onChange={(_e, value) => {
@@ -68,7 +68,7 @@ function Filters({
             id={`${name}Operator`}
             className={classes.select}
             size="small"
-            value={filterInputs[name][0] || "Any"}
+            value={filterInputs[name][0] ?? "Any"}
             onChange={(e) => {
               setFilterInputs({
                 ...filterInputs,
