@@ -5,13 +5,62 @@ import {
   ScaleControl,
   Marker,
   Tooltip,
+  useMap,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import classes from "./Map.module.css";
 import type { TCanyon, TFilters } from "../../canyonUtils";
 import { passesFilters } from "../../canyonUtils";
 
-function Map({ filters, canyons }: { filters: TFilters; canyons: TCanyon[] }) {
+// This component will be used inside MapContainer to access the map instance
+function CanyonMarkers({
+  canyons,
+  filters,
+  selectCanyon,
+}: {
+  canyons: TCanyon[];
+  filters: TFilters;
+  selectCanyon: (id: number | null) => void;
+}) {
+  const map = useMap();
+
+  return (
+    <>
+      {canyons
+        .filter((canyon) => passesFilters(canyon, filters))
+        .map((canyon) => (
+          <Marker
+            key={canyon.id}
+            position={[canyon.latitude, canyon.longitude]}
+            title={canyon.name}
+            eventHandlers={{
+              click: () => {
+                selectCanyon(canyon.id);
+                setTimeout(() => {
+                  map.invalidateSize();
+                  map.flyTo([canyon.latitude, canyon.longitude], 16, {
+                    duration: 1.5,
+                  });
+                }, 300);
+              },
+            }}
+          >
+            <Tooltip>{canyon.name}</Tooltip>
+          </Marker>
+        ))}
+    </>
+  );
+}
+
+function Map({
+  filters,
+  canyons,
+  selectCanyon,
+}: {
+  filters: TFilters;
+  canyons: TCanyon[];
+  selectCanyon: (id: number | null) => void;
+}) {
   const layers = [
     {
       name: "Default",
@@ -50,7 +99,6 @@ function Map({ filters, canyons }: { filters: TFilters; canyons: TCanyon[] }) {
         '<a href="https://maps.six.nsw.gov.au/" title="SIX Maps - NSW Map">SIX Maps</a>',
     },
   ];
-
   return (
     <div id="map" className={classes.map}>
       <MapContainer
@@ -71,17 +119,11 @@ function Map({ filters, canyons }: { filters: TFilters; canyons: TCanyon[] }) {
           ))}
         </LayersControl>
         <ScaleControl position="bottomleft" imperial={false} />
-        {canyons
-          .filter((canyon) => passesFilters(canyon, filters))
-          .map((canyon) => (
-            <Marker
-              key={canyon.id}
-              position={[canyon.latitude, canyon.longitude]}
-              title={canyon.name}
-            >
-              <Tooltip>{canyon.name}</Tooltip>
-            </Marker>
-          ))}
+        <CanyonMarkers
+          canyons={canyons}
+          filters={filters}
+          selectCanyon={selectCanyon}
+        />
       </MapContainer>
     </div>
   );

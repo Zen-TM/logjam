@@ -17,12 +17,30 @@ function App() {
     hours: null,
     wetsuits: null,
   });
+  const [selectedCanyonID, setSelectedCanyonID] = useState<number | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   let canyons = useCanyons();
 
   return (
     <div className={classes.app}>
-      <Sidebar onChangeFilters={setFilters} filters={filters} />
-      <Map filters={filters} canyons={canyons} />
+      <Sidebar
+        onChangeFilters={setFilters}
+        filters={filters}
+        selectedCanyonID={selectedCanyonID}
+        setSelectedCanyonID={setSelectedCanyonID}
+        canyons={canyons}
+        sidebarOpen={sidebarOpen}
+        setSidebarOpen={setSidebarOpen}
+      />
+      <Map
+        filters={filters}
+        canyons={canyons}
+        selectCanyon={(id) => {
+          setSelectedCanyonID(id);
+          setSidebarOpen(true);
+        }}
+      />
     </div>
   );
 }

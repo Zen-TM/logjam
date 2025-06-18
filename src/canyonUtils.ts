@@ -142,3 +142,15 @@ export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
   if (!passesSliderFilter("wetsuits", [1, 5])) return false;
   return true;
 }
+
+export function formatCanyonGrade(canyon: TCanyon): string | null {
+  if (!canyon.v_grade && !canyon.a_grade && !canyon.commitment) {
+    return null;
+  }
+  const vGrade = canyon.v_grade ? `v${canyon.v_grade}` : "v?";
+  const aGrade = canyon.a_grade ? `a${canyon.a_grade}` : "a?";
+  const commitment = canyon.commitment
+    ? " " + ["I", "II", "III", "IV", "V", "VI"][canyon.commitment - 1]
+    : "";
+  return `${vGrade}${aGrade}${commitment}`;
+}
