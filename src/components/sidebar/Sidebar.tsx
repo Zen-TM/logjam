@@ -22,6 +22,8 @@ function Sidebar({
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
 }) {
+  const canyon = canyons.find((c) => c.id === selectedCanyonID);
+
   function sidebarModules() {
     return (
       <>
@@ -34,7 +36,6 @@ function Sidebar({
   }
 
   function canyonInfo() {
-    const canyon = canyons.find((c) => c.id === selectedCanyonID);
     if (!canyon) return null;
     const canyonGrade = formatCanyonGrade(canyon);
 
@@ -101,7 +102,7 @@ function Sidebar({
           opacity: sidebarOpen ? 1 : 0,
         }}
       >
-        {selectedCanyonID ? (
+        {selectedCanyonID != null ? (
           <div className={classes.canyonHeader}>
             <button
               className={classes.backButton}
@@ -113,9 +114,7 @@ function Sidebar({
                 alt="Arrow"
               />
             </button>
-            <h2 style={{ marginLeft: "0.5em" }}>
-              {canyons.find((c) => c.id === selectedCanyonID)?.name} Canyon
-            </h2>
+            <h2 style={{ marginLeft: "0.5em" }}>{canyon?.name} Canyon</h2>
           </div>
         ) : (
           <h2>Sidebar</h2>

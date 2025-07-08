@@ -12,7 +12,8 @@ import classes from "./Map.module.css";
 import type { TCanyon, TFilters } from "../../canyonUtils";
 import { passesFilters } from "../../canyonUtils";
 
-// This component will be used inside MapContainer to access the map instance
+const SIDEBAR_TRANSITION_DURATION_MS = 300;
+
 function CanyonMarkers({
   canyons,
   filters,
@@ -41,7 +42,7 @@ function CanyonMarkers({
                   map.flyTo([canyon.latitude, canyon.longitude], 16, {
                     duration: 1.5,
                   });
-                }, 300);
+                }, SIDEBAR_TRANSITION_DURATION_MS);
               },
             }}
           >
