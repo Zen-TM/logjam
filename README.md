@@ -39,7 +39,5 @@ LOGJAM is a mapping and logbook app designed for canyoning in New South Wales.
 To run the app locally, navigate to the project directory and use the following command:
 
 ```bash
-npm start
+npm run dev
 ```
-
-NOTE: This is a custom script that runs `npm run dev` and `node tile-proxy.js` concurrently. This will start the development server and the tile proxy server for SIX Maps tiles. Access the app in your web browser at the URL that is displayed in the terminal.
