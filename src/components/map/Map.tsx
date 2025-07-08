@@ -39,7 +39,7 @@ function Map({ filters, canyons }: { filters: TFilters; canyons: TCanyon[] }) {
     },
     {
       name: "SIX Maps Base Map",
-      url: "http://localhost:3001/six/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
+      url: "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
       attribution:
         '<a href="https://maps.six.nsw.gov.au/" title="SIX Maps - NSW Map">SIX Maps</a>',
     },
