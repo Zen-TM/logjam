@@ -33,21 +33,27 @@ function Map({ filters, canyons }: { filters: TFilters; canyons: TCanyon[] }) {
     },
     {
       name: "Six Maps Topo",
-      url: "http://localhost:3001/six/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+      url: "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
       attribution:
         '<a href="https://maps.six.nsw.gov.au/" title="SIX Maps - NSW Map">SIX Maps</a>',
     },
     {
       name: "SIX Maps Base Map",
-      url: "http://localhost:3001/six/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
+      url: "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
       attribution:
         '<a href="https://maps.six.nsw.gov.au/" title="SIX Maps - NSW Map">SIX Maps</a>',
     },
     {
       name: "SIX Maps Imagery",
-      url: "http://localhost:3001/six/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
+      url: "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
       attribution:
         '<a href="https://maps.six.nsw.gov.au/" title="SIX Maps - NSW Map">SIX Maps</a>',
+    },
+    {
+      name: "Esri World Hillshade",
+      url: "https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+      attribution:
+        '<a href="https://www.esri.com/en-us/arcgis/products/arcgis-online/maps/elevation" title="Esri World Hillshade">Esri, CGIAR</a>',
     },
   ];
 
