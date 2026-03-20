@@ -1,0 +1,14 @@
+{
+  "AWSEBDockerrunVersion": "1",
+  "Image": {
+    "Name": "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest",
+    "Update": "true"
+  },
+  "Ports": [
+    {
+      "ContainerPort": "8080",
+      "HostPort": "8080"
+    }
+  ],
+  "Logging": "/var/log/app"
+}

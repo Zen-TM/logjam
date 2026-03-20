@@ -1,0 +1,265 @@
+import { Router, Response } from "express";
+import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
+import prisma from "../services/prisma";
+import { AppError } from "../middleware/errorHandler";
+import { Prisma } from "@prisma/client";
+
+const router = Router();
+
+async function fetchCanyons(where: object) {
+  return prisma.canyon.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    include: {
+      _count: { select: { tripLogs: true } },
+    },
+  });
+}
+
+function getParam(param: string | string[]): string {
+  return Array.isArray(param) ? param[0] : param;
+}
+
+// GET /canyons — owned canyons
+router.get(
+  "/",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await prisma.user.findUnique({
+      where: { cognitoId: req.user!.sub },
+    });
+    if (!user) throw new AppError(404, "User not found");
+    res.json(await fetchCanyons({ ownerId: user.id }));
+  },
+);
+
+// GET /canyons/shared — canyons shared with me
+router.get(
+  "/shared",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await prisma.user.findUnique({
+      where: { cognitoId: req.user!.sub },
+    });
+    if (!user) throw new AppError(404, "User not found");
+    res.json(
+      await fetchCanyons({ shares: { some: { sharedWithId: user.id } } }),
+    );
+  },
+);
+
+// ── POST /canyons ─────────────────────────────────────────────
+// Creates a new canyon
+router.post(
+  "/",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await prisma.user.findUnique({
+      where: { cognitoId: req.user!.sub },
+    });
+    if (!user) throw new AppError(404, "User not found");
+
+    const {
+      name,
+      altNames,
+      latitude,
+      longitude,
+      grade,
+      numAbseils,
+      longestAbseil,
+      notes,
+      attributes,
+    } = req.body;
+
+    if (!name || latitude === undefined || longitude === undefined) {
+      throw new AppError(400, "name, latitude, and longitude are required");
+    }
+
+    const canyon = await prisma.canyon.create({
+      data: {
+        ownerId: user.id,
+        name,
+        altNames: altNames ?? [],
+        latitude,
+        longitude,
+        grade,
+        numAbseils,
+        longestAbseil,
+        notes,
+        attributes: attributes ?? {},
+      },
+    });
+
+    res.status(201).json(canyon);
+  },
+);
+
+// ── POST /canyons/:id/copy ─────────────────────────────────────────────
+// Copies a shared canyon
+router.post(
+  "/:id/copy",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await prisma.user.findUnique({
+      where: { cognitoId: req.user!.sub },
+    });
+    if (!user) throw new AppError(404, "User not found");
+
+    const canyonId = getParam(req.params.id);
+    const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
+    if (!canyon) throw new AppError(404, "Canyon not found");
+
+    // Check if the user has access to the canyon
+    const isOwner = canyon.ownerId === user.id;
+    const isShared = await prisma.canyonShare.findFirst({
+      where: { canyonId, sharedWithId: user.id },
+    });
+    if (!isOwner && !isShared) throw new AppError(403, "Access denied");
+
+    // Create a copy of the canyon
+    const copiedCanyon = await prisma.canyon.create({
+      data: {
+        ownerId: user.id,
+        name: canyon.name,
+        altNames: canyon.altNames,
+        latitude: canyon.latitude,
+        longitude: canyon.longitude,
+        grade: canyon.grade,
+        numAbseils: canyon.numAbseils,
+        longestAbseil: canyon.longestAbseil,
+        notes: canyon.notes,
+        attributes: canyon.attributes ?? Prisma.JsonNull,
+        forkedFromId: canyonId,
+      },
+    });
+
+    res.status(201).json(copiedCanyon);
+  },
+);
+
+// ── GET /canyons/:id ──────────────────────────────────────────
+// Returns a single canyon with its trip logs and media
+router.get(
+  "/:id",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await prisma.user.findUnique({
+      where: { cognitoId: req.user!.sub },
+    });
+    if (!user) throw new AppError(404, "User not found");
+
+    const canyon = await prisma.canyon.findUnique({
+      where: { id: getParam(req.params.id) },
+      include: {
+        tripLogs: {
+          orderBy: { date: "desc" },
+          include: { media: true },
+        },
+        media: true,
+      },
+    });
+
+    if (!canyon) throw new AppError(404, "Canyon not found");
+
+    // Ensure the canyon belongs to this user, or has been shared with them
+    const isOwner = canyon.ownerId === user.id;
+    const isShared = await prisma.canyonShare.findFirst({
+      where: { canyonId: canyon.id, sharedWithId: user.id },
+    });
+
+    if (!isOwner && !isShared) throw new AppError(403, "Access denied");
+
+    res.json(canyon);
+  },
+);
+
+// ── PATCH /canyons/:id ────────────────────────────────────────
+// Updates an existing canyon (owner only)
+router.patch(
+  "/:id",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await prisma.user.findUnique({
+      where: { cognitoId: req.user!.sub },
+    });
+    if (!user) throw new AppError(404, "User not found");
+
+    const canyon = await prisma.canyon.findUnique({
+      where: { id: getParam(req.params.id) },
+    });
+
+    if (!canyon) throw new AppError(404, "Canyon not found");
+    if (canyon.ownerId !== user.id)
+      throw new AppError(403, "Only the owner can edit a canyon");
+
+    const {
+      name,
+      altNames,
+      latitude,
+      longitude,
+      grade,
+      numAbseils,
+      longestAbseil,
+      notes,
+      attributes,
+    } = req.body;
+
+    const updated = await prisma.canyon.update({
+      where: { id: getParam(req.params.id) },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(altNames !== undefined && { altNames }),
+        ...(latitude !== undefined && { latitude }),
+        ...(longitude !== undefined && { longitude }),
+        ...(grade !== undefined && { grade }),
+        ...(numAbseils !== undefined && { numAbseils }),
+        ...(longestAbseil !== undefined && { longestAbseil }),
+        ...(notes !== undefined && { notes }),
+        ...(attributes !== undefined && {
+          attributes: attributes ?? Prisma.JsonNull,
+        }),
+      },
+    });
+
+    res.json(updated);
+  },
+);
+
+// ── DELETE /canyons/:id ───────────────────────────────────────
+// Deletes a canyon and all associated data (owner only)
+router.delete(
+  "/:id",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await prisma.user.findUnique({
+      where: { cognitoId: req.user!.sub },
+    });
+    if (!user) throw new AppError(404, "User not found");
+
+    const canyon = await prisma.canyon.findUnique({
+      where: { id: getParam(req.params.id) },
+    });
+
+    if (!canyon) throw new AppError(404, "Canyon not found");
+    if (canyon.ownerId !== user.id)
+      throw new AppError(403, "Only the owner can delete a canyon");
+
+    const id = getParam(req.params.id);
+
+    // Delete in order to respect foreign key constraints
+    await prisma.media.deleteMany({
+      where: { linkedId: id },
+    });
+    await prisma.tripLog.deleteMany({
+      where: { canyonId: id },
+    });
+    await prisma.canyonShare.deleteMany({
+      where: { canyonId: id },
+    });
+    await prisma.canyon.delete({ where: { id: id } });
+
+    res.status(204).send();
+  },
+);
+
+export default router;
