@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { fetchAuthSession } from "aws-amplify/auth";
 
 export type TCanyonAttributes = {
   v_grade?: 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -41,7 +42,20 @@ export type TFilters = {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
-async function apiFetch<T>(path: string, token: string): Promise<T> {
+// Gets a fresh ID token from Amplify on every call. Amplify automatically
+// refreshes the token using the refresh token when the ID token has expired
+// (every 1 hour), so callers never need to worry about expiry.
+async function getIdToken(): Promise<string> {
+  const session = await fetchAuthSession();
+  const token = session.tokens?.idToken?.toString();
+  if (!token) throw new Error("No auth session");
+  return token;
+}
+
+// Every API call fetches its own fresh token internally, so hooks don't
+// need a token parameter — just a boolean to control whether to fetch.
+async function apiFetch<T>(path: string): Promise<T> {
+  const token = await getIdToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -49,35 +63,35 @@ async function apiFetch<T>(path: string, token: string): Promise<T> {
   return res.json();
 }
 
-export function useCanyons(token: string | null) {
+export function useCanyons(enabled: boolean) {
   const [canyons, setCanyons] = useState<TCanyon[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token) return;
+    if (!enabled) return;
     setLoading(true);
-    apiFetch<TCanyon[]>("/canyons", token)
+    apiFetch<TCanyon[]>("/canyons")
       .then(setCanyons)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [enabled]);
 
   return { canyons, loading, error };
 }
 
-export function useSharedCanyons(token: string | null) {
+export function useSharedCanyons(enabled: boolean) {
   const [canyons, setCanyons] = useState<TCanyon[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!token) return;
+    if (!enabled) return;
     setLoading(true);
-    apiFetch<TCanyon[]>("/canyons/shared", token)
+    apiFetch<TCanyon[]>("/canyons/shared")
       .then(setCanyons)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [enabled]);
 
   return { canyons, loading };
 }

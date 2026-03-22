@@ -1,9 +1,11 @@
 import { useState } from "react";
 import Sidebar from "./sidebar/Sidebar";
 import Map from "./map/Map";
+import SignIn from "./SignIn";
 import classes from "./App.module.css";
 import type { TFilters } from "../canyonUtils";
 import { useCanyons, useSharedCanyons } from "../canyonUtils";
+import { useAuth } from "../useAuth";
 
 function App() {
   const [filters, setFilters] = useState<TFilters>({
@@ -20,11 +22,17 @@ function App() {
   const [selectedCanyonID, setSelectedCanyonID] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // TODO: replace with real Cognito token once auth is wired up
-  const token: string | null = null;
+  const auth = useAuth();
+  const { canyons } = useCanyons(auth.authenticated);
+  const { canyons: sharedCanyons } = useSharedCanyons(auth.authenticated);
 
-  const { canyons } = useCanyons(token);
-  const { canyons: sharedCanyons } = useSharedCanyons(token);
+  // While checking for an existing session, render nothing to avoid
+  // a brief flash of the sign-in form before the session loads.
+  if (auth.loading) return null;
+
+  if (!auth.authenticated) {
+    return <SignIn onSignIn={auth.signIn} error={auth.error} />;
+  }
 
   return (
     <div className={classes.app}>
