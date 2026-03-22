@@ -1,0 +1,13 @@
+CLAUDE.md
+.claude
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment files — never commit secrets
+.env
+.env.local
+.env.*.local

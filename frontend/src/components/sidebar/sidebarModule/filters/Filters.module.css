@@ -1,0 +1,40 @@
+.filterOptions {
+  padding: 1em;
+  padding-top: 0.5em;
+  padding-bottom: 0;
+}
+
+.searchContainer {
+  padding-bottom: 1em;
+}
+
+.search {
+  width: 1em; 
+  height: 1em;
+}
+
+.selectContainer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5em;
+  padding-bottom: 0.5em;
+}
+
+.buttonContainer {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  justify-content: space-between;
+  gap: 1em;
+}
+
+.select {
+  min-width: 120px;
+  width: 100%;
+}
+
+.numberInput {
+  width: 100%;
+  min-width: 120px;
+}

@@ -1,0 +1,22 @@
+.map {
+  position: absolute;
+  inset: 0;
+}
+
+.layerSwitcher {
+  position: absolute;
+  top: 10px;
+  right: 50px; /* clear of navigation control */
+  z-index: 1;
+}
+
+.layerSelect {
+  padding: 4px 6px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.95);
+  border: none;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  color: #333;
+}

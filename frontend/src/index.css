@@ -1,0 +1,21 @@
+:root {
+  color-scheme: light dark;
+
+  --content-color: white;
+  --sandstone-dark: #4E4944;
+  --sandstone-light: #8C7A5B;
+  --sand-light: #D9CBB8;
+  --sand-dark: #C79657;
+
+}
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .icon {
+    filter: invert(1);
+  }
+}
