@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   signIn as amplifySignIn,
+  signUp as amplifySignUp,
+  confirmSignUp as amplifyConfirmSignUp,
   signOut as amplifySignOut,
   fetchAuthSession,
 } from "aws-amplify/auth";
@@ -20,34 +22,39 @@ async function ensureUserExists() {
   });
 }
 
+export type AuthState = "loading" | "signIn" | "signUp" | "confirmSignUp" | "authenticated";
+
 export function useAuth() {
-  const [authenticated, setAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<AuthState>("loading");
   const [error, setError] = useState<string | null>(null);
+  // Username is stored between sign-up and confirmation steps
+  const [pendingUsername, setPendingUsername] = useState("");
 
   // On mount, check if there's an existing valid session in localStorage.
-  // This lets users stay logged in across page refreshes without re-entering
-  // credentials — Amplify stores tokens in localStorage automatically.
   useEffect(() => {
     fetchAuthSession()
       .then((session) => {
         if (session.tokens?.idToken) {
-          setAuthenticated(true);
+          setState("authenticated");
+        } else {
+          setState("signIn");
         }
       })
-      .catch(() => {
-        // No session — user needs to sign in
-      })
-      .finally(() => setLoading(false));
+      .catch(() => setState("signIn"));
   }, []);
 
   const handleSignIn = useCallback(
     async (username: string, password: string) => {
       setError(null);
       try {
-        await amplifySignIn({ username, password });
-        await ensureUserExists();
-        setAuthenticated(true);
+        const result = await amplifySignIn({ username, password });
+        if (!result.isSignedIn) {
+          setError(`Sign-in incomplete: ${result.nextStep.signInStep}`);
+          return;
+        }
+        // Best-effort: don't block sign-in if the API is unreachable
+        ensureUserExists().catch(console.error);
+        setState("authenticated");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Sign in failed");
       }
@@ -55,16 +62,59 @@ export function useAuth() {
     [],
   );
 
+  const handleSignUp = useCallback(
+    async (username: string, password: string, email: string, name: string) => {
+      setError(null);
+      try {
+        const result = await amplifySignUp({
+          username,
+          password,
+          options: { userAttributes: { email, name } },
+        });
+        if (result.nextStep.signUpStep === "CONFIRM_SIGN_UP") {
+          setPendingUsername(username);
+          setState("confirmSignUp");
+        } else if (result.isSignUpComplete) {
+          // Auto-confirmed (unlikely with email verification on)
+          setState("signIn");
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Sign up failed");
+      }
+    },
+    [],
+  );
+
+  const handleConfirmSignUp = useCallback(
+    async (code: string) => {
+      setError(null);
+      try {
+        await amplifyConfirmSignUp({
+          username: pendingUsername,
+          confirmationCode: code,
+        });
+        setState("signIn");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Confirmation failed");
+      }
+    },
+    [pendingUsername],
+  );
+
   const handleSignOut = useCallback(async () => {
     await amplifySignOut();
-    setAuthenticated(false);
+    setState("signIn");
   }, []);
 
   return {
-    authenticated,
-    loading,
+    state,
     error,
+    pendingUsername,
     signIn: handleSignIn,
+    signUp: handleSignUp,
+    confirmSignUp: handleConfirmSignUp,
     signOut: handleSignOut,
+    goToSignUp: useCallback(() => { setError(null); setState("signUp"); }, []),
+    goToSignIn: useCallback(() => { setError(null); setState("signIn"); }, []),
   };
 }

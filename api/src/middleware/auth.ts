@@ -2,12 +2,19 @@ import { Request, Response, NextFunction } from "express";
 import jwksClient from "jwks-rsa";
 import jwt from "jsonwebtoken";
 
-const client = jwksClient({
-  jwksUri: `https://cognito-idp.${process.env.COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}/.well-known/jwks.json`,
-});
+let client: jwksClient.JwksClient | null = null;
+
+function getClient() {
+  if (!client) {
+    client = jwksClient({
+      jwksUri: `https://cognito-idp.${process.env.COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}/.well-known/jwks.json`,
+    });
+  }
+  return client;
+}
 
 function getKey(header: jwt.JwtHeader, callback: jwt.SigningKeyCallback) {
-  client.getSigningKey(header.kid, (err, key) => {
+  getClient().getSigningKey(header.kid, (err, key) => {
     if (err) return callback(err);
     const signingKey = key?.getPublicKey();
     callback(null, signingKey);

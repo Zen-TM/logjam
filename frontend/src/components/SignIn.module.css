@@ -23,9 +23,34 @@
   color: var(--content-color);
 }
 
+.subtitle {
+  margin: 0;
+  text-align: center;
+  color: var(--sand-light);
+  font-size: 0.875rem;
+}
+
 .error {
   margin: 0;
   color: #f87171;
   font-size: 0.875rem;
   text-align: center;
+}
+
+.switchText {
+  margin: 0;
+  text-align: center;
+  color: var(--sand-light);
+  font-size: 0.875rem;
+}
+
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--content-color);
+  font-size: inherit;
+  font-family: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }

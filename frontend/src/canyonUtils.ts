@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
 
 export type TCanyonAttributes = {
@@ -54,19 +54,51 @@ async function getIdToken(): Promise<string> {
 
 // Every API call fetches its own fresh token internally, so hooks don't
 // need a token parameter — just a boolean to control whether to fetch.
-async function apiFetch<T>(path: string): Promise<T> {
+async function apiFetch<T>(
+  path: string,
+  options?: { method?: string; body?: unknown },
+): Promise<T> {
   const token = await getIdToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    method: options?.method ?? "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(options?.body != null && { "Content-Type": "application/json" }),
+    },
+    ...(options?.body != null && { body: JSON.stringify(options.body) }),
   });
   if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
   return res.json();
+}
+
+export type ImportResult = {
+  imported: number;
+  skipped: number;
+  errors: string[];
+};
+
+export type RefreshResult = {
+  added: number;
+  updated: number;
+  unchanged: number;
+  userEdited: number;
+  errors: string[];
+};
+
+export function importFromRopeWiki(): Promise<ImportResult> {
+  return apiFetch<ImportResult>("/ropewiki/import", { method: "POST" });
+}
+
+export function refreshFromRopeWiki(): Promise<RefreshResult> {
+  return apiFetch<RefreshResult>("/ropewiki/refresh", { method: "POST" });
 }
 
 export function useCanyons(enabled: boolean) {
   const [canyons, setCanyons] = useState<TCanyon[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -74,10 +106,15 @@ export function useCanyons(enabled: boolean) {
     apiFetch<TCanyon[]>("/canyons")
       .then(setCanyons)
       .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [enabled]);
+      .finally(() => {
+        setLoading(false);
+        setLoaded(true);
+      });
+  }, [enabled, fetchCount]);
 
-  return { canyons, loading, error };
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+
+  return { canyons, loading, loaded, error, refetch };
 }
 
 export function useSharedCanyons(enabled: boolean) {

@@ -9,6 +9,7 @@ import tripLogsRouter from "./routes/tripLogs";
 import sharingRouter from "./routes/sharing";
 import friendsRouter from "./routes/friends";
 import notificationsRouter from "./routes/notifications";
+import ropewikiRouter from "./routes/ropewiki";
 
 dotenv.config();
 
@@ -36,6 +37,7 @@ app.use("/canyons/:canyonId/trips", tripLogsRouter);
 app.use("/canyons", sharingRouter);
 app.use("/friends", friendsRouter);
 app.use("/notifications", notificationsRouter);
+app.use("/ropewiki", ropewikiRouter);
 
 // Error handler — must be last
 app.use(errorHandler);

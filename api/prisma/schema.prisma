@@ -43,7 +43,9 @@ model Canyon {
   attributes    Json     @default("{}")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
-  forkedFromId  String?  @map("forked_from_id")
+  forkedFromId      String?  @map("forked_from_id")
+  ropeWikiId        Int?     @map("ropewiki_id")
+  ropeWikiSnapshot  Json?    @map("ropewiki_snapshot")
 
   owner         User          @relation(fields: [ownerId], references: [id])
   tripLogs      TripLog[]
@@ -52,6 +54,7 @@ model Canyon {
   forkedFrom    Canyon?  @relation("CanyonForks", fields: [forkedFromId], references: [id])
   forks         Canyon[]      @relation("CanyonForks")
 
+  @@unique([ownerId, ropeWikiId])
   @@map("canyons")
 }
 

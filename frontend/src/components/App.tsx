@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Sidebar from "./sidebar/Sidebar";
 import Map from "./map/Map";
 import SignIn from "./SignIn";
+import ImportDialog from "./ImportDialog";
 import classes from "./App.module.css";
 import type { TFilters } from "../canyonUtils";
 import { useCanyons, useSharedCanyons } from "../canyonUtils";
@@ -22,20 +23,49 @@ function App() {
   const [selectedCanyonID, setSelectedCanyonID] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const [showImport, setShowImport] = useState(false);
+  const importChecked = useRef(false);
+
   const auth = useAuth();
-  const { canyons } = useCanyons(auth.authenticated);
-  const { canyons: sharedCanyons } = useSharedCanyons(auth.authenticated);
+  const authenticated = auth.state === "authenticated";
+  const { canyons, loaded: canyonsLoaded, refetch } = useCanyons(authenticated);
+  const { canyons: sharedCanyons } = useSharedCanyons(authenticated);
+
+  // Show import dialog once when user has no canyons after first fetch completes
+  useEffect(() => {
+    if (canyonsLoaded && !importChecked.current) {
+      importChecked.current = true;
+      if (canyons.length === 0) {
+        setShowImport(true);
+      }
+    }
+  }, [canyonsLoaded, canyons.length]);
 
   // While checking for an existing session, render nothing to avoid
   // a brief flash of the sign-in form before the session loads.
-  if (auth.loading) return null;
+  if (auth.state === "loading") return null;
 
-  if (!auth.authenticated) {
-    return <SignIn onSignIn={auth.signIn} error={auth.error} />;
+  if (!authenticated) {
+    return (
+      <SignIn
+        authState={auth.state}
+        error={auth.error}
+        onSignIn={auth.signIn}
+        onSignUp={auth.signUp}
+        onConfirmSignUp={auth.confirmSignUp}
+        goToSignUp={auth.goToSignUp}
+        goToSignIn={auth.goToSignIn}
+      />
+    );
   }
 
   return (
     <div className={classes.app}>
+      <ImportDialog
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        onImported={refetch}
+      />
       <Sidebar
         onChangeFilters={setFilters}
         filters={filters}
