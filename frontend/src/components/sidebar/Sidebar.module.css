@@ -38,6 +38,29 @@
 
 .canyonInfo {
   padding: 0 1em;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.altNames {
+  font-style: italic;
+  opacity: 0.8;
+  font-size: 0.9em;
+}
+
+.disclaimer {
+  font-size: 0.8em;
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.sourcesList {
+  margin: 0.3em 0;
+  padding-left: 1.2em;
+}
+
+.sourcesList a {
+  color: var(--sand-light);
 }
 
 .canyonHeader {
@@ -70,6 +93,42 @@
 
 .sidebar .toggleButton:hover {
   background-color: rgba(255, 255, 255, 0.1);
+}
+
+.canyonActions {
+  display: flex;
+  gap: 0.5em;
+  margin-top: 1em;
+  padding-bottom: 1em;
+}
+
+.editButton,
+.deleteButton {
+  flex: 1;
+  padding: 0.5em 1em;
+  border: 1px solid var(--sandstone-light);
+  border-radius: 4px;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.editButton {
+  background-color: var(--sandstone-light);
+  color: white;
+}
+
+.editButton:hover {
+  opacity: 0.9;
+}
+
+.deleteButton {
+  background-color: transparent;
+  color: #e57373;
+  border-color: #e57373;
+}
+
+.deleteButton:hover {
+  background-color: rgba(229, 115, 115, 0.1);
 }
 
 .arrow {

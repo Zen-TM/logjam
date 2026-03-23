@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Sidebar from "./sidebar/Sidebar";
 import Map from "./map/Map";
 import SignIn from "./SignIn";
@@ -25,6 +25,32 @@ function App() {
 
   const [showImport, setShowImport] = useState(false);
   const importChecked = useRef(false);
+
+  // Coordinate picking mode for EditCanyonDialog
+  const [pickingCoords, setPickingCoords] = useState(false);
+  const coordsCallbackRef = useRef<((lat: number, lng: number) => void) | null>(null);
+
+  const startPickingCoords = useCallback(
+    (onPicked: (lat: number, lng: number) => void) => {
+      coordsCallbackRef.current = onPicked;
+      setPickingCoords(true);
+    },
+    [],
+  );
+
+  const handleCoordsPicked = useCallback(
+    (lat: number, lng: number) => {
+      coordsCallbackRef.current?.(lat, lng);
+      coordsCallbackRef.current = null;
+      setPickingCoords(false);
+    },
+    [],
+  );
+
+  const cancelPickingCoords = useCallback(() => {
+    coordsCallbackRef.current = null;
+    setPickingCoords(false);
+  }, []);
 
   const auth = useAuth();
   const authenticated = auth.state === "authenticated";
@@ -74,6 +100,10 @@ function App() {
         canyons={[...canyons, ...sharedCanyons]}
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
+        onRefetch={refetch}
+        onPickCoords={startPickingCoords}
+        pickingCoords={pickingCoords}
+        onCancelPickCoords={cancelPickingCoords}
       />
       <Map
         filters={filters}
@@ -83,6 +113,8 @@ function App() {
           setSelectedCanyonID(id);
           setSidebarOpen(true);
         }}
+        pickingCoords={pickingCoords}
+        onCoordsPicked={handleCoordsPicked}
       />
     </div>
   );

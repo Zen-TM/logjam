@@ -10,6 +10,21 @@
   z-index: 1;
 }
 
+.pickBanner {
+  position: absolute;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  background: var(--sandstone-dark);
+  color: var(--content-color);
+  padding: 0.6em 1.2em;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  font-size: 14px;
+  pointer-events: none;
+}
+
 .layerSelect {
   padding: 4px 6px;
   font-size: 12px;

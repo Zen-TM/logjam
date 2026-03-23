@@ -24,6 +24,7 @@ export type TCanyon = {
   longestAbseil: number | null;
   notes: string | null;
   attributes: TCanyonAttributes;
+  ropeWikiId: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -68,6 +69,7 @@ async function apiFetch<T>(
     ...(options?.body != null && { body: JSON.stringify(options.body) }),
   });
   if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -91,6 +93,17 @@ export function importFromRopeWiki(): Promise<ImportResult> {
 
 export function refreshFromRopeWiki(): Promise<RefreshResult> {
   return apiFetch<RefreshResult>("/ropewiki/refresh", { method: "POST" });
+}
+
+export function updateCanyon(
+  id: string,
+  data: Partial<Omit<TCanyon, "id" | "createdAt" | "updatedAt" | "ropeWikiId">>,
+): Promise<TCanyon> {
+  return apiFetch<TCanyon>(`/canyons/${id}`, { method: "PATCH", body: data });
+}
+
+export function deleteCanyon(id: string): Promise<void> {
+  return apiFetch<void>(`/canyons/${id}`, { method: "DELETE" });
 }
 
 export function useCanyons(enabled: boolean) {

@@ -62,11 +62,15 @@ function Map({
   canyons,
   sharedCanyons,
   selectCanyon,
+  pickingCoords,
+  onCoordsPicked,
 }: {
   filters: TFilters;
   canyons: TCanyon[];
   sharedCanyons: TCanyon[];
   selectCanyon: (id: string | null) => void;
+  pickingCoords: boolean;
+  onCoordsPicked: (lat: number, lng: number) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -284,6 +288,31 @@ function Map({
     }
   }, [canyons, sharedCanyons, filters, mapLoaded]);
 
+  // Coordinate picking mode
+  const onCoordsPickedRef = useRef(onCoordsPicked);
+  useEffect(() => {
+    onCoordsPickedRef.current = onCoordsPicked;
+  }, [onCoordsPicked]);
+
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+
+    if (pickingCoords) {
+      map.getCanvas().style.cursor = "crosshair";
+      const handleClick = (e: maplibregl.MapMouseEvent) => {
+        onCoordsPickedRef.current(e.lngLat.lat, e.lngLat.lng);
+      };
+      map.once("click", handleClick);
+      return () => {
+        map.getCanvas().style.cursor = "";
+        map.off("click", handleClick);
+      };
+    } else {
+      map.getCanvas().style.cursor = "";
+    }
+  }, [pickingCoords, mapLoaded]);
+
   // Toggle base layer visibility
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -299,7 +328,13 @@ function Map({
   return (
     <div id="map" className={classes.map}>
       <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
-      <div className={classes.layerSwitcher}>
+      {pickingCoords && (
+        <div className={classes.pickBanner}>Click the map to select a location</div>
+      )}
+      <div
+        className={classes.layerSwitcher}
+        style={{ pointerEvents: pickingCoords ? "none" : undefined }}
+      >
         <select
           className={classes.layerSelect}
           value={activeLayerId}
