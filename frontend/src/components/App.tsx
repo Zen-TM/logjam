@@ -26,7 +26,11 @@ function App() {
   const [showImport, setShowImport] = useState(false);
   const importChecked = useRef(false);
 
-  // Coordinate picking mode for EditCanyonDialog
+  // Layer visibility toggles
+  const [showOwnedCanyons, setShowOwnedCanyons] = useState(true);
+  const [showSharedCanyons, setShowSharedCanyons] = useState(true);
+
+  // Coordinate picking mode for CanyonDialog
   const [pickingCoords, setPickingCoords] = useState(false);
   const coordsCallbackRef = useRef<((lat: number, lng: number) => void) | null>(null);
 
@@ -104,11 +108,17 @@ function App() {
         onPickCoords={startPickingCoords}
         pickingCoords={pickingCoords}
         onCancelPickCoords={cancelPickingCoords}
+        showOwnedCanyons={showOwnedCanyons}
+        setShowOwnedCanyons={setShowOwnedCanyons}
+        showSharedCanyons={showSharedCanyons}
+        setShowSharedCanyons={setShowSharedCanyons}
       />
       <Map
         filters={filters}
         canyons={canyons}
         sharedCanyons={sharedCanyons}
+        showOwnedCanyons={showOwnedCanyons}
+        showSharedCanyons={showSharedCanyons}
         selectCanyon={(id) => {
           setSelectedCanyonID(id);
           setSidebarOpen(true);

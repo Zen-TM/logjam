@@ -6,14 +6,22 @@ import {
   DialogContentText,
   DialogActions,
   Button,
+  Switch,
+  Box,
+  CircularProgress,
+  Typography,
 } from "@mui/material";
 import classes from "./Sidebar.module.css";
 import Arrow from "../../assets/arrow.svg";
 import SidebarModule from "./sidebarModule/SidebarModule";
 import Filters from "./sidebarModule/filters/Filters";
-import EditCanyonDialog from "../EditCanyonDialog";
-import type { TCanyon, TFilters } from "../../canyonUtils";
-import { formatCanyonGrade, deleteCanyon } from "../../canyonUtils";
+import CanyonDialog from "../CanyonDialog";
+import type { TCanyon, TFilters, RefreshResult } from "../../canyonUtils";
+import {
+  formatCanyonGrade,
+  deleteCanyon,
+  refreshFromRopeWiki,
+} from "../../canyonUtils";
 
 function Sidebar({
   onChangeFilters,
@@ -27,6 +35,10 @@ function Sidebar({
   onPickCoords,
   pickingCoords,
   onCancelPickCoords,
+  showOwnedCanyons,
+  setShowOwnedCanyons,
+  showSharedCanyons,
+  setShowSharedCanyons,
 }: {
   onChangeFilters: (filters: TFilters) => void;
   filters: TFilters;
@@ -39,11 +51,20 @@ function Sidebar({
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
   onCancelPickCoords: () => void;
+  showOwnedCanyons: boolean;
+  setShowOwnedCanyons: (show: boolean) => void;
+  showSharedCanyons: boolean;
+  setShowSharedCanyons: (show: boolean) => void;
 }) {
   const canyon = canyons.find((c) => c.id === selectedCanyonID);
   const [showEdit, setShowEdit] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(
+    null,
+  );
 
   async function handleDelete() {
     if (!canyon) return;
@@ -59,9 +80,86 @@ function Sidebar({
     }
   }
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    setRefreshResult(null);
+    try {
+      const result = await refreshFromRopeWiki();
+      setRefreshResult(result);
+      onRefetch();
+    } catch {
+      setRefreshResult(null);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   function sidebarModules() {
     return (
       <>
+        <SidebarModule sidebarOpen={sidebarOpen} moduleName="Canyon Options">
+          <div className={classes.optionsContent}>
+            <button
+              className={classes.addButton}
+              onClick={() => setShowAdd(true)}
+            >
+              + Add Canyon
+            </button>
+
+            <div className={classes.toggleRow}>
+              <span>Show my canyons</span>
+              <Switch
+                size="small"
+                checked={showOwnedCanyons}
+                onChange={(_, checked) => setShowOwnedCanyons(checked)}
+                sx={{
+                  "& .MuiSwitch-switchBase.Mui-checked": {
+                    color: "#f97316",
+                  },
+                  "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
+                    backgroundColor: "#f97316",
+                  },
+                }}
+              />
+            </div>
+            <div className={classes.toggleRow}>
+              <span>Show shared canyons</span>
+              <Switch
+                size="small"
+                checked={showSharedCanyons}
+                onChange={(_, checked) => setShowSharedCanyons(checked)}
+                sx={{
+                  "& .MuiSwitch-switchBase.Mui-checked": {
+                    color: "#3b82f6",
+                  },
+                  "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
+                    backgroundColor: "#3b82f6",
+                  },
+                }}
+              />
+            </div>
+
+            <button
+              className={classes.refreshButton}
+              onClick={handleRefresh}
+              disabled={refreshing}
+            >
+              {refreshing ? "Refreshing..." : "Refresh from RopeWiki"}
+            </button>
+            {refreshResult && (
+              <Typography
+                variant="caption"
+                sx={{ color: "var(--content-color)", opacity: 0.7 }}
+              >
+                {refreshResult.added} added, {refreshResult.updated} updated,{" "}
+                {refreshResult.unchanged} unchanged
+                {refreshResult.userEdited > 0 &&
+                  `, ${refreshResult.userEdited} kept (edited)`}
+              </Typography>
+            )}
+          </div>
+        </SidebarModule>
+        <span className={classes.separator} />
         <SidebarModule sidebarOpen={sidebarOpen} moduleName="Filters">
           <Filters onChangeFilters={onChangeFilters} filters={filters} />
         </SidebarModule>
@@ -218,46 +316,59 @@ function Sidebar({
           }}
         />
       </button>
+
+      {/* Edit canyon dialog */}
       {canyon && (
-        <>
-          <EditCanyonDialog
-            canyon={canyon}
-            open={showEdit && !pickingCoords}
-            onClose={() => setShowEdit(false)}
-            onSaved={onRefetch}
-            onPickCoords={onPickCoords}
-            onCancelPickCoords={onCancelPickCoords}
-          />
-          <Dialog
-            open={showDeleteConfirm}
-            onClose={deleting ? undefined : () => setShowDeleteConfirm(false)}
-          >
-            <DialogTitle>Delete Canyon</DialogTitle>
-            <DialogContent>
-              <DialogContentText>
-                Are you sure you want to delete {canyon.name}? Trip logs and
-                other associated data will also be deleted. This cannot be
-                undone.
-              </DialogContentText>
-            </DialogContent>
-            <DialogActions>
-              <Button
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={deleting}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleDelete}
-                color="error"
-                variant="contained"
-                disabled={deleting}
-              >
-                {deleting ? "Deleting..." : "Delete"}
-              </Button>
-            </DialogActions>
-          </Dialog>
-        </>
+        <CanyonDialog
+          canyon={canyon}
+          open={showEdit && !pickingCoords}
+          onClose={() => setShowEdit(false)}
+          onSaved={onRefetch}
+          onPickCoords={onPickCoords}
+          onCancelPickCoords={onCancelPickCoords}
+        />
+      )}
+
+      {/* Add canyon dialog */}
+      <CanyonDialog
+        canyon={null}
+        open={showAdd && !pickingCoords}
+        onClose={() => setShowAdd(false)}
+        onSaved={onRefetch}
+        onPickCoords={onPickCoords}
+        onCancelPickCoords={onCancelPickCoords}
+      />
+
+      {/* Delete confirmation */}
+      {canyon && (
+        <Dialog
+          open={showDeleteConfirm}
+          onClose={deleting ? undefined : () => setShowDeleteConfirm(false)}
+        >
+          <DialogTitle>Delete Canyon</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Are you sure you want to delete {canyon.name}? Trip logs and other
+              associated data will also be deleted. This cannot be undone.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => setShowDeleteConfirm(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDelete}
+              color="error"
+              variant="contained"
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogActions>
+        </Dialog>
       )}
     </div>
   );

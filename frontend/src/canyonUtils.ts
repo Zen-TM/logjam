@@ -95,6 +95,21 @@ export function refreshFromRopeWiki(): Promise<RefreshResult> {
   return apiFetch<RefreshResult>("/ropewiki/refresh", { method: "POST" });
 }
 
+export type CreateCanyonData = {
+  name: string;
+  altNames?: string[];
+  latitude: number;
+  longitude: number;
+  numAbseils?: number | null;
+  longestAbseil?: number | null;
+  notes?: string | null;
+  attributes?: TCanyonAttributes;
+};
+
+export function createCanyon(data: CreateCanyonData): Promise<TCanyon> {
+  return apiFetch<TCanyon>("/canyons", { method: "POST", body: data });
+}
+
 export function updateCanyon(
   id: string,
   data: Partial<Omit<TCanyon, "id" | "createdAt" | "updatedAt" | "ropeWikiId">>,

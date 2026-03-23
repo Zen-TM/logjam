@@ -64,6 +64,8 @@ function Map({
   selectCanyon,
   pickingCoords,
   onCoordsPicked,
+  showOwnedCanyons,
+  showSharedCanyons,
 }: {
   filters: TFilters;
   canyons: TCanyon[];
@@ -71,6 +73,8 @@ function Map({
   selectCanyon: (id: string | null) => void;
   pickingCoords: boolean;
   onCoordsPicked: (lat: number, lng: number) => void;
+  showOwnedCanyons: boolean;
+  showSharedCanyons: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -312,6 +316,16 @@ function Map({
       map.getCanvas().style.cursor = "";
     }
   }, [pickingCoords, mapLoaded]);
+
+  // Toggle canyon layer visibility
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const vis = (show: boolean) => (show ? "visible" : "none");
+    mapRef.current.setLayoutProperty("canyon-circles", "visibility", vis(showOwnedCanyons));
+    mapRef.current.setLayoutProperty("canyon-labels", "visibility", vis(showOwnedCanyons));
+    mapRef.current.setLayoutProperty("shared-canyon-circles", "visibility", vis(showSharedCanyons));
+    mapRef.current.setLayoutProperty("shared-canyon-labels", "visibility", vis(showSharedCanyons));
+  }, [showOwnedCanyons, showSharedCanyons, mapLoaded]);
 
   // Toggle base layer visibility
   useEffect(() => {

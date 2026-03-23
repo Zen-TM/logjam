@@ -13,7 +13,7 @@ import {
   Typography,
 } from "@mui/material";
 import type { TCanyon, TCanyonAttributes } from "../canyonUtils";
-import { updateCanyon } from "../canyonUtils";
+import { updateCanyon, createCanyon } from "../canyonUtils";
 
 const V_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
 const A_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -28,7 +28,6 @@ const COMMITMENTS = [
 const QUALITY_GRADES = [1, 2, 3, 4, 5] as const;
 const WETSUIT_GRADES = [1, 2, 3, 4, 5] as const;
 
-// Shared sx for select TextFields so the selected value text is white
 const selectSx = {
   "& .MuiSelect-select": { color: "var(--content-color)" },
   "& .MuiSelect-icon": { color: "var(--content-color)" },
@@ -36,7 +35,7 @@ const selectSx = {
 
 type Source = { label: string; url: string };
 
-function EditCanyonDialog({
+function CanyonDialog({
   canyon,
   open,
   onClose,
@@ -44,13 +43,15 @@ function EditCanyonDialog({
   onPickCoords,
   onCancelPickCoords,
 }: {
-  canyon: TCanyon;
+  canyon: TCanyon | null;
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   onCancelPickCoords: () => void;
 }) {
+  const isEdit = canyon != null;
+
   const [name, setName] = useState("");
   const [altNames, setAltNames] = useState("");
   const [latitude, setLatitude] = useState("");
@@ -70,35 +71,50 @@ function EditCanyonDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Track whether we're returning from coordinate picking so we don't
-  // reset the form (the useEffect below fires when `open` toggles).
   const pickingRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
-    // Skip resetting form values when returning from map pick
     if (pickingRef.current) {
       pickingRef.current = false;
       return;
     }
-    const attr = canyon.attributes;
-    setName(canyon.name);
-    setAltNames(canyon.altNames.join(", "));
-    setLatitude(String(canyon.latitude));
-    setLongitude(String(canyon.longitude));
-    setNumAbseils(canyon.numAbseils != null ? String(canyon.numAbseils) : "");
-    setLongestAbseil(
-      canyon.longestAbseil != null ? String(canyon.longestAbseil) : "",
-    );
-    setNotes(canyon.notes ?? "");
-    setVGrade(attr.v_grade ?? "");
-    setAGrade(attr.a_grade ?? "");
-    setCommitment(attr.commitment ?? "");
-    setQuality(attr.quality ?? "");
-    setWetsuits(attr.wetsuits ?? "");
-    setRockType(attr.rock_type ?? "");
-    setHours(attr.hours != null ? String(attr.hours) : "");
-    setSources((attr.sources ?? []).map(([label, url]) => ({ label, url })));
+    if (canyon) {
+      const attr = canyon.attributes;
+      setName(canyon.name);
+      setAltNames(canyon.altNames.join(", "));
+      setLatitude(String(canyon.latitude));
+      setLongitude(String(canyon.longitude));
+      setNumAbseils(canyon.numAbseils != null ? String(canyon.numAbseils) : "");
+      setLongestAbseil(
+        canyon.longestAbseil != null ? String(canyon.longestAbseil) : "",
+      );
+      setNotes(canyon.notes ?? "");
+      setVGrade(attr.v_grade ?? "");
+      setAGrade(attr.a_grade ?? "");
+      setCommitment(attr.commitment ?? "");
+      setQuality(attr.quality ?? "");
+      setWetsuits(attr.wetsuits ?? "");
+      setRockType(attr.rock_type ?? "");
+      setHours(attr.hours != null ? String(attr.hours) : "");
+      setSources((attr.sources ?? []).map(([label, url]) => ({ label, url })));
+    } else {
+      setName("");
+      setAltNames("");
+      setLatitude("");
+      setLongitude("");
+      setNumAbseils("");
+      setLongestAbseil("");
+      setNotes("");
+      setVGrade("");
+      setAGrade("");
+      setCommitment("");
+      setQuality("");
+      setWetsuits("");
+      setRockType("");
+      setHours("");
+      setSources([]);
+    }
     setError(null);
   }, [open, canyon]);
 
@@ -116,13 +132,13 @@ function EditCanyonDialog({
     try {
       const parsedLat = parseFloat(latitude);
       const parsedLng = parseFloat(longitude);
-      if (isNaN(parsedLat) || isNaN(parsedLng)) {
-        setError("Invalid coordinates");
+      if (!name.trim()) {
+        setError("Name is required");
         setSaving(false);
         return;
       }
-      if (!name.trim()) {
-        setError("Name is required");
+      if (!latitude || !longitude || isNaN(parsedLat) || isNaN(parsedLng)) {
+        setError("Valid coordinates are required");
         setSaving(false);
         return;
       }
@@ -131,7 +147,19 @@ function EditCanyonDialog({
         .filter((s) => s.label.trim())
         .map((s) => [s.label.trim(), s.url.trim()]);
 
-      await updateCanyon(canyon.id, {
+      const attributes: TCanyonAttributes = {
+        ...(canyon?.attributes),
+        ...(vGrade !== "" ? { v_grade: vGrade as TCanyonAttributes["v_grade"] } : {}),
+        ...(aGrade !== "" ? { a_grade: aGrade as TCanyonAttributes["a_grade"] } : {}),
+        ...(commitment !== "" ? { commitment: commitment as TCanyonAttributes["commitment"] } : {}),
+        ...(quality !== "" ? { quality } : {}),
+        ...(wetsuits !== "" ? { wetsuits: wetsuits as TCanyonAttributes["wetsuits"] } : {}),
+        rock_type: rockType || undefined,
+        ...(hours ? { hours: parseFloat(hours) } : {}),
+        sources: cleanSources.length > 0 ? cleanSources : undefined,
+      };
+
+      const data = {
         name: name.trim(),
         altNames: altNames
           .split(",")
@@ -142,18 +170,14 @@ function EditCanyonDialog({
         numAbseils: numAbseils ? parseInt(numAbseils) : null,
         longestAbseil: longestAbseil ? parseFloat(longestAbseil) : null,
         notes: notes || null,
-        attributes: {
-          ...canyon.attributes,
-          ...(vGrade !== "" ? { v_grade: vGrade as TCanyonAttributes["v_grade"] } : {}),
-          ...(aGrade !== "" ? { a_grade: aGrade as TCanyonAttributes["a_grade"] } : {}),
-          ...(commitment !== "" ? { commitment: commitment as TCanyonAttributes["commitment"] } : {}),
-          ...(quality !== "" ? { quality } : {}),
-          ...(wetsuits !== "" ? { wetsuits: wetsuits as TCanyonAttributes["wetsuits"] } : {}),
-          rock_type: rockType || undefined,
-          ...(hours ? { hours: parseFloat(hours) } : {}),
-          sources: cleanSources.length > 0 ? cleanSources : undefined,
-        },
-      });
+        attributes,
+      };
+
+      if (isEdit) {
+        await updateCanyon(canyon.id, data);
+      } else {
+        await createCanyon(data);
+      }
       onSaved();
       onClose();
     } catch (err) {
@@ -176,7 +200,7 @@ function EditCanyonDialog({
         },
       }}
     >
-      <DialogTitle>Edit Canyon</DialogTitle>
+      <DialogTitle>{isEdit ? "Edit Canyon" : "Add Canyon"}</DialogTitle>
       <DialogContent>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
           <TextField
@@ -364,7 +388,6 @@ function EditCanyonDialog({
             size="small"
           />
 
-          {/* Sources list */}
           <Box>
             <Typography variant="body2" sx={{ mb: 0.5 }}>
               Sources
@@ -452,4 +475,4 @@ function EditCanyonDialog({
   );
 }
 
-export default EditCanyonDialog;
+export default CanyonDialog;

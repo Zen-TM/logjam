@@ -27,7 +27,7 @@ function Filters({
     name: keyof TFilters,
     displayName: string,
     range: [number, number] = [1, 7],
-    step: number = 1
+    step: number = 1,
   ) {
     return (
       <>
@@ -133,7 +133,7 @@ function Filters({
       {sliderFilterInput("v_grade", "Vertical Grade")}
       {sliderFilterInput("a_grade", "Aquatic Grade")}
       {sliderFilterInput("commitment", "Commitment", [1, 6])}
-      {sliderFilterInput("quality", "Quality", [1, 5], 0.1)}
+      {sliderFilterInput("quality", "Quality", [1, 5])}
       {selectNumberFilterInput("pitches", "Pitches")}
       {selectNumberFilterInput("longest_pitch", "Longest Pitch")}
       {selectNumberFilterInput("hours", "Hours")}

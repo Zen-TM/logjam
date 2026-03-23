@@ -131,6 +131,55 @@
   background-color: rgba(229, 115, 115, 0.1);
 }
 
+.optionsContent {
+  padding: 0.5em 1em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+}
+
+.addButton {
+  width: 100%;
+  padding: 0.5em 1em;
+  background-color: var(--sandstone-light);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.addButton:hover {
+  opacity: 0.9;
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9em;
+}
+
+.refreshButton {
+  width: 100%;
+  padding: 0.5em 1em;
+  background-color: transparent;
+  color: var(--content-color);
+  border: 1px solid var(--sandstone-light);
+  border-radius: 4px;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.refreshButton:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.refreshButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .arrow {
   height: 100%;
   transition: transform 0.3s;
