@@ -8,7 +8,6 @@ import {
   Button,
   Switch,
   Box,
-  CircularProgress,
   Typography,
   TextField,
 } from "@mui/material";
