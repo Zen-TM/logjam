@@ -4,152 +4,144 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
 model User {
-  id                  String   @id @default(uuid())
-  cognitoId           String   @unique @map("cognito_id")
-  username            String   @unique
-  email               String   @unique
-  storageUsedBytes    BigInt   @default(0) @map("storage_used_bytes")
-  storageQuotaBytes   BigInt   @default(524288000) @map("storage_quota_bytes")
-  createdAt           DateTime @default(now()) @map("created_at")
-
-  notifications       Notification[]
+  id                  String         @id @default(uuid())
+  cognitoId           String         @unique @map("cognito_id")
+  username            String         @unique
+  email               String         @unique
+  storageUsedBytes    BigInt         @default(0) @map("storage_used_bytes")
+  storageQuotaBytes   BigInt         @default(524288000) @map("storage_quota_bytes")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  sharedBy            CanyonShare[]  @relation("sharedBy")
+  sharedWith          CanyonShare[]  @relation("sharedWith")
   canyons             Canyon[]
-  tripLogs            TripLog[]
+  receivedFriendships Friendship[]   @relation("addressee")
+  sentFriendships     Friendship[]   @relation("requester")
   media               Media[]
-  sentFriendships     Friendship[] @relation("requester")
-  receivedFriendships Friendship[] @relation("addressee")
-  sharedBy            CanyonShare[] @relation("sharedBy")
-  sharedWith          CanyonShare[] @relation("sharedWith")
+  notifications       Notification[]
   topoJobs            TopoJob[]
+  tripLogs            TripLog[]
 
   @@map("users")
 }
 
 model Canyon {
-  id            String   @id @default(uuid())
-  ownerId       String   @map("owner_id")
-  name          String
-  altNames      String[] @default([])
-  latitude      Float
-  longitude     Float
-  numAbseils    Int?     @map("num_abseils")
-  longestAbseil Float?   @map("longest_abseil_m")
-  vGrade        Int?     @map("v_grade")
-  aGrade        Int?     @map("a_grade")
-  commitment    Int?
-  quality       Int?
-  wetsuits      Int?
-  hours         Float?
-  notes         String?
-  attributes    Json     @default("{}")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  forkedFromId      String?  @map("forked_from_id")
-  ropeWikiId        Int?     @map("ropewiki_id")
-  ropeWikiSnapshot  Json?    @map("ropewiki_snapshot")
-
-  owner         User          @relation(fields: [ownerId], references: [id])
-  tripLogs      TripLog[]
-  media         Media[]       @relation("CanyonMedia")
-  shares        CanyonShare[]
-  forkedFrom    Canyon?  @relation("CanyonForks", fields: [forkedFromId], references: [id])
-  forks         Canyon[]      @relation("CanyonForks")
+  id               String        @id @default(uuid())
+  ownerId          String        @map("owner_id")
+  name             String
+  altNames         String[]      @default([])
+  latitude         Float
+  longitude        Float
+  numAbseils       Int?          @map("num_abseils")
+  longestAbseil    Float?        @map("longest_abseil_m")
+  notes            String?
+  attributes       Json          @default("{}")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+  forkedFromId     String?       @map("forked_from_id")
+  ropeWikiId       Int?          @map("ropewiki_id")
+  ropeWikiSnapshot Json?         @map("ropewiki_snapshot")
+  vGrade           Int?          @map("v_grade")
+  aGrade           Int?          @map("a_grade")
+  commitment       Int?
+  quality          Int?
+  wetsuits         Int?
+  hours            Float?
+  shares           CanyonShare[]
+  forkedFrom       Canyon?       @relation("CanyonForks", fields: [forkedFromId], references: [id])
+  forks            Canyon[]      @relation("CanyonForks")
+  owner            User          @relation(fields: [ownerId], references: [id])
+  media            Media[]       @relation("CanyonMedia")
+  tripLogs         TripLog[]
 
   @@unique([ownerId, ropeWikiId])
   @@map("canyons")
 }
 
 model Notification {
-  id          String   @id @default(uuid())
-  userId      String   @map("user_id")
-  type        String   // "canyon_shared", "friend_request", etc.
-  payload     Json     // flexible — stores relevant IDs and context
-  read        Boolean  @default(false)
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  user        User     @relation(fields: [userId], references: [id])
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  type      String
+  payload   Json
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id])
 
   @@map("notifications")
 }
 
 model TripLog {
-  id            String   @id @default(uuid())
-  canyonId      String   @map("canyon_id")
-  userId        String   @map("user_id")
-  date          DateTime
-  notes         String?
-  customFields  Json     @default("{}") @map("custom_fields")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  canyon        Canyon   @relation(fields: [canyonId], references: [id])
-  user          User     @relation(fields: [userId], references: [id])
-  media         Media[]  @relation("TripLogMedia")
+  id           String   @id @default(uuid())
+  canyonId     String   @map("canyon_id")
+  userId       String   @map("user_id")
+  date         DateTime
+  notes        String?
+  customFields Json     @default("{}") @map("custom_fields")
+  createdAt    DateTime @default(now()) @map("created_at")
+  media        Media[]  @relation("TripLogMedia")
+  canyon       Canyon   @relation(fields: [canyonId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
 
   @@map("trip_logs")
 }
 
 model Media {
-  id               String    @id @default(uuid())
-  ownerId          String    @map("owner_id")
-  linkedType       String    @map("linked_type")
-  linkedId         String    @map("linked_id")
-  s3KeyThumbnail   String?   @map("s3_key_thumbnail")
-  s3KeyDisplay     String    @map("s3_key_display")
-  mediaType        String    @map("media_type")
-  filename         String
-  fileSizeBytes    BigInt    @map("file_size_bytes")
-  createdAt        DateTime  @default(now()) @map("created_at")
-
-  owner            User      @relation(fields: [ownerId], references: [id])
-  canyon           Canyon?   @relation("CanyonMedia", fields: [linkedId], references: [id], map: "media_canyon_linked_id_fkey")
-  tripLog          TripLog?  @relation("TripLogMedia", fields: [linkedId], references: [id], map: "media_triplog_linked_id_fkey")
+  id             String   @id @default(uuid())
+  ownerId        String   @map("owner_id")
+  linkedType     String   @map("linked_type")
+  linkedId       String   @map("linked_id")
+  s3KeyThumbnail String?  @map("s3_key_thumbnail")
+  s3KeyDisplay   String   @map("s3_key_display")
+  mediaType      String   @map("media_type")
+  filename       String
+  fileSizeBytes  BigInt   @map("file_size_bytes")
+  createdAt      DateTime @default(now()) @map("created_at")
+  owner          User     @relation(fields: [ownerId], references: [id])
+  canyon         Canyon?  @relation("CanyonMedia", fields: [linkedId], references: [id], map: "media_canyon_linked_id_fkey")
+  tripLog        TripLog? @relation("TripLogMedia", fields: [linkedId], references: [id], map: "media_triplog_linked_id_fkey")
 
   @@map("media")
 }
 
 model Friendship {
-  id           String   @id @default(uuid())
-  requesterId  String   @map("requester_id")
-  addresseeId  String   @map("addressee_id")
-  status       String   @default("pending")
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  requester    User     @relation("requester", fields: [requesterId], references: [id])
-  addressee    User     @relation("addressee", fields: [addresseeId], references: [id])
+  id          String   @id @default(uuid())
+  requesterId String   @map("requester_id")
+  addresseeId String   @map("addressee_id")
+  status      String   @default("pending")
+  createdAt   DateTime @default(now()) @map("created_at")
+  addressee   User     @relation("addressee", fields: [addresseeId], references: [id])
+  requester   User     @relation("requester", fields: [requesterId], references: [id])
 
   @@unique([requesterId, addresseeId])
   @@map("friendships")
 }
 
 model CanyonShare {
-  id            String   @id @default(uuid())
-  canyonId      String   @map("canyon_id")
-  sharedById    String   @map("shared_by_id")
-  sharedWithId  String   @map("shared_with_id")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  canyon        Canyon   @relation(fields: [canyonId], references: [id])
-  sharedBy      User     @relation("sharedBy", fields: [sharedById], references: [id])
-  sharedWith    User     @relation("sharedWith", fields: [sharedWithId], references: [id])
+  id           String   @id @default(uuid())
+  canyonId     String   @map("canyon_id")
+  sharedById   String   @map("shared_by_id")
+  sharedWithId String   @map("shared_with_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  canyon       Canyon   @relation(fields: [canyonId], references: [id])
+  sharedBy     User     @relation("sharedBy", fields: [sharedById], references: [id])
+  sharedWith   User     @relation("sharedWith", fields: [sharedWithId], references: [id])
 
   @@map("canyon_shares")
 }
 
 model TopoJob {
-  id            String   @id @default(uuid())
-  userId        String   @map("user_id")
-  status        String   @default("pending")
-  s3InputKey    String?  @map("s3_input_key")
-  s3OutputKey   String?  @map("s3_output_key")
-  errorMessage  String?  @map("error_message")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  user          User     @relation(fields: [userId], references: [id])
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  status       String   @default("pending")
+  s3InputKey   String?  @map("s3_input_key")
+  s3OutputKey  String?  @map("s3_output_key")
+  errorMessage String?  @map("error_message")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id])
 
   @@map("topo_jobs")
 }

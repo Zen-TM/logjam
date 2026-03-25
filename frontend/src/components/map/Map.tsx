@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
+import maplibregl, { setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-csp-worker?url";
+
+// Use the pre-built CSP worker instead of the default inline blob worker.
+// Vite's production minification can corrupt the blob worker code, causing
+// "on is not defined" errors and breaking GeoJSON source processing.
+setWorkerUrl(maplibreWorkerUrl);
 import classes from "./Map.module.css";
 import type { TCanyon, TFilters } from "../../canyonUtils";
 import { passesFilters } from "../../canyonUtils";
@@ -364,10 +370,10 @@ function Map({
       const maxX = Math.max(start.x, e.clientX);
       const maxY = Math.max(start.y, e.clientY);
       const rect = container.getBoundingClientRect();
-      box.style.left = (minX - rect.left) + "px";
-      box.style.top = (minY - rect.top) + "px";
-      box.style.width = (maxX - minX) + "px";
-      box.style.height = (maxY - minY) + "px";
+      box.style.left = minX - rect.left + "px";
+      box.style.top = minY - rect.top + "px";
+      box.style.width = maxX - minX + "px";
+      box.style.height = maxY - minY + "px";
     }
 
     function onMouseUp(e: MouseEvent) {
@@ -380,7 +386,10 @@ function Map({
       if (!start || !map) return;
       const rect = container.getBoundingClientRect();
       const p1: [number, number] = [start.x - rect.left, start.y - rect.top];
-      const p2: [number, number] = [e.clientX - rect.left, e.clientY - rect.top];
+      const p2: [number, number] = [
+        e.clientX - rect.left,
+        e.clientY - rect.top,
+      ];
 
       const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
         [Math.min(p1[0], p2[0]), Math.min(p1[1], p2[1])],
@@ -391,7 +400,11 @@ function Map({
         layers: ["canyon-circles", "shared-canyon-circles"],
       });
 
-      const ids = [...new Set(features.map((f) => f.properties?.id as string).filter(Boolean))];
+      const ids = [
+        ...new Set(
+          features.map((f) => f.properties?.id as string).filter(Boolean),
+        ),
+      ];
       start = null;
       onAreaSelectedRef.current(ids);
     }
@@ -413,10 +426,26 @@ function Map({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const vis = (show: boolean) => (show ? "visible" : "none");
-    mapRef.current.setLayoutProperty("canyon-circles", "visibility", vis(showOwnedCanyons));
-    mapRef.current.setLayoutProperty("canyon-labels", "visibility", vis(showOwnedCanyons));
-    mapRef.current.setLayoutProperty("shared-canyon-circles", "visibility", vis(showSharedCanyons));
-    mapRef.current.setLayoutProperty("shared-canyon-labels", "visibility", vis(showSharedCanyons));
+    mapRef.current.setLayoutProperty(
+      "canyon-circles",
+      "visibility",
+      vis(showOwnedCanyons),
+    );
+    mapRef.current.setLayoutProperty(
+      "canyon-labels",
+      "visibility",
+      vis(showOwnedCanyons),
+    );
+    mapRef.current.setLayoutProperty(
+      "shared-canyon-circles",
+      "visibility",
+      vis(showSharedCanyons),
+    );
+    mapRef.current.setLayoutProperty(
+      "shared-canyon-labels",
+      "visibility",
+      vis(showSharedCanyons),
+    );
   }, [showOwnedCanyons, showSharedCanyons, mapLoaded]);
 
   // Toggle base layer visibility
@@ -435,14 +464,20 @@ function Map({
     <div id="map" className={classes.map}>
       <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
       {pickingCoords && (
-        <div className={classes.pickBanner}>Click the map to select a location</div>
+        <div className={classes.pickBanner}>
+          Click the map to select a location
+        </div>
       )}
       {selectingArea && (
-        <div className={classes.pickBanner}>Click and drag to select an area</div>
+        <div className={classes.pickBanner}>
+          Click and drag to select an area
+        </div>
       )}
       <div
         className={classes.layerSwitcher}
-        style={{ pointerEvents: pickingCoords || selectingArea ? "none" : undefined }}
+        style={{
+          pointerEvents: pickingCoords || selectingArea ? "none" : undefined,
+        }}
       >
         <select
           className={classes.layerSelect}
