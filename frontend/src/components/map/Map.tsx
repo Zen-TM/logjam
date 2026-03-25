@@ -176,7 +176,7 @@ function Map({
         minzoom: 11,
         layout: {
           "text-field": ["get", "name"],
-          "text-font": ["Open Sans Regular"],
+          "text-font": ["Open Sans Semibold"],
           "text-size": 12,
           "text-offset": [0, 1.2],
           "text-anchor": "top",
@@ -196,7 +196,7 @@ function Map({
         minzoom: 11,
         layout: {
           "text-field": ["get", "name"],
-          "text-font": ["Open Sans Regular"],
+          "text-font": ["Open Sans Semibold"],
           "text-size": 12,
           "text-offset": [0, 1.2],
           "text-anchor": "top",
