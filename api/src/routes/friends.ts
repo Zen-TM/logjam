@@ -33,11 +33,15 @@ router.get(
 
     const friends = friendships.map(
       (f: {
+        id: string;
         requesterId: string;
         addresseeId: string;
         requester: { id: string; username: string; email: string };
         addressee: { id: string; username: string; email: string };
-      }) => (f.requesterId === user.id ? f.addressee : f.requester),
+      }) => {
+        const friend = f.requesterId === user.id ? f.addressee : f.requester;
+        return { ...friend, friendshipId: f.id };
+      },
     );
 
     res.json(friends);
@@ -284,7 +288,10 @@ router.get(
 
     const users = await prisma.user.findMany({
       where: {
-        username: { contains: q, mode: "insensitive" },
+        OR: [
+          { username: { contains: q, mode: "insensitive" } },
+          { email: { contains: q, mode: "insensitive" } },
+        ],
         id: { not: user.id }, // exclude self
       },
       select: { id: true, username: true },

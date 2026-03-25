@@ -12,7 +12,7 @@ import {
   IconButton,
   Typography,
 } from "@mui/material";
-import type { TCanyon, TCanyonAttributes } from "../canyonUtils";
+import type { TCanyon } from "../canyonUtils";
 import { updateCanyon, createCanyon } from "../canyonUtils";
 
 const V_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -64,7 +64,6 @@ function CanyonDialog({
   const [commitment, setCommitment] = useState<number | "">("");
   const [quality, setQuality] = useState<number | "">("");
   const [wetsuits, setWetsuits] = useState<number | "">("");
-  const [rockType, setRockType] = useState("");
   const [hours, setHours] = useState("");
   const [sources, setSources] = useState<Source[]>([]);
 
@@ -80,7 +79,6 @@ function CanyonDialog({
       return;
     }
     if (canyon) {
-      const attr = canyon.attributes;
       setName(canyon.name);
       setAltNames(canyon.altNames.join(", "));
       setLatitude(String(canyon.latitude));
@@ -90,14 +88,13 @@ function CanyonDialog({
         canyon.longestAbseil != null ? String(canyon.longestAbseil) : "",
       );
       setNotes(canyon.notes ?? "");
-      setVGrade(attr.v_grade ?? "");
-      setAGrade(attr.a_grade ?? "");
-      setCommitment(attr.commitment ?? "");
-      setQuality(attr.quality ?? "");
-      setWetsuits(attr.wetsuits ?? "");
-      setRockType(attr.rock_type ?? "");
-      setHours(attr.hours != null ? String(attr.hours) : "");
-      setSources((attr.sources ?? []).map(([label, url]) => ({ label, url })));
+      setVGrade(canyon.vGrade ?? "");
+      setAGrade(canyon.aGrade ?? "");
+      setCommitment(canyon.commitment ?? "");
+      setQuality(canyon.quality ?? "");
+      setWetsuits(canyon.wetsuits ?? "");
+      setHours(canyon.hours != null ? String(canyon.hours) : "");
+      setSources((canyon.attributes.sources ?? []).map(([label, url]) => ({ label, url })));
     } else {
       setName("");
       setAltNames("");
@@ -111,7 +108,6 @@ function CanyonDialog({
       setCommitment("");
       setQuality("");
       setWetsuits("");
-      setRockType("");
       setHours("");
       setSources([]);
     }
@@ -147,18 +143,6 @@ function CanyonDialog({
         .filter((s) => s.label.trim())
         .map((s) => [s.label.trim(), s.url.trim()]);
 
-      const attributes: TCanyonAttributes = {
-        ...(canyon?.attributes),
-        ...(vGrade !== "" ? { v_grade: vGrade as TCanyonAttributes["v_grade"] } : {}),
-        ...(aGrade !== "" ? { a_grade: aGrade as TCanyonAttributes["a_grade"] } : {}),
-        ...(commitment !== "" ? { commitment: commitment as TCanyonAttributes["commitment"] } : {}),
-        ...(quality !== "" ? { quality } : {}),
-        ...(wetsuits !== "" ? { wetsuits: wetsuits as TCanyonAttributes["wetsuits"] } : {}),
-        rock_type: rockType || undefined,
-        ...(hours ? { hours: parseFloat(hours) } : {}),
-        sources: cleanSources.length > 0 ? cleanSources : undefined,
-      };
-
       const data = {
         name: name.trim(),
         altNames: altNames
@@ -169,8 +153,17 @@ function CanyonDialog({
         longitude: parsedLng,
         numAbseils: numAbseils ? parseInt(numAbseils) : null,
         longestAbseil: longestAbseil ? parseFloat(longestAbseil) : null,
+        vGrade: vGrade !== "" ? (vGrade as number) : null,
+        aGrade: aGrade !== "" ? (aGrade as number) : null,
+        commitment: commitment !== "" ? (commitment as number) : null,
+        quality: quality !== "" ? (quality as number) : null,
+        wetsuits: wetsuits !== "" ? (wetsuits as number) : null,
+        hours: hours ? parseFloat(hours) : null,
         notes: notes || null,
-        attributes,
+        attributes: {
+          ...(canyon?.attributes),
+          sources: cleanSources.length > 0 ? cleanSources : undefined,
+        },
       };
 
       if (isEdit) {
@@ -197,6 +190,8 @@ function CanyonDialog({
         sx: {
           backgroundColor: "var(--sandstone-dark)",
           color: "var(--content-color)",
+          "& .MuiInputBase-input": { color: "var(--content-color)" },
+          "& .MuiInputBase-inputMultiline": { color: "var(--content-color)" },
         },
       }}
     >
@@ -373,12 +368,6 @@ function CanyonDialog({
               fullWidth
             />
           </Box>
-          <TextField
-            label="Rock Type"
-            value={rockType}
-            onChange={(e) => setRockType(e.target.value)}
-            size="small"
-          />
           <TextField
             label="Notes"
             value={notes}

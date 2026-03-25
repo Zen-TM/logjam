@@ -35,7 +35,7 @@ function SignIn({
     e.preventDefault();
     setLocalError(null);
     setSubmitting(true);
-    await onSignIn(username, password);
+    await onSignIn(email, password);
     setSubmitting(false);
   }
 
@@ -169,9 +169,10 @@ function SignIn({
       <form className={classes.form} onSubmit={handleSignIn}>
         <h1 className={classes.title}>Logjam</h1>
         <TextField
-          label="Username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          label="Email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           size="small"
           fullWidth
           required

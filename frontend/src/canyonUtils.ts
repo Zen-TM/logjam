@@ -2,31 +2,66 @@ import { useEffect, useState, useCallback } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
 
 export type TCanyonAttributes = {
-  v_grade?: 1 | 2 | 3 | 4 | 5 | 6 | 7;
-  a_grade?: 1 | 2 | 3 | 4 | 5 | 6 | 7;
-  commitment?: 1 | 2 | 3 | 4 | 5 | 6;
-  quality?: number;
-  wetsuits?: 1 | 2 | 3 | 4 | 5;
-  rock_type?: string;
-  hours?: number;
   sources?: [string, string][];
-  description?: string;
 };
 
 export type TCanyon = {
   id: string;
+  ownerId: string;
   name: string;
   altNames: string[];
   latitude: number;
   longitude: number;
-  grade: string | null;
   numAbseils: number | null;
   longestAbseil: number | null;
+  vGrade: number | null;
+  aGrade: number | null;
+  commitment: number | null;
+  quality: number | null;
+  wetsuits: number | null;
+  hours: number | null;
   notes: string | null;
   attributes: TCanyonAttributes;
   ropeWikiId: number | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type TUser = {
+  id: string;
+  username: string;
+  email: string;
+};
+
+export type TFriend = {
+  id: string;
+  username: string;
+  email: string;
+  friendshipId: string;
+};
+
+export type TFriendRequest = {
+  id: string;
+  requester: { id: string; username: string; email: string };
+};
+
+export type TSearchUser = {
+  id: string;
+  username: string;
+};
+
+export type TCanyonShare = {
+  id: string;
+  canyonId: string;
+  sharedWith: { id: string; username: string; email: string };
+};
+
+export type TNotification = {
+  id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  read: boolean;
+  createdAt: string;
 };
 
 export type TFilters = {
@@ -102,6 +137,12 @@ export type CreateCanyonData = {
   longitude: number;
   numAbseils?: number | null;
   longestAbseil?: number | null;
+  vGrade?: number | null;
+  aGrade?: number | null;
+  commitment?: number | null;
+  quality?: number | null;
+  wetsuits?: number | null;
+  hours?: number | null;
   notes?: string | null;
   attributes?: TCanyonAttributes;
 };
@@ -148,6 +189,7 @@ export function useCanyons(enabled: boolean) {
 export function useSharedCanyons(enabled: boolean) {
   const [canyons, setCanyons] = useState<TCanyon[]>([]);
   const [loading, setLoading] = useState(false);
+  const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -156,14 +198,148 @@ export function useSharedCanyons(enabled: boolean) {
       .then(setCanyons)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [enabled]);
+  }, [enabled, fetchCount]);
 
-  return { canyons, loading };
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+
+  return { canyons, loading, refetch };
 }
 
-export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
-  const attr = canyon.attributes;
+// ── Current user ──────────────────────────────────────────────
 
+export function fetchCurrentUser(): Promise<TUser> {
+  return apiFetch<TUser>("/users/me");
+}
+
+// ── Friends ───────────────────────────────────────────────────
+
+export function searchUsers(query: string): Promise<TSearchUser[]> {
+  return apiFetch<TSearchUser[]>(
+    `/friends/search?q=${encodeURIComponent(query)}`,
+  );
+}
+
+export function getFriends(): Promise<TFriend[]> {
+  return apiFetch<TFriend[]>("/friends");
+}
+
+export function getFriendRequests(): Promise<TFriendRequest[]> {
+  return apiFetch<TFriendRequest[]>("/friends/requests");
+}
+
+export function sendFriendRequest(addresseeId: string): Promise<void> {
+  return apiFetch<void>("/friends/request", {
+    method: "POST",
+    body: { addresseeId },
+  });
+}
+
+export function acceptFriendRequest(friendshipId: string): Promise<void> {
+  return apiFetch<void>(`/friends/${friendshipId}/accept`, { method: "PATCH" });
+}
+
+export function declineFriendRequest(friendshipId: string): Promise<void> {
+  return apiFetch<void>(`/friends/${friendshipId}/decline`, {
+    method: "PATCH",
+  });
+}
+
+export function removeFriend(friendshipId: string): Promise<void> {
+  return apiFetch<void>(`/friends/${friendshipId}`, { method: "DELETE" });
+}
+
+export function useFriends(enabled: boolean) {
+  const [friends, setFriends] = useState<TFriend[]>([]);
+  const [requests, setRequests] = useState<TFriendRequest[]>([]);
+  const [fetchCount, setFetchCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    getFriends().then(setFriends).catch(console.error);
+    getFriendRequests().then(setRequests).catch(console.error);
+  }, [enabled, fetchCount]);
+
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+
+  return { friends, requests, refetch };
+}
+
+// ── Sharing ───────────────────────────────────────────────────
+
+export function shareCanyonWith(
+  canyonId: string,
+  sharedWithUserId: string,
+): Promise<void> {
+  return apiFetch<void>(`/canyons/${canyonId}/share`, {
+    method: "POST",
+    body: { sharedWithUserId },
+  });
+}
+
+export function unshareCanyonWith(
+  canyonId: string,
+  userId: string,
+): Promise<void> {
+  return apiFetch<void>(`/canyons/${canyonId}/share/${userId}`, {
+    method: "DELETE",
+  });
+}
+
+export function getCanyonShares(canyonId: string): Promise<TCanyonShare[]> {
+  return apiFetch<TCanyonShare[]>(`/canyons/${canyonId}/shares`);
+}
+
+export function copyCanyon(canyonId: string): Promise<TCanyon> {
+  return apiFetch<TCanyon>(`/canyons/${canyonId}/copy`, { method: "POST" });
+}
+
+// ── Notifications ─────────────────────────────────────────────
+
+export function getNotifications(): Promise<TNotification[]> {
+  return apiFetch<TNotification[]>("/notifications");
+}
+
+export function getUnreadCount(): Promise<{ count: number }> {
+  return apiFetch<{ count: number }>("/notifications/unread-count");
+}
+
+export function markNotificationRead(id: string): Promise<void> {
+  return apiFetch<void>(`/notifications/${id}/read`, { method: "PATCH" });
+}
+
+export function markAllNotificationsRead(): Promise<void> {
+  return apiFetch<void>("/notifications/read-all", { method: "PATCH" });
+}
+
+export function deleteNotification(id: string): Promise<void> {
+  return apiFetch<void>(`/notifications/${id}`, { method: "DELETE" });
+}
+
+export function clearReadNotifications(): Promise<void> {
+  return apiFetch<void>("/notifications", { method: "DELETE" });
+}
+
+export function useNotifications(enabled: boolean) {
+  const [notifications, setNotifications] = useState<TNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [fetchCount, setFetchCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    getNotifications().then(setNotifications).catch(console.error);
+    getUnreadCount()
+      .then((r) => setUnreadCount(r.count))
+      .catch(console.error);
+  }, [enabled, fetchCount]);
+
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+
+  return { notifications, unreadCount, refetch };
+}
+
+// ── Filters ───────────────────────────────────────────────────
+
+export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
   function passesSliderFilter(
     value: number | null | undefined,
     filter: number[] | null,
@@ -198,27 +374,27 @@ export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
     if (!matchesName && !matchesAlt) return false;
   }
 
-  if (!passesSliderFilter(attr.v_grade, filters.v_grade, [1, 7])) return false;
-  if (!passesSliderFilter(attr.a_grade, filters.a_grade, [1, 7])) return false;
-  if (!passesSliderFilter(attr.commitment, filters.commitment, [1, 6]))
+  if (!passesSliderFilter(canyon.vGrade, filters.v_grade, [1, 7])) return false;
+  if (!passesSliderFilter(canyon.aGrade, filters.a_grade, [1, 7])) return false;
+  if (!passesSliderFilter(canyon.commitment, filters.commitment, [1, 6]))
     return false;
-  if (!passesSliderFilter(attr.quality, filters.quality, [1, 5])) return false;
+  if (!passesSliderFilter(canyon.quality, filters.quality, [1, 5])) return false;
   if (!passesSelectNumberFilter(canyon.numAbseils, filters.pitches))
     return false;
   if (!passesSelectNumberFilter(canyon.longestAbseil, filters.longest_pitch))
     return false;
-  if (!passesSelectNumberFilter(attr.hours, filters.hours)) return false;
-  if (!passesSliderFilter(attr.wetsuits, filters.wetsuits, [1, 5]))
+  if (!passesSelectNumberFilter(canyon.hours, filters.hours)) return false;
+  if (!passesSliderFilter(canyon.wetsuits, filters.wetsuits, [1, 5]))
     return false;
 
   return true;
 }
 
 export function formatCanyonGrade(canyon: TCanyon): string | null {
-  const { v_grade, a_grade, commitment } = canyon.attributes;
-  if (!v_grade && !a_grade && !commitment) return null;
-  const v = v_grade ? `v${v_grade}` : "v?";
-  const a = a_grade ? `a${a_grade}` : "a?";
+  const { vGrade, aGrade, commitment } = canyon;
+  if (!vGrade && !aGrade && !commitment) return null;
+  const v = vGrade ? `v${vGrade}` : "v?";
+  const a = aGrade ? `a${aGrade}` : "a?";
   const c = commitment
     ? " " + ["I", "II", "III", "IV", "V", "VI"][commitment - 1]
     : "";

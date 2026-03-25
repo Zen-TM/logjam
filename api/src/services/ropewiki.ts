@@ -22,12 +22,12 @@ export type RopeWikiCanyon = {
   numAbseils: number | null;
   longestAbseil: number | null;
   notes: string | null;
+  vGrade: number | null;
+  aGrade: number | null;
+  commitment: number | null;
+  quality: number | null;
+  hours: number | null;
   attributes: {
-    v_grade?: number;
-    a_grade?: number;
-    commitment?: number;
-    quality?: number;
-    hours?: number;
     sources?: [string, string][];
   };
 };
@@ -40,7 +40,12 @@ export type RopeWikiSnapshot = {
   longitude: number;
   numAbseils: number | null;
   longestAbseil: number | null;
-  attributes: RopeWikiCanyon["attributes"];
+  vGrade: number | null;
+  aGrade: number | null;
+  commitment: number | null;
+  quality: number | null;
+  hours: number | null;
+  attributes: { sources?: [string, string][] };
 };
 
 export function snapshotFromCanyon(c: RopeWikiCanyon): RopeWikiSnapshot {
@@ -50,6 +55,11 @@ export function snapshotFromCanyon(c: RopeWikiCanyon): RopeWikiSnapshot {
     longitude: c.longitude,
     numAbseils: c.numAbseils,
     longestAbseil: c.longestAbseil,
+    vGrade: c.vGrade,
+    aGrade: c.aGrade,
+    commitment: c.commitment,
+    quality: c.quality,
+    hours: c.hours,
     attributes: { ...c.attributes },
   };
 }
@@ -92,9 +102,16 @@ function parseDMS(
 }
 
 /**
- * Parse rating HTML like:
- * `<span class='pointed_canyon_rating'>v4</span><span class='pointed_canyon_rating'>a3</span><span class='pointed_canyon_rating'>III</span>`
- * into { v_grade, a_grade, commitment }.
+ * Parse rating HTML to extract the French grading system.
+ * RopeWiki stores two grading systems; the French grade (e.g. "v2a3 III")
+ * appears inside parentheses. Commitment may be wrapped in <i></i> tags.
+ *
+ * Examples:
+ *   `<i>4C</i>   (v4a3 V)`         → v4 a3 V
+ *   `3B <i>III</i>  (v2a2 III)`     → v2 a2 III
+ *   `3B   (<i>v3a2</i>)`            → v3 a2
+ *   `<i>2B III</i>  (v1a2 <i>III</i>)` → v1 a2 III
+ *   `<i>3</i>   (v3)`               → v3
  */
 function parseRating(html: string): {
   v_grade?: number;
@@ -105,9 +122,12 @@ function parseRating(html: string): {
     {};
   if (!html) return result;
 
-  // Extract text content from spans (or handle plain text)
-  const spanTexts = [...html.matchAll(/>([^<]+)</g)].map((m) => m[1].trim());
-  const texts = spanTexts.length > 0 ? spanTexts : [html.trim()];
+  // Extract content inside parentheses
+  const parenMatch = html.match(/\(([^)]+)\)/);
+  if (!parenMatch) return result;
+
+  // Strip all HTML tags to get plain text
+  const plain = parenMatch[1].replace(/<[^>]+>/g, "").trim();
 
   const romanToNum: Record<string, number> = {
     I: 1,
@@ -118,20 +138,16 @@ function parseRating(html: string): {
     VI: 6,
   };
 
-  for (const text of texts) {
-    const vMatch = text.match(/^v(\d)$/i);
-    if (vMatch) {
-      result.v_grade = parseInt(vMatch[1]);
-      continue;
-    }
-    const aMatch = text.match(/^a(\d)$/i);
-    if (aMatch) {
-      result.a_grade = parseInt(aMatch[1]);
-      continue;
-    }
-    if (romanToNum[text]) {
-      result.commitment = romanToNum[text];
-    }
+  const vMatch = plain.match(/v(\d)/i);
+  if (vMatch) result.v_grade = parseInt(vMatch[1]);
+
+  const aMatch = plain.match(/a(\d)/i);
+  if (aMatch) result.a_grade = parseInt(aMatch[1]);
+
+  // Match Roman numeral at end of string or after whitespace
+  const romanMatch = plain.match(/\b(VI|IV|V?I{0,3})\s*$/);
+  if (romanMatch && romanToNum[romanMatch[1]]) {
+    result.commitment = romanToNum[romanMatch[1]];
   }
 
   return result;
@@ -263,15 +279,6 @@ export async function fetchAndParseRopeWiki(): Promise<{
         longestCol >= 0 ? parseLongestRappel(row[longestCol] || "") : null;
       const hours = timeCol >= 0 ? parseHours(row[timeCol] || "") : null;
 
-      const attributes: RopeWikiCanyon["attributes"] = {
-        ...rating,
-        ...(quality != null && { quality }),
-        ...(hours != null && { hours }),
-        sources: [
-          ["RopeWiki", `http://ropewiki.com/index.php?curid=${pageId}`],
-        ],
-      };
-
       canyons.push({
         ropeWikiId: pageId,
         name,
@@ -280,7 +287,16 @@ export async function fetchAndParseRopeWiki(): Promise<{
         numAbseils,
         longestAbseil,
         notes: null,
-        attributes,
+        vGrade: rating.v_grade ?? null,
+        aGrade: rating.a_grade ?? null,
+        commitment: rating.commitment ?? null,
+        quality: quality ?? null,
+        hours: hours ?? null,
+        attributes: {
+          sources: [
+            ["RopeWiki", `http://ropewiki.com/index.php?curid=${pageId}`],
+          ],
+        },
       });
     } catch (err) {
       errors.push(

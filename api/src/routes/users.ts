@@ -26,6 +26,12 @@ router.get(
           username,
         },
       });
+    } else if (user.username !== username || user.email !== email) {
+      // Sync username/email from Cognito token if they've changed
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { username, email },
+      });
     }
 
     res.json(user);

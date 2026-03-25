@@ -60,7 +60,7 @@ export function requireAuth(
       req.user = {
         sub: payload.sub!,
         email: payload.email,
-        username: payload["cognito:username"],
+        username: payload.preferred_username || payload["cognito:username"],
       };
 
       next();

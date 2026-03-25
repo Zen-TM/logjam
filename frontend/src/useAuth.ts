@@ -66,13 +66,15 @@ export function useAuth() {
     async (username: string, password: string, email: string, name: string) => {
       setError(null);
       try {
+        // Use email as the Cognito login identifier, store display
+        // username in preferred_username so it's included in the JWT.
         const result = await amplifySignUp({
-          username,
+          username: email,
           password,
-          options: { userAttributes: { email, name } },
+          options: { userAttributes: { email, name, preferred_username: username } },
         });
         if (result.nextStep.signUpStep === "CONFIRM_SIGN_UP") {
-          setPendingUsername(username);
+          setPendingUsername(email);
           setState("confirmSignUp");
         } else if (result.isSignUpComplete) {
           // Auto-confirmed (unlikely with email verification on)

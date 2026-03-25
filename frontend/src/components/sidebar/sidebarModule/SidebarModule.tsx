@@ -22,18 +22,29 @@ function SidebarModule({
     }
   }, [sidebarOpen]);
 
+  const [transitionDone, setTransitionDone] = useState(false);
+
   useEffect(() => {
     if (moduleOpen) {
       setShouldRenderContent(true);
+      setTransitionDone(false);
       const timer = setTimeout(() => {
         if (contentRef.current) {
           setMaxHeight(contentRef.current.scrollHeight + "px");
         }
       }, 10);
-      return () => clearTimeout(timer);
+      // After the CSS transition (300ms), switch to none so dynamic content can grow
+      const doneTimer = setTimeout(() => setTransitionDone(true), 320);
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(doneTimer);
+      };
     } else {
+      setTransitionDone(false);
       if (contentRef.current) {
-        setMaxHeight("0px");
+        // Snap back to a fixed value before animating to 0
+        setMaxHeight(contentRef.current.scrollHeight + "px");
+        requestAnimationFrame(() => setMaxHeight("0px"));
       }
       const timer = setTimeout(() => setShouldRenderContent(false), 300);
       return () => clearTimeout(timer);
@@ -65,8 +76,9 @@ function SidebarModule({
         <div
           className={classes.content}
           style={{
-            maxHeight: maxHeight,
+            maxHeight: transitionDone ? "none" : maxHeight,
             minHeight: "0px",
+            overflow: transitionDone ? "visible" : "hidden",
           }}
           ref={contentRef}
         >

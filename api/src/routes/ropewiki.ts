@@ -44,6 +44,11 @@ router.post(
           numAbseils: c.numAbseils,
           longestAbseil: c.longestAbseil,
           notes: c.notes,
+          vGrade: c.vGrade,
+          aGrade: c.aGrade,
+          commitment: c.commitment,
+          quality: c.quality,
+          hours: c.hours,
           attributes: c.attributes,
           ropeWikiId: c.ropeWikiId,
           ropeWikiSnapshot: snapshotFromCanyon(c),
@@ -103,6 +108,11 @@ router.post(
             numAbseils: fresh.numAbseils,
             longestAbseil: fresh.longestAbseil,
             notes: fresh.notes,
+            vGrade: fresh.vGrade,
+            aGrade: fresh.aGrade,
+            commitment: fresh.commitment,
+            quality: fresh.quality,
+            hours: fresh.hours,
             attributes: fresh.attributes,
             ropeWikiId: fresh.ropeWikiId,
             ropeWikiSnapshot: snapshotFromCanyon(fresh),
@@ -133,6 +143,11 @@ router.post(
         existing.longitude !== snapshot.longitude ||
         existing.numAbseils !== snapshot.numAbseils ||
         existing.longestAbseil !== snapshot.longestAbseil ||
+        existing.vGrade !== snapshot.vGrade ||
+        existing.aGrade !== snapshot.aGrade ||
+        existing.commitment !== snapshot.commitment ||
+        existing.quality !== snapshot.quality ||
+        existing.hours !== snapshot.hours ||
         JSON.stringify(existing.attributes) !==
           JSON.stringify(snapshot.attributes);
 
@@ -157,6 +172,11 @@ router.post(
               longitude: fresh.longitude,
               numAbseils: fresh.numAbseils,
               longestAbseil: fresh.longestAbseil,
+              vGrade: fresh.vGrade,
+              aGrade: fresh.aGrade,
+              commitment: fresh.commitment,
+              quality: fresh.quality,
+              hours: fresh.hours,
               attributes: fresh.attributes,
               ropeWikiSnapshot: freshSnapshot,
             },

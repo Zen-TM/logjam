@@ -66,6 +66,8 @@ function Map({
   onCoordsPicked,
   showOwnedCanyons,
   showSharedCanyons,
+  selectingArea,
+  onAreaSelected,
 }: {
   filters: TFilters;
   canyons: TCanyon[];
@@ -75,6 +77,8 @@ function Map({
   onCoordsPicked: (lat: number, lng: number) => void;
   showOwnedCanyons: boolean;
   showSharedCanyons: boolean;
+  selectingArea: boolean;
+  onAreaSelected: (ids: string[]) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -317,6 +321,94 @@ function Map({
     }
   }, [pickingCoords, mapLoaded]);
 
+  // Area selection mode
+  const onAreaSelectedRef = useRef(onAreaSelected);
+  useEffect(() => {
+    onAreaSelectedRef.current = onAreaSelected;
+  }, [onAreaSelected]);
+
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+    const container = map.getCanvasContainer();
+
+    if (!selectingArea) {
+      map.getCanvas().style.cursor = "";
+      return;
+    }
+
+    map.getCanvas().style.cursor = "crosshair";
+    map.boxZoom.disable();
+    map.dragPan.disable();
+
+    let start: { x: number; y: number } | null = null;
+    let box: HTMLDivElement | null = null;
+
+    function onMouseDown(e: MouseEvent) {
+      start = { x: e.clientX, y: e.clientY };
+      box = document.createElement("div");
+      box.style.position = "absolute";
+      box.style.border = "2px dashed #f97316";
+      box.style.backgroundColor = "rgba(249, 115, 22, 0.1)";
+      box.style.pointerEvents = "none";
+      box.style.zIndex = "10";
+      container.appendChild(box);
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    }
+
+    function onMouseMove(e: MouseEvent) {
+      if (!start || !box) return;
+      const minX = Math.min(start.x, e.clientX);
+      const minY = Math.min(start.y, e.clientY);
+      const maxX = Math.max(start.x, e.clientX);
+      const maxY = Math.max(start.y, e.clientY);
+      const rect = container.getBoundingClientRect();
+      box.style.left = (minX - rect.left) + "px";
+      box.style.top = (minY - rect.top) + "px";
+      box.style.width = (maxX - minX) + "px";
+      box.style.height = (maxY - minY) + "px";
+    }
+
+    function onMouseUp(e: MouseEvent) {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      if (box) {
+        box.remove();
+        box = null;
+      }
+      if (!start || !map) return;
+      const rect = container.getBoundingClientRect();
+      const p1: [number, number] = [start.x - rect.left, start.y - rect.top];
+      const p2: [number, number] = [e.clientX - rect.left, e.clientY - rect.top];
+
+      const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
+        [Math.min(p1[0], p2[0]), Math.min(p1[1], p2[1])],
+        [Math.max(p1[0], p2[0]), Math.max(p1[1], p2[1])],
+      ];
+
+      const features = map.queryRenderedFeatures(bbox, {
+        layers: ["canyon-circles", "shared-canyon-circles"],
+      });
+
+      const ids = [...new Set(features.map((f) => f.properties?.id as string).filter(Boolean))];
+      start = null;
+      onAreaSelectedRef.current(ids);
+    }
+
+    container.addEventListener("mousedown", onMouseDown);
+
+    return () => {
+      container.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      if (box) box.remove();
+      map.boxZoom.enable();
+      map.dragPan.enable();
+      map.getCanvas().style.cursor = "";
+    };
+  }, [selectingArea, mapLoaded]);
+
   // Toggle canyon layer visibility
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -345,9 +437,12 @@ function Map({
       {pickingCoords && (
         <div className={classes.pickBanner}>Click the map to select a location</div>
       )}
+      {selectingArea && (
+        <div className={classes.pickBanner}>Click and drag to select an area</div>
+      )}
       <div
         className={classes.layerSwitcher}
-        style={{ pointerEvents: pickingCoords ? "none" : undefined }}
+        style={{ pointerEvents: pickingCoords || selectingArea ? "none" : undefined }}
       >
         <select
           className={classes.layerSelect}

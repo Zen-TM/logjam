@@ -5,7 +5,12 @@ import SignIn from "./SignIn";
 import ImportDialog from "./ImportDialog";
 import classes from "./App.module.css";
 import type { TFilters } from "../canyonUtils";
-import { useCanyons, useSharedCanyons } from "../canyonUtils";
+import {
+  useCanyons,
+  useSharedCanyons,
+  useFriends,
+  useNotifications,
+} from "../canyonUtils";
 import { useAuth } from "../useAuth";
 
 function App() {
@@ -34,6 +39,10 @@ function App() {
   const [pickingCoords, setPickingCoords] = useState(false);
   const coordsCallbackRef = useRef<((lat: number, lng: number) => void) | null>(null);
 
+  // Area selection mode
+  const [selectingArea, setSelectingArea] = useState(false);
+  const [selectedAreaCanyonIds, setSelectedAreaCanyonIds] = useState<string[]>([]);
+
   const startPickingCoords = useCallback(
     (onPicked: (lat: number, lng: number) => void) => {
       coordsCallbackRef.current = onPicked;
@@ -56,10 +65,28 @@ function App() {
     setPickingCoords(false);
   }, []);
 
+  const startAreaSelection = useCallback(() => {
+    setSelectingArea(true);
+    setSelectedAreaCanyonIds([]);
+  }, []);
+
+  const handleAreaSelected = useCallback((ids: string[]) => {
+    setSelectingArea(false);
+    setSelectedAreaCanyonIds(ids);
+    setSidebarOpen(true);
+  }, []);
+
+  const cancelAreaSelection = useCallback(() => {
+    setSelectingArea(false);
+    setSelectedAreaCanyonIds([]);
+  }, []);
+
   const auth = useAuth();
   const authenticated = auth.state === "authenticated";
   const { canyons, loaded: canyonsLoaded, refetch } = useCanyons(authenticated);
-  const { canyons: sharedCanyons } = useSharedCanyons(authenticated);
+  const { canyons: sharedCanyons, refetch: refetchShared } = useSharedCanyons(authenticated);
+  const { friends, requests: friendRequests, refetch: refetchFriends } = useFriends(authenticated);
+  const { notifications, unreadCount, refetch: refetchNotifications } = useNotifications(authenticated);
 
   // Show import dialog once when user has no canyons after first fetch completes
   useEffect(() => {
@@ -105,6 +132,7 @@ function App() {
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
         onRefetch={refetch}
+        onRefetchShared={refetchShared}
         onPickCoords={startPickingCoords}
         pickingCoords={pickingCoords}
         onCancelPickCoords={cancelPickingCoords}
@@ -112,6 +140,18 @@ function App() {
         setShowOwnedCanyons={setShowOwnedCanyons}
         showSharedCanyons={showSharedCanyons}
         setShowSharedCanyons={setShowSharedCanyons}
+        ownedCanyonIds={new Set(canyons.map((c) => c.id))}
+        friends={friends}
+        friendRequests={friendRequests}
+        onRefetchFriends={refetchFriends}
+        notifications={notifications}
+        unreadCount={unreadCount}
+        onRefetchNotifications={refetchNotifications}
+        onStartAreaSelection={startAreaSelection}
+        selectingArea={selectingArea}
+        onCancelAreaSelection={cancelAreaSelection}
+        selectedAreaCanyonIds={selectedAreaCanyonIds}
+        onClearAreaSelection={() => setSelectedAreaCanyonIds([])}
       />
       <Map
         filters={filters}
@@ -125,6 +165,8 @@ function App() {
         }}
         pickingCoords={pickingCoords}
         onCoordsPicked={handleCoordsPicked}
+        selectingArea={selectingArea}
+        onAreaSelected={handleAreaSelected}
       />
     </div>
   );

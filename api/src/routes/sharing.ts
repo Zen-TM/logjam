@@ -95,7 +95,7 @@ router.delete(
     if (!user) throw new AppError(404, "User not found");
 
     const canyonId = getParam(req.params.id);
-    const targetUserId = getParam(req.params.userId);
+    const targetUserId = getParam(req.params.userId) === "me" ? user.id : getParam(req.params.userId);
 
     const share = await prisma.canyonShare.findFirst({
       where: { canyonId, sharedWithId: targetUserId },

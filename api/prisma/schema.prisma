@@ -36,9 +36,14 @@ model Canyon {
   altNames      String[] @default([])
   latitude      Float
   longitude     Float
-  grade         String?
   numAbseils    Int?     @map("num_abseils")
   longestAbseil Float?   @map("longest_abseil_m")
+  vGrade        Int?     @map("v_grade")
+  aGrade        Int?     @map("a_grade")
+  commitment    Int?
+  quality       Int?
+  wetsuits      Int?
+  hours         Float?
   notes         String?
   attributes    Json     @default("{}")
   createdAt     DateTime @default(now()) @map("created_at")
