@@ -133,15 +133,19 @@ model CanyonShare {
 }
 
 model TopoJob {
-  id           String   @id @default(uuid())
-  userId       String   @map("user_id")
-  status       String   @default("pending")
-  s3InputKey   String?  @map("s3_input_key")
-  s3OutputKey  String?  @map("s3_output_key")
-  errorMessage String?  @map("error_message")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  user         User     @relation(fields: [userId], references: [id])
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  status        String   @default("uploading")
+  // status values: uploading | pending | processing | complete | failed
+  bbox          Json?
+  layerOptions  Json?    @map("layer_options")
+  s3InputKey    String?  @map("s3_input_key")
+  s3OutputKeys  Json?    @map("s3_output_keys")
+  // s3OutputKeys shape: { name: string, mbtilesKey: string, pmtilesKey: string }[]
+  errorMessage  String?  @map("error_message")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  user          User     @relation(fields: [userId], references: [id])
 
   @@map("topo_jobs")
 }

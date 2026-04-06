@@ -10,6 +10,7 @@ import sharingRouter from "./routes/sharing";
 import friendsRouter from "./routes/friends";
 import notificationsRouter from "./routes/notifications";
 import ropewikiRouter from "./routes/ropewiki";
+import topoJobsRouter from "./routes/topoJobs";
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ app.use("/canyons", sharingRouter);
 app.use("/friends", friendsRouter);
 app.use("/notifications", notificationsRouter);
 app.use("/ropewiki", ropewikiRouter);
+app.use("/topo-jobs", topoJobsRouter);
 
 // Error handler — must be last
 app.use(errorHandler);

@@ -1,0 +1,14 @@
+# topo_mbtiles – Python dependencies
+# GDAL is installed separately in the Dockerfile to match the system version.
+# All other deps are pinned to a compatible range.
+
+numpy>=1.24,<3.0
+Pillow>=10.0,<12.0
+requests>=2.31,<3.0
+boto3>=1.34,<2.0
+psycopg2-binary>=2.9,<3.0
+pmtiles>=3.0,<4.0
+
+# GDAL Python bindings are installed dynamically in the Dockerfile.
+# If running outside Docker, install manually:
+#   pip install GDAL==$(gdal-config --version)

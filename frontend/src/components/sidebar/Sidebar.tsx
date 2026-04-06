@@ -73,6 +73,7 @@ function Sidebar({
   onCancelAreaSelection,
   selectedAreaCanyonIds,
   onClearAreaSelection,
+  onOpenTopo,
 }: {
   onChangeFilters: (filters: TFilters) => void;
   filters: TFilters;
@@ -102,6 +103,7 @@ function Sidebar({
   onCancelAreaSelection: () => void;
   selectedAreaCanyonIds: string[];
   onClearAreaSelection: () => void;
+  onOpenTopo: () => void;
 }) {
   const canyon = canyons.find((c) => c.id === selectedCanyonID);
   const isOwnedCanyon = canyon != null && ownedCanyonIds.has(canyon.id);
@@ -406,6 +408,13 @@ function Sidebar({
               }
             >
               {selectingArea ? "Cancel Selection" : "Select Area"}
+            </button>
+
+            <button
+              className={classes.refreshButton}
+              onClick={onOpenTopo}
+            >
+              Generate Topo Map
             </button>
 
             <button

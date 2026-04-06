@@ -3,7 +3,9 @@ import Sidebar from "./sidebar/Sidebar";
 import Map from "./map/Map";
 import SignIn from "./SignIn";
 import ImportDialog from "./ImportDialog";
+import TopoDialog from "./TopoDialog";
 import classes from "./App.module.css";
+import type { TBbox } from "./map/Map";
 import type { TFilters } from "../canyonUtils";
 import {
   useCanyons,
@@ -42,6 +44,12 @@ function App() {
   // Area selection mode
   const [selectingArea, setSelectingArea] = useState(false);
   const [selectedAreaCanyonIds, setSelectedAreaCanyonIds] = useState<string[]>([]);
+
+  // Topo dialog
+  const [showTopo, setShowTopo] = useState(false);
+  const [selectingTopoBbox, setSelectingTopoBbox] = useState(false);
+  const [pendingTopoBbox, setPendingTopoBbox] = useState<TBbox | null>(null);
+  const [topoOverlayLayers, setTopoOverlayLayers] = useState<{ id: string; pmtilesUrl: string }[]>([]);
 
   const startPickingCoords = useCallback(
     (onPicked: (lat: number, lng: number) => void) => {
@@ -123,6 +131,19 @@ function App() {
         onClose={() => setShowImport(false)}
         onImported={refetch}
       />
+      <TopoDialog
+        open={showTopo}
+        onClose={() => {
+          setShowTopo(false);
+          setSelectingTopoBbox(false);
+        }}
+        onSelectBbox={() => {
+          setShowTopo(false);
+          setSelectingTopoBbox(true);
+        }}
+        pendingBbox={pendingTopoBbox}
+        onLayersToggle={setTopoOverlayLayers}
+      />
       <Sidebar
         onChangeFilters={setFilters}
         filters={filters}
@@ -152,6 +173,7 @@ function App() {
         onCancelAreaSelection={cancelAreaSelection}
         selectedAreaCanyonIds={selectedAreaCanyonIds}
         onClearAreaSelection={() => setSelectedAreaCanyonIds([])}
+        onOpenTopo={() => setShowTopo(true)}
       />
       <Map
         filters={filters}
@@ -167,6 +189,13 @@ function App() {
         onCoordsPicked={handleCoordsPicked}
         selectingArea={selectingArea}
         onAreaSelected={handleAreaSelected}
+        selectingBbox={selectingTopoBbox}
+        onBboxSelected={(bbox) => {
+          setPendingTopoBbox(bbox);
+          setSelectingTopoBbox(false);
+          setShowTopo(true);
+        }}
+        topoLayers={topoOverlayLayers}
       />
     </div>
   );

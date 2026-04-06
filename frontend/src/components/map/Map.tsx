@@ -7,6 +7,11 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-csp-worker?url";
 // Vite's production minification can corrupt the blob worker code, causing
 // "on is not defined" errors and breaking GeoJSON source processing.
 setWorkerUrl(maplibreWorkerUrl);
+import { Protocol } from "pmtiles";
+
+// Register PMTiles protocol for serving topo overlay layers from S3
+const pmtilesProtocol = new Protocol();
+maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
 import classes from "./Map.module.css";
 import type { TCanyon, TFilters } from "../../canyonUtils";
 import { passesFilters } from "../../canyonUtils";
@@ -63,6 +68,8 @@ const BASE_LAYERS = [
   },
 ];
 
+export type TBbox = { west: number; south: number; east: number; north: number };
+
 function Map({
   filters,
   canyons,
@@ -74,6 +81,9 @@ function Map({
   showSharedCanyons,
   selectingArea,
   onAreaSelected,
+  selectingBbox,
+  onBboxSelected,
+  topoLayers,
 }: {
   filters: TFilters;
   canyons: TCanyon[];
@@ -85,6 +95,9 @@ function Map({
   showSharedCanyons: boolean;
   selectingArea: boolean;
   onAreaSelected: (ids: string[]) => void;
+  selectingBbox?: boolean;
+  onBboxSelected?: (bbox: TBbox) => void;
+  topoLayers?: { id: string; pmtilesUrl: string }[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -460,6 +473,116 @@ function Map({
     });
   }, [activeLayerId, mapLoaded]);
 
+  // Topo bbox selection mode (rubber-band draw → returns lat/lng bbox)
+  const onBboxSelectedRef = useRef(onBboxSelected);
+  useEffect(() => {
+    onBboxSelectedRef.current = onBboxSelected;
+  }, [onBboxSelected]);
+
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+    const container = map.getCanvasContainer();
+
+    if (!selectingBbox) {
+      map.getCanvas().style.cursor = "";
+      return;
+    }
+
+    map.getCanvas().style.cursor = "crosshair";
+    map.boxZoom.disable();
+    map.dragPan.disable();
+
+    let start: { x: number; y: number } | null = null;
+    let box: HTMLDivElement | null = null;
+
+    function onMouseDown(e: MouseEvent) {
+      start = { x: e.clientX, y: e.clientY };
+      box = document.createElement("div");
+      box.style.position = "absolute";
+      box.style.border = "2px dashed #22d3ee";
+      box.style.backgroundColor = "rgba(34, 211, 238, 0.1)";
+      box.style.pointerEvents = "none";
+      box.style.zIndex = "10";
+      container.appendChild(box);
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    }
+
+    function onMouseMove(e: MouseEvent) {
+      if (!start || !box) return;
+      const minX = Math.min(start.x, e.clientX);
+      const minY = Math.min(start.y, e.clientY);
+      const maxX = Math.max(start.x, e.clientX);
+      const maxY = Math.max(start.y, e.clientY);
+      const rect = container.getBoundingClientRect();
+      box.style.left = minX - rect.left + "px";
+      box.style.top = minY - rect.top + "px";
+      box.style.width = maxX - minX + "px";
+      box.style.height = maxY - minY + "px";
+    }
+
+    function onMouseUp(e: MouseEvent) {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      if (box) { box.remove(); box = null; }
+      if (!start || !map) return;
+
+      const rect = container.getBoundingClientRect();
+      const p1 = map.unproject([start.x - rect.left, start.y - rect.top]);
+      const p2 = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+
+      start = null;
+      onBboxSelectedRef.current?.({
+        west:  Math.min(p1.lng, p2.lng),
+        south: Math.min(p1.lat, p2.lat),
+        east:  Math.max(p1.lng, p2.lng),
+        north: Math.max(p1.lat, p2.lat),
+      });
+    }
+
+    container.addEventListener("mousedown", onMouseDown);
+
+    return () => {
+      container.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      if (box) box.remove();
+      map.boxZoom.enable();
+      map.dragPan.enable();
+      map.getCanvas().style.cursor = "";
+    };
+  }, [selectingBbox, mapLoaded]);
+
+  // Topo overlay layers (PMTiles)
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+    const layers = topoLayers ?? [];
+    const activeIds = new Set(layers.map((l) => l.id));
+
+    // Remove layers/sources that are no longer in topoLayers
+    map.getStyle().layers.forEach((l) => {
+      if (l.id.startsWith("topo-overlay-") && !activeIds.has(l.id.replace("topo-overlay-", ""))) {
+        map.removeLayer(l.id);
+        const srcId = l.id.replace("topo-overlay-", "topo-src-");
+        if (map.getSource(srcId)) map.removeSource(srcId);
+      }
+    });
+
+    // Add new layers
+    layers.forEach(({ id, pmtilesUrl }) => {
+      const layerId = `topo-overlay-${id}`;
+      const srcId   = `topo-src-${id}`;
+      if (!map.getSource(srcId)) {
+        map.addSource(srcId, { type: "raster", url: `pmtiles://${pmtilesUrl}`, tileSize: 256 });
+      }
+      if (!map.getLayer(layerId)) {
+        map.addLayer({ id: layerId, type: "raster", source: srcId, paint: { "raster-opacity": 0.85 } });
+      }
+    });
+  }, [topoLayers, mapLoaded]);
+
   return (
     <div id="map" className={classes.map}>
       <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
@@ -473,10 +596,15 @@ function Map({
           Click and drag to select an area
         </div>
       )}
+      {selectingBbox && (
+        <div className={classes.pickBanner}>
+          Click and drag to define the topo area
+        </div>
+      )}
       <div
         className={classes.layerSwitcher}
         style={{
-          pointerEvents: pickingCoords || selectingArea ? "none" : undefined,
+          pointerEvents: pickingCoords || selectingArea || selectingBbox ? "none" : undefined,
         }}
       >
         <select

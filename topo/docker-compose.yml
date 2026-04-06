@@ -1,0 +1,38 @@
+services:
+  topo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: topo_mbtiles:latest
+    container_name: topo_mbtiles
+
+    # ── Volume mounts ────────────────────────────────────────
+    # Place your ELVIS ZIP at ./input/elvis.zip before running.
+    # Finished MBTiles will appear in ./output/
+    volumes:
+      - ./input:/input:ro
+      - ./output:/output:rw
+
+    # ── Resource limits ──────────────────────────────────────
+    # Adjust cpus to match your machine. On cloud VMs set this
+    # to the full vCPU count for fastest processing.
+    deploy:
+      resources:
+        limits:
+          cpus: "4" # ← change to your core count
+          memory: "16g" # ← increase for large tiles
+
+    # ── Environment ──────────────────────────────────────────
+    environment:
+      - PYTHONUNBUFFERED=1
+
+    # ── Command override ─────────────────────────────────────
+    # Default (no override): processes /input/elvis.zip
+    #
+    # To customise, uncomment and edit:
+    # command: [
+    #   "/input/my_lidar.zip",
+    #   "--output", "/output",
+    #   "--workers", "8",
+    #   "--keep-work"
+    # ]

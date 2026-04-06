@@ -90,7 +90,7 @@ async function getIdToken(): Promise<string> {
 
 // Every API call fetches its own fresh token internally, so hooks don't
 // need a token parameter — just a boolean to control whether to fetch.
-async function apiFetch<T>(
+export async function apiFetch<T>(
   path: string,
   options?: { method?: string; body?: unknown },
 ): Promise<T> {
