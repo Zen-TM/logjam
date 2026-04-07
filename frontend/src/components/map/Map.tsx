@@ -20,7 +20,7 @@ const SIDEBAR_TRANSITION_MS = 300;
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
 const INITIAL_ZOOM = 7;
 
-const BASE_LAYERS = [
+export const BASE_LAYERS = [
   {
     id: "osm",
     name: "Default",
@@ -84,6 +84,7 @@ function Map({
   selectingBbox,
   onBboxSelected,
   topoLayers,
+  activeLayerId,
 }: {
   filters: TFilters;
   canyons: TCanyon[];
@@ -98,10 +99,10 @@ function Map({
   selectingBbox?: boolean;
   onBboxSelected?: (bbox: TBbox) => void;
   topoLayers?: { id: string; pmtilesUrl: string }[];
+  activeLayerId: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const [activeLayerId, setActiveLayerId] = useState(BASE_LAYERS[0].id);
   const [mapLoaded, setMapLoaded] = useState(false);
 
   // Keep refs up to date for use inside event handlers
@@ -601,24 +602,6 @@ function Map({
           Click and drag to define the topo area
         </div>
       )}
-      <div
-        className={classes.layerSwitcher}
-        style={{
-          pointerEvents: pickingCoords || selectingArea || selectingBbox ? "none" : undefined,
-        }}
-      >
-        <select
-          className={classes.layerSelect}
-          value={activeLayerId}
-          onChange={(e) => setActiveLayerId(e.target.value)}
-        >
-          {BASE_LAYERS.map((layer) => (
-            <option key={layer.id} value={layer.id}>
-              {layer.name}
-            </option>
-          ))}
-        </select>
-      </div>
     </div>
   );
 }

@@ -1,0 +1,192 @@
+import { X } from "lucide-react";
+import type { PanelId } from "./panels";
+import type {
+  TCanyon,
+  TFilters,
+  TFriend,
+  TFriendRequest,
+  TNotification,
+} from "../../canyonUtils";
+import classes from "./SidebarPanel.module.css";
+import OverlaysPanel from "./panels/OverlaysPanel";
+import LayersPanel from "./panels/LayersPanel";
+import ForgePanel from "./panels/ForgePanel";
+import FiltersPanel from "./panels/FiltersPanel";
+import FriendsPanel from "./panels/FriendsPanel";
+import NotificationsPanel from "./panels/NotificationsPanel";
+import CanyonDetailPanel from "./panels/CanyonDetailPanel";
+import PlaceholderPanel from "./panels/PlaceholderPanel";
+
+const PANEL_TITLES: Record<PanelId, string> = {
+  overlays: "Overlays",
+  layers: "Layers",
+  forge: "Forge",
+  filters: "Filters",
+  friends: "Friends",
+  notifications: "Notifications",
+  account: "Account",
+  settings: "Settings",
+  "canyon-detail": "Canyon Detail",
+};
+
+function SidebarPanel({
+  activePanel,
+  onClose,
+  // Overlays
+  showOwnedCanyons,
+  setShowOwnedCanyons,
+  showSharedCanyons,
+  setShowSharedCanyons,
+  // Layers
+  activeLayerId,
+  onActiveLayerChange,
+  // Forge
+  onAddCanyon,
+  onOpenTopo,
+  onStartAreaSelection,
+  selectingArea,
+  onCancelAreaSelection,
+  onRefetch,
+  // Filters
+  filters,
+  onChangeFilters,
+  // Friends
+  friends,
+  friendRequests,
+  onRefetchFriends,
+  onRefetchShared,
+  // Notifications
+  notifications,
+  onRefetchNotifications,
+  setSelectedCanyonID,
+  setActivePanel,
+  // Canyon detail
+  canyon,
+  isOwnedCanyon,
+  onPickCoords,
+  pickingCoords,
+  onCancelPickCoords,
+}: {
+  activePanel: PanelId | null;
+  onClose: () => void;
+  // Overlays
+  showOwnedCanyons: boolean;
+  setShowOwnedCanyons: (show: boolean) => void;
+  showSharedCanyons: boolean;
+  setShowSharedCanyons: (show: boolean) => void;
+  // Layers
+  activeLayerId: string;
+  onActiveLayerChange: (id: string) => void;
+  // Forge
+  onAddCanyon: () => void;
+  onOpenTopo: () => void;
+  onStartAreaSelection: () => void;
+  selectingArea: boolean;
+  onCancelAreaSelection: () => void;
+  onRefetch: () => void;
+  // Filters
+  filters: TFilters;
+  onChangeFilters: (filters: TFilters) => void;
+  // Friends
+  friends: TFriend[];
+  friendRequests: TFriendRequest[];
+  onRefetchFriends: () => void;
+  onRefetchShared: () => void;
+  // Notifications
+  notifications: TNotification[];
+  onRefetchNotifications: () => void;
+  setSelectedCanyonID: (id: string | null) => void;
+  setActivePanel: (panel: PanelId | null) => void;
+  // Canyon detail
+  canyon: TCanyon | undefined;
+  isOwnedCanyon: boolean;
+  onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
+  pickingCoords: boolean;
+  onCancelPickCoords: () => void;
+}) {
+  if (!activePanel) return null;
+
+  const title =
+    activePanel === "canyon-detail" && canyon
+      ? canyon.name
+      : PANEL_TITLES[activePanel];
+
+  return (
+    <div className={classes.panel}>
+      <div className={classes.panelHeader}>
+        <h2 className={classes.panelTitle}>{title}</h2>
+        <button className={classes.closeButton} onClick={onClose}>
+          <X size={18} />
+        </button>
+      </div>
+      <div className={classes.panelBody}>
+        {activePanel === "overlays" && (
+          <OverlaysPanel
+            showOwnedCanyons={showOwnedCanyons}
+            setShowOwnedCanyons={setShowOwnedCanyons}
+            showSharedCanyons={showSharedCanyons}
+            setShowSharedCanyons={setShowSharedCanyons}
+          />
+        )}
+        {activePanel === "layers" && (
+          <LayersPanel
+            activeLayerId={activeLayerId}
+            onActiveLayerChange={onActiveLayerChange}
+          />
+        )}
+        {activePanel === "forge" && (
+          <ForgePanel
+            onAddCanyon={onAddCanyon}
+            onOpenTopo={onOpenTopo}
+            onStartAreaSelection={onStartAreaSelection}
+            selectingArea={selectingArea}
+            onCancelAreaSelection={onCancelAreaSelection}
+            onRefetch={onRefetch}
+          />
+        )}
+        {activePanel === "filters" && (
+          <FiltersPanel filters={filters} onChangeFilters={onChangeFilters} />
+        )}
+        {activePanel === "friends" && (
+          <FriendsPanel
+            friends={friends}
+            friendRequests={friendRequests}
+            onRefetchFriends={onRefetchFriends}
+            onRefetchShared={onRefetchShared}
+            onRefetchNotifications={onRefetchNotifications}
+          />
+        )}
+        {activePanel === "notifications" && (
+          <NotificationsPanel
+            notifications={notifications}
+            onRefetchNotifications={onRefetchNotifications}
+            onRefetchFriends={onRefetchFriends}
+            setSelectedCanyonID={setSelectedCanyonID}
+            setActivePanel={setActivePanel}
+          />
+        )}
+        {activePanel === "account" && (
+          <PlaceholderPanel text="Coming soon" />
+        )}
+        {activePanel === "settings" && (
+          <PlaceholderPanel text="Coming soon" />
+        )}
+        {activePanel === "canyon-detail" && (
+          <CanyonDetailPanel
+            canyon={canyon}
+            isOwnedCanyon={isOwnedCanyon}
+            friends={friends}
+            onRefetch={onRefetch}
+            onRefetchShared={onRefetchShared}
+            setSelectedCanyonID={setSelectedCanyonID}
+            onPickCoords={onPickCoords}
+            pickingCoords={pickingCoords}
+            onCancelPickCoords={onCancelPickCoords}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default SidebarPanel;

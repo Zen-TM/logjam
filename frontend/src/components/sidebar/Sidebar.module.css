@@ -1,40 +1,4 @@
-.sidebar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  z-index: 1;
-  background-color: var(--sandstone-dark);
-  transition: width 0.3s;
-  color: var(--content-color);
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar h2 {
-  margin-left: 1em;
-  margin-right: 1em;
-  overflow: hidden;
-}
-
-.sidebar button {
-  cursor: pointer;
-}
-
-.sidebarContent {
-  transition: opacity 0.3s;
-  width: 300px;
-  overflow-x: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.separator {
-  width: 100%;
-  height: 1px;
-  background-color: var(--sandstone-light);
-  margin: 0.5em 0;
-}
+/* Shared styles used by panel content components */
 
 .canyonInfo {
   padding: 0 1em;
@@ -61,38 +25,6 @@
 
 .sourcesList a {
   color: var(--sand-light);
-}
-
-.canyonHeader {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-.backButton {
-  background-color: transparent;
-  border: none;
-  padding: 1em;
-  height: 4em;
-  display: flex;
-  align-items: center;
-  justify-content: left;
-}
-
-.sidebar .toggleButton {
-  width: 100%;
-  background-color: transparent;
-  border: none;
-  padding: 1em;
-  height: 5em;
-  display: flex;
-  align-items: center;
-  justify-content: right;
-  margin-top: auto;
-}
-
-.sidebar .toggleButton:hover {
-  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .canyonActions {
@@ -132,7 +64,7 @@
 }
 
 .optionsContent {
-  padding: 0.5em 1em;
+  padding: 0.5em 0;
   display: flex;
   flex-direction: column;
   gap: 0.6em;
@@ -178,11 +110,6 @@
 .refreshButton:disabled {
   opacity: 0.5;
   cursor: default;
-}
-
-.arrow {
-  height: 100%;
-  transition: transform 0.3s;
 }
 
 /* Friends */
@@ -328,17 +255,6 @@
   margin-top: 0.5em;
 }
 
-.friendCheckRow {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  font-size: 0.85em;
-}
-
-.friendCheckRow input[type="checkbox"] {
-  accent-color: #3b82f6;
-}
-
 .sharedWithList {
   margin-top: 0.5em;
 }
@@ -394,45 +310,6 @@
 
 /* Notifications */
 
-.notificationBell {
-  position: relative;
-  background-color: transparent;
-  border: none;
-  padding: 0.5em;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.notificationBell:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-}
-
-.bellBadge {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  background-color: #e57373;
-  color: white;
-  border-radius: 50%;
-  font-size: 0.65em;
-  min-width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-}
-
-.notificationHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 1em;
-}
-
 .notificationList {
   padding: 0 1em;
   overflow-y: auto;
@@ -473,8 +350,6 @@
 .clearAllButton {
   width: 100%;
   padding: 0.5em;
-  margin: 0.5em 1em;
-  width: calc(100% - 2em);
   background-color: transparent;
   border: 1px solid var(--sandstone-light);
   color: var(--content-color);

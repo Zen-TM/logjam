@@ -1,0 +1,18 @@
+.layerList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.layerItem {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.4em 0;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.layerItem input[type="radio"] {
+  accent-color: var(--sandstone-light);
+}
