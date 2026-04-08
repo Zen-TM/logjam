@@ -63,11 +63,14 @@ function App() {
   const [selectingArea, setSelectingArea] = useState(false);
   const [selectedAreaCanyonIds, setSelectedAreaCanyonIds] = useState<string[]>([]);
 
-  // Topo dialog
+  // Topo dialog (per-job overlays)
   const [showTopo, setShowTopo] = useState(false);
   const [selectingTopoBbox, setSelectingTopoBbox] = useState(false);
   const [pendingTopoBbox, setPendingTopoBbox] = useState<TBbox | null>(null);
-  const [topoOverlayLayers, setTopoOverlayLayers] = useState<{ id: string; pmtilesUrl: string }[]>([]);
+  const [topoOverlayLayers, setTopoOverlayLayers] = useState<{ id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]>([]);
+
+  // Master topo layers from the Overlays panel (communal, persistent)
+  const [masterTopoLayers, setMasterTopoLayers] = useState<{ id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]>([]);
 
   const startPickingCoords = useCallback(
     (onPicked: (lat: number, lng: number) => void) => {
@@ -279,6 +282,7 @@ function App() {
           onPickCoords={startPickingCoords}
           pickingCoords={pickingCoords}
           onCancelPickCoords={cancelPickingCoords}
+          onTopoLayersChange={setMasterTopoLayers}
         />
       </div>
       <Map
@@ -301,7 +305,7 @@ function App() {
           setSelectingTopoBbox(false);
           setShowTopo(true);
         }}
-        topoLayers={topoOverlayLayers}
+        topoLayers={[...masterTopoLayers, ...topoOverlayLayers]}
         activeLayerId={activeLayerId}
       />
 

@@ -20,9 +20,11 @@ Optional environment variables:
 """
 
 import boto3
+import botocore.exceptions
 import json
 import logging
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -46,6 +48,18 @@ BUCKET       = os.environ["S3_BUCKET_TOPO"]
 DATABASE_URL = os.environ["DATABASE_URL"]
 SES_FROM     = os.environ.get("SES_FROM_EMAIL", "")
 JOB_ID       = os.environ["JOB_ID"]
+
+# Canonical list of master layer types and their tile format.
+# Keep in sync with: api/src/constants/topoLayers.ts, frontend/src/topoLayerTypes.ts
+MASTER_LAYERS: dict[str, str] = {
+    "hillshade":  "raster",
+    "vegetation": "raster",
+    "slope":      "raster",
+    "contours":   "vector",
+    "features":   "vector",
+}
+
+MERGE_MAX_RETRIES = 3
 
 s3  = boto3.client("s3",  region_name=AWS_REGION)
 sqs = boto3.client("sqs", region_name=AWS_REGION) if QUEUE_URL else None
@@ -146,6 +160,185 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict]):
         log.warning(f"Failed to send completion email: {e}")
 
 
+# ── Vector tile generation ────────────────────────────────────────────────────
+
+def run_tippecanoe_contours(geojson_dir: str, out_dir: str) -> Path | None:
+    """Convert contour GeoJSON files to a single vector MBTiles via tippecanoe."""
+    inputs = []
+    for interval in [5, 10, 50]:
+        path = Path(geojson_dir) / f"contours_{interval}m.geojson"
+        if path.exists():
+            inputs.append(str(path))
+    if not inputs:
+        log.warning("No contour GeoJSON files found — skipping vector contours.")
+        return None
+
+    out_path = Path(out_dir) / "contours_vector.mbtiles"
+    cmd = [
+        "tippecanoe",
+        "-o", str(out_path),
+        "-z", "18", "-Z", "12",
+        "--no-feature-limit", "--no-tile-size-limit",
+        "-l", "contours",
+        "--force",
+        *inputs,
+    ]
+    log.info(f"tippecanoe (contours): {len(inputs)} input file(s) …")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"tippecanoe contours failed:\n{result.stderr}")
+    log.info(f"Vector contours → {out_path}")
+    return out_path
+
+
+def run_tippecanoe_features(geojson_dir: str, out_dir: str) -> Path | None:
+    """Convert OSM features GeoJSON to vector MBTiles via tippecanoe."""
+    input_path = Path(geojson_dir) / "osm_features.geojson"
+    if not input_path.exists():
+        log.warning("No OSM features GeoJSON found — skipping vector features.")
+        return None
+
+    out_path = Path(out_dir) / "features_vector.mbtiles"
+    cmd = [
+        "tippecanoe",
+        "-o", str(out_path),
+        "-z", "18", "-Z", "12",
+        "--no-feature-limit", "--no-tile-size-limit",
+        "-l", "features",
+        "--force",
+        str(input_path),
+    ]
+    log.info("tippecanoe (features) …")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"tippecanoe features failed:\n{result.stderr}")
+    log.info(f"Vector features → {out_path}")
+    return out_path
+
+
+# ── Master PMTiles merge ─────────────────────────────────────────────────────
+#
+# Each master layer is a single MBTiles + PMTiles pair stored at:
+#   s3://BUCKET/master/{layer}.mbtiles
+#   s3://BUCKET/master/{layer}.pmtiles
+#
+# Merge strategy: download existing master, SQLite INSERT OR REPLACE with
+# the new job's tiles, convert to PMTiles, upload both.
+#
+# Concurrency: uses S3 ETag optimistic locking. If another worker merges
+# into the same master between our download and upload, the ETag will
+# mismatch and we retry (download-merge-upload) up to MERGE_MAX_RETRIES
+# times. This is safe because the current architecture typically runs one
+# worker per job, but multiple jobs can run concurrently on Fargate.
+# If ETag contention becomes frequent, upgrade to a DynamoDB-based lock.
+
+def merge_into_master(layer_name: str, job_mbtiles: Path, tmp_dir: str):
+    """Merge a job's MBTiles into the corresponding master file on S3."""
+    master_key_mbtiles = f"master/{layer_name}.mbtiles"
+    master_key_pmtiles = f"master/{layer_name}.pmtiles"
+
+    for attempt in range(1, MERGE_MAX_RETRIES + 1):
+        master_path = Path(tmp_dir) / f"master_{layer_name}_{attempt}.mbtiles"
+        master_pmtiles = Path(tmp_dir) / f"master_{layer_name}_{attempt}.pmtiles"
+
+        # Download existing master (if any) and record its ETag
+        etag = None
+        try:
+            resp = s3.head_object(Bucket=BUCKET, Key=master_key_mbtiles)
+            etag = resp["ETag"]
+            log.info(f"Downloading master {layer_name}.mbtiles (ETag: {etag}) …")
+            s3.download_file(BUCKET, master_key_mbtiles, str(master_path))
+
+            size_mb = master_path.stat().st_size / (1024 * 1024)
+            if size_mb > 2048:
+                log.warning(
+                    f"Master {layer_name}.mbtiles is {size_mb:.0f} MB. "
+                    "Consider regional sharding if this continues to grow."
+                )
+
+            has_master = True
+        except botocore.exceptions.ClientError as e:
+            if e.response["Error"]["Code"] == "404":
+                has_master = False
+            else:
+                raise
+
+        if not has_master:
+            log.info(f"No existing master for {layer_name} — creating from job output.")
+            shutil.copy2(str(job_mbtiles), str(master_path))
+        else:
+            log.info(f"Merging {job_mbtiles.name} into master {layer_name} …")
+            with sqlite3.connect(str(master_path)) as conn:
+                conn.execute("ATTACH DATABASE ? AS job", (str(job_mbtiles),))
+                conn.execute(
+                    "INSERT OR REPLACE INTO tiles "
+                    "SELECT zoom_level, tile_column, tile_row, tile_data "
+                    "FROM job.tiles"
+                )
+                _update_master_bounds(conn)
+                conn.execute("DETACH DATABASE job")
+
+        # Convert to PMTiles
+        with sqlite3.connect(str(master_path)) as conn:
+            row = conn.execute(
+                "SELECT value FROM metadata WHERE name='maxzoom'"
+            ).fetchone()
+            maxzoom = int(row[0]) if row else 18
+        mbtiles_to_pmtiles(str(master_path), str(master_pmtiles), maxzoom)
+
+        # Verify ETag hasn't changed (optimistic concurrency)
+        if etag is not None:
+            try:
+                current = s3.head_object(Bucket=BUCKET, Key=master_key_mbtiles)
+                current_etag = current["ETag"]
+            except botocore.exceptions.ClientError:
+                current_etag = None
+
+            if current_etag != etag:
+                log.warning(
+                    f"Master {layer_name} ETag changed ({etag} → {current_etag}), "
+                    f"retrying merge (attempt {attempt}/{MERGE_MAX_RETRIES}) …"
+                )
+                master_path.unlink(missing_ok=True)
+                master_pmtiles.unlink(missing_ok=True)
+                if attempt == MERGE_MAX_RETRIES:
+                    raise RuntimeError(
+                        f"Master merge for {layer_name} failed after "
+                        f"{MERGE_MAX_RETRIES} ETag-conflict retries."
+                    )
+                continue
+
+        log.info(f"Uploading master {layer_name}.mbtiles + .pmtiles …")
+        s3.upload_file(str(master_path), BUCKET, master_key_mbtiles)
+        s3.upload_file(str(master_pmtiles), BUCKET, master_key_pmtiles)
+        log.info(f"Master {layer_name} updated successfully.")
+        return
+
+
+def _update_master_bounds(conn: sqlite3.Connection):
+    """Update the bounds metadata entry to the union of master + job bounds."""
+    try:
+        master_bounds = conn.execute(
+            "SELECT value FROM metadata WHERE name='bounds'"
+        ).fetchone()
+        job_bounds = conn.execute(
+            "SELECT value FROM job.metadata WHERE name='bounds'"
+        ).fetchone()
+        if master_bounds and job_bounds:
+            mb = [float(x) for x in master_bounds[0].split(",")]
+            jb = [float(x) for x in job_bounds[0].split(",")]
+            union = (
+                f"{min(mb[0], jb[0])},{min(mb[1], jb[1])},"
+                f"{max(mb[2], jb[2])},{max(mb[3], jb[3])}"
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO metadata (name, value) VALUES ('bounds', ?)",
+                (union,),
+            )
+    except Exception as e:
+        log.warning(f"Could not update master bounds: {e}")
+
+
 # ── Core processing ───────────────────────────────────────────────────────────
 
 def process_job(job: dict, tmp: str) -> list[dict]:
@@ -162,9 +355,11 @@ def process_job(job: dict, tmp: str) -> list[dict]:
     log.info(f"Downloading {s3_input_key} …")
     s3.download_file(BUCKET, s3_input_key, str(zip_path))
 
-    # Run topo_mbtiles.py
+    # Run topo_mbtiles.py (produces raster MBTiles — the existing pipeline)
     output_dir = Path(tmp) / "output"
     output_dir.mkdir()
+    geojson_dir = Path(tmp) / "geojson_export"
+    geojson_dir.mkdir()
     layers_arg = ",".join(layer_opts) if layer_opts else "all"
     log.info(f"Running pipeline (layers: {layers_arg}) …")
     result = subprocess.run(
@@ -175,6 +370,7 @@ def process_job(job: dict, tmp: str) -> list[dict]:
             "--output",  str(output_dir),
             "--workers", str(os.cpu_count() or 4),
             "--layers",  layers_arg,
+            "--export-geojson", str(geojson_dir),
         ],
     )
     if result.returncode != 0:
@@ -183,7 +379,7 @@ def process_job(job: dict, tmp: str) -> list[dict]:
             f"({'OOM kill' if result.returncode == -9 else 'non-zero exit'})"
         )
 
-    # Upload MBTiles + convert to PMTiles and upload
+    # ── Per-job upload (existing behaviour — raster MBTiles + PMTiles) ────
     output_keys = []
     for mbtiles_path in sorted(output_dir.glob("*.mbtiles")):
         name        = mbtiles_path.stem
@@ -209,6 +405,31 @@ def process_job(job: dict, tmp: str) -> list[dict]:
             "pmtilesKey": pmtiles_key,
         })
 
+    # ── Master merge (new — merge each layer into communal master files) ──
+    log.info("Starting master layer merge …")
+
+    # Generate vector MBTiles for contours and features via tippecanoe
+    vector_mbtiles: dict[str, Path | None] = {}
+    vector_mbtiles["contours"] = run_tippecanoe_contours(str(geojson_dir), tmp)
+    vector_mbtiles["features"] = run_tippecanoe_features(str(geojson_dir), tmp)
+
+    for layer_name, fmt in MASTER_LAYERS.items():
+        if fmt == "vector":
+            job_mbtiles = vector_mbtiles.get(layer_name)
+        else:
+            job_mbtiles = output_dir / f"{layer_name}.mbtiles"
+
+        if job_mbtiles is None or not Path(job_mbtiles).exists():
+            log.info(f"Skipping master merge for {layer_name} — no output produced.")
+            continue
+
+        try:
+            merge_into_master(layer_name, Path(job_mbtiles), tmp)
+        except Exception as e:
+            log.error(f"Master merge failed for {layer_name}: {e}")
+            raise
+
+    log.info("Master merge complete.")
     return output_keys
 
 

@@ -395,3 +395,81 @@
 .chipRemove:hover {
   opacity: 1;
 }
+
+/* LiDAR topo overlay section */
+
+.lidarSection {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 0.4em;
+}
+
+.lidarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9em;
+}
+
+.lidarHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.expandArrow {
+  background: none;
+  border: none;
+  color: var(--content-color);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  transition: transform 0.2s ease;
+}
+
+.expandArrowOpen {
+  transform: rotate(90deg);
+}
+
+.subToggleList {
+  display: flex;
+  flex-direction: column;
+  padding-left: 0.2em;
+  margin-top: 0.2em;
+}
+
+.subToggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85em;
+  padding: 0.15em 0;
+  border-radius: 4px;
+  transition: background-color 0.15s;
+}
+
+.subToggleRow:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.subToggleRowDragOver {
+  border-top: 2px solid var(--sand-light);
+}
+
+.subToggleLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.dragHandle {
+  color: var(--content-color);
+  opacity: 0.4;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+}
+
+.dragHandle:hover {
+  opacity: 0.8;
+}

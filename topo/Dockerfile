@@ -47,7 +47,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     unzip \
+    # Build tools (needed for tippecanoe)
+    git \
+    build-essential \
+    libsqlite3-dev \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# ------------------------------------------------------------
+# 2b. tippecanoe – GeoJSON → vector MBTiles (MVT format)
+#     Used by the worker to produce vector tiles for contours
+#     and OSM features before merging into master PMTiles.
+# ------------------------------------------------------------
+RUN git clone --depth 1 https://github.com/felt/tippecanoe.git /tmp/tippecanoe \
+    && cd /tmp/tippecanoe \
+    && make -j$(nproc) \
+    && make install \
+    && rm -rf /tmp/tippecanoe
 
 # ------------------------------------------------------------
 # 3. Python environment

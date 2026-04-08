@@ -20,6 +20,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import type { TBbox } from "./map/Map";
 import { apiFetch } from "../canyonUtils";
+import { MASTER_TOPO_LAYERS } from "../topoLayerTypes";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,23 +53,16 @@ type DownloadUrl = {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const ALL_LAYERS = [
-  "hillshade",
-  "vegetation",
-  "features",
-  "slope",
-  "contours",
+  ...MASTER_TOPO_LAYERS.map((l) => l.name),
   "composite",
 ] as const;
 type LayerName = (typeof ALL_LAYERS)[number];
 
 const LAYER_LABELS: Record<LayerName, string> = {
-  hillshade: "Hillshade",
-  vegetation: "Vegetation",
+  ...Object.fromEntries(MASTER_TOPO_LAYERS.map((l) => [l.name, l.label])),
   features: "Features (OSM overlay)",
-  slope: "Slope",
-  contours: "Contours",
   composite: "Composite (all layers combined)",
-};
+} as Record<LayerName, string>;
 
 function bboxAreaKm2(bbox: TBbox): number {
   const R = 6371;

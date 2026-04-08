@@ -37,6 +37,7 @@ function SidebarPanel({
   setShowOwnedCanyons,
   showSharedCanyons,
   setShowSharedCanyons,
+  onTopoLayersChange,
   // Layers
   activeLayerId,
   onActiveLayerChange,
@@ -74,6 +75,7 @@ function SidebarPanel({
   setShowOwnedCanyons: (show: boolean) => void;
   showSharedCanyons: boolean;
   setShowSharedCanyons: (show: boolean) => void;
+  onTopoLayersChange: (layers: { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]) => void;
   // Layers
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
@@ -126,6 +128,7 @@ function SidebarPanel({
             setShowOwnedCanyons={setShowOwnedCanyons}
             showSharedCanyons={showSharedCanyons}
             setShowSharedCanyons={setShowSharedCanyons}
+            onTopoLayersChange={onTopoLayersChange}
           />
         )}
         {activePanel === "layers" && (

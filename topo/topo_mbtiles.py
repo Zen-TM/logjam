@@ -1352,6 +1352,11 @@ def main():
                         help="Skip Overpass API download (offline / testing mode)")
     parser.add_argument("--benchmark", action="store_true",
                         help="Print per-step timing report at the end")
+    parser.add_argument("--export-geojson", default=None, metavar="DIR",
+                        help=(
+                            "Copy intermediate GeoJSON files (contours + OSM features) "
+                            "to DIR for external vector tile generation."
+                        ))
     parser.add_argument("--layers", default="all",
                         help=(
                             "Comma-separated list of layers to generate "
@@ -1421,6 +1426,17 @@ def main():
         # ── Step 6: Contours ─────────────────────────────────────────────────
         with bench.step("Generate contours (5 m / 10 m / 50 m)"):
             contour_paths = generate_contours_gdal(dtm_filled, work_dir)
+
+        # ── Step 6b: Export GeoJSON for external vector tile generation ─────
+        if args.export_geojson:
+            export_dir = args.export_geojson
+            os.makedirs(export_dir, exist_ok=True)
+            log.info(f"Exporting GeoJSON to {export_dir} …")
+            for interval, path in contour_paths.items():
+                if os.path.exists(path):
+                    shutil.copy2(path, os.path.join(export_dir, f"contours_{interval}m.geojson"))
+            if osm_geojson and os.path.exists(osm_geojson):
+                shutil.copy2(osm_geojson, os.path.join(export_dir, "osm_features.geojson"))
 
         # ── Step 7: Tile rendering ───────────────────────────────────────────
         active_layers = ["hillshade", "features", "slope", "contours"]

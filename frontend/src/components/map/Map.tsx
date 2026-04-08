@@ -98,7 +98,7 @@ function Map({
   onAreaSelected: (ids: string[]) => void;
   selectingBbox?: boolean;
   onBboxSelected?: (bbox: TBbox) => void;
-  topoLayers?: { id: string; pmtilesUrl: string }[];
+  topoLayers?: { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[];
   activeLayerId: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -555,33 +555,196 @@ function Map({
     };
   }, [selectingBbox, mapLoaded]);
 
-  // Topo overlay layers (PMTiles)
+  // Topo overlay layers (PMTiles — raster and vector)
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
     const layers = topoLayers ?? [];
+
+    // Map each entry id → the set of MapLibre layer ids it owns
     const activeIds = new Set(layers.map((l) => l.id));
 
-    // Remove layers/sources that are no longer in topoLayers
-    map.getStyle().layers.forEach((l) => {
-      if (l.id.startsWith("topo-overlay-") && !activeIds.has(l.id.replace("topo-overlay-", ""))) {
-        map.removeLayer(l.id);
-        const srcId = l.id.replace("topo-overlay-", "topo-src-");
-        if (map.getSource(srcId)) map.removeSource(srcId);
+    // Helper: get all MapLibre layer ids owned by a topo entry id
+    const ownedLayerIds = (entryId: string): string[] =>
+      map.getStyle().layers
+        .map((l) => l.id)
+        .filter((lid) => lid.startsWith(`topo-${entryId}-`));
+
+    // Remove layers/sources no longer in topoLayers
+    const allTopoLayerIds = map.getStyle().layers
+      .map((l) => l.id)
+      .filter((lid) => lid.startsWith("topo-"));
+    for (const lid of allTopoLayerIds) {
+      // Extract entry id: "topo-<entryId>-<suffix>"
+      const withoutPrefix = lid.replace(/^topo-/, "");
+      const dashIdx = withoutPrefix.indexOf("-");
+      if (dashIdx < 0) continue;
+      const entryId = withoutPrefix.slice(0, dashIdx);
+      if (!activeIds.has(entryId)) {
+        if (map.getLayer(lid)) map.removeLayer(lid);
+      }
+    }
+    // Remove orphaned sources
+    for (const entryId of [...map.getStyle().sources ? Object.keys(map.getStyle().sources) : []]) {
+      if (entryId.startsWith("topo-src-")) {
+        const id = entryId.replace("topo-src-", "");
+        if (!activeIds.has(id)) {
+          map.removeSource(entryId);
+        }
+      }
+    }
+
+    // Add sources + layers for new entries
+    layers.forEach(({ id, pmtilesUrl, format }) => {
+      const srcId = `topo-src-${id}`;
+      const fmt = format ?? "raster";
+
+      if (!map.getSource(srcId)) {
+        if (fmt === "raster") {
+          map.addSource(srcId, {
+            type: "raster",
+            url: `pmtiles://${pmtilesUrl}`,
+            tileSize: 256,
+          });
+        } else {
+          map.addSource(srcId, {
+            type: "vector",
+            url: `pmtiles://${pmtilesUrl}`,
+          });
+        }
+      }
+
+      if (fmt === "raster") {
+        const layerId = `topo-${id}-raster`;
+        if (!map.getLayer(layerId)) {
+          map.addLayer({
+            id: layerId,
+            type: "raster",
+            source: srcId,
+            paint: { "raster-opacity": 0.85 },
+          });
+        }
+      } else {
+        // Vector layers — detect source type by id suffix
+        const isContours = id.includes("contours");
+        if (isContours) {
+          // Minor contours (5m + 10m): elevation not divisible by 50
+          const minorId = `topo-${id}-minor`;
+          if (!map.getLayer(minorId)) {
+            map.addLayer({
+              id: minorId,
+              type: "line",
+              source: srcId,
+              "source-layer": "contours",
+              filter: ["!=", ["%", ["to-number", ["get", "elev"]], 50], 0],
+              paint: {
+                "line-color": "rgba(120, 90, 60, 0.55)",
+                "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.5, 18, 1.2],
+              },
+              minzoom: 13,
+            });
+          }
+          // Major contours (50m): elevation divisible by 50
+          const majorId = `topo-${id}-major`;
+          if (!map.getLayer(majorId)) {
+            map.addLayer({
+              id: majorId,
+              type: "line",
+              source: srcId,
+              "source-layer": "contours",
+              filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
+              paint: {
+                "line-color": "rgba(80, 60, 40, 0.85)",
+                "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1, 18, 2.5],
+              },
+            });
+          }
+          // Elevation labels on major contours at z14+
+          const labelsId = `topo-${id}-labels`;
+          if (!map.getLayer(labelsId)) {
+            map.addLayer({
+              id: labelsId,
+              type: "symbol",
+              source: srcId,
+              "source-layer": "contours",
+              filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
+              minzoom: 14,
+              layout: {
+                "text-field": ["concat", ["to-string", ["get", "elev"]], "m"],
+                "text-font": ["Open Sans Semibold"],
+                "text-size": ["interpolate", ["linear"], ["zoom"], 14, 9, 18, 12],
+                "symbol-placement": "line",
+                "text-max-angle": 30,
+              },
+              paint: {
+                "text-color": "rgba(80, 60, 40, 0.9)",
+                "text-halo-color": "rgba(255, 255, 255, 0.8)",
+                "text-halo-width": 1.5,
+              },
+            });
+          }
+        } else {
+          // OSM features vector source — one layer per category
+          const featureLayers: { suffix: string; filter: maplibregl.ExpressionSpecification; style: object }[] = [
+            {
+              suffix: "waterway",
+              filter: ["==", ["get", "_category"], "waterway"],
+              style: { type: "line", paint: { "line-color": "rgba(40,120,220,0.85)", "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1, 18, 3] } },
+            },
+            {
+              suffix: "track",
+              filter: ["==", ["get", "_category"], "track"],
+              style: { type: "line", paint: { "line-color": "rgba(160,100,30,0.85)", "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.8, 18, 2], "line-dasharray": [4, 2] } },
+            },
+            {
+              suffix: "road",
+              filter: ["==", ["get", "_category"], "road"],
+              style: { type: "line", paint: { "line-color": "rgba(80,80,80,0.9)", "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1, 18, 4] } },
+            },
+            {
+              suffix: "building",
+              filter: ["==", ["get", "_category"], "building"],
+              style: { type: "fill", paint: { "fill-color": "rgba(160,140,120,0.3)", "fill-outline-color": "rgba(160,140,120,0.8)" } },
+            },
+            {
+              suffix: "power",
+              filter: ["==", ["get", "_category"], "power"],
+              style: { type: "line", paint: { "line-color": "rgba(200,160,0,0.8)", "line-width": 1, "line-dasharray": [3, 4] } },
+            },
+            {
+              suffix: "points",
+              filter: ["in", ["get", "_category"], ["literal", ["campsite", "peak", "spring", "gate", "viewpoint", "cave", "picnic"]]],
+              style: { type: "circle", paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 3, 18, 7], "circle-color": "rgba(0,140,80,0.9)", "circle-stroke-color": "#fff", "circle-stroke-width": 1 } },
+            },
+          ];
+          for (const { suffix, filter, style } of featureLayers) {
+            const lid = `topo-${id}-${suffix}`;
+            if (!map.getLayer(lid)) {
+              map.addLayer({
+                id: lid,
+                source: srcId,
+                "source-layer": "features",
+                filter,
+                ...style,
+              } as maplibregl.LayerSpecification);
+            }
+          }
+        }
       }
     });
 
-    // Add new layers
-    layers.forEach(({ id, pmtilesUrl }) => {
-      const layerId = `topo-overlay-${id}`;
-      const srcId   = `topo-src-${id}`;
-      if (!map.getSource(srcId)) {
-        map.addSource(srcId, { type: "raster", url: `pmtiles://${pmtilesUrl}`, tileSize: 256 });
+    // Reorder: ensure layers appear in the order specified by topoLayers array.
+    // Each entry may own multiple MapLibre layers — move them all as a group.
+    let afterLayerId: string | undefined = undefined;
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const owned = ownedLayerIds(layers[i].id);
+      for (const lid of owned) {
+        if (map.getLayer(lid)) {
+          map.moveLayer(lid, afterLayerId);
+        }
       }
-      if (!map.getLayer(layerId)) {
-        map.addLayer({ id: layerId, type: "raster", source: srcId, paint: { "raster-opacity": 0.85 } });
-      }
-    });
+      if (owned.length > 0) afterLayerId = owned[0];
+    }
   }, [topoLayers, mapLoaded]);
 
   return (
