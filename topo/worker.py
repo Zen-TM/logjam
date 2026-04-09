@@ -355,13 +355,15 @@ def process_job(job: dict, tmp: str) -> list[dict]:
     log.info(f"Downloading {s3_input_key} …")
     s3.download_file(BUCKET, s3_input_key, str(zip_path))
 
-    # Run topo_mbtiles.py (produces raster MBTiles — the existing pipeline)
+    # Run topo_mbtiles.py (produces raster MBTiles — the existing pipeline).
+    # Always run with --layers all so every master layer is available for
+    # the merge step, regardless of what the user selected for per-job output.
+    # layerOptions only controls which files are uploaded/emailed to the user.
     output_dir = Path(tmp) / "output"
     output_dir.mkdir()
     geojson_dir = Path(tmp) / "geojson_export"
     geojson_dir.mkdir()
-    layers_arg = ",".join(layer_opts) if layer_opts else "all"
-    log.info(f"Running pipeline (layers: {layers_arg}) …")
+    log.info("Running pipeline (layers: all) …")
     result = subprocess.run(
         [
             "python3",
@@ -369,7 +371,7 @@ def process_job(job: dict, tmp: str) -> list[dict]:
             str(zip_path),
             "--output",  str(output_dir),
             "--workers", str(os.cpu_count() or 4),
-            "--layers",  layers_arg,
+            "--layers",  "all",
             "--export-geojson", str(geojson_dir),
         ],
     )
@@ -380,8 +382,12 @@ def process_job(job: dict, tmp: str) -> list[dict]:
         )
 
     # ── Per-job upload (existing behaviour — raster MBTiles + PMTiles) ────
+    # Only upload layers the user selected (or all if none specified).
+    requested_layers = set(layer_opts) if layer_opts else None
     output_keys = []
     for mbtiles_path in sorted(output_dir.glob("*.mbtiles")):
+        if requested_layers and mbtiles_path.stem not in requested_layers:
+            continue
         name        = mbtiles_path.stem
         mbtiles_key = f"outputs/{job_id}/{name}.mbtiles"
         pmtiles_path = output_dir / f"{name}.pmtiles"
