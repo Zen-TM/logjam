@@ -78,6 +78,7 @@ export const BASE_LAYERS = [
     tiles: [
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
     ],
+    maxzoom: 16,
     attribution: '<a href="https://maps.six.nsw.gov.au/">SIX Maps</a>',
   },
   {
@@ -86,6 +87,7 @@ export const BASE_LAYERS = [
     tiles: [
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
     ],
+    maxzoom: 19,
     attribution: '<a href="https://maps.six.nsw.gov.au/">SIX Maps</a>',
   },
   {
@@ -94,6 +96,7 @@ export const BASE_LAYERS = [
     tiles: [
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
     ],
+    maxzoom: 20,
     attribution: '<a href="https://maps.six.nsw.gov.au/">SIX Maps</a>',
   },
 ];
@@ -193,6 +196,7 @@ function Map({
           type: "raster",
           tiles: layer.tiles,
           tileSize: 256,
+          ...(layer.maxzoom != null && { maxzoom: layer.maxzoom }),
           attribution: layer.attribution,
         });
         map.addLayer({
@@ -751,7 +755,7 @@ function Map({
               },
             });
           }
-          // Elevation labels on major contours at z14+
+          // Elevation labels on major contours at z12+
           const labelsId = `topo-${id}-labels`;
           if (!map.getLayer(labelsId)) {
             map.addLayer({
@@ -760,7 +764,7 @@ function Map({
               source: srcId,
               "source-layer": "contours",
               filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
-              minzoom: 14,
+              minzoom: 12,
               layout: {
                 "text-field": ["concat", ["to-string", ["get", "elev"]], "m"],
                 "text-font": ["Open Sans Semibold"],

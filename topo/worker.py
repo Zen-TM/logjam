@@ -276,6 +276,7 @@ def merge_into_master(layer_name: str, job_mbtiles: Path, tmp_dir: str):
                     "FROM job.tiles"
                 )
                 _update_master_bounds(conn)
+                conn.commit()
                 conn.execute("DETACH DATABASE job")
 
         # Convert to PMTiles
