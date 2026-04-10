@@ -20,3 +20,59 @@
   font-size: 14px;
   pointer-events: none;
 }
+
+/* ── GeoPDF extent overlay ─────────────────────────────── */
+
+.geoPdfOverlayFrame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 70vmin;
+  border: 3px dashed #f97316;
+  background: transparent;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+}
+
+.geoPdfConfirmBar {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  gap: 8px;
+}
+
+.geoPdfConfirmButton {
+  padding: 0.6em 1.5em;
+  background: #f97316;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.geoPdfConfirmButton:hover {
+  background: #ea580c;
+}
+
+.geoPdfCancelButton {
+  padding: 0.6em 1.5em;
+  background: var(--sandstone-dark);
+  color: var(--content-color);
+  border: 1px solid var(--sandstone-light);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.geoPdfCancelButton:hover {
+  background: var(--sandstone-light);
+}

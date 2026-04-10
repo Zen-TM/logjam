@@ -1,0 +1,93 @@
+.templateList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-height: 60px;
+}
+
+.emptyMessage {
+  font-size: 0.85em;
+  opacity: 0.5;
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.templateItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--sandstone-light);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.templateItem:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.templateName {
+  flex: 1;
+  font-size: 0.9em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.templateDate {
+  font-size: 0.75em;
+  opacity: 0.5;
+  white-space: nowrap;
+}
+
+.actionButton {
+  padding: 0.2em 0.5em;
+  background: transparent;
+  color: var(--content-color);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  font-size: 0.75em;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.actionButton:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.deleteButton {
+  composes: actionButton;
+}
+
+.deleteButton:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.confirmRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8em;
+}
+
+.confirmText {
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.confirmYes {
+  composes: actionButton;
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.confirmYes:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.confirmNo {
+  composes: actionButton;
+}

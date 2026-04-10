@@ -1,0 +1,1016 @@
+import { createCanvas, loadImage, type Canvas, type CanvasRenderingContext2D } from "canvas";
+import PDFDocument from "pdfkit";
+import type { GeoPdfConfig } from "@logjam/shared";
+import { getPaperDimensions, gridConvergence, toEastingNorthing } from "@logjam/shared";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { PMTiles } from "pmtiles";
+import type { Source } from "pmtiles";
+import { VectorTile } from "@mapbox/vector-tile";
+import Pbf from "pbf";
+import { MASTER_TOPO_LAYERS } from "../constants/topoLayers";
+
+// geomagnetism has no type declarations
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const geomagnetism = require("geomagnetism");
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const DPI = 150;
+const MM_PER_INCH = 25.4;
+const TILE_SIZE = 256;
+const CONCURRENCY = 8;
+
+const TILE_URLS: Record<string, string> = {
+  "osm": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "osm-topo": "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
+  "osm-cycle": "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+  "six-topo": "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+  "six-base": "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
+  "six-imagery": "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
+};
+
+const SCALE_BAR_DISTANCES = [100, 250, 500, 1000, 2000, 5000, 10000];
+const DEG_TO_RAD = Math.PI / 180;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function mmToPx(mm: number): number {
+  return Math.round(mm * DPI / MM_PER_INCH);
+}
+
+/** Points (PDF coordinate unit, 72 per inch) */
+function mmToPt(mm: number): number {
+  return mm * 72 / MM_PER_INCH;
+}
+
+function chooseZoom(scale: number): number {
+  if (scale <= 10000) return 14;
+  if (scale <= 25000) return 13;
+  if (scale <= 50000) return 12;
+  return 11;
+}
+
+/** Convert longitude to tile X index at given zoom */
+function lon2tileX(lon: number, z: number): number {
+  return Math.floor(((lon + 180) / 360) * Math.pow(2, z));
+}
+
+/** Convert latitude to tile Y index at given zoom */
+function lat2tileY(lat: number, z: number): number {
+  const latRad = lat * DEG_TO_RAD;
+  return Math.floor(
+    (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, z),
+  );
+}
+
+/** Convert tile X index to longitude (west edge) */
+function tileX2lon(x: number, z: number): number {
+  return (x / Math.pow(2, z)) * 360 - 180;
+}
+
+/** Convert tile Y index to latitude (north edge) */
+function tileY2lat(y: number, z: number): number {
+  const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
+  return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+}
+
+/** Simple concurrency limiter */
+async function pMap<T, R>(
+  items: T[],
+  fn: (item: T) => Promise<R>,
+  concurrency: number,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let idx = 0;
+
+  async function worker() {
+    while (idx < items.length) {
+      const i = idx++;
+      results[i] = await fn(items[i]);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+/** Format distance label for scale bar */
+function formatDistance(m: number): string {
+  if (m >= 1000) return `${m / 1000} km`;
+  return `${m} m`;
+}
+
+// ── Main generation pipeline ─────────────────────────────────────────────────
+
+export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
+  // 1. Paper dimensions
+  const paper = getPaperDimensions({
+    paperSize: config.paperSize,
+    orientation: config.orientation,
+    customRatio: config.customRatio,
+    north: 0, south: 0, east: 0, west: 0, scale: 0,
+    coordMode: "latlon", lockMode: "scale", pivot: "mc",
+  });
+  const widthPx = mmToPx(paper.w);
+  const heightPx = mmToPx(paper.h);
+  const widthPt = mmToPt(paper.w);
+  const heightPt = mmToPt(paper.h);
+
+  // 2. Zoom level
+  const zoom = chooseZoom(config.scale);
+  const { north, south, east, west } = config.extent;
+
+  // 3. Tile range
+  const minTileX = lon2tileX(west, zoom);
+  const maxTileX = lon2tileX(east, zoom);
+  const minTileY = lat2tileY(north, zoom); // north = smaller Y
+  const maxTileY = lat2tileY(south, zoom);
+
+  // 4. Build tile list
+  type TileCoord = { x: number; y: number; z: number };
+  const tiles: TileCoord[] = [];
+  for (let y = minTileY; y <= maxTileY; y++) {
+    for (let x = minTileX; x <= maxTileX; x++) {
+      tiles.push({ x, y, z: zoom });
+    }
+  }
+
+  // 5. Fetch and composite tiles
+  const tileCanvas = createCanvas(
+    (maxTileX - minTileX + 1) * TILE_SIZE,
+    (maxTileY - minTileY + 1) * TILE_SIZE,
+  );
+  const tileCtx = tileCanvas.getContext("2d");
+
+  // Draw base layer tiles
+  const baseUrl = TILE_URLS[config.baseLayer];
+  if (baseUrl) {
+    await fetchAndDrawTiles(tileCtx, tiles, baseUrl, minTileX, minTileY);
+  }
+
+  // Draw overlay tiles from PMTiles archives in S3
+  if (config.overlays.length > 0) {
+    const topoBucket = process.env.S3_BUCKET_TOPO ?? "logjam-topo-jobs";
+    const s3 = new S3Client({ region: process.env.AWS_REGION ?? "ap-southeast-2" });
+
+    for (const overlayName of config.overlays) {
+      const layerDef = MASTER_TOPO_LAYERS.find(l => l.name === overlayName);
+      if (!layerDef) continue;
+      const pmtilesKey = `master/${overlayName}.pmtiles`;
+      const source = new S3Source(topoBucket, pmtilesKey, s3);
+      const archive = new PMTiles(source);
+      if (layerDef.format === "vector") {
+        await fetchAndDrawPMTilesVector(tileCtx, tiles, archive, minTileX, minTileY, overlayName);
+      } else {
+        await fetchAndDrawPMTilesRaster(tileCtx, tiles, archive, minTileX, minTileY);
+      }
+    }
+  }
+
+  // 6. Crop tile canvas to exact extent and scale to paper dimensions
+  const mapCanvas = createCanvas(widthPx, heightPx);
+  const mapCtx = mapCanvas.getContext("2d");
+
+  // Calculate pixel coordinates of extent within the tile canvas
+  const tileOriginLon = tileX2lon(minTileX, zoom);
+  const tileOriginLat = tileY2lat(minTileY, zoom);
+  const tileEndLon = tileX2lon(maxTileX + 1, zoom);
+  const tileEndLat = tileY2lat(maxTileY + 1, zoom);
+
+  const tileCanvasW = tileCanvas.width;
+  const tileCanvasH = tileCanvas.height;
+
+  const srcX = ((west - tileOriginLon) / (tileEndLon - tileOriginLon)) * tileCanvasW;
+  const srcY = ((tileOriginLat - north) / (tileOriginLat - tileEndLat)) * tileCanvasH;
+  const srcW = ((east - west) / (tileEndLon - tileOriginLon)) * tileCanvasW;
+  const srcH = ((north - south) / (tileOriginLat - tileEndLat)) * tileCanvasH;
+
+  mapCtx.drawImage(tileCanvas, srcX, srcY, srcW, srcH, 0, 0, widthPx, heightPx);
+
+  // 7. Draw map elements
+  if (config.elements.gridLines) {
+    drawGridLines(mapCtx, config, widthPx, heightPx);
+  }
+
+  // Bottom-left element stack
+  const elementMargin = mmToPx(5);
+  const elementPadH = mmToPx(2);
+  const elementPadV = mmToPx(1.5);
+  let stackY = heightPx - elementMargin;
+
+  if (config.elements.scaleBar) {
+    stackY = drawScaleBar(mapCtx, config, widthPx, stackY, elementMargin, elementPadH, elementPadV);
+  }
+
+  if (config.elements.scaleText) {
+    stackY = drawScaleText(mapCtx, config, stackY, elementMargin, elementPadH, elementPadV);
+  }
+
+  if (config.elements.contourInterval !== undefined) {
+    stackY = drawContourInterval(mapCtx, config.elements.contourInterval, stackY, elementMargin, elementPadH, elementPadV);
+  }
+
+  if (config.elements.compass) {
+    drawCompass(mapCtx, config, stackY, elementMargin);
+  }
+
+  if (config.elements.title) {
+    drawTitle(mapCtx, config.elements.title, elementMargin, elementPadH, elementPadV);
+  }
+
+  // Attribution bottom-right
+  drawAttribution(mapCtx, widthPx, heightPx, elementMargin);
+
+  // 8. Build PDF with GeoPDF georeferencing metadata
+  const pdfBuffer = await buildPdf(mapCanvas, widthPt, heightPt, config);
+
+  return pdfBuffer;
+}
+
+// ── Tile fetching ────────────────────────────────────────────────────────────
+
+async function fetchAndDrawTiles(
+  ctx: CanvasRenderingContext2D,
+  tiles: { x: number; y: number; z: number }[],
+  urlTemplate: string,
+  originX: number,
+  originY: number,
+): Promise<void> {
+  await pMap(tiles, async (tile) => {
+    const url = urlTemplate
+      .replace("{z}", String(tile.z))
+      .replace("{x}", String(tile.x))
+      .replace("{y}", String(tile.y));
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15_000);
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const arrayBuf = await response.arrayBuffer();
+      const img = await loadImage(Buffer.from(arrayBuf));
+      const dx = (tile.x - originX) * TILE_SIZE;
+      const dy = (tile.y - originY) * TILE_SIZE;
+      ctx.drawImage(img, dx, dy, TILE_SIZE, TILE_SIZE);
+    } catch (err) {
+      // Fill failed tile with grey
+      const dx = (tile.x - originX) * TILE_SIZE;
+      const dy = (tile.y - originY) * TILE_SIZE;
+      ctx.fillStyle = "#e8e8e8";
+      ctx.fillRect(dx, dy, TILE_SIZE, TILE_SIZE);
+      console.warn(`Failed to fetch tile z${tile.z}/${tile.x}/${tile.y}: ${err}`);
+    }
+  }, CONCURRENCY);
+}
+
+// ── PMTiles overlay rendering ────────────────────────────────────────────────
+
+class S3Source implements Source {
+  constructor(private bucket: string, private key: string, private s3: S3Client) {}
+  async getBytes(offset: number, length: number): Promise<{ data: ArrayBuffer }> {
+    const resp = await this.s3.send(new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: this.key,
+      Range: `bytes=${offset}-${offset + length - 1}`,
+    }));
+    const bytes = await resp.Body!.transformToByteArray();
+    return { data: bytes.buffer as ArrayBuffer };
+  }
+  getKey() { return `s3://${this.bucket}/${this.key}`; }
+}
+
+async function fetchAndDrawPMTilesRaster(
+  ctx: CanvasRenderingContext2D,
+  tiles: { x: number; y: number; z: number }[],
+  archive: PMTiles,
+  originX: number,
+  originY: number,
+): Promise<void> {
+  await pMap(tiles, async (tile) => {
+    try {
+      const result = await archive.getZxy(tile.z, tile.x, tile.y);
+      if (!result?.data) return;
+      const img = await loadImage(Buffer.from(result.data));
+      const dx = (tile.x - originX) * TILE_SIZE;
+      const dy = (tile.y - originY) * TILE_SIZE;
+      ctx.drawImage(img, dx, dy, TILE_SIZE, TILE_SIZE);
+    } catch (err) {
+      console.warn(`Failed to fetch raster PMTile ${tile.z}/${tile.x}/${tile.y}: ${err}`);
+    }
+  }, CONCURRENCY);
+}
+
+async function fetchAndDrawPMTilesVector(
+  ctx: CanvasRenderingContext2D,
+  tiles: { x: number; y: number; z: number }[],
+  archive: PMTiles,
+  originX: number,
+  originY: number,
+  layerName: string,
+): Promise<void> {
+  await pMap(tiles, async (tile) => {
+    try {
+      const result = await archive.getZxy(tile.z, tile.x, tile.y);
+      if (!result?.data) return;
+      const vt = new VectorTile(new Pbf(result.data));
+      const dx = (tile.x - originX) * TILE_SIZE;
+      const dy = (tile.y - originY) * TILE_SIZE;
+      const sourceLayer = vt.layers[layerName];
+      if (!sourceLayer) return;
+      for (let i = 0; i < sourceLayer.length; i++) {
+        const feature = sourceLayer.feature(i);
+        renderVectorFeature(ctx, feature, dx, dy, tile.z, layerName);
+      }
+    } catch (err) {
+      console.warn(`Failed to render vector PMTile ${tile.z}/${tile.x}/${tile.y}: ${err}`);
+    }
+  }, CONCURRENCY);
+}
+
+/** Linear interpolation between two zoom stops */
+function interpZoom(z: number, z1: number, v1: number, z2: number, v2: number): number {
+  const t = Math.max(0, Math.min(1, (z - z1) / (z2 - z1)));
+  return v1 + t * (v2 - v1);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function renderVectorFeature(
+  ctx: CanvasRenderingContext2D,
+  feature: any,
+  dx: number,
+  dy: number,
+  zoom: number,
+  layerName: string,
+) {
+  const scale = TILE_SIZE / feature.extent;
+  const geomType = feature.type; // 1=Point, 2=LineString, 3=Polygon
+  const props = feature.properties;
+
+  if (layerName === "contours") {
+    renderContourFeature(ctx, feature, dx, dy, zoom, scale, geomType, props);
+  } else if (layerName === "features") {
+    renderOsmFeature(ctx, feature, dx, dy, zoom, scale, geomType, props);
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function renderContourFeature(
+  ctx: CanvasRenderingContext2D,
+  feature: any,
+  dx: number,
+  dy: number,
+  zoom: number,
+  scale: number,
+  geomType: number,
+  props: Record<string, unknown>,
+) {
+  if (geomType !== 2) return; // contours are lines
+  const elev = Number(props.elev ?? 0);
+  const isMajor = elev % 50 === 0;
+
+  // Minor contours only visible at z13+
+  if (!isMajor && zoom < 13) return;
+
+  const lineWidth = isMajor
+    ? interpZoom(zoom, 12, 1, 18, 2.5)
+    : interpZoom(zoom, 12, 0.5, 18, 1.2);
+  const color = isMajor ? "rgba(80, 60, 40, 0.85)" : "rgba(120, 90, 60, 0.55)";
+
+  const geometry = feature.loadGeometry();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.setLineDash([]);
+
+  for (const ring of geometry) {
+    ctx.beginPath();
+    for (let j = 0; j < ring.length; j++) {
+      const px = dx + ring[j].x * scale;
+      const py = dy + ring[j].y * scale;
+      if (j === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+
+    // Draw elevation label on major contours at z14+
+    if (isMajor && zoom >= 14 && ring.length >= 2) {
+      const mid = Math.floor(ring.length / 2);
+      const mx = dx + ring[mid].x * scale;
+      const my = dy + ring[mid].y * scale;
+
+      // Calculate angle from adjacent points for text rotation
+      const prev = mid > 0 ? mid - 1 : 0;
+      const next = mid < ring.length - 1 ? mid + 1 : ring.length - 1;
+      const ax = ring[next].x - ring[prev].x;
+      const ay = ring[next].y - ring[prev].y;
+      let angle = Math.atan2(ay, ax);
+      // Keep text upright
+      if (angle > Math.PI / 2) angle -= Math.PI;
+      if (angle < -Math.PI / 2) angle += Math.PI;
+
+      const fontSize = interpZoom(zoom, 14, 9, 18, 12);
+      const label = `${elev}m`;
+
+      ctx.save();
+      ctx.translate(mx, my);
+      ctx.rotate(angle);
+      ctx.font = `600 ${fontSize}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      // Halo
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+      ctx.lineWidth = 3;
+      ctx.strokeText(label, 0, 0);
+      // Text
+      ctx.fillStyle = "rgba(80, 60, 40, 0.9)";
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    }
+  }
+}
+
+const POINT_CATEGORIES = new Set([
+  "campsite", "peak", "spring", "gate", "viewpoint", "cave", "picnic",
+]);
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function renderOsmFeature(
+  ctx: CanvasRenderingContext2D,
+  feature: any,
+  dx: number,
+  dy: number,
+  zoom: number,
+  scale: number,
+  geomType: number,
+  props: Record<string, unknown>,
+) {
+  const category = String(props._category ?? "");
+  const geometry = feature.loadGeometry();
+
+  switch (category) {
+    case "waterway":
+      drawLineFeature(ctx, geometry, dx, dy, scale, {
+        color: "rgba(40,120,220,0.85)",
+        width: interpZoom(zoom, 12, 1, 18, 3),
+      });
+      break;
+    case "track":
+      drawLineFeature(ctx, geometry, dx, dy, scale, {
+        color: "rgba(160,100,30,0.85)",
+        width: interpZoom(zoom, 12, 0.8, 18, 2),
+        dash: [4, 2],
+      });
+      break;
+    case "road":
+      drawLineFeature(ctx, geometry, dx, dy, scale, {
+        color: "rgba(80,80,80,0.9)",
+        width: interpZoom(zoom, 12, 1, 18, 4),
+      });
+      break;
+    case "building":
+      if (geomType === 3) {
+        drawFillFeature(ctx, geometry, dx, dy, scale, {
+          fill: "rgba(160,140,120,0.3)",
+          outline: "rgba(160,140,120,0.8)",
+        });
+      }
+      break;
+    case "power":
+      drawLineFeature(ctx, geometry, dx, dy, scale, {
+        color: "rgba(200,160,0,0.8)",
+        width: 1,
+        dash: [3, 4],
+      });
+      break;
+    default:
+      if (POINT_CATEGORIES.has(category) && geomType === 1) {
+        const radius = interpZoom(zoom, 12, 3, 18, 7);
+        for (const ring of geometry) {
+          for (const pt of ring) {
+            const px = dx + pt.x * scale;
+            const py = dy + pt.y * scale;
+            ctx.beginPath();
+            ctx.arc(px, py, radius, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(0,140,80,0.9)";
+            ctx.fill();
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        }
+      }
+      break;
+  }
+}
+
+function drawLineFeature(
+  ctx: CanvasRenderingContext2D,
+  geometry: { x: number; y: number }[][],
+  dx: number,
+  dy: number,
+  scale: number,
+  style: { color: string; width: number; dash?: number[] },
+) {
+  ctx.strokeStyle = style.color;
+  ctx.lineWidth = style.width;
+  ctx.setLineDash(style.dash ?? []);
+  for (const ring of geometry) {
+    ctx.beginPath();
+    for (let j = 0; j < ring.length; j++) {
+      const px = dx + ring[j].x * scale;
+      const py = dy + ring[j].y * scale;
+      if (j === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+}
+
+function drawFillFeature(
+  ctx: CanvasRenderingContext2D,
+  geometry: { x: number; y: number }[][],
+  dx: number,
+  dy: number,
+  scale: number,
+  style: { fill: string; outline: string },
+) {
+  for (const ring of geometry) {
+    ctx.beginPath();
+    for (let j = 0; j < ring.length; j++) {
+      const px = dx + ring[j].x * scale;
+      const py = dy + ring[j].y * scale;
+      if (j === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = style.fill;
+    ctx.fill();
+    ctx.strokeStyle = style.outline;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}
+
+// ── Map elements ─────────────────────────────────────────────────────────────
+
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+  r: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawElementBackground(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+) {
+  ctx.save();
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = "white";
+  drawRoundedRect(ctx, x, y, w, h, mmToPx(1));
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawTitle(
+  ctx: CanvasRenderingContext2D,
+  title: string,
+  margin: number,
+  padH: number,
+  padV: number,
+) {
+  const fontSize = mmToPx(4);
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  const metrics = ctx.measureText(title);
+  const boxW = metrics.width + padH * 2;
+  const boxH = fontSize + padV * 2;
+  const x = margin;
+  const y = margin;
+
+  drawElementBackground(ctx, x, y, boxW, boxH);
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillText(title, x + padH, y + padV + fontSize * 0.85);
+}
+
+function drawScaleBar(
+  ctx: CanvasRenderingContext2D,
+  config: GeoPdfConfig,
+  canvasWidth: number,
+  stackY: number,
+  margin: number,
+  padH: number,
+  padV: number,
+): number {
+  // Find largest round distance fitting 25% of map width
+  const midLat = (config.extent.north + config.extent.south) / 2;
+  const mapWidthM =
+    (config.extent.east - config.extent.west) *
+    111320 *
+    Math.cos(midLat * DEG_TO_RAD);
+  const maxBarM = mapWidthM * 0.25;
+  let barDistM = SCALE_BAR_DISTANCES[0];
+  for (const d of SCALE_BAR_DISTANCES) {
+    if (d <= maxBarM) barDistM = d;
+    else break;
+  }
+
+  const barWidthPx = (barDistM / mapWidthM) * canvasWidth;
+  const barHeight = mmToPx(2);
+  const fontSize = mmToPx(2.5);
+  const segments = 4;
+  const segWidth = barWidthPx / segments;
+
+  const labelText = formatDistance(barDistM);
+  ctx.font = `${fontSize}px sans-serif`;
+  const labelW = ctx.measureText(labelText).width;
+
+  const boxW = barWidthPx + padH * 2 + labelW + mmToPx(2);
+  const boxH = barHeight + fontSize + padV * 3;
+  const x = margin;
+  const y = stackY - boxH;
+
+  drawElementBackground(ctx, x, y, boxW, boxH);
+
+  // Draw alternating segments
+  for (let i = 0; i < segments; i++) {
+    ctx.fillStyle = i % 2 === 0 ? "#1a1a1a" : "white";
+    ctx.fillRect(x + padH + i * segWidth, y + padV, segWidth, barHeight);
+  }
+
+  // Bar border
+  ctx.strokeStyle = "#1a1a1a";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + padH, y + padV, barWidthPx, barHeight);
+
+  // Labels
+  ctx.fillStyle = "#1a1a1a";
+  ctx.font = `${fontSize}px sans-serif`;
+  ctx.fillText("0", x + padH, y + padV + barHeight + fontSize + mmToPx(0.5));
+  ctx.fillText(
+    labelText,
+    x + padH + barWidthPx + mmToPx(1),
+    y + padV + barHeight / 2 + fontSize * 0.35,
+  );
+
+  return y - mmToPx(1);
+}
+
+function drawScaleText(
+  ctx: CanvasRenderingContext2D,
+  config: GeoPdfConfig,
+  stackY: number,
+  margin: number,
+  padH: number,
+  padV: number,
+): number {
+  const text = `1:${Math.round(config.scale).toLocaleString()}`;
+  const fontSize = mmToPx(3);
+  ctx.font = `bold ${fontSize}px sans-serif`;
+  const metrics = ctx.measureText(text);
+  const boxW = metrics.width + padH * 2;
+  const boxH = fontSize + padV * 2;
+  const x = margin;
+  const y = stackY - boxH;
+
+  drawElementBackground(ctx, x, y, boxW, boxH);
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillText(text, x + padH, y + padV + fontSize * 0.85);
+
+  return y - mmToPx(1);
+}
+
+function drawContourInterval(
+  ctx: CanvasRenderingContext2D,
+  interval: number,
+  stackY: number,
+  margin: number,
+  padH: number,
+  padV: number,
+): number {
+  const text = `${interval}m contours`;
+  const fontSize = mmToPx(2.5);
+  ctx.font = `${fontSize}px sans-serif`;
+  const metrics = ctx.measureText(text);
+  const boxW = metrics.width + padH * 2;
+  const boxH = fontSize + padV * 2;
+  const x = margin;
+  const y = stackY - boxH;
+
+  drawElementBackground(ctx, x, y, boxW, boxH);
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillText(text, x + padH, y + padV + fontSize * 0.85);
+
+  return y - mmToPx(1);
+}
+
+function drawCompass(
+  ctx: CanvasRenderingContext2D,
+  config: GeoPdfConfig,
+  stackY: number,
+  margin: number,
+) {
+  const midLat = (config.extent.north + config.extent.south) / 2;
+  const midLon = (config.extent.east + config.extent.west) / 2;
+
+  // Magnetic declination
+  const model = geomagnetism.model();
+  const magInfo = model.point([midLat, midLon]);
+  const magDecl = magInfo.decl as number; // degrees, positive = east
+
+  // Grid convergence
+  const gridConv = gridConvergence(midLat, midLon);
+
+  const size = mmToPx(20);
+  const cx = margin + size / 2;
+  const cy = stackY - size / 2;
+
+  // Background
+  drawElementBackground(ctx, margin, stackY - size, size, size);
+
+  const arrowLen = size * 0.35;
+  const fontSize = mmToPx(2);
+
+  // Draw arrow helper
+  function drawArrow(
+    angleDeg: number,
+    color: string,
+    label: string,
+    angleLabel: string,
+  ) {
+    const angleRad = -angleDeg * DEG_TO_RAD; // negative because canvas Y is down
+    const tipX = cx + Math.sin(angleRad) * arrowLen;
+    const tipY = cy - Math.cos(angleRad) * arrowLen;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
+
+    // Arrowhead
+    const headLen = mmToPx(1.5);
+    const headAngle = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(
+      tipX - headLen * Math.sin(angleRad - headAngle),
+      tipY + headLen * Math.cos(angleRad - headAngle),
+    );
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(
+      tipX - headLen * Math.sin(angleRad + headAngle),
+      tipY + headLen * Math.cos(angleRad + headAngle),
+    );
+    ctx.stroke();
+
+    // Label at tip
+    ctx.fillStyle = color;
+    ctx.font = `bold ${fontSize}px sans-serif`;
+    const labelX = cx + Math.sin(angleRad) * (arrowLen + mmToPx(2));
+    const labelY = cy - Math.cos(angleRad) * (arrowLen + mmToPx(2));
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, labelX, labelY);
+
+    // Angle label below main label
+    if (angleLabel) {
+      ctx.font = `${mmToPx(1.5)}px sans-serif`;
+      ctx.fillText(angleLabel, labelX, labelY + fontSize);
+    }
+  }
+
+  // True North: straight up (0 degrees)
+  drawArrow(0, "#e11d48", "TN", "");
+
+  // Grid North: offset by grid convergence
+  drawArrow(
+    gridConv,
+    "#2563eb",
+    "GN",
+    `${gridConv >= 0 ? "+" : ""}${gridConv.toFixed(2)}°`,
+  );
+
+  // Magnetic North: offset by magnetic declination
+  drawArrow(
+    magDecl,
+    "#16a34a",
+    "MN",
+    `${magDecl >= 0 ? "+" : ""}${magDecl.toFixed(1)}°`,
+  );
+
+  // Reset text alignment
+  ctx.textAlign = "start";
+  ctx.textBaseline = "alphabetic";
+}
+
+function drawGridLines(
+  ctx: CanvasRenderingContext2D,
+  config: GeoPdfConfig,
+  widthPx: number,
+  heightPx: number,
+) {
+  const { north, south, east, west } = config.extent;
+  const fontSize = mmToPx(2);
+  ctx.font = `${fontSize}px sans-serif`;
+  ctx.strokeStyle = "rgba(100, 100, 100, 0.4)";
+  ctx.fillStyle = "rgba(80, 80, 80, 0.7)";
+  ctx.lineWidth = 1;
+
+  if (config.elements.gridLines === "enNorthing") {
+    // MGA easting/northing grid
+    const interval = config.scale <= 25000 ? 1000 : 10000;
+
+    const swEN = toEastingNorthing(south, west);
+    const neEN = toEastingNorthing(north, east);
+
+    // Vertical lines (eastings)
+    const startE = Math.ceil(swEN.easting / interval) * interval;
+    const endE = Math.floor(neEN.easting / interval) * interval;
+    for (let e = startE; e <= endE; e += interval) {
+      const frac = (e - swEN.easting) / (neEN.easting - swEN.easting);
+      const x = frac * widthPx;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, heightPx);
+      ctx.stroke();
+      const label = interval >= 10000 ? `${e / 1000}` : `${e}`;
+      ctx.fillText(label, x + 2, fontSize + 2);
+    }
+
+    // Horizontal lines (northings)
+    const startN = Math.ceil(swEN.northing / interval) * interval;
+    const endN = Math.floor(neEN.northing / interval) * interval;
+    for (let n = startN; n <= endN; n += interval) {
+      const frac = (n - swEN.northing) / (neEN.northing - swEN.northing);
+      const y = heightPx - frac * heightPx; // northing increases upward
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(widthPx, y);
+      ctx.stroke();
+      const label = interval >= 10000 ? `${n / 1000}` : `${n}`;
+      ctx.fillText(label, 2, y - 2);
+    }
+  } else {
+    // Lat/lon grid
+    const latRange = north - south;
+    const lonRange = east - west;
+
+    // Choose interval based on extent size
+    const intervals = [10, 5, 2, 1, 0.5, 1 / 6, 1 / 12, 1 / 60, 1 / 120]; // degrees
+    let latInterval = intervals[0];
+    for (const iv of intervals) {
+      if (latRange / iv >= 3 && latRange / iv <= 15) {
+        latInterval = iv;
+        break;
+      }
+    }
+    let lonInterval = intervals[0];
+    for (const iv of intervals) {
+      if (lonRange / iv >= 3 && lonRange / iv <= 15) {
+        lonInterval = iv;
+        break;
+      }
+    }
+
+    // Horizontal lines (latitudes)
+    const startLat = Math.ceil(south / latInterval) * latInterval;
+    for (let lat = startLat; lat <= north; lat += latInterval) {
+      const frac = (lat - south) / (north - south);
+      const y = heightPx - frac * heightPx;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(widthPx, y);
+      ctx.stroke();
+      ctx.fillText(lat.toFixed(4) + "°", 2, y - 2);
+    }
+
+    // Vertical lines (longitudes)
+    const startLon = Math.ceil(west / lonInterval) * lonInterval;
+    for (let lon = startLon; lon <= east; lon += lonInterval) {
+      const frac = (lon - west) / (east - west);
+      const x = frac * widthPx;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, heightPx);
+      ctx.stroke();
+      ctx.fillText(lon.toFixed(4) + "°", x + 2, fontSize + 2);
+    }
+  }
+}
+
+function drawAttribution(
+  ctx: CanvasRenderingContext2D,
+  widthPx: number,
+  heightPx: number,
+  margin: number,
+) {
+  const fontSize = mmToPx(1.8);
+  ctx.font = `${fontSize}px sans-serif`;
+  ctx.fillStyle = "rgba(60, 60, 60, 0.8)";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "bottom";
+  ctx.fillText("Generated by Logjam", widthPx - margin, heightPx - margin);
+  ctx.fillText(
+    "Map data © OpenStreetMap contributors",
+    widthPx - margin,
+    heightPx - margin - fontSize - mmToPx(0.5),
+  );
+  ctx.textAlign = "start";
+  ctx.textBaseline = "alphabetic";
+}
+
+// ── PDF assembly with GeoPDF metadata ────────────────────────────────────────
+
+async function buildPdf(
+  mapCanvas: Canvas,
+  widthPt: number,
+  heightPt: number,
+  config: GeoPdfConfig,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({
+      size: [widthPt, heightPt],
+      margin: 0,
+      info: {
+        Title: config.elements.title ?? "Logjam GeoPDF Export",
+        Creator: "Logjam",
+        Producer: "Logjam GeoPDF Generator",
+      },
+    });
+
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    // Embed the map image as full-page
+    const imgBuffer = mapCanvas.toBuffer("image/png");
+    doc.image(imgBuffer, 0, 0, { width: widthPt, height: heightPt });
+
+    // GeoPDF georeferencing metadata
+    // Reference: PDF 1.7 specification, Section 8.7.2 — Geospatial features
+    // and OGC GeoPDF specification.
+    //
+    // We attach a Viewport dictionary to the page with GPTS (geographic tie
+    // points in WGS84) and LPTS (normalised page coordinates). This allows
+    // GIS software like QGIS and Avenza Maps to read coordinate information.
+    try {
+      const { north, south, east, west } = config.extent;
+
+      // WGS84 Well-Known Text for the GCS
+      const wgs84Wkt =
+        'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",' +
+        'SPHEROID["WGS_1984",6378137,298.257223563]],' +
+        'PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]';
+
+      const gcsRef = (doc as any).ref({
+        Type: "PROJCS",
+        WKT: wgs84Wkt,
+      });
+      gcsRef.end();
+
+      const measureRef = (doc as any).ref({
+        Type: "Measure",
+        Subtype: "GEO",
+        // GPTS: four corners in lat/lon order — BL, BR, TR, TL
+        GPTS: [south, west, south, east, north, east, north, west],
+        // LPTS: corresponding normalised page coordinates (0,0 = bottom-left)
+        LPTS: [0, 0, 1, 0, 1, 1, 0, 1],
+        GCS: gcsRef,
+      });
+      measureRef.end();
+
+      const viewportRef = (doc as any).ref({
+        Type: "Viewport",
+        BBox: [0, 0, widthPt, heightPt],
+        Measure: measureRef,
+      });
+      viewportRef.end();
+
+      // Attach viewport to the current page
+      const page = (doc as any)._root.data.Pages.data.Kids[0];
+      if (page && page.data) {
+        page.data.VP = [viewportRef];
+      }
+    } catch (err) {
+      // If GeoPDF metadata injection fails, continue without it.
+      // The PDF will still render correctly but won't have georeferencing.
+      console.warn("Failed to inject GeoPDF metadata:", err);
+    }
+
+    doc.end();
+  });
+}

@@ -44,6 +44,8 @@ function SidebarPanel({
   // Forge
   onAddCanyon,
   onOpenTopo,
+  onOpenGeoPdf,
+  onOpenGeoPdfTemplates,
   onStartAreaSelection,
   selectingArea,
   onCancelAreaSelection,
@@ -82,6 +84,8 @@ function SidebarPanel({
   // Forge
   onAddCanyon: () => void;
   onOpenTopo: () => void;
+  onOpenGeoPdf: () => void;
+  onOpenGeoPdfTemplates: () => void;
   onStartAreaSelection: () => void;
   selectingArea: boolean;
   onCancelAreaSelection: () => void;
@@ -141,6 +145,8 @@ function SidebarPanel({
           <ForgePanel
             onAddCanyon={onAddCanyon}
             onOpenTopo={onOpenTopo}
+            onOpenGeoPdf={onOpenGeoPdf}
+            onOpenGeoPdfTemplates={onOpenGeoPdfTemplates}
             onStartAreaSelection={onStartAreaSelection}
             selectingArea={selectingArea}
             onCancelAreaSelection={onCancelAreaSelection}

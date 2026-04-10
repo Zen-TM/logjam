@@ -12,6 +12,8 @@ import notificationsRouter from "./routes/notifications";
 import ropewikiRouter from "./routes/ropewiki";
 import topoJobsRouter from "./routes/topoJobs";
 import topoLayersRouter from "./routes/topoLayers";
+import geoPdfTemplatesRouter from "./routes/geoPdfTemplates";
+import geoPdfRouter from "./routes/geoPdf";
 
 dotenv.config();
 
@@ -42,6 +44,8 @@ app.use("/notifications", notificationsRouter);
 app.use("/ropewiki", ropewikiRouter);
 app.use("/topo-jobs", topoJobsRouter);
 app.use("/topo-layers", topoLayersRouter);
+app.use("/geo-pdf-templates", geoPdfTemplatesRouter);
+app.use("/geo-pdf", geoPdfRouter);
 
 // Error handler — must be last
 app.use(errorHandler);

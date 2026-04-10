@@ -5,6 +5,9 @@ import Map, { BASE_LAYERS } from "./map/Map";
 import SignIn from "./SignIn";
 import ImportDialog from "./ImportDialog";
 import TopoDialog from "./TopoDialog";
+import GeoPdfDialog from "./GeoPdfDialog";
+import GeoPdfTemplatesDialog from "./GeoPdfTemplatesDialog";
+import type { GeoPdfTemplate } from "./GeoPdfTemplatesDialog";
 import CanyonDialog from "./CanyonDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
@@ -68,6 +71,16 @@ function App() {
   const [selectingTopoBbox, setSelectingTopoBbox] = useState(false);
   const [pendingTopoBbox, setPendingTopoBbox] = useState<TBbox | null>(null);
   const [topoOverlayLayers, setTopoOverlayLayers] = useState<{ id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]>([]);
+
+  // GeoPDF dialog
+  const [showGeoPdf, setShowGeoPdf] = useState(false);
+  const [selectingGeoPdfExtent, setSelectingGeoPdfExtent] = useState(false);
+  const [geoPdfPaperAspect, setGeoPdfPaperAspect] = useState(210 / 297);
+  const [pendingGeoPdfExtent, setPendingGeoPdfExtent] = useState<TBbox | null>(null);
+
+  // GeoPDF Templates dialog
+  const [showGeoPdfTemplates, setShowGeoPdfTemplates] = useState(false);
+  const [editingGeoPdfTemplate, setEditingGeoPdfTemplate] = useState<GeoPdfTemplate | null | undefined>(undefined);
 
   // Master topo layers from the Overlays panel (communal, persistent)
   const [masterTopoLayers, setMasterTopoLayers] = useState<{ id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]>([]);
@@ -219,7 +232,7 @@ function App() {
     );
   }
 
-  const dimUI = pickingCoords || selectingArea;
+  const dimUI = pickingCoords || selectingArea || selectingGeoPdfExtent;
 
   return (
     <div className={classes.app}>
@@ -240,6 +253,35 @@ function App() {
         }}
         pendingBbox={pendingTopoBbox}
         onLayersToggle={setTopoOverlayLayers}
+      />
+      <GeoPdfDialog
+        open={showGeoPdf}
+        onClose={() => { setShowGeoPdf(false); setEditingGeoPdfTemplate(undefined); }}
+        onSelectOnMap={(aspect) => {
+          setGeoPdfPaperAspect(aspect);
+          setShowGeoPdf(false);
+          setActivePanel(null);
+          setSelectingGeoPdfExtent(true);
+        }}
+        pendingExtent={pendingGeoPdfExtent}
+        activeLayerId={activeLayerId}
+        masterTopoLayers={masterTopoLayers}
+        templateMode={editingGeoPdfTemplate !== undefined}
+        editingTemplate={editingGeoPdfTemplate ?? undefined}
+        onTemplateSaved={() => {
+          setEditingGeoPdfTemplate(undefined);
+          setShowGeoPdf(false);
+          setShowGeoPdfTemplates(true);
+        }}
+      />
+      <GeoPdfTemplatesDialog
+        open={showGeoPdfTemplates}
+        onClose={() => setShowGeoPdfTemplates(false)}
+        onEditTemplate={(template) => {
+          setEditingGeoPdfTemplate(template);
+          setShowGeoPdfTemplates(false);
+          setShowGeoPdf(true);
+        }}
       />
       <div
         style={{
@@ -263,6 +305,8 @@ function App() {
           onActiveLayerChange={setActiveLayerId}
           onAddCanyon={() => setShowAdd(true)}
           onOpenTopo={() => setShowTopo(true)}
+          onOpenGeoPdf={() => setShowGeoPdf(true)}
+          onOpenGeoPdfTemplates={() => setShowGeoPdfTemplates(true)}
           onStartAreaSelection={startAreaSelection}
           selectingArea={selectingArea}
           onCancelAreaSelection={cancelAreaSelection}
@@ -307,6 +351,17 @@ function App() {
         }}
         topoLayers={[...masterTopoLayers, ...topoOverlayLayers]}
         activeLayerId={activeLayerId}
+        selectingGeoPdfExtent={selectingGeoPdfExtent}
+        geoPdfPaperAspect={geoPdfPaperAspect}
+        onGeoPdfExtentConfirmed={(extent) => {
+          setPendingGeoPdfExtent(extent);
+          setSelectingGeoPdfExtent(false);
+          setShowGeoPdf(true);
+        }}
+        onGeoPdfExtentCancelled={() => {
+          setSelectingGeoPdfExtent(false);
+          setShowGeoPdf(true);
+        }}
       />
 
       {/* Add canyon dialog */}

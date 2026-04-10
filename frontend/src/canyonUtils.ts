@@ -108,6 +108,23 @@ export async function apiFetch<T>(
   return res.json();
 }
 
+export async function apiFetchBlob(
+  path: string,
+  options?: { method?: string; body?: unknown },
+): Promise<Blob> {
+  const token = await getIdToken();
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: options?.method ?? "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(options?.body != null && { "Content-Type": "application/json" }),
+    },
+    ...(options?.body != null && { body: JSON.stringify(options.body) }),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
+  return res.blob();
+}
+
 export type ImportResult = {
   imported: number;
   skipped: number;
