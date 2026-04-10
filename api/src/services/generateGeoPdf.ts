@@ -29,6 +29,14 @@ const TILE_URLS: Record<string, string> = {
   "six-imagery": "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
 };
 
+const SIX_EXPORT_URLS: Record<string, string> = {
+  "six-topo": "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/export",
+  "six-base": "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/export",
+  "six-imagery": "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/export",
+};
+
+const MAX_EXPORT_SIZE = 4096;
+
 const SCALE_BAR_DISTANCES = [100, 250, 500, 1000, 2000, 5000, 10000];
 const DEG_TO_RAD = Math.PI / 180;
 
@@ -43,11 +51,14 @@ function mmToPt(mm: number): number {
   return mm * 72 / MM_PER_INCH;
 }
 
-function chooseZoom(scale: number): number {
-  if (scale <= 10000) return 14;
-  if (scale <= 25000) return 13;
-  if (scale <= 50000) return 12;
-  return 11;
+const MAX_ZOOM = 18;
+const MIN_ZOOM = 8;
+
+/** Compute the tile zoom level that provides at least 1 source pixel per output pixel */
+function computeZoom(scale: number, latDeg: number, dpi: number): number {
+  const cosLat = Math.cos(Math.abs(latDeg) * DEG_TO_RAD);
+  const z = Math.log2((156543.03 * cosLat * dpi) / (scale * 0.0254));
+  return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.ceil(z)));
 }
 
 /** Convert longitude to tile X index at given zoom */
@@ -101,6 +112,73 @@ function formatDistance(m: number): string {
   return `${m} m`;
 }
 
+// ── Tile canvas helpers ─────────────────────────────────────────────────────
+
+type TileCoord = { x: number; y: number; z: number };
+
+/** Build a tile canvas and tile list for a given zoom and extent */
+function buildTileCanvas(zoom: number, north: number, south: number, east: number, west: number) {
+  const minTileX = lon2tileX(west, zoom);
+  const maxTileX = lon2tileX(east, zoom);
+  const minTileY = lat2tileY(north, zoom);
+  const maxTileY = lat2tileY(south, zoom);
+
+  const tiles: TileCoord[] = [];
+  for (let y = minTileY; y <= maxTileY; y++) {
+    for (let x = minTileX; x <= maxTileX; x++) {
+      tiles.push({ x, y, z: zoom });
+    }
+  }
+
+  const tileCanvas = createCanvas(
+    (maxTileX - minTileX + 1) * TILE_SIZE,
+    (maxTileY - minTileY + 1) * TILE_SIZE,
+  );
+
+  return { tileCanvas, minTileX, minTileY, tiles };
+}
+
+/** Build a tile canvas and fetch base layer tiles onto it */
+async function fetchBaseTiles(baseLayerName: string, zoom: number, north: number, south: number, east: number, west: number) {
+  const result = buildTileCanvas(zoom, north, south, east, west);
+  const baseUrl = TILE_URLS[baseLayerName];
+  if (baseUrl) {
+    const ctx = result.tileCanvas.getContext("2d");
+    await fetchAndDrawTiles(ctx, result.tiles, baseUrl, result.minTileX, result.minTileY);
+  }
+  return result;
+}
+
+/** Crop a tile canvas to the exact geographic extent and draw it onto the output canvas */
+function cropTileCanvas(
+  mapCtx: CanvasRenderingContext2D,
+  tileCanvas: Canvas,
+  minTileX: number,
+  minTileY: number,
+  zoom: number,
+  north: number,
+  south: number,
+  east: number,
+  west: number,
+  widthPx: number,
+  heightPx: number,
+) {
+  const tileOriginLon = tileX2lon(minTileX, zoom);
+  const tileOriginLat = tileY2lat(minTileY, zoom);
+  const tileEndLon = tileX2lon(minTileX + tileCanvas.width / TILE_SIZE, zoom);
+  const tileEndLat = tileY2lat(minTileY + tileCanvas.height / TILE_SIZE, zoom);
+
+  const tileCanvasW = tileCanvas.width;
+  const tileCanvasH = tileCanvas.height;
+
+  const srcX = ((west - tileOriginLon) / (tileEndLon - tileOriginLon)) * tileCanvasW;
+  const srcY = ((tileOriginLat - north) / (tileOriginLat - tileEndLat)) * tileCanvasH;
+  const srcW = ((east - west) / (tileEndLon - tileOriginLon)) * tileCanvasW;
+  const srcH = ((north - south) / (tileOriginLat - tileEndLat)) * tileCanvasH;
+
+  mapCtx.drawImage(tileCanvas, srcX, srcY, srcW, srcH, 0, 0, widthPx, heightPx);
+}
+
 // ── Main generation pipeline ─────────────────────────────────────────────────
 
 export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
@@ -117,40 +195,32 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
   const widthPt = mmToPt(paper.w);
   const heightPt = mmToPt(paper.h);
 
-  // 2. Zoom level
-  const zoom = chooseZoom(config.scale);
+  // 2. Zoom level & extent
   const { north, south, east, west } = config.extent;
+  const centreLat = (north + south) / 2;
+  const zoom = computeZoom(config.scale, centreLat, DPI);
 
-  // 3. Tile range
-  const minTileX = lon2tileX(west, zoom);
-  const maxTileX = lon2tileX(east, zoom);
-  const minTileY = lat2tileY(north, zoom); // north = smaller Y
-  const maxTileY = lat2tileY(south, zoom);
+  // 3. Output canvas
+  const mapCanvas = createCanvas(widthPx, heightPx);
+  const mapCtx = mapCanvas.getContext("2d");
 
-  // 4. Build tile list
-  type TileCoord = { x: number; y: number; z: number };
-  const tiles: TileCoord[] = [];
-  for (let y = minTileY; y <= maxTileY; y++) {
-    for (let x = minTileX; x <= maxTileX; x++) {
-      tiles.push({ x, y, z: zoom });
-    }
+  // 4. Base layer — SIX Maps uses ArcGIS export API, others use tile fetching
+  const sixExportUrl = SIX_EXPORT_URLS[config.baseLayer];
+
+  if (sixExportUrl) {
+    // Fetch full-resolution image directly from ArcGIS export endpoint
+    const sixCanvas = await fetchSixExportImage(sixExportUrl, config.extent, widthPx, heightPx);
+    mapCtx.drawImage(sixCanvas, 0, 0);
+  } else {
+    // Standard tile-based fetching at computed zoom
+    const { tileCanvas, minTileX, minTileY } = await fetchBaseTiles(config.baseLayer, zoom, north, south, east, west);
+    cropTileCanvas(mapCtx, tileCanvas, minTileX, minTileY, zoom, north, south, east, west, widthPx, heightPx);
   }
 
-  // 5. Fetch and composite tiles
-  const tileCanvas = createCanvas(
-    (maxTileX - minTileX + 1) * TILE_SIZE,
-    (maxTileY - minTileY + 1) * TILE_SIZE,
-  );
-  const tileCtx = tileCanvas.getContext("2d");
-
-  // Draw base layer tiles
-  const baseUrl = TILE_URLS[config.baseLayer];
-  if (baseUrl) {
-    await fetchAndDrawTiles(tileCtx, tiles, baseUrl, minTileX, minTileY);
-  }
-
-  // Draw overlay tiles from PMTiles archives in S3
+  // 5. Overlay tiles from PMTiles archives in S3 (always tile-based)
   if (config.overlays.length > 0) {
+    const { tileCanvas: overlayCanvas, minTileX, minTileY, tiles } = buildTileCanvas(zoom, north, south, east, west);
+    const overlayCtx = overlayCanvas.getContext("2d");
     const topoBucket = process.env.S3_BUCKET_TOPO ?? "logjam-topo-jobs";
     const s3 = new S3Client({ region: process.env.AWS_REGION ?? "ap-southeast-2" });
 
@@ -161,32 +231,14 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
       const source = new S3Source(topoBucket, pmtilesKey, s3);
       const archive = new PMTiles(source);
       if (layerDef.format === "vector") {
-        await fetchAndDrawPMTilesVector(tileCtx, tiles, archive, minTileX, minTileY, overlayName);
+        await fetchAndDrawPMTilesVector(overlayCtx, tiles, archive, minTileX, minTileY, overlayName);
       } else {
-        await fetchAndDrawPMTilesRaster(tileCtx, tiles, archive, minTileX, minTileY);
+        await fetchAndDrawPMTilesRaster(overlayCtx, tiles, archive, minTileX, minTileY);
       }
     }
+
+    cropTileCanvas(mapCtx, overlayCanvas, minTileX, minTileY, zoom, north, south, east, west, widthPx, heightPx);
   }
-
-  // 6. Crop tile canvas to exact extent and scale to paper dimensions
-  const mapCanvas = createCanvas(widthPx, heightPx);
-  const mapCtx = mapCanvas.getContext("2d");
-
-  // Calculate pixel coordinates of extent within the tile canvas
-  const tileOriginLon = tileX2lon(minTileX, zoom);
-  const tileOriginLat = tileY2lat(minTileY, zoom);
-  const tileEndLon = tileX2lon(maxTileX + 1, zoom);
-  const tileEndLat = tileY2lat(maxTileY + 1, zoom);
-
-  const tileCanvasW = tileCanvas.width;
-  const tileCanvasH = tileCanvas.height;
-
-  const srcX = ((west - tileOriginLon) / (tileEndLon - tileOriginLon)) * tileCanvasW;
-  const srcY = ((tileOriginLat - north) / (tileOriginLat - tileEndLat)) * tileCanvasH;
-  const srcW = ((east - west) / (tileEndLon - tileOriginLon)) * tileCanvasW;
-  const srcH = ((north - south) / (tileOriginLat - tileEndLat)) * tileCanvasH;
-
-  mapCtx.drawImage(tileCanvas, srcX, srcY, srcW, srcH, 0, 0, widthPx, heightPx);
 
   // 7. Draw map elements
   if (config.elements.gridLines) {
@@ -262,6 +314,80 @@ async function fetchAndDrawTiles(
       console.warn(`Failed to fetch tile z${tile.z}/${tile.x}/${tile.y}: ${err}`);
     }
   }, CONCURRENCY);
+}
+
+// ── SIX Maps ArcGIS export ──────────────────────────────────────────────────
+
+/**
+ * Fetch a full-resolution image from a SIX Maps ArcGIS MapServer/export endpoint.
+ * If the requested size exceeds the server's max (4096px), the image is fetched
+ * in a grid of chunks and composited together.
+ */
+async function fetchSixExportImage(
+  exportUrl: string,
+  extent: { north: number; south: number; east: number; west: number },
+  widthPx: number,
+  heightPx: number,
+): Promise<Canvas> {
+  const canvas = createCanvas(widthPx, heightPx);
+  const ctx = canvas.getContext("2d");
+
+  // Split into chunks if either dimension exceeds the server limit
+  const cols = Math.ceil(widthPx / MAX_EXPORT_SIZE);
+  const rows = Math.ceil(heightPx / MAX_EXPORT_SIZE);
+  const lonRange = extent.east - extent.west;
+  const latRange = extent.north - extent.south;
+
+  type Chunk = { col: number; row: number };
+  const chunks: Chunk[] = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      chunks.push({ col, row });
+    }
+  }
+
+  await pMap(chunks, async ({ col, row }) => {
+    // Pixel bounds for this chunk
+    const pxLeft = col * MAX_EXPORT_SIZE;
+    const pxTop = row * MAX_EXPORT_SIZE;
+    const chunkW = Math.min(MAX_EXPORT_SIZE, widthPx - pxLeft);
+    const chunkH = Math.min(MAX_EXPORT_SIZE, heightPx - pxTop);
+
+    // Geographic bounds for this chunk
+    const chunkWest = extent.west + (pxLeft / widthPx) * lonRange;
+    const chunkEast = extent.west + ((pxLeft + chunkW) / widthPx) * lonRange;
+    // Note: north is top (row 0), south is bottom
+    const chunkNorth = extent.north - (pxTop / heightPx) * latRange;
+    const chunkSouth = extent.north - ((pxTop + chunkH) / heightPx) * latRange;
+
+    const params = new URLSearchParams({
+      bbox: `${chunkWest},${chunkSouth},${chunkEast},${chunkNorth}`,
+      bboxSR: "4326",
+      imageSR: "3857",
+      size: `${chunkW},${chunkH}`,
+      format: "png",
+      f: "image",
+      transparent: "true",
+    });
+
+    const url = `${exportUrl}?${params.toString()}`;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60_000);
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const arrayBuf = await response.arrayBuffer();
+      const img = await loadImage(Buffer.from(arrayBuf));
+      ctx.drawImage(img, 0, 0, img.width, img.height, pxLeft, pxTop, chunkW, chunkH);
+    } catch (err) {
+      ctx.fillStyle = "#e8e8e8";
+      ctx.fillRect(pxLeft, pxTop, chunkW, chunkH);
+      console.warn(`Failed to fetch SIX export chunk col=${col} row=${row}: ${err}`);
+    }
+  }, CONCURRENCY);
+
+  return canvas;
 }
 
 // ── PMTiles overlay rendering ────────────────────────────────────────────────
