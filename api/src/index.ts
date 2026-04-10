@@ -20,14 +20,19 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-app.use(helmet());
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
+  : "*";
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN?.split(",") ?? "*",
-    methods: ["GET", "POST", "PATCH", "DELETE"],
+    origin: allowedOrigins,
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
   }),
 );
+app.use(helmet());
 app.use(express.json());
 
 // Routes
