@@ -17,13 +17,14 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.6rem;
-  background: var(--sandstone-light);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--theme-secondary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
   border-radius: 4px;
 }
 
 .templateItem:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
 }
 
 .templateName {
@@ -44,8 +45,9 @@
 .actionButton {
   padding: 0.2em 0.5em;
   background: transparent;
-  color: var(--content-color);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
   border-radius: 4px;
   font-size: 0.75em;
   cursor: pointer;
@@ -54,7 +56,7 @@
 
 .actionButton:hover {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
 }
 
 .deleteButton {
@@ -62,8 +64,8 @@
 }
 
 .deleteButton:hover {
-  border-color: #ef4444;
-  color: #ef4444;
+  border-color: var(--theme-warning);
+  color: var(--theme-warning);
 }
 
 .confirmRow {
@@ -80,12 +82,12 @@
 
 .confirmYes {
   composes: actionButton;
-  border-color: #ef4444;
-  color: #ef4444;
+  border-color: var(--theme-warning);
+  color: var(--theme-warning);
 }
 
 .confirmYes:hover {
-  background: rgba(239, 68, 68, 0.15);
+  background: color-mix(in srgb, var(--theme-warning) 15%, transparent);
 }
 
 .confirmNo {

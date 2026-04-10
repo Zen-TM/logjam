@@ -12,6 +12,7 @@ model User {
   cognitoId           String         @unique @map("cognito_id")
   username            String         @unique
   email               String         @unique
+  uiPreferences       Json           @default("{}") @map("ui_preferences")
   storageUsedBytes    BigInt         @default(0) @map("storage_used_bytes")
   storageQuotaBytes   BigInt         @default(524288000) @map("storage_quota_bytes")
   createdAt           DateTime       @default(now()) @map("created_at")

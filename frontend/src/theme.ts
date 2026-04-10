@@ -1,58 +1,67 @@
 import { createTheme } from "@mui/material/styles";
+import type { Theme } from "@mui/material/styles";
+import type { ThemeTokens } from "@logjam/shared";
 
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: "#8C7A5B",
+export function createThemeFromTokens(tokens: ThemeTokens): Theme {
+  return createTheme({
+    palette: {
+      primary: {
+        main: tokens.accent,
+      },
+      secondary: {
+        main: tokens.secondary,
+      },
+      warning: {
+        main: tokens.warning,
+      },
+      text: {
+        primary: tokens.textPrimary,
+        secondary: tokens.textMuted,
+      },
     },
-    secondary: {
-      main: "#4E4944",
-    },
-  },
-  components: {
-    MuiTextField: {
-      styleOverrides: {
-        root: {
-          input: {
-            color: "var(--content-color)",
-            "&::placeholder": {
-              color: "var(--content-color)",
+    components: {
+      MuiTextField: {
+        styleOverrides: {
+          root: {
+            input: {
+              color: "var(--text-primary)",
+              "&::placeholder": {
+                color: "var(--text-muted)",
+              },
             },
-          },
-          "& .MuiInputLabel-root": {
-            color: "var(--content-color)",
-          },
-          label: {
-            color: "var(--content-color)",
-          },
-          "& .MuiOutlinedInput-root": {
-            "& fieldset": {
-              borderColor: "var(--content-color)",
+            "& .MuiInputLabel-root": {
+              color: "var(--text-primary)",
             },
-            "&:hover:not(.Mui-focused) fieldset": {
-              borderColor: "var(--content-color)",
+            label: {
+              color: "var(--text-primary)",
+            },
+            "& .MuiOutlinedInput-root": {
+              "& fieldset": {
+                borderColor: "var(--text-muted)",
+              },
+              "&:hover:not(.Mui-focused) fieldset": {
+                borderColor: "var(--text-muted)",
+              },
             },
           },
         },
       },
-    },
-    MuiSelect: {
-      styleOverrides: {
-        root: {
-          color: "var(--content-color)",
-          "& .MuiOutlinedInput-notchedOutline": {
-            borderColor: "var(--content-color)",
+      MuiSelect: {
+        styleOverrides: {
+          root: {
+            color: "var(--text-primary)",
+            "& .MuiOutlinedInput-notchedOutline": {
+              borderColor: "var(--text-muted)",
+            },
+            "&:hover:not(.Mui-focused) .MuiOutlinedInput-notchedOutline": {
+              borderColor: "var(--text-muted)",
+            },
           },
-          "&:hover:not(.Mui-focused) .MuiOutlinedInput-notchedOutline": {
-            borderColor: "var(--content-color)",
+          icon: {
+            color: "var(--text-primary)",
           },
-        },
-        icon: {
-          color: "var(--content-color)",
         },
       },
     },
-  },
-});
-
-export default theme;
+  });
+}

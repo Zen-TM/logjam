@@ -7,7 +7,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--content-color);
+  color: var(--theme-text-primary);
   opacity: 0.6;
   margin-bottom: 0.4rem;
 }
@@ -23,9 +23,10 @@
 .templateSelect {
   flex: 1;
   padding: 0.35em 0.5em;
-  background: var(--sandstone-light);
-  color: var(--content-color);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
   border-radius: 4px;
   font-size: 0.85em;
 }
@@ -40,18 +41,20 @@
 .templateNameInput {
   flex: 1;
   padding: 0.3em 0.5em;
-  background: var(--sandstone-light);
-  color: var(--content-color);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
   border-radius: 4px;
   font-size: 0.85em;
 }
 
 .smallButton {
   padding: 0.3em 0.7em;
-  background: var(--sandstone-light);
-  color: var(--content-color);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
   border-radius: 4px;
   font-size: 0.8em;
   cursor: pointer;
@@ -59,7 +62,7 @@
 }
 
 .smallButton:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
 }
 
 /* ── Paper ───────────────────────────────────────────────── */
@@ -73,23 +76,24 @@
 
 .paperButton {
   padding: 0.3em 0.7em;
-  background: var(--sandstone-light);
-  color: var(--content-color);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
   border-radius: 4px;
   font-size: 0.8em;
   cursor: pointer;
 }
 
 .paperButton:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
 }
 
 .paperButtonActive {
   composes: paperButton;
-  background: #f97316;
-  border-color: #f97316;
-  color: white;
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+  color: var(--theme-text-primary);
 }
 
 .orientationRow {
@@ -108,9 +112,10 @@
 .ratioInput {
   width: 60px;
   padding: 0.3em 0.5em;
-  background: var(--sandstone-light);
-  color: var(--content-color);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
   border-radius: 4px;
   font-size: 0.85em;
   text-align: center;
@@ -130,9 +135,10 @@
 .extentInput {
   width: 100%;
   padding: 0.3em 0.5em;
-  background: var(--sandstone-light);
-  color: var(--content-color);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
   border-radius: 4px;
   font-size: 0.85em;
   text-align: center;
@@ -187,9 +193,10 @@
 .scaleInput {
   width: 120px;
   padding: 0.3em 0.5em;
-  background: var(--sandstone-light);
-  color: var(--content-color);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
   border-radius: 4px;
   font-size: 0.85em;
 }
@@ -204,15 +211,15 @@
   width: 100%;
   padding: 0.45em 1em;
   background: transparent;
-  color: #f97316;
-  border: 1px solid #f97316;
+  color: var(--theme-accent);
+  border: 1px solid var(--theme-accent);
   border-radius: 4px;
   font-size: 0.85em;
   cursor: pointer;
 }
 
 .selectOnMapButton:hover {
-  background: rgba(249, 115, 22, 0.1);
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
 }
 
 /* ── Pivot picker ────────────────────────────────────────── */
@@ -228,20 +235,21 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.25);
+  border: 2px solid
+    color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
   background: transparent;
   cursor: pointer;
   padding: 0;
 }
 
 .pivotButton:hover {
-  border-color: rgba(255, 255, 255, 0.5);
+  border-color: color-mix(in srgb, var(--theme-text-primary) 60%, transparent);
 }
 
 .pivotButtonActive {
   composes: pivotButton;
-  border-color: #f97316;
-  background: rgba(249, 115, 22, 0.3);
+  border-color: var(--theme-accent);
+  background: color-mix(in srgb, var(--theme-accent) 30%, transparent);
 }
 
 /* ── Layers ──────────────────────────────────────────────── */
@@ -285,9 +293,10 @@
 .elementInput {
   flex: 1;
   padding: 0.25em 0.5em;
-  background: var(--sandstone-light);
-  color: var(--content-color);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
   border-radius: 4px;
   font-size: 0.85em;
 }

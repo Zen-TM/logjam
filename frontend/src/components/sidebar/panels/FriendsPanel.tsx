@@ -10,7 +10,11 @@ import {
   Typography,
 } from "@mui/material";
 import classes from "../Sidebar.module.css";
-import type { TFriend, TFriendRequest, TSearchUser } from "../../../canyonUtils";
+import type {
+  TFriend,
+  TFriendRequest,
+  TSearchUser,
+} from "../../../canyonUtils";
 import {
   searchUsers,
   sendFriendRequest,
@@ -64,8 +68,7 @@ function FriendsPanel({
       setFriendSearch("");
       setTimeout(() => setSearchFeedback(null), 3000);
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Failed to send request";
+      const msg = err instanceof Error ? err.message : "Failed to send request";
       if (msg.includes("409")) {
         setSearchFeedback("Already friends or request pending");
       } else {
@@ -138,7 +141,7 @@ function FriendsPanel({
           {searchFeedback && (
             <Typography
               variant="caption"
-              sx={{ color: "var(--content-color)", opacity: 0.7 }}
+              sx={{ color: "var(--theme-text-primary)", opacity: 0.7 }}
             >
               {searchFeedback}
             </Typography>
@@ -147,16 +150,10 @@ function FriendsPanel({
 
         {friendRequests.length > 0 && (
           <>
-            <Typography
-              variant="body2"
-              sx={{ fontWeight: "bold", mt: 0.5 }}
-            >
+            <Typography variant="body2" sx={{ fontWeight: "bold", mt: 0.5 }}>
               Pending Requests
             </Typography>
-            <div
-              className={classes.scrollList}
-              style={{ maxHeight: "150px" }}
-            >
+            <div className={classes.scrollList} style={{ maxHeight: "150px" }}>
               {friendRequests.map((req) => (
                 <div key={req.id} className={classes.friendRow}>
                   <span className={classes.friendName}>
@@ -190,15 +187,10 @@ function FriendsPanel({
             No friends yet. Search for a username above.
           </Typography>
         ) : (
-          <div
-            className={classes.scrollList}
-            style={{ maxHeight: "200px" }}
-          >
+          <div className={classes.scrollList} style={{ maxHeight: "200px" }}>
             {friends.map((friend) => (
               <div key={friend.id} className={classes.friendRow}>
-                <span className={classes.friendName}>
-                  {friend.username}
-                </span>
+                <span className={classes.friendName}>{friend.username}</span>
                 <button
                   className={classes.removeButton}
                   onClick={() =>

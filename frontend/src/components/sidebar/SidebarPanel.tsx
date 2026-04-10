@@ -16,6 +16,7 @@ import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import CanyonDetailPanel from "./panels/CanyonDetailPanel";
 import PlaceholderPanel from "./panels/PlaceholderPanel";
+import SettingsPanel from "./panels/SettingsPanel";
 
 const PANEL_TITLES: Record<PanelId, string> = {
   overlays: "Overlays",
@@ -77,7 +78,9 @@ function SidebarPanel({
   setShowOwnedCanyons: (show: boolean) => void;
   showSharedCanyons: boolean;
   setShowSharedCanyons: (show: boolean) => void;
-  onTopoLayersChange: (layers: { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]) => void;
+  onTopoLayersChange: (
+    layers: { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[],
+  ) => void;
   // Layers
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
@@ -174,12 +177,8 @@ function SidebarPanel({
             setActivePanel={setActivePanel}
           />
         )}
-        {activePanel === "account" && (
-          <PlaceholderPanel text="Coming soon" />
-        )}
-        {activePanel === "settings" && (
-          <PlaceholderPanel text="Coming soon" />
-        )}
+        {activePanel === "account" && <PlaceholderPanel text="Coming soon" />}
+        {activePanel === "settings" && <SettingsPanel />}
         {activePanel === "canyon-detail" && (
           <CanyonDetailPanel
             canyon={canyon}

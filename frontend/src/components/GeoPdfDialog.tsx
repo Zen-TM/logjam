@@ -41,7 +41,9 @@ import classes from "./GeoPdfDialog.module.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export type GeoPdfTemplateConfig = Omit<GeoPdfConfig, "extent"> & { scale?: number };
+export type GeoPdfTemplateConfig = Omit<GeoPdfConfig, "extent"> & {
+  scale?: number;
+};
 
 type GeoPdfTemplate = {
   id: string;
@@ -55,9 +57,15 @@ type GeoPdfTemplate = {
 
 const PAPER_SIZES: PaperSize[] = ["A2", "A3", "A4", "A5", "custom"];
 const PIVOT_POINTS: PivotPoint[] = [
-  "tl", "tc", "tr",
-  "ml", "mc", "mr",
-  "bl", "bc", "br",
+  "tl",
+  "tc",
+  "tr",
+  "ml",
+  "mc",
+  "mr",
+  "bl",
+  "bc",
+  "br",
 ];
 
 const DEFAULT_EXTENT_STATE: ExtentState = {
@@ -98,9 +106,12 @@ function GeoPdfDialog({
 }) {
   // ── State ────────────────────────────────────────────────────────────────
 
-  const [extentState, setExtentState] = useState<ExtentState>(DEFAULT_EXTENT_STATE);
+  const [extentState, setExtentState] =
+    useState<ExtentState>(DEFAULT_EXTENT_STATE);
   const [templates, setTemplates] = useState<GeoPdfTemplate[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    null,
+  );
   const [templateName, setTemplateName] = useState("");
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
 
@@ -262,26 +273,40 @@ function GeoPdfDialog({
     [templates],
   );
 
-  const buildTemplateConfig = useCallback((): GeoPdfTemplateConfig => ({
-    paperSize: extentState.paperSize,
-    orientation: extentState.orientation,
-    ...(extentState.customRatio ? { customRatio: extentState.customRatio } : {}),
-    scale: extentState.scale,
-    baseLayer: selectedBaseLayer,
-    overlays: [...selectedOverlays],
-    elements: {
-      ...(titleEnabled ? { title: titleText } : {}),
-      compass: compassEnabled,
-      ...(contourEnabled ? { contourInterval } : {}),
-      scaleText: scaleTextEnabled,
-      scaleBar: scaleBarEnabled,
-      ...(gridLinesEnabled ? { gridLines: gridLinesMode } : {}),
-    },
-  }), [
-    extentState, selectedBaseLayer, selectedOverlays,
-    titleEnabled, titleText, compassEnabled, contourEnabled, contourInterval,
-    scaleTextEnabled, scaleBarEnabled, gridLinesEnabled, gridLinesMode,
-  ]);
+  const buildTemplateConfig = useCallback(
+    (): GeoPdfTemplateConfig => ({
+      paperSize: extentState.paperSize,
+      orientation: extentState.orientation,
+      ...(extentState.customRatio
+        ? { customRatio: extentState.customRatio }
+        : {}),
+      scale: extentState.scale,
+      baseLayer: selectedBaseLayer,
+      overlays: [...selectedOverlays],
+      elements: {
+        ...(titleEnabled ? { title: titleText } : {}),
+        compass: compassEnabled,
+        ...(contourEnabled ? { contourInterval } : {}),
+        scaleText: scaleTextEnabled,
+        scaleBar: scaleBarEnabled,
+        ...(gridLinesEnabled ? { gridLines: gridLinesMode } : {}),
+      },
+    }),
+    [
+      extentState,
+      selectedBaseLayer,
+      selectedOverlays,
+      titleEnabled,
+      titleText,
+      compassEnabled,
+      contourEnabled,
+      contourInterval,
+      scaleTextEnabled,
+      scaleBarEnabled,
+      gridLinesEnabled,
+      gridLinesMode,
+    ],
+  );
 
   const handleSaveTemplate = useCallback(async () => {
     if (!templateName.trim()) return;
@@ -327,7 +352,9 @@ function GeoPdfDialog({
     const config: GeoPdfConfig = {
       paperSize: extentState.paperSize,
       orientation: extentState.orientation,
-      ...(extentState.customRatio ? { customRatio: extentState.customRatio } : {}),
+      ...(extentState.customRatio
+        ? { customRatio: extentState.customRatio }
+        : {}),
       extent: {
         north: extentState.north,
         south: extentState.south,
@@ -347,7 +374,10 @@ function GeoPdfDialog({
       },
     };
     try {
-      const blob = await apiFetchBlob("/geo-pdf", { method: "POST", body: config });
+      const blob = await apiFetchBlob("/geo-pdf", {
+        method: "POST",
+        body: config,
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -360,9 +390,18 @@ function GeoPdfDialog({
       setGenerating(false);
     }
   }, [
-    extentState, selectedBaseLayer, selectedOverlays,
-    titleEnabled, titleText, compassEnabled, contourEnabled, contourInterval,
-    scaleTextEnabled, scaleBarEnabled, gridLinesEnabled, gridLinesMode,
+    extentState,
+    selectedBaseLayer,
+    selectedOverlays,
+    titleEnabled,
+    titleText,
+    compassEnabled,
+    contourEnabled,
+    contourInterval,
+    scaleTextEnabled,
+    scaleBarEnabled,
+    gridLinesEnabled,
+    gridLinesMode,
   ]);
 
   const toggleOverlay = useCallback((name: string) => {
@@ -386,9 +425,7 @@ function GeoPdfDialog({
         return which === "lat" ? lat.toFixed(6) : lon.toFixed(6);
       }
       const en = toEastingNorthing(lat, lon);
-      return which === "lat"
-        ? en.northing.toFixed(1)
-        : en.easting.toFixed(1);
+      return which === "lat" ? en.northing.toFixed(1) : en.easting.toFixed(1);
     },
     [extentState.coordMode],
   );
@@ -403,17 +440,31 @@ function GeoPdfDialog({
       fullWidth
       PaperProps={{
         sx: {
-          backgroundColor: "var(--sandstone-dark)",
-          color: "var(--content-color)",
+          backgroundColor: "var(--theme-primary)",
+          color: "var(--theme-text-primary)",
           maxHeight: "85vh",
         },
       }}
     >
-      <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
+      <DialogTitle
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          pb: 1,
+        }}
+      >
         {templateMode
-          ? editingTemplate ? `Edit Template: ${editingTemplate.name}` : "New Template"
+          ? editingTemplate
+            ? `Edit Template: ${editingTemplate.name}`
+            : "New Template"
           : "Export GeoPDF"}
-        <IconButton size="small" onClick={onClose} disabled={generating} sx={{ color: "var(--content-color)" }}>
+        <IconButton
+          size="small"
+          onClick={onClose}
+          disabled={generating}
+          sx={{ color: "var(--theme-text-primary)" }}
+        >
           <CloseIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
@@ -447,7 +498,9 @@ function GeoPdfDialog({
               >
                 <option value="">— None —</option>
                 {templates.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
                 ))}
               </select>
               <button
@@ -465,7 +518,10 @@ function GeoPdfDialog({
                   value={templateName}
                   onChange={(e) => setTemplateName(e.target.value)}
                 />
-                <button className={classes.smallButton} onClick={handleSaveTemplate}>
+                <button
+                  className={classes.smallButton}
+                  onClick={handleSaveTemplate}
+                >
                   Save
                 </button>
               </div>
@@ -480,8 +536,14 @@ function GeoPdfDialog({
             {PAPER_SIZES.map((size) => (
               <button
                 key={size}
-                className={extentState.paperSize === size ? classes.paperButtonActive : classes.paperButton}
-                onClick={() => setExtentState(applyPaperChange(extentState, size))}
+                className={
+                  extentState.paperSize === size
+                    ? classes.paperButtonActive
+                    : classes.paperButton
+                }
+                onClick={() =>
+                  setExtentState(applyPaperChange(extentState, size))
+                }
               >
                 {size}
               </button>
@@ -491,8 +553,14 @@ function GeoPdfDialog({
             {(["portrait", "landscape"] as Orientation[]).map((o) => (
               <button
                 key={o}
-                className={extentState.orientation === o ? classes.paperButtonActive : classes.paperButton}
-                onClick={() => setExtentState(applyOrientationChange(extentState, o))}
+                className={
+                  extentState.orientation === o
+                    ? classes.paperButtonActive
+                    : classes.paperButton
+                }
+                onClick={() =>
+                  setExtentState(applyOrientationChange(extentState, o))
+                }
               >
                 {o.charAt(0).toUpperCase() + o.slice(1)}
               </button>
@@ -507,7 +575,9 @@ function GeoPdfDialog({
                 onChange={(e) => {
                   const w = parseFloat(e.target.value) || 1;
                   const h = extentState.customRatio?.h ?? 297;
-                  setExtentState(applyPaperChange(extentState, "custom", { w, h }));
+                  setExtentState(
+                    applyPaperChange(extentState, "custom", { w, h }),
+                  );
                 }}
               />
               <span>:</span>
@@ -518,7 +588,9 @@ function GeoPdfDialog({
                 onChange={(e) => {
                   const h = parseFloat(e.target.value) || 1;
                   const w = extentState.customRatio?.w ?? 210;
-                  setExtentState(applyPaperChange(extentState, "custom", { w, h }));
+                  setExtentState(
+                    applyPaperChange(extentState, "custom", { w, h }),
+                  );
                 }}
               />
             </div>
@@ -534,19 +606,36 @@ function GeoPdfDialog({
             {(["scale", "position"] as LockMode[]).map((mode) => (
               <button
                 key={mode}
-                className={extentState.lockMode === mode ? classes.paperButtonActive : classes.paperButton}
-                onClick={() => setExtentState({ ...extentState, lockMode: mode })}
+                className={
+                  extentState.lockMode === mode
+                    ? classes.paperButtonActive
+                    : classes.paperButton
+                }
+                onClick={() =>
+                  setExtentState({ ...extentState, lockMode: mode })
+                }
               >
                 Lock {mode.charAt(0).toUpperCase() + mode.slice(1)}
               </button>
             ))}
           </div>
           <div className={classes.toggleRow}>
-            {([["latlon", "Lat/Lon"], ["enNorthing", "E/N"]] as [CoordMode, string][]).map(([mode, label]) => (
+            {(
+              [
+                ["latlon", "Lat/Lon"],
+                ["enNorthing", "E/N"],
+              ] as [CoordMode, string][]
+            ).map(([mode, label]) => (
               <button
                 key={mode}
-                className={extentState.coordMode === mode ? classes.paperButtonActive : classes.paperButton}
-                onClick={() => setExtentState(applyCoordModeChange(extentState, mode))}
+                className={
+                  extentState.coordMode === mode
+                    ? classes.paperButtonActive
+                    : classes.paperButton
+                }
+                onClick={() =>
+                  setExtentState(applyCoordModeChange(extentState, mode))
+                }
               >
                 {label}
               </button>
@@ -556,7 +645,9 @@ function GeoPdfDialog({
           {/* NSEW inputs + pivot */}
           <div
             className={classes.extentGrid}
-            style={templateMode ? { opacity: 0.4, pointerEvents: "none" } : undefined}
+            style={
+              templateMode ? { opacity: 0.4, pointerEvents: "none" } : undefined
+            }
           >
             <div className={classes.extentNorth}>
               <div className={classes.extentLabel}>
@@ -594,8 +685,14 @@ function GeoPdfDialog({
                 {PIVOT_POINTS.map((p) => (
                   <button
                     key={p}
-                    className={extentState.pivot === p ? classes.pivotButtonActive : classes.pivotButton}
-                    onClick={() => setExtentState(applyPivotChange(extentState, p))}
+                    className={
+                      extentState.pivot === p
+                        ? classes.pivotButtonActive
+                        : classes.pivotButton
+                    }
+                    onClick={() =>
+                      setExtentState(applyPivotChange(extentState, p))
+                    }
                     title={p}
                   />
                 ))}
@@ -650,7 +747,10 @@ function GeoPdfDialog({
 
           {/* Select on map (hidden in template mode) */}
           {!templateMode && (
-            <button className={classes.selectOnMapButton} onClick={handleSelectOnMap}>
+            <button
+              className={classes.selectOnMapButton}
+              onClick={handleSelectOnMap}
+            >
               Select on map
             </button>
           )}
@@ -734,7 +834,9 @@ function GeoPdfDialog({
                   className={classes.elementInput}
                   style={{ width: 60, flex: "none" }}
                   value={contourInterval}
-                  onChange={(e) => setContourInterval(parseInt(e.target.value) || 10)}
+                  onChange={(e) =>
+                    setContourInterval(parseInt(e.target.value) || 10)
+                  }
                 />
                 <span className={classes.elementSuffix}>m contours</span>
               </>
@@ -773,10 +875,19 @@ function GeoPdfDialog({
             <span>Grid lines</span>
             {gridLinesEnabled && (
               <>
-                {([["latlon", "Lat/Lon"], ["enNorthing", "E/N"]] as [CoordMode, string][]).map(([mode, label]) => (
+                {(
+                  [
+                    ["latlon", "Lat/Lon"],
+                    ["enNorthing", "E/N"],
+                  ] as [CoordMode, string][]
+                ).map(([mode, label]) => (
                   <button
                     key={mode}
-                    className={gridLinesMode === mode ? classes.paperButtonActive : classes.paperButton}
+                    className={
+                      gridLinesMode === mode
+                        ? classes.paperButtonActive
+                        : classes.paperButton
+                    }
                     onClick={() => setGridLinesMode(mode)}
                     style={{ padding: "0.15em 0.5em", fontSize: "0.8em" }}
                   >
@@ -796,7 +907,11 @@ function GeoPdfDialog({
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 1.5 }}>
-        <Button onClick={onClose} disabled={generating} sx={{ color: "var(--content-color)" }}>
+        <Button
+          onClick={onClose}
+          disabled={generating}
+          sx={{ color: "var(--theme-text-primary)" }}
+        >
           Cancel
         </Button>
         {templateMode ? (
@@ -804,7 +919,13 @@ function GeoPdfDialog({
             variant="contained"
             onClick={handleSaveTemplateMode}
             disabled={!editTemplateName.trim()}
-            sx={{ backgroundColor: "#f97316", "&:hover": { backgroundColor: "#ea580c" } }}
+            sx={{
+              backgroundColor: "var(--theme-accent)",
+              "&:hover": {
+                backgroundColor:
+                  "color-mix(in srgb var(--theme-accent) 80% transparent)",
+              },
+            }}
           >
             Save Template
           </Button>
@@ -813,7 +934,13 @@ function GeoPdfDialog({
             variant="contained"
             onClick={handleGenerate}
             disabled={generating || !extentValid}
-            sx={{ backgroundColor: "#f97316", "&:hover": { backgroundColor: "#ea580c" } }}
+            sx={{
+              backgroundColor: "var(--theme-accent)",
+              "&:hover": {
+                backgroundColor:
+                  "color-mix(in srgb var(--theme-accent) 80% transparent)",
+              },
+            }}
           >
             {generating ? (
               <>

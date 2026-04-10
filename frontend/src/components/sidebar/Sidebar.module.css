@@ -24,7 +24,7 @@
 }
 
 .sourcesList a {
-  color: var(--sand-light);
+  color: var(--theme-accent);
 }
 
 .canyonActions {
@@ -38,15 +38,15 @@
 .deleteButton {
   flex: 1;
   padding: 0.5em 1em;
-  border: 1px solid var(--sandstone-light);
+  border: 1px solid var(--theme-accent);
   border-radius: 4px;
   font-size: 0.9em;
   cursor: pointer;
 }
 
 .editButton {
-  background-color: var(--sandstone-light);
-  color: white;
+  background-color: var(--theme-accent);
+  color: var(--theme-text-primary);
 }
 
 .editButton:hover {
@@ -55,12 +55,12 @@
 
 .deleteButton {
   background-color: transparent;
-  color: #e57373;
-  border-color: #e57373;
+  color: var(--theme-warning);
+  border-color: var(--theme-warning);
 }
 
 .deleteButton:hover {
-  background-color: rgba(229, 115, 115, 0.1);
+  background-color: color-mix(in srgb, var(--theme-warning) 12%, transparent);
 }
 
 .optionsContent {
@@ -73,8 +73,8 @@
 .addButton {
   width: 100%;
   padding: 0.5em 1em;
-  background-color: var(--sandstone-light);
-  color: white;
+  background-color: var(--theme-secondary);
+  color: var(--theme-text-primary);
   border: none;
   border-radius: 4px;
   font-size: 0.9em;
@@ -96,15 +96,19 @@
   width: 100%;
   padding: 0.5em 1em;
   background-color: transparent;
-  color: var(--content-color);
-  border: 1px solid var(--sandstone-light);
+  color: var(--theme-text-primary);
+  border: 1px solid var(--theme-secondary);
   border-radius: 4px;
   font-size: 0.85em;
   cursor: pointer;
 }
 
 .refreshButton:hover {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: color-mix(
+    in srgb,
+    var(--theme-text-primary) 8%,
+    transparent
+  );
 }
 
 .refreshButton:disabled {
@@ -124,7 +128,7 @@
 .searchResults {
   display: flex;
   flex-direction: column;
-  background-color: var(--sandstone-light);
+  background-color: var(--theme-secondary);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -138,13 +142,14 @@
 }
 
 .searchResultItem + .searchResultItem {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
 }
 
 .addFriendButton {
   background-color: transparent;
-  border: 1px solid var(--sand-light);
-  color: var(--sand-light);
+  border: 1px solid var(--theme-bonus-1);
+  color: var(--theme-bonus-1);
   border-radius: 4px;
   padding: 0.2em 0.6em;
   font-size: 0.85em;
@@ -152,7 +157,7 @@
 }
 
 .addFriendButton:hover {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: color-mix(in srgb, var(--theme-bonus-1) 12%, transparent);
 }
 
 .scrollList {
@@ -186,8 +191,8 @@
 
 .acceptButton {
   background-color: transparent;
-  border: 1px solid #66bb6a;
-  color: #66bb6a;
+  border: 1px solid var(--theme-accent);
+  color: var(--theme-accent);
   border-radius: 4px;
   padding: 0.2em 0.5em;
   font-size: 0.85em;
@@ -195,13 +200,13 @@
 }
 
 .acceptButton:hover {
-  background-color: rgba(102, 187, 106, 0.1);
+  background-color: color-mix(in srgb, var(--theme-accent) 12%, transparent);
 }
 
 .declineButton {
   background-color: transparent;
-  border: 1px solid #e57373;
-  color: #e57373;
+  border: 1px solid var(--theme-warning);
+  color: var(--theme-warning);
   border-radius: 4px;
   padding: 0.2em 0.5em;
   font-size: 0.85em;
@@ -209,13 +214,13 @@
 }
 
 .declineButton:hover {
-  background-color: rgba(229, 115, 115, 0.1);
+  background-color: color-mix(in srgb, var(--theme-warning) 12%, transparent);
 }
 
 .removeButton {
   background-color: transparent;
-  border: 1px solid #e57373;
-  color: #e57373;
+  border: 1px solid var(--theme-warning);
+  color: var(--theme-warning);
   border-radius: 4px;
   padding: 0.2em 0.5em;
   font-size: 0.85em;
@@ -224,7 +229,7 @@
 }
 
 .removeButton:hover {
-  background-color: rgba(229, 115, 115, 0.1);
+  background-color: color-mix(in srgb, var(--theme-warning) 12%, transparent);
 }
 
 /* Sharing */
@@ -236,8 +241,8 @@
 .shareButton {
   width: 100%;
   padding: 0.5em 1em;
-  background-color: var(--sandstone-light);
-  color: white;
+  background-color: var(--theme-secondary);
+  color: var(--theme-text-primary);
   border: none;
   border-radius: 4px;
   font-size: 0.9em;
@@ -269,8 +274,8 @@
 
 .unshareButton {
   background-color: transparent;
-  border: 1px solid #e57373;
-  color: #e57373;
+  border: 1px solid var(--theme-warning);
+  color: var(--theme-warning);
   border-radius: 4px;
   padding: 0.2em 0.5em;
   font-size: 0.85em;
@@ -279,7 +284,7 @@
 }
 
 .unshareButton:hover {
-  background-color: rgba(229, 115, 115, 0.1);
+  background-color: color-mix(in srgb, var(--theme-warning) 12%, transparent);
 }
 
 .copyActions {
@@ -291,8 +296,8 @@
 .copyButton {
   flex: 1;
   padding: 0.5em 0.5em;
-  background-color: var(--sandstone-light);
-  color: white;
+  background-color: var(--theme-secondary);
+  color: var(--theme-text-primary);
   border: none;
   border-radius: 4px;
   font-size: 0.85em;
@@ -318,7 +323,8 @@
 
 .notificationItem {
   padding: 0.6em 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
   font-size: 0.85em;
   cursor: pointer;
 }
@@ -328,7 +334,7 @@
 }
 
 .notificationUnread {
-  border-left: 3px solid #3b82f6;
+  border-left: 3px solid var(--theme-accent);
   padding-left: 0.5em;
 }
 
@@ -351,15 +357,19 @@
   width: 100%;
   padding: 0.5em;
   background-color: transparent;
-  border: 1px solid var(--sandstone-light);
-  color: var(--content-color);
+  border: 1px solid var(--theme-secondary);
+  color: var(--theme-text-primary);
   border-radius: 4px;
   font-size: 0.8em;
   cursor: pointer;
 }
 
 .clearAllButton:hover {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: color-mix(
+    in srgb,
+    var(--theme-text-primary) 8%,
+    transparent
+  );
 }
 
 /* Friend selector chips */
@@ -374,8 +384,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3em;
-  background-color: var(--sandstone-light);
-  color: var(--content-color);
+  background-color: var(--theme-secondary);
+  color: var(--theme-text-primary);
   border-radius: 12px;
   padding: 0.2em 0.5em;
   font-size: 0.8em;
@@ -384,7 +394,7 @@
 .chipRemove {
   background: none;
   border: none;
-  color: var(--content-color);
+  color: var(--theme-text-primary);
   font-size: 1em;
   line-height: 1;
   padding: 0;
@@ -399,7 +409,8 @@
 /* LiDAR topo overlay section */
 
 .lidarSection {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
   padding-top: 0.4em;
 }
 
@@ -419,7 +430,7 @@
 .expandArrow {
   background: none;
   border: none;
-  color: var(--content-color);
+  color: var(--theme-text-primary);
   cursor: pointer;
   padding: 2px;
   display: flex;
@@ -449,11 +460,15 @@
 }
 
 .subToggleRow:hover {
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: color-mix(
+    in srgb,
+    var(--theme-text-primary) 6%,
+    transparent
+  );
 }
 
 .subToggleRowDragOver {
-  border-top: 2px solid var(--sand-light);
+  border-top: 2px solid var(--theme-bonus-1);
 }
 
 .subToggleLeft {
@@ -463,7 +478,7 @@
 }
 
 .dragHandle {
-  color: var(--content-color);
+  color: var(--theme-text-primary);
   opacity: 0.4;
   cursor: grab;
   display: flex;

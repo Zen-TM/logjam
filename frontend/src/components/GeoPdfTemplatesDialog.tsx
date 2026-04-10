@@ -72,15 +72,26 @@ function GeoPdfTemplatesDialog({
       fullWidth
       PaperProps={{
         sx: {
-          backgroundColor: "var(--sandstone-dark)",
-          color: "var(--content-color)",
+          backgroundColor: "var(--theme-primary)",
+          color: "var(--theme-text-primary)",
           maxHeight: "70vh",
         },
       }}
     >
-      <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
+      <DialogTitle
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          pb: 1,
+        }}
+      >
         GeoPDF Templates
-        <IconButton size="small" onClick={onClose} sx={{ color: "var(--content-color)" }}>
+        <IconButton
+          size="small"
+          onClick={onClose}
+          sx={{ color: "var(--theme-text-primary)" }}
+        >
           <CloseIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
@@ -94,7 +105,10 @@ function GeoPdfTemplatesDialog({
             color: "#f97316",
             borderColor: "#f97316",
             mb: 1.5,
-            "&:hover": { borderColor: "#ea580c", backgroundColor: "rgba(249,115,22,0.1)" },
+            "&:hover": {
+              borderColor: "#ea580c",
+              backgroundColor: "rgba(249,115,22,0.1)",
+            },
           }}
         >
           + New Template
@@ -107,23 +121,37 @@ function GeoPdfTemplatesDialog({
           {templates.map((t) => (
             <div key={t.id} className={classes.templateItem}>
               <span className={classes.templateName}>{t.name}</span>
-              <span className={classes.templateDate}>{relativeDate(t.updatedAt)}</span>
+              <span className={classes.templateDate}>
+                {relativeDate(t.updatedAt)}
+              </span>
               {deletingId === t.id ? (
                 <div className={classes.confirmRow}>
                   <span className={classes.confirmText}>Delete?</span>
-                  <button className={classes.confirmYes} onClick={() => handleDelete(t.id)}>
+                  <button
+                    className={classes.confirmYes}
+                    onClick={() => handleDelete(t.id)}
+                  >
                     Yes
                   </button>
-                  <button className={classes.confirmNo} onClick={() => setDeletingId(null)}>
+                  <button
+                    className={classes.confirmNo}
+                    onClick={() => setDeletingId(null)}
+                  >
                     No
                   </button>
                 </div>
               ) : (
                 <>
-                  <button className={classes.actionButton} onClick={() => onEditTemplate(t)}>
+                  <button
+                    className={classes.actionButton}
+                    onClick={() => onEditTemplate(t)}
+                  >
                     Edit
                   </button>
-                  <button className={classes.deleteButton} onClick={() => setDeletingId(t.id)}>
+                  <button
+                    className={classes.deleteButton}
+                    onClick={() => setDeletingId(t.id)}
+                  >
                     Delete
                   </button>
                 </>
@@ -134,7 +162,7 @@ function GeoPdfTemplatesDialog({
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 1.5 }}>
-        <Button onClick={onClose} sx={{ color: "var(--content-color)" }}>
+        <Button onClick={onClose} sx={{ color: "var(--theme-text-primary)" }}>
           Close
         </Button>
       </DialogActions>

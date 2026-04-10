@@ -20,6 +20,35 @@ const SIDEBAR_TRANSITION_MS = 300;
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
 const INITIAL_ZOOM = 7;
 
+function readCssVar(name: string, fallback: string): string {
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+  return value || fallback;
+}
+
+function applyCanyonThemePaint(map: maplibregl.Map) {
+  const owned = readCssVar("--theme-bonus-3", "#f97316");
+  const shared = readCssVar("--theme-accent", "#3b82f6");
+  const label = readCssVar("--theme-text-primary", "#ffffff");
+  const halo = readCssVar("--theme-bonus-2", "#1a1a1a");
+
+  if (map.getLayer("canyon-circles")) {
+    map.setPaintProperty("canyon-circles", "circle-color", owned);
+  }
+  if (map.getLayer("shared-canyon-circles")) {
+    map.setPaintProperty("shared-canyon-circles", "circle-color", shared);
+  }
+  if (map.getLayer("canyon-labels")) {
+    map.setPaintProperty("canyon-labels", "text-color", label);
+    map.setPaintProperty("canyon-labels", "text-halo-color", halo);
+  }
+  if (map.getLayer("shared-canyon-labels")) {
+    map.setPaintProperty("shared-canyon-labels", "text-color", label);
+    map.setPaintProperty("shared-canyon-labels", "text-halo-color", halo);
+  }
+}
+
 export const BASE_LAYERS = [
   {
     id: "osm",
@@ -186,7 +215,7 @@ function Map({
         source: "canyons",
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
-          "circle-color": "#f97316",
+          "circle-color": readCssVar("--theme-bonus-3", "#f97316"),
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 1.5,
         },
@@ -199,7 +228,7 @@ function Map({
         source: "shared-canyons",
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
-          "circle-color": "#3b82f6",
+          "circle-color": readCssVar("--theme-accent", "#3b82f6"),
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 1.5,
         },
@@ -219,8 +248,8 @@ function Map({
           "text-anchor": "top",
         },
         paint: {
-          "text-color": "#1a1a1a",
-          "text-halo-color": "#ffffff",
+          "text-color": readCssVar("--theme-text-primary", "#ffffff"),
+          "text-halo-color": readCssVar("--theme-bonus-2", "#1a1a1a"),
           "text-halo-width": 1.5,
         },
       });
@@ -239,11 +268,13 @@ function Map({
           "text-anchor": "top",
         },
         paint: {
-          "text-color": "#1a1a1a",
-          "text-halo-color": "#ffffff",
+          "text-color": readCssVar("--theme-text-primary", "#ffffff"),
+          "text-halo-color": readCssVar("--theme-bonus-2", "#1a1a1a"),
           "text-halo-width": 1.5,
         },
       });
+
+      applyCanyonThemePaint(map);
 
       // Click to select canyon
       map.on("click", "canyon-circles", (e) => {
@@ -295,6 +326,20 @@ function Map({
       setMapLoaded(false);
     };
   }, []);
+
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+
+    const map = mapRef.current;
+    const onThemeChange = () => {
+      applyCanyonThemePaint(map);
+    };
+
+    window.addEventListener("logjam-theme-change", onThemeChange);
+    return () => {
+      window.removeEventListener("logjam-theme-change", onThemeChange);
+    };
+  }, [mapLoaded]);
 
   // Update canyon GeoJSON when data or filters change
   useEffect(() => {

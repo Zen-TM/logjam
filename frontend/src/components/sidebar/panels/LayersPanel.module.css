@@ -14,5 +14,5 @@
 }
 
 .layerItem input[type="radio"] {
-  accent-color: var(--sandstone-light);
+  accent-color: color-mix(in srgb, var(--theme-accent) 55%, transparent);
 }

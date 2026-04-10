@@ -77,7 +77,7 @@ function ForgePanel({
       {refreshResult && (
         <Typography
           variant="caption"
-          sx={{ color: "var(--content-color)", opacity: 0.7 }}
+          sx={{ color: "var(--theme-text-primary)", opacity: 0.7 }}
         >
           {refreshResult.added} added, {refreshResult.updated} updated,{" "}
           {refreshResult.unchanged} unchanged

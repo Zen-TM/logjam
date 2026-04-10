@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
+import type { ThemeSchemeId } from "@logjam/shared";
 
 export type TCanyonAttributes = {
   sources?: [string, string][];
@@ -31,6 +32,9 @@ export type TUser = {
   id: string;
   username: string;
   email: string;
+  uiPreferences?: {
+    themeSchemeId?: ThemeSchemeId;
+  } | null;
 };
 
 export type TFriend = {
@@ -228,6 +232,15 @@ export function fetchCurrentUser(): Promise<TUser> {
   return apiFetch<TUser>("/users/me");
 }
 
+export function updateCurrentUserThemeScheme(
+  themeSchemeId: ThemeSchemeId,
+): Promise<TUser> {
+  return apiFetch<TUser>("/users/me", {
+    method: "PATCH",
+    body: { themeSchemeId },
+  });
+}
+
 // ── Friends ───────────────────────────────────────────────────
 
 export function searchUsers(query: string): Promise<TSearchUser[]> {
@@ -395,7 +408,8 @@ export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
   if (!passesSliderFilter(canyon.aGrade, filters.a_grade, [1, 7])) return false;
   if (!passesSliderFilter(canyon.commitment, filters.commitment, [1, 6]))
     return false;
-  if (!passesSliderFilter(canyon.quality, filters.quality, [1, 5])) return false;
+  if (!passesSliderFilter(canyon.quality, filters.quality, [1, 5]))
+    return false;
   if (!passesSelectNumberFilter(canyon.numAbseils, filters.pitches))
     return false;
   if (!passesSelectNumberFilter(canyon.longestAbseil, filters.longest_pitch))
