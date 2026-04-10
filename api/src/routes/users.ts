@@ -4,6 +4,7 @@ import { isThemeSchemeId, normalizeUserUiPreferences } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
+import { verifyEmail } from "../services/email";
 
 const router = Router();
 
@@ -28,12 +29,19 @@ router.get(
           username,
         },
       });
+      // Trigger SES sandbox verification so we can email this user
+      verifyEmail(email).catch(() => {});
     } else if (user.username !== username || user.email !== email) {
       // Sync username/email from Cognito token if they've changed
+      const emailChanged = user.email !== email;
       user = await prisma.user.update({
         where: { id: user.id },
         data: { username, email },
       });
+      // Re-verify if email changed
+      if (emailChanged) {
+        verifyEmail(email).catch(() => {});
+      }
     }
 
     res.json({

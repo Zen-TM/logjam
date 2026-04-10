@@ -10,10 +10,10 @@ import {
   Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import type { TBbox } from "./map/Map";
-import { BASE_LAYERS } from "./map/Map";
-import { MASTER_TOPO_LAYERS } from "../topoLayerTypes";
-import { apiFetch, apiFetchBlob } from "../canyonUtils";
+import type { TBbox } from "../map/Map";
+import { BASE_LAYERS } from "../map/Map";
+import { MASTER_TOPO_LAYERS } from "../../topoLayerTypes";
+import { apiFetch, apiFetchBlob } from "../../canyonUtils";
 import type {
   ExtentState,
   PaperSize,
@@ -716,7 +716,8 @@ function GeoPdfDialog({
                 onBlur={() => {
                   focusedField.current = null;
                   const v = parseFloat(rawN);
-                  if (!isNaN(v)) setExtentState((s: ExtentState) => applyNorthChange(s, v));
+                  if (!isNaN(v))
+                    setExtentState((s: ExtentState) => applyNorthChange(s, v));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
@@ -738,7 +739,8 @@ function GeoPdfDialog({
                 onBlur={() => {
                   focusedField.current = null;
                   const v = parseFloat(rawW);
-                  if (!isNaN(v)) setExtentState((s: ExtentState) => applyWestChange(s, v));
+                  if (!isNaN(v))
+                    setExtentState((s: ExtentState) => applyWestChange(s, v));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
@@ -779,7 +781,8 @@ function GeoPdfDialog({
                 onBlur={() => {
                   focusedField.current = null;
                   const v = parseFloat(rawE);
-                  if (!isNaN(v)) setExtentState((s: ExtentState) => applyEastChange(s, v));
+                  if (!isNaN(v))
+                    setExtentState((s: ExtentState) => applyEastChange(s, v));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
@@ -801,7 +804,8 @@ function GeoPdfDialog({
                 onBlur={() => {
                   focusedField.current = null;
                   const v = parseFloat(rawS);
-                  if (!isNaN(v)) setExtentState((s: ExtentState) => applySouthChange(s, v));
+                  if (!isNaN(v))
+                    setExtentState((s: ExtentState) => applySouthChange(s, v));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();

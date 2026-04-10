@@ -10,7 +10,7 @@ import {
   Typography,
 } from "@mui/material";
 import classes from "../Sidebar.module.css";
-import CanyonDialog from "../../CanyonDialog";
+import CanyonDialog from "../../dialogs/CanyonDialog";
 import type { TCanyon, TFriend, TCanyonShare } from "../../../canyonUtils";
 import {
   formatCanyonGrade,

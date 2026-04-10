@@ -12,8 +12,8 @@ import {
   IconButton,
   Typography,
 } from "@mui/material";
-import type { TCanyon } from "../canyonUtils";
-import { updateCanyon, createCanyon } from "../canyonUtils";
+import type { TCanyon } from "../../canyonUtils";
+import { updateCanyon, createCanyon } from "../../canyonUtils";
 
 const V_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
 const A_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;

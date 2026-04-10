@@ -55,6 +55,7 @@ export const BASE_LAYERS = [
     id: "osm",
     name: "Default",
     tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+    maxzoom: 19,
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   },
@@ -62,6 +63,7 @@ export const BASE_LAYERS = [
     id: "osm-topo",
     name: "OSM Topo",
     tiles: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
+    maxzoom: 17,
     attribution:
       '<a href="https://github.com/der-stefan/OpenTopoMap">OpenTopo</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   },
@@ -69,6 +71,7 @@ export const BASE_LAYERS = [
     id: "osm-cycle",
     name: "OSM Cycle Topo",
     tiles: ["https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"],
+    maxzoom: 20,
     attribution:
       '<a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases">CyclOSM</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   },

@@ -8,7 +8,7 @@ import {
   IconButton,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { apiFetch } from "../canyonUtils";
+import { apiFetch } from "../../canyonUtils";
 import type { GeoPdfTemplateConfig } from "./GeoPdfDialog";
 import classes from "./GeoPdfTemplatesDialog.module.css";
 

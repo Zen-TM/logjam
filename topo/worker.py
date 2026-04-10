@@ -131,6 +131,7 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict]):
     if not ses:
         return
     links = []
+    html_links = []
     for output in output_keys:
         url = s3.generate_presigned_url(
             "get_object",
@@ -138,8 +139,9 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict]):
             ExpiresIn=604800,  # 7 days
         )
         links.append(f"  {output['name']}: {url}")
+        html_links.append(f'<li><a href="{url}">{output["name"]}</a></li>')
 
-    body = "\n".join([
+    text_body = "\n".join([
         f"Your topo map job is complete.",
         "",
         "Download your MBTiles files (links expire in 7 days):",
@@ -147,13 +149,27 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict]):
         "",
         "You can also view these layers as overlays in the Logjam app.",
     ])
+
+    html_body = "\n".join([
+        "<html>",
+        "  <body>",
+        "    <p>Your topo map job is complete.</p>",
+        "    <p>Download your MBTiles files (links expire in 7 days):</p>",
+        f"    <ul>{''.join(html_links)}</ul>",
+        "    <p>You can also view these layers as overlays in the Logjam app.</p>",
+        "  </body>",
+        "</html>",
+    ])
     try:
         ses.send_email(
             Source=SES_FROM,
             Destination={"ToAddresses": [to_email]},
             Message={
                 "Subject": {"Data": "Topo map ready — Logjam"},
-                "Body":    {"Text": {"Data": body}},
+                "Body":    {
+                    "Text": {"Data": text_body},
+                    "Html": {"Data": html_body},
+                },
             },
         )
     except Exception as e:

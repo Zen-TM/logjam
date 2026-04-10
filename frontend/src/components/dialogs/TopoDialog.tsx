@@ -18,9 +18,9 @@ import {
   Alert,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import type { TBbox } from "./map/Map";
-import { apiFetch } from "../canyonUtils";
-import { MASTER_TOPO_LAYERS } from "../topoLayerTypes";
+import type { TBbox } from "../map/Map";
+import { apiFetch } from "../../canyonUtils";
+import { MASTER_TOPO_LAYERS } from "../../topoLayerTypes";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

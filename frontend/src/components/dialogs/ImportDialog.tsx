@@ -9,7 +9,7 @@ import {
   CircularProgress,
   Box,
 } from "@mui/material";
-import { importFromRopeWiki, type ImportResult } from "../canyonUtils";
+import { importFromRopeWiki, type ImportResult } from "../../canyonUtils";
 
 function ImportDialog({
   open,
