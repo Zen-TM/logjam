@@ -29,8 +29,8 @@ const QUALITY_GRADES = [1, 2, 3, 4, 5] as const;
 const WETSUIT_GRADES = [1, 2, 3, 4, 5] as const;
 
 const selectSx = {
-  "& .MuiSelect-select": { color: "var(--content-color)" },
-  "& .MuiSelect-icon": { color: "var(--content-color)" },
+  "& .MuiSelect-select": { color: "var(--theme-text-primary)" },
+  "& .MuiSelect-icon": { color: "var(--theme-text-primary)" },
 };
 
 type Source = { label: string; url: string };
@@ -94,7 +94,12 @@ function CanyonDialog({
       setQuality(canyon.quality ?? "");
       setWetsuits(canyon.wetsuits ?? "");
       setHours(canyon.hours != null ? String(canyon.hours) : "");
-      setSources((canyon.attributes.sources ?? []).map(([label, url]) => ({ label, url })));
+      setSources(
+        (canyon.attributes.sources ?? []).map(([label, url]) => ({
+          label,
+          url,
+        })),
+      );
     } else {
       setName("");
       setAltNames("");
@@ -161,7 +166,7 @@ function CanyonDialog({
         hours: hours ? parseFloat(hours) : null,
         notes: notes || null,
         attributes: {
-          ...(canyon?.attributes),
+          ...canyon?.attributes,
           sources: cleanSources.length > 0 ? cleanSources : undefined,
         },
       };
@@ -188,10 +193,12 @@ function CanyonDialog({
       fullWidth
       PaperProps={{
         sx: {
-          backgroundColor: "var(--sandstone-dark)",
-          color: "var(--content-color)",
-          "& .MuiInputBase-input": { color: "var(--content-color)" },
-          "& .MuiInputBase-inputMultiline": { color: "var(--content-color)" },
+          backgroundColor: "var(--theme-primary)",
+          color: "var(--theme-text-primary)",
+          "& .MuiInputBase-input": { color: "var(--theme-text-primary)" },
+          "& .MuiInputBase-inputMultiline": {
+            color: "var(--theme-text-primary)",
+          },
         },
       }}
     >
@@ -234,10 +241,10 @@ function CanyonDialog({
                 whiteSpace: "nowrap",
                 minWidth: "auto",
                 height: "40px",
-                color: "var(--content-color)",
-                borderColor: "var(--sandstone-light)",
+                color: "var(--theme-text-primary)",
+                borderColor: "var(--theme-accent)",
                 "&:hover": {
-                  borderColor: "var(--content-color)",
+                  borderColor: "var(--theme-text-primary)",
                   backgroundColor: "rgba(255,255,255,0.08)",
                 },
               }}
@@ -426,10 +433,10 @@ function CanyonDialog({
               variant="outlined"
               sx={{
                 height: "40px",
-                color: "var(--content-color)",
-                borderColor: "var(--sandstone-light)",
+                color: "var(--theme-text-primary)",
+                borderColor: "var(--theme-accent)",
                 "&:hover": {
-                  borderColor: "var(--content-color)",
+                  borderColor: "var(--theme-text-primary)",
                   backgroundColor: "rgba(255,255,255,0.08)",
                 },
               }}

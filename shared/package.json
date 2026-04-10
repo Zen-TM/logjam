@@ -1,0 +1,20 @@
+{
+  "name": "@logjam/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "proj4": "^2.15.0"
+  },
+  "devDependencies": {
+    "@types/proj4": "^2.5.5",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.3"
+  }
+}

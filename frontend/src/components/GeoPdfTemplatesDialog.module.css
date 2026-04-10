@@ -1,0 +1,95 @@
+.templateList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-height: 60px;
+}
+
+.emptyMessage {
+  font-size: 0.85em;
+  opacity: 0.5;
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.templateItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--theme-secondary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
+  border-radius: 4px;
+}
+
+.templateItem:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+}
+
+.templateName {
+  flex: 1;
+  font-size: 0.9em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.templateDate {
+  font-size: 0.75em;
+  opacity: 0.5;
+  white-space: nowrap;
+}
+
+.actionButton {
+  padding: 0.2em 0.5em;
+  background: transparent;
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  border-radius: 4px;
+  font-size: 0.75em;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.actionButton:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+}
+
+.deleteButton {
+  composes: actionButton;
+}
+
+.deleteButton:hover {
+  border-color: var(--theme-warning);
+  color: var(--theme-warning);
+}
+
+.confirmRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8em;
+}
+
+.confirmText {
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.confirmYes {
+  composes: actionButton;
+  border-color: var(--theme-warning);
+  color: var(--theme-warning);
+}
+
+.confirmYes:hover {
+  background: color-mix(in srgb, var(--theme-warning) 15%, transparent);
+}
+
+.confirmNo {
+  composes: actionButton;
+}

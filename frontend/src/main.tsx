@@ -5,7 +5,10 @@ import "./index.css";
 import App from "./components/App.tsx";
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
-import theme from "./theme.ts";
+import {
+  ThemePreferencesProvider,
+  useThemePreferences,
+} from "./themePreferences";
 
 Amplify.configure({
   Auth: {
@@ -16,11 +19,21 @@ Amplify.configure({
   },
 });
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <ThemeProvider theme={theme}>
+function ThemedApp() {
+  const { muiTheme } = useThemePreferences();
+
+  return (
+    <ThemeProvider theme={muiTheme}>
       <CssBaseline />
       <App />
     </ThemeProvider>
-  </StrictMode>
+  );
+}
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <ThemePreferencesProvider>
+      <ThemedApp />
+    </ThemePreferencesProvider>
+  </StrictMode>,
 );

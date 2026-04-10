@@ -1,0 +1,125 @@
+import { Router, Response } from "express";
+import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
+import prisma from "../services/prisma";
+import { AppError } from "../middleware/errorHandler";
+
+const router = Router();
+
+function getParam(param: string | string[]): string {
+  return Array.isArray(param) ? param[0] : param;
+}
+
+async function getUser(cognitoSub: string) {
+  const user = await prisma.user.findUnique({ where: { cognitoId: cognitoSub } });
+  if (!user) throw new AppError(404, "User not found");
+  return user;
+}
+
+// GET / — list all templates for current user
+router.get(
+  "/",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const templates = await prisma.geoPdfTemplate.findMany({
+      where: { userId: user.id },
+      orderBy: { updatedAt: "desc" },
+    });
+    res.json(templates);
+  },
+);
+
+// GET /:id — get single template (owner only)
+router.get(
+  "/:id",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const id = getParam(req.params.id);
+    const template = await prisma.geoPdfTemplate.findUnique({ where: { id } });
+    if (!template || template.userId !== user.id) {
+      throw new AppError(404, "Template not found");
+    }
+    res.json(template);
+  },
+);
+
+// POST / — create template
+router.post(
+  "/",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const { name, config } = req.body;
+
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
+      throw new AppError(400, "name is required");
+    }
+    if (!config || typeof config !== "object") {
+      throw new AppError(400, "config is required and must be an object");
+    }
+
+    const template = await prisma.geoPdfTemplate.create({
+      data: {
+        userId: user.id,
+        name: name.trim(),
+        config,
+      },
+    });
+    res.status(201).json(template);
+  },
+);
+
+// PATCH /:id — update template (owner only)
+router.patch(
+  "/:id",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const id = getParam(req.params.id);
+    const existing = await prisma.geoPdfTemplate.findUnique({ where: { id } });
+    if (!existing || existing.userId !== user.id) {
+      throw new AppError(404, "Template not found");
+    }
+
+    const { name, config } = req.body;
+    const data: { name?: string; config?: object } = {};
+    if (name !== undefined) {
+      if (typeof name !== "string" || name.trim().length === 0) {
+        throw new AppError(400, "name must be a non-empty string");
+      }
+      data.name = name.trim();
+    }
+    if (config !== undefined) {
+      if (typeof config !== "object") {
+        throw new AppError(400, "config must be an object");
+      }
+      data.config = config;
+    }
+
+    const template = await prisma.geoPdfTemplate.update({
+      where: { id },
+      data,
+    });
+    res.json(template);
+  },
+);
+
+// DELETE /:id — delete template (owner only)
+router.delete(
+  "/:id",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const id = getParam(req.params.id);
+    const existing = await prisma.geoPdfTemplate.findUnique({ where: { id } });
+    if (!existing || existing.userId !== user.id) {
+      throw new AppError(404, "Template not found");
+    }
+
+    await prisma.geoPdfTemplate.delete({ where: { id } });
+    res.status(204).end();
+  },
+);
+
+export default router;

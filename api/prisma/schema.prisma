@@ -12,6 +12,7 @@ model User {
   cognitoId           String         @unique @map("cognito_id")
   username            String         @unique
   email               String         @unique
+  uiPreferences       Json           @default("{}") @map("ui_preferences")
   storageUsedBytes    BigInt         @default(0) @map("storage_used_bytes")
   storageQuotaBytes   BigInt         @default(524288000) @map("storage_quota_bytes")
   createdAt           DateTime       @default(now()) @map("created_at")
@@ -24,6 +25,7 @@ model User {
   notifications       Notification[]
   topoJobs            TopoJob[]
   tripLogs            TripLog[]
+  geoPdfTemplates     GeoPdfTemplate[]
 
   @@map("users")
 }
@@ -148,4 +150,17 @@ model TopoJob {
   user          User     @relation(fields: [userId], references: [id])
 
   @@map("topo_jobs")
+}
+
+model GeoPdfTemplate {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  name      String
+  config    Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("geo_pdf_templates")
 }

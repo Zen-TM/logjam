@@ -1,0 +1,316 @@
+.section {
+  margin-bottom: 1rem;
+}
+
+.sectionLabel {
+  font-size: 0.8em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--theme-text-primary);
+  opacity: 0.6;
+  margin-bottom: 0.4rem;
+}
+
+/* ── Template loader ─────────────────────────────────────── */
+
+.templateRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.templateSelect {
+  flex: 1;
+  padding: 0.35em 0.5em;
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+.templateSaveRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.4rem;
+}
+
+.templateNameInput {
+  flex: 1;
+  padding: 0.3em 0.5em;
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+.smallButton {
+  padding: 0.3em 0.7em;
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  border-radius: 4px;
+  font-size: 0.8em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.smallButton:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+}
+
+/* ── Paper ───────────────────────────────────────────────── */
+
+.paperRow {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.paperButton {
+  padding: 0.3em 0.7em;
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  border-radius: 4px;
+  font-size: 0.8em;
+  cursor: pointer;
+}
+
+.paperButton:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+}
+
+.paperButtonActive {
+  composes: paperButton;
+  background: var(--theme-accent);
+  border-color: var(--theme-accent);
+  color: var(--theme-text-primary);
+}
+
+.orientationRow {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.customRatioRow {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-top: 0.4rem;
+  font-size: 0.85em;
+}
+
+.ratioInput {
+  width: 60px;
+  padding: 0.3em 0.5em;
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  border-radius: 4px;
+  font-size: 0.85em;
+  text-align: center;
+}
+
+/* ── Extent ──────────────────────────────────────────────── */
+
+.extentGrid {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto auto auto;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.extentInput {
+  width: 100%;
+  padding: 0.3em 0.5em;
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  border-radius: 4px;
+  font-size: 0.85em;
+  text-align: center;
+}
+
+.extentLabel {
+  font-size: 0.75em;
+  opacity: 0.7;
+  text-align: center;
+}
+
+.extentNorth {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.extentWest {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.extentEast {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.extentSouth {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.extentCenter {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.scaleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.scalePrefix {
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.scaleInput {
+  width: 120px;
+  padding: 0.3em 0.5em;
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+.toggleRow {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.selectOnMapButton {
+  width: 100%;
+  padding: 0.45em 1em;
+  background: transparent;
+  color: var(--theme-accent);
+  border: 1px solid var(--theme-accent);
+  border-radius: 4px;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.selectOnMapButton:hover {
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+}
+
+/* ── Pivot picker ────────────────────────────────────────── */
+
+.pivotGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 24px);
+  grid-template-rows: repeat(3, 24px);
+  gap: 3px;
+}
+
+.pivotButton {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid
+    color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.pivotButton:hover {
+  border-color: color-mix(in srgb, var(--theme-text-primary) 60%, transparent);
+}
+
+.pivotButtonActive {
+  composes: pivotButton;
+  border-color: var(--theme-accent);
+  background: color-mix(in srgb, var(--theme-accent) 30%, transparent);
+}
+
+/* ── Layers ──────────────────────────────────────────────── */
+
+.layerColumns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.layerColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.layerColumnLabel {
+  font-size: 0.75em;
+  font-weight: 600;
+  opacity: 0.6;
+  margin-bottom: 0.2rem;
+}
+
+.layerOption {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85em;
+}
+
+/* ── Map elements ────────────────────────────────────────── */
+
+.elementRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+  font-size: 0.85em;
+}
+
+.elementInput {
+  flex: 1;
+  padding: 0.25em 0.5em;
+  background: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+.elementSuffix {
+  font-size: 0.8em;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+/* ── Generate ────────────────────────────────────────────── */
+
+.generatingMessage {
+  font-size: 0.8em;
+  opacity: 0.7;
+  margin-top: 0.3rem;
+}

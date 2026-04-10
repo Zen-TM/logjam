@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
+import type { ThemeSchemeId } from "@logjam/shared";
 
 export type TCanyonAttributes = {
   sources?: [string, string][];
@@ -31,6 +32,9 @@ export type TUser = {
   id: string;
   username: string;
   email: string;
+  uiPreferences?: {
+    themeSchemeId?: ThemeSchemeId;
+  } | null;
 };
 
 export type TFriend = {
@@ -106,6 +110,23 @@ export async function apiFetch<T>(
   if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
   if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+export async function apiFetchBlob(
+  path: string,
+  options?: { method?: string; body?: unknown },
+): Promise<Blob> {
+  const token = await getIdToken();
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method: options?.method ?? "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(options?.body != null && { "Content-Type": "application/json" }),
+    },
+    ...(options?.body != null && { body: JSON.stringify(options.body) }),
+  });
+  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
+  return res.blob();
 }
 
 export type ImportResult = {
@@ -209,6 +230,15 @@ export function useSharedCanyons(enabled: boolean) {
 
 export function fetchCurrentUser(): Promise<TUser> {
   return apiFetch<TUser>("/users/me");
+}
+
+export function updateCurrentUserThemeScheme(
+  themeSchemeId: ThemeSchemeId,
+): Promise<TUser> {
+  return apiFetch<TUser>("/users/me", {
+    method: "PATCH",
+    body: { themeSchemeId },
+  });
 }
 
 // ── Friends ───────────────────────────────────────────────────
@@ -378,7 +408,8 @@ export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
   if (!passesSliderFilter(canyon.aGrade, filters.a_grade, [1, 7])) return false;
   if (!passesSliderFilter(canyon.commitment, filters.commitment, [1, 6]))
     return false;
-  if (!passesSliderFilter(canyon.quality, filters.quality, [1, 5])) return false;
+  if (!passesSliderFilter(canyon.quality, filters.quality, [1, 5]))
+    return false;
   if (!passesSelectNumberFilter(canyon.numAbseils, filters.pitches))
     return false;
   if (!passesSelectNumberFilter(canyon.longestAbseil, filters.longest_pitch))

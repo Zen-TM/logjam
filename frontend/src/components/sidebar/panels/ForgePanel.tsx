@@ -7,6 +7,8 @@ import { refreshFromRopeWiki } from "../../../canyonUtils";
 function ForgePanel({
   onAddCanyon,
   onOpenTopo,
+  onOpenGeoPdf,
+  onOpenGeoPdfTemplates,
   onStartAreaSelection,
   selectingArea,
   onCancelAreaSelection,
@@ -14,6 +16,8 @@ function ForgePanel({
 }: {
   onAddCanyon: () => void;
   onOpenTopo: () => void;
+  onOpenGeoPdf: () => void;
+  onOpenGeoPdfTemplates: () => void;
   onStartAreaSelection: () => void;
   selectingArea: boolean;
   onCancelAreaSelection: () => void;
@@ -55,6 +59,14 @@ function ForgePanel({
         Generate Topo Map
       </button>
 
+      <button className={classes.refreshButton} onClick={onOpenGeoPdf}>
+        Download Area as GeoPDF
+      </button>
+
+      <button className={classes.refreshButton} onClick={onOpenGeoPdfTemplates}>
+        GeoPDF Templates
+      </button>
+
       <button
         className={classes.refreshButton}
         onClick={handleRefresh}
@@ -65,7 +77,7 @@ function ForgePanel({
       {refreshResult && (
         <Typography
           variant="caption"
-          sx={{ color: "var(--content-color)", opacity: 0.7 }}
+          sx={{ color: "var(--theme-text-primary)", opacity: 0.7 }}
         >
           {refreshResult.added} added, {refreshResult.updated} updated,{" "}
           {refreshResult.unchanged} unchanged

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import maplibregl, { setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-csp-worker?url";
@@ -15,10 +15,40 @@ maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
 import classes from "./Map.module.css";
 import type { TCanyon, TFilters } from "../../canyonUtils";
 import { passesFilters } from "../../canyonUtils";
+import { extentFromCentreAndSize } from "@logjam/shared";
 
 const SIDEBAR_TRANSITION_MS = 300;
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
 const INITIAL_ZOOM = 7;
+
+function readCssVar(name: string, fallback: string): string {
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+  return value || fallback;
+}
+
+function applyCanyonThemePaint(map: maplibregl.Map) {
+  const owned = readCssVar("--theme-bonus-3", "#f97316");
+  const shared = readCssVar("--theme-accent", "#3b82f6");
+  const label = readCssVar("--theme-text-primary", "#ffffff");
+  const halo = readCssVar("--theme-bonus-2", "#1a1a1a");
+
+  if (map.getLayer("canyon-circles")) {
+    map.setPaintProperty("canyon-circles", "circle-color", owned);
+  }
+  if (map.getLayer("shared-canyon-circles")) {
+    map.setPaintProperty("shared-canyon-circles", "circle-color", shared);
+  }
+  if (map.getLayer("canyon-labels")) {
+    map.setPaintProperty("canyon-labels", "text-color", label);
+    map.setPaintProperty("canyon-labels", "text-halo-color", halo);
+  }
+  if (map.getLayer("shared-canyon-labels")) {
+    map.setPaintProperty("shared-canyon-labels", "text-color", label);
+    map.setPaintProperty("shared-canyon-labels", "text-halo-color", halo);
+  }
+}
 
 export const BASE_LAYERS = [
   {
@@ -68,7 +98,12 @@ export const BASE_LAYERS = [
   },
 ];
 
-export type TBbox = { west: number; south: number; east: number; north: number };
+export type TBbox = {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+};
 
 function Map({
   filters,
@@ -85,6 +120,13 @@ function Map({
   onBboxSelected,
   topoLayers,
   activeLayerId,
+  selectingGeoPdfExtent,
+  geoPdfPaperAspect,
+  geoPdfPaperDimensions,
+  geoPdfInitialExtent,
+  geoPdfInitialScale,
+  onGeoPdfExtentConfirmed,
+  onGeoPdfExtentCancelled,
 }: {
   filters: TFilters;
   canyons: TCanyon[];
@@ -98,8 +140,22 @@ function Map({
   onAreaSelected: (ids: string[]) => void;
   selectingBbox?: boolean;
   onBboxSelected?: (bbox: TBbox) => void;
-  topoLayers?: { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[];
+  topoLayers?: {
+    id: string;
+    pmtilesUrl: string;
+    format?: "raster" | "vector";
+  }[];
   activeLayerId: string;
+  selectingGeoPdfExtent?: boolean;
+  geoPdfPaperAspect?: number;
+  geoPdfPaperDimensions?: { w: number; h: number };
+  geoPdfInitialExtent?: TBbox;
+  geoPdfInitialScale?: number;
+  onGeoPdfExtentConfirmed?: (
+    extent: TBbox,
+    scale: number,
+  ) => void;
+  onGeoPdfExtentCancelled?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -169,7 +225,7 @@ function Map({
         source: "canyons",
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
-          "circle-color": "#f97316",
+          "circle-color": readCssVar("--theme-bonus-3", "#f97316"),
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 1.5,
         },
@@ -182,7 +238,7 @@ function Map({
         source: "shared-canyons",
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
-          "circle-color": "#3b82f6",
+          "circle-color": readCssVar("--theme-accent", "#3b82f6"),
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 1.5,
         },
@@ -202,8 +258,8 @@ function Map({
           "text-anchor": "top",
         },
         paint: {
-          "text-color": "#1a1a1a",
-          "text-halo-color": "#ffffff",
+          "text-color": readCssVar("--theme-text-primary", "#ffffff"),
+          "text-halo-color": readCssVar("--theme-bonus-2", "#1a1a1a"),
           "text-halo-width": 1.5,
         },
       });
@@ -222,11 +278,13 @@ function Map({
           "text-anchor": "top",
         },
         paint: {
-          "text-color": "#1a1a1a",
-          "text-halo-color": "#ffffff",
+          "text-color": readCssVar("--theme-text-primary", "#ffffff"),
+          "text-halo-color": readCssVar("--theme-bonus-2", "#1a1a1a"),
           "text-halo-width": 1.5,
         },
       });
+
+      applyCanyonThemePaint(map);
 
       // Click to select canyon
       map.on("click", "canyon-circles", (e) => {
@@ -278,6 +336,20 @@ function Map({
       setMapLoaded(false);
     };
   }, []);
+
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+
+    const map = mapRef.current;
+    const onThemeChange = () => {
+      applyCanyonThemePaint(map);
+    };
+
+    window.addEventListener("logjam-theme-change", onThemeChange);
+    return () => {
+      window.removeEventListener("logjam-theme-change", onThemeChange);
+    };
+  }, [mapLoaded]);
 
   // Update canyon GeoJSON when data or filters change
   useEffect(() => {
@@ -526,7 +598,10 @@ function Map({
     function onMouseUp(e: MouseEvent) {
       document.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("mouseup", onMouseUp);
-      if (box) { box.remove(); box = null; }
+      if (box) {
+        box.remove();
+        box = null;
+      }
       if (!start || !map) return;
 
       const rect = container.getBoundingClientRect();
@@ -535,9 +610,9 @@ function Map({
 
       start = null;
       onBboxSelectedRef.current?.({
-        west:  Math.min(p1.lng, p2.lng),
+        west: Math.min(p1.lng, p2.lng),
         south: Math.min(p1.lat, p2.lat),
-        east:  Math.max(p1.lng, p2.lng),
+        east: Math.max(p1.lng, p2.lng),
         north: Math.max(p1.lat, p2.lat),
       });
     }
@@ -566,13 +641,15 @@ function Map({
 
     // Helper: get all MapLibre layer ids owned by a topo entry id
     const ownedLayerIds = (entryId: string): string[] =>
-      map.getStyle().layers
-        .map((l) => l.id)
+      map
+        .getStyle()
+        .layers.map((l) => l.id)
         .filter((lid) => lid.startsWith(`topo-${entryId}-`));
 
     // Remove layers/sources no longer in topoLayers
-    const allTopoLayerIds = map.getStyle().layers
-      .map((l) => l.id)
+    const allTopoLayerIds = map
+      .getStyle()
+      .layers.map((l) => l.id)
       .filter((lid) => lid.startsWith("topo-"));
     for (const lid of allTopoLayerIds) {
       // Extract entry id: "topo-<entryId>-<suffix>"
@@ -585,7 +662,9 @@ function Map({
       }
     }
     // Remove orphaned sources
-    for (const entryId of [...map.getStyle().sources ? Object.keys(map.getStyle().sources) : []]) {
+    for (const entryId of [
+      ...(map.getStyle().sources ? Object.keys(map.getStyle().sources) : []),
+    ]) {
       if (entryId.startsWith("topo-src-")) {
         const id = entryId.replace("topo-src-", "");
         if (!activeIds.has(id)) {
@@ -639,7 +718,15 @@ function Map({
               filter: ["!=", ["%", ["to-number", ["get", "elev"]], 50], 0],
               paint: {
                 "line-color": "rgba(120, 90, 60, 0.55)",
-                "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.5, 18, 1.2],
+                "line-width": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  12,
+                  0.5,
+                  18,
+                  1.2,
+                ],
               },
               minzoom: 13,
             });
@@ -655,7 +742,15 @@ function Map({
               filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
               paint: {
                 "line-color": "rgba(80, 60, 40, 0.85)",
-                "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1, 18, 2.5],
+                "line-width": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  12,
+                  1,
+                  18,
+                  2.5,
+                ],
               },
             });
           }
@@ -672,7 +767,15 @@ function Map({
               layout: {
                 "text-field": ["concat", ["to-string", ["get", "elev"]], "m"],
                 "text-font": ["Open Sans Semibold"],
-                "text-size": ["interpolate", ["linear"], ["zoom"], 14, 9, 18, 12],
+                "text-size": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  14,
+                  9,
+                  18,
+                  12,
+                ],
                 "symbol-placement": "line",
                 "text-max-angle": 30,
               },
@@ -685,36 +788,127 @@ function Map({
           }
         } else {
           // OSM features vector source — one layer per category
-          const featureLayers: { suffix: string; filter: maplibregl.ExpressionSpecification; style: object }[] = [
+          const featureLayers: {
+            suffix: string;
+            filter: maplibregl.ExpressionSpecification;
+            style: object;
+          }[] = [
             {
               suffix: "waterway",
               filter: ["==", ["get", "_category"], "waterway"],
-              style: { type: "line", paint: { "line-color": "rgba(40,120,220,0.85)", "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1, 18, 3] } },
+              style: {
+                type: "line",
+                paint: {
+                  "line-color": "rgba(40,120,220,0.85)",
+                  "line-width": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    12,
+                    1,
+                    18,
+                    3,
+                  ],
+                },
+              },
             },
             {
               suffix: "track",
               filter: ["==", ["get", "_category"], "track"],
-              style: { type: "line", paint: { "line-color": "rgba(160,100,30,0.85)", "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.8, 18, 2], "line-dasharray": [4, 2] } },
+              style: {
+                type: "line",
+                paint: {
+                  "line-color": "rgba(160,100,30,0.85)",
+                  "line-width": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    12,
+                    0.8,
+                    18,
+                    2,
+                  ],
+                  "line-dasharray": [4, 2],
+                },
+              },
             },
             {
               suffix: "road",
               filter: ["==", ["get", "_category"], "road"],
-              style: { type: "line", paint: { "line-color": "rgba(80,80,80,0.9)", "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1, 18, 4] } },
+              style: {
+                type: "line",
+                paint: {
+                  "line-color": "rgba(80,80,80,0.9)",
+                  "line-width": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    12,
+                    1,
+                    18,
+                    4,
+                  ],
+                },
+              },
             },
             {
               suffix: "building",
               filter: ["==", ["get", "_category"], "building"],
-              style: { type: "fill", paint: { "fill-color": "rgba(160,140,120,0.3)", "fill-outline-color": "rgba(160,140,120,0.8)" } },
+              style: {
+                type: "fill",
+                paint: {
+                  "fill-color": "rgba(160,140,120,0.3)",
+                  "fill-outline-color": "rgba(160,140,120,0.8)",
+                },
+              },
             },
             {
               suffix: "power",
               filter: ["==", ["get", "_category"], "power"],
-              style: { type: "line", paint: { "line-color": "rgba(200,160,0,0.8)", "line-width": 1, "line-dasharray": [3, 4] } },
+              style: {
+                type: "line",
+                paint: {
+                  "line-color": "rgba(200,160,0,0.8)",
+                  "line-width": 1,
+                  "line-dasharray": [3, 4],
+                },
+              },
             },
             {
               suffix: "points",
-              filter: ["in", ["get", "_category"], ["literal", ["campsite", "peak", "spring", "gate", "viewpoint", "cave", "picnic"]]],
-              style: { type: "circle", paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 3, 18, 7], "circle-color": "rgba(0,140,80,0.9)", "circle-stroke-color": "#fff", "circle-stroke-width": 1 } },
+              filter: [
+                "in",
+                ["get", "_category"],
+                [
+                  "literal",
+                  [
+                    "campsite",
+                    "peak",
+                    "spring",
+                    "gate",
+                    "viewpoint",
+                    "cave",
+                    "picnic",
+                  ],
+                ],
+              ],
+              style: {
+                type: "circle",
+                paint: {
+                  "circle-radius": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    12,
+                    3,
+                    18,
+                    7,
+                  ],
+                  "circle-color": "rgba(0,140,80,0.9)",
+                  "circle-stroke-color": "#fff",
+                  "circle-stroke-width": 1,
+                },
+              },
             },
           ];
           for (const { suffix, filter, style } of featureLayers) {
@@ -747,6 +941,161 @@ function Map({
     }
   }, [topoLayers, mapLoaded]);
 
+  // GeoPDF extent selection: ref for overlay rectangle
+  const geoPdfFrameRef = useRef<HTMLDivElement>(null);
+
+  // Refs used to detect whether the user has moved the map since extent
+  // selection activated. If they haven't, we return the initial extent exactly
+  // (rather than re-deriving it via unproject, which introduces floating-point drift).
+  const geoPdfInitialExtentRef = useRef<TBbox | undefined>(undefined);
+  const geoPdfInitialScaleRef = useRef<number | undefined>(undefined);
+  const geoPdfPaperDimensionsRef = useRef<{ w: number; h: number }>({ w: 210, h: 297 });
+  const geoPdfFitBoundsSettledRef = useRef(false);
+  const geoPdfUserPannedRef = useRef(false);
+  const geoPdfUserZoomedRef = useRef(false);
+
+  // When extent selection activates: fly to the initial extent (if any),
+  // then start tracking user interaction once the animation settles.
+  useEffect(() => {
+    if (!selectingGeoPdfExtent) {
+      geoPdfInitialExtentRef.current = undefined;
+      geoPdfFitBoundsSettledRef.current = false;
+      geoPdfUserPannedRef.current = false;
+      geoPdfUserZoomedRef.current = false;
+      return;
+    }
+
+    geoPdfInitialExtentRef.current = geoPdfInitialExtent;
+    geoPdfInitialScaleRef.current = geoPdfInitialScale;
+    geoPdfPaperDimensionsRef.current = geoPdfPaperDimensions ?? { w: 210, h: 297 };
+    geoPdfFitBoundsSettledRef.current = false;
+    geoPdfUserPannedRef.current = false;
+    geoPdfUserZoomedRef.current = false;
+
+    const map = mapRef.current;
+    if (!geoPdfInitialExtent || !map) {
+      // No fitBounds animation — settled immediately.
+      geoPdfFitBoundsSettledRef.current = true;
+      return;
+    }
+
+    map.fitBounds(
+      [
+        [geoPdfInitialExtent.west, geoPdfInitialExtent.south],
+        [geoPdfInitialExtent.east, geoPdfInitialExtent.north],
+      ],
+      { animate: true, padding: 60 },
+    );
+
+    const onFitBoundsEnd = () => {
+      geoPdfFitBoundsSettledRef.current = true;
+    };
+    map.once("moveend", onFitBoundsEnd);
+
+    return () => {
+      map.off("moveend", onFitBoundsEnd);
+    };
+  }, [selectingGeoPdfExtent, geoPdfInitialExtent]);
+
+  // Track user-initiated map movement during extent selection.
+  useEffect(() => {
+    if (!selectingGeoPdfExtent || !mapRef.current) return;
+    const map = mapRef.current;
+    const onPanStart = () => {
+      // Only count panning that occurs after fitBounds has settled.
+      if (geoPdfFitBoundsSettledRef.current) {
+        geoPdfUserPannedRef.current = true;
+      }
+    };
+    const onZoomStart = () => {
+      // Only count zooming that occurs after fitBounds has settled.
+      if (geoPdfFitBoundsSettledRef.current) {
+        geoPdfUserZoomedRef.current = true;
+      }
+    };
+    map.on("movestart", onPanStart);
+    map.on("zoomstart", onZoomStart);
+    return () => {
+      map.off("movestart", onPanStart);
+      map.off("zoomstart", onZoomStart);
+    };
+  }, [selectingGeoPdfExtent]);
+
+  const onGeoPdfExtentConfirmedRef = useRef(onGeoPdfExtentConfirmed);
+  useEffect(() => {
+    onGeoPdfExtentConfirmedRef.current = onGeoPdfExtentConfirmed;
+  }, [onGeoPdfExtentConfirmed]);
+
+  const handleConfirmGeoPdfExtent = useCallback(() => {
+    if (!mapRef.current || !geoPdfFrameRef.current || !containerRef.current)
+      return;
+
+    // If the user hasn't moved the map at all, return the exact initial values.
+    if (
+      geoPdfInitialExtentRef.current &&
+      geoPdfInitialScaleRef.current &&
+      !geoPdfUserPannedRef.current &&
+      !geoPdfUserZoomedRef.current
+    ) {
+      onGeoPdfExtentConfirmedRef.current?.(
+        geoPdfInitialExtentRef.current,
+        geoPdfInitialScaleRef.current,
+      );
+      return;
+    }
+
+    const map = mapRef.current;
+    const mapRect = containerRef.current.getBoundingClientRect();
+    const frameRect = geoPdfFrameRef.current.getBoundingClientRect();
+
+    // Always unproject only the center of the frame — this is the one
+    // coordinate we trust from the projection, avoiding the trapezoid
+    // distortion that comes from unprojecting all four corners independently.
+    const centerX = (frameRect.left + frameRect.right) / 2 - mapRect.left;
+    const centerY = (frameRect.top + frameRect.bottom) / 2 - mapRect.top;
+    const center = map.unproject([centerX, centerY]);
+
+    let scale: number;
+    if (!geoPdfUserZoomedRef.current && geoPdfInitialScaleRef.current) {
+      // User panned but didn't zoom — preserve the exact scale.
+      scale = geoPdfInitialScaleRef.current;
+    } else {
+      // User zoomed — derive scale from the frame's geographic width.
+      // Unproject the left and right midpoints of the frame to measure
+      // the true geographic width at the frame's vertical center.
+      const leftMid = map.unproject([
+        frameRect.left - mapRect.left,
+        centerY,
+      ]);
+      const rightMid = map.unproject([
+        frameRect.right - mapRect.left,
+        centerY,
+      ]);
+      const DEG_TO_RAD = Math.PI / 180;
+      const METERS_PER_DEG_LON_EQUATOR = 111320;
+      const midLat = center.lat;
+      const geoWidthM =
+        (rightMid.lng - leftMid.lng) *
+        METERS_PER_DEG_LON_EQUATOR *
+        Math.cos(midLat * DEG_TO_RAD);
+      const paperWidthM = geoPdfPaperDimensionsRef.current.w / 1000;
+      scale = geoWidthM / paperWidthM;
+    }
+
+    // Compute a consistent extent from center + scale + paper dimensions.
+    const paper = geoPdfPaperDimensionsRef.current;
+    const widthM = scale * (paper.w / 1000);
+    const heightM = scale * (paper.h / 1000);
+    const bounds = extentFromCentreAndSize(
+      center.lat,
+      center.lng,
+      widthM,
+      heightM,
+    );
+
+    onGeoPdfExtentConfirmedRef.current?.(bounds, scale);
+  }, []);
+
   return (
     <div id="map" className={classes.map}>
       <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
@@ -764,6 +1113,32 @@ function Map({
         <div className={classes.pickBanner}>
           Click and drag to define the topo area
         </div>
+      )}
+      {selectingGeoPdfExtent && (
+        <>
+          <div className={classes.pickBanner}>
+            Pan and zoom the map to position the export area
+          </div>
+          <div
+            ref={geoPdfFrameRef}
+            className={classes.geoPdfOverlayFrame}
+            style={{ aspectRatio: `${geoPdfPaperAspect ?? 210 / 297}` }}
+          />
+          <div className={classes.geoPdfConfirmBar}>
+            <button
+              className={classes.geoPdfConfirmButton}
+              onClick={handleConfirmGeoPdfExtent}
+            >
+              Confirm extent
+            </button>
+            <button
+              className={classes.geoPdfCancelButton}
+              onClick={onGeoPdfExtentCancelled}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

@@ -4,7 +4,7 @@
   left: 0;
   bottom: 0;
   width: 56px;
-  background-color: var(--sandstone-dark);
+  background-color: var(--theme-primary);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -28,7 +28,7 @@
   height: 48px;
   border: none;
   background: transparent;
-  color: var(--content-color);
+  color: var(--theme-text-primary);
   cursor: pointer;
   border-radius: 8px;
   margin-bottom: 4px;
@@ -48,7 +48,7 @@
 
 .navItem.active {
   opacity: 1;
-  background-color: var(--sandstone-light);
+  background-color: color-mix(in srgb, var(--theme-accent) 55%, transparent);
 }
 
 .label {
@@ -61,8 +61,8 @@
   position: absolute;
   top: 2px;
   right: 2px;
-  background-color: #e57373;
-  color: white;
+  background-color: color-mix(in srgb, var(--theme-warning) 55%, transparent);
+  color: color-mix(in srgb, var(--theme-text-primary) 55%, transparent);
   border-radius: 50%;
   font-size: 9px;
   min-width: 14px;

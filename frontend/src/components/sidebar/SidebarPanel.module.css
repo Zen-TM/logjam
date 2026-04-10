@@ -4,8 +4,8 @@
   left: 56px;
   bottom: 0;
   width: 280px;
-  background-color: var(--sandstone-dark);
-  color: var(--content-color);
+  background-color: var(--theme-primary);
+  color: var(--theme-text-primary);
   z-index: 1;
   display: flex;
   flex-direction: column;
@@ -27,7 +27,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--sandstone-light);
+  border-bottom: 1px solid var(--theme-secondary);
   flex-shrink: 0;
 }
 
@@ -44,7 +44,7 @@
 .closeButton {
   background: transparent;
   border: none;
-  color: var(--content-color);
+  color: var(--theme-text-primary);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -55,7 +55,11 @@
 }
 
 .closeButton:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: color-mix(
+    in srgb,
+    var(--theme-text-primary) 10%,
+    transparent
+  );
 }
 
 .panelBody {

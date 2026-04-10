@@ -1,4 +1,6 @@
 import { Router, Response } from "express";
+import { Prisma } from "@prisma/client";
+import { isThemeSchemeId, normalizeUserUiPreferences } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
@@ -34,7 +36,10 @@ router.get(
       });
     }
 
-    res.json(user);
+    res.json({
+      ...user,
+      uiPreferences: normalizeUserUiPreferences(user.uiPreferences),
+    });
   },
 );
 
@@ -44,17 +49,51 @@ router.patch(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
-    const { username } = req.body;
+    const { username, themeSchemeId } = req.body as {
+      username?: unknown;
+      themeSchemeId?: unknown;
+    };
 
     const user = await prisma.user.findUnique({ where: { cognitoId: sub } });
     if (!user) throw new AppError(404, "User not found");
 
+    const updates: {
+      username?: string;
+      uiPreferences?: Prisma.InputJsonValue;
+    } = {};
+
+    if (username !== undefined) {
+      if (typeof username !== "string" || username.trim().length === 0) {
+        throw new AppError(400, "username must be a non-empty string");
+      }
+      updates.username = username;
+    }
+
+    if (themeSchemeId !== undefined) {
+      if (!isThemeSchemeId(themeSchemeId)) {
+        throw new AppError(400, "Invalid themeSchemeId");
+      }
+
+      const current = normalizeUserUiPreferences(user.uiPreferences);
+      updates.uiPreferences = {
+        ...current,
+        themeSchemeId,
+      };
+    }
+
+    if (Object.keys(updates).length === 0) {
+      throw new AppError(400, "No valid update fields provided");
+    }
+
     const updated = await prisma.user.update({
       where: { cognitoId: sub },
-      data: { username },
+      data: updates,
     });
 
-    res.json(updated);
+    res.json({
+      ...updated,
+      uiPreferences: normalizeUserUiPreferences(updated.uiPreferences),
+    });
   },
 );
 

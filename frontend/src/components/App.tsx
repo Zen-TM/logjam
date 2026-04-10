@@ -5,6 +5,9 @@ import Map, { BASE_LAYERS } from "./map/Map";
 import SignIn from "./SignIn";
 import ImportDialog from "./ImportDialog";
 import TopoDialog from "./TopoDialog";
+import GeoPdfDialog from "./GeoPdfDialog";
+import GeoPdfTemplatesDialog from "./GeoPdfTemplatesDialog";
+import type { GeoPdfTemplate } from "./GeoPdfTemplatesDialog";
 import CanyonDialog from "./CanyonDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
@@ -30,6 +33,7 @@ import {
   Typography,
   Box,
 } from "@mui/material";
+import { useThemePreferences } from "../themePreferences";
 
 function App() {
   const [filters, setFilters] = useState<TFilters>({
@@ -57,20 +61,55 @@ function App() {
 
   // Coordinate picking mode for CanyonDialog
   const [pickingCoords, setPickingCoords] = useState(false);
-  const coordsCallbackRef = useRef<((lat: number, lng: number) => void) | null>(null);
+  const coordsCallbackRef = useRef<((lat: number, lng: number) => void) | null>(
+    null,
+  );
 
   // Area selection mode
   const [selectingArea, setSelectingArea] = useState(false);
-  const [selectedAreaCanyonIds, setSelectedAreaCanyonIds] = useState<string[]>([]);
+  const [selectedAreaCanyonIds, setSelectedAreaCanyonIds] = useState<string[]>(
+    [],
+  );
 
   // Topo dialog (per-job overlays)
   const [showTopo, setShowTopo] = useState(false);
   const [selectingTopoBbox, setSelectingTopoBbox] = useState(false);
   const [pendingTopoBbox, setPendingTopoBbox] = useState<TBbox | null>(null);
-  const [topoOverlayLayers, setTopoOverlayLayers] = useState<{ id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]>([]);
+  const [topoOverlayLayers, setTopoOverlayLayers] = useState<
+    { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]
+  >([]);
+
+  // GeoPDF dialog
+  const [showGeoPdf, setShowGeoPdf] = useState(false);
+  const [selectingGeoPdfExtent, setSelectingGeoPdfExtent] = useState(false);
+  const [geoPdfPaperAspect, setGeoPdfPaperAspect] = useState(210 / 297);
+  const [geoPdfPaperDimensions, setGeoPdfPaperDimensions] = useState<{
+    w: number;
+    h: number;
+  }>({ w: 210, h: 297 });
+  const [geoPdfInitialExtent, setGeoPdfInitialExtent] = useState<
+    TBbox | undefined
+  >(undefined);
+  const [geoPdfInitialScale, setGeoPdfInitialScale] = useState<
+    number | undefined
+  >(undefined);
+  const [pendingGeoPdfExtent, setPendingGeoPdfExtent] = useState<TBbox | null>(
+    null,
+  );
+  const [pendingGeoPdfScale, setPendingGeoPdfScale] = useState<number | null>(
+    null,
+  );
+
+  // GeoPDF Templates dialog
+  const [showGeoPdfTemplates, setShowGeoPdfTemplates] = useState(false);
+  const [editingGeoPdfTemplate, setEditingGeoPdfTemplate] = useState<
+    GeoPdfTemplate | null | undefined
+  >(undefined);
 
   // Master topo layers from the Overlays panel (communal, persistent)
-  const [masterTopoLayers, setMasterTopoLayers] = useState<{ id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]>([]);
+  const [masterTopoLayers, setMasterTopoLayers] = useState<
+    { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]
+  >([]);
 
   const startPickingCoords = useCallback(
     (onPicked: (lat: number, lng: number) => void) => {
@@ -80,14 +119,11 @@ function App() {
     [],
   );
 
-  const handleCoordsPicked = useCallback(
-    (lat: number, lng: number) => {
-      coordsCallbackRef.current?.(lat, lng);
-      coordsCallbackRef.current = null;
-      setPickingCoords(false);
-    },
-    [],
-  );
+  const handleCoordsPicked = useCallback((lat: number, lng: number) => {
+    coordsCallbackRef.current?.(lat, lng);
+    coordsCallbackRef.current = null;
+    setPickingCoords(false);
+  }, []);
 
   const cancelPickingCoords = useCallback(() => {
     coordsCallbackRef.current = null;
@@ -127,10 +163,25 @@ function App() {
 
   const auth = useAuth();
   const authenticated = auth.state === "authenticated";
+  const { hydrateFromUser } = useThemePreferences();
   const { canyons, loaded: canyonsLoaded, refetch } = useCanyons(authenticated);
-  const { canyons: sharedCanyons, refetch: refetchShared } = useSharedCanyons(authenticated);
-  const { friends, requests: friendRequests, refetch: refetchFriends } = useFriends(authenticated);
-  const { notifications, unreadCount, refetch: refetchNotifications } = useNotifications(authenticated);
+  const { canyons: sharedCanyons, refetch: refetchShared } =
+    useSharedCanyons(authenticated);
+  const {
+    friends,
+    requests: friendRequests,
+    refetch: refetchFriends,
+  } = useFriends(authenticated);
+  const {
+    notifications,
+    unreadCount,
+    refetch: refetchNotifications,
+  } = useNotifications(authenticated);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    hydrateFromUser().catch(console.error);
+  }, [authenticated, hydrateFromUser]);
 
   // Show import dialog once when user has no canyons after first fetch completes
   useEffect(() => {
@@ -219,7 +270,7 @@ function App() {
     );
   }
 
-  const dimUI = pickingCoords || selectingArea;
+  const dimUI = pickingCoords || selectingArea || selectingGeoPdfExtent;
 
   return (
     <div className={classes.app}>
@@ -240,6 +291,42 @@ function App() {
         }}
         pendingBbox={pendingTopoBbox}
         onLayersToggle={setTopoOverlayLayers}
+      />
+      <GeoPdfDialog
+        open={showGeoPdf}
+        onClose={() => {
+          setShowGeoPdf(false);
+          setEditingGeoPdfTemplate(undefined);
+        }}
+        onSelectOnMap={(aspect, paperDims, extent, scale) => {
+          setGeoPdfPaperAspect(aspect);
+          setGeoPdfPaperDimensions(paperDims);
+          setGeoPdfInitialExtent(extent);
+          setGeoPdfInitialScale(scale);
+          setShowGeoPdf(false);
+          setActivePanel(null);
+          setSelectingGeoPdfExtent(true);
+        }}
+        pendingExtent={pendingGeoPdfExtent}
+        pendingScale={pendingGeoPdfScale}
+        activeLayerId={activeLayerId}
+        masterTopoLayers={masterTopoLayers}
+        templateMode={editingGeoPdfTemplate !== undefined}
+        editingTemplate={editingGeoPdfTemplate ?? undefined}
+        onTemplateSaved={() => {
+          setEditingGeoPdfTemplate(undefined);
+          setShowGeoPdf(false);
+          setShowGeoPdfTemplates(true);
+        }}
+      />
+      <GeoPdfTemplatesDialog
+        open={showGeoPdfTemplates}
+        onClose={() => setShowGeoPdfTemplates(false)}
+        onEditTemplate={(template) => {
+          setEditingGeoPdfTemplate(template);
+          setShowGeoPdfTemplates(false);
+          setShowGeoPdf(true);
+        }}
       />
       <div
         style={{
@@ -263,6 +350,8 @@ function App() {
           onActiveLayerChange={setActiveLayerId}
           onAddCanyon={() => setShowAdd(true)}
           onOpenTopo={() => setShowTopo(true)}
+          onOpenGeoPdf={() => setShowGeoPdf(true)}
+          onOpenGeoPdfTemplates={() => setShowGeoPdfTemplates(true)}
           onStartAreaSelection={startAreaSelection}
           selectingArea={selectingArea}
           onCancelAreaSelection={cancelAreaSelection}
@@ -307,6 +396,21 @@ function App() {
         }}
         topoLayers={[...masterTopoLayers, ...topoOverlayLayers]}
         activeLayerId={activeLayerId}
+        selectingGeoPdfExtent={selectingGeoPdfExtent}
+        geoPdfPaperAspect={geoPdfPaperAspect}
+        geoPdfPaperDimensions={geoPdfPaperDimensions}
+        geoPdfInitialExtent={geoPdfInitialExtent}
+        geoPdfInitialScale={geoPdfInitialScale}
+        onGeoPdfExtentConfirmed={(extent, scale) => {
+          setPendingGeoPdfExtent(extent);
+          setPendingGeoPdfScale(scale);
+          setSelectingGeoPdfExtent(false);
+          setShowGeoPdf(true);
+        }}
+        onGeoPdfExtentCancelled={() => {
+          setSelectingGeoPdfExtent(false);
+          setShowGeoPdf(true);
+        }}
       />
 
       {/* Add canyon dialog */}
@@ -322,13 +426,17 @@ function App() {
       {/* Bulk area selection dialog */}
       <Dialog
         open={selectedAreaCanyonIds.length > 0}
-        onClose={bulkSharing || bulkDeleting ? undefined : () => setSelectedAreaCanyonIds([])}
+        onClose={
+          bulkSharing || bulkDeleting
+            ? undefined
+            : () => setSelectedAreaCanyonIds([])
+        }
         maxWidth="sm"
         fullWidth
         PaperProps={{
           sx: {
-            backgroundColor: "var(--sandstone-dark)",
-            color: "var(--content-color)",
+            backgroundColor: "var(--theme-primary)",
+            color: "var(--theme-text-primary)",
           },
         }}
       >
@@ -391,8 +499,8 @@ function App() {
                         <button
                           style={{
                             backgroundColor: "transparent",
-                            border: "1px solid var(--sand-light)",
-                            color: "var(--sand-light)",
+                            border: "1px solid var(--theme-bonus-1)",
+                            color: "var(--theme-bonus-1)",
                             borderRadius: "4px",
                             padding: "0.2em 0.6em",
                             fontSize: "0.85em",
@@ -413,7 +521,9 @@ function App() {
                 </Box>
               )}
               {bulkShareFriendIds.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3em" }}>
+                <div
+                  style={{ display: "flex", flexWrap: "wrap", gap: "0.3em" }}
+                >
                   {bulkShareFriendIds.map((id) => {
                     const f = friends.find((fr) => fr.id === id);
                     if (!f) return null;
@@ -424,8 +534,8 @@ function App() {
                           display: "inline-flex",
                           alignItems: "center",
                           gap: "0.3em",
-                          backgroundColor: "var(--sandstone-light)",
-                          color: "var(--content-color)",
+                          backgroundColor: "var(--theme-accent)",
+                          color: "var(--theme-text-primary)",
                           borderRadius: "12px",
                           padding: "0.2em 0.5em",
                           fontSize: "0.8em",
@@ -436,7 +546,7 @@ function App() {
                           style={{
                             background: "none",
                             border: "none",
-                            color: "var(--content-color)",
+                            color: "var(--theme-text-primary)",
                             fontSize: "1em",
                             lineHeight: 1,
                             padding: 0,
