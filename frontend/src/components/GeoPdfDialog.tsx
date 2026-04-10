@@ -24,7 +24,6 @@ import type {
 } from "@logjam/shared";
 import {
   getPaperDimensions,
-  calcScale,
   applyNorthChange,
   applySouthChange,
   applyEastChange,
@@ -183,7 +182,7 @@ function GeoPdfDialog({
     if (editingTemplate) {
       setEditTemplateName(editingTemplate.name);
       const c = editingTemplate.config;
-      setExtentState((prev) => {
+      setExtentState((prev: ExtentState) => {
         let updated = {
           ...prev,
           paperSize: c.paperSize,
@@ -223,7 +222,7 @@ function GeoPdfDialog({
   // Populate extent from map selection — always receives both extent and scale
   useEffect(() => {
     if (pendingExtent && pendingScale) {
-      setExtentState((prev) => ({
+      setExtentState((prev: ExtentState) => ({
         ...prev,
         north: pendingExtent.north,
         south: pendingExtent.south,
@@ -294,7 +293,7 @@ function GeoPdfDialog({
       const tmpl = templates.find((t) => t.id === id);
       if (!tmpl) return;
       const c = tmpl.config;
-      setExtentState((prev) => {
+      setExtentState((prev: ExtentState) => {
         let updated = {
           ...prev,
           paperSize: c.paperSize,
@@ -717,7 +716,7 @@ function GeoPdfDialog({
                 onBlur={() => {
                   focusedField.current = null;
                   const v = parseFloat(rawN);
-                  if (!isNaN(v)) setExtentState((s) => applyNorthChange(s, v));
+                  if (!isNaN(v)) setExtentState((s: ExtentState) => applyNorthChange(s, v));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
@@ -739,7 +738,7 @@ function GeoPdfDialog({
                 onBlur={() => {
                   focusedField.current = null;
                   const v = parseFloat(rawW);
-                  if (!isNaN(v)) setExtentState((s) => applyWestChange(s, v));
+                  if (!isNaN(v)) setExtentState((s: ExtentState) => applyWestChange(s, v));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
@@ -780,7 +779,7 @@ function GeoPdfDialog({
                 onBlur={() => {
                   focusedField.current = null;
                   const v = parseFloat(rawE);
-                  if (!isNaN(v)) setExtentState((s) => applyEastChange(s, v));
+                  if (!isNaN(v)) setExtentState((s: ExtentState) => applyEastChange(s, v));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
@@ -802,7 +801,7 @@ function GeoPdfDialog({
                 onBlur={() => {
                   focusedField.current = null;
                   const v = parseFloat(rawS);
-                  if (!isNaN(v)) setExtentState((s) => applySouthChange(s, v));
+                  if (!isNaN(v)) setExtentState((s: ExtentState) => applySouthChange(s, v));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
@@ -826,7 +825,7 @@ function GeoPdfDialog({
                 focusedField.current = null;
                 const v = parseFloat(rawScale);
                 if (!isNaN(v) && v > 0)
-                  setExtentState((s) => applyScaleChange(s, v));
+                  setExtentState((s: ExtentState) => applyScaleChange(s, v));
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") e.currentTarget.blur();

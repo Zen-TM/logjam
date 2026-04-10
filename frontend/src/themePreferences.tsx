@@ -119,7 +119,7 @@ export function ThemePreferencesProvider({
   const value = useMemo<ThemePreferencesContextValue>(
     () => ({
       schemeId,
-      schemes: THEME_SCHEME_ORDER.map((id) => THEME_SCHEMES[id]),
+      schemes: THEME_SCHEME_ORDER.map((id: ThemeSchemeId) => THEME_SCHEMES[id]),
       isHydrating,
       isSaving,
       error,
