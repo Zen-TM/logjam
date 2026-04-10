@@ -39,6 +39,12 @@ function SidebarPanel({
   showSharedCanyons,
   setShowSharedCanyons,
   onTopoLayersChange,
+  lidarEnabled,
+  setLidarEnabled,
+  lidarLayerToggles,
+  setLidarLayerToggles,
+  lidarLayerOrder,
+  setLidarLayerOrder,
   // Layers
   activeLayerId,
   onActiveLayerChange,
@@ -81,6 +87,12 @@ function SidebarPanel({
   onTopoLayersChange: (
     layers: { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[],
   ) => void;
+  lidarEnabled: boolean;
+  setLidarEnabled: (v: boolean) => void;
+  lidarLayerToggles: Record<string, boolean>;
+  setLidarLayerToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
+  lidarLayerOrder: string[];
+  setLidarLayerOrder: (v: string[] | ((prev: string[]) => string[])) => void;
   // Layers
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
@@ -136,6 +148,12 @@ function SidebarPanel({
             showSharedCanyons={showSharedCanyons}
             setShowSharedCanyons={setShowSharedCanyons}
             onTopoLayersChange={onTopoLayersChange}
+            lidarEnabled={lidarEnabled}
+            setLidarEnabled={setLidarEnabled}
+            lidarLayerToggles={lidarLayerToggles}
+            setLidarLayerToggles={setLidarLayerToggles}
+            lidarLayerOrder={lidarLayerOrder}
+            setLidarLayerOrder={setLidarLayerOrder}
           />
         )}
         {activePanel === "layers" && (

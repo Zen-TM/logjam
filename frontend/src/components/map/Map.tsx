@@ -151,10 +151,7 @@ function Map({
   geoPdfPaperDimensions?: { w: number; h: number };
   geoPdfInitialExtent?: TBbox;
   geoPdfInitialScale?: number;
-  onGeoPdfExtentConfirmed?: (
-    extent: TBbox,
-    scale: number,
-  ) => void;
+  onGeoPdfExtentConfirmed?: (extent: TBbox, scale: number) => void;
   onGeoPdfExtentCancelled?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -700,7 +697,7 @@ function Map({
             id: layerId,
             type: "raster",
             source: srcId,
-            paint: { "raster-opacity": 0.85 },
+            paint: { "raster-opacity": 1 },
           });
         }
       } else {
@@ -923,6 +920,79 @@ function Map({
               } as maplibregl.LayerSpecification);
             }
           }
+
+          // Feature name labels for line categories (waterway, track, road)
+          const featureLabelLayers: {
+            suffix: string;
+            filter: maplibregl.ExpressionSpecification;
+            color: string;
+          }[] = [
+            {
+              suffix: "waterway-label",
+              filter: [
+                "all",
+                ["==", ["get", "_category"], "waterway"],
+                ["has", "name"],
+              ],
+              color: "rgba(20,80,180,0.95)",
+            },
+            {
+              suffix: "track-label",
+              filter: [
+                "all",
+                ["==", ["get", "_category"], "track"],
+                ["has", "name"],
+              ],
+              color: "rgba(120,75,20,0.95)",
+            },
+            {
+              suffix: "road-label",
+              filter: [
+                "all",
+                ["==", ["get", "_category"], "road"],
+                ["any", ["has", "name"], ["has", "ref"]],
+              ],
+              color: "rgba(50,50,50,0.95)",
+            },
+          ];
+          for (const { suffix, filter, color } of featureLabelLayers) {
+            const lid = `topo-${id}-${suffix}`;
+            if (!map.getLayer(lid)) {
+              map.addLayer({
+                id: lid,
+                type: "symbol",
+                source: srcId,
+                "source-layer": "features",
+                filter,
+                minzoom: 14,
+                layout: {
+                  "text-field": [
+                    "coalesce",
+                    ["get", "name"],
+                    ["get", "ref"],
+                    "",
+                  ],
+                  "text-font": ["Open Sans Semibold"],
+                  "text-size": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    14,
+                    9,
+                    18,
+                    12,
+                  ],
+                  "symbol-placement": "line",
+                  "text-max-angle": 30,
+                },
+                paint: {
+                  "text-color": color,
+                  "text-halo-color": "rgba(255,255,255,0.8)",
+                  "text-halo-width": 1.5,
+                },
+              });
+            }
+          }
         }
       }
     });
@@ -939,6 +1009,19 @@ function Map({
       }
       if (owned.length > 0) afterLayerId = owned[0];
     }
+
+    // Move canyon marker layers above all topo layers so they remain visible
+    const canyonLayers = [
+      "canyon-circles",
+      "shared-canyon-circles",
+      "canyon-labels",
+      "shared-canyon-labels",
+    ];
+    for (const cid of canyonLayers) {
+      if (map.getLayer(cid)) {
+        map.moveLayer(cid);
+      }
+    }
   }, [topoLayers, mapLoaded]);
 
   // GeoPDF extent selection: ref for overlay rectangle
@@ -949,7 +1032,10 @@ function Map({
   // (rather than re-deriving it via unproject, which introduces floating-point drift).
   const geoPdfInitialExtentRef = useRef<TBbox | undefined>(undefined);
   const geoPdfInitialScaleRef = useRef<number | undefined>(undefined);
-  const geoPdfPaperDimensionsRef = useRef<{ w: number; h: number }>({ w: 210, h: 297 });
+  const geoPdfPaperDimensionsRef = useRef<{ w: number; h: number }>({
+    w: 210,
+    h: 297,
+  });
   const geoPdfFitBoundsSettledRef = useRef(false);
   const geoPdfUserPannedRef = useRef(false);
   const geoPdfUserZoomedRef = useRef(false);
@@ -967,7 +1053,10 @@ function Map({
 
     geoPdfInitialExtentRef.current = geoPdfInitialExtent;
     geoPdfInitialScaleRef.current = geoPdfInitialScale;
-    geoPdfPaperDimensionsRef.current = geoPdfPaperDimensions ?? { w: 210, h: 297 };
+    geoPdfPaperDimensionsRef.current = geoPdfPaperDimensions ?? {
+      w: 210,
+      h: 297,
+    };
     geoPdfFitBoundsSettledRef.current = false;
     geoPdfUserPannedRef.current = false;
     geoPdfUserZoomedRef.current = false;
@@ -1063,14 +1152,8 @@ function Map({
       // User zoomed — derive scale from the frame's geographic width.
       // Unproject the left and right midpoints of the frame to measure
       // the true geographic width at the frame's vertical center.
-      const leftMid = map.unproject([
-        frameRect.left - mapRect.left,
-        centerY,
-      ]);
-      const rightMid = map.unproject([
-        frameRect.right - mapRect.left,
-        centerY,
-      ]);
+      const leftMid = map.unproject([frameRect.left - mapRect.left, centerY]);
+      const rightMid = map.unproject([frameRect.right - mapRect.left, centerY]);
       const DEG_TO_RAD = Math.PI / 180;
       const METERS_PER_DEG_LON_EQUATOR = 111320;
       const midLat = center.lat;

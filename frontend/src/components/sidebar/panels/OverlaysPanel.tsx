@@ -25,25 +25,30 @@ function OverlaysPanel({
   showSharedCanyons,
   setShowSharedCanyons,
   onTopoLayersChange,
+  lidarEnabled,
+  setLidarEnabled,
+  lidarLayerToggles: layerToggles,
+  setLidarLayerToggles: setLayerToggles,
+  lidarLayerOrder: layerOrder,
+  setLidarLayerOrder: setLayerOrder,
 }: {
   showOwnedCanyons: boolean;
   setShowOwnedCanyons: (show: boolean) => void;
   showSharedCanyons: boolean;
   setShowSharedCanyons: (show: boolean) => void;
   onTopoLayersChange: (layers: TopoLayerEntry[]) => void;
+  lidarEnabled: boolean;
+  setLidarEnabled: (v: boolean) => void;
+  lidarLayerToggles: Record<string, boolean>;
+  setLidarLayerToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
+  lidarLayerOrder: string[];
+  setLidarLayerOrder: (v: string[] | ((prev: string[]) => string[])) => void;
 }) {
   // Master layer data fetched from API
   const [masterLayers, setMasterLayers] = useState<MasterLayer[]>([]);
 
-  // LiDAR topo state — all local
-  const [lidarEnabled, setLidarEnabled] = useState(false);
+  // Transient UI state — OK to reset on remount
   const [expanded, setExpanded] = useState(false);
-  const [layerToggles, setLayerToggles] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(MASTER_TOPO_LAYERS.map((l) => [l.name, true])),
-  );
-  const [layerOrder, setLayerOrder] = useState<string[]>(
-    MASTER_TOPO_LAYERS.map((l) => l.name),
-  );
 
   // Drag state
   const dragIndex = useRef<number | null>(null);

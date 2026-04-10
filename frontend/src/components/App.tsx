@@ -13,6 +13,7 @@ import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
 import type { TFilters, TCanyon } from "../canyonUtils";
 import type { PanelId } from "./sidebar/panels";
+import { MASTER_TOPO_LAYERS } from "../topoLayerTypes";
 import {
   useCanyons,
   useSharedCanyons,
@@ -105,6 +106,15 @@ function App() {
   const [editingGeoPdfTemplate, setEditingGeoPdfTemplate] = useState<
     GeoPdfTemplate | null | undefined
   >(undefined);
+
+  // LiDAR topo panel state — lifted so it persists across panel open/close
+  const [lidarEnabled, setLidarEnabled] = useState(false);
+  const [lidarLayerToggles, setLidarLayerToggles] = useState<
+    Record<string, boolean>
+  >(() => Object.fromEntries(MASTER_TOPO_LAYERS.map((l) => [l.name, true])));
+  const [lidarLayerOrder, setLidarLayerOrder] = useState<string[]>(
+    MASTER_TOPO_LAYERS.map((l) => l.name),
+  );
 
   // Master topo layers from the Overlays panel (communal, persistent)
   const [masterTopoLayers, setMasterTopoLayers] = useState<
@@ -372,6 +382,12 @@ function App() {
           pickingCoords={pickingCoords}
           onCancelPickCoords={cancelPickingCoords}
           onTopoLayersChange={setMasterTopoLayers}
+          lidarEnabled={lidarEnabled}
+          setLidarEnabled={setLidarEnabled}
+          lidarLayerToggles={lidarLayerToggles}
+          setLidarLayerToggles={setLidarLayerToggles}
+          lidarLayerOrder={lidarLayerOrder}
+          setLidarLayerOrder={setLidarLayerOrder}
         />
       </div>
       <Map

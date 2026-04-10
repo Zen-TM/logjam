@@ -170,7 +170,7 @@ OSM_FEATURE_QUERIES = {
     "power":      '["power"~"line|minor_line|cable"]',
     "campsite":   '["tourism"~"camp_site|caravan_site|wilderness_hut|alpine_hut"]',
     "peak":       '["natural"~"peak|saddle|cliff|ridge|volcano"]',
-    "spring":     '["natural"~"spring|water|wetland"]',
+    "spring":     '["natural"="spring"]',
     "gate":       '["barrier"~"gate|lift_gate|cycle_barrier"]',
     "viewpoint":  '["tourism"="viewpoint"]',
     "cave":       '["natural"="cave_entrance"]',
