@@ -8,6 +8,21 @@ import { verifyEmail } from "../services/email";
 
 const router = Router();
 
+function serializeUserForResponse(
+  user: {
+    storageUsedBytes: bigint;
+    storageQuotaBytes: bigint;
+    uiPreferences: Prisma.JsonValue;
+  } & Record<string, unknown>,
+) {
+  return {
+    ...user,
+    storageUsedBytes: Number(user.storageUsedBytes),
+    storageQuotaBytes: Number(user.storageQuotaBytes),
+    uiPreferences: normalizeUserUiPreferences(user.uiPreferences),
+  };
+}
+
 // GET /users/me — get current user's profile
 // Creates the user in DB if it's their first request (post-Cognito signup)
 router.get(
@@ -44,10 +59,7 @@ router.get(
       }
     }
 
-    res.json({
-      ...user,
-      uiPreferences: normalizeUserUiPreferences(user.uiPreferences),
-    });
+    res.json(serializeUserForResponse(user));
   },
 );
 
@@ -98,10 +110,7 @@ router.patch(
       data: updates,
     });
 
-    res.json({
-      ...updated,
-      uiPreferences: normalizeUserUiPreferences(updated.uiPreferences),
-    });
+    res.json(serializeUserForResponse(updated));
   },
 );
 
