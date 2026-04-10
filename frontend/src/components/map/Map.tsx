@@ -15,6 +15,7 @@ maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
 import classes from "./Map.module.css";
 import type { TCanyon, TFilters } from "../../canyonUtils";
 import { passesFilters } from "../../canyonUtils";
+import { extentFromCentreAndSize } from "@logjam/shared";
 
 const SIDEBAR_TRANSITION_MS = 300;
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
@@ -121,6 +122,9 @@ function Map({
   activeLayerId,
   selectingGeoPdfExtent,
   geoPdfPaperAspect,
+  geoPdfPaperDimensions,
+  geoPdfInitialExtent,
+  geoPdfInitialScale,
   onGeoPdfExtentConfirmed,
   onGeoPdfExtentCancelled,
 }: {
@@ -144,7 +148,13 @@ function Map({
   activeLayerId: string;
   selectingGeoPdfExtent?: boolean;
   geoPdfPaperAspect?: number;
-  onGeoPdfExtentConfirmed?: (extent: TBbox) => void;
+  geoPdfPaperDimensions?: { w: number; h: number };
+  geoPdfInitialExtent?: TBbox;
+  geoPdfInitialScale?: number;
+  onGeoPdfExtentConfirmed?: (
+    extent: TBbox,
+    scale: number,
+  ) => void;
   onGeoPdfExtentCancelled?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -933,6 +943,84 @@ function Map({
 
   // GeoPDF extent selection: ref for overlay rectangle
   const geoPdfFrameRef = useRef<HTMLDivElement>(null);
+
+  // Refs used to detect whether the user has moved the map since extent
+  // selection activated. If they haven't, we return the initial extent exactly
+  // (rather than re-deriving it via unproject, which introduces floating-point drift).
+  const geoPdfInitialExtentRef = useRef<TBbox | undefined>(undefined);
+  const geoPdfInitialScaleRef = useRef<number | undefined>(undefined);
+  const geoPdfPaperDimensionsRef = useRef<{ w: number; h: number }>({ w: 210, h: 297 });
+  const geoPdfFitBoundsSettledRef = useRef(false);
+  const geoPdfUserPannedRef = useRef(false);
+  const geoPdfUserZoomedRef = useRef(false);
+
+  // When extent selection activates: fly to the initial extent (if any),
+  // then start tracking user interaction once the animation settles.
+  useEffect(() => {
+    if (!selectingGeoPdfExtent) {
+      geoPdfInitialExtentRef.current = undefined;
+      geoPdfFitBoundsSettledRef.current = false;
+      geoPdfUserPannedRef.current = false;
+      geoPdfUserZoomedRef.current = false;
+      return;
+    }
+
+    geoPdfInitialExtentRef.current = geoPdfInitialExtent;
+    geoPdfInitialScaleRef.current = geoPdfInitialScale;
+    geoPdfPaperDimensionsRef.current = geoPdfPaperDimensions ?? { w: 210, h: 297 };
+    geoPdfFitBoundsSettledRef.current = false;
+    geoPdfUserPannedRef.current = false;
+    geoPdfUserZoomedRef.current = false;
+
+    const map = mapRef.current;
+    if (!geoPdfInitialExtent || !map) {
+      // No fitBounds animation — settled immediately.
+      geoPdfFitBoundsSettledRef.current = true;
+      return;
+    }
+
+    map.fitBounds(
+      [
+        [geoPdfInitialExtent.west, geoPdfInitialExtent.south],
+        [geoPdfInitialExtent.east, geoPdfInitialExtent.north],
+      ],
+      { animate: true, padding: 60 },
+    );
+
+    const onFitBoundsEnd = () => {
+      geoPdfFitBoundsSettledRef.current = true;
+    };
+    map.once("moveend", onFitBoundsEnd);
+
+    return () => {
+      map.off("moveend", onFitBoundsEnd);
+    };
+  }, [selectingGeoPdfExtent, geoPdfInitialExtent]);
+
+  // Track user-initiated map movement during extent selection.
+  useEffect(() => {
+    if (!selectingGeoPdfExtent || !mapRef.current) return;
+    const map = mapRef.current;
+    const onPanStart = () => {
+      // Only count panning that occurs after fitBounds has settled.
+      if (geoPdfFitBoundsSettledRef.current) {
+        geoPdfUserPannedRef.current = true;
+      }
+    };
+    const onZoomStart = () => {
+      // Only count zooming that occurs after fitBounds has settled.
+      if (geoPdfFitBoundsSettledRef.current) {
+        geoPdfUserZoomedRef.current = true;
+      }
+    };
+    map.on("movestart", onPanStart);
+    map.on("zoomstart", onZoomStart);
+    return () => {
+      map.off("movestart", onPanStart);
+      map.off("zoomstart", onZoomStart);
+    };
+  }, [selectingGeoPdfExtent]);
+
   const onGeoPdfExtentConfirmedRef = useRef(onGeoPdfExtentConfirmed);
   useEffect(() => {
     onGeoPdfExtentConfirmedRef.current = onGeoPdfExtentConfirmed;
@@ -941,26 +1029,71 @@ function Map({
   const handleConfirmGeoPdfExtent = useCallback(() => {
     if (!mapRef.current || !geoPdfFrameRef.current || !containerRef.current)
       return;
+
+    // If the user hasn't moved the map at all, return the exact initial values.
+    if (
+      geoPdfInitialExtentRef.current &&
+      geoPdfInitialScaleRef.current &&
+      !geoPdfUserPannedRef.current &&
+      !geoPdfUserZoomedRef.current
+    ) {
+      onGeoPdfExtentConfirmedRef.current?.(
+        geoPdfInitialExtentRef.current,
+        geoPdfInitialScaleRef.current,
+      );
+      return;
+    }
+
     const map = mapRef.current;
     const mapRect = containerRef.current.getBoundingClientRect();
     const frameRect = geoPdfFrameRef.current.getBoundingClientRect();
 
-    // Convert frame corners to map coordinates (relative to the map container)
-    const topLeft = map.unproject([
-      frameRect.left - mapRect.left,
-      frameRect.top - mapRect.top,
-    ]);
-    const bottomRight = map.unproject([
-      frameRect.right - mapRect.left,
-      frameRect.bottom - mapRect.top,
-    ]);
+    // Always unproject only the center of the frame — this is the one
+    // coordinate we trust from the projection, avoiding the trapezoid
+    // distortion that comes from unprojecting all four corners independently.
+    const centerX = (frameRect.left + frameRect.right) / 2 - mapRect.left;
+    const centerY = (frameRect.top + frameRect.bottom) / 2 - mapRect.top;
+    const center = map.unproject([centerX, centerY]);
 
-    onGeoPdfExtentConfirmedRef.current?.({
-      north: topLeft.lat,
-      south: bottomRight.lat,
-      east: bottomRight.lng,
-      west: topLeft.lng,
-    });
+    let scale: number;
+    if (!geoPdfUserZoomedRef.current && geoPdfInitialScaleRef.current) {
+      // User panned but didn't zoom — preserve the exact scale.
+      scale = geoPdfInitialScaleRef.current;
+    } else {
+      // User zoomed — derive scale from the frame's geographic width.
+      // Unproject the left and right midpoints of the frame to measure
+      // the true geographic width at the frame's vertical center.
+      const leftMid = map.unproject([
+        frameRect.left - mapRect.left,
+        centerY,
+      ]);
+      const rightMid = map.unproject([
+        frameRect.right - mapRect.left,
+        centerY,
+      ]);
+      const DEG_TO_RAD = Math.PI / 180;
+      const METERS_PER_DEG_LON_EQUATOR = 111320;
+      const midLat = center.lat;
+      const geoWidthM =
+        (rightMid.lng - leftMid.lng) *
+        METERS_PER_DEG_LON_EQUATOR *
+        Math.cos(midLat * DEG_TO_RAD);
+      const paperWidthM = geoPdfPaperDimensionsRef.current.w / 1000;
+      scale = geoWidthM / paperWidthM;
+    }
+
+    // Compute a consistent extent from center + scale + paper dimensions.
+    const paper = geoPdfPaperDimensionsRef.current;
+    const widthM = scale * (paper.w / 1000);
+    const heightM = scale * (paper.h / 1000);
+    const bounds = extentFromCentreAndSize(
+      center.lat,
+      center.lng,
+      widthM,
+      heightM,
+    );
+
+    onGeoPdfExtentConfirmedRef.current?.(bounds, scale);
   }, []);
 
   return (

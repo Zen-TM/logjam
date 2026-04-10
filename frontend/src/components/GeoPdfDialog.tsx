@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -81,6 +81,12 @@ const DEFAULT_EXTENT_STATE: ExtentState = {
   pivot: "mc",
 };
 
+function getContourInterval(scale: number): number {
+  if (scale <= 10000) return 5;
+  if (scale <= 25000) return 10;
+  return 50;
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 function GeoPdfDialog({
@@ -88,6 +94,7 @@ function GeoPdfDialog({
   onClose,
   onSelectOnMap,
   pendingExtent,
+  pendingScale,
   activeLayerId,
   masterTopoLayers,
   templateMode,
@@ -96,8 +103,14 @@ function GeoPdfDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onSelectOnMap: (paperAspectRatio: number) => void;
+  onSelectOnMap: (
+    paperAspectRatio: number,
+    paperDimensions: { w: number; h: number },
+    initialExtent?: TBbox,
+    initialScale?: number,
+  ) => void;
   pendingExtent: TBbox | null;
+  pendingScale: number | null;
   activeLayerId: string;
   masterTopoLayers: { id: string; pmtilesUrl: string; format?: string }[];
   templateMode?: boolean;
@@ -126,7 +139,6 @@ function GeoPdfDialog({
   const [titleText, setTitleText] = useState("");
   const [compassEnabled, setCompassEnabled] = useState(true);
   const [contourEnabled, setContourEnabled] = useState(false);
-  const [contourInterval, setContourInterval] = useState(10);
   const [scaleTextEnabled, setScaleTextEnabled] = useState(true);
   const [scaleBarEnabled, setScaleBarEnabled] = useState(true);
   const [gridLinesEnabled, setGridLinesEnabled] = useState(false);
@@ -138,6 +150,14 @@ function GeoPdfDialog({
 
   // Template mode name
   const [editTemplateName, setEditTemplateName] = useState("");
+
+  // Raw string state for extent/scale inputs (deferred recalculation)
+  const focusedField = useRef<"n" | "s" | "e" | "w" | "scale" | null>(null);
+  const [rawN, setRawN] = useState("");
+  const [rawS, setRawS] = useState("");
+  const [rawE, setRawE] = useState("");
+  const [rawW, setRawW] = useState("");
+  const [rawScale, setRawScale] = useState("");
 
   // ── Effects ──────────────────────────────────────────────────────────────
 
@@ -185,12 +205,7 @@ function GeoPdfDialog({
         setTitleEnabled(false);
       }
       setCompassEnabled(c.elements.compass);
-      if (c.elements.contourInterval !== undefined) {
-        setContourEnabled(true);
-        setContourInterval(c.elements.contourInterval);
-      } else {
-        setContourEnabled(false);
-      }
+      setContourEnabled(c.elements.contourInterval !== undefined);
       setScaleTextEnabled(c.elements.scaleText);
       setScaleBarEnabled(c.elements.scaleBar);
       if (c.elements.gridLines !== undefined) {
@@ -205,26 +220,72 @@ function GeoPdfDialog({
     }
   }, [open, templateMode, editingTemplate]);
 
-  // Populate extent from map selection
+  // Populate extent from map selection — always receives both extent and scale
   useEffect(() => {
-    if (!pendingExtent) return;
-    setExtentState((prev) => {
-      const updated = {
+    if (pendingExtent && pendingScale) {
+      setExtentState((prev) => ({
         ...prev,
         north: pendingExtent.north,
         south: pendingExtent.south,
         east: pendingExtent.east,
         west: pendingExtent.west,
-      };
-      return { ...updated, scale: calcScale(updated) };
-    });
-  }, [pendingExtent]);
+        scale: pendingScale,
+      }));
+    }
+  }, [pendingExtent, pendingScale]);
+
+  // Display helpers for coord mode
+  const formatCoord = useCallback(
+    (lat: number, lon: number, which: "lat" | "lon"): string => {
+      if (extentState.coordMode === "latlon") {
+        return which === "lat" ? lat.toFixed(6) : lon.toFixed(6);
+      }
+      const en = toEastingNorthing(lat, lon);
+      return which === "lat" ? en.northing.toFixed(1) : en.easting.toFixed(1);
+    },
+    [extentState.coordMode],
+  );
+
+  // Sync raw strings from extentState whenever extentState changes,
+  // but only for fields the user is not currently editing.
+  useEffect(() => {
+    if (focusedField.current !== "n")
+      setRawN(formatCoord(extentState.north, extentState.west, "lat"));
+    if (focusedField.current !== "s")
+      setRawS(formatCoord(extentState.south, extentState.east, "lat"));
+    if (focusedField.current !== "e")
+      setRawE(formatCoord(extentState.north, extentState.east, "lon"));
+    if (focusedField.current !== "w")
+      setRawW(formatCoord(extentState.south, extentState.west, "lon"));
+    if (focusedField.current !== "scale")
+      setRawScale(String(Math.round(extentState.scale)));
+  }, [extentState, formatCoord]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   const handleSelectOnMap = useCallback(() => {
     const paper = getPaperDimensions(extentState);
-    onSelectOnMap(paper.w / paper.h);
+    const aspectRatio = paper.w / paper.h;
+    const hasValidExtent =
+      extentState.north !== 0 &&
+      extentState.south !== 0 &&
+      extentState.east !== 0 &&
+      extentState.west !== 0 &&
+      extentState.north > extentState.south &&
+      extentState.east > extentState.west;
+    onSelectOnMap(
+      aspectRatio,
+      paper,
+      hasValidExtent
+        ? {
+            north: extentState.north,
+            south: extentState.south,
+            east: extentState.east,
+            west: extentState.west,
+          }
+        : undefined,
+      extentState.scale,
+    );
   }, [extentState, onSelectOnMap]);
 
   const handleTemplateSelect = useCallback(
@@ -255,12 +316,7 @@ function GeoPdfDialog({
         setTitleEnabled(false);
       }
       setCompassEnabled(c.elements.compass);
-      if (c.elements.contourInterval !== undefined) {
-        setContourEnabled(true);
-        setContourInterval(c.elements.contourInterval);
-      } else {
-        setContourEnabled(false);
-      }
+      setContourEnabled(c.elements.contourInterval !== undefined);
       setScaleTextEnabled(c.elements.scaleText);
       setScaleBarEnabled(c.elements.scaleBar);
       if (c.elements.gridLines !== undefined) {
@@ -286,7 +342,9 @@ function GeoPdfDialog({
       elements: {
         ...(titleEnabled ? { title: titleText } : {}),
         compass: compassEnabled,
-        ...(contourEnabled ? { contourInterval } : {}),
+        ...(contourEnabled
+          ? { contourInterval: getContourInterval(extentState.scale) }
+          : {}),
         scaleText: scaleTextEnabled,
         scaleBar: scaleBarEnabled,
         ...(gridLinesEnabled ? { gridLines: gridLinesMode } : {}),
@@ -300,7 +358,6 @@ function GeoPdfDialog({
       titleText,
       compassEnabled,
       contourEnabled,
-      contourInterval,
       scaleTextEnabled,
       scaleBarEnabled,
       gridLinesEnabled,
@@ -367,7 +424,9 @@ function GeoPdfDialog({
       elements: {
         ...(titleEnabled ? { title: titleText } : {}),
         compass: compassEnabled,
-        ...(contourEnabled ? { contourInterval } : {}),
+        ...(contourEnabled
+          ? { contourInterval: getContourInterval(extentState.scale) }
+          : {}),
         scaleText: scaleTextEnabled,
         scaleBar: scaleBarEnabled,
         ...(gridLinesEnabled ? { gridLines: gridLinesMode } : {}),
@@ -397,7 +456,6 @@ function GeoPdfDialog({
     titleText,
     compassEnabled,
     contourEnabled,
-    contourInterval,
     scaleTextEnabled,
     scaleBarEnabled,
     gridLinesEnabled,
@@ -417,18 +475,6 @@ function GeoPdfDialog({
     extentState.north > extentState.south &&
     extentState.east > extentState.west &&
     extentState.scale > 0;
-
-  // Display helpers for coord mode
-  const formatCoord = useCallback(
-    (lat: number, lon: number, which: "lat" | "lon"): string => {
-      if (extentState.coordMode === "latlon") {
-        return which === "lat" ? lat.toFixed(6) : lon.toFixed(6);
-      }
-      const en = toEastingNorthing(lat, lon);
-      return which === "lat" ? en.northing.toFixed(1) : en.easting.toFixed(1);
-    },
-    [extentState.coordMode],
-  );
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -549,7 +595,14 @@ function GeoPdfDialog({
               </button>
             ))}
           </div>
-          <div className={classes.orientationRow}>
+          <div
+            className={classes.orientationRow}
+            style={
+              extentState.paperSize === "custom"
+                ? { opacity: 0.4, pointerEvents: "none" }
+                : undefined
+            }
+          >
             {(["portrait", "landscape"] as Orientation[]).map((o) => (
               <button
                 key={o}
@@ -656,11 +709,18 @@ function GeoPdfDialog({
               <input
                 type="number"
                 className={classes.extentInput}
-                value={formatCoord(extentState.north, extentState.west, "lat")}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  if (isNaN(v)) return;
-                  setExtentState(applyNorthChange(extentState, v));
+                value={rawN}
+                onFocus={() => {
+                  focusedField.current = "n";
+                }}
+                onChange={(e) => setRawN(e.target.value)}
+                onBlur={() => {
+                  focusedField.current = null;
+                  const v = parseFloat(rawN);
+                  if (!isNaN(v)) setExtentState((s) => applyNorthChange(s, v));
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
                 }}
               />
             </div>
@@ -671,11 +731,18 @@ function GeoPdfDialog({
               <input
                 type="number"
                 className={classes.extentInput}
-                value={formatCoord(extentState.south, extentState.west, "lon")}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  if (isNaN(v)) return;
-                  setExtentState(applyWestChange(extentState, v));
+                value={rawW}
+                onFocus={() => {
+                  focusedField.current = "w";
+                }}
+                onChange={(e) => setRawW(e.target.value)}
+                onBlur={() => {
+                  focusedField.current = null;
+                  const v = parseFloat(rawW);
+                  if (!isNaN(v)) setExtentState((s) => applyWestChange(s, v));
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
                 }}
               />
             </div>
@@ -705,11 +772,18 @@ function GeoPdfDialog({
               <input
                 type="number"
                 className={classes.extentInput}
-                value={formatCoord(extentState.north, extentState.east, "lon")}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  if (isNaN(v)) return;
-                  setExtentState(applyEastChange(extentState, v));
+                value={rawE}
+                onFocus={() => {
+                  focusedField.current = "e";
+                }}
+                onChange={(e) => setRawE(e.target.value)}
+                onBlur={() => {
+                  focusedField.current = null;
+                  const v = parseFloat(rawE);
+                  if (!isNaN(v)) setExtentState((s) => applyEastChange(s, v));
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
                 }}
               />
             </div>
@@ -720,11 +794,18 @@ function GeoPdfDialog({
               <input
                 type="number"
                 className={classes.extentInput}
-                value={formatCoord(extentState.south, extentState.east, "lat")}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  if (isNaN(v)) return;
-                  setExtentState(applySouthChange(extentState, v));
+                value={rawS}
+                onFocus={() => {
+                  focusedField.current = "s";
+                }}
+                onChange={(e) => setRawS(e.target.value)}
+                onBlur={() => {
+                  focusedField.current = null;
+                  const v = parseFloat(rawS);
+                  if (!isNaN(v)) setExtentState((s) => applySouthChange(s, v));
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
                 }}
               />
             </div>
@@ -736,11 +817,19 @@ function GeoPdfDialog({
             <input
               type="number"
               className={classes.scaleInput}
-              value={Math.round(extentState.scale)}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (isNaN(v) || v <= 0) return;
-                setExtentState(applyScaleChange(extentState, v));
+              value={rawScale}
+              onFocus={() => {
+                focusedField.current = "scale";
+              }}
+              onChange={(e) => setRawScale(e.target.value)}
+              onBlur={() => {
+                focusedField.current = null;
+                const v = parseFloat(rawScale);
+                if (!isNaN(v) && v > 0)
+                  setExtentState((s) => applyScaleChange(s, v));
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
               }}
             />
           </div>
@@ -826,20 +915,11 @@ function GeoPdfDialog({
               checked={contourEnabled}
               onChange={(e) => setContourEnabled(e.target.checked)}
             />
-            <span>Contour interval</span>
-            {contourEnabled && (
-              <>
-                <input
-                  type="number"
-                  className={classes.elementInput}
-                  style={{ width: 60, flex: "none" }}
-                  value={contourInterval}
-                  onChange={(e) =>
-                    setContourInterval(parseInt(e.target.value) || 10)
-                  }
-                />
-                <span className={classes.elementSuffix}>m contours</span>
-              </>
+            <span>Contour interval text</span>
+            {contourEnabled && extentState.scale > 0 && (
+              <span className={classes.elementSuffix}>
+                {getContourInterval(extentState.scale)}m
+              </span>
             )}
           </div>
 

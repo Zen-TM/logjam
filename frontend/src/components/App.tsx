@@ -83,7 +83,20 @@ function App() {
   const [showGeoPdf, setShowGeoPdf] = useState(false);
   const [selectingGeoPdfExtent, setSelectingGeoPdfExtent] = useState(false);
   const [geoPdfPaperAspect, setGeoPdfPaperAspect] = useState(210 / 297);
+  const [geoPdfPaperDimensions, setGeoPdfPaperDimensions] = useState<{
+    w: number;
+    h: number;
+  }>({ w: 210, h: 297 });
+  const [geoPdfInitialExtent, setGeoPdfInitialExtent] = useState<
+    TBbox | undefined
+  >(undefined);
+  const [geoPdfInitialScale, setGeoPdfInitialScale] = useState<
+    number | undefined
+  >(undefined);
   const [pendingGeoPdfExtent, setPendingGeoPdfExtent] = useState<TBbox | null>(
+    null,
+  );
+  const [pendingGeoPdfScale, setPendingGeoPdfScale] = useState<number | null>(
     null,
   );
 
@@ -285,13 +298,17 @@ function App() {
           setShowGeoPdf(false);
           setEditingGeoPdfTemplate(undefined);
         }}
-        onSelectOnMap={(aspect) => {
+        onSelectOnMap={(aspect, paperDims, extent, scale) => {
           setGeoPdfPaperAspect(aspect);
+          setGeoPdfPaperDimensions(paperDims);
+          setGeoPdfInitialExtent(extent);
+          setGeoPdfInitialScale(scale);
           setShowGeoPdf(false);
           setActivePanel(null);
           setSelectingGeoPdfExtent(true);
         }}
         pendingExtent={pendingGeoPdfExtent}
+        pendingScale={pendingGeoPdfScale}
         activeLayerId={activeLayerId}
         masterTopoLayers={masterTopoLayers}
         templateMode={editingGeoPdfTemplate !== undefined}
@@ -381,8 +398,12 @@ function App() {
         activeLayerId={activeLayerId}
         selectingGeoPdfExtent={selectingGeoPdfExtent}
         geoPdfPaperAspect={geoPdfPaperAspect}
-        onGeoPdfExtentConfirmed={(extent) => {
+        geoPdfPaperDimensions={geoPdfPaperDimensions}
+        geoPdfInitialExtent={geoPdfInitialExtent}
+        geoPdfInitialScale={geoPdfInitialScale}
+        onGeoPdfExtentConfirmed={(extent, scale) => {
           setPendingGeoPdfExtent(extent);
+          setPendingGeoPdfScale(scale);
           setSelectingGeoPdfExtent(false);
           setShowGeoPdf(true);
         }}

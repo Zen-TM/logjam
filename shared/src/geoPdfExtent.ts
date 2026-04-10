@@ -95,7 +95,7 @@ export function mapAspectRatio(state: ExtentState): number {
  * Given a desired geo width and height in meters, and a centre point,
  * compute the extent bounds. Returns { north, south, east, west }.
  */
-function extentFromCentreAndSize(
+export function extentFromCentreAndSize(
   centreLatDeg: number,
   centreLonDeg: number,
   widthM: number,

@@ -1,3 +1,3 @@
-export * from "./geoPdfExtent";
-export * from "./geoPdfConfig";
-export * from "./themeSchemes";
+export * from "./geoPdfExtent.js";
+export * from "./geoPdfConfig.js";
+export * from "./themeSchemes.js";

@@ -1,4 +1,4 @@
-import type { PaperSize, Orientation, CoordMode } from "./geoPdfExtent";
+import type { PaperSize, Orientation, CoordMode } from "./geoPdfExtent.js";
 
 export interface GeoPdfConfig {
   paperSize: PaperSize;
