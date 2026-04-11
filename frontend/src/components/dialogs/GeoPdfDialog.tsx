@@ -340,7 +340,9 @@ function GeoPdfDialog({
         : {}),
       scale: extentState.scale,
       baseLayer: selectedBaseLayer,
-      overlays: [...selectedOverlays],
+      overlays: [...selectedOverlays].map((id) =>
+        id.startsWith("master-") ? id.slice("master-".length) : id,
+      ),
       elements: {
         ...(titleEnabled ? { title: titleText } : {}),
         compass: compassEnabled,
@@ -422,7 +424,9 @@ function GeoPdfDialog({
       },
       scale: extentState.scale,
       baseLayer: selectedBaseLayer,
-      overlays: [...selectedOverlays],
+      overlays: [...selectedOverlays].map((id) =>
+        id.startsWith("master-") ? id.slice("master-".length) : id,
+      ),
       elements: {
         ...(titleEnabled ? { title: titleText } : {}),
         compass: compassEnabled,
