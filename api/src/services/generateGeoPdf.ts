@@ -8,6 +8,7 @@ import type { Source } from "pmtiles";
 import { VectorTile } from "@mapbox/vector-tile";
 import Pbf from "pbf";
 import { MASTER_TOPO_LAYERS } from "../constants/topoLayers";
+import { AppError } from "../middleware/errorHandler";
 
 // geomagnetism has no type declarations
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -112,12 +113,28 @@ function formatDistance(m: number): string {
   return `${m} m`;
 }
 
-// ── Tile canvas helpers ─────────────────────────────────────────────────────
+// ── Tile transform helpers ──────────────────────────────────────────────────
 
 type TileCoord = { x: number; y: number; z: number };
 
-/** Build a tile canvas and tile list for a given zoom and extent */
-function buildTileCanvas(zoom: number, north: number, south: number, east: number, west: number) {
+/** Transform mapping tile-grid pixel space to output mapCanvas pixel space */
+interface TileToMapTransform {
+  minTileX: number;
+  minTileY: number;
+  tiles: TileCoord[];
+  offsetX: number;  // pixel offset within tile grid where extent starts
+  offsetY: number;
+  scaleX: number;   // ratio: output pixels / source pixels
+  scaleY: number;
+}
+
+/** Compute the transform from tile-grid pixel space to output canvas pixel space.
+ *  No intermediate canvas is allocated — only the math from the old cropTileCanvas. */
+function computeTileToMapTransform(
+  zoom: number,
+  north: number, south: number, east: number, west: number,
+  widthPx: number, heightPx: number,
+): TileToMapTransform {
   const minTileX = lon2tileX(west, zoom);
   const maxTileX = lon2tileX(east, zoom);
   const minTileY = lat2tileY(north, zoom);
@@ -130,53 +147,28 @@ function buildTileCanvas(zoom: number, north: number, south: number, east: numbe
     }
   }
 
-  const tileCanvas = createCanvas(
-    (maxTileX - minTileX + 1) * TILE_SIZE,
-    (maxTileY - minTileY + 1) * TILE_SIZE,
-  );
+  const tileGridW = (maxTileX - minTileX + 1) * TILE_SIZE;
+  const tileGridH = (maxTileY - minTileY + 1) * TILE_SIZE;
 
-  return { tileCanvas, minTileX, minTileY, tiles };
-}
-
-/** Build a tile canvas and fetch base layer tiles onto it */
-async function fetchBaseTiles(baseLayerName: string, zoom: number, north: number, south: number, east: number, west: number) {
-  const result = buildTileCanvas(zoom, north, south, east, west);
-  const baseUrl = TILE_URLS[baseLayerName];
-  if (baseUrl) {
-    const ctx = result.tileCanvas.getContext("2d");
-    await fetchAndDrawTiles(ctx, result.tiles, baseUrl, result.minTileX, result.minTileY);
-  }
-  return result;
-}
-
-/** Crop a tile canvas to the exact geographic extent and draw it onto the output canvas */
-function cropTileCanvas(
-  mapCtx: CanvasRenderingContext2D,
-  tileCanvas: Canvas,
-  minTileX: number,
-  minTileY: number,
-  zoom: number,
-  north: number,
-  south: number,
-  east: number,
-  west: number,
-  widthPx: number,
-  heightPx: number,
-) {
   const tileOriginLon = tileX2lon(minTileX, zoom);
   const tileOriginLat = tileY2lat(minTileY, zoom);
-  const tileEndLon = tileX2lon(minTileX + tileCanvas.width / TILE_SIZE, zoom);
-  const tileEndLat = tileY2lat(minTileY + tileCanvas.height / TILE_SIZE, zoom);
+  const tileEndLon = tileX2lon(maxTileX + 1, zoom);
+  const tileEndLat = tileY2lat(maxTileY + 1, zoom);
 
-  const tileCanvasW = tileCanvas.width;
-  const tileCanvasH = tileCanvas.height;
+  const offsetX = ((west - tileOriginLon) / (tileEndLon - tileOriginLon)) * tileGridW;
+  const offsetY = ((tileOriginLat - north) / (tileOriginLat - tileEndLat)) * tileGridH;
+  const srcW = ((east - west) / (tileEndLon - tileOriginLon)) * tileGridW;
+  const srcH = ((north - south) / (tileOriginLat - tileEndLat)) * tileGridH;
 
-  const srcX = ((west - tileOriginLon) / (tileEndLon - tileOriginLon)) * tileCanvasW;
-  const srcY = ((tileOriginLat - north) / (tileOriginLat - tileEndLat)) * tileCanvasH;
-  const srcW = ((east - west) / (tileEndLon - tileOriginLon)) * tileCanvasW;
-  const srcH = ((north - south) / (tileOriginLat - tileEndLat)) * tileCanvasH;
-
-  mapCtx.drawImage(tileCanvas, srcX, srcY, srcW, srcH, 0, 0, widthPx, heightPx);
+  return {
+    minTileX,
+    minTileY,
+    tiles,
+    offsetX,
+    offsetY,
+    scaleX: widthPx / srcW,
+    scaleY: heightPx / srcH,
+  };
 }
 
 // ── Main generation pipeline ─────────────────────────────────────────────────
@@ -195,32 +187,41 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
   const widthPt = mmToPt(paper.w);
   const heightPt = mmToPt(paper.h);
 
-  // 2. Zoom level & extent
+  // 2. Memory budget guard
+  const mapCanvasBytes = widthPx * heightPx * 4;
+  const MAX_CANVAS_BYTES = 200 * 1024 * 1024; // 200MB
+  if (mapCanvasBytes > MAX_CANVAS_BYTES) {
+    throw new AppError(400, "Requested export is too large. Try a smaller paper size or lower scale.");
+  }
+
+  // 3. Zoom level & extent
   const { north, south, east, west } = config.extent;
   const centreLat = (north + south) / 2;
   const zoom = computeZoom(config.scale, centreLat, DPI);
 
-  // 3. Output canvas
+  // 4. Output canvas — the only canvas allocated for the entire pipeline
   const mapCanvas = createCanvas(widthPx, heightPx);
   const mapCtx = mapCanvas.getContext("2d");
 
-  // 4. Base layer — SIX Maps uses ArcGIS export API, others use tile fetching
+  // 5. Base layer — draw directly onto mapCanvas (no intermediate canvas)
   const sixExportUrl = SIX_EXPORT_URLS[config.baseLayer];
 
   if (sixExportUrl) {
-    // Fetch full-resolution image directly from ArcGIS export endpoint
-    const sixCanvas = await fetchSixExportImage(sixExportUrl, config.extent, widthPx, heightPx);
-    mapCtx.drawImage(sixCanvas, 0, 0);
+    await fetchSixExportImageDirect(mapCtx, sixExportUrl, config.extent, widthPx, heightPx);
   } else {
-    // Standard tile-based fetching at computed zoom
-    const { tileCanvas, minTileX, minTileY } = await fetchBaseTiles(config.baseLayer, zoom, north, south, east, west);
-    cropTileCanvas(mapCtx, tileCanvas, minTileX, minTileY, zoom, north, south, east, west, widthPx, heightPx);
+    const transform = computeTileToMapTransform(zoom, north, south, east, west, widthPx, heightPx);
+    if (transform.tiles.length > 2000) {
+      throw new AppError(400, "Requested area is too large at this scale. Try a smaller extent or lower zoom.");
+    }
+    const baseUrl = TILE_URLS[config.baseLayer];
+    if (baseUrl) {
+      await fetchAndDrawTilesDirect(mapCtx, transform.tiles, baseUrl, transform);
+    }
   }
 
-  // 5. Overlay tiles from PMTiles archives in S3 (always tile-based)
+  // 6. Overlay tiles from PMTiles archives in S3 — draw directly onto mapCanvas
   if (config.overlays.length > 0) {
-    const { tileCanvas: overlayCanvas, minTileX, minTileY, tiles } = buildTileCanvas(zoom, north, south, east, west);
-    const overlayCtx = overlayCanvas.getContext("2d");
+    const transform = computeTileToMapTransform(zoom, north, south, east, west, widthPx, heightPx);
     const topoBucket = process.env.S3_BUCKET_TOPO ?? "logjam-topo-jobs";
     const s3 = new S3Client({ region: process.env.AWS_REGION ?? "ap-southeast-2" });
 
@@ -231,13 +232,11 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
       const source = new S3Source(topoBucket, pmtilesKey, s3);
       const archive = new PMTiles(source);
       if (layerDef.format === "vector") {
-        await fetchAndDrawPMTilesVector(overlayCtx, tiles, archive, minTileX, minTileY, overlayName);
+        await fetchAndDrawPMTilesVectorDirect(mapCtx, transform.tiles, archive, transform, overlayName, zoom);
       } else {
-        await fetchAndDrawPMTilesRaster(overlayCtx, tiles, archive, minTileX, minTileY);
+        await fetchAndDrawPMTilesRasterDirect(mapCtx, transform.tiles, archive, transform);
       }
     }
-
-    cropTileCanvas(mapCtx, overlayCanvas, minTileX, minTileY, zoom, north, south, east, west, widthPx, heightPx);
   }
 
   // 7. Draw map elements
@@ -282,14 +281,18 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
 
 // ── Tile fetching ────────────────────────────────────────────────────────────
 
-async function fetchAndDrawTiles(
-  ctx: CanvasRenderingContext2D,
-  tiles: { x: number; y: number; z: number }[],
+/** Fetch tiles and draw each directly onto the output canvas using the transform */
+async function fetchAndDrawTilesDirect(
+  mapCtx: CanvasRenderingContext2D,
+  tiles: TileCoord[],
   urlTemplate: string,
-  originX: number,
-  originY: number,
+  transform: TileToMapTransform,
 ): Promise<void> {
   await pMap(tiles, async (tile) => {
+    const destX = ((tile.x - transform.minTileX) * TILE_SIZE - transform.offsetX) * transform.scaleX;
+    const destY = ((tile.y - transform.minTileY) * TILE_SIZE - transform.offsetY) * transform.scaleY;
+    const destW = TILE_SIZE * transform.scaleX;
+    const destH = TILE_SIZE * transform.scaleY;
     const url = urlTemplate
       .replace("{z}", String(tile.z))
       .replace("{x}", String(tile.x))
@@ -302,15 +305,10 @@ async function fetchAndDrawTiles(
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const arrayBuf = await response.arrayBuffer();
       const img = await loadImage(Buffer.from(arrayBuf));
-      const dx = (tile.x - originX) * TILE_SIZE;
-      const dy = (tile.y - originY) * TILE_SIZE;
-      ctx.drawImage(img, dx, dy, TILE_SIZE, TILE_SIZE);
+      mapCtx.drawImage(img, 0, 0, TILE_SIZE, TILE_SIZE, destX, destY, destW, destH);
     } catch (err) {
-      // Fill failed tile with grey
-      const dx = (tile.x - originX) * TILE_SIZE;
-      const dy = (tile.y - originY) * TILE_SIZE;
-      ctx.fillStyle = "#e8e8e8";
-      ctx.fillRect(dx, dy, TILE_SIZE, TILE_SIZE);
+      mapCtx.fillStyle = "#e8e8e8";
+      mapCtx.fillRect(destX, destY, destW, destH);
       console.warn(`Failed to fetch tile z${tile.z}/${tile.x}/${tile.y}: ${err}`);
     }
   }, CONCURRENCY);
@@ -319,19 +317,16 @@ async function fetchAndDrawTiles(
 // ── SIX Maps ArcGIS export ──────────────────────────────────────────────────
 
 /**
- * Fetch a full-resolution image from a SIX Maps ArcGIS MapServer/export endpoint.
- * If the requested size exceeds the server's max (4096px), the image is fetched
- * in a grid of chunks and composited together.
+ * Fetch a full-resolution image from a SIX Maps ArcGIS MapServer/export endpoint
+ * and draw directly onto the output canvas. No intermediate canvas is allocated.
  */
-async function fetchSixExportImage(
+async function fetchSixExportImageDirect(
+  mapCtx: CanvasRenderingContext2D,
   exportUrl: string,
   extent: { north: number; south: number; east: number; west: number },
   widthPx: number,
   heightPx: number,
-): Promise<Canvas> {
-  const canvas = createCanvas(widthPx, heightPx);
-  const ctx = canvas.getContext("2d");
-
+): Promise<void> {
   // Split into chunks if either dimension exceeds the server limit
   const cols = Math.ceil(widthPx / MAX_EXPORT_SIZE);
   const rows = Math.ceil(heightPx / MAX_EXPORT_SIZE);
@@ -347,16 +342,13 @@ async function fetchSixExportImage(
   }
 
   await pMap(chunks, async ({ col, row }) => {
-    // Pixel bounds for this chunk
     const pxLeft = col * MAX_EXPORT_SIZE;
     const pxTop = row * MAX_EXPORT_SIZE;
     const chunkW = Math.min(MAX_EXPORT_SIZE, widthPx - pxLeft);
     const chunkH = Math.min(MAX_EXPORT_SIZE, heightPx - pxTop);
 
-    // Geographic bounds for this chunk
     const chunkWest = extent.west + (pxLeft / widthPx) * lonRange;
     const chunkEast = extent.west + ((pxLeft + chunkW) / widthPx) * lonRange;
-    // Note: north is top (row 0), south is bottom
     const chunkNorth = extent.north - (pxTop / heightPx) * latRange;
     const chunkSouth = extent.north - ((pxTop + chunkH) / heightPx) * latRange;
 
@@ -379,15 +371,13 @@ async function fetchSixExportImage(
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const arrayBuf = await response.arrayBuffer();
       const img = await loadImage(Buffer.from(arrayBuf));
-      ctx.drawImage(img, 0, 0, img.width, img.height, pxLeft, pxTop, chunkW, chunkH);
+      mapCtx.drawImage(img, 0, 0, img.width, img.height, pxLeft, pxTop, chunkW, chunkH);
     } catch (err) {
-      ctx.fillStyle = "#e8e8e8";
-      ctx.fillRect(pxLeft, pxTop, chunkW, chunkH);
+      mapCtx.fillStyle = "#e8e8e8";
+      mapCtx.fillRect(pxLeft, pxTop, chunkW, chunkH);
       console.warn(`Failed to fetch SIX export chunk col=${col} row=${row}: ${err}`);
     }
   }, CONCURRENCY);
-
-  return canvas;
 }
 
 // ── PMTiles overlay rendering ────────────────────────────────────────────────
@@ -406,47 +396,50 @@ class S3Source implements Source {
   getKey() { return `s3://${this.bucket}/${this.key}`; }
 }
 
-async function fetchAndDrawPMTilesRaster(
-  ctx: CanvasRenderingContext2D,
-  tiles: { x: number; y: number; z: number }[],
+/** Fetch raster PMTiles and draw directly onto the output canvas */
+async function fetchAndDrawPMTilesRasterDirect(
+  mapCtx: CanvasRenderingContext2D,
+  tiles: TileCoord[],
   archive: PMTiles,
-  originX: number,
-  originY: number,
+  transform: TileToMapTransform,
 ): Promise<void> {
   await pMap(tiles, async (tile) => {
     try {
       const result = await archive.getZxy(tile.z, tile.x, tile.y);
       if (!result?.data) return;
       const img = await loadImage(Buffer.from(result.data));
-      const dx = (tile.x - originX) * TILE_SIZE;
-      const dy = (tile.y - originY) * TILE_SIZE;
-      ctx.drawImage(img, dx, dy, TILE_SIZE, TILE_SIZE);
+      const destX = ((tile.x - transform.minTileX) * TILE_SIZE - transform.offsetX) * transform.scaleX;
+      const destY = ((tile.y - transform.minTileY) * TILE_SIZE - transform.offsetY) * transform.scaleY;
+      const destW = TILE_SIZE * transform.scaleX;
+      const destH = TILE_SIZE * transform.scaleY;
+      mapCtx.drawImage(img, 0, 0, TILE_SIZE, TILE_SIZE, destX, destY, destW, destH);
     } catch (err) {
       console.warn(`Failed to fetch raster PMTile ${tile.z}/${tile.x}/${tile.y}: ${err}`);
     }
   }, CONCURRENCY);
 }
 
-async function fetchAndDrawPMTilesVector(
-  ctx: CanvasRenderingContext2D,
-  tiles: { x: number; y: number; z: number }[],
+/** Fetch vector PMTiles and render features directly onto the output canvas */
+async function fetchAndDrawPMTilesVectorDirect(
+  mapCtx: CanvasRenderingContext2D,
+  tiles: TileCoord[],
   archive: PMTiles,
-  originX: number,
-  originY: number,
+  transform: TileToMapTransform,
   layerName: string,
+  zoom: number,
 ): Promise<void> {
   await pMap(tiles, async (tile) => {
     try {
       const result = await archive.getZxy(tile.z, tile.x, tile.y);
       if (!result?.data) return;
       const vt = new VectorTile(new Pbf(result.data));
-      const dx = (tile.x - originX) * TILE_SIZE;
-      const dy = (tile.y - originY) * TILE_SIZE;
+      const tileDx = ((tile.x - transform.minTileX) * TILE_SIZE - transform.offsetX) * transform.scaleX;
+      const tileDy = ((tile.y - transform.minTileY) * TILE_SIZE - transform.offsetY) * transform.scaleY;
       const sourceLayer = vt.layers[layerName];
       if (!sourceLayer) return;
       for (let i = 0; i < sourceLayer.length; i++) {
         const feature = sourceLayer.feature(i);
-        renderVectorFeature(ctx, feature, dx, dy, tile.z, layerName);
+        renderVectorFeature(mapCtx, feature, tileDx, tileDy, zoom, layerName, transform.scaleX, transform.scaleY);
       }
     } catch (err) {
       console.warn(`Failed to render vector PMTile ${tile.z}/${tile.x}/${tile.y}: ${err}`);
@@ -468,15 +461,19 @@ function renderVectorFeature(
   dy: number,
   zoom: number,
   layerName: string,
+  transformScaleX = 1,
+  transformScaleY = 1,
 ) {
-  const scale = TILE_SIZE / feature.extent;
+  const baseScale = TILE_SIZE / feature.extent;
+  const scaleX = baseScale * transformScaleX;
+  const scaleY = baseScale * transformScaleY;
   const geomType = feature.type; // 1=Point, 2=LineString, 3=Polygon
   const props = feature.properties;
 
   if (layerName === "contours") {
-    renderContourFeature(ctx, feature, dx, dy, zoom, scale, geomType, props);
+    renderContourFeature(ctx, feature, dx, dy, zoom, scaleX, scaleY, geomType, props);
   } else if (layerName === "features") {
-    renderOsmFeature(ctx, feature, dx, dy, zoom, scale, geomType, props);
+    renderOsmFeature(ctx, feature, dx, dy, zoom, scaleX, scaleY, geomType, props);
   }
 }
 
@@ -487,7 +484,8 @@ function renderContourFeature(
   dx: number,
   dy: number,
   zoom: number,
-  scale: number,
+  scaleX: number,
+  scaleY: number,
   geomType: number,
   props: Record<string, unknown>,
 ) {
@@ -511,8 +509,8 @@ function renderContourFeature(
   for (const ring of geometry) {
     ctx.beginPath();
     for (let j = 0; j < ring.length; j++) {
-      const px = dx + ring[j].x * scale;
-      const py = dy + ring[j].y * scale;
+      const px = dx + ring[j].x * scaleX;
+      const py = dy + ring[j].y * scaleY;
       if (j === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
     }
@@ -521,14 +519,14 @@ function renderContourFeature(
     // Draw elevation label on major contours at z14+
     if (isMajor && zoom >= 14 && ring.length >= 2) {
       const mid = Math.floor(ring.length / 2);
-      const mx = dx + ring[mid].x * scale;
-      const my = dy + ring[mid].y * scale;
+      const mx = dx + ring[mid].x * scaleX;
+      const my = dy + ring[mid].y * scaleY;
 
       // Calculate angle from adjacent points for text rotation
       const prev = mid > 0 ? mid - 1 : 0;
       const next = mid < ring.length - 1 ? mid + 1 : ring.length - 1;
-      const ax = ring[next].x - ring[prev].x;
-      const ay = ring[next].y - ring[prev].y;
+      const ax = (ring[next].x - ring[prev].x) * scaleX;
+      const ay = (ring[next].y - ring[prev].y) * scaleY;
       let angle = Math.atan2(ay, ax);
       // Keep text upright
       if (angle > Math.PI / 2) angle -= Math.PI;
@@ -566,7 +564,8 @@ function renderOsmFeature(
   dx: number,
   dy: number,
   zoom: number,
-  scale: number,
+  scaleX: number,
+  scaleY: number,
   geomType: number,
   props: Record<string, unknown>,
 ) {
@@ -575,34 +574,34 @@ function renderOsmFeature(
 
   switch (category) {
     case "waterway":
-      drawLineFeature(ctx, geometry, dx, dy, scale, {
+      drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
         color: "rgba(40,120,220,0.85)",
         width: interpZoom(zoom, 12, 1, 18, 3),
       });
       break;
     case "track":
-      drawLineFeature(ctx, geometry, dx, dy, scale, {
+      drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
         color: "rgba(160,100,30,0.85)",
         width: interpZoom(zoom, 12, 0.8, 18, 2),
         dash: [4, 2],
       });
       break;
     case "road":
-      drawLineFeature(ctx, geometry, dx, dy, scale, {
+      drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
         color: "rgba(80,80,80,0.9)",
         width: interpZoom(zoom, 12, 1, 18, 4),
       });
       break;
     case "building":
       if (geomType === 3) {
-        drawFillFeature(ctx, geometry, dx, dy, scale, {
+        drawFillFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
           fill: "rgba(160,140,120,0.3)",
           outline: "rgba(160,140,120,0.8)",
         });
       }
       break;
     case "power":
-      drawLineFeature(ctx, geometry, dx, dy, scale, {
+      drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
         color: "rgba(200,160,0,0.8)",
         width: 1,
         dash: [3, 4],
@@ -613,8 +612,8 @@ function renderOsmFeature(
         const radius = interpZoom(zoom, 12, 3, 18, 7);
         for (const ring of geometry) {
           for (const pt of ring) {
-            const px = dx + pt.x * scale;
-            const py = dy + pt.y * scale;
+            const px = dx + pt.x * scaleX;
+            const py = dy + pt.y * scaleY;
             ctx.beginPath();
             ctx.arc(px, py, radius, 0, Math.PI * 2);
             ctx.fillStyle = "rgba(0,140,80,0.9)";
@@ -634,7 +633,8 @@ function drawLineFeature(
   geometry: { x: number; y: number }[][],
   dx: number,
   dy: number,
-  scale: number,
+  scaleX: number,
+  scaleY: number,
   style: { color: string; width: number; dash?: number[] },
 ) {
   ctx.strokeStyle = style.color;
@@ -643,8 +643,8 @@ function drawLineFeature(
   for (const ring of geometry) {
     ctx.beginPath();
     for (let j = 0; j < ring.length; j++) {
-      const px = dx + ring[j].x * scale;
-      const py = dy + ring[j].y * scale;
+      const px = dx + ring[j].x * scaleX;
+      const py = dy + ring[j].y * scaleY;
       if (j === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
     }
@@ -658,14 +658,15 @@ function drawFillFeature(
   geometry: { x: number; y: number }[][],
   dx: number,
   dy: number,
-  scale: number,
+  scaleX: number,
+  scaleY: number,
   style: { fill: string; outline: string },
 ) {
   for (const ring of geometry) {
     ctx.beginPath();
     for (let j = 0; j < ring.length; j++) {
-      const px = dx + ring[j].x * scale;
-      const py = dy + ring[j].y * scale;
+      const px = dx + ring[j].x * scaleX;
+      const py = dy + ring[j].y * scaleY;
       if (j === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
     }
@@ -1083,7 +1084,7 @@ async function buildPdf(
     doc.on("error", reject);
 
     // Embed the map image as full-page
-    const imgBuffer = mapCanvas.toBuffer("image/png");
+    const imgBuffer = mapCanvas.toBuffer("image/jpeg", { quality: 0.92 });
     doc.image(imgBuffer, 0, 0, { width: widthPt, height: heightPt });
 
     // GeoPDF georeferencing metadata
