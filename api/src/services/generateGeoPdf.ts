@@ -1,7 +1,7 @@
 import { createCanvas, loadImage, type Canvas, type CanvasRenderingContext2D } from "canvas";
 import PDFDocument from "pdfkit";
 import type { GeoPdfConfig } from "@logjam/shared";
-import { getPaperDimensions, gridConvergence, toEastingNorthing } from "@logjam/shared";
+import { getPaperDimensions, gridConvergence, toEastingNorthing, fromEastingNorthing, detectMgaZone } from "@logjam/shared";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { PMTiles } from "pmtiles";
 import type { Source } from "pmtiles";
@@ -263,7 +263,7 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
   }
 
   if (config.elements.compass) {
-    drawCompass(mapCtx, config, stackY, elementMargin);
+    stackY = drawCompass(mapCtx, config, stackY, elementMargin);
   }
 
   if (config.elements.title) {
@@ -847,7 +847,7 @@ function drawCompass(
   config: GeoPdfConfig,
   stackY: number,
   margin: number,
-) {
+): number {
   const midLat = (config.extent.north + config.extent.south) / 2;
   const midLon = (config.extent.east + config.extent.west) / 2;
 
@@ -859,88 +859,103 @@ function drawCompass(
   // Grid convergence
   const gridConv = gridConvergence(midLat, midLon);
 
-  const size = mmToPx(20);
-  const cx = margin + size / 2;
-  const cy = stackY - size / 2;
+  const boxW = mmToPx(40);
+  const arrowLen = mmToPx(15);
+  const arrowSectionH = arrowLen + mmToPx(6); // headroom above + tip
+  const legendRowH = mmToPx(6);
+  const legendRows = 3;
+  const boxH = arrowSectionH + legendRows * legendRowH + mmToPx(4); // 4mm bottom pad
 
-  // Background
-  drawElementBackground(ctx, margin, stackY - size, size, size);
+  const boxX = margin;
+  const boxY = stackY - boxH;
 
-  const arrowLen = size * 0.35;
-  const fontSize = mmToPx(2);
+  drawElementBackground(ctx, boxX, boxY, boxW, boxH);
 
-  // Draw arrow helper
-  function drawArrow(
-    angleDeg: number,
-    color: string,
-    label: string,
-    angleLabel: string,
-  ) {
-    const angleRad = -angleDeg * DEG_TO_RAD; // negative because canvas Y is down
+  // Arrow origin: horizontally centred, with arrowLen of space above
+  const cx = boxX + boxW / 2;
+  const cy = boxY + mmToPx(3) + arrowLen; // 3mm top pad + arrow length
+
+  // Draw a single north arrow (no tip labels)
+  function drawArrow(angleDeg: number, color: string) {
+    const angleRad = -angleDeg * DEG_TO_RAD;
     const tipX = cx + Math.sin(angleRad) * arrowLen;
     const tipY = cy - Math.cos(angleRad) * arrowLen;
 
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = mmToPx(0.4);
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(tipX, tipY);
     ctx.stroke();
 
-    // Arrowhead
-    const headLen = mmToPx(1.5);
-    const headAngle = 0.4;
+    // Filled arrowhead
+    const headLen = mmToPx(2.5);
+    const headAngle = 0.35;
+    ctx.fillStyle = color;
     ctx.beginPath();
     ctx.moveTo(tipX, tipY);
     ctx.lineTo(
       tipX - headLen * Math.sin(angleRad - headAngle),
       tipY + headLen * Math.cos(angleRad - headAngle),
     );
-    ctx.moveTo(tipX, tipY);
     ctx.lineTo(
       tipX - headLen * Math.sin(angleRad + headAngle),
       tipY + headLen * Math.cos(angleRad + headAngle),
     );
-    ctx.stroke();
-
-    // Label at tip
-    ctx.fillStyle = color;
-    ctx.font = `bold ${fontSize}px sans-serif`;
-    const labelX = cx + Math.sin(angleRad) * (arrowLen + mmToPx(2));
-    const labelY = cy - Math.cos(angleRad) * (arrowLen + mmToPx(2));
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, labelX, labelY);
-
-    // Angle label below main label
-    if (angleLabel) {
-      ctx.font = `${mmToPx(1.5)}px sans-serif`;
-      ctx.fillText(angleLabel, labelX, labelY + fontSize);
-    }
+    ctx.closePath();
+    ctx.fill();
   }
 
-  // True North: straight up (0 degrees)
-  drawArrow(0, "#e11d48", "TN", "");
+  // Draw all three arrows (MN first so TN/GN render on top)
+  drawArrow(magDecl, "#16a34a");
+  drawArrow(gridConv, "#2563eb");
+  drawArrow(0, "#e11d48");
 
-  // Grid North: offset by grid convergence
-  drawArrow(
-    gridConv,
-    "#2563eb",
-    "GN",
-    `${gridConv >= 0 ? "+" : ""}${gridConv.toFixed(2)}°`,
-  );
+  // Legend: coloured line swatch + label text
+  const legendFontSize = mmToPx(2.5);
+  const swatchLen = mmToPx(5);
+  const swatchLineW = mmToPx(0.5);
+  const legendX = boxX + mmToPx(3);
+  const legendTextX = legendX + swatchLen + mmToPx(2);
+  let legendY = boxY + arrowSectionH + mmToPx(1);
 
-  // Magnetic North: offset by magnetic declination
-  drawArrow(
-    magDecl,
-    "#16a34a",
-    "MN",
-    `${magDecl >= 0 ? "+" : ""}${magDecl.toFixed(1)}°`,
-  );
+  ctx.font = `${legendFontSize}px sans-serif`;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "start";
 
-  // Reset text alignment
+  const entries: [string, string, string][] = [
+    ["#e11d48", "TN", "True North"],
+    ["#2563eb", "GN", `Grid North (${gridConv >= 0 ? "+" : ""}${gridConv.toFixed(2)}°)`],
+    ["#16a34a", "MN", `Mag. North (${magDecl >= 0 ? "+" : ""}${magDecl.toFixed(1)}°)`],
+  ];
+
+  for (const [color, abbr, desc] of entries) {
+    const rowMidY = legendY + legendRowH / 2;
+
+    // Coloured swatch line
+    ctx.strokeStyle = color;
+    ctx.lineWidth = swatchLineW;
+    ctx.beginPath();
+    ctx.moveTo(legendX, rowMidY);
+    ctx.lineTo(legendX + swatchLen, rowMidY);
+    ctx.stroke();
+
+    // Abbreviation (bold) + description
+    ctx.fillStyle = "#1a1a1a";
+    ctx.font = `bold ${legendFontSize}px sans-serif`;
+    ctx.fillText(abbr, legendTextX, rowMidY);
+    const abbrW = ctx.measureText(abbr + " ").width;
+    ctx.font = `${legendFontSize}px sans-serif`;
+    ctx.fillText(desc, legendTextX + abbrW, rowMidY);
+
+    legendY += legendRowH;
+  }
+
+  // Reset context state
   ctx.textAlign = "start";
   ctx.textBaseline = "alphabetic";
+
+  return boxY;
 }
 
 function drawGridLines(
@@ -957,38 +972,55 @@ function drawGridLines(
   ctx.lineWidth = 1;
 
   if (config.elements.gridLines === "enNorthing") {
-    // MGA easting/northing grid
+    // MGA easting/northing grid — convert each grid coordinate via
+    // MGA → lat/lon → pixel so lines align with the geographic canvas.
     const interval = config.scale <= 25000 ? 1000 : 10000;
+
+    // Use a single MGA zone based on the map centre to avoid cross-zone issues
+    const midLon = (east + west) / 2;
+    const zone = detectMgaZone(midLon);
 
     const swEN = toEastingNorthing(south, west);
     const neEN = toEastingNorthing(north, east);
 
-    // Vertical lines (eastings)
+    // Helper: lat/lon → canvas pixel (matches the geographic-linear canvas)
+    function toPixel(lat: number, lon: number) {
+      const x = ((lon - west) / (east - west)) * widthPx;
+      const y = ((north - lat) / (north - south)) * heightPx;
+      return { x, y };
+    }
+
+    // Vertical lines (constant easting, varying northing)
     const startE = Math.ceil(swEN.easting / interval) * interval;
     const endE = Math.floor(neEN.easting / interval) * interval;
     for (let e = startE; e <= endE; e += interval) {
-      const frac = (e - swEN.easting) / (neEN.easting - swEN.easting);
-      const x = frac * widthPx;
+      // Convert top and bottom endpoints from MGA to lat/lon then to pixel
+      const topLL = fromEastingNorthing(e, neEN.northing, zone);
+      const botLL = fromEastingNorthing(e, swEN.northing, zone);
+      const topPx = toPixel(topLL.lat, topLL.lon);
+      const botPx = toPixel(botLL.lat, botLL.lon);
       ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, heightPx);
+      ctx.moveTo(topPx.x, topPx.y);
+      ctx.lineTo(botPx.x, botPx.y);
       ctx.stroke();
       const label = interval >= 10000 ? `${e / 1000}` : `${e}`;
-      ctx.fillText(label, x + 2, fontSize + 2);
+      ctx.fillText(label, topPx.x + 2, fontSize + 2);
     }
 
-    // Horizontal lines (northings)
+    // Horizontal lines (constant northing, varying easting)
     const startN = Math.ceil(swEN.northing / interval) * interval;
     const endN = Math.floor(neEN.northing / interval) * interval;
     for (let n = startN; n <= endN; n += interval) {
-      const frac = (n - swEN.northing) / (neEN.northing - swEN.northing);
-      const y = heightPx - frac * heightPx; // northing increases upward
+      const leftLL = fromEastingNorthing(swEN.easting, n, zone);
+      const rightLL = fromEastingNorthing(neEN.easting, n, zone);
+      const leftPx = toPixel(leftLL.lat, leftLL.lon);
+      const rightPx = toPixel(rightLL.lat, rightLL.lon);
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(widthPx, y);
+      ctx.moveTo(leftPx.x, leftPx.y);
+      ctx.lineTo(rightPx.x, rightPx.y);
       ctx.stroke();
       const label = interval >= 10000 ? `${n / 1000}` : `${n}`;
-      ctx.fillText(label, 2, y - 2);
+      ctx.fillText(label, 2, leftPx.y - 2);
     }
   } else {
     // Lat/lon grid
