@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Switch } from "@mui/material";
 import { ChevronRight, GripVertical } from "lucide-react";
-import classes from "../Sidebar.module.css";
+import classes from "./OverlaysPanel.module.css";
 import { MASTER_TOPO_LAYERS } from "../../../topoLayerTypes";
 import type { TopoLayerFormat } from "../../../topoLayerTypes";
 import { apiFetch } from "../../../canyonUtils";
@@ -40,7 +40,11 @@ function OverlaysPanel({
   lidarEnabled: boolean;
   setLidarEnabled: (v: boolean) => void;
   lidarLayerToggles: Record<string, boolean>;
-  setLidarLayerToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
+  setLidarLayerToggles: (
+    v:
+      | Record<string, boolean>
+      | ((prev: Record<string, boolean>) => Record<string, boolean>),
+  ) => void;
   lidarLayerOrder: string[];
   setLidarLayerOrder: (v: string[] | ((prev: string[]) => string[])) => void;
 }) {
@@ -56,6 +60,7 @@ function OverlaysPanel({
   // Drag state
   const dragIndex = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
 
   // Fetch master layer URLs from API
   useEffect(() => {
@@ -85,7 +90,11 @@ function OverlaysPanel({
       .filter((name) => layerToggles[name] && layerMap.has(name))
       .map((name) => {
         const l = layerMap.get(name)!;
-        return { id: `master-${l.name}`, pmtilesUrl: l.pmtilesUrl, format: l.format };
+        return {
+          id: `master-${l.name}`,
+          pmtilesUrl: l.pmtilesUrl,
+          format: l.format,
+        };
       });
     const json = JSON.stringify(active);
     if (prevLayersJsonRef.current !== json) {
@@ -107,6 +116,7 @@ function OverlaysPanel({
   // Native HTML5 drag-and-drop handlers
   function onDragStart(index: number) {
     dragIndex.current = index;
+    setDraggingIndex(index);
   }
 
   function onDragOver(e: React.DragEvent, index: number) {
@@ -120,21 +130,25 @@ function OverlaysPanel({
     if (from === null || from === dropIndex) {
       dragIndex.current = null;
       setDragOverIndex(null);
+      setDraggingIndex(null);
       return;
     }
     setLayerOrder((prev) => {
       const next = [...prev];
       const [item] = next.splice(from, 1);
-      next.splice(dropIndex, 0, item);
+      const insertAt = from < dropIndex ? dropIndex - 1 : dropIndex;
+      next.splice(insertAt, 0, item);
       return next;
     });
     dragIndex.current = null;
     setDragOverIndex(null);
+    setDraggingIndex(null);
   }
 
   function onDragEnd() {
     dragIndex.current = null;
     setDragOverIndex(null);
+    setDraggingIndex(null);
   }
 
   const switchSx = (color: string) => ({
@@ -153,7 +167,7 @@ function OverlaysPanel({
           size="small"
           checked={showOwnedCanyons}
           onChange={(_, checked) => setShowOwnedCanyons(checked)}
-          sx={switchSx("#f97316")}
+          sx={switchSx("var(--theme-bonus-1)")}
         />
       </div>
 
@@ -164,7 +178,7 @@ function OverlaysPanel({
           size="small"
           checked={showSharedCanyons}
           onChange={(_, checked) => setShowSharedCanyons(checked)}
-          sx={switchSx("#3b82f6")}
+          sx={switchSx("var(--theme-bonus-2)")}
         />
       </div>
 
@@ -176,7 +190,9 @@ function OverlaysPanel({
               <button
                 className={`${classes.expandArrow} ${expanded ? classes.expandArrowOpen : ""}`}
                 onClick={() => setExpanded((v) => !v)}
-                aria-label={expanded ? "Collapse LiDAR layers" : "Expand LiDAR layers"}
+                aria-label={
+                  expanded ? "Collapse LiDAR layers" : "Expand LiDAR layers"
+                }
               >
                 <ChevronRight size={14} />
               </button>
@@ -187,20 +203,21 @@ function OverlaysPanel({
             size="small"
             checked={lidarEnabled}
             onChange={(_, checked) => handleLidarToggle(checked)}
-            sx={switchSx("#22d3ee")}
+            sx={switchSx("var(--theme-secondary)")}
           />
         </div>
 
         {lidarEnabled && expanded && (
           <div className={classes.subToggleList}>
             {layerOrder.map((name, i) => {
-              const layer = masterLayers.find((l) => l.name === name)
-                ?? MASTER_TOPO_LAYERS.find((l) => l.name === name);
+              const layer =
+                masterLayers.find((l) => l.name === name) ??
+                MASTER_TOPO_LAYERS.find((l) => l.name === name);
               const label = layer?.label ?? name;
               return (
                 <div
                   key={name}
-                  className={`${classes.subToggleRow} ${dragOverIndex === i ? classes.subToggleRowDragOver : ""}`}
+                  className={`${classes.subToggleRow} ${dragOverIndex === i ? classes.subToggleRowDragOver : ""} ${draggingIndex === i ? classes.subToggleRowDragging : ""}`}
                   draggable
                   onDragStart={() => onDragStart(i)}
                   onDragOver={(e) => onDragOver(e, i)}
@@ -217,11 +234,16 @@ function OverlaysPanel({
                     size="small"
                     checked={layerToggles[name] ?? true}
                     onChange={(_, checked) => handleSubToggle(name, checked)}
-                    sx={switchSx("#22d3ee")}
+                    sx={switchSx("var(--theme-secondary)")}
                   />
                 </div>
               );
             })}
+            <div
+              className={`${classes.dragSentinel} ${dragOverIndex === layerOrder.length ? classes.dragSentinelActive : ""}`}
+              onDragOver={(e) => onDragOver(e, layerOrder.length)}
+              onDrop={(e) => onDrop(e, layerOrder.length)}
+            />
           </div>
         )}
       </div>

@@ -9,7 +9,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import classes from "../Sidebar.module.css";
+import classes from "./CanyonDetailPanel.module.css";
 import CanyonDialog from "../../dialogs/CanyonDialog";
 import type { TCanyon, TFriend, TCanyonShare } from "../../../canyonUtils";
 import {
@@ -278,7 +278,7 @@ function CanyonDetailPanel({
                             >
                               <span>{friend.username}</span>
                               <button
-                                className={classes.addFriendButton}
+                                className={classes.addToShareButton}
                                 onClick={() => {
                                   setSelectedFriendIds([
                                     ...selectedFriendIds,

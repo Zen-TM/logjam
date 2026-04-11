@@ -1,0 +1,143 @@
+/* Styles for CanyonDetailPanel — canyon info, edit/delete, sharing UI */
+
+.canyonInfo {
+  padding: 0 1em;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.altNames {
+  font-style: italic;
+  opacity: 0.8;
+  font-size: var(--text-base);
+}
+
+.disclaimer {
+  font-size: var(--text-xs);
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.sourcesList {
+  margin: 0.3em 0;
+  padding-left: 1.2em;
+}
+
+.sourcesList a {
+  color: var(--theme-accent);
+}
+
+/* Canyon action buttons */
+
+.canyonActions {
+  display: flex;
+  gap: 0.5em;
+  margin-top: 1em;
+  padding-bottom: 1em;
+}
+
+.editButton {
+  composes: btn btnFilledAccent btnMd from '@styles/shared.module.css';
+  flex: 1;
+}
+
+.deleteButton {
+  composes: btn btnOutlineWarning btnMd from '@styles/shared.module.css';
+  flex: 1;
+}
+
+/* Sharing section */
+
+.shareSection {
+  margin-top: 0.5em;
+}
+
+.shareButton {
+  composes: btn btnFilledNeutral btnMd btnFull from '@styles/shared.module.css';
+}
+
+.shareSelector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  margin-top: 0.5em;
+}
+
+.searchResults {
+  composes: searchResults from '@styles/shared.module.css';
+}
+
+.searchResultItem {
+  composes: searchResultItem from '@styles/shared.module.css';
+}
+
+.addToShareButton {
+  composes: btn btnSm btnOutlineBonus1 from '@styles/shared.module.css';
+}
+
+.selectedFriends {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+}
+
+.friendChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  background-color: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border-radius: var(--radius-lg);
+  padding: 0.2em 0.5em;
+  font-size: var(--text-xs);
+}
+
+.chipRemove {
+  background: none;
+  border: none;
+  color: var(--theme-text-primary);
+  font-size: 1em;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.chipRemove:hover {
+  opacity: 1;
+}
+
+.sharedWithList {
+  margin-top: 0.5em;
+}
+
+.sharedWithRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.3em 0;
+  font-size: var(--text-sm);
+}
+
+.unshareButton {
+  composes: btn btnSm btnOutlineWarning from '@styles/shared.module.css';
+  flex-shrink: 0;
+}
+
+/* Shared canyon actions */
+
+.copyActions {
+  display: flex;
+  gap: 0.5em;
+  margin-top: 1em;
+}
+
+.copyButton {
+  composes: btn btnFilledNeutral btnMd from '@styles/shared.module.css';
+  flex: 1;
+}
+
+.copyButton:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: default;
+}

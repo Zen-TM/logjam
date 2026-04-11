@@ -39,7 +39,16 @@ function ImportDialog({
   }
 
   return (
-    <Dialog open={open} onClose={loading ? undefined : onClose}>
+    <Dialog
+      open={open}
+      onClose={loading ? undefined : onClose}
+      PaperProps={{
+        sx: {
+          backgroundColor: "var(--theme-primary)",
+          color: "var(--theme-text-primary)",
+        },
+      }}
+    >
       <DialogTitle>Welcome to Logjam</DialogTitle>
       <DialogContent>
         {!result && !loading && !error && (
@@ -72,14 +81,18 @@ function ImportDialog({
       <DialogActions>
         {!result && !loading && (
           <>
-            <Button onClick={onClose}>Skip for now</Button>
-            <Button variant="contained" onClick={handleImport}>
+            <Button onClick={onClose} sx={{ color: "var(--theme-text-primary)" }}>Skip for now</Button>
+            <Button
+              variant="contained"
+              color="secondary"
+              onClick={handleImport}
+            >
               Import canyons
             </Button>
           </>
         )}
         {(result || error) && (
-          <Button variant="contained" onClick={onClose}>
+          <Button variant="contained" color="secondary" onClick={onClose}>
             Close
           </Button>
         )}

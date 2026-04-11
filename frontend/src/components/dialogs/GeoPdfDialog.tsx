@@ -8,6 +8,9 @@ import {
   IconButton,
   CircularProgress,
   Typography,
+  Select,
+  MenuItem,
+  TextField,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import type { TBbox } from "../map/Map";
@@ -519,11 +522,28 @@ function GeoPdfDialog({
         {templateMode && (
           <div className={classes.section}>
             <div className={classes.sectionLabel}>Template name</div>
-            <input
-              className={classes.templateNameInput}
+            <TextField
               placeholder="Template name"
               value={editTemplateName}
               onChange={(e) => setEditTemplateName(e.target.value)}
+              size="small"
+              color="secondary"
+              sx={{
+                width: "100%",
+                background: "transparent",
+                "& .MuiOutlinedInput-notchedOutline": {
+                  border: "1px solid var(--theme-accent)",
+                },
+                "&:hover .MuiOutlinedInput-notchedOutline": {
+                  border: "1px solid var(--theme-accent)",
+                },
+                "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                  border: "1px solid var(--theme-accent)",
+                },
+                "& .MuiOutlinedInput-input": {
+                  padding: "0.25rem 0.5rem !important",
+                },
+              }}
             />
           </div>
         )}
@@ -533,39 +553,86 @@ function GeoPdfDialog({
           <div className={classes.section}>
             <div className={classes.sectionLabel}>Template</div>
             <div className={classes.templateRow}>
-              <select
-                className={classes.templateSelect}
+              <Select
                 value={selectedTemplateId ?? ""}
                 onChange={(e) => {
                   if (e.target.value) handleTemplateSelect(e.target.value);
                   else setSelectedTemplateId(null);
                 }}
+                size="small"
+                sx={{
+                  flex: 1,
+                  background: "transparent",
+                  border: "1px solid var(--theme-accent)",
+                  borderRadius: "var(--radius-sm)",
+                  "& .MuiOutlinedInput-notchedOutline": {
+                    border: "none",
+                  },
+                  "&:hover .MuiOutlinedInput-notchedOutline": {
+                    border: "none",
+                  },
+                  "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                    border: "none",
+                  },
+                  "& .MuiOutlinedInput-input": {
+                    padding: "0.25rem 0.5rem !important",
+                  },
+                }}
+                MenuProps={{
+                  PaperProps: {
+                    sx: {
+                      backgroundColor: "var(--theme-primary)",
+                      boxShadow: "0 8px 16px rgba(0, 0, 0, 0.3)",
+                    },
+                  },
+                }}
               >
-                <option value="">— None —</option>
+                <MenuItem value="">— None —</MenuItem>
                 {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
+                  <MenuItem key={t.id} value={t.id}>
                     {t.name}
-                  </option>
+                  </MenuItem>
                 ))}
-              </select>
+              </Select>
               <button
-                className={classes.smallButton}
+                className={classes.smallButtonActive}
                 onClick={() => setShowSaveTemplate(!showSaveTemplate)}
+                style={{ fontSize: "0.9em", alignSelf: "stretch" }}
               >
                 {showSaveTemplate ? "Cancel" : "Save as template"}
               </button>
             </div>
             {showSaveTemplate && (
               <div className={classes.templateSaveRow}>
-                <input
-                  className={classes.templateNameInput}
+                <TextField
                   placeholder="Template name"
                   value={templateName}
                   onChange={(e) => setTemplateName(e.target.value)}
+                  size="small"
+                  color="secondary"
+                  sx={{
+                    flex: 1,
+                    background: "transparent",
+                    border: "1px solid var(--theme-accent)",
+                    borderRadius: "var(--radius-sm)",
+                    "& .MuiOutlinedInput-notchedOutline": {
+                      border: "none",
+                    },
+                    "&:hover .MuiOutlinedInput-notchedOutline": {
+                      border: "none",
+                    },
+                    "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                      border: "none",
+                    },
+                    "& .MuiOutlinedInput-input": {
+                      padding: "0.25rem 0.5rem !important",
+                    },
+                  }}
                 />
                 <button
-                  className={classes.smallButton}
+                  className={classes.smallButtonActive}
                   onClick={handleSaveTemplate}
+                  style={{ fontSize: "0.9em", alignSelf: "stretch" }}
                 >
                   Save
                 </button>
@@ -583,8 +650,8 @@ function GeoPdfDialog({
                 key={size}
                 className={
                   extentState.paperSize === size
-                    ? classes.paperButtonActive
-                    : classes.paperButton
+                    ? classes.smallButtonActive
+                    : classes.smallButton
                 }
                 onClick={() =>
                   setExtentState(applyPaperChange(extentState, size))
@@ -607,8 +674,8 @@ function GeoPdfDialog({
                 key={o}
                 className={
                   extentState.orientation === o
-                    ? classes.paperButtonActive
-                    : classes.paperButton
+                    ? classes.smallButtonActive
+                    : classes.smallButton
                 }
                 onClick={() =>
                   setExtentState(applyOrientationChange(extentState, o))
@@ -660,8 +727,8 @@ function GeoPdfDialog({
                 key={mode}
                 className={
                   extentState.lockMode === mode
-                    ? classes.paperButtonActive
-                    : classes.paperButton
+                    ? classes.smallButtonActive
+                    : classes.smallButton
                 }
                 onClick={() =>
                   setExtentState({ ...extentState, lockMode: mode })
@@ -682,8 +749,8 @@ function GeoPdfDialog({
                 key={mode}
                 className={
                   extentState.coordMode === mode
-                    ? classes.paperButtonActive
-                    : classes.paperButton
+                    ? classes.smallButtonActive
+                    : classes.smallButton
                 }
                 onClick={() =>
                   setExtentState(applyCoordModeChange(extentState, mode))
@@ -861,6 +928,9 @@ function GeoPdfDialog({
                     name="geopdf-base-layer"
                     checked={selectedBaseLayer === layer.id}
                     onChange={() => setSelectedBaseLayer(layer.id)}
+                    style={{
+                      accentColor: "var(--theme-accent)",
+                    }}
                   />
                   {layer.name}
                 </label>
@@ -874,6 +944,9 @@ function GeoPdfDialog({
                     type="checkbox"
                     checked={selectedOverlays.has(layer.name)}
                     onChange={() => toggleOverlay(layer.name)}
+                    style={{
+                      accentColor: "var(--theme-accent)",
+                    }}
                   />
                   {layer.label}
                 </label>
@@ -891,6 +964,9 @@ function GeoPdfDialog({
               type="checkbox"
               checked={titleEnabled}
               onChange={(e) => setTitleEnabled(e.target.checked)}
+              style={{
+                accentColor: "var(--theme-accent)",
+              }}
             />
             <span>Title</span>
             {titleEnabled && (
@@ -908,6 +984,9 @@ function GeoPdfDialog({
               type="checkbox"
               checked={compassEnabled}
               onChange={(e) => setCompassEnabled(e.target.checked)}
+              style={{
+                accentColor: "var(--theme-accent)",
+              }}
             />
             <span>North arrow (TN / GN / MN)</span>
           </div>
@@ -917,6 +996,9 @@ function GeoPdfDialog({
               type="checkbox"
               checked={contourEnabled}
               onChange={(e) => setContourEnabled(e.target.checked)}
+              style={{
+                accentColor: "var(--theme-accent)",
+              }}
             />
             <span>Contour interval text</span>
             {contourEnabled && extentState.scale > 0 && (
@@ -931,6 +1013,9 @@ function GeoPdfDialog({
               type="checkbox"
               checked={scaleTextEnabled}
               onChange={(e) => setScaleTextEnabled(e.target.checked)}
+              style={{
+                accentColor: "var(--theme-accent)",
+              }}
             />
             <span>Scale text</span>
             {scaleTextEnabled && (
@@ -945,6 +1030,9 @@ function GeoPdfDialog({
               type="checkbox"
               checked={scaleBarEnabled}
               onChange={(e) => setScaleBarEnabled(e.target.checked)}
+              style={{
+                accentColor: "var(--theme-accent)",
+              }}
             />
             <span>Scale bar</span>
           </div>
@@ -954,6 +1042,9 @@ function GeoPdfDialog({
               type="checkbox"
               checked={gridLinesEnabled}
               onChange={(e) => setGridLinesEnabled(e.target.checked)}
+              style={{
+                accentColor: "var(--theme-accent)",
+              }}
             />
             <span>Grid lines</span>
             {gridLinesEnabled && (
@@ -968,8 +1059,8 @@ function GeoPdfDialog({
                     key={mode}
                     className={
                       gridLinesMode === mode
-                        ? classes.paperButtonActive
-                        : classes.paperButton
+                        ? classes.smallButtonActive
+                        : classes.smallButton
                     }
                     onClick={() => setGridLinesMode(mode)}
                     style={{ padding: "0.15em 0.5em", fontSize: "0.8em" }}
@@ -1002,13 +1093,7 @@ function GeoPdfDialog({
             variant="contained"
             onClick={handleSaveTemplateMode}
             disabled={!editTemplateName.trim()}
-            sx={{
-              backgroundColor: "var(--theme-accent)",
-              "&:hover": {
-                backgroundColor:
-                  "color-mix(in srgb var(--theme-accent) 80% transparent)",
-              },
-            }}
+            color="secondary"
           >
             Save Template
           </Button>
@@ -1017,13 +1102,7 @@ function GeoPdfDialog({
             variant="contained"
             onClick={handleGenerate}
             disabled={generating || !extentValid}
-            sx={{
-              backgroundColor: "var(--theme-accent)",
-              "&:hover": {
-                backgroundColor:
-                  "color-mix(in srgb var(--theme-accent) 80% transparent)",
-              },
-            }}
+            color="secondary"
           >
             {generating ? (
               <>

@@ -3,7 +3,7 @@
   top: 0;
   left: 0;
   bottom: 0;
-  width: 56px;
+  width: var(--nav-rail-width);
   background-color: var(--theme-primary);
   display: flex;
   flex-direction: column;
@@ -12,7 +12,7 @@
   padding-top: 8px;
   padding-bottom: 8px;
   box-sizing: border-box;
-  box-shadow: 8px 0 8px -4px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-nav);
 }
 
 .spacer {
@@ -30,15 +30,15 @@
   background: transparent;
   color: var(--theme-text-primary);
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   margin-bottom: 4px;
   font-size: 0;
   gap: 2px;
   position: relative;
   opacity: 0.6;
   transition:
-    opacity 0.15s,
-    background-color 0.15s;
+    opacity var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
 .navItem:hover {
@@ -48,7 +48,7 @@
 
 .navItem.active {
   opacity: 1;
-  background-color: color-mix(in srgb, var(--theme-accent) 55%, transparent);
+  background-color: color-mix(in srgb, var(--theme-secondary) 80%, transparent);
 }
 
 .label {
@@ -63,7 +63,7 @@
   right: 2px;
   background-color: color-mix(in srgb, var(--theme-warning) 55%, transparent);
   color: color-mix(in srgb, var(--theme-text-primary) 55%, transparent);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   font-size: 9px;
   min-width: 14px;
   height: 14px;

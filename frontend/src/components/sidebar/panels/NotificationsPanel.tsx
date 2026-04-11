@@ -1,5 +1,5 @@
 import { Typography } from "@mui/material";
-import classes from "../Sidebar.module.css";
+import classes from "./NotificationsPanel.module.css";
 import type { TNotification } from "../../../canyonUtils";
 import type { PanelId } from "../panels";
 import {
@@ -27,7 +27,7 @@ function NotificationsPanel({
     <>
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.5em" }}>
         <button
-          className={classes.addFriendButton}
+          className={classes.markAllReadButton}
           onClick={async () => {
             await markAllNotificationsRead();
             onRefetchNotifications();

@@ -23,50 +23,54 @@ function FiltersPanel({
     wetsuits: filters.wetsuits || [1, 5],
   });
 
-  function sliderFilterInput(
+  function sliderCell(
     name: keyof TFilters,
     displayName: string,
     range: [number, number] = [1, 7],
     step: number = 1,
   ) {
+    const value =
+      Array.isArray(filterInputs[name]) &&
+      typeof filterInputs[name][0] === "number"
+        ? (filterInputs[name] as number[])
+        : range;
+
     return (
-      <>
-        <h4>{displayName}</h4>
+      <div className={classes.sliderCell} key={name}>
+        <div className={classes.sliderLabel}>
+          <span className={classes.sliderLabelText}>{displayName}</span>
+          <span className={classes.sliderValue}>
+            {value[0]}–{value[1]}
+          </span>
+        </div>
         <Slider
           id={name}
-          style={{ width: "100%" }}
+          color="secondary"
           marks={step === 1}
           step={step}
           min={range[0]}
           max={range[1]}
-          value={
-            Array.isArray(filterInputs[name]) &&
-            typeof filterInputs[name][0] === "number"
-              ? (filterInputs[name] as number[])
-              : range
-          }
+          value={value}
           valueLabelDisplay="auto"
-          onChange={(_e, value) => {
-            if (Array.isArray(value) && value.length === 2) {
-              setFilterInputs({
-                ...filterInputs,
-                [name]: value,
-              });
+          onChange={(_e, v) => {
+            if (Array.isArray(v) && v.length === 2) {
+              setFilterInputs({ ...filterInputs, [name]: v });
             }
           }}
         />
-      </>
+      </div>
     );
   }
 
-  function selectNumberFilterInput(name: keyof TFilters, displayName: string) {
+  function selectCell(name: keyof TFilters, displayName: string) {
     return (
-      <>
-        <h4>{displayName}</h4>
+      <div className={classes.selectCell} key={name}>
+        <div className={classes.selectLabel}>{displayName}</div>
         <div className={classes.selectContainer}>
           <Select
             id={`${name}Operator`}
             className={classes.select}
+            color="secondary"
             size="small"
             value={filterInputs[name][0] ?? "Any"}
             onChange={(e) => {
@@ -75,81 +79,108 @@ function FiltersPanel({
                 [name]: [e.target.value, filterInputs[name][1] || 0],
               });
             }}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  backgroundColor: "var(--theme-primary)",
+                  boxShadow: "0 8px 16px rgba(0, 0, 0, 0.3)",
+                },
+              },
+            }}
           >
             <MenuItem value="Any">Any</MenuItem>
-            <MenuItem value="Less than">Less than</MenuItem>
-            <MenuItem value="More than">More than</MenuItem>
-            <MenuItem value="Exactly">Exactly</MenuItem>
+            <MenuItem value="Less than">&lt;</MenuItem>
+            <MenuItem value="More than">&gt;</MenuItem>
+            <MenuItem value="Exactly">=</MenuItem>
           </Select>
-          {filterInputs[name][0] === "Any" || (
+          {filterInputs[name][0] !== "Any" && (
             <TextField
               id={`${name}Count`}
               className={classes.numberInput}
               type="number"
               size="small"
+              color="secondary"
               value={filterInputs[name][1] || 0}
               onChange={(e) => {
-                const value = parseInt(e.target.value, 10);
-                if (!isNaN(value)) {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v)) {
                   setFilterInputs({
                     ...filterInputs,
-                    [name]: [filterInputs[name][0], value],
+                    [name]: [filterInputs[name][0], v],
                   });
                 }
               }}
             />
           )}
         </div>
-      </>
+      </div>
     );
   }
 
   return (
     <div className={classes.filterOptions}>
-      <div className={classes.searchContainer}>
-        <TextField
-          id="name"
-          className={classes.searchInput}
-          type="search"
-          size="small"
-          label="Search by name"
-          value={filterInputs.name}
-          slotProps={{
-            input: {
-              endAdornment: (
-                <img className={`${classes.search} icon`} src={Search} />
-              ),
-            },
-          }}
-          onChange={(e) => {
-            const value = e.target.value.trim();
-            setFilterInputs({
-              ...filterInputs,
-              name: value,
-            });
-          }}
-        />
+      <div className={classes.scrollArea}>
+        <div className={classes.searchContainer}>
+          <TextField
+            id="name"
+            className={classes.searchInput}
+            type="search"
+            size="small"
+            label="Search by name"
+            value={filterInputs.name}
+            slotProps={{
+              input: {
+                endAdornment: (
+                  <img className={`${classes.search} icon`} src={Search} />
+                ),
+              },
+            }}
+            onChange={(e) => {
+              setFilterInputs({ ...filterInputs, name: e.target.value.trim() });
+            }}
+          />
+        </div>
+
+        <div className={classes.section}>
+          <div className={classes.sectionHeader}>Grades</div>
+          <div className={classes.sliderGrid}>
+            {sliderCell("v_grade", "Vertical", [1, 7])}
+            {sliderCell("a_grade", "Aquatic", [1, 7])}
+            {sliderCell("commitment", "Commitment", [1, 6])}
+          </div>
+        </div>
+
+        <div className={classes.section}>
+          <div className={classes.sectionHeader}>Character</div>
+          <div className={classes.sliderGrid}>
+            {sliderCell("quality", "Quality", [1, 5])}
+            {sliderCell("wetsuits", "Wetsuits", [1, 5])}
+          </div>
+        </div>
+
+        <div className={classes.section}>
+          <div className={classes.sectionHeader}>Logistics</div>
+          <div className={classes.selectGrid}>
+            {selectCell("pitches", "Pitches")}
+            {selectCell("longest_pitch", "Longest pitch")}
+            {selectCell("hours", "Hours")}
+          </div>
+        </div>
       </div>
-      {sliderFilterInput("v_grade", "Vertical Grade")}
-      {sliderFilterInput("a_grade", "Aquatic Grade")}
-      {sliderFilterInput("commitment", "Commitment", [1, 6])}
-      {sliderFilterInput("quality", "Quality", [1, 5])}
-      {selectNumberFilterInput("pitches", "Pitches")}
-      {selectNumberFilterInput("longest_pitch", "Longest Pitch")}
-      {selectNumberFilterInput("hours", "Hours")}
-      {sliderFilterInput("wetsuits", "Wetsuits", [1, 5])}
-      <div className={classes.buttonContainer}>
+
+      <div className={classes.buttonBar}>
         <Button
           variant="contained"
+          color="secondary"
           onClick={() => onChangeFilters({ ...filters, ...filterInputs })}
         >
           Apply
         </Button>
         <Button
-          variant="contained"
-          color="primary"
+          variant="outlined"
+          color="secondary"
           onClick={() => {
-            onChangeFilters({
+            const reset: TFilters = {
               name: null,
               v_grade: [1, 7],
               a_grade: [1, 7],
@@ -159,7 +190,8 @@ function FiltersPanel({
               longest_pitch: null,
               hours: null,
               wetsuits: null,
-            });
+            };
+            onChangeFilters(reset);
             setFilterInputs({
               name: "",
               v_grade: [1, 7],

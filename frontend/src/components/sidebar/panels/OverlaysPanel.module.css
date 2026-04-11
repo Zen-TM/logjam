@@ -1,0 +1,100 @@
+/* Styles for OverlaysPanel — canyon toggles, LiDAR topo layer management */
+
+.optionsContent {
+  composes: optionsContent from '@styles/shared.module.css';
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-base);
+}
+
+.lidarSection {
+  border-top: 1px solid color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
+  padding-top: 0.4em;
+}
+
+.lidarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-base);
+}
+
+.lidarHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.expandArrow {
+  background: none;
+  border: none;
+  color: var(--theme-text-primary);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  transition: transform var(--transition-med) ease;
+}
+
+.expandArrowOpen {
+  transform: rotate(90deg);
+}
+
+.subToggleList {
+  display: flex;
+  flex-direction: column;
+  padding-left: 0.2em;
+  margin-top: 0.2em;
+}
+
+.subToggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  padding: 0.15em 0;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-fast);
+}
+
+.subToggleRow:hover {
+  background-color: color-mix(in srgb, var(--theme-text-primary) 6%, transparent);
+}
+
+.subToggleRowDragOver {
+  border-top: 2px solid var(--theme-bonus-1);
+}
+
+.subToggleRowDragging {
+  opacity: var(--opacity-dimmed);
+}
+
+.dragSentinel {
+  height: 2em;
+}
+
+.dragSentinelActive {
+  border-top: 2px solid var(--theme-bonus-1);
+}
+
+.subToggleLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.dragHandle {
+  color: var(--theme-text-primary);
+  opacity: var(--opacity-dimmed);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+}
+
+.dragHandle:hover {
+  opacity: 0.8;
+}

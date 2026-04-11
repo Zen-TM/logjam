@@ -1,0 +1,152 @@
+/* Shared button and input patterns — compose from this file in panel modules */
+
+/* ─── Base button ─────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  transition:
+    opacity var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+/* ─── Colour variants ─────────────────────────────────────────────────────── */
+
+.btnFilledAccent {
+  background-color: var(--theme-accent);
+  color: var(--theme-text-primary);
+  border: none;
+}
+
+.btnFilledAccent:hover {
+  opacity: 0.9;
+}
+
+.btnFilledNeutral {
+  background-color: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  border: none;
+}
+
+.btnFilledNeutral:hover {
+  opacity: 0.9;
+}
+
+.btnOutlineAccent {
+  background-color: transparent;
+  border: 1px solid var(--theme-accent);
+  color: var(--theme-accent);
+}
+
+.btnOutlineAccent:hover {
+  background-color: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+}
+
+.btnOutlineWarning {
+  background-color: transparent;
+  border: 1px solid var(--theme-warning);
+  color: var(--theme-warning);
+}
+
+.btnOutlineWarning:hover {
+  background-color: color-mix(in srgb, var(--theme-warning) 12%, transparent);
+}
+
+.btnGhost {
+  background-color: transparent;
+  border: 1px solid var(--theme-secondary);
+  color: var(--theme-text-primary);
+}
+
+.btnGhost:hover {
+  background-color: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+}
+
+/* ─── Size modifiers ──────────────────────────────────────────────────────── */
+
+.btnSm {
+  padding: 0.2em 0.5em;
+  font-size: var(--text-sm);
+}
+
+.btnMd {
+  padding: 0.5em 1em;
+  font-size: var(--text-base);
+}
+
+.btnFull {
+  width: 100%;
+}
+
+/* ─── Input ───────────────────────────────────────────────────────────────── */
+
+.input {
+  padding: 0.3em 0.5em;
+  background: transparent;
+  color: var(--theme-text-primary);
+  border: 1px solid var(--theme-accent);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+/* ─── Additional colour variant ───────────────────────────────────────────── */
+
+.btnOutlineBonus1 {
+  background-color: transparent;
+  border: 1px solid var(--theme-bonus-1);
+  color: var(--theme-bonus-1);
+}
+
+.btnOutlineBonus1:hover {
+  background-color: color-mix(in srgb, var(--theme-bonus-1) 12%, transparent);
+}
+
+/* ─── Structural ──────────────────────────────────────────────────────────── */
+
+.divider {
+  border-top: 1px solid color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
+}
+
+.sectionLabel {
+  font-size: 0.7em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.45;
+  color: var(--theme-text-primary);
+}
+
+/* ─── Shared layout ───────────────────────────────────────────────────────── */
+
+/* Panel content wrapper used by multiple panels */
+.optionsContent {
+  padding: 0.5em 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* Dropdown results list (friend search, share selector) */
+.searchResults {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--theme-secondary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.searchResultItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4em 0.6em;
+  font-size: var(--text-sm);
+}
+
+.searchResultItem + .searchResultItem {
+  border-top: 1px solid color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
+}

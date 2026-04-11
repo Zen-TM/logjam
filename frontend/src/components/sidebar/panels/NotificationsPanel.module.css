@@ -1,0 +1,56 @@
+/* Styles for NotificationsPanel — notification list, accept/decline actions */
+
+.markAllReadButton {
+  composes: btn btnSm btnOutlineBonus1 from '@styles/shared.module.css';
+}
+
+.notificationList {
+  padding: 0 1em;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.notificationItem {
+  padding: 0.6em 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.notificationItem:last-child {
+  border-bottom: none;
+}
+
+.notificationUnread {
+  border-left: 3px solid var(--theme-accent);
+  padding-left: 0.5em;
+}
+
+.notificationText {
+  margin-bottom: 0.3em;
+}
+
+.notificationTime {
+  font-size: var(--text-xs);
+  opacity: var(--opacity-muted);
+}
+
+.notificationActions {
+  display: flex;
+  gap: 0.3em;
+  margin-top: 0.3em;
+}
+
+.acceptButton {
+  composes: btn btnSm btnOutlineAccent from '@styles/shared.module.css';
+}
+
+.declineButton {
+  composes: btn btnSm btnOutlineWarning from '@styles/shared.module.css';
+}
+
+.clearAllButton {
+  composes: btn btnGhost btnFull from '@styles/shared.module.css';
+  padding: 0.5em;
+  font-size: var(--text-xs);
+}

@@ -15,7 +15,12 @@ function SignIn({
   authState: AuthState;
   error: string | null;
   onSignIn: (username: string, password: string) => Promise<void>;
-  onSignUp: (username: string, password: string, email: string, name: string) => Promise<void>;
+  onSignUp: (
+    username: string,
+    password: string,
+    email: string,
+    name: string,
+  ) => Promise<void>;
   onConfirmSignUp: (code: string) => Promise<void>;
   goToSignUp: () => void;
   goToSignIn: () => void;

@@ -12,6 +12,7 @@ import {
   IconButton,
   Typography,
 } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import type { TCanyon } from "../../canyonUtils";
 import { updateCanyon, createCanyon } from "../../canyonUtils";
 
@@ -31,6 +32,18 @@ const WETSUIT_GRADES = [1, 2, 3, 4, 5] as const;
 const selectSx = {
   "& .MuiSelect-select": { color: "var(--theme-text-primary)" },
   "& .MuiSelect-icon": { color: "var(--theme-text-primary)" },
+};
+
+const selectProps = {
+  MenuProps: {
+    PaperProps: {
+      sx: {
+        backgroundColor: "var(--theme-primary)",
+        color: "var(--theme-text-primary)",
+        boxShadow: "0 8px 16px rgba(0, 0, 0, 0.3)",
+      },
+    },
+  },
 };
 
 type Source = { label: string; url: string };
@@ -196,14 +209,29 @@ function CanyonDialog({
           backgroundColor: "var(--theme-primary)",
           color: "var(--theme-text-primary)",
           "& .MuiInputBase-input": { color: "var(--theme-text-primary)" },
-          "& .MuiInputBase-inputMultiline": {
-            color: "var(--theme-text-primary)",
-          },
+          "& .MuiInputBase-inputMultiline": { color: "var(--theme-text-primary)" },
+          "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
+          "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
+          "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
+          "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
+          "& .MuiInputLabel-root.Mui-focused": { color: "var(--theme-accent)" },
         },
       }}
     >
-      <DialogTitle>{isEdit ? "Edit Canyon" : "Add Canyon"}</DialogTitle>
-      <DialogContent>
+      <DialogTitle
+        sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}
+      >
+        {isEdit ? "Edit Canyon" : "Add Canyon"}
+        <IconButton
+          size="small"
+          onClick={saving ? undefined : onClose}
+          disabled={saving}
+          sx={{ color: "var(--theme-text-primary)" }}
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
           <TextField
             label="Name"
@@ -236,17 +264,12 @@ function CanyonDialog({
               fullWidth
             />
             <Button
-              variant="outlined"
+              variant="contained"
+              color="secondary"
               sx={{
                 whiteSpace: "nowrap",
                 minWidth: "auto",
                 height: "40px",
-                color: "var(--theme-text-primary)",
-                borderColor: "var(--theme-accent)",
-                "&:hover": {
-                  borderColor: "var(--theme-text-primary)",
-                  backgroundColor: "rgba(255,255,255,0.08)",
-                },
               }}
               onClick={handlePickCoords}
             >
@@ -264,6 +287,7 @@ function CanyonDialog({
               size="small"
               fullWidth
               sx={selectSx}
+              SelectProps={selectProps}
             >
               <MenuItem value="">None</MenuItem>
               {V_GRADES.map((v) => (
@@ -282,6 +306,7 @@ function CanyonDialog({
               size="small"
               fullWidth
               sx={selectSx}
+              SelectProps={selectProps}
             >
               <MenuItem value="">None</MenuItem>
               {A_GRADES.map((a) => (
@@ -302,6 +327,7 @@ function CanyonDialog({
               size="small"
               fullWidth
               sx={selectSx}
+              SelectProps={selectProps}
             >
               <MenuItem value="">None</MenuItem>
               {COMMITMENTS.map((c) => (
@@ -322,6 +348,7 @@ function CanyonDialog({
               size="small"
               fullWidth
               sx={selectSx}
+              SelectProps={selectProps}
             >
               <MenuItem value="">None</MenuItem>
               {QUALITY_GRADES.map((q) => (
@@ -340,6 +367,7 @@ function CanyonDialog({
               size="small"
               fullWidth
               sx={selectSx}
+              SelectProps={selectProps}
             >
               <MenuItem value="">None</MenuItem>
               {WETSUIT_GRADES.map((w) => (
@@ -419,7 +447,7 @@ function CanyonDialog({
                   size="small"
                   onClick={() => setSources(sources.filter((_, j) => j !== i))}
                   sx={{
-                    color: "#e57373",
+                    color: "var(--theme-warning)",
                     flexShrink: 0,
                     width: 32,
                     height: 32,
@@ -436,8 +464,8 @@ function CanyonDialog({
                 color: "var(--theme-text-primary)",
                 borderColor: "var(--theme-accent)",
                 "&:hover": {
-                  borderColor: "var(--theme-text-primary)",
-                  backgroundColor: "rgba(255,255,255,0.08)",
+                  backgroundColor:
+                    "color-mix(in srgb, var(--theme-accent) 20%, transparent)",
                 },
               }}
               onClick={() => setSources([...sources, { label: "", url: "" }])}
@@ -460,10 +488,16 @@ function CanyonDialog({
             onClose();
           }}
           disabled={saving}
+          sx={{ color: "var(--theme-text-primary)" }}
         >
           Cancel
         </Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving}>
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={handleSave}
+          disabled={saving}
+        >
           {saving ? <CircularProgress size={20} /> : "Save"}
         </Button>
       </DialogActions>

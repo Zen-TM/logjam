@@ -343,12 +343,7 @@ function App() {
           setShowGeoPdf(true);
         }}
       />
-      <div
-        style={{
-          pointerEvents: dimUI ? "none" : undefined,
-          opacity: dimUI ? 0.5 : undefined,
-        }}
-      >
+      <div className={dimUI ? classes.dimmed : undefined}>
         <NavRail
           activePanel={activePanel}
           onPanelChange={handlePanelChange}
@@ -470,7 +465,7 @@ function App() {
               <Typography key={c.id} variant="body2" sx={{ py: 0.2 }}>
                 {c.name}
                 {!ownedCanyonIds.has(c.id) && (
-                  <span style={{ opacity: 0.5, marginLeft: "0.5em" }}>
+                  <span className={classes.sharedLabel}>
                     (shared)
                   </span>
                 )}
@@ -508,25 +503,11 @@ function App() {
                     .map((friend) => (
                       <div
                         key={friend.id}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "0.4em 0.6em",
-                          fontSize: "0.85em",
-                        }}
+                        className={classes.bulkShareResultItem}
                       >
                         <span>{friend.username}</span>
                         <button
-                          style={{
-                            backgroundColor: "transparent",
-                            border: "1px solid var(--theme-bonus-1)",
-                            color: "var(--theme-bonus-1)",
-                            borderRadius: "4px",
-                            padding: "0.2em 0.6em",
-                            fontSize: "0.85em",
-                            cursor: "pointer",
-                          }}
+                          className={classes.bulkShareAddButton}
                           onClick={() => {
                             setBulkShareFriendIds([
                               ...bulkShareFriendIds,
@@ -542,38 +523,15 @@ function App() {
                 </Box>
               )}
               {bulkShareFriendIds.length > 0 && (
-                <div
-                  style={{ display: "flex", flexWrap: "wrap", gap: "0.3em" }}
-                >
+                <div className={classes.selectedFriendChips}>
                   {bulkShareFriendIds.map((id) => {
                     const f = friends.find((fr) => fr.id === id);
                     if (!f) return null;
                     return (
-                      <span
-                        key={id}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "0.3em",
-                          backgroundColor: "var(--theme-accent)",
-                          color: "var(--theme-text-primary)",
-                          borderRadius: "12px",
-                          padding: "0.2em 0.5em",
-                          fontSize: "0.8em",
-                        }}
-                      >
+                      <span key={id} className={classes.friendChip}>
                         {f.username}
                         <button
-                          style={{
-                            background: "none",
-                            border: "none",
-                            color: "var(--theme-text-primary)",
-                            fontSize: "1em",
-                            lineHeight: 1,
-                            padding: 0,
-                            cursor: "pointer",
-                            opacity: 0.7,
-                          }}
+                          className={classes.chipRemove}
                           onClick={() =>
                             setBulkShareFriendIds(
                               bulkShareFriendIds.filter((fid) => fid !== id),

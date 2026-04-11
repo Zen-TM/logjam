@@ -1,9 +1,4 @@
-export type ThemeSchemeId =
-  | "sandstoneClassic"
-  | "basaltPool"
-  | "scribblyGum"
-  | "blueMalleeMist"
-  | "topoIronbark";
+export type ThemeSchemeId = "sandstone" | "basalt" | "scribblyGum" | "ironbark";
 
 export type ThemeTokens = {
   primary: string;
@@ -28,17 +23,17 @@ export type UserUiPreferences = {
   themeSchemeId: ThemeSchemeId;
 };
 
-export const DEFAULT_THEME_SCHEME_ID: ThemeSchemeId = "sandstoneClassic";
+export const DEFAULT_THEME_SCHEME_ID: ThemeSchemeId = "sandstone";
 
 export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
-  sandstoneClassic: {
-    id: "sandstoneClassic",
-    name: "Sandstone Classic",
+  sandstone: {
+    id: "sandstone",
+    name: "Sandstone",
     description: "Warm weathered sandstone with iron-rich accents.",
     tokens: {
       primary: "#4E4944",
       secondary: "#8C7A5B",
-      accent: "#C79657",
+      accent: "#B87333",
       textPrimary: "#F7F3EC",
       textMuted: "#D8CCB9",
       warning: "#C05A1A",
@@ -47,13 +42,13 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       bonus3: "#9C5A2E",
     },
   },
-  basaltPool: {
-    id: "basaltPool",
-    name: "Basalt Pool",
+  basalt: {
+    id: "basalt",
+    name: "Basalt",
     description: "Cool plunge-water blues against dark gorge rock.",
     tokens: {
       primary: "#2B3F52",
-      secondary: "#9B5E33",
+      secondary: "#886043",
       accent: "#4BB4D9",
       textPrimary: "#EAF1F6",
       textMuted: "#A7BBC9",
@@ -70,7 +65,7 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
     tokens: {
       primary: "#2F4F3E",
       secondary: "#7B9D88",
-      accent: "#6CBF8E",
+      accent: "#D4A470",
       textPrimary: "#EAF2EC",
       textMuted: "#B4C8BC",
       warning: "#C44536",
@@ -79,30 +74,14 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       bonus3: "#DCE7DA",
     },
   },
-  blueMalleeMist: {
-    id: "blueMalleeMist",
-    name: "Blue Mallee Mist",
-    description: "Blue-range haze with warm sunlit escarpment tones.",
-    tokens: {
-      primary: "#5A7FA3",
-      secondary: "#D49A6E",
-      accent: "#2A9EB1",
-      textPrimary: "#1F2A33",
-      textMuted: "#5D6975",
-      warning: "#B23B2B",
-      bonus1: "#E7D9BA",
-      bonus2: "#3F5D4B",
-      bonus3: "#7BA7C2",
-    },
-  },
-  topoIronbark: {
-    id: "topoIronbark",
-    name: "Topo Ironbark",
+  ironbark: {
+    id: "ironbark",
+    name: "Ironbark",
     description: "Topographic ink tones with native vegetation highlights.",
     tokens: {
       primary: "#2B3A3F",
       secondary: "#4F6F66",
-      accent: "#E0BE62",
+      accent: "#B8694F",
       textPrimary: "#ECF2EF",
       textMuted: "#A7B8B2",
       warning: "#E06A4E",
@@ -114,11 +93,10 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
 };
 
 export const THEME_SCHEME_ORDER: ThemeSchemeId[] = [
-  "sandstoneClassic",
-  "basaltPool",
+  "sandstone",
+  "basalt",
   "scribblyGum",
-  "blueMalleeMist",
-  "topoIronbark",
+  "ironbark",
 ];
 
 export function isThemeSchemeId(value: unknown): value is ThemeSchemeId {

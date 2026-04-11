@@ -1,6 +1,7 @@
 :root {
   color-scheme: dark;
 
+  /* Colours */
   --theme-primary: #4e4944;
   --theme-secondary: #8c7a5b;
   --theme-accent: #c79657;
@@ -10,6 +11,36 @@
   --theme-bonus-1: #d9cbb8;
   --theme-bonus-2: #6b5f4b;
   --theme-bonus-3: #9c5a2e;
+
+  /* Layout */
+  --nav-rail-width: 56px;
+  --panel-width: 280px;
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 50%;
+
+  /* Shadows */
+  --shadow-nav: 8px 0 8px -4px rgba(0, 0, 0, 0.2);
+  --shadow-panel: 4px 0 12px rgba(0, 0, 0, 0.2);
+  --shadow-float: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-modal: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+  /* Transitions */
+  --transition-fast: 0.15s;
+  --transition-med: 0.2s;
+
+  /* Font sizes */
+  --text-xs: 0.75em;
+  --text-sm: 0.85em;
+  --text-base: 1em;
+
+  /* Opacity */
+  --opacity-muted: 0.5;
+  --opacity-dimmed: 0.4;
+  --opacity-disabled: 0.5;
 }
 
 body {

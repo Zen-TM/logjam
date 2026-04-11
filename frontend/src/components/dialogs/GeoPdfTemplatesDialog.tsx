@@ -102,12 +102,13 @@ function GeoPdfTemplatesDialog({
           size="small"
           onClick={() => onEditTemplate(null)}
           sx={{
-            color: "#f97316",
-            borderColor: "#f97316",
+            color: "var(--theme-accent)",
+            borderColor: "var(--theme-accent)",
             mb: 1.5,
             "&:hover": {
-              borderColor: "#ea580c",
-              backgroundColor: "rgba(249,115,22,0.1)",
+              borderColor: "var(--theme-accent)",
+              backgroundColor:
+                "color-mix(in srgb, var(--theme-accent) 20%, transparent)",
             },
           }}
         >

@@ -445,8 +445,9 @@ function Map({
       start = { x: e.clientX, y: e.clientY };
       box = document.createElement("div");
       box.style.position = "absolute";
-      box.style.border = "2px dashed #f97316";
-      box.style.backgroundColor = "rgba(249, 115, 22, 0.1)";
+      box.style.border = "2px dashed var(--theme-accent)";
+      box.style.backgroundColor =
+        "color-mix(in srgb, var(--theme-accent) 20%, transparent)";
       box.style.pointerEvents = "none";
       box.style.zIndex = "10";
       container.appendChild(box);
@@ -1223,13 +1224,13 @@ function Map({
           />
           <div className={classes.geoPdfConfirmBar}>
             <button
-              className={classes.geoPdfConfirmButton}
+              className={classes.geoPdfButton}
               onClick={handleConfirmGeoPdfExtent}
             >
               Confirm extent
             </button>
             <button
-              className={classes.geoPdfCancelButton}
+              className={classes.geoPdfButton}
               onClick={onGeoPdfExtentCancelled}
             >
               Cancel

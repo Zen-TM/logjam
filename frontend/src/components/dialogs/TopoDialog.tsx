@@ -16,8 +16,10 @@ import {
   IconButton,
   Divider,
   Alert,
+  Tooltip,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import type { TBbox } from "../map/Map";
 import { apiFetch } from "../../canyonUtils";
 import { MASTER_TOPO_LAYERS } from "../../topoLayerTypes";
@@ -429,7 +431,19 @@ export default function TopoDialog({
   const area = pendingBbox ? bboxAreaKm2(pendingBbox) : null;
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          backgroundColor: "var(--theme-primary)",
+          color: "var(--theme-text-primary)",
+          maxHeight: "85vh",
+        },
+      }}
+    >
       <DialogTitle
         sx={{
           display: "flex",
@@ -438,12 +452,16 @@ export default function TopoDialog({
         }}
       >
         Generate Topo Map
-        <IconButton onClick={handleClose} size="small">
+        <IconButton
+          onClick={handleClose}
+          size="small"
+          sx={{ color: "var(--theme-text-primary)" }}
+        >
           <CloseIcon />
         </IconButton>
       </DialogTitle>
 
-      <DialogContent dividers>
+      <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
         {/* ── View: complete ── */}
         {job?.status === "complete" && downloadUrls && (
           <Box>
@@ -465,7 +483,17 @@ export default function TopoDialog({
                     variant="outlined"
                     href={u.mbtilesUrl}
                     download={`${u.name}.mbtiles`}
-                    sx={{ textTransform: "none", minWidth: 160 }}
+                    sx={{
+                      textTransform: "none",
+                      minWidth: 160,
+                      color: "var(--theme-accent)",
+                      borderColor: "var(--theme-accent)",
+                      "&:hover": {
+                        borderColor: "var(--theme-accent)",
+                        backgroundColor:
+                          "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
+                      },
+                    }}
                   >
                     {u.name}.mbtiles
                   </Button>
@@ -475,8 +503,22 @@ export default function TopoDialog({
                       variant={
                         overlayIds.has(layerId) ? "contained" : "outlined"
                       }
+                      color={overlayIds.has(layerId) ? "secondary" : undefined}
                       onClick={() => toggleMapOverlay(u)}
-                      sx={{ textTransform: "none" }}
+                      sx={
+                        overlayIds.has(layerId)
+                          ? { textTransform: "none" }
+                          : {
+                              textTransform: "none",
+                              color: "var(--theme-accent)",
+                              borderColor: "var(--theme-accent)",
+                              "&:hover": {
+                                borderColor: "var(--theme-accent)",
+                                backgroundColor:
+                                  "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
+                              },
+                            }
+                      }
                     >
                       {overlayIds.has(layerId) ? "Hide on map" : "Show on map"}
                     </Button>
@@ -524,7 +566,16 @@ export default function TopoDialog({
                 variant="outlined"
                 size="small"
                 onClick={onSelectBbox}
-                sx={{ textTransform: "none" }}
+                sx={{
+                  textTransform: "none",
+                  color: "var(--theme-accent)",
+                  borderColor: "var(--theme-accent)",
+                  "&:hover": {
+                    borderColor: "var(--theme-accent)",
+                    backgroundColor:
+                      "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
+                  },
+                }}
               >
                 Draw on map
               </Button>
@@ -532,13 +583,16 @@ export default function TopoDialog({
                 <Chip
                   size="small"
                   label={`${area?.toFixed(0)} km² · ${estimateTime(area!)}`}
-                  color="success"
+                  sx={{
+                    color: "var(--theme-text-muted)",
+                    borderColor: "var(--theme-text-muted)",
+                  }}
                   variant="outlined"
                 />
               )}
             </Box>
 
-            <Divider sx={{ my: 2 }} />
+            <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,0.1)" }} />
 
             {/* Step 2: Layer selection */}
             <Typography variant="subtitle2" gutterBottom>
@@ -553,6 +607,10 @@ export default function TopoDialog({
                       checked={selectedLayers.has(name)}
                       onChange={() => toggleLayer(name)}
                       size="small"
+                      sx={{
+                        color: "var(--theme-accent)",
+                        "&.Mui-checked": { color: "var(--theme-accent)" },
+                      }}
                     />
                   }
                   label={LAYER_LABELS[name]}
@@ -560,7 +618,7 @@ export default function TopoDialog({
               ))}
             </FormGroup>
 
-            <Divider sx={{ my: 2 }} />
+            <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,0.1)" }} />
 
             {/* Step 3: Download from ELVIS + upload */}
             <Typography variant="subtitle2" gutterBottom>
@@ -583,17 +641,26 @@ export default function TopoDialog({
                     size="small"
                     variant="outlined"
                     onClick={() => downloadBboxShapefile(pendingBbox)}
-                    sx={{ textTransform: "none" }}
+                    sx={{
+                      textTransform: "none",
+                      color: "var(--theme-accent)",
+                      borderColor: "var(--theme-accent)",
+                      "&:hover": {
+                        borderColor: "var(--theme-accent)",
+                        backgroundColor:
+                          "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
+                      },
+                    }}
                   >
                     Download area shapefile
                   </Button>
                 ) : (
                   <Typography
                     variant="body2"
-                    color="text.disabled"
+                    color="text.secondary"
                     sx={{ fontStyle: "italic" }}
                   >
-                    Define area above, then download area shapefile
+                    Define area above to download area shapefile
                   </Typography>
                 )}
               </Box>
@@ -613,14 +680,23 @@ export default function TopoDialog({
                   href="https://elevation.fsdf.org.au/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  sx={{ textTransform: "none" }}
+                  sx={{
+                    textTransform: "none",
+                    color: "var(--theme-accent)",
+                    borderColor: "var(--theme-accent)",
+                    "&:hover": {
+                      borderColor: "var(--theme-accent)",
+                      backgroundColor:
+                        "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
+                    },
+                  }}
                 >
                   Open ELVIS portal ↗
                 </Button>
               </Box>
 
               {/* 3c–e */}
-              <Box sx={{ display: "flex", gap: 1.5 }}>
+              <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}>
                 <Typography
                   variant="body2"
                   color="text.secondary"
@@ -629,9 +705,38 @@ export default function TopoDialog({
                   c.
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Click 'Order Data' → 'Load File' and upload the shapefile ZIP
-                  downloaded in step a.
+                  Click 'Order Data' → 'Load File', upload the shapefile ZIP
+                  downloaded in step a, and click 'Search'.
                 </Typography>
+                <Tooltip
+                  title={
+                    <>
+                      <strong>Faster processing:</strong> You can also include
+                      ELVIS DEM (Digital Elevation Model) files alongside the
+                      point cloud. DEM files must cover the entire selected
+                      area.
+                      <br />
+                      <br />
+                      <strong>
+                        Fastest (no vegetation layer):
+                      </strong> Select <em>only</em> DEM files — no point cloud
+                      needed. The vegetation density layer will not be
+                      generated.
+                    </>
+                  }
+                  arrow
+                  placement="right"
+                >
+                  <InfoOutlinedIcon
+                    fontSize="small"
+                    sx={{
+                      color: "var(--theme-text-muted)",
+                      cursor: "help",
+                      flexShrink: 0,
+                      mt: "2px",
+                    }}
+                  />
+                </Tooltip>
               </Box>
               <Box sx={{ display: "flex", gap: 1.5 }}>
                 <Typography
@@ -671,7 +776,16 @@ export default function TopoDialog({
                   variant="outlined"
                   component="label"
                   size="small"
-                  sx={{ textTransform: "none" }}
+                  sx={{
+                    textTransform: "none",
+                    color: "var(--theme-accent)",
+                    borderColor: "var(--theme-accent)",
+                    "&:hover": {
+                      borderColor: "var(--theme-accent)",
+                      backgroundColor:
+                        "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
+                    },
+                  }}
                 >
                   {file ? file.name : "Upload downloaded ZIP…"}
                   <input
@@ -696,13 +810,18 @@ export default function TopoDialog({
       <DialogActions>
         {!job && (
           <>
-            <Button onClick={handleClose} disabled={submitting}>
+            <Button
+              onClick={handleClose}
+              disabled={submitting}
+              sx={{ color: "var(--theme-text-primary)" }}
+            >
               Cancel
             </Button>
             <Button
               variant="contained"
+              color="secondary"
               onClick={handleSubmit}
-              disabled={!pendingBbox || !file || submitting}
+              disabled={!file || submitting}
             >
               {submitting ? <CircularProgress size={18} /> : "Submit"}
             </Button>
@@ -715,12 +834,16 @@ export default function TopoDialog({
               setDownloadUrls(null);
               setOverlayIds(new Set());
             }}
+            sx={{ color: "var(--theme-text-primary)" }}
           >
             New job
           </Button>
         )}
         {(job?.status === "processing" || job?.status === "pending") && (
-          <Button onClick={handleClose}>
+          <Button
+            onClick={handleClose}
+            sx={{ color: "var(--theme-text-primary)" }}
+          >
             Close (job continues in background)
           </Button>
         )}

@@ -9,7 +9,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import classes from "../Sidebar.module.css";
+import classes from "./FriendsPanel.module.css";
 import type {
   TFriend,
   TFriendRequest,
@@ -118,6 +118,7 @@ function FriendsPanel({
           <TextField
             placeholder="Search by username or email..."
             value={friendSearch}
+            color="secondary"
             onChange={(e) => setFriendSearch(e.target.value)}
             size="small"
             fullWidth

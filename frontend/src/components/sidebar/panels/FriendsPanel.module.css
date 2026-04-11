@@ -1,0 +1,66 @@
+/* Styles for FriendsPanel — friend search, list, accept/decline requests */
+
+.optionsContent {
+  composes: optionsContent from '@styles/shared.module.css';
+}
+
+.friendSearchContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  position: relative;
+}
+
+.searchResults {
+  composes: searchResults from '@styles/shared.module.css';
+}
+
+.searchResultItem {
+  composes: searchResultItem from '@styles/shared.module.css';
+}
+
+.addFriendButton {
+  composes: btn btnSm btnOutlineBonus1 from '@styles/shared.module.css';
+}
+
+.scrollList {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+
+.friendRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.3em 0;
+  font-size: var(--text-sm);
+}
+
+.friendName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.friendActions {
+  display: flex;
+  gap: 0.3em;
+  flex-shrink: 0;
+}
+
+.acceptButton {
+  composes: btn btnSm btnOutlineAccent from '@styles/shared.module.css';
+}
+
+.declineButton {
+  composes: btn btnSm btnOutlineWarning from '@styles/shared.module.css';
+}
+
+.removeButton {
+  composes: btn btnSm btnOutlineWarning from '@styles/shared.module.css';
+  flex-shrink: 0;
+}

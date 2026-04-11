@@ -17,6 +17,9 @@ function LayersPanel({
             name="base-layer"
             checked={activeLayerId === layer.id}
             onChange={() => onActiveLayerChange(layer.id)}
+            style={{
+              accentColor: "var(--theme-secondary)",
+            }}
           />
           <span>{layer.name}</span>
         </label>

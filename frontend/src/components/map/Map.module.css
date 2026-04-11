@@ -1,7 +1,7 @@
 .map {
   position: absolute;
   top: 0;
-  left: 56px;
+  left: var(--nav-rail-width);
   right: 0;
   bottom: 0;
 }
@@ -15,9 +15,9 @@
   background: var(--theme-primary);
   color: var(--theme-text-primary);
   padding: 0.6em 1.2em;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  font-size: 14px;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-float);
+  font-size: var(--text-sm);
   pointer-events: none;
 }
 
@@ -46,33 +46,18 @@
   gap: 8px;
 }
 
-.geoPdfConfirmButton {
+.geoPdfButton {
   padding: 0.6em 1.5em;
   background: var(--theme-accent);
   color: var(--theme-text-primary);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-sm);
   font-weight: 500;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-float);
 }
 
-.geoPdfConfirmButton:hover {
+.geoPdfButton:hover {
   background: color-mix(in srgb, var(--theme-accent) 80%, transparent);
-}
-
-.geoPdfCancelButton {
-  padding: 0.6em 1.5em;
-  background: var(--theme-primary);
-  color: var(--theme-text-primary);
-  border: 1px solid var(--theme-accent);
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.geoPdfCancelButton:hover {
-  background: var(--theme-accent);
 }
