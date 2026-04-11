@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import NavRail from "./sidebar/NavRail";
 import SidebarPanel from "./sidebar/SidebarPanel";
 import Map, { BASE_LAYERS } from "./map/Map";
@@ -120,6 +120,11 @@ function App() {
   const [masterTopoLayers, setMasterTopoLayers] = useState<
     { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]
   >([]);
+
+  const combinedTopoLayers = useMemo(
+    () => [...masterTopoLayers, ...topoOverlayLayers],
+    [masterTopoLayers, topoOverlayLayers],
+  );
 
   const startPickingCoords = useCallback(
     (onPicked: (lat: number, lng: number) => void) => {
@@ -410,7 +415,7 @@ function App() {
           setSelectingTopoBbox(false);
           setShowTopo(true);
         }}
-        topoLayers={[...masterTopoLayers, ...topoOverlayLayers]}
+        topoLayers={combinedTopoLayers}
         activeLayerId={activeLayerId}
         selectingGeoPdfExtent={selectingGeoPdfExtent}
         geoPdfPaperAspect={geoPdfPaperAspect}

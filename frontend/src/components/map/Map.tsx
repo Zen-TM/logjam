@@ -163,6 +163,7 @@ function Map({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const prevTopoKeyRef = useRef<string>("");
 
   // Keep refs up to date for use inside event handlers
   const selectCanyonRef = useRef(selectCanyon);
@@ -639,6 +640,12 @@ function Map({
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
     const layers = topoLayers ?? [];
+
+    // Skip if topo layers haven't actually changed (avoids flicker from
+    // new array references with identical contents)
+    const topoKey = layers.map((l) => `${l.id}:${l.pmtilesUrl}`).join("|");
+    if (topoKey === prevTopoKeyRef.current) return;
+    prevTopoKeyRef.current = topoKey;
 
     // Map each entry id → the set of MapLibre layer ids it owns
     const activeIds = new Set(layers.map((l) => l.id));

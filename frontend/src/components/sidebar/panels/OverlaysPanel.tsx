@@ -50,6 +50,9 @@ function OverlaysPanel({
   // Transient UI state — OK to reset on remount
   const [expanded, setExpanded] = useState(false);
 
+  // Track previous layer state to avoid unnecessary callbacks
+  const prevLayersJsonRef = useRef<string>("");
+
   // Drag state
   const dragIndex = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -71,7 +74,10 @@ function OverlaysPanel({
 
   useEffect(() => {
     if (!lidarEnabled || masterLayers.length === 0) {
-      onTopoLayersChangeRef.current([]);
+      if (prevLayersJsonRef.current !== "[]") {
+        prevLayersJsonRef.current = "[]";
+        onTopoLayersChangeRef.current([]);
+      }
       return;
     }
     const layerMap = new Map(masterLayers.map((l) => [l.name, l]));
@@ -81,7 +87,11 @@ function OverlaysPanel({
         const l = layerMap.get(name)!;
         return { id: `master-${l.name}`, pmtilesUrl: l.pmtilesUrl, format: l.format };
       });
-    onTopoLayersChangeRef.current(active);
+    const json = JSON.stringify(active);
+    if (prevLayersJsonRef.current !== json) {
+      prevLayersJsonRef.current = json;
+      onTopoLayersChangeRef.current(active);
+    }
   }, [lidarEnabled, layerToggles, layerOrder, masterLayers]);
 
   function handleLidarToggle(checked: boolean) {

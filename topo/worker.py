@@ -21,6 +21,7 @@ Optional environment variables:
 
 import boto3
 import botocore.exceptions
+import io
 import json
 import logging
 import os
@@ -31,6 +32,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from PIL import Image
 import psycopg2
 import psycopg2.extras
 from pmtiles.convert import mbtiles_to_pmtiles
@@ -248,7 +250,49 @@ def run_tippecanoe_features(geojson_dir: str, out_dir: str) -> Path | None:
 # worker per job, but multiple jobs can run concurrently on Fargate.
 # If ETag contention becomes frequent, upgrade to a DynamoDB-based lock.
 
-def merge_into_master(layer_name: str, job_mbtiles: Path, tmp_dir: str):
+def _normalize_mbtiles_schema(conn: sqlite3.Connection):
+    """If 'tiles' is a VIEW (tippecanoe dedup schema), materialize it as a TABLE.
+
+    Tippecanoe creates MBTiles with: tiles_data, tiles_shallow, tiles (VIEW).
+    The merge code needs a real TABLE so INSERT OR REPLACE works.
+    """
+    row = conn.execute(
+        "SELECT type FROM sqlite_master WHERE name='tiles'"
+    ).fetchone()
+    if row is None or row[0] == "table":
+        return  # already a real table or doesn't exist
+
+    log.info("Normalizing tippecanoe VIEW schema → TABLE for merge compatibility.")
+    conn.executescript("""
+        CREATE TABLE tiles_materialized (
+            zoom_level  INTEGER,
+            tile_column INTEGER,
+            tile_row    INTEGER,
+            tile_data   BLOB
+        );
+        INSERT INTO tiles_materialized
+            SELECT zoom_level, tile_column, tile_row, tile_data FROM tiles;
+        DROP VIEW tiles;
+        ALTER TABLE tiles_materialized RENAME TO tiles;
+        CREATE UNIQUE INDEX IF NOT EXISTS tile_index
+            ON tiles (zoom_level, tile_column, tile_row);
+        DROP TABLE IF EXISTS tiles_shallow;
+        DROP TABLE IF EXISTS tiles_data;
+    """)
+    conn.commit()
+
+
+def _composite_raster_tile(existing_data: bytes, new_data: bytes) -> bytes:
+    """Alpha-composite two PNG tiles, drawing new on top of existing."""
+    base = Image.open(io.BytesIO(existing_data)).convert("RGBA")
+    overlay = Image.open(io.BytesIO(new_data)).convert("RGBA")
+    composited = Image.alpha_composite(base, overlay)
+    buf = io.BytesIO()
+    composited.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def merge_into_master(layer_name: str, job_mbtiles: Path, tmp_dir: str, fmt: str = "raster"):
     """Merge a job's MBTiles into the corresponding master file on S3."""
     master_key_mbtiles = f"master/{layer_name}.mbtiles"
     master_key_pmtiles = f"master/{layer_name}.pmtiles"
@@ -282,15 +326,46 @@ def merge_into_master(layer_name: str, job_mbtiles: Path, tmp_dir: str):
         if not has_master:
             log.info(f"No existing master for {layer_name} — creating from job output.")
             shutil.copy2(str(job_mbtiles), str(master_path))
+            with sqlite3.connect(str(master_path)) as conn:
+                _normalize_mbtiles_schema(conn)
         else:
             log.info(f"Merging {job_mbtiles.name} into master {layer_name} …")
             with sqlite3.connect(str(master_path)) as conn:
+                _normalize_mbtiles_schema(conn)
                 conn.execute("ATTACH DATABASE ? AS job", (str(job_mbtiles),))
-                conn.execute(
-                    "INSERT OR REPLACE INTO tiles "
-                    "SELECT zoom_level, tile_column, tile_row, tile_data "
-                    "FROM job.tiles"
-                )
+
+                if fmt == "raster":
+                    # Alpha-composite overlapping raster tiles to avoid border gaps
+                    job_tiles = conn.execute(
+                        "SELECT zoom_level, tile_column, tile_row, tile_data FROM job.tiles"
+                    ).fetchall()
+                    for z, x, y, new_data in job_tiles:
+                        existing = conn.execute(
+                            "SELECT tile_data FROM tiles "
+                            "WHERE zoom_level=? AND tile_column=? AND tile_row=?",
+                            (z, x, y),
+                        ).fetchone()
+                        if existing is not None:
+                            merged = _composite_raster_tile(existing[0], new_data)
+                            conn.execute(
+                                "UPDATE tiles SET tile_data=? "
+                                "WHERE zoom_level=? AND tile_column=? AND tile_row=?",
+                                (sqlite3.Binary(merged), z, x, y),
+                            )
+                        else:
+                            conn.execute(
+                                "INSERT INTO tiles (zoom_level, tile_column, tile_row, tile_data) "
+                                "VALUES (?,?,?,?)",
+                                (z, x, y, sqlite3.Binary(new_data)),
+                            )
+                else:
+                    # Vector tiles: simple replacement (compositing MVT is out of scope)
+                    conn.execute(
+                        "INSERT OR REPLACE INTO tiles "
+                        "SELECT zoom_level, tile_column, tile_row, tile_data "
+                        "FROM job.tiles"
+                    )
+
                 _update_master_bounds(conn)
                 conn.commit()
                 conn.execute("DETACH DATABASE job")
@@ -447,7 +522,7 @@ def process_job(job: dict, tmp: str) -> list[dict]:
             continue
 
         try:
-            merge_into_master(layer_name, Path(job_mbtiles), tmp)
+            merge_into_master(layer_name, Path(job_mbtiles), tmp, fmt)
         except Exception as e:
             log.error(f"Master merge failed for {layer_name}: {e}")
             raise
