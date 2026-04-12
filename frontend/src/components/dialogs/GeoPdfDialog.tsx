@@ -27,6 +27,7 @@ import type {
 } from "@logjam/shared";
 import {
   getPaperDimensions,
+  GEOPDF_PADDING_MM,
   applyNorthChange,
   applySouthChange,
   applyEastChange,
@@ -166,6 +167,9 @@ function GeoPdfDialog({
   // Template mode name
   const [editTemplateName, setEditTemplateName] = useState("");
 
+  // Tracks when dialog is reopening after "Select on map" — skip layer reset in that case
+  const returningFromMapSelect = useRef(false);
+
   // Raw string state for extent/scale inputs (deferred recalculation)
   const focusedField = useRef<"n" | "s" | "e" | "w" | "scale" | null>(null);
   const [rawN, setRawN] = useState("");
@@ -179,18 +183,23 @@ function GeoPdfDialog({
   // Sync base layer on open + initialize extent from map center
   useEffect(() => {
     if (open) {
-      setSelectedBaseLayer(
-        activeLayerId.startsWith("osm") ? "six-topo" : activeLayerId,
-      );
-      setSelectedOverlays(new Set(masterTopoLayers.map((l) => l.id)));
+      if (!returningFromMapSelect.current) {
+        setSelectedBaseLayer(
+          activeLayerId.startsWith("osm") ? "six-topo" : activeLayerId,
+        );
+        setSelectedOverlays(new Set(masterTopoLayers.map((l) => l.id)));
+      }
+      returningFromMapSelect.current = false;
 
       // Initialize extent from current map center when no extent is set
       setExtentState((prev) => {
         if (prev.north !== 0 || prev.south !== 0) return prev;
         if (!mapCenter) return prev;
         const paper = getPaperDimensions(prev);
-        const widthM = prev.scale * (paper.w / 1000);
-        const heightM = prev.scale * (paper.h / 1000);
+        const mapW = paper.w - 2 * GEOPDF_PADDING_MM;
+        const mapH = paper.h - 2 * GEOPDF_PADDING_MM;
+        const widthM = prev.scale * (mapW / 1000);
+        const heightM = prev.scale * (mapH / 1000);
         const bounds = extentFromCentreAndSize(
           mapCenter.lat,
           mapCenter.lng,
@@ -298,7 +307,9 @@ function GeoPdfDialog({
 
   const handleSelectOnMap = useCallback(() => {
     const paper = getPaperDimensions(extentState);
-    const aspectRatio = paper.w / paper.h;
+    const mapW = paper.w - 2 * GEOPDF_PADDING_MM;
+    const mapH = paper.h - 2 * GEOPDF_PADDING_MM;
+    const aspectRatio = mapW / mapH;
     const hasValidExtent =
       extentState.north !== 0 &&
       extentState.south !== 0 &&
@@ -306,9 +317,10 @@ function GeoPdfDialog({
       extentState.west !== 0 &&
       extentState.north > extentState.south &&
       extentState.east > extentState.west;
+    returningFromMapSelect.current = true;
     onSelectOnMap(
       aspectRatio,
-      paper,
+      { w: mapW, h: mapH },
       hasValidExtent
         ? {
             north: extentState.north,

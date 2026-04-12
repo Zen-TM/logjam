@@ -29,8 +29,8 @@ function readCssVar(name: string, fallback: string): string {
 }
 
 function applyCanyonThemePaint(map: maplibregl.Map) {
-  const owned = readCssVar("--theme-bonus-3", "#f97316");
-  const shared = readCssVar("--theme-accent", "#3b82f6");
+  const owned = readCssVar("--owned-canyon-color", "#f97316");
+  const shared = readCssVar("--shared-canyon-color", "#3b82f6");
   const label = readCssVar("--theme-text-primary", "#ffffff");
   const halo = readCssVar("--theme-bonus-2", "#1a1a1a");
 
@@ -160,7 +160,10 @@ function Map({
   geoPdfInitialScale?: number;
   onGeoPdfExtentConfirmed?: (extent: TBbox, scale: number) => void;
   onGeoPdfExtentCancelled?: () => void;
-  onMapViewChange?: (center: { lat: number; lng: number }, zoom: number) => void;
+  onMapViewChange?: (
+    center: { lat: number; lng: number },
+    zoom: number,
+  ) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -337,14 +340,6 @@ function Map({
       });
 
       setMapLoaded(true);
-
-      // Notify parent of map view changes for GeoPDF extent initialization
-      const fireViewChange = () => {
-        const c = map.getCenter();
-        onMapViewChangeRef.current?.({ lat: c.lat, lng: c.lng }, map.getZoom());
-      };
-      fireViewChange();
-      map.on("moveend", fireViewChange);
     });
 
     mapRef.current = map;

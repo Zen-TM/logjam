@@ -1,5 +1,6 @@
 CLAUDE.md
 .claude
+.mcp.json
 
 # Dependencies
 node_modules/

@@ -167,7 +167,7 @@ function OverlaysPanel({
           size="small"
           checked={showOwnedCanyons}
           onChange={(_, checked) => setShowOwnedCanyons(checked)}
-          sx={switchSx("var(--theme-bonus-1)")}
+          sx={switchSx("var(--owned-canyon-color)")}
         />
       </div>
 
@@ -178,7 +178,7 @@ function OverlaysPanel({
           size="small"
           checked={showSharedCanyons}
           onChange={(_, checked) => setShowSharedCanyons(checked)}
-          sx={switchSx("var(--theme-bonus-2)")}
+          sx={switchSx("var(--shared-canyon-color)")}
         />
       </div>
 

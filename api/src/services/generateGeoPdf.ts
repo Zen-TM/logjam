@@ -8,6 +8,7 @@ import PDFDocument from "pdfkit";
 import type { GeoPdfConfig } from "@logjam/shared";
 import {
   getPaperDimensions,
+  GEOPDF_PADDING_MM,
   gridConvergence,
   toEastingNorthing,
   fromEastingNorthing,
@@ -31,18 +32,16 @@ const DPI = 150;
 const MM_PER_INCH = 25.4;
 const TILE_SIZE = 256;
 const CONCURRENCY = 8;
+const MIN_CONTOUR_LABEL_DISTANCE = 150; // px — ~4x sparser label density
 
-
-const SIX_EXPORT_URLS: Record<string, string> = {
+const SIX_TILE_URLS: Record<string, string> = {
   "six-topo":
-    "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/export",
+    "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
   "six-base":
-    "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/export",
+    "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
   "six-imagery":
-    "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/export",
+    "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
 };
-
-const MAX_EXPORT_SIZE = 4096;
 
 const SCALE_BAR_DISTANCES = [100, 250, 500, 1000, 2000, 5000, 10000];
 const DEG_TO_RAD = Math.PI / 180;
@@ -209,8 +208,16 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
   const widthPt = mmToPt(paper.w);
   const heightPt = mmToPt(paper.h);
 
+  // 1b. Map area (page minus 1cm padding on all sides)
+  const paddingPx = mmToPx(GEOPDF_PADDING_MM);
+  const paddingPt = mmToPt(GEOPDF_PADDING_MM);
+  const mapWidthPx = widthPx - 2 * paddingPx;
+  const mapHeightPx = heightPx - 2 * paddingPx;
+  const mapWidthPt = widthPt - 2 * paddingPt;
+  const mapHeightPt = heightPt - 2 * paddingPt;
+
   // 2. Memory budget guard
-  const mapCanvasBytes = widthPx * heightPx * 4;
+  const mapCanvasBytes = mapWidthPx * mapHeightPx * 4;
   const MAX_CANVAS_BYTES = 200 * 1024 * 1024; // 200MB
   if (mapCanvasBytes > MAX_CANVAS_BYTES) {
     throw new AppError(
@@ -224,34 +231,35 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
   const centreLat = (north + south) / 2;
   const zoom = computeZoom(config.scale, centreLat, DPI);
 
-  // 4. Output canvas — the only canvas allocated for the entire pipeline
-  const mapCanvas = createCanvas(widthPx, heightPx);
+  // 4. Output canvas sized to the map area (page minus padding)
+  const mapCanvas = createCanvas(mapWidthPx, mapHeightPx);
   const mapCtx = mapCanvas.getContext("2d");
 
-  // 5. Base layer — draw directly onto mapCanvas (no intermediate canvas)
-  const sixExportUrl = SIX_EXPORT_URLS[config.baseLayer];
+  // Shared tile transform for base layer and overlays
+  const transform = computeTileToMapTransform(
+    zoom,
+    north,
+    south,
+    east,
+    west,
+    mapWidthPx,
+    mapHeightPx,
+  );
 
-  if (sixExportUrl) {
-    await fetchSixExportImageDirect(
+  // 5. Base layer — fetch tiles and draw directly onto mapCanvas
+  const sixTileUrl = SIX_TILE_URLS[config.baseLayer];
+
+  if (sixTileUrl) {
+    await fetchAndDrawHttpTilesDirect(
       mapCtx,
-      sixExportUrl,
-      config.extent,
-      widthPx,
-      heightPx,
+      transform.tiles,
+      sixTileUrl,
+      transform,
     );
   }
 
   // 6. Overlay tiles from PMTiles archives in S3 — draw directly onto mapCanvas
   if (config.overlays.length > 0) {
-    const transform = computeTileToMapTransform(
-      zoom,
-      north,
-      south,
-      east,
-      west,
-      widthPx,
-      heightPx,
-    );
     const topoBucket = process.env.S3_BUCKET_TOPO ?? "logjam-topo-jobs";
     const s3 = new S3Client({
       region: process.env.AWS_REGION ?? "ap-southeast-2",
@@ -285,25 +293,25 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
 
   // 6b. Canyon markers
   if (config.canyonMarkers && config.canyonMarkers.length > 0) {
-    drawCanyonMarkers(mapCtx, config, widthPx, heightPx);
+    drawCanyonMarkers(mapCtx, config, mapWidthPx, mapHeightPx);
   }
 
   // 7. Draw map elements
   if (config.elements.gridLines) {
-    drawGridLines(mapCtx, config, widthPx, heightPx);
+    drawGridLines(mapCtx, config, mapWidthPx, mapHeightPx);
   }
 
   // Bottom-left element stack
   const elementMargin = mmToPx(5);
   const elementPadH = mmToPx(2);
   const elementPadV = mmToPx(1.5);
-  let stackY = heightPx - elementMargin;
+  let stackY = mapHeightPx - elementMargin;
 
   if (config.elements.scaleBar) {
     stackY = drawScaleBar(
       mapCtx,
       config,
-      widthPx,
+      mapWidthPx,
       stackY,
       elementMargin,
       elementPadH,
@@ -348,90 +356,52 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
   }
 
   // Attribution bottom-right
-  drawAttribution(mapCtx, widthPx, heightPx, elementMargin);
+  drawAttribution(mapCtx, mapWidthPx, mapHeightPx, elementMargin);
 
   // 8. Build PDF with GeoPDF georeferencing metadata
-  const pdfBuffer = await buildPdf(mapCanvas, widthPt, heightPt, config);
+  const pdfBuffer = await buildPdf(mapCanvas, widthPt, heightPt, mapWidthPt, mapHeightPt, paddingPt, config);
 
   return pdfBuffer;
 }
 
-// ── SIX Maps ArcGIS export ──────────────────────────────────────────────────
+// ── HTTP tile fetching (SIX Maps, etc.) ─────────────────────────────────────
 
-/**
- * Fetch a full-resolution image from a SIX Maps ArcGIS MapServer/export endpoint
- * and draw directly onto the output canvas. No intermediate canvas is allocated.
- */
-async function fetchSixExportImageDirect(
+/** Fetch tiles from an HTTP tile server and draw directly onto the output canvas */
+async function fetchAndDrawHttpTilesDirect(
   mapCtx: CanvasRenderingContext2D,
-  exportUrl: string,
-  extent: { north: number; south: number; east: number; west: number },
-  widthPx: number,
-  heightPx: number,
+  tiles: TileCoord[],
+  urlTemplate: string,
+  transform: TileToMapTransform,
 ): Promise<void> {
-  // Split into chunks if either dimension exceeds the server limit
-  const cols = Math.ceil(widthPx / MAX_EXPORT_SIZE);
-  const rows = Math.ceil(heightPx / MAX_EXPORT_SIZE);
-  const lonRange = extent.east - extent.west;
-  const latRange = extent.north - extent.south;
-
-  type Chunk = { col: number; row: number };
-  const chunks: Chunk[] = [];
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < cols; col++) {
-      chunks.push({ col, row });
-    }
-  }
-
   await pMap(
-    chunks,
-    async ({ col, row }) => {
-      const pxLeft = col * MAX_EXPORT_SIZE;
-      const pxTop = row * MAX_EXPORT_SIZE;
-      const chunkW = Math.min(MAX_EXPORT_SIZE, widthPx - pxLeft);
-      const chunkH = Math.min(MAX_EXPORT_SIZE, heightPx - pxTop);
-
-      const chunkWest = extent.west + (pxLeft / widthPx) * lonRange;
-      const chunkEast = extent.west + ((pxLeft + chunkW) / widthPx) * lonRange;
-      const chunkNorth = extent.north - (pxTop / heightPx) * latRange;
-      const chunkSouth =
-        extent.north - ((pxTop + chunkH) / heightPx) * latRange;
-
-      const params = new URLSearchParams({
-        bbox: `${chunkWest},${chunkSouth},${chunkEast},${chunkNorth}`,
-        bboxSR: "4326",
-        size: `${chunkW},${chunkH}`,
-        dpi: `${DPI}`,
-        format: "png",
-        f: "image",
-        transparent: "true",
-      });
-
-      const url = `${exportUrl}?${params.toString()}`;
+    tiles,
+    async (tile) => {
+      const url = urlTemplate
+        .replace("{z}", String(tile.z))
+        .replace("{y}", String(tile.y))
+        .replace("{x}", String(tile.x));
+      const destX =
+        ((tile.x - transform.minTileX) * TILE_SIZE - transform.offsetX) *
+        transform.scaleX;
+      const destY =
+        ((tile.y - transform.minTileY) * TILE_SIZE - transform.offsetY) *
+        transform.scaleY;
+      const destW = TILE_SIZE * transform.scaleX;
+      const destH = TILE_SIZE * transform.scaleY;
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60_000);
+        const timeoutId = setTimeout(() => controller.abort(), 30_000);
         const response = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const arrayBuf = await response.arrayBuffer();
         const img = await loadImage(Buffer.from(arrayBuf));
-        mapCtx.drawImage(
-          img,
-          0,
-          0,
-          img.width,
-          img.height,
-          pxLeft,
-          pxTop,
-          chunkW,
-          chunkH,
-        );
+        mapCtx.drawImage(img, 0, 0, TILE_SIZE, TILE_SIZE, destX, destY, destW, destH);
       } catch (err) {
         mapCtx.fillStyle = "#e8e8e8";
-        mapCtx.fillRect(pxLeft, pxTop, chunkW, chunkH);
+        mapCtx.fillRect(destX, destY, destW, destH);
         console.warn(
-          `Failed to fetch SIX export chunk col=${col} row=${row}: ${err}`,
+          `Failed to fetch tile ${tile.z}/${tile.x}/${tile.y}: ${err}`,
         );
       }
     },
@@ -517,6 +487,7 @@ async function fetchAndDrawPMTilesVectorDirect(
   transform: TileToMapTransform,
   layerName: string,
   zoom: number,
+  placedLabels: Array<{ x: number; y: number }> = [],
 ): Promise<void> {
   await pMap(
     tiles,
@@ -544,6 +515,7 @@ async function fetchAndDrawPMTilesVectorDirect(
             layerName,
             transform.scaleX,
             transform.scaleY,
+            placedLabels,
           );
         }
       } catch (err) {
@@ -578,6 +550,7 @@ function renderVectorFeature(
   layerName: string,
   transformScaleX = 1,
   transformScaleY = 1,
+  placedLabels: Array<{ x: number; y: number }> = [],
 ) {
   const baseScale = TILE_SIZE / feature.extent;
   const scaleX = baseScale * transformScaleX;
@@ -596,6 +569,7 @@ function renderVectorFeature(
       scaleY,
       geomType,
       props,
+      placedLabels,
     );
   } else if (layerName === "features") {
     renderOsmFeature(
@@ -623,6 +597,7 @@ function renderContourFeature(
   scaleY: number,
   geomType: number,
   props: Record<string, unknown>,
+  placedLabels: Array<{ x: number; y: number }> = [],
 ) {
   if (geomType !== 2) return; // contours are lines
   const elev = Number(props.elev ?? 0);
@@ -656,6 +631,10 @@ function renderContourFeature(
       const mid = Math.floor(ring.length / 2);
       const mx = dx + ring[mid].x * scaleX;
       const my = dy + ring[mid].y * scaleY;
+
+      // Skip if too close to an already-placed label
+      if (placedLabels.some((p) => Math.hypot(p.x - mx, p.y - my) < MIN_CONTOUR_LABEL_DISTANCE)) continue;
+      placedLabels.push({ x: mx, y: my });
 
       // Calculate angle from adjacent points for text rotation
       const prev = mid > 0 ? mid - 1 : 0;
@@ -1070,18 +1049,11 @@ function drawCompass(
   ctx.textBaseline = "middle";
   ctx.textAlign = "start";
 
+  // Omitted description to save space
   const entries: [string, string, string][] = [
-    ["#e11d48", "TN", "True North"],
-    [
-      "#2563eb",
-      "GN",
-      `Grid North (${gridConv >= 0 ? "+" : ""}${gridConv.toFixed(2)}°)`,
-    ],
-    [
-      "#16a34a",
-      "MN",
-      `Mag. North (${magDecl >= 0 ? "+" : ""}${magDecl.toFixed(1)}°)`,
-    ],
+    ["#e11d48", "TN", ""],
+    ["#2563eb", "GN", `${gridConv >= 0 ? "+" : ""}${gridConv.toFixed(2)}°`],
+    ["#16a34a", "MN", `${magDecl >= 0 ? "+" : ""}${magDecl.toFixed(1)}°`],
   ];
 
   for (const [color, abbr, desc] of entries) {
@@ -1095,13 +1067,13 @@ function drawCompass(
     ctx.lineTo(legendX + swatchLen, rowMidY);
     ctx.stroke();
 
-    // Abbreviation (bold) + description (description currently omitted to save space)
+    // Abbreviation (bold) + description
     ctx.fillStyle = "#1a1a1a";
     ctx.font = `bold ${legendFontSize}px sans-serif`;
     ctx.fillText(abbr, legendTextX, rowMidY);
     const abbrW = ctx.measureText(abbr + " ").width;
     ctx.font = `${legendFontSize}px sans-serif`;
-    // ctx.fillText(desc, legendTextX + abbrW, rowMidY);
+    ctx.fillText(desc, legendTextX + abbrW, rowMidY);
 
     legendY += legendRowH;
   }
@@ -1128,7 +1100,13 @@ function drawCanyonMarkers(
     const y = ((north - marker.lat) / (north - south)) * heightPx;
 
     // Skip markers outside canvas bounds
-    if (x < -radius || x > widthPx + radius || y < -radius || y > heightPx + radius) continue;
+    if (
+      x < -radius ||
+      x > widthPx + radius ||
+      y < -radius ||
+      y > heightPx + radius
+    )
+      continue;
 
     // Filled circle
     ctx.beginPath();
@@ -1248,7 +1226,15 @@ function drawGridLines(
       ctx.moveTo(topPx.x, topPx.y);
       ctx.lineTo(botPx.x, botPx.y);
       ctx.stroke();
-      drawGridLabel(ctx, e, interval, topPx.x + 2, fontSize + 2, fontSize, largeFontSize);
+      drawGridLabel(
+        ctx,
+        e,
+        interval,
+        topPx.x + 2,
+        fontSize + 2,
+        fontSize,
+        largeFontSize,
+      );
     }
 
     // Horizontal lines (constant northing, varying easting)
@@ -1340,6 +1326,9 @@ async function buildPdf(
   mapCanvas: Canvas,
   widthPt: number,
   heightPt: number,
+  mapWidthPt: number,
+  mapHeightPt: number,
+  paddingPt: number,
   config: GeoPdfConfig,
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -1358,9 +1347,15 @@ async function buildPdf(
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    // Embed the map image as full-page
+    // White page background
+    doc.rect(0, 0, widthPt, heightPt).fill("white");
+
+    // Map image inset by padding on all sides
     const imgBuffer = mapCanvas.toBuffer("image/jpeg", { quality: 0.92 });
-    doc.image(imgBuffer, 0, 0, { width: widthPt, height: heightPt });
+    doc.image(imgBuffer, paddingPt, paddingPt, {
+      width: mapWidthPt,
+      height: mapHeightPt,
+    });
 
     // GeoPDF georeferencing metadata
     // Reference: PDF 1.7 specification, Section 8.7.2 — Geospatial features
@@ -1369,6 +1364,7 @@ async function buildPdf(
     // We attach a Viewport dictionary to the page with GPTS (geographic tie
     // points in WGS84) and LPTS (normalised page coordinates). This allows
     // GIS software like QGIS and Avenza Maps to read coordinate information.
+    // LPTS corners correspond to the map area (inset from the page edge by paddingPt).
     try {
       const { north, south, east, west } = config.extent;
 
@@ -1384,20 +1380,26 @@ async function buildPdf(
       });
       gcsRef.end();
 
+      // Normalised page coordinates of the map area (PDF y=0 is bottom of page)
+      const lx0 = paddingPt / widthPt;
+      const lx1 = (widthPt - paddingPt) / widthPt;
+      const ly0 = paddingPt / heightPt;
+      const ly1 = (heightPt - paddingPt) / heightPt;
+
       const measureRef = (doc as any).ref({
         Type: "Measure",
         Subtype: "GEO",
         // GPTS: four corners in lat/lon order — BL, BR, TR, TL
         GPTS: [south, west, south, east, north, east, north, west],
         // LPTS: corresponding normalised page coordinates (0,0 = bottom-left)
-        LPTS: [0, 0, 1, 0, 1, 1, 0, 1],
+        LPTS: [lx0, ly0, lx1, ly0, lx1, ly1, lx0, ly1],
         GCS: gcsRef,
       });
       measureRef.end();
 
       const viewportRef = (doc as any).ref({
         Type: "Viewport",
-        BBox: [0, 0, widthPt, heightPt],
+        BBox: [paddingPt, paddingPt, widthPt - paddingPt, heightPt - paddingPt],
         Measure: measureRef,
       });
       viewportRef.end();

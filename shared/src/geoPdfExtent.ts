@@ -34,6 +34,18 @@ export const PAPER_SIZES_MM: Record<Exclude<PaperSize, "custom">, { w: number; h
   A5: { w: 148, h: 210 },
 };
 
+/** White border applied to all sides of the PDF page (mm). */
+export const GEOPDF_PADDING_MM = 10;
+
+/** Drawable map area dimensions in mm (page minus 1cm padding on all sides). */
+export function getMapDimensions(state: ExtentState): { w: number; h: number } {
+  const paper = getPaperDimensions(state);
+  return {
+    w: paper.w - 2 * GEOPDF_PADDING_MM,
+    h: paper.h - 2 * GEOPDF_PADDING_MM,
+  };
+}
+
 const DEG_TO_RAD = Math.PI / 180;
 const METERS_PER_DEG_LAT = 110540;
 const METERS_PER_DEG_LON_EQUATOR = 111320;
