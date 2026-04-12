@@ -1,7 +1,18 @@
-import { createCanvas, loadImage, type Canvas, type CanvasRenderingContext2D } from "canvas";
+import {
+  createCanvas,
+  loadImage,
+  type Canvas,
+  type CanvasRenderingContext2D,
+} from "canvas";
 import PDFDocument from "pdfkit";
 import type { GeoPdfConfig } from "@logjam/shared";
-import { getPaperDimensions, gridConvergence, toEastingNorthing, fromEastingNorthing, detectMgaZone } from "@logjam/shared";
+import {
+  getPaperDimensions,
+  gridConvergence,
+  toEastingNorthing,
+  fromEastingNorthing,
+  detectMgaZone,
+} from "@logjam/shared";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { PMTiles } from "pmtiles";
 import type { Source } from "pmtiles";
@@ -21,19 +32,14 @@ const MM_PER_INCH = 25.4;
 const TILE_SIZE = 256;
 const CONCURRENCY = 8;
 
-const TILE_URLS: Record<string, string> = {
-  "osm": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-  "osm-topo": "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
-  "osm-cycle": "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
-  "six-topo": "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-  "six-base": "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
-  "six-imagery": "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
-};
 
 const SIX_EXPORT_URLS: Record<string, string> = {
-  "six-topo": "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/export",
-  "six-base": "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/export",
-  "six-imagery": "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/export",
+  "six-topo":
+    "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/export",
+  "six-base":
+    "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/export",
+  "six-imagery":
+    "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/export",
 };
 
 const MAX_EXPORT_SIZE = 4096;
@@ -44,12 +50,12 @@ const DEG_TO_RAD = Math.PI / 180;
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function mmToPx(mm: number): number {
-  return Math.round(mm * DPI / MM_PER_INCH);
+  return Math.round((mm * DPI) / MM_PER_INCH);
 }
 
 /** Points (PDF coordinate unit, 72 per inch) */
 function mmToPt(mm: number): number {
-  return mm * 72 / MM_PER_INCH;
+  return (mm * 72) / MM_PER_INCH;
 }
 
 const MAX_ZOOM = 18;
@@ -71,7 +77,8 @@ function lon2tileX(lon: number, z: number): number {
 function lat2tileY(lat: number, z: number): number {
   const latRad = lat * DEG_TO_RAD;
   return Math.floor(
-    (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, z),
+    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
+      Math.pow(2, z),
   );
 }
 
@@ -102,7 +109,10 @@ async function pMap<T, R>(
     }
   }
 
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker());
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    () => worker(),
+  );
   await Promise.all(workers);
   return results;
 }
@@ -122,9 +132,9 @@ interface TileToMapTransform {
   minTileX: number;
   minTileY: number;
   tiles: TileCoord[];
-  offsetX: number;  // pixel offset within tile grid where extent starts
+  offsetX: number; // pixel offset within tile grid where extent starts
   offsetY: number;
-  scaleX: number;   // ratio: output pixels / source pixels
+  scaleX: number; // ratio: output pixels / source pixels
   scaleY: number;
 }
 
@@ -132,8 +142,12 @@ interface TileToMapTransform {
  *  No intermediate canvas is allocated — only the math from the old cropTileCanvas. */
 function computeTileToMapTransform(
   zoom: number,
-  north: number, south: number, east: number, west: number,
-  widthPx: number, heightPx: number,
+  north: number,
+  south: number,
+  east: number,
+  west: number,
+  widthPx: number,
+  heightPx: number,
 ): TileToMapTransform {
   const minTileX = lon2tileX(west, zoom);
   const maxTileX = lon2tileX(east, zoom);
@@ -155,8 +169,10 @@ function computeTileToMapTransform(
   const tileEndLon = tileX2lon(maxTileX + 1, zoom);
   const tileEndLat = tileY2lat(maxTileY + 1, zoom);
 
-  const offsetX = ((west - tileOriginLon) / (tileEndLon - tileOriginLon)) * tileGridW;
-  const offsetY = ((tileOriginLat - north) / (tileOriginLat - tileEndLat)) * tileGridH;
+  const offsetX =
+    ((west - tileOriginLon) / (tileEndLon - tileOriginLon)) * tileGridW;
+  const offsetY =
+    ((tileOriginLat - north) / (tileOriginLat - tileEndLat)) * tileGridH;
   const srcW = ((east - west) / (tileEndLon - tileOriginLon)) * tileGridW;
   const srcH = ((north - south) / (tileOriginLat - tileEndLat)) * tileGridH;
 
@@ -179,8 +195,14 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
     paperSize: config.paperSize,
     orientation: config.orientation,
     customRatio: config.customRatio,
-    north: 0, south: 0, east: 0, west: 0, scale: 0,
-    coordMode: "latlon", lockMode: "scale", pivot: "mc",
+    north: 0,
+    south: 0,
+    east: 0,
+    west: 0,
+    scale: 0,
+    coordMode: "latlon",
+    lockMode: "scale",
+    pivot: "mc",
   });
   const widthPx = mmToPx(paper.w);
   const heightPx = mmToPx(paper.h);
@@ -191,7 +213,10 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
   const mapCanvasBytes = widthPx * heightPx * 4;
   const MAX_CANVAS_BYTES = 200 * 1024 * 1024; // 200MB
   if (mapCanvasBytes > MAX_CANVAS_BYTES) {
-    throw new AppError(400, "Requested export is too large. Try a smaller paper size or lower scale.");
+    throw new AppError(
+      400,
+      "Requested export is too large. Try a smaller paper size or lower scale.",
+    );
   }
 
   // 3. Zoom level & extent
@@ -207,36 +232,60 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
   const sixExportUrl = SIX_EXPORT_URLS[config.baseLayer];
 
   if (sixExportUrl) {
-    await fetchSixExportImageDirect(mapCtx, sixExportUrl, config.extent, widthPx, heightPx);
-  } else {
-    const transform = computeTileToMapTransform(zoom, north, south, east, west, widthPx, heightPx);
-    if (transform.tiles.length > 2000) {
-      throw new AppError(400, "Requested area is too large at this scale. Try a smaller extent or lower zoom.");
-    }
-    const baseUrl = TILE_URLS[config.baseLayer];
-    if (baseUrl) {
-      await fetchAndDrawTilesDirect(mapCtx, transform.tiles, baseUrl, transform);
-    }
+    await fetchSixExportImageDirect(
+      mapCtx,
+      sixExportUrl,
+      config.extent,
+      widthPx,
+      heightPx,
+    );
   }
 
   // 6. Overlay tiles from PMTiles archives in S3 — draw directly onto mapCanvas
   if (config.overlays.length > 0) {
-    const transform = computeTileToMapTransform(zoom, north, south, east, west, widthPx, heightPx);
+    const transform = computeTileToMapTransform(
+      zoom,
+      north,
+      south,
+      east,
+      west,
+      widthPx,
+      heightPx,
+    );
     const topoBucket = process.env.S3_BUCKET_TOPO ?? "logjam-topo-jobs";
-    const s3 = new S3Client({ region: process.env.AWS_REGION ?? "ap-southeast-2" });
+    const s3 = new S3Client({
+      region: process.env.AWS_REGION ?? "ap-southeast-2",
+    });
 
     for (const overlayName of config.overlays) {
-      const layerDef = MASTER_TOPO_LAYERS.find(l => l.name === overlayName);
+      const layerDef = MASTER_TOPO_LAYERS.find((l) => l.name === overlayName);
       if (!layerDef) continue;
       const pmtilesKey = `master/${overlayName}.pmtiles`;
       const source = new S3Source(topoBucket, pmtilesKey, s3);
       const archive = new PMTiles(source);
       if (layerDef.format === "vector") {
-        await fetchAndDrawPMTilesVectorDirect(mapCtx, transform.tiles, archive, transform, overlayName, zoom);
+        await fetchAndDrawPMTilesVectorDirect(
+          mapCtx,
+          transform.tiles,
+          archive,
+          transform,
+          overlayName,
+          zoom,
+        );
       } else {
-        await fetchAndDrawPMTilesRasterDirect(mapCtx, transform.tiles, archive, transform);
+        await fetchAndDrawPMTilesRasterDirect(
+          mapCtx,
+          transform.tiles,
+          archive,
+          transform,
+        );
       }
     }
+  }
+
+  // 6b. Canyon markers
+  if (config.canyonMarkers && config.canyonMarkers.length > 0) {
+    drawCanyonMarkers(mapCtx, config, widthPx, heightPx);
   }
 
   // 7. Draw map elements
@@ -251,15 +300,37 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
   let stackY = heightPx - elementMargin;
 
   if (config.elements.scaleBar) {
-    stackY = drawScaleBar(mapCtx, config, widthPx, stackY, elementMargin, elementPadH, elementPadV);
+    stackY = drawScaleBar(
+      mapCtx,
+      config,
+      widthPx,
+      stackY,
+      elementMargin,
+      elementPadH,
+      elementPadV,
+    );
   }
 
   if (config.elements.scaleText) {
-    stackY = drawScaleText(mapCtx, config, stackY, elementMargin, elementPadH, elementPadV);
+    stackY = drawScaleText(
+      mapCtx,
+      config,
+      stackY,
+      elementMargin,
+      elementPadH,
+      elementPadV,
+    );
   }
 
   if (config.elements.contourInterval !== undefined) {
-    stackY = drawContourInterval(mapCtx, config.elements.contourInterval, stackY, elementMargin, elementPadH, elementPadV);
+    stackY = drawContourInterval(
+      mapCtx,
+      config.elements.contourInterval,
+      stackY,
+      elementMargin,
+      elementPadH,
+      elementPadV,
+    );
   }
 
   if (config.elements.compass) {
@@ -267,7 +338,13 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
   }
 
   if (config.elements.title) {
-    drawTitle(mapCtx, config.elements.title, elementMargin, elementPadH, elementPadV);
+    drawTitle(
+      mapCtx,
+      config.elements.title,
+      elementMargin,
+      elementPadH,
+      elementPadV,
+    );
   }
 
   // Attribution bottom-right
@@ -277,41 +354,6 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
   const pdfBuffer = await buildPdf(mapCanvas, widthPt, heightPt, config);
 
   return pdfBuffer;
-}
-
-// ── Tile fetching ────────────────────────────────────────────────────────────
-
-/** Fetch tiles and draw each directly onto the output canvas using the transform */
-async function fetchAndDrawTilesDirect(
-  mapCtx: CanvasRenderingContext2D,
-  tiles: TileCoord[],
-  urlTemplate: string,
-  transform: TileToMapTransform,
-): Promise<void> {
-  await pMap(tiles, async (tile) => {
-    const destX = ((tile.x - transform.minTileX) * TILE_SIZE - transform.offsetX) * transform.scaleX;
-    const destY = ((tile.y - transform.minTileY) * TILE_SIZE - transform.offsetY) * transform.scaleY;
-    const destW = TILE_SIZE * transform.scaleX;
-    const destH = TILE_SIZE * transform.scaleY;
-    const url = urlTemplate
-      .replace("{z}", String(tile.z))
-      .replace("{x}", String(tile.x))
-      .replace("{y}", String(tile.y));
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15_000);
-      const response = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeoutId);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const arrayBuf = await response.arrayBuffer();
-      const img = await loadImage(Buffer.from(arrayBuf));
-      mapCtx.drawImage(img, 0, 0, TILE_SIZE, TILE_SIZE, destX, destY, destW, destH);
-    } catch (err) {
-      mapCtx.fillStyle = "#e8e8e8";
-      mapCtx.fillRect(destX, destY, destW, destH);
-      console.warn(`Failed to fetch tile z${tile.z}/${tile.x}/${tile.y}: ${err}`);
-    }
-  }, CONCURRENCY);
 }
 
 // ── SIX Maps ArcGIS export ──────────────────────────────────────────────────
@@ -341,59 +383,87 @@ async function fetchSixExportImageDirect(
     }
   }
 
-  await pMap(chunks, async ({ col, row }) => {
-    const pxLeft = col * MAX_EXPORT_SIZE;
-    const pxTop = row * MAX_EXPORT_SIZE;
-    const chunkW = Math.min(MAX_EXPORT_SIZE, widthPx - pxLeft);
-    const chunkH = Math.min(MAX_EXPORT_SIZE, heightPx - pxTop);
+  await pMap(
+    chunks,
+    async ({ col, row }) => {
+      const pxLeft = col * MAX_EXPORT_SIZE;
+      const pxTop = row * MAX_EXPORT_SIZE;
+      const chunkW = Math.min(MAX_EXPORT_SIZE, widthPx - pxLeft);
+      const chunkH = Math.min(MAX_EXPORT_SIZE, heightPx - pxTop);
 
-    const chunkWest = extent.west + (pxLeft / widthPx) * lonRange;
-    const chunkEast = extent.west + ((pxLeft + chunkW) / widthPx) * lonRange;
-    const chunkNorth = extent.north - (pxTop / heightPx) * latRange;
-    const chunkSouth = extent.north - ((pxTop + chunkH) / heightPx) * latRange;
+      const chunkWest = extent.west + (pxLeft / widthPx) * lonRange;
+      const chunkEast = extent.west + ((pxLeft + chunkW) / widthPx) * lonRange;
+      const chunkNorth = extent.north - (pxTop / heightPx) * latRange;
+      const chunkSouth =
+        extent.north - ((pxTop + chunkH) / heightPx) * latRange;
 
-    const params = new URLSearchParams({
-      bbox: `${chunkWest},${chunkSouth},${chunkEast},${chunkNorth}`,
-      bboxSR: "4326",
-      imageSR: "3857",
-      size: `${chunkW},${chunkH}`,
-      format: "png",
-      f: "image",
-      transparent: "true",
-    });
+      const params = new URLSearchParams({
+        bbox: `${chunkWest},${chunkSouth},${chunkEast},${chunkNorth}`,
+        bboxSR: "4326",
+        size: `${chunkW},${chunkH}`,
+        dpi: `${DPI}`,
+        format: "png",
+        f: "image",
+        transparent: "true",
+      });
 
-    const url = `${exportUrl}?${params.toString()}`;
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60_000);
-      const response = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeoutId);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const arrayBuf = await response.arrayBuffer();
-      const img = await loadImage(Buffer.from(arrayBuf));
-      mapCtx.drawImage(img, 0, 0, img.width, img.height, pxLeft, pxTop, chunkW, chunkH);
-    } catch (err) {
-      mapCtx.fillStyle = "#e8e8e8";
-      mapCtx.fillRect(pxLeft, pxTop, chunkW, chunkH);
-      console.warn(`Failed to fetch SIX export chunk col=${col} row=${row}: ${err}`);
-    }
-  }, CONCURRENCY);
+      const url = `${exportUrl}?${params.toString()}`;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60_000);
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const arrayBuf = await response.arrayBuffer();
+        const img = await loadImage(Buffer.from(arrayBuf));
+        mapCtx.drawImage(
+          img,
+          0,
+          0,
+          img.width,
+          img.height,
+          pxLeft,
+          pxTop,
+          chunkW,
+          chunkH,
+        );
+      } catch (err) {
+        mapCtx.fillStyle = "#e8e8e8";
+        mapCtx.fillRect(pxLeft, pxTop, chunkW, chunkH);
+        console.warn(
+          `Failed to fetch SIX export chunk col=${col} row=${row}: ${err}`,
+        );
+      }
+    },
+    CONCURRENCY,
+  );
 }
 
 // ── PMTiles overlay rendering ────────────────────────────────────────────────
 
 class S3Source implements Source {
-  constructor(private bucket: string, private key: string, private s3: S3Client) {}
-  async getBytes(offset: number, length: number): Promise<{ data: ArrayBuffer }> {
-    const resp = await this.s3.send(new GetObjectCommand({
-      Bucket: this.bucket,
-      Key: this.key,
-      Range: `bytes=${offset}-${offset + length - 1}`,
-    }));
+  constructor(
+    private bucket: string,
+    private key: string,
+    private s3: S3Client,
+  ) {}
+  async getBytes(
+    offset: number,
+    length: number,
+  ): Promise<{ data: ArrayBuffer }> {
+    const resp = await this.s3.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: this.key,
+        Range: `bytes=${offset}-${offset + length - 1}`,
+      }),
+    );
     const bytes = await resp.Body!.transformToByteArray();
     return { data: bytes.buffer as ArrayBuffer };
   }
-  getKey() { return `s3://${this.bucket}/${this.key}`; }
+  getKey() {
+    return `s3://${this.bucket}/${this.key}`;
+  }
 }
 
 /** Fetch raster PMTiles and draw directly onto the output canvas */
@@ -403,20 +473,40 @@ async function fetchAndDrawPMTilesRasterDirect(
   archive: PMTiles,
   transform: TileToMapTransform,
 ): Promise<void> {
-  await pMap(tiles, async (tile) => {
-    try {
-      const result = await archive.getZxy(tile.z, tile.x, tile.y);
-      if (!result?.data) return;
-      const img = await loadImage(Buffer.from(result.data));
-      const destX = ((tile.x - transform.minTileX) * TILE_SIZE - transform.offsetX) * transform.scaleX;
-      const destY = ((tile.y - transform.minTileY) * TILE_SIZE - transform.offsetY) * transform.scaleY;
-      const destW = TILE_SIZE * transform.scaleX;
-      const destH = TILE_SIZE * transform.scaleY;
-      mapCtx.drawImage(img, 0, 0, TILE_SIZE, TILE_SIZE, destX, destY, destW, destH);
-    } catch (err) {
-      console.warn(`Failed to fetch raster PMTile ${tile.z}/${tile.x}/${tile.y}: ${err}`);
-    }
-  }, CONCURRENCY);
+  await pMap(
+    tiles,
+    async (tile) => {
+      try {
+        const result = await archive.getZxy(tile.z, tile.x, tile.y);
+        if (!result?.data) return;
+        const img = await loadImage(Buffer.from(result.data));
+        const destX =
+          ((tile.x - transform.minTileX) * TILE_SIZE - transform.offsetX) *
+          transform.scaleX;
+        const destY =
+          ((tile.y - transform.minTileY) * TILE_SIZE - transform.offsetY) *
+          transform.scaleY;
+        const destW = TILE_SIZE * transform.scaleX;
+        const destH = TILE_SIZE * transform.scaleY;
+        mapCtx.drawImage(
+          img,
+          0,
+          0,
+          TILE_SIZE,
+          TILE_SIZE,
+          destX,
+          destY,
+          destW,
+          destH,
+        );
+      } catch (err) {
+        console.warn(
+          `Failed to fetch raster PMTile ${tile.z}/${tile.x}/${tile.y}: ${err}`,
+        );
+      }
+    },
+    CONCURRENCY,
+  );
 }
 
 /** Fetch vector PMTiles and render features directly onto the output canvas */
@@ -428,27 +518,52 @@ async function fetchAndDrawPMTilesVectorDirect(
   layerName: string,
   zoom: number,
 ): Promise<void> {
-  await pMap(tiles, async (tile) => {
-    try {
-      const result = await archive.getZxy(tile.z, tile.x, tile.y);
-      if (!result?.data) return;
-      const vt = new VectorTile(new Pbf(result.data));
-      const tileDx = ((tile.x - transform.minTileX) * TILE_SIZE - transform.offsetX) * transform.scaleX;
-      const tileDy = ((tile.y - transform.minTileY) * TILE_SIZE - transform.offsetY) * transform.scaleY;
-      const sourceLayer = vt.layers[layerName];
-      if (!sourceLayer) return;
-      for (let i = 0; i < sourceLayer.length; i++) {
-        const feature = sourceLayer.feature(i);
-        renderVectorFeature(mapCtx, feature, tileDx, tileDy, zoom, layerName, transform.scaleX, transform.scaleY);
+  await pMap(
+    tiles,
+    async (tile) => {
+      try {
+        const result = await archive.getZxy(tile.z, tile.x, tile.y);
+        if (!result?.data) return;
+        const vt = new VectorTile(new Pbf(result.data));
+        const tileDx =
+          ((tile.x - transform.minTileX) * TILE_SIZE - transform.offsetX) *
+          transform.scaleX;
+        const tileDy =
+          ((tile.y - transform.minTileY) * TILE_SIZE - transform.offsetY) *
+          transform.scaleY;
+        const sourceLayer = vt.layers[layerName];
+        if (!sourceLayer) return;
+        for (let i = 0; i < sourceLayer.length; i++) {
+          const feature = sourceLayer.feature(i);
+          renderVectorFeature(
+            mapCtx,
+            feature,
+            tileDx,
+            tileDy,
+            zoom,
+            layerName,
+            transform.scaleX,
+            transform.scaleY,
+          );
+        }
+      } catch (err) {
+        console.warn(
+          `Failed to render vector PMTile ${tile.z}/${tile.x}/${tile.y}: ${err}`,
+        );
       }
-    } catch (err) {
-      console.warn(`Failed to render vector PMTile ${tile.z}/${tile.x}/${tile.y}: ${err}`);
-    }
-  }, CONCURRENCY);
+    },
+    CONCURRENCY,
+  );
 }
 
 /** Linear interpolation between two zoom stops */
-function interpZoom(z: number, z1: number, v1: number, z2: number, v2: number): number {
+function interpZoom(
+  z: number,
+  z1: number,
+  v1: number,
+  z2: number,
+  v2: number,
+): number {
   const t = Math.max(0, Math.min(1, (z - z1) / (z2 - z1)));
   return v1 + t * (v2 - v1);
 }
@@ -471,9 +586,29 @@ function renderVectorFeature(
   const props = feature.properties;
 
   if (layerName === "contours") {
-    renderContourFeature(ctx, feature, dx, dy, zoom, scaleX, scaleY, geomType, props);
+    renderContourFeature(
+      ctx,
+      feature,
+      dx,
+      dy,
+      zoom,
+      scaleX,
+      scaleY,
+      geomType,
+      props,
+    );
   } else if (layerName === "features") {
-    renderOsmFeature(ctx, feature, dx, dy, zoom, scaleX, scaleY, geomType, props);
+    renderOsmFeature(
+      ctx,
+      feature,
+      dx,
+      dy,
+      zoom,
+      scaleX,
+      scaleY,
+      geomType,
+      props,
+    );
   }
 }
 
@@ -554,7 +689,13 @@ function renderContourFeature(
 }
 
 const POINT_CATEGORIES = new Set([
-  "campsite", "peak", "spring", "gate", "viewpoint", "cave", "picnic",
+  "campsite",
+  "peak",
+  "spring",
+  "gate",
+  "viewpoint",
+  "cave",
+  "picnic",
 ]);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -683,7 +824,10 @@ function drawFillFeature(
 
 function drawRoundedRect(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
   r: number,
 ) {
   ctx.beginPath();
@@ -701,7 +845,10 @@ function drawRoundedRect(
 
 function drawElementBackground(
   ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
 ) {
   ctx.save();
   ctx.globalAlpha = 0.7;
@@ -925,8 +1072,16 @@ function drawCompass(
 
   const entries: [string, string, string][] = [
     ["#e11d48", "TN", "True North"],
-    ["#2563eb", "GN", `Grid North (${gridConv >= 0 ? "+" : ""}${gridConv.toFixed(2)}°)`],
-    ["#16a34a", "MN", `Mag. North (${magDecl >= 0 ? "+" : ""}${magDecl.toFixed(1)}°)`],
+    [
+      "#2563eb",
+      "GN",
+      `Grid North (${gridConv >= 0 ? "+" : ""}${gridConv.toFixed(2)}°)`,
+    ],
+    [
+      "#16a34a",
+      "MN",
+      `Mag. North (${magDecl >= 0 ? "+" : ""}${magDecl.toFixed(1)}°)`,
+    ],
   ];
 
   for (const [color, abbr, desc] of entries) {
@@ -940,13 +1095,13 @@ function drawCompass(
     ctx.lineTo(legendX + swatchLen, rowMidY);
     ctx.stroke();
 
-    // Abbreviation (bold) + description
+    // Abbreviation (bold) + description (description currently omitted to save space)
     ctx.fillStyle = "#1a1a1a";
     ctx.font = `bold ${legendFontSize}px sans-serif`;
     ctx.fillText(abbr, legendTextX, rowMidY);
     const abbrW = ctx.measureText(abbr + " ").width;
     ctx.font = `${legendFontSize}px sans-serif`;
-    ctx.fillText(desc, legendTextX + abbrW, rowMidY);
+    // ctx.fillText(desc, legendTextX + abbrW, rowMidY);
 
     legendY += legendRowH;
   }
@@ -958,6 +1113,95 @@ function drawCompass(
   return boxY;
 }
 
+function drawCanyonMarkers(
+  ctx: CanvasRenderingContext2D,
+  config: GeoPdfConfig,
+  widthPx: number,
+  heightPx: number,
+) {
+  const { north, south, east, west } = config.extent;
+  const radius = mmToPx(2);
+  const labelFontSize = mmToPx(2.5);
+
+  for (const marker of config.canyonMarkers!) {
+    const x = ((marker.lon - west) / (east - west)) * widthPx;
+    const y = ((north - marker.lat) / (north - south)) * heightPx;
+
+    // Skip markers outside canvas bounds
+    if (x < -radius || x > widthPx + radius || y < -radius || y > heightPx + radius) continue;
+
+    // Filled circle
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, 2 * Math.PI);
+    ctx.fillStyle = marker.color === "owned" ? "#f97316" : "#3b82f6";
+    ctx.fill();
+    ctx.strokeStyle = "#333333";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Name label at scales <= 1:50000
+    if (config.scale <= 50000 && marker.name) {
+      ctx.font = `${labelFontSize}px sans-serif`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+
+      const labelX = x + radius + mmToPx(1);
+      const labelY = y;
+
+      // White halo for legibility
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.lineWidth = 3;
+      ctx.lineJoin = "round";
+      ctx.strokeText(marker.name, labelX, labelY);
+
+      ctx.fillStyle = "#1a1a1a";
+      ctx.fillText(marker.name, labelX, labelY);
+    }
+  }
+
+  // Reset context state
+  ctx.textAlign = "start";
+  ctx.textBaseline = "alphabetic";
+}
+
+/**
+ * Draw an MGA grid label with the principal 2-digit grid reference in a
+ * larger bold font, following standard topographic map conventions.
+ * E.g. for 6292000 at 1km interval: "62" small + "92" large bold + "000" small
+ * E.g. for 6292000 at 10km interval (shown as 6292): "62" small + "92" large bold
+ */
+function drawGridLabel(
+  ctx: CanvasRenderingContext2D,
+  value: number,
+  interval: number,
+  x: number,
+  y: number,
+  smallFontSize: number,
+  largeFontSize: number,
+) {
+  const km = Math.round(value / 1000);
+  const principal = String(km % 100).padStart(2, "0");
+  const prefix = String(Math.floor(km / 100));
+
+  let curX = x;
+
+  ctx.font = `${smallFontSize}px sans-serif`;
+  ctx.fillText(prefix, curX, y);
+  curX += ctx.measureText(prefix).width;
+
+  ctx.font = `bold ${largeFontSize}px sans-serif`;
+  ctx.fillText(principal, curX, y);
+  curX += ctx.measureText(principal).width;
+
+  if (interval < 10000) {
+    ctx.font = `${smallFontSize}px sans-serif`;
+    ctx.fillText("000", curX, y);
+  }
+
+  // Restore font
+  ctx.font = `${smallFontSize}px sans-serif`;
+}
+
 function drawGridLines(
   ctx: CanvasRenderingContext2D,
   config: GeoPdfConfig,
@@ -966,10 +1210,11 @@ function drawGridLines(
 ) {
   const { north, south, east, west } = config.extent;
   const fontSize = mmToPx(2);
+  const largeFontSize = mmToPx(3.2);
   ctx.font = `${fontSize}px sans-serif`;
-  ctx.strokeStyle = "rgba(100, 100, 100, 0.4)";
-  ctx.fillStyle = "rgba(80, 80, 80, 0.7)";
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(40, 40, 40, 0.6)";
+  ctx.fillStyle = "rgba(20, 20, 20, 0.9)";
+  ctx.lineWidth = 1.5;
 
   if (config.elements.gridLines === "enNorthing") {
     // MGA easting/northing grid — convert each grid coordinate via
@@ -1003,8 +1248,7 @@ function drawGridLines(
       ctx.moveTo(topPx.x, topPx.y);
       ctx.lineTo(botPx.x, botPx.y);
       ctx.stroke();
-      const label = interval >= 10000 ? `${e / 1000}` : `${e}`;
-      ctx.fillText(label, topPx.x + 2, fontSize + 2);
+      drawGridLabel(ctx, e, interval, topPx.x + 2, fontSize + 2, fontSize, largeFontSize);
     }
 
     // Horizontal lines (constant northing, varying easting)
@@ -1019,8 +1263,7 @@ function drawGridLines(
       ctx.moveTo(leftPx.x, leftPx.y);
       ctx.lineTo(rightPx.x, rightPx.y);
       ctx.stroke();
-      const label = interval >= 10000 ? `${n / 1000}` : `${n}`;
-      ctx.fillText(label, 2, leftPx.y - 2);
+      drawGridLabel(ctx, n, interval, 2, leftPx.y - 2, fontSize, largeFontSize);
     }
   } else {
     // Lat/lon grid

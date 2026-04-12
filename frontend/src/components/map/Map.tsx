@@ -133,6 +133,7 @@ function Map({
   geoPdfInitialScale,
   onGeoPdfExtentConfirmed,
   onGeoPdfExtentCancelled,
+  onMapViewChange,
 }: {
   filters: TFilters;
   canyons: TCanyon[];
@@ -159,6 +160,7 @@ function Map({
   geoPdfInitialScale?: number;
   onGeoPdfExtentConfirmed?: (extent: TBbox, scale: number) => void;
   onGeoPdfExtentCancelled?: () => void;
+  onMapViewChange?: (center: { lat: number; lng: number }, zoom: number) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -170,6 +172,11 @@ function Map({
   useEffect(() => {
     selectCanyonRef.current = selectCanyon;
   }, [selectCanyon]);
+
+  const onMapViewChangeRef = useRef(onMapViewChange);
+  useEffect(() => {
+    onMapViewChangeRef.current = onMapViewChange;
+  }, [onMapViewChange]);
 
   // Initialise map once
   useEffect(() => {
@@ -330,6 +337,14 @@ function Map({
       });
 
       setMapLoaded(true);
+
+      // Notify parent of map view changes for GeoPDF extent initialization
+      const fireViewChange = () => {
+        const c = map.getCenter();
+        onMapViewChangeRef.current?.({ lat: c.lat, lng: c.lng }, map.getZoom());
+      };
+      fireViewChange();
+      map.on("moveend", fireViewChange);
     });
 
     mapRef.current = map;

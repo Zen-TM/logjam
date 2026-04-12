@@ -16,7 +16,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import type { TBbox } from "../map/Map";
 import { BASE_LAYERS } from "../map/Map";
 import { MASTER_TOPO_LAYERS } from "../../topoLayerTypes";
-import { apiFetch, apiFetchBlob } from "../../canyonUtils";
+import { apiFetch, apiFetchBlob, type TCanyon } from "../../canyonUtils";
 import type {
   ExtentState,
   PaperSize,
@@ -37,8 +37,9 @@ import {
   applyPivotChange,
   applyCoordModeChange,
   toEastingNorthing,
+  extentFromCentreAndSize,
 } from "@logjam/shared";
-import type { GeoPdfConfig } from "@logjam/shared";
+import type { GeoPdfConfig, CanyonMarker } from "@logjam/shared";
 import classes from "./GeoPdfDialog.module.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -99,6 +100,9 @@ function GeoPdfDialog({
   pendingScale,
   activeLayerId,
   masterTopoLayers,
+  mapCenter,
+  canyons,
+  sharedCanyons,
   templateMode,
   editingTemplate,
   onTemplateSaved,
@@ -115,6 +119,9 @@ function GeoPdfDialog({
   pendingScale: number | null;
   activeLayerId: string;
   masterTopoLayers: { id: string; pmtilesUrl: string; format?: string }[];
+  mapCenter?: { lat: number; lng: number } | null;
+  canyons?: TCanyon[];
+  sharedCanyons?: TCanyon[];
   templateMode?: boolean;
   editingTemplate?: GeoPdfTemplate | null;
   onTemplateSaved?: () => void;
@@ -131,7 +138,9 @@ function GeoPdfDialog({
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
 
   // Layers
-  const [selectedBaseLayer, setSelectedBaseLayer] = useState(activeLayerId);
+  const [selectedBaseLayer, setSelectedBaseLayer] = useState(
+    activeLayerId.startsWith("osm") ? "six-topo" : activeLayerId,
+  );
   const [selectedOverlays, setSelectedOverlays] = useState<Set<string>>(() => {
     return new Set(masterTopoLayers.map((l) => l.id));
   });
@@ -145,6 +154,10 @@ function GeoPdfDialog({
   const [scaleBarEnabled, setScaleBarEnabled] = useState(true);
   const [gridLinesEnabled, setGridLinesEnabled] = useState(false);
   const [gridLinesMode, setGridLinesMode] = useState<CoordMode>("latlon");
+
+  // Canyon overlays
+  const [showOwnedCanyonsOnPdf, setShowOwnedCanyonsOnPdf] = useState(true);
+  const [showSharedCanyonsOnPdf, setShowSharedCanyonsOnPdf] = useState(true);
 
   // Generation
   const [generating, setGenerating] = useState(false);
@@ -163,13 +176,31 @@ function GeoPdfDialog({
 
   // ── Effects ──────────────────────────────────────────────────────────────
 
-  // Sync base layer on open
+  // Sync base layer on open + initialize extent from map center
   useEffect(() => {
     if (open) {
-      setSelectedBaseLayer(activeLayerId);
+      setSelectedBaseLayer(
+        activeLayerId.startsWith("osm") ? "six-topo" : activeLayerId,
+      );
       setSelectedOverlays(new Set(masterTopoLayers.map((l) => l.id)));
+
+      // Initialize extent from current map center when no extent is set
+      setExtentState((prev) => {
+        if (prev.north !== 0 || prev.south !== 0) return prev;
+        if (!mapCenter) return prev;
+        const paper = getPaperDimensions(prev);
+        const widthM = prev.scale * (paper.w / 1000);
+        const heightM = prev.scale * (paper.h / 1000);
+        const bounds = extentFromCentreAndSize(
+          mapCenter.lat,
+          mapCenter.lng,
+          widthM,
+          heightM,
+        );
+        return { ...prev, ...bounds };
+      });
     }
-  }, [open, activeLayerId, masterTopoLayers]);
+  }, [open, activeLayerId, masterTopoLayers, mapCenter]);
 
   // Fetch templates on open (only in normal mode)
   useEffect(() => {
@@ -438,6 +469,30 @@ function GeoPdfDialog({
         ...(gridLinesEnabled ? { gridLines: gridLinesMode } : {}),
       },
     };
+
+    // Build canyon markers from canyons within the current extent
+    const markers: CanyonMarker[] = [];
+    const ext = config.extent;
+    if (showOwnedCanyonsOnPdf && canyons) {
+      for (const c of canyons) {
+        if (c.latitude >= ext.south && c.latitude <= ext.north &&
+            c.longitude >= ext.west && c.longitude <= ext.east) {
+          markers.push({ lat: c.latitude, lon: c.longitude, name: c.name, color: "owned" });
+        }
+      }
+    }
+    if (showSharedCanyonsOnPdf && sharedCanyons) {
+      for (const c of sharedCanyons) {
+        if (c.latitude >= ext.south && c.latitude <= ext.north &&
+            c.longitude >= ext.west && c.longitude <= ext.east) {
+          markers.push({ lat: c.latitude, lon: c.longitude, name: c.name, color: "shared" });
+        }
+      }
+    }
+    if (markers.length > 0) {
+      config.canyonMarkers = markers;
+    }
+
     try {
       const blob = await apiFetchBlob("/geo-pdf", {
         method: "POST",
@@ -473,6 +528,9 @@ function GeoPdfDialog({
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
       else next.add(name);
+      if (name === "contours" && !next.has("contours")) {
+        setContourEnabled(false);
+      }
       return next;
     });
   }, []);
@@ -925,7 +983,7 @@ function GeoPdfDialog({
           <div className={classes.layerColumns}>
             <div className={classes.layerColumn}>
               <div className={classes.layerColumnLabel}>Base layer</div>
-              {BASE_LAYERS.map((layer) => (
+              {BASE_LAYERS.filter((l) => !l.id.startsWith("osm")).map((layer) => (
                 <label key={layer.id} className={classes.layerOption}>
                   <input
                     type="radio"
@@ -955,6 +1013,24 @@ function GeoPdfDialog({
                   {layer.label}
                 </label>
               ))}
+              <label className={classes.layerOption}>
+                <input
+                  type="checkbox"
+                  checked={showOwnedCanyonsOnPdf}
+                  onChange={(e) => setShowOwnedCanyonsOnPdf(e.target.checked)}
+                  style={{ accentColor: "var(--theme-accent)" }}
+                />
+                My Canyons
+              </label>
+              <label className={classes.layerOption}>
+                <input
+                  type="checkbox"
+                  checked={showSharedCanyonsOnPdf}
+                  onChange={(e) => setShowSharedCanyonsOnPdf(e.target.checked)}
+                  style={{ accentColor: "var(--theme-accent)" }}
+                />
+                Shared Canyons
+              </label>
             </div>
           </div>
         </div>
@@ -1000,11 +1076,12 @@ function GeoPdfDialog({
               type="checkbox"
               checked={contourEnabled}
               onChange={(e) => setContourEnabled(e.target.checked)}
+              disabled={!selectedOverlays.has("contours")}
               style={{
                 accentColor: "var(--theme-accent)",
               }}
             />
-            <span>Contour interval text</span>
+            <span style={!selectedOverlays.has("contours") ? { opacity: 0.5 } : undefined}>Contour interval text</span>
             {contourEnabled && extentState.scale > 0 && (
               <span className={classes.elementSuffix}>
                 {getContourInterval(extentState.scale)}m

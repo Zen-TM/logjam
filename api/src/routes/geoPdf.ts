@@ -48,6 +48,14 @@ router.post(
         }
       }
     }
+    if (Array.isArray(config.canyonMarkers)) {
+      for (const m of config.canyonMarkers) {
+        if (typeof m.lat !== "number" || typeof m.lon !== "number" ||
+            typeof m.name !== "string" || (m.color !== "owned" && m.color !== "shared")) {
+          throw new AppError(400, "Invalid canyon marker entry");
+        }
+      }
+    }
 
     const pdfBuffer = await generateGeoPdf(config);
 

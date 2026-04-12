@@ -101,6 +101,9 @@ function App() {
     null,
   );
 
+  // Map view state for GeoPDF extent initialization
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
+
   // GeoPDF Templates dialog
   const [showGeoPdfTemplates, setShowGeoPdfTemplates] = useState(false);
   const [editingGeoPdfTemplate, setEditingGeoPdfTemplate] = useState<
@@ -326,6 +329,9 @@ function App() {
         pendingScale={pendingGeoPdfScale}
         activeLayerId={activeLayerId}
         masterTopoLayers={masterTopoLayers}
+        mapCenter={mapCenter}
+        canyons={canyons}
+        sharedCanyons={sharedCanyons}
         templateMode={editingGeoPdfTemplate !== undefined}
         editingTemplate={editingGeoPdfTemplate ?? undefined}
         onTemplateSaved={() => {
@@ -427,6 +433,7 @@ function App() {
           setSelectingGeoPdfExtent(false);
           setShowGeoPdf(true);
         }}
+        onMapViewChange={(center) => setMapCenter(center)}
       />
 
       {/* Add canyon dialog */}

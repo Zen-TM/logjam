@@ -1,5 +1,12 @@
 import type { PaperSize, Orientation, CoordMode } from "./geoPdfExtent.js";
 
+export interface CanyonMarker {
+  lat: number;
+  lon: number;
+  name: string;
+  color: "owned" | "shared";
+}
+
 export interface GeoPdfConfig {
   paperSize: PaperSize;
   orientation: Orientation;
@@ -16,4 +23,5 @@ export interface GeoPdfConfig {
     scaleBar: boolean;
     gridLines?: CoordMode;
   };
+  canyonMarkers?: CanyonMarker[];
 }
