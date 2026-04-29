@@ -7,6 +7,7 @@ import type {
   TFriendRequest,
   TNotification,
   TTripLog,
+  TAnalytics,
 } from "../../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import classes from "./SidebarPanel.module.css";
@@ -20,6 +21,7 @@ import CanyonDetailPanel from "./panels/CanyonDetailPanel";
 import PlaceholderPanel from "./panels/PlaceholderPanel";
 import SettingsPanel from "./panels/SettingsPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
+import AnalyticsPanel from "./panels/AnalyticsPanel";
 
 const PANEL_TITLES: Record<PanelId, string> = {
   overlays: "Overlays",
@@ -27,6 +29,7 @@ const PANEL_TITLES: Record<PanelId, string> = {
   forge: "Forge",
   filters: "Filters",
   "trip-logs": "Trip Logs",
+  analytics: "Analytics",
   friends: "Friends",
   notifications: "Notifications",
   account: "Account",
@@ -86,6 +89,9 @@ function SidebarPanel({
   onRefetchTripLogs,
   customFieldDefs,
   onCustomFieldDefsChange,
+  // Analytics
+  analytics,
+  analyticsLoading,
 }: {
   activePanel: PanelId | null;
   onClose: () => void;
@@ -140,6 +146,9 @@ function SidebarPanel({
   onRefetchTripLogs: () => void;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  // Analytics
+  analytics: TAnalytics | null;
+  analyticsLoading: boolean;
 }) {
   if (!activePanel) return null;
 
@@ -209,6 +218,15 @@ function SidebarPanel({
             onRefetchFriends={onRefetchFriends}
             setSelectedCanyonID={setSelectedCanyonID}
             setActivePanel={setActivePanel}
+          />
+        )}
+        {activePanel === "analytics" && (
+          <AnalyticsPanel
+            analytics={analytics}
+            loading={analyticsLoading}
+            tripLogs={tripLogs}
+            customFieldDefs={customFieldDefs}
+            onRefetchTripLogs={onRefetchTripLogs}
           />
         )}
         {activePanel === "trip-logs" && (

@@ -4,6 +4,7 @@ export type PanelId =
   | "forge"
   | "filters"
   | "trip-logs"
+  | "analytics"
   | "friends"
   | "notifications"
   | "account"

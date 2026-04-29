@@ -20,6 +20,7 @@ import {
   useFriends,
   useNotifications,
   useTripLogs,
+  useAnalytics,
   deleteCanyon,
   shareCanyonWith,
   fetchCurrentUser,
@@ -203,6 +204,10 @@ function App() {
     loading: tripLogsLoading,
     refetch: refetchTripLogs,
   } = useTripLogs(authenticated);
+  const {
+    analytics,
+    loading: analyticsLoading,
+  } = useAnalytics(authenticated);
 
   const [customFieldDefs, setCustomFieldDefs] = useState<TripLogCustomFieldDef[]>([]);
 
@@ -408,6 +413,8 @@ function App() {
           onRefetchTripLogs={refetchTripLogs}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={setCustomFieldDefs}
+          analytics={analytics}
+          analyticsLoading={analyticsLoading}
           onTopoLayersChange={setMasterTopoLayers}
           lidarEnabled={lidarEnabled}
           setLidarEnabled={setLidarEnabled}

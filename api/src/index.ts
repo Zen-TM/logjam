@@ -15,6 +15,7 @@ import topoJobsRouter from "./routes/topoJobs";
 import topoLayersRouter from "./routes/topoLayers";
 import geoPdfTemplatesRouter from "./routes/geoPdfTemplates";
 import geoPdfRouter from "./routes/geoPdf";
+import analyticsRouter from "./routes/analytics";
 
 dotenv.config();
 
@@ -53,6 +54,7 @@ app.use("/topo-jobs", topoJobsRouter);
 app.use("/topo-layers", topoLayersRouter);
 app.use("/geo-pdf-templates", geoPdfTemplatesRouter);
 app.use("/geo-pdf", geoPdfRouter);
+app.use("/analytics", analyticsRouter);
 
 // Error handler — must be last
 app.use(errorHandler);

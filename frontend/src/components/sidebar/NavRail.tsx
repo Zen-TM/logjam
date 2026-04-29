@@ -4,6 +4,7 @@ import {
   Hammer,
   SlidersHorizontal,
   BookOpen,
+  BarChart3,
   Users,
   Bell,
   CircleUser,
@@ -18,6 +19,7 @@ const TOP_ITEMS: { id: PanelId; label: string; Icon: typeof Layers }[] = [
   { id: "forge", label: "Forge", Icon: Hammer },
   { id: "filters", label: "Filters", Icon: SlidersHorizontal },
   { id: "trip-logs", label: "Trip Logs", Icon: BookOpen },
+  { id: "analytics", label: "Analytics", Icon: BarChart3 },
   { id: "friends", label: "Friends", Icon: Users },
 ];
 

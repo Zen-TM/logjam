@@ -322,6 +322,45 @@ export function useTripLogs(enabled: boolean) {
   return { tripLogs, loading, refetch };
 }
 
+// ── Analytics ─────────────────────────────────────────────────
+
+export type TAnalytics = {
+  heroStats: {
+    totalTrips: number;
+    uniqueCanyons: number;
+    daysCanyoning: number;
+    totalAbseils: number | null;
+  };
+  completion: {
+    totalCanyons: number;
+    canyonsWithTrips: number;
+  };
+  tripDates: Record<string, number>;
+};
+
+export function getAnalytics(): Promise<TAnalytics> {
+  return apiFetch<TAnalytics>("/analytics");
+}
+
+export function useAnalytics(enabled: boolean) {
+  const [analytics, setAnalytics] = useState<TAnalytics | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [fetchCount, setFetchCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    setLoading(true);
+    getAnalytics()
+      .then(setAnalytics)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [enabled, fetchCount]);
+
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+
+  return { analytics, loading, refetch };
+}
+
 // ── Friends ───────────────────────────────────────────────────
 
 export function searchUsers(query: string): Promise<TSearchUser[]> {
