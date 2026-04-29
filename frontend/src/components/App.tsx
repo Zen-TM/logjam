@@ -24,6 +24,7 @@ import {
   deleteCanyon,
   shareCanyonWith,
   fetchCurrentUser,
+  passesFilters,
 } from "../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { useAuth } from "../useAuth";
@@ -463,6 +464,39 @@ function App() {
         }}
         onMapViewChange={(center) => setMapCenter(center)}
       />
+
+      {selectingArea && (
+        <div className={classes.selectAllButtons}>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={cancelAreaSelection}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            size="small"
+            onClick={() => handleAreaSelected(allCanyons.map((c) => c.id))}
+          >
+            Select All
+          </Button>
+          <Button
+            variant="contained"
+            size="small"
+            disabled={!Object.values(filters).some((v) => v !== null)}
+            onClick={() =>
+              handleAreaSelected(
+                allCanyons
+                  .filter((c) => passesFilters(c, filters))
+                  .map((c) => c.id),
+              )
+            }
+          >
+            Select All Filtered
+          </Button>
+        </div>
+      )}
 
       {/* Add canyon dialog */}
       <CanyonDialog
