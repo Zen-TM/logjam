@@ -1,6 +1,10 @@
 import { Router, Response } from "express";
 import { Prisma } from "@prisma/client";
-import { isThemeSchemeId, normalizeUserUiPreferences } from "@logjam/shared";
+import {
+  isThemeSchemeId,
+  normalizeUserUiPreferences,
+  isTripLogCustomFieldDef,
+} from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
@@ -69,9 +73,10 @@ router.patch(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
-    const { username, themeSchemeId } = req.body as {
+    const { username, themeSchemeId, tripLogCustomFields } = req.body as {
       username?: unknown;
       themeSchemeId?: unknown;
+      tripLogCustomFields?: unknown;
     };
 
     const user = await prisma.user.findUnique({ where: { cognitoId: sub } });
@@ -89,15 +94,24 @@ router.patch(
       updates.username = username;
     }
 
-    if (themeSchemeId !== undefined) {
-      if (!isThemeSchemeId(themeSchemeId)) {
+    if (themeSchemeId !== undefined || tripLogCustomFields !== undefined) {
+      if (themeSchemeId !== undefined && !isThemeSchemeId(themeSchemeId)) {
         throw new AppError(400, "Invalid themeSchemeId");
+      }
+      if (tripLogCustomFields !== undefined) {
+        if (
+          !Array.isArray(tripLogCustomFields) ||
+          !tripLogCustomFields.every(isTripLogCustomFieldDef)
+        ) {
+          throw new AppError(400, "Invalid tripLogCustomFields");
+        }
       }
 
       const current = normalizeUserUiPreferences(user.uiPreferences);
       updates.uiPreferences = {
         ...current,
-        themeSchemeId,
+        ...(themeSchemeId !== undefined ? { themeSchemeId } : {}),
+        ...(tripLogCustomFields !== undefined ? { tripLogCustomFields } : {}),
       };
     }
 

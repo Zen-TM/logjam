@@ -6,7 +6,9 @@ import type {
   TFriend,
   TFriendRequest,
   TNotification,
+  TTripLog,
 } from "../../canyonUtils";
+import type { TripLogCustomFieldDef } from "@logjam/shared";
 import classes from "./SidebarPanel.module.css";
 import OverlaysPanel from "./panels/OverlaysPanel";
 import LayersPanel from "./panels/LayersPanel";
@@ -17,12 +19,14 @@ import NotificationsPanel from "./panels/NotificationsPanel";
 import CanyonDetailPanel from "./panels/CanyonDetailPanel";
 import PlaceholderPanel from "./panels/PlaceholderPanel";
 import SettingsPanel from "./panels/SettingsPanel";
+import TripLogsPanel from "./panels/TripLogsPanel";
 
 const PANEL_TITLES: Record<PanelId, string> = {
   overlays: "Overlays",
   layers: "Layers",
   forge: "Forge",
   filters: "Filters",
+  "trip-logs": "Trip Logs",
   friends: "Friends",
   notifications: "Notifications",
   account: "Account",
@@ -76,6 +80,12 @@ function SidebarPanel({
   onPickCoords,
   pickingCoords,
   onCancelPickCoords,
+  // Trip logs
+  tripLogs,
+  tripLogsLoading,
+  onRefetchTripLogs,
+  customFieldDefs,
+  onCustomFieldDefsChange,
 }: {
   activePanel: PanelId | null;
   onClose: () => void;
@@ -124,6 +134,12 @@ function SidebarPanel({
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
   onCancelPickCoords: () => void;
+  // Trip logs
+  tripLogs: TTripLog[];
+  tripLogsLoading: boolean;
+  onRefetchTripLogs: () => void;
+  customFieldDefs: TripLogCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
 }) {
   if (!activePanel) return null;
 
@@ -195,6 +211,15 @@ function SidebarPanel({
             setActivePanel={setActivePanel}
           />
         )}
+        {activePanel === "trip-logs" && (
+          <TripLogsPanel
+            tripLogs={tripLogs}
+            loading={tripLogsLoading}
+            onRefetchTripLogs={onRefetchTripLogs}
+            customFieldDefs={customFieldDefs}
+            onCustomFieldDefsChange={onCustomFieldDefsChange}
+          />
+        )}
         {activePanel === "account" && <PlaceholderPanel text="Coming soon" />}
         {activePanel === "settings" && <SettingsPanel />}
         {activePanel === "canyon-detail" && (
@@ -208,6 +233,8 @@ function SidebarPanel({
             onPickCoords={onPickCoords}
             pickingCoords={pickingCoords}
             onCancelPickCoords={onCancelPickCoords}
+            customFieldDefs={customFieldDefs}
+            onCustomFieldDefsChange={onCustomFieldDefsChange}
           />
         )}
       </div>

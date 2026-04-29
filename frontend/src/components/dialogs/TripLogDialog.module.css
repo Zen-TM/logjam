@@ -1,0 +1,14 @@
+.addFieldForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+}
+
+.uploadPlaceholder {
+  padding: 0.75rem;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+}

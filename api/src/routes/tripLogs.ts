@@ -56,7 +56,7 @@ router.get(
     const id = getParam(req.params.id);
     const trip = await prisma.tripLog.findUnique({
       where: { id },
-      include: { media: true, canyon: true },
+      include: { media: true, canyon: { select: { id: true, name: true, ownerId: true } } },
     });
     if (!trip) throw new AppError(404, "Trip log not found");
 

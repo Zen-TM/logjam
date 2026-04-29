@@ -21,6 +21,7 @@ export type ThemeScheme = {
 
 export type UserUiPreferences = {
   themeSchemeId: ThemeSchemeId;
+  tripLogCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
 };
 
 export const DEFAULT_THEME_SCHEME_ID: ThemeSchemeId = "sandstone";
@@ -108,11 +109,25 @@ export function isThemeSchemeId(value: unknown): value is ThemeSchemeId {
 
 export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
   if (typeof value === "object" && value !== null) {
-    const candidate = (value as { themeSchemeId?: unknown }).themeSchemeId;
-    if (isThemeSchemeId(candidate)) {
-      return { themeSchemeId: candidate };
-    }
+    const obj = value as Record<string, unknown>;
+    const themeSchemeId = isThemeSchemeId(obj.themeSchemeId)
+      ? obj.themeSchemeId
+      : DEFAULT_THEME_SCHEME_ID;
+    const tripLogCustomFields = Array.isArray(obj.tripLogCustomFields)
+      ? (obj.tripLogCustomFields as unknown[]).filter(
+          (f): f is import("./tripLogFields.js").TripLogCustomFieldDef => {
+            if (typeof f !== "object" || f === null) return false;
+            const c = f as Record<string, unknown>;
+            return (
+              typeof c.key === "string" &&
+              typeof c.label === "string" &&
+              typeof c.type === "string"
+            );
+          },
+        )
+      : [];
+    return { themeSchemeId, tripLogCustomFields };
   }
 
-  return { themeSchemeId: DEFAULT_THEME_SCHEME_ID };
+  return { themeSchemeId: DEFAULT_THEME_SCHEME_ID, tripLogCustomFields: [] };
 }

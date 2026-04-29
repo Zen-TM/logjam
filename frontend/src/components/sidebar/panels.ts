@@ -3,6 +3,7 @@ export type PanelId =
   | "layers"
   | "forge"
   | "filters"
+  | "trip-logs"
   | "friends"
   | "notifications"
   | "account"

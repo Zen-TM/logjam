@@ -19,9 +19,12 @@ import {
   useSharedCanyons,
   useFriends,
   useNotifications,
+  useTripLogs,
   deleteCanyon,
   shareCanyonWith,
+  fetchCurrentUser,
 } from "../canyonUtils";
+import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import {
   Dialog,
@@ -195,10 +198,23 @@ function App() {
     unreadCount,
     refetch: refetchNotifications,
   } = useNotifications(authenticated);
+  const {
+    tripLogs,
+    loading: tripLogsLoading,
+    refetch: refetchTripLogs,
+  } = useTripLogs(authenticated);
+
+  const [customFieldDefs, setCustomFieldDefs] = useState<TripLogCustomFieldDef[]>([]);
 
   useEffect(() => {
     if (!authenticated) return;
     hydrateFromUser().catch(console.error);
+    // Fetch user preferences to get custom field definitions
+    fetchCurrentUser()
+      .then((user) => {
+        setCustomFieldDefs(user.uiPreferences?.tripLogCustomFields ?? []);
+      })
+      .catch(console.error);
   }, [authenticated, hydrateFromUser]);
 
   // Show import dialog once when user has no canyons after first fetch completes
@@ -387,6 +403,11 @@ function App() {
           onPickCoords={startPickingCoords}
           pickingCoords={pickingCoords}
           onCancelPickCoords={cancelPickingCoords}
+          tripLogs={tripLogs}
+          tripLogsLoading={tripLogsLoading}
+          onRefetchTripLogs={refetchTripLogs}
+          customFieldDefs={customFieldDefs}
+          onCustomFieldDefsChange={setCustomFieldDefs}
           onTopoLayersChange={setMasterTopoLayers}
           lidarEnabled={lidarEnabled}
           setLidarEnabled={setLidarEnabled}

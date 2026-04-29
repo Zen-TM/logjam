@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
-import type { ThemeSchemeId } from "@logjam/shared";
+import type { ThemeSchemeId, TripLogCustomFieldDef } from "@logjam/shared";
 
 export type TCanyonAttributes = {
   sources?: [string, string][];
@@ -34,7 +34,19 @@ export type TUser = {
   email: string;
   uiPreferences?: {
     themeSchemeId?: ThemeSchemeId;
+    tripLogCustomFields?: TripLogCustomFieldDef[];
   } | null;
+};
+
+export type TTripLog = {
+  id: string;
+  canyonId: string;
+  userId: string;
+  date: string;
+  notes: string | null;
+  customFields: Record<string, unknown>;
+  createdAt: string;
+  canyon?: { id: string; name: string };
 };
 
 export type TFriend = {
@@ -239,6 +251,75 @@ export function updateCurrentUserThemeScheme(
     method: "PATCH",
     body: { themeSchemeId },
   });
+}
+
+export function updateUserPreferences(
+  prefs: Partial<{ themeSchemeId: ThemeSchemeId; tripLogCustomFields: TripLogCustomFieldDef[] }>,
+): Promise<TUser> {
+  return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });
+}
+
+// ── Trip Logs ─────────────────────────────────────────────────
+
+export function getTripLogs(canyonId: string): Promise<TTripLog[]> {
+  return apiFetch<TTripLog[]>(`/canyons/${canyonId}/trips`);
+}
+
+export function createTripLog(
+  canyonId: string,
+  data: { date: string; notes?: string | null; customFields?: Record<string, unknown> },
+): Promise<TTripLog> {
+  return apiFetch<TTripLog>(`/canyons/${canyonId}/trips`, {
+    method: "POST",
+    body: data,
+  });
+}
+
+export function updateTripLog(
+  canyonId: string,
+  id: string,
+  data: { date?: string; notes?: string | null; customFields?: Record<string, unknown> },
+): Promise<TTripLog> {
+  return apiFetch<TTripLog>(`/canyons/${canyonId}/trips/${id}`, {
+    method: "PATCH",
+    body: data,
+  });
+}
+
+export function deleteTripLog(canyonId: string, id: string): Promise<void> {
+  return apiFetch<void>(`/canyons/${canyonId}/trips/${id}`, { method: "DELETE" });
+}
+
+export function getAllTripLogs(params?: {
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<TTripLog[]> {
+  const qs = new URLSearchParams();
+  if (params?.search) qs.set("search", params.search);
+  if (params?.dateFrom) qs.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) qs.set("dateTo", params.dateTo);
+  const query = qs.toString();
+  return apiFetch<TTripLog[]>(`/trips${query ? `?${query}` : ""}`);
+}
+
+export function useTripLogs(enabled: boolean) {
+  const [tripLogs, setTripLogs] = useState<TTripLog[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [fetchCount, setFetchCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    setLoading(true);
+    getAllTripLogs()
+      .then(setTripLogs)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [enabled, fetchCount]);
+
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+
+  return { tripLogs, loading, refetch };
 }
 
 // ── Friends ───────────────────────────────────────────────────

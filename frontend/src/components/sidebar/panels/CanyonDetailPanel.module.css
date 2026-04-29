@@ -141,3 +141,54 @@
   opacity: var(--opacity-disabled);
   cursor: default;
 }
+
+.logTripButton {
+  composes: btn btnFilledAccent btnMd from '@styles/shared.module.css';
+  flex: 1;
+}
+
+/* Trip logs section */
+
+.tripLogsSection {
+  margin-top: 1.25em;
+  padding-top: 1em;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tripLogList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.tripLogCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  padding: 0.6em 0.75em;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  color: var(--theme-text-primary);
+  width: 100%;
+  transition: background-color var(--transition-fast);
+}
+
+.tripLogCard:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tripLogDate {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.tripLogNotes {
+  font-size: var(--text-xs);
+  opacity: 0.65;
+  line-height: 1.35;
+}

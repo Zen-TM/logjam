@@ -3,6 +3,7 @@ import {
   Map,
   Hammer,
   SlidersHorizontal,
+  BookOpen,
   Users,
   Bell,
   CircleUser,
@@ -16,6 +17,7 @@ const TOP_ITEMS: { id: PanelId; label: string; Icon: typeof Layers }[] = [
   { id: "layers", label: "Layers", Icon: Map },
   { id: "forge", label: "Forge", Icon: Hammer },
   { id: "filters", label: "Filters", Icon: SlidersHorizontal },
+  { id: "trip-logs", label: "Trip Logs", Icon: BookOpen },
   { id: "friends", label: "Friends", Icon: Users },
 ];
 

@@ -8,10 +8,14 @@ import {
   Button,
   TextField,
   Typography,
+  Box,
 } from "@mui/material";
 import classes from "./CanyonDetailPanel.module.css";
 import CanyonDialog from "../../dialogs/CanyonDialog";
-import type { TCanyon, TFriend, TCanyonShare } from "../../../canyonUtils";
+import TripLogDialog from "../../dialogs/TripLogDialog";
+import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
+import type { TCanyon, TFriend, TCanyonShare, TTripLog } from "../../../canyonUtils";
+import type { TripLogCustomFieldDef } from "@logjam/shared";
 import {
   formatCanyonGrade,
   deleteCanyon,
@@ -19,6 +23,7 @@ import {
   unshareCanyonWith,
   getCanyonShares,
   copyCanyon,
+  getTripLogs,
 } from "../../../canyonUtils";
 
 function CanyonDetailPanel({
@@ -31,6 +36,8 @@ function CanyonDetailPanel({
   onPickCoords,
   pickingCoords,
   onCancelPickCoords,
+  customFieldDefs,
+  onCustomFieldDefsChange,
 }: {
   canyon: TCanyon | undefined;
   isOwnedCanyon: boolean;
@@ -41,10 +48,20 @@ function CanyonDetailPanel({
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
   onCancelPickCoords: () => void;
+  customFieldDefs: TripLogCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
 }) {
   const [showEdit, setShowEdit] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Trip log state
+  const [tripLogs, setTripLogs] = useState<TTripLog[]>([]);
+  const [loadingTrips, setLoadingTrips] = useState(false);
+  const [showTripLogDialog, setShowTripLogDialog] = useState(false);
+  const [showTripLogView, setShowTripLogView] = useState(false);
+  const [viewingTripLog, setViewingTripLog] = useState<TTripLog | null>(null);
+  const [editingTripLog, setEditingTripLog] = useState<TTripLog | undefined>(undefined);
 
   // Sharing state
   const [showShareSelector, setShowShareSelector] = useState(false);
@@ -65,6 +82,19 @@ function CanyonDetailPanel({
     }
     getCanyonShares(canyon.id).then(setCanyonShares).catch(console.error);
   }, [canyon?.id, isOwnedCanyon]);
+
+  // Fetch trip logs when canyon changes
+  useEffect(() => {
+    if (!canyon) {
+      setTripLogs([]);
+      return;
+    }
+    setLoadingTrips(true);
+    getTripLogs(canyon.id)
+      .then(setTripLogs)
+      .catch(console.error)
+      .finally(() => setLoadingTrips(false));
+  }, [canyon?.id]);
 
   if (!canyon) {
     return (
@@ -221,6 +251,15 @@ function CanyonDetailPanel({
               onClick={() => setShowEdit(true)}
             >
               Edit
+            </button>
+            <button
+              className={classes.logTripButton}
+              onClick={() => {
+                setEditingTripLog(undefined);
+                setShowTripLogDialog(true);
+              }}
+            >
+              Log Trip
             </button>
             <button
               className={classes.deleteButton}
@@ -382,6 +421,50 @@ function CanyonDetailPanel({
             </button>
           </div>
         )}
+
+        {/* Trip Logs list */}
+        <div className={classes.tripLogsSection}>
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
+            <Typography variant="body2" sx={{ fontWeight: "bold" }}>
+              Trip Logs {tripLogs.length > 0 && `(${tripLogs.length})`}
+            </Typography>
+          </Box>
+          {loadingTrips ? (
+            <Typography variant="caption" sx={{ opacity: 0.6 }}>
+              Loading...
+            </Typography>
+          ) : tripLogs.length === 0 ? (
+            <Typography variant="caption" sx={{ opacity: 0.6 }}>
+              No trips logged yet.
+            </Typography>
+          ) : (
+            <div className={classes.tripLogList}>
+              {tripLogs.map((trip) => (
+                <button
+                  key={trip.id}
+                  className={classes.tripLogCard}
+                  onClick={() => {
+                    setViewingTripLog(trip);
+                    setShowTripLogView(true);
+                  }}
+                >
+                  <span className={classes.tripLogDate}>
+                    {new Date(trip.date).toLocaleDateString("en-AU", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </span>
+                  {trip.notes && (
+                    <span className={classes.tripLogNotes}>
+                      {trip.notes.length > 60 ? trip.notes.slice(0, 60) + "…" : trip.notes}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Edit canyon dialog */}
@@ -423,6 +506,47 @@ function CanyonDetailPanel({
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Trip Log create/edit dialog */}
+      <TripLogDialog
+        open={showTripLogDialog && !pickingCoords}
+        onClose={() => {
+          setShowTripLogDialog(false);
+          setEditingTripLog(undefined);
+        }}
+        onSaved={() => {
+          setShowTripLogDialog(false);
+          setEditingTripLog(undefined);
+          // Refresh trip logs
+          getTripLogs(canyon.id).then(setTripLogs).catch(console.error);
+        }}
+        canyonId={canyon.id}
+        canyonName={canyon.name}
+        tripLog={editingTripLog}
+        customFieldDefs={customFieldDefs}
+        onCustomFieldDefsChange={onCustomFieldDefsChange}
+      />
+
+      {/* Trip Log view dialog */}
+      <TripLogViewDialog
+        open={showTripLogView}
+        onClose={() => {
+          setShowTripLogView(false);
+          setViewingTripLog(null);
+        }}
+        tripLog={viewingTripLog}
+        canyonName={canyon.name}
+        customFieldDefs={customFieldDefs}
+        onEdit={() => {
+          setShowTripLogView(false);
+          setEditingTripLog(viewingTripLog ?? undefined);
+          setViewingTripLog(null);
+          setShowTripLogDialog(true);
+        }}
+        onDeleted={() => {
+          getTripLogs(canyon.id).then(setTripLogs).catch(console.error);
+        }}
+      />
     </>
   );
 }

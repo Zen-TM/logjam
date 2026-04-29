@@ -1,0 +1,25 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sectionLabel {
+  color: var(--theme-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.7rem;
+  margin-bottom: 0.15rem;
+}
+
+.fieldRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.fieldLabel {
+  color: var(--theme-text-muted);
+  min-width: 7rem;
+  flex-shrink: 0;
+}
