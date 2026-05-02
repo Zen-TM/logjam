@@ -465,7 +465,7 @@ function CanyonDialog({
                 borderColor: "var(--theme-accent)",
                 "&:hover": {
                   backgroundColor:
-                    "color-mix(in srgb, var(--theme-accent) 20%, transparent)",
+                    "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
                 },
               }}
               onClick={() => setSources([...sources, { label: "", url: "" }])}

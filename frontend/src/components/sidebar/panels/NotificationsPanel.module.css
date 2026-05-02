@@ -4,8 +4,13 @@
   composes: btn btnSm btnOutlineBonus1 from '@styles/shared.module.css';
 }
 
+.header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5em;
+}
+
 .notificationList {
-  padding: 0 1em;
   overflow-y: auto;
   flex: 1;
 }
@@ -35,6 +40,14 @@
   opacity: var(--opacity-muted);
 }
 
+.emptyText {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.6;
+  padding: 0.5em 0;
+  display: block;
+}
+
 .notificationActions {
   display: flex;
   gap: 0.3em;
@@ -53,4 +66,5 @@
   composes: btn btnGhost btnFull from '@styles/shared.module.css';
   padding: 0.5em;
   font-size: var(--text-xs);
+  margin: 0.5em 0;
 }

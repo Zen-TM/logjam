@@ -82,15 +82,6 @@
 }
 
 .resetButton {
-  border: 1px solid
-    color-mix(in srgb, var(--theme-text-primary) 24%, transparent);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--theme-text-primary);
-  padding: 8px 10px;
-  cursor: pointer;
-}
-
-.resetButton:hover {
-  background: color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
+  composes: btn btnGhost btnMd from '@styles/shared.module.css';
+  width: 100%;
 }

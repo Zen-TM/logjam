@@ -1,4 +1,3 @@
-import { Typography } from "@mui/material";
 import classes from "./NotificationsPanel.module.css";
 import type { TNotification } from "../../../canyonUtils";
 import type { PanelId } from "../panels";
@@ -25,7 +24,7 @@ function NotificationsPanel({
 }) {
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.5em" }}>
+      <div className={classes.header}>
         <button
           className={classes.markAllReadButton}
           onClick={async () => {
@@ -37,14 +36,9 @@ function NotificationsPanel({
         </button>
       </div>
 
-      <div className={classes.notificationList} style={{ padding: 0 }}>
+      <div className={classes.notificationList}>
         {notifications.length === 0 ? (
-          <Typography
-            variant="caption"
-            sx={{ opacity: 0.6, padding: "0.5em 0" }}
-          >
-            No notifications.
-          </Typography>
+          <span className={classes.emptyText}>No notifications.</span>
         ) : (
           notifications.map((n) => (
             <div
@@ -110,7 +104,6 @@ function NotificationsPanel({
       {notifications.some((n) => n.read) && (
         <button
           className={classes.clearAllButton}
-          style={{ margin: "0.5em 0", width: "100%" }}
           onClick={async () => {
             await clearReadNotifications();
             onRefetchNotifications();

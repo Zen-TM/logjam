@@ -116,7 +116,7 @@ function TripLogViewDialog({
           {/* Custom field values */}
           {customFieldDefs.length > 0 && (
             <>
-              <Divider sx={{ borderColor: "rgba(255,255,255,0.08)", my: 1.5 }} />
+              <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 1.5 }} />
               <Box className={classes.section}>
                 {customFieldDefs.map((def) => {
                   const val = tripLog.customFields[def.key];
@@ -138,7 +138,7 @@ function TripLogViewDialog({
           {/* Notes */}
           {tripLog.notes && (
             <>
-              <Divider sx={{ borderColor: "rgba(255,255,255,0.08)", my: 1.5 }} />
+              <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 1.5 }} />
               <Box className={classes.section}>
                 <Typography variant="caption" className={classes.sectionLabel}>
                   Notes
@@ -151,7 +151,7 @@ function TripLogViewDialog({
           )}
 
           {/* Media grid placeholder */}
-          <Divider sx={{ borderColor: "rgba(255,255,255,0.08)", my: 1.5 }} />
+          <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 1.5 }} />
           <Box className={classes.section}>
             <Typography variant="caption" className={classes.sectionLabel}>
               Photos &amp; Videos

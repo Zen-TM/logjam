@@ -198,7 +198,7 @@ function TripLogDialog({
         sx={{
           "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.9em" },
           "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
-          "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.2)" },
+          "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
         }}
       />
     );
@@ -257,7 +257,7 @@ function TripLogDialog({
             sx={{
               "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.9em" },
               "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
-              "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.2)" },
+              "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
             }}
           />
 
@@ -274,7 +274,7 @@ function TripLogDialog({
             sx={{
               "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.9em" },
               "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
-              "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.2)" },
+              "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
             }}
           />
 
@@ -304,7 +304,7 @@ function TripLogDialog({
                 sx={{
                   "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.9em" },
                   "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
-                  "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.2)" },
+                  "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
                 }}
               />
               <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
@@ -318,7 +318,7 @@ function TripLogDialog({
                   sx={{
                     color: "var(--theme-text-primary)",
                     fontSize: "0.85em",
-                    "& .MuiOutlinedInput-notchedOutline": { borderColor: "rgba(255,255,255,0.2)" },
+                    "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
                     "& .MuiSvgIcon-root": { color: "var(--theme-text-muted)" },
                   }}
                 >

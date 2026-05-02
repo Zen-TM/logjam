@@ -111,6 +111,12 @@
   gap: 0.75em;
 }
 
-.buttonBar button {
+.applyButton {
+  composes: btn btnFilledNeutral btnMd from '@styles/shared.module.css';
+  flex: 1;
+}
+
+.resetButton {
+  composes: btn btnGhost btnMd from '@styles/shared.module.css';
   flex: 1;
 }

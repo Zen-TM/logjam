@@ -108,7 +108,7 @@ function GeoPdfTemplatesDialog({
             "&:hover": {
               borderColor: "var(--theme-accent)",
               backgroundColor:
-                "color-mix(in srgb, var(--theme-accent) 20%, transparent)",
+                "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
             },
           }}
         >
@@ -162,7 +162,7 @@ function GeoPdfTemplatesDialog({
         </div>
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, py: 1.5 }}>
+      <DialogActions>
         <Button onClick={onClose} sx={{ color: "var(--theme-text-primary)" }}>
           Close
         </Button>

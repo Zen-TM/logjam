@@ -5,10 +5,12 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  IconButton,
   Typography,
   CircularProgress,
   Box,
 } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import { importFromRopeWiki, type ImportResult } from "../../canyonUtils";
 
 function ImportDialog({
@@ -42,6 +44,8 @@ function ImportDialog({
     <Dialog
       open={open}
       onClose={loading ? undefined : onClose}
+      maxWidth="sm"
+      fullWidth
       PaperProps={{
         sx: {
           backgroundColor: "var(--theme-primary)",
@@ -49,8 +53,18 @@ function ImportDialog({
         },
       }}
     >
-      <DialogTitle>Welcome to Logjam</DialogTitle>
-      <DialogContent>
+      <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
+        Welcome to Logjam
+        <IconButton
+          size="small"
+          onClick={loading ? undefined : onClose}
+          disabled={loading}
+          sx={{ color: "var(--theme-text-primary)" }}
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
         {!result && !loading && !error && (
           <Typography>
             Would you like to import NSW canyons from RopeWiki to get started?

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Slider, TextField, Button, Select, MenuItem } from "@mui/material";
+import { Slider, TextField, Select, MenuItem } from "@mui/material";
 import Search from "../../../assets/search.svg";
 import classes from "./FiltersPanel.module.css";
 import type { TFilters } from "../../../canyonUtils";
@@ -169,16 +169,14 @@ function FiltersPanel({
       </div>
 
       <div className={classes.buttonBar}>
-        <Button
-          variant="contained"
-          color="secondary"
+        <button
+          className={classes.applyButton}
           onClick={() => onChangeFilters({ ...filters, ...filterInputs })}
         >
           Apply
-        </Button>
-        <Button
-          variant="outlined"
-          color="secondary"
+        </button>
+        <button
+          className={classes.resetButton}
           onClick={() => {
             const reset: TFilters = {
               name: null,
@@ -206,7 +204,7 @@ function FiltersPanel({
           }}
         >
           Reset
-        </Button>
+        </button>
       </div>
     </div>
   );
