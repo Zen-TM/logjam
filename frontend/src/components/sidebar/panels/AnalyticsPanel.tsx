@@ -77,7 +77,7 @@ function CompletionRing({ total, completed }: { total: number; completed: number
     <div className={classes.completionSection}>
       <span className={classes.sectionLabel}>Canyon Completion</span>
       <div className={classes.ringWrapper}>
-        <svg viewBox="0 0 100 100" width={90} height={90} className={classes.ringSvg}>
+        <svg viewBox="0 0 100 100" width={135} height={135} className={classes.ringSvg}>
           <circle
             cx="50" cy="50" r={radius}
             fill="none"

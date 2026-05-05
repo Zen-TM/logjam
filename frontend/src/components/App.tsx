@@ -9,6 +9,7 @@ import GeoPdfDialog from "./dialogs/GeoPdfDialog";
 import GeoPdfTemplatesDialog from "./dialogs/GeoPdfTemplatesDialog";
 import type { GeoPdfTemplate } from "./dialogs/GeoPdfTemplatesDialog";
 import CanyonDialog from "./dialogs/CanyonDialog";
+import SelectedCanyonsDialog from "./dialogs/SelectedCanyonsDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
 import type { TFilters, TCanyon } from "../canyonUtils";
@@ -21,24 +22,12 @@ import {
   useNotifications,
   useTripLogs,
   useAnalytics,
-  deleteCanyon,
-  shareCanyonWith,
   fetchCurrentUser,
   passesFilters,
 } from "../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { useAuth } from "../useAuth";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
-  Button,
-  TextField,
-  Typography,
-  Box,
-} from "@mui/material";
+import { Button } from "@mui/material";
 import { useThemePreferences } from "../themePreferences";
 
 function App() {
@@ -239,58 +228,9 @@ function App() {
   const ownedCanyonIds = new Set(canyons.map((c) => c.id));
   const isOwnedCanyon = canyon != null && ownedCanyonIds.has(canyon.id);
 
-  // Bulk area action state
-  const [bulkShareFriendIds, setBulkShareFriendIds] = useState<string[]>([]);
-  const [bulkShareSearch, setBulkShareSearch] = useState("");
-  const [bulkSharing, setBulkSharing] = useState(false);
-  const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
-
   const selectedAreaCanyons = selectedAreaCanyonIds
     .map((id) => allCanyons.find((c) => c.id === id))
     .filter((c): c is TCanyon => c != null);
-  const ownedAreaCanyons = selectedAreaCanyons.filter((c) =>
-    ownedCanyonIds.has(c.id),
-  );
-
-  async function handleBulkShare() {
-    if (bulkShareFriendIds.length === 0 || ownedAreaCanyons.length === 0)
-      return;
-    setBulkSharing(true);
-    try {
-      for (const c of ownedAreaCanyons) {
-        for (const fId of bulkShareFriendIds) {
-          try {
-            await shareCanyonWith(c.id, fId);
-          } catch {
-            // skip duplicates / errors
-          }
-        }
-      }
-      setBulkShareFriendIds([]);
-      setSelectedAreaCanyonIds([]);
-    } catch {
-      // ignore
-    } finally {
-      setBulkSharing(false);
-    }
-  }
-
-  async function handleBulkDelete() {
-    setBulkDeleting(true);
-    try {
-      for (const c of ownedAreaCanyons) {
-        await deleteCanyon(c.id);
-      }
-      setShowBulkDeleteConfirm(false);
-      setSelectedAreaCanyonIds([]);
-      refetch();
-    } catch {
-      // ignore
-    } finally {
-      setBulkDeleting(false);
-    }
-  }
 
   // While checking for an existing session, render nothing to avoid
   // a brief flash of the sign-in form before the session loads.
@@ -509,185 +449,14 @@ function App() {
         onCancelPickCoords={cancelPickingCoords}
       />
 
-      {/* Bulk area selection dialog */}
-      <Dialog
+      <SelectedCanyonsDialog
         open={selectedAreaCanyonIds.length > 0}
-        onClose={
-          bulkSharing || bulkDeleting
-            ? undefined
-            : () => setSelectedAreaCanyonIds([])
-        }
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            backgroundColor: "var(--theme-primary)",
-            color: "var(--theme-text-primary)",
-          },
-        }}
-      >
-        <DialogTitle>
-          Selected Canyons ({selectedAreaCanyons.length})
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ mb: 2 }}>
-            {selectedAreaCanyons.map((c) => (
-              <Typography key={c.id} variant="body2" sx={{ py: 0.2 }}>
-                {c.name}
-                {!ownedCanyonIds.has(c.id) && (
-                  <span className={classes.sharedLabel}>
-                    (shared)
-                  </span>
-                )}
-              </Typography>
-            ))}
-          </Box>
-
-          {ownedAreaCanyons.length > 0 && (
-            <>
-              <Typography variant="body2" sx={{ fontWeight: "bold", mb: 0.5 }}>
-                Share {ownedAreaCanyons.length} owned canyon
-                {ownedAreaCanyons.length !== 1 ? "s" : ""} with:
-              </Typography>
-              <TextField
-                placeholder="Search friends..."
-                value={bulkShareSearch}
-                onChange={(e) => setBulkShareSearch(e.target.value)}
-                size="small"
-                fullWidth
-                sx={{
-                  mb: 0.5,
-                  "& .MuiInputBase-input": { fontSize: "0.85em" },
-                }}
-              />
-              {bulkShareSearch.length > 0 && (
-                <Box sx={{ mb: 0.5 }}>
-                  {friends
-                    .filter(
-                      (f) =>
-                        f.username
-                          .toLowerCase()
-                          .includes(bulkShareSearch.toLowerCase()) &&
-                        !bulkShareFriendIds.includes(f.id),
-                    )
-                    .map((friend) => (
-                      <div
-                        key={friend.id}
-                        className={classes.bulkShareResultItem}
-                      >
-                        <span>{friend.username}</span>
-                        <button
-                          className={classes.bulkShareAddButton}
-                          onClick={() => {
-                            setBulkShareFriendIds([
-                              ...bulkShareFriendIds,
-                              friend.id,
-                            ]);
-                            setBulkShareSearch("");
-                          }}
-                        >
-                          Add
-                        </button>
-                      </div>
-                    ))}
-                </Box>
-              )}
-              {bulkShareFriendIds.length > 0 && (
-                <div className={classes.selectedFriendChips}>
-                  {bulkShareFriendIds.map((id) => {
-                    const f = friends.find((fr) => fr.id === id);
-                    if (!f) return null;
-                    return (
-                      <span key={id} className={classes.friendChip}>
-                        {f.username}
-                        <button
-                          className={classes.chipRemove}
-                          onClick={() =>
-                            setBulkShareFriendIds(
-                              bulkShareFriendIds.filter((fid) => fid !== id),
-                            )
-                          }
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-              <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
-                <Button
-                  variant="contained"
-                  size="small"
-                  onClick={handleBulkShare}
-                  disabled={bulkSharing || bulkShareFriendIds.length === 0}
-                >
-                  {bulkSharing ? "Sharing..." : "Share Selected"}
-                </Button>
-                <Button
-                  variant="contained"
-                  color="error"
-                  size="small"
-                  onClick={() => setShowBulkDeleteConfirm(true)}
-                  disabled={bulkDeleting}
-                >
-                  Delete Selected
-                </Button>
-              </Box>
-            </>
-          )}
-          {ownedAreaCanyons.length === 0 && (
-            <Typography variant="body2" sx={{ opacity: 0.6 }}>
-              No owned canyons in selection. Bulk actions only apply to your own
-              canyons.
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => setSelectedAreaCanyonIds([])}
-            disabled={bulkSharing || bulkDeleting}
-          >
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Bulk delete confirmation */}
-      <Dialog
-        open={showBulkDeleteConfirm}
-        onClose={
-          bulkDeleting ? undefined : () => setShowBulkDeleteConfirm(false)
-        }
-      >
-        <DialogTitle>
-          Delete {ownedAreaCanyons.length} Canyon
-          {ownedAreaCanyons.length !== 1 ? "s" : ""}?
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            This will permanently delete {ownedAreaCanyons.length} canyon
-            {ownedAreaCanyons.length !== 1 ? "s" : ""} and all associated trip
-            logs. This cannot be undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => setShowBulkDeleteConfirm(false)}
-            disabled={bulkDeleting}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleBulkDelete}
-            color="error"
-            variant="contained"
-            disabled={bulkDeleting}
-          >
-            {bulkDeleting ? "Deleting..." : "Delete All"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        selectedCanyons={selectedAreaCanyons}
+        ownedCanyonIds={ownedCanyonIds}
+        friends={friends}
+        onClose={() => setSelectedAreaCanyonIds([])}
+        onDeleted={refetch}
+      />
     </div>
   );
 }

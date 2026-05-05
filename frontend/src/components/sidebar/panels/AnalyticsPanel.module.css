@@ -99,7 +99,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 1rem;
+  justify-content: center;
 }
 
 .ringSvg {
@@ -108,9 +108,8 @@
 
 .ringCenter {
   position: absolute;
-  left: 0;
-  width: 90px;
-  height: 90px;
+  width: 135px;
+  height: 135px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -119,16 +118,16 @@
 }
 
 .ringPct {
-  font-size: 1.1rem;
+  font-size: 1.65rem;
   font-weight: 700;
   color: var(--theme-text-primary);
   line-height: 1;
 }
 
 .ringCaption {
-  font-size: 0.65rem;
+  font-size: 0.95rem;
   color: var(--theme-text-muted);
-  margin-top: 0.15rem;
+  margin-top: 0.2rem;
 }
 
 /* ── Heatmap section ────────────────────────────── */
