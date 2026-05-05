@@ -29,24 +29,12 @@ type MatchResult =
   | { kind: "ambiguous"; canyons: TCanyon[] }
   | { kind: "none" };
 
-function matchExact(query: string, canyons: TCanyon[]): MatchResult {
+export function matchCanyonByName(csvName: string, canyons: TCanyon[]): MatchResult {
+  const query = stripWaterwaySuffix(csvName);
   const matches = canyons.filter(
-    (c) => norm(c.name) === query || c.altNames.some((a) => norm(a) === query),
+    (c) => norm(c.name).includes(query) || c.altNames.some((a) => norm(a).includes(query)),
   );
   if (matches.length === 1) return { kind: "match", canyon: matches[0] };
   if (matches.length > 1) return { kind: "ambiguous", canyons: matches };
-  return { kind: "none" };
-}
-
-export function matchCanyonByName(csvName: string, canyons: TCanyon[]): MatchResult {
-  const q = norm(csvName);
-  const exact = matchExact(q, canyons);
-  if (exact.kind !== "none") return exact;
-
-  const stripped = stripWaterwaySuffix(csvName);
-  if (stripped !== q) {
-    return matchExact(stripped, canyons);
-  }
-
   return { kind: "none" };
 }
