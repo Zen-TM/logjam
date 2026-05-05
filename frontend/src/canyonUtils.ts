@@ -290,6 +290,22 @@ export function deleteTripLog(canyonId: string, id: string): Promise<void> {
   return apiFetch<void>(`/canyons/${canyonId}/trips/${id}`, { method: "DELETE" });
 }
 
+export type BulkTripLogInput = {
+  canyonId: string;
+  date: string;
+  notes?: string | null;
+  customFields?: Record<string, unknown>;
+};
+
+export type BulkTripLogResult = {
+  imported: number;
+  errors: { index: number; error: string }[];
+};
+
+export function bulkCreateTripLogs(trips: BulkTripLogInput[]): Promise<BulkTripLogResult> {
+  return apiFetch<BulkTripLogResult>("/trips/bulk", { method: "POST", body: { trips } });
+}
+
 export function getAllTripLogs(params?: {
   search?: string;
   dateFrom?: string;

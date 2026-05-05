@@ -414,6 +414,7 @@ function App() {
           onRefetchTripLogs={refetchTripLogs}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={setCustomFieldDefs}
+          canyons={canyons}
           analytics={analytics}
           analyticsLoading={analyticsLoading}
           onTopoLayersChange={setMasterTopoLayers}

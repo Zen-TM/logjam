@@ -1,9 +1,10 @@
 import { useState, useMemo } from "react";
 import { TextField, Typography, Box } from "@mui/material";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
-import type { TTripLog } from "../../../canyonUtils";
+import type { TCanyon, TTripLog } from "../../../canyonUtils";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
+import TripLogCsvImportDialog from "../../dialogs/TripLogCsvImportDialog";
 import classes from "./TripLogsPanel.module.css";
 
 function TripLogsPanel({
@@ -12,12 +13,18 @@ function TripLogsPanel({
   onRefetchTripLogs,
   customFieldDefs,
   onCustomFieldDefsChange,
+  canyons,
+  onPickCoords,
+  pickingCoords,
 }: {
   tripLogs: TTripLog[];
   loading: boolean;
   onRefetchTripLogs: () => void;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  canyons: TCanyon[];
+  onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
+  pickingCoords: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -26,6 +33,7 @@ function TripLogsPanel({
   const [editingTripLog, setEditingTripLog] = useState<TTripLog | undefined>(undefined);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const filtered = useMemo(() => {
     return tripLogs.filter((t) => {
@@ -45,6 +53,9 @@ function TripLogsPanel({
 
   return (
     <div className={classes.panel}>
+      <button className={classes.importBtn} onClick={() => setShowImport(true)}>
+        Import from CSV
+      </button>
       <div className={classes.filters}>
         <TextField
           placeholder="Search by canyon name..."
@@ -160,6 +171,18 @@ function TripLogsPanel({
           onCustomFieldDefsChange={onCustomFieldDefsChange}
         />
       )}
+
+      {/* CSV import dialog */}
+      <TripLogCsvImportDialog
+        open={showImport && !pickingCoords}
+        onClose={() => setShowImport(false)}
+        canyons={canyons}
+        tripLogs={tripLogs}
+        customFieldDefs={customFieldDefs}
+        onCustomFieldDefsChange={onCustomFieldDefsChange}
+        onRefetchTripLogs={onRefetchTripLogs}
+        onPickCoords={onPickCoords}
+      />
     </div>
   );
 }

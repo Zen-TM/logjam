@@ -89,6 +89,7 @@ function SidebarPanel({
   onRefetchTripLogs,
   customFieldDefs,
   onCustomFieldDefsChange,
+  canyons,
   // Analytics
   analytics,
   analyticsLoading,
@@ -146,6 +147,7 @@ function SidebarPanel({
   onRefetchTripLogs: () => void;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  canyons: TCanyon[];
   // Analytics
   analytics: TAnalytics | null;
   analyticsLoading: boolean;
@@ -236,6 +238,9 @@ function SidebarPanel({
             onRefetchTripLogs={onRefetchTripLogs}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
+            canyons={canyons}
+            onPickCoords={onPickCoords}
+            pickingCoords={pickingCoords}
           />
         )}
         {activePanel === "account" && <PlaceholderPanel text="Coming soon" />}

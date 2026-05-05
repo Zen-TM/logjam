@@ -30,6 +30,18 @@ export const VALID_CUSTOM_FIELD_TYPES = new Set<string>([
   "boolean",
 ]);
 
+export function makeCustomFieldKey(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
+export function coerceFieldValue(value: string, type: TripLogCustomFieldType): unknown {
+  if (value === "") return null;
+  if (type === "integer") return parseInt(value, 10);
+  if (type === "float") return parseFloat(value);
+  if (type === "boolean") return value === "true";
+  return value;
+}
+
 export function isTripLogCustomFieldDef(v: unknown): v is TripLogCustomFieldDef {
   if (typeof v !== "object" || v === null) return false;
   const c = v as Record<string, unknown>;

@@ -6,6 +6,11 @@
   overflow: hidden;
 }
 
+.importBtn {
+  composes: btn btnFilledAccent btnMd btnFull from '@styles/shared.module.css';
+  flex-shrink: 0;
+}
+
 .filters {
   display: flex;
   flex-direction: column;

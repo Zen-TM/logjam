@@ -7,6 +7,7 @@ import usersRouter from "./routes/users";
 import canyonsRouter from "./routes/canyons";
 import tripLogsRouter from "./routes/tripLogs";
 import tripLogsGlobalRouter from "./routes/tripLogsGlobal";
+import tripLogsBulkRouter from "./routes/tripLogsBulk";
 import sharingRouter from "./routes/sharing";
 import friendsRouter from "./routes/friends";
 import notificationsRouter from "./routes/notifications";
@@ -45,6 +46,7 @@ app.get("/health", (req, res) => {
 app.use("/users", usersRouter);
 app.use("/canyons", canyonsRouter);
 app.use("/canyons/:canyonId/trips", tripLogsRouter);
+app.use("/trips/bulk", tripLogsBulkRouter);
 app.use("/trips", tripLogsGlobalRouter);
 app.use("/canyons", sharingRouter);
 app.use("/friends", friendsRouter);

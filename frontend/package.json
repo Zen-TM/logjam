@@ -12,12 +12,14 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
+    "@logjam/shared": "file:../shared",
     "@mui/icons-material": "^7.3.9",
     "@mui/material": "^7.1.1",
+    "@types/papaparse": "^5.5.2",
     "aws-amplify": "^6.15.9",
     "lucide-react": "^1.7.0",
     "maplibre-gl": "^5.20.2",
-    "@logjam/shared": "file:../shared",
+    "papaparse": "^5.5.3",
     "pmtiles": "^4.4.0",
     "react": "^19.0.0-rc.1",
     "react-dom": "^19.0.0-rc.1"

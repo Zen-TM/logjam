@@ -17,7 +17,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import type { TripLogCustomFieldDef, TripLogCustomFieldType } from "@logjam/shared";
-import { CUSTOM_FIELD_TYPES } from "@logjam/shared";
+import { CUSTOM_FIELD_TYPES, makeCustomFieldKey, coerceFieldValue } from "@logjam/shared";
 import type { TTripLog } from "../../canyonUtils";
 import {
   createTripLog,
@@ -95,14 +95,6 @@ function TripLogDialog({
     setFieldValues((prev) => ({ ...prev, [key]: value }));
   }
 
-  function coerceFieldValue(value: string, type: TripLogCustomFieldType): unknown {
-    if (value === "") return null;
-    if (type === "integer") return parseInt(value, 10);
-    if (type === "float") return parseFloat(value);
-    if (type === "boolean") return value === "true";
-    return value;
-  }
-
   async function handleSave() {
     if (!date) {
       setError("Date is required.");
@@ -136,7 +128,7 @@ function TripLogDialog({
     const label = newFieldLabel.trim();
     if (!label) return;
     // Generate a stable key from the label
-    const key = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    const key = makeCustomFieldKey(label);
     if (customFieldDefs.some((d) => d.key === key)) {
       setError(`A field with the key "${key}" already exists.`);
       return;
