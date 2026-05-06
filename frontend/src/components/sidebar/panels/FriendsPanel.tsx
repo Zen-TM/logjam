@@ -40,6 +40,7 @@ function FriendsPanel({
   const [searchResults, setSearchResults] = useState<TSearchUser[]>([]);
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
   const [removingFriendId, setRemovingFriendId] = useState<string | null>(null);
+  const [loadingRequestId, setLoadingRequestId] = useState<string | null>(null);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState<{
     id: string;
     username: string;
@@ -79,21 +80,27 @@ function FriendsPanel({
   }
 
   async function handleAcceptRequest(friendshipId: string) {
+    setLoadingRequestId(friendshipId);
     try {
       await acceptFriendRequest(friendshipId);
       onRefetchFriends();
       onRefetchNotifications();
     } catch {
       // ignore
+    } finally {
+      setLoadingRequestId(null);
     }
   }
 
   async function handleDeclineRequest(friendshipId: string) {
+    setLoadingRequestId(friendshipId);
     try {
       await declineFriendRequest(friendshipId);
       onRefetchFriends();
     } catch {
       // ignore
+    } finally {
+      setLoadingRequestId(null);
     }
   }
 
@@ -164,12 +171,14 @@ function FriendsPanel({
                     <button
                       className={classes.acceptButton}
                       onClick={() => handleAcceptRequest(req.id)}
+                      disabled={loadingRequestId === req.id}
                     >
                       Accept
                     </button>
                     <button
                       className={classes.declineButton}
                       onClick={() => handleDeclineRequest(req.id)}
+                      disabled={loadingRequestId === req.id}
                     >
                       Decline
                     </button>

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import classes from "./NotificationsPanel.module.css";
 import type { TNotification } from "../../../canyonUtils";
 import type { PanelId } from "../panels";
@@ -5,6 +6,7 @@ import {
   markNotificationRead,
   markAllNotificationsRead,
   clearReadNotifications,
+  deleteNotification,
   acceptFriendRequest,
   declineFriendRequest,
 } from "../../../canyonUtils";
@@ -22,6 +24,43 @@ function NotificationsPanel({
   setSelectedCanyonID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
 }) {
+  const [actionedIds, setActionedIds] = useState<Set<string>>(new Set());
+
+  async function handleAccept(notificationId: string, friendshipId: string) {
+    setActionedIds((prev) => new Set([...prev, notificationId]));
+    try {
+      await acceptFriendRequest(friendshipId);
+      deleteNotification(notificationId).catch(() => {});
+      onRefetchFriends();
+      onRefetchNotifications();
+    } catch {
+      setActionedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(notificationId);
+        return next;
+      });
+    }
+  }
+
+  async function handleDecline(notificationId: string, friendshipId: string) {
+    setActionedIds((prev) => new Set([...prev, notificationId]));
+    try {
+      await declineFriendRequest(friendshipId);
+      deleteNotification(notificationId).catch(() => {});
+      onRefetchNotifications();
+    } catch {
+      setActionedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(notificationId);
+        return next;
+      });
+    }
+  }
+
+  const visibleNotifications = notifications.filter(
+    (n) => !actionedIds.has(n.id),
+  );
+
   return (
     <>
       <div className={classes.header}>
@@ -37,10 +76,10 @@ function NotificationsPanel({
       </div>
 
       <div className={classes.notificationList}>
-        {notifications.length === 0 ? (
+        {visibleNotifications.length === 0 ? (
           <span className={classes.emptyText}>No notifications.</span>
         ) : (
-          notifications.map((n) => (
+          visibleNotifications.map((n) => (
             <div
               key={n.id}
               className={`${classes.notificationItem} ${!n.read ? classes.notificationUnread : ""}`}
@@ -70,26 +109,18 @@ function NotificationsPanel({
                 <div className={classes.notificationActions}>
                   <button
                     className={classes.acceptButton}
-                    onClick={async (e) => {
+                    onClick={(e) => {
                       e.stopPropagation();
-                      await acceptFriendRequest(
-                        n.payload.friendshipId as string,
-                      );
-                      onRefetchFriends();
-                      onRefetchNotifications();
+                      handleAccept(n.id, n.payload.friendshipId as string);
                     }}
                   >
                     Accept
                   </button>
                   <button
                     className={classes.declineButton}
-                    onClick={async (e) => {
+                    onClick={(e) => {
                       e.stopPropagation();
-                      await declineFriendRequest(
-                        n.payload.friendshipId as string,
-                      );
-                      onRefetchFriends();
-                      onRefetchNotifications();
+                      handleDecline(n.id, n.payload.friendshipId as string);
                     }}
                   >
                     Decline
@@ -101,7 +132,7 @@ function NotificationsPanel({
         )}
       </div>
 
-      {notifications.some((n) => n.read) && (
+      {visibleNotifications.some((n) => n.read) && (
         <button
           className={classes.clearAllButton}
           onClick={async () => {
