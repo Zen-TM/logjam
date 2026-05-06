@@ -59,19 +59,41 @@ router.get(
         // Trigger SES sandbox verification so we can email this user
         verifyEmail(email).catch(() => {});
       } catch (e) {
-        // Race condition: a concurrent request already created the user record.
-        // Recover by fetching the record that was just created.
         if (
-          e instanceof Prisma.PrismaClientKnownRequestError &&
-          e.code === "P2002"
+          !(e instanceof Prisma.PrismaClientKnownRequestError) ||
+          e.code !== "P2002"
         ) {
+          throw e;
+        }
+        const target = (e.meta?.target as string[] | undefined) ?? [];
+
+        if (target.includes("email")) {
+          // A DB record exists for this email under a different Cognito sub
+          // (e.g. the user's Cognito account was deleted and recreated). Reclaim
+          // the existing record by updating its cognitoId to the new sub.
+          user = await prisma.user.update({
+            where: { email },
+            data: { cognitoId: sub },
+          });
+        } else if (target.includes("username")) {
+          // The preferred_username chosen at sign-up is already taken. Retry
+          // with a short suffix so signup never hard-fails on this.
+          user = await prisma.user.create({
+            data: {
+              cognitoId: sub,
+              email,
+              username: `${initialUsername}-${sub.slice(0, 6)}`,
+            },
+          });
+          verifyEmail(email).catch(() => {});
+        } else {
+          // cognitoId collision: a concurrent /users/me request just created
+          // this record. Recover by fetching the record that won the race.
           const existing = await prisma.user.findUnique({
             where: { cognitoId: sub },
           });
           if (!existing) throw e;
           user = existing;
-        } else {
-          throw e;
         }
       }
     } else if (user.email !== email) {
