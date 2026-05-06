@@ -170,4 +170,34 @@ router.patch(
   },
 );
 
+// DELETE /users/me — permanently delete the current user's account and all data
+router.delete(
+  "/me",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { sub } = req.user!;
+
+    const user = await prisma.user.findUnique({ where: { cognitoId: sub } });
+    if (!user) throw new AppError(404, "User not found");
+
+    await prisma.$transaction([
+      prisma.notification.deleteMany({ where: { userId: user.id } }),
+      prisma.canyonShare.deleteMany({
+        where: { OR: [{ sharedById: user.id }, { sharedWithId: user.id }] },
+      }),
+      prisma.friendship.deleteMany({
+        where: { OR: [{ requesterId: user.id }, { addresseeId: user.id }] },
+      }),
+      prisma.topoJob.deleteMany({ where: { userId: user.id } }),
+      prisma.media.deleteMany({ where: { ownerId: user.id } }),
+      prisma.tripLog.deleteMany({ where: { userId: user.id } }),
+      prisma.canyon.deleteMany({ where: { ownerId: user.id } }),
+      prisma.geoPdfTemplate.deleteMany({ where: { userId: user.id } }),
+      prisma.user.delete({ where: { id: user.id } }),
+    ]);
+
+    res.status(204).end();
+  },
+);
+
 export default router;

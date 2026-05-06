@@ -34,11 +34,11 @@ const WATERWAY_SUFFIXES = [
   "watercourses",
 ];
 
-function norm(s: string): string {
+export function norm(s: string): string {
   return s.toLowerCase().replace(/'/g, "").trim();
 }
 
-function stripWaterwaySuffix(name: string): string {
+export function stripWaterwaySuffix(name: string): string {
   const n = norm(name);
   for (const suffix of WATERWAY_SUFFIXES) {
     // Match suffix as a whole trailing word

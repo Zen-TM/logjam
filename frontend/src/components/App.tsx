@@ -24,6 +24,7 @@ import {
   useAnalytics,
   fetchCurrentUser,
   passesFilters,
+  syncOzUltimateSources,
 } from "../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { useAuth } from "../useAuth";
@@ -49,6 +50,7 @@ function App() {
   const [showImport, setShowImport] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const importChecked = useRef(false);
+  const pendingOzSync = useRef(false);
 
   // Layer visibility toggles
   const [showOwnedCanyons, setShowOwnedCanyons] = useState(true);
@@ -222,6 +224,15 @@ function App() {
     }
   }, [canyonsLoaded, canyons.length]);
 
+  // After a Ropewiki import/refresh, sync OzUltimate source links onto matching canyons
+  useEffect(() => {
+    if (!pendingOzSync.current || !canyonsLoaded || canyons.length === 0) return;
+    pendingOzSync.current = false;
+    syncOzUltimateSources(canyons).then((updated) => {
+      if (updated) refetch();
+    });
+  }, [canyons, canyonsLoaded, refetch]);
+
   // Derived values
   const allCanyons = [...canyons, ...sharedCanyons];
   const canyon = allCanyons.find((c) => c.id === selectedCanyonID);
@@ -257,7 +268,7 @@ function App() {
       <ImportDialog
         open={showImport}
         onClose={() => setShowImport(false)}
-        onImported={refetch}
+        onImported={() => { pendingOzSync.current = true; refetch(); }}
       />
       <TopoDialog
         open={showTopo}
@@ -333,7 +344,7 @@ function App() {
           onStartAreaSelection={startAreaSelection}
           selectingArea={selectingArea}
           onCancelAreaSelection={cancelAreaSelection}
-          onRefetch={refetch}
+          onRefetch={() => { pendingOzSync.current = true; refetch(); }}
           filters={filters}
           onChangeFilters={setFilters}
           friends={friends}
