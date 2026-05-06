@@ -265,6 +265,10 @@ export function updateUsername(username: string): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: { username } });
 }
 
+export function deleteAccount(): Promise<void> {
+  return apiFetch<void>("/users/me", { method: "DELETE" });
+}
+
 // ── Trip Logs ─────────────────────────────────────────────────
 
 export function getTripLogs(canyonId: string): Promise<TTripLog[]> {

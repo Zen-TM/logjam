@@ -89,12 +89,24 @@
   composes: btn btnGhost btnSm from '@styles/shared.module.css';
 }
 
+.emailRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .infoValue {
+  flex: 1;
   font-size: var(--text-sm);
   color: var(--theme-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.changeEmailBtn {
+  composes: btn btnOutlineAccent btnSm from '@styles/shared.module.css';
+  flex-shrink: 0;
 }
 
 .storageBar {
@@ -126,7 +138,55 @@
   color: var(--theme-text-muted);
 }
 
+.card {
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 16%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--theme-primary) 85%, transparent);
+  color: var(--theme-text-primary);
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--theme-accent) 55%, transparent);
+}
+
+.cardSelected {
+  border-color: var(--theme-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--theme-accent) 55%, transparent);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cardName {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.swatches {
+  display: flex;
+  gap: 5px;
+}
+
+.swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
 .signOutBtn {
-  composes: btn btnGhost btnSm from '@styles/shared.module.css';
-  align-self: flex-start;
+  composes: btn btnOutlineWarning btnSm btnFull from '@styles/shared.module.css';
+}
+
+.deleteAccountBtn {
+  composes: btn btnOutlineWarning btnSm btnFull from '@styles/shared.module.css';
 }

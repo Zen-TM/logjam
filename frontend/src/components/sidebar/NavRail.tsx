@@ -8,7 +8,6 @@ import {
   Users,
   Bell,
   CircleUser,
-  Settings,
 } from "lucide-react";
 import type { PanelId } from "./panels";
 import classes from "./NavRail.module.css";
@@ -26,7 +25,6 @@ const TOP_ITEMS: { id: PanelId; label: string; Icon: typeof Layers }[] = [
 const BOTTOM_ITEMS: { id: PanelId; label: string; Icon: typeof Layers }[] = [
   { id: "notifications", label: "Alerts", Icon: Bell },
   { id: "account", label: "Account", Icon: CircleUser },
-  { id: "settings", label: "Settings", Icon: Settings },
 ];
 
 function NavRail({

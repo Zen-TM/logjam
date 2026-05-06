@@ -19,7 +19,6 @@ import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import CanyonDetailPanel from "./panels/CanyonDetailPanel";
 import AccountPanel from "./panels/AccountPanel";
-import SettingsPanel from "./panels/SettingsPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
 
@@ -33,7 +32,6 @@ const PANEL_TITLES: Record<PanelId, string> = {
   friends: "Friends",
   notifications: "Notifications",
   account: "Account",
-  settings: "Settings",
   "canyon-detail": "Canyon Detail",
 };
 
@@ -244,7 +242,6 @@ function SidebarPanel({
           />
         )}
         {activePanel === "account" && <AccountPanel />}
-        {activePanel === "settings" && <SettingsPanel />}
         {activePanel === "canyon-detail" && (
           <CanyonDetailPanel
             canyon={canyon}

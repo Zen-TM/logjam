@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { fetchCurrentUser, updateUsername } from "../../../canyonUtils";
 import { useAuth } from "../../../useAuth";
+import { useThemePreferences } from "../../../themePreferences";
+import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
+import ChangeEmailDialog from "../../dialogs/ChangeEmailDialog";
 import classes from "./AccountPanel.module.css";
 
 function formatBytes(bytes: number): string {
@@ -11,6 +14,8 @@ function formatBytes(bytes: number): string {
 
 function AccountPanel() {
   const { signOut } = useAuth();
+  const { schemeId, schemes, isHydrating, isSaving, error: themeError, setThemeScheme } =
+    useThemePreferences();
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameInput, setUsernameInput] = useState("");
@@ -20,6 +25,8 @@ function AccountPanel() {
   const [email, setEmail] = useState<string | null>(null);
   const [storageUsedBytes, setStorageUsedBytes] = useState<number | null>(null);
   const [storageQuotaBytes, setStorageQuotaBytes] = useState<number | null>(null);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [changeEmailOpen, setChangeEmailOpen] = useState(false);
 
   useEffect(() => {
     fetchCurrentUser()
@@ -116,7 +123,15 @@ function AccountPanel() {
       {email === null ? (
         <p className={classes.state}>Loading...</p>
       ) : (
-        <span className={classes.infoValue}>{email}</span>
+        <div className={classes.emailRow}>
+          <span className={classes.infoValue}>{email}</span>
+          <button
+            className={classes.changeEmailBtn}
+            onClick={() => setChangeEmailOpen(true)}
+          >
+            Change
+          </button>
+        </div>
       )}
 
       <span className={classes.sectionLabel}>Storage</span>
@@ -136,11 +151,62 @@ function AccountPanel() {
         </>
       )}
 
-      <span className={classes.sectionLabel}>Session</span>
+      <span className={classes.sectionLabel}>Theme</span>
       <div className={classes.divider} />
+
+      {themeError && <p className={classes.error}>{themeError}</p>}
+      {isHydrating && <p className={classes.state}>Loading your saved theme...</p>}
+      {isSaving && <p className={classes.state}>Saving theme...</p>}
+
+      {schemes.map((scheme) => {
+        const isSelected = scheme.id === schemeId;
+        const cardClass = `${classes.card} ${isSelected ? classes.cardSelected : ""}`;
+        return (
+          <button
+            key={scheme.id}
+            type="button"
+            className={cardClass}
+            onClick={() => setThemeScheme(scheme.id)}
+            disabled={isSaving}
+            aria-pressed={isSelected}
+          >
+            <div className={classes.cardHeader}>
+              <h3 className={classes.cardName}>{scheme.name}</h3>
+              <div className={classes.swatches}>
+                {[scheme.tokens.primary, scheme.tokens.secondary, scheme.tokens.accent].map((color) => (
+                  <span
+                    key={color}
+                    className={classes.swatch}
+                    style={{ backgroundColor: color }}
+                    aria-hidden="true"
+                  />
+                ))}
+              </div>
+            </div>
+          </button>
+        );
+      })}
+
       <button className={classes.signOutBtn} onClick={signOut}>
         Sign out
       </button>
+      <button className={classes.deleteAccountBtn} onClick={() => setDeleteAccountOpen(true)}>
+        Delete account
+      </button>
+
+      {currentUsername !== null && (
+        <DeleteAccountDialog
+          open={deleteAccountOpen}
+          onClose={() => setDeleteAccountOpen(false)}
+          username={currentUsername}
+          onDeleted={signOut}
+        />
+      )}
+      <ChangeEmailDialog
+        open={changeEmailOpen}
+        onClose={() => setChangeEmailOpen(false)}
+        onSuccess={(newEmail) => setEmail(newEmail)}
+      />
     </div>
   );
 }

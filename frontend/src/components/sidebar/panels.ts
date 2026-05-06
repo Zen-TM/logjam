@@ -8,5 +8,4 @@ export type PanelId =
   | "friends"
   | "notifications"
   | "account"
-  | "settings"
   | "canyon-detail";
