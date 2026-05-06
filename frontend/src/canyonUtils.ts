@@ -32,6 +32,8 @@ export type TUser = {
   id: string;
   username: string;
   email: string;
+  storageUsedBytes: number;
+  storageQuotaBytes: number;
   uiPreferences?: {
     themeSchemeId?: ThemeSchemeId;
     tripLogCustomFields?: TripLogCustomFieldDef[];
@@ -257,6 +259,10 @@ export function updateUserPreferences(
   prefs: Partial<{ themeSchemeId: ThemeSchemeId; tripLogCustomFields: TripLogCustomFieldDef[] }>,
 ): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });
+}
+
+export function updateUsername(username: string): Promise<TUser> {
+  return apiFetch<TUser>("/users/me", { method: "PATCH", body: { username } });
 }
 
 // ── Trip Logs ─────────────────────────────────────────────────

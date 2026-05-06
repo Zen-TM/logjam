@@ -39,28 +39,31 @@ router.get(
       where: { cognitoId: sub },
     });
 
-    // First time this user has hit the API — create their DB record
+    // First time this user has hit the API — create their DB record.
+    // Prefer preferred_username from Cognito; fall back to email prefix rather
+    // than raw cognito:username which can be an auto-generated UUID.
+    const isUUID = (s: string) =>
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+    const initialUsername =
+      username && !isUUID(username) ? username : email.split("@")[0];
+
     if (!user) {
       user = await prisma.user.create({
         data: {
           cognitoId: sub,
           email,
-          username,
+          username: initialUsername,
         },
       });
       // Trigger SES sandbox verification so we can email this user
       verifyEmail(email).catch(() => {});
-    } else if (user.username !== username || user.email !== email) {
-      // Sync username/email from Cognito token if they've changed
-      const emailChanged = user.email !== email;
+    } else if (user.email !== email) {
+      // Only sync email from Cognito — username is managed by the user via PATCH /users/me
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { username, email },
+        data: { email },
       });
-      // Re-verify if email changed
-      if (emailChanged) {
-        verifyEmail(email).catch(() => {});
-      }
+      verifyEmail(email).catch(() => {});
     }
 
     res.json(serializeUserForResponse(user));

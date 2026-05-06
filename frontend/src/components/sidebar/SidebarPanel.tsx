@@ -18,7 +18,7 @@ import FiltersPanel from "./panels/FiltersPanel";
 import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import CanyonDetailPanel from "./panels/CanyonDetailPanel";
-import PlaceholderPanel from "./panels/PlaceholderPanel";
+import AccountPanel from "./panels/AccountPanel";
 import SettingsPanel from "./panels/SettingsPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
@@ -243,7 +243,7 @@ function SidebarPanel({
             pickingCoords={pickingCoords}
           />
         )}
-        {activePanel === "account" && <PlaceholderPanel text="Coming soon" />}
+        {activePanel === "account" && <AccountPanel />}
         {activePanel === "settings" && <SettingsPanel />}
         {activePanel === "canyon-detail" && (
           <CanyonDetailPanel
