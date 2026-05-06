@@ -48,15 +48,32 @@ router.get(
       username && !isUUID(username) ? username : email.split("@")[0];
 
     if (!user) {
-      user = await prisma.user.create({
-        data: {
-          cognitoId: sub,
-          email,
-          username: initialUsername,
-        },
-      });
-      // Trigger SES sandbox verification so we can email this user
-      verifyEmail(email).catch(() => {});
+      try {
+        user = await prisma.user.create({
+          data: {
+            cognitoId: sub,
+            email,
+            username: initialUsername,
+          },
+        });
+        // Trigger SES sandbox verification so we can email this user
+        verifyEmail(email).catch(() => {});
+      } catch (e) {
+        // Race condition: a concurrent request already created the user record.
+        // Recover by fetching the record that was just created.
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === "P2002"
+        ) {
+          const existing = await prisma.user.findUnique({
+            where: { cognitoId: sub },
+          });
+          if (!existing) throw e;
+          user = existing;
+        } else {
+          throw e;
+        }
+      }
     } else if (user.email !== email) {
       // Only sync email from Cognito — username is managed by the user via PATCH /users/me
       user = await prisma.user.update({
