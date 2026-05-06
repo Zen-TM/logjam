@@ -31,6 +31,7 @@
 
 .canyonActions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5em;
   margin-top: 1em;
   padding-bottom: 1em;
@@ -38,12 +39,12 @@
 
 .editButton {
   composes: btn btnFilledAccent btnMd from '@styles/shared.module.css';
-  flex: 1;
+  flex: 1 1 calc(50% - 0.25em);
 }
 
 .deleteButton {
   composes: btn btnOutlineWarning btnMd from '@styles/shared.module.css';
-  flex: 1;
+  flex: 1 1 calc(50% - 0.25em);
 }
 
 /* Sharing section */
@@ -144,7 +145,7 @@
 
 .logTripButton {
   composes: btn btnFilledAccent btnMd from '@styles/shared.module.css';
-  flex: 1;
+  flex: 0 0 100%;
 }
 
 /* Trip logs section */

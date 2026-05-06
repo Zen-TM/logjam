@@ -23,9 +23,6 @@
   border-radius: var(--radius-sm);
 }
 
-.templateItem:hover {
-  background: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
-}
 
 .templateName {
   flex: 1;
@@ -44,19 +41,17 @@
 
 .actionButton {
   padding: 0.2em 0.5em;
-  background: transparent;
+  background: color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
   color: var(--theme-text-primary);
   border: 1px solid
     color-mix(in srgb, var(--theme-accent) 50%, transparent);
   border-radius: var(--radius-sm);
   font-size: var(--text-xs);
   cursor: pointer;
-  opacity: 0.7;
 }
 
 .actionButton:hover {
-  opacity: 1;
-  background: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+  background: color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
 }
 
 .deleteButton {
@@ -84,10 +79,11 @@
   composes: actionButton;
   border-color: var(--theme-warning);
   color: var(--theme-warning);
+  background: color-mix(in srgb, var(--theme-warning) 12%, transparent);
 }
 
 .confirmYes:hover {
-  background: color-mix(in srgb, var(--theme-warning) 15%, transparent);
+  background: color-mix(in srgb, var(--theme-warning) 20%, transparent);
 }
 
 .confirmNo {
