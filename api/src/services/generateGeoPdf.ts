@@ -127,6 +127,15 @@ function formatDistance(m: number): string {
 
 type TileCoord = { x: number; y: number; z: number };
 
+/** Buffered contour label — drawn after all overlay lines to keep labels on top */
+type PendingLabel = {
+  x: number;
+  y: number;
+  angle: number;
+  text: string;
+  fontSize: number;
+};
+
 /** Transform mapping tile-grid pixel space to output mapCanvas pixel space */
 interface TileToMapTransform {
   minTileX: number;
@@ -326,7 +335,34 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
       region: process.env.AWS_REGION ?? "ap-southeast-2",
     });
 
-    for (const overlayName of config.overlays) {
+    // Overlays are always sampled at their native resolution (max z18), independent
+    // of the base layer cap. A separate transform maps higher-zoom overlay tiles
+    // onto the same canvas dimensions.
+    const overlayZoom = computeZoom(config.scale, centreLat, TARGET_DPI, 18);
+    const overlayTransform = computeTileToMapTransform(
+      overlayZoom,
+      north,
+      south,
+      east,
+      west,
+      nativeW,
+      nativeH,
+    );
+
+    // Sort by canonical MASTER_TOPO_LAYERS index so hillshade is always at the
+    // bottom and vector layers (contours, features) are always on top, regardless
+    // of the order the user selected them.
+    const canonicalOrder: string[] = MASTER_TOPO_LAYERS.map((l) => l.name);
+    const sortedOverlays = [...config.overlays].sort(
+      (a, b) => canonicalOrder.indexOf(a) - canonicalOrder.indexOf(b),
+    );
+
+    // Labels are buffered during line rendering and flushed after all overlays so
+    // they always appear on top of every line.
+    const pendingLabels: PendingLabel[] = [];
+    const placedLabelPositions: Array<{ x: number; y: number }> = [];
+
+    for (const overlayName of sortedOverlays) {
       const layerDef = MASTER_TOPO_LAYERS.find((l) => l.name === overlayName);
       if (!layerDef) continue;
       const pmtilesKey = `master/${overlayName}.pmtiles`;
@@ -335,21 +371,26 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
       if (layerDef.format === "vector") {
         await fetchAndDrawPMTilesVectorDirect(
           mapCtx,
-          transform.tiles,
+          overlayTransform.tiles,
           archive,
-          transform,
+          overlayTransform,
           overlayName,
-          zoom,
+          overlayZoom,
+          placedLabelPositions,
+          pendingLabels,
         );
       } else {
         await fetchAndDrawPMTilesRasterDirect(
           mapCtx,
-          transform.tiles,
+          overlayTransform.tiles,
           archive,
-          transform,
+          overlayTransform,
         );
       }
     }
+
+    // Flush buffered contour labels on top of all overlay lines
+    flushPendingLabels(mapCtx, pendingLabels);
   }
 
   // 7b. Canyon markers
@@ -560,6 +601,7 @@ async function fetchAndDrawPMTilesVectorDirect(
   layerName: string,
   zoom: number,
   placedLabels: Array<{ x: number; y: number }> = [],
+  pendingLabels: PendingLabel[] = [],
 ): Promise<void> {
   await pMap(
     tiles,
@@ -588,6 +630,7 @@ async function fetchAndDrawPMTilesVectorDirect(
             transform.scaleX,
             transform.scaleY,
             placedLabels,
+            pendingLabels,
           );
         }
       } catch (err) {
@@ -598,6 +641,27 @@ async function fetchAndDrawPMTilesVectorDirect(
     },
     CONCURRENCY,
   );
+}
+
+/** Draw all buffered contour labels — called after all overlay lines are rendered */
+function flushPendingLabels(
+  ctx: CanvasRenderingContext2D,
+  labels: PendingLabel[],
+): void {
+  for (const lbl of labels) {
+    ctx.save();
+    ctx.translate(lbl.x, lbl.y);
+    ctx.rotate(lbl.angle);
+    ctx.font = `600 ${lbl.fontSize}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.lineWidth = 4;
+    ctx.strokeText(lbl.text, 0, 0);
+    ctx.fillStyle = "rgba(200, 120, 30, 0.92)";
+    ctx.fillText(lbl.text, 0, 0);
+    ctx.restore();
+  }
 }
 
 /** Linear interpolation between two zoom stops */
@@ -623,6 +687,7 @@ function renderVectorFeature(
   transformScaleX = 1,
   transformScaleY = 1,
   placedLabels: Array<{ x: number; y: number }> = [],
+  pendingLabels: PendingLabel[] = [],
 ) {
   const baseScale = TILE_SIZE / feature.extent;
   const scaleX = baseScale * transformScaleX;
@@ -642,6 +707,7 @@ function renderVectorFeature(
       geomType,
       props,
       placedLabels,
+      pendingLabels,
     );
   } else if (layerName === "features") {
     renderOsmFeature(
@@ -670,6 +736,7 @@ function renderContourFeature(
   geomType: number,
   props: Record<string, unknown>,
   placedLabels: Array<{ x: number; y: number }> = [],
+  pendingLabels: PendingLabel[] = [],
 ) {
   if (geomType !== 2) return; // contours are lines
   const elev = Number(props.elev ?? 0);
@@ -681,7 +748,7 @@ function renderContourFeature(
   const lineWidth = isMajor
     ? interpZoom(zoom, 12, 1, 18, 2.5)
     : interpZoom(zoom, 12, 0.5, 18, 1.2);
-  const color = isMajor ? "rgba(80, 60, 40, 0.85)" : "rgba(120, 90, 60, 0.55)";
+  const color = isMajor ? "rgba(200, 120, 30, 0.88)" : "rgba(200, 120, 30, 0.45)";
 
   const geometry = feature.loadGeometry();
   ctx.strokeStyle = color;
@@ -698,7 +765,7 @@ function renderContourFeature(
     }
     ctx.stroke();
 
-    // Draw elevation label on major contours at z14+
+    // Buffer elevation label on major contours at z14+ — drawn after all lines
     if (isMajor && zoom >= 14 && ring.length >= 2) {
       const mid = Math.floor(ring.length / 2);
       const mx = dx + ring[mid].x * scaleX;
@@ -718,23 +785,13 @@ function renderContourFeature(
       if (angle > Math.PI / 2) angle -= Math.PI;
       if (angle < -Math.PI / 2) angle += Math.PI;
 
-      const fontSize = interpZoom(zoom, 14, 9, 18, 12);
-      const label = `${elev}m`;
-
-      ctx.save();
-      ctx.translate(mx, my);
-      ctx.rotate(angle);
-      ctx.font = `600 ${fontSize}px sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      // Halo
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-      ctx.lineWidth = 3;
-      ctx.strokeText(label, 0, 0);
-      // Text
-      ctx.fillStyle = "rgba(80, 60, 40, 0.9)";
-      ctx.fillText(label, 0, 0);
-      ctx.restore();
+      pendingLabels.push({
+        x: mx,
+        y: my,
+        angle,
+        text: `${elev}m`,
+        fontSize: interpZoom(zoom, 14, 9, 18, 12),
+      });
     }
   }
 }
@@ -1271,9 +1328,9 @@ function drawGridLines(
   const fontSize = mmToPx(2, dpi);
   const largeFontSize = mmToPx(3.2, dpi);
   ctx.font = `${fontSize}px sans-serif`;
-  ctx.strokeStyle = "rgba(40, 40, 40, 0.6)";
+  ctx.strokeStyle = "rgba(40, 40, 40, 0.65)";
   ctx.fillStyle = "rgba(20, 20, 20, 0.9)";
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 2.5;
 
   if (config.elements.gridLines === "enNorthing") {
     // MGA easting/northing grid
