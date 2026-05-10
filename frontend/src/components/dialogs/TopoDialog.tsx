@@ -17,9 +17,13 @@ import {
   Divider,
   Alert,
   Tooltip,
+  Collapse,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import type { TBbox } from "../map/Map";
 import { apiFetch } from "../../canyonUtils";
 import { MASTER_TOPO_LAYERS } from "../../topoLayerTypes";
@@ -65,6 +69,8 @@ const LAYER_LABELS: Record<LayerName, string> = {
   features: "Features (OSM overlay)",
   composite: "Composite (all layers combined)",
 } as Record<LayerName, string>;
+
+const INSTRUCTIONS_KEY = "topoDialogShowInstructions";
 
 function bboxAreaKm2(bbox: TBbox): number {
   const R = 6371;
@@ -343,6 +349,12 @@ export default function TopoDialog({
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(
+    () => localStorage.getItem(INSTRUCTIONS_KEY) === "true",
+  );
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Per-session overlay toggle state (which job layers are shown on the map)
   const [overlayIds, setOverlayIds] = useState<Set<string>>(new Set());
@@ -351,9 +363,40 @@ export default function TopoDialog({
   function toggleLayer(name: LayerName) {
     setSelectedLayers((prev) => {
       const next = new Set(prev);
-      if (next.has(name)) { next.delete(name); } else { next.add(name); }
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
       return next;
     });
+  }
+
+  function toggleInstructions() {
+    setShowInstructions((prev) => {
+      const next = !prev;
+      localStorage.setItem(INSTRUCTIONS_KEY, String(next));
+      return next;
+    });
+  }
+
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(false);
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped?.name.toLowerCase().endsWith(".zip")) {
+      setFile(dropped);
+    }
   }
 
   async function handleSubmit() {
@@ -403,7 +446,10 @@ export default function TopoDialog({
       for (const [jid, urls] of Object.entries(downloadUrlsMap)) {
         for (const u of urls) {
           if (u.pmtilesUrl && next.has(`${jid}-${u.name}`)) {
-            newLayers.push({ id: `${jid}-${u.name}`, pmtilesUrl: u.pmtilesUrl });
+            newLayers.push({
+              id: `${jid}-${u.name}`,
+              pmtilesUrl: u.pmtilesUrl,
+            });
           }
         }
       }
@@ -467,7 +513,12 @@ export default function TopoDialog({
               return (
                 <Box key={j.id} sx={{ mb: 1.5 }}>
                   <Box
-                    sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      mb: 0.5,
+                    }}
                   >
                     {isRunning && <CircularProgress size={14} />}
                     <Chip
@@ -545,43 +596,15 @@ export default function TopoDialog({
                 </Box>
               );
             })}
-            <Divider sx={{ mt: 1, mb: 2, borderColor: "rgba(255,255,255,0.1)" }} />
+            <Divider
+              sx={{ mt: 1, mb: 2, borderColor: "rgba(255,255,255,0.1)" }}
+            />
           </Box>
         )}
 
-        {/* ── New job form ── */}
-
-        {/* Step 1: Draw bbox */}
+        {/* ── Layer selection ── */}
         <Typography variant="subtitle2" gutterBottom>
-          1. Define area
-        </Typography>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={onSelectBbox}
-            sx={outlinedAccentSx}
-          >
-            Draw on map
-          </Button>
-          {pendingBbox && (
-            <Chip
-              size="small"
-              label={`${area?.toFixed(0)} km² · ${estimateTime(area!)}`}
-              sx={{
-                color: "var(--theme-text-muted)",
-                borderColor: "var(--theme-text-muted)",
-              }}
-              variant="outlined"
-            />
-          )}
-        </Box>
-
-        <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,0.1)" }} />
-
-        {/* Step 2: Layer selection */}
-        <Typography variant="subtitle2" gutterBottom>
-          2. Select layers
+          Select layers
         </Typography>
         <FormGroup>
           {ALL_LAYERS.map((name) => (
@@ -605,154 +628,262 @@ export default function TopoDialog({
 
         <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,0.1)" }} />
 
-        {/* Step 3: Download from ELVIS + upload */}
-        <Typography variant="subtitle2" gutterBottom>
-          3. Upload ELVIS ZIP
-        </Typography>
-        <Box sx={{ pl: 2, display: "flex", flexDirection: "column", gap: 1 }}>
-          {/* 3a */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ minWidth: 16 }}
+        {/* ── Instructions toggle ── */}
+        <Box
+          component="button"
+          onClick={toggleInstructions}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 0.5,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: "var(--theme-text-muted)",
+            fontSize: "0.8rem",
+            p: 0,
+            mb: 2,
+            "&:hover": { color: "var(--theme-text-primary)" },
+            transition: "color var(--transition-fast)",
+          }}
+        >
+          {showInstructions ? (
+            <ExpandLessIcon sx={{ fontSize: 16 }} />
+          ) : (
+            <ExpandMoreIcon sx={{ fontSize: 16 }} />
+          )}
+          {showInstructions ? "Hide instructions" : "How to get an ELVIS ZIP"}
+        </Box>
+
+        {/* ── Collapsible instructions ── */}
+        <Collapse in={showInstructions}>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 1,
+              mb: 2,
+              pl: 1,
+            }}
+          >
+            {/* Step 1: Draw area + shapefile */}
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1.5,
+                flexWrap: "wrap",
+              }}
             >
-              a.
-            </Typography>
-            {pendingBbox ? (
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => downloadBboxShapefile(pendingBbox)}
-                sx={outlinedAccentSx}
-              >
-                Download area shapefile
-              </Button>
-            ) : (
               <Typography
                 variant="body2"
                 color="text.secondary"
-                sx={{ fontStyle: "italic" }}
+                sx={{ minWidth: 16 }}
               >
-                Define area above to download area shapefile
+                1.
               </Typography>
-            )}
-          </Box>
-
-          {/* 3b */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ minWidth: 16 }}
-            >
-              b.
-            </Typography>
-            <Button
-              size="small"
-              variant="outlined"
-              href="https://elevation.fsdf.org.au/"
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={outlinedAccentSx}
-            >
-              Open ELVIS portal ↗
-            </Button>
-          </Box>
-
-          {/* 3c–e */}
-          <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ minWidth: 16 }}
-            >
-              c.
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Click 'Order Data' → 'Load File', upload the shapefile ZIP
-              downloaded in step a, and click 'Search'.
-            </Typography>
-            <Tooltip
-              title={
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={onSelectBbox}
+                sx={outlinedAccentSx}
+              >
+                Draw area on map
+              </Button>
+              {pendingBbox ? (
                 <>
-                  <strong>Faster processing:</strong> You can also include
-                  ELVIS DEM (Digital Elevation Model) files alongside the
-                  point cloud. DEM files must cover the entire selected
-                  area.
-                  <br />
-                  <br />
-                  <strong>
-                    Fastest (no vegetation layer):
-                  </strong> Select <em>only</em> DEM files — no point cloud
-                  needed. The vegetation density layer will not be
-                  generated.
+                  <Chip
+                    size="small"
+                    label={`${area?.toFixed(0)} km²`}
+                    variant="outlined"
+                    sx={{
+                      color: "var(--theme-text-muted)",
+                      borderColor: "var(--theme-text-muted)",
+                    }}
+                  />
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => downloadBboxShapefile(pendingBbox)}
+                    sx={outlinedAccentSx}
+                  >
+                    Download shapefile
+                  </Button>
                 </>
-              }
-              arrow
-              placement="right"
-            >
-              <InfoOutlinedIcon
-                fontSize="small"
-                sx={{
-                  color: "var(--theme-text-muted)",
-                  cursor: "help",
-                  flexShrink: 0,
-                  mt: "2px",
-                }}
-              />
-            </Tooltip>
+              ) : (
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ fontStyle: "italic" }}
+                >
+                  then download shapefile
+                </Typography>
+              )}
+            </Box>
+
+            {/* Step 2: Open ELVIS portal */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ minWidth: 16 }}
+              >
+                2.
+              </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                href="https://elevation.fsdf.org.au/"
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={outlinedAccentSx}
+              >
+                Open ELVIS portal ↗
+              </Button>
+            </Box>
+
+            {/* Step 3: Load file + search */}
+            <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ minWidth: 16 }}
+              >
+                3.
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Click 'Order Data' → 'Load File', upload the shapefile ZIP
+                downloaded in step 1, and click 'Search'.
+              </Typography>
+              <Tooltip
+                title={
+                  <>
+                    <strong>Faster processing:</strong> You can also include
+                    ELVIS DEM (Digital Elevation Model) files alongside the
+                    point cloud. DEM files must cover the entire selected area.
+                    <br />
+                    <br />
+                    <strong>Fastest (no vegetation layer):</strong> Select{" "}
+                    <em>only</em> DEM files — no point cloud needed. The
+                    vegetation density layer will not be generated.
+                  </>
+                }
+                arrow
+                placement="right"
+              >
+                <InfoOutlinedIcon
+                  fontSize="small"
+                  sx={{
+                    color: "var(--theme-text-muted)",
+                    cursor: "help",
+                    flexShrink: 0,
+                    mt: "2px",
+                  }}
+                />
+              </Tooltip>
+            </Box>
+
+            {/* Step 4: Select point clouds */}
+            <Box sx={{ display: "flex", gap: 1.5 }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ minWidth: 16 }}
+              >
+                4.
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Under 'NSW Government - Spatial Services' → 'Point Clouds',
+                beside 'AHD', click 'Select all'.
+              </Typography>
+            </Box>
+
+            {/* Step 5: Order datasets */}
+            <Box sx={{ display: "flex", gap: 1.5 }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ minWidth: 16 }}
+              >
+                5.
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Under 'Industry', select 'Recreation'. Enter your email and
+                click 'Order x Datasets'.
+              </Typography>
+            </Box>
           </Box>
-          <Box sx={{ display: "flex", gap: 1.5 }}>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ minWidth: 16 }}
-            >
-              d.
+        </Collapse>
+
+        {/* ── Upload zone (hero) ── */}
+        <Box
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          sx={{
+            border: `2px dashed ${dragging ? "var(--theme-accent)" : "rgba(255,255,255,0.18)"}`,
+            borderRadius: "var(--radius-md)",
+            p: 3,
+            textAlign: "center",
+            cursor: "pointer",
+            backgroundColor: dragging
+              ? "color-mix(in srgb, var(--theme-accent) 8%, transparent)"
+              : "rgba(255,255,255,0.02)",
+            transition:
+              "border-color var(--transition-fast), background-color var(--transition-fast)",
+            "&:hover": {
+              borderColor: "var(--theme-accent)",
+              backgroundColor:
+                "color-mix(in srgb, var(--theme-accent) 8%, transparent)",
+            },
+          }}
+        >
+          <UploadFileIcon
+            sx={{
+              fontSize: 36,
+              color: file ? "var(--theme-accent)" : "var(--theme-text-muted)",
+              mb: 0.5,
+            }}
+          />
+          <Typography
+            variant="body2"
+            sx={{
+              color: file
+                ? "var(--theme-text-primary)"
+                : "var(--theme-text-muted)",
+            }}
+          >
+            {file ? file.name : "Drop ELVIS ZIP here, or click to browse"}
+          </Typography>
+          {file && (
+            <Typography variant="caption" color="text.secondary">
+              Click to change file
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Under 'NSW Government - Spatial Services' → 'Point Clouds',
-              beside 'AHD', click 'Select all'.
-            </Typography>
-          </Box>
-          <Box sx={{ display: "flex", gap: 1.5 }}>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ minWidth: 16 }}
-            >
-              e.
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Under 'Industry', select 'Recreation'. Enter your email and
-              click 'Order x Datasets'.
-            </Typography>
-          </Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ minWidth: 16 }}
-            >
-              f.
-            </Typography>
-            <Button
-              variant="outlined"
-              component="label"
-              size="small"
-              sx={outlinedAccentSx}
-            >
-              {file ? file.name : "Upload downloaded ZIP…"}
-              <input
-                type="file"
-                accept=".zip"
-                hidden
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
-            </Button>
-          </Box>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".zip"
+            hidden
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
         </Box>
+
+        {/* Area chip — shown below upload zone when bbox is drawn */}
+        {pendingBbox && (
+          <Box sx={{ mt: 1 }}>
+            <Chip
+              size="small"
+              label={`Area: ${area?.toFixed(0)} km²`}
+              variant="outlined"
+              sx={{
+                color: "var(--theme-text-muted)",
+                borderColor: "var(--theme-text-muted)",
+              }}
+            />
+          </Box>
+        )}
 
         {error && (
           <Alert severity="error" sx={{ mt: 2 }}>
@@ -773,7 +904,7 @@ export default function TopoDialog({
           variant="contained"
           color="secondary"
           onClick={handleSubmit}
-          disabled={!file || !pendingBbox || submitting}
+          disabled={!file || submitting}
         >
           {submitting ? <CircularProgress size={18} /> : "Submit"}
         </Button>
