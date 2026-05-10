@@ -143,13 +143,13 @@ WGS84_EPSG = 4326
 ZOOM_MIN = 12
 ZOOM_MAX = 18
 
-# Scrub density thresholds for vegetation layer
-# Ratio of returns in 0.25–2.0 m band to total returns per cell.
-# Cells below SCRUB_DENSITY_MIN_RATIO are transparent; cells at
-# SCRUB_DENSITY_MAX_RATIO get full dark-green colour.
-SCRUB_DENSITY_MIN_RATIO  = 0.05   # 5% returns in scrub band → just visible
-SCRUB_DENSITY_MAX_RATIO  = 0.50   # 50% returns in scrub band → fully opaque
-SCRUB_DENSITY_MIN_POINTS = 4      # minimum total-return count per cell for valid ratio
+# Vegetation (scrub density) layer — for bushbashing avoidance.
+# Window-pooled ratio of sub-canopy returns in the 0.25–2.0 m walking-height band
+# to all sub-canopy returns (HAG ≤ 2.0 m). Window size in metres == cells (1 m grid).
+SCRUB_DENSITY_WINDOW_M    = 7      # 7×7 m pooling window
+SCRUB_DENSITY_MIN_RATIO   = 0.02   # below this → transparent (light scrub / open ground)
+SCRUB_DENSITY_MAX_RATIO   = 0.35   # at/above → fully opaque dark green
+SCRUB_DENSITY_MIN_POINTS  = 16     # minimum *windowed* sub-canopy point count
 
 # Slope thresholds (degrees) → RGBA colour
 SLOPE_COLOURS = [
@@ -401,15 +401,15 @@ def extract_elvis_zip(zip_path: str, work_dir: str) -> ElvisContents:
 # ---------------------------------------------------------------------------
 
 def build_pipeline_full(las_files: List[str], out_dtm: str,
-                        out_scrub_count: str, out_total_count: str,
+                        out_scrub_count: str, out_sub_canopy_count: str,
                         resolution: float = 1.0) -> dict:
-    """PDAL pipeline: LAZ → DTM (ground) + scrub/total return count rasters. Mode C.
+    """PDAL pipeline: LAZ → DTM (ground) + scrub/sub-canopy return count rasters. Mode C.
 
     Uses filters.smrf for ground classification and filters.hag_nn to assign
     HeightAboveGround to every point. Two count rasters are produced:
-      - scrub_count: points with 0.25 m ≤ HAG ≤ 2.0 m (walking-height scrub band)
-      - total_count: all points (normalises for variable point density)
-    The ratio scrub/total gives a density estimate independent of flight-line overlap.
+      - scrub_count:      points with 0.25 m ≤ HAG ≤ 2.0 m (walking-height scrub band)
+      - sub_canopy_count: points with HAG ≤ 2.0 m (denominator — excludes canopy returns
+                          so the ratio is not diluted under thick forest)
     """
     readers = [{"type": "readers.las", "filename": f} for f in las_files]
     return {
@@ -438,12 +438,13 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
-            # Total return count (all points — denominator for density ratio)
+            # Sub-canopy return count (HAG ≤ 2.0 m — denominator for density ratio)
             {
                 "type": "writers.gdal",
-                "filename": out_total_count,
+                "filename": out_sub_canopy_count,
                 "resolution": resolution,
                 "output_type": "count",
+                "where": "HeightAboveGround <= 2.0",
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
@@ -452,9 +453,9 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
 
 
 def build_pipeline_density_only(las_files: List[str], dtm_path: str,
-                                 out_scrub_count: str, out_total_count: str,
+                                 out_scrub_count: str, out_sub_canopy_count: str,
                                  resolution: float = 1.0) -> dict:
-    """PDAL pipeline: LAZ → scrub/total count rasters using an external DEM. Mode B.
+    """PDAL pipeline: LAZ → scrub/sub-canopy count rasters using an external DEM. Mode B.
 
     Uses filters.hag_dem to compute HeightAboveGround from a pre-built DEM raster,
     avoiding the need to re-run ground classification (smrf) when a DEM already exists.
@@ -475,12 +476,13 @@ def build_pipeline_density_only(las_files: List[str], dtm_path: str,
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
-            # Total return count (all points — denominator for density ratio)
+            # Sub-canopy return count (HAG ≤ 2.0 m — denominator for density ratio)
             {
                 "type": "writers.gdal",
-                "filename": out_total_count,
+                "filename": out_sub_canopy_count,
                 "resolution": resolution,
                 "output_type": "count",
+                "where": "HeightAboveGround <= 2.0",
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
@@ -513,55 +515,55 @@ def run_pdal_pipeline(pipeline: dict, work_dir: str, label: str = "pipeline"):
 
 
 def run_pdal_sequential_full(las_files: List[str], out_dtm: str,
-                              out_scrub_count: str, out_total_count: str,
+                              out_scrub_count: str, out_sub_canopy_count: str,
                               work_dir: str, resolution: float = 1.0):
     """Process LAZ files one at a time (DTM + density counts), then merge. Mode C."""
     dtm_tiles = []
     scrub_tiles = []
-    total_tiles = []
+    sub_canopy_tiles = []
     for i, laz in enumerate(las_files):
         log.info(f"PDAL tile {i+1}/{len(las_files)}: {os.path.basename(laz)}")
-        tile_dtm   = os.path.join(work_dir, f"dtm_tile_{i}.tif")
-        tile_scrub = os.path.join(work_dir, f"scrub_tile_{i}.tif")
-        tile_total = os.path.join(work_dir, f"total_tile_{i}.tif")
-        pipeline = build_pipeline_full([laz], tile_dtm, tile_scrub, tile_total, resolution)
+        tile_dtm        = os.path.join(work_dir, f"dtm_tile_{i}.tif")
+        tile_scrub      = os.path.join(work_dir, f"scrub_tile_{i}.tif")
+        tile_sub_canopy = os.path.join(work_dir, f"sub_canopy_tile_{i}.tif")
+        pipeline = build_pipeline_full([laz], tile_dtm, tile_scrub, tile_sub_canopy, resolution)
         run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_full_{i}")
         dtm_tiles.append(tile_dtm)
         scrub_tiles.append(tile_scrub)
-        total_tiles.append(tile_total)
+        sub_canopy_tiles.append(tile_sub_canopy)
 
     log.info(f"Merging {len(dtm_tiles)} DTM tiles …")
     _merge_raster_tiles(dtm_tiles, out_dtm)
     log.info(f"Merging {len(scrub_tiles)} scrub-count tiles …")
     _merge_raster_tiles(scrub_tiles, out_scrub_count)
-    log.info(f"Merging {len(total_tiles)} total-count tiles …")
-    _merge_raster_tiles(total_tiles, out_total_count)
+    log.info(f"Merging {len(sub_canopy_tiles)} sub-canopy-count tiles …")
+    _merge_raster_tiles(sub_canopy_tiles, out_sub_canopy_count)
 
-    for p in dtm_tiles + scrub_tiles + total_tiles:
+    for p in dtm_tiles + scrub_tiles + sub_canopy_tiles:
         os.remove(p)
 
 
 def run_pdal_sequential_density(las_files: List[str], dtm_path: str,
-                                 out_scrub_count: str, out_total_count: str,
+                                 out_scrub_count: str, out_sub_canopy_count: str,
                                  work_dir: str, resolution: float = 1.0):
     """Process LAZ files one at a time (density counts only) using hag_dem. Mode B."""
     scrub_tiles = []
-    total_tiles = []
+    sub_canopy_tiles = []
     for i, laz in enumerate(las_files):
         log.info(f"PDAL tile {i+1}/{len(las_files)}: {os.path.basename(laz)}")
-        tile_scrub = os.path.join(work_dir, f"scrub_tile_{i}.tif")
-        tile_total = os.path.join(work_dir, f"total_tile_{i}.tif")
-        pipeline = build_pipeline_density_only([laz], dtm_path, tile_scrub, tile_total, resolution)
+        tile_scrub      = os.path.join(work_dir, f"scrub_tile_{i}.tif")
+        tile_sub_canopy = os.path.join(work_dir, f"sub_canopy_tile_{i}.tif")
+        pipeline = build_pipeline_density_only([laz], dtm_path, tile_scrub, tile_sub_canopy, resolution)
         run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_density_{i}")
         scrub_tiles.append(tile_scrub)
-        total_tiles.append(tile_total)
+        sub_canopy_tiles.append(tile_sub_canopy)
 
     log.info(f"Merging {len(scrub_tiles)} scrub-count tiles …")
     _merge_raster_tiles(scrub_tiles, out_scrub_count)
-    log.info(f"Merging {len(total_tiles)} total-count tiles …")
-    _merge_raster_tiles(total_tiles, out_total_count)
+    log.info(f"Merging {len(sub_canopy_tiles)} sub-canopy-count tiles …")
+    _merge_raster_tiles(sub_canopy_tiles, out_sub_canopy_count)
 
-    for p in scrub_tiles + total_tiles:
+    for p in scrub_tiles + sub_canopy_tiles:
         os.remove(p)
 
 
@@ -740,7 +742,28 @@ def align_raster_to_reference(src_path: str, ref_path: str, dst_path: str):
     ref_ds = None
 
 
-def compute_rasters(dtm_path: str, scrub_count_path: str, total_count_path: str,
+def _box_sum_2d(arr: np.ndarray, k: int) -> np.ndarray:
+    """Sum of values in a k×k window centred on each cell, computed in O(N) via a
+    summed-area table. Edge cells are reflected so the window is always full size.
+    Returns a float32 array with the same shape as `arr`.
+    """
+    if k % 2 != 1:
+        raise ValueError("window size must be odd")
+    half = k // 2
+    padded = np.pad(arr.astype(np.float32, copy=False), half, mode="reflect")
+    # Summed-area table with a leading zero row/col for clean indexing.
+    sat = np.zeros((padded.shape[0] + 1, padded.shape[1] + 1), dtype=np.float64)
+    sat[1:, 1:] = padded.cumsum(axis=0).cumsum(axis=1)
+    h, w = arr.shape
+    # Window [i:i+k, j:j+k] over `padded` corresponds to (i, j) in the original.
+    bottom_right = sat[k:k + h, k:k + w]
+    top_right    = sat[0:h,     k:k + w]
+    bottom_left  = sat[k:k + h, 0:w]
+    top_left     = sat[0:h,     0:w]
+    return (bottom_right - top_right - bottom_left + top_left).astype(np.float32)
+
+
+def compute_rasters(dtm_path: str, scrub_count_path: str, sub_canopy_count_path: str,
                     work_dir: str) -> dict:
     """
     From DTM + point-count rasters produce hillshade.tif, slope.tif, scrub_density.tif.
@@ -749,8 +772,11 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, total_count_path: str,
     are guaranteed to match — essential in Mode B where the DTM comes from a
     pre-built DEM and the counts come from PDAL.
 
-    Scrub density is the ratio of returns in the 0.25–2.0 m height band to all
-    returns per cell, smoothed with a 3×3 mean filter to reduce single-cell noise.
+    Scrub density is the pooled ratio of scrub-band returns (0.25–2.0 m) to all
+    sub-canopy returns (HAG ≤ 2.0 m), aggregated over a SCRUB_DENSITY_WINDOW_M-cell
+    box. Pooling counts before dividing (rather than per-pixel ratio + post-smooth)
+    gives a statistically stable estimate even in canopy-shadowed cells where
+    individual pixels would otherwise have too few points to be reliable.
     """
     paths = {}
 
@@ -774,42 +800,38 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, total_count_path: str,
     )
     paths["slope"] = sl_path
 
-    # Scrub density: ratio of scrub-band returns to total returns per cell
+    # Scrub density: pooled ratio of scrub-band to sub-canopy returns over a window
     # Step 1: align count rasters onto the DTM grid
-    scrub_aligned = os.path.join(work_dir, "scrub_count_aligned.tif")
-    total_aligned = os.path.join(work_dir, "total_count_aligned.tif")
+    scrub_aligned      = os.path.join(work_dir, "scrub_count_aligned.tif")
+    sub_canopy_aligned = os.path.join(work_dir, "sub_canopy_count_aligned.tif")
     log.info("Aligning count rasters to DTM grid …")
     align_raster_to_reference(scrub_count_path, dtm_path, scrub_aligned)
-    align_raster_to_reference(total_count_path, dtm_path, total_aligned)
+    align_raster_to_reference(sub_canopy_count_path, dtm_path, sub_canopy_aligned)
 
-    # Step 2: compute normalised density ratio
-    log.info("Computing scrub density …")
-    dtm_ds    = gdal.Open(dtm_path)
-    scrub_ds  = gdal.Open(scrub_aligned)
-    total_ds  = gdal.Open(total_aligned)
+    # Step 2: window-pooled ratio (numerator: scrub-band, denominator: sub-canopy)
+    log.info(f"Computing scrub density (pooled {SCRUB_DENSITY_WINDOW_M}×{SCRUB_DENSITY_WINDOW_M} m) …")
+    dtm_ds         = gdal.Open(dtm_path)
+    scrub_ds       = gdal.Open(scrub_aligned)
+    sub_canopy_ds  = gdal.Open(sub_canopy_aligned)
 
-    scrub_arr = scrub_ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
-    total_arr = total_ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
+    # nodata in the count rasters is 0, so reading as-is gives correct counts.
+    scrub_arr      = scrub_ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
+    sub_canopy_arr = sub_canopy_ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
 
-    # Cells below the minimum point threshold are treated as nodata (unstable ratio)
-    valid = total_arr >= SCRUB_DENSITY_MIN_POINTS
-    density = np.where(valid, scrub_arr / np.where(total_arr > 0, total_arr, 1.0), np.nan)
+    scrub_sum      = _box_sum_2d(scrub_arr,      SCRUB_DENSITY_WINDOW_M)
+    sub_canopy_sum = _box_sum_2d(sub_canopy_arr, SCRUB_DENSITY_WINDOW_M)
 
-    # Step 3: 3×3 mean smooth — reduces single-cell speckle without scipy
-    # NaN-safe: accumulate sum and count separately, divide where count > 0
-    finite_mask = np.isfinite(density).astype(np.float32)
-    density_filled = np.where(finite_mask, density, 0.0)
-    sum_vals  = np.lib.stride_tricks.sliding_window_view(
-        np.pad(density_filled, 1, mode="edge"), (3, 3)
-    ).sum(axis=(-2, -1))
-    sum_mask  = np.lib.stride_tricks.sliding_window_view(
-        np.pad(finite_mask, 1, mode="edge"), (3, 3)
-    ).sum(axis=(-2, -1))
-    density_smooth = np.where(sum_mask > 0, sum_vals / sum_mask, np.nan)
+    # Windows below the pooled-point threshold are treated as nodata (unstable ratio).
+    valid = sub_canopy_sum >= SCRUB_DENSITY_MIN_POINTS
+    density = np.where(
+        valid,
+        scrub_sum / np.where(sub_canopy_sum > 0, sub_canopy_sum, 1.0),
+        np.nan,
+    )
 
-    # Step 4: write scrub_density.tif (values 0–1, nodata = -9999)
+    # Step 3: write scrub_density.tif (values 0–1, nodata = -9999)
     density_path = os.path.join(work_dir, "scrub_density.tif")
-    density_out = np.where(np.isfinite(density_smooth), density_smooth, -9999).astype(np.float32)
+    density_out = np.where(np.isfinite(density), density, -9999).astype(np.float32)
     driver = gdal.GetDriverByName("GTiff")
     out_ds = driver.Create(
         density_path,
@@ -1210,7 +1232,7 @@ def render_vegetation_tile(density_arr: Optional[np.ndarray]) -> Image.Image:
     rgba[..., 0] = np.where(mask, (144 - t * 144).astype(np.uint8), 0)
     rgba[..., 1] = np.where(mask, (238 - t * 138).astype(np.uint8), 0)
     rgba[..., 2] = np.where(mask, (144 - t * 144).astype(np.uint8), 0)
-    rgba[..., 3] = np.where(mask, (80  + t * 100).astype(np.uint8), 0)
+    rgba[..., 3] = np.where(mask, (60  + t * 195).astype(np.uint8), 0)
     return Image.fromarray(rgba)
 
 
@@ -1673,9 +1695,9 @@ def main():
             contents = extract_elvis_zip(args.elvis_zip, work_dir)
 
         las_strs = [str(f) for f in contents.las_files]
-        dtm_filled      = os.path.join(work_dir, "dtm_filled.tif")
-        scrub_count_raw = os.path.join(work_dir, "scrub_count_raw.tif")
-        total_count_raw = os.path.join(work_dir, "total_count_raw.tif")
+        dtm_filled           = os.path.join(work_dir, "dtm_filled.tif")
+        scrub_count_raw      = os.path.join(work_dir, "scrub_count_raw.tif")
+        sub_canopy_count_raw = os.path.join(work_dir, "sub_canopy_count_raw.tif")
 
         footprint_path = os.path.join(work_dir, "footprint.geojson")
 
@@ -1690,7 +1712,7 @@ def main():
             dtm_raw = os.path.join(work_dir, "dtm_raw.tif")
             with bench.step("PDAL: LAZ → DTM + scrub density counts (ground classification)"):
                 run_pdal_sequential_full(
-                    las_strs, dtm_raw, scrub_count_raw, total_count_raw,
+                    las_strs, dtm_raw, scrub_count_raw, sub_canopy_count_raw,
                     work_dir, resolution=1.0,
                 )
             with bench.step("Compute data footprint"):
@@ -1702,14 +1724,14 @@ def main():
         if contents.mode == MODE_DEM_LAZ:
             with bench.step("PDAL: LAZ → scrub density counts (hag_dem)"):
                 run_pdal_sequential_density(
-                    las_strs, dtm_filled, scrub_count_raw, total_count_raw,
+                    las_strs, dtm_filled, scrub_count_raw, sub_canopy_count_raw,
                     work_dir, resolution=1.0,
                 )
 
         # ── Step 3: Derive rasters ───────────────────────────────────────────
         with bench.step("Compute hillshade, slope" + (", scrub density (vegetation)" if contents.has_vegetation else "")):
             if contents.has_vegetation:
-                raster_paths = compute_rasters(dtm_filled, scrub_count_raw, total_count_raw, work_dir)
+                raster_paths = compute_rasters(dtm_filled, scrub_count_raw, sub_canopy_count_raw, work_dir)
             else:
                 raster_paths = compute_rasters_no_veg(dtm_filled, work_dir)
 
