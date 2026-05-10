@@ -140,6 +140,7 @@ model TopoJob {
   status        String   @default("uploading")
   // status values: uploading | pending | processing | complete | failed
   bbox          Json?
+  footprint     Json?
   layerOptions  Json?    @map("layer_options")
   s3InputKey    String?  @map("s3_input_key")
   s3OutputKeys  Json?    @map("s3_output_keys")

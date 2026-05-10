@@ -82,12 +82,15 @@ function OverlaysPanel({
   }, [onTopoLayersChange]);
 
   useEffect(() => {
-    if (!lidarEnabled || masterLayers.length === 0) {
+    if (!lidarEnabled) {
       if (prevLayersJsonRef.current !== "[]") {
         prevLayersJsonRef.current = "[]";
         onTopoLayersChangeRef.current([]);
       }
       return;
+    }
+    if (masterLayers.length === 0) {
+      return; // still loading after panel remount — don't disturb existing map layers
     }
     const layerMap = new Map(masterLayers.map((l) => [l.name, l]));
     const active: TopoLayerEntry[] = layerOrder

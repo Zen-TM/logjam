@@ -54,6 +54,8 @@ import numpy as np
 import requests
 from PIL import Image, ImageDraw, ImageFont
 from osgeo import gdal, ogr, osr
+from shapely.geometry import shape, mapping, Polygon, MultiPolygon, box as shapely_box
+from shapely.ops import unary_union
 
 gdal.UseExceptions()
 ogr.UseExceptions()
@@ -563,7 +565,7 @@ def run_pdal_sequential_density(las_files: List[str], dtm_path: str,
         os.remove(p)
 
 
-def fill_nodata(src_path: str, dst_path: str, max_distance: int = 50):
+def fill_nodata(src_path: str, dst_path: str, max_distance: int = 5):
     """Fill small nodata holes (e.g. under dense canopy) using GDAL."""
     log.info(f"Filling nodata in {os.path.basename(src_path)} …")
     ds = gdal.Open(src_path)
@@ -574,6 +576,133 @@ def fill_nodata(src_path: str, dst_path: str, max_distance: int = 50):
     out_ds.FlushCache()
     out_ds = None
     ds = None
+
+
+def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
+    """Polygonize the valid-pixel mask of a DTM raster → tight WGS84 footprint GeoJSON.
+
+    Downsamples 10× before polygonizing so it stays fast on large rasters.
+    Takes only the exterior boundary (drops interior nodata holes like dense canopy).
+    """
+    ds = gdal.Open(dtm_path)
+    band = ds.GetRasterBand(1)
+    nodata = band.GetNoDataValue()
+    arr = band.ReadAsArray().astype(np.float32)
+
+    mask_arr = np.ones((ds.RasterYSize, ds.RasterXSize), dtype=np.uint8)
+    if nodata is not None:
+        mask_arr[arr == float(nodata)] = 0
+    mask_arr[~np.isfinite(arr)] = 0
+
+    # Write 1m mask to memory
+    mem_drv = gdal.GetDriverByName("MEM")
+    mask_ds = mem_drv.Create("", ds.RasterXSize, ds.RasterYSize, 1, gdal.GDT_Byte)
+    mask_ds.SetGeoTransform(ds.GetGeoTransform())
+    mask_ds.SetProjection(ds.GetProjection())
+    mask_ds.GetRasterBand(1).WriteArray(mask_arr)
+
+    # Downsample 10× for faster polygonization (~10 m resolution is plenty)
+    scale = 10
+    new_x = max(1, ds.RasterXSize // scale)
+    new_y = max(1, ds.RasterYSize // scale)
+    gt = ds.GetGeoTransform()
+    small_ds = mem_drv.Create("", new_x, new_y, 1, gdal.GDT_Byte)
+    small_ds.SetGeoTransform((gt[0], gt[1] * scale, 0, gt[3], 0, gt[5] * scale))
+    small_ds.SetProjection(ds.GetProjection())
+    gdal.Warp(small_ds, mask_ds, resampleAlg=gdal.GRA_NearestNeighbour)
+
+    # Polygonize
+    tmp_path = dst_geojson_path + "_tmp.geojson"
+    drv = ogr.GetDriverByName("GeoJSON")
+    if os.path.exists(tmp_path):
+        drv.DeleteDataSource(tmp_path)
+    poly_ds = drv.CreateDataSource(tmp_path)
+    src_srs = osr.SpatialReference()
+    src_srs.ImportFromWkt(ds.GetProjection())
+    poly_layer = poly_ds.CreateLayer("footprint", srs=src_srs, geom_type=ogr.wkbPolygon)
+    poly_layer.CreateField(ogr.FieldDefn("val", ogr.OFTInteger))
+    gdal.Polygonize(small_ds.GetRasterBand(1), None, poly_layer, 0)
+    poly_ds.FlushCache()
+    poly_ds = None
+    small_ds = None
+    mask_ds = None
+
+    # Union value==1 polygons, take outer boundary only
+    in_ds = ogr.Open(tmp_path)
+    in_layer = in_ds.GetLayer()
+    polys = []
+    for feat in in_layer:
+        if feat.GetField("val") == 1:
+            geom = feat.GetGeometryRef()
+            if geom:
+                polys.append(shape(json.loads(geom.ExportToJson())))
+    in_ds = None
+
+    if not polys:
+        log.warning("No valid pixels found — falling back to full raster bbox for footprint")
+        xmin = gt[0]; xmax = gt[0] + gt[1] * ds.RasterXSize
+        ymax = gt[3]; ymin = gt[3] + gt[5] * ds.RasterYSize
+        footprint_merc = shapely_box(xmin, ymin, xmax, ymax)
+    else:
+        merged = unary_union(polys)
+        if merged.geom_type == "Polygon":
+            footprint_merc = Polygon(merged.exterior)
+        else:
+            footprint_merc = MultiPolygon([Polygon(p.exterior) for p in merged.geoms])
+
+    # Simplify with ~50 m tolerance (Web Mercator metres)
+    footprint_merc = footprint_merc.simplify(50.0, preserve_topology=True)
+
+    # Reproject to WGS84 via OGR
+    tgt_srs = osr.SpatialReference()
+    tgt_srs.ImportFromEPSG(WGS84_EPSG)
+    src_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    tgt_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    transform = osr.CoordinateTransformation(src_srs, tgt_srs)
+    ds = None
+
+    geom_ogr = ogr.CreateGeometryFromJson(json.dumps(mapping(footprint_merc)))
+    geom_ogr.Transform(transform)
+    footprint_wgs84 = shape(json.loads(geom_ogr.ExportToJson()))
+
+    with open(dst_geojson_path, "w") as f:
+        json.dump({"type": "FeatureCollection", "features": [
+            {"type": "Feature", "geometry": mapping(footprint_wgs84), "properties": {}}
+        ]}, f)
+
+    try:
+        os.remove(tmp_path)
+    except OSError:
+        pass
+    log.info(f"Data footprint computed → {dst_geojson_path}")
+
+
+def clip_geojson_to_footprint(geojson_path: str, footprint_path: str, out_path: str):
+    """Clip GeoJSON features to footprint, dropping features entirely outside it."""
+    with open(footprint_path) as f:
+        fp_fc = json.load(f)
+    fp_geom = unary_union([shape(feat["geometry"]) for feat in fp_fc["features"]])
+
+    with open(geojson_path) as f:
+        gj = json.load(f)
+
+    clipped = []
+    for feat in gj.get("features", []):
+        geom = shape(feat["geometry"])
+        if not geom.is_valid:
+            geom = geom.buffer(0)
+        if not fp_geom.intersects(geom):
+            continue
+        if fp_geom.contains(geom):
+            clipped.append(feat)
+        else:
+            inter = fp_geom.intersection(geom)
+            if not inter.is_empty:
+                clipped.append({**feat, "geometry": mapping(inter)})
+
+    with open(out_path, "w") as f:
+        json.dump({"type": "FeatureCollection", "features": clipped}, f)
+    log.info(f"Clipped {len(gj.get('features', []))} → {len(clipped)} features to footprint")
 
 
 def align_raster_to_reference(src_path: str, ref_path: str, dst_path: str):
@@ -729,8 +858,8 @@ def compute_rasters_no_veg(dtm_path: str, work_dir: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: float,
-                       work_dir: str) -> Optional[str]:
-    """Download OSM data via Overpass API. Returns path to GeoJSON file."""
+                       work_dir: str, footprint_path: Optional[str] = None) -> Optional[str]:
+    """Download OSM data via Overpass API, then clip to the data footprint. Returns path to GeoJSON."""
     log.info("Fetching OSM features from Overpass API …")
     bbox = f"{lat_min},{lon_min},{lat_max},{lon_max}"
 
@@ -795,8 +924,13 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
     geojson = {"type": "FeatureCollection", "features": features}
     with open(geojson_path, "w") as f:
         json.dump(geojson, f)
-
     log.info(f"OSM fetch complete: {len(features)} features.")
+
+    if footprint_path and os.path.exists(footprint_path):
+        clipped_path = os.path.join(work_dir, "osm_features.geojson")
+        clip_geojson_to_footprint(geojson_path, footprint_path, clipped_path)
+        return clipped_path
+
     return geojson_path
 
 
@@ -866,17 +1000,19 @@ def _merc_srs():
     return srs
 
 
-def generate_contours_gdal(dtm_filled: str, work_dir: str) -> dict:
+def generate_contours_gdal(dtm_filled: str, work_dir: str,
+                           footprint_path: Optional[str] = None) -> dict:
     """
     Generate contour GeoJSONs from the DTM.
 
     gdal_contour outputs coordinates in the DTM's CRS (Web Mercator).
-    We then reproject each GeoJSON to WGS84 (EPSG:4326) so the tile
-    renderer can use lon/lat coordinates directly.
+    We then reproject each GeoJSON to WGS84 (EPSG:4326) and clip to the
+    data footprint so contours don't extend into nodata-filled edges.
     """
     paths = {}
     for interval in [5, 10, 50]:
         merc_path = os.path.join(work_dir, f"contours_{interval}m_merc.geojson")
+        reproj_path = os.path.join(work_dir, f"contours_{interval}m_reproj.geojson")
         out_path  = os.path.join(work_dir, f"contours_{interval}m.geojson")
 
         # Step 1: generate contours in Web Mercator
@@ -892,17 +1028,23 @@ def generate_contours_gdal(dtm_filled: str, work_dir: str) -> dict:
         if result.returncode != 0:
             raise RuntimeError(f"gdal_contour failed:\n{result.stderr}")
 
-        # Step 2: reproject to WGS84 so the tile renderer can use lon/lat
+        # Step 2: reproject to WGS84
         cmd2 = [
             "ogr2ogr",
             "-f", "GeoJSON",
             "-t_srs", "EPSG:4326",
-            out_path,
+            reproj_path,
             merc_path,
         ]
         result2 = subprocess.run(cmd2, capture_output=True, text=True)
         if result2.returncode != 0:
             raise RuntimeError(f"ogr2ogr reproject failed:\n{result2.stderr}")
+
+        # Step 3: clip to data footprint if available
+        if footprint_path and os.path.exists(footprint_path):
+            clip_geojson_to_footprint(reproj_path, footprint_path, out_path)
+        else:
+            os.rename(reproj_path, out_path)
 
         paths[interval] = out_path
         log.info(f"  {interval}m contours → {out_path}")
@@ -953,6 +1095,7 @@ def read_raster_window(raster_path: str, bbox_merc: Tuple, out_size: int = TILE_
 # ---------------------------------------------------------------------------
 
 _geojson_cache: Dict[str, dict] = {}
+_footprint_shape_cache: Dict[str, object] = {}
 
 def _load_geojson(path: str) -> dict:
     """Load and cache parsed GeoJSON. Each ProcessPoolExecutor worker gets its
@@ -962,6 +1105,64 @@ def _load_geojson(path: str) -> dict:
         with open(path) as f:
             _geojson_cache[path] = json.load(f)
     return _geojson_cache[path]
+
+
+def _load_footprint_shape(footprint_path: str):
+    """Load and cache footprint as a shapely geometry (per-process cache)."""
+    if footprint_path not in _footprint_shape_cache:
+        gj = _load_geojson(footprint_path)
+        _footprint_shape_cache[footprint_path] = unary_union(
+            [shape(f["geometry"]) for f in gj["features"]]
+        )
+    return _footprint_shape_cache[footprint_path]
+
+
+def _apply_footprint_mask(img: Image.Image, footprint_path: str,
+                          bbox_wgs84: Tuple) -> Image.Image:
+    """Zero alpha where the footprint polygon is absent.
+
+    Tiles entirely inside the footprint are returned unchanged.
+    Tiles partially intersecting the footprint have their alpha channel
+    masked so only pixels inside the footprint remain visible.
+    Tiles entirely outside are returned fully transparent.
+    """
+    lon_min, lat_min, lon_max, lat_max = bbox_wgs84
+    tile_box = shapely_box(lon_min, lat_min, lon_max, lat_max)
+    fp_geom = _load_footprint_shape(footprint_path)
+
+    if fp_geom.contains(tile_box):
+        return img
+    if not fp_geom.intersects(tile_box):
+        return Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
+
+    # Partial overlap: rasterize intersection into a 256×256 mask
+    inter = fp_geom.intersection(tile_box)
+    mask_img = Image.new("L", (TILE_SIZE, TILE_SIZE), 0)
+    draw = ImageDraw.Draw(mask_img)
+    tile_w = lon_max - lon_min
+    tile_h = lat_max - lat_min
+
+    def to_px(lon, lat):
+        return ((lon - lon_min) / tile_w * TILE_SIZE,
+                (lat_max - lat) / tile_h * TILE_SIZE)
+
+    def rasterize_poly(poly):
+        pts = [to_px(c[0], c[1]) for c in poly.exterior.coords]
+        if len(pts) >= 3:
+            draw.polygon(pts, fill=255)
+
+    if inter.geom_type == "Polygon":
+        rasterize_poly(inter)
+    elif inter.geom_type in ("MultiPolygon", "GeometryCollection"):
+        for g in inter.geoms:
+            if g.geom_type == "Polygon":
+                rasterize_poly(g)
+
+    r, g, b, a = img.split()
+    new_a = Image.fromarray(
+        np.minimum(np.array(a), np.array(mask_img)).astype(np.uint8), mode="L"
+    )
+    return Image.merge("RGBA", (r, g, b, new_a))
 
 
 def render_hillshade_tile(hs_arr: Optional[np.ndarray]) -> Image.Image:
@@ -1235,6 +1436,7 @@ class RenderConfig:
     lat_min: float
     lon_max: float
     lat_max: float
+    footprint_path: Optional[str] = None
 
 
 def render_tile_job(args) -> Tuple[int, int, int, dict]:
@@ -1264,6 +1466,16 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
     # --- Slope ---
     sl_arr = read_raster_window(cfg.slope_path, bbox_merc)
     slope_img = render_slope_tile(sl_arr)
+
+    # --- Apply footprint mask to raster layers ---
+    # This ensures pixels in the nodata-filled edge ring are fully transparent.
+    if cfg.footprint_path:
+        try:
+            hs_img = _apply_footprint_mask(hs_img, cfg.footprint_path, bbox_wgs84)
+            veg_img = _apply_footprint_mask(veg_img, cfg.footprint_path, bbox_wgs84)
+            slope_img = _apply_footprint_mask(slope_img, cfg.footprint_path, bbox_wgs84)
+        except Exception as _e:
+            log.warning(f"Footprint mask failed for tile {z}/{x}/{y}: {_e}")
 
     # --- Contours ---
     contour_img = render_contours_tile(cfg.contour_paths, bbox_wgs84, z)
@@ -1433,6 +1645,11 @@ def main():
                             "Copy intermediate GeoJSON files (contours + OSM features) "
                             "to DIR for external vector tile generation."
                         ))
+    parser.add_argument("--export-footprint", default=None, metavar="DIR",
+                        help=(
+                            "Copy the computed data-coverage footprint GeoJSON "
+                            "to DIR (alongside --export-geojson outputs)."
+                        ))
     parser.add_argument("--layers", default="all",
                         help=(
                             "Comma-separated list of layers to generate "
@@ -1460,10 +1677,14 @@ def main():
         scrub_count_raw = os.path.join(work_dir, "scrub_count_raw.tif")
         total_count_raw = os.path.join(work_dir, "total_count_raw.tif")
 
+        footprint_path = os.path.join(work_dir, "footprint.geojson")
+
         # ── Step 2a: Obtain DTM ──────────────────────────────────────────────
         if contents.mode == MODE_DEM_ONLY or contents.mode == MODE_DEM_LAZ:
             with bench.step("Merge & reproject pre-built DEM (DTM)"):
                 merge_dem_tiles(contents.dem_files, dtm_filled)
+            with bench.step("Compute data footprint"):
+                compute_data_footprint(dtm_filled, footprint_path)
         else:
             # MODE_LAZ_ONLY – build DTM + density counts from point cloud
             dtm_raw = os.path.join(work_dir, "dtm_raw.tif")
@@ -1472,6 +1693,8 @@ def main():
                     las_strs, dtm_raw, scrub_count_raw, total_count_raw,
                     work_dir, resolution=1.0,
                 )
+            with bench.step("Compute data footprint"):
+                compute_data_footprint(dtm_raw, footprint_path)
             with bench.step("Fill DTM nodata holes"):
                 fill_nodata(dtm_raw, dtm_filled)
 
@@ -1495,25 +1718,33 @@ def main():
         log.info(f"Coverage: lon {lon_min:.4f}–{lon_max:.4f}, lat {lat_min:.4f}–{lat_max:.4f}")
 
         # ── Step 5: OSM features ─────────────────────────────────────────────
+        fp = footprint_path if os.path.exists(footprint_path) else None
         osm_geojson = None
         if not args.skip_osm:
             with bench.step("Fetch OSM features (Overpass API)"):
-                osm_geojson = fetch_osm_features(lon_min, lat_min, lon_max, lat_max, work_dir)
+                osm_geojson = fetch_osm_features(lon_min, lat_min, lon_max, lat_max, work_dir,
+                                                  footprint_path=fp)
 
         # ── Step 6: Contours ─────────────────────────────────────────────────
         with bench.step("Generate contours (5 m / 10 m / 50 m)"):
-            contour_paths = generate_contours_gdal(dtm_filled, work_dir)
+            contour_paths = generate_contours_gdal(dtm_filled, work_dir, footprint_path=fp)
 
         # ── Step 6b: Export GeoJSON for external vector tile generation ─────
-        if args.export_geojson:
-            export_dir = args.export_geojson
+        if args.export_geojson or args.export_footprint:
+            export_dir = args.export_geojson or args.export_footprint
             os.makedirs(export_dir, exist_ok=True)
-            log.info(f"Exporting GeoJSON to {export_dir} …")
+        if args.export_geojson:
+            log.info(f"Exporting GeoJSON to {args.export_geojson} …")
             for interval, path in contour_paths.items():
                 if os.path.exists(path):
-                    shutil.copy2(path, os.path.join(export_dir, f"contours_{interval}m.geojson"))
+                    shutil.copy2(path, os.path.join(args.export_geojson, f"contours_{interval}m.geojson"))
             if osm_geojson and os.path.exists(osm_geojson):
-                shutil.copy2(osm_geojson, os.path.join(export_dir, "osm_features.geojson"))
+                shutil.copy2(osm_geojson, os.path.join(args.export_geojson, "osm_features.geojson"))
+        if args.export_footprint and fp:
+            fp_export_dir = args.export_footprint
+            os.makedirs(fp_export_dir, exist_ok=True)
+            shutil.copy2(fp, os.path.join(fp_export_dir, "footprint.geojson"))
+            log.info(f"Footprint exported to {fp_export_dir}")
 
         # ── Step 7: Tile rendering ───────────────────────────────────────────
         active_layers = ["hillshade", "features", "slope", "contours"]
@@ -1538,6 +1769,7 @@ def main():
             lat_min=lat_min,
             lon_max=lon_max,
             lat_max=lat_max,
+            footprint_path=fp,
         )
 
         with bench.step(f"Render tiles z{ZOOM_MIN}–z{ZOOM_MAX} ({args.workers} workers)"):

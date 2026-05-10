@@ -216,7 +216,7 @@ router.delete(
     if (job.userId !== user.id) throw new AppError(403, "Access denied");
 
     // List and delete all S3 objects for this job
-    const prefixes = [`inputs/${jobId}/`, `outputs/${jobId}/`];
+    const prefixes = [`inputs/${jobId}/`, `outputs/${jobId}/`, `jobs/${jobId}/`];
     for (const prefix of prefixes) {
       const listed = await s3.send(new ListObjectsV2Command({ Bucket: TOPO_BUCKET, Prefix: prefix }));
       const keys = listed.Contents?.map((o) => ({ Key: o.Key! })) ?? [];

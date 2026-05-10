@@ -5,6 +5,7 @@ import Map, { BASE_LAYERS } from "./map/Map";
 import SignIn from "./SignIn";
 import ImportDialog from "./dialogs/ImportDialog";
 import TopoDialog from "./dialogs/TopoDialog";
+import type { TopoJob, DownloadUrl } from "./dialogs/TopoDialog";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
 import GeoPdfTemplatesDialog from "./dialogs/GeoPdfTemplatesDialog";
 import type { GeoPdfTemplate } from "./dialogs/GeoPdfTemplatesDialog";
@@ -25,10 +26,11 @@ import {
   fetchCurrentUser,
   passesFilters,
   syncOzUltimateSources,
+  apiFetch,
 } from "../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { useAuth } from "../useAuth";
-import { Button } from "@mui/material";
+import { Alert, Button, Snackbar } from "@mui/material";
 import { useThemePreferences } from "../themePreferences";
 
 function App() {
@@ -75,6 +77,12 @@ function App() {
   const [topoOverlayLayers, setTopoOverlayLayers] = useState<
     { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]
   >([]);
+
+  // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
+  const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
+  const [topoDownloadUrls, setTopoDownloadUrls] = useState<Record<string, DownloadUrl[]>>({});
+  const [topoSnackbar, setTopoSnackbar] = useState<{ jobId: string; bbox: TBbox | null } | null>(null);
+  const [topoFlyTarget, setTopoFlyTarget] = useState<TBbox | null>(null);
 
   // GeoPDF dialog
   const [showGeoPdf, setShowGeoPdf] = useState(false);
@@ -219,6 +227,51 @@ function App() {
       .catch(console.error);
   }, [authenticated, hydrateFromUser]);
 
+  // Resume tracking any jobs that were pending/processing before page load
+  useEffect(() => {
+    if (!authenticated) return;
+    apiFetch<TopoJob[]>("/topo-jobs")
+      .then((jobs) => {
+        const resumable = jobs.filter(
+          (j) => j.status === "pending" || j.status === "processing",
+        );
+        if (resumable.length) setActiveTopoJobs(resumable);
+      })
+      .catch(() => {});
+  }, [authenticated]);
+
+  // Poll non-terminal jobs every 10 s; fire snackbar on completion
+  useEffect(() => {
+    const nonTerminal = activeTopoJobs.filter(
+      (j) => j.status !== "complete" && j.status !== "failed",
+    );
+    if (!nonTerminal.length) return;
+    const interval = setInterval(async () => {
+      for (const job of nonTerminal) {
+        try {
+          const updated = await apiFetch<TopoJob>(`/topo-jobs/${job.id}`);
+          setActiveTopoJobs((prev) =>
+            prev.map((j) => (j.id === updated.id ? updated : j)),
+          );
+          if (updated.status === "complete") {
+            const urls = await apiFetch<DownloadUrl[]>(
+              `/topo-jobs/${updated.id}/download-urls`,
+            );
+            setTopoDownloadUrls((prev) => ({ ...prev, [updated.id]: urls }));
+            setTopoSnackbar({ jobId: updated.id, bbox: updated.bbox });
+          }
+        } catch {
+          // silent — will retry next tick
+        }
+      }
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, [activeTopoJobs]);
+
+  const handleTopoJobCreated = useCallback((job: TopoJob) => {
+    setActiveTopoJobs((prev) => [job, ...prev]);
+  }, []);
+
   // Show import dialog once when user has no canyons after first fetch completes
   useEffect(() => {
     if (canyonsLoaded && !importChecked.current) {
@@ -287,7 +340,37 @@ function App() {
         }}
         pendingBbox={pendingTopoBbox}
         onLayersToggle={setTopoOverlayLayers}
+        jobs={activeTopoJobs}
+        downloadUrlsMap={topoDownloadUrls}
+        onJobCreated={handleTopoJobCreated}
       />
+      <Snackbar
+        open={!!topoSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        onClose={() => setTopoSnackbar(null)}
+      >
+        <Alert
+          severity="success"
+          onClose={() => setTopoSnackbar(null)}
+          action={
+            topoSnackbar?.bbox ? (
+              <Button
+                size="small"
+                color="inherit"
+                onClick={() => {
+                  setLidarEnabled(true);
+                  setTopoFlyTarget(topoSnackbar.bbox);
+                  setTopoSnackbar(null);
+                }}
+              >
+                Zoom to map
+              </Button>
+            ) : undefined
+          }
+        >
+          LiDAR topo complete!
+        </Alert>
+      </Snackbar>
       <GeoPdfDialog
         open={showGeoPdf}
         onClose={() => {
@@ -420,6 +503,8 @@ function App() {
           setShowGeoPdf(true);
         }}
         onMapViewChange={(center) => setMapCenter(center)}
+        topoFlyTarget={topoFlyTarget}
+        onTopoFlyConsumed={() => setTopoFlyTarget(null)}
       />
 
       {selectingArea && (

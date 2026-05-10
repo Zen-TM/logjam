@@ -134,6 +134,8 @@ function Map({
   onGeoPdfExtentConfirmed,
   onGeoPdfExtentCancelled,
   onMapViewChange,
+  topoFlyTarget,
+  onTopoFlyConsumed,
 }: {
   filters: TFilters;
   canyons: TCanyon[];
@@ -164,6 +166,8 @@ function Map({
     center: { lat: number; lng: number },
     zoom: number,
   ) => void;
+  topoFlyTarget?: TBbox | null;
+  onTopoFlyConsumed?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -768,7 +772,7 @@ function Map({
                   1.2,
                 ],
               },
-              minzoom: 13,
+              minzoom: 12,
             });
           }
           // Major contours (50m): elevation divisible by 50
@@ -817,7 +821,7 @@ function Map({
                   12,
                 ],
                 "symbol-placement": "line",
-                "text-max-angle": 30,
+                "text-max-angle": 60,
               },
               paint: {
                 "text-color": "rgba(80, 60, 40, 0.9)",
@@ -1066,6 +1070,22 @@ function Map({
       }
     }
   }, [topoLayers, mapLoaded]);
+
+  // Fly to a topo job's bbox when requested from App.tsx
+  const onTopoFlyConsumedRef = useRef(onTopoFlyConsumed);
+  useEffect(() => {
+    onTopoFlyConsumedRef.current = onTopoFlyConsumed;
+  }, [onTopoFlyConsumed]);
+
+  useEffect(() => {
+    if (!topoFlyTarget || !mapLoaded || !mapRef.current) return;
+    const { west, south, east, north } = topoFlyTarget;
+    mapRef.current.fitBounds([west, south, east, north], {
+      padding: 80,
+      duration: 1200,
+    });
+    onTopoFlyConsumedRef.current?.();
+  }, [topoFlyTarget, mapLoaded]);
 
   // GeoPDF extent selection: ref for overlay rectangle
   const geoPdfFrameRef = useRef<HTMLDivElement>(null);

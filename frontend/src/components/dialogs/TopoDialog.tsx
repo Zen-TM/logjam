@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, Fragment } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -26,14 +26,14 @@ import { MASTER_TOPO_LAYERS } from "../../topoLayerTypes";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type TopoJobStatus =
+export type TopoJobStatus =
   | "uploading"
   | "pending"
   | "processing"
   | "complete"
   | "failed";
 
-type TopoJob = {
+export type TopoJob = {
   id: string;
   status: TopoJobStatus;
   bbox: TBbox | null;
@@ -46,7 +46,7 @@ type TopoJob = {
     | null;
 };
 
-type DownloadUrl = {
+export type DownloadUrl = {
   name: string;
   mbtilesUrl: string;
   pmtilesUrl: string | null;
@@ -308,18 +308,34 @@ function downloadBboxShapefile(bbox: TBbox) {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
+const outlinedAccentSx = {
+  textTransform: "none",
+  color: "var(--theme-accent)",
+  borderColor: "var(--theme-accent)",
+  "&:hover": {
+    borderColor: "var(--theme-accent)",
+    backgroundColor: "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
+  },
+} as const;
+
 export default function TopoDialog({
   open,
   onClose,
   onSelectBbox,
   pendingBbox,
   onLayersToggle,
+  jobs,
+  downloadUrlsMap,
+  onJobCreated,
 }: {
   open: boolean;
   onClose: () => void;
   onSelectBbox: () => void;
   pendingBbox: TBbox | null;
   onLayersToggle: (layers: { id: string; pmtilesUrl: string }[]) => void;
+  jobs: TopoJob[];
+  downloadUrlsMap: Record<string, DownloadUrl[]>;
+  onJobCreated: (job: TopoJob) => void;
 }) {
   const [selectedLayers, setSelectedLayers] = useState<Set<LayerName>>(
     new Set(["composite"]),
@@ -328,38 +344,14 @@ export default function TopoDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Active job being tracked
-  const [job, setJob] = useState<TopoJob | null>(null);
-  const [downloadUrls, setDownloadUrls] = useState<DownloadUrl[] | null>(null);
-
-  // Overlay layers currently shown on the map: { id, pmtilesUrl }[]
+  // Per-session overlay toggle state (which job layers are shown on the map)
   const [overlayIds, setOverlayIds] = useState<Set<string>>(new Set());
   const overlayLayersRef = useRef<{ id: string; pmtilesUrl: string }[]>([]);
-
-  // Poll for job status
-  useEffect(() => {
-    if (!job || job.status === "complete" || job.status === "failed") return;
-    const interval = setInterval(async () => {
-      try {
-        const updated = await apiFetch<TopoJob>(`/topo-jobs/${job.id}`);
-        setJob(updated);
-        if (updated.status === "complete") {
-          const urls = await apiFetch<DownloadUrl[]>(
-            `/topo-jobs/${job.id}/download-urls`,
-          );
-          setDownloadUrls(urls);
-        }
-      } catch (e) {
-        console.error("Job status poll failed:", e);
-      }
-    }, 10_000);
-    return () => clearInterval(interval);
-  }, [job]);
 
   function toggleLayer(name: LayerName) {
     setSelectedLayers((prev) => {
       const next = new Set(prev);
-      next.has(name) ? next.delete(name) : next.add(name);
+      if (next.has(name)) { next.delete(name); } else { next.add(name); }
       return next;
     });
   }
@@ -370,7 +362,6 @@ export default function TopoDialog({
     setSubmitting(true);
     try {
       const layers = [...selectedLayers];
-      // Create job + get presigned upload URL
       const { jobId, uploadUrl } = await apiFetch<{
         jobId: string;
         uploadUrl: string;
@@ -379,7 +370,6 @@ export default function TopoDialog({
         body: { bbox: pendingBbox, layerOptions: layers, filename: file.name },
       });
 
-      // Upload ZIP directly to S3
       const uploadRes = await fetch(uploadUrl, {
         method: "PUT",
         body: file,
@@ -387,11 +377,10 @@ export default function TopoDialog({
       });
       if (!uploadRes.ok) throw new Error("ZIP upload failed");
 
-      // Submit job to queue
       await apiFetch(`/topo-jobs/${jobId}/start`, { method: "POST" });
 
       const newJob = await apiFetch<TopoJob>(`/topo-jobs/${jobId}`);
-      setJob(newJob);
+      onJobCreated(newJob);
       setFile(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Submission failed");
@@ -400,8 +389,8 @@ export default function TopoDialog({
     }
   }
 
-  function toggleMapOverlay(url: DownloadUrl) {
-    const layerId = `${job!.id}-${url.name}`;
+  function toggleMapOverlay(jobId: string, url: DownloadUrl) {
+    const layerId = `${jobId}-${url.name}`;
     setOverlayIds((prev) => {
       const next = new Set(prev);
       if (next.has(layerId)) {
@@ -409,14 +398,15 @@ export default function TopoDialog({
       } else {
         next.add(layerId);
       }
-      // Rebuild overlay layers list and notify parent
-      const all = downloadUrls ?? [];
-      const newLayers = all
-        .filter((u) => u.pmtilesUrl && next.has(`${job!.id}-${u.name}`))
-        .map((u) => ({
-          id: `${job!.id}-${u.name}`,
-          pmtilesUrl: u.pmtilesUrl!,
-        }));
+      // Rebuild overlay layers list across all jobs
+      const newLayers: { id: string; pmtilesUrl: string }[] = [];
+      for (const [jid, urls] of Object.entries(downloadUrlsMap)) {
+        for (const u of urls) {
+          if (u.pmtilesUrl && next.has(`${jid}-${u.name}`)) {
+            newLayers.push({ id: `${jid}-${u.name}`, pmtilesUrl: u.pmtilesUrl });
+          }
+        }
+      }
       overlayLayersRef.current = newLayers;
       onLayersToggle(newLayers);
       return next;
@@ -462,391 +452,331 @@ export default function TopoDialog({
       </DialogTitle>
 
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
-        {/* ── View: complete ── */}
-        {job?.status === "complete" && downloadUrls && (
-          <Box>
-            <Alert severity="success" sx={{ mb: 2 }}>
-              Topo map is ready! A download link has been emailed to you.
-            </Alert>
+        {/* ── Job status list ── */}
+        {jobs.length > 0 && (
+          <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle2" gutterBottom>
-              Downloads
+              Jobs
             </Typography>
-            {downloadUrls.map((u) => {
-              const layerId = `${job.id}-${u.name}`;
+            {jobs.map((j) => {
+              const urls = downloadUrlsMap[j.id] ?? null;
+              const isRunning =
+                j.status === "pending" || j.status === "processing";
+              const isComplete = j.status === "complete";
+              const isFailed = j.status === "failed";
               return (
-                <Box
-                  key={u.name}
-                  sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}
-                >
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    href={u.mbtilesUrl}
-                    download={`${u.name}.mbtiles`}
-                    sx={{
-                      textTransform: "none",
-                      minWidth: 160,
-                      color: "var(--theme-accent)",
-                      borderColor: "var(--theme-accent)",
-                      "&:hover": {
-                        borderColor: "var(--theme-accent)",
-                        backgroundColor:
-                          "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
-                      },
-                    }}
+                <Box key={j.id} sx={{ mb: 1.5 }}>
+                  <Box
+                    sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}
                   >
-                    {u.name}.mbtiles
-                  </Button>
-                  {u.pmtilesUrl && (
-                    <Button
+                    {isRunning && <CircularProgress size={14} />}
+                    <Chip
                       size="small"
-                      variant={
-                        overlayIds.has(layerId) ? "contained" : "outlined"
+                      label={
+                        j.status === "pending"
+                          ? "Queued"
+                          : j.status === "processing"
+                            ? "Processing"
+                            : j.status === "complete"
+                              ? "Complete"
+                              : "Failed"
                       }
-                      color={overlayIds.has(layerId) ? "secondary" : undefined}
-                      onClick={() => toggleMapOverlay(u)}
-                      sx={
-                        overlayIds.has(layerId)
-                          ? { textTransform: "none" }
-                          : {
-                              textTransform: "none",
-                              color: "var(--theme-accent)",
-                              borderColor: "var(--theme-accent)",
-                              "&:hover": {
-                                borderColor: "var(--theme-accent)",
-                                backgroundColor:
-                                  "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
-                              },
-                            }
+                      color={
+                        isComplete ? "success" : isFailed ? "error" : "default"
                       }
-                    >
-                      {overlayIds.has(layerId) ? "Hide on map" : "Show on map"}
-                    </Button>
+                    />
+                    {isRunning && j.bbox && (
+                      <Typography variant="caption" color="text.secondary">
+                        {estimateTime(bboxAreaKm2(j.bbox))}
+                      </Typography>
+                    )}
+                  </Box>
+                  {isRunning && <LinearProgress sx={{ mb: 0.5 }} />}
+                  {isFailed && (
+                    <Typography variant="caption" color="error">
+                      {j.errorMessage ?? "Unknown error"}
+                    </Typography>
+                  )}
+                  {isComplete && urls && (
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                      {urls.map((u) => {
+                        const layerId = `${j.id}-${u.name}`;
+                        return (
+                          <Fragment key={u.name}>
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              href={u.mbtilesUrl}
+                              download={`${u.name}.mbtiles`}
+                              sx={outlinedAccentSx}
+                            >
+                              {u.name}.mbtiles
+                            </Button>
+                            {u.pmtilesUrl && (
+                              <Button
+                                size="small"
+                                variant={
+                                  overlayIds.has(layerId)
+                                    ? "contained"
+                                    : "outlined"
+                                }
+                                color={
+                                  overlayIds.has(layerId)
+                                    ? "secondary"
+                                    : undefined
+                                }
+                                onClick={() => toggleMapOverlay(j.id, u)}
+                                sx={
+                                  overlayIds.has(layerId)
+                                    ? { textTransform: "none" }
+                                    : outlinedAccentSx
+                                }
+                              >
+                                {overlayIds.has(layerId)
+                                  ? "Hide on map"
+                                  : "Show on map"}
+                              </Button>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                    </Box>
                   )}
                 </Box>
               );
             })}
+            <Divider sx={{ mt: 1, mb: 2, borderColor: "rgba(255,255,255,0.1)" }} />
           </Box>
         )}
 
-        {/* ── View: failed ── */}
-        {job?.status === "failed" && (
-          <Alert severity="error">
-            Processing failed: {job.errorMessage ?? "Unknown error"}
-          </Alert>
-        )}
+        {/* ── New job form ── */}
 
-        {/* ── View: processing/pending ── */}
-        {(job?.status === "processing" || job?.status === "pending") && (
-          <Box sx={{ textAlign: "center", py: 2 }}>
-            <CircularProgress sx={{ mb: 2 }} />
-            <Typography>
-              {job.status === "pending"
-                ? "Queued — waiting for worker…"
-                : "Processing LiDAR data…"}
+        {/* Step 1: Draw bbox */}
+        <Typography variant="subtitle2" gutterBottom>
+          1. Define area
+        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={onSelectBbox}
+            sx={outlinedAccentSx}
+          >
+            Draw on map
+          </Button>
+          {pendingBbox && (
+            <Chip
+              size="small"
+              label={`${area?.toFixed(0)} km² · ${estimateTime(area!)}`}
+              sx={{
+                color: "var(--theme-text-muted)",
+                borderColor: "var(--theme-text-muted)",
+              }}
+              variant="outlined"
+            />
+          )}
+        </Box>
+
+        <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,0.1)" }} />
+
+        {/* Step 2: Layer selection */}
+        <Typography variant="subtitle2" gutterBottom>
+          2. Select layers
+        </Typography>
+        <FormGroup>
+          {ALL_LAYERS.map((name) => (
+            <FormControlLabel
+              key={name}
+              control={
+                <Checkbox
+                  checked={selectedLayers.has(name)}
+                  onChange={() => toggleLayer(name)}
+                  size="small"
+                  sx={{
+                    color: "var(--theme-accent)",
+                    "&.Mui-checked": { color: "var(--theme-accent)" },
+                  }}
+                />
+              }
+              label={LAYER_LABELS[name]}
+            />
+          ))}
+        </FormGroup>
+
+        <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,0.1)" }} />
+
+        {/* Step 3: Download from ELVIS + upload */}
+        <Typography variant="subtitle2" gutterBottom>
+          3. Upload ELVIS ZIP
+        </Typography>
+        <Box sx={{ pl: 2, display: "flex", flexDirection: "column", gap: 1 }}>
+          {/* 3a */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ minWidth: 16 }}
+            >
+              a.
             </Typography>
-            {job.bbox && (
-              <Typography variant="caption" color="text.secondary">
-                Estimated time: {estimateTime(bboxAreaKm2(job.bbox))}
+            {pendingBbox ? (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => downloadBboxShapefile(pendingBbox)}
+                sx={outlinedAccentSx}
+              >
+                Download area shapefile
+              </Button>
+            ) : (
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontStyle: "italic" }}
+              >
+                Define area above to download area shapefile
               </Typography>
             )}
-            <LinearProgress sx={{ mt: 2 }} />
           </Box>
-        )}
 
-        {/* ── View: setup ── */}
-        {!job && (
-          <>
-            {/* Step 1: Draw bbox */}
-            <Typography variant="subtitle2" gutterBottom>
-              1. Define area
-            </Typography>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={onSelectBbox}
-                sx={{
-                  textTransform: "none",
-                  color: "var(--theme-accent)",
-                  borderColor: "var(--theme-accent)",
-                  "&:hover": {
-                    borderColor: "var(--theme-accent)",
-                    backgroundColor:
-                      "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
-                  },
-                }}
-              >
-                Draw on map
-              </Button>
-              {pendingBbox && (
-                <Chip
-                  size="small"
-                  label={`${area?.toFixed(0)} km² · ${estimateTime(area!)}`}
-                  sx={{
-                    color: "var(--theme-text-muted)",
-                    borderColor: "var(--theme-text-muted)",
-                  }}
-                  variant="outlined"
-                />
-              )}
-            </Box>
-
-            <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,0.1)" }} />
-
-            {/* Step 2: Layer selection */}
-            <Typography variant="subtitle2" gutterBottom>
-              2. Select layers
-            </Typography>
-            <FormGroup>
-              {ALL_LAYERS.map((name) => (
-                <FormControlLabel
-                  key={name}
-                  control={
-                    <Checkbox
-                      checked={selectedLayers.has(name)}
-                      onChange={() => toggleLayer(name)}
-                      size="small"
-                      sx={{
-                        color: "var(--theme-accent)",
-                        "&.Mui-checked": { color: "var(--theme-accent)" },
-                      }}
-                    />
-                  }
-                  label={LAYER_LABELS[name]}
-                />
-              ))}
-            </FormGroup>
-
-            <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,0.1)" }} />
-
-            {/* Step 3: Download from ELVIS + upload */}
-            <Typography variant="subtitle2" gutterBottom>
-              3. Upload ELVIS ZIP
-            </Typography>
-            <Box
-              sx={{ pl: 2, display: "flex", flexDirection: "column", gap: 1 }}
+          {/* 3b */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ minWidth: 16 }}
             >
-              {/* 3a */}
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ minWidth: 16 }}
-                >
-                  a.
-                </Typography>
-                {pendingBbox ? (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={() => downloadBboxShapefile(pendingBbox)}
-                    sx={{
-                      textTransform: "none",
-                      color: "var(--theme-accent)",
-                      borderColor: "var(--theme-accent)",
-                      "&:hover": {
-                        borderColor: "var(--theme-accent)",
-                        backgroundColor:
-                          "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
-                      },
-                    }}
-                  >
-                    Download area shapefile
-                  </Button>
-                ) : (
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ fontStyle: "italic" }}
-                  >
-                    Define area above to download area shapefile
-                  </Typography>
-                )}
-              </Box>
+              b.
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              href="https://elevation.fsdf.org.au/"
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={outlinedAccentSx}
+            >
+              Open ELVIS portal ↗
+            </Button>
+          </Box>
 
-              {/* 3b */}
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ minWidth: 16 }}
-                >
-                  b.
-                </Typography>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  href="https://elevation.fsdf.org.au/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  sx={{
-                    textTransform: "none",
-                    color: "var(--theme-accent)",
-                    borderColor: "var(--theme-accent)",
-                    "&:hover": {
-                      borderColor: "var(--theme-accent)",
-                      backgroundColor:
-                        "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
-                    },
-                  }}
-                >
-                  Open ELVIS portal ↗
-                </Button>
-              </Box>
+          {/* 3c–e */}
+          <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ minWidth: 16 }}
+            >
+              c.
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Click 'Order Data' → 'Load File', upload the shapefile ZIP
+              downloaded in step a, and click 'Search'.
+            </Typography>
+            <Tooltip
+              title={
+                <>
+                  <strong>Faster processing:</strong> You can also include
+                  ELVIS DEM (Digital Elevation Model) files alongside the
+                  point cloud. DEM files must cover the entire selected
+                  area.
+                  <br />
+                  <br />
+                  <strong>
+                    Fastest (no vegetation layer):
+                  </strong> Select <em>only</em> DEM files — no point cloud
+                  needed. The vegetation density layer will not be
+                  generated.
+                </>
+              }
+              arrow
+              placement="right"
+            >
+              <InfoOutlinedIcon
+                fontSize="small"
+                sx={{
+                  color: "var(--theme-text-muted)",
+                  cursor: "help",
+                  flexShrink: 0,
+                  mt: "2px",
+                }}
+              />
+            </Tooltip>
+          </Box>
+          <Box sx={{ display: "flex", gap: 1.5 }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ minWidth: 16 }}
+            >
+              d.
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Under 'NSW Government - Spatial Services' → 'Point Clouds',
+              beside 'AHD', click 'Select all'.
+            </Typography>
+          </Box>
+          <Box sx={{ display: "flex", gap: 1.5 }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ minWidth: 16 }}
+            >
+              e.
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Under 'Industry', select 'Recreation'. Enter your email and
+              click 'Order x Datasets'.
+            </Typography>
+          </Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ minWidth: 16 }}
+            >
+              f.
+            </Typography>
+            <Button
+              variant="outlined"
+              component="label"
+              size="small"
+              sx={outlinedAccentSx}
+            >
+              {file ? file.name : "Upload downloaded ZIP…"}
+              <input
+                type="file"
+                accept=".zip"
+                hidden
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              />
+            </Button>
+          </Box>
+        </Box>
 
-              {/* 3c–e */}
-              <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ minWidth: 16 }}
-                >
-                  c.
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Click 'Order Data' → 'Load File', upload the shapefile ZIP
-                  downloaded in step a, and click 'Search'.
-                </Typography>
-                <Tooltip
-                  title={
-                    <>
-                      <strong>Faster processing:</strong> You can also include
-                      ELVIS DEM (Digital Elevation Model) files alongside the
-                      point cloud. DEM files must cover the entire selected
-                      area.
-                      <br />
-                      <br />
-                      <strong>
-                        Fastest (no vegetation layer):
-                      </strong> Select <em>only</em> DEM files — no point cloud
-                      needed. The vegetation density layer will not be
-                      generated.
-                    </>
-                  }
-                  arrow
-                  placement="right"
-                >
-                  <InfoOutlinedIcon
-                    fontSize="small"
-                    sx={{
-                      color: "var(--theme-text-muted)",
-                      cursor: "help",
-                      flexShrink: 0,
-                      mt: "2px",
-                    }}
-                  />
-                </Tooltip>
-              </Box>
-              <Box sx={{ display: "flex", gap: 1.5 }}>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ minWidth: 16 }}
-                >
-                  d.
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Under 'NSW Government - Spatial Services' → 'Point Clouds',
-                  beside 'AHD', click 'Select all'.
-                </Typography>
-              </Box>
-              <Box sx={{ display: "flex", gap: 1.5 }}>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ minWidth: 16 }}
-                >
-                  e.
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Under 'Industry', select 'Recreation'. Enter your email and
-                  click 'Order x Datasets'.
-                </Typography>
-              </Box>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ minWidth: 16 }}
-                >
-                  f.
-                </Typography>
-                <Button
-                  variant="outlined"
-                  component="label"
-                  size="small"
-                  sx={{
-                    textTransform: "none",
-                    color: "var(--theme-accent)",
-                    borderColor: "var(--theme-accent)",
-                    "&:hover": {
-                      borderColor: "var(--theme-accent)",
-                      backgroundColor:
-                        "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
-                    },
-                  }}
-                >
-                  {file ? file.name : "Upload downloaded ZIP…"}
-                  <input
-                    type="file"
-                    accept=".zip"
-                    hidden
-                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  />
-                </Button>
-              </Box>
-            </Box>
-
-            {error && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                {error}
-              </Alert>
-            )}
-          </>
+        {error && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {error}
+          </Alert>
         )}
       </DialogContent>
 
       <DialogActions>
-        {!job && (
-          <>
-            <Button
-              onClick={handleClose}
-              disabled={submitting}
-              sx={{ color: "var(--theme-text-primary)" }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              color="secondary"
-              onClick={handleSubmit}
-              disabled={!file || submitting}
-            >
-              {submitting ? <CircularProgress size={18} /> : "Submit"}
-            </Button>
-          </>
-        )}
-        {(job?.status === "complete" || job?.status === "failed") && (
-          <Button
-            onClick={() => {
-              setJob(null);
-              setDownloadUrls(null);
-              setOverlayIds(new Set());
-            }}
-            sx={{ color: "var(--theme-text-primary)" }}
-          >
-            New job
-          </Button>
-        )}
-        {(job?.status === "processing" || job?.status === "pending") && (
-          <Button
-            onClick={handleClose}
-            sx={{ color: "var(--theme-text-primary)" }}
-          >
-            Close (job continues in background)
-          </Button>
-        )}
+        <Button
+          onClick={handleClose}
+          disabled={submitting}
+          sx={{ color: "var(--theme-text-primary)" }}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={handleSubmit}
+          disabled={!file || !pendingBbox || submitting}
+        >
+          {submitting ? <CircularProgress size={18} /> : "Submit"}
+        </Button>
       </DialogActions>
     </Dialog>
   );

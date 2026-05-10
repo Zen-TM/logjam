@@ -24,6 +24,7 @@ import botocore.exceptions
 import io
 import json
 import logging
+import math
 import os
 import shutil
 import sqlite3
@@ -31,11 +32,14 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 from PIL import Image
 import psycopg2
 import psycopg2.extras
 from pmtiles.convert import mbtiles_to_pmtiles
+from shapely.geometry import shape, mapping
+from shapely.ops import unary_union
 
 logging.basicConfig(
     level=logging.INFO,
@@ -292,16 +296,28 @@ def _composite_raster_tile(existing_data: bytes, new_data: bytes) -> bytes:
     return buf.getvalue()
 
 
-def merge_into_master(layer_name: str, job_mbtiles: Path, tmp_dir: str, fmt: str = "raster"):
-    """Merge a job's MBTiles into the corresponding master file on S3."""
+def merge_into_master(layer_name: str, job_mbtiles: Path, tmp_dir: str,
+                      fmt: str = "raster", footprint_path: Optional[str] = None):
+    """Merge a job's MBTiles into the corresponding master file on S3.
+
+    Raster layers: footprint-aware overwrite — fully-covered tiles are hard-replaced,
+    boundary tiles are mask-erased then alpha-composited. Requires footprint_path.
+    Vector layers: delegated to rebuild_vector_master (not called here directly).
+    """
+    if fmt == "vector":
+        raise ValueError("Vector layers must use rebuild_vector_master, not merge_into_master.")
+
     master_key_mbtiles = f"master/{layer_name}.mbtiles"
     master_key_pmtiles = f"master/{layer_name}.pmtiles"
+
+    footprint_geom = None
+    if footprint_path and os.path.exists(footprint_path):
+        footprint_geom = _load_footprint_geom(footprint_path)
 
     for attempt in range(1, MERGE_MAX_RETRIES + 1):
         master_path = Path(tmp_dir) / f"master_{layer_name}_{attempt}.mbtiles"
         master_pmtiles = Path(tmp_dir) / f"master_{layer_name}_{attempt}.pmtiles"
 
-        # Download existing master (if any) and record its ETag
         etag = None
         try:
             resp = s3.head_object(Bucket=BUCKET, Key=master_key_mbtiles)
@@ -315,7 +331,6 @@ def merge_into_master(layer_name: str, job_mbtiles: Path, tmp_dir: str, fmt: str
                     f"Master {layer_name}.mbtiles is {size_mb:.0f} MB. "
                     "Consider regional sharding if this continues to grow."
                 )
-
             has_master = True
         except botocore.exceptions.ClientError as e:
             if e.response["Error"]["Code"] == "404":
@@ -329,56 +344,35 @@ def merge_into_master(layer_name: str, job_mbtiles: Path, tmp_dir: str, fmt: str
             with sqlite3.connect(str(master_path)) as conn:
                 _normalize_mbtiles_schema(conn)
         else:
-            log.info(f"Merging {job_mbtiles.name} into master {layer_name} …")
+            log.info(f"Merging {job_mbtiles.name} into master {layer_name} (raster, footprint-aware) …")
             with sqlite3.connect(str(master_path)) as conn:
                 _normalize_mbtiles_schema(conn)
                 conn.execute("ATTACH DATABASE ? AS job", (str(job_mbtiles),))
 
-                if fmt == "raster":
-                    # Alpha-composite overlapping raster tiles to avoid border gaps
-                    job_tiles = conn.execute(
-                        "SELECT zoom_level, tile_column, tile_row, tile_data FROM job.tiles"
-                    ).fetchall()
-                    for z, x, y, new_data in job_tiles:
-                        existing = conn.execute(
-                            "SELECT tile_data FROM tiles "
-                            "WHERE zoom_level=? AND tile_column=? AND tile_row=?",
-                            (z, x, y),
-                        ).fetchone()
-                        if existing is not None:
-                            merged = _composite_raster_tile(existing[0], new_data)
-                            conn.execute(
-                                "UPDATE tiles SET tile_data=? "
-                                "WHERE zoom_level=? AND tile_column=? AND tile_row=?",
-                                (sqlite3.Binary(merged), z, x, y),
-                            )
-                        else:
-                            conn.execute(
-                                "INSERT INTO tiles (zoom_level, tile_column, tile_row, tile_data) "
-                                "VALUES (?,?,?,?)",
-                                (z, x, y, sqlite3.Binary(new_data)),
-                            )
-                else:
-                    # Vector tiles: simple replacement (compositing MVT is out of scope)
-                    conn.execute(
-                        "INSERT OR REPLACE INTO tiles "
-                        "SELECT zoom_level, tile_column, tile_row, tile_data "
-                        "FROM job.tiles"
-                    )
-
-                _update_master_bounds(conn)
-                conn.commit()
+                job_tiles = conn.execute(
+                    "SELECT zoom_level, tile_column, tile_row, tile_data FROM job.tiles"
+                ).fetchall()
                 conn.execute("DETACH DATABASE job")
 
-        # Convert to PMTiles
+                for z, x, y, new_data in job_tiles:
+                    if footprint_geom is not None:
+                        _raster_merge_tile(conn, z, x, y, new_data, footprint_geom)
+                    else:
+                        # No footprint: fall back to hard replace
+                        conn.execute(
+                            "INSERT OR REPLACE INTO tiles "
+                            "(zoom_level, tile_column, tile_row, tile_data) VALUES (?,?,?,?)",
+                            (z, x, y, sqlite3.Binary(new_data)),
+                        )
+
+                _update_master_bounds_standalone(conn, job_mbtiles)
+                conn.commit()
+
         with sqlite3.connect(str(master_path)) as conn:
-            row = conn.execute(
-                "SELECT value FROM metadata WHERE name='maxzoom'"
-            ).fetchone()
+            row = conn.execute("SELECT value FROM metadata WHERE name='maxzoom'").fetchone()
             maxzoom = int(row[0]) if row else 18
         mbtiles_to_pmtiles(str(master_path), str(master_pmtiles), maxzoom)
 
-        # Verify ETag hasn't changed (optimistic concurrency)
         if etag is not None:
             try:
                 current = s3.head_object(Bucket=BUCKET, Key=master_key_mbtiles)
@@ -408,7 +402,7 @@ def merge_into_master(layer_name: str, job_mbtiles: Path, tmp_dir: str, fmt: str
 
 
 def _update_master_bounds(conn: sqlite3.Connection):
-    """Update the bounds metadata entry to the union of master + job bounds."""
+    """Update bounds from an ATTACHed 'job' database (legacy — unused post-refactor)."""
     try:
         master_bounds = conn.execute(
             "SELECT value FROM metadata WHERE name='bounds'"
@@ -431,6 +425,255 @@ def _update_master_bounds(conn: sqlite3.Connection):
         log.warning(f"Could not update master bounds: {e}")
 
 
+def _update_master_bounds_standalone(conn: sqlite3.Connection, job_mbtiles: Path):
+    """Update master bounds metadata by reading job bounds from the job MBTiles file."""
+    try:
+        with sqlite3.connect(str(job_mbtiles)) as job_conn:
+            job_bounds_row = job_conn.execute(
+                "SELECT value FROM metadata WHERE name='bounds'"
+            ).fetchone()
+        if not job_bounds_row:
+            return
+        master_bounds = conn.execute(
+            "SELECT value FROM metadata WHERE name='bounds'"
+        ).fetchone()
+        if master_bounds:
+            mb = [float(v) for v in master_bounds[0].split(",")]
+            jb = [float(v) for v in job_bounds_row[0].split(",")]
+            union = (
+                f"{min(mb[0], jb[0])},{min(mb[1], jb[1])},"
+                f"{max(mb[2], jb[2])},{max(mb[3], jb[3])}"
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO metadata (name, value) VALUES ('bounds', ?)",
+                (union,),
+            )
+    except Exception as e:
+        log.warning(f"Could not update master bounds: {e}")
+
+
+# ── Footprint / tile-bounds helpers ──────────────────────────────────────────
+
+def _tile_bounds_wgs84(z: int, tile_col: int, tile_row_tms: int):
+    """Return (lon_min, lat_min, lon_max, lat_max) for an MBTiles TMS tile."""
+    n = 2 ** z
+    y_xyz = n - 1 - tile_row_tms
+    lon_min = tile_col / n * 360 - 180
+    lon_max = (tile_col + 1) / n * 360 - 180
+    lat_max = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * y_xyz / n))))
+    lat_min = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (y_xyz + 1) / n))))
+    return lon_min, lat_min, lon_max, lat_max
+
+
+def _load_footprint_geom(footprint_path: str):
+    """Load a footprint GeoJSON file → merged shapely geometry."""
+    with open(footprint_path) as f:
+        fc = json.load(f)
+    return unary_union([shape(feat["geometry"]) for feat in fc["features"]])
+
+
+def _raster_merge_tile(master_conn: sqlite3.Connection, z: int, x: int, y_tms: int,
+                       new_data: bytes, footprint_geom):
+    """Merge one raster tile into master using footprint-aware overwrite.
+
+    Fully-covered tiles are hard-replaced. Boundary tiles have their master
+    pixels inside the footprint zeroed, then the new tile is alpha-composited
+    on top. Tiles outside the footprint are left untouched (shouldn't occur
+    in practice since job tiles are rendered inside the footprint, but guarded).
+    """
+    from shapely.geometry import box as shapely_box
+
+    lon_min, lat_min, lon_max, lat_max = _tile_bounds_wgs84(z, x, y_tms)
+    tile_box = shapely_box(lon_min, lat_min, lon_max, lat_max)
+
+    if not footprint_geom.intersects(tile_box):
+        return  # Outside footprint — skip
+
+    existing = master_conn.execute(
+        "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?",
+        (z, x, y_tms),
+    ).fetchone()
+
+    if existing is None or footprint_geom.contains(tile_box):
+        # No existing tile, or tile fully inside footprint → hard replace
+        master_conn.execute(
+            "INSERT OR REPLACE INTO tiles (zoom_level, tile_column, tile_row, tile_data) "
+            "VALUES (?,?,?,?)",
+            (z, x, y_tms, sqlite3.Binary(new_data)),
+        )
+        return
+
+    # Boundary tile: erase master pixels inside footprint, then paste new tile
+    inter = footprint_geom.intersection(tile_box)
+    if inter.is_empty:
+        return
+
+    TILE_SIZE = 256
+    tile_w = lon_max - lon_min
+    tile_h = lat_max - lat_min
+
+    from PIL import Image, ImageDraw
+    import numpy as np
+
+    def to_px(lon, lat):
+        return ((lon - lon_min) / tile_w * TILE_SIZE,
+                (lat_max - lat) / tile_h * TILE_SIZE)
+
+    # Build a mask of pixels inside the footprint intersection
+    mask_img = Image.new("L", (TILE_SIZE, TILE_SIZE), 0)
+    draw = ImageDraw.Draw(mask_img)
+
+    def rasterize_poly(poly):
+        pts = [to_px(c[0], c[1]) for c in poly.exterior.coords]
+        if len(pts) >= 3:
+            draw.polygon(pts, fill=255)
+
+    if inter.geom_type == "Polygon":
+        rasterize_poly(inter)
+    elif inter.geom_type in ("MultiPolygon", "GeometryCollection"):
+        for g in inter.geoms:
+            if g.geom_type == "Polygon":
+                rasterize_poly(g)
+
+    mask = np.array(mask_img)
+
+    # Zero master alpha inside footprint
+    base = Image.open(io.BytesIO(existing[0])).convert("RGBA")
+    base_arr = np.array(base)
+    base_arr[..., 3] = np.where(mask > 0, 0, base_arr[..., 3]).astype(np.uint8)
+    erased = Image.fromarray(base_arr)
+
+    # Alpha-composite the new tile on top
+    overlay = Image.open(io.BytesIO(new_data)).convert("RGBA")
+    result = Image.alpha_composite(erased, overlay)
+    buf = io.BytesIO()
+    result.save(buf, format="PNG")
+    master_conn.execute(
+        "UPDATE tiles SET tile_data=? WHERE zoom_level=? AND tile_column=? AND tile_row=?",
+        (sqlite3.Binary(buf.getvalue()), z, x, y_tms),
+    )
+
+
+def rebuild_vector_master(layer_name: str, geojson_dir: str, tmp_dir: str):
+    """Rebuild master vector MBTiles+PMTiles from per-job source GeoJSONs in S3.
+
+    Fetches all jobs' footprints and source GeoJSONs ordered by created_at.
+    Each job's features are clipped to (its footprint MINUS union of newer
+    footprints) so newer jobs cleanly overwrite older ones in the overlap area.
+    """
+    # Query DB for all complete jobs ordered by age
+    conn = db_connect()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, created_at FROM topo_jobs WHERE status='complete' ORDER BY created_at ASC"
+        )
+        rows = cur.fetchall()
+    conn.close()
+
+    if not rows:
+        log.info(f"No complete jobs — skipping vector master rebuild for {layer_name}.")
+        return
+
+    geojson_keys_by_layer = {
+        "contours": ["contours_5m.geojson", "contours_10m.geojson", "contours_50m.geojson"],
+        "features": ["osm_features.geojson"],
+    }
+    src_filenames = geojson_keys_by_layer.get(layer_name, [])
+
+    jobs_data = []
+    for row in rows:
+        job_id = row["id"]
+        fp_key = f"jobs/{job_id}/footprint.geojson"
+        fp_local = os.path.join(tmp_dir, f"fp_{job_id}.geojson")
+        try:
+            s3.download_file(BUCKET, fp_key, fp_local)
+        except botocore.exceptions.ClientError:
+            continue  # Job predates footprint support or has no footprint
+
+        src_locals = []
+        for fname in src_filenames:
+            key = f"jobs/{job_id}/{fname}"
+            local = os.path.join(tmp_dir, f"{job_id}_{fname}")
+            try:
+                s3.download_file(BUCKET, key, local)
+                src_locals.append(local)
+            except botocore.exceptions.ClientError:
+                pass
+
+        if src_locals:
+            jobs_data.append({"job_id": job_id, "fp_local": fp_local, "srcs": src_locals})
+
+    if not jobs_data:
+        log.info(f"No jobs with source GeoJSONs for {layer_name} — skipping rebuild.")
+        return
+
+    all_fp_geoms = [_load_footprint_geom(j["fp_local"]) for j in jobs_data]
+
+    clipped_files = []
+    for i, job in enumerate(jobs_data):
+        newer_geoms = all_fp_geoms[i + 1:]
+        effective_region = (
+            all_fp_geoms[i] if not newer_geoms
+            else all_fp_geoms[i].difference(unary_union(newer_geoms))
+        )
+        if effective_region.is_empty:
+            continue
+
+        for src in job["srcs"]:
+            with open(src) as f:
+                gj = json.load(f)
+
+            clipped = []
+            for feat in gj.get("features", []):
+                geom = shape(feat["geometry"])
+                if not geom.is_valid:
+                    geom = geom.buffer(0)
+                if not effective_region.intersects(geom):
+                    continue
+                if effective_region.contains(geom):
+                    clipped.append(feat)
+                else:
+                    inter = effective_region.intersection(geom)
+                    if not inter.is_empty:
+                        clipped.append({**feat, "geometry": mapping(inter)})
+
+            if clipped:
+                out = os.path.join(tmp_dir,
+                                   f"rebuild_{layer_name}_{job['job_id']}_{os.path.basename(src)}")
+                with open(out, "w") as f:
+                    json.dump({"type": "FeatureCollection", "features": clipped}, f)
+                clipped_files.append(out)
+
+    if not clipped_files:
+        log.info(f"No features after clipping for {layer_name} — skipping upload.")
+        return
+
+    layer_id = "contours" if layer_name == "contours" else "features"
+    out_mbtiles = Path(tmp_dir) / f"master_{layer_name}_rebuild.mbtiles"
+    cmd = [
+        "tippecanoe",
+        "-o", str(out_mbtiles),
+        "-z", "18", "-Z", "12",
+        "--no-feature-limit", "--no-tile-size-limit",
+        "-l", layer_id,
+        "--force",
+        *clipped_files,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"tippecanoe rebuild for {layer_name} failed:\n{result.stderr}")
+
+    out_pmtiles = Path(tmp_dir) / f"master_{layer_name}_rebuild.pmtiles"
+    with sqlite3.connect(str(out_mbtiles)) as conn:
+        row = conn.execute("SELECT value FROM metadata WHERE name='maxzoom'").fetchone()
+        maxzoom = int(row[0]) if row else 18
+    mbtiles_to_pmtiles(str(out_mbtiles), str(out_pmtiles), maxzoom)
+
+    s3.upload_file(str(out_mbtiles), BUCKET, f"master/{layer_name}.mbtiles")
+    s3.upload_file(str(out_pmtiles), BUCKET, f"master/{layer_name}.pmtiles")
+    log.info(f"Master {layer_name} rebuilt from {len(jobs_data)} job(s) and uploaded.")
+
+
 # ── Core processing ───────────────────────────────────────────────────────────
 
 def process_job(job: dict, tmp: str) -> list[dict]:
@@ -447,10 +690,9 @@ def process_job(job: dict, tmp: str) -> list[dict]:
     log.info(f"Downloading {s3_input_key} …")
     s3.download_file(BUCKET, s3_input_key, str(zip_path))
 
-    # Run topo_mbtiles.py (produces raster MBTiles — the existing pipeline).
+    # Run topo_mbtiles.py.
     # Always run with --layers all so every master layer is available for
     # the merge step, regardless of what the user selected for per-job output.
-    # layerOptions only controls which files are uploaded/emailed to the user.
     output_dir = Path(tmp) / "output"
     output_dir.mkdir()
     geojson_dir = Path(tmp) / "geojson_export"
@@ -464,7 +706,8 @@ def process_job(job: dict, tmp: str) -> list[dict]:
             "--output",  str(output_dir),
             "--workers", str(os.cpu_count() or 4),
             "--layers",  "all",
-            "--export-geojson", str(geojson_dir),
+            "--export-geojson",   str(geojson_dir),
+            "--export-footprint", str(geojson_dir),
         ],
     )
     if result.returncode != 0:
@@ -473,8 +716,20 @@ def process_job(job: dict, tmp: str) -> list[dict]:
             f"({'OOM kill' if result.returncode == -9 else 'non-zero exit'})"
         )
 
-    # ── Per-job upload (existing behaviour — raster MBTiles + PMTiles) ────
-    # Only upload layers the user selected (or all if none specified).
+    footprint_local = geojson_dir / "footprint.geojson"
+
+    # ── Upload per-job source GeoJSONs + footprint to S3 ────────────────
+    # These are the authoritative source files used to rebuild the master
+    # vector tiles on each job merge.
+    job_s3_prefix = f"jobs/{job_id}"
+    for fname in ["footprint.geojson", "osm_features.geojson",
+                  "contours_5m.geojson", "contours_10m.geojson", "contours_50m.geojson"]:
+        local = geojson_dir / fname
+        if local.exists():
+            s3.upload_file(str(local), BUCKET, f"{job_s3_prefix}/{fname}")
+            log.info(f"Uploaded {job_s3_prefix}/{fname}")
+
+    # ── Per-job upload (raster MBTiles + PMTiles for the user) ──────────
     requested_layers = set(layer_opts) if layer_opts else None
     output_keys = []
     for mbtiles_path in sorted(output_dir.glob("*.mbtiles")):
@@ -503,32 +758,38 @@ def process_job(job: dict, tmp: str) -> list[dict]:
             "pmtilesKey": pmtiles_key,
         })
 
-    # ── Master merge (new — merge each layer into communal master files) ──
+    # ── Master merge ─────────────────────────────────────────────────────
     log.info("Starting master layer merge …")
 
-    # Generate vector MBTiles for contours and features via tippecanoe
-    vector_mbtiles: dict[str, Path | None] = {}
-    vector_mbtiles["contours"] = run_tippecanoe_contours(str(geojson_dir), tmp)
-    vector_mbtiles["features"] = run_tippecanoe_features(str(geojson_dir), tmp)
+    footprint_path_str = str(footprint_local) if footprint_local.exists() else None
 
+    # Raster layers: footprint-aware tile-level merge
     for layer_name, fmt in MASTER_LAYERS.items():
-        if fmt == "vector":
-            job_mbtiles = vector_mbtiles.get(layer_name)
-        else:
-            job_mbtiles = output_dir / f"{layer_name}.mbtiles"
-
-        if job_mbtiles is None or not Path(job_mbtiles).exists():
+        if fmt != "raster":
+            continue
+        job_mbtiles = output_dir / f"{layer_name}.mbtiles"
+        if not job_mbtiles.exists():
             log.info(f"Skipping master merge for {layer_name} — no output produced.")
             continue
-
         try:
-            merge_into_master(layer_name, Path(job_mbtiles), tmp, fmt)
+            merge_into_master(layer_name, job_mbtiles, tmp,
+                              fmt="raster", footprint_path=footprint_path_str)
         except Exception as e:
-            log.error(f"Master merge failed for {layer_name}: {e}")
+            log.error(f"Master raster merge failed for {layer_name}: {e}")
+            raise
+
+    # Vector layers: full rebuild from all per-job source GeoJSONs
+    for layer_name, fmt in MASTER_LAYERS.items():
+        if fmt != "vector":
+            continue
+        try:
+            rebuild_vector_master(layer_name, str(geojson_dir), tmp)
+        except Exception as e:
+            log.error(f"Master vector rebuild failed for {layer_name}: {e}")
             raise
 
     log.info("Master merge complete.")
-    return output_keys
+    return output_keys, footprint_local
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -542,9 +803,17 @@ def main():
 
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            output_keys = process_job(job, tmp)
+            output_keys, footprint_local = process_job(job, tmp)
 
-        update_status(conn, JOB_ID, "complete", s3_output_keys=output_keys)
+            extra: dict = {"s3_output_keys": output_keys}
+            if footprint_local and footprint_local.exists():
+                with open(footprint_local) as f:
+                    fp_fc = json.load(f)
+                features = fp_fc.get("features", [])
+                if features:
+                    extra["footprint"] = features[0]["geometry"]
+
+        update_status(conn, JOB_ID, "complete", **extra)
         log.info(f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded")
 
         email = get_user_email(conn, job["user_id"])
