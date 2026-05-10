@@ -697,19 +697,27 @@ def process_job(job: dict, tmp: str) -> list[dict]:
     output_dir.mkdir()
     geojson_dir = Path(tmp) / "geojson_export"
     geojson_dir.mkdir()
+    # When TOPO_KEEP_INTERMEDIATES=1, run with --work-dir so intermediate
+    # rasters survive the subprocess and can be uploaded to S3 for debugging.
+    keep_intermediates = os.environ.get("TOPO_KEEP_INTERMEDIATES") == "1"
+    pipeline_work_dir: Optional[Path] = None
+    cmd = [
+        "python3",
+        str(Path(__file__).parent / "topo_mbtiles.py"),
+        str(zip_path),
+        "--output",  str(output_dir),
+        "--workers", str(os.cpu_count() or 4),
+        "--layers",  "all",
+        "--export-geojson",   str(geojson_dir),
+        "--export-footprint", str(geojson_dir),
+    ]
+    if keep_intermediates:
+        pipeline_work_dir = Path(tmp) / "pipeline_work"
+        pipeline_work_dir.mkdir()
+        cmd.extend(["--work-dir", str(pipeline_work_dir)])
+        log.info(f"TOPO_KEEP_INTERMEDIATES=1 — intermediates will be kept at {pipeline_work_dir}")
     log.info("Running pipeline (layers: all) …")
-    result = subprocess.run(
-        [
-            "python3",
-            str(Path(__file__).parent / "topo_mbtiles.py"),
-            str(zip_path),
-            "--output",  str(output_dir),
-            "--workers", str(os.cpu_count() or 4),
-            "--layers",  "all",
-            "--export-geojson",   str(geojson_dir),
-            "--export-footprint", str(geojson_dir),
-        ],
-    )
+    result = subprocess.run(cmd)
     if result.returncode != 0:
         raise RuntimeError(
             f"topo_mbtiles.py exited with code {result.returncode} "
@@ -717,6 +725,26 @@ def process_job(job: dict, tmp: str) -> list[dict]:
         )
 
     footprint_local = geojson_dir / "footprint.geojson"
+
+    # ── Optional: upload intermediates for debugging ────────────────────
+    if keep_intermediates and pipeline_work_dir is not None:
+        debug_prefix = f"jobs/{job_id}/debug"
+        debug_files = [
+            "dtm_raw.tif", "dtm_filled.tif",
+            "scrub_count_raw.tif", "understorey_count_raw.tif",
+            "scrub_density.tif", "footprint.geojson",
+            "hillshade.tif", "slope.tif",
+        ]
+        for fname in debug_files:
+            local = pipeline_work_dir / fname
+            if local.exists():
+                try:
+                    s3.upload_file(str(local), BUCKET, f"{debug_prefix}/{fname}")
+                    log.info(f"Uploaded {debug_prefix}/{fname}")
+                except Exception as e:
+                    log.warning(f"Failed to upload debug artefact {fname}: {e}")
+            else:
+                log.info(f"Debug artefact {fname} not present — skipped")
 
     # ── Upload per-job source GeoJSONs + footprint to S3 ────────────────
     # These are the authoritative source files used to rebuild the master

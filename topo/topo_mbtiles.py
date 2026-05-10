@@ -144,12 +144,13 @@ ZOOM_MIN = 12
 ZOOM_MAX = 18
 
 # Vegetation (scrub density) layer — for bushbashing avoidance.
-# Window-pooled ratio of sub-canopy returns in the 0.25–2.0 m walking-height band
-# to all sub-canopy returns (HAG ≤ 2.0 m). Window size in metres == cells (1 m grid).
+# Window-pooled ratio of walking-height returns (0.25–2.0 m HAG) to all
+# *understorey* returns (0.25–3.0 m HAG, i.e. ground and canopy excluded).
+# Window size in metres == cells (1 m grid).
 SCRUB_DENSITY_WINDOW_M    = 7      # 7×7 m pooling window
-SCRUB_DENSITY_MIN_RATIO   = 0.02   # below this → transparent (light scrub / open ground)
-SCRUB_DENSITY_MAX_RATIO   = 0.35   # at/above → fully opaque dark green
-SCRUB_DENSITY_MIN_POINTS  = 16     # minimum *windowed* sub-canopy point count
+SCRUB_DENSITY_MIN_RATIO   = 0.10   # below this → transparent (light scrub / open ground)
+SCRUB_DENSITY_MAX_RATIO   = 0.70   # at/above → fully opaque dark green
+SCRUB_DENSITY_MIN_POINTS  = 8      # minimum *windowed* understorey-band point count
 
 # Slope thresholds (degrees) → RGBA colour
 SLOPE_COLOURS = [
@@ -401,15 +402,16 @@ def extract_elvis_zip(zip_path: str, work_dir: str) -> ElvisContents:
 # ---------------------------------------------------------------------------
 
 def build_pipeline_full(las_files: List[str], out_dtm: str,
-                        out_scrub_count: str, out_sub_canopy_count: str,
+                        out_scrub_count: str, out_understorey_count: str,
                         resolution: float = 1.0) -> dict:
-    """PDAL pipeline: LAZ → DTM (ground) + scrub/sub-canopy return count rasters. Mode C.
+    """PDAL pipeline: LAZ → DTM (ground) + scrub/understorey return count rasters. Mode C.
 
     Uses filters.smrf for ground classification and filters.hag_nn to assign
     HeightAboveGround to every point. Two count rasters are produced:
-      - scrub_count:      points with 0.25 m ≤ HAG ≤ 2.0 m (walking-height scrub band)
-      - sub_canopy_count: points with HAG ≤ 2.0 m (denominator — excludes canopy returns
-                          so the ratio is not diluted under thick forest)
+      - scrub_count:       points with 0.25 m ≤ HAG ≤ 2.0 m (walking-height scrub band)
+      - understorey_count: points with 0.25 m < HAG ≤ 3.0 m (denominator — excludes
+                           ground returns and most canopy so the ratio reflects
+                           "fraction of understorey at walking height")
     """
     readers = [{"type": "readers.las", "filename": f} for f in las_files]
     return {
@@ -438,13 +440,13 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
-            # Sub-canopy return count (HAG ≤ 2.0 m — denominator for density ratio)
+            # Understorey return count (0.25 m < HAG ≤ 3.0 m — denominator for density ratio)
             {
                 "type": "writers.gdal",
-                "filename": out_sub_canopy_count,
+                "filename": out_understorey_count,
                 "resolution": resolution,
                 "output_type": "count",
-                "where": "HeightAboveGround <= 2.0",
+                "where": "HeightAboveGround > 0.25 && HeightAboveGround <= 3.0",
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
@@ -453,9 +455,9 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
 
 
 def build_pipeline_density_only(las_files: List[str], dtm_path: str,
-                                 out_scrub_count: str, out_sub_canopy_count: str,
+                                 out_scrub_count: str, out_understorey_count: str,
                                  resolution: float = 1.0) -> dict:
-    """PDAL pipeline: LAZ → scrub/sub-canopy count rasters using an external DEM. Mode B.
+    """PDAL pipeline: LAZ → scrub/understorey count rasters using an external DEM. Mode B.
 
     Uses filters.hag_dem to compute HeightAboveGround from a pre-built DEM raster,
     avoiding the need to re-run ground classification (smrf) when a DEM already exists.
@@ -476,13 +478,13 @@ def build_pipeline_density_only(las_files: List[str], dtm_path: str,
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
-            # Sub-canopy return count (HAG ≤ 2.0 m — denominator for density ratio)
+            # Understorey return count (0.25 m < HAG ≤ 3.0 m — denominator for density ratio)
             {
                 "type": "writers.gdal",
-                "filename": out_sub_canopy_count,
+                "filename": out_understorey_count,
                 "resolution": resolution,
                 "output_type": "count",
-                "where": "HeightAboveGround <= 2.0",
+                "where": "HeightAboveGround > 0.25 && HeightAboveGround <= 3.0",
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
@@ -515,55 +517,55 @@ def run_pdal_pipeline(pipeline: dict, work_dir: str, label: str = "pipeline"):
 
 
 def run_pdal_sequential_full(las_files: List[str], out_dtm: str,
-                              out_scrub_count: str, out_sub_canopy_count: str,
+                              out_scrub_count: str, out_understorey_count: str,
                               work_dir: str, resolution: float = 1.0):
     """Process LAZ files one at a time (DTM + density counts), then merge. Mode C."""
     dtm_tiles = []
     scrub_tiles = []
-    sub_canopy_tiles = []
+    understorey_tiles = []
     for i, laz in enumerate(las_files):
         log.info(f"PDAL tile {i+1}/{len(las_files)}: {os.path.basename(laz)}")
-        tile_dtm        = os.path.join(work_dir, f"dtm_tile_{i}.tif")
-        tile_scrub      = os.path.join(work_dir, f"scrub_tile_{i}.tif")
-        tile_sub_canopy = os.path.join(work_dir, f"sub_canopy_tile_{i}.tif")
-        pipeline = build_pipeline_full([laz], tile_dtm, tile_scrub, tile_sub_canopy, resolution)
+        tile_dtm         = os.path.join(work_dir, f"dtm_tile_{i}.tif")
+        tile_scrub       = os.path.join(work_dir, f"scrub_tile_{i}.tif")
+        tile_understorey = os.path.join(work_dir, f"understorey_tile_{i}.tif")
+        pipeline = build_pipeline_full([laz], tile_dtm, tile_scrub, tile_understorey, resolution)
         run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_full_{i}")
         dtm_tiles.append(tile_dtm)
         scrub_tiles.append(tile_scrub)
-        sub_canopy_tiles.append(tile_sub_canopy)
+        understorey_tiles.append(tile_understorey)
 
     log.info(f"Merging {len(dtm_tiles)} DTM tiles …")
     _merge_raster_tiles(dtm_tiles, out_dtm)
     log.info(f"Merging {len(scrub_tiles)} scrub-count tiles …")
     _merge_raster_tiles(scrub_tiles, out_scrub_count)
-    log.info(f"Merging {len(sub_canopy_tiles)} sub-canopy-count tiles …")
-    _merge_raster_tiles(sub_canopy_tiles, out_sub_canopy_count)
+    log.info(f"Merging {len(understorey_tiles)} understorey-count tiles …")
+    _merge_raster_tiles(understorey_tiles, out_understorey_count)
 
-    for p in dtm_tiles + scrub_tiles + sub_canopy_tiles:
+    for p in dtm_tiles + scrub_tiles + understorey_tiles:
         os.remove(p)
 
 
 def run_pdal_sequential_density(las_files: List[str], dtm_path: str,
-                                 out_scrub_count: str, out_sub_canopy_count: str,
+                                 out_scrub_count: str, out_understorey_count: str,
                                  work_dir: str, resolution: float = 1.0):
     """Process LAZ files one at a time (density counts only) using hag_dem. Mode B."""
     scrub_tiles = []
-    sub_canopy_tiles = []
+    understorey_tiles = []
     for i, laz in enumerate(las_files):
         log.info(f"PDAL tile {i+1}/{len(las_files)}: {os.path.basename(laz)}")
-        tile_scrub      = os.path.join(work_dir, f"scrub_tile_{i}.tif")
-        tile_sub_canopy = os.path.join(work_dir, f"sub_canopy_tile_{i}.tif")
-        pipeline = build_pipeline_density_only([laz], dtm_path, tile_scrub, tile_sub_canopy, resolution)
+        tile_scrub       = os.path.join(work_dir, f"scrub_tile_{i}.tif")
+        tile_understorey = os.path.join(work_dir, f"understorey_tile_{i}.tif")
+        pipeline = build_pipeline_density_only([laz], dtm_path, tile_scrub, tile_understorey, resolution)
         run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_density_{i}")
         scrub_tiles.append(tile_scrub)
-        sub_canopy_tiles.append(tile_sub_canopy)
+        understorey_tiles.append(tile_understorey)
 
     log.info(f"Merging {len(scrub_tiles)} scrub-count tiles …")
     _merge_raster_tiles(scrub_tiles, out_scrub_count)
-    log.info(f"Merging {len(sub_canopy_tiles)} sub-canopy-count tiles …")
-    _merge_raster_tiles(sub_canopy_tiles, out_sub_canopy_count)
+    log.info(f"Merging {len(understorey_tiles)} understorey-count tiles …")
+    _merge_raster_tiles(understorey_tiles, out_understorey_count)
 
-    for p in scrub_tiles + sub_canopy_tiles:
+    for p in scrub_tiles + understorey_tiles:
         os.remove(p)
 
 
@@ -580,11 +582,57 @@ def fill_nodata(src_path: str, dst_path: str, max_distance: int = 5):
     ds = None
 
 
+def _binary_close(mask: np.ndarray, radius: int = 5) -> np.ndarray:
+    """Morphological close on a 0/1 uint8 mask: dilate then erode by `radius` cells.
+
+    Hand-rolled with a separable square structuring element so we don't pull in
+    scipy. For each pass (dilate, erode), shifts the mask by 1 cell in each of
+    the 4 cardinal directions `radius` times. Bridges nodata gaps narrower than
+    2*radius cells before polygonization.
+    """
+    if radius <= 0:
+        return mask
+    m = mask.astype(np.uint8, copy=True)
+    h, w = m.shape
+
+    def dilate_once(a):
+        out = a.copy()
+        out[1:, :]  |= a[:-1, :]
+        out[:-1, :] |= a[1:, :]
+        out[:, 1:]  |= a[:, :-1]
+        out[:, :-1] |= a[:, 1:]
+        return out
+
+    def erode_once(a):
+        out = a.copy()
+        out[1:, :]  &= a[:-1, :]
+        out[:-1, :] &= a[1:, :]
+        out[:, 1:]  &= a[:, :-1]
+        out[:, :-1] &= a[:, 1:]
+        return out
+
+    for _ in range(radius):
+        m = dilate_once(m)
+    for _ in range(radius):
+        m = erode_once(m)
+    return m
+
+
 def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
     """Polygonize the valid-pixel mask of a DTM raster → tight WGS84 footprint GeoJSON.
 
-    Downsamples 10× before polygonizing so it stays fast on large rasters.
-    Takes only the exterior boundary (drops interior nodata holes like dense canopy).
+    Produces a single connected outer footprint with no interior holes.
+    Pipeline:
+      1. Build a 1 m valid-pixel binary mask.
+      2. Downsample 10× for speed (~10 m effective resolution).
+      3. Morphologically close the downsampled mask with a 5-cell radius
+         (~50 m) so narrow nodata strips along LAZ-tile seams, rivers, and
+         dense-canopy gaps are filled before polygonization.
+      4. Polygonize, union, then buffer +50 m / −50 m to merge close-but-
+         disjoint components from ragged edges.
+      5. Keep only the largest connected polygon and take its exterior ring,
+         discarding any interior holes.
+      6. Simplify (~50 m tolerance) and reproject to WGS84.
     """
     ds = gdal.Open(dtm_path)
     band = ds.GetRasterBand(1)
@@ -612,6 +660,13 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
     small_ds.SetGeoTransform((gt[0], gt[1] * scale, 0, gt[3], 0, gt[5] * scale))
     small_ds.SetProjection(ds.GetProjection())
     gdal.Warp(small_ds, mask_ds, resampleAlg=gdal.GRA_NearestNeighbour)
+
+    # Morphological close on the downsampled mask: dilate then erode with a
+    # 5-cell (~50 m) radius. Bridges narrow nodata strips so the polygonizer
+    # produces a clean outer hull instead of swiss cheese.
+    small_arr = small_ds.GetRasterBand(1).ReadAsArray()
+    closed_arr = _binary_close(small_arr, radius=5)
+    small_ds.GetRasterBand(1).WriteArray(closed_arr)
 
     # Polygonize
     tmp_path = dst_geojson_path + "_tmp.geojson"
@@ -647,10 +702,22 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
         footprint_merc = shapely_box(xmin, ymin, xmax, ymax)
     else:
         merged = unary_union(polys)
+        # Buffer +/- 50 m to merge close-but-disjoint components left behind
+        # by ragged tile edges (the binary close above handles narrow gaps;
+        # this handles wider seam diagonals that survived).
+        merged = merged.buffer(50.0).buffer(-50.0)
+        # Keep only the largest connected component — outliers from stray
+        # tiles or noise pixels shouldn't shape the footprint.
+        if merged.geom_type == "MultiPolygon":
+            merged = max(merged.geoms, key=lambda g: g.area)
+        # Drop any residual interior rings.
         if merged.geom_type == "Polygon":
             footprint_merc = Polygon(merged.exterior)
         else:
-            footprint_merc = MultiPolygon([Polygon(p.exterior) for p in merged.geoms])
+            # Defensive: buffer may rarely return a non-Polygon (e.g. empty)
+            xmin = gt[0]; xmax = gt[0] + gt[1] * ds.RasterXSize
+            ymax = gt[3]; ymin = gt[3] + gt[5] * ds.RasterYSize
+            footprint_merc = shapely_box(xmin, ymin, xmax, ymax)
 
     # Simplify with ~50 m tolerance (Web Mercator metres)
     footprint_merc = footprint_merc.simplify(50.0, preserve_topology=True)
@@ -763,7 +830,7 @@ def _box_sum_2d(arr: np.ndarray, k: int) -> np.ndarray:
     return (bottom_right - top_right - bottom_left + top_left).astype(np.float32)
 
 
-def compute_rasters(dtm_path: str, scrub_count_path: str, sub_canopy_count_path: str,
+def compute_rasters(dtm_path: str, scrub_count_path: str, understorey_count_path: str,
                     work_dir: str) -> dict:
     """
     From DTM + point-count rasters produce hillshade.tif, slope.tif, scrub_density.tif.
@@ -772,11 +839,12 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, sub_canopy_count_path:
     are guaranteed to match — essential in Mode B where the DTM comes from a
     pre-built DEM and the counts come from PDAL.
 
-    Scrub density is the pooled ratio of scrub-band returns (0.25–2.0 m) to all
-    sub-canopy returns (HAG ≤ 2.0 m), aggregated over a SCRUB_DENSITY_WINDOW_M-cell
-    box. Pooling counts before dividing (rather than per-pixel ratio + post-smooth)
-    gives a statistically stable estimate even in canopy-shadowed cells where
-    individual pixels would otherwise have too few points to be reliable.
+    Scrub density is the pooled ratio of walking-height returns (0.25–2.0 m) to
+    understorey returns (0.25 m < HAG ≤ 3.0 m, ground and canopy excluded),
+    aggregated over a SCRUB_DENSITY_WINDOW_M-cell box. Pooling counts before
+    dividing (rather than per-pixel ratio + post-smooth) gives a statistically
+    stable estimate even in cells where individual pixels would otherwise have
+    too few points to be reliable.
     """
     paths = {}
 
@@ -800,32 +868,32 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, sub_canopy_count_path:
     )
     paths["slope"] = sl_path
 
-    # Scrub density: pooled ratio of scrub-band to sub-canopy returns over a window
+    # Scrub density: pooled ratio of walking-height to understorey returns over a window
     # Step 1: align count rasters onto the DTM grid
-    scrub_aligned      = os.path.join(work_dir, "scrub_count_aligned.tif")
-    sub_canopy_aligned = os.path.join(work_dir, "sub_canopy_count_aligned.tif")
+    scrub_aligned       = os.path.join(work_dir, "scrub_count_aligned.tif")
+    understorey_aligned = os.path.join(work_dir, "understorey_count_aligned.tif")
     log.info("Aligning count rasters to DTM grid …")
     align_raster_to_reference(scrub_count_path, dtm_path, scrub_aligned)
-    align_raster_to_reference(sub_canopy_count_path, dtm_path, sub_canopy_aligned)
+    align_raster_to_reference(understorey_count_path, dtm_path, understorey_aligned)
 
-    # Step 2: window-pooled ratio (numerator: scrub-band, denominator: sub-canopy)
+    # Step 2: window-pooled ratio (numerator: walking-height, denominator: understorey)
     log.info(f"Computing scrub density (pooled {SCRUB_DENSITY_WINDOW_M}×{SCRUB_DENSITY_WINDOW_M} m) …")
-    dtm_ds         = gdal.Open(dtm_path)
-    scrub_ds       = gdal.Open(scrub_aligned)
-    sub_canopy_ds  = gdal.Open(sub_canopy_aligned)
+    dtm_ds          = gdal.Open(dtm_path)
+    scrub_ds        = gdal.Open(scrub_aligned)
+    understorey_ds  = gdal.Open(understorey_aligned)
 
     # nodata in the count rasters is 0, so reading as-is gives correct counts.
-    scrub_arr      = scrub_ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
-    sub_canopy_arr = sub_canopy_ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
+    scrub_arr       = scrub_ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
+    understorey_arr = understorey_ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
 
-    scrub_sum      = _box_sum_2d(scrub_arr,      SCRUB_DENSITY_WINDOW_M)
-    sub_canopy_sum = _box_sum_2d(sub_canopy_arr, SCRUB_DENSITY_WINDOW_M)
+    scrub_sum       = _box_sum_2d(scrub_arr,       SCRUB_DENSITY_WINDOW_M)
+    understorey_sum = _box_sum_2d(understorey_arr, SCRUB_DENSITY_WINDOW_M)
 
     # Windows below the pooled-point threshold are treated as nodata (unstable ratio).
-    valid = sub_canopy_sum >= SCRUB_DENSITY_MIN_POINTS
+    valid = understorey_sum >= SCRUB_DENSITY_MIN_POINTS
     density = np.where(
         valid,
-        scrub_sum / np.where(sub_canopy_sum > 0, sub_canopy_sum, 1.0),
+        scrub_sum / np.where(understorey_sum > 0, understorey_sum, 1.0),
         np.nan,
     )
 
@@ -1697,7 +1765,7 @@ def main():
         las_strs = [str(f) for f in contents.las_files]
         dtm_filled           = os.path.join(work_dir, "dtm_filled.tif")
         scrub_count_raw      = os.path.join(work_dir, "scrub_count_raw.tif")
-        sub_canopy_count_raw = os.path.join(work_dir, "sub_canopy_count_raw.tif")
+        understorey_count_raw = os.path.join(work_dir, "understorey_count_raw.tif")
 
         footprint_path = os.path.join(work_dir, "footprint.geojson")
 
@@ -1712,26 +1780,29 @@ def main():
             dtm_raw = os.path.join(work_dir, "dtm_raw.tif")
             with bench.step("PDAL: LAZ → DTM + scrub density counts (ground classification)"):
                 run_pdal_sequential_full(
-                    las_strs, dtm_raw, scrub_count_raw, sub_canopy_count_raw,
+                    las_strs, dtm_raw, scrub_count_raw, understorey_count_raw,
                     work_dir, resolution=1.0,
                 )
-            with bench.step("Compute data footprint"):
-                compute_data_footprint(dtm_raw, footprint_path)
             with bench.step("Fill DTM nodata holes"):
                 fill_nodata(dtm_raw, dtm_filled)
+            # Footprint is computed from the *filled* DTM so small interior
+            # holes (rivers, dense canopy ground gaps) don't leak through as
+            # cutouts in downstream raster layers.
+            with bench.step("Compute data footprint"):
+                compute_data_footprint(dtm_filled, footprint_path)
 
         # ── Step 2b: Obtain density counts (only if vegetation layer needed) ─
         if contents.mode == MODE_DEM_LAZ:
             with bench.step("PDAL: LAZ → scrub density counts (hag_dem)"):
                 run_pdal_sequential_density(
-                    las_strs, dtm_filled, scrub_count_raw, sub_canopy_count_raw,
+                    las_strs, dtm_filled, scrub_count_raw, understorey_count_raw,
                     work_dir, resolution=1.0,
                 )
 
         # ── Step 3: Derive rasters ───────────────────────────────────────────
         with bench.step("Compute hillshade, slope" + (", scrub density (vegetation)" if contents.has_vegetation else "")):
             if contents.has_vegetation:
-                raster_paths = compute_rasters(dtm_filled, scrub_count_raw, sub_canopy_count_raw, work_dir)
+                raster_paths = compute_rasters(dtm_filled, scrub_count_raw, understorey_count_raw, work_dir)
             else:
                 raster_paths = compute_rasters_no_veg(dtm_filled, work_dir)
 
