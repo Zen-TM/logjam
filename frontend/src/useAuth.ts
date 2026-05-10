@@ -105,7 +105,7 @@ export function useAuth() {
 
   const handleSignOut = useCallback(async () => {
     await amplifySignOut();
-    setState("signIn");
+    window.location.reload();
   }, []);
 
   return {
