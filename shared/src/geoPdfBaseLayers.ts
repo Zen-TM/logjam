@@ -8,12 +8,6 @@ export const GEOPDF_BASE_LAYER_CONFIG: Record<
     maxNativeZoom: 16,
     attribution: "Base map © NSW Spatial Services (SIX Maps)",
   },
-  "six-base": {
-    urlTemplate:
-      "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
-    maxNativeZoom: 19,
-    attribution: "Base map © NSW Spatial Services (SIX Maps)",
-  },
   "six-imagery": {
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",

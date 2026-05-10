@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -119,7 +119,12 @@ function GeoPdfDialog({
   pendingExtent: TBbox | null;
   pendingScale: number | null;
   activeLayerId: string;
-  masterTopoLayers: { id: string; pmtilesUrl: string; format?: string }[];
+  masterTopoLayers: {
+    id: string;
+    pmtilesUrl: string;
+    format?: string;
+    bounds?: { north: number; south: number; east: number; west: number };
+  }[];
   mapCenter?: { lat: number; lng: number } | null;
   canyons?: TCanyon[];
   sharedCanyons?: TCanyon[];
@@ -262,6 +267,36 @@ function GeoPdfDialog({
       setEditTemplateName("");
     }
   }, [open, templateMode, editingTemplate]);
+
+  // Clear contour interval text when contours overlay is deselected
+  useEffect(() => {
+    const hasContours =
+      selectedOverlays.has("contours") ||
+      selectedOverlays.has("master-contours");
+    if (!hasContours) setContourEnabled(false);
+  }, [selectedOverlays]);
+
+  // True when any master LiDAR layer's bounds overlap the current export extent.
+  // Falls back to true when bounds are unknown or extent is uninitialised — never wrongly hides.
+  const lidarOverlap = useMemo(() => {
+    if (templateMode) return true;
+    const ext = extentState;
+    if (ext.north <= ext.south || ext.east <= ext.west) return true;
+    const withBounds = masterTopoLayers.filter((l) => l.bounds);
+    if (withBounds.length === 0) return true;
+    return withBounds.some(
+      (l) =>
+        l.bounds!.east > ext.west &&
+        l.bounds!.west < ext.east &&
+        l.bounds!.north > ext.south &&
+        l.bounds!.south < ext.north,
+    );
+  }, [masterTopoLayers, extentState, templateMode]);
+
+  // Clear contour element when LiDAR coverage leaves the extent
+  useEffect(() => {
+    if (!lidarOverlap) setContourEnabled(false);
+  }, [lidarOverlap]);
 
   // Populate extent from map selection — always receives both extent and scale
   useEffect(() => {
@@ -996,7 +1031,7 @@ function GeoPdfDialog({
           <div className={classes.layerColumns}>
             <div className={classes.layerColumn}>
               <div className={classes.layerColumnLabel}>Base layer</div>
-              {BASE_LAYERS.filter((l) => !l.id.startsWith("osm")).map((layer) => (
+              {BASE_LAYERS.filter((l) => !l.id.startsWith("osm") && l.id !== "six-base").map((layer) => (
                 <label key={layer.id} className={classes.layerOption}>
                   <input
                     type="radio"
@@ -1013,19 +1048,20 @@ function GeoPdfDialog({
             </div>
             <div className={classes.layerColumn}>
               <div className={classes.layerColumnLabel}>Overlays</div>
-              {MASTER_TOPO_LAYERS.map((layer) => (
-                <label key={layer.name} className={classes.layerOption}>
-                  <input
-                    type="checkbox"
-                    checked={selectedOverlays.has(layer.name)}
-                    onChange={() => toggleOverlay(layer.name)}
-                    style={{
-                      accentColor: "var(--theme-accent)",
-                    }}
-                  />
-                  {layer.label}
-                </label>
-              ))}
+              {lidarOverlap &&
+                MASTER_TOPO_LAYERS.map((layer) => (
+                  <label key={layer.name} className={classes.layerOption}>
+                    <input
+                      type="checkbox"
+                      checked={selectedOverlays.has(layer.name)}
+                      onChange={() => toggleOverlay(layer.name)}
+                      style={{
+                        accentColor: "var(--theme-accent)",
+                      }}
+                    />
+                    {layer.label}
+                  </label>
+                ))}
               <label className={classes.layerOption}>
                 <input
                   type="checkbox"
@@ -1084,23 +1120,37 @@ function GeoPdfDialog({
             <span>North arrow (TN / GN / MN)</span>
           </div>
 
-          <div className={classes.elementRow}>
-            <input
-              type="checkbox"
-              checked={contourEnabled}
-              onChange={(e) => setContourEnabled(e.target.checked)}
-              disabled={!selectedOverlays.has("contours")}
-              style={{
-                accentColor: "var(--theme-accent)",
-              }}
-            />
-            <span style={!selectedOverlays.has("contours") ? { opacity: 0.5 } : undefined}>Contour interval text</span>
-            {contourEnabled && extentState.scale > 0 && (
-              <span className={classes.elementSuffix}>
-                {getContourInterval(extentState.scale)}m
+          {lidarOverlap && (
+            <div className={classes.elementRow}>
+              <input
+                type="checkbox"
+                checked={contourEnabled}
+                onChange={(e) => setContourEnabled(e.target.checked)}
+                disabled={
+                  !selectedOverlays.has("contours") &&
+                  !selectedOverlays.has("master-contours")
+                }
+                style={{
+                  accentColor: "var(--theme-accent)",
+                }}
+              />
+              <span
+                style={
+                  !selectedOverlays.has("contours") &&
+                  !selectedOverlays.has("master-contours")
+                    ? { opacity: 0.5 }
+                    : undefined
+                }
+              >
+                Contour interval text
               </span>
-            )}
-          </div>
+              {contourEnabled && extentState.scale > 0 && (
+                <span className={classes.elementSuffix}>
+                  {getContourInterval(extentState.scale)}m
+                </span>
+              )}
+            </div>
+          )}
 
           <div className={classes.elementRow}>
             <input

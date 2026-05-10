@@ -6,17 +6,21 @@ import { MASTER_TOPO_LAYERS } from "../../../topoLayerTypes";
 import type { TopoLayerFormat } from "../../../topoLayerTypes";
 import { apiFetch } from "../../../canyonUtils";
 
+type LayerBounds = { north: number; south: number; east: number; west: number };
+
 type MasterLayer = {
   name: string;
   label: string;
   format: TopoLayerFormat;
   pmtilesUrl: string;
+  bounds?: LayerBounds;
 };
 
 type TopoLayerEntry = {
   id: string;
   pmtilesUrl: string;
   format: TopoLayerFormat;
+  bounds?: LayerBounds;
 };
 
 function OverlaysPanel({
@@ -94,6 +98,7 @@ function OverlaysPanel({
           id: `master-${l.name}`,
           pmtilesUrl: l.pmtilesUrl,
           format: l.format,
+          ...(l.bounds ? { bounds: l.bounds } : {}),
         };
       });
     const json = JSON.stringify(active);

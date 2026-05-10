@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { S3Client, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { MASTER_TOPO_LAYERS } from "../constants/topoLayers";
+import { PMTiles } from "pmtiles";
 
 const router = Router();
 
@@ -27,6 +28,19 @@ async function objectExists(key: string): Promise<boolean> {
   }
 }
 
+/** Read the geographic bounds from a PMTiles archive header. Returns undefined on failure. */
+async function readPMTilesBounds(
+  url: string,
+): Promise<{ north: number; south: number; east: number; west: number } | undefined> {
+  try {
+    const archive = new PMTiles(url);
+    const h = await archive.getHeader();
+    return { north: h.maxLat, south: h.minLat, east: h.maxLon, west: h.minLon };
+  } catch {
+    return undefined;
+  }
+}
+
 // GET /topo-layers — return only master topo layers whose PMTiles files exist in S3
 router.get(
   "/",
@@ -38,14 +52,21 @@ router.get(
         exists: await objectExists(`master/${layer.name}.pmtiles`),
       })),
     );
-    const layers = checks
-      .filter((c) => c.exists)
-      .map((c) => ({
-        name: c.layer.name,
-        label: c.layer.label,
-        format: c.layer.format,
-        pmtilesUrl: `${TOPO_CDN_BASE}/master/${c.layer.name}.pmtiles`,
-      }));
+    const layers = await Promise.all(
+      checks
+        .filter((c) => c.exists)
+        .map(async (c) => {
+          const pmtilesUrl = `${TOPO_CDN_BASE}/master/${c.layer.name}.pmtiles`;
+          const bounds = await readPMTilesBounds(pmtilesUrl);
+          return {
+            name: c.layer.name,
+            label: c.layer.label,
+            format: c.layer.format,
+            pmtilesUrl,
+            ...(bounds ? { bounds } : {}),
+          };
+        }),
+    );
     res.json(layers);
   },
 );

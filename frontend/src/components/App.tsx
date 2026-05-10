@@ -117,7 +117,12 @@ function App() {
 
   // Master topo layers from the Overlays panel (communal, persistent)
   const [masterTopoLayers, setMasterTopoLayers] = useState<
-    { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]
+    {
+      id: string;
+      pmtilesUrl: string;
+      format?: "raster" | "vector";
+      bounds?: { north: number; south: number; east: number; west: number };
+    }[]
   >([]);
 
   const combinedTopoLayers = useMemo(

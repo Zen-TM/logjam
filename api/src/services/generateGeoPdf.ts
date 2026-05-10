@@ -1306,7 +1306,7 @@ function drawGridLines(
         e,
         interval,
         topPx.x + 2,
-        fontSize + 2,
+        largeFontSize + 4,
         fontSize,
         largeFontSize,
       );
@@ -1368,7 +1368,7 @@ function drawGridLines(
       ctx.moveTo(x, 0);
       ctx.lineTo(x, heightPx);
       ctx.stroke();
-      ctx.fillText(lon.toFixed(4) + "°", x + 2, fontSize + 2);
+      ctx.fillText(lon.toFixed(4) + "°", x + 2, fontSize + 6);
     }
   }
 }
