@@ -366,6 +366,24 @@ function Map({
     };
   }, [mapLoaded]);
 
+  // Fire onMapViewChange on load and after every pan/zoom so the dialog always
+  // has the current map centre for extent initialisation.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+
+    const fireViewChange = () => {
+      const c = map.getCenter();
+      onMapViewChangeRef.current?.({ lat: c.lat, lng: c.lng }, map.getZoom());
+    };
+
+    fireViewChange(); // report initial centre immediately on load
+    map.on("moveend", fireViewChange);
+    return () => {
+      map.off("moveend", fireViewChange);
+    };
+  }, [mapLoaded]);
+
   // Update canyon GeoJSON when data or filters change
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -1065,8 +1083,9 @@ function Map({
   const geoPdfUserPannedRef = useRef(false);
   const geoPdfUserZoomedRef = useRef(false);
 
-  // When extent selection activates: fly to the initial extent (if any),
-  // then start tracking user interaction once the animation settles.
+  // When extent selection activates: position the map so the on-screen frame
+  // visually matches the initial extent (or scale × paper) — that way the
+  // dashed rectangle the user sees is exactly the geographic area they'll get.
   useEffect(() => {
     if (!selectingGeoPdfExtent) {
       geoPdfInitialExtentRef.current = undefined;
@@ -1087,29 +1106,74 @@ function Map({
     geoPdfUserZoomedRef.current = false;
 
     const map = mapRef.current;
-    if (!geoPdfInitialExtent || !map) {
-      // No fitBounds animation — settled immediately.
+    if (!map) {
       geoPdfFitBoundsSettledRef.current = true;
       return;
     }
 
-    map.fitBounds(
-      [
-        [geoPdfInitialExtent.west, geoPdfInitialExtent.south],
-        [geoPdfInitialExtent.east, geoPdfInitialExtent.north],
-      ],
-      { animate: true, padding: 60 },
-    );
-
-    const onFitBoundsEnd = () => {
+    // Determine the geographic centre and target width (metres) we want the
+    // on-screen frame to represent.
+    let targetCenter: [number, number];
+    let targetWidthM: number;
+    if (geoPdfInitialExtent) {
+      const cLat = (geoPdfInitialExtent.north + geoPdfInitialExtent.south) / 2;
+      const cLng = (geoPdfInitialExtent.east + geoPdfInitialExtent.west) / 2;
+      targetCenter = [cLng, cLat];
+      targetWidthM =
+        (geoPdfInitialExtent.east - geoPdfInitialExtent.west) *
+        111320 *
+        Math.cos((cLat * Math.PI) / 180);
+    } else if (geoPdfInitialScale && geoPdfPaperDimensions) {
+      const c = map.getCenter();
+      targetCenter = [c.lng, c.lat];
+      targetWidthM = geoPdfInitialScale * (geoPdfPaperDimensions.w / 1000);
+    } else {
       geoPdfFitBoundsSettledRef.current = true;
-    };
-    map.once("moveend", onFitBoundsEnd);
+      return;
+    }
+
+    // Wait one frame so the frame element is in the DOM and measurable.
+    const rafId = requestAnimationFrame(() => {
+      const frameEl = geoPdfFrameRef.current;
+      const m = mapRef.current;
+      if (!frameEl || !m) {
+        geoPdfFitBoundsSettledRef.current = true;
+        return;
+      }
+      const framePxW = frameEl.getBoundingClientRect().width;
+      if (framePxW <= 0) {
+        geoPdfFitBoundsSettledRef.current = true;
+        return;
+      }
+
+      // Solve for zoom: at zoom z and latitude lat,
+      //   metres_per_pixel = 156543.03 × cos(lat) / 2^z
+      // We want metres_per_pixel × framePxW = targetWidthM
+      const cosLat = Math.cos((targetCenter[1] * Math.PI) / 180);
+      const metresPerPixel = targetWidthM / framePxW;
+      const targetZoom = Math.log2((156543.03 * cosLat) / metresPerPixel);
+
+      m.easeTo({
+        center: targetCenter,
+        zoom: targetZoom,
+        duration: 600,
+      });
+
+      const onSettled = () => {
+        geoPdfFitBoundsSettledRef.current = true;
+      };
+      m.once("moveend", onSettled);
+    });
 
     return () => {
-      map.off("moveend", onFitBoundsEnd);
+      cancelAnimationFrame(rafId);
     };
-  }, [selectingGeoPdfExtent, geoPdfInitialExtent]);
+  }, [
+    selectingGeoPdfExtent,
+    geoPdfInitialExtent,
+    geoPdfInitialScale,
+    geoPdfPaperDimensions,
+  ]);
 
   // Track user-initiated map movement during extent selection.
   useEffect(() => {

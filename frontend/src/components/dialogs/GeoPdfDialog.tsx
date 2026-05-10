@@ -180,35 +180,36 @@ function GeoPdfDialog({
 
   // ── Effects ──────────────────────────────────────────────────────────────
 
-  // Sync base layer on open + initialize extent from map center
+  // Sync layers + initialise extent from current map view on first open.
   useEffect(() => {
-    if (open) {
-      if (!returningFromMapSelect.current) {
-        setSelectedBaseLayer(
-          activeLayerId.startsWith("osm") ? "six-topo" : activeLayerId,
-        );
-        setSelectedOverlays(new Set(masterTopoLayers.map((l) => l.id)));
-      }
-      returningFromMapSelect.current = false;
+    if (!open) return;
 
-      // Initialize extent from current map center when no extent is set
-      setExtentState((prev) => {
-        if (prev.north !== 0 || prev.south !== 0) return prev;
-        if (!mapCenter) return prev;
-        const paper = getPaperDimensions(prev);
-        const mapW = paper.w - 2 * GEOPDF_PADDING_MM;
-        const mapH = paper.h - 2 * GEOPDF_PADDING_MM;
-        const widthM = prev.scale * (mapW / 1000);
-        const heightM = prev.scale * (mapH / 1000);
-        const bounds = extentFromCentreAndSize(
-          mapCenter.lat,
-          mapCenter.lng,
-          widthM,
-          heightM,
-        );
-        return { ...prev, ...bounds };
-      });
+    if (!returningFromMapSelect.current) {
+      setSelectedBaseLayer(
+        activeLayerId.startsWith("osm") ? "six-topo" : activeLayerId,
+      );
+      setSelectedOverlays(new Set(masterTopoLayers.map((l) => l.id)));
     }
+    returningFromMapSelect.current = false;
+
+    // Only seed the extent when it has never been set; preserve any prior
+    // selection so closing and reopening the dialog keeps the user's bounds.
+    setExtentState((prev) => {
+      if (prev.north !== 0 || prev.south !== 0) return prev;
+      if (!mapCenter) return prev;
+      const paper = getPaperDimensions(prev);
+      const mapW = paper.w - 2 * GEOPDF_PADDING_MM;
+      const mapH = paper.h - 2 * GEOPDF_PADDING_MM;
+      const widthM = prev.scale * (mapW / 1000);
+      const heightM = prev.scale * (mapH / 1000);
+      const bounds = extentFromCentreAndSize(
+        mapCenter.lat,
+        mapCenter.lng,
+        widthM,
+        heightM,
+      );
+      return { ...prev, ...bounds };
+    });
   }, [open, activeLayerId, masterTopoLayers, mapCenter]);
 
   // Fetch templates on open (only in normal mode)
