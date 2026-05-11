@@ -347,6 +347,9 @@ def merge_into_master(layer_name: str, job_mbtiles: Path, tmp_dir: str,
             log.info(f"Merging {job_mbtiles.name} into master {layer_name} (raster, footprint-aware) …")
             with sqlite3.connect(str(master_path)) as conn:
                 _normalize_mbtiles_schema(conn)
+                master_count_before = conn.execute(
+                    "SELECT COUNT(*) FROM tiles"
+                ).fetchone()[0]
                 conn.execute("ATTACH DATABASE ? AS job", (str(job_mbtiles),))
 
                 job_tiles = conn.execute(
@@ -354,19 +357,38 @@ def merge_into_master(layer_name: str, job_mbtiles: Path, tmp_dir: str,
                 ).fetchall()
                 conn.execute("DETACH DATABASE job")
 
+                n_total = len(job_tiles)
+                n_skipped = n_inserted = n_replaced = n_composited = 0
                 for z, x, y, new_data in job_tiles:
                     if footprint_geom is not None:
-                        _raster_merge_tile(conn, z, x, y, new_data, footprint_geom)
+                        action = _raster_merge_tile(conn, z, x, y, new_data, footprint_geom)
+                        if action == "skip":
+                            n_skipped += 1
+                        elif action == "insert":
+                            n_inserted += 1
+                        elif action == "replace":
+                            n_replaced += 1
+                        elif action == "composite":
+                            n_composited += 1
                     else:
-                        # No footprint: fall back to hard replace
                         conn.execute(
                             "INSERT OR REPLACE INTO tiles "
                             "(zoom_level, tile_column, tile_row, tile_data) VALUES (?,?,?,?)",
                             (z, x, y, sqlite3.Binary(new_data)),
                         )
+                        n_replaced += 1
 
                 _update_master_bounds_standalone(conn, job_mbtiles)
                 conn.commit()
+                master_count_after = conn.execute(
+                    "SELECT COUNT(*) FROM tiles"
+                ).fetchone()[0]
+                log.info(
+                    f"Merge stats for {layer_name}: job_tiles={n_total} "
+                    f"(skip_outside_fp={n_skipped}, new_inserts={n_inserted}, "
+                    f"hard_replace={n_replaced}, boundary_composite={n_composited}); "
+                    f"master tile count {master_count_before} → {master_count_after}"
+                )
 
         with sqlite3.connect(str(master_path)) as conn:
             row = conn.execute("SELECT value FROM metadata WHERE name='maxzoom'").fetchone()
@@ -473,13 +495,15 @@ def _load_footprint_geom(footprint_path: str):
 
 
 def _raster_merge_tile(master_conn: sqlite3.Connection, z: int, x: int, y_tms: int,
-                       new_data: bytes, footprint_geom):
+                       new_data: bytes, footprint_geom) -> str:
     """Merge one raster tile into master using footprint-aware overwrite.
 
     Fully-covered tiles are hard-replaced. Boundary tiles have their master
     pixels inside the footprint zeroed, then the new tile is alpha-composited
     on top. Tiles outside the footprint are left untouched (shouldn't occur
     in practice since job tiles are rendered inside the footprint, but guarded).
+
+    Returns one of: "skip", "insert", "replace", "composite" for diagnostics.
     """
     from shapely.geometry import box as shapely_box
 
@@ -487,7 +511,7 @@ def _raster_merge_tile(master_conn: sqlite3.Connection, z: int, x: int, y_tms: i
     tile_box = shapely_box(lon_min, lat_min, lon_max, lat_max)
 
     if not footprint_geom.intersects(tile_box):
-        return  # Outside footprint — skip
+        return "skip"
 
     existing = master_conn.execute(
         "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?",
@@ -495,18 +519,17 @@ def _raster_merge_tile(master_conn: sqlite3.Connection, z: int, x: int, y_tms: i
     ).fetchone()
 
     if existing is None or footprint_geom.contains(tile_box):
-        # No existing tile, or tile fully inside footprint → hard replace
         master_conn.execute(
             "INSERT OR REPLACE INTO tiles (zoom_level, tile_column, tile_row, tile_data) "
             "VALUES (?,?,?,?)",
             (z, x, y_tms, sqlite3.Binary(new_data)),
         )
-        return
+        return "insert" if existing is None else "replace"
 
     # Boundary tile: erase master pixels inside footprint, then paste new tile
     inter = footprint_geom.intersection(tile_box)
     if inter.is_empty:
-        return
+        return "skip"
 
     TILE_SIZE = 256
     tile_w = lon_max - lon_min
@@ -552,6 +575,7 @@ def _raster_merge_tile(master_conn: sqlite3.Connection, z: int, x: int, y_tms: i
         "UPDATE tiles SET tile_data=? WHERE zoom_level=? AND tile_column=? AND tile_row=?",
         (sqlite3.Binary(buf.getvalue()), z, x, y_tms),
     )
+    return "composite"
 
 
 def rebuild_vector_master(layer_name: str, geojson_dir: str, tmp_dir: str):

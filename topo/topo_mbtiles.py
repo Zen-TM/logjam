@@ -569,8 +569,14 @@ def run_pdal_sequential_density(las_files: List[str], dtm_path: str,
         os.remove(p)
 
 
-def fill_nodata(src_path: str, dst_path: str, max_distance: int = 5):
-    """Fill small nodata holes (e.g. under dense canopy) using GDAL."""
+def fill_nodata(src_path: str, dst_path: str, max_distance: int = 100):
+    """Fill nodata holes (e.g. under dense canopy, water, LAZ-tile seams) using GDAL.
+
+    Default search distance is 100 pixels (= 100 m at 1 m DTM resolution), enough to
+    bridge typical canopy gaps and river ribbons without smearing detail across true
+    edge boundaries — fill_nodata only interpolates from valid pixels surrounding a
+    hole, so it cannot extend the data outward beyond the original footprint.
+    """
     log.info(f"Filling nodata in {os.path.basename(src_path)} …")
     ds = gdal.Open(src_path)
     driver = gdal.GetDriverByName("GTiff")
@@ -622,17 +628,18 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
     """Polygonize the valid-pixel mask of a DTM raster → tight WGS84 footprint GeoJSON.
 
     Produces a single connected outer footprint with no interior holes.
+    Assumes the input DTM has already been hole-filled (fill_nodata) so the
+    valid-pixel mask is close to the true data extent — this keeps the
+    footprint tight against the rendered tiles instead of expanding beyond it.
     Pipeline:
       1. Build a 1 m valid-pixel binary mask.
       2. Downsample 10× for speed (~10 m effective resolution).
-      3. Morphologically close the downsampled mask with a 5-cell radius
-         (~50 m) so narrow nodata strips along LAZ-tile seams, rivers, and
-         dense-canopy gaps are filled before polygonization.
-      4. Polygonize, union, then buffer +50 m / −50 m to merge close-but-
-         disjoint components from ragged edges.
-      5. Keep only the largest connected polygon and take its exterior ring,
-         discarding any interior holes.
-      6. Simplify (~50 m tolerance) and reproject to WGS84.
+      3. Morphologically close the downsampled mask with a 2-cell radius
+         (~20 m) so narrow residual nodata strips along LAZ-tile seams are
+         bridged before polygonization, without dilating the outer edge.
+      4. Polygonize, union, keep the largest connected component, take its
+         exterior ring (drops any interior holes).
+      5. Simplify (~50 m tolerance) and reproject to WGS84.
     """
     ds = gdal.Open(dtm_path)
     band = ds.GetRasterBand(1)
@@ -662,10 +669,10 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
     gdal.Warp(small_ds, mask_ds, resampleAlg=gdal.GRA_NearestNeighbour)
 
     # Morphological close on the downsampled mask: dilate then erode with a
-    # 5-cell (~50 m) radius. Bridges narrow nodata strips so the polygonizer
-    # produces a clean outer hull instead of swiss cheese.
+    # 2-cell (~20 m) radius. Bridges narrow residual nodata strips without
+    # noticeably dilating the outer edge of the data.
     small_arr = small_ds.GetRasterBand(1).ReadAsArray()
-    closed_arr = _binary_close(small_arr, radius=5)
+    closed_arr = _binary_close(small_arr, radius=2)
     small_ds.GetRasterBand(1).WriteArray(closed_arr)
 
     # Polygonize
@@ -702,19 +709,15 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
         footprint_merc = shapely_box(xmin, ymin, xmax, ymax)
     else:
         merged = unary_union(polys)
-        # Buffer +/- 50 m to merge close-but-disjoint components left behind
-        # by ragged tile edges (the binary close above handles narrow gaps;
-        # this handles wider seam diagonals that survived).
-        merged = merged.buffer(50.0).buffer(-50.0)
         # Keep only the largest connected component — outliers from stray
         # tiles or noise pixels shouldn't shape the footprint.
         if merged.geom_type == "MultiPolygon":
             merged = max(merged.geoms, key=lambda g: g.area)
-        # Drop any residual interior rings.
+        # Drop any residual interior rings by rebuilding from the exterior ring.
         if merged.geom_type == "Polygon":
             footprint_merc = Polygon(merged.exterior)
         else:
-            # Defensive: buffer may rarely return a non-Polygon (e.g. empty)
+            # Defensive: union may rarely return a non-Polygon (e.g. empty)
             xmin = gt[0]; xmax = gt[0] + gt[1] * ds.RasterXSize
             ymax = gt[3]; ymin = gt[3] + gt[5] * ds.RasterYSize
             footprint_merc = shapely_box(xmin, ymin, xmax, ymax)
@@ -882,9 +885,20 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, understorey_count_path
     scrub_ds        = gdal.Open(scrub_aligned)
     understorey_ds  = gdal.Open(understorey_aligned)
 
-    # nodata in the count rasters is 0, so reading as-is gives correct counts.
-    scrub_arr       = scrub_ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
-    understorey_arr = understorey_ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
+    # PDAL writes count rasters with nodata=0 (cells with no points matching the
+    # `where` filter). align_raster_to_reference then warps with dstNodata=-9999,
+    # so zero-count cells arrive here marked as -9999. For density purposes
+    # "no points in this band" should be treated as a count of 0, not as nodata —
+    # otherwise -9999 sentinels poison the windowed box sums below and silence
+    # the whole layer. Clamp anything non-positive (sentinel or zero) to zero.
+    def _read_count(ds):
+        a = ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
+        a[~np.isfinite(a)] = 0.0
+        a[a < 0] = 0.0
+        return a
+
+    scrub_arr       = _read_count(scrub_ds)
+    understorey_arr = _read_count(understorey_ds)
 
     scrub_sum       = _box_sum_2d(scrub_arr,       SCRUB_DENSITY_WINDOW_M)
     understorey_sum = _box_sum_2d(understorey_arr, SCRUB_DENSITY_WINDOW_M)
