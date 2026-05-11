@@ -5,7 +5,7 @@ import Map, { BASE_LAYERS } from "./map/Map";
 import SignIn from "./SignIn";
 import ImportDialog from "./dialogs/ImportDialog";
 import TopoDialog from "./dialogs/TopoDialog";
-import type { TopoJob, DownloadUrl } from "./dialogs/TopoDialog";
+import type { TopoJob, DownloadUrl, GeoJsonPolygon } from "./dialogs/TopoDialog";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
 import GeoPdfTemplatesDialog from "./dialogs/GeoPdfTemplatesDialog";
 import type { GeoPdfTemplate } from "./dialogs/GeoPdfTemplatesDialog";
@@ -30,7 +30,7 @@ import {
 } from "../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { useAuth } from "../useAuth";
-import { Alert, Button, Snackbar } from "@mui/material";
+import { Button } from "@mui/material";
 import { useThemePreferences } from "../themePreferences";
 
 function App() {
@@ -72,8 +72,6 @@ function App() {
 
   // Topo dialog (per-job overlays)
   const [showTopo, setShowTopo] = useState(false);
-  const [selectingTopoBbox, setSelectingTopoBbox] = useState(false);
-  const [pendingTopoBbox, setPendingTopoBbox] = useState<TBbox | null>(null);
   const [topoOverlayLayers, setTopoOverlayLayers] = useState<
     { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]
   >([]);
@@ -81,8 +79,7 @@ function App() {
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
   const [topoDownloadUrls, setTopoDownloadUrls] = useState<Record<string, DownloadUrl[]>>({});
-  const [topoSnackbar, setTopoSnackbar] = useState<{ jobId: string; bbox: TBbox | null } | null>(null);
-  const [topoFlyTarget, setTopoFlyTarget] = useState<TBbox | null>(null);
+  const [topoFlyTarget, setTopoFlyTarget] = useState<GeoJsonPolygon | null>(null);
 
   // GeoPDF dialog
   const [showGeoPdf, setShowGeoPdf] = useState(false);
@@ -258,7 +255,8 @@ function App() {
               `/topo-jobs/${updated.id}/download-urls`,
             );
             setTopoDownloadUrls((prev) => ({ ...prev, [updated.id]: urls }));
-            setTopoSnackbar({ jobId: updated.id, bbox: updated.bbox });
+            setActiveTopoJobs((prev) => prev.filter((j) => j.id !== updated.id));
+            refetchNotifications();
           }
         } catch {
           // silent — will retry next tick
@@ -330,47 +328,12 @@ function App() {
       />
       <TopoDialog
         open={showTopo}
-        onClose={() => {
-          setShowTopo(false);
-          setSelectingTopoBbox(false);
-        }}
-        onSelectBbox={() => {
-          setShowTopo(false);
-          setSelectingTopoBbox(true);
-        }}
-        pendingBbox={pendingTopoBbox}
+        onClose={() => setShowTopo(false)}
         onLayersToggle={setTopoOverlayLayers}
         jobs={activeTopoJobs}
         downloadUrlsMap={topoDownloadUrls}
         onJobCreated={handleTopoJobCreated}
       />
-      <Snackbar
-        open={!!topoSnackbar}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        onClose={() => setTopoSnackbar(null)}
-      >
-        <Alert
-          severity="success"
-          onClose={() => setTopoSnackbar(null)}
-          action={
-            topoSnackbar?.bbox ? (
-              <Button
-                size="small"
-                color="inherit"
-                onClick={() => {
-                  setLidarEnabled(true);
-                  setTopoFlyTarget(topoSnackbar.bbox);
-                  setTopoSnackbar(null);
-                }}
-              >
-                Zoom to map
-              </Button>
-            ) : undefined
-          }
-        >
-          LiDAR topo complete!
-        </Alert>
-      </Snackbar>
       <GeoPdfDialog
         open={showGeoPdf}
         onClose={() => {
@@ -419,6 +382,10 @@ function App() {
         <SidebarPanel
           activePanel={activePanel}
           onClose={handlePanelClose}
+          onTopoFlyTarget={(footprint) => {
+            setLidarEnabled(true);
+            setTopoFlyTarget(footprint);
+          }}
           showOwnedCanyons={showOwnedCanyons}
           setShowOwnedCanyons={setShowOwnedCanyons}
           showSharedCanyons={showSharedCanyons}
@@ -479,12 +446,6 @@ function App() {
         onCoordsPicked={handleCoordsPicked}
         selectingArea={selectingArea}
         onAreaSelected={handleAreaSelected}
-        selectingBbox={selectingTopoBbox}
-        onBboxSelected={(bbox) => {
-          setPendingTopoBbox(bbox);
-          setSelectingTopoBbox(false);
-          setShowTopo(true);
-        }}
         topoLayers={combinedTopoLayers}
         activeLayerId={activeLayerId}
         selectingGeoPdfExtent={selectingGeoPdfExtent}

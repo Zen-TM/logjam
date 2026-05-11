@@ -10,6 +10,7 @@ import type {
   TAnalytics,
 } from "../../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
+import type { GeoJsonPolygon } from "../dialogs/TopoDialog";
 import classes from "./SidebarPanel.module.css";
 import OverlaysPanel from "./panels/OverlaysPanel";
 import LayersPanel from "./panels/LayersPanel";
@@ -38,6 +39,7 @@ const PANEL_TITLES: Record<PanelId, string> = {
 function SidebarPanel({
   activePanel,
   onClose,
+  onTopoFlyTarget,
   // Overlays
   showOwnedCanyons,
   setShowOwnedCanyons,
@@ -94,6 +96,7 @@ function SidebarPanel({
 }: {
   activePanel: PanelId | null;
   onClose: () => void;
+  onTopoFlyTarget: (footprint: GeoJsonPolygon) => void;
   // Overlays
   showOwnedCanyons: boolean;
   setShowOwnedCanyons: (show: boolean) => void;
@@ -218,6 +221,7 @@ function SidebarPanel({
             onRefetchFriends={onRefetchFriends}
             setSelectedCanyonID={setSelectedCanyonID}
             setActivePanel={setActivePanel}
+            onTopoFlyTarget={onTopoFlyTarget}
           />
         )}
         {activePanel === "analytics" && (

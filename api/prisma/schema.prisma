@@ -139,8 +139,10 @@ model TopoJob {
   userId        String   @map("user_id")
   status        String   @default("uploading")
   // status values: uploading | pending | processing | complete | failed
-  bbox          Json?
+  name          String?
   footprint     Json?
+  tileCount     Int?     @map("tile_count")
+  estimatedSeconds Int?  @map("estimated_seconds")
   layerOptions  Json?    @map("layer_options")
   s3InputKey    String?  @map("s3_input_key")
   s3OutputKeys  Json?    @map("s3_output_keys")

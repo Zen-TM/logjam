@@ -103,6 +103,17 @@ def get_job(conn, job_id: str) -> dict:
     return dict(row)
 
 
+def create_notification(conn, user_id: str, notif_type: str, payload: dict):
+    import uuid as _uuid
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO notifications (id, user_id, type, payload, read, created_at) "
+            "VALUES (%s, %s, %s, %s, false, NOW())",
+            (str(_uuid.uuid4()), user_id, notif_type, json.dumps(payload)),
+        )
+    conn.commit()
+
+
 def get_user_email(conn, user_id: str) -> str | None:
     with conn.cursor() as cur:
         cur.execute("SELECT email FROM users WHERE id = %s", (user_id,))
@@ -868,6 +879,12 @@ def main():
         update_status(conn, JOB_ID, "complete", **extra)
         log.info(f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded")
 
+        create_notification(conn, job["user_id"], "topo_complete", {
+            "jobId": JOB_ID,
+            "jobName": job.get("name"),
+            "footprint": extra.get("footprint"),
+        })
+
         email = get_user_email(conn, job["user_id"])
         if email:
             send_completion_email(email, JOB_ID, output_keys)
@@ -877,6 +894,10 @@ def main():
     except Exception as e:
         log.error(f"Job {JOB_ID} failed: {e}", exc_info=True)
         update_status(conn, JOB_ID, "failed", error_message=str(e))
+        create_notification(conn, job["user_id"], "topo_failed", {
+            "jobId": JOB_ID,
+            "jobName": job.get("name"),
+        })
         # Do NOT delete SQS message — allows retry after visibility timeout
         sys.exit(1)
 

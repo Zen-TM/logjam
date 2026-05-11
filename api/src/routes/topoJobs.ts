@@ -37,17 +37,21 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const { bbox, layerOptions, filename } = req.body;
+    const { layerOptions, tileCount, jobName, filename } = req.body;
 
-    if (!bbox || !layerOptions?.length) {
-      throw new AppError(400, "bbox and layerOptions are required");
+    if (!layerOptions?.length) {
+      throw new AppError(400, "layerOptions is required");
     }
+
+    const estimatedSeconds = tileCount ? Math.round(tileCount * 8.5) * 60 : null;
 
     const job = await prisma.topoJob.create({
       data: {
         userId: user.id,
         status: "uploading",
-        bbox,
+        name: jobName ?? null,
+        tileCount: tileCount ?? null,
+        estimatedSeconds,
         layerOptions,
       },
     });
@@ -144,7 +148,10 @@ router.get(
       select: {
         id: true,
         status: true,
-        bbox: true,
+        name: true,
+        footprint: true,
+        tileCount: true,
+        estimatedSeconds: true,
         layerOptions: true,
         errorMessage: true,
         createdAt: true,

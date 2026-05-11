@@ -2,6 +2,7 @@ import { useState } from "react";
 import classes from "./NotificationsPanel.module.css";
 import type { TNotification } from "../../../canyonUtils";
 import type { PanelId } from "../panels";
+import type { GeoJsonPolygon } from "../../dialogs/TopoDialog";
 import {
   markNotificationRead,
   markAllNotificationsRead,
@@ -17,12 +18,14 @@ function NotificationsPanel({
   onRefetchFriends,
   setSelectedCanyonID,
   setActivePanel,
+  onTopoFlyTarget,
 }: {
   notifications: TNotification[];
   onRefetchNotifications: () => void;
   onRefetchFriends: () => void;
   setSelectedCanyonID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
+  onTopoFlyTarget: (footprint: GeoJsonPolygon) => void;
 }) {
   const [actionedIds, setActionedIds] = useState<Set<string>>(new Set());
 
@@ -101,6 +104,14 @@ function NotificationsPanel({
                   `${n.payload.acceptedByUsername} accepted your friend request`}
                 {n.type === "canyon_shared" &&
                   `${n.payload.sharedByUsername} shared ${n.payload.canyonName} with you`}
+                {n.type === "topo_complete" &&
+                  (n.payload.jobName
+                    ? `${n.payload.jobName} topo complete`
+                    : "LiDAR topo processing complete")}
+                {n.type === "topo_failed" &&
+                  (n.payload.jobName
+                    ? `${n.payload.jobName} topo failed`
+                    : "LiDAR topo processing failed")}
               </div>
               <div className={classes.notificationTime}>
                 {new Date(n.createdAt).toLocaleDateString()}
@@ -124,6 +135,23 @@ function NotificationsPanel({
                     }}
                   >
                     Decline
+                  </button>
+                </div>
+              )}
+              {n.type === "topo_complete" && !!n.payload.footprint && (
+                <div className={classes.notificationActions}>
+                  <button
+                    className={classes.acceptButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTopoFlyTarget(n.payload.footprint as GeoJsonPolygon);
+                      if (!n.read) {
+                        markNotificationRead(n.id).catch(() => {});
+                        onRefetchNotifications();
+                      }
+                    }}
+                  >
+                    Zoom to map
                   </button>
                 </div>
               )}
