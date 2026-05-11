@@ -346,19 +346,25 @@ def process_job(job: dict, tmp: str) -> list[dict]:
 
         pmtiles_key: Optional[str] = None
         if name in ALL_LAYERS:
-            pmtiles_path = output_dir / f"{name}.pmtiles"
-            pmtiles_key  = f"outputs/{job_id}/{name}.pmtiles"
-
-            log.info(f"Converting {name} → PMTiles …")
             with sqlite3.connect(str(mbtiles_path)) as _conn:
                 _row = _conn.execute("SELECT value FROM metadata WHERE name='maxzoom'").fetchone()
                 maxzoom = int(_row[0]) if _row else 18
-            mbtiles_to_pmtiles(str(mbtiles_path), str(pmtiles_path), maxzoom)
+                tile_count = _conn.execute("SELECT COUNT(*) FROM tiles").fetchone()[0]
 
-            log.info(f"Uploading {name}.pmtiles …")
-            s3.upload_file(str(pmtiles_path), BUCKET, pmtiles_key)
+            if tile_count == 0:
+                # Layer is entirely transparent (e.g. vegetation on a Mode-A job).
+                # mbtiles_to_pmtiles crashes on empty inputs. Leave pmtiles_key=None
+                # so the frontend knows there's no PMTiles for this layer.
+                log.info(f"Skipping PMTiles conversion for {name} (0 tiles — layer is empty)")
+            else:
+                pmtiles_path = output_dir / f"{name}.pmtiles"
+                pmtiles_key  = f"outputs/{job_id}/{name}.pmtiles"
+                log.info(f"Converting {name} → PMTiles ({tile_count} tiles) …")
+                mbtiles_to_pmtiles(str(mbtiles_path), str(pmtiles_path), maxzoom)
+                log.info(f"Uploading {name}.pmtiles …")
+                s3.upload_file(str(pmtiles_path), BUCKET, pmtiles_key)
         else:
-            log.info(f"Skipping PMTiles conversion for {name} (not in ALL_LAYERS — MBTiles-only)")
+            log.info(f"Skipping PMTiles conversion for {name} (MBTiles-only layer)")
 
         output_keys.append({
             "name":       name,
