@@ -48,7 +48,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     unzip \
     # Build tools (needed for tippecanoe)
-    git \
     build-essential \
     libsqlite3-dev \
     zlib1g-dev \
@@ -59,7 +58,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #     Used by the worker to produce vector tiles for contours
 #     and OSM features before merging into master PMTiles.
 # ------------------------------------------------------------
-RUN git clone --depth 1 https://github.com/felt/tippecanoe.git /tmp/tippecanoe \
+RUN mkdir -p /tmp/tippecanoe \
+    && curl -fsSL https://github.com/felt/tippecanoe/archive/refs/heads/main.tar.gz | tar -xz -C /tmp/tippecanoe --strip-components=1 \
     && cd /tmp/tippecanoe \
     && make -j$(nproc) \
     && make install \
