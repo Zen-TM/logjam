@@ -3,7 +3,8 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { AppError } from "../middleware/errorHandler";
 import { generateGeoPdf } from "../services/generateGeoPdf";
 import type { GeoPdfConfig } from "@logjam/shared";
-import { MASTER_TOPO_LAYERS } from "../constants/topoLayers";
+import { TOPO_LAYERS } from "../constants/topoLayers";
+import prisma from "../services/prisma";
 
 const router = Router();
 
@@ -13,7 +14,7 @@ const VALID_BASE_LAYERS = new Set([
 ]);
 
 const VALID_PAPER_SIZES = new Set(["A2", "A3", "A4", "A5", "custom"]);
-const VALID_OVERLAY_NAMES = new Set<string>(MASTER_TOPO_LAYERS.map(l => l.name));
+const VALID_OVERLAY_NAMES = new Set<string>(TOPO_LAYERS.map(l => l.name));
 
 router.post(
   "/",
@@ -57,7 +58,15 @@ router.post(
       }
     }
 
-    const pdfBuffer = await generateGeoPdf(config);
+    // Resolve the authenticated user's UUID so the GeoPDF service can scope
+    // its per-job overlay lookups to this user's completed topo jobs only.
+    const userRow = await prisma.user.findUnique({
+      where: { cognitoId: req.user!.sub },
+      select: { id: true },
+    });
+    if (!userRow) throw new AppError(404, "User not found");
+
+    const pdfBuffer = await generateGeoPdf(config, userRow.id);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(

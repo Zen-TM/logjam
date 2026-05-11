@@ -15,7 +15,8 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import type { TBbox } from "../map/Map";
 import { BASE_LAYERS } from "../map/Map";
-import { MASTER_TOPO_LAYERS } from "../../topoLayerTypes";
+import { TOPO_LAYERS } from "../../topoLayerTypes";
+import type { CompletedTopoJob } from "../../topoLayerTypes";
 import { apiFetch, apiFetchBlob, type TCanyon } from "../../canyonUtils";
 import type {
   ExtentState,
@@ -100,7 +101,7 @@ function GeoPdfDialog({
   pendingExtent,
   pendingScale,
   activeLayerId,
-  masterTopoLayers,
+  completedTopoJobs,
   mapCenter,
   canyons,
   sharedCanyons,
@@ -119,12 +120,7 @@ function GeoPdfDialog({
   pendingExtent: TBbox | null;
   pendingScale: number | null;
   activeLayerId: string;
-  masterTopoLayers: {
-    id: string;
-    pmtilesUrl: string;
-    format?: string;
-    bounds?: { north: number; south: number; east: number; west: number };
-  }[];
+  completedTopoJobs: CompletedTopoJob[];
   mapCenter?: { lat: number; lng: number } | null;
   canyons?: TCanyon[];
   sharedCanyons?: TCanyon[];
@@ -148,7 +144,7 @@ function GeoPdfDialog({
     activeLayerId.startsWith("osm") ? "six-topo" : activeLayerId,
   );
   const [selectedOverlays, setSelectedOverlays] = useState<Set<string>>(() => {
-    return new Set(masterTopoLayers.map((l) => l.id));
+    return new Set(TOPO_LAYERS.map((l) => l.name));
   });
 
   // Map elements
@@ -193,7 +189,7 @@ function GeoPdfDialog({
       setSelectedBaseLayer(
         activeLayerId.startsWith("osm") ? "six-topo" : activeLayerId,
       );
-      setSelectedOverlays(new Set(masterTopoLayers.map((l) => l.id)));
+      setSelectedOverlays(new Set(TOPO_LAYERS.map((l) => l.name)));
     }
     returningFromMapSelect.current = false;
 
@@ -215,7 +211,7 @@ function GeoPdfDialog({
       );
       return { ...prev, ...bounds };
     });
-  }, [open, activeLayerId, masterTopoLayers, mapCenter]);
+  }, [open, activeLayerId, completedTopoJobs, mapCenter]);
 
   // Fetch templates on open (only in normal mode)
   useEffect(() => {
@@ -271,27 +267,46 @@ function GeoPdfDialog({
   // Clear contour interval text when contours overlay is deselected
   useEffect(() => {
     const hasContours =
-      selectedOverlays.has("contours") ||
-      selectedOverlays.has("master-contours");
+      selectedOverlays.has("contours");
     if (!hasContours) setContourEnabled(false);
   }, [selectedOverlays]);
 
-  // True when any master LiDAR layer's bounds overlap the current export extent.
-  // Falls back to true when bounds are unknown or extent is uninitialised — never wrongly hides.
+  // True when any of the user's completed-job footprints overlaps the current
+  // export extent. Falls back to true when no footprints are stored or the
+  // extent is uninitialised — never wrongly hides.
   const lidarOverlap = useMemo(() => {
     if (templateMode) return true;
     const ext = extentState;
     if (ext.north <= ext.south || ext.east <= ext.west) return true;
-    const withBounds = masterTopoLayers.filter((l) => l.bounds);
-    if (withBounds.length === 0) return true;
-    return withBounds.some(
-      (l) =>
-        l.bounds!.east > ext.west &&
-        l.bounds!.west < ext.east &&
-        l.bounds!.north > ext.south &&
-        l.bounds!.south < ext.north,
-    );
-  }, [masterTopoLayers, extentState, templateMode]);
+    const withFp = completedTopoJobs.filter((j) => j.footprint);
+    if (withFp.length === 0) return true;
+    return withFp.some((j) => {
+      const fp = j.footprint!;
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      const visit = (pt: number[]) => {
+        if (pt[0] < minX) minX = pt[0];
+        if (pt[0] > maxX) maxX = pt[0];
+        if (pt[1] < minY) minY = pt[1];
+        if (pt[1] > maxY) maxY = pt[1];
+      };
+      const walkRings = (rings: number[][][]) =>
+        rings.forEach((r) => r.forEach(visit));
+      if (fp.type === "Polygon") {
+        walkRings(fp.coordinates as number[][][]);
+      } else if (fp.type === "MultiPolygon") {
+        (fp.coordinates as number[][][][]).forEach(walkRings);
+      } else {
+        return true; // unknown geometry — defensively include
+      }
+      if (!Number.isFinite(minX)) return true;
+      return (
+        maxX > ext.west &&
+        minX < ext.east &&
+        maxY > ext.south &&
+        minY < ext.north
+      );
+    });
+  }, [completedTopoJobs, extentState, templateMode]);
 
   // Clear contour element when LiDAR coverage leaves the extent
   useEffect(() => {
@@ -1049,7 +1064,7 @@ function GeoPdfDialog({
             <div className={classes.layerColumn}>
               <div className={classes.layerColumnLabel}>Overlays</div>
               {lidarOverlap &&
-                MASTER_TOPO_LAYERS.map((layer) => (
+                TOPO_LAYERS.map((layer) => (
                   <label key={layer.name} className={classes.layerOption}>
                     <input
                       type="checkbox"
@@ -1126,18 +1141,14 @@ function GeoPdfDialog({
                 type="checkbox"
                 checked={contourEnabled}
                 onChange={(e) => setContourEnabled(e.target.checked)}
-                disabled={
-                  !selectedOverlays.has("contours") &&
-                  !selectedOverlays.has("master-contours")
-                }
+                disabled={!selectedOverlays.has("contours")}
                 style={{
                   accentColor: "var(--theme-accent)",
                 }}
               />
               <span
                 style={
-                  !selectedOverlays.has("contours") &&
-                  !selectedOverlays.has("master-contours")
+                  !selectedOverlays.has("contours")
                     ? { opacity: 0.5 }
                     : undefined
                 }

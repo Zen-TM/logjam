@@ -1,10 +1,13 @@
 /**
- * Master topo layer types — shared frontend constant.
+ * Topo layer types — shared frontend constant.
  *
  * Canonical source: api/src/constants/topoLayers.ts — keep in sync.
- * Also mirrored in: topo/worker.py → MASTER_LAYERS
+ * Also mirrored in: topo/worker.py → ALL_LAYERS
+ *
+ * Composite is intentionally absent — it's MBTiles-only (email download),
+ * not a map layer.
  */
-export const MASTER_TOPO_LAYERS = [
+export const TOPO_LAYERS = [
   { name: "hillshade", label: "Hillshade", format: "raster" },
   { name: "vegetation", label: "Vegetation", format: "raster" },
   { name: "slope", label: "Slope", format: "raster" },
@@ -12,5 +15,20 @@ export const MASTER_TOPO_LAYERS = [
   { name: "features", label: "Features", format: "vector" },
 ] as const;
 
-export type MasterTopoLayerName = (typeof MASTER_TOPO_LAYERS)[number]["name"];
+export type TopoLayerName = (typeof TOPO_LAYERS)[number]["name"];
 export type TopoLayerFormat = "raster" | "vector";
+
+/** A polygon footprint as returned in GeoJSON form by the topo-jobs API. */
+export type GeoJsonGeometry = {
+  type: string;
+  coordinates: unknown;
+};
+
+/** Per-completed-job overlay payload returned by GET /topo-jobs/completed-overlays. */
+export type CompletedTopoJob = {
+  jobId: string;
+  name: string | null;
+  createdAt: string;
+  footprint: GeoJsonGeometry | null;
+  layers: { name: TopoLayerName; format: TopoLayerFormat; pmtilesUrl: string }[];
+};

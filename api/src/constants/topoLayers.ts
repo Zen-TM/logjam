@@ -1,11 +1,13 @@
 /**
- * Canonical list of master topo layer types.
+ * Canonical list of topo layer types that are rendered on the map and selectable
+ * as GeoPDF overlays. Composite is intentionally absent — it's MBTiles-only
+ * (email download), not a map layer.
  *
  * Keep in sync with:
- *   - topo/worker.py          → MASTER_LAYERS
+ *   - topo/worker.py          → ALL_LAYERS
  *   - frontend/src/topoLayerTypes.ts
  */
-export const MASTER_TOPO_LAYERS = [
+export const TOPO_LAYERS = [
   { name: "hillshade", label: "Hillshade", format: "raster" },
   { name: "vegetation", label: "Vegetation", format: "raster" },
   { name: "slope", label: "Slope", format: "raster" },
@@ -13,6 +15,6 @@ export const MASTER_TOPO_LAYERS = [
   { name: "features", label: "Features", format: "vector" },
 ] as const;
 
-export type MasterTopoLayer = (typeof MASTER_TOPO_LAYERS)[number];
-export type MasterTopoLayerName = MasterTopoLayer["name"];
+export type TopoLayerMeta = (typeof TOPO_LAYERS)[number];
+export type TopoLayerName = TopoLayerMeta["name"];
 export type TopoLayerFormat = "raster" | "vector";

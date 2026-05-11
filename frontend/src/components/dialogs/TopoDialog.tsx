@@ -5,9 +5,6 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  Checkbox,
-  FormControlLabel,
-  FormGroup,
   Typography,
   Box,
   CircularProgress,
@@ -25,7 +22,6 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { apiFetch } from "../../canyonUtils";
-import { MASTER_TOPO_LAYERS } from "../../topoLayerTypes";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,7 +49,7 @@ export type TopoJob = {
   createdAt: string;
   updatedAt: string;
   s3OutputKeys:
-    | { name: string; mbtilesKey: string; pmtilesKey: string }[]
+    | { name: string; mbtilesKey: string; pmtilesKey: string | null }[]
     | null;
 };
 
@@ -62,20 +58,6 @@ export type DownloadUrl = {
   mbtilesUrl: string;
   pmtilesUrl: string | null;
 };
-
-// ── Constants ────────────────────────────────────────────────────────────────
-
-const ALL_LAYERS = [
-  ...MASTER_TOPO_LAYERS.map((l) => l.name),
-  "composite",
-] as const;
-type LayerName = (typeof ALL_LAYERS)[number];
-
-const LAYER_LABELS: Record<LayerName, string> = {
-  ...Object.fromEntries(MASTER_TOPO_LAYERS.map((l) => [l.name, l.label])),
-  features: "Features (OSM overlay)",
-  composite: "Composite (all layers combined)",
-} as Record<LayerName, string>;
 
 const INSTRUCTIONS_KEY = "topoDialogShowInstructions";
 
@@ -129,21 +111,16 @@ const outlinedAccentSx = {
 export default function TopoDialog({
   open,
   onClose,
-  onLayersToggle,
   jobs,
   downloadUrlsMap,
   onJobCreated,
 }: {
   open: boolean;
   onClose: () => void;
-  onLayersToggle: (layers: { id: string; pmtilesUrl: string }[]) => void;
   jobs: TopoJob[];
   downloadUrlsMap: Record<string, DownloadUrl[]>;
   onJobCreated: (job: TopoJob) => void;
 }) {
-  const [selectedLayers, setSelectedLayers] = useState<Set<LayerName>>(
-    new Set(["composite"]),
-  );
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -153,22 +130,6 @@ export default function TopoDialog({
   );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Per-session overlay toggle state (which job layers are shown on the map)
-  const [overlayIds, setOverlayIds] = useState<Set<string>>(new Set());
-  const overlayLayersRef = useRef<{ id: string; pmtilesUrl: string }[]>([]);
-
-  function toggleLayer(name: LayerName) {
-    setSelectedLayers((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
-        next.add(name);
-      }
-      return next;
-    });
-  }
 
   function toggleInstructions() {
     setShowInstructions((prev) => {
@@ -202,7 +163,6 @@ export default function TopoDialog({
     setError(null);
     setSubmitting(true);
     try {
-      const layers = [...selectedLayers];
       const { tileCount, jobName } = await parseElvisZip(file);
       const { jobId, uploadUrl } = await apiFetch<{
         jobId: string;
@@ -212,7 +172,6 @@ export default function TopoDialog({
         body: {
           tileCount: tileCount || null,
           jobName: jobName || null,
-          layerOptions: layers,
           filename: file.name,
         },
       });
@@ -234,33 +193,6 @@ export default function TopoDialog({
     } finally {
       setSubmitting(false);
     }
-  }
-
-  function toggleMapOverlay(jobId: string, url: DownloadUrl) {
-    const layerId = `${jobId}-${url.name}`;
-    setOverlayIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(layerId)) {
-        next.delete(layerId);
-      } else {
-        next.add(layerId);
-      }
-      // Rebuild overlay layers list across all jobs
-      const newLayers: { id: string; pmtilesUrl: string }[] = [];
-      for (const [jid, urls] of Object.entries(downloadUrlsMap)) {
-        for (const u of urls) {
-          if (u.pmtilesUrl && next.has(`${jid}-${u.name}`)) {
-            newLayers.push({
-              id: `${jid}-${u.name}`,
-              pmtilesUrl: u.pmtilesUrl,
-            });
-          }
-        }
-      }
-      overlayLayersRef.current = newLayers;
-      onLayersToggle(newLayers);
-      return next;
-    });
   }
 
   function handleClose() {
@@ -357,47 +289,19 @@ export default function TopoDialog({
                   )}
                   {isComplete && urls && (
                     <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                      {urls.map((u) => {
-                        const layerId = `${j.id}-${u.name}`;
-                        return (
-                          <Fragment key={u.name}>
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              href={u.mbtilesUrl}
-                              download={`${u.name}.mbtiles`}
-                              sx={outlinedAccentSx}
-                            >
-                              {u.name}.mbtiles
-                            </Button>
-                            {u.pmtilesUrl && (
-                              <Button
-                                size="small"
-                                variant={
-                                  overlayIds.has(layerId)
-                                    ? "contained"
-                                    : "outlined"
-                                }
-                                color={
-                                  overlayIds.has(layerId)
-                                    ? "secondary"
-                                    : undefined
-                                }
-                                onClick={() => toggleMapOverlay(j.id, u)}
-                                sx={
-                                  overlayIds.has(layerId)
-                                    ? { textTransform: "none" }
-                                    : outlinedAccentSx
-                                }
-                              >
-                                {overlayIds.has(layerId)
-                                  ? "Hide on map"
-                                  : "Show on map"}
-                              </Button>
-                            )}
-                          </Fragment>
-                        );
-                      })}
+                      {urls.map((u) => (
+                        <Fragment key={u.name}>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            href={u.mbtilesUrl}
+                            download={`${u.name}.mbtiles`}
+                            sx={outlinedAccentSx}
+                          >
+                            {u.name}.mbtiles
+                          </Button>
+                        </Fragment>
+                      ))}
                     </Box>
                   )}
                 </Box>
@@ -408,32 +312,6 @@ export default function TopoDialog({
             />
           </Box>
         )}
-
-        {/* ── Layer selection ── */}
-        <Typography variant="subtitle2" gutterBottom>
-          Select layers
-        </Typography>
-        <FormGroup>
-          {ALL_LAYERS.map((name) => (
-            <FormControlLabel
-              key={name}
-              control={
-                <Checkbox
-                  checked={selectedLayers.has(name)}
-                  onChange={() => toggleLayer(name)}
-                  size="small"
-                  sx={{
-                    color: "var(--theme-accent)",
-                    "&.Mui-checked": { color: "var(--theme-accent)" },
-                  }}
-                />
-              }
-              label={LAYER_LABELS[name]}
-            />
-          ))}
-        </FormGroup>
-
-        <Divider sx={{ my: 2, borderColor: "rgba(255,255,255,0.1)" }} />
 
         {/* ── Instructions toggle ── */}
         <Box

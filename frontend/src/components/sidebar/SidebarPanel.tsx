@@ -11,6 +11,7 @@ import type {
 } from "../../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import type { GeoJsonPolygon } from "../dialogs/TopoDialog";
+import type { CompletedTopoJob } from "../../topoLayerTypes";
 import classes from "./SidebarPanel.module.css";
 import OverlaysPanel from "./panels/OverlaysPanel";
 import LayersPanel from "./panels/LayersPanel";
@@ -45,13 +46,15 @@ function SidebarPanel({
   setShowOwnedCanyons,
   showSharedCanyons,
   setShowSharedCanyons,
-  onTopoLayersChange,
   lidarEnabled,
   setLidarEnabled,
   lidarLayerToggles,
   setLidarLayerToggles,
   lidarLayerOrder,
   setLidarLayerOrder,
+  completedTopoJobs,
+  lidarJobToggles,
+  setLidarJobToggles,
   // Layers
   activeLayerId,
   onActiveLayerChange,
@@ -102,15 +105,15 @@ function SidebarPanel({
   setShowOwnedCanyons: (show: boolean) => void;
   showSharedCanyons: boolean;
   setShowSharedCanyons: (show: boolean) => void;
-  onTopoLayersChange: (
-    layers: { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[],
-  ) => void;
   lidarEnabled: boolean;
   setLidarEnabled: (v: boolean) => void;
   lidarLayerToggles: Record<string, boolean>;
   setLidarLayerToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
   lidarLayerOrder: string[];
   setLidarLayerOrder: (v: string[] | ((prev: string[]) => string[])) => void;
+  completedTopoJobs: CompletedTopoJob[];
+  lidarJobToggles: Record<string, boolean>;
+  setLidarJobToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
   // Layers
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
@@ -175,13 +178,15 @@ function SidebarPanel({
             setShowOwnedCanyons={setShowOwnedCanyons}
             showSharedCanyons={showSharedCanyons}
             setShowSharedCanyons={setShowSharedCanyons}
-            onTopoLayersChange={onTopoLayersChange}
             lidarEnabled={lidarEnabled}
             setLidarEnabled={setLidarEnabled}
             lidarLayerToggles={lidarLayerToggles}
             setLidarLayerToggles={setLidarLayerToggles}
             lidarLayerOrder={lidarLayerOrder}
             setLidarLayerOrder={setLidarLayerOrder}
+            completedTopoJobs={completedTopoJobs}
+            lidarJobToggles={lidarJobToggles}
+            setLidarJobToggles={setLidarJobToggles}
           />
         )}
         {activePanel === "layers" && (

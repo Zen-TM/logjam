@@ -20,8 +20,33 @@ import { PMTiles } from "pmtiles";
 import type { Source } from "pmtiles";
 import { VectorTile } from "@mapbox/vector-tile";
 import Pbf from "pbf";
-import { MASTER_TOPO_LAYERS } from "../constants/topoLayers";
+import { TOPO_LAYERS } from "../constants/topoLayers";
+import type { TopoLayerName } from "../constants/topoLayers";
 import { AppError } from "../middleware/errorHandler";
+import prisma from "./prisma";
+
+/** Bounding box of a GeoJSON Polygon/MultiPolygon coords ring. */
+function geomBbox(
+  geom: { type: string; coordinates: unknown },
+): { west: number; south: number; east: number; north: number } | null {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const visit = (pt: number[]) => {
+    if (pt[0] < minX) minX = pt[0];
+    if (pt[0] > maxX) maxX = pt[0];
+    if (pt[1] < minY) minY = pt[1];
+    if (pt[1] > maxY) maxY = pt[1];
+  };
+  const walkRings = (rings: number[][][]) => rings.forEach((r) => r.forEach(visit));
+  if (geom.type === "Polygon") {
+    walkRings(geom.coordinates as number[][][]);
+  } else if (geom.type === "MultiPolygon") {
+    (geom.coordinates as number[][][][]).forEach(walkRings);
+  } else {
+    return null;
+  }
+  if (!Number.isFinite(minX)) return null;
+  return { west: minX, south: minY, east: maxX, north: maxY };
+}
 
 // geomagnetism has no type declarations
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -234,7 +259,10 @@ function latLonToCanvasPx(
 
 // ── Main generation pipeline ─────────────────────────────────────────────────
 
-export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
+export async function generateGeoPdf(
+  config: GeoPdfConfig,
+  userId: string,
+): Promise<Buffer> {
   // 1. Paper dimensions (in mm and pt only — canvas will be native tile resolution)
   const paper = getPaperDimensions({
     paperSize: config.paperSize,
@@ -349,43 +377,76 @@ export async function generateGeoPdf(config: GeoPdfConfig): Promise<Buffer> {
       nativeH,
     );
 
-    // Sort by canonical MASTER_TOPO_LAYERS index so hillshade is always at the
+    // Sort by canonical TOPO_LAYERS index so hillshade is always at the
     // bottom and vector layers (contours, features) are always on top, regardless
     // of the order the user selected them.
-    const canonicalOrder: string[] = MASTER_TOPO_LAYERS.map((l) => l.name);
+    const canonicalOrder: string[] = TOPO_LAYERS.map((l) => l.name);
     const sortedOverlays = [...config.overlays].sort(
       (a, b) => canonicalOrder.indexOf(a) - canonicalOrder.indexOf(b),
     );
+
+    // Look up the user's completed topo jobs and filter to those whose
+    // footprint bbox overlaps the export extent. Older jobs render first so
+    // newer ones land on top. Jobs without a stored footprint fall through
+    // defensively (rendered into every export).
+    const completedJobs = await prisma.topoJob.findMany({
+      where: { userId, status: "complete" },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, footprint: true },
+    });
+    const overlappingJobs = completedJobs.filter((j) => {
+      if (!j.footprint) return true;
+      const bb = geomBbox(j.footprint as { type: string; coordinates: unknown });
+      if (!bb) return true;
+      return (
+        bb.east > config.extent.west &&
+        bb.west < config.extent.east &&
+        bb.north > config.extent.south &&
+        bb.south < config.extent.north
+      );
+    });
 
     // Labels are buffered during line rendering and flushed after all overlays so
     // they always appear on top of every line.
     const pendingLabels: PendingLabel[] = [];
     const placedLabelPositions: Array<{ x: number; y: number }> = [];
 
-    for (const overlayName of sortedOverlays) {
-      const layerDef = MASTER_TOPO_LAYERS.find((l) => l.name === overlayName);
+    for (const overlayName of sortedOverlays as TopoLayerName[]) {
+      const layerDef = TOPO_LAYERS.find((l) => l.name === overlayName);
       if (!layerDef) continue;
-      const pmtilesKey = `master/${overlayName}.pmtiles`;
-      const source = new S3Source(topoBucket, pmtilesKey, s3);
-      const archive = new PMTiles(source);
-      if (layerDef.format === "vector") {
-        await fetchAndDrawPMTilesVectorDirect(
-          mapCtx,
-          overlayTransform.tiles,
-          archive,
-          overlayTransform,
-          overlayName,
-          overlayZoom,
-          placedLabelPositions,
-          pendingLabels,
-        );
-      } else {
-        await fetchAndDrawPMTilesRasterDirect(
-          mapCtx,
-          overlayTransform.tiles,
-          archive,
-          overlayTransform,
-        );
+      for (const job of overlappingJobs) {
+        const pmtilesKey = `outputs/${job.id}/${overlayName}.pmtiles`;
+        const source = new S3Source(topoBucket, pmtilesKey, s3);
+        const archive = new PMTiles(source);
+        try {
+          if (layerDef.format === "vector") {
+            await fetchAndDrawPMTilesVectorDirect(
+              mapCtx,
+              overlayTransform.tiles,
+              archive,
+              overlayTransform,
+              overlayName,
+              overlayZoom,
+              placedLabelPositions,
+              pendingLabels,
+            );
+          } else {
+            await fetchAndDrawPMTilesRasterDirect(
+              mapCtx,
+              overlayTransform.tiles,
+              archive,
+              overlayTransform,
+            );
+          }
+        } catch (e) {
+          // A job may legitimately lack a given layer (e.g. Mode-A jobs skip
+          // vegetation). Treat S3 404 / PMTiles errors as "this job doesn't
+          // contribute this overlay" and continue.
+          // eslint-disable-next-line no-console
+          console.warn(
+            `GeoPDF: skipping ${overlayName} for job ${job.id}: ${e instanceof Error ? e.message : e}`,
+          );
+        }
       }
     }
 

@@ -15,7 +15,8 @@ import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
 import type { TFilters, TCanyon } from "../canyonUtils";
 import type { PanelId } from "./sidebar/panels";
-import { MASTER_TOPO_LAYERS } from "../topoLayerTypes";
+import { TOPO_LAYERS } from "../topoLayerTypes";
+import type { CompletedTopoJob } from "../topoLayerTypes";
 import {
   useCanyons,
   useSharedCanyons,
@@ -70,16 +71,17 @@ function App() {
     [],
   );
 
-  // Topo dialog (per-job overlays)
+  // Topo dialog
   const [showTopo, setShowTopo] = useState(false);
-  const [topoOverlayLayers, setTopoOverlayLayers] = useState<
-    { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[]
-  >([]);
 
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
   const [topoDownloadUrls, setTopoDownloadUrls] = useState<Record<string, DownloadUrl[]>>({});
   const [topoFlyTarget, setTopoFlyTarget] = useState<GeoJsonPolygon | null>(null);
+  // All of the user's completed topo jobs (with presigned PMTiles URLs per
+  // layer). Replaces the old single "master" mosaic — each job is its own
+  // set of overlays, controlled per-job in the Overlays panel.
+  const [completedTopoJobs, setCompletedTopoJobs] = useState<CompletedTopoJob[]>([]);
 
   // GeoPDF dialog
   const [showGeoPdf, setShowGeoPdf] = useState(false);
@@ -115,25 +117,43 @@ function App() {
   const [lidarEnabled, setLidarEnabled] = useState(false);
   const [lidarLayerToggles, setLidarLayerToggles] = useState<
     Record<string, boolean>
-  >(() => Object.fromEntries(MASTER_TOPO_LAYERS.map((l) => [l.name, true])));
+  >(() => Object.fromEntries(TOPO_LAYERS.map((l) => [l.name, true])));
   const [lidarLayerOrder, setLidarLayerOrder] = useState<string[]>(
-    MASTER_TOPO_LAYERS.map((l) => l.name),
+    TOPO_LAYERS.map((l) => l.name),
   );
+  // Per-completed-job visibility. Newly fetched jobs default to true (visible).
+  const [lidarJobToggles, setLidarJobToggles] = useState<
+    Record<string, boolean>
+  >({});
 
-  // Master topo layers from the Overlays panel (communal, persistent)
-  const [masterTopoLayers, setMasterTopoLayers] = useState<
-    {
-      id: string;
-      pmtilesUrl: string;
-      format?: "raster" | "vector";
-      bounds?: { north: number; south: number; east: number; west: number };
-    }[]
-  >([]);
-
-  const combinedTopoLayers = useMemo(
-    () => [...masterTopoLayers, ...topoOverlayLayers],
-    [masterTopoLayers, topoOverlayLayers],
-  );
+  // Compose all (job × layer) pairs into the flat list the Map consumes.
+  // Z-order: outer loop = layer (per user-chosen order), inner loop = jobs
+  // (newest first so newer data renders on top of older within the same layer).
+  // A pair is included only when both the layer toggle and the job toggle are on.
+  const combinedTopoLayers = useMemo(() => {
+    if (!lidarEnabled) return [];
+    const out: { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[] = [];
+    for (const layerName of lidarLayerOrder) {
+      if (!lidarLayerToggles[layerName]) continue;
+      for (const job of completedTopoJobs) {
+        if (!(lidarJobToggles[job.jobId] ?? true)) continue;
+        const match = job.layers.find((l) => l.name === layerName);
+        if (!match) continue;
+        out.push({
+          id: `${job.jobId}-${layerName}`,
+          pmtilesUrl: match.pmtilesUrl,
+          format: match.format,
+        });
+      }
+    }
+    return out;
+  }, [
+    lidarEnabled,
+    lidarLayerOrder,
+    lidarLayerToggles,
+    lidarJobToggles,
+    completedTopoJobs,
+  ]);
 
   const startPickingCoords = useCallback(
     (onPicked: (lat: number, lng: number) => void) => {
@@ -237,6 +257,30 @@ function App() {
       .catch(() => {});
   }, [authenticated]);
 
+  // Fetch the user's completed topo jobs (with presigned PMTiles URLs) on
+  // auth and whenever a job transitions to complete.
+  const refetchCompletedTopoJobs = useCallback(() => {
+    return apiFetch<CompletedTopoJob[]>("/topo-jobs/completed-overlays")
+      .then((jobs) => {
+        setCompletedTopoJobs(jobs);
+        setLidarJobToggles((prev) => {
+          // Default newly-seen jobs to visible; preserve prior toggle state
+          // for jobs we already knew about.
+          const next: Record<string, boolean> = { ...prev };
+          for (const j of jobs) {
+            if (next[j.jobId] === undefined) next[j.jobId] = true;
+          }
+          return next;
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    refetchCompletedTopoJobs();
+  }, [authenticated, refetchCompletedTopoJobs]);
+
   // Poll non-terminal jobs every 10 s; fire snackbar on completion
   useEffect(() => {
     const nonTerminal = activeTopoJobs.filter(
@@ -257,6 +301,7 @@ function App() {
             setTopoDownloadUrls((prev) => ({ ...prev, [updated.id]: urls }));
             setActiveTopoJobs((prev) => prev.filter((j) => j.id !== updated.id));
             refetchNotifications();
+            refetchCompletedTopoJobs();
           }
         } catch {
           // silent — will retry next tick
@@ -264,7 +309,7 @@ function App() {
       }
     }, 10_000);
     return () => clearInterval(interval);
-  }, [activeTopoJobs]);
+  }, [activeTopoJobs, refetchNotifications, refetchCompletedTopoJobs]);
 
   const handleTopoJobCreated = useCallback((job: TopoJob) => {
     setActiveTopoJobs((prev) => [job, ...prev]);
@@ -329,7 +374,6 @@ function App() {
       <TopoDialog
         open={showTopo}
         onClose={() => setShowTopo(false)}
-        onLayersToggle={setTopoOverlayLayers}
         jobs={activeTopoJobs}
         downloadUrlsMap={topoDownloadUrls}
         onJobCreated={handleTopoJobCreated}
@@ -352,7 +396,7 @@ function App() {
         pendingExtent={pendingGeoPdfExtent}
         pendingScale={pendingGeoPdfScale}
         activeLayerId={activeLayerId}
-        masterTopoLayers={masterTopoLayers}
+        completedTopoJobs={completedTopoJobs}
         mapCenter={mapCenter}
         canyons={canyons}
         sharedCanyons={sharedCanyons}
@@ -423,13 +467,15 @@ function App() {
           canyons={canyons}
           analytics={analytics}
           analyticsLoading={analyticsLoading}
-          onTopoLayersChange={setMasterTopoLayers}
           lidarEnabled={lidarEnabled}
           setLidarEnabled={setLidarEnabled}
           lidarLayerToggles={lidarLayerToggles}
           setLidarLayerToggles={setLidarLayerToggles}
           lidarLayerOrder={lidarLayerOrder}
           setLidarLayerOrder={setLidarLayerOrder}
+          completedTopoJobs={completedTopoJobs}
+          lidarJobToggles={lidarJobToggles}
+          setLidarJobToggles={setLidarJobToggles}
         />
       </div>
       <Map

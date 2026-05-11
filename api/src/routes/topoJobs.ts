@@ -3,6 +3,8 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { S3Client, HeadObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { TOPO_LAYERS } from "../constants/topoLayers";
+import type { TopoLayerName, TopoLayerFormat } from "../constants/topoLayers";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
@@ -37,11 +39,7 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const { layerOptions, tileCount, jobName, filename } = req.body;
-
-    if (!layerOptions?.length) {
-      throw new AppError(400, "layerOptions is required");
-    }
+    const { tileCount, jobName } = req.body;
 
     const estimatedSeconds = tileCount ? Math.round(tileCount * 8.5) * 60 : null;
 
@@ -52,7 +50,8 @@ router.post(
         name: jobName ?? null,
         tileCount: tileCount ?? null,
         estimatedSeconds,
-        layerOptions,
+        // layerOptions is retained on the schema but no longer driven by the
+        // submission UI — every completed job produces every available layer.
       },
     });
 
@@ -105,7 +104,6 @@ router.post(
         MessageBody: JSON.stringify({
           jobId,
           s3InputKey: job.s3InputKey,
-          layerOptions: job.layerOptions,
         }),
       }));
     }
@@ -159,6 +157,71 @@ router.get(
       },
     });
     res.json(jobs);
+  },
+);
+
+// GET /topo-jobs/completed-overlays — bulk overlay PMTiles URLs for the
+// authenticated user's completed jobs. Replaces the old /topo-layers route.
+// Returns one entry per completed job, each with presigned PMTiles URLs for
+// every layer in TOPO_LAYERS that the job produced. Composite is excluded
+// (MBTiles-only). URLs expire in 24h — callers should refetch on demand.
+router.get(
+  "/completed-overlays",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const jobs = await prisma.topoJob.findMany({
+      where: { userId: user.id, status: "complete" },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        footprint: true,
+        createdAt: true,
+        s3OutputKeys: true,
+      },
+    });
+
+    const layerMetaByName = new Map<TopoLayerName, { format: TopoLayerFormat }>(
+      TOPO_LAYERS.map((l) => [l.name, { format: l.format }]),
+    );
+
+    const result = await Promise.all(
+      jobs.map(async (j) => {
+        const outputs =
+          (j.s3OutputKeys as
+            | { name: string; mbtilesKey: string; pmtilesKey: string | null }[]
+            | null) ?? [];
+        const layers = await Promise.all(
+          outputs
+            .filter((o): o is typeof o & { pmtilesKey: string } =>
+              Boolean(o.pmtilesKey) && layerMetaByName.has(o.name as TopoLayerName),
+            )
+            .map(async (o) => {
+              const meta = layerMetaByName.get(o.name as TopoLayerName)!;
+              const pmtilesUrl = await getSignedUrl(
+                s3,
+                new GetObjectCommand({ Bucket: TOPO_BUCKET, Key: o.pmtilesKey }),
+                { expiresIn: 86400 },
+              );
+              return {
+                name: o.name as TopoLayerName,
+                format: meta.format,
+                pmtilesUrl,
+              };
+            }),
+        );
+        return {
+          jobId: j.id,
+          name: j.name,
+          createdAt: j.createdAt,
+          footprint: j.footprint,
+          layers,
+        };
+      }),
+    );
+
+    res.json(result);
   },
 );
 

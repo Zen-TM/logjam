@@ -1,46 +1,39 @@
-import { useEffect, useRef, useState } from "react";
+import { useState, useRef } from "react";
 import { Switch } from "@mui/material";
 import { ChevronRight, GripVertical } from "lucide-react";
 import classes from "./OverlaysPanel.module.css";
-import { MASTER_TOPO_LAYERS } from "../../../topoLayerTypes";
-import type { TopoLayerFormat } from "../../../topoLayerTypes";
-import { apiFetch } from "../../../canyonUtils";
+import { TOPO_LAYERS } from "../../../topoLayerTypes";
+import type { CompletedTopoJob } from "../../../topoLayerTypes";
 
-type LayerBounds = { north: number; south: number; east: number; west: number };
-
-type MasterLayer = {
-  name: string;
-  label: string;
-  format: TopoLayerFormat;
-  pmtilesUrl: string;
-  bounds?: LayerBounds;
-};
-
-type TopoLayerEntry = {
-  id: string;
-  pmtilesUrl: string;
-  format: TopoLayerFormat;
-  bounds?: LayerBounds;
-};
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  // e.g. "10 May 2026"
+  return d.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 function OverlaysPanel({
   showOwnedCanyons,
   setShowOwnedCanyons,
   showSharedCanyons,
   setShowSharedCanyons,
-  onTopoLayersChange,
   lidarEnabled,
   setLidarEnabled,
   lidarLayerToggles: layerToggles,
   setLidarLayerToggles: setLayerToggles,
   lidarLayerOrder: layerOrder,
   setLidarLayerOrder: setLayerOrder,
+  completedTopoJobs,
+  lidarJobToggles,
+  setLidarJobToggles,
 }: {
   showOwnedCanyons: boolean;
   setShowOwnedCanyons: (show: boolean) => void;
   showSharedCanyons: boolean;
   setShowSharedCanyons: (show: boolean) => void;
-  onTopoLayersChange: (layers: TopoLayerEntry[]) => void;
   lidarEnabled: boolean;
   setLidarEnabled: (v: boolean) => void;
   lidarLayerToggles: Record<string, boolean>;
@@ -51,77 +44,31 @@ function OverlaysPanel({
   ) => void;
   lidarLayerOrder: string[];
   setLidarLayerOrder: (v: string[] | ((prev: string[]) => string[])) => void;
+  completedTopoJobs: CompletedTopoJob[];
+  lidarJobToggles: Record<string, boolean>;
+  setLidarJobToggles: (
+    v:
+      | Record<string, boolean>
+      | ((prev: Record<string, boolean>) => Record<string, boolean>),
+  ) => void;
 }) {
-  // Master layer data fetched from API
-  const [masterLayers, setMasterLayers] = useState<MasterLayer[]>([]);
+  // Each child section's expanded state is independent.
+  const [layersExpanded, setLayersExpanded] = useState(false);
+  const [areasExpanded, setAreasExpanded] = useState(false);
 
-  // Transient UI state — OK to reset on remount
-  const [expanded, setExpanded] = useState(false);
-
-  // Track previous layer state to avoid unnecessary callbacks
-  const prevLayersJsonRef = useRef<string>("");
-
-  // Drag state
+  // Drag state for layer-order reordering
   const dragIndex = useRef<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
-
-  // Fetch master layer URLs from API
-  useEffect(() => {
-    apiFetch<MasterLayer[]>("/topo-layers")
-      .then(setMasterLayers)
-      .catch(() => {
-        // API may not have any master files yet — silently ignore
-      });
-  }, []);
-
-  // Notify parent whenever visible layers or order changes
-  const onTopoLayersChangeRef = useRef(onTopoLayersChange);
-  useEffect(() => {
-    onTopoLayersChangeRef.current = onTopoLayersChange;
-  }, [onTopoLayersChange]);
-
-  useEffect(() => {
-    if (!lidarEnabled) {
-      if (prevLayersJsonRef.current !== "[]") {
-        prevLayersJsonRef.current = "[]";
-        onTopoLayersChangeRef.current([]);
-      }
-      return;
-    }
-    if (masterLayers.length === 0) {
-      return; // still loading after panel remount — don't disturb existing map layers
-    }
-    const layerMap = new Map(masterLayers.map((l) => [l.name, l]));
-    const active: TopoLayerEntry[] = layerOrder
-      .filter((name) => layerToggles[name] && layerMap.has(name))
-      .map((name) => {
-        const l = layerMap.get(name)!;
-        return {
-          id: `master-${l.name}`,
-          pmtilesUrl: l.pmtilesUrl,
-          format: l.format,
-          ...(l.bounds ? { bounds: l.bounds } : {}),
-        };
-      });
-    const json = JSON.stringify(active);
-    if (prevLayersJsonRef.current !== json) {
-      prevLayersJsonRef.current = json;
-      onTopoLayersChangeRef.current(active);
-    }
-  }, [lidarEnabled, layerToggles, layerOrder, masterLayers]);
-
-  function handleLidarToggle(checked: boolean) {
-    setLidarEnabled(checked);
-    if (!checked) setExpanded(false);
-    if (checked && !expanded) setExpanded(true);
-  }
 
   function handleSubToggle(name: string, checked: boolean) {
     setLayerToggles((prev) => ({ ...prev, [name]: checked }));
   }
 
-  // Native HTML5 drag-and-drop handlers
+  function handleJobToggle(jobId: string, checked: boolean) {
+    setLidarJobToggles((prev) => ({ ...prev, [jobId]: checked }));
+  }
+
   function onDragStart(index: number) {
     dragIndex.current = index;
     setDraggingIndex(index);
@@ -190,69 +137,123 @@ function OverlaysPanel({
         />
       </div>
 
-      {/* LiDAR Topos */}
+      {/* LiDAR Topos — parent is no longer expandable */}
       <div className={classes.lidarSection}>
         <div className={classes.lidarHeader}>
-          <div className={classes.lidarHeaderLeft}>
-            {lidarEnabled && (
-              <button
-                className={`${classes.expandArrow} ${expanded ? classes.expandArrowOpen : ""}`}
-                onClick={() => setExpanded((v) => !v)}
-                aria-label={
-                  expanded ? "Collapse LiDAR layers" : "Expand LiDAR layers"
-                }
-              >
-                <ChevronRight size={14} />
-              </button>
-            )}
-            <span>LiDAR Topos</span>
-          </div>
+          <span>LiDAR Topos</span>
           <Switch
             size="small"
             checked={lidarEnabled}
-            onChange={(_, checked) => handleLidarToggle(checked)}
+            onChange={(_, checked) => setLidarEnabled(checked)}
             sx={switchSx("var(--theme-secondary)")}
           />
         </div>
 
-        {lidarEnabled && expanded && (
-          <div className={classes.subToggleList}>
-            {layerOrder.map((name, i) => {
-              const layer =
-                masterLayers.find((l) => l.name === name) ??
-                MASTER_TOPO_LAYERS.find((l) => l.name === name);
-              const label = layer?.label ?? name;
-              return (
-                <div
-                  key={name}
-                  className={`${classes.subToggleRow} ${dragOverIndex === i ? classes.subToggleRowDragOver : ""} ${draggingIndex === i ? classes.subToggleRowDragging : ""}`}
-                  draggable
-                  onDragStart={() => onDragStart(i)}
-                  onDragOver={(e) => onDragOver(e, i)}
-                  onDrop={(e) => onDrop(e, i)}
-                  onDragEnd={onDragEnd}
+        {lidarEnabled && (
+          <>
+            {/* Layers section */}
+            <div className={classes.nestedSection}>
+              <button
+                type="button"
+                className={classes.nestedHeader}
+                onClick={() => setLayersExpanded((v) => !v)}
+                aria-expanded={layersExpanded}
+              >
+                <span
+                  className={`${classes.expandArrow} ${layersExpanded ? classes.expandArrowOpen : ""}`}
                 >
-                  <div className={classes.subToggleLeft}>
-                    <span className={classes.dragHandle}>
-                      <GripVertical size={12} />
-                    </span>
-                    <span>{label}</span>
-                  </div>
-                  <Switch
-                    size="small"
-                    checked={layerToggles[name] ?? true}
-                    onChange={(_, checked) => handleSubToggle(name, checked)}
-                    sx={switchSx("var(--theme-secondary)")}
+                  <ChevronRight size={14} />
+                </span>
+                <span className={classes.nestedHeaderLabel}>Layers</span>
+              </button>
+
+              {layersExpanded && (
+                <div className={classes.subToggleList}>
+                  {layerOrder.map((name, i) => {
+                    const layer = TOPO_LAYERS.find((l) => l.name === name);
+                    const label = layer?.label ?? name;
+                    return (
+                      <div
+                        key={name}
+                        className={`${classes.subToggleRow} ${dragOverIndex === i ? classes.subToggleRowDragOver : ""} ${draggingIndex === i ? classes.subToggleRowDragging : ""}`}
+                        draggable
+                        onDragStart={() => onDragStart(i)}
+                        onDragOver={(e) => onDragOver(e, i)}
+                        onDrop={(e) => onDrop(e, i)}
+                        onDragEnd={onDragEnd}
+                      >
+                        <div className={classes.subToggleLeft}>
+                          <span className={classes.dragHandle}>
+                            <GripVertical size={12} />
+                          </span>
+                          <span>{label}</span>
+                        </div>
+                        <Switch
+                          size="small"
+                          checked={layerToggles[name] ?? true}
+                          onChange={(_, checked) => handleSubToggle(name, checked)}
+                          sx={switchSx("var(--theme-secondary)")}
+                        />
+                      </div>
+                    );
+                  })}
+                  <div
+                    className={`${classes.dragSentinel} ${dragOverIndex === layerOrder.length ? classes.dragSentinelActive : ""}`}
+                    onDragOver={(e) => onDragOver(e, layerOrder.length)}
+                    onDrop={(e) => onDrop(e, layerOrder.length)}
                   />
                 </div>
-              );
-            })}
-            <div
-              className={`${classes.dragSentinel} ${dragOverIndex === layerOrder.length ? classes.dragSentinelActive : ""}`}
-              onDragOver={(e) => onDragOver(e, layerOrder.length)}
-              onDrop={(e) => onDrop(e, layerOrder.length)}
-            />
-          </div>
+              )}
+            </div>
+
+            {/* Areas section */}
+            <div className={classes.nestedSection}>
+              <button
+                type="button"
+                className={classes.nestedHeader}
+                onClick={() => setAreasExpanded((v) => !v)}
+                aria-expanded={areasExpanded}
+              >
+                <span
+                  className={`${classes.expandArrow} ${areasExpanded ? classes.expandArrowOpen : ""}`}
+                >
+                  <ChevronRight size={14} />
+                </span>
+                <span className={classes.nestedHeaderLabel}>Areas</span>
+              </button>
+
+              {areasExpanded && (
+                <div className={classes.subToggleList}>
+                  {completedTopoJobs.length === 0 && (
+                    <span className={classes.emptyHint}>
+                      No completed topos yet.
+                    </span>
+                  )}
+                  {completedTopoJobs.map((job) => {
+                    const dateStr = formatDate(job.createdAt);
+                    const primary = job.name ?? dateStr;
+                    const showSubtitle = Boolean(job.name);
+                    return (
+                      <div key={job.jobId} className={classes.areaRow}>
+                        <div className={classes.areaRowLeft}>
+                          <span className={classes.areaPrimary}>{primary}</span>
+                          {showSubtitle && (
+                            <span className={classes.areaSubtitle}>{dateStr}</span>
+                          )}
+                        </div>
+                        <Switch
+                          size="small"
+                          checked={lidarJobToggles[job.jobId] ?? true}
+                          onChange={(_, checked) => handleJobToggle(job.jobId, checked)}
+                          sx={switchSx("var(--theme-secondary)")}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>
