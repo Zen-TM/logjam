@@ -979,15 +979,24 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
     out body geom;
     """
 
-    try:
-        resp = requests.post(
-            "https://overpass-api.de/api/interpreter",
-            data={"data": query},
-            timeout=180,
-        )
-        resp.raise_for_status()
-    except Exception as e:
-        log.warning(f"Overpass API request failed: {e}. Features layer will be empty.")
+    import time as _time
+    resp = None
+    for _attempt in range(3):
+        try:
+            resp = requests.post(
+                "https://overpass-api.de/api/interpreter",
+                data={"data": query},
+                headers={"User-Agent": "LogjamTopoWorker/1.0 (private canyoning app worker)"},
+                timeout=180,
+            )
+            resp.raise_for_status()
+            break  # success
+        except Exception as e:
+            log.warning(f"Overpass API attempt {_attempt + 1}/3 failed: {e}")
+            if _attempt < 2:
+                _time.sleep(10 * (2 ** _attempt))  # 10 s, then 20 s
+    if resp is None or not resp.ok:
+        log.warning("Overpass API request failed after 3 attempts. Features layer will be empty.")
         return None
 
     raw = resp.json()
