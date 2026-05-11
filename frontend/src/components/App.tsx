@@ -5,7 +5,11 @@ import Map, { BASE_LAYERS } from "./map/Map";
 import SignIn from "./SignIn";
 import ImportDialog from "./dialogs/ImportDialog";
 import TopoDialog from "./dialogs/TopoDialog";
-import type { TopoJob, DownloadUrl, GeoJsonPolygon } from "./dialogs/TopoDialog";
+import type {
+  TopoJob,
+  DownloadUrl,
+  GeoJsonPolygon,
+} from "./dialogs/TopoDialog";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
 import GeoPdfTemplatesDialog from "./dialogs/GeoPdfTemplatesDialog";
 import type { GeoPdfTemplate } from "./dialogs/GeoPdfTemplatesDialog";
@@ -73,15 +77,23 @@ function App() {
 
   // Topo dialog
   const [showTopo, setShowTopo] = useState(false);
+  const [selectingTopoBbox, setSelectingTopoBbox] = useState(false);
+  const [pendingTopoBbox, setPendingTopoBbox] = useState<TBbox | null>(null);
 
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
-  const [topoDownloadUrls, setTopoDownloadUrls] = useState<Record<string, DownloadUrl[]>>({});
-  const [topoFlyTarget, setTopoFlyTarget] = useState<GeoJsonPolygon | null>(null);
+  const [topoDownloadUrls, setTopoDownloadUrls] = useState<
+    Record<string, DownloadUrl[]>
+  >({});
+  const [topoFlyTarget, setTopoFlyTarget] = useState<GeoJsonPolygon | null>(
+    null,
+  );
   // All of the user's completed topo jobs (with presigned PMTiles URLs per
   // layer). Replaces the old single "master" mosaic — each job is its own
   // set of overlays, controlled per-job in the Overlays panel.
-  const [completedTopoJobs, setCompletedTopoJobs] = useState<CompletedTopoJob[]>([]);
+  const [completedTopoJobs, setCompletedTopoJobs] = useState<
+    CompletedTopoJob[]
+  >([]);
 
   // GeoPDF dialog
   const [showGeoPdf, setShowGeoPdf] = useState(false);
@@ -105,7 +117,10 @@ function App() {
   );
 
   // Map view state for GeoPDF extent initialization
-  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapCenter, setMapCenter] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
 
   // GeoPDF Templates dialog
   const [showGeoPdfTemplates, setShowGeoPdfTemplates] = useState(false);
@@ -132,7 +147,11 @@ function App() {
   // A pair is included only when both the layer toggle and the job toggle are on.
   const combinedTopoLayers = useMemo(() => {
     if (!lidarEnabled) return [];
-    const out: { id: string; pmtilesUrl: string; format?: "raster" | "vector" }[] = [];
+    const out: {
+      id: string;
+      pmtilesUrl: string;
+      format?: "raster" | "vector";
+    }[] = [];
     for (const layerName of lidarLayerOrder) {
       if (!lidarLayerToggles[layerName]) continue;
       for (const job of completedTopoJobs) {
@@ -226,12 +245,11 @@ function App() {
     loading: tripLogsLoading,
     refetch: refetchTripLogs,
   } = useTripLogs(authenticated);
-  const {
-    analytics,
-    loading: analyticsLoading,
-  } = useAnalytics(authenticated);
+  const { analytics, loading: analyticsLoading } = useAnalytics(authenticated);
 
-  const [customFieldDefs, setCustomFieldDefs] = useState<TripLogCustomFieldDef[]>([]);
+  const [customFieldDefs, setCustomFieldDefs] = useState<
+    TripLogCustomFieldDef[]
+  >([]);
 
   useEffect(() => {
     if (!authenticated) return;
@@ -299,7 +317,9 @@ function App() {
               `/topo-jobs/${updated.id}/download-urls`,
             );
             setTopoDownloadUrls((prev) => ({ ...prev, [updated.id]: urls }));
-            setActiveTopoJobs((prev) => prev.filter((j) => j.id !== updated.id));
+            setActiveTopoJobs((prev) =>
+              prev.filter((j) => j.id !== updated.id),
+            );
             refetchNotifications();
             refetchCompletedTopoJobs();
           }
@@ -327,7 +347,8 @@ function App() {
 
   // After a Ropewiki import/refresh, sync OzUltimate source links onto matching canyons
   useEffect(() => {
-    if (!pendingOzSync.current || !canyonsLoaded || canyons.length === 0) return;
+    if (!pendingOzSync.current || !canyonsLoaded || canyons.length === 0)
+      return;
     pendingOzSync.current = false;
     syncOzUltimateSources(canyons).then((updated) => {
       if (updated) refetch();
@@ -369,11 +390,22 @@ function App() {
       <ImportDialog
         open={showImport}
         onClose={() => setShowImport(false)}
-        onImported={() => { pendingOzSync.current = true; refetch(); }}
+        onImported={() => {
+          pendingOzSync.current = true;
+          refetch();
+        }}
       />
       <TopoDialog
         open={showTopo}
-        onClose={() => setShowTopo(false)}
+        onClose={() => {
+          setShowTopo(false);
+          setSelectingTopoBbox(false);
+        }}
+        onSelectBbox={() => {
+          setShowTopo(false);
+          setSelectingTopoBbox(true);
+        }}
+        pendingBbox={pendingTopoBbox}
         jobs={activeTopoJobs}
         downloadUrlsMap={topoDownloadUrls}
         onJobCreated={handleTopoJobCreated}
@@ -443,7 +475,10 @@ function App() {
           onStartAreaSelection={startAreaSelection}
           selectingArea={selectingArea}
           onCancelAreaSelection={cancelAreaSelection}
-          onRefetch={() => { pendingOzSync.current = true; refetch(); }}
+          onRefetch={() => {
+            pendingOzSync.current = true;
+            refetch();
+          }}
           filters={filters}
           onChangeFilters={setFilters}
           friends={friends}
@@ -492,6 +527,12 @@ function App() {
         onCoordsPicked={handleCoordsPicked}
         selectingArea={selectingArea}
         onAreaSelected={handleAreaSelected}
+        selectingBbox={selectingTopoBbox}
+        onBboxSelected={(bbox) => {
+          setPendingTopoBbox(bbox);
+          setSelectingTopoBbox(false);
+          setShowTopo(true);
+        }}
         topoLayers={combinedTopoLayers}
         activeLayerId={activeLayerId}
         selectingGeoPdfExtent={selectingGeoPdfExtent}
@@ -516,11 +557,7 @@ function App() {
 
       {selectingArea && (
         <div className={classes.selectAllButtons}>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={cancelAreaSelection}
-          >
+          <Button variant="outlined" size="small" onClick={cancelAreaSelection}>
             Cancel
           </Button>
           <Button
