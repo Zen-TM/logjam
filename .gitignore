@@ -1,6 +1,7 @@
 CLAUDE.md
 .claude
 .mcp.json
+repomix-output.xml
 
 # Dependencies
 node_modules/
