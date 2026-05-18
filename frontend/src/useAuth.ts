@@ -13,8 +13,9 @@ const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 // if one doesn't exist yet (keyed on the Cognito sub), so this is safe
 // to call on every sign-in, not just the first.
 async function ensureUserExists() {
-  const session = await fetchAuthSession();
-  const token = session.tokens?.idToken?.toString();
+  const token = import.meta.env.VITE_AUTH_MODE === "fake"
+    ? "fake-token"
+    : (await fetchAuthSession()).tokens?.idToken?.toString();
   if (!token) return;
 
   await fetch(`${API_BASE_URL}/users/me`, {
@@ -32,6 +33,10 @@ export function useAuth() {
 
   // On mount, check if there's an existing valid session in localStorage.
   useEffect(() => {
+    if (import.meta.env.VITE_AUTH_MODE === "fake") {
+      setState("authenticated");
+      return;
+    }
     fetchAuthSession()
       .then((session) => {
         if (session.tokens?.idToken) {

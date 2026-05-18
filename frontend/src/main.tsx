@@ -10,14 +10,16 @@ import {
   useThemePreferences,
 } from "./themePreferences";
 
-Amplify.configure({
-  Auth: {
-    Cognito: {
-      userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
-      userPoolClientId: import.meta.env.VITE_COGNITO_CLIENT_ID,
+if (import.meta.env.VITE_AUTH_MODE !== "fake") {
+  Amplify.configure({
+    Auth: {
+      Cognito: {
+        userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
+        userPoolClientId: import.meta.env.VITE_COGNITO_CLIENT_ID,
+      },
     },
-  },
-});
+  });
+}
 
 function ThemedApp() {
   const { muiTheme } = useThemePreferences();

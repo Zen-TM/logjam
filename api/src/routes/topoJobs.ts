@@ -2,19 +2,16 @@ import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
-import { S3Client, HeadObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { HeadObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName, TopoLayerFormat } from "../constants/topoLayers";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
-import { ECSClient, RunTaskCommand } from "@aws-sdk/client-ecs";
+import { SendMessageCommand } from "@aws-sdk/client-sqs";
+import { RunTaskCommand } from "@aws-sdk/client-ecs";
+import { s3, sqs, ecs } from "../services/awsClients";
 
 const router = Router();
-
-const s3 = new S3Client({ region: process.env.AWS_REGION ?? "ap-southeast-2" });
-const sqs = new SQSClient({ region: process.env.AWS_REGION ?? "ap-southeast-2" });
-const ecs = new ECSClient({ region: process.env.AWS_REGION ?? "ap-southeast-2" });
 
 const TOPO_BUCKET = process.env.S3_BUCKET_TOPO!;
 const SQS_QUEUE_URL = process.env.SQS_QUEUE_URL!;

@@ -13,3 +13,8 @@ dist/
 .env
 .env.local
 .env.*.local
+
+# Local dev environment
+snapshots/*.sql
+localstack-data/
+postgres-data/

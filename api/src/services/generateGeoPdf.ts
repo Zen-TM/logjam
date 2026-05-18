@@ -16,6 +16,7 @@ import {
   GEOPDF_BASE_LAYER_CONFIG,
 } from "@logjam/shared";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { s3 as s3Client } from "./awsClients";
 import { PMTiles } from "pmtiles";
 import type { Source } from "pmtiles";
 import { VectorTile } from "@mapbox/vector-tile";
@@ -359,9 +360,7 @@ export async function generateGeoPdf(
   // 7. Overlay tiles from PMTiles archives in S3
   if (config.overlays.length > 0) {
     const topoBucket = process.env.S3_BUCKET_TOPO ?? "logjam-topo-jobs";
-    const s3 = new S3Client({
-      region: process.env.AWS_REGION ?? "ap-southeast-2",
-    });
+    const s3 = s3Client;
 
     // Overlays are always sampled at their native resolution (max z18), independent
     // of the base layer cap. A separate transform maps higher-zoom overlay tiles

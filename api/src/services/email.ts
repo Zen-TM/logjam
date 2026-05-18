@@ -1,12 +1,8 @@
 import {
-  SESClient,
   VerifyEmailIdentityCommand,
   SendEmailCommand,
 } from "@aws-sdk/client-ses";
-
-const ses = new SESClient({
-  region: process.env.COGNITO_REGION ?? "ap-southeast-2",
-});
+import { ses } from "./awsClients";
 
 const FROM_EMAIL = process.env.SES_FROM_EMAIL ?? "noreply@logjamnsw.com";
 

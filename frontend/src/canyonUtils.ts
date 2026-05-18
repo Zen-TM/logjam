@@ -96,10 +96,10 @@ export type TFilters = {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
-// Gets a fresh ID token from Amplify on every call. Amplify automatically
-// refreshes the token using the refresh token when the ID token has expired
-// (every 1 hour), so callers never need to worry about expiry.
 async function getIdToken(): Promise<string> {
+  if (import.meta.env.VITE_AUTH_MODE === "fake") return "fake-token";
+  // Amplify automatically refreshes the token using the refresh token when
+  // the ID token has expired (every 1 hour).
   const session = await fetchAuthSession();
   const token = session.tokens?.idToken?.toString();
   if (!token) throw new Error("No auth session");

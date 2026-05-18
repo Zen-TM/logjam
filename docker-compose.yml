@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: logjam
+      POSTGRES_USER: logjam
+      POSTGRES_PASSWORD: logjam
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logjam"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  localstack:
+    image: localstack/localstack:3.8
+    environment:
+      SERVICES: s3,sqs
+      DEFAULT_REGION: ap-southeast-2
+      AWS_DEFAULT_REGION: ap-southeast-2
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./scripts/seed-localstack.sh:/etc/localstack/init/ready.d/seed.sh:ro
+      - localstack-data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health | grep -q running"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Topo pipeline worker — opt in with: docker compose --profile topo up topo-worker
+  topo-worker:
+    profiles:
+      - topo
+    build:
+      context: topo
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://logjam:logjam@postgres:5432/logjam
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_REGION: ap-southeast-2
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      S3_BUCKET_TOPO: logjam-topo-local
+      SQS_QUEUE_URL: http://localstack:4566/000000000000/logjam-topo-jobs-local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  localstack-data:

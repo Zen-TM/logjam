@@ -34,6 +34,19 @@ export function requireAuth(
   res: Response,
   next: NextFunction,
 ) {
+  if (process.env.AUTH_MODE === "fake") {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("AUTH_MODE=fake is not allowed in production");
+    }
+    req.user = {
+      sub: process.env.FAKE_USER_SUB ?? "fake-alice-sub",
+      email: "alice@local",
+      username: "alice",
+    };
+    next();
+    return;
+  }
+
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
