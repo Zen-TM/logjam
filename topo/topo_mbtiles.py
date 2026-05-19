@@ -484,13 +484,17 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
     # That destroys ASPRS noise/overlap codes (7/12/18). To preserve them for
     # downstream filtering, we drop those points BEFORE the assign step using
     # filters.range — it removes points outright rather than reclassifying.
+    # PDAL filter expression parser has no function support (no abs()), so
+    # the scan-angle gate is written as an explicit range comparison.
     count_where = (
         f"HeightAboveGround >= 0.25 && HeightAboveGround <= 2.0 "
-        f"&& abs(ScanAngleRank) <= {PDAL_SCAN_ANGLE_MAX}"
+        f"&& ScanAngleRank >= -{PDAL_SCAN_ANGLE_MAX} "
+        f"&& ScanAngleRank <= {PDAL_SCAN_ANGLE_MAX}"
     )
     below_where = (
         f"HeightAboveGround < 0.25 "
-        f"&& abs(ScanAngleRank) <= {PDAL_SCAN_ANGLE_MAX}"
+        f"&& ScanAngleRank >= -{PDAL_SCAN_ANGLE_MAX} "
+        f"&& ScanAngleRank <= {PDAL_SCAN_ANGLE_MAX}"
     )
     readers = [{"type": "readers.las", "filename": f} for f in las_files]
     return {
@@ -549,13 +553,17 @@ def build_pipeline_density_only(las_files: List[str], dtm_path: str,
     Drops ASPRS noise (7, 18) and overlap (12) classifications, and gates
     points to scan angles ≤ ±20° to remove swath-edge attenuation bias.
     """
+    # PDAL filter expression parser has no function support (no abs()), so
+    # the scan-angle gate is written as an explicit range comparison.
     count_where = (
         f"HeightAboveGround >= 0.25 && HeightAboveGround <= 2.0 "
-        f"&& abs(ScanAngleRank) <= {PDAL_SCAN_ANGLE_MAX}"
+        f"&& ScanAngleRank >= -{PDAL_SCAN_ANGLE_MAX} "
+        f"&& ScanAngleRank <= {PDAL_SCAN_ANGLE_MAX}"
     )
     below_where = (
         f"HeightAboveGround < 0.25 "
-        f"&& abs(ScanAngleRank) <= {PDAL_SCAN_ANGLE_MAX}"
+        f"&& ScanAngleRank >= -{PDAL_SCAN_ANGLE_MAX} "
+        f"&& ScanAngleRank <= {PDAL_SCAN_ANGLE_MAX}"
     )
     readers = [{"type": "readers.las", "filename": f} for f in las_files]
     return {
