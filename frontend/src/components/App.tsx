@@ -14,6 +14,7 @@ import GeoPdfDialog from "./dialogs/GeoPdfDialog";
 import GeoPdfTemplatesDialog from "./dialogs/GeoPdfTemplatesDialog";
 import type { GeoPdfTemplate } from "./dialogs/GeoPdfTemplatesDialog";
 import CanyonDialog from "./dialogs/CanyonDialog";
+import CanyonCsvImportDialog from "./dialogs/CanyonCsvImportDialog";
 import SelectedCanyonsDialog from "./dialogs/SelectedCanyonsDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
@@ -56,6 +57,7 @@ function App() {
 
   const [showImport, setShowImport] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
+const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   const importChecked = useRef(false);
   const pendingOzSync = useRef(false);
 
@@ -470,6 +472,7 @@ function App() {
           activeLayerId={activeLayerId}
           onActiveLayerChange={setActiveLayerId}
           onAddCanyon={() => setShowAdd(true)}
+          onOpenCanyonCsvImport={() => setShowCanyonCsvImport(true)}
           onOpenTopo={() => setShowTopo(true)}
           onOpenGeoPdf={() => setShowGeoPdf(true)}
           onOpenGeoPdfTemplates={() => setShowGeoPdfTemplates(true)}
@@ -584,6 +587,14 @@ function App() {
           </Button>
         </div>
       )}
+
+      {/* Canyon CSV import dialog */}
+      <CanyonCsvImportDialog
+        open={showCanyonCsvImport}
+        onClose={() => setShowCanyonCsvImport(false)}
+        canyons={canyons}
+        onRefetchCanyons={refetch}
+      />
 
       {/* Add canyon dialog */}
       <CanyonDialog

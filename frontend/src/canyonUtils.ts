@@ -339,6 +339,37 @@ export function bulkCreateTripLogs(trips: BulkTripLogInput[]): Promise<BulkTripL
   return apiFetch<BulkTripLogResult>("/trips/bulk", { method: "POST", body: { trips } });
 }
 
+export type BulkCanyonInput = {
+  name: string;
+  latitude: number;
+  longitude: number;
+  altNames?: string[];
+  notes?: string | null;
+  vGrade?: number | null;
+  aGrade?: number | null;
+  commitment?: number | null;
+  quality?: number | null;
+  wetsuits?: number | null;
+  numAbseils?: number | null;
+  longestAbseil?: number | null;
+  hours?: number | null;
+  attributes?: Record<string, unknown>;
+};
+
+export type BulkCanyonRequest =
+  | { mode: "create"; canyons: BulkCanyonInput[] }
+  | { mode: "replace"; replacements: { canyonId: string; data: BulkCanyonInput }[] };
+
+export type BulkCanyonResult = {
+  created: number;
+  replaced: number;
+  errors: { rowIndex: number; message: string }[];
+};
+
+export function bulkCanyonImport(body: BulkCanyonRequest): Promise<BulkCanyonResult> {
+  return apiFetch<BulkCanyonResult>("/canyons/bulk", { method: "POST", body });
+}
+
 export function getAllTripLogs(params?: {
   search?: string;
   dateFrom?: string;

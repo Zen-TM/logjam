@@ -5,6 +5,7 @@ import { refreshFromRopeWiki } from "../../../canyonUtils";
 
 function ForgePanel({
   onAddCanyon,
+  onOpenCanyonCsvImport,
   onOpenTopo,
   onOpenGeoPdf,
   onOpenGeoPdfTemplates,
@@ -14,6 +15,7 @@ function ForgePanel({
   onRefetch,
 }: {
   onAddCanyon: () => void;
+  onOpenCanyonCsvImport: () => void;
   onOpenTopo: () => void;
   onOpenGeoPdf: () => void;
   onOpenGeoPdfTemplates: () => void;
@@ -48,6 +50,12 @@ function ForgePanel({
         <span className={classes.forgeSectionLabel}>Canyon Data</span>
         <button className={classes.addButton} onClick={onAddCanyon}>
           + Add Canyon
+        </button>
+        <button
+          className={classes.refreshButton}
+          onClick={onOpenCanyonCsvImport}
+        >
+          Import Canyons from CSV
         </button>
         <button
           className={classes.refreshButton}

@@ -61,6 +61,7 @@ function SidebarPanel({
   onActiveLayerChange,
   // Forge
   onAddCanyon,
+  onOpenCanyonCsvImport,
   onOpenTopo,
   onOpenGeoPdf,
   onOpenGeoPdfTemplates,
@@ -121,6 +122,7 @@ function SidebarPanel({
   onActiveLayerChange: (id: string) => void;
   // Forge
   onAddCanyon: () => void;
+  onOpenCanyonCsvImport: () => void;
   onOpenTopo: () => void;
   onOpenGeoPdf: () => void;
   onOpenGeoPdfTemplates: () => void;
@@ -201,6 +203,7 @@ function SidebarPanel({
         {activePanel === "forge" && (
           <ForgePanel
             onAddCanyon={onAddCanyon}
+            onOpenCanyonCsvImport={onOpenCanyonCsvImport}
             onOpenTopo={onOpenTopo}
             onOpenGeoPdf={onOpenGeoPdf}
             onOpenGeoPdfTemplates={onOpenGeoPdfTemplates}

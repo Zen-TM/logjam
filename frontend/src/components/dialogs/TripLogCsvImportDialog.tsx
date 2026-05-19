@@ -31,6 +31,7 @@ import { detectColumns } from "../../csvImport/detectColumns";
 import { detectDateFormat, toIsoDate, DATE_FORMAT_LABELS } from "../../csvImport/detectDateFormat";
 import type { DateFormat } from "../../csvImport/detectDateFormat";
 import { matchCanyonByName } from "../../csvImport/matchCanyon";
+import { fieldSx, selectSx, menuPaperProps, SectionLabel } from "../../csvImport/dialogStyles";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -105,43 +106,7 @@ type NewCanyonSpec = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const fieldSx = {
-  "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.9em" },
-  "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
-  "& .MuiInputLabel-root.Mui-focused": { color: "var(--theme-accent)" },
-  "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-};
-
-const selectSx = {
-  color: "var(--theme-text-primary)",
-  fontSize: "0.85em",
-  "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-  "& .MuiSvgIcon-root": { color: "var(--theme-text-muted)" },
-};
-
-const menuPaperProps = {
-  PaperProps: {
-    sx: { backgroundColor: "var(--theme-primary)", color: "var(--theme-text-primary)" },
-  },
-};
-
-function sectionLabel(text: string) {
-  return (
-    <Typography
-      variant="caption"
-      sx={{
-        color: "var(--theme-text-muted)",
-        textTransform: "uppercase",
-        letterSpacing: "0.05em",
-        fontWeight: 600,
-        fontSize: "0.7em",
-      }}
-    >
-      {text}
-    </Typography>
-  );
-}
+// fieldSx, selectSx, menuPaperProps, SectionLabel imported from csvImport/dialogStyles
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -605,7 +570,7 @@ function TripLogCsvImportDialog({
 
       return (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {sectionLabel("Column Assignments")}
+          {<SectionLabel text="Column Assignments" />}
           <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>
             Exactly one column must be assigned Canyon Name and one to Date.
           </Typography>
@@ -691,7 +656,7 @@ function TripLogCsvImportDialog({
           {dateCol && (
             <>
               <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 0.5 }} />
-              {sectionLabel("Date Format")}
+              {<SectionLabel text="Date Format" />}
               {formatAmbiguous && (
                 <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>
                   Ambiguous format detected — please confirm.
@@ -965,7 +930,7 @@ function TripLogCsvImportDialog({
       const { importRows, newCanyons, newFieldDefs, skipCount, discardCount } = stage;
       return (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-          {sectionLabel("Summary")}
+          {<SectionLabel text="Summary" />}
           <Typography variant="body2" sx={{ color: "var(--theme-text-primary)" }}>
             {importRows.length} trip log{importRows.length !== 1 ? "s" : ""} will be imported
           </Typography>
