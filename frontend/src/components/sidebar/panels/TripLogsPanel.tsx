@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { TextField, Typography, Box } from "@mui/material";
+import { TextField } from "@mui/material";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import type { TCanyon, TTripLog } from "../../../canyonUtils";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
@@ -63,11 +63,9 @@ function TripLogsPanel({
           onChange={(e) => setSearch(e.target.value)}
           size="small"
           fullWidth
-          sx={{
-            "& .MuiInputBase-input": { fontSize: "0.85em" },
-          }}
+          sx={{ "& .MuiInputBase-input": { fontSize: "0.85em" } }}
         />
-        <Box sx={{ display: "flex", gap: 1 }}>
+        <div className={classes.dateRow}>
           <TextField
             label="From"
             type="date"
@@ -88,17 +86,15 @@ function TripLogsPanel({
             InputLabelProps={{ shrink: true }}
             sx={{ "& .MuiInputBase-input": { fontSize: "0.85em" } }}
           />
-        </Box>
+        </div>
       </div>
 
       {loading ? (
-        <Typography variant="caption" sx={{ opacity: 0.6, px: 1 }}>
-          Loading...
-        </Typography>
+        <span className={classes.caption}>Loading...</span>
       ) : filtered.length === 0 ? (
-        <Typography variant="caption" sx={{ opacity: 0.6, px: 1 }}>
+        <span className={classes.caption}>
           {tripLogs.length === 0 ? "No trip logs yet." : "No trips match your filters."}
-        </Typography>
+        </span>
       ) : (
         <div className={classes.list}>
           {filtered.map((trip) => (

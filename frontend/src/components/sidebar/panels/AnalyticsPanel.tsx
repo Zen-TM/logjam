@@ -93,7 +93,7 @@ function CompletionRing({ total, completed }: { total: number; completed: number
             strokeDasharray={circumference}
             strokeDashoffset={offset}
             transform="rotate(-90 50 50)"
-            style={{ transition: "stroke-dashoffset 0.6s ease" }}
+            className={classes.ringStrokeDash}
           />
         </svg>
         <div className={classes.ringCenter}>

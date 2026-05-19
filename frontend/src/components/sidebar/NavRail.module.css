@@ -43,7 +43,7 @@
 
 .navItem:hover {
   opacity: 1;
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
 }
 
 .navItem.active {

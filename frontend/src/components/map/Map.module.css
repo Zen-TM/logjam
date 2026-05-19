@@ -33,7 +33,7 @@
   background: transparent;
   pointer-events: none;
   z-index: 5;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 9999px color-mix(in srgb, black 40%, transparent);
 }
 
 .geoPdfConfirmBar {

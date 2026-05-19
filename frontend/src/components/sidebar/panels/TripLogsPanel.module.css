@@ -6,6 +6,18 @@
   overflow: hidden;
 }
 
+.caption {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.6;
+  padding: 0 4px;
+}
+
+.dateRow {
+  display: flex;
+  gap: 8px;
+}
+
 .importBtn {
   composes: btn btnFilledAccent btnMd btnFull from '@styles/shared.module.css';
   flex-shrink: 0;
@@ -27,22 +39,11 @@
 }
 
 .tripCard {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.65rem 0.75rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  text-align: left;
-  color: var(--theme-text-primary);
-  width: 100%;
-  transition: background-color var(--transition-fast);
+  composes: tripCard from '@styles/shared.module.css';
 }
 
 .tripCard:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: color-mix(in srgb, var(--theme-text-primary) 9%, transparent);
 }
 
 .canyonName {

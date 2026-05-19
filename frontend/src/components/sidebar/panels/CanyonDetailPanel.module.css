@@ -1,8 +1,6 @@
 /* Styles for CanyonDetailPanel — canyon info, edit/delete, sharing UI */
 
 .canyonInfo {
-  padding: 0 1em;
-  overflow-y: auto;
   flex: 1;
 }
 
@@ -153,7 +151,27 @@
 .tripLogsSection {
   margin-top: 1.25em;
   padding-top: 1em;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+}
+
+.tripLogsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5em;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.caption {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.6;
+}
+
+.removeSharedButton {
+  composes: btn btnOutlineWarning btnMd btnFull from '@styles/shared.module.css';
+  margin-top: 0.5em;
 }
 
 .tripLogList {
@@ -169,8 +187,8 @@
   flex-direction: column;
   gap: 0.2em;
   padding: 0.6em 0.75em;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--theme-text-primary) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
@@ -180,7 +198,7 @@
 }
 
 .tripLogCard:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
 }
 
 .tripLogDate {

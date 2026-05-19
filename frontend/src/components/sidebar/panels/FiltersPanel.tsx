@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Slider, TextField, Select, MenuItem } from "@mui/material";
-import Search from "../../../assets/search.svg";
+import { Search } from "lucide-react";
 import classes from "./FiltersPanel.module.css";
 import type { TFilters } from "../../../canyonUtils";
 
@@ -131,7 +131,7 @@ function FiltersPanel({
             slotProps={{
               input: {
                 endAdornment: (
-                  <img className={`${classes.search} icon`} src={Search} />
+                  <Search className={`${classes.search} icon`} />
                 ),
               },
             }}

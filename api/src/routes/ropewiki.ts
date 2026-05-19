@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
+import { AppError } from "../middleware/errorHandler";
 import {
   fetchAndParseRopeWiki,
   snapshotFromCanyon,
@@ -17,10 +18,7 @@ router.post(
     const user = await prisma.user.findUnique({
       where: { cognitoId: req.user!.sub },
     });
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
+    if (!user) throw new AppError(404, "User not found");
 
     const { canyons: parsed, errors: parseErrors } =
       await fetchAndParseRopeWiki();
@@ -73,10 +71,7 @@ router.post(
     const user = await prisma.user.findUnique({
       where: { cognitoId: req.user!.sub },
     });
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
+    if (!user) throw new AppError(404, "User not found");
 
     const { canyons: parsed, errors: parseErrors } =
       await fetchAndParseRopeWiki();

@@ -7,7 +7,6 @@ import {
   DialogActions,
   Button,
   TextField,
-  Typography,
 } from "@mui/material";
 import classes from "./FriendsPanel.module.css";
 import type {
@@ -147,21 +146,14 @@ function FriendsPanel({
             </div>
           )}
           {searchFeedback && (
-            <Typography
-              variant="caption"
-              sx={{ color: "var(--theme-text-primary)", opacity: 0.7 }}
-            >
-              {searchFeedback}
-            </Typography>
+            <span className={classes.caption}>{searchFeedback}</span>
           )}
         </div>
 
         {friendRequests.length > 0 && (
           <>
-            <Typography variant="body2" sx={{ fontWeight: "bold", mt: 0.5 }}>
-              Pending Requests
-            </Typography>
-            <div className={classes.scrollList} style={{ maxHeight: "150px" }}>
+            <span className={classes.sectionTitle}>Pending Requests</span>
+            <div className={classes.pendingScrollList}>
               {friendRequests.map((req) => (
                 <div key={req.id} className={classes.friendRow}>
                   <span className={classes.friendName}>
@@ -189,15 +181,13 @@ function FriendsPanel({
           </>
         )}
 
-        <Typography variant="body2" sx={{ fontWeight: "bold", mt: 0.5 }}>
-          Friends ({friends.length})
-        </Typography>
+        <span className={classes.sectionTitle}>Friends ({friends.length})</span>
         {friends.length === 0 ? (
-          <Typography variant="caption" sx={{ opacity: 0.6 }}>
+          <span className={classes.caption}>
             No friends yet. Search for a username above.
-          </Typography>
+          </span>
         ) : (
-          <div className={classes.scrollList} style={{ maxHeight: "200px" }}>
+          <div className={classes.friendsScrollList}>
             {friends.map((friend) => (
               <div key={friend.id} className={classes.friendRow}>
                 <span className={classes.friendName}>{friend.username}</span>

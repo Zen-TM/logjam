@@ -466,6 +466,7 @@ function App() {
           setShowOwnedCanyons={setShowOwnedCanyons}
           showSharedCanyons={showSharedCanyons}
           setShowSharedCanyons={setShowSharedCanyons}
+          baseLayers={BASE_LAYERS}
           activeLayerId={activeLayerId}
           onActiveLayerChange={setActiveLayerId}
           onAddCanyon={() => setShowAdd(true)}

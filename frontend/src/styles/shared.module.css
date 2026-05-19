@@ -105,6 +105,23 @@
   background-color: color-mix(in srgb, var(--theme-bonus-1) 12%, transparent);
 }
 
+/* ─── Trip log card ───────────────────────────────────────────────────────── */
+
+.tripCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.65rem 0.75rem;
+  background: color-mix(in srgb, var(--theme-text-primary) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  color: var(--theme-text-primary);
+  width: 100%;
+  transition: background-color var(--transition-fast);
+}
+
 /* ─── Structural ──────────────────────────────────────────────────────────── */
 
 .divider {

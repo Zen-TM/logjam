@@ -26,6 +26,10 @@
   height: 1em;
 }
 
+:global(.Mui-focused) .search {
+  color: white !important;
+}
+
 /* Section grouping */
 .section {
   margin-bottom: 0.75em;
@@ -106,7 +110,7 @@
 /* Sticky footer buttons */
 .buttonBar {
   padding: 0.6em 1em;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
   display: flex;
   gap: 0.75em;
 }

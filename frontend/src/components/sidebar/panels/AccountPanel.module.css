@@ -180,7 +180,7 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
 }
 
 .signOutBtn {

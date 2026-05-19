@@ -14,5 +14,5 @@
 }
 
 .layerItem input[type="radio"] {
-  accent-color: color-mix(in srgb, var(--theme-accent) 55%, transparent);
+  accent-color: var(--theme-secondary);
 }

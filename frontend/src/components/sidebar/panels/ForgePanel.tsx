@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Typography } from "@mui/material";
 import classes from "./ForgePanel.module.css";
 import type { RefreshResult } from "../../../canyonUtils";
 import { refreshFromRopeWiki } from "../../../canyonUtils";
@@ -58,15 +57,12 @@ function ForgePanel({
           {refreshing ? "Refreshing..." : "Refresh from RopeWiki"}
         </button>
         {refreshResult && (
-          <Typography
-            variant="caption"
-            sx={{ color: "var(--theme-text-primary)", opacity: 0.7 }}
-          >
+          <span className={classes.refreshResult}>
             {refreshResult.added} added, {refreshResult.updated} updated,{" "}
             {refreshResult.unchanged} unchanged
             {refreshResult.userEdited > 0 &&
               `, ${refreshResult.userEdited} kept (edited)`}
-          </Typography>
+          </span>
         )}
       </div>
 

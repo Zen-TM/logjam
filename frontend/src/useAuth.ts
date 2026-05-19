@@ -6,21 +6,13 @@ import {
   signOut as amplifySignOut,
   fetchAuthSession,
 } from "aws-amplify/auth";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
+import { apiFetch } from "./canyonUtils";
 
 // Calls GET /users/me after sign-in. The API creates a new user record
 // if one doesn't exist yet (keyed on the Cognito sub), so this is safe
 // to call on every sign-in, not just the first.
 async function ensureUserExists() {
-  const token = import.meta.env.VITE_AUTH_MODE === "fake"
-    ? "fake-token"
-    : (await fetchAuthSession()).tokens?.idToken?.toString();
-  if (!token) return;
-
-  await fetch(`${API_BASE_URL}/users/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  await apiFetch("/users/me");
 }
 
 export type AuthState = "loading" | "signIn" | "signUp" | "confirmSignUp" | "authenticated";

@@ -3,12 +3,12 @@
   flex-direction: column;
   gap: 0.75rem;
   padding: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
+  border-radius: var(--radius-sm);
 }
 
 .uploadPlaceholder {
   padding: 0.75rem;
-  border: 1px dashed rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
+  border: 1px dashed color-mix(in srgb, var(--theme-text-primary) 15%, transparent);
+  border-radius: var(--radius-sm);
 }

@@ -7,8 +7,6 @@ import {
   DialogActions,
   Button,
   TextField,
-  Typography,
-  Box,
 } from "@mui/material";
 import classes from "./CanyonDetailPanel.module.css";
 import CanyonDialog from "../../dialogs/CanyonDialog";
@@ -97,11 +95,7 @@ function CanyonDetailPanel({
   }, [canyon?.id]);
 
   if (!canyon) {
-    return (
-      <Typography variant="caption" sx={{ opacity: 0.6 }}>
-        No canyon selected.
-      </Typography>
-    );
+    return <span className={classes.caption}>No canyon selected.</span>;
   }
 
   async function handleDelete() {
@@ -181,7 +175,7 @@ function CanyonDetailPanel({
 
   return (
     <>
-      <div className={classes.canyonInfo} style={{ padding: 0 }}>
+      <div className={classes.canyonInfo}>
         {canyon.altNames.length > 0 && (
           <p className={classes.altNames}>
             Also known as: {canyon.altNames.join(", ")}
@@ -282,9 +276,9 @@ function CanyonDetailPanel({
             {showShareSelector && (
               <div className={classes.shareSelector}>
                 {friends.length === 0 ? (
-                  <Typography variant="caption" sx={{ opacity: 0.6 }}>
+                  <span className={classes.caption}>
                     Add friends first to share canyons.
-                  </Typography>
+                  </span>
                 ) : (
                   <>
                     <TextField
@@ -370,12 +364,7 @@ function CanyonDetailPanel({
             )}
             {canyonShares.length > 0 && (
               <div className={classes.sharedWithList}>
-                <Typography
-                  variant="body2"
-                  sx={{ fontWeight: "bold", mt: 0.5, mb: 0.3 }}
-                >
-                  Shared with:
-                </Typography>
+                <span className={classes.tripLogsHeader}>Shared with:</span>
                 {canyonShares.map((share) => (
                   <div key={share.id} className={classes.sharedWithRow}>
                     <span>{share.sharedWith.username}</span>
@@ -412,8 +401,7 @@ function CanyonDetailPanel({
               </button>
             </div>
             <button
-              className={classes.deleteButton}
-              style={{ width: "100%", marginTop: "0.5em" }}
+              className={classes.removeSharedButton}
               onClick={handleRemoveShared}
               disabled={copying}
             >
@@ -424,19 +412,13 @@ function CanyonDetailPanel({
 
         {/* Trip Logs list */}
         <div className={classes.tripLogsSection}>
-          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
-            <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-              Trip Logs {tripLogs.length > 0 && `(${tripLogs.length})`}
-            </Typography>
-          </Box>
+          <div className={classes.tripLogsHeader}>
+            Trip Logs {tripLogs.length > 0 && `(${tripLogs.length})`}
+          </div>
           {loadingTrips ? (
-            <Typography variant="caption" sx={{ opacity: 0.6 }}>
-              Loading...
-            </Typography>
+            <span className={classes.caption}>Loading...</span>
           ) : tripLogs.length === 0 ? (
-            <Typography variant="caption" sx={{ opacity: 0.6 }}>
-              No trips logged yet.
-            </Typography>
+            <span className={classes.caption}>No trips logged yet.</span>
           ) : (
             <div className={classes.tripLogList}>
               {tripLogs.map((trip) => (

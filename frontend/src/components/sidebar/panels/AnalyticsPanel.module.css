@@ -3,7 +3,6 @@
   flex-direction: column;
   gap: 1.25rem;
   height: 100%;
-  overflow-y: auto;
   padding-right: 2px;
 }
 
@@ -32,8 +31,8 @@
   flex-direction: column;
   gap: 0.2rem;
   padding: 0.75rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--theme-text-primary) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
   border-radius: var(--radius-md);
 }
 
@@ -69,7 +68,7 @@
   bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.85);
+  background: color-mix(in srgb, black 85%, transparent);
   color: var(--theme-text-primary);
   font-size: 0.7rem;
   padding: 0.4rem 0.55rem;
@@ -104,6 +103,10 @@
 
 .ringSvg {
   flex-shrink: 0;
+}
+
+.ringStrokeDash {
+  transition: stroke-dashoffset 0.6s ease;
 }
 
 .ringCenter {
@@ -180,7 +183,7 @@
 
 .navIconBtn:hover:not(:disabled) {
   color: var(--theme-text-primary);
-  background: rgba(255, 255, 255, 0.07);
+  background: color-mix(in srgb, var(--theme-text-primary) 7%, transparent);
 }
 
 .navIconBtn:disabled {
@@ -190,7 +193,7 @@
 
 /* ── Heat scale classes ─────────────────────────── */
 
-.heat0 { background: rgba(255, 255, 255, 0.04); }
+.heat0 { background: color-mix(in srgb, var(--theme-text-primary) 4%, transparent); }
 .heat1 { background: color-mix(in srgb, var(--theme-accent) 25%, transparent); }
 .heat2 { background: color-mix(in srgb, var(--theme-accent) 50%, transparent); }
 .heat3 { background: color-mix(in srgb, var(--theme-accent) 75%, transparent); }
@@ -210,7 +213,7 @@
   align-items: center;
   gap: 0.1rem;
   padding: 0.5rem 0.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--theme-text-primary);
@@ -219,7 +222,7 @@
 
 .yearCell:hover {
   filter: brightness(1.2);
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: color-mix(in srgb, var(--theme-text-primary) 18%, transparent);
 }
 
 .yearLabel {
@@ -247,7 +250,7 @@
   align-items: center;
   gap: 0.1rem;
   padding: 0.55rem 0.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--theme-text-primary);
@@ -256,7 +259,7 @@
 
 .monthCell:hover {
   filter: brightness(1.2);
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: color-mix(in srgb, var(--theme-text-primary) 18%, transparent);
 }
 
 .monthLabel {
@@ -292,7 +295,7 @@
   justify-content: center;
   font-size: 0.65rem;
   color: var(--theme-text-primary);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 6%, transparent);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: filter var(--transition-fast), border-color var(--transition-fast);
@@ -300,7 +303,7 @@
 
 .dayCell:not(:disabled):hover {
   filter: brightness(1.25);
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: color-mix(in srgb, var(--theme-text-primary) 18%, transparent);
 }
 
 .dayCell:disabled {
@@ -319,22 +322,11 @@
 }
 
 .tripCard {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.65rem 0.75rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  text-align: left;
-  color: var(--theme-text-primary);
-  width: 100%;
-  transition: background-color var(--transition-fast);
+  composes: tripCard from '@styles/shared.module.css';
 }
 
 .tripCard:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: color-mix(in srgb, var(--theme-text-primary) 9%, transparent);
 }
 
 .tripCanyonName {

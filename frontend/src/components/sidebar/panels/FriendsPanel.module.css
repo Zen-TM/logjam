@@ -4,6 +4,35 @@
   composes: optionsContent from '@styles/shared.module.css';
 }
 
+.caption {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.6;
+}
+
+.sectionTitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-top: 0.5em;
+}
+
+.scrollList {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+
+.pendingScrollList {
+  composes: scrollList;
+  max-height: 150px;
+}
+
+.friendsScrollList {
+  composes: scrollList;
+  max-height: 200px;
+}
+
 .friendSearchContainer {
   display: flex;
   flex-direction: column;
@@ -21,13 +50,6 @@
 
 .addFriendButton {
   composes: btn btnSm btnOutlineBonus1 from '@styles/shared.module.css';
-}
-
-.scrollList {
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2em;
 }
 
 .friendRow {

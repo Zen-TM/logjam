@@ -56,6 +56,7 @@ function SidebarPanel({
   lidarJobToggles,
   setLidarJobToggles,
   // Layers
+  baseLayers,
   activeLayerId,
   onActiveLayerChange,
   // Forge
@@ -115,6 +116,7 @@ function SidebarPanel({
   lidarJobToggles: Record<string, boolean>;
   setLidarJobToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
   // Layers
+  baseLayers: readonly { id: string; name: string }[];
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
   // Forge
@@ -191,6 +193,7 @@ function SidebarPanel({
         )}
         {activePanel === "layers" && (
           <LayersPanel
+            layers={baseLayers}
             activeLayerId={activeLayerId}
             onActiveLayerChange={onActiveLayerChange}
           />
