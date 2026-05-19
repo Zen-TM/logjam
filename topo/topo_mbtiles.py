@@ -144,13 +144,72 @@ ZOOM_MIN = 12
 ZOOM_MAX = 18
 
 # Vegetation (scrub density) layer — for bushbashing avoidance.
-# Window-pooled ratio of walking-height returns (0.25–2.0 m HAG) to all
-# *understorey* returns (0.25–3.0 m HAG, i.e. ground and canopy excluded).
-# Window size in metres == cells (1 m grid).
-SCRUB_DENSITY_WINDOW_M    = 7      # 7×7 m pooling window
-SCRUB_DENSITY_MIN_RATIO   = 0.10   # below this → transparent (light scrub / open ground)
-SCRUB_DENSITY_MAX_RATIO   = 0.70   # at/above → fully opaque dark green
-SCRUB_DENSITY_MIN_POINTS  = 8      # minimum *windowed* understorey-band point count
+# Normalized Relative Density (NRD): walking-height returns (0.25–2.0 m HAG)
+# divided by walking-height + everything-below (HAG ≤ 2.0 m including ground).
+# Including ground in the denominator corrects for canopy occlusion: where the
+# canopy absorbs most pulses, the few that reach the ground floor still
+# normalize the scrub-band count instead of producing wild ratios from tiny
+# denominators.
+# After per-cell NRD is computed, a count-weighted bilateral filter smooths it
+# while preserving scrub-patch edges.
+SCRUB_DENSITY_FILTER_WINDOW_M = 9     # 9×9 m bilateral window (≈4.5 m radius)
+SCRUB_DENSITY_SIGMA_SPATIAL_M = 3.0   # spatial Gaussian σ (metres / cells, 1m grid)
+SCRUB_DENSITY_SIGMA_RANGE     = 0.15  # intensity Gaussian σ in NRD units
+SCRUB_DENSITY_MIN_PULSES      = 12    # min windowed (scrub+below) pulse count for a valid cell
+SCRUB_DENSITY_MIN_RATIO       = 0.05  # below this → transparent (NRD runs lower than old ratio)
+SCRUB_DENSITY_MAX_RATIO       = 0.45  # at/above → fully opaque dark green
+
+# PDAL noise/overlap classification codes per ASPRS LAS spec (dropped during count):
+#   7  = Low noise
+#   12 = Overlap (flight-line redundancy)
+#   18 = High noise
+PDAL_DROP_CLASSES_EXPR = (
+    "Classification != 7 && Classification != 12 && Classification != 18"
+)
+# Drop swath-edge points where understory penetration is poor.
+PDAL_SCAN_ANGLE_MAX = 20
+
+# SVTM formation raster served from S3 via GDAL's /vsis3/ virtual filesystem.
+# GDAL reads only the tiles covering the job AOI — the full NSW-wide raster
+# never loads into memory. Set GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR in the
+# ECS task environment to suppress the S3 directory listing GDAL would
+# otherwise attempt when opening a /vsis3/ path.
+#
+# Override via env var SVTM_FORMATION_S3_PATH (s3://bucket/key form).
+# Set to an empty string to skip SVTM weighting entirely.
+_svtm_s3_raw = os.environ.get(
+    "SVTM_FORMATION_S3_PATH",
+    "s3://logjam-topo-jobs/svtm/svtm_formation.tif",
+)
+SVTM_FORMATION_RASTER: str = (
+    "/vsis3/" + _svtm_s3_raw.removeprefix("s3://") if _svtm_s3_raw else ""
+)
+
+# Formation → navigational-resistance multiplier μ.
+# Multiplies the structural NRD so hard/thorny vegetation (Heathlands,
+# Dry Sclerophyll) reads as harder going than clear-floored vegetation
+# (Rainforest, Grasslands) at the same LiDAR point density.
+# Formation index order must match build_svtm_formation.py exactly.
+# Index 0 is always "Not classified" (μ=1.0).
+SVTM_FORMATION_MU: Dict[str, float] = {
+    "Not classified":                                      1.0,
+    "Rainforests":                                         0.7,
+    "Wet Sclerophyll Forests (Grassy sub-formation)":      0.9,
+    "Wet Sclerophyll Forests (Shrubby sub-formation)":     1.2,
+    "Dry Sclerophyll Forests (Shrub/grass sub-formation)": 1.2,
+    "Dry Sclerophyll Forests (Shrubby sub-formation)":     1.5,
+    "Grassy Woodlands":                                    0.7,
+    "Grasslands":                                          0.5,
+    "Heathlands":                                          1.8,
+    "Forested Wetlands":                                   1.1,
+    "Freshwater Wetlands":                                 1.3,
+    "Saline Wetlands":                                     1.0,
+    "Semi-arid Woodlands (Grassy sub-formation)":          0.9,
+    "Semi-arid Woodlands (Shrubby sub-formation)":         1.3,
+    "Arid Shrublands (Acacia sub-formation)":              1.4,
+    "Arid Shrublands (Chenopod sub-formation)":            1.0,
+    "Alpine Complex":                                      1.4,
+}
 
 # Slope thresholds (degrees) → RGBA colour
 SLOPE_COLOURS = [
@@ -402,25 +461,49 @@ def extract_elvis_zip(zip_path: str, work_dir: str) -> ElvisContents:
 # ---------------------------------------------------------------------------
 
 def build_pipeline_full(las_files: List[str], out_dtm: str,
-                        out_scrub_count: str, out_understorey_count: str,
+                        out_scrub_count: str, out_below_count: str,
                         resolution: float = 1.0) -> dict:
-    """PDAL pipeline: LAZ → DTM (ground) + scrub/understorey return count rasters. Mode C.
+    """PDAL pipeline: LAZ → DTM (ground) + NRD count rasters. Mode C.
 
     Uses filters.smrf for ground classification and filters.hag_nn to assign
-    HeightAboveGround to every point. Two count rasters are produced:
-      - scrub_count:       points with 0.25 m ≤ HAG ≤ 2.0 m (walking-height scrub band)
-      - understorey_count: points with 0.25 m < HAG ≤ 3.0 m (denominator — excludes
-                           ground returns and most canopy so the ratio reflects
-                           "fraction of understorey at walking height")
+    HeightAboveGround to every point. Two count rasters drive NRD:
+      - scrub_count: points with 0.25 ≤ HAG ≤ 2.0 m (walking-height scrub)
+      - below_count: points with HAG < 0.25 m (ground + low litter)
+
+    NRD = scrub_count / (scrub_count + below_count) — the proportion of pulses
+    reaching ≤2.0 m that were intercepted by the walking-height layer rather
+    than passing through to the ground. Including ground returns in the
+    denominator compensates for canopy occlusion.
+
+    A noise/overlap-class filter and a ±20° scan-angle gate apply to both
+    count rasters (but NOT the DTM, which still needs all ground returns
+    regardless of scan angle).
     """
+    # Note on classification: filters.assign below wipes incoming Classification
+    # to 0 so smrf has a clean slate to assign 1 (unclassified) / 2 (ground).
+    # That destroys ASPRS noise/overlap codes (7/12/18). To preserve them for
+    # downstream filtering, we drop those points BEFORE the assign step using
+    # filters.range — it removes points outright rather than reclassifying.
+    count_where = (
+        f"HeightAboveGround >= 0.25 && HeightAboveGround <= 2.0 "
+        f"&& abs(ScanAngleRank) <= {PDAL_SCAN_ANGLE_MAX}"
+    )
+    below_where = (
+        f"HeightAboveGround < 0.25 "
+        f"&& abs(ScanAngleRank) <= {PDAL_SCAN_ANGLE_MAX}"
+    )
     readers = [{"type": "readers.las", "filename": f} for f in las_files]
     return {
         "pipeline": readers + [
             {"type": "filters.reprojection", "out_srs": f"EPSG:{WEB_MERCATOR_EPSG}"},
+            # Drop ASPRS noise (7, 18) and overlap (12) points before smrf
+            # touches Classification.
+            {"type": "filters.range",
+             "limits": "Classification![7:7],Classification![12:12],Classification![18:18]"},
             {"type": "filters.assign", "assignment": "Classification[:]=0"},
             {"type": "filters.smrf"},
             {"type": "filters.hag_nn"},
-            # DTM: mean elevation of ground-classified points
+            # DTM: mean elevation of ground-classified points.
             {
                 "type": "writers.gdal",
                 "filename": out_dtm,
@@ -430,23 +513,23 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
                 "nodata": -9999,
                 "gdalopts": "COMPRESS=LZW",
             },
-            # Scrub band return count (0.25–2.0 m above ground)
+            # Scrub band return count (0.25–2.0 m above ground).
             {
                 "type": "writers.gdal",
                 "filename": out_scrub_count,
                 "resolution": resolution,
                 "output_type": "count",
-                "where": "HeightAboveGround >= 0.25 && HeightAboveGround <= 2.0",
+                "where": count_where,
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
-            # Understorey return count (0.25 m < HAG ≤ 3.0 m — denominator for density ratio)
+            # Below-band return count (HAG < 0.25 m: ground + low litter).
             {
                 "type": "writers.gdal",
-                "filename": out_understorey_count,
+                "filename": out_below_count,
                 "resolution": resolution,
                 "output_type": "count",
-                "where": "HeightAboveGround > 0.25 && HeightAboveGround <= 3.0",
+                "where": below_where,
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
@@ -455,36 +538,51 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
 
 
 def build_pipeline_density_only(las_files: List[str], dtm_path: str,
-                                 out_scrub_count: str, out_understorey_count: str,
+                                 out_scrub_count: str, out_below_count: str,
                                  resolution: float = 1.0) -> dict:
-    """PDAL pipeline: LAZ → scrub/understorey count rasters using an external DEM. Mode B.
+    """PDAL pipeline: LAZ → NRD count rasters using an external DEM. Mode B.
 
     Uses filters.hag_dem to compute HeightAboveGround from a pre-built DEM raster,
     avoiding the need to re-run ground classification (smrf) when a DEM already exists.
     Requires PDAL ≥ 2.4 (available via UbuntuGIS unstable on Ubuntu 24.04).
+
+    Drops ASPRS noise (7, 18) and overlap (12) classifications, and gates
+    points to scan angles ≤ ±20° to remove swath-edge attenuation bias.
     """
+    count_where = (
+        f"HeightAboveGround >= 0.25 && HeightAboveGround <= 2.0 "
+        f"&& abs(ScanAngleRank) <= {PDAL_SCAN_ANGLE_MAX}"
+    )
+    below_where = (
+        f"HeightAboveGround < 0.25 "
+        f"&& abs(ScanAngleRank) <= {PDAL_SCAN_ANGLE_MAX}"
+    )
     readers = [{"type": "readers.las", "filename": f} for f in las_files]
     return {
         "pipeline": readers + [
             {"type": "filters.reprojection", "out_srs": f"EPSG:{WEB_MERCATOR_EPSG}"},
+            # Mode B preserves original Classification (no assign/smrf), so
+            # noise/overlap codes survive — drop them outright.
+            {"type": "filters.range",
+             "limits": "Classification![7:7],Classification![12:12],Classification![18:18]"},
             {"type": "filters.hag_dem", "raster": dtm_path},
-            # Scrub band return count (0.25–2.0 m above ground)
+            # Scrub band return count (0.25–2.0 m above ground).
             {
                 "type": "writers.gdal",
                 "filename": out_scrub_count,
                 "resolution": resolution,
                 "output_type": "count",
-                "where": "HeightAboveGround >= 0.25 && HeightAboveGround <= 2.0",
+                "where": count_where,
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
-            # Understorey return count (0.25 m < HAG ≤ 3.0 m — denominator for density ratio)
+            # Below-band return count (HAG < 0.25 m: ground + low litter).
             {
                 "type": "writers.gdal",
-                "filename": out_understorey_count,
+                "filename": out_below_count,
                 "resolution": resolution,
                 "output_type": "count",
-                "where": "HeightAboveGround > 0.25 && HeightAboveGround <= 3.0",
+                "where": below_where,
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
@@ -517,55 +615,55 @@ def run_pdal_pipeline(pipeline: dict, work_dir: str, label: str = "pipeline"):
 
 
 def run_pdal_sequential_full(las_files: List[str], out_dtm: str,
-                              out_scrub_count: str, out_understorey_count: str,
+                              out_scrub_count: str, out_below_count: str,
                               work_dir: str, resolution: float = 1.0):
-    """Process LAZ files one at a time (DTM + density counts), then merge. Mode C."""
+    """Process LAZ files one at a time (DTM + NRD counts), then merge. Mode C."""
     dtm_tiles = []
     scrub_tiles = []
-    understorey_tiles = []
+    below_tiles = []
     for i, laz in enumerate(las_files):
         log.info(f"PDAL tile {i+1}/{len(las_files)}: {os.path.basename(laz)}")
-        tile_dtm         = os.path.join(work_dir, f"dtm_tile_{i}.tif")
-        tile_scrub       = os.path.join(work_dir, f"scrub_tile_{i}.tif")
-        tile_understorey = os.path.join(work_dir, f"understorey_tile_{i}.tif")
-        pipeline = build_pipeline_full([laz], tile_dtm, tile_scrub, tile_understorey, resolution)
+        tile_dtm   = os.path.join(work_dir, f"dtm_tile_{i}.tif")
+        tile_scrub = os.path.join(work_dir, f"scrub_tile_{i}.tif")
+        tile_below = os.path.join(work_dir, f"below_tile_{i}.tif")
+        pipeline = build_pipeline_full([laz], tile_dtm, tile_scrub, tile_below, resolution)
         run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_full_{i}")
         dtm_tiles.append(tile_dtm)
         scrub_tiles.append(tile_scrub)
-        understorey_tiles.append(tile_understorey)
+        below_tiles.append(tile_below)
 
     log.info(f"Merging {len(dtm_tiles)} DTM tiles …")
     _merge_raster_tiles(dtm_tiles, out_dtm)
     log.info(f"Merging {len(scrub_tiles)} scrub-count tiles …")
     _merge_raster_tiles(scrub_tiles, out_scrub_count)
-    log.info(f"Merging {len(understorey_tiles)} understorey-count tiles …")
-    _merge_raster_tiles(understorey_tiles, out_understorey_count)
+    log.info(f"Merging {len(below_tiles)} below-count tiles …")
+    _merge_raster_tiles(below_tiles, out_below_count)
 
-    for p in dtm_tiles + scrub_tiles + understorey_tiles:
+    for p in dtm_tiles + scrub_tiles + below_tiles:
         os.remove(p)
 
 
 def run_pdal_sequential_density(las_files: List[str], dtm_path: str,
-                                 out_scrub_count: str, out_understorey_count: str,
+                                 out_scrub_count: str, out_below_count: str,
                                  work_dir: str, resolution: float = 1.0):
-    """Process LAZ files one at a time (density counts only) using hag_dem. Mode B."""
+    """Process LAZ files one at a time (NRD counts only) using hag_dem. Mode B."""
     scrub_tiles = []
-    understorey_tiles = []
+    below_tiles = []
     for i, laz in enumerate(las_files):
         log.info(f"PDAL tile {i+1}/{len(las_files)}: {os.path.basename(laz)}")
-        tile_scrub       = os.path.join(work_dir, f"scrub_tile_{i}.tif")
-        tile_understorey = os.path.join(work_dir, f"understorey_tile_{i}.tif")
-        pipeline = build_pipeline_density_only([laz], dtm_path, tile_scrub, tile_understorey, resolution)
+        tile_scrub = os.path.join(work_dir, f"scrub_tile_{i}.tif")
+        tile_below = os.path.join(work_dir, f"below_tile_{i}.tif")
+        pipeline = build_pipeline_density_only([laz], dtm_path, tile_scrub, tile_below, resolution)
         run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_density_{i}")
         scrub_tiles.append(tile_scrub)
-        understorey_tiles.append(tile_understorey)
+        below_tiles.append(tile_below)
 
     log.info(f"Merging {len(scrub_tiles)} scrub-count tiles …")
     _merge_raster_tiles(scrub_tiles, out_scrub_count)
-    log.info(f"Merging {len(understorey_tiles)} understorey-count tiles …")
-    _merge_raster_tiles(understorey_tiles, out_understorey_count)
+    log.info(f"Merging {len(below_tiles)} below-count tiles …")
+    _merge_raster_tiles(below_tiles, out_below_count)
 
-    for p in scrub_tiles + understorey_tiles:
+    for p in scrub_tiles + below_tiles:
         os.remove(p)
 
 
@@ -833,21 +931,163 @@ def _box_sum_2d(arr: np.ndarray, k: int) -> np.ndarray:
     return (bottom_right - top_right - bottom_left + top_left).astype(np.float32)
 
 
-def compute_rasters(dtm_path: str, scrub_count_path: str, understorey_count_path: str,
+def _build_svtm_mu_lookup() -> np.ndarray:
+    """Build formation→μ lookup as a uint8-indexed float32 array from SVTM_FORMATION_MU.
+
+    The formation raster pixel values are indices into the ordered formation
+    list produced by build_svtm_formation.py, which always starts with
+    "Not classified" at index 0 and adds formations in iteration order of
+    SVTM_FORMATION_MU. The lookup is 256 elements so any uint8 raster value
+    (including nodata=255) is a valid direct index — out-of-range values
+    default to μ=1.0 (identity).
+    """
+    mu_lookup = np.ones(256, dtype=np.float32)
+    for idx, mu in enumerate(SVTM_FORMATION_MU.values()):
+        mu_lookup[idx] = mu
+    # Index 255 = nodata sentinel → identity.
+    mu_lookup[255] = 1.0
+    return mu_lookup
+
+
+def apply_svtm_weighting(density_arr: np.ndarray, dtm_path: str, work_dir: str) -> np.ndarray:
+    """Multiply NRD per-pixel by the SVTM formation μ.
+
+    The formation raster is warped from S3 (/vsis3/ path) onto the DTM grid
+    (1 m, Web Mercator, nearest-neighbour to preserve discrete formation
+    indices) — GDAL only fetches the tiles covering the job AOI, so the full
+    NSW-wide raster never loads into memory. μ is then looked up per cell.
+
+    Returns the input array unchanged if SVTM_FORMATION_S3_PATH is unset or
+    empty, or if the /vsis3/ path cannot be opened (e.g. offline dev without
+    LocalStack) — the pipeline always degrades cleanly.
+
+    Output is clamped to [0, 1] so MAX_RATIO normalisation downstream is
+    still meaningful (μ > 1 can push NRD beyond 1).
+    """
+    if not SVTM_FORMATION_RASTER:
+        log.info("SVTM_FORMATION_S3_PATH not set — skipping vegetation weighting.")
+        return density_arr
+
+    log.info(f"Warping SVTM formation raster onto DTM grid (source: {SVTM_FORMATION_RASTER}) …")
+    formation_aligned = os.path.join(work_dir, "svtm_formation_aligned.tif")
+
+    try:
+        ref_ds = gdal.Open(dtm_path)
+        gt = ref_ds.GetGeoTransform()
+        proj = ref_ds.GetProjection()
+        cols = ref_ds.RasterXSize
+        rows = ref_ds.RasterYSize
+        xmin = gt[0]
+        xmax = gt[0] + gt[1] * cols
+        ymax = gt[3]
+        ymin = gt[3] + gt[5] * rows
+        gdal.Warp(
+            formation_aligned,
+            SVTM_FORMATION_RASTER,
+            dstSRS=proj,
+            outputBounds=(xmin, ymin, xmax, ymax),
+            width=cols,
+            height=rows,
+            resampleAlg="near",
+            dstNodata=255,
+            outputType=gdal.GDT_Byte,
+            creationOptions=["COMPRESS=LZW", "TILED=YES"],
+        )
+        ref_ds = None
+    except Exception as e:
+        log.warning(f"SVTM formation raster unavailable ({e}) — skipping vegetation weighting.")
+        return density_arr
+
+    mu_lookup = _build_svtm_mu_lookup()
+    form_ds = gdal.Open(formation_aligned)
+    formation_arr = form_ds.GetRasterBand(1).ReadAsArray().astype(np.uint8)
+    form_ds = None
+
+    mu = mu_lookup[formation_arr]
+    weighted = density_arr * mu
+    # Preserve NaN nodata cells; clamp valid weighted values to [0, 1].
+    out = np.where(np.isfinite(density_arr), np.clip(weighted, 0.0, 1.0), np.nan).astype(np.float32)
+    return out
+
+
+def _bilateral_filter_weighted(
+    value_arr: np.ndarray,
+    confidence_arr: np.ndarray,
+    window: int,
+    sigma_spatial: float,
+    sigma_range: float,
+) -> np.ndarray:
+    """Confidence-weighted bilateral filter on a 2-D float raster.
+
+    For each pixel p, computes a weighted average over the window centred at p:
+        out[p] = Σ_q  w_spatial(p,q) · w_range(value[p], value[q]) · conf[q] · value[q]
+                 ─────────────────────────────────────────────────────────────────────
+                 Σ_q  w_spatial(p,q) · w_range(value[p], value[q]) · conf[q]
+
+    The `conf` term lets cells with more LiDAR pulses contribute proportionally
+    more — so low-pulse cells (under heavy canopy) are smoothed *into* by
+    surrounding high-pulse cells rather than dominating the average.
+
+    Vectorised: for each offset (dy, dx) in the window we shift the arrays and
+    accumulate. O(N · window²) numpy ops; ~10–30 s on a 10k×10k raster.
+    """
+    if window % 2 != 1:
+        raise ValueError("window size must be odd")
+    half = window // 2
+
+    # Pad with `reflect` so border pixels still see a full window's worth of
+    # neighbours (avoids edge artifacts at the raster boundary).
+    val_p = np.pad(value_arr,      half, mode="reflect")
+    cnf_p = np.pad(confidence_arr, half, mode="reflect")
+
+    h, w = value_arr.shape
+    num   = np.zeros((h, w), dtype=np.float64)
+    denom = np.zeros((h, w), dtype=np.float64)
+
+    inv_2_s2 = 1.0 / (2.0 * sigma_spatial * sigma_spatial)
+    inv_2_r2 = 1.0 / (2.0 * sigma_range   * sigma_range)
+
+    for dy in range(-half, half + 1):
+        for dx in range(-half, half + 1):
+            spatial_w = math.exp(-(dy * dy + dx * dx) * inv_2_s2)
+            if spatial_w < 1e-4:
+                continue
+            v_shift = val_p[half + dy : half + dy + h, half + dx : half + dx + w]
+            c_shift = cnf_p[half + dy : half + dy + h, half + dx : half + dx + w]
+            diff = value_arr - v_shift
+            range_w = np.exp(-(diff * diff) * inv_2_r2)
+            w_combined = spatial_w * range_w * c_shift
+            num   += w_combined * v_shift
+            denom += w_combined
+
+    out = np.zeros_like(value_arr, dtype=np.float32)
+    valid = denom > 0
+    out[valid] = (num[valid] / denom[valid]).astype(np.float32)
+    out[~valid] = np.nan
+    return out
+
+
+def compute_rasters(dtm_path: str, scrub_count_path: str, below_count_path: str,
                     work_dir: str) -> dict:
     """
-    From DTM + point-count rasters produce hillshade.tif, slope.tif, scrub_density.tif.
+    From DTM + NRD-count rasters produce hillshade.tif, slope.tif, scrub_density.tif.
 
     The count rasters are first warped onto the DTM pixel grid so array shapes
     are guaranteed to match — essential in Mode B where the DTM comes from a
     pre-built DEM and the counts come from PDAL.
 
-    Scrub density is the pooled ratio of walking-height returns (0.25–2.0 m) to
-    understorey returns (0.25 m < HAG ≤ 3.0 m, ground and canopy excluded),
-    aggregated over a SCRUB_DENSITY_WINDOW_M-cell box. Pooling counts before
-    dividing (rather than per-pixel ratio + post-smooth) gives a statistically
-    stable estimate even in cells where individual pixels would otherwise have
-    too few points to be reliable.
+    Scrub density is computed as Normalized Relative Density (NRD):
+        NRD = scrub_count / (scrub_count + below_count)
+    where the denominator counts every pulse that reached ≤ 2.0 m HAG (scrub
+    band plus everything below it, ground returns included). This compensates
+    for canopy occlusion at the source — a heavy overstory absorbs most pulses,
+    but the few that make it through still normalize the scrub-band count
+    rather than producing a wild ratio off a tiny denominator.
+
+    A confidence-weighted bilateral filter is then applied, where the per-cell
+    confidence is the total pulse count (scrub + below). This preserves sharp
+    edges between scrub patches while smoothing the speckle in low-confidence
+    interior pixels.
     """
     paths = {}
 
@@ -871,47 +1111,63 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, understorey_count_path
     )
     paths["slope"] = sl_path
 
-    # Scrub density: pooled ratio of walking-height to understorey returns over a window
+    # Scrub density: NRD + count-weighted bilateral filter.
     # Step 1: align count rasters onto the DTM grid
-    scrub_aligned       = os.path.join(work_dir, "scrub_count_aligned.tif")
-    understorey_aligned = os.path.join(work_dir, "understorey_count_aligned.tif")
+    scrub_aligned = os.path.join(work_dir, "scrub_count_aligned.tif")
+    below_aligned = os.path.join(work_dir, "below_count_aligned.tif")
     log.info("Aligning count rasters to DTM grid …")
     align_raster_to_reference(scrub_count_path, dtm_path, scrub_aligned)
-    align_raster_to_reference(understorey_count_path, dtm_path, understorey_aligned)
+    align_raster_to_reference(below_count_path, dtm_path, below_aligned)
 
-    # Step 2: window-pooled ratio (numerator: walking-height, denominator: understorey)
-    log.info(f"Computing scrub density (pooled {SCRUB_DENSITY_WINDOW_M}×{SCRUB_DENSITY_WINDOW_M} m) …")
-    dtm_ds          = gdal.Open(dtm_path)
-    scrub_ds        = gdal.Open(scrub_aligned)
-    understorey_ds  = gdal.Open(understorey_aligned)
+    log.info(
+        f"Computing NRD + bilateral filter "
+        f"({SCRUB_DENSITY_FILTER_WINDOW_M}×{SCRUB_DENSITY_FILTER_WINDOW_M} m, "
+        f"σ_s={SCRUB_DENSITY_SIGMA_SPATIAL_M} m, σ_r={SCRUB_DENSITY_SIGMA_RANGE}) …"
+    )
+    dtm_ds   = gdal.Open(dtm_path)
+    scrub_ds = gdal.Open(scrub_aligned)
+    below_ds = gdal.Open(below_aligned)
 
-    # PDAL writes count rasters with nodata=0 (cells with no points matching the
-    # `where` filter). align_raster_to_reference then warps with dstNodata=-9999,
-    # so zero-count cells arrive here marked as -9999. For density purposes
-    # "no points in this band" should be treated as a count of 0, not as nodata —
-    # otherwise -9999 sentinels poison the windowed box sums below and silence
-    # the whole layer. Clamp anything non-positive (sentinel or zero) to zero.
+    # PDAL writes count rasters with nodata=0; warp then injects -9999 sentinels
+    # at non-overlap edges. For NRD purposes "no points" is a count of 0, not
+    # nodata — clamp anything non-positive (sentinel or NaN) to zero so it
+    # cleanly contributes nothing without poisoning the arithmetic.
     def _read_count(ds):
         a = ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
         a[~np.isfinite(a)] = 0.0
         a[a < 0] = 0.0
         return a
 
-    scrub_arr       = _read_count(scrub_ds)
-    understorey_arr = _read_count(understorey_ds)
+    scrub_arr = _read_count(scrub_ds)
+    below_arr = _read_count(below_ds)
+    total_arr = scrub_arr + below_arr
 
-    scrub_sum       = _box_sum_2d(scrub_arr,       SCRUB_DENSITY_WINDOW_M)
-    understorey_sum = _box_sum_2d(understorey_arr, SCRUB_DENSITY_WINDOW_M)
+    # Per-cell raw NRD; cells with zero total contribute 0 (smoothed away by
+    # the bilateral filter via their zero confidence weight).
+    raw_nrd = np.where(total_arr > 0, scrub_arr / np.maximum(total_arr, 1.0), 0.0).astype(np.float32)
 
-    # Windows below the pooled-point threshold are treated as nodata (unstable ratio).
-    valid = understorey_sum >= SCRUB_DENSITY_MIN_POINTS
-    density = np.where(
-        valid,
-        scrub_sum / np.where(understorey_sum > 0, understorey_sum, 1.0),
-        np.nan,
+    # Bilateral filter, weighted by per-cell pulse count.
+    nrd_smoothed = _bilateral_filter_weighted(
+        raw_nrd,
+        total_arr,
+        window=SCRUB_DENSITY_FILTER_WINDOW_M,
+        sigma_spatial=SCRUB_DENSITY_SIGMA_SPATIAL_M,
+        sigma_range=SCRUB_DENSITY_SIGMA_RANGE,
     )
 
-    # Step 3: write scrub_density.tif (values 0–1, nodata = -9999)
+    # Mask cells whose windowed pulse sum is below the confidence threshold —
+    # a box sum is faster than re-walking the bilateral neighbourhood and is
+    # exactly the right quantity for "are there enough total pulses nearby?".
+    windowed_pulses = _box_sum_2d(total_arr, SCRUB_DENSITY_FILTER_WINDOW_M)
+    valid = (windowed_pulses >= SCRUB_DENSITY_MIN_PULSES) & np.isfinite(nrd_smoothed)
+    density = np.where(valid, nrd_smoothed, np.nan).astype(np.float32)
+
+    # Apply SVTM formation μ — distinguishes soft (rainforest) from hard
+    # (sclerophyll/heath) vegetation of equal LiDAR density. No-op if the
+    # preprocessed formation raster is absent.
+    density = apply_svtm_weighting(density, dtm_path, work_dir)
+
+    # Write scrub_density.tif (values 0–1, nodata = -9999)
     density_path = os.path.join(work_dir, "scrub_density.tif")
     density_out = np.where(np.isfinite(density), density, -9999).astype(np.float32)
     driver = gdal.GetDriverByName("GTiff")
@@ -1786,9 +2042,9 @@ def main():
             contents = extract_elvis_zip(args.elvis_zip, work_dir)
 
         las_strs = [str(f) for f in contents.las_files]
-        dtm_filled           = os.path.join(work_dir, "dtm_filled.tif")
-        scrub_count_raw      = os.path.join(work_dir, "scrub_count_raw.tif")
-        understorey_count_raw = os.path.join(work_dir, "understorey_count_raw.tif")
+        dtm_filled      = os.path.join(work_dir, "dtm_filled.tif")
+        scrub_count_raw = os.path.join(work_dir, "scrub_count_raw.tif")
+        below_count_raw = os.path.join(work_dir, "below_count_raw.tif")
 
         footprint_path = os.path.join(work_dir, "footprint.geojson")
 
@@ -1799,11 +2055,11 @@ def main():
             with bench.step("Compute data footprint"):
                 compute_data_footprint(dtm_filled, footprint_path)
         else:
-            # MODE_LAZ_ONLY – build DTM + density counts from point cloud
+            # MODE_LAZ_ONLY – build DTM + NRD counts from point cloud
             dtm_raw = os.path.join(work_dir, "dtm_raw.tif")
-            with bench.step("PDAL: LAZ → DTM + scrub density counts (ground classification)"):
+            with bench.step("PDAL: LAZ → DTM + NRD counts (ground classification)"):
                 run_pdal_sequential_full(
-                    las_strs, dtm_raw, scrub_count_raw, understorey_count_raw,
+                    las_strs, dtm_raw, scrub_count_raw, below_count_raw,
                     work_dir, resolution=1.0,
                 )
             with bench.step("Fill DTM nodata holes"):
@@ -1814,18 +2070,18 @@ def main():
             with bench.step("Compute data footprint"):
                 compute_data_footprint(dtm_filled, footprint_path)
 
-        # ── Step 2b: Obtain density counts (only if vegetation layer needed) ─
+        # ── Step 2b: Obtain NRD counts (only if vegetation layer needed) ────
         if contents.mode == MODE_DEM_LAZ:
-            with bench.step("PDAL: LAZ → scrub density counts (hag_dem)"):
+            with bench.step("PDAL: LAZ → NRD counts (hag_dem)"):
                 run_pdal_sequential_density(
-                    las_strs, dtm_filled, scrub_count_raw, understorey_count_raw,
+                    las_strs, dtm_filled, scrub_count_raw, below_count_raw,
                     work_dir, resolution=1.0,
                 )
 
         # ── Step 3: Derive rasters ───────────────────────────────────────────
         with bench.step("Compute hillshade, slope" + (", scrub density (vegetation)" if contents.has_vegetation else "")):
             if contents.has_vegetation:
-                raster_paths = compute_rasters(dtm_filled, scrub_count_raw, understorey_count_raw, work_dir)
+                raster_paths = compute_rasters(dtm_filled, scrub_count_raw, below_count_raw, work_dir)
             else:
                 raster_paths = compute_rasters_no_veg(dtm_filled, work_dir)
 
