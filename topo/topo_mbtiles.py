@@ -1235,24 +1235,42 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
     out body geom;
     """
 
+    # Multiple Overpass mirrors — the main endpoint has been returning 406
+    # for requests coming from AWS Fargate egress IPs. Rotate across mirrors
+    # so transient blocks on one don't kill the whole layer.
+    endpoints = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+    ]
+    headers = {
+        "User-Agent": "LogjamTopoWorker/1.0",
+        "Accept": "application/json",
+    }
+
     import time as _time
     resp = None
-    for _attempt in range(3):
-        try:
-            resp = requests.post(
-                "https://overpass-api.de/api/interpreter",
-                data={"data": query},
-                headers={"User-Agent": "LogjamTopoWorker/1.0 (private canyoning app worker)"},
-                timeout=180,
-            )
-            resp.raise_for_status()
-            break  # success
-        except Exception as e:
-            log.warning(f"Overpass API attempt {_attempt + 1}/3 failed: {e}")
-            if _attempt < 2:
-                _time.sleep(10 * (2 ** _attempt))  # 10 s, then 20 s
+    last_err: Optional[str] = None
+    attempts = 0
+    for endpoint in endpoints:
+        for retry in range(2):
+            attempts += 1
+            try:
+                resp = requests.post(endpoint, data={"data": query},
+                                     headers=headers, timeout=180)
+                resp.raise_for_status()
+                break
+            except Exception as e:
+                last_err = f"{endpoint}: {e}"
+                log.warning(f"Overpass attempt {attempts} failed ({last_err})")
+                resp = None
+                if retry == 0:
+                    _time.sleep(10)
+        if resp is not None and resp.ok:
+            break
     if resp is None or not resp.ok:
-        log.warning("Overpass API request failed after 3 attempts. Features layer will be empty.")
+        log.warning(f"Overpass API failed after {attempts} attempts across {len(endpoints)} endpoints. "
+                    f"Features layer will be empty. Last error: {last_err}")
         return None
 
     raw = resp.json()
@@ -1971,14 +1989,30 @@ def get_raster_bbox_wgs84(raster_path: str) -> Tuple[float, float, float, float]
 # ---------------------------------------------------------------------------
 
 def merge_dem_tiles(dem_files: List[Path], out_path: str):
-    """Mosaic multiple DEM GeoTIFFs into one and reproject to Web Mercator."""
+    """Mosaic multiple DEM GeoTIFFs into one and reproject to Web Mercator.
+
+    Reads source nodata from the first DEM's band metadata and propagates it
+    through the warp so the rotated edge cells become nodata instead of
+    bilinear-blended attenuated values. INIT_DEST=NO_DATA stops cubic
+    resampling from averaging valid + nodata at the boundary.
+    """
     log.info(f"Merging {len(dem_files)} DEM tile(s) into Web Mercator …")
     vrt_path = out_path.replace(".tif", "_input.vrt")
     gdal.BuildVRT(vrt_path, [str(f) for f in dem_files])
+
+    src_ds = gdal.Open(str(dem_files[0]))
+    src_nodata = src_ds.GetRasterBand(1).GetNoDataValue()
+    src_ds = None
+    if src_nodata is None:
+        src_nodata = -9999
+
     gdal.Warp(
         out_path, vrt_path,
         dstSRS=f"EPSG:{WEB_MERCATOR_EPSG}",
-        resampleAlg="bilinear",
+        resampleAlg="cubic",
+        srcNodata=src_nodata,
+        dstNodata=-9999,
+        warpOptions=["INIT_DEST=NO_DATA"],
         creationOptions=["COMPRESS=LZW"],
     )
     log.info("DEM merge complete.")
@@ -2064,11 +2098,12 @@ def main():
                 )
             with bench.step("Fill DTM nodata holes"):
                 fill_nodata(dtm_raw, dtm_filled)
-            # Footprint is computed from the *filled* DTM so small interior
-            # holes (rivers, dense canopy ground gaps) don't leak through as
-            # cutouts in downstream raster layers.
+            # Footprint is computed from dtm_raw (pre-fill) so fill_nodata's
+            # 100 m extrapolation into outer nodata regions doesn't dilate the
+            # outer boundary into a wedge artifact. Interior holes still get
+            # bridged by the morphological close inside compute_data_footprint.
             with bench.step("Compute data footprint"):
-                compute_data_footprint(dtm_filled, footprint_path)
+                compute_data_footprint(dtm_raw, footprint_path)
 
         # ── Step 2b: Obtain NRD counts (only if vegetation layer needed) ────
         if contents.mode == MODE_DEM_LAZ:

@@ -104,10 +104,18 @@ function NotificationsPanel({
                   `${n.payload.acceptedByUsername} accepted your friend request`}
                 {n.type === "canyon_shared" &&
                   `${n.payload.sharedByUsername} shared ${n.payload.canyonName} with you`}
-                {n.type === "topo_complete" &&
-                  (n.payload.jobName
-                    ? `${n.payload.jobName} topo complete`
-                    : "LiDAR topo processing complete")}
+                {n.type === "topo_complete" && (
+                  <>
+                    {n.payload.jobName
+                      ? `${n.payload.jobName} topo complete`
+                      : "LiDAR topo processing complete"}
+                    {n.payload.osmFailed === true && (
+                      <div className={classes.notificationWarning}>
+                        OSM features unavailable — Overpass API failed. Retry to fetch them.
+                      </div>
+                    )}
+                  </>
+                )}
                 {n.type === "topo_failed" &&
                   (n.payload.jobName
                     ? `${n.payload.jobName} topo failed`

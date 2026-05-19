@@ -136,7 +136,8 @@ def find_and_delete_sqs_message(job_id: str):
 
 # ── Email ─────────────────────────────────────────────────────────────────────
 
-def send_completion_email(to_email: str, job_id: str, output_keys: list[dict]):
+def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
+                          osm_failed: bool = False):
     if not ses:
         return
     links = []
@@ -150,6 +151,18 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict]):
         links.append(f"  {output['name']}: {url}")
         html_links.append(f'<li><a href="{url}">{output["name"]}</a></li>')
 
+    osm_warning_text = (
+        "\n\nNote: OSM features (tracks, waterways, peaks, etc.) are unavailable "
+        "for this map — the Overpass API request failed. Other layers are complete. "
+        "Retry the job to fetch features again."
+    ) if osm_failed else ""
+    osm_warning_html = (
+        '<p style="color:#a06000"><strong>Note:</strong> OSM features '
+        "(tracks, waterways, peaks, etc.) are unavailable for this map — "
+        "the Overpass API request failed. Other layers are complete. "
+        "Retry the job to fetch features again.</p>"
+    ) if osm_failed else ""
+
     text_body = "\n".join([
         f"Your topo map job is complete.",
         "",
@@ -157,7 +170,7 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict]):
         *links,
         "",
         "You can also view these layers as overlays in the Logjam app.",
-    ])
+    ]) + osm_warning_text
 
     html_body = "\n".join([
         "<html>",
@@ -166,6 +179,7 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict]):
         "    <p>Download your MBTiles files (links expire in 7 days):</p>",
         f"    <ul>{''.join(html_links)}</ul>",
         "    <p>You can also view these layers as overlays in the Logjam app.</p>",
+        f"    {osm_warning_html}",
         "  </body>",
         "</html>",
     ])
@@ -264,10 +278,12 @@ def run_tippecanoe_features(geojson_dir: str, out_dir: str) -> Path | None:
 
 # ── Core processing ───────────────────────────────────────────────────────────
 
-def process_job(job: dict, tmp: str) -> list[dict]:
+def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool]:
     """
     Download ZIP, run topo pipeline, convert to PMTiles, upload all to S3.
-    Returns list of { name, mbtilesKey, pmtilesKey }.
+    Returns (output_keys, footprint_local, osm_failed).
+    osm_failed is True when the Overpass fetch did not produce a GeoJSON
+    (so the features layer will be empty/missing).
     """
     s3_input_key = job["s3_input_key"]
     job_id       = job["id"]
@@ -311,6 +327,25 @@ def process_job(job: dict, tmp: str) -> list[dict]:
         )
 
     footprint_local = geojson_dir / "footprint.geojson"
+    osm_failed = not (geojson_dir / "osm_features.geojson").exists()
+    if osm_failed:
+        log.warning("OSM features GeoJSON missing — Overpass fetch failed in pipeline.")
+
+    # ── Vector tiles for contours + OSM features ────────────────────────
+    # topo_mbtiles.py writes raster contours.mbtiles / features.mbtiles
+    # (used for the composite + Gaia downloads). The web app needs the
+    # vector versions — run tippecanoe on the GeoJSON exports and put the
+    # resulting MBTiles in vector_dir; the upload loop picks them up for
+    # the vector layers' pmtiles conversion.
+    vector_dir = Path(tmp) / "vector"
+    vector_dir.mkdir()
+    vector_mbtiles_by_layer: dict[str, Path] = {}
+    contours_vector = run_tippecanoe_contours(str(geojson_dir), str(vector_dir))
+    if contours_vector is not None:
+        vector_mbtiles_by_layer["contours"] = contours_vector
+    features_vector = run_tippecanoe_features(str(geojson_dir), str(vector_dir))
+    if features_vector is not None:
+        vector_mbtiles_by_layer["features"] = features_vector
 
     # ── Optional: upload intermediates for debugging ────────────────────
     if keep_intermediates and pipeline_work_dir is not None:
@@ -346,7 +381,11 @@ def process_job(job: dict, tmp: str) -> list[dict]:
 
         pmtiles_key: Optional[str] = None
         if name in ALL_LAYERS:
-            with sqlite3.connect(str(mbtiles_path)) as _conn:
+            # Vector layers (contours, features) get their PMTiles from the
+            # tippecanoe-produced vector MBTiles, not from the raster MBTiles
+            # that backs the composite + Gaia download.
+            pmtiles_source = vector_mbtiles_by_layer.get(name, mbtiles_path)
+            with sqlite3.connect(str(pmtiles_source)) as _conn:
                 _row = _conn.execute("SELECT value FROM metadata WHERE name='maxzoom'").fetchone()
                 maxzoom = int(_row[0]) if _row else 18
                 tile_count = _conn.execute("SELECT COUNT(*) FROM tiles").fetchone()[0]
@@ -359,8 +398,8 @@ def process_job(job: dict, tmp: str) -> list[dict]:
             else:
                 pmtiles_path = output_dir / f"{name}.pmtiles"
                 pmtiles_key  = f"outputs/{job_id}/{name}.pmtiles"
-                log.info(f"Converting {name} → PMTiles ({tile_count} tiles) …")
-                mbtiles_to_pmtiles(str(mbtiles_path), str(pmtiles_path), maxzoom)
+                log.info(f"Converting {name} → PMTiles ({tile_count} tiles, source={pmtiles_source.name}) …")
+                mbtiles_to_pmtiles(str(pmtiles_source), str(pmtiles_path), maxzoom)
                 log.info(f"Uploading {name}.pmtiles …")
                 s3.upload_file(str(pmtiles_path), BUCKET, pmtiles_key)
         else:
@@ -372,7 +411,7 @@ def process_job(job: dict, tmp: str) -> list[dict]:
             "pmtilesKey": pmtiles_key,
         })
 
-    return output_keys, footprint_local
+    return output_keys, footprint_local, osm_failed
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -386,7 +425,7 @@ def main():
 
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            output_keys, footprint_local = process_job(job, tmp)
+            output_keys, footprint_local, osm_failed = process_job(job, tmp)
 
             extra: dict = {"s3_output_keys": output_keys}
             if footprint_local and footprint_local.exists():
@@ -397,17 +436,19 @@ def main():
                     extra["footprint"] = features[0]["geometry"]
 
         update_status(conn, JOB_ID, "complete", **extra)
-        log.info(f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded")
+        log.info(f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded"
+                 + (" (OSM features missing — Overpass failed)" if osm_failed else ""))
 
         create_notification(conn, job["user_id"], "topo_complete", {
             "jobId": JOB_ID,
             "jobName": job.get("name"),
             "footprint": extra.get("footprint"),
+            "osmFailed": osm_failed,
         })
 
         email = get_user_email(conn, job["user_id"])
         if email:
-            send_completion_email(email, JOB_ID, output_keys)
+            send_completion_email(email, JOB_ID, output_keys, osm_failed=osm_failed)
 
         find_and_delete_sqs_message(JOB_ID)
 

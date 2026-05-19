@@ -54,6 +54,12 @@
   margin-top: 0.3em;
 }
 
+.notificationWarning {
+  margin-top: 0.3em;
+  font-size: var(--text-xs);
+  color: var(--theme-warning);
+}
+
 .acceptButton {
   composes: btn btnSm btnOutlineAccent from '@styles/shared.module.css';
 }
