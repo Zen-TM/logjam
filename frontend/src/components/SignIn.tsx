@@ -3,6 +3,8 @@ import { TextField, Button } from "@mui/material";
 import classes from "./SignIn.module.css";
 import type { AuthState } from "../useAuth";
 import { ErrorBanner } from "./feedback/ErrorBanner";
+import Footer from "./Footer";
+import { CURRENT_CONSENT_VERSION, PENDING_CONSENT_STORAGE_KEY } from "../consent";
 
 function SignIn({
   authState,
@@ -47,6 +49,7 @@ function SignIn({
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendSuccess, setResendSuccess] = useState(false);
+  const [consented, setConsented] = useState(false);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -88,9 +91,17 @@ function SignIn({
       setLocalError("Password must be at least 8 characters");
       return;
     }
+    if (!consented) {
+      setLocalError("You must agree to the Terms and Privacy Policy");
+      return;
+    }
     setSubmitting(true);
-    await onSignUp(username, password, email, name);
-    setSubmitting(false);
+    try {
+      await onSignUp(username, password, email, name);
+      localStorage.setItem(PENDING_CONSENT_STORAGE_KEY, CURRENT_CONSENT_VERSION);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleConfirm(e: React.FormEvent) {
@@ -165,6 +176,7 @@ function SignIn({
             {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
           </Button>
         </form>
+        <div className={classes.footerWrap}><Footer /></div>
       </div>
     );
   }
@@ -202,6 +214,7 @@ function SignIn({
             </button>
           </p>
         </form>
+        <div className={classes.footerWrap}><Footer /></div>
       </div>
     );
   }
@@ -257,6 +270,7 @@ function SignIn({
             </button>
           </p>
         </form>
+        <div className={classes.footerWrap}><Footer /></div>
       </div>
     );
   }
@@ -310,12 +324,26 @@ function SignIn({
             fullWidth
             required
           />
+          <label className={classes.consentRow}>
+            <input
+              type="checkbox"
+              checked={consented}
+              onChange={(e) => setConsented(e.target.checked)}
+              required
+            />
+            <span>
+              I agree to the{" "}
+              <a href="/tos.html" target="_blank" rel="noopener noreferrer">Terms</a>{" "}
+              and acknowledge the{" "}
+              <a href="/privacy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+            </span>
+          </label>
           {displayError && <ErrorBanner message={displayError} />}
           <Button
             type="submit"
             variant="contained"
             fullWidth
-            disabled={submitting}
+            disabled={submitting || !consented}
           >
             {submitting ? "Creating account..." : "Sign up"}
           </Button>
@@ -326,6 +354,7 @@ function SignIn({
             </button>
           </p>
         </form>
+        <div className={classes.footerWrap}><Footer /></div>
       </div>
     );
   }
@@ -378,6 +407,7 @@ function SignIn({
           </button>
         </p>
       </form>
+      <div className={classes.footerWrap}><Footer /></div>
     </div>
   );
 }

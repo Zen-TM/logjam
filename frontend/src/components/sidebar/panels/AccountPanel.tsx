@@ -8,6 +8,7 @@ import classes from "./AccountPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import { ErrorBanner } from "../../feedback/ErrorBanner";
+import Footer from "../../Footer";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -212,6 +213,8 @@ function AccountPanel() {
         onClose={() => setChangeEmailOpen(false)}
         onSuccess={(newEmail) => setEmail(newEmail)}
       />
+
+      <Footer />
     </div>
   );
 }

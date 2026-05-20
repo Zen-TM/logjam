@@ -30,10 +30,12 @@ import {
   useTripLogs,
   useAnalytics,
   fetchCurrentUser,
+  recordConsent,
   passesFilters,
   syncOzUltimateSources,
   apiFetch,
 } from "../canyonUtils";
+import { PENDING_CONSENT_STORAGE_KEY } from "../consent";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import { Button } from "@mui/material";
@@ -274,6 +276,14 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     fetchCurrentUser()
       .then((user) => {
         setCustomFieldDefs(user.uiPreferences?.tripLogCustomFields ?? []);
+        const pending = localStorage.getItem(PENDING_CONSENT_STORAGE_KEY);
+        if (pending && !user.consentedAt) {
+          recordConsent(pending)
+            .then(() => localStorage.removeItem(PENDING_CONSENT_STORAGE_KEY))
+            .catch((err) => { console.error(err); });
+        } else if (pending) {
+          localStorage.removeItem(PENDING_CONSENT_STORAGE_KEY);
+        }
       })
       .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't load your preferences.")); });
   }, [authenticated, hydrateFromUser, toast]);

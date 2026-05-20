@@ -184,10 +184,11 @@ router.patch(
   userPatchLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
-    const { username, themeSchemeId, tripLogCustomFields } = req.body as {
+    const { username, themeSchemeId, tripLogCustomFields, consentVersion } = req.body as {
       username?: unknown;
       themeSchemeId?: unknown;
       tripLogCustomFields?: unknown;
+      consentVersion?: unknown;
     };
 
     const user = await prisma.user.findUnique({ where: { cognitoId: sub } });
@@ -196,7 +197,17 @@ router.patch(
     const updates: {
       username?: string;
       uiPreferences?: Prisma.InputJsonValue;
+      consentedAt?: Date;
+      consentVersion?: string;
     } = {};
+
+    if (consentVersion !== undefined) {
+      if (typeof consentVersion !== "string" || consentVersion.length === 0 || consentVersion.length > 64) {
+        throw new AppError(400, "Invalid consentVersion");
+      }
+      updates.consentVersion = consentVersion;
+      updates.consentedAt = new Date();
+    }
 
     if (username !== undefined) {
       const parsed = usernameSchema.safeParse(username);

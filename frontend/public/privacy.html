@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Logjam — Privacy Policy</title>
+    <style>
+      body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.55; color: #1c1c1c; background: #fafafa; }
+      h1, h2 { line-height: 1.2; }
+      h1 { margin-bottom: 0.25rem; }
+      .updated { color: #666; font-size: 0.9rem; margin-top: 0; }
+      a { color: #2256b8; }
+      hr { border: none; border-top: 1px solid #ddd; margin: 2rem 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Logjam — Privacy Policy</h1>
+    <p class="updated">Last updated: 2026-05-21</p>
+
+    <p>
+      Logjam is built as a <strong>private</strong> tool. Privacy is a design
+      constraint, not a feature, because exposing canyon locations causes real
+      environmental harm and can compromise rescue and access agreements. This
+      policy explains what we store, why, and what we deliberately do not do.
+    </p>
+
+    <h2>What we store</h2>
+    <ul>
+      <li><strong>Account data:</strong> username, email, sign-in credentials
+          (via AWS Cognito), theme and UI preferences, storage usage.</li>
+      <li><strong>Canyon data:</strong> name, coordinates, grades, notes,
+          attributes, and any media you upload.</li>
+      <li><strong>Trip logs:</strong> dates, notes, custom fields, and media
+          attached to your own trips.</li>
+      <li><strong>Sharing:</strong> which of your friends each canyon is
+          shared with.</li>
+      <li><strong>Topo jobs:</strong> LiDAR inputs you upload and the rendered
+          map tiles produced from them.</li>
+      <li><strong>Operational logs:</strong> request error logs and worker
+          job state. These are scrubbed so canyon names and coordinates do not
+          appear in plain text.</li>
+    </ul>
+
+    <h2>What we do not do</h2>
+    <ul>
+      <li>No third-party analytics, advertising, or telemetry leaving your
+          account.</li>
+      <li>No public or unauthenticated endpoints on user data — every API
+          route requires authentication.</li>
+      <li>No default public sharing. Sharing is explicit, per-canyon, between
+          authenticated users you have a friendship with.</li>
+      <li>No selling, renting, or monetising your data.</li>
+    </ul>
+
+    <h2>How sharing works</h2>
+    <p>
+      When you share a canyon with another Logjam user, that user can see the
+      canyon record including its name, coordinates, canyon-level notes and
+      canyon-level media. Per-trip notes, per-trip media, and your trip-log
+      history remain private to you.
+    </p>
+
+    <h2>Where data is hosted</h2>
+    <p>
+      Logjam runs on AWS in the <code>ap-southeast-2</code> (Sydney) region.
+      Photos, topo input, and rendered tiles are stored in S3. The database is
+      RDS PostgreSQL. Email goes via Amazon SES. Authentication is Amazon
+      Cognito.
+    </p>
+
+    <h2>Email</h2>
+    <p>
+      We email you only for:
+    </p>
+    <ul>
+      <li>Account verification and password reset codes.</li>
+      <li>Notification when a topo job you started has finished.</li>
+    </ul>
+    <p>No marketing email is ever sent.</p>
+
+    <h2>Your controls</h2>
+    <ul>
+      <li><strong>Export:</strong> contact us if you want a copy of your data.</li>
+      <li><strong>Delete:</strong> the Account panel has a "Delete account"
+          button that permanently removes every record we hold for you,
+          including canyons, trip logs, media, friendships, shares, and
+          notifications.</li>
+      <li><strong>Correct:</strong> you can edit your username, email, canyon
+          records, and trip logs at any time.</li>
+    </ul>
+
+    <h2>Retention</h2>
+    <p>
+      Data is retained until you delete it or the account. Operational logs
+      may persist in AWS CloudWatch for up to 90 days after the originating
+      record is removed.
+    </p>
+
+    <h2>Children</h2>
+    <p>
+      Logjam is not directed at children under 16. Do not create an account
+      for a minor.
+    </p>
+
+    <h2>Changes to this policy</h2>
+    <p>
+      When this policy materially changes, the "Last updated" date above will
+      change and you will be asked to re-consent on next sign-in.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+      Privacy questions:
+      <a href="mailto:zentmarcos@gmail.com?subject=Logjam%20privacy">zentmarcos@gmail.com</a>.
+    </p>
+
+    <hr />
+    <p><a href="/">← Back to Logjam</a></p>
+  </body>
+</html>

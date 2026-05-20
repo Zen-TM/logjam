@@ -36,6 +36,8 @@ export type TUser = {
   email: string;
   storageUsedBytes: number;
   storageQuotaBytes: number;
+  consentedAt: string | null;
+  consentVersion: string | null;
   uiPreferences?: {
     themeSchemeId?: ThemeSchemeId;
     tripLogCustomFields?: TripLogCustomFieldDef[];
@@ -312,6 +314,13 @@ export function updateUsername(username: string): Promise<TUser> {
 
 export function deleteAccount(): Promise<void> {
   return apiFetch<void>("/users/me", { method: "DELETE" });
+}
+
+export function recordConsent(version: string): Promise<TUser> {
+  return apiFetch<TUser>("/users/me", {
+    method: "PATCH",
+    body: { consentVersion: version },
+  });
 }
 
 // ── Trip Logs ─────────────────────────────────────────────────
