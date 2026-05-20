@@ -1,5 +1,7 @@
 import { useState } from "react";
 import classes from "./NotificationsPanel.module.css";
+import { useToast } from "../../feedback/ToastProvider";
+import { messageFromError } from "../../../errors/messageFromError";
 import type { TNotification } from "../../../canyonUtils";
 import type { PanelId } from "../panels";
 import type { GeoJsonPolygon } from "../../dialogs/TopoDialog";
@@ -28,15 +30,18 @@ function NotificationsPanel({
   onTopoFlyTarget: (footprint: GeoJsonPolygon) => void;
 }) {
   const [actionedIds, setActionedIds] = useState<Set<string>>(new Set());
+  const toast = useToast();
 
   async function handleAccept(notificationId: string, friendshipId: string) {
     setActionedIds((prev) => new Set([...prev, notificationId]));
     try {
       await acceptFriendRequest(friendshipId);
-      deleteNotification(notificationId).catch(() => {});
+      deleteNotification(notificationId).catch((err) => { console.error(err); });
       onRefetchFriends();
       onRefetchNotifications();
-    } catch {
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't accept friend request."));
       setActionedIds((prev) => {
         const next = new Set(prev);
         next.delete(notificationId);
@@ -49,9 +54,11 @@ function NotificationsPanel({
     setActionedIds((prev) => new Set([...prev, notificationId]));
     try {
       await declineFriendRequest(friendshipId);
-      deleteNotification(notificationId).catch(() => {});
+      deleteNotification(notificationId).catch((err) => { console.error(err); });
       onRefetchNotifications();
-    } catch {
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't decline friend request."));
       setActionedIds((prev) => {
         const next = new Set(prev);
         next.delete(notificationId);
@@ -154,7 +161,7 @@ function NotificationsPanel({
                       e.stopPropagation();
                       onTopoFlyTarget(n.payload.footprint as GeoJsonPolygon);
                       if (!n.read) {
-                        markNotificationRead(n.id).catch(() => {});
+                        markNotificationRead(n.id).catch((err) => { console.error(err); });
                         onRefetchNotifications();
                       }
                     }}

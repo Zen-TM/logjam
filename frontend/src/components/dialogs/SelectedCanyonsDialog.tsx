@@ -17,6 +17,8 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import type { TCanyon, TFriend } from "../../canyonUtils";
 import { deleteCanyon, shareCanyonWith } from "../../canyonUtils";
+import { useToast } from "../feedback/ToastProvider";
+import { messageFromError } from "../../errors/messageFromError";
 import type { TExportFormat } from "../../canyonExport";
 import { buildCanyonExport } from "../../canyonExport";
 import classes from "./SelectedCanyonsDialog.module.css";
@@ -42,6 +44,7 @@ function SelectedCanyonsDialog({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [exportFormat, setExportFormat] = useState<TExportFormat>("gpx");
+  const toast = useToast();
 
   const busy = sharing || deleting;
   const ownedCanyons = selectedCanyons.filter((c) => ownedCanyonIds.has(c.id));
@@ -54,15 +57,17 @@ function SelectedCanyonsDialog({
         for (const fId of shareFriendIds) {
           try {
             await shareCanyonWith(c.id, fId);
-          } catch {
-            // skip duplicates / errors
+          } catch (err) {
+            console.error(err);
+            toast.error(messageFromError(err, "Couldn't share one or more canyons."));
           }
         }
       }
       setShareFriendIds([]);
       onClose();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't share canyons. Please try again."));
     } finally {
       setSharing(false);
     }
@@ -87,8 +92,9 @@ function SelectedCanyonsDialog({
       setShowDeleteConfirm(false);
       onDeleted();
       onClose();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't delete canyons. Please try again."));
     } finally {
       setDeleting(false);
     }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { TextField, Button } from "@mui/material";
 import classes from "./SignIn.module.css";
 import type { AuthState } from "../useAuth";
+import { ErrorBanner } from "./feedback/ErrorBanner";
 
 function SignIn({
   authState,
@@ -85,7 +86,7 @@ function SignIn({
             required
             autoFocus
           />
-          {displayError && <p className={classes.error}>{displayError}</p>}
+          {displayError && <ErrorBanner message={displayError} />}
           <Button
             type="submit"
             variant="contained"
@@ -148,7 +149,7 @@ function SignIn({
             fullWidth
             required
           />
-          {displayError && <p className={classes.error}>{displayError}</p>}
+          {displayError && <ErrorBanner message={displayError} />}
           <Button
             type="submit"
             variant="contained"
@@ -192,7 +193,7 @@ function SignIn({
           fullWidth
           required
         />
-        {displayError && <p className={classes.error}>{displayError}</p>}
+        {displayError && <ErrorBanner message={displayError} />}
         <Button
           type="submit"
           variant="contained"

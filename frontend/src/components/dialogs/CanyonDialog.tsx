@@ -15,6 +15,8 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import type { TCanyon } from "../../canyonUtils";
 import { updateCanyon, createCanyon } from "../../canyonUtils";
+import { messageFromError } from "../../errors/messageFromError";
+import { ErrorBanner } from "../feedback/ErrorBanner";
 
 const V_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
 const A_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -192,7 +194,8 @@ function CanyonDialog({
       onSaved();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save");
+      console.error(err);
+      setError(messageFromError(err, "Couldn't save canyon. Please try again."));
     } finally {
       setSaving(false);
     }
@@ -474,11 +477,7 @@ function CanyonDialog({
             </Button>
           </Box>
 
-          {error && (
-            <Box sx={{ color: "error.main", fontSize: "0.875rem" }}>
-              {error}
-            </Box>
-          )}
+          {error && <ErrorBanner message={error} />}
         </Box>
       </DialogContent>
       <DialogActions>

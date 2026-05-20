@@ -18,6 +18,8 @@ import { BASE_LAYERS } from "../map/Map";
 import { TOPO_LAYERS } from "../../topoLayerTypes";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import { apiFetch, apiFetchBlob, type TCanyon } from "../../canyonUtils";
+import { messageFromError } from "../../errors/messageFromError";
+import { ErrorBanner } from "../feedback/ErrorBanner";
 import type {
   ExtentState,
   PaperSize,
@@ -218,7 +220,7 @@ function GeoPdfDialog({
     if (!open || templateMode) return;
     apiFetch<GeoPdfTemplate[]>("/geo-pdf-templates")
       .then(setTemplates)
-      .catch(() => {});
+      .catch((err) => { console.error(err); });
   }, [open, templateMode]);
 
   // Populate fields from editingTemplate when entering template mode
@@ -568,7 +570,8 @@ function GeoPdfDialog({
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to generate PDF");
+      console.error(e);
+      setError(messageFromError(e, "Couldn't generate PDF. Please try again."));
     } finally {
       setGenerating(false);
     }
@@ -1228,11 +1231,7 @@ function GeoPdfDialog({
           </div>
         </div>
 
-        {error && (
-          <Typography color="error" variant="body2" sx={{ mt: 1 }}>
-            {error}
-          </Typography>
-        )}
+        {error && <ErrorBanner message={error} />}
       </DialogContent>
 
       <DialogActions>

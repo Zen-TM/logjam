@@ -13,6 +13,8 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import type { TTripLog } from "../../canyonUtils";
+import { useToast } from "../feedback/ToastProvider";
+import { messageFromError } from "../../errors/messageFromError";
 import { deleteTripLog } from "../../canyonUtils";
 import classes from "./TripLogViewDialog.module.css";
 
@@ -49,6 +51,7 @@ function TripLogViewDialog({
 }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const toast = useToast();
 
   async function handleDelete() {
     if (!tripLog) return;
@@ -58,8 +61,9 @@ function TripLogViewDialog({
       setShowDeleteConfirm(false);
       onDeleted();
       onClose();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't delete trip log. Please try again."));
     } finally {
       setDeleting(false);
     }

@@ -13,6 +13,8 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import { deleteUser } from "aws-amplify/auth";
 import { deleteAccount } from "../../canyonUtils";
+import { messageFromError } from "../../errors/messageFromError";
+import { ErrorBanner } from "../feedback/ErrorBanner";
 
 const inputSx = {
   "& .MuiInputBase-input": { color: "var(--theme-text-primary)" },
@@ -54,7 +56,8 @@ function DeleteAccountDialog({
       await deleteUser();
       onDeleted();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete account");
+      console.error(err);
+      setError(messageFromError(err, "Couldn't delete account. Please try again."));
       setDeleting(false);
     }
   }
@@ -114,20 +117,7 @@ function DeleteAccountDialog({
           autoFocus
           sx={inputSx}
         />
-        {error && (
-          <Typography
-            sx={{
-              fontSize: "var(--text-xs)",
-              color: "var(--theme-text-primary)",
-              background: "color-mix(in srgb, var(--theme-warning) 25%, transparent)",
-              border: "1px solid color-mix(in srgb, var(--theme-warning) 55%, transparent)",
-              borderRadius: "var(--radius-sm)",
-              padding: "8px 10px",
-            }}
-          >
-            {error}
-          </Typography>
-        )}
+        {error && <ErrorBanner message={error} />}
       </DialogContent>
       <DialogActions>
         <Button

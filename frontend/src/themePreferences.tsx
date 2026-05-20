@@ -18,6 +18,7 @@ import {
 } from "@logjam/shared";
 import { createThemeFromTokens } from "./theme";
 import { fetchCurrentUser, updateCurrentUserThemeScheme } from "./canyonUtils";
+import { messageFromError } from "./errors/messageFromError";
 
 function applyTokensToCss(tokens: ThemeTokens) {
   const root = document.documentElement;
@@ -107,8 +108,9 @@ export function ThemePreferencesProvider({
         const normalized = normalizeUserUiPreferences(updated.uiPreferences);
         setSchemeId(normalized.themeSchemeId);
       } catch (err) {
+        console.error(err);
         setSchemeId(previous);
-        setError(err instanceof Error ? err.message : "Failed to save theme");
+        setError(messageFromError(err, "Couldn't save theme. Please try again."));
       } finally {
         setIsSaving(false);
       }

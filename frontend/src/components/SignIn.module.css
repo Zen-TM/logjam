@@ -30,13 +30,6 @@
   font-size: 0.875rem;
 }
 
-.error {
-  margin: 0;
-  color: var(--theme-warning);
-  font-size: 0.875rem;
-  text-align: center;
-}
-
 .switchText {
   margin: 0;
   text-align: center;

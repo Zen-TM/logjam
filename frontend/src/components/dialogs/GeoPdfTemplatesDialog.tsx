@@ -9,6 +9,8 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { apiFetch } from "../../canyonUtils";
+import { messageFromError } from "../../errors/messageFromError";
+import { ErrorBanner } from "../feedback/ErrorBanner";
 import type { GeoPdfTemplateConfig } from "./GeoPdfDialog";
 import classes from "./GeoPdfTemplatesDialog.module.css";
 
@@ -46,12 +48,14 @@ function GeoPdfTemplatesDialog({
 }) {
   const [templates, setTemplates] = useState<GeoPdfTemplate[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    setError(null);
     apiFetch<GeoPdfTemplate[]>("/geo-pdf-templates")
       .then(setTemplates)
-      .catch(() => {});
+      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load templates.")); });
   }, [open]);
 
   const handleDelete = useCallback(async (id: string) => {
@@ -59,8 +63,9 @@ function GeoPdfTemplatesDialog({
       await apiFetch(`/geo-pdf-templates/${id}`, { method: "DELETE" });
       setTemplates((prev) => prev.filter((t) => t.id !== id));
       setDeletingId(null);
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error(err);
+      setError(messageFromError(err, "Couldn't delete template. Please try again."));
     }
   }, []);
 
@@ -115,6 +120,7 @@ function GeoPdfTemplatesDialog({
           + New Template
         </Button>
 
+        {error && <ErrorBanner message={error} />}
         <div className={classes.templateList}>
           {templates.length === 0 && (
             <div className={classes.emptyMessage}>No saved templates</div>

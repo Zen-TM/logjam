@@ -9,6 +9,7 @@ import {
   ThemePreferencesProvider,
   useThemePreferences,
 } from "./themePreferences";
+import { ToastProvider } from "./components/feedback/ToastProvider";
 
 if (import.meta.env.VITE_AUTH_MODE !== "fake") {
   Amplify.configure({
@@ -35,7 +36,9 @@ function ThemedApp() {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemePreferencesProvider>
-      <ThemedApp />
+      <ToastProvider>
+        <ThemedApp />
+      </ToastProvider>
     </ThemePreferencesProvider>
   </StrictMode>,
 );

@@ -12,7 +12,6 @@ import {
   Chip,
   IconButton,
   Divider,
-  Alert,
   Tooltip,
   Collapse,
 } from "@mui/material";
@@ -22,6 +21,8 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { apiFetch } from "../../canyonUtils";
+import { messageFromError } from "../../errors/messageFromError";
+import { ErrorBanner } from "../feedback/ErrorBanner";
 import type { TBbox } from "../map/Map";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -434,7 +435,8 @@ export default function TopoDialog({
       onJobCreated(newJob);
       setFile(null);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Submission failed");
+      console.error(e);
+      setError(messageFromError(e, "Submission failed. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -537,7 +539,7 @@ export default function TopoDialog({
                     {isRunning && <LinearProgress sx={{ mb: 0.5 }} />}
                     {isFailed && (
                       <Typography variant="caption" color="error">
-                        {j.errorMessage ?? "Unknown error"}
+                        {j.errorMessage ?? "Processing failed. Please try again."}
                       </Typography>
                     )}
                     {isComplete && urls && (
@@ -808,11 +810,7 @@ export default function TopoDialog({
           />
         </Box>
 
-        {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {error}
-          </Alert>
-        )}
+        {error && <ErrorBanner message={error} />}
       </DialogContent>
 
       <DialogActions>

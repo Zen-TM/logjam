@@ -12,6 +12,8 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { importFromRopeWiki, type ImportResult } from "../../canyonUtils";
+import { messageFromError } from "../../errors/messageFromError";
+import { ErrorBanner } from "../feedback/ErrorBanner";
 
 function ImportDialog({
   open,
@@ -34,7 +36,8 @@ function ImportDialog({
       setResult(res);
       onImported();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Import failed");
+      console.error(err);
+      setError(messageFromError(err, "Import failed. You can try again later from the sidebar."));
     } finally {
       setLoading(false);
     }
@@ -78,11 +81,7 @@ function ImportDialog({
             <Typography>Importing canyons from RopeWiki...</Typography>
           </Box>
         )}
-        {error && (
-          <Typography color="error">
-            {error}. You can try again later from the sidebar.
-          </Typography>
-        )}
+        {error && <ErrorBanner message={error} />}
         {result && (
           <Typography>
             Imported {result.imported} canyon{result.imported !== 1 ? "s" : ""}

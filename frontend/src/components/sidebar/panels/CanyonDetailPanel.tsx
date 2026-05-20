@@ -9,6 +9,8 @@ import {
   TextField,
 } from "@mui/material";
 import classes from "./CanyonDetailPanel.module.css";
+import { useToast } from "../../feedback/ToastProvider";
+import { messageFromError } from "../../../errors/messageFromError";
 import CanyonDialog from "../../dialogs/CanyonDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
@@ -49,6 +51,7 @@ function CanyonDetailPanel({
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
 }) {
+  const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -78,8 +81,10 @@ function CanyonDetailPanel({
       setCanyonShares([]);
       return;
     }
-    getCanyonShares(canyon.id).then(setCanyonShares).catch(console.error);
-  }, [canyon?.id, isOwnedCanyon]);
+    getCanyonShares(canyon.id)
+      .then(setCanyonShares)
+      .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't load shares.")); });
+  }, [canyon?.id, isOwnedCanyon, toast]);
 
   // Fetch trip logs when canyon changes
   useEffect(() => {
@@ -90,9 +95,9 @@ function CanyonDetailPanel({
     setLoadingTrips(true);
     getTripLogs(canyon.id)
       .then(setTripLogs)
-      .catch(console.error)
+      .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't load trip logs.")); })
       .finally(() => setLoadingTrips(false));
-  }, [canyon?.id]);
+  }, [canyon?.id, toast]);
 
   if (!canyon) {
     return <span className={classes.caption}>No canyon selected.</span>;
@@ -107,7 +112,9 @@ function CanyonDetailPanel({
       setDeleting(false);
       setSelectedCanyonID(null);
       onRefetch();
-    } catch {
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't delete canyon. Please try again."));
       setDeleting(false);
     }
   }
@@ -121,9 +128,12 @@ function CanyonDetailPanel({
       }
       setSelectedFriendIds([]);
       setShowShareSelector(false);
-      getCanyonShares(canyon.id).then(setCanyonShares).catch(console.error);
-    } catch {
-      // ignore
+      getCanyonShares(canyon.id)
+        .then(setCanyonShares)
+        .catch((err) => { console.error(err); });
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't share canyon. Please try again."));
     } finally {
       setSharing(false);
     }
@@ -133,9 +143,12 @@ function CanyonDetailPanel({
     if (!canyon) return;
     try {
       await unshareCanyonWith(canyon.id, userId);
-      getCanyonShares(canyon.id).then(setCanyonShares).catch(console.error);
-    } catch {
-      // ignore
+      getCanyonShares(canyon.id)
+        .then(setCanyonShares)
+        .catch((err) => { console.error(err); });
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't remove share. Please try again."));
     }
   }
 
@@ -150,8 +163,9 @@ function CanyonDetailPanel({
         setSelectedCanyonID(null);
       }
       onRefetch();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't copy canyon. Please try again."));
     } finally {
       setCopying(false);
     }
@@ -164,8 +178,9 @@ function CanyonDetailPanel({
       await unshareCanyonWith(canyon.id, "me");
       onRefetchShared();
       setSelectedCanyonID(null);
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't remove shared canyon. Please try again."));
     } finally {
       setCopying(false);
     }
@@ -500,7 +515,9 @@ function CanyonDetailPanel({
           setShowTripLogDialog(false);
           setEditingTripLog(undefined);
           // Refresh trip logs
-          getTripLogs(canyon.id).then(setTripLogs).catch(console.error);
+          getTripLogs(canyon.id)
+            .then(setTripLogs)
+            .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't refresh trip logs.")); });
         }}
         canyonId={canyon.id}
         canyonName={canyon.name}
@@ -526,7 +543,9 @@ function CanyonDetailPanel({
           setShowTripLogDialog(true);
         }}
         onDeleted={() => {
-          getTripLogs(canyon.id).then(setTripLogs).catch(console.error);
+          getTripLogs(canyon.id)
+            .then(setTripLogs)
+            .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't refresh trip logs.")); });
         }}
       />
     </>

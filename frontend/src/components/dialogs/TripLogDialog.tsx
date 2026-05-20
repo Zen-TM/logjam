@@ -16,6 +16,7 @@ import {
   CircularProgress,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import { ErrorBanner } from "../feedback/ErrorBanner";
 import type { TripLogCustomFieldDef, TripLogCustomFieldType } from "@logjam/shared";
 import { CUSTOM_FIELD_TYPES, makeCustomFieldKey, coerceFieldValue } from "@logjam/shared";
 import type { TTripLog } from "../../canyonUtils";
@@ -375,11 +376,7 @@ function TripLogDialog({
             </Typography>
           </Box>
 
-          {error && (
-            <Typography variant="body2" sx={{ color: "error.main" }}>
-              {error}
-            </Typography>
-          )}
+          {error && <ErrorBanner message={error} />}
         </Box>
       </DialogContent>
 

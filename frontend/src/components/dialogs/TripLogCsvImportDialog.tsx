@@ -32,6 +32,8 @@ import { detectDateFormat, toIsoDate, DATE_FORMAT_LABELS } from "../../csvImport
 import type { DateFormat } from "../../csvImport/detectDateFormat";
 import { matchCanyonByName } from "../../csvImport/matchCanyon";
 import { fieldSx, selectSx, menuPaperProps, SectionLabel } from "../../csvImport/dialogStyles";
+import { messageFromError } from "../../errors/messageFromError";
+import { ErrorBanner } from "../feedback/ErrorBanner";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -203,7 +205,8 @@ function TripLogCsvImportDialog({
         formatAmbiguous: ambiguous,
       });
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Failed to parse CSV");
+      console.error(err);
+      setParseError(messageFromError(err, "Couldn't read the CSV file. Please check the file and try again."));
     }
   }
 
@@ -457,7 +460,8 @@ function TripLogCsvImportDialog({
 
       setStage({ name: "result", imported, errors });
     } catch (err) {
-      errors.push(err instanceof Error ? err.message : "Import failed");
+      console.error(err);
+      errors.push(messageFromError(err, "Import failed. Please try again."));
       setStage({ name: "result", imported: 0, errors });
     }
   }
@@ -556,9 +560,7 @@ function TripLogCsvImportDialog({
             Choose CSV File
             <input type="file" accept=".csv" hidden onChange={handleFileChange} />
           </Button>
-          {parseError && (
-            <Typography variant="body2" color="error">{parseError}</Typography>
-          )}
+          {parseError && <ErrorBanner message={parseError} />}
         </Box>
       );
     }
@@ -986,7 +988,7 @@ function TripLogCsvImportDialog({
               </Typography>
               <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
                 {errors.map((e, i) => (
-                  <Typography key={i} variant="caption" color="error">{e}</Typography>
+                  <Typography key={i} variant="caption" sx={{ color: "var(--theme-warning)" }}>{e}</Typography>
                 ))}
               </Box>
             </>

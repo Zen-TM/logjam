@@ -5,6 +5,9 @@ import { useThemePreferences } from "../../../themePreferences";
 import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
 import ChangeEmailDialog from "../../dialogs/ChangeEmailDialog";
 import classes from "./AccountPanel.module.css";
+import { useToast } from "../../feedback/ToastProvider";
+import { messageFromError } from "../../../errors/messageFromError";
+import { ErrorBanner } from "../../feedback/ErrorBanner";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -14,6 +17,7 @@ function formatBytes(bytes: number): string {
 
 function AccountPanel() {
   const { signOut } = useAuth();
+  const toast = useToast();
   const { schemeId, schemes, isHydrating, isSaving, error: themeError, setThemeScheme } =
     useThemePreferences();
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
@@ -37,8 +41,8 @@ function AccountPanel() {
         setStorageUsedBytes(u.storageUsedBytes);
         setStorageQuotaBytes(u.storageQuotaBytes);
       })
-      .catch(console.error);
-  }, []);
+      .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't load account details.")); });
+  }, [toast]);
 
   async function handleSaveUsername() {
     const trimmed = usernameInput.trim();
@@ -53,7 +57,8 @@ function AccountPanel() {
       setUsernameSaved(true);
       setTimeout(() => setUsernameSaved(false), 2500);
     } catch (err) {
-      setUsernameError(err instanceof Error ? err.message : "Failed to save");
+      console.error(err);
+      setUsernameError(messageFromError(err, "Couldn't save username. Please try again."));
     } finally {
       setUsernameSaving(false);
     }
@@ -103,7 +108,7 @@ function AccountPanel() {
               Cancel
             </button>
           </div>
-          {usernameError && <p className={classes.error}>{usernameError}</p>}
+          {usernameError && <ErrorBanner message={usernameError} />}
         </div>
       ) : (
         <div className={classes.usernameRow}>
@@ -154,7 +159,7 @@ function AccountPanel() {
       <span className={classes.sectionLabel}>Theme</span>
       <div className={classes.divider} />
 
-      {themeError && <p className={classes.error}>{themeError}</p>}
+      {themeError && <ErrorBanner message={themeError} />}
       {isHydrating && <p className={classes.state}>Loading your saved theme...</p>}
       {isSaving && <p className={classes.state}>Saving theme...</p>}
 

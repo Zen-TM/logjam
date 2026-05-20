@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -9,6 +9,8 @@ import {
   TextField,
 } from "@mui/material";
 import classes from "./FriendsPanel.module.css";
+import { useToast } from "../../feedback/ToastProvider";
+import { messageFromError } from "../../../errors/messageFromError";
 import type {
   TFriend,
   TFriendRequest,
@@ -37,7 +39,7 @@ function FriendsPanel({
 }) {
   const [friendSearch, setFriendSearch] = useState("");
   const [searchResults, setSearchResults] = useState<TSearchUser[]>([]);
-  const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
+  const [searchFeedback, setSearchFeedback] = useState<{ message: string; isSuccess: boolean } | null>(null);
   const [removingFriendId, setRemovingFriendId] = useState<string | null>(null);
   const [loadingRequestId, setLoadingRequestId] = useState<string | null>(null);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState<{
@@ -45,6 +47,7 @@ function FriendsPanel({
     username: string;
   } | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     if (friendSearch.length < 2) {
@@ -53,28 +56,28 @@ function FriendsPanel({
     }
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => {
-      searchUsers(friendSearch).then(setSearchResults).catch(console.error);
+      searchUsers(friendSearch)
+        .then(setSearchResults)
+        .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't search users.")); });
     }, 300);
     return () => {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     };
-  }, [friendSearch]);
+  }, [friendSearch, toast]);
+
+  const clearFeedback = useCallback(() => setSearchFeedback(null), []);
 
   async function handleSendFriendRequest(addresseeId: string) {
     try {
       await sendFriendRequest(addresseeId);
-      setSearchFeedback("Request sent");
+      setSearchFeedback({ message: "Friend request sent.", isSuccess: true });
       setSearchResults([]);
       setFriendSearch("");
-      setTimeout(() => setSearchFeedback(null), 3000);
+      setTimeout(clearFeedback, 3000);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to send request";
-      if (msg.includes("409")) {
-        setSearchFeedback("Already friends or request pending");
-      } else {
-        setSearchFeedback(msg);
-      }
-      setTimeout(() => setSearchFeedback(null), 3000);
+      console.error(err);
+      setSearchFeedback({ message: messageFromError(err, "Couldn't send friend request."), isSuccess: false });
+      setTimeout(clearFeedback, 3000);
     }
   }
 
@@ -84,8 +87,9 @@ function FriendsPanel({
       await acceptFriendRequest(friendshipId);
       onRefetchFriends();
       onRefetchNotifications();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't accept friend request."));
     } finally {
       setLoadingRequestId(null);
     }
@@ -96,8 +100,9 @@ function FriendsPanel({
     try {
       await declineFriendRequest(friendshipId);
       onRefetchFriends();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't decline friend request."));
     } finally {
       setLoadingRequestId(null);
     }
@@ -110,8 +115,9 @@ function FriendsPanel({
       setShowRemoveConfirm(null);
       onRefetchFriends();
       onRefetchShared();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't remove friend."));
     } finally {
       setRemovingFriendId(null);
     }
@@ -146,7 +152,12 @@ function FriendsPanel({
             </div>
           )}
           {searchFeedback && (
-            <span className={classes.caption}>{searchFeedback}</span>
+            <span
+              className={classes.caption}
+              style={{ color: searchFeedback.isSuccess ? "var(--theme-text-muted)" : "var(--theme-warning)" }}
+            >
+              {searchFeedback.message}
+            </span>
           )}
         </div>
 

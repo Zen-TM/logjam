@@ -38,8 +38,11 @@ import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import { Button } from "@mui/material";
 import { useThemePreferences } from "../themePreferences";
+import { useToast } from "./feedback/ToastProvider";
+import { messageFromError } from "../errors/messageFromError";
 
 function App() {
+  const toast = useToast();
   const [filters, setFilters] = useState<TFilters>({
     name: null,
     v_grade: null,
@@ -229,40 +232,50 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   const auth = useAuth();
   const authenticated = auth.state === "authenticated";
   const { hydrateFromUser } = useThemePreferences();
-  const { canyons, loaded: canyonsLoaded, refetch } = useCanyons(authenticated);
-  const { canyons: sharedCanyons, refetch: refetchShared } =
+  const { canyons, loaded: canyonsLoaded, error: canyonsError, refetch } = useCanyons(authenticated);
+  const { canyons: sharedCanyons, error: sharedError, refetch: refetchShared } =
     useSharedCanyons(authenticated);
   const {
     friends,
     requests: friendRequests,
+    error: friendsError,
     refetch: refetchFriends,
   } = useFriends(authenticated);
   const {
     notifications,
     unreadCount,
+    error: notificationsError,
     refetch: refetchNotifications,
   } = useNotifications(authenticated);
   const {
     tripLogs,
     loading: tripLogsLoading,
+    error: tripLogsError,
     refetch: refetchTripLogs,
   } = useTripLogs(authenticated);
-  const { analytics, loading: analyticsLoading } = useAnalytics(authenticated);
+  const { analytics, loading: analyticsLoading, error: analyticsError } = useAnalytics(authenticated);
 
   const [customFieldDefs, setCustomFieldDefs] = useState<
     TripLogCustomFieldDef[]
   >([]);
 
+  // Surface background data-load errors as toasts
+  useEffect(() => { if (canyonsError) toast.error(canyonsError); }, [canyonsError, toast]);
+  useEffect(() => { if (sharedError) toast.error(sharedError); }, [sharedError, toast]);
+  useEffect(() => { if (friendsError) toast.error(friendsError); }, [friendsError, toast]);
+  useEffect(() => { if (notificationsError) toast.error(notificationsError); }, [notificationsError, toast]);
+  useEffect(() => { if (tripLogsError) toast.error(tripLogsError); }, [tripLogsError, toast]);
+  useEffect(() => { if (analyticsError) toast.error(analyticsError); }, [analyticsError, toast]);
+
   useEffect(() => {
     if (!authenticated) return;
     hydrateFromUser().catch(console.error);
-    // Fetch user preferences to get custom field definitions
     fetchCurrentUser()
       .then((user) => {
         setCustomFieldDefs(user.uiPreferences?.tripLogCustomFields ?? []);
       })
-      .catch(console.error);
-  }, [authenticated, hydrateFromUser]);
+      .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't load your preferences.")); });
+  }, [authenticated, hydrateFromUser, toast]);
 
   // Resume tracking any jobs that were pending/processing before page load
   useEffect(() => {
@@ -274,7 +287,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         );
         if (resumable.length) setActiveTopoJobs(resumable);
       })
-      .catch(() => {});
+      .catch((err) => { console.error(err); });
   }, [authenticated]);
 
   // Fetch the user's completed topo jobs (with presigned PMTiles URLs) on
@@ -293,7 +306,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           return next;
         });
       })
-      .catch(() => {});
+      .catch((err) => { console.error(err); });
   }, []);
 
   useEffect(() => {

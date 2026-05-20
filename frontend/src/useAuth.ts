@@ -7,6 +7,8 @@ import {
   fetchAuthSession,
 } from "aws-amplify/auth";
 import { apiFetch } from "./canyonUtils";
+import { messageFromError } from "./errors/messageFromError";
+import { mapAuthNextStep } from "./errors/authErrorMap";
 
 // Calls GET /users/me after sign-in. The API creates a new user record
 // if one doesn't exist yet (keyed on the Cognito sub), so this is safe
@@ -46,14 +48,15 @@ export function useAuth() {
       try {
         const result = await amplifySignIn({ username, password });
         if (!result.isSignedIn) {
-          setError(`Sign-in incomplete: ${result.nextStep.signInStep}`);
+          setError(mapAuthNextStep(result.nextStep.signInStep));
           return;
         }
         // Best-effort: don't block sign-in if the API is unreachable
         ensureUserExists().catch(console.error);
         setState("authenticated");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Sign in failed");
+        console.error(err);
+        setError(messageFromError(err, "Sign in failed. Please try again."));
       }
     },
     [],
@@ -78,7 +81,8 @@ export function useAuth() {
           setState("signIn");
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Sign up failed");
+        console.error(err);
+        setError(messageFromError(err, "Sign up failed. Please try again."));
       }
     },
     [],
@@ -94,7 +98,8 @@ export function useAuth() {
         });
         setState("signIn");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Confirmation failed");
+        console.error(err);
+        setError(messageFromError(err, "Confirmation failed. Please try again."));
       }
     },
     [pendingUsername],

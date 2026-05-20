@@ -12,6 +12,8 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { updateUserAttribute, confirmUserAttribute } from "aws-amplify/auth";
+import { messageFromError } from "../../errors/messageFromError";
+import { ErrorBanner } from "../feedback/ErrorBanner";
 
 const inputSx = {
   "& .MuiInputBase-input": { color: "var(--theme-text-primary)" },
@@ -66,7 +68,8 @@ function ChangeEmailDialog({
       setPendingEmail(trimmed);
       setStage("verify");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send code");
+      console.error(err);
+      setError(messageFromError(err, "Couldn't send verification code. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -82,7 +85,8 @@ function ChangeEmailDialog({
       setStage("done");
       onSuccess(pendingEmail);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid or expired code");
+      console.error(err);
+      setError(messageFromError(err, "Incorrect or expired code. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -172,20 +176,7 @@ function ChangeEmailDialog({
             <strong>{pendingEmail}</strong>. Use it to sign in next time.
           </Typography>
         )}
-        {error && (
-          <Typography
-            sx={{
-              fontSize: "var(--text-xs)",
-              color: "var(--theme-text-primary)",
-              background: "color-mix(in srgb, var(--theme-warning) 25%, transparent)",
-              border: "1px solid color-mix(in srgb, var(--theme-warning) 55%, transparent)",
-              borderRadius: "var(--radius-sm)",
-              padding: "8px 10px",
-            }}
-          >
-            {error}
-          </Typography>
-        )}
+        {error && <ErrorBanner message={error} />}
       </DialogContent>
       <DialogActions>
         {stage === "done" ? (

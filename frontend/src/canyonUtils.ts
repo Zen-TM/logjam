@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
 import type { ThemeSchemeId, TripLogCustomFieldDef } from "@logjam/shared";
+import { ApiError } from "./errors/ApiError";
+import { messageFromError } from "./errors/messageFromError";
 
 export type TCanyonAttributes = {
   sources?: [string, string][];
@@ -121,7 +123,17 @@ export async function apiFetch<T>(
     },
     ...(options?.body != null && { body: JSON.stringify(options.body) }),
   });
-  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
+  if (!res.ok) {
+    const method = options?.method ?? "GET";
+    let serverMessage: string | undefined;
+    try {
+      const body = await res.clone().json();
+      if (typeof body?.error === "string") serverMessage = body.error;
+    } catch {
+      // non-JSON body — ignore
+    }
+    throw new ApiError(res.status, path, method, serverMessage);
+  }
   if (res.status === 204) return undefined as T;
   return res.json();
 }
@@ -139,7 +151,17 @@ export async function apiFetchBlob(
     },
     ...(options?.body != null && { body: JSON.stringify(options.body) }),
   });
-  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`);
+  if (!res.ok) {
+    const method = options?.method ?? "GET";
+    let serverMessage: string | undefined;
+    try {
+      const body = await res.clone().json();
+      if (typeof body?.error === "string") serverMessage = body.error;
+    } catch {
+      // non-JSON body — ignore
+    }
+    throw new ApiError(res.status, path, method, serverMessage);
+  }
   return res.blob();
 }
 
@@ -232,7 +254,7 @@ export function useCanyons(enabled: boolean) {
     setLoading(true);
     apiFetch<TCanyon[]>("/canyons")
       .then(setCanyons)
-      .catch((err) => setError(err.message))
+      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load canyons.")); })
       .finally(() => {
         setLoading(false);
         setLoaded(true);
@@ -247,6 +269,7 @@ export function useCanyons(enabled: boolean) {
 export function useSharedCanyons(enabled: boolean) {
   const [canyons, setCanyons] = useState<TCanyon[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
@@ -254,13 +277,13 @@ export function useSharedCanyons(enabled: boolean) {
     setLoading(true);
     apiFetch<TCanyon[]>("/canyons/shared")
       .then(setCanyons)
-      .catch(console.error)
+      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load shared canyons.")); })
       .finally(() => setLoading(false));
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { canyons, loading, refetch };
+  return { canyons, loading, error, refetch };
 }
 
 // ── Current user ──────────────────────────────────────────────
@@ -386,6 +409,7 @@ export function getAllTripLogs(params?: {
 export function useTripLogs(enabled: boolean) {
   const [tripLogs, setTripLogs] = useState<TTripLog[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
@@ -393,13 +417,13 @@ export function useTripLogs(enabled: boolean) {
     setLoading(true);
     getAllTripLogs()
       .then(setTripLogs)
-      .catch(console.error)
+      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load trip logs.")); })
       .finally(() => setLoading(false));
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { tripLogs, loading, refetch };
+  return { tripLogs, loading, error, refetch };
 }
 
 // ── Analytics ─────────────────────────────────────────────────
@@ -425,6 +449,7 @@ export function getAnalytics(): Promise<TAnalytics> {
 export function useAnalytics(enabled: boolean) {
   const [analytics, setAnalytics] = useState<TAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
@@ -432,13 +457,13 @@ export function useAnalytics(enabled: boolean) {
     setLoading(true);
     getAnalytics()
       .then(setAnalytics)
-      .catch(console.error)
+      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load analytics.")); })
       .finally(() => setLoading(false));
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { analytics, loading, refetch };
+  return { analytics, loading, error, refetch };
 }
 
 // ── Friends ───────────────────────────────────────────────────
@@ -481,17 +506,22 @@ export function removeFriend(friendshipId: string): Promise<void> {
 export function useFriends(enabled: boolean) {
   const [friends, setFriends] = useState<TFriend[]>([]);
   const [requests, setRequests] = useState<TFriendRequest[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
-    getFriends().then(setFriends).catch(console.error);
-    getFriendRequests().then(setRequests).catch(console.error);
+    getFriends()
+      .then(setFriends)
+      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load friends.")); });
+    getFriendRequests()
+      .then(setRequests)
+      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load friend requests.")); });
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { friends, requests, refetch };
+  return { friends, requests, error, refetch };
 }
 
 // ── Sharing ───────────────────────────────────────────────────
@@ -552,19 +582,22 @@ export function clearReadNotifications(): Promise<void> {
 export function useNotifications(enabled: boolean) {
   const [notifications, setNotifications] = useState<TNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
-    getNotifications().then(setNotifications).catch(console.error);
+    getNotifications()
+      .then(setNotifications)
+      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load notifications.")); });
     getUnreadCount()
       .then((r) => setUnreadCount(r.count))
-      .catch(console.error);
+      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load notifications.")); });
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { notifications, unreadCount, refetch };
+  return { notifications, unreadCount, error, refetch };
 }
 
 // ── Filters ───────────────────────────────────────────────────

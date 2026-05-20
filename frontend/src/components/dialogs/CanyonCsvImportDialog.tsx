@@ -47,6 +47,8 @@ import { mergeCanyon } from "../../csvImport/mergeCanyon";
 import type { ConflictPolicy } from "../../csvImport/mergeCanyon";
 import { matchCanyonByName } from "../../csvImport/matchCanyon";
 import { fieldSx, selectSx, menuPaperProps, SectionLabel } from "../../csvImport/dialogStyles";
+import { messageFromError } from "../../errors/messageFromError";
+import { ErrorBanner } from "../feedback/ErrorBanner";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -386,7 +388,8 @@ function CanyonCsvImportDialog({
       setNewAttrForms({});
       setStage({ name: "mapping", headers: parsed.headers, rows: parsed.rows });
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : "Failed to parse CSV");
+      console.error(err);
+      setParseError(messageFromError(err, "Couldn't read the CSV file. Please check the file and try again."));
     }
   }
 
@@ -611,13 +614,14 @@ function CanyonCsvImportDialog({
         errors: allErrors,
       });
     } catch (err) {
+      console.error(err);
       setStage({
         name: "result",
         created: totalCreated,
         replaced: totalReplaced,
         errors: [
           ...allErrors,
-          { rowIndex: -1, message: err instanceof Error ? err.message : "Import failed" },
+          { rowIndex: -1, message: messageFromError(err, "Import failed. Please try again.") },
         ],
       });
     }
@@ -714,9 +718,7 @@ function CanyonCsvImportDialog({
               Choose CSV file
               <input type="file" accept=".csv" hidden onChange={handleFileChange} />
             </Button>
-            {parseError && (
-              <Typography variant="body2" color="error">{parseError}</Typography>
-            )}
+            {parseError && <ErrorBanner message={parseError} />}
           </Box>
         </DialogContent>
         <DialogActions>
@@ -787,9 +789,7 @@ function CanyonCsvImportDialog({
                 </Box>
               );
             })}
-            {parseError && (
-              <Typography variant="body2" color="error" sx={{ mt: 1 }}>{parseError}</Typography>
-            )}
+            {parseError && <ErrorBanner message={parseError} />}
           </Box>
         </DialogContent>
         <DialogActions>
@@ -1403,11 +1403,11 @@ function CanyonCsvImportDialog({
             </Typography>
             {errors.length > 0 && (
               <Box>
-                <Typography variant="caption" color="error" sx={{ display: "block", mb: 0.5 }}>
+                <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", display: "block", mb: 0.5 }}>
                   {errors.length} error{errors.length !== 1 ? "s" : ""}:
                 </Typography>
                 {errors.map((e, i) => (
-                  <Typography key={i} variant="caption" color="error" sx={{ display: "block" }}>
+                  <Typography key={i} variant="caption" sx={{ color: "var(--theme-warning)", display: "block" }}>
                     {e.message}
                   </Typography>
                 ))}
