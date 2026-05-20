@@ -21,7 +21,7 @@ import type { TBbox } from "./map/Map";
 import type { TFilters, TCanyon } from "../canyonUtils";
 import type { PanelId } from "./sidebar/panels";
 import { TOPO_LAYERS } from "../topoLayerTypes";
-import type { CompletedTopoJob } from "../topoLayerTypes";
+import type { CompletedTopoJob, CompletedOverlaysResponse } from "../topoLayerTypes";
 import {
   useCanyons,
   useSharedCanyons,
@@ -293,10 +293,12 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
 
   // Fetch the user's completed topo jobs (with presigned PMTiles URLs) on
   // auth and whenever a job transitions to complete.
+  const [overlaysExpiresAt, setOverlaysExpiresAt] = useState<string | null>(null);
   const refetchCompletedTopoJobs = useCallback(() => {
-    return apiFetch<CompletedTopoJob[]>("/topo-jobs/completed-overlays")
-      .then((jobs) => {
+    return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays")
+      .then(({ jobs, expiresAt }) => {
         setCompletedTopoJobs(jobs);
+        setOverlaysExpiresAt(expiresAt);
         setLidarJobToggles((prev) => {
           // Default newly-seen jobs to visible; preserve prior toggle state
           // for jobs we already knew about.
@@ -314,6 +316,20 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     if (!authenticated) return;
     refetchCompletedTopoJobs();
   }, [authenticated, refetchCompletedTopoJobs]);
+
+  // Pre-refetch presigned PMTiles URLs ~30 min before the server-reported expiry
+  // so MapLibre tile requests never see a 403 in an active session.
+  useEffect(() => {
+    if (!authenticated || !overlaysExpiresAt) return;
+    const refetchAt = new Date(overlaysExpiresAt).getTime() - 30 * 60 * 1000;
+    const delay = refetchAt - Date.now();
+    if (delay <= 0) {
+      refetchCompletedTopoJobs();
+      return;
+    }
+    const timer = setTimeout(() => { refetchCompletedTopoJobs(); }, delay);
+    return () => clearTimeout(timer);
+  }, [authenticated, overlaysExpiresAt, refetchCompletedTopoJobs]);
 
   // Poll non-terminal jobs every 10 s; fire snackbar on completion
   useEffect(() => {
@@ -430,6 +446,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         onSignIn={auth.signIn}
         onSignUp={auth.signUp}
         onConfirmSignUp={auth.confirmSignUp}
+        onResendCode={auth.resendSignUpCode}
         onForgotPassword={auth.forgotPassword}
         onConfirmForgotPassword={auth.confirmForgotPassword}
         goToSignUp={auth.goToSignUp}

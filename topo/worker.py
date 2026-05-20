@@ -42,6 +42,23 @@ logging.basicConfig(
 )
 log = logging.getLogger("worker")
 
+
+def safe_error_message(e: Exception) -> str:
+    """Map raw exceptions to user-safe text; full traceback stays in CloudWatch."""
+    msg = str(e)
+    if isinstance(e, subprocess.CalledProcessError):
+        return f"A pipeline subprocess failed. Contact support with job ID {JOB_ID}."
+    if isinstance(e, MemoryError) or "OOM" in msg or "exit code -9" in msg:
+        return "Processing ran out of memory. Try a smaller LiDAR area."
+    if isinstance(e, RuntimeError):
+        if "tippecanoe" in msg:
+            return "Failed to build vector tiles. Contact support with job ID {}.".format(JOB_ID)
+        if "topo_mbtiles" in msg:
+            return "The topo pipeline exited with an error. Contact support with job ID {}.".format(JOB_ID)
+    if isinstance(e, (OSError, IOError)):
+        return "Could not read input LiDAR data. Verify the ZIP contains Elvis DTM files."
+    return f"Processing failed. Contact support with job ID {JOB_ID}."
+
 AWS_REGION   = os.environ.get("AWS_REGION", "ap-southeast-2")
 BUCKET       = os.environ["S3_BUCKET_TOPO"]
 DATABASE_URL = os.environ["DATABASE_URL"]
@@ -424,7 +441,7 @@ def main():
 
     except Exception as e:
         log.error(f"Job {JOB_ID} failed: {e}", exc_info=True)
-        update_status(conn, JOB_ID, "failed", error_message=str(e))
+        update_status(conn, JOB_ID, "failed", error_message=safe_error_message(e))
         create_notification(conn, job["user_id"], "topo_failed", {
             "jobId": JOB_ID,
             "jobName": job.get("name"),

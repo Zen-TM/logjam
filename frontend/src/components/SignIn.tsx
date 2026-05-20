@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TextField, Button } from "@mui/material";
 import classes from "./SignIn.module.css";
 import type { AuthState } from "../useAuth";
@@ -10,6 +10,7 @@ function SignIn({
   onSignIn,
   onSignUp,
   onConfirmSignUp,
+  onResendCode,
   onForgotPassword,
   onConfirmForgotPassword,
   goToSignUp,
@@ -26,6 +27,7 @@ function SignIn({
     name: string,
   ) => Promise<void>;
   onConfirmSignUp: (code: string) => Promise<void>;
+  onResendCode: () => Promise<{ ok: boolean; error?: string }>;
   onForgotPassword: (email: string) => Promise<void>;
   onConfirmForgotPassword: (code: string, newPassword: string) => Promise<boolean>;
   goToSignUp: () => void;
@@ -43,6 +45,27 @@ function SignIn({
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendSuccess, setResendSuccess] = useState(false);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
+
+  async function handleResendCode() {
+    setLocalError(null);
+    setResendSuccess(false);
+    setResendCooldown(30);
+    const result = await onResendCode();
+    if (result.ok) {
+      setResendSuccess(true);
+    } else {
+      setLocalError(result.error ?? "Couldn't resend code.");
+      setResendCooldown(0);
+    }
+  }
 
   const displayError = localError || error;
 
@@ -121,6 +144,9 @@ function SignIn({
             autoFocus
           />
           {displayError && <ErrorBanner message={displayError} />}
+          {resendSuccess && (
+            <p className={classes.successBanner}>New code sent — check your email.</p>
+          )}
           <Button
             type="submit"
             variant="contained"
@@ -128,6 +154,15 @@ function SignIn({
             disabled={submitting}
           >
             {submitting ? "Verifying..." : "Verify"}
+          </Button>
+          <Button
+            type="button"
+            variant="text"
+            fullWidth
+            disabled={resendCooldown > 0}
+            onClick={handleResendCode}
+          >
+            {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : "Resend code"}
           </Button>
         </form>
       </div>

@@ -3,6 +3,7 @@ import {
   signIn as amplifySignIn,
   signUp as amplifySignUp,
   confirmSignUp as amplifyConfirmSignUp,
+  resendSignUpCode as amplifyResendSignUpCode,
   signOut as amplifySignOut,
   fetchAuthSession,
   resetPassword as amplifyResetPassword,
@@ -114,6 +115,16 @@ export function useAuth() {
     [pendingUsername],
   );
 
+  const handleResendCode = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      await amplifyResendSignUpCode({ username: pendingUsername });
+      return { ok: true };
+    } catch (err) {
+      console.error(err);
+      return { ok: false, error: messageFromError(err, "Couldn't resend code. Please try again.") };
+    }
+  }, [pendingUsername]);
+
   const handleForgotPassword = useCallback(async (email: string) => {
     setError(null);
     try {
@@ -160,6 +171,7 @@ export function useAuth() {
     signIn: handleSignIn,
     signUp: handleSignUp,
     confirmSignUp: handleConfirmSignUp,
+    resendSignUpCode: handleResendCode,
     forgotPassword: handleForgotPassword,
     confirmForgotPassword: handleConfirmForgotPassword,
     signOut: handleSignOut,

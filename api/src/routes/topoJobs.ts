@@ -195,7 +195,8 @@ router.get(
 // authenticated user's completed jobs. Replaces the old /topo-layers route.
 // Returns one entry per completed job, each with presigned PMTiles URLs for
 // every layer in TOPO_LAYERS that the job produced. Composite is excluded
-// (MBTiles-only). URLs expire in 24h — callers should refetch on demand.
+// (MBTiles-only). URLs expire in 24h; response includes `expiresAt` so the
+// client can pre-refetch before tiles start returning 403.
 router.get(
   "/completed-overlays",
   requireAuth,
@@ -217,7 +218,10 @@ router.get(
       TOPO_LAYERS.map((l) => [l.name, { format: l.format }]),
     );
 
-    const result = await Promise.all(
+    const presignTtlSeconds = 86400;
+    const expiresAt = new Date(Date.now() + presignTtlSeconds * 1000).toISOString();
+
+    const jobsResult = await Promise.all(
       jobs.map(async (j) => {
         const outputs =
           (j.s3OutputKeys as
@@ -233,7 +237,7 @@ router.get(
               const pmtilesUrl = await getSignedUrl(
                 s3,
                 new GetObjectCommand({ Bucket: TOPO_BUCKET, Key: o.pmtilesKey }),
-                { expiresIn: 86400 },
+                { expiresIn: presignTtlSeconds },
               );
               return {
                 name: o.name as TopoLayerName,
@@ -252,7 +256,7 @@ router.get(
       }),
     );
 
-    res.json(result);
+    res.json({ jobs: jobsResult, expiresAt });
   },
 );
 
