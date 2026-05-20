@@ -130,6 +130,21 @@ def get_user_email(conn, user_id: str) -> str | None:
     return row["email"] if row else None
 
 
+def wants_topo_email(conn, user_id: str) -> bool:
+    """Read users.ui_preferences.notifications.topoEmail; default True if absent."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT ui_preferences FROM users WHERE id = %s", (user_id,))
+        row = cur.fetchone()
+    if not row:
+        return False
+    prefs = row["ui_preferences"] or {}
+    notifications = prefs.get("notifications") if isinstance(prefs, dict) else None
+    if not isinstance(notifications, dict):
+        return True
+    value = notifications.get("topoEmail")
+    return True if not isinstance(value, bool) else value
+
+
 # ── Email ─────────────────────────────────────────────────────────────────────
 
 def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
@@ -436,7 +451,7 @@ def main():
         })
 
         email = get_user_email(conn, job["user_id"])
-        if email:
+        if email and wants_topo_email(conn, job["user_id"]):
             send_completion_email(email, JOB_ID, output_keys, osm_failed=osm_failed)
 
     except Exception as e:

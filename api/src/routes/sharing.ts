@@ -3,6 +3,7 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
+import { normalizeUserUiPreferences } from "@logjam/shared";
 
 const router = Router();
 
@@ -53,28 +54,34 @@ router.post(
     if (existing)
       throw new AppError(409, "Canyon already shared with this user");
 
-    // Create the share and notification in a transaction
-    const [share] = await prisma.$transaction([
-      prisma.canyonShare.create({
+    const notifyRecipient = normalizeUserUiPreferences(targetUser.uiPreferences)
+      .notifications.shareInApp;
+
+    // Create the share and (optionally) notification in a transaction
+    const share = await prisma.$transaction(async (tx) => {
+      const created = await tx.canyonShare.create({
         data: {
           canyonId,
           sharedById: user.id,
           sharedWithId: sharedWithUserId,
         },
-      }),
-      prisma.notification.create({
-        data: {
-          userId: sharedWithUserId,
-          type: "canyon_shared",
-          payload: {
-            canyonId,
-            canyonName: canyon.name,
-            sharedById: user.id,
-            sharedByUsername: user.username,
+      });
+      if (notifyRecipient) {
+        await tx.notification.create({
+          data: {
+            userId: sharedWithUserId,
+            type: "canyon_shared",
+            payload: {
+              canyonId,
+              canyonName: canyon.name,
+              sharedById: user.id,
+              sharedByUsername: user.username,
+            },
           },
-        },
-      }),
-    ]);
+        });
+      }
+      return created;
+    });
 
     res.status(201).json(share);
   },

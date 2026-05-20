@@ -4,6 +4,19 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { friendsSearchLimiter } from "../middleware/rateLimit";
 import { getParam } from "../lib/getParam";
+import { normalizeUserUiPreferences } from "@logjam/shared";
+
+async function wantsInAppNotification(
+  userId: string,
+  key: "friendRequestInApp" | "shareInApp",
+): Promise<boolean> {
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { uiPreferences: true },
+  });
+  if (!target) return false;
+  return normalizeUserUiPreferences(target.uiPreferences).notifications[key];
+}
 
 const router = Router();
 
@@ -111,6 +124,8 @@ router.post(
         throw new AppError(403, "Unable to send friend request");
     }
 
+    const notifyAddressee = await wantsInAppNotification(addresseeId, "friendRequestInApp");
+
     // Create friendship first so the notification can reference its real ID
     // atomically inside the same transaction.
     const friendship = await prisma.$transaction(async (tx) => {
@@ -121,17 +136,19 @@ router.post(
           status: "pending",
         },
       });
-      await tx.notification.create({
-        data: {
-          userId: addresseeId,
-          type: "friend_request",
-          payload: {
-            friendshipId: created.id,
-            requesterId: user.id,
-            requesterUsername: user.username,
+      if (notifyAddressee) {
+        await tx.notification.create({
+          data: {
+            userId: addresseeId,
+            type: "friend_request",
+            payload: {
+              friendshipId: created.id,
+              requesterId: user.id,
+              requesterUsername: user.username,
+            },
           },
-        },
-      });
+        });
+      }
       return created;
     });
 
@@ -158,24 +175,31 @@ router.patch(
     if (friendship.status !== "pending")
       throw new AppError(400, "Friend request is not pending");
 
-    const [updated] = await prisma.$transaction([
-      prisma.friendship.update({
+    const notifyRequester = await wantsInAppNotification(
+      friendship.requesterId,
+      "friendRequestInApp",
+    );
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.friendship.update({
         where: { id },
         data: { status: "accepted" },
-      }),
-      // Notify the requester their request was accepted
-      prisma.notification.create({
-        data: {
-          userId: friendship.requesterId,
-          type: "friend_request_accepted",
-          payload: {
-            friendshipId: id,
-            acceptedById: user.id,
-            acceptedByUsername: user.username,
+      });
+      if (notifyRequester) {
+        await tx.notification.create({
+          data: {
+            userId: friendship.requesterId,
+            type: "friend_request_accepted",
+            payload: {
+              friendshipId: id,
+              acceptedById: user.id,
+              acceptedByUsername: user.username,
+            },
           },
-        },
-      }),
-    ]);
+        });
+      }
+      return u;
+    });
 
     res.json(updated);
   },

@@ -19,10 +19,49 @@ export type ThemeScheme = {
   tokens: ThemeTokens;
 };
 
+export type NotificationPreferences = {
+  topoEmail: boolean;
+  friendRequestInApp: boolean;
+  shareInApp: boolean;
+};
+
+export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  topoEmail: true,
+  friendRequestInApp: true,
+  shareInApp: true,
+};
+
 export type UserUiPreferences = {
   themeSchemeId: ThemeSchemeId;
   tripLogCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
+  notifications: NotificationPreferences;
 };
+
+export function isNotificationPreferences(
+  value: unknown,
+): value is Partial<NotificationPreferences> {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  for (const key of ["topoEmail", "friendRequestInApp", "shareInApp"] as const) {
+    if (key in obj && typeof obj[key] !== "boolean") return false;
+  }
+  return true;
+}
+
+function normalizeNotificationPreferences(value: unknown): NotificationPreferences {
+  if (typeof value !== "object" || value === null) {
+    return { ...DEFAULT_NOTIFICATION_PREFERENCES };
+  }
+  const obj = value as Record<string, unknown>;
+  return {
+    topoEmail: typeof obj.topoEmail === "boolean" ? obj.topoEmail : DEFAULT_NOTIFICATION_PREFERENCES.topoEmail,
+    friendRequestInApp:
+      typeof obj.friendRequestInApp === "boolean"
+        ? obj.friendRequestInApp
+        : DEFAULT_NOTIFICATION_PREFERENCES.friendRequestInApp,
+    shareInApp: typeof obj.shareInApp === "boolean" ? obj.shareInApp : DEFAULT_NOTIFICATION_PREFERENCES.shareInApp,
+  };
+}
 
 export const DEFAULT_THEME_SCHEME_ID: ThemeSchemeId = "sandstone";
 
@@ -126,8 +165,13 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
           },
         )
       : [];
-    return { themeSchemeId, tripLogCustomFields };
+    const notifications = normalizeNotificationPreferences(obj.notifications);
+    return { themeSchemeId, tripLogCustomFields, notifications };
   }
 
-  return { themeSchemeId: DEFAULT_THEME_SCHEME_ID, tripLogCustomFields: [] };
+  return {
+    themeSchemeId: DEFAULT_THEME_SCHEME_ID,
+    tripLogCustomFields: [],
+    notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES },
+  };
 }

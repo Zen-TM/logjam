@@ -6,6 +6,7 @@ import {
   isThemeSchemeId,
   normalizeUserUiPreferences,
   isTripLogCustomFieldDef,
+  isNotificationPreferences,
 } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
@@ -184,10 +185,11 @@ router.patch(
   userPatchLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
-    const { username, themeSchemeId, tripLogCustomFields, consentVersion } = req.body as {
+    const { username, themeSchemeId, tripLogCustomFields, notifications, consentVersion } = req.body as {
       username?: unknown;
       themeSchemeId?: unknown;
       tripLogCustomFields?: unknown;
+      notifications?: unknown;
       consentVersion?: unknown;
     };
 
@@ -217,7 +219,11 @@ router.patch(
       updates.username = parsed.data;
     }
 
-    if (themeSchemeId !== undefined || tripLogCustomFields !== undefined) {
+    if (
+      themeSchemeId !== undefined ||
+      tripLogCustomFields !== undefined ||
+      notifications !== undefined
+    ) {
       if (themeSchemeId !== undefined && !isThemeSchemeId(themeSchemeId)) {
         throw new AppError(400, "Invalid themeSchemeId");
       }
@@ -229,12 +235,18 @@ router.patch(
           throw new AppError(400, "Invalid tripLogCustomFields");
         }
       }
+      if (notifications !== undefined && !isNotificationPreferences(notifications)) {
+        throw new AppError(400, "Invalid notifications");
+      }
 
       const current = normalizeUserUiPreferences(user.uiPreferences);
       updates.uiPreferences = {
         ...current,
         ...(themeSchemeId !== undefined ? { themeSchemeId } : {}),
         ...(tripLogCustomFields !== undefined ? { tripLogCustomFields } : {}),
+        ...(notifications !== undefined
+          ? { notifications: { ...current.notifications, ...(notifications as Record<string, boolean>) } }
+          : {}),
       };
     }
 
@@ -263,6 +275,56 @@ router.patch(
     }
 
     res.json(serializeUserForResponse(updated));
+  },
+);
+
+// GET /users/me/export — download all data owned by the current user as JSON.
+// Media file content (S3 blobs) is intentionally excluded; only metadata.
+router.get(
+  "/me/export",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const { sub } = req.user!;
+    const user = await prisma.user.findUnique({ where: { cognitoId: sub } });
+    if (!user) throw new AppError(404, "User not found");
+
+    const [canyons, tripLogs, geoPdfTemplates, sharesGiven, sharesReceived, media] =
+      await Promise.all([
+        prisma.canyon.findMany({ where: { ownerId: user.id } }),
+        prisma.tripLog.findMany({ where: { userId: user.id } }),
+        prisma.geoPdfTemplate.findMany({ where: { userId: user.id } }),
+        prisma.canyonShare.findMany({
+          where: { sharedById: user.id },
+          include: { sharedWith: { select: { id: true, username: true } } },
+        }),
+        prisma.canyonShare.findMany({
+          where: { sharedWithId: user.id },
+          include: { sharedBy: { select: { id: true, username: true } } },
+        }),
+        prisma.media.findMany({ where: { ownerId: user.id } }),
+      ]);
+
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      schemaVersion: 1,
+      user: serializeUserForResponse(user),
+      canyons,
+      tripLogs,
+      geoPdfTemplates,
+      sharesGiven,
+      sharesReceived,
+      // Media metadata only; file content not included. To download media bytes,
+      // request a presigned URL per item via GET /media/:id (future schemaVersion).
+      media: media.map((m) => ({
+        ...m,
+        fileSizeBytes: Number(m.fileSizeBytes),
+      })),
+    };
+
+    const filename = `logjam-export-${new Date().toISOString().slice(0, 10)}.json`;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.json(JSON.parse(JSON.stringify(payload, (_, v) => (typeof v === "bigint" ? Number(v) : v))));
   },
 );
 

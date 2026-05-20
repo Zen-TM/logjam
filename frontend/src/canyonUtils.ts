@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
-import type { ThemeSchemeId, TripLogCustomFieldDef } from "@logjam/shared";
+import type { ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
 
@@ -41,6 +41,7 @@ export type TUser = {
   uiPreferences?: {
     themeSchemeId?: ThemeSchemeId;
     tripLogCustomFields?: TripLogCustomFieldDef[];
+    notifications?: NotificationPreferences;
   } | null;
 };
 
@@ -324,9 +325,23 @@ export function updateCurrentUserThemeScheme(
 }
 
 export function updateUserPreferences(
-  prefs: Partial<{ themeSchemeId: ThemeSchemeId; tripLogCustomFields: TripLogCustomFieldDef[] }>,
+  prefs: Partial<{
+    themeSchemeId: ThemeSchemeId;
+    tripLogCustomFields: TripLogCustomFieldDef[];
+    notifications: Partial<NotificationPreferences>;
+  }>,
 ): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });
+}
+
+export function updateNotificationPreferences(
+  notifications: Partial<NotificationPreferences>,
+): Promise<TUser> {
+  return apiFetch<TUser>("/users/me", { method: "PATCH", body: { notifications } });
+}
+
+export function exportUserData(): Promise<Blob> {
+  return apiFetchBlob("/users/me/export");
 }
 
 export function updateUsername(username: string): Promise<TUser> {

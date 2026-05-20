@@ -1,0 +1,32 @@
+{
+  "description": "Security headers attached to the Logjam frontend CloudFront distribution. Source of truth for the CSP rolled out via CloudFront → Policies → Response headers (policy name: logjam-frontend-security-headers). When the allowlist changes (new map tile host, new API origin, etc.), update this file AND the AWS Console policy.",
+  "rolloutStrategy": "Ship initially as Content-Security-Policy-Report-Only for ~1 week. Watch browser console + (optional) report-uri endpoint. Swap to Content-Security-Policy (enforcing) once no violations remain.",
+  "placeholders": {
+    "<API_ORIGIN>": "Production API origin, e.g. https://api.logjam.app",
+    "<FRONTEND_ORIGIN>": "Production frontend origin (used for connect-src in case of fetch back to same host)",
+    "<TOPO_CDN_ORIGIN>": "CloudFront distribution serving topo MBTiles/PMTiles",
+    "<MEDIA_CDN_ORIGIN>": "CloudFront distribution serving media (photos)",
+    "<MAPLIBRE_TILE_HOSTS>": "Space-separated list of basemap tile hosts (e.g. https://tiles.maptiler.com https://api.maptiler.com). Enumerate from frontend/src/components/map/ style sources before applying."
+  },
+  "headers": {
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.cloudfront.net https://*.s3.ap-southeast-2.amazonaws.com <MAPLIBRE_TILE_HOSTS>; font-src 'self' data:; connect-src 'self' <API_ORIGIN> https://cognito-idp.ap-southeast-2.amazonaws.com https://*.auth.ap-southeast-2.amazoncognito.com https://*.cloudfront.net https://*.s3.ap-southeast-2.amazonaws.com <MAPLIBRE_TILE_HOSTS>; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "geolocation=(self), camera=(), microphone=(), payment=()"
+  },
+  "applySteps": [
+    "AWS Console → CloudFront → Policies → Response headers → Create policy",
+    "Name: logjam-frontend-security-headers",
+    "Add the four sibling headers above as custom headers",
+    "For initial rollout, add Content-Security-Policy as Content-Security-Policy-Report-Only",
+    "Attach policy to the frontend distribution's default behavior",
+    "Verify: curl -I https://<FRONTEND_ORIGIN>/ | grep -i content-security",
+    "After clean week, swap header name from Content-Security-Policy-Report-Only to Content-Security-Policy"
+  ],
+  "notes": [
+    "'unsafe-inline' for style-src is required by MUI/emotion's runtime style injection. Never relax script-src to 'unsafe-inline'.",
+    "geolocation=(self) is intentional — the app uses device location to place canyon trip logs.",
+    "frame-ancestors 'none' only works as a real header (not <meta http-equiv>) — hence CloudFront delivery, not index.html injection."
+  ]
+}

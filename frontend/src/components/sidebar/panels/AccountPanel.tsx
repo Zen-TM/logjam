@@ -1,5 +1,14 @@
 import { useState, useEffect } from "react";
-import { fetchCurrentUser, updateUsername } from "../../../canyonUtils";
+import {
+  fetchCurrentUser,
+  updateUsername,
+  updateNotificationPreferences,
+  exportUserData,
+} from "../../../canyonUtils";
+import {
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  type NotificationPreferences,
+} from "@logjam/shared";
 import { useAuth } from "../../../useAuth";
 import { useThemePreferences } from "../../../themePreferences";
 import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
@@ -32,6 +41,9 @@ function AccountPanel() {
   const [storageQuotaBytes, setStorageQuotaBytes] = useState<number | null>(null);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
+  const [notifSaving, setNotifSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchCurrentUser()
@@ -41,9 +53,50 @@ function AccountPanel() {
         setEmail(u.email);
         setStorageUsedBytes(u.storageUsedBytes);
         setStorageQuotaBytes(u.storageQuotaBytes);
+        setNotifPrefs({
+          ...DEFAULT_NOTIFICATION_PREFERENCES,
+          ...(u.uiPreferences?.notifications ?? {}),
+        });
       })
       .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't load account details.")); });
   }, [toast]);
+
+  async function handleToggleNotif(key: keyof NotificationPreferences) {
+    if (!notifPrefs) return;
+    const previous = notifPrefs;
+    const next = { ...notifPrefs, [key]: !notifPrefs[key] };
+    setNotifPrefs(next);
+    setNotifSaving(true);
+    try {
+      await updateNotificationPreferences({ [key]: next[key] });
+    } catch (err) {
+      console.error(err);
+      setNotifPrefs(previous);
+      toast.error(messageFromError(err, "Couldn't save notification setting."));
+    } finally {
+      setNotifSaving(false);
+    }
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const blob = await exportUserData();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `logjam-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't download your data. Please try again."));
+    } finally {
+      setExporting(false);
+    }
+  }
 
   async function handleSaveUsername() {
     const trimmed = usernameInput.trim();
@@ -192,6 +245,52 @@ function AccountPanel() {
           </button>
         );
       })}
+
+      <span className={classes.sectionLabel}>Notifications</span>
+      <div className={classes.divider} />
+      {notifPrefs === null ? (
+        <p className={classes.state}>Loading...</p>
+      ) : (
+        <div className={classes.notifGroup}>
+          <label className={classes.notifRow}>
+            <input
+              type="checkbox"
+              checked={notifPrefs.topoEmail}
+              onChange={() => handleToggleNotif("topoEmail")}
+              disabled={notifSaving}
+            />
+            <span className={classes.notifLabel}>Email me when a topo job finishes</span>
+          </label>
+          <label className={classes.notifRow}>
+            <input
+              type="checkbox"
+              checked={notifPrefs.friendRequestInApp}
+              onChange={() => handleToggleNotif("friendRequestInApp")}
+              disabled={notifSaving}
+            />
+            <span className={classes.notifLabel}>In-app notification for friend requests</span>
+          </label>
+          <label className={classes.notifRow}>
+            <input
+              type="checkbox"
+              checked={notifPrefs.shareInApp}
+              onChange={() => handleToggleNotif("shareInApp")}
+              disabled={notifSaving}
+            />
+            <span className={classes.notifLabel}>In-app notification when a canyon is shared with me</span>
+          </label>
+        </div>
+      )}
+
+      <span className={classes.sectionLabel}>Your data</span>
+      <div className={classes.divider} />
+      <button
+        className={classes.exportBtn}
+        onClick={handleExport}
+        disabled={exporting}
+      >
+        {exporting ? "Preparing..." : "Download my data"}
+      </button>
 
       <button className={classes.signOutBtn} onClick={signOut}>
         Sign out
