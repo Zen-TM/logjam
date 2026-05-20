@@ -128,7 +128,12 @@ router.post(
     });
     if (!isOwner && !isShared) throw new AppError(403, "Access denied");
 
-    // Create a copy of the canyon
+    // Create a copy of the canyon.
+    // Drop ropeWikiId + ropeWikiSnapshot: @@unique([ownerId, ropeWikiId]) would
+    // collide on self-copy, and preserving across owners would mis-attribute the
+    // copy as the recipient's canonical RopeWiki record. Lineage is preserved
+    // via forkedFromId; "forked from RopeWiki" is derivable from
+    // forkedFrom.ropeWikiId if ever needed.
     const copiedCanyon = await prisma.canyon.create({
       data: {
         ownerId: user.id,
@@ -146,6 +151,8 @@ router.post(
         hours: canyon.hours,
         notes: canyon.notes,
         attributes: canyon.attributes ?? Prisma.JsonNull,
+        ropeWikiId: null,
+        ropeWikiSnapshot: Prisma.JsonNull,
         forkedFromId: canyonId,
       },
     });

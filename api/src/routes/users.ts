@@ -10,6 +10,7 @@ import {
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
+import { userPatchLimiter } from "../middleware/rateLimit";
 import { verifyEmail } from "../services/email";
 import { cognitoIdp } from "../services/awsClients";
 import { AdminGetUserCommand, UserNotFoundException } from "@aws-sdk/client-cognito-identity-provider";
@@ -180,6 +181,7 @@ router.get(
 router.patch(
   "/me",
   requireAuth,
+  userPatchLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
     const { username, themeSchemeId, tripLogCustomFields } = req.body as {

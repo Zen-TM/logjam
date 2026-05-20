@@ -10,6 +10,7 @@ import { getEnv } from "./lib/env";
 import { logger } from "./lib/logger";
 import prisma from "./services/prisma";
 import { errorHandler } from "./middleware/errorHandler";
+import { globalLimiter } from "./middleware/rateLimit";
 import usersRouter from "./routes/users";
 import canyonsRouter from "./routes/canyons";
 import tripLogsRouter from "./routes/tripLogs";
@@ -109,6 +110,11 @@ app.get("/ready", async (_req, res) => {
     res.status(503).json({ status: "db_unavailable" });
   }
 });
+
+// Global rate limit applied to API routes (not /health, /ready). Keyed by
+// authenticated user sub when available (per-route auth runs inside routers),
+// IP otherwise. Per-route stricter limiters layered inside individual routers.
+app.use(globalLimiter);
 
 app.use("/users", usersRouter);
 app.use("/canyons", canyonsRouter);

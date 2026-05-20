@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
+import { friendsSearchLimiter } from "../middleware/rateLimit";
 
 const router = Router();
 
@@ -275,6 +276,7 @@ router.delete(
 router.get(
   "/search",
   requireAuth,
+  friendsSearchLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await prisma.user.findUnique({
       where: { cognitoId: req.user!.sub },

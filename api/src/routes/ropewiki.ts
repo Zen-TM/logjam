@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
+import { ropeWikiHeavyLimiter } from "../middleware/rateLimit";
 import { snapshotFromCanyon, type RopeWikiSnapshot } from "../services/ropewiki";
 import { getRopeWikiCanyons } from "../services/ropeWikiCache";
 
@@ -13,6 +14,7 @@ const UPDATE_CHUNK_SIZE = 200;
 router.post(
   "/import",
   requireAuth,
+  ropeWikiHeavyLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await prisma.user.findUnique({
       where: { cognitoId: req.user!.sub },
@@ -66,6 +68,7 @@ router.post(
 router.post(
   "/refresh",
   requireAuth,
+  ropeWikiHeavyLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await prisma.user.findUnique({
       where: { cognitoId: req.user!.sub },
