@@ -21,7 +21,6 @@ const baseSchema = z.object({
 
   S3_BUCKET_TOPO: z.string().optional(),
   S3_BUCKET_MEDIA: z.string().optional(),
-  SQS_QUEUE_URL: z.string().optional(),
   ECS_CLUSTER: z.string().default("logjam-cluster"),
   ECS_TOPO_TASK_DEF: z.string().default("logjam-topo-worker"),
   ECS_SUBNETS: z.string().optional(),

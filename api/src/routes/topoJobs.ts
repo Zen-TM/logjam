@@ -7,9 +7,8 @@ import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName, TopoLayerFormat } from "../constants/topoLayers";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { RunTaskCommand } from "@aws-sdk/client-ecs";
-import { s3, sqs, ecs } from "../services/awsClients";
+import { s3, ecs } from "../services/awsClients";
 import {
   parseZipCentralDirectory,
   classifyElvisEntries,
@@ -21,7 +20,6 @@ const router = Router();
 
 const env = getEnv();
 const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
-const SQS_QUEUE_URL = env.SQS_QUEUE_URL ?? "";
 const ECS_CLUSTER = env.ECS_CLUSTER;
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
@@ -133,37 +131,34 @@ router.post(
 
     await prisma.topoJob.update({ where: { id: jobId }, data: { status: "pending" } });
 
-    // Publish SQS message
-    if (SQS_QUEUE_URL) {
-      await sqs.send(new SendMessageCommand({
-        QueueUrl: SQS_QUEUE_URL,
-        MessageBody: JSON.stringify({
-          jobId,
-          s3InputKey: job.s3InputKey,
-        }),
-      }));
-    }
-
-    // Trigger on-demand Fargate task if configured
+    // ECS RunTask owns lifecycle; status column owns retry semantics.
     if (ECS_SUBNETS.length) {
-      await ecs.send(new RunTaskCommand({
-        cluster: ECS_CLUSTER,
-        taskDefinition: ECS_TASK_DEFINITION,
-        launchType: "FARGATE",
-        networkConfiguration: {
-          awsvpcConfiguration: {
-            subnets: ECS_SUBNETS,
-            securityGroups: ECS_SECURITY_GROUPS,
-            assignPublicIp: "ENABLED",
+      try {
+        await ecs.send(new RunTaskCommand({
+          cluster: ECS_CLUSTER,
+          taskDefinition: ECS_TASK_DEFINITION,
+          launchType: "FARGATE",
+          networkConfiguration: {
+            awsvpcConfiguration: {
+              subnets: ECS_SUBNETS,
+              securityGroups: ECS_SECURITY_GROUPS,
+              assignPublicIp: "ENABLED",
+            },
           },
-        },
-        overrides: {
-          containerOverrides: [{
-            name: "topo-worker",
-            environment: [{ name: "JOB_ID", value: jobId }],
-          }],
-        },
-      }));
+          overrides: {
+            containerOverrides: [{
+              name: "topo-worker",
+              environment: [{ name: "JOB_ID", value: jobId }],
+            }],
+          },
+        }));
+      } catch {
+        await prisma.topoJob.update({
+          where: { id: jobId },
+          data: { status: "failed", errorMessage: "Failed to launch processing task." },
+        });
+        throw new AppError(500, "Failed to launch topo job");
+      }
     }
 
     res.json({ jobId, status: "pending" });

@@ -4,9 +4,8 @@ worker.py
 ECS Fargate topo worker. Processes a single TopoJob then exits.
 
 The job ID is read from the JOB_ID environment variable, set by the API
-when it calls ecs.RunTask(). SQS is used for retry durability: if the
-task crashes the message becomes visible again after the visibility
-timeout and the next task will retry it.
+when it calls ecs.RunTask(). ECS RunTask owns the launch lifecycle and
+the TopoJob.status column owns retry semantics.
 
 Required environment variables:
   JOB_ID            - UUID of the TopoJob to process
@@ -14,7 +13,6 @@ Required environment variables:
   DATABASE_URL      - PostgreSQL connection string
 
 Optional environment variables:
-  SQS_QUEUE_URL     - SQS queue URL (for deleting the message on success)
   SES_FROM_EMAIL    - Verified SES sender address (skips email if unset)
   FRONTEND_URL      - Base URL of the Logjam web app (e.g. https://logjam.app)
                       Used to build the deep link in the completion email.
@@ -45,7 +43,6 @@ logging.basicConfig(
 log = logging.getLogger("worker")
 
 AWS_REGION   = os.environ.get("AWS_REGION", "ap-southeast-2")
-QUEUE_URL    = os.environ.get("SQS_QUEUE_URL", "")
 BUCKET       = os.environ["S3_BUCKET_TOPO"]
 DATABASE_URL = os.environ["DATABASE_URL"]
 SES_FROM     = os.environ.get("SES_FROM_EMAIL", "")
@@ -64,7 +61,6 @@ ALL_LAYERS: frozenset[str] = frozenset({
 })
 
 s3  = boto3.client("s3",  region_name=AWS_REGION)
-sqs = boto3.client("sqs", region_name=AWS_REGION) if QUEUE_URL else None
 ses = boto3.client("ses", region_name=AWS_REGION) if SES_FROM else None
 
 
@@ -115,27 +111,6 @@ def get_user_email(conn, user_id: str) -> str | None:
         cur.execute("SELECT email FROM users WHERE id = %s", (user_id,))
         row = cur.fetchone()
     return row["email"] if row else None
-
-
-# ── SQS helper ────────────────────────────────────────────────────────────────
-
-def find_and_delete_sqs_message(job_id: str):
-    """Find the SQS message for this job and delete it."""
-    if not sqs:
-        return
-    try:
-        msgs = sqs.receive_message(
-            QueueUrl=QUEUE_URL,
-            MaxNumberOfMessages=1,
-            WaitTimeSeconds=5,
-        ).get("Messages", [])
-        for msg in msgs:
-            body = json.loads(msg["Body"])
-            if body.get("jobId") == job_id:
-                sqs.delete_message(QueueUrl=QUEUE_URL, ReceiptHandle=msg["ReceiptHandle"])
-                return
-    except Exception as e:
-        log.warning(f"Failed to delete SQS message: {e}")
 
 
 # ── Email ─────────────────────────────────────────────────────────────────────
@@ -447,8 +422,6 @@ def main():
         if email:
             send_completion_email(email, JOB_ID, output_keys, osm_failed=osm_failed)
 
-        find_and_delete_sqs_message(JOB_ID)
-
     except Exception as e:
         log.error(f"Job {JOB_ID} failed: {e}", exc_info=True)
         update_status(conn, JOB_ID, "failed", error_message=str(e))
@@ -456,7 +429,6 @@ def main():
             "jobId": JOB_ID,
             "jobName": job.get("name"),
         })
-        # Do NOT delete SQS message — allows retry after visibility timeout
         sys.exit(1)
 
     finally:

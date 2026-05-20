@@ -33,7 +33,7 @@ Canyoning in the Blue Mountains is driven by exploration and discovery in remote
 - PostgreSQL (AWS RDS)
 - AWS Cognito (authentication)
 - AWS S3 (media storage)
-- AWS SQS + ECS Fargate (topo job processing)
+- AWS ECS Fargate (topo job processing)
 - AWS SES (email notifications)
 
 ### Infrastructure
@@ -182,14 +182,10 @@ The topo worker (Python/GDAL/PDAL) is not started by default. Opt in when needed
 docker compose --profile topo up topo-worker
 ```
 
-To manually trigger a job against LocalStack:
+To manually trigger a job, run the worker with `JOB_ID` set (the API's `POST /topo-jobs/:id/start` does this via ECS RunTask in production):
 
 ```bash
-aws sqs send-message \
-  --endpoint-url http://localhost:4566 \
-  --queue-url http://localhost:4566/000000000000/logjam-topo-jobs-local \
-  --message-body '{"jobId":"<id>","s3InputKey":"inputs/<id>/upload.zip"}' \
-  --region ap-southeast-2
+docker compose --profile topo run --rm -e JOB_ID=<id> topo-worker
 ```
 
 ### Running integration tests
