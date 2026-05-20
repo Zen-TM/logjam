@@ -1,0 +1,65 @@
+.intro {
+  font-size: var(--text-sm);
+  color: var(--theme-text-muted);
+  margin-bottom: 12px;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+}
+
+.rwName {
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.rwCoords {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.option:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.optionLabel {
+  flex: 1;
+  font-size: var(--text-sm);
+  color: var(--theme-text-primary);
+}
+
+.optionMeta {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+}
+
+.matchBadge {
+  background: color-mix(in srgb, var(--theme-accent) 30%, transparent);
+  color: var(--theme-text-primary);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+}

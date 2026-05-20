@@ -188,22 +188,74 @@ export async function apiFetchBlob(
   return res.blob();
 }
 
+export type RopeWikiCandidatePayload = {
+  ropeWikiId: number;
+  rw: {
+    ropeWikiId: number;
+    name: string;
+    latitude: number;
+    longitude: number;
+    numAbseils: number | null;
+    longestAbseil: number | null;
+    vGrade: number | null;
+    aGrade: number | null;
+    commitment: number | null;
+    quality: number | null;
+    hours: number | null;
+    attributes: TCanyonAttributes;
+  };
+  candidates: {
+    canyonId: string;
+    name: string;
+    latitude: number;
+    longitude: number;
+    distanceMeters: number;
+    nameMatch: boolean;
+  }[];
+};
+
 export type ImportResult = {
   imported: number;
+  autoLinked: number;
   skipped: number;
+  review: RopeWikiCandidatePayload[];
   errors: string[];
 };
 
 export type RefreshResult = {
   added: number;
+  autoLinked: number;
+  review: RopeWikiCandidatePayload[];
   updated: number;
   unchanged: number;
   userEdited: number;
   errors: string[];
 };
 
+export type RopeWikiApplyDecision = {
+  ropeWikiId: number;
+  action: "link" | "create" | "skip";
+  targetCanyonId?: string;
+};
+
+export type RopeWikiApplyResult = {
+  linked: number;
+  created: number;
+  skipped: number;
+  errors: string[];
+};
+
 export function importFromRopeWiki(): Promise<ImportResult> {
   return apiFetch<ImportResult>("/ropewiki/import", { method: "POST" });
+}
+
+export function applyRopeWikiImport(
+  decisions: RopeWikiApplyDecision[],
+): Promise<RopeWikiApplyResult> {
+  return apiFetch<RopeWikiApplyResult>("/ropewiki/import/apply", {
+    method: "POST",
+    body: { decisions },
+  });
 }
 
 export function refreshFromRopeWiki(): Promise<RefreshResult> {

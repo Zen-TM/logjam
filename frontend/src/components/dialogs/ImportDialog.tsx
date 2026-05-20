@@ -14,6 +14,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import { importFromRopeWiki, type ImportResult } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import RopeWikiReviewDialog from "./RopeWikiReviewDialog";
 
 function ImportDialog({
   open,
@@ -27,6 +28,7 @@ function ImportDialog({
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   async function handleImport() {
     setLoading(true);
@@ -85,7 +87,11 @@ function ImportDialog({
         {result && (
           <Typography>
             Imported {result.imported} canyon{result.imported !== 1 ? "s" : ""}
+            {result.autoLinked > 0 &&
+              `, linked ${result.autoLinked} to existing canyon${result.autoLinked !== 1 ? "s" : ""}`}
             {result.skipped > 0 && ` (${result.skipped} already existed)`}.
+            {result.review.length > 0 &&
+              ` ${result.review.length} possible duplicate${result.review.length !== 1 ? "s" : ""} need review.`}
             {result.errors.length > 0 &&
               ` ${result.errors.length} row${result.errors.length !== 1 ? "s" : ""} could not be parsed.`}
           </Typography>
@@ -105,11 +111,33 @@ function ImportDialog({
           </>
         )}
         {(result || error) && (
-          <Button variant="contained" color="secondary" onClick={onClose}>
-            Close
-          </Button>
+          <>
+            {result && result.review.length > 0 && (
+              <Button
+                variant="outlined"
+                color="secondary"
+                onClick={() => setReviewOpen(true)}
+              >
+                Review {result.review.length}
+              </Button>
+            )}
+            <Button variant="contained" color="secondary" onClick={onClose}>
+              Close
+            </Button>
+          </>
         )}
       </DialogActions>
+      {result && (
+        <RopeWikiReviewDialog
+          open={reviewOpen}
+          review={result.review}
+          onClose={() => setReviewOpen(false)}
+          onApplied={() => {
+            setResult({ ...result, review: [] });
+            onImported();
+          }}
+        />
+      )}
     </Dialog>
   );
 }

@@ -1,53 +1,7 @@
 import type { TCanyon } from "../canyonUtils";
+import { norm, stripWaterwaySuffix } from "@logjam/shared";
 
-const WATERWAY_SUFFIXES = [
-  "canyon",
-  "canyons",
-  "gorge",
-  "gorges",
-  "river",
-  "rivers",
-  "creek",
-  "creeks",
-  "gully",
-  "gullies",
-  "gulch",
-  "gulches",
-  "ravine",
-  "ravines",
-  "valley",
-  "valleys",
-  "brook",
-  "brooks",
-  "stream",
-  "streams",
-  "falls",
-  "waterfall",
-  "waterfalls",
-  "tunnel",
-  "tunnels",
-  "slot",
-  "slots",
-  "chasm",
-  "chasms",
-  "watercourse",
-  "watercourses",
-];
-
-export function norm(s: string): string {
-  return s.toLowerCase().replace(/'/g, "").trim();
-}
-
-export function stripWaterwaySuffix(name: string): string {
-  const n = norm(name);
-  for (const suffix of WATERWAY_SUFFIXES) {
-    // Match suffix as a whole trailing word
-    const re = new RegExp(`\\s+${suffix}$`);
-    const stripped = n.replace(re, "").trim();
-    if (stripped && stripped !== n) return stripped;
-  }
-  return n;
-}
+export { norm, stripWaterwaySuffix };
 
 type MatchResult =
   | { kind: "match"; canyon: TCanyon }

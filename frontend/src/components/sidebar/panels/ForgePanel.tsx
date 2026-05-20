@@ -2,6 +2,7 @@ import { useState } from "react";
 import classes from "./ForgePanel.module.css";
 import type { RefreshResult } from "../../../canyonUtils";
 import { refreshFromRopeWiki } from "../../../canyonUtils";
+import RopeWikiReviewDialog from "../../dialogs/RopeWikiReviewDialog";
 
 function ForgePanel({
   onAddCanyon,
@@ -28,6 +29,7 @@ function ForgePanel({
   const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(
     null,
   );
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -36,6 +38,7 @@ function ForgePanel({
       const result = await refreshFromRopeWiki();
       setRefreshResult(result);
       onRefetch();
+      if (result.review.length > 0) setReviewOpen(true);
     } catch {
       setRefreshResult(null);
     } finally {
@@ -66,10 +69,15 @@ function ForgePanel({
         </button>
         {refreshResult && (
           <span className={classes.refreshResult}>
-            {refreshResult.added} added, {refreshResult.updated} updated,{" "}
-            {refreshResult.unchanged} unchanged
+            {refreshResult.added} added
+            {refreshResult.autoLinked > 0 &&
+              `, ${refreshResult.autoLinked} linked`}
+            , {refreshResult.updated} updated, {refreshResult.unchanged}{" "}
+            unchanged
             {refreshResult.userEdited > 0 &&
               `, ${refreshResult.userEdited} kept (edited)`}
+            {refreshResult.review.length > 0 &&
+              `, ${refreshResult.review.length} need review`}
           </span>
         )}
       </div>
@@ -101,6 +109,18 @@ function ForgePanel({
           GeoPDF Templates
         </button>
       </div>
+
+      {refreshResult && (
+        <RopeWikiReviewDialog
+          open={reviewOpen}
+          review={refreshResult.review}
+          onClose={() => setReviewOpen(false)}
+          onApplied={() => {
+            setRefreshResult({ ...refreshResult, review: [] });
+            onRefetch();
+          }}
+        />
+      )}
     </div>
   );
 }
