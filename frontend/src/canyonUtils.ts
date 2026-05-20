@@ -56,13 +56,12 @@ export type TTripLog = {
 export type TFriend = {
   id: string;
   username: string;
-  email: string;
   friendshipId: string;
 };
 
 export type TFriendRequest = {
   id: string;
-  requester: { id: string; username: string; email: string };
+  requester: { id: string; username: string };
 };
 
 export type TSearchUser = {
@@ -73,7 +72,7 @@ export type TSearchUser = {
 export type TCanyonShare = {
   id: string;
   canyonId: string;
-  sharedWith: { id: string; username: string; email: string };
+  sharedWith: { id: string; username: string };
 };
 
 export type TNotification = {

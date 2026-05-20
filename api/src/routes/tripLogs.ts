@@ -27,10 +27,15 @@ router.get(
 
     // Check access — owner or shared
     const isOwner = canyon.ownerId === user.id;
-    const isShared = await prisma.canyonShare.findFirst({
-      where: { canyonId, sharedWithId: user.id },
-    });
-    if (!isOwner && !isShared) throw new AppError(403, "Access denied");
+    if (!isOwner) {
+      const isShared = await prisma.canyonShare.findFirst({
+        where: { canyonId, sharedWithId: user.id },
+      });
+      if (!isShared) throw new AppError(403, "Access denied");
+      // Trip logs are owner-private (hybrid sharing model).
+      res.json([]);
+      return;
+    }
 
     const trips = await prisma.tripLog.findMany({
       where: { canyonId },

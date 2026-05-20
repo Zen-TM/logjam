@@ -10,8 +10,11 @@ function SignIn({
   onSignIn,
   onSignUp,
   onConfirmSignUp,
+  onForgotPassword,
+  onConfirmForgotPassword,
   goToSignUp,
   goToSignIn,
+  goToForgotPassword,
 }: {
   authState: AuthState;
   error: string | null;
@@ -23,8 +26,11 @@ function SignIn({
     name: string,
   ) => Promise<void>;
   onConfirmSignUp: (code: string) => Promise<void>;
+  onForgotPassword: (email: string) => Promise<void>;
+  onConfirmForgotPassword: (code: string, newPassword: string) => Promise<boolean>;
   goToSignUp: () => void;
   goToSignIn: () => void;
+  goToForgotPassword: () => void;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -32,8 +38,11 @@ function SignIn({
   const [name, setName] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   const displayError = localError || error;
 
@@ -69,6 +78,31 @@ function SignIn({
     setSubmitting(false);
   }
 
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setLocalError(null);
+    setSubmitting(true);
+    await onForgotPassword(email);
+    setSubmitting(false);
+  }
+
+  async function handleConfirmForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setLocalError(null);
+    if (newPassword !== confirmNewPassword) {
+      setLocalError("Passwords do not match");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setLocalError("Password must be at least 8 characters");
+      return;
+    }
+    setSubmitting(true);
+    const succeeded = await onConfirmForgotPassword(code, newPassword);
+    setSubmitting(false);
+    if (succeeded) setResetSuccess(true);
+  }
+
   if (authState === "confirmSignUp") {
     return (
       <div className={classes.container}>
@@ -95,6 +129,98 @@ function SignIn({
           >
             {submitting ? "Verifying..." : "Verify"}
           </Button>
+        </form>
+      </div>
+    );
+  }
+
+  if (authState === "forgotPassword") {
+    return (
+      <div className={classes.container}>
+        <form className={classes.form} onSubmit={handleForgotPassword}>
+          <h1 className={classes.title}>Logjam</h1>
+          <p className={classes.subtitle}>
+            Enter your email and we&apos;ll send you a reset code
+          </p>
+          <TextField
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            size="small"
+            fullWidth
+            required
+            autoFocus
+          />
+          {displayError && <ErrorBanner message={displayError} />}
+          <Button
+            type="submit"
+            variant="contained"
+            fullWidth
+            disabled={submitting}
+          >
+            {submitting ? "Sending..." : "Send reset code"}
+          </Button>
+          <p className={classes.switchText}>
+            <button type="button" className={classes.link} onClick={goToSignIn}>
+              Back to sign in
+            </button>
+          </p>
+        </form>
+      </div>
+    );
+  }
+
+  if (authState === "confirmForgotPassword") {
+    return (
+      <div className={classes.container}>
+        <form className={classes.form} onSubmit={handleConfirmForgotPassword}>
+          <h1 className={classes.title}>Logjam</h1>
+          <p className={classes.subtitle}>
+            Check your email for a reset code, then choose a new password
+          </p>
+          <TextField
+            label="Reset code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            size="small"
+            fullWidth
+            required
+            autoFocus
+          />
+          <TextField
+            label="New password"
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            size="small"
+            fullWidth
+            required
+            helperText="At least 8 characters"
+          />
+          <TextField
+            label="Confirm new password"
+            type="password"
+            value={confirmNewPassword}
+            onChange={(e) => setConfirmNewPassword(e.target.value)}
+            size="small"
+            fullWidth
+            required
+          />
+          {displayError && <ErrorBanner message={displayError} />}
+          <Button
+            type="submit"
+            variant="contained"
+            fullWidth
+            disabled={submitting}
+          >
+            {submitting ? "Resetting..." : "Reset password"}
+          </Button>
+          <p className={classes.switchText}>
+            <button type="button" className={classes.link} onClick={goToSignIn}>
+              Back to sign in
+            </button>
+          </p>
         </form>
       </div>
     );
@@ -174,11 +300,14 @@ function SignIn({
     <div className={classes.container}>
       <form className={classes.form} onSubmit={handleSignIn}>
         <h1 className={classes.title}>Logjam</h1>
+        {resetSuccess && (
+          <p className={classes.successBanner}>Password reset — please sign in.</p>
+        )}
         <TextField
           label="Email"
           type="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => { setEmail(e.target.value); setResetSuccess(false); }}
           size="small"
           fullWidth
           required
@@ -202,6 +331,11 @@ function SignIn({
         >
           {submitting ? "Signing in..." : "Sign in"}
         </Button>
+        <p className={classes.switchText}>
+          <button type="button" className={classes.link} onClick={goToForgotPassword}>
+            Forgot password?
+          </button>
+        </p>
         <p className={classes.switchText}>
           Don&apos;t have an account?{" "}
           <button type="button" className={classes.link} onClick={goToSignUp}>

@@ -128,7 +128,7 @@ function FriendsPanel({
       <div className={classes.optionsContent}>
         <div className={classes.friendSearchContainer}>
           <TextField
-            placeholder="Search by username or email..."
+            placeholder="Search by username..."
             value={friendSearch}
             color="secondary"
             onChange={(e) => setFriendSearch(e.target.value)}

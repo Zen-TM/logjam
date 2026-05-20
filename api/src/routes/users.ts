@@ -1,4 +1,5 @@
 import { Router, Response } from "express";
+import { createHash } from "crypto";
 import { Prisma } from "@prisma/client";
 import {
   isThemeSchemeId,
@@ -9,6 +10,25 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { verifyEmail } from "../services/email";
+import { cognitoIdp } from "../services/awsClients";
+import { AdminGetUserCommand, UserNotFoundException } from "@aws-sdk/client-cognito-identity-provider";
+
+function shortHash(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 12);
+}
+
+async function cognitoUserExists(sub: string): Promise<boolean> {
+  const poolId = process.env.COGNITO_USER_POOL_ID;
+  if (!poolId) return true; // fail safe: assume exists if pool not configured
+  try {
+    await cognitoIdp.send(new AdminGetUserCommand({ UserPoolId: poolId, Username: sub }));
+    return true;
+  } catch (err) {
+    if (err instanceof UserNotFoundException) return false;
+    // IAM not granted or network error — fail safe: treat as existing
+    return true;
+  }
+}
 
 const router = Router();
 
@@ -68,9 +88,32 @@ router.get(
         const target = (e.meta?.target as string[] | undefined) ?? [];
 
         if (target.includes("email")) {
-          // A DB record exists for this email under a different Cognito sub
-          // (e.g. the user's Cognito account was deleted and recreated). Reclaim
-          // the existing record by updating its cognitoId to the new sub.
+          // A DB record exists for this email under a different Cognito sub.
+          // Only allow rebind when the inbound JWT is email-verified AND the
+          // previous Cognito user no longer exists (account was deleted+recreated).
+          // Any other case returns 409 to prevent account takeover.
+          const existingRow = await prisma.user.findUnique({
+            where: { email },
+            select: { cognitoId: true },
+          });
+          const oldSub = existingRow?.cognitoId ?? "";
+          const canRebind =
+            req.user!.emailVerified &&
+            oldSub !== sub &&
+            !(await cognitoUserExists(oldSub));
+
+          if (!canRebind) {
+            throw new AppError(
+              409,
+              "An account exists for this email address. Contact support if you believe this is an error.",
+            );
+          }
+
+          console.warn(JSON.stringify({
+            event: "cognito_rebind",
+            oldSubHash: shortHash(oldSub),
+            newSubHash: shortHash(sub),
+          }));
           user = await prisma.user.update({
             where: { email },
             data: { cognitoId: sub },

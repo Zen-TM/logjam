@@ -430,8 +430,11 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         onSignIn={auth.signIn}
         onSignUp={auth.signUp}
         onConfirmSignUp={auth.confirmSignUp}
+        onForgotPassword={auth.forgotPassword}
+        onConfirmForgotPassword={auth.confirmForgotPassword}
         goToSignUp={auth.goToSignUp}
         goToSignIn={auth.goToSignIn}
+        goToForgotPassword={auth.goToForgotPassword}
       />
     );
   }

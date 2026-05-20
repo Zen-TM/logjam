@@ -2,6 +2,30 @@ import { Request, Response, NextFunction } from "express";
 import jwksClient from "jwks-rsa";
 import jwt from "jsonwebtoken";
 
+// Fail fast at module load if AUTH_MODE=fake would bypass Cognito in a non-dev runtime.
+// Three independent signals — any one is sufficient to refuse:
+//   1. NODE_ENV is not "development" or "test"
+//   2. AWS runtime env vars present (ECS/EB inject these)
+//   3. DATABASE_URL points to a non-local host
+if (process.env.AUTH_MODE === "fake") {
+  const env = process.env.NODE_ENV;
+  const looksProd = env !== "development" && env !== "test";
+  const hasAwsRuntime =
+    Boolean(process.env.AWS_EXECUTION_ENV) ||
+    Boolean(process.env.ECS_CONTAINER_METADATA_URI_V4) ||
+    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+  const dbUrl = process.env.DATABASE_URL ?? "";
+  const dbHostNonLocal =
+    dbUrl !== "" &&
+    !/@(localhost|127\.0\.0\.1|host\.docker\.internal|postgres)(:|\/|$)/.test(dbUrl);
+  if (looksProd || hasAwsRuntime || dbHostNonLocal) {
+    throw new Error(
+      `AUTH_MODE=fake refused: detected non-dev runtime ` +
+        `(NODE_ENV=${env}, awsRuntime=${hasAwsRuntime}, dbHostNonLocal=${dbHostNonLocal})`,
+    );
+  }
+}
+
 let client: jwksClient.JwksClient | null = null;
 
 function getClient() {
@@ -25,6 +49,7 @@ export interface AuthenticatedRequest extends Request {
   user?: {
     sub: string; // Cognito user ID
     email: string;
+    emailVerified: boolean;
     username: string;
   };
 }
@@ -35,12 +60,12 @@ export function requireAuth(
   next: NextFunction,
 ) {
   if (process.env.AUTH_MODE === "fake") {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("AUTH_MODE=fake is not allowed in production");
-    }
+    // Module-load guard above already refuses this in non-dev runtimes.
+    // This per-request branch is defence-in-depth only.
     req.user = {
       sub: process.env.FAKE_USER_SUB ?? "fake-alice-sub",
       email: "alice@local",
+      emailVerified: true,
       username: "alice",
     };
     next();
@@ -73,6 +98,7 @@ export function requireAuth(
       req.user = {
         sub: payload.sub!,
         email: payload.email,
+        emailVerified: payload.email_verified === true,
         username: payload.preferred_username || payload["cognito:username"],
       };
 

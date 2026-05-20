@@ -155,7 +155,9 @@ router.post(
 );
 
 // ── GET /canyons/:id ──────────────────────────────────────────
-// Returns a single canyon with its trip logs and media
+// Returns a single canyon. Owners receive trip logs + all media.
+// Share recipients receive canyon record + canyon-level media only
+// (trip logs and trip media are owner-private — hybrid sharing model).
 router.get(
   "/:id",
   requireAuth,
@@ -165,26 +167,29 @@ router.get(
     });
     if (!user) throw new AppError(404, "User not found");
 
+    const canyonId = getParam(req.params.id);
+
+    // Fetch owner first so we can decide includes before the full query.
+    const stub = await prisma.canyon.findUnique({
+      where: { id: canyonId },
+      select: { ownerId: true },
+    });
+    if (!stub) throw new AppError(404, "Canyon not found");
+
+    const isOwner = stub.ownerId === user.id;
+    if (!isOwner) {
+      const share = await prisma.canyonShare.findFirst({
+        where: { canyonId, sharedWithId: user.id },
+      });
+      if (!share) throw new AppError(403, "Access denied");
+    }
+
     const canyon = await prisma.canyon.findUnique({
-      where: { id: getParam(req.params.id) },
-      include: {
-        tripLogs: {
-          orderBy: { date: "desc" },
-          include: { media: true },
-        },
-        media: true,
-      },
+      where: { id: canyonId },
+      include: isOwner
+        ? { tripLogs: { orderBy: { date: "desc" }, include: { media: true } }, media: true }
+        : { media: true },
     });
-
-    if (!canyon) throw new AppError(404, "Canyon not found");
-
-    // Ensure the canyon belongs to this user, or has been shared with them
-    const isOwner = canyon.ownerId === user.id;
-    const isShared = await prisma.canyonShare.findFirst({
-      where: { canyonId: canyon.id, sharedWithId: user.id },
-    });
-
-    if (!isOwner && !isShared) throw new AppError(403, "Access denied");
 
     res.json(canyon);
   },

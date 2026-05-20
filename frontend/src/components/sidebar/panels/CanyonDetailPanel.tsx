@@ -433,7 +433,9 @@ function CanyonDetailPanel({
           {loadingTrips ? (
             <span className={classes.caption}>Loading...</span>
           ) : tripLogs.length === 0 ? (
-            <span className={classes.caption}>No trips logged yet.</span>
+            <span className={classes.caption}>
+              {isOwnedCanyon ? "No trips logged yet." : "Trip logs are private to the canyon owner."}
+            </span>
           ) : (
             <div className={classes.tripLogList}>
               {tripLogs.map((trip) => (

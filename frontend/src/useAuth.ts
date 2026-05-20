@@ -5,6 +5,8 @@ import {
   confirmSignUp as amplifyConfirmSignUp,
   signOut as amplifySignOut,
   fetchAuthSession,
+  resetPassword as amplifyResetPassword,
+  confirmResetPassword as amplifyConfirmResetPassword,
 } from "aws-amplify/auth";
 import { apiFetch } from "./canyonUtils";
 import { messageFromError } from "./errors/messageFromError";
@@ -17,7 +19,14 @@ async function ensureUserExists() {
   await apiFetch("/users/me");
 }
 
-export type AuthState = "loading" | "signIn" | "signUp" | "confirmSignUp" | "authenticated";
+export type AuthState =
+  | "loading"
+  | "signIn"
+  | "signUp"
+  | "confirmSignUp"
+  | "forgotPassword"
+  | "confirmForgotPassword"
+  | "authenticated";
 
 export function useAuth() {
   const [state, setState] = useState<AuthState>("loading");
@@ -105,6 +114,40 @@ export function useAuth() {
     [pendingUsername],
   );
 
+  const handleForgotPassword = useCallback(async (email: string) => {
+    setError(null);
+    try {
+      const result = await amplifyResetPassword({ username: email });
+      if (result.nextStep.resetPasswordStep === "CONFIRM_RESET_PASSWORD_WITH_CODE") {
+        setPendingUsername(email);
+        setState("confirmForgotPassword");
+      }
+    } catch (err) {
+      console.error(err);
+      setError(messageFromError(err, "Couldn't send reset code. Please try again."));
+    }
+  }, []);
+
+  const handleConfirmForgotPassword = useCallback(
+    async (code: string, newPassword: string): Promise<boolean> => {
+      setError(null);
+      try {
+        await amplifyConfirmResetPassword({
+          username: pendingUsername,
+          confirmationCode: code,
+          newPassword,
+        });
+        setState("signIn");
+        return true;
+      } catch (err) {
+        console.error(err);
+        setError(messageFromError(err, "Couldn't reset password. Please try again."));
+        return false;
+      }
+    },
+    [pendingUsername],
+  );
+
   const handleSignOut = useCallback(async () => {
     await amplifySignOut();
     window.location.reload();
@@ -117,8 +160,11 @@ export function useAuth() {
     signIn: handleSignIn,
     signUp: handleSignUp,
     confirmSignUp: handleConfirmSignUp,
+    forgotPassword: handleForgotPassword,
+    confirmForgotPassword: handleConfirmForgotPassword,
     signOut: handleSignOut,
     goToSignUp: useCallback(() => { setError(null); setState("signUp"); }, []),
     goToSignIn: useCallback(() => { setError(null); setState("signIn"); }, []),
+    goToForgotPassword: useCallback(() => { setError(null); setState("forgotPassword"); }, []),
   };
 }

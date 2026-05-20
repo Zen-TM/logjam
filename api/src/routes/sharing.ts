@@ -135,7 +135,7 @@ router.get(
       where: { canyonId },
       include: {
         sharedWith: {
-          select: { id: true, username: true, email: true },
+          select: { id: true, username: true },
         },
       },
     });

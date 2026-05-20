@@ -37,6 +37,16 @@
   font-size: 0.875rem;
 }
 
+.successBanner {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background-color: color-mix(in srgb, var(--theme-accent) 15%, transparent);
+  color: var(--theme-accent);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
 .link {
   background: none;
   border: none;

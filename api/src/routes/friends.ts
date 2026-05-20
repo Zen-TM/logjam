@@ -26,8 +26,8 @@ router.get(
         OR: [{ requesterId: user.id }, { addresseeId: user.id }],
       },
       include: {
-        requester: { select: { id: true, username: true, email: true } },
-        addressee: { select: { id: true, username: true, email: true } },
+        requester: { select: { id: true, username: true } },
+        addressee: { select: { id: true, username: true } },
       },
     });
 
@@ -36,8 +36,8 @@ router.get(
         id: string;
         requesterId: string;
         addresseeId: string;
-        requester: { id: string; username: string; email: string };
-        addressee: { id: string; username: string; email: string };
+        requester: { id: string; username: string };
+        addressee: { id: string; username: string };
       }) => {
         const friend = f.requesterId === user.id ? f.addressee : f.requester;
         return { ...friend, friendshipId: f.id };
@@ -65,7 +65,7 @@ router.get(
         status: "pending",
       },
       include: {
-        requester: { select: { id: true, username: true, email: true } },
+        requester: { select: { id: true, username: true } },
       },
     });
 
@@ -282,20 +282,17 @@ router.get(
     if (!user) throw new AppError(404, "User not found");
 
     const { q } = req.query;
-    if (!q || typeof q !== "string" || q.length < 2) {
-      throw new AppError(400, "Search query must be at least 2 characters");
+    if (!q || typeof q !== "string" || q.length < 3) {
+      throw new AppError(400, "Search query must be at least 3 characters");
     }
 
     const users = await prisma.user.findMany({
       where: {
-        OR: [
-          { username: { contains: q, mode: "insensitive" } },
-          { email: { contains: q, mode: "insensitive" } },
-        ],
-        id: { not: user.id }, // exclude self
+        username: { contains: q, mode: "insensitive" },
+        id: { not: user.id },
       },
       select: { id: true, username: true },
-      take: 10, // limit results
+      take: 10,
     });
 
     res.json(users);
