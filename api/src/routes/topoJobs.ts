@@ -15,15 +15,17 @@ import {
   classifyElvisEntries,
   ElvisZipError,
 } from "@logjam/shared";
+import { getEnv } from "../lib/env";
 
 const router = Router();
 
-const TOPO_BUCKET = process.env.S3_BUCKET_TOPO!;
-const SQS_QUEUE_URL = process.env.SQS_QUEUE_URL!;
-const ECS_CLUSTER = process.env.ECS_CLUSTER ?? "logjam-cluster";
-const ECS_TASK_DEFINITION = process.env.ECS_TOPO_TASK_DEF ?? "logjam-topo-worker";
-const ECS_SUBNETS = (process.env.ECS_SUBNETS ?? "").split(",").filter(Boolean);
-const ECS_SECURITY_GROUPS = (process.env.ECS_SECURITY_GROUPS ?? "").split(",").filter(Boolean);
+const env = getEnv();
+const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
+const SQS_QUEUE_URL = env.SQS_QUEUE_URL ?? "";
+const ECS_CLUSTER = env.ECS_CLUSTER;
+const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
+const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
+const ECS_SECURITY_GROUPS = env.ECS_SECURITY_GROUPS_LIST;
 
 function getParam(param: string | string[]): string {
   return Array.isArray(param) ? param[0] : param;

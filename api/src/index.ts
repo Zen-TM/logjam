@@ -1,7 +1,14 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
-import dotenv from "dotenv";
+import pinoHttp from "pino-http";
+import { randomUUID } from "crypto";
+import { getEnv } from "./lib/env";
+import { logger } from "./lib/logger";
+import prisma from "./services/prisma";
 import { errorHandler } from "./middleware/errorHandler";
 import usersRouter from "./routes/users";
 import canyonsRouter from "./routes/canyons";
@@ -18,29 +25,89 @@ import geoPdfTemplatesRouter from "./routes/geoPdfTemplates";
 import geoPdfRouter from "./routes/geoPdf";
 import analyticsRouter from "./routes/analytics";
 
-dotenv.config();
+const env = getEnv();
 
 const app = express();
-const PORT = process.env.PORT || 8080;
 
-const allowedOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
-  : "*";
+let shuttingDown = false;
+
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req, res) => {
+      const incoming =
+        (req.headers["x-request-id"] as string | undefined) ?? randomUUID();
+      res.setHeader("X-Request-Id", incoming);
+      return incoming;
+    },
+    customLogLevel: (req, res, err) => {
+      if (err || res.statusCode >= 500) return "error";
+      if (res.statusCode >= 400) return "warn";
+      return "info";
+    },
+    serializers: {
+      req: (req) => ({
+        id: req.id,
+        method: req.method,
+        url: req.url,
+        // Deliberately omit body — payloads may contain canyon names/coords.
+      }),
+    },
+  }),
+);
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      // Same-origin / curl requests have no Origin header — allow.
+      if (!origin) return callback(null, true);
+      if (env.CORS_ORIGIN_LIST.includes(origin)) return callback(null, true);
+      return callback(null, false);
+    },
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Fake-Auth"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Fake-Auth", "X-Request-Id"],
+    exposedHeaders: ["X-Request-Id"],
     credentials: true,
   }),
 );
-app.use(helmet());
-app.use(express.json());
 
-// Routes
-app.get("/health", (req, res) => {
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    strictTransportSecurity: {
+      maxAge: 63072000,
+      includeSubDomains: true,
+      preload: false,
+    },
+  }),
+);
+
+app.use(express.json({ limit: "1mb" }));
+
+// Liveness — cheap, never depends on DB
+app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Readiness — checks DB; 503 during shutdown or DB outage
+app.get("/ready", async (_req, res) => {
+  if (shuttingDown) {
+    res.status(503).json({ status: "shutting_down" });
+    return;
+  }
+  try {
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("db_ping_timeout")), 1000),
+      ),
+    ]);
+    res.json({ status: "ready" });
+  } catch (err) {
+    logger.warn({ err }, "ready_check_failed");
+    res.status(503).json({ status: "db_unavailable" });
+  }
 });
 
 app.use("/users", usersRouter);
@@ -58,11 +125,48 @@ app.use("/geo-pdf-templates", geoPdfTemplatesRouter);
 app.use("/geo-pdf", geoPdfRouter);
 app.use("/analytics", analyticsRouter);
 
-// Error handler — must be last
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`Logjam API running on port ${PORT}`);
+const server = app.listen(env.PORT, () => {
+  logger.info({ port: env.PORT, nodeEnv: env.NODE_ENV }, "api_started");
+});
+
+const SHUTDOWN_TIMEOUT_MS = 25_000;
+
+function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ signal }, "shutdown_initiated");
+
+  const force = setTimeout(() => {
+    logger.error("shutdown_timeout_force_exit");
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+  force.unref();
+
+  server.close(async (err) => {
+    if (err) logger.error({ err }, "server_close_error");
+    try {
+      await prisma.$disconnect();
+      logger.info("shutdown_complete");
+      process.exit(0);
+    } catch (disconnectErr) {
+      logger.error({ err: disconnectErr }, "prisma_disconnect_error");
+      process.exit(1);
+    }
+  });
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "unhandled_rejection");
+});
+
+process.on("uncaughtException", (err) => {
+  logger.fatal({ err }, "uncaught_exception");
+  shutdown("uncaughtException");
 });
 
 export default app;
