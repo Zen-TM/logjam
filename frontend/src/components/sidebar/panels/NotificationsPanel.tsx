@@ -36,6 +36,7 @@ function NotificationsPanel({
     setActionedIds((prev) => new Set([...prev, notificationId]));
     try {
       await acceptFriendRequest(friendshipId);
+      markNotificationRead(notificationId).catch((err) => { console.error(err); });
       deleteNotification(notificationId).catch((err) => { console.error(err); });
       onRefetchFriends();
       onRefetchNotifications();
@@ -54,6 +55,7 @@ function NotificationsPanel({
     setActionedIds((prev) => new Set([...prev, notificationId]));
     try {
       await declineFriendRequest(friendshipId);
+      markNotificationRead(notificationId).catch((err) => { console.error(err); });
       deleteNotification(notificationId).catch((err) => { console.error(err); });
       onRefetchNotifications();
     } catch (err) {
