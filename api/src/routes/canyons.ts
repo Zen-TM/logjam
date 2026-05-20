@@ -279,17 +279,24 @@ router.delete(
 
     const id = getParam(req.params.id);
 
-    // Delete in order to respect foreign key constraints
-    await prisma.media.deleteMany({
-      where: { linkedId: id },
-    });
-    await prisma.tripLog.deleteMany({
-      where: { canyonId: id },
-    });
-    await prisma.canyonShare.deleteMany({
-      where: { canyonId: id },
-    });
-    await prisma.canyon.delete({ where: { id: id } });
+    const tripIds = (
+      await prisma.tripLog.findMany({
+        where: { canyonId: id },
+        select: { id: true },
+      })
+    ).map((t) => t.id);
+
+    await prisma.$transaction([
+      prisma.media.deleteMany({
+        where: { linkedType: "tripLog", linkedId: { in: tripIds } },
+      }),
+      prisma.media.deleteMany({
+        where: { linkedType: "canyon", linkedId: id },
+      }),
+      prisma.tripLog.deleteMany({ where: { canyonId: id } }),
+      prisma.canyonShare.deleteMany({ where: { canyonId: id } }),
+      prisma.canyon.delete({ where: { id } }),
+    ]);
 
     res.status(204).send();
   },

@@ -31,6 +31,15 @@ router.post(
     const errors: { index: number; error: string }[] = [];
     const validData: Prisma.TripLogCreateManyInput[] = [];
 
+    const canyonIds = Array.from(
+      new Set(trips.map((t) => t.canyonId).filter((id): id is string => Boolean(id))),
+    );
+    const owned = await prisma.canyon.findMany({
+      where: { id: { in: canyonIds } },
+      select: { id: true, ownerId: true },
+    });
+    const ownerById = new Map(owned.map((c) => [c.id, c.ownerId]));
+
     for (let i = 0; i < trips.length; i++) {
       const t = trips[i];
       if (!t.canyonId || !t.date) {
@@ -42,12 +51,12 @@ router.post(
         errors.push({ index: i, error: `invalid date: ${t.date}` });
         continue;
       }
-      const canyon = await prisma.canyon.findUnique({ where: { id: t.canyonId } });
-      if (!canyon) {
+      const ownerId = ownerById.get(t.canyonId);
+      if (ownerId === undefined) {
         errors.push({ index: i, error: "canyon not found" });
         continue;
       }
-      if (canyon.ownerId !== user.id) {
+      if (ownerId !== user.id) {
         errors.push({ index: i, error: "not the canyon owner" });
         continue;
       }

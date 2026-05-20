@@ -138,6 +138,15 @@ router.post(
 
       const errors: BulkError[] = [];
 
+      const candidateIds = replacements
+        .map((r) => r.canyonId)
+        .filter((id): id is string => Boolean(id));
+      const owned = await prisma.canyon.findMany({
+        where: { id: { in: candidateIds } },
+        select: { id: true, ownerId: true },
+      });
+      const ownerById = new Map(owned.map((c) => [c.id, c.ownerId]));
+
       // validate + ownership-check all rows before any writes
       const validReplacements: { canyonId: string; data: BulkCanyonInput }[] = [];
       for (let i = 0; i < replacements.length; i++) {
@@ -148,12 +157,12 @@ router.post(
         }
         if (!validateInput(data, i, errors)) continue;
 
-        const existing = await prisma.canyon.findUnique({ where: { id: canyonId } });
-        if (!existing) {
+        const ownerId = ownerById.get(canyonId);
+        if (ownerId === undefined) {
           errors.push({ rowIndex: i, message: `Row ${i}: canyon not found` });
           continue;
         }
-        if (existing.ownerId !== user.id) {
+        if (ownerId !== user.id) {
           throw new AppError(403, "Forbidden");
         }
         validReplacements.push({ canyonId, data });

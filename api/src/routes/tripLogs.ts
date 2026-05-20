@@ -129,6 +129,8 @@ router.patch(
       include: { canyon: true },
     });
     if (!trip) throw new AppError(404, "Trip log not found");
+    if (trip.canyonId !== getParam(req.params.canyonId))
+      throw new AppError(404, "Trip log not found");
     if (trip.canyon.ownerId !== user.id)
       throw new AppError(403, "Only the canyon owner can edit trip logs");
 
@@ -166,11 +168,17 @@ router.delete(
       include: { canyon: true },
     });
     if (!trip) throw new AppError(404, "Trip log not found");
+    if (trip.canyonId !== getParam(req.params.canyonId))
+      throw new AppError(404, "Trip log not found");
     if (trip.canyon.ownerId !== user.id)
       throw new AppError(403, "Only the canyon owner can delete trip logs");
 
-    await prisma.media.deleteMany({ where: { linkedId: id } });
-    await prisma.tripLog.delete({ where: { id } });
+    await prisma.$transaction([
+      prisma.media.deleteMany({
+        where: { linkedType: "tripLog", linkedId: id },
+      }),
+      prisma.tripLog.delete({ where: { id } }),
+    ]);
 
     res.status(204).send();
   },
