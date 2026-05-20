@@ -9,6 +9,21 @@ function getParam(param: string | string[]): string {
   return Array.isArray(param) ? param[0] : param;
 }
 
+// Notification payload reference shape (see plan Finding 17):
+//   friend_request / friend_request_accepted: payload.friendshipId
+//   canyon_shared:                            payload.canyonId
+//   topo_complete / topo_failed:              self-only refs (jobId)
+// When the *other* user is deleted, the cascade in DELETE /users/me wipes
+// their friendships, canyon shares, and canyons. The orphan notifications
+// remain on this side — filter them out at read time.
+function payloadString(payload: unknown, key: string): string | null {
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const v = (payload as Record<string, unknown>)[key];
+    if (typeof v === "string" && v.length > 0) return v;
+  }
+  return null;
+}
+
 // ── GET /notifications ────────────────────────────────────────
 // Returns all notifications for the current user, unread first
 router.get(
@@ -28,7 +43,49 @@ router.get(
       ],
     });
 
-    res.json(notifications);
+    const friendshipIds = new Set<string>();
+    const canyonIds = new Set<string>();
+    for (const n of notifications) {
+      if (n.type === "friend_request" || n.type === "friend_request_accepted") {
+        const id = payloadString(n.payload, "friendshipId");
+        if (id) friendshipIds.add(id);
+      } else if (n.type === "canyon_shared") {
+        const id = payloadString(n.payload, "canyonId");
+        if (id) canyonIds.add(id);
+      }
+    }
+
+    const [existingFriendships, existingCanyons] = await Promise.all([
+      friendshipIds.size > 0
+        ? prisma.friendship.findMany({
+            where: { id: { in: [...friendshipIds] } },
+            select: { id: true },
+          })
+        : Promise.resolve([] as { id: string }[]),
+      canyonIds.size > 0
+        ? prisma.canyon.findMany({
+            where: { id: { in: [...canyonIds] } },
+            select: { id: true },
+          })
+        : Promise.resolve([] as { id: string }[]),
+    ]);
+
+    const liveFriendships = new Set(existingFriendships.map((f) => f.id));
+    const liveCanyons = new Set(existingCanyons.map((c) => c.id));
+
+    const visible = notifications.filter((n) => {
+      if (n.type === "friend_request" || n.type === "friend_request_accepted") {
+        const id = payloadString(n.payload, "friendshipId");
+        return id !== null && liveFriendships.has(id);
+      }
+      if (n.type === "canyon_shared") {
+        const id = payloadString(n.payload, "canyonId");
+        return id !== null && liveCanyons.has(id);
+      }
+      return true;
+    });
+
+    res.json(visible);
   },
 );
 

@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { createHash } from "crypto";
 import { Prisma } from "@prisma/client";
+import { z } from "zod";
 import {
   isThemeSchemeId,
   normalizeUserUiPreferences,
@@ -29,6 +30,16 @@ async function cognitoUserExists(sub: string): Promise<boolean> {
     return true;
   }
 }
+
+const usernameSchema = z
+  .string()
+  .trim()
+  .min(3, "Username must be at least 3 characters")
+  .max(32, "Username must be at most 32 characters")
+  .regex(
+    /^[A-Za-z0-9_.-]+$/,
+    "Username may only contain letters, numbers, underscores, dots, and dashes",
+  );
 
 const router = Router();
 
@@ -141,11 +152,24 @@ router.get(
       }
     } else if (user.email !== email) {
       // Only sync email from Cognito — username is managed by the user via PATCH /users/me
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { email },
-      });
-      verifyEmail(email).catch(() => {});
+      try {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { email },
+        });
+        verifyEmail(email).catch(() => {});
+      } catch (e) {
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === "P2002"
+        ) {
+          throw new AppError(
+            409,
+            "That email is already linked to another account.",
+          );
+        }
+        throw e;
+      }
     }
 
     res.json(serializeUserForResponse(user));
@@ -173,10 +197,11 @@ router.patch(
     } = {};
 
     if (username !== undefined) {
-      if (typeof username !== "string" || username.trim().length === 0) {
-        throw new AppError(400, "username must be a non-empty string");
+      const parsed = usernameSchema.safeParse(username);
+      if (!parsed.success) {
+        throw new AppError(400, parsed.error.issues[0]?.message ?? "Invalid username");
       }
-      updates.username = username;
+      updates.username = parsed.data;
     }
 
     if (themeSchemeId !== undefined || tripLogCustomFields !== undefined) {
@@ -204,10 +229,25 @@ router.patch(
       throw new AppError(400, "No valid update fields provided");
     }
 
-    const updated = await prisma.user.update({
-      where: { cognitoId: sub },
-      data: updates,
-    });
+    let updated;
+    try {
+      updated = await prisma.user.update({
+        where: { cognitoId: sub },
+        data: updates,
+      });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === "P2002"
+      ) {
+        const target = (e.meta?.target as string[] | undefined) ?? [];
+        if (target.includes("username")) {
+          throw new AppError(409, "Username taken.");
+        }
+        throw new AppError(409, "Conflict updating profile.");
+      }
+      throw e;
+    }
 
     res.json(serializeUserForResponse(updated));
   },
