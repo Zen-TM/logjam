@@ -327,6 +327,7 @@ export default function TopoDialog({
   jobs,
   downloadUrlsMap,
   onJobCreated,
+  focusJobId,
 }: {
   open: boolean;
   onClose: () => void;
@@ -335,6 +336,7 @@ export default function TopoDialog({
   jobs: TopoJob[];
   downloadUrlsMap: Record<string, DownloadUrl[]>;
   onJobCreated: (job: TopoJob) => void;
+  focusJobId?: string | null;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -499,21 +501,34 @@ export default function TopoDialog({
 
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
         {/* ── Job status list ── */}
-        {jobs.filter((j) => j.status !== "complete").length > 0 && (
+        {jobs.length > 0 && (
           <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle2" gutterBottom>
               Jobs
             </Typography>
-            {jobs
-              .filter((j) => j.status !== "complete")
+            {[...jobs]
+              .sort((a, b) =>
+                a.id === focusJobId ? -1 : b.id === focusJobId ? 1 : 0,
+              )
               .map((j) => {
                 const urls = downloadUrlsMap[j.id] ?? null;
                 const isRunning =
                   j.status === "pending" || j.status === "processing";
                 const isComplete = j.status === "complete";
                 const isFailed = j.status === "failed";
+                const isFocused = j.id === focusJobId;
                 return (
-                  <Box key={j.id} sx={{ mb: 1.5 }}>
+                  <Box
+                    key={j.id}
+                    sx={{
+                      mb: 1.5,
+                      ...(isFocused && {
+                        p: 1,
+                        borderRadius: 1,
+                        border: "1px solid var(--theme-accent)",
+                      }),
+                    }}
+                  >
                     <Box
                       sx={{
                         display: "flex",

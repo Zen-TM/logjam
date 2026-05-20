@@ -84,6 +84,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   const [showTopo, setShowTopo] = useState(false);
   const [selectingTopoBbox, setSelectingTopoBbox] = useState(false);
   const [pendingTopoBbox, setPendingTopoBbox] = useState<TBbox | null>(null);
+  const [focusTopoJobId, setFocusTopoJobId] = useState<string | null>(null);
 
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
@@ -350,6 +351,43 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     setActiveTopoJobs((prev) => [job, ...prev]);
   }, []);
 
+  // Capture ?topoJob=<id> deep link on mount, stash in sessionStorage so it
+  // survives a Cognito sign-in redirect, then clean the URL immediately.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const jobId = params.get("topoJob");
+    if (jobId) {
+      sessionStorage.setItem("pendingTopoJobId", jobId);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  // After auth, resolve any stashed deep-link job and open TopoDialog on it.
+  useEffect(() => {
+    if (!authenticated) return;
+    const jobId = sessionStorage.getItem("pendingTopoJobId");
+    if (!jobId) return;
+    sessionStorage.removeItem("pendingTopoJobId");
+    apiFetch<TopoJob>(`/topo-jobs/${jobId}`)
+      .then(async (job) => {
+        setActiveTopoJobs((prev) =>
+          prev.some((j) => j.id === job.id) ? prev : [job, ...prev],
+        );
+        if (job.status === "complete") {
+          const urls = await apiFetch<DownloadUrl[]>(
+            `/topo-jobs/${job.id}/download-urls`,
+          );
+          setTopoDownloadUrls((prev) => ({ ...prev, [job.id]: urls }));
+        }
+        setFocusTopoJobId(job.id);
+        setShowTopo(true);
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't load topo job."));
+      });
+  }, [authenticated, toast]);
+
   // Show import dialog once when user has no canyons after first fetch completes
   useEffect(() => {
     if (canyonsLoaded && !importChecked.current) {
@@ -415,6 +453,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         onClose={() => {
           setShowTopo(false);
           setSelectingTopoBbox(false);
+          setFocusTopoJobId(null);
         }}
         onSelectBbox={() => {
           setShowTopo(false);
@@ -424,6 +463,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         jobs={activeTopoJobs}
         downloadUrlsMap={topoDownloadUrls}
         onJobCreated={handleTopoJobCreated}
+        focusJobId={focusTopoJobId}
       />
       <GeoPdfDialog
         open={showGeoPdf}

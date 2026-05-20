@@ -47,6 +47,7 @@ services:
       AWS_SECRET_ACCESS_KEY: test
       S3_BUCKET_TOPO: logjam-topo-local
       SQS_QUEUE_URL: http://localstack:4566/000000000000/logjam-topo-jobs-local
+      FRONTEND_URL: http://localhost:5173
     depends_on:
       postgres:
         condition: service_healthy

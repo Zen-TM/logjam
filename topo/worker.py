@@ -16,6 +16,9 @@ Required environment variables:
 Optional environment variables:
   SQS_QUEUE_URL     - SQS queue URL (for deleting the message on success)
   SES_FROM_EMAIL    - Verified SES sender address (skips email if unset)
+  FRONTEND_URL      - Base URL of the Logjam web app (e.g. https://logjam.app)
+                      Used to build the deep link in the completion email.
+                      If unset, email is skipped with a warning.
   AWS_REGION        - defaults to ap-southeast-2
 """
 
@@ -46,6 +49,7 @@ QUEUE_URL    = os.environ.get("SQS_QUEUE_URL", "")
 BUCKET       = os.environ["S3_BUCKET_TOPO"]
 DATABASE_URL = os.environ["DATABASE_URL"]
 SES_FROM     = os.environ.get("SES_FROM_EMAIL", "")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 JOB_ID       = os.environ["JOB_ID"]
 
 # Canonical list of layer types that get rendered onto the map.
@@ -140,16 +144,11 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
                           osm_failed: bool = False):
     if not ses:
         return
-    links = []
-    html_links = []
-    for output in output_keys:
-        url = s3.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": BUCKET, "Key": output["mbtilesKey"]},
-            ExpiresIn=604800,  # 7 days
-        )
-        links.append(f"  {output['name']}: {url}")
-        html_links.append(f'<li><a href="{url}">{output["name"]}</a></li>')
+    if not FRONTEND_URL:
+        log.warning("FRONTEND_URL not set — skipping completion email")
+        return
+
+    app_link = f"{FRONTEND_URL}/?topoJob={job_id}"
 
     osm_warning_text = (
         "\n\nNote: OSM features (tracks, waterways, peaks, etc.) are unavailable "
@@ -164,21 +163,19 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
     ) if osm_failed else ""
 
     text_body = "\n".join([
-        f"Your topo map job is complete.",
+        "Your topo map job is complete.",
         "",
-        "Download your MBTiles files (links expire in 7 days):",
-        *links,
+        f"Open Logjam to download your MBTiles files: {app_link}",
         "",
-        "You can also view these layers as overlays in the Logjam app.",
+        "You can also view these layers as overlays in the app.",
     ]) + osm_warning_text
 
     html_body = "\n".join([
         "<html>",
         "  <body>",
         "    <p>Your topo map job is complete.</p>",
-        "    <p>Download your MBTiles files (links expire in 7 days):</p>",
-        f"    <ul>{''.join(html_links)}</ul>",
-        "    <p>You can also view these layers as overlays in the Logjam app.</p>",
+        f'    <p><a href="{app_link}">Open in Logjam</a> to download your MBTiles files.</p>',
+        "    <p>You can also view these layers as overlays in the app.</p>",
         f"    {osm_warning_html}",
         "  </body>",
         "</html>",
