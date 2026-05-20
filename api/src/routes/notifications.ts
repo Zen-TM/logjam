@@ -2,12 +2,9 @@ import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
+import { getParam } from "../lib/getParam";
 
 const router = Router();
-
-function getParam(param: string | string[]): string {
-  return Array.isArray(param) ? param[0] : param;
-}
 
 // Notification payload reference shape (see plan Finding 17):
 //   friend_request / friend_request_accepted: payload.friendshipId
@@ -41,6 +38,7 @@ router.get(
         { read: "asc" }, // unread first
         { createdAt: "desc" }, // newest first within each group
       ],
+      take: 500,
     });
 
     const friendshipIds = new Set<string>();

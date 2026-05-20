@@ -39,6 +39,7 @@ router.get(
           : {}),
       },
       orderBy: { date: "desc" },
+      take: 500,
       include: {
         canyon: { select: { id: true, name: true } },
       },

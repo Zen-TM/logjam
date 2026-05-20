@@ -99,14 +99,33 @@ export type TFilters = {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
+// useAuth registers a handler here so apiFetch can flip the UI back to the
+// sign-in screen when the Cognito refresh token has expired or been revoked.
+// Without this, the UI would stay "authenticated" while every API call 401s.
+let sessionExpiredHandler: (() => void) | null = null;
+export function setSessionExpiredHandler(handler: (() => void) | null) {
+  sessionExpiredHandler = handler;
+}
+function notifySessionExpired() {
+  if (sessionExpiredHandler) sessionExpiredHandler();
+}
+
 async function getIdToken(): Promise<string> {
   if (import.meta.env.VITE_AUTH_MODE === "fake") return "fake-token";
   // Amplify automatically refreshes the token using the refresh token when
   // the ID token has expired (every 1 hour).
-  const session = await fetchAuthSession();
-  const token = session.tokens?.idToken?.toString();
-  if (!token) throw new Error("No auth session");
-  return token;
+  try {
+    const session = await fetchAuthSession();
+    const token = session.tokens?.idToken?.toString();
+    if (!token) {
+      notifySessionExpired();
+      throw new Error("No auth session");
+    }
+    return token;
+  } catch (err) {
+    notifySessionExpired();
+    throw err;
+  }
 }
 
 // Every API call fetches its own fresh token internally, so hooks don't
@@ -125,6 +144,7 @@ export async function apiFetch<T>(
     ...(options?.body != null && { body: JSON.stringify(options.body) }),
   });
   if (!res.ok) {
+    if (res.status === 401) notifySessionExpired();
     const method = options?.method ?? "GET";
     let serverMessage: string | undefined;
     try {
@@ -153,6 +173,7 @@ export async function apiFetchBlob(
     ...(options?.body != null && { body: JSON.stringify(options.body) }),
   });
   if (!res.ok) {
+    if (res.status === 401) notifySessionExpired();
     const method = options?.method ?? "GET";
     let serverMessage: string | undefined;
     try {

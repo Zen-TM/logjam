@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
-import { HeadObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { HeadObjectCommand, DeleteObjectsCommand, ListObjectsV2Command, type ListObjectsV2CommandOutput } from "@aws-sdk/client-s3";
 import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName, TopoLayerFormat } from "../constants/topoLayers";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -15,6 +15,7 @@ import {
   ElvisZipError,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
+import { getParam } from "../lib/getParam";
 
 const router = Router();
 
@@ -24,10 +25,6 @@ const ECS_CLUSTER = env.ECS_CLUSTER;
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
 const ECS_SECURITY_GROUPS = env.ECS_SECURITY_GROUPS_LIST;
-
-function getParam(param: string | string[]): string {
-  return Array.isArray(param) ? param[0] : param;
-}
 
 async function getUser(cognitoSub: string) {
   const user = await prisma.user.findUnique({ where: { cognitoId: cognitoSub } });
@@ -320,17 +317,28 @@ router.delete(
     if (!job) throw new AppError(404, "Job not found");
     if (job.userId !== user.id) throw new AppError(403, "Access denied");
 
-    // List and delete all S3 objects for this job
+    // List and delete all S3 objects for this job. Each prefix may exceed the
+    // 1000-key ListObjectsV2 page limit (topo output tilesets can be large),
+    // so paginate via ContinuationToken. DeleteObjects accepts up to 1000 keys
+    // per call, which matches the list page size — one delete per page.
     const prefixes = [`inputs/${jobId}/`, `outputs/${jobId}/`, `jobs/${jobId}/`];
     for (const prefix of prefixes) {
-      const listed = await s3.send(new ListObjectsV2Command({ Bucket: TOPO_BUCKET, Prefix: prefix }));
-      const keys = listed.Contents?.map((o) => ({ Key: o.Key! })) ?? [];
-      if (keys.length) {
-        await s3.send(new DeleteObjectsCommand({
+      let continuationToken: string | undefined = undefined;
+      do {
+        const listed: ListObjectsV2CommandOutput = await s3.send(new ListObjectsV2Command({
           Bucket: TOPO_BUCKET,
-          Delete: { Objects: keys },
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
         }));
-      }
+        const keys = listed.Contents?.map((o) => ({ Key: o.Key! })) ?? [];
+        if (keys.length) {
+          await s3.send(new DeleteObjectsCommand({
+            Bucket: TOPO_BUCKET,
+            Delete: { Objects: keys },
+          }));
+        }
+        continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
+      } while (continuationToken);
     }
 
     await prisma.topoJob.delete({ where: { id: jobId } });

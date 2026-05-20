@@ -3,12 +3,9 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { friendsSearchLimiter } from "../middleware/rateLimit";
+import { getParam } from "../lib/getParam";
 
 const router = Router();
-
-function getParam(param: string | string[]): string {
-  return Array.isArray(param) ? param[0] : param;
-}
 
 // ── GET /friends ──────────────────────────────────────────────
 // Returns all accepted friends for the current user
@@ -114,42 +111,28 @@ router.post(
         throw new AppError(403, "Unable to send friend request");
     }
 
-    // Create friendship record and notification in a transaction
-    const [friendship] = await prisma.$transaction([
-      prisma.friendship.create({
+    // Create friendship first so the notification can reference its real ID
+    // atomically inside the same transaction.
+    const friendship = await prisma.$transaction(async (tx) => {
+      const created = await tx.friendship.create({
         data: {
           requesterId: user.id,
           addresseeId,
           status: "pending",
         },
-      }),
-      prisma.notification.create({
+      });
+      await tx.notification.create({
         data: {
           userId: addresseeId,
           type: "friend_request",
           payload: {
-            friendshipId: "", // updated below
+            friendshipId: created.id,
             requesterId: user.id,
             requesterUsername: user.username,
           },
         },
-      }),
-    ]);
-
-    // Update notification payload with the friendship ID
-    await prisma.notification.updateMany({
-      where: {
-        userId: addresseeId,
-        type: "friend_request",
-        payload: { path: ["requesterId"], equals: user.id },
-      },
-      data: {
-        payload: {
-          friendshipId: friendship.id,
-          requesterId: user.id,
-          requesterUsername: user.username,
-        },
-      },
+      });
+      return created;
     });
 
     res.status(201).json(friendship);

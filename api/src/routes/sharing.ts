@@ -2,12 +2,9 @@ import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
+import { getParam } from "../lib/getParam";
 
 const router = Router();
-
-function getParam(param: string | string[]): string {
-  return Array.isArray(param) ? param[0] : param;
-}
 
 // ── POST /canyons/:id/share ───────────────────────────────────
 // Share a canyon with a friend
@@ -95,7 +92,8 @@ router.delete(
     if (!user) throw new AppError(404, "User not found");
 
     const canyonId = getParam(req.params.id);
-    const targetUserId = getParam(req.params.userId) === "me" ? user.id : getParam(req.params.userId);
+    const rawUserId = getParam(req.params.userId);
+    const targetUserId = rawUserId === "me" ? user.id : rawUserId;
 
     const share = await prisma.canyonShare.findFirst({
       where: { canyonId, sharedWithId: targetUserId },

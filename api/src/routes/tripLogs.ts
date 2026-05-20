@@ -3,12 +3,9 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
+import { getParam } from "../lib/getParam";
 
 const router = Router({ mergeParams: true });
-
-function getParam(param: string | string[]): string {
-  return Array.isArray(param) ? param[0] : param;
-}
 
 // ── GET /canyons/:canyonId/trips ──────────────────────────────
 // Returns all trip logs for a canyon

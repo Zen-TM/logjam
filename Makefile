@@ -1,4 +1,4 @@
-.PHONY: dev dev-snapshot dev-cognito reset seed snapshot logs down help
+.PHONY: dev dev-snapshot dev-cognito reset seed snapshot logs down help shared
 
 # Load .env.local if present (provides AUTH_MODE, FAKE_USER_SUB, Cognito vars etc.)
 -include .env.local
@@ -7,7 +7,7 @@ export
 # ── Primary targets ────────────────────────────────────────────────────────────
 
 ## Start full local env (fake auth, seeded fixtures)
-dev:
+dev: shared
 	@echo "Starting infra..."
 	docker compose up -d postgres localstack
 	@$(MAKE) _wait-healthy
@@ -43,13 +43,19 @@ dev-snapshot:
 	@echo "    Terminal 2: cd frontend && VITE_AUTH_MODE=cognito npm run dev"
 
 ## Reset: wipe DB + LocalStack volumes, restart, re-seed
-reset:
+reset: shared
 	docker compose down -v
 	docker compose up -d postgres localstack
 	@$(MAKE) _wait-healthy
 	cd api && DATABASE_URL=postgresql://logjam:logjam@localhost:5432/logjam npx prisma migrate deploy
 	cd api && DATABASE_URL=postgresql://logjam:logjam@localhost:5432/logjam npx prisma db seed
 	@echo "Reset complete."
+
+## Build the shared package — api + frontend import @logjam/shared via file:../shared
+## and read from shared/dist/, so dist must exist before either app starts.
+shared:
+	@echo "Building shared package..."
+	cd shared && npm run build
 
 ## Re-run seed without wiping volumes
 seed:

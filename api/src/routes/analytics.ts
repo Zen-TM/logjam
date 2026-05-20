@@ -16,19 +16,15 @@ router.get(
     });
     if (!user) throw new AppError(404, "User not found");
 
-    const [tripLogsWithCanyon, uniqueCanyonRows, totalCanyons, canyonsWithTrips] =
+    const [tripLogsWithCanyon, totalCanyons, canyonsWithTrips] =
       await Promise.all([
         prisma.tripLog.findMany({
           where: { userId: user.id },
           select: {
             date: true,
+            canyonId: true,
             canyon: { select: { numAbseils: true } },
           },
-        }),
-        prisma.tripLog.findMany({
-          where: { userId: user.id },
-          distinct: ["canyonId"],
-          select: { canyonId: true },
         }),
         prisma.canyon.count({ where: { ownerId: user.id } }),
         prisma.canyon.count({
@@ -40,11 +36,13 @@ router.get(
     const tripDates: Record<string, number> = {};
     let totalAbseils: number | null = null;
     const distinctDays = new Set<string>();
+    const distinctCanyons = new Set<string>();
 
     for (const t of tripLogsWithCanyon) {
       const dateStr = t.date.toISOString().split("T")[0];
       tripDates[dateStr] = (tripDates[dateStr] ?? 0) + 1;
       distinctDays.add(dateStr);
+      distinctCanyons.add(t.canyonId);
 
       if (t.canyon?.numAbseils != null) {
         totalAbseils = (totalAbseils ?? 0) + t.canyon.numAbseils;
@@ -54,7 +52,7 @@ router.get(
     res.json({
       heroStats: {
         totalTrips: tripLogsWithCanyon.length,
-        uniqueCanyons: uniqueCanyonRows.length,
+        uniqueCanyons: distinctCanyons.size,
         daysCanyoning: distinctDays.size,
         totalAbseils,
       },

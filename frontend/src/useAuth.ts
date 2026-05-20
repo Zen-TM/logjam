@@ -9,7 +9,7 @@ import {
   resetPassword as amplifyResetPassword,
   confirmResetPassword as amplifyConfirmResetPassword,
 } from "aws-amplify/auth";
-import { apiFetch } from "./canyonUtils";
+import { apiFetch, setSessionExpiredHandler } from "./canyonUtils";
 import { messageFromError } from "./errors/messageFromError";
 import { mapAuthNextStep } from "./errors/authErrorMap";
 
@@ -50,6 +50,22 @@ export function useAuth() {
         }
       })
       .catch(() => setState("signIn"));
+  }, []);
+
+  // Listen for mid-session token-refresh failures from apiFetch. When the
+  // refresh token has expired or been revoked, drop back to the sign-in
+  // screen with an explanatory banner instead of leaving the UI in a
+  // half-authenticated state where every request 401s silently.
+  useEffect(() => {
+    if (import.meta.env.VITE_AUTH_MODE === "fake") return;
+    setSessionExpiredHandler(() => {
+      setState((prev) => {
+        if (prev !== "authenticated") return prev;
+        setError("Your session has expired. Please sign in again.");
+        return "signIn";
+      });
+    });
+    return () => setSessionExpiredHandler(null);
   }, []);
 
   const handleSignIn = useCallback(

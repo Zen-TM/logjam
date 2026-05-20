@@ -540,6 +540,39 @@ export async function generateGeoPdf(
 
 // ── HTTP tile fetching (SIX Maps, etc.) ─────────────────────────────────────
 
+/**
+ * Fetch with one retry on transient failure. Tile CDNs occasionally return
+ * 5xx / 429 / drop connections; a single retry with short backoff turns a
+ * grey square into a successful tile in the common case.
+ */
+async function fetchTileWithRetry(url: string, timeoutMs: number): Promise<Response> {
+  const attempt = async (): Promise<Response> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      return res;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+  const isRetryable = (res: Response | null, err: unknown): boolean => {
+    if (err) return true; // network error / abort
+    if (!res) return true;
+    return res.status >= 500 || res.status === 429;
+  };
+  try {
+    const res = await attempt();
+    if (!isRetryable(res, null)) return res;
+    await new Promise((r) => setTimeout(r, 250));
+    return await attempt();
+  } catch (err) {
+    if (!isRetryable(null, err)) throw err;
+    await new Promise((r) => setTimeout(r, 250));
+    return await attempt();
+  }
+}
+
 /** Fetch tiles from an HTTP tile server and draw directly onto the output canvas */
 async function fetchAndDrawHttpTilesDirect(
   mapCtx: CanvasRenderingContext2D,
@@ -568,10 +601,7 @@ async function fetchAndDrawHttpTilesDirect(
       const dy1 = Math.ceil(rawY + TILE_SIZE * transform.scaleY);
 
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30_000);
-        const response = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeoutId);
+        const response = await fetchTileWithRetry(url, 30_000);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const arrayBuf = await response.arrayBuffer();
         const img = await loadImage(Buffer.from(arrayBuf));

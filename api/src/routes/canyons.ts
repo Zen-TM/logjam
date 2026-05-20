@@ -3,6 +3,7 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
+import { getParam } from "../lib/getParam";
 
 const router = Router();
 
@@ -10,14 +11,11 @@ async function fetchCanyons(where: object) {
   return prisma.canyon.findMany({
     where,
     orderBy: { createdAt: "desc" },
+    take: 500,
     include: {
       _count: { select: { tripLogs: true } },
     },
   });
-}
-
-function getParam(param: string | string[]): string {
-  return Array.isArray(param) ? param[0] : param;
 }
 
 // GET /canyons — owned canyons
