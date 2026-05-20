@@ -1,11 +1,20 @@
 export class ApiError extends Error {
+  readonly status: number;
+  readonly path: string;
+  readonly method: string;
+  readonly serverMessage?: string;
+
   constructor(
-    public readonly status: number,
-    public readonly path: string,
-    public readonly method: string,
-    public readonly serverMessage?: string,
+    status: number,
+    path: string,
+    method: string,
+    serverMessage?: string,
   ) {
     super(`API error ${status}: ${method} ${path}`);
     this.name = "ApiError";
+    this.status = status;
+    this.path = path;
+    this.method = method;
+    this.serverMessage = serverMessage;
   }
 }
