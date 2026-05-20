@@ -1,5 +1,7 @@
 import { parse } from "csv-parse/sync";
 
+// notes is a Logjam user-only field — never sourced from RopeWiki.
+
 const ROPEWIKI_CSV_URL =
   "https://ropewiki.com/index.php?title=Special:Ask" +
   "&x=-5B-5BCategory%3ACanyons-5D-5D-20-5B-5BLocated-20in-20region" +
@@ -21,7 +23,6 @@ export type RopeWikiCanyon = {
   longitude: number;
   numAbseils: number | null;
   longestAbseil: number | null;
-  notes: string | null;
   vGrade: number | null;
   aGrade: number | null;
   commitment: number | null;
@@ -220,27 +221,35 @@ export async function fetchAndParseRopeWiki(): Promise<{
 
   // First row is headers — identify column indices by name
   const headers = records[0].map((h) => h.trim().toLowerCase());
-  const colIndex = (...names: string[]): number => {
+  const requiredCol = (name: string): number => {
+    const i = headers.indexOf(name);
+    if (i === -1) {
+      throw new Error(`RopeWiki CSV missing required column: ${name}`);
+    }
+    return i;
+  };
+  const optionalCol = (...names: string[]): number => {
     for (const name of names) {
       const i = headers.indexOf(name);
       if (i !== -1) return i;
     }
-    // Try partial match against all names
     for (const name of names) {
-      const partial = headers.findIndex((h) => h.includes(name) || name.includes(h));
+      const partial = headers.findIndex(
+        (h) => h.length > 0 && (h.includes(name) || name.includes(h)),
+      );
       if (partial !== -1) return partial;
     }
     return -1;
   };
 
-  const pageIdCol = colIndex("pageid", "");
-  const coordCol = colIndex("coords", "coordinates");
-  const locationCol = colIndex("location", "name");
-  const qualityCol = colIndex("quality");
-  const ratingCol = colIndex("rating");
-  const rappelsCol = colIndex("rappels", "number of rappels");
-  const longestCol = colIndex("longest", "longest rappel");
-  const timeCol = colIndex("min time", "time");
+  const pageIdCol = requiredCol("pageid");
+  const coordCol = requiredCol("coords");
+  const locationCol = requiredCol("location");
+  const qualityCol = optionalCol("quality");
+  const ratingCol = optionalCol("rating");
+  const rappelsCol = optionalCol("rappels", "number of rappels");
+  const longestCol = optionalCol("longest", "longest rappel");
+  const timeCol = optionalCol("min time", "time");
 
   const canyons: RopeWikiCanyon[] = [];
   const errors: string[] = [];
@@ -286,7 +295,6 @@ export async function fetchAndParseRopeWiki(): Promise<{
         longitude: coords.longitude,
         numAbseils,
         longestAbseil,
-        notes: null,
         vGrade: rating.v_grade ?? null,
         aGrade: rating.a_grade ?? null,
         commitment: rating.commitment ?? null,

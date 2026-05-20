@@ -2,13 +2,12 @@ import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
-import {
-  fetchAndParseRopeWiki,
-  snapshotFromCanyon,
-  type RopeWikiSnapshot,
-} from "../services/ropewiki";
+import { snapshotFromCanyon, type RopeWikiSnapshot } from "../services/ropewiki";
+import { getRopeWikiCanyons } from "../services/ropeWikiCache";
 
 const router = Router();
+
+const UPDATE_CHUNK_SIZE = 200;
 
 // POST /ropewiki/import — bulk-import RopeWiki canyons for the authenticated user
 router.post(
@@ -20,8 +19,9 @@ router.post(
     });
     if (!user) throw new AppError(404, "User not found");
 
+    const fresh = req.query.fresh === "true";
     const { canyons: parsed, errors: parseErrors } =
-      await fetchAndParseRopeWiki();
+      await getRopeWikiCanyons(fresh);
 
     // Find which RopeWiki IDs this user already has
     const existing = await prisma.canyon.findMany({
@@ -41,7 +41,6 @@ router.post(
           longitude: c.longitude,
           numAbseils: c.numAbseils,
           longestAbseil: c.longestAbseil,
-          notes: c.notes,
           vGrade: c.vGrade,
           aGrade: c.aGrade,
           commitment: c.commitment,
@@ -73,8 +72,9 @@ router.post(
     });
     if (!user) throw new AppError(404, "User not found");
 
+    const fresh = req.query.fresh === "true";
     const { canyons: parsed, errors: parseErrors } =
-      await fetchAndParseRopeWiki();
+      await getRopeWikiCanyons(fresh);
 
     // Load all existing RopeWiki-sourced canyons for this user
     const existingCanyons = await prisma.canyon.findMany({
@@ -84,54 +84,47 @@ router.post(
       existingCanyons.map((c) => [c.ropeWikiId!, c]),
     );
 
-    let added = 0;
-    let updated = 0;
-    let unchanged = 0;
-    let userEdited = 0;
+    type SnapshotOnly = { id: string; snapshot: RopeWikiSnapshot };
+    type FullUpdate = {
+      id: string;
+      data: {
+        name: string;
+        latitude: number;
+        longitude: number;
+        numAbseils: number | null;
+        longestAbseil: number | null;
+        vGrade: number | null;
+        aGrade: number | null;
+        commitment: number | null;
+        quality: number | null;
+        hours: number | null;
+        attributes: object;
+        ropeWikiSnapshot: RopeWikiSnapshot;
+      };
+    };
 
-    for (const fresh of parsed) {
-      const existing = existingByRwId.get(fresh.ropeWikiId);
+    const toCreate: typeof parsed = [];
+    const toUpdateSnapshotOnly: SnapshotOnly[] = [];
+    const toUpdateAll: FullUpdate[] = [];
+    let unchanged = 0;
+
+    for (const freshC of parsed) {
+      const existing = existingByRwId.get(freshC.ropeWikiId);
 
       if (!existing) {
-        // New canyon — create it
-        await prisma.canyon.create({
-          data: {
-            ownerId: user.id,
-            name: fresh.name,
-            latitude: fresh.latitude,
-            longitude: fresh.longitude,
-            numAbseils: fresh.numAbseils,
-            longestAbseil: fresh.longestAbseil,
-            notes: fresh.notes,
-            vGrade: fresh.vGrade,
-            aGrade: fresh.aGrade,
-            commitment: fresh.commitment,
-            quality: fresh.quality,
-            hours: fresh.hours,
-            attributes: fresh.attributes,
-            ropeWikiId: fresh.ropeWikiId,
-            ropeWikiSnapshot: snapshotFromCanyon(fresh),
-          },
-        });
-        added++;
+        toCreate.push(freshC);
         continue;
       }
 
-      // Existing canyon — three-way merge
       const snapshot = (existing.ropeWikiSnapshot as RopeWikiSnapshot) || null;
-      const freshSnapshot = snapshotFromCanyon(fresh);
+      const freshSnapshot = snapshotFromCanyon(freshC);
 
       if (!snapshot) {
-        // No snapshot (legacy import) — treat as user-edited, just store snapshot
-        await prisma.canyon.update({
-          where: { id: existing.id },
-          data: { ropeWikiSnapshot: freshSnapshot },
-        });
-        userEdited++;
+        // Legacy import w/o snapshot — treat as user-edited, just store snapshot
+        toUpdateSnapshotOnly.push({ id: existing.id, snapshot: freshSnapshot });
         continue;
       }
 
-      // Check if user has edited any field by comparing current values to snapshot
       const edited =
         existing.name !== snapshot.name ||
         existing.latitude !== snapshot.latitude ||
@@ -147,47 +140,78 @@ router.post(
           JSON.stringify(snapshot.attributes);
 
       if (edited) {
-        // User edited — keep their values, just update the snapshot
-        await prisma.canyon.update({
-          where: { id: existing.id },
-          data: { ropeWikiSnapshot: freshSnapshot },
-        });
-        userEdited++;
-      } else {
-        // User never touched it — check if RopeWiki data changed
-        const rwChanged =
-          JSON.stringify(freshSnapshot) !== JSON.stringify(snapshot);
+        toUpdateSnapshotOnly.push({ id: existing.id, snapshot: freshSnapshot });
+        continue;
+      }
 
-        if (rwChanged) {
-          await prisma.canyon.update({
-            where: { id: existing.id },
-            data: {
-              name: fresh.name,
-              latitude: fresh.latitude,
-              longitude: fresh.longitude,
-              numAbseils: fresh.numAbseils,
-              longestAbseil: fresh.longestAbseil,
-              vGrade: fresh.vGrade,
-              aGrade: fresh.aGrade,
-              commitment: fresh.commitment,
-              quality: fresh.quality,
-              hours: fresh.hours,
-              attributes: fresh.attributes,
-              ropeWikiSnapshot: freshSnapshot,
-            },
-          });
-          updated++;
-        } else {
-          unchanged++;
-        }
+      const rwChanged = JSON.stringify(freshSnapshot) !== JSON.stringify(snapshot);
+      if (rwChanged) {
+        toUpdateAll.push({
+          id: existing.id,
+          data: {
+            name: freshC.name,
+            latitude: freshC.latitude,
+            longitude: freshC.longitude,
+            numAbseils: freshC.numAbseils,
+            longestAbseil: freshC.longestAbseil,
+            vGrade: freshC.vGrade,
+            aGrade: freshC.aGrade,
+            commitment: freshC.commitment,
+            quality: freshC.quality,
+            hours: freshC.hours,
+            attributes: freshC.attributes,
+            ropeWikiSnapshot: freshSnapshot,
+          },
+        });
+      } else {
+        unchanged++;
       }
     }
 
+    // Bulk create new canyons
+    if (toCreate.length > 0) {
+      await prisma.canyon.createMany({
+        data: toCreate.map((c) => ({
+          ownerId: user.id,
+          name: c.name,
+          latitude: c.latitude,
+          longitude: c.longitude,
+          numAbseils: c.numAbseils,
+          longestAbseil: c.longestAbseil,
+          vGrade: c.vGrade,
+          aGrade: c.aGrade,
+          commitment: c.commitment,
+          quality: c.quality,
+          hours: c.hours,
+          attributes: c.attributes,
+          ropeWikiId: c.ropeWikiId,
+          ropeWikiSnapshot: snapshotFromCanyon(c),
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    // Chunked transaction updates (different data per row → can't updateMany)
+    const allUpdates = [
+      ...toUpdateAll.map((u) =>
+        prisma.canyon.update({ where: { id: u.id }, data: u.data }),
+      ),
+      ...toUpdateSnapshotOnly.map((u) =>
+        prisma.canyon.update({
+          where: { id: u.id },
+          data: { ropeWikiSnapshot: u.snapshot },
+        }),
+      ),
+    ];
+    for (let i = 0; i < allUpdates.length; i += UPDATE_CHUNK_SIZE) {
+      await prisma.$transaction(allUpdates.slice(i, i + UPDATE_CHUNK_SIZE));
+    }
+
     res.json({
-      added,
-      updated,
+      added: toCreate.length,
+      updated: toUpdateAll.length,
       unchanged,
-      userEdited,
+      userEdited: toUpdateSnapshotOnly.length,
       errors: parseErrors,
     });
   },
