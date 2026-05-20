@@ -1,4 +1,4 @@
-import { useState, useRef, Fragment } from "react";
+import { useState, useRef, Fragment, useEffect } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -24,6 +24,12 @@ import { apiFetch } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import type { TBbox } from "../map/Map";
+import {
+  parseZipCentralDirectory,
+  classifyElvisEntries,
+  ElvisZipError,
+  type ElvisStats,
+} from "@logjam/shared";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,46 +69,9 @@ export type DownloadUrl = {
 
 const INSTRUCTIONS_KEY = "topoDialogShowInstructions";
 
-async function parseElvisZip(
-  file: File,
-): Promise<{ tileCount: number; jobName: string | null }> {
-  const tail = await file.slice(file.size - 22, file.size).arrayBuffer();
-  const eocd = new DataView(tail);
-  if (eocd.getUint32(0, true) !== 0x06054b50)
-    return { tileCount: 0, jobName: null };
-  const cdOffset = eocd.getUint32(16, true);
-  const cdSize = eocd.getUint32(12, true);
-  const cdBuf = await file.slice(cdOffset, cdOffset + cdSize).arrayBuffer();
-  const cd = new DataView(cdBuf);
-  let tileCount = 0;
-  const nameFreq: Record<string, number> = {};
-  let pos = 0;
-  while (pos < cdBuf.byteLength - 4) {
-    if (cd.getUint32(pos, true) !== 0x02014b50) break;
-    const fnLen = cd.getUint16(pos + 28, true);
-    const extraLen = cd.getUint16(pos + 30, true);
-    const commentLen = cd.getUint16(pos + 32, true);
-    const fn = new TextDecoder().decode(new Uint8Array(cdBuf, pos + 46, fnLen));
-    if (
-      fn.toLowerCase().endsWith(".laz") ||
-      fn.toLowerCase().endsWith(".las")
-    ) {
-      tileCount++;
-      const base = (fn.split("/").pop() ?? fn).replace(/\.[^.]+$/, "");
-      const match = base.match(/^([A-Za-z]+)/);
-      if (match) nameFreq[match[1]] = (nameFreq[match[1]] ?? 0) + 1;
-    }
-    pos += 46 + fnLen + extraLen + commentLen;
-  }
-  let jobName: string | null = null;
-  let maxCount = 0;
-  for (const [name, count] of Object.entries(nameFreq)) {
-    if (count > maxCount) {
-      maxCount = count;
-      jobName = name;
-    }
-  }
-  return { tileCount, jobName };
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
 }
 
 function bboxAreaKm2(bbox: TBbox): number {
@@ -374,8 +343,59 @@ export default function TopoDialog({
   const [showInstructions, setShowInstructions] = useState(
     () => localStorage.getItem(INSTRUCTIONS_KEY) === "true",
   );
+  const [validating, setValidating] = useState(false);
+  const [stats, setStats] = useState<ElvisStats | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!file) {
+      setStats(null);
+      setValidationError(null);
+      return;
+    }
+    let cancelled = false;
+    setValidating(true);
+    setStats(null);
+    setValidationError(null);
+    (async () => {
+      try {
+        const tailSize = Math.min(65536, file.size);
+        const tail = await file
+          .slice(file.size - tailSize, file.size)
+          .arrayBuffer();
+        const entries = parseZipCentralDirectory(
+          new Uint8Array(tail),
+          file.size,
+        );
+        const s = classifyElvisEntries(entries);
+        if (!cancelled) setStats(s);
+      } catch (e) {
+        if (!cancelled) {
+          setValidationError(
+            e instanceof ElvisZipError
+              ? e.message
+              : "Could not read this ZIP file.",
+          );
+        }
+      } finally {
+        if (!cancelled) setValidating(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [file]);
+
+  function onFilePicked(picked: File) {
+    if (!picked.name.toLowerCase().endsWith(".zip")) {
+      setValidationError("Please select a .zip file.");
+      return;
+    }
+    setFile(picked);
+    setError(null);
+  }
 
   function toggleInstructions() {
     setShowInstructions((prev) => {
@@ -399,25 +419,22 @@ export default function TopoDialog({
     e.preventDefault();
     setDragging(false);
     const dropped = e.dataTransfer.files[0];
-    if (dropped?.name.toLowerCase().endsWith(".zip")) {
-      setFile(dropped);
-    }
+    if (dropped) onFilePicked(dropped);
   }
 
   async function handleSubmit() {
-    if (!file) return;
+    if (!file || !stats) return;
     setError(null);
     setSubmitting(true);
     try {
-      const { tileCount, jobName } = await parseElvisZip(file);
       const { jobId, uploadUrl } = await apiFetch<{
         jobId: string;
         uploadUrl: string;
       }>("/topo-jobs", {
         method: "POST",
         body: {
-          tileCount: tileCount || null,
-          jobName: jobName || null,
+          tileCount: stats.tileCount || null,
+          jobName: stats.surveyNames[0] || null,
           filename: file.name,
         },
       });
@@ -806,11 +823,95 @@ export default function TopoDialog({
             type="file"
             accept=".zip"
             hidden
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              const picked = e.target.files?.[0];
+              if (picked) onFilePicked(picked);
+              e.target.value = "";
+            }}
           />
         </Box>
 
-        {error && <ErrorBanner message={error} />}
+        {/* Validation spinner */}
+        {validating && (
+          <Box
+            sx={{
+              mt: 1.5,
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              color: "var(--theme-text-muted)",
+            }}
+          >
+            <CircularProgress size={14} />
+            <Typography variant="caption">Checking ZIP…</Typography>
+          </Box>
+        )}
+
+        {/* ZIP stats panel */}
+        {stats && !validating && (
+          <Box
+            sx={{
+              mt: 1.5,
+              p: 1.5,
+              borderRadius: "var(--radius-sm)",
+              backgroundColor: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              display: "grid",
+              gridTemplateColumns: "auto 1fr",
+              columnGap: 2,
+              rowGap: 0.5,
+            }}
+          >
+            {(
+              [
+                ["Survey", stats.surveyNames.join(", ") || "—"],
+                ["Mode", stats.modeLabel],
+                ["Tiles", String(stats.tileCount)],
+                stats.lazCount > 0
+                  ? ["Point clouds", `${stats.lazCount}× .laz`]
+                  : null,
+                stats.demCount > 0
+                  ? [
+                      "DEM",
+                      `${stats.demCount}× .tif${stats.demResolutionMeters != null ? ` @ ${stats.demResolutionMeters}m` : ""}`,
+                    ]
+                  : null,
+                ["Size", formatBytes(stats.uncompressedBytes)],
+              ] as ([string, string] | null)[]
+            )
+              .filter((row): row is [string, string] => row !== null)
+              .map(([label, value]) => (
+                <Fragment key={label}>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "var(--theme-text-muted)" }}
+                  >
+                    {label}
+                  </Typography>
+                  <Typography variant="caption">{value}</Typography>
+                </Fragment>
+              ))}
+            {stats.derivativeTifCount > 0 && (
+              <Typography
+                variant="caption"
+                sx={{
+                  gridColumn: "1 / -1",
+                  mt: 0.5,
+                  fontStyle: "italic",
+                  color: "var(--theme-text-muted)",
+                }}
+              >
+                {stats.derivativeTifCount} derivative raster
+                {stats.derivativeTifCount > 1 ? "s" : ""} (hillshade etc.) will
+                be ignored
+              </Typography>
+            )}
+          </Box>
+        )}
+
+        {(validationError || error) && (
+          <ErrorBanner message={validationError ?? error!} />
+        )}
       </DialogContent>
 
       <DialogActions>
@@ -825,7 +926,7 @@ export default function TopoDialog({
           variant="contained"
           color="secondary"
           onClick={handleSubmit}
-          disabled={!file || submitting}
+          disabled={!file || submitting || validating || !stats || !!validationError}
         >
           {submitting ? <CircularProgress size={18} /> : "Submit"}
         </Button>

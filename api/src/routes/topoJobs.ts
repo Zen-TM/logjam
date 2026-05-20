@@ -10,6 +10,11 @@ import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { RunTaskCommand } from "@aws-sdk/client-ecs";
 import { s3, sqs, ecs } from "../services/awsClients";
+import {
+  parseZipCentralDirectory,
+  classifyElvisEntries,
+  ElvisZipError,
+} from "@logjam/shared";
 
 const router = Router();
 
@@ -86,10 +91,42 @@ router.post(
     if (job.status !== "uploading") throw new AppError(400, "Job is not awaiting upload");
 
     // Verify the S3 object was actually uploaded
+    let objectSize: number;
     try {
-      await s3.send(new HeadObjectCommand({ Bucket: TOPO_BUCKET, Key: job.s3InputKey! }));
+      const head = await s3.send(
+        new HeadObjectCommand({ Bucket: TOPO_BUCKET, Key: job.s3InputKey! }),
+      );
+      objectSize = head.ContentLength ?? 0;
     } catch {
       throw new AppError(400, "ZIP file has not been uploaded yet");
+    }
+
+    // Re-validate ZIP central directory from S3 (range-GET last 64 KB).
+    // Catches bypassed clients or corrupted uploads before paying ECS spin-up cost.
+    // 64 KB fits ~900 central-directory entries — sufficient for all realistic ELVIS zips.
+    {
+      const tailLen = Math.min(65536, objectSize);
+      const rangeStart = objectSize - tailLen;
+      const tail = await s3.send(
+        new GetObjectCommand({
+          Bucket: TOPO_BUCKET,
+          Key: job.s3InputKey!,
+          Range: `bytes=${rangeStart}-${objectSize - 1}`,
+        }),
+      );
+      const tailBytes = await tail.Body!.transformToByteArray();
+      try {
+        const entries = parseZipCentralDirectory(
+          new Uint8Array(tailBytes),
+          objectSize,
+        );
+        classifyElvisEntries(entries);
+      } catch (e) {
+        if (e instanceof ElvisZipError) {
+          throw new AppError(400, e.message);
+        }
+        throw e;
+      }
     }
 
     await prisma.topoJob.update({ where: { id: jobId }, data: { status: "pending" } });
