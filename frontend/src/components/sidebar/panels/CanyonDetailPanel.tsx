@@ -480,10 +480,20 @@ function CanyonDetailPanel({
       <Dialog
         open={showDeleteConfirm}
         onClose={deleting ? undefined : () => setShowDeleteConfirm(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: "var(--theme-primary)",
+            color: "var(--theme-text-primary)",
+          },
+        }}
       >
-        <DialogTitle>Delete Canyon</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
+        <DialogTitle sx={{ color: "var(--theme-text-primary)" }}>
+          Delete Canyon
+        </DialogTitle>
+        <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
+          <DialogContentText sx={{ color: "var(--theme-text-muted)" }}>
             Are you sure you want to delete {canyon.name}? Trip logs and other
             associated data will also be deleted. This cannot be undone.
           </DialogContentText>
@@ -492,6 +502,7 @@ function CanyonDetailPanel({
           <Button
             onClick={() => setShowDeleteConfirm(false)}
             disabled={deleting}
+            sx={{ color: "var(--theme-text-primary)" }}
           >
             Cancel
           </Button>
