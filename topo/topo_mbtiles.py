@@ -239,12 +239,10 @@ OSM_FEATURE_QUERIES = {
     "building":   '["building"]',
     "power":      '["power"~"line|minor_line|cable"]',
     "campsite":   '["tourism"~"camp_site|caravan_site|wilderness_hut|alpine_hut"]',
-    "peak":       '["natural"~"peak|saddle|cliff|ridge|volcano"]',
+    "peak":       '["natural"="peak"]',
     "spring":     '["natural"="spring"]',
     "gate":       '["barrier"~"gate|lift_gate|cycle_barrier"]',
-    "viewpoint":  '["tourism"="viewpoint"]',
     "cave":       '["natural"="cave_entrance"]',
-    "picnic":     '["tourism"="picnic_site"]',
 }
 
 # Per-feature render style  (zoom-relative: width at z18, scaled down at lower zooms)
@@ -255,12 +253,10 @@ OSM_STYLES = {
     "building":  {"colour": (160, 140, 120, 200),  "width_z18": 2,  "dash": None, "fill": (160, 140, 120, 60)},
     "power":     {"colour": (200, 160,   0, 200),  "width_z18": 1,  "dash": (4, 6)},
     "campsite":  {"colour": (0,   160,  80, 230),  "point": True,   "symbol": "▲", "size_z18": 14},
-    "peak":      {"colour": (100,  60,  20, 240),  "point": True,   "symbol": "▲", "size_z18": 12},
-    "spring":    {"colour": (40,  100, 220, 220),  "point": True,   "symbol": "●", "size_z18": 8},
-    "gate":      {"colour": (80,   80,  80, 200),  "point": True,   "symbol": "×", "size_z18": 10},
-    "viewpoint": {"colour": (200, 100,   0, 220),  "point": True,   "symbol": "◉", "size_z18": 12},
-    "cave":      {"colour": (80,   40,  10, 220),  "point": True,   "symbol": "◆", "size_z18": 10},
-    "picnic":    {"colour": (0,   140,  60, 220),  "point": True,   "symbol": "■", "size_z18": 10},
+    "peak":      {"colour": (80,   50,  20, 240),  "point": True,   "symbol": "▲", "size_z18": 12},
+    "spring":    {"colour": (30,   90, 210, 230),  "point": True,   "symbol": "●", "size_z18": 8},
+    "gate":      {"colour": (70,   70,  70, 220),  "point": True,   "symbol": "×", "size_z18": 10},
+    "cave":      {"colour": (60,   30,  10, 230),  "point": True,   "symbol": "◆", "size_z18": 10},
 }
 
 # ---------------------------------------------------------------------------
@@ -1313,6 +1309,8 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
                         geom = {"type": "Polygon", "coordinates": [coords]}
                     break
 
+        if geom and category == "peak" and geom["type"] != "Point":
+            continue
         if geom:
             features.append({"type": "Feature", "geometry": geom, "properties": props})
 
@@ -1349,18 +1347,14 @@ def classify_osm_element(tags: dict) -> Optional[str]:
         return "power"
     if tour in ("camp_site", "caravan_site", "wilderness_hut", "alpine_hut"):
         return "campsite"
-    if nat in ("peak", "saddle", "cliff", "ridge", "volcano"):
+    if nat == "peak":
         return "peak"
-    if nat in ("spring", "water", "wetland"):
+    if nat == "spring":
         return "spring"
     if bar in ("gate", "lift_gate", "cycle_barrier"):
         return "gate"
-    if tour == "viewpoint":
-        return "viewpoint"
     if nat == "cave_entrance":
         return "cave"
-    if tour == "picnic_site":
-        return "picnic"
     return None
 
 # ---------------------------------------------------------------------------

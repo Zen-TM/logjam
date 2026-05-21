@@ -919,38 +919,160 @@ function Map({
               },
             },
             {
-              suffix: "points",
-              filter: [
-                "in",
-                ["get", "_category"],
-                [
-                  "literal",
-                  [
-                    "campsite",
-                    "peak",
-                    "spring",
-                    "gate",
-                    "viewpoint",
-                    "cave",
-                    "picnic",
-                  ],
-                ],
-              ],
+              suffix: "peak",
+              filter: ["==", ["get", "_category"], "peak"],
               style: {
-                type: "circle",
-                paint: {
-                  "circle-radius": [
+                type: "symbol",
+                minzoom: 12,
+                layout: {
+                  "text-field": [
+                    "case",
+                    ["all", ["has", "name"], ["has", "ele"]],
+                    [
+                      "concat",
+                      "▲\n",
+                      ["get", "name"],
+                      "\n",
+                      ["to-string", ["get", "ele"]],
+                      " m",
+                    ],
+                    ["has", "name"],
+                    ["concat", "▲\n", ["get", "name"]],
+                    ["has", "ele"],
+                    [
+                      "concat",
+                      "▲\n",
+                      ["to-string", ["get", "ele"]],
+                      " m",
+                    ],
+                    "▲",
+                  ],
+                  "text-font": ["Open Sans Semibold"],
+                  "text-size": [
                     "interpolate",
                     ["linear"],
                     ["zoom"],
                     12,
-                    3,
+                    11,
                     18,
-                    7,
+                    15,
                   ],
-                  "circle-color": "rgba(0,140,80,0.9)",
-                  "circle-stroke-color": "#fff",
-                  "circle-stroke-width": 1,
+                  "text-anchor": "top",
+                  "text-justify": "center",
+                  "text-allow-overlap": false,
+                },
+                paint: {
+                  "text-color": "rgba(80,50,20,0.95)",
+                  "text-halo-color": "rgba(255,255,255,0.85)",
+                  "text-halo-width": 1.5,
+                },
+              },
+            },
+            {
+              suffix: "campsite",
+              filter: ["==", ["get", "_category"], "campsite"],
+              style: {
+                type: "symbol",
+                minzoom: 12,
+                layout: {
+                  "text-field": "▲",
+                  "text-font": ["Open Sans Semibold"],
+                  "text-size": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    12,
+                    11,
+                    18,
+                    15,
+                  ],
+                  "text-allow-overlap": true,
+                },
+                paint: {
+                  "text-color": "rgba(0,140,80,0.95)",
+                  "text-halo-color": "rgba(255,255,255,0.85)",
+                  "text-halo-width": 1.5,
+                },
+              },
+            },
+            {
+              suffix: "cave",
+              filter: ["==", ["get", "_category"], "cave"],
+              style: {
+                type: "symbol",
+                minzoom: 12,
+                layout: {
+                  "text-field": "◆",
+                  "text-font": ["Open Sans Semibold"],
+                  "text-size": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    12,
+                    10,
+                    18,
+                    14,
+                  ],
+                  "text-allow-overlap": true,
+                },
+                paint: {
+                  "text-color": "rgba(60,30,10,0.95)",
+                  "text-halo-color": "rgba(255,255,255,0.85)",
+                  "text-halo-width": 1.5,
+                },
+              },
+            },
+            {
+              suffix: "spring",
+              filter: ["==", ["get", "_category"], "spring"],
+              style: {
+                type: "symbol",
+                minzoom: 12,
+                layout: {
+                  "text-field": "●",
+                  "text-font": ["Open Sans Semibold"],
+                  "text-size": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    12,
+                    9,
+                    18,
+                    13,
+                  ],
+                  "text-allow-overlap": true,
+                },
+                paint: {
+                  "text-color": "rgba(30,90,210,0.95)",
+                  "text-halo-color": "rgba(255,255,255,0.85)",
+                  "text-halo-width": 1.5,
+                },
+              },
+            },
+            {
+              suffix: "gate",
+              filter: ["==", ["get", "_category"], "gate"],
+              style: {
+                type: "symbol",
+                minzoom: 14,
+                layout: {
+                  "text-field": "×",
+                  "text-font": ["Open Sans Semibold"],
+                  "text-size": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    14,
+                    11,
+                    18,
+                    15,
+                  ],
+                  "text-allow-overlap": true,
+                },
+                paint: {
+                  "text-color": "rgba(70,70,70,0.95)",
+                  "text-halo-color": "rgba(255,255,255,0.85)",
+                  "text-halo-width": 1.5,
                 },
               },
             },
@@ -1035,6 +1157,56 @@ function Map({
                 paint: {
                   "text-color": color,
                   "text-halo-color": "rgba(255,255,255,0.8)",
+                  "text-halo-width": 1.5,
+                },
+              });
+            }
+          }
+
+          // Name labels for point categories at z14+ (campsite, cave, spring, gate)
+          const pointLabelLayers: {
+            suffix: string;
+            category: string;
+            color: string;
+          }[] = [
+            { suffix: "campsite-label", category: "campsite", color: "rgba(0,140,80,0.95)" },
+            { suffix: "cave-label", category: "cave", color: "rgba(60,30,10,0.95)" },
+            { suffix: "spring-label", category: "spring", color: "rgba(30,90,210,0.95)" },
+            { suffix: "gate-label", category: "gate", color: "rgba(70,70,70,0.95)" },
+          ];
+          for (const { suffix, category, color } of pointLabelLayers) {
+            const lid = `topo-${id}-${suffix}`;
+            if (!map.getLayer(lid)) {
+              map.addLayer({
+                id: lid,
+                type: "symbol",
+                source: srcId,
+                "source-layer": "features",
+                filter: [
+                  "all",
+                  ["==", ["get", "_category"], category],
+                  ["has", "name"],
+                ],
+                minzoom: 14,
+                layout: {
+                  "text-field": ["get", "name"],
+                  "text-font": ["Open Sans Semibold"],
+                  "text-size": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    14,
+                    9,
+                    18,
+                    12,
+                  ],
+                  "text-anchor": "top",
+                  "text-offset": [0, 0.8],
+                  "text-optional": true,
+                },
+                paint: {
+                  "text-color": color,
+                  "text-halo-color": "rgba(255,255,255,0.85)",
                   "text-halo-width": 1.5,
                 },
               });
