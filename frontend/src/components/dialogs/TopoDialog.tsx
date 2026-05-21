@@ -351,6 +351,8 @@ export default function TopoDialog({
   const [tileUsed, setTileUsed] = useState<number | null>(null);
   const [tileQuota, setTileQuota] = useState<number | null>(null);
   const [tileResetAt, setTileResetAt] = useState<string | null>(null);
+  const [storageUsed, setStorageUsed] = useState<number | null>(null);
+  const [storageQuota, setStorageQuota] = useState<number | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -361,6 +363,8 @@ export default function TopoDialog({
         setTileUsed(u.weeklyTileUsage);
         setTileQuota(u.weeklyTileQuota);
         setTileResetAt(u.weeklyTileResetAt);
+        setStorageUsed(u.storageUsedBytes);
+        setStorageQuota(u.storageQuotaBytes);
       })
       .catch(() => {});
   }, [open]);
@@ -441,6 +445,11 @@ export default function TopoDialog({
   async function handleSubmit() {
     if (!file || !stats) return;
     setError(null);
+
+    if (storageUsed !== null && storageQuota !== null && storageUsed >= storageQuota) {
+      setError("Storage quota is full. Free space by deleting old topo jobs before submitting a new one.");
+      return;
+    }
 
     if (tileUsed !== null && tileQuota !== null && stats.tileCount) {
       if (tileUsed + stats.tileCount > tileQuota) {

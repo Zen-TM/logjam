@@ -151,6 +151,7 @@ model TopoJob {
   s3InputKey    String?  @map("s3_input_key")
   s3OutputKeys  Json?    @map("s3_output_keys")
   // s3OutputKeys shape: { name: string, mbtilesKey: string, pmtilesKey: string }[]
+  outputBytes   BigInt?  @map("output_bytes")
   errorMessage  String?  @map("error_message")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")

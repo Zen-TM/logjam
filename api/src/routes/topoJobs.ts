@@ -17,6 +17,7 @@ import {
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { assertCanSubmit, getWeeklyTileUsage } from "../lib/tileQuota";
+import { assertHasStorageQuota } from "../lib/storageQuota";
 
 const router = Router();
 
@@ -42,6 +43,7 @@ router.post(
     const { tileCount, jobName } = req.body;
 
     await assertCanSubmit(user, tileCount);
+    await assertHasStorageQuota(user.id);
 
     const estimatedSeconds = tileCount ? Math.round(tileCount * 8.5) * 60 : null;
 
@@ -132,6 +134,7 @@ router.post(
     // Authoritative quota check against server-counted tiles from the actual ZIP.
     // The job is still "uploading" so it won't appear in the weekly aggregate.
     await assertCanSubmit(user, verifiedTileCount);
+    await assertHasStorageQuota(user.id);
 
     await prisma.topoJob.update({
       where: { id: jobId },

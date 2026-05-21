@@ -103,6 +103,17 @@ def update_status(conn, job_id: str, status: str, **kwargs):
     conn.commit()
 
 
+def increment_user_storage(conn, job_id: str, delta_bytes: int):
+    """Atomically add delta_bytes to the job owner's storage_used_bytes."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE users SET storage_used_bytes = storage_used_bytes + %s"
+            " WHERE id = (SELECT user_id FROM topo_jobs WHERE id = %s)",
+            (delta_bytes, job_id),
+        )
+    conn.commit()
+
+
 def get_job(conn, job_id: str) -> dict:
     with conn.cursor() as cur:
         cur.execute("SELECT * FROM topo_jobs WHERE id = %s", (job_id,))
@@ -282,7 +293,7 @@ def run_tippecanoe_features(geojson_dir: str, out_dir: str) -> Path | None:
 
 # ── Core processing ───────────────────────────────────────────────────────────
 
-def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool]:
+def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
     """
     Download ZIP, run topo pipeline, convert to PMTiles, upload all to S3.
     Returns (output_keys, footprint_local, osm_failed).
@@ -376,12 +387,14 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool]:
     # used solely for the completion email; the map renders the individual
     # layers, not the composite.
     output_keys = []
+    total_output_bytes = 0
     for mbtiles_path in sorted(output_dir.glob("*.mbtiles")):
         name        = mbtiles_path.stem
         mbtiles_key = f"outputs/{job_id}/{name}.mbtiles"
 
         log.info(f"Uploading {name}.mbtiles …")
         s3.upload_file(str(mbtiles_path), BUCKET, mbtiles_key)
+        total_output_bytes += mbtiles_path.stat().st_size
 
         pmtiles_key: Optional[str] = None
         if name in ALL_LAYERS:
@@ -406,6 +419,7 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool]:
                 mbtiles_to_pmtiles(str(pmtiles_source), str(pmtiles_path), maxzoom)
                 log.info(f"Uploading {name}.pmtiles …")
                 s3.upload_file(str(pmtiles_path), BUCKET, pmtiles_key)
+                total_output_bytes += pmtiles_path.stat().st_size
         else:
             log.info(f"Skipping PMTiles conversion for {name} (MBTiles-only layer)")
 
@@ -415,7 +429,7 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool]:
             "pmtilesKey": pmtiles_key,
         })
 
-    return output_keys, footprint_local, osm_failed
+    return output_keys, footprint_local, osm_failed, total_output_bytes
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -429,9 +443,9 @@ def main():
 
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            output_keys, footprint_local, osm_failed = process_job(job, tmp)
+            output_keys, footprint_local, osm_failed, total_output_bytes = process_job(job, tmp)
 
-            extra: dict = {"s3_output_keys": output_keys}
+            extra: dict = {"s3_output_keys": output_keys, "output_bytes": total_output_bytes}
             if footprint_local and footprint_local.exists():
                 with open(footprint_local) as f:
                     fp_fc = json.load(f)
@@ -440,6 +454,8 @@ def main():
                     extra["footprint"] = features[0]["geometry"]
 
         update_status(conn, JOB_ID, "complete", **extra)
+        if total_output_bytes > 0:
+            increment_user_storage(conn, JOB_ID, total_output_bytes)
         log.info(f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded"
                  + (" (OSM features missing — Overpass failed)" if osm_failed else ""))
 
