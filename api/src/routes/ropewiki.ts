@@ -5,6 +5,8 @@ import { AppError } from "../middleware/errorHandler";
 import { ropeWikiHeavyLimiter } from "../middleware/rateLimit";
 import {
   snapshotFromCanyon,
+  snapshotsEqual,
+  attributesSourcesEqual,
   type RopeWikiCanyon,
   type RopeWikiSnapshot,
 } from "../services/ropewiki";
@@ -319,7 +321,7 @@ router.post(
       existingCanyons.map((c) => [c.ropeWikiId!, c]),
     );
 
-    type SnapshotOnly = { id: string; snapshot: RopeWikiSnapshot };
+    type SnapshotOnly = { id: string; snapshot: RopeWikiSnapshot; previousUpdatedAt: Date };
     type FullUpdate = {
       id: string;
       data: {
@@ -356,7 +358,7 @@ router.post(
 
       if (!snapshot) {
         // Legacy import w/o snapshot — treat as user-edited, just store snapshot
-        toUpdateSnapshotOnly.push({ id: existing.id, snapshot: freshSnapshot });
+        toUpdateSnapshotOnly.push({ id: existing.id, snapshot: freshSnapshot, previousUpdatedAt: existing.updatedAt });
         continue;
       }
 
@@ -371,15 +373,17 @@ router.post(
         existing.commitment !== snapshot.commitment ||
         existing.quality !== snapshot.quality ||
         existing.hours !== snapshot.hours ||
-        JSON.stringify(existing.attributes) !==
-          JSON.stringify(snapshot.attributes);
+        !attributesSourcesEqual(
+          existing.attributes as { sources?: [string, string][] } | null,
+          snapshot.attributes,
+        );
 
       if (edited) {
-        toUpdateSnapshotOnly.push({ id: existing.id, snapshot: freshSnapshot });
+        toUpdateSnapshotOnly.push({ id: existing.id, snapshot: freshSnapshot, previousUpdatedAt: existing.updatedAt });
         continue;
       }
 
-      const rwChanged = JSON.stringify(freshSnapshot) !== JSON.stringify(snapshot);
+      const rwChanged = !snapshotsEqual(freshSnapshot, snapshot);
       if (rwChanged) {
         toUpdateAll.push({
           id: existing.id,
@@ -431,7 +435,7 @@ router.post(
       ...toUpdateSnapshotOnly.map((u) =>
         prisma.canyon.update({
           where: { id: u.id },
-          data: { ropeWikiSnapshot: u.snapshot },
+          data: { ropeWikiSnapshot: u.snapshot, updatedAt: u.previousUpdatedAt },
         }),
       ),
     ];

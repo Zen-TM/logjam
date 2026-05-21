@@ -65,6 +65,47 @@ export function snapshotFromCanyon(c: RopeWikiCanyon): RopeWikiSnapshot {
   };
 }
 
+function sourcesEqual(
+  a: [string, string][] | undefined,
+  b: [string, string][] | undefined,
+): boolean {
+  const aSrc = a ?? [];
+  const bSrc = b ?? [];
+  if (aSrc.length !== bSrc.length) return false;
+  const key = (t: [string, string]) => t[0] + "\0" + t[1];
+  const aSort = [...aSrc].sort((x, y) => key(x).localeCompare(key(y)));
+  const bSort = [...bSrc].sort((x, y) => key(x).localeCompare(key(y)));
+  return aSort.every((t, i) => t[0] === bSort[i][0] && t[1] === bSort[i][1]);
+}
+
+// Structural equality for RopeWikiSnapshot — avoids JSON.stringify key-order
+// sensitivity after Postgres jsonb round-trips.
+export function snapshotsEqual(
+  a: RopeWikiSnapshot,
+  b: RopeWikiSnapshot,
+): boolean {
+  return (
+    a.name === b.name &&
+    a.latitude === b.latitude &&
+    a.longitude === b.longitude &&
+    a.numAbseils === b.numAbseils &&
+    a.longestAbseil === b.longestAbseil &&
+    a.vGrade === b.vGrade &&
+    a.aGrade === b.aGrade &&
+    a.commitment === b.commitment &&
+    a.quality === b.quality &&
+    a.hours === b.hours &&
+    sourcesEqual(a.attributes?.sources, b.attributes?.sources)
+  );
+}
+
+export function attributesSourcesEqual(
+  a: { sources?: [string, string][] } | null | undefined,
+  b: { sources?: [string, string][] } | null | undefined,
+): boolean {
+  return sourcesEqual(a?.sources, b?.sources);
+}
+
 /**
  * Parse DMS coordinates like `33° 33' 3.82" S, 150° 24' 6.13" E`
  * into { latitude, longitude } in decimal degrees.
