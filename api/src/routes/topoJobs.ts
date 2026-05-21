@@ -13,6 +13,7 @@ import {
   parseZipCentralDirectory,
   classifyElvisEntries,
   ElvisZipError,
+  validateTopoSettings,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
@@ -40,10 +41,21 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const { tileCount, jobName } = req.body;
+    const { tileCount, jobName, settings } = req.body;
 
     await assertCanSubmit(user, tileCount);
     await assertHasStorageQuota(user.id);
+
+    // Optional advanced render settings. Default preset is used when absent —
+    // worker.py falls back to its built-in defaults if layerOptions is null.
+    let layerOptions: object | undefined;
+    if (settings !== undefined && settings !== null) {
+      const validation = validateTopoSettings(settings);
+      if (!validation.ok) {
+        throw new AppError(400, `Invalid topo settings: ${validation.errors.join("; ")}`);
+      }
+      layerOptions = validation.value as object;
+    }
 
     const estimatedSeconds = tileCount ? Math.round(tileCount * 8.5) * 60 : null;
 
@@ -54,8 +66,7 @@ router.post(
         name: jobName ?? null,
         tileCount: tileCount ?? null,
         estimatedSeconds,
-        // layerOptions is retained on the schema but no longer driven by the
-        // submission UI — every completed job produces every available layer.
+        layerOptions: layerOptions ?? undefined,
       },
     });
 

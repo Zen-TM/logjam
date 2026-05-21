@@ -23,6 +23,7 @@ import notificationsRouter from "./routes/notifications";
 import ropewikiRouter from "./routes/ropewiki";
 import topoJobsRouter from "./routes/topoJobs";
 import geoPdfTemplatesRouter from "./routes/geoPdfTemplates";
+import topoTemplatesRouter from "./routes/topoTemplates";
 import geoPdfRouter from "./routes/geoPdf";
 import analyticsRouter from "./routes/analytics";
 
@@ -128,6 +129,7 @@ app.use("/notifications", notificationsRouter);
 app.use("/ropewiki", ropewikiRouter);
 app.use("/topo-jobs", topoJobsRouter);
 app.use("/geo-pdf-templates", geoPdfTemplatesRouter);
+app.use("/topo-templates", topoTemplatesRouter);
 app.use("/geo-pdf", geoPdfRouter);
 app.use("/analytics", analyticsRouter);
 

@@ -13,6 +13,7 @@ import type {
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
 import GeoPdfTemplatesDialog from "./dialogs/GeoPdfTemplatesDialog";
 import type { GeoPdfTemplate } from "./dialogs/GeoPdfTemplatesDialog";
+import TopoTemplatesDialog from "./dialogs/TopoTemplatesDialog";
 import CanyonDialog from "./dialogs/CanyonDialog";
 import CanyonCsvImportDialog from "./dialogs/CanyonCsvImportDialog";
 import SelectedCanyonsDialog from "./dialogs/SelectedCanyonsDialog";
@@ -135,6 +136,9 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   const [editingGeoPdfTemplate, setEditingGeoPdfTemplate] = useState<
     GeoPdfTemplate | null | undefined
   >(undefined);
+
+  // Topo Templates dialog
+  const [showTopoTemplates, setShowTopoTemplates] = useState(false);
 
   // LiDAR topo panel state — lifted so it persists across panel open/close
   const [lidarEnabled, setLidarEnabled] = useState(false);
@@ -494,6 +498,11 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         downloadUrlsMap={topoDownloadUrls}
         onJobCreated={handleTopoJobCreated}
         focusJobId={focusTopoJobId}
+        onOpenTemplates={() => setShowTopoTemplates(true)}
+      />
+      <TopoTemplatesDialog
+        open={showTopoTemplates}
+        onClose={() => setShowTopoTemplates(false)}
       />
       <GeoPdfDialog
         open={showGeoPdf}
@@ -557,6 +566,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           onAddCanyon={() => setShowAdd(true)}
           onOpenCanyonCsvImport={() => setShowCanyonCsvImport(true)}
           onOpenTopo={() => setShowTopo(true)}
+          onOpenTopoTemplates={() => setShowTopoTemplates(true)}
           onOpenGeoPdf={() => setShowGeoPdf(true)}
           onOpenGeoPdfTemplates={() => setShowGeoPdfTemplates(true)}
           onStartAreaSelection={startAreaSelection}

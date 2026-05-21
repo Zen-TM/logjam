@@ -1,4 +1,4 @@
-import { useState, useRef, Fragment, useEffect } from "react";
+import { useState, useRef, Fragment, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -14,6 +14,12 @@ import {
   Divider,
   Tooltip,
   Collapse,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Select,
+  MenuItem,
+  TextField,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
@@ -28,8 +34,23 @@ import {
   parseZipCentralDirectory,
   classifyElvisEntries,
   ElvisZipError,
+  TOPO_SETTINGS_DEFAULTS,
+  cloneTopoSettings,
   type ElvisStats,
+  type TopoSettings,
 } from "@logjam/shared";
+import AdvancedSettings from "./topoSettings/AdvancedSettings";
+
+export type TopoTemplate = {
+  id: string;
+  name: string;
+  isSystem: boolean;
+  config: TopoSettings;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+const DEFAULT_TEMPLATE_ID = "default";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -328,6 +349,7 @@ export default function TopoDialog({
   downloadUrlsMap,
   onJobCreated,
   focusJobId,
+  onOpenTemplates,
 }: {
   open: boolean;
   onClose: () => void;
@@ -337,6 +359,7 @@ export default function TopoDialog({
   downloadUrlsMap: Record<string, DownloadUrl[]>;
   onJobCreated: (job: TopoJob) => void;
   focusJobId?: string | null;
+  onOpenTemplates: () => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -354,7 +377,54 @@ export default function TopoDialog({
   const [storageUsed, setStorageUsed] = useState<number | null>(null);
   const [storageQuota, setStorageQuota] = useState<number | null>(null);
 
+  // Advanced settings + templates
+  const [settings, setSettings] = useState<TopoSettings>(() => cloneTopoSettings(TOPO_SETTINGS_DEFAULTS));
+  const [templates, setTemplates] = useState<TopoTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [saveAsName, setSaveAsName] = useState("");
+  const [showSaveAs, setShowSaveAs] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refreshTemplates = useCallback(async () => {
+    try {
+      const list = await apiFetch<TopoTemplate[]>("/topo-templates");
+      setTemplates(list);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      void refreshTemplates();
+    }
+  }, [open, refreshTemplates]);
+
+  function selectTemplate(id: string) {
+    setSelectedTemplateId(id);
+    const t = templates.find((x) => x.id === id);
+    if (t) setSettings(cloneTopoSettings(t.config));
+  }
+
+  async function handleSaveAsTemplate() {
+    const name = saveAsName.trim();
+    if (!name) return;
+    try {
+      const created = await apiFetch<TopoTemplate>("/topo-templates", {
+        method: "POST",
+        body: { name, config: settings },
+      });
+      setSaveAsName("");
+      setShowSaveAs(false);
+      await refreshTemplates();
+      setSelectedTemplateId(created.id);
+    } catch (e) {
+      console.error(e);
+      setError(messageFromError(e, "Couldn't save template."));
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -475,6 +545,7 @@ export default function TopoDialog({
           tileCount: stats.tileCount || null,
           jobName: stats.surveyNames[0] || null,
           filename: file.name,
+          settings,
         },
       });
 
@@ -967,6 +1038,96 @@ export default function TopoDialog({
         {(validationError || error) && (
           <ErrorBanner message={validationError ?? error!} />
         )}
+
+        {/* ── Template selector + Save as / Manage ── */}
+        <Box sx={{ mt: 2, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+          <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>
+            Template
+          </Typography>
+          <Select
+            size="small"
+            value={selectedTemplateId}
+            onChange={(e) => selectTemplate(String(e.target.value))}
+            sx={{
+              minWidth: 180,
+              color: "var(--theme-text-primary)",
+              "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
+            }}
+          >
+            {templates.map((t) => (
+              <MenuItem key={t.id} value={t.id}>
+                {t.name}{t.isSystem ? " (system)" : ""}
+              </MenuItem>
+            ))}
+          </Select>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => setShowSaveAs((v) => !v)}
+            sx={outlinedAccentSx}
+          >
+            Save as template
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={onOpenTemplates}
+            sx={outlinedAccentSx}
+          >
+            Manage templates
+          </Button>
+        </Box>
+
+        {showSaveAs && (
+          <Box sx={{ mt: 1, display: "flex", gap: 1, alignItems: "center" }}>
+            <TextField
+              size="small"
+              placeholder="Template name"
+              value={saveAsName}
+              onChange={(e) => setSaveAsName(e.target.value)}
+              sx={{
+                flex: 1,
+                "& .MuiInputBase-input": { color: "var(--theme-text-primary)" },
+                "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
+              }}
+            />
+            <Button
+              size="small"
+              variant="contained"
+              color="secondary"
+              disabled={!saveAsName.trim()}
+              onClick={handleSaveAsTemplate}
+            >
+              Save
+            </Button>
+            <Button
+              size="small"
+              onClick={() => { setShowSaveAs(false); setSaveAsName(""); }}
+              sx={{ color: "var(--theme-text-primary)" }}
+            >
+              Cancel
+            </Button>
+          </Box>
+        )}
+
+        {/* ── Advanced settings accordion ── */}
+        <Accordion
+          expanded={advancedOpen}
+          onChange={(_, expanded) => setAdvancedOpen(expanded)}
+          sx={{
+            mt: 2,
+            backgroundColor: "rgba(255,255,255,0.04)",
+            color: "var(--theme-text-primary)",
+            "& .MuiAccordionSummary-root": { minHeight: 40 },
+          }}
+        >
+          <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: "var(--theme-text-primary)" }} />}>
+            <Typography variant="body2">Advanced settings</Typography>
+          </AccordionSummary>
+          <AccordionDetails sx={{ pt: 0 }}>
+            <AdvancedSettings value={settings} onChange={setSettings} />
+          </AccordionDetails>
+        </Accordion>
       </DialogContent>
 
       <DialogActions>

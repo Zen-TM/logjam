@@ -1,0 +1,143 @@
+.tabPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 4px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sectionTitle {
+  font-size: 0.75em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.55;
+  color: var(--theme-text-primary);
+  margin: 4px 0 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.labelWithTooltip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--theme-text-primary);
+  font-size: 0.9em;
+}
+
+.infoIcon {
+  font-size: 14px !important;
+  opacity: 0.5;
+  cursor: help;
+}
+
+.numberInput,
+.textInput {
+  width: 90px;
+  padding: 4px 8px;
+  background: var(--theme-primary);
+  color: var(--theme-text-primary);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+}
+
+.numberInput:focus,
+.textInput:focus {
+  outline: none;
+  border-color: var(--theme-accent);
+}
+
+.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.bandTable {
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.bandHeader {
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.45;
+  color: var(--theme-text-primary);
+}
+
+.removeButton {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  color: var(--theme-text-primary);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 0.85em;
+}
+
+.removeButton:hover {
+  border-color: var(--theme-warning);
+  color: var(--theme-warning);
+}
+
+.addButton {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--theme-accent) 50%, transparent);
+  color: var(--theme-accent);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 0.85em;
+}
+
+.addButton:hover {
+  background: color-mix(in srgb, var(--theme-accent) 10%, transparent);
+}
+
+.featureRow {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.featureRow.featureRowDisabled .colourCell,
+.featureRow.featureRowDisabled .widthCell {
+  opacity: 0.4;
+}
+
+.helpText {
+  font-size: 0.8em;
+  color: var(--theme-text-muted);
+  margin: 0;
+}
+
+.formationGrid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 6px 16px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.formationName {
+  font-size: 0.85em;
+  color: var(--theme-text-primary);
+}

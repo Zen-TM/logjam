@@ -36,6 +36,7 @@ import logging
 import math
 import multiprocessing
 import os
+import re
 import shutil
 import sqlite3
 import struct
@@ -48,7 +49,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Generator, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import numpy as np
 import requests
@@ -211,8 +212,25 @@ SVTM_FORMATION_MU: Dict[str, float] = {
     "Alpine Complex":                                      1.4,
 }
 
-# Slope thresholds (degrees) → RGBA colour
-SLOPE_COLOURS = [
+# Hillshade defaults (formerly inline in gdaldem hillshade calls).
+HILLSHADE_DEFAULTS = {
+    "colour":           "#ffffffff",   # tint applied to greyscale luminance (#RRGGBBAA)
+    "azimuth":          315,            # sun direction (NW)
+    "altitude":         45,             # sun elevation
+    "zFactor":          1.5,            # vertical exaggeration
+    "multidirectional": False,          # blend multiple sun angles
+}
+
+# Vegetation render defaults (formerly inline in render_vegetation_tile).
+VEGETATION_DEFAULTS = {
+    "sparseColour": "#90ee90ff",  # alpha ignored — alphaMin used
+    "denseColour":  "#006400ff",  # alpha ignored — alphaMax used
+    "alphaMin": 60,
+    "alphaMax": 255,
+}
+
+# Slope thresholds (degrees) → RGBA colour. Defaults for the Default preset.
+SLOPE_DEFAULT_BANDS = [
     (40, 50, (255, 255,   0, 140)),   # yellow
     (50, 60, (255, 165,   0, 160)),   # orange
     (60, 70, (220,  38,  38, 180)),   # red
@@ -220,33 +238,46 @@ SLOPE_COLOURS = [
 ]
 
 # Contour intervals visible at each zoom level
-# (zoom_min_inclusive, zoom_max_inclusive) → interval_metres
-CONTOUR_ZOOM_INTERVALS = [
-    (12, 15, 50),
-    (15, 16, 10),
-    (17, 18, 5),
+# Format: (zoom_min_inclusive, zoom_max_inclusive, interval_metres, major_every_n)
+CONTOUR_ZOOM_INTERVALS_DEFAULT = [
+    (12, 15, 50,  1),
+    (15, 16, 10,  5),
+    (17, 18,  5, 10),
 ]
 
-# Line thickness for contours in ground metres (will be converted to pixels at render time)
-CONTOUR_MAJOR_WIDTH_M = 18   # 50 m contours
-CONTOUR_MINOR_WIDTH_M = 8    # 10 m / 5 m contours
-
-# OSM Overpass query tags for topo-relevant features
-OSM_FEATURE_QUERIES = {
-    "waterway":   '["waterway"~"river|stream|creek|drain|canal|ditch"]',
-    "track":      '["highway"~"track|path|footway|bridleway|steps"]',
-    "road":       '["highway"~"primary|secondary|tertiary|unclassified|residential|service"]',
-    "building":   '["building"]',
-    "power":      '["power"~"line|minor_line|cable"]',
-    "campsite":   '["tourism"~"camp_site|caravan_site|wilderness_hut|alpine_hut"]',
-    "peak":       '["natural"="peak"]',
-    "spring":     '["natural"="spring"]',
-    "gate":       '["barrier"~"gate|lift_gate|cycle_barrier"]',
-    "cave":       '["natural"="cave_entrance"]',
+# Contour colour defaults (formerly inline in render_contours_tile).
+CONTOUR_DEFAULTS = {
+    "majorColour": (80, 60, 40, 220),
+    "minorColour": (120, 90, 60, 160),
+    "majorWidthM": 18,
+    "minorWidthM": 8,
 }
 
-# Per-feature render style  (zoom-relative: width at z18, scaled down at lower zooms)
-OSM_STYLES = {
+# OSM Overpass query tags for topo-relevant features.
+# Catalogue is fixed (user-supplied queries would be an injection vector).
+OSM_FEATURE_QUERIES = {
+    "waterway":  '["waterway"~"river|stream|creek|drain|canal|ditch"]',
+    "track":     '["highway"~"track|path|footway|bridleway|steps"]',
+    "road":      '["highway"~"primary|secondary|tertiary|unclassified|residential|service"]',
+    "building":  '["building"]',
+    "power":     '["power"~"line|minor_line|cable"]',
+    "campsite":  '["tourism"~"camp_site|caravan_site|wilderness_hut|alpine_hut"]',
+    "peak":      '["natural"="peak"]',
+    "spring":    '["natural"="spring"]',
+    "gate":      '["barrier"~"gate|lift_gate|cycle_barrier"]',
+    "cave":      '["natural"="cave_entrance"]',
+    "bridge":    '["bridge"="yes"]',
+    "ford":      '["ford"]',
+    "waterfall": '["waterway"="waterfall"]',
+    "trailhead": '["highway"="trailhead"]',
+    "viewpoint": '["tourism"="viewpoint"]',
+    "hut":       '["amenity"="shelter"]',
+}
+
+# Default per-feature render style metadata. Geometry kind (point vs line/poly),
+# symbol glyphs and dash patterns are intrinsic to the category and not exposed
+# in the per-job settings — those settings carry {enabled, colour, widthZ18}.
+OSM_STYLE_META = {
     "waterway":  {"colour": (40, 120, 220, 220),  "width_z18": 3,  "dash": None},
     "track":     {"colour": (160, 100,  30, 220),  "width_z18": 2,  "dash": (8, 4)},
     "road":      {"colour": (80,   80,  80, 230),  "width_z18": 4,  "dash": None},
@@ -257,7 +288,168 @@ OSM_STYLES = {
     "spring":    {"colour": (30,   90, 210, 230),  "point": True,   "symbol": "●", "size_z18": 8},
     "gate":      {"colour": (70,   70,  70, 220),  "point": True,   "symbol": "×", "size_z18": 10},
     "cave":      {"colour": (60,   30,  10, 230),  "point": True,   "symbol": "◆", "size_z18": 10},
+    # Newly added features (disabled by default).
+    "bridge":    {"colour": (64,  48,  40, 230),  "width_z18": 3,  "dash": None},
+    "ford":      {"colour": (30,  144, 255, 230), "point": True,   "symbol": "≈", "size_z18": 12},
+    "waterfall": {"colour": (30,  106, 210, 240), "point": True,   "symbol": "▼", "size_z18": 14},
+    "trailhead": {"colour": (160, 64,  32, 230),  "point": True,   "symbol": "✦", "size_z18": 14},
+    "viewpoint": {"colour": (128, 96,  32, 230),  "point": True,   "symbol": "◉", "size_z18": 14},
+    "hut":       {"colour": (80,  56,  32, 230),  "point": True,   "symbol": "⌂", "size_z18": 14},
 }
+
+# ---------------------------------------------------------------------------
+# Render settings (per-job overrides loaded via --settings-json)
+# ---------------------------------------------------------------------------
+
+ALL_LAYER_KEYS = ("hillshade", "vegetation", "slope", "contours", "features")
+ALL_OSM_KEYS = tuple(OSM_FEATURE_QUERIES.keys())
+
+_HEX_RGBA_RE = re.compile(r"^#[0-9a-fA-F]{8}$")
+
+
+def _parse_rgba_hex(hex_str: str) -> Tuple[int, int, int, int]:
+    if not isinstance(hex_str, str) or not _HEX_RGBA_RE.match(hex_str):
+        raise ValueError(f"Invalid RGBA hex: {hex_str!r}")
+    n = int(hex_str[1:], 16)
+    return ((n >> 24) & 0xff, (n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff)
+
+
+def _default_render_settings() -> Dict[str, Any]:
+    """Construct the Default preset dict matching shared/src/topoSettings.ts.
+
+    Returns plain dicts/lists (JSON-serialisable) so the same shape can be
+    serialised to disk, sent to subprocesses, and passed straight through
+    without any wrapping types.
+    """
+    slope_bands = []
+    for lo, hi, (r, g, b, a) in SLOPE_DEFAULT_BANDS:
+        slope_bands.append({
+            "fromDeg": lo,
+            "toDeg": hi,
+            "colour": f"#{r:02x}{g:02x}{b:02x}{a:02x}",
+        })
+
+    zoom_bands = []
+    for zmin, zmax, interval, major_n in CONTOUR_ZOOM_INTERVALS_DEFAULT:
+        zoom_bands.append({
+            "zoomMin": zmin,
+            "zoomMax": zmax,
+            "intervalM": interval,
+            "majorEveryN": major_n,
+        })
+
+    def _meta_hex(rgba: Tuple[int, int, int, int]) -> str:
+        return f"#{rgba[0]:02x}{rgba[1]:02x}{rgba[2]:02x}{rgba[3]:02x}"
+
+    features = {}
+    for key in ALL_OSM_KEYS:
+        meta = OSM_STYLE_META[key]
+        enabled = key not in {"bridge", "ford", "waterfall", "trailhead", "viewpoint", "hut"}
+        features[key] = {
+            "enabled": enabled,
+            "colour": _meta_hex(meta["colour"]),
+            "widthZ18": meta.get("width_z18") or meta.get("size_z18") or 2,
+        }
+
+    return {
+        "hillshade": {"enabled": True, **HILLSHADE_DEFAULTS},
+        "slope": {"enabled": True, "bands": slope_bands},
+        "vegetation": {
+            "enabled": True,
+            "minRatio": SCRUB_DENSITY_MIN_RATIO,
+            "maxRatio": SCRUB_DENSITY_MAX_RATIO,
+            "sparseColour": VEGETATION_DEFAULTS["sparseColour"],
+            "denseColour":  VEGETATION_DEFAULTS["denseColour"],
+            "alphaMin": VEGETATION_DEFAULTS["alphaMin"],
+            "alphaMax": VEGETATION_DEFAULTS["alphaMax"],
+            "weightsEnabled": True,
+            "formationWeights": dict(SVTM_FORMATION_MU),
+        },
+        "contours": {
+            "enabled": True,
+            "zoomBands": zoom_bands,
+            "majorColour": _meta_hex(CONTOUR_DEFAULTS["majorColour"]),
+            "minorColour": _meta_hex(CONTOUR_DEFAULTS["minorColour"]),
+            "majorWidthM": CONTOUR_DEFAULTS["majorWidthM"],
+            "minorWidthM": CONTOUR_DEFAULTS["minorWidthM"],
+        },
+        "features": {
+            "enabled": True,
+            "features": features,
+        },
+    }
+
+
+def _validate_render_settings(settings: Dict[str, Any]) -> None:
+    """Defence-in-depth validation. API already validates via shared zod-style
+    schema, but the worker re-checks so an out-of-band settings.json (e.g. a
+    manual local invocation) still fails loud rather than producing garbage.
+    """
+    if not isinstance(settings, dict):
+        raise ValueError("settings must be a JSON object")
+    for layer in ALL_LAYER_KEYS:
+        if layer not in settings or not isinstance(settings[layer], dict):
+            raise ValueError(f"settings.{layer} missing or not an object")
+
+    hs = settings["hillshade"]
+    _parse_rgba_hex(hs.get("colour", ""))
+    if not (0 <= float(hs["azimuth"]) <= 360):
+        raise ValueError("hillshade.azimuth out of range")
+    if not (0 <= float(hs["altitude"]) <= 90):
+        raise ValueError("hillshade.altitude out of range")
+    if not (0.1 <= float(hs["zFactor"]) <= 10):
+        raise ValueError("hillshade.zFactor out of range")
+
+    bands = settings["slope"].get("bands", [])
+    if not isinstance(bands, list) or len(bands) > 8:
+        raise ValueError("slope.bands must be list of length <= 8")
+    for b in bands:
+        _parse_rgba_hex(b["colour"])
+
+    veg = settings["vegetation"]
+    if not (0 <= float(veg["minRatio"]) < float(veg["maxRatio"]) <= 1):
+        raise ValueError("vegetation minRatio/maxRatio invalid")
+    _parse_rgba_hex(veg["sparseColour"])
+    _parse_rgba_hex(veg["denseColour"])
+
+    cont = settings["contours"]
+    zbs = cont.get("zoomBands", [])
+    if not isinstance(zbs, list) or len(zbs) != 3:
+        raise ValueError("contours.zoomBands must be list of length 3")
+    _parse_rgba_hex(cont["majorColour"])
+    _parse_rgba_hex(cont["minorColour"])
+
+    feats = settings["features"].get("features", {})
+    if not isinstance(feats, dict):
+        raise ValueError("features.features must be an object")
+    for key, style in feats.items():
+        if key not in ALL_OSM_KEYS:
+            raise ValueError(f"unknown OSM feature key: {key}")
+        _parse_rgba_hex(style["colour"])
+
+
+def load_render_settings(path: Optional[str]) -> Dict[str, Any]:
+    """Load + validate per-job render settings. Returns the Default preset if
+    `path` is None (no settings file passed)."""
+    if not path:
+        return _default_render_settings()
+    with open(path, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+    _validate_render_settings(raw)
+    return raw
+
+
+def active_layers_from_settings(settings: Dict[str, Any], has_vegetation: bool) -> List[str]:
+    """Return ordered layer list filtered by settings.<layer>.enabled."""
+    order = ["hillshade", "vegetation", "features", "slope", "contours"]
+    out = []
+    for name in order:
+        if name == "vegetation" and not has_vegetation:
+            continue
+        if settings.get(name, {}).get("enabled", True):
+            out.append(name)
+    return out
+
 
 # ---------------------------------------------------------------------------
 # Tile maths
@@ -935,8 +1127,8 @@ def _box_sum_2d(arr: np.ndarray, k: int) -> np.ndarray:
     return (bottom_right - top_right - bottom_left + top_left).astype(np.float32)
 
 
-def _build_svtm_mu_lookup() -> np.ndarray:
-    """Build formation→μ lookup as a uint8-indexed float32 array from SVTM_FORMATION_MU.
+def _build_svtm_mu_lookup(formation_weights: Optional[Dict[str, float]] = None) -> np.ndarray:
+    """Build formation→μ lookup as a uint8-indexed float32 array.
 
     The formation raster pixel values are indices into the ordered formation
     list produced by build_svtm_formation.py, which always starts with
@@ -944,16 +1136,26 @@ def _build_svtm_mu_lookup() -> np.ndarray:
     SVTM_FORMATION_MU. The lookup is 256 elements so any uint8 raster value
     (including nodata=255) is a valid direct index — out-of-range values
     default to μ=1.0 (identity).
+
+    `formation_weights` overrides per-formation μ values by name (any unknown
+    name is ignored). Missing names fall through to the SVTM_FORMATION_MU
+    default for that index.
     """
+    overrides = formation_weights or {}
     mu_lookup = np.ones(256, dtype=np.float32)
-    for idx, mu in enumerate(SVTM_FORMATION_MU.values()):
-        mu_lookup[idx] = mu
-    # Index 255 = nodata sentinel → identity.
+    for idx, (name, default_mu) in enumerate(SVTM_FORMATION_MU.items()):
+        mu_lookup[idx] = float(overrides.get(name, default_mu))
     mu_lookup[255] = 1.0
     return mu_lookup
 
 
-def apply_svtm_weighting(density_arr: np.ndarray, dtm_path: str, work_dir: str) -> np.ndarray:
+def apply_svtm_weighting(
+    density_arr: np.ndarray,
+    dtm_path: str,
+    work_dir: str,
+    weights_enabled: bool = True,
+    formation_weights: Optional[Dict[str, float]] = None,
+) -> np.ndarray:
     """Multiply NRD per-pixel by the SVTM formation μ.
 
     The formation raster is warped from S3 (/vsis3/ path) onto the DTM grid
@@ -967,7 +1169,14 @@ def apply_svtm_weighting(density_arr: np.ndarray, dtm_path: str, work_dir: str) 
 
     Output is clamped to [0, 1] so MAX_RATIO normalisation downstream is
     still meaningful (μ > 1 can push NRD beyond 1).
+
+    When `weights_enabled` is False the formation lookup is skipped and the
+    raw density is returned — useful when the user has turned the per-
+    formation μ table off in advanced settings.
     """
+    if not weights_enabled:
+        log.info("SVTM weighting disabled by settings — skipping.")
+        return density_arr
     if not SVTM_FORMATION_RASTER:
         log.info("SVTM_FORMATION_S3_PATH not set — skipping vegetation weighting.")
         return density_arr
@@ -1002,7 +1211,7 @@ def apply_svtm_weighting(density_arr: np.ndarray, dtm_path: str, work_dir: str) 
         log.warning(f"SVTM formation raster unavailable ({e}) — skipping vegetation weighting.")
         return density_arr
 
-    mu_lookup = _build_svtm_mu_lookup()
+    mu_lookup = _build_svtm_mu_lookup(formation_weights)
     form_ds = gdal.Open(formation_aligned)
     formation_arr = form_ds.GetRasterBand(1).ReadAsArray().astype(np.uint8)
     form_ds = None
@@ -1071,8 +1280,27 @@ def _bilateral_filter_weighted(
     return out
 
 
+def _run_gdaldem_hillshade(out_path: str, dtm_path: str, settings: Dict[str, Any]) -> None:
+    """Centralised hillshade invocation. Honours per-job overrides."""
+    hs = settings.get("hillshade", {})
+    azimuth = float(hs.get("azimuth", HILLSHADE_DEFAULTS["azimuth"]))
+    altitude = float(hs.get("altitude", HILLSHADE_DEFAULTS["altitude"]))
+    z_factor = float(hs.get("zFactor", HILLSHADE_DEFAULTS["zFactor"]))
+    multidirectional = bool(hs.get("multidirectional", HILLSHADE_DEFAULTS["multidirectional"]))
+    kwargs = dict(
+        zFactor=z_factor,
+        creationOptions=["COMPRESS=LZW"],
+    )
+    if multidirectional:
+        kwargs["multiDirectional"] = True
+    else:
+        kwargs["azimuth"] = azimuth
+        kwargs["altitude"] = altitude
+    gdal.DEMProcessing(out_path, dtm_path, "hillshade", **kwargs)
+
+
 def compute_rasters(dtm_path: str, scrub_count_path: str, below_count_path: str,
-                    work_dir: str) -> dict:
+                    work_dir: str, settings: Dict[str, Any]) -> dict:
     """
     From DTM + NRD-count rasters produce hillshade.tif, slope.tif, scrub_density.tif.
 
@@ -1098,11 +1326,7 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, below_count_path: str,
     # Hillshade from DTM
     hs_path = os.path.join(work_dir, "hillshade.tif")
     log.info("Computing hillshade …")
-    gdal.DEMProcessing(
-        hs_path, dtm_path, "hillshade",
-        azimuth=315, altitude=45, zFactor=1.5,
-        creationOptions=["COMPRESS=LZW"],
-    )
+    _run_gdaldem_hillshade(hs_path, dtm_path, settings)
     paths["hillshade"] = hs_path
 
     # Slope from DTM
@@ -1168,8 +1392,13 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, below_count_path: str,
 
     # Apply SVTM formation μ — distinguishes soft (rainforest) from hard
     # (sclerophyll/heath) vegetation of equal LiDAR density. No-op if the
-    # preprocessed formation raster is absent.
-    density = apply_svtm_weighting(density, dtm_path, work_dir)
+    # preprocessed formation raster is absent or the user disabled weighting.
+    veg_settings = settings.get("vegetation", {})
+    density = apply_svtm_weighting(
+        density, dtm_path, work_dir,
+        weights_enabled=bool(veg_settings.get("weightsEnabled", True)),
+        formation_weights=veg_settings.get("formationWeights"),
+    )
 
     # Write scrub_density.tif (values 0–1, nodata = -9999)
     density_path = os.path.join(work_dir, "scrub_density.tif")
@@ -1194,17 +1423,13 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, below_count_path: str,
     return paths
 
 
-def compute_rasters_no_veg(dtm_path: str, work_dir: str) -> dict:
+def compute_rasters_no_veg(dtm_path: str, work_dir: str, settings: Dict[str, Any]) -> dict:
     """Compute only hillshade and slope (no DSM/CHM available). Mode A."""
     paths = {}
 
     hs_path = os.path.join(work_dir, "hillshade.tif")
     log.info("Computing hillshade …")
-    gdal.DEMProcessing(
-        hs_path, dtm_path, "hillshade",
-        azimuth=315, altitude=45, zFactor=1.5,
-        creationOptions=["COMPRESS=LZW"],
-    )
+    _run_gdaldem_hillshade(hs_path, dtm_path, settings)
     paths["hillshade"] = hs_path
 
     sl_path = os.path.join(work_dir, "slope.tif")
@@ -1222,14 +1447,25 @@ def compute_rasters_no_veg(dtm_path: str, work_dir: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: float,
-                       work_dir: str, footprint_path: Optional[str] = None) -> Optional[str]:
-    """Download OSM data via Overpass API, then clip to the data footprint. Returns path to GeoJSON."""
+                       work_dir: str, footprint_path: Optional[str] = None,
+                       settings: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    """Download OSM data via Overpass API, then clip to the data footprint. Returns path to GeoJSON.
+
+    Only queries feature classes that are `enabled` in `settings.features.features`.
+    Saves Overpass bandwidth when users disable categories.
+    """
     log.info("Fetching OSM features from Overpass API …")
     bbox = f"{lat_min},{lon_min},{lat_max},{lon_max}"
 
+    feature_settings = (settings or {}).get("features", {}).get("features", {})
     parts = []
-    for tag_filter in OSM_FEATURE_QUERIES.values():
-        parts.append(f'nwr{tag_filter}({bbox});')
+    for key, tag_filter in OSM_FEATURE_QUERIES.items():
+        cfg = feature_settings.get(key)
+        if cfg is None or cfg.get("enabled", True):
+            parts.append(f'nwr{tag_filter}({bbox});')
+    if not parts:
+        log.info("All OSM feature classes disabled — skipping Overpass.")
+        return None
 
     query = f"""
     [out:json][timeout:120];
@@ -1334,6 +1570,26 @@ def classify_osm_element(tags: dict) -> Optional[str]:
     tour = tags.get("tourism", "")
     pw = tags.get("power", "")
     bar = tags.get("barrier", "")
+    info = tags.get("information", "")
+    amenity = tags.get("amenity", "")
+
+    # Specific categories first — bridge/ford/waterfall override more generic
+    # tags so a highway-tagged bridge classifies as bridge, not track/road.
+    if ww == "waterfall":
+        return "waterfall"
+    if "ford" in tags:
+        return "ford"
+    if tags.get("bridge") == "yes":
+        return "bridge"
+    if tour == "viewpoint":
+        return "viewpoint"
+    # amenity=shelter only — tourism=alpine_hut/wilderness_hut keep their
+    # legacy "campsite" classification so the Default preset's behaviour
+    # remains backwards-compatible.
+    if amenity == "shelter":
+        return "hut"
+    if hw == "trailhead" or info == "guidepost":
+        return "trailhead"
 
     if ww in ("river", "stream", "creek", "drain", "canal", "ditch"):
         return "waterway"
@@ -1389,20 +1645,27 @@ def _merc_srs():
     return srs
 
 
-def generate_contours_gdal(dtm_filled: str, work_dir: str,
-                           footprint_path: Optional[str] = None) -> dict:
+def generate_contours_gdal(
+    dtm_filled: str,
+    work_dir: str,
+    intervals: List[float],
+    footprint_path: Optional[str] = None,
+) -> dict:
     """
-    Generate contour GeoJSONs from the DTM.
+    Generate contour GeoJSONs from the DTM, one per requested interval.
 
     gdal_contour outputs coordinates in the DTM's CRS (Web Mercator).
     We then reproject each GeoJSON to WGS84 (EPSG:4326) and clip to the
     data footprint so contours don't extend into nodata-filled edges.
     """
     paths = {}
-    for interval in [5, 10, 50]:
-        merc_path = os.path.join(work_dir, f"contours_{interval}m_merc.geojson")
-        reproj_path = os.path.join(work_dir, f"contours_{interval}m_reproj.geojson")
-        out_path  = os.path.join(work_dir, f"contours_{interval}m.geojson")
+    for interval in sorted({float(i) for i in intervals}):
+        # Format the interval for filenames — strip trailing ".0" so integer
+        # intervals keep their familiar names (e.g. "contours_50m.geojson").
+        suffix = str(int(interval)) if interval == int(interval) else str(interval).replace(".", "p")
+        merc_path = os.path.join(work_dir, f"contours_{suffix}m_merc.geojson")
+        reproj_path = os.path.join(work_dir, f"contours_{suffix}m_reproj.geojson")
+        out_path  = os.path.join(work_dir, f"contours_{suffix}m.geojson")
 
         # Step 1: generate contours in Web Mercator
         cmd = [
@@ -1554,7 +1817,7 @@ def _apply_footprint_mask(img: Image.Image, footprint_path: str,
     return Image.merge("RGBA", (r, g, b, new_a))
 
 
-def render_hillshade_tile(hs_arr: Optional[np.ndarray]) -> Image.Image:
+def render_hillshade_tile(hs_arr: Optional[np.ndarray], settings: Dict[str, Any]) -> Image.Image:
     img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
     if hs_arr is None:
         return img
@@ -1562,59 +1825,77 @@ def render_hillshade_tile(hs_arr: Optional[np.ndarray]) -> Image.Image:
     if not valid.any():
         return img
     norm = np.clip(hs_arr, 0, 255)
-    # Desaturate + fade for "faint greyscale" effect
-    alpha_val = 255
+    safe = np.nan_to_num(norm, nan=0).astype(np.float32)
+
+    # Tint: greyscale luminance multiplied by the tint colour, alpha from
+    # the tint hex's alpha channel. Default tint is opaque white = identity.
+    tint_hex = settings.get("hillshade", {}).get("colour", HILLSHADE_DEFAULTS["colour"])
+    tr, tg, tb, ta = _parse_rgba_hex(tint_hex)
     rgba = np.zeros((TILE_SIZE, TILE_SIZE, 4), dtype=np.uint8)
-    safe = np.nan_to_num(norm, nan=0).astype(np.uint8)
-    rgba[..., 0] = safe
-    rgba[..., 1] = safe
-    rgba[..., 2] = safe
-    rgba[..., 3] = np.where(valid, alpha_val, 0).astype(np.uint8)
+    rgba[..., 0] = (safe * (tr / 255.0)).astype(np.uint8)
+    rgba[..., 1] = (safe * (tg / 255.0)).astype(np.uint8)
+    rgba[..., 2] = (safe * (tb / 255.0)).astype(np.uint8)
+    rgba[..., 3] = np.where(valid, ta, 0).astype(np.uint8)
     return Image.fromarray(rgba)
 
 
-def render_vegetation_tile(density_arr: Optional[np.ndarray]) -> Image.Image:
-    """Render scrub density (0–1 ratio) as a light→dark green overlay.
+def render_vegetation_tile(density_arr: Optional[np.ndarray], settings: Dict[str, Any]) -> Image.Image:
+    """Render scrub density (0–1 ratio) as a sparse→dense colour ramp.
 
     density_arr contains the normalised point ratio (scrub-band returns / total
-    returns per cell). Values below SCRUB_DENSITY_MIN_RATIO are transparent.
-    A sqrt curve spreads low-density values for better perceptual differentiation.
+    returns per cell). Values below minRatio are transparent. A sqrt curve
+    spreads low-density values for better perceptual differentiation.
+
+    Sparse/dense colours and alpha endpoints come from `settings.vegetation`.
     """
     img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
     if density_arr is None:
         return img
 
-    mask = np.isfinite(density_arr) & (density_arr >= SCRUB_DENSITY_MIN_RATIO)
+    veg = settings.get("vegetation", {})
+    min_ratio = float(veg.get("minRatio", SCRUB_DENSITY_MIN_RATIO))
+    max_ratio = float(veg.get("maxRatio", SCRUB_DENSITY_MAX_RATIO))
+    sparse_r, sparse_g, sparse_b, _ = _parse_rgba_hex(veg.get("sparseColour", VEGETATION_DEFAULTS["sparseColour"]))
+    dense_r,  dense_g,  dense_b,  _ = _parse_rgba_hex(veg.get("denseColour",  VEGETATION_DEFAULTS["denseColour"]))
+    alpha_min = float(veg.get("alphaMin", VEGETATION_DEFAULTS["alphaMin"]))
+    alpha_max = float(veg.get("alphaMax", VEGETATION_DEFAULTS["alphaMax"]))
+
+    mask = np.isfinite(density_arr) & (density_arr >= min_ratio)
     if not mask.any():
         return img
 
-    # Map [MIN_RATIO, MAX_RATIO] → [0, 1] then apply sqrt for perceptual spread
-    t = np.sqrt(np.clip(
-        (density_arr - SCRUB_DENSITY_MIN_RATIO) / (SCRUB_DENSITY_MAX_RATIO - SCRUB_DENSITY_MIN_RATIO),
-        0, 1,
-    ))
+    span = max(max_ratio - min_ratio, 1e-6)
+    t = np.sqrt(np.clip((density_arr - min_ratio) / span, 0, 1))
 
     rgba = np.zeros((TILE_SIZE, TILE_SIZE, 4), dtype=np.uint8)
-    # Colour gradient: sparse = light green (144,238,144), dense = dark green (0,100,0)
-    rgba[..., 0] = np.where(mask, (144 - t * 144).astype(np.uint8), 0)
-    rgba[..., 1] = np.where(mask, (238 - t * 138).astype(np.uint8), 0)
-    rgba[..., 2] = np.where(mask, (144 - t * 144).astype(np.uint8), 0)
-    rgba[..., 3] = np.where(mask, (60  + t * 195).astype(np.uint8), 0)
+    rgba[..., 0] = np.where(mask, (sparse_r + t * (dense_r - sparse_r)).astype(np.uint8), 0)
+    rgba[..., 1] = np.where(mask, (sparse_g + t * (dense_g - sparse_g)).astype(np.uint8), 0)
+    rgba[..., 2] = np.where(mask, (sparse_b + t * (dense_b - sparse_b)).astype(np.uint8), 0)
+    rgba[..., 3] = np.where(mask, (alpha_min + t * (alpha_max - alpha_min)).astype(np.uint8), 0)
     return Image.fromarray(rgba)
 
 
-def render_slope_tile(slope_arr: Optional[np.ndarray]) -> Image.Image:
+def render_slope_tile(slope_arr: Optional[np.ndarray], settings: Dict[str, Any]) -> Image.Image:
     img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
     if slope_arr is None:
         return img
     rgba = np.zeros((TILE_SIZE, TILE_SIZE, 4), dtype=np.uint8)
-    for lo, hi, colour in SLOPE_COLOURS:
+    bands = settings.get("slope", {}).get("bands", [])
+    for band in bands:
+        lo = float(band["fromDeg"])
+        hi = float(band["toDeg"])
+        colour = _parse_rgba_hex(band["colour"])
         m = np.isfinite(slope_arr) & (slope_arr >= lo) & (slope_arr < hi)
         rgba[m] = colour
     return Image.fromarray(rgba)
 
 
-def render_features_tile(geojson_path: Optional[str], bbox_wgs84: Tuple, zoom: int) -> Image.Image:
+def render_features_tile(
+    geojson_path: Optional[str],
+    bbox_wgs84: Tuple,
+    zoom: int,
+    settings: Dict[str, Any],
+) -> Image.Image:
     img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
     if not geojson_path or not os.path.exists(geojson_path):
         return img
@@ -1629,6 +1910,10 @@ def render_features_tile(geojson_path: Optional[str], bbox_wgs84: Tuple, zoom: i
 
     draw = ImageDraw.Draw(img)
 
+    # Merge intrinsic style metadata (geometry kind, symbol glyph, dash) with
+    # per-job overrides (enabled flag, colour, width).
+    feature_overrides = settings.get("features", {}).get("features", {})
+
     def lonlat_to_px(lon, lat):
         px = (lon - lon_min) / (lon_max - lon_min) * TILE_SIZE
         py = (lat_max - lat) / (lat_max - lat_min) * TILE_SIZE
@@ -1636,9 +1921,16 @@ def render_features_tile(geojson_path: Optional[str], bbox_wgs84: Tuple, zoom: i
 
     for feat in gj.get("features", []):
         cat = feat.get("properties", {}).get("_category")
-        style = OSM_STYLES.get(cat)
-        if not style:
+        meta = OSM_STYLE_META.get(cat)
+        override = feature_overrides.get(cat)
+        if not meta or not override or not override.get("enabled", True):
             continue
+        style = dict(meta)
+        style["colour"] = _parse_rgba_hex(override["colour"])
+        if "width_z18" in meta:
+            style["width_z18"] = float(override.get("widthZ18", meta["width_z18"]))
+        if "size_z18" in meta:
+            style["size_z18"] = float(override.get("widthZ18", meta["size_z18"]))
 
         geom = feat.get("geometry", {})
         gtype = geom.get("type")
@@ -1709,30 +2001,41 @@ def render_features_tile(geojson_path: Optional[str], bbox_wgs84: Tuple, zoom: i
     return img
 
 
-def render_contours_tile(contour_paths: dict, bbox_wgs84: Tuple, zoom: int) -> Image.Image:
+def render_contours_tile(
+    contour_paths: dict,
+    bbox_wgs84: Tuple,
+    zoom: int,
+    settings: Dict[str, Any],
+) -> Image.Image:
     img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
     lon_min, lat_min, lon_max, lat_max = bbox_wgs84
 
-    # Determine which interval(s) to render at this zoom
-    active_interval = None
-    show_5m = False
-    for z_lo, z_hi, interval in CONTOUR_ZOOM_INTERVALS:
-        if z_lo <= zoom <= z_hi:
-            active_interval = interval
-            show_5m = (interval == 5)
-            break
-    if active_interval is None:
-        return img
+    contour_settings = settings.get("contours", {})
+    zoom_bands = contour_settings.get("zoomBands", [])
 
-    intervals_to_draw = []
-    if active_interval == 5:
-        intervals_to_draw = [5, 10, 50]
-    elif active_interval == 10:
-        intervals_to_draw = [10, 50]
-    else:
-        intervals_to_draw = [50]
+    # Determine the active zoom band — the one whose [zoomMin, zoomMax]
+    # contains the current zoom. The active interval is its primary interval.
+    active_band = None
+    for band in zoom_bands:
+        if int(band["zoomMin"]) <= zoom <= int(band["zoomMax"]):
+            active_band = band
+            break
+    if active_band is None:
+        return img
+    active_interval = float(active_band["intervalM"])
+    major_every_n = int(active_band.get("majorEveryN", 1))
+
+    # Collect all configured intervals so finer bands inherit coarser overlays
+    # (the 5 m band still wants the 10 m and 50 m lines drawn under it).
+    interval_set = sorted({float(b["intervalM"]) for b in zoom_bands}, reverse=True)
+    intervals_to_draw = [i for i in interval_set if i >= active_interval]
+
+    major_colour = _parse_rgba_hex(contour_settings.get("majorColour", "#503c28dc"))
+    minor_colour = _parse_rgba_hex(contour_settings.get("minorColour", "#785a3ca0"))
+    major_width_m = float(contour_settings.get("majorWidthM", CONTOUR_DEFAULTS["majorWidthM"]))
+    minor_width_m = float(contour_settings.get("minorWidthM", CONTOUR_DEFAULTS["minorWidthM"]))
 
     def lonlat_to_px(lon, lat):
         px = (lon - lon_min) / (lon_max - lon_min) * TILE_SIZE
@@ -1747,8 +2050,13 @@ def render_contours_tile(contour_paths: dict, bbox_wgs84: Tuple, zoom: int) -> I
     except Exception:
         font_major = font_minor = ImageFont.load_default()
 
+    # A contour at elevation E is "major" if E is a multiple of
+    # (interval * majorEveryN) at the current zoom. The geojson contains lines
+    # at the requested interval; we read elev and bucket here.
+    major_modulus = active_interval * max(major_every_n, 1)
+
     # Draw from largest interval first (so smaller sit on top)
-    for interval in sorted(intervals_to_draw, reverse=True):
+    for interval in intervals_to_draw:
         path = contour_paths.get(interval)
         if not path or not os.path.exists(path):
             continue
@@ -1757,11 +2065,10 @@ def render_contours_tile(contour_paths: dict, bbox_wgs84: Tuple, zoom: int) -> I
         except Exception:
             continue
 
-        is_major = (interval == 50)
-        colour = (80, 60, 40, 220) if is_major else (120, 90, 60, 160)
-        line_width = max(1, int((3 if is_major else 1) * zoom / 16))
-
-        label_interval = interval == 50 and active_interval != 50
+        # When this interval is coarser than the active interval (e.g. drawing
+        # the 50 m band underneath the 5 m band), treat its lines as major.
+        is_coarser = interval > active_interval
+        label_interval = is_coarser
 
         # Use 1 full tile-width of padding so cross-edge lines are always kept.
         # At z14 one tile ≈ 0.022° wide; at z18 ≈ 0.0014°. 0.05° covers all zooms.
@@ -1786,25 +2093,34 @@ def render_contours_tile(contour_paths: dict, bbox_wgs84: Tuple, zoom: int) -> I
             pts = [lonlat_to_px(c[0], c[1]) for c in coords]
             if len(pts) < 2:
                 continue
+
+            elev = feat.get("properties", {}).get("elev")
+            # Major if elevation is a multiple of (active_interval * majorEveryN).
+            # Inherited coarser-band lines (e.g. 50m drawn under the 5m band)
+            # naturally satisfy this condition without a separate override.
+            is_major = False
+            if elev is not None and major_modulus > 0:
+                m = float(elev) / major_modulus
+                is_major = abs(m - round(m)) < 1e-3
+
+            colour = major_colour if is_major else minor_colour
+            line_width = max(1, int((major_width_m if is_major else minor_width_m)
+                                    * zoom / 16 / 6))
             draw.line(pts, fill=colour, width=line_width)
 
-            if label_interval and len(pts) >= 4:
-                elev = feat.get("properties", {}).get("elev")
-                if elev is not None:
-                    # Place label at midpoint of the portion inside the tile
-                    visible_pts = [
-                        p for p, c in zip(pts, coords)
-                        if lon_min <= c[0] <= lon_max and lat_min <= c[1] <= lat_max
-                    ]
-                    if not visible_pts:
-                        visible_pts = pts
-                    mid = visible_pts[len(visible_pts) // 2]
-                    label = f"{int(elev)}m"
-                    font = font_major if is_major else font_minor
-                    # White halo for legibility
-                    for dx, dy in [(-1,-1),(1,-1),(-1,1),(1,1),(0,-1),(0,1),(-1,0),(1,0)]:
-                        draw.text((mid[0]+dx, mid[1]+dy), label, fill=(255,255,255,200), font=font)
-                    draw.text(mid, label, fill=colour, font=font)
+            if label_interval and is_major and len(pts) >= 4 and elev is not None:
+                visible_pts = [
+                    p for p, c in zip(pts, coords)
+                    if lon_min <= c[0] <= lon_max and lat_min <= c[1] <= lat_max
+                ]
+                if not visible_pts:
+                    visible_pts = pts
+                mid = visible_pts[len(visible_pts) // 2]
+                label = f"{int(elev)}m"
+                font = font_major if is_major else font_minor
+                for dx, dy in [(-1,-1),(1,-1),(-1,1),(1,1),(0,-1),(0,1),(-1,0),(1,0)]:
+                    draw.text((mid[0]+dx, mid[1]+dy), label, fill=(255,255,255,200), font=font)
+                draw.text(mid, label, fill=colour, font=font)
 
     return img
 
@@ -1825,6 +2141,7 @@ class RenderConfig:
     lat_min: float
     lon_max: float
     lat_max: float
+    settings: Dict[str, Any] = field(default_factory=_default_render_settings)
     footprint_path: Optional[str] = None
 
 
@@ -1843,18 +2160,18 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
 
     # --- Hillshade ---
     hs_arr = read_raster_window(cfg.hillshade_path, bbox_merc)
-    hs_img = render_hillshade_tile(hs_arr)
+    hs_img = render_hillshade_tile(hs_arr, cfg.settings)
 
     # --- Vegetation ---
     density_arr = read_raster_window(cfg.density_path, bbox_merc)
-    veg_img = render_vegetation_tile(density_arr)
+    veg_img = render_vegetation_tile(density_arr, cfg.settings)
 
     # --- Features ---
-    feat_img = render_features_tile(cfg.osm_geojson, bbox_wgs84, z)
+    feat_img = render_features_tile(cfg.osm_geojson, bbox_wgs84, z, cfg.settings)
 
     # --- Slope ---
     sl_arr = read_raster_window(cfg.slope_path, bbox_merc)
-    slope_img = render_slope_tile(sl_arr)
+    slope_img = render_slope_tile(sl_arr, cfg.settings)
 
     # --- Apply footprint mask to raster layers ---
     # This ensures pixels in the nodata-filled edge ring are fully transparent.
@@ -1867,7 +2184,7 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
             log.warning(f"Footprint mask failed for tile {z}/{x}/{y}: {_e}")
 
     # --- Contours ---
-    contour_img = render_contours_tile(cfg.contour_paths, bbox_wgs84, z)
+    contour_img = render_contours_tile(cfg.contour_paths, bbox_wgs84, z, cfg.settings)
 
     def img_to_png(img: Image.Image):
         """Return PNG bytes, or None if fully transparent. Uses getextrema() — no numpy needed."""
@@ -2059,13 +2376,26 @@ def main():
                         help=(
                             "Comma-separated list of layers to generate "
                             "(hillshade, vegetation, features, slope, contours, composite). "
-                            "Defaults to 'all'. 'composite' is always included."
+                            "Defaults to 'all'. 'composite' is always included. "
+                            "Per-layer `enabled` flags in --settings-json also disable layers."
+                        ))
+    parser.add_argument("--settings-json", default=None, metavar="PATH",
+                        help=(
+                            "Path to a JSON file with per-job render overrides "
+                            "(hillshade params, slope bands, vegetation colours, "
+                            "contour intervals, OSM feature toggles). Shape must "
+                            "match shared/src/topoSettings.ts TopoSettings. "
+                            "Omit to use the Default preset."
                         ))
     args = parser.parse_args()
 
     if not os.path.exists(args.elvis_zip):
         log.error(f"File not found: {args.elvis_zip}")
         sys.exit(1)
+
+    settings = load_render_settings(args.settings_json)
+    if args.settings_json:
+        log.info(f"Loaded render settings from {args.settings_json}")
 
     bench = Benchmark(enabled=args.benchmark)
     use_temp = args.work_dir is None
@@ -2118,9 +2448,10 @@ def main():
         # ── Step 3: Derive rasters ───────────────────────────────────────────
         with bench.step("Compute hillshade, slope" + (", scrub density (vegetation)" if contents.has_vegetation else "")):
             if contents.has_vegetation:
-                raster_paths = compute_rasters(dtm_filled, scrub_count_raw, below_count_raw, work_dir)
+                raster_paths = compute_rasters(dtm_filled, scrub_count_raw, below_count_raw,
+                                               work_dir, settings)
             else:
-                raster_paths = compute_rasters_no_veg(dtm_filled, work_dir)
+                raster_paths = compute_rasters_no_veg(dtm_filled, work_dir, settings)
 
         # ── Step 4: Bounding box ─────────────────────────────────────────────
         lon_min, lat_min, lon_max, lat_max = get_raster_bbox_wgs84(dtm_filled)
@@ -2129,14 +2460,22 @@ def main():
         # ── Step 5: OSM features ─────────────────────────────────────────────
         fp = footprint_path if os.path.exists(footprint_path) else None
         osm_geojson = None
-        if not args.skip_osm:
+        features_enabled = settings.get("features", {}).get("enabled", True)
+        if not args.skip_osm and features_enabled:
             with bench.step("Fetch OSM features (Overpass API)"):
                 osm_geojson = fetch_osm_features(lon_min, lat_min, lon_max, lat_max, work_dir,
-                                                  footprint_path=fp)
+                                                  footprint_path=fp, settings=settings)
 
         # ── Step 6: Contours ─────────────────────────────────────────────────
-        with bench.step("Generate contours (5 m / 10 m / 50 m)"):
-            contour_paths = generate_contours_gdal(dtm_filled, work_dir, footprint_path=fp)
+        contour_intervals = sorted({float(b["intervalM"])
+                                    for b in settings.get("contours", {}).get("zoomBands", [])})
+        contours_enabled = settings.get("contours", {}).get("enabled", True) and bool(contour_intervals)
+        contour_paths: Dict[float, str] = {}
+        if contours_enabled:
+            with bench.step(f"Generate contours ({', '.join(str(i) + 'm' for i in contour_intervals)})"):
+                contour_paths = generate_contours_gdal(dtm_filled, work_dir,
+                                                       intervals=contour_intervals,
+                                                       footprint_path=fp)
 
         # ── Step 6b: Export GeoJSON for external vector tile generation ─────
         if args.export_geojson or args.export_footprint:
@@ -2146,7 +2485,8 @@ def main():
             log.info(f"Exporting GeoJSON to {args.export_geojson} …")
             for interval, path in contour_paths.items():
                 if os.path.exists(path):
-                    shutil.copy2(path, os.path.join(args.export_geojson, f"contours_{interval}m.geojson"))
+                    pretty = int(interval) if float(interval).is_integer() else str(interval).replace(".", "p")
+                    shutil.copy2(path, os.path.join(args.export_geojson, f"contours_{pretty}m.geojson"))
             if osm_geojson and os.path.exists(osm_geojson):
                 shutil.copy2(osm_geojson, os.path.join(args.export_geojson, "osm_features.geojson"))
         if args.export_footprint and fp:
@@ -2156,14 +2496,12 @@ def main():
             log.info(f"Footprint exported to {fp_export_dir}")
 
         # ── Step 7: Tile rendering ───────────────────────────────────────────
-        active_layers = ["hillshade", "features", "slope", "contours"]
-        if contents.has_vegetation:
-            active_layers.insert(1, "vegetation")  # second from bottom
+        active_layers = active_layers_from_settings(settings, contents.has_vegetation)
 
-        # Filter to requested layers (--layers arg); "composite" is always produced
+        # CLI --layers further narrows the list (e.g. for debugging single layers).
         if args.layers and args.layers.lower() != "all":
             requested = {l.strip().lower() for l in args.layers.split(",") if l.strip()}
-            requested.discard("composite")  # always added by generate_all_tiles
+            requested.discard("composite")
             active_layers = [l for l in active_layers if l in requested]
 
         cfg = RenderConfig(
@@ -2178,6 +2516,7 @@ def main():
             lat_min=lat_min,
             lon_max=lon_max,
             lat_max=lat_max,
+            settings=settings,
             footprint_path=fp,
         )
 

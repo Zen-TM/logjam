@@ -63,6 +63,7 @@ function SidebarPanel({
   onAddCanyon,
   onOpenCanyonCsvImport,
   onOpenTopo,
+  onOpenTopoTemplates,
   onOpenGeoPdf,
   onOpenGeoPdfTemplates,
   onStartAreaSelection,
@@ -124,6 +125,7 @@ function SidebarPanel({
   onAddCanyon: () => void;
   onOpenCanyonCsvImport: () => void;
   onOpenTopo: () => void;
+  onOpenTopoTemplates: () => void;
   onOpenGeoPdf: () => void;
   onOpenGeoPdfTemplates: () => void;
   onStartAreaSelection: () => void;
@@ -205,6 +207,7 @@ function SidebarPanel({
             onAddCanyon={onAddCanyon}
             onOpenCanyonCsvImport={onOpenCanyonCsvImport}
             onOpenTopo={onOpenTopo}
+            onOpenTopoTemplates={onOpenTopoTemplates}
             onOpenGeoPdf={onOpenGeoPdf}
             onOpenGeoPdfTemplates={onOpenGeoPdfTemplates}
             onStartAreaSelection={onStartAreaSelection}

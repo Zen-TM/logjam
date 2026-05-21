@@ -308,14 +308,14 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
     log.info(f"Downloading {s3_input_key} …")
     s3.download_file(BUCKET, s3_input_key, str(zip_path))
 
-    # Run topo_mbtiles.py with all layers — layer selection is no longer
-    # a per-job choice; every completed job exposes every available layer.
+    # Run topo_mbtiles.py with all layers. The per-job render settings
+    # (layer toggles + cosmetic knobs) come from TopoJob.layer_options and are
+    # passed to the pipeline as a JSON file via --settings-json. If the column
+    # is null, the pipeline falls back to its built-in Default preset.
     output_dir = Path(tmp) / "output"
     output_dir.mkdir()
     geojson_dir = Path(tmp) / "geojson_export"
     geojson_dir.mkdir()
-    # When TOPO_KEEP_INTERMEDIATES=1, run with --work-dir so intermediate
-    # rasters survive the subprocess and can be uploaded to S3 for debugging.
     keep_intermediates = os.environ.get("TOPO_KEEP_INTERMEDIATES") == "1"
     pipeline_work_dir: Optional[Path] = None
     cmd = [
@@ -328,12 +328,25 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
         "--export-geojson",   str(geojson_dir),
         "--export-footprint", str(geojson_dir),
     ]
+
+    layer_options = job.get("layer_options")
+    if layer_options:
+        settings_path = Path(tmp) / "settings.json"
+        # psycopg2 RealDictCursor decodes jsonb as dict; if a raw string
+        # somehow comes through, json.dump still produces valid JSON.
+        with open(settings_path, "w", encoding="utf-8") as f:
+            json.dump(layer_options, f)
+        cmd.extend(["--settings-json", str(settings_path)])
+        log.info(f"Per-job render settings written to {settings_path}")
+    else:
+        log.info("No per-job render settings — using Default preset.")
+
     if keep_intermediates:
         pipeline_work_dir = Path(tmp) / "pipeline_work"
         pipeline_work_dir.mkdir()
         cmd.extend(["--work-dir", str(pipeline_work_dir)])
         log.info(f"TOPO_KEEP_INTERMEDIATES=1 — intermediates will be kept at {pipeline_work_dir}")
-    log.info("Running pipeline (layers: all) …")
+    log.info("Running pipeline …")
     result = subprocess.run(cmd)
     if result.returncode != 0:
         raise RuntimeError(

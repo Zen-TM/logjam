@@ -7,3 +7,4 @@ export * from "./elvisZip.js";
 export * from "./canyonNameMatch.js";
 export * from "./canyonGeo.js";
 export * from "./weeklyQuota.js";
+export * from "./topoSettings.js";

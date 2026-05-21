@@ -8,6 +8,7 @@ function ForgePanel({
   onAddCanyon,
   onOpenCanyonCsvImport,
   onOpenTopo,
+  onOpenTopoTemplates,
   onOpenGeoPdf,
   onOpenGeoPdfTemplates,
   onStartAreaSelection,
@@ -18,6 +19,7 @@ function ForgePanel({
   onAddCanyon: () => void;
   onOpenCanyonCsvImport: () => void;
   onOpenTopo: () => void;
+  onOpenTopoTemplates: () => void;
   onOpenGeoPdf: () => void;
   onOpenGeoPdfTemplates: () => void;
   onStartAreaSelection: () => void;
@@ -87,6 +89,12 @@ function ForgePanel({
         <span className={classes.forgeSectionLabel}>Map Tools</span>
         <button className={classes.addButton} onClick={onOpenTopo}>
           Generate LiDAR Topo
+        </button>
+        <button
+          className={classes.refreshButton}
+          onClick={onOpenTopoTemplates}
+        >
+          Topo Templates
         </button>
         <button
           className={classes.refreshButton}

@@ -1,0 +1,59 @@
+.swatchButton {
+  position: relative;
+  width: 36px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow: hidden;
+  background: transparent;
+}
+
+.swatchButton:hover {
+  border-color: var(--theme-accent);
+}
+
+.checkerboard {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(45deg, #888 25%, transparent 25%),
+    linear-gradient(-45deg, #888 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #888 75%),
+    linear-gradient(-45deg, transparent 75%, #888 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  background-color: #ccc;
+}
+
+.swatch {
+  position: absolute;
+  inset: 0;
+}
+
+.popover {
+  background: var(--theme-secondary);
+}
+
+.pickerWrap {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hexInput {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  padding: 4px 6px;
+  background: var(--theme-primary);
+  color: var(--theme-text-primary);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.hexInput:focus {
+  outline: none;
+  border-color: var(--theme-accent);
+}
