@@ -1,32 +1,56 @@
 {
-  "description": "Security headers attached to the Logjam frontend CloudFront distribution. Source of truth for the CSP rolled out via CloudFront → Policies → Response headers (policy name: logjam-frontend-security-headers). When the allowlist changes (new map tile host, new API origin, etc.), update this file AND the AWS Console policy.",
-  "rolloutStrategy": "Ship initially as Content-Security-Policy-Report-Only for ~1 week. Watch browser console + (optional) report-uri endpoint. Swap to Content-Security-Policy (enforcing) once no violations remain.",
-  "placeholders": {
-    "<API_ORIGIN>": "Production API origin, e.g. https://api.logjam.app",
-    "<FRONTEND_ORIGIN>": "Production frontend origin (used for connect-src in case of fetch back to same host)",
-    "<TOPO_CDN_ORIGIN>": "CloudFront distribution serving topo MBTiles/PMTiles",
-    "<MEDIA_CDN_ORIGIN>": "CloudFront distribution serving media (photos)",
-    "<MAPLIBRE_TILE_HOSTS>": "Space-separated list of basemap tile hosts (e.g. https://tiles.maptiler.com https://api.maptiler.com). Enumerate from frontend/src/components/map/ style sources before applying."
+  "description": "Logjam security headers — hybrid delivery. Custom CloudFront response headers policies are gated behind the AWS Business plan, so CSP ships via <meta> in the Vite production build, and HTTP-only headers (HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) come from the AWS-managed `SecurityHeadersPolicy` attached to the frontend distribution.",
+  "delivery": {
+    "csp": "Vite plugin in frontend/vite.config.ts injects <meta http-equiv=\"Content-Security-Policy\"> at build time. Source of truth for the policy string: the CSP_PROD constant in vite.config.ts.",
+    "referrerPolicy": "Both the <meta name=\"referrer\"> tag (vite plugin) AND the managed SecurityHeadersPolicy set this. Redundant is fine — same value in both places.",
+    "managedHeaders": "Managed policy `SecurityHeadersPolicy` (free, attachable on free tier) provides Strict-Transport-Security, X-Content-Type-Options, X-Frame-Options, Referrer-Policy."
   },
-  "headers": {
-    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.cloudfront.net https://*.s3.ap-southeast-2.amazonaws.com <MAPLIBRE_TILE_HOSTS>; font-src 'self' data:; connect-src 'self' <API_ORIGIN> https://cognito-idp.ap-southeast-2.amazonaws.com https://*.auth.ap-southeast-2.amazoncognito.com https://*.cloudfront.net https://*.s3.ap-southeast-2.amazonaws.com <MAPLIBRE_TILE_HOSTS>; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests",
-    "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
-    "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Permissions-Policy": "geolocation=(self), camera=(), microphone=(), payment=()"
+  "metaCspLimitations": [
+    "`frame-ancestors` cannot be set via meta — mitigated by managed policy's X-Frame-Options: SAMEORIGIN.",
+    "`report-uri` / `report-to` cannot be set via meta — no violation telemetry; rely on browser console during rollout.",
+    "Browser applies CSP only after parsing the meta tag, so any resource referenced before the meta tag is not constrained. Vite plugin injects immediately after <head> to minimise this window."
+  ],
+  "managedPolicyAttachSteps": [
+    "AWS Console → CloudFront → Distributions → E22J79PHZM2K (logjamnsw.com)",
+    "Behaviors → select default behavior → Edit",
+    "Response headers policy → dropdown → select `SecurityHeadersPolicy` (under Managed)",
+    "Save",
+    "Wait ~5 min edge propagation"
+  ],
+  "cspAllowlist": {
+    "apiOrigin": "https://api.logjamnsw.com",
+    "cognitoHosts": [
+      "https://cognito-idp.ap-southeast-2.amazonaws.com",
+      "https://*.auth.ap-southeast-2.amazoncognito.com"
+    ],
+    "awsAssetHosts": [
+      "https://*.cloudfront.net",
+      "https://*.s3.ap-southeast-2.amazonaws.com"
+    ],
+    "tileHosts": [
+      "https://tile.openstreetmap.org",
+      "https://a.tile.openstreetmap.org",
+      "https://b.tile.openstreetmap.org",
+      "https://c.tile.openstreetmap.org",
+      "https://a.tile-cyclosm.openstreetmap.fr",
+      "https://b.tile-cyclosm.openstreetmap.fr",
+      "https://c.tile-cyclosm.openstreetmap.fr",
+      "https://a.tile.opentopomap.org",
+      "https://b.tile.opentopomap.org",
+      "https://c.tile.opentopomap.org",
+      "https://demotiles.maplibre.org",
+      "https://maps.six.nsw.gov.au",
+      "https://elevation.fsdf.org.au"
+    ]
   },
-  "applySteps": [
-    "AWS Console → CloudFront → Policies → Response headers → Create policy",
-    "Name: logjam-frontend-security-headers",
-    "Add the four sibling headers above as custom headers",
-    "For initial rollout, add Content-Security-Policy as Content-Security-Policy-Report-Only",
-    "Attach policy to the frontend distribution's default behavior",
-    "Verify: curl -I https://<FRONTEND_ORIGIN>/ | grep -i content-security",
-    "After clean week, swap header name from Content-Security-Policy-Report-Only to Content-Security-Policy"
+  "verification": [
+    "Local: `cd frontend && npm run build && grep Content-Security-Policy dist/index.html` — should show meta tag.",
+    "Production: open browser DevTools console after deploy. Hit every map basemap, sign in, create a trip log, run a topo job, search friends. Any 'Refused to ...' messages indicate a missing allowlist entry.",
+    "Production headers: `curl -I https://logjamnsw.com/` should show Strict-Transport-Security, X-Content-Type-Options, X-Frame-Options, Referrer-Policy (from managed CloudFront policy)."
   ],
   "notes": [
-    "'unsafe-inline' for style-src is required by MUI/emotion's runtime style injection. Never relax script-src to 'unsafe-inline'.",
-    "geolocation=(self) is intentional — the app uses device location to place canyon trip logs.",
-    "frame-ancestors 'none' only works as a real header (not <meta http-equiv>) — hence CloudFront delivery, not index.html injection."
+    "Dev server (vite dev) intentionally has NO CSP — HMR uses inline scripts + eval which 'self' would block.",
+    "'unsafe-inline' for style-src is required by MUI/emotion runtime style injection. Never relax script-src.",
+    "If new tile providers / image hosts are added, update CSP_PROD in frontend/vite.config.ts AND the allowlist in this file."
   ]
 }
