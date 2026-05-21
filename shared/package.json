@@ -10,9 +10,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "luxon": "^3.7.2",
     "proj4": "^2.15.0"
   },
   "devDependencies": {
+    "@types/luxon": "^3.7.1",
     "@types/proj4": "^2.5.5",
     "typescript": "^5.8.3",
     "vitest": "^3.1.3"

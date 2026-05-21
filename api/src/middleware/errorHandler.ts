@@ -2,12 +2,15 @@ import { Request, Response, NextFunction } from "express";
 import { logger } from "../lib/logger";
 
 export class AppError extends Error {
+  public details?: Record<string, unknown>;
   constructor(
     public statusCode: number,
     message: string,
+    details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "AppError";
+    this.details = details;
   }
 }
 
@@ -24,7 +27,7 @@ export function errorHandler(
 
   if (err instanceof AppError) {
     reqLog.warn({ err, statusCode: err.statusCode, reqId }, "request_failed");
-    res.status(err.statusCode).json({ error: err.message, requestId: reqId });
+    res.status(err.statusCode).json({ error: err.message, requestId: reqId, ...(err.details ?? {}) });
     return;
   }
 

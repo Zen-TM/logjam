@@ -39,6 +39,9 @@ function AccountPanel() {
   const [email, setEmail] = useState<string | null>(null);
   const [storageUsedBytes, setStorageUsedBytes] = useState<number | null>(null);
   const [storageQuotaBytes, setStorageQuotaBytes] = useState<number | null>(null);
+  const [tileUsed, setTileUsed] = useState<number | null>(null);
+  const [tileQuota, setTileQuota] = useState<number | null>(null);
+  const [tileResetAt, setTileResetAt] = useState<string | null>(null);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
@@ -53,6 +56,9 @@ function AccountPanel() {
         setEmail(u.email);
         setStorageUsedBytes(u.storageUsedBytes);
         setStorageQuotaBytes(u.storageQuotaBytes);
+        setTileUsed(u.weeklyTileUsage);
+        setTileQuota(u.weeklyTileQuota);
+        setTileResetAt(u.weeklyTileResetAt);
         setNotifPrefs({
           ...DEFAULT_NOTIFICATION_PREFERENCES,
           ...(u.uiPreferences?.notifications ?? {}),
@@ -206,6 +212,24 @@ function AccountPanel() {
           />
           <span className={classes.storageLabel}>
             {formatBytes(storageUsedBytes)} of {formatBytes(storageQuotaBytes)} used
+          </span>
+        </>
+      )}
+
+      <span className={classes.sectionLabel}>LiDAR Processing</span>
+      <div className={classes.divider} />
+      {tileUsed === null || tileQuota === null ? (
+        <p className={classes.state}>Loading...</p>
+      ) : (
+        <>
+          <progress
+            className={classes.storageBar}
+            value={tileUsed}
+            max={tileQuota}
+          />
+          <span className={classes.storageLabel}>
+            {tileUsed} / {tileQuota} tiles this week
+            {tileResetAt ? ` · resets ${new Date(tileResetAt).toLocaleDateString("en-AU", { weekday: "short", month: "short", day: "numeric" })}` : ""}
           </span>
         </>
       )}

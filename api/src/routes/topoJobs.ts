@@ -16,6 +16,7 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
+import { assertCanSubmit, getWeeklyTileUsage } from "../lib/tileQuota";
 
 const router = Router();
 
@@ -39,6 +40,8 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
     const { tileCount, jobName } = req.body;
+
+    await assertCanSubmit(user, tileCount);
 
     const estimatedSeconds = tileCount ? Math.round(tileCount * 8.5) * 60 : null;
 
@@ -101,32 +104,47 @@ router.post(
     // Re-validate ZIP central directory from S3 (range-GET last 64 KB).
     // Catches bypassed clients or corrupted uploads before paying ECS spin-up cost.
     // 64 KB fits ~900 central-directory entries — sufficient for all realistic ELVIS zips.
-    {
-      const tailLen = Math.min(65536, objectSize);
-      const rangeStart = objectSize - tailLen;
-      const tail = await s3.send(
-        new GetObjectCommand({
-          Bucket: TOPO_BUCKET,
-          Key: job.s3InputKey!,
-          Range: `bytes=${rangeStart}-${objectSize - 1}`,
-        }),
+    const tailLen = Math.min(65536, objectSize);
+    const rangeStart = objectSize - tailLen;
+    const tail = await s3.send(
+      new GetObjectCommand({
+        Bucket: TOPO_BUCKET,
+        Key: job.s3InputKey!,
+        Range: `bytes=${rangeStart}-${objectSize - 1}`,
+      }),
+    );
+    const tailBytes = await tail.Body!.transformToByteArray();
+    let verifiedTileCount: number | null = null;
+    try {
+      const entries = parseZipCentralDirectory(
+        new Uint8Array(tailBytes),
+        objectSize,
       );
-      const tailBytes = await tail.Body!.transformToByteArray();
-      try {
-        const entries = parseZipCentralDirectory(
-          new Uint8Array(tailBytes),
-          objectSize,
-        );
-        classifyElvisEntries(entries);
-      } catch (e) {
-        if (e instanceof ElvisZipError) {
-          throw new AppError(400, e.message);
-        }
-        throw e;
+      const zipStats = classifyElvisEntries(entries);
+      verifiedTileCount = zipStats.tileCount || null;
+    } catch (e) {
+      if (e instanceof ElvisZipError) {
+        throw new AppError(400, e.message);
       }
+      throw e;
     }
 
-    await prisma.topoJob.update({ where: { id: jobId }, data: { status: "pending" } });
+    // Authoritative quota check against server-counted tiles from the actual ZIP.
+    // The job is still "uploading" so it won't appear in the weekly aggregate.
+    await assertCanSubmit(user, verifiedTileCount);
+
+    await prisma.topoJob.update({
+      where: { id: jobId },
+      data: {
+        status: "pending",
+        ...(verifiedTileCount !== null
+          ? {
+              tileCount: verifiedTileCount,
+              estimatedSeconds: Math.round(verifiedTileCount * 8.5) * 60,
+            }
+          : {}),
+      },
+    });
 
     // ECS RunTask owns lifecycle; status column owns retry semantics.
     if (ECS_SUBNETS.length) {

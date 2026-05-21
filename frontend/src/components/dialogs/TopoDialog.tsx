@@ -20,7 +20,7 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
-import { apiFetch } from "../../canyonUtils";
+import { apiFetch, fetchCurrentUser } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import type { TBbox } from "../map/Map";
@@ -348,8 +348,22 @@ export default function TopoDialog({
   const [validating, setValidating] = useState(false);
   const [stats, setStats] = useState<ElvisStats | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [tileUsed, setTileUsed] = useState<number | null>(null);
+  const [tileQuota, setTileQuota] = useState<number | null>(null);
+  const [tileResetAt, setTileResetAt] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    fetchCurrentUser()
+      .then((u) => {
+        setTileUsed(u.weeklyTileUsage);
+        setTileQuota(u.weeklyTileQuota);
+        setTileResetAt(u.weeklyTileResetAt);
+      })
+      .catch(() => {});
+  }, [open]);
 
   useEffect(() => {
     if (!file) {
@@ -427,6 +441,20 @@ export default function TopoDialog({
   async function handleSubmit() {
     if (!file || !stats) return;
     setError(null);
+
+    if (tileUsed !== null && tileQuota !== null && stats.tileCount) {
+      if (tileUsed + stats.tileCount > tileQuota) {
+        const remaining = Math.max(0, tileQuota - tileUsed);
+        const resetStr = tileResetAt
+          ? ` Quota resets ${new Date(tileResetAt).toLocaleDateString("en-AU", { weekday: "short", month: "short", day: "numeric" })}.`
+          : "";
+        setError(
+          `Weekly tile quota exceeded. This job needs ${stats.tileCount} tiles but only ${remaining} remain.${resetStr}`,
+        );
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const { jobId, uploadUrl } = await apiFetch<{
@@ -892,6 +920,9 @@ export default function TopoDialog({
                     ]
                   : null,
                 ["Size", formatBytes(stats.uncompressedBytes)],
+                tileUsed !== null && tileQuota !== null
+                  ? ["Weekly quota", `${tileUsed + (stats.tileCount || 0)} / ${tileQuota} after this job`]
+                  : null,
               ] as ([string, string] | null)[]
             )
               .filter((row): row is [string, string] => row !== null)
@@ -941,7 +972,14 @@ export default function TopoDialog({
           variant="contained"
           color="secondary"
           onClick={handleSubmit}
-          disabled={!file || submitting || validating || !stats || !!validationError}
+          disabled={
+            !file ||
+            submitting ||
+            validating ||
+            !stats ||
+            !!validationError ||
+            (tileUsed !== null && tileQuota !== null && !!stats?.tileCount && tileUsed + stats.tileCount > tileQuota)
+          }
         >
           {submitting ? <CircularProgress size={18} /> : "Submit"}
         </Button>

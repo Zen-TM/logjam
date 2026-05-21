@@ -14,6 +14,7 @@ import { AppError } from "../middleware/errorHandler";
 import { userPatchLimiter } from "../middleware/rateLimit";
 import { verifyEmail } from "../services/email";
 import { cognitoIdp } from "../services/awsClients";
+import { getWeeklyTileUsage } from "../lib/tileQuota";
 import { AdminGetUserCommand, UserNotFoundException } from "@aws-sdk/client-cognito-identity-provider";
 
 function shortHash(value: string): string {
@@ -174,7 +175,13 @@ router.get(
       }
     }
 
-    res.json(serializeUserForResponse(user));
+    const tileUsage = await getWeeklyTileUsage(user.id, user.weeklyTileQuota);
+    res.json({
+      ...serializeUserForResponse(user),
+      weeklyTileQuota: tileUsage.quota,
+      weeklyTileUsage: tileUsage.used,
+      weeklyTileResetAt: tileUsage.resetAt,
+    });
   },
 );
 

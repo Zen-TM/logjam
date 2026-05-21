@@ -36,6 +36,9 @@ export type TUser = {
   email: string;
   storageUsedBytes: number;
   storageQuotaBytes: number;
+  weeklyTileQuota: number;
+  weeklyTileUsage: number;
+  weeklyTileResetAt: string;
   consentedAt: string | null;
   consentVersion: string | null;
   uiPreferences?: {
