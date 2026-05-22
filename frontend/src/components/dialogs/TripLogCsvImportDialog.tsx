@@ -18,6 +18,7 @@ import {
   Autocomplete,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import type { TripLogCustomFieldDef, TripLogCustomFieldType } from "@logjam/shared";
 import { CUSTOM_FIELD_TYPES, makeCustomFieldKey, coerceFieldValue } from "@logjam/shared";
 import type { TCanyon, TTripLog } from "../../canyonUtils";
@@ -133,6 +134,8 @@ function TripLogCsvImportDialog({
 }) {
   const [stage, setStage] = useState<Stage>({ name: "select-file" });
   const [parseError, setParseError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Mapping stage mutable state
   const [assignments, setAssignments] = useState<Record<string, ColumnRole>>({});
@@ -167,9 +170,31 @@ function TripLogCsvImportDialog({
 
   // ── File select ────────────────────────────────────────────────────────────
 
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(false);
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped) handleFileSelected(dropped);
+  }
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = "";
+    await handleFileSelected(file);
+  }
+
+  async function handleFileSelected(file: File) {
     setParseError(null);
     try {
       const parsed = await parseCsv(file);
@@ -548,18 +573,41 @@ function TripLogCsvImportDialog({
             Upload a CSV file with your trip history. The importer will detect columns for canyon name,
             date, notes, and custom fields.
           </Typography>
-          <Button
-            variant="outlined"
-            component="label"
+          <Box
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
             sx={{
-              borderColor: "var(--theme-accent)",
-              color: "var(--theme-accent)",
-              alignSelf: "flex-start",
+              border: `2px dashed ${dragging ? "var(--theme-accent)" : "rgba(255,255,255,0.18)"}`,
+              borderRadius: "var(--radius-md)",
+              p: 3,
+              textAlign: "center",
+              cursor: "pointer",
+              backgroundColor: dragging
+                ? "color-mix(in srgb, var(--theme-accent) 8%, transparent)"
+                : "rgba(255,255,255,0.02)",
+              transition: "border-color var(--transition-fast), background-color var(--transition-fast)",
+              "&:hover": {
+                borderColor: "var(--theme-accent)",
+                backgroundColor: "color-mix(in srgb, var(--theme-accent) 8%, transparent)",
+              },
             }}
           >
-            Choose CSV File
-            <input type="file" accept=".csv" hidden onChange={handleFileChange} />
-          </Button>
+            <UploadFileIcon
+              sx={{ fontSize: 36, color: "var(--theme-text-muted)", mb: 0.5 }}
+            />
+            <Typography variant="body2" sx={{ color: "var(--theme-text-muted)" }}>
+              Drop CSV here, or click to browse
+            </Typography>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              hidden
+              onChange={handleFileChange}
+            />
+          </Box>
           {parseError && <ErrorBanner message={parseError} />}
         </Box>
       );

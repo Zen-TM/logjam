@@ -22,6 +22,7 @@ import {
   Tooltip,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import type { TCanyon, BulkCanyonInput, BulkCanyonRequest } from "../../canyonUtils";
 import { bulkCanyonImport } from "../../canyonUtils";
 import { parseCsv } from "../../csvImport/parseCsv";
@@ -334,6 +335,8 @@ function CanyonCsvImportDialog({
 }) {
   const [stage, setStage] = useState<Stage>({ name: "select-file" });
   const [parseError, setParseError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Mapping stage state
   const [assignments, setAssignments] = useState<Record<string, CanyonFieldRole>>({});
@@ -373,9 +376,31 @@ function CanyonCsvImportDialog({
 
   // ── File select ────────────────────────────────────────────────────────────
 
+  function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(false);
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped) void handleFileSelected(dropped);
+  }
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = "";
+    await handleFileSelected(file);
+  }
+
+  async function handleFileSelected(file: File) {
     setParseError(null);
     try {
       const parsed = await parseCsv(file);
@@ -710,14 +735,41 @@ function CanyonCsvImportDialog({
             <Typography variant="body2" sx={{ color: "var(--theme-text-muted)" }}>
               Upload a CSV file with canyon data. You'll map columns to fields in the next step.
             </Typography>
-            <Button
-              variant="outlined"
-              component="label"
-              sx={{ color: "var(--theme-text-primary)", borderColor: "var(--theme-accent)" }}
+            <Box
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              sx={{
+                border: `2px dashed ${dragging ? "var(--theme-accent)" : "rgba(255,255,255,0.18)"}`,
+                borderRadius: "var(--radius-md)",
+                p: 3,
+                textAlign: "center",
+                cursor: "pointer",
+                backgroundColor: dragging
+                  ? "color-mix(in srgb, var(--theme-accent) 8%, transparent)"
+                  : "rgba(255,255,255,0.02)",
+                transition: "border-color var(--transition-fast), background-color var(--transition-fast)",
+                "&:hover": {
+                  borderColor: "var(--theme-accent)",
+                  backgroundColor: "color-mix(in srgb, var(--theme-accent) 8%, transparent)",
+                },
+              }}
             >
-              Choose CSV file
-              <input type="file" accept=".csv" hidden onChange={handleFileChange} />
-            </Button>
+              <UploadFileIcon
+                sx={{ fontSize: 36, color: "var(--theme-text-muted)", mb: 0.5 }}
+              />
+              <Typography variant="body2" sx={{ color: "var(--theme-text-muted)" }}>
+                Drop CSV here, or click to browse
+              </Typography>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                hidden
+                onChange={handleFileChange}
+              />
+            </Box>
             {parseError && <ErrorBanner message={parseError} />}
           </Box>
         </DialogContent>
