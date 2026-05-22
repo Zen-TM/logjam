@@ -16,3 +16,12 @@ export async function assertHasStorageQuota(userId: string) {
     throw new AppError(507, "Storage quota exceeded", { used: used.toString(), quota: quota.toString() });
   }
 }
+
+export async function decrementStorageUsed(userId: string, bytes: bigint): Promise<void> {
+  if (bytes <= 0n) return;
+  await prisma.$executeRaw`
+    UPDATE users
+    SET storage_used_bytes = GREATEST(0, storage_used_bytes - ${bytes})
+    WHERE id = ${userId}
+  `;
+}

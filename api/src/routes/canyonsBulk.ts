@@ -3,6 +3,13 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
+import { getEnv } from "../lib/env";
+import { deleteS3Keys } from "../lib/s3Cleanup";
+import { decrementStorageUsed } from "../lib/storageQuota";
+
+const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
+
+const BULK_DELETE_LIMIT = 500;
 
 const router = Router();
 
@@ -199,6 +206,74 @@ router.post(
     }
 
     throw new AppError(400, "mode must be 'create' or 'replace'");
+  },
+);
+
+// POST /canyons/bulk/delete — bulk delete canyons by ID (owner only)
+router.post(
+  "/delete",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await prisma.user.findUnique({
+      where: { cognitoId: req.user!.sub },
+    });
+    if (!user) throw new AppError(404, "User not found");
+
+    const { ids } = req.body as { ids: unknown };
+    if (!Array.isArray(ids) || ids.length === 0) {
+      throw new AppError(400, "ids array is required");
+    }
+    if (ids.length > BULK_DELETE_LIMIT) {
+      throw new AppError(400, `Cannot delete more than ${BULK_DELETE_LIMIT} canyons at once`);
+    }
+
+    const owned = await prisma.canyon.findMany({
+      where: { id: { in: ids as string[] }, ownerId: user.id },
+      select: { id: true },
+    });
+    const ownedIds = owned.map((c) => c.id);
+    if (ownedIds.length === 0) {
+      res.json({ deletedIds: [] });
+      return;
+    }
+
+    const tripIds = (
+      await prisma.tripLog.findMany({
+        where: { canyonId: { in: ownedIds } },
+        select: { id: true },
+      })
+    ).map((t) => t.id);
+
+    const media = await prisma.media.findMany({
+      where: {
+        OR: [
+          { linkedType: "tripLog", linkedId: { in: tripIds } },
+          { linkedType: "canyon", linkedId: { in: ownedIds } },
+        ],
+      },
+      select: { s3KeyDisplay: true, s3KeyThumbnail: true, fileSizeBytes: true },
+    });
+
+    await prisma.$transaction([
+      prisma.media.deleteMany({
+        where: { linkedType: "tripLog", linkedId: { in: tripIds } },
+      }),
+      prisma.media.deleteMany({
+        where: { linkedType: "canyon", linkedId: { in: ownedIds } },
+      }),
+      prisma.tripLog.deleteMany({ where: { canyonId: { in: ownedIds } } }),
+      prisma.canyonShare.deleteMany({ where: { canyonId: { in: ownedIds } } }),
+      prisma.canyon.deleteMany({ where: { id: { in: ownedIds } } }),
+    ]);
+
+    const s3Keys = media.flatMap((m) =>
+      [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
+    );
+    const totalBytes = media.reduce((sum, m) => sum + (m.fileSizeBytes ?? 0n), 0n);
+    await deleteS3Keys(MEDIA_BUCKET, s3Keys);
+    await decrementStorageUsed(user.id, totalBytes);
+
+    res.json({ deletedIds: ownedIds });
   },
 );
 

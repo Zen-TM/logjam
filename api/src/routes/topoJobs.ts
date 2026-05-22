@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
-import { HeadObjectCommand, DeleteObjectsCommand, ListObjectsV2Command, type ListObjectsV2CommandOutput } from "@aws-sdk/client-s3";
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName, TopoLayerFormat } from "../constants/topoLayers";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -18,7 +18,8 @@ import {
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { assertCanSubmit, getWeeklyTileUsage } from "../lib/tileQuota";
-import { assertHasStorageQuota } from "../lib/storageQuota";
+import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
+import { deleteS3Prefix } from "../lib/s3Cleanup";
 
 const router = Router();
 
@@ -349,31 +350,15 @@ router.delete(
     if (!job) throw new AppError(404, "Job not found");
     if (job.userId !== user.id) throw new AppError(403, "Access denied");
 
-    // List and delete all S3 objects for this job. Each prefix may exceed the
-    // 1000-key ListObjectsV2 page limit (topo output tilesets can be large),
-    // so paginate via ContinuationToken. DeleteObjects accepts up to 1000 keys
-    // per call, which matches the list page size — one delete per page.
-    const prefixes = [`inputs/${jobId}/`, `outputs/${jobId}/`, `jobs/${jobId}/`];
-    for (const prefix of prefixes) {
-      let continuationToken: string | undefined = undefined;
-      do {
-        const listed: ListObjectsV2CommandOutput = await s3.send(new ListObjectsV2Command({
-          Bucket: TOPO_BUCKET,
-          Prefix: prefix,
-          ContinuationToken: continuationToken,
-        }));
-        const keys = listed.Contents?.map((o) => ({ Key: o.Key! })) ?? [];
-        if (keys.length) {
-          await s3.send(new DeleteObjectsCommand({
-            Bucket: TOPO_BUCKET,
-            Delete: { Objects: keys },
-          }));
-        }
-        continuationToken = listed.IsTruncated ? listed.NextContinuationToken : undefined;
-      } while (continuationToken);
-    }
-
     await prisma.topoJob.delete({ where: { id: jobId } });
+
+    await Promise.all(
+      [`inputs/${jobId}/`, `outputs/${jobId}/`, `jobs/${jobId}/`].map((prefix) =>
+        deleteS3Prefix(TOPO_BUCKET, prefix),
+      ),
+    );
+    await decrementStorageUsed(job.userId, job.outputBytes ?? 0n);
+
     res.status(204).send();
   },
 );

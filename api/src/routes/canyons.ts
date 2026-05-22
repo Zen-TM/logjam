@@ -4,6 +4,11 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
 import { getParam } from "../lib/getParam";
+import { getEnv } from "../lib/env";
+import { deleteS3Keys } from "../lib/s3Cleanup";
+import { decrementStorageUsed } from "../lib/storageQuota";
+
+const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
 const router = Router();
 
@@ -291,6 +296,16 @@ router.delete(
       })
     ).map((t) => t.id);
 
+    const media = await prisma.media.findMany({
+      where: {
+        OR: [
+          { linkedType: "tripLog", linkedId: { in: tripIds } },
+          { linkedType: "canyon", linkedId: id },
+        ],
+      },
+      select: { s3KeyDisplay: true, s3KeyThumbnail: true, fileSizeBytes: true },
+    });
+
     await prisma.$transaction([
       prisma.media.deleteMany({
         where: { linkedType: "tripLog", linkedId: { in: tripIds } },
@@ -302,6 +317,13 @@ router.delete(
       prisma.canyonShare.deleteMany({ where: { canyonId: id } }),
       prisma.canyon.delete({ where: { id } }),
     ]);
+
+    const s3Keys = media.flatMap((m) =>
+      [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
+    );
+    const totalBytes = media.reduce((sum, m) => sum + (m.fileSizeBytes ?? 0n), 0n);
+    await deleteS3Keys(MEDIA_BUCKET, s3Keys);
+    await decrementStorageUsed(user.id, totalBytes);
 
     res.status(204).send();
   },

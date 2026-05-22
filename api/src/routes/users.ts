@@ -15,6 +15,11 @@ import { userPatchLimiter } from "../middleware/rateLimit";
 import { verifyEmail } from "../services/email";
 import { cognitoIdp } from "../services/awsClients";
 import { getWeeklyTileUsage } from "../lib/tileQuota";
+import { getEnv } from "../lib/env";
+import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
+
+const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
+const TOPO_BUCKET = getEnv().S3_BUCKET_TOPO ?? "";
 import { AdminGetUserCommand, UserNotFoundException } from "@aws-sdk/client-cognito-identity-provider";
 
 function shortHash(value: string): string {
@@ -345,6 +350,14 @@ router.delete(
     const user = await prisma.user.findUnique({ where: { cognitoId: sub } });
     if (!user) throw new AppError(404, "User not found");
 
+    const [topoJobs, media] = await Promise.all([
+      prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
+      prisma.media.findMany({
+        where: { ownerId: user.id },
+        select: { s3KeyDisplay: true, s3KeyThumbnail: true },
+      }),
+    ]);
+
     await prisma.$transaction([
       prisma.notification.deleteMany({ where: { userId: user.id } }),
       prisma.canyonShare.deleteMany({
@@ -358,7 +371,20 @@ router.delete(
       prisma.tripLog.deleteMany({ where: { userId: user.id } }),
       prisma.canyon.deleteMany({ where: { ownerId: user.id } }),
       prisma.geoPdfTemplate.deleteMany({ where: { userId: user.id } }),
+      prisma.topoTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.user.delete({ where: { id: user.id } }),
+    ]);
+
+    const mediaKeys = media.flatMap((m) =>
+      [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
+    );
+    await Promise.all([
+      deleteS3Keys(MEDIA_BUCKET, mediaKeys),
+      ...topoJobs.flatMap(({ id }) => [
+        deleteS3Prefix(TOPO_BUCKET, `inputs/${id}/`),
+        deleteS3Prefix(TOPO_BUCKET, `outputs/${id}/`),
+        deleteS3Prefix(TOPO_BUCKET, `jobs/${id}/`),
+      ]),
     ]);
 
     res.status(204).end();
