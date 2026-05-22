@@ -59,6 +59,7 @@ function SidebarPanel({
   baseLayers,
   activeLayerId,
   onActiveLayerChange,
+  mapView,
   // Forge
   onAddCanyon,
   onOpenCanyonCsvImport,
@@ -118,9 +119,10 @@ function SidebarPanel({
   lidarJobToggles: Record<string, boolean>;
   setLidarJobToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
   // Layers
-  baseLayers: readonly { id: string; name: string }[];
+  baseLayers: readonly { id: string; name: string; tiles: string[]; maxzoom: number }[];
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
+  mapView: { lng: number; lat: number; zoom: number } | null;
   // Forge
   onAddCanyon: () => void;
   onOpenCanyonCsvImport: () => void;
@@ -200,6 +202,7 @@ function SidebarPanel({
             layers={baseLayers}
             activeLayerId={activeLayerId}
             onActiveLayerChange={onActiveLayerChange}
+            mapView={mapView}
           />
         )}
         {activePanel === "forge" && (

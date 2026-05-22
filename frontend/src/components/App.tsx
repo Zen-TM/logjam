@@ -125,10 +125,11 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     null,
   );
 
-  // Map view state for GeoPDF extent initialization
+  // Map view state — used for GeoPDF initialisation and layer tile previews
   const [mapCenter, setMapCenter] = useState<{
     lat: number;
     lng: number;
+    zoom: number;
   } | null>(null);
 
   // GeoPDF Templates dialog
@@ -563,6 +564,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           baseLayers={BASE_LAYERS}
           activeLayerId={activeLayerId}
           onActiveLayerChange={setActiveLayerId}
+          mapView={mapCenter}
           onAddCanyon={() => setShowAdd(true)}
           onOpenCanyonCsvImport={() => setShowCanyonCsvImport(true)}
           onOpenTopo={() => setShowTopo(true)}
@@ -647,7 +649,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           setSelectingGeoPdfExtent(false);
           setShowGeoPdf(true);
         }}
-        onMapViewChange={(center) => setMapCenter(center)}
+        onMapViewChange={(center, zoom) => setMapCenter({ ...center, zoom })}
         topoFlyTarget={topoFlyTarget}
         onTopoFlyConsumed={() => setTopoFlyTarget(null)}
       />
