@@ -121,6 +121,7 @@ function TripLogCsvImportDialog({
   customFieldDefs,
   onCustomFieldDefsChange,
   onRefetchTripLogs,
+  onRefetchAnalytics,
   onPickCoords,
 }: {
   open: boolean;
@@ -130,6 +131,7 @@ function TripLogCsvImportDialog({
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
   onRefetchTripLogs: () => void;
+  onRefetchAnalytics: () => void;
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
 }) {
   const [stage, setStage] = useState<Stage>({ name: "select-file" });
@@ -495,6 +497,7 @@ function TripLogCsvImportDialog({
     if (stage.name === "importing") return;
     if (stage.name === "result") {
       onRefetchTripLogs();
+      onRefetchAnalytics();
     }
     onClose();
   }

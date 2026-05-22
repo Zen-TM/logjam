@@ -112,11 +112,13 @@ function DrilldownHeatmap({
   tripLogs,
   customFieldDefs,
   onRefetchTripLogs,
+  onRefetchAnalytics,
 }: {
   tripDates: Record<string, number>;
   tripLogs: TTripLog[];
   customFieldDefs: TripLogCustomFieldDef[];
   onRefetchTripLogs: () => void;
+  onRefetchAnalytics: () => void;
 }) {
   const currentYear = new Date().getFullYear();
   const [drilldown, setDrilldown] = useState<DrilldownLevel>({ level: "years" });
@@ -379,6 +381,7 @@ function DrilldownHeatmap({
         onDeleted={() => {
           setViewingTripLog(null);
           onRefetchTripLogs();
+          onRefetchAnalytics();
         }}
       />
     </div>
@@ -393,12 +396,14 @@ function AnalyticsPanel({
   tripLogs,
   customFieldDefs,
   onRefetchTripLogs,
+  onRefetchAnalytics,
 }: {
   analytics: TAnalytics | null;
   loading: boolean;
   tripLogs: TTripLog[];
   customFieldDefs: TripLogCustomFieldDef[];
   onRefetchTripLogs: () => void;
+  onRefetchAnalytics: () => void;
 }) {
   if (loading || !analytics) {
     return (
@@ -436,6 +441,7 @@ function AnalyticsPanel({
         tripLogs={tripLogs}
         customFieldDefs={customFieldDefs}
         onRefetchTripLogs={onRefetchTripLogs}
+        onRefetchAnalytics={onRefetchAnalytics}
       />
     </div>
   );

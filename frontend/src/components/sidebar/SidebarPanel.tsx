@@ -94,6 +94,7 @@ function SidebarPanel({
   tripLogs,
   tripLogsLoading,
   onRefetchTripLogs,
+  onRefetchAnalytics,
   customFieldDefs,
   onCustomFieldDefsChange,
   canyons,
@@ -157,6 +158,7 @@ function SidebarPanel({
   tripLogs: TTripLog[];
   tripLogsLoading: boolean;
   onRefetchTripLogs: () => void;
+  onRefetchAnalytics: () => void;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
   canyons: TCanyon[];
@@ -248,6 +250,7 @@ function SidebarPanel({
             tripLogs={tripLogs}
             customFieldDefs={customFieldDefs}
             onRefetchTripLogs={onRefetchTripLogs}
+            onRefetchAnalytics={onRefetchAnalytics}
           />
         )}
         {activePanel === "trip-logs" && (
@@ -255,6 +258,7 @@ function SidebarPanel({
             tripLogs={tripLogs}
             loading={tripLogsLoading}
             onRefetchTripLogs={onRefetchTripLogs}
+            onRefetchAnalytics={onRefetchAnalytics}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
             canyons={canyons}

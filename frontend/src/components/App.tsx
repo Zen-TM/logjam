@@ -259,11 +259,16 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     error: tripLogsError,
     refetch: refetchTripLogs,
   } = useTripLogs(authenticated);
-  const { analytics, loading: analyticsLoading, error: analyticsError } = useAnalytics(authenticated);
+  const { analytics, loading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(authenticated);
 
   const [customFieldDefs, setCustomFieldDefs] = useState<
     TripLogCustomFieldDef[]
   >([]);
+
+  // Refresh analytics whenever the analytics panel opens
+  useEffect(() => {
+    if (activePanel === "analytics" && authenticated) refetchAnalytics();
+  }, [activePanel, authenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Surface background data-load errors as toasts
   useEffect(() => { if (canyonsError) toast.error(canyonsError); }, [canyonsError, toast]);
@@ -584,6 +589,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           tripLogs={tripLogs}
           tripLogsLoading={tripLogsLoading}
           onRefetchTripLogs={refetchTripLogs}
+          onRefetchAnalytics={refetchAnalytics}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={setCustomFieldDefs}
           canyons={canyons}

@@ -11,6 +11,7 @@ function TripLogsPanel({
   tripLogs,
   loading,
   onRefetchTripLogs,
+  onRefetchAnalytics,
   customFieldDefs,
   onCustomFieldDefsChange,
   canyons,
@@ -20,6 +21,7 @@ function TripLogsPanel({
   tripLogs: TTripLog[];
   loading: boolean;
   onRefetchTripLogs: () => void;
+  onRefetchAnalytics: () => void;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
   canyons: TCanyon[];
@@ -144,6 +146,7 @@ function TripLogsPanel({
         }}
         onDeleted={() => {
           onRefetchTripLogs();
+          onRefetchAnalytics();
         }}
       />
 
@@ -159,6 +162,7 @@ function TripLogsPanel({
             setShowEditDialog(false);
             setEditingTripLog(undefined);
             onRefetchTripLogs();
+            onRefetchAnalytics();
           }}
           canyonId={editingTripLog.canyonId}
           canyonName={editingTripLog.canyon?.name ?? ""}
@@ -177,6 +181,7 @@ function TripLogsPanel({
         customFieldDefs={customFieldDefs}
         onCustomFieldDefsChange={onCustomFieldDefsChange}
         onRefetchTripLogs={onRefetchTripLogs}
+        onRefetchAnalytics={onRefetchAnalytics}
         onPickCoords={onPickCoords}
       />
     </div>
