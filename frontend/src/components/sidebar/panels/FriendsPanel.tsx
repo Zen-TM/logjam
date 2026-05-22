@@ -50,7 +50,7 @@ function FriendsPanel({
   const toast = useToast();
 
   useEffect(() => {
-    if (friendSearch.length < 2) {
+    if (friendSearch.length < 3) {
       setSearchResults([]);
       return;
     }

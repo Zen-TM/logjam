@@ -380,7 +380,9 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
 
   const handleTopoJobCreated = useCallback((job: TopoJob) => {
     setActiveTopoJobs((prev) => [job, ...prev]);
-  }, []);
+    setShowTopo(false);
+    toast.success(`Topo job submitted: "${job.name ?? "Unnamed"}"`);
+  }, [toast]);
 
   // Capture ?topoJob=<id> deep link on mount, stash in sessionStorage so it
   // survives a Cognito sign-in redirect, then clean the URL immediately.
