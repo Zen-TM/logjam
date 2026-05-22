@@ -466,6 +466,12 @@ def main():
                 if features:
                     extra["footprint"] = features[0]["geometry"]
 
+        try:
+            s3.delete_object(Bucket=BUCKET, Key=job["s3_input_key"])
+            log.info(f"Deleted input ZIP {job['s3_input_key']}")
+        except Exception as e:
+            log.warning(f"Failed to delete input ZIP {job['s3_input_key']}: {e}")
+
         update_status(conn, JOB_ID, "complete", **extra)
         if total_output_bytes > 0:
             increment_user_storage(conn, JOB_ID, total_output_bytes)
