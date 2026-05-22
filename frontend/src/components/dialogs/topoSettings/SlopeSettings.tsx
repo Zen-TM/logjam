@@ -42,8 +42,12 @@ export default function SlopeSettings({ value, onChange }: Props) {
       </p>
 
       <div className={styles.bandTable}>
-        <span className={styles.bandHeader}>From °</span>
-        <span className={styles.bandHeader}>To °</span>
+        <Tooltip title="Slope angle in degrees from horizontal. Flat ground ≈ 0–5°; steep trail ≈ 20–30°; cliff / technical terrain ≈ 45°+." placement="top" arrow>
+          <span className={styles.bandHeader}>From °</span>
+        </Tooltip>
+        <Tooltip title="Upper bound of this slope band in degrees. Must be greater than From °." placement="top" arrow>
+          <span className={styles.bandHeader}>To °</span>
+        </Tooltip>
         <span className={styles.bandHeader}>Colour</span>
         <span />
         {value.bands.map((band, idx) => (
@@ -57,14 +61,18 @@ export default function SlopeSettings({ value, onChange }: Props) {
         ))}
       </div>
 
-      <button
-        type="button"
-        className={styles.addButton}
-        onClick={addBand}
-        disabled={value.bands.length >= MAX_BANDS}
-      >
-        + Add band ({value.bands.length}/{MAX_BANDS})
-      </button>
+      <Tooltip title="Maximum 8 bands — each is a separate colour pass in the tile pipeline." placement="top" arrow>
+        <span>
+          <button
+            type="button"
+            className={styles.addButton}
+            onClick={addBand}
+            disabled={value.bands.length >= MAX_BANDS}
+          >
+            + Add band ({value.bands.length}/{MAX_BANDS})
+          </button>
+        </span>
+      </Tooltip>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   Select,
   MenuItem,
   TextField,
+  Tooltip,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import type { TBbox } from "../map/Map";
@@ -850,43 +851,64 @@ function GeoPdfDialog({
 
           {/* Lock mode + Coord mode toggles */}
           <div className={classes.toggleRow}>
-            {(["scale", "position"] as LockMode[]).map((mode) => (
+            <Tooltip title="Keeps the map scale constant when you move the extent box — the box resizes instead of stretching." placement="top" arrow>
               <button
-                key={mode}
                 className={
-                  extentState.lockMode === mode
+                  extentState.lockMode === "scale"
                     ? classes.smallButtonActive
                     : classes.smallButton
                 }
                 onClick={() =>
-                  setExtentState({ ...extentState, lockMode: mode })
+                  setExtentState({ ...extentState, lockMode: "scale" })
                 }
               >
-                Lock {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                Lock Scale
               </button>
-            ))}
+            </Tooltip>
+            <Tooltip title="Keeps the map centre fixed when you change the scale — the box expands or contracts around the centre." placement="top" arrow>
+              <button
+                className={
+                  extentState.lockMode === "position"
+                    ? classes.smallButtonActive
+                    : classes.smallButton
+                }
+                onClick={() =>
+                  setExtentState({ ...extentState, lockMode: "position" })
+                }
+              >
+                Lock Position
+              </button>
+            </Tooltip>
           </div>
           <div className={classes.toggleRow}>
-            {(
-              [
-                ["latlon", "Lat/Lon"],
-                ["enNorthing", "E/N"],
-              ] as [CoordMode, string][]
-            ).map(([mode, label]) => (
+            <Tooltip title="Decimal degrees — global standard GPS format (e.g. -33.8912, 150.1234)." placement="top" arrow>
               <button
-                key={mode}
                 className={
-                  extentState.coordMode === mode
+                  extentState.coordMode === "latlon"
                     ? classes.smallButtonActive
                     : classes.smallButton
                 }
                 onClick={() =>
-                  setExtentState(applyCoordModeChange(extentState, mode))
+                  setExtentState(applyCoordModeChange(extentState, "latlon"))
                 }
               >
-                {label}
+                Lat/Lon
               </button>
-            ))}
+            </Tooltip>
+            <Tooltip title="Easting/Northing in MGA2020 (GDA2020) — the standard for NSW topo maps and field navigation with a grid reference." placement="top" arrow>
+              <button
+                className={
+                  extentState.coordMode === "enNorthing"
+                    ? classes.smallButtonActive
+                    : classes.smallButton
+                }
+                onClick={() =>
+                  setExtentState(applyCoordModeChange(extentState, "enNorthing"))
+                }
+              >
+                E/N
+              </button>
+            </Tooltip>
           </div>
 
           {/* NSEW inputs + pivot */}
@@ -944,22 +966,24 @@ function GeoPdfDialog({
             </div>
             <div className={classes.extentCenter}>
               {/* Pivot picker */}
-              <div className={classes.pivotGrid}>
-                {PIVOT_POINTS.map((p) => (
-                  <button
-                    key={p}
-                    className={
-                      extentState.pivot === p
-                        ? classes.pivotButtonActive
-                        : classes.pivotButton
-                    }
-                    onClick={() =>
-                      setExtentState(applyPivotChange(extentState, p))
-                    }
-                    title={p}
-                  />
-                ))}
-              </div>
+              <Tooltip title="The point that stays fixed when you resize the extent or change the scale. E.g. top-left keeps the NW corner anchored." placement="top" arrow>
+                <div className={classes.pivotGrid}>
+                  {PIVOT_POINTS.map((p) => (
+                    <button
+                      key={p}
+                      className={
+                        extentState.pivot === p
+                          ? classes.pivotButtonActive
+                          : classes.pivotButton
+                      }
+                      onClick={() =>
+                        setExtentState(applyPivotChange(extentState, p))
+                      }
+                      title={p}
+                    />
+                  ))}
+                </div>
+              </Tooltip>
             </div>
             <div className={classes.extentEast}>
               <div className={classes.extentLabel}>
@@ -1010,27 +1034,29 @@ function GeoPdfDialog({
           </div>
 
           {/* Scale */}
-          <div className={classes.scaleRow}>
-            <span className={classes.scalePrefix}>1 :</span>
-            <input
-              type="number"
-              className={classes.scaleInput}
-              value={rawScale}
-              onFocus={() => {
-                focusedField.current = "scale";
-              }}
-              onChange={(e) => setRawScale(e.target.value)}
-              onBlur={() => {
-                focusedField.current = null;
-                const v = parseFloat(rawScale);
-                if (!isNaN(v) && v > 0)
-                  setExtentState((s: ExtentState) => applyScaleChange(s, v));
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-              }}
-            />
-          </div>
+          <Tooltip title="Map scale ratio. 25000 means 1 cm on the PDF = 250 m on the ground. Standard topo maps: 1:25 000 or 1:50 000." placement="top" arrow>
+            <div className={classes.scaleRow}>
+              <span className={classes.scalePrefix}>1 :</span>
+              <input
+                type="number"
+                className={classes.scaleInput}
+                value={rawScale}
+                onFocus={() => {
+                  focusedField.current = "scale";
+                }}
+                onChange={(e) => setRawScale(e.target.value)}
+                onBlur={() => {
+                  focusedField.current = null;
+                  const v = parseFloat(rawScale);
+                  if (!isNaN(v) && v > 0)
+                    setExtentState((s: ExtentState) => applyScaleChange(s, v));
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+              />
+            </div>
+          </Tooltip>
 
           {/* Select on map (hidden in template mode) */}
           {!templateMode && (

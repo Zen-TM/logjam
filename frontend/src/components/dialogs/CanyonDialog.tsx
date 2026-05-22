@@ -11,8 +11,11 @@ import {
   CircularProgress,
   IconButton,
   Typography,
+  Tooltip,
+  InputAdornment,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import type { TCanyon } from "../../canyonUtils";
 import { updateCanyon, createCanyon } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
@@ -248,6 +251,15 @@ function CanyonDialog({
             value={altNames}
             onChange={(e) => setAltNames(e.target.value)}
             size="small"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Tooltip title="Other names this canyon is known by. Used in search and for cross-referencing guidebooks." placement="top" arrow>
+                    <InfoOutlinedIcon sx={{ fontSize: "1rem", color: "var(--theme-text-muted)", cursor: "help" }} />
+                  </Tooltip>
+                </InputAdornment>
+              ),
+            }}
           />
           <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
             <TextField
@@ -257,6 +269,15 @@ function CanyonDialog({
               type="number"
               size="small"
               fullWidth
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title="WGS84 decimal degrees (standard GPS format). Stored privately — only visible to people you share this canyon with." placement="top" arrow>
+                      <InfoOutlinedIcon sx={{ fontSize: "1rem", color: "var(--theme-text-muted)", cursor: "help" }} />
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              }}
             />
             <TextField
               label="Longitude"
@@ -265,6 +286,15 @@ function CanyonDialog({
               type="number"
               size="small"
               fullWidth
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title="WGS84 decimal degrees (standard GPS format). Stored privately — only visible to people you share this canyon with." placement="top" arrow>
+                      <InfoOutlinedIcon sx={{ fontSize: "1rem", color: "var(--theme-text-muted)", cursor: "help" }} />
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              }}
             />
             <Button
               variant="contained"
@@ -280,105 +310,137 @@ function CanyonDialog({
             </Button>
           </Box>
           <Box sx={{ display: "flex", gap: 2 }}>
-            <TextField
-              label="V Grade"
-              value={vGrade}
-              onChange={(e) =>
-                setVGrade(e.target.value === "" ? "" : Number(e.target.value))
-              }
-              select
-              size="small"
-              fullWidth
-              sx={selectSx}
-              SelectProps={selectProps}
+            <Tooltip
+              title={<a href="https://ropewiki.com/French_rating" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>Vertical technical difficulty — French rating system ↗</a>}
+              placement="top"
+              arrow
             >
-              <MenuItem value="">None</MenuItem>
-              {V_GRADES.map((v) => (
-                <MenuItem key={v} value={v}>
-                  v{v}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              label="A Grade"
-              value={aGrade}
-              onChange={(e) =>
-                setAGrade(e.target.value === "" ? "" : Number(e.target.value))
-              }
-              select
-              size="small"
-              fullWidth
-              sx={selectSx}
-              SelectProps={selectProps}
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <TextField
+                  label="V Grade"
+                  value={vGrade}
+                  onChange={(e) =>
+                    setVGrade(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                  select
+                  size="small"
+                  fullWidth
+                  sx={selectSx}
+                  SelectProps={selectProps}
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {V_GRADES.map((v) => (
+                    <MenuItem key={v} value={v}>
+                      v{v}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+            </Tooltip>
+            <Tooltip
+              title={<a href="https://ropewiki.com/French_rating" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>Aquatic difficulty of water sections — French rating system ↗</a>}
+              placement="top"
+              arrow
             >
-              <MenuItem value="">None</MenuItem>
-              {A_GRADES.map((a) => (
-                <MenuItem key={a} value={a}>
-                  a{a}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              label="Commitment"
-              value={commitment}
-              onChange={(e) =>
-                setCommitment(
-                  e.target.value === "" ? "" : Number(e.target.value),
-                )
-              }
-              select
-              size="small"
-              fullWidth
-              sx={selectSx}
-              SelectProps={selectProps}
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <TextField
+                  label="A Grade"
+                  value={aGrade}
+                  onChange={(e) =>
+                    setAGrade(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                  select
+                  size="small"
+                  fullWidth
+                  sx={selectSx}
+                  SelectProps={selectProps}
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {A_GRADES.map((a) => (
+                    <MenuItem key={a} value={a}>
+                      a{a}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+            </Tooltip>
+            <Tooltip
+              title={<a href="https://ropewiki.com/French_rating" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>Difficulty of escape or retreat once committed — French rating system ↗</a>}
+              placement="top"
+              arrow
             >
-              <MenuItem value="">None</MenuItem>
-              {COMMITMENTS.map((c) => (
-                <MenuItem key={c.value} value={c.value}>
-                  {c.label}
-                </MenuItem>
-              ))}
-            </TextField>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <TextField
+                  label="Commitment"
+                  value={commitment}
+                  onChange={(e) =>
+                    setCommitment(
+                      e.target.value === "" ? "" : Number(e.target.value),
+                    )
+                  }
+                  select
+                  size="small"
+                  fullWidth
+                  sx={selectSx}
+                  SelectProps={selectProps}
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {COMMITMENTS.map((c) => (
+                    <MenuItem key={c.value} value={c.value}>
+                      {c.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+            </Tooltip>
           </Box>
           <Box sx={{ display: "flex", gap: 2 }}>
-            <TextField
-              label="Quality (1-5)"
-              value={quality}
-              onChange={(e) =>
-                setQuality(e.target.value === "" ? "" : Number(e.target.value))
-              }
-              select
-              size="small"
-              fullWidth
-              sx={selectSx}
-              SelectProps={selectProps}
-            >
-              <MenuItem value="">None</MenuItem>
-              {QUALITY_GRADES.map((q) => (
-                <MenuItem key={q} value={q}>
-                  {q}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              label="Wetsuits (1-5)"
-              value={wetsuits}
-              onChange={(e) =>
-                setWetsuits(e.target.value === "" ? "" : Number(e.target.value))
-              }
-              select
-              size="small"
-              fullWidth
-              sx={selectSx}
-              SelectProps={selectProps}
-            >
-              <MenuItem value="">None</MenuItem>
-              {WETSUIT_GRADES.map((w) => (
-                <MenuItem key={w} value={w}>
-                  {w}
-                </MenuItem>
-              ))}
-            </TextField>
+            <Tooltip title="Subjective overall quality. 1 = unremarkable; 5 = exceptional. Consider scenery, technical interest, and uniqueness." placement="top" arrow>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <TextField
+                  label="Quality (1-5)"
+                  value={quality}
+                  onChange={(e) =>
+                    setQuality(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                  select
+                  size="small"
+                  fullWidth
+                  sx={selectSx}
+                  SelectProps={selectProps}
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {QUALITY_GRADES.map((q) => (
+                    <MenuItem key={q} value={q}>
+                      {q}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+            </Tooltip>
+            <Tooltip title="Wetsuit necessity. 1 = not needed (dry or warm); 5 = essential even in summer (cold, sustained swims)." placement="top" arrow>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <TextField
+                  label="Wetsuits (1-5)"
+                  value={wetsuits}
+                  onChange={(e) =>
+                    setWetsuits(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                  select
+                  size="small"
+                  fullWidth
+                  sx={selectSx}
+                  SelectProps={selectProps}
+                >
+                  <MenuItem value="">None</MenuItem>
+                  {WETSUIT_GRADES.map((w) => (
+                    <MenuItem key={w} value={w}>
+                      {w}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+            </Tooltip>
           </Box>
           <Box sx={{ display: "flex", gap: 2 }}>
             <TextField
@@ -388,6 +450,15 @@ function CanyonDialog({
               type="number"
               size="small"
               fullWidth
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title="Number of distinct rope drops (abseils/rappels). Each pitch is a separate setup." placement="top" arrow>
+                      <InfoOutlinedIcon sx={{ fontSize: "1rem", color: "var(--theme-text-muted)", cursor: "help" }} />
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              }}
             />
             <TextField
               label="Longest Pitch (m)"
@@ -396,6 +467,15 @@ function CanyonDialog({
               type="number"
               size="small"
               fullWidth
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title="Length of the longest single abseil in metres, measured along the rope." placement="top" arrow>
+                      <InfoOutlinedIcon sx={{ fontSize: "1rem", color: "var(--theme-text-muted)", cursor: "help" }} />
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              }}
             />
             <TextField
               label="Hours"
@@ -404,6 +484,15 @@ function CanyonDialog({
               type="number"
               size="small"
               fullWidth
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title="Estimated total trip duration for an average group, car-to-car." placement="top" arrow>
+                      <InfoOutlinedIcon sx={{ fontSize: "1rem", color: "var(--theme-text-muted)", cursor: "help" }} />
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              }}
             />
           </Box>
           <TextField

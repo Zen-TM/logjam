@@ -199,7 +199,7 @@ function AccountPanel() {
         </div>
       )}
 
-      <span className={classes.sectionLabel}>Storage</span>
+      <span className={classes.sectionLabel} title="Counts media files and topo job outputs (MBTiles/PMTiles and LiDAR ZIPs). Does not count cached map tiles.">Storage</span>
       <div className={classes.divider} />
       {storageUsedBytes === null || storageQuotaBytes === null ? (
         <p className={classes.state}>Loading...</p>
@@ -216,7 +216,7 @@ function AccountPanel() {
         </>
       )}
 
-      <span className={classes.sectionLabel}>LiDAR Processing</span>
+      <span className={classes.sectionLabel} title="Weekly quota for LiDAR map tiles served to the browser. Resets on the date shown.">LiDAR Processing</span>
       <div className={classes.divider} />
       {tileUsed === null || tileQuota === null ? (
         <p className={classes.state}>Loading...</p>
