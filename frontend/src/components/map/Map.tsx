@@ -90,7 +90,7 @@ export const BASE_LAYERS = [
     tiles: [
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
     ],
-    maxzoom: 19,
+    maxzoom: 18,
     attribution: '<a href="https://maps.six.nsw.gov.au/">SIX Maps</a>',
   },
   {
@@ -99,7 +99,7 @@ export const BASE_LAYERS = [
     tiles: [
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
     ],
-    maxzoom: 20,
+    maxzoom: 18,
     attribution: '<a href="https://maps.six.nsw.gov.au/">SIX Maps</a>',
   },
 ];
@@ -772,7 +772,7 @@ function Map({
                   1.2,
                 ],
               },
-              minzoom: 12,
+              minzoom: 14,
             });
           }
           // Major contours (50m): elevation divisible by 50
@@ -807,7 +807,7 @@ function Map({
               source: srcId,
               "source-layer": "contours",
               filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
-              minzoom: 12,
+              minzoom: 14,
               layout: {
                 "text-field": ["concat", ["to-string", ["get", "elev"]], "m"],
                 "text-font": ["Open Sans Semibold"],
