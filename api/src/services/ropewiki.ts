@@ -33,8 +33,31 @@ export type RopeWikiCanyon = {
   };
 };
 
-// Snapshot stored alongside the canyon so we can detect user edits on refresh.
-// Contains the same fields as the canyon data at import time.
+// Scalar fields that RopeWiki may own on a linked canyon.
+// name/latitude/longitude are always user-owned on link (Canyon requires them).
+export type RopeWikiOwnableField =
+  | "numAbseils"
+  | "longestAbseil"
+  | "vGrade"
+  | "aGrade"
+  | "commitment"
+  | "quality"
+  | "hours";
+
+export const ROPE_WIKI_OWNABLE_FIELDS: RopeWikiOwnableField[] = [
+  "numAbseils",
+  "longestAbseil",
+  "vGrade",
+  "aGrade",
+  "commitment",
+  "quality",
+  "hours",
+];
+
+// Snapshot stored alongside the canyon to detect user edits on refresh.
+// Values are always the RopeWiki upstream values at last sync time.
+// ropeWikiOwnedFields lists scalar fields RopeWiki contributed on link.
+// "*" means all fields are RopeWiki-owned (fresh create, no pre-existing data).
 export type RopeWikiSnapshot = {
   name: string;
   latitude: number;
@@ -47,9 +70,11 @@ export type RopeWikiSnapshot = {
   quality: number | null;
   hours: number | null;
   attributes: { sources?: [string, string][] };
+  ropeWikiOwnedFields: RopeWikiOwnableField[] | "*";
 };
 
-export function snapshotFromCanyon(c: RopeWikiCanyon): RopeWikiSnapshot {
+// For canyons created fresh from RopeWiki — all fields are RopeWiki-owned.
+export function snapshotFromCreate(c: RopeWikiCanyon): RopeWikiSnapshot {
   return {
     name: c.name,
     latitude: c.latitude,
@@ -62,7 +87,38 @@ export function snapshotFromCanyon(c: RopeWikiCanyon): RopeWikiSnapshot {
     quality: c.quality,
     hours: c.hours,
     attributes: { ...c.attributes },
+    ropeWikiOwnedFields: "*",
   };
+}
+
+// For canyons linked from an existing local canyon — only null-filled fields
+// are RopeWiki-owned. The caller supplies the ownership mask (from mergeFillNulls).
+export function snapshotFromLink(
+  c: RopeWikiCanyon,
+  ropeWikiOwnedFields: RopeWikiOwnableField[],
+): RopeWikiSnapshot {
+  return {
+    name: c.name,
+    latitude: c.latitude,
+    longitude: c.longitude,
+    numAbseils: c.numAbseils,
+    longestAbseil: c.longestAbseil,
+    vGrade: c.vGrade,
+    aGrade: c.aGrade,
+    commitment: c.commitment,
+    quality: c.quality,
+    hours: c.hours,
+    attributes: { ...c.attributes },
+    ropeWikiOwnedFields,
+  };
+}
+
+export function isRopeWikiOwned(
+  snapshot: RopeWikiSnapshot,
+  field: RopeWikiOwnableField,
+): boolean {
+  if (snapshot.ropeWikiOwnedFields === "*") return true;
+  return snapshot.ropeWikiOwnedFields.includes(field);
 }
 
 function sourcesEqual(

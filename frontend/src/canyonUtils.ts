@@ -297,28 +297,6 @@ export function deleteCanyon(id: string): Promise<void> {
   return apiFetch<void>(`/canyons/${id}`, { method: "DELETE" });
 }
 
-export async function syncOzUltimateSources(canyons: TCanyon[]): Promise<boolean> {
-  const { matchOzUltimateUrl } = await import("./csvImport/ozultimate");
-  const updates = canyons.flatMap((c) => {
-    const url = matchOzUltimateUrl(c.name, c.altNames);
-    if (!url) return [];
-    const alreadySet = c.attributes.sources?.some(([, u]) => u === url) ?? false;
-    if (alreadySet) return [];
-    return [{ canyon: c, url }];
-  });
-  if (updates.length === 0) return false;
-  await Promise.all(
-    updates.map(({ canyon, url }) =>
-      updateCanyon(canyon.id, {
-        attributes: {
-          ...canyon.attributes,
-          sources: [...(canyon.attributes.sources ?? []), ["OzUltimate", url]],
-        },
-      }),
-    ),
-  );
-  return true;
-}
 
 export function useCanyons(enabled: boolean) {
   const [canyons, setCanyons] = useState<TCanyon[]>([]);

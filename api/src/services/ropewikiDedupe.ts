@@ -1,6 +1,6 @@
 import { haversineMeters, nameMatchScore, withinBbox } from "@logjam/shared";
 import type { Canyon } from "@prisma/client";
-import type { RopeWikiCanyon } from "./ropewiki";
+import type { RopeWikiCanyon, RopeWikiOwnableField } from "./ropewiki";
 
 const AUTO_LINK_DIST_M = 250;
 const REVIEW_DIST_M = 1000;
@@ -149,7 +149,23 @@ function mergeSources(
 // Merge policy: existing user data wins. RopeWiki values only fill nulls on
 // scalar fields. ropeWikiId and ropeWikiSnapshot are always set so subsequent
 // /refresh calls work. sources are always unioned (additive).
-export function mergeFillNulls(existing: Canyon, fresh: RopeWikiCanyon) {
+// Returns the merged data AND the list of fields RopeWiki contributed
+// (i.e. fields that were null on the existing canyon).
+export function mergeFillNulls(
+  existing: Canyon,
+  fresh: RopeWikiCanyon,
+): {
+  ropeWikiId: number;
+  numAbseils: number | null;
+  longestAbseil: number | null;
+  vGrade: number | null;
+  aGrade: number | null;
+  commitment: number | null;
+  quality: number | null;
+  hours: number | null;
+  attributes: object;
+  ropeWikiOwnedFields: RopeWikiOwnableField[];
+} {
   const fill = <T>(current: T | null, incoming: T | null): T | null =>
     current === null || current === undefined ? incoming : current;
   const mergedAttrs: { sources?: [string, string][] } & object = {
@@ -162,6 +178,16 @@ export function mergeFillNulls(existing: Canyon, fresh: RopeWikiCanyon) {
   );
   if (sources) mergedAttrs.sources = sources;
   else delete (mergedAttrs as { sources?: unknown }).sources;
+
+  const ropeWikiOwnedFields: RopeWikiOwnableField[] = [];
+  if (existing.numAbseils === null || existing.numAbseils === undefined) ropeWikiOwnedFields.push("numAbseils");
+  if (existing.longestAbseil === null || existing.longestAbseil === undefined) ropeWikiOwnedFields.push("longestAbseil");
+  if (existing.vGrade === null || existing.vGrade === undefined) ropeWikiOwnedFields.push("vGrade");
+  if (existing.aGrade === null || existing.aGrade === undefined) ropeWikiOwnedFields.push("aGrade");
+  if (existing.commitment === null || existing.commitment === undefined) ropeWikiOwnedFields.push("commitment");
+  if (existing.quality === null || existing.quality === undefined) ropeWikiOwnedFields.push("quality");
+  if (existing.hours === null || existing.hours === undefined) ropeWikiOwnedFields.push("hours");
+
   return {
     ropeWikiId: fresh.ropeWikiId,
     numAbseils: fill(existing.numAbseils, fresh.numAbseils),
@@ -172,5 +198,6 @@ export function mergeFillNulls(existing: Canyon, fresh: RopeWikiCanyon) {
     quality: fill(existing.quality, fresh.quality),
     hours: fill(existing.hours, fresh.hours),
     attributes: mergedAttrs,
+    ropeWikiOwnedFields,
   };
 }

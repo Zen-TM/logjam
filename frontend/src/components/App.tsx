@@ -33,7 +33,6 @@ import {
   fetchCurrentUser,
   recordConsent,
   passesFilters,
-  syncOzUltimateSources,
   apiFetch,
 } from "../canyonUtils";
 import { PENDING_CONSENT_STORAGE_KEY } from "../consent";
@@ -65,7 +64,6 @@ function App() {
   const [showAdd, setShowAdd] = useState(false);
 const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   const importChecked = useRef(false);
-  const pendingOzSync = useRef(false);
 
   // Layer visibility toggles
   const [showOwnedCanyons, setShowOwnedCanyons] = useState(true);
@@ -431,16 +429,6 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     }
   }, [canyonsLoaded, canyons.length]);
 
-  // After a Ropewiki import/refresh, sync OzUltimate source links onto matching canyons
-  useEffect(() => {
-    if (!pendingOzSync.current || !canyonsLoaded || canyons.length === 0)
-      return;
-    pendingOzSync.current = false;
-    syncOzUltimateSources(canyons).then((updated) => {
-      if (updated) refetch();
-    });
-  }, [canyons, canyonsLoaded, refetch]);
-
   // Derived values
   const allCanyons = [...canyons, ...sharedCanyons];
   const canyon = allCanyons.find((c) => c.id === selectedCanyonID);
@@ -481,7 +469,6 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         open={showImport}
         onClose={() => setShowImport(false)}
         onImported={() => {
-          pendingOzSync.current = true;
           refetch();
         }}
       />
@@ -577,7 +564,6 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           selectingArea={selectingArea}
           onCancelAreaSelection={cancelAreaSelection}
           onRefetch={() => {
-            pendingOzSync.current = true;
             refetch();
           }}
           filters={filters}

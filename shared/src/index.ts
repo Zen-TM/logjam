@@ -8,3 +8,4 @@ export * from "./canyonNameMatch.js";
 export * from "./canyonGeo.js";
 export * from "./weeklyQuota.js";
 export * from "./topoSettings.js";
+export * from "./ozUltimate.js";
