@@ -180,6 +180,14 @@ function Map({
     selectCanyonRef.current = selectCanyon;
   }, [selectCanyon]);
 
+  // True whenever any coord-pick mode is active — read by once-on-load layer
+  // handlers to suppress marker selection during picking.
+  const pickModeRef = useRef(false);
+  useEffect(() => {
+    pickModeRef.current =
+      pickingCoords || selectingArea || (selectingGeoPdfExtent ?? false);
+  }, [pickingCoords, selectingArea, selectingGeoPdfExtent]);
+
   const onMapViewChangeRef = useRef(onMapViewChange);
   useEffect(() => {
     onMapViewChangeRef.current = onMapViewChange;
@@ -307,6 +315,7 @@ function Map({
 
       // Click to select canyon
       map.on("click", "canyon-circles", (e) => {
+        if (pickModeRef.current) return;
         if (!e.features?.length) return;
         const feature = e.features[0];
         const id = feature.properties?.id as string;
@@ -319,6 +328,7 @@ function Map({
       });
 
       map.on("click", "shared-canyon-circles", (e) => {
+        if (pickModeRef.current) return;
         if (!e.features?.length) return;
         const feature = e.features[0];
         const id = feature.properties?.id as string;
@@ -331,12 +341,14 @@ function Map({
       });
 
       map.on("mouseenter", "canyon-circles", () => {
+        if (pickModeRef.current) return;
         map.getCanvas().style.cursor = "pointer";
       });
       map.on("mouseleave", "canyon-circles", () => {
         map.getCanvas().style.cursor = "";
       });
       map.on("mouseenter", "shared-canyon-circles", () => {
+        if (pickModeRef.current) return;
         map.getCanvas().style.cursor = "pointer";
       });
       map.on("mouseleave", "shared-canyon-circles", () => {
