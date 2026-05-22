@@ -70,6 +70,8 @@ function SignIn({
     }
   }
 
+  const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{8,}$/;
+
   const displayError = localError || error;
 
   async function handleSignIn(e: React.FormEvent) {
@@ -87,8 +89,8 @@ function SignIn({
       setLocalError("Passwords do not match");
       return;
     }
-    if (password.length < 8) {
-      setLocalError("Password must be at least 8 characters");
+    if (!PASSWORD_REGEX.test(password)) {
+      setLocalError("Password must be at least 8 characters and include uppercase, lowercase, number, and symbol");
       return;
     }
     if (!consented) {
@@ -127,8 +129,8 @@ function SignIn({
       setLocalError("Passwords do not match");
       return;
     }
-    if (newPassword.length < 8) {
-      setLocalError("Password must be at least 8 characters");
+    if (!PASSWORD_REGEX.test(newPassword)) {
+      setLocalError("Password must be at least 8 characters and include uppercase, lowercase, number, and symbol");
       return;
     }
     setSubmitting(true);
@@ -244,7 +246,7 @@ function SignIn({
             size="small"
             fullWidth
             required
-            helperText="At least 8 characters"
+            helperText="Min 8 characters — must include uppercase, lowercase, number, and symbol"
           />
           <TextField
             label="Confirm new password"
@@ -314,6 +316,7 @@ function SignIn({
             size="small"
             fullWidth
             required
+            helperText="Min 8 characters — must include uppercase, lowercase, number, and symbol"
           />
           <TextField
             label="Confirm password"
