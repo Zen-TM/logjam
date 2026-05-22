@@ -130,12 +130,38 @@ export function buildProposals(
   return proposals;
 }
 
+// sources are unioned by URL so linking always preserves existing entries
+// (e.g. OzUltimate) while adding the RopeWiki source.
+function mergeSources(
+  existing: [string, string][] | undefined,
+  fresh: [string, string][] | undefined,
+): [string, string][] | undefined {
+  if (!fresh?.length) return existing;
+  const merged = [...(existing ?? [])];
+  for (const [label, url] of fresh) {
+    if (!merged.some(([, u]) => u === url)) {
+      merged.push([label, url]);
+    }
+  }
+  return merged.length ? merged : undefined;
+}
+
 // Merge policy: existing user data wins. RopeWiki values only fill nulls on
 // scalar fields. ropeWikiId and ropeWikiSnapshot are always set so subsequent
-// /refresh calls work.
+// /refresh calls work. sources are always unioned (additive).
 export function mergeFillNulls(existing: Canyon, fresh: RopeWikiCanyon) {
   const fill = <T>(current: T | null, incoming: T | null): T | null =>
     current === null || current === undefined ? incoming : current;
+  const mergedAttrs: { sources?: [string, string][] } & object = {
+    ...(fresh.attributes ?? {}),
+    ...((existing.attributes as object) ?? {}),
+  };
+  const sources = mergeSources(
+    (existing.attributes as { sources?: [string, string][] } | null)?.sources,
+    fresh.attributes?.sources,
+  );
+  if (sources) mergedAttrs.sources = sources;
+  else delete (mergedAttrs as { sources?: unknown }).sources;
   return {
     ropeWikiId: fresh.ropeWikiId,
     numAbseils: fill(existing.numAbseils, fresh.numAbseils),
@@ -145,10 +171,6 @@ export function mergeFillNulls(existing: Canyon, fresh: RopeWikiCanyon) {
     commitment: fill(existing.commitment, fresh.commitment),
     quality: fill(existing.quality, fresh.quality),
     hours: fill(existing.hours, fresh.hours),
-    // attributes: shallow merge, existing wins per key
-    attributes: {
-      ...(fresh.attributes ?? {}),
-      ...((existing.attributes as object) ?? {}),
-    },
+    attributes: mergedAttrs,
   };
 }
