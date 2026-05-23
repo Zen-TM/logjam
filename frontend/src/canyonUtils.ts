@@ -679,6 +679,39 @@ export function useNotifications(enabled: boolean) {
 
 // ── Filters ───────────────────────────────────────────────────
 
+export const emptyFilters: TFilters = {
+  name: null,
+  v_grade: null,
+  a_grade: null,
+  commitment: null,
+  quality: null,
+  pitches: null,
+  longest_pitch: null,
+  hours: null,
+  wetsuits: null,
+};
+
+export function hasActiveFilters(filters: TFilters): boolean {
+  if (filters.name && filters.name.trim() !== "") return true;
+  const rangeDefaults: [keyof TFilters, [number, number]][] = [
+    ["v_grade", [1, 7]],
+    ["a_grade", [1, 7]],
+    ["commitment", [1, 6]],
+    ["quality", [1, 5]],
+    ["wetsuits", [1, 5]],
+  ];
+  for (const [key, [min, max]] of rangeDefaults) {
+    const val = filters[key] as number[] | null;
+    if (val && (val[0] !== min || val[1] !== max)) return true;
+  }
+  const thresholdKeys: (keyof TFilters)[] = ["pitches", "longest_pitch", "hours"];
+  for (const key of thresholdKeys) {
+    const val = filters[key] as ["Any" | "Less than" | "More than" | "Exactly", number] | null;
+    if (val && val[0] !== "Any") return true;
+  }
+  return false;
+}
+
 export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
   function passesSliderFilter(
     value: number | null | undefined,

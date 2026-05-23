@@ -69,6 +69,7 @@ function SidebarPanel({
   onRefetch,
   filters,
   onChangeFilters,
+  filtersAccordionSignal,
   onFlyToCanyon,
   // GeoPDFs
   onOpenGeoPdf,
@@ -141,6 +142,7 @@ function SidebarPanel({
   onRefetch: () => void;
   filters: TFilters;
   onChangeFilters: (f: TFilters) => void;
+  filtersAccordionSignal: number;
   onFlyToCanyon: (lat: number, lng: number) => void;
   // GeoPDFs
   onOpenGeoPdf: () => void;
@@ -230,6 +232,7 @@ function SidebarPanel({
             onRefetch={onRefetch}
             filters={filters}
             onChangeFilters={onChangeFilters}
+            filtersAccordionSignal={filtersAccordionSignal}
             onFlyToCanyon={onFlyToCanyon}
           />
         )}

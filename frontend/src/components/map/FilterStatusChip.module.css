@@ -1,0 +1,46 @@
+.chip {
+  position: absolute;
+  top: 10px;
+  right: 50px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  background: color-mix(in srgb, var(--theme-warning) 25%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-warning) 55%, transparent);
+  color: var(--theme-warning);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  overflow: hidden;
+}
+
+.label {
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast);
+}
+
+.label:hover {
+  background: color-mix(in srgb, var(--theme-warning) 15%, transparent);
+}
+
+.clear {
+  display: flex;
+  align-items: center;
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid color-mix(in srgb, var(--theme-warning) 40%, transparent);
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.clear:hover {
+  background: color-mix(in srgb, var(--theme-warning) 20%, transparent);
+}

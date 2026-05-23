@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
 import { Slider, Select, MenuItem } from "@mui/material";
 import classes from "./CanyonsPanel.module.css";
@@ -18,6 +18,7 @@ function CanyonsPanel({
   onRefetch,
   filters,
   onChangeFilters,
+  filtersAccordionSignal,
   onFlyToCanyon,
 }: {
   canyons: TCanyon[];
@@ -30,6 +31,7 @@ function CanyonsPanel({
   onRefetch: () => void;
   filters: TFilters;
   onChangeFilters: (f: TFilters) => void;
+  filtersAccordionSignal: number;
   onFlyToCanyon: (lat: number, lng: number) => void;
 }) {
   // Search
@@ -65,6 +67,9 @@ function CanyonsPanel({
 
   // Filters accordion
   const [filtersOpen, setFiltersOpen] = useState(false);
+  useEffect(() => {
+    if (filtersAccordionSignal > 0) setFiltersOpen(true);
+  }, [filtersAccordionSignal]);
   const [filterInputs, setFilterInputs] = useState({
     v_grade: filters.v_grade ?? [1, 7],
     a_grade: filters.a_grade ?? [1, 7],

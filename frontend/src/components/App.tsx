@@ -31,8 +31,12 @@ import {
   fetchCurrentUser,
   recordConsent,
   passesFilters,
+  hasActiveFilters,
+  emptyFilters,
   apiFetch,
 } from "../canyonUtils";
+import FilterStatusChip from "./map/FilterStatusChip";
+import FilterEmptyState from "./map/FilterEmptyState";
 import { PENDING_CONSENT_STORAGE_KEY } from "../consent";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { useAuth } from "../useAuth";
@@ -44,17 +48,8 @@ import { messageFromError } from "../errors/messageFromError";
 
 function App() {
   const toast = useToast();
-  const [filters, setFilters] = useLocalStorage<TFilters>("logjam.filters", {
-    name: null,
-    v_grade: null,
-    a_grade: null,
-    commitment: null,
-    quality: null,
-    pitches: null,
-    longest_pitch: null,
-    hours: null,
-    wetsuits: null,
-  });
+  const [filters, setFilters] = useLocalStorage<TFilters>("logjam.filters", emptyFilters);
+  const [filtersAccordionSignal, setFiltersAccordionSignal] = useState(0);
   const [selectedCanyonID, setSelectedCanyonID] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
   const [activeLayerId, setActiveLayerId] = useLocalStorage("logjam.activeLayerId", BASE_LAYERS[0].id);
@@ -463,6 +458,13 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
 
   // Derived values
   const allCanyons = [...canyons, ...sharedCanyons];
+  const filteredCanyons = useMemo(
+    () => allCanyons.filter((c) => passesFilters(c, filters)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [canyons, sharedCanyons, filters],
+  );
+  const filtersActive = hasActiveFilters(filters);
+  const clearFilters = () => setFilters(emptyFilters);
   const canyon = allCanyons.find((c) => c.id === selectedCanyonID);
   const ownedCanyonIds = new Set(canyons.map((c) => c.id));
   const isOwnedCanyon = canyon != null && ownedCanyonIds.has(canyon.id);
@@ -592,6 +594,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           onRefetch={refetch}
           filters={filters}
           onChangeFilters={setFilters}
+          filtersAccordionSignal={filtersAccordionSignal}
           onFlyToCanyon={(lat, lng) => setFlyToCanyon({ lat, lng })}
           onOpenGeoPdf={() => {
             setEditingGeoPdfTemplate(undefined);
@@ -711,18 +714,29 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           <Button
             variant="contained"
             size="small"
-            disabled={!Object.values(filters).some((v) => v !== null)}
+            disabled={!filtersActive}
             onClick={() =>
-              handleAreaSelected(
-                allCanyons
-                  .filter((c) => passesFilters(c, filters))
-                  .map((c) => c.id),
-              )
+              handleAreaSelected(filteredCanyons.map((c) => c.id))
             }
           >
             Select All Filtered
           </Button>
         </div>
+      )}
+
+      {filtersActive && !dimUI && (
+        <FilterStatusChip
+          filteredCount={filteredCanyons.length}
+          totalCount={allCanyons.length}
+          onOpenFilters={() => {
+            setActivePanel("canyons");
+            setFiltersAccordionSignal((n) => n + 1);
+          }}
+          onClearFilters={clearFilters}
+        />
+      )}
+      {filtersActive && !dimUI && filteredCanyons.length === 0 && (
+        <FilterEmptyState onClearFilters={clearFilters} />
       )}
 
       {/* Canyon CSV import dialog */}
