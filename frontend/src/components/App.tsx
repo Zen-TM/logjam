@@ -36,6 +36,7 @@ import {
 import { PENDING_CONSENT_STORAGE_KEY } from "../consent";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { useAuth } from "../useAuth";
+import { useLocalStorage } from "../useLocalStorage";
 import { Button } from "@mui/material";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
@@ -43,7 +44,7 @@ import { messageFromError } from "../errors/messageFromError";
 
 function App() {
   const toast = useToast();
-  const [filters, setFilters] = useState<TFilters>({
+  const [filters, setFilters] = useLocalStorage<TFilters>("logjam.filters", {
     name: null,
     v_grade: null,
     a_grade: null,
@@ -56,7 +57,7 @@ function App() {
   });
   const [selectedCanyonID, setSelectedCanyonID] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
-  const [activeLayerId, setActiveLayerId] = useState(BASE_LAYERS[0].id);
+  const [activeLayerId, setActiveLayerId] = useLocalStorage("logjam.activeLayerId", BASE_LAYERS[0].id);
 
   const [showImport, setShowImport] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -64,8 +65,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   const importChecked = useRef(false);
 
   // Layer visibility toggles
-  const [showOwnedCanyons, setShowOwnedCanyons] = useState(true);
-  const [showSharedCanyons, setShowSharedCanyons] = useState(true);
+  const [showOwnedCanyons, setShowOwnedCanyons] = useLocalStorage("logjam.showOwnedCanyons", true);
+  const [showSharedCanyons, setShowSharedCanyons] = useLocalStorage("logjam.showSharedCanyons", true);
 
   // Coordinate picking mode for CanyonDialog
   const [pickingCoords, setPickingCoords] = useState(false);
@@ -121,12 +122,14 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     null,
   );
 
-  // Map view state — used for GeoPDF initialisation and layer tile previews
-  const [mapCenter, setMapCenter] = useState<{
+  // Map view state — persisted for session restore and used for GeoPDF initialisation
+  const [mapCenter, setMapCenter] = useLocalStorage<{
     lat: number;
     lng: number;
     zoom: number;
-  } | null>(null);
+    bearing: number;
+    pitch: number;
+  } | null>("logjam.mapView", null);
 
   // GeoPDF template editing state (undefined = normal mode, null = new template, object = edit)
   const [editingGeoPdfTemplate, setEditingGeoPdfTemplate] = useState<
@@ -144,17 +147,37 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   const [flyToCanyon, setFlyToCanyon] = useState<{ lat: number; lng: number } | null>(null);
 
   // LiDAR topo panel state — lifted so it persists across panel open/close
-  const [lidarEnabled, setLidarEnabled] = useState(false);
-  const [lidarLayerToggles, setLidarLayerToggles] = useState<
-    Record<string, boolean>
-  >(() => Object.fromEntries(TOPO_LAYERS.map((l) => [l.name, true])));
-  const [lidarLayerOrder, setLidarLayerOrder] = useState<string[]>(
-    TOPO_LAYERS.map((l) => l.name),
+  const [lidarEnabled, setLidarEnabled] = useLocalStorage("logjam.lidarEnabled", false);
+
+  const currentLayerNames: string[] = TOPO_LAYERS.map((l) => l.name);
+  const defaultLayerToggles = Object.fromEntries(currentLayerNames.map((n) => [n, true]));
+  const [rawLidarLayerToggles, setLidarLayerToggles] = useLocalStorage<Record<string, boolean>>(
+    "logjam.lidarLayerToggles",
+    defaultLayerToggles,
   );
+  // Drop unknown layers, add missing new layers as true
+  const lidarLayerToggles: Record<string, boolean> = {
+    ...defaultLayerToggles,
+    ...Object.fromEntries(
+      Object.entries(rawLidarLayerToggles).filter(([k]) => currentLayerNames.includes(k)),
+    ),
+  };
+
+  const [rawLidarLayerOrder, setLidarLayerOrder] = useLocalStorage<string[]>(
+    "logjam.lidarLayerOrder",
+    currentLayerNames,
+  );
+  // Drop unknown names, append any new layers at end
+  const lidarLayerOrder: string[] = [
+    ...rawLidarLayerOrder.filter((n) => currentLayerNames.includes(n)),
+    ...currentLayerNames.filter((n) => !rawLidarLayerOrder.includes(n)),
+  ];
+
   // Per-completed-job visibility. Newly fetched jobs default to true (visible).
-  const [lidarJobToggles, setLidarJobToggles] = useState<
-    Record<string, boolean>
-  >({});
+  const [lidarJobToggles, setLidarJobToggles] = useLocalStorage<Record<string, boolean>>(
+    "logjam.lidarJobToggles",
+    {},
+  );
 
   // Compose all (job × layer) pairs into the flat list the Map consumes.
   // Z-order: outer loop = layer (per user-chosen order), inner loop = jobs
@@ -665,7 +688,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           setSelectingGeoPdfExtent(false);
           setShowGeoPdf(true);
         }}
-        onMapViewChange={(center, zoom) => setMapCenter({ ...center, zoom })}
+        onMapViewChange={(view) => setMapCenter(view)}
+        initialView={mapCenter}
         topoFlyTarget={topoFlyTarget}
         onTopoFlyConsumed={() => setTopoFlyTarget(null)}
         flyToCanyon={flyToCanyon}

@@ -134,6 +134,7 @@ function Map({
   onGeoPdfExtentConfirmed,
   onGeoPdfExtentCancelled,
   onMapViewChange,
+  initialView,
   topoFlyTarget,
   onTopoFlyConsumed,
   flyToCanyon,
@@ -164,10 +165,20 @@ function Map({
   geoPdfInitialScale?: number;
   onGeoPdfExtentConfirmed?: (extent: TBbox, scale: number) => void;
   onGeoPdfExtentCancelled?: () => void;
-  onMapViewChange?: (
-    center: { lat: number; lng: number },
-    zoom: number,
-  ) => void;
+  onMapViewChange?: (view: {
+    lat: number;
+    lng: number;
+    zoom: number;
+    bearing: number;
+    pitch: number;
+  }) => void;
+  initialView?: {
+    lat: number;
+    lng: number;
+    zoom: number;
+    bearing: number;
+    pitch: number;
+  } | null;
   topoFlyTarget?: { type: string; coordinates: number[][][] } | null;
   onTopoFlyConsumed?: () => void;
   flyToCanyon?: { lat: number; lng: number } | null;
@@ -209,8 +220,10 @@ function Map({
         sources: {},
         layers: [],
       },
-      center: INITIAL_CENTER,
-      zoom: INITIAL_ZOOM,
+      center: initialView ? [initialView.lng, initialView.lat] : INITIAL_CENTER,
+      zoom: initialView?.zoom ?? INITIAL_ZOOM,
+      bearing: initialView?.bearing ?? 0,
+      pitch: initialView?.pitch ?? 0,
     });
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");
@@ -394,7 +407,13 @@ function Map({
 
     const fireViewChange = () => {
       const c = map.getCenter();
-      onMapViewChangeRef.current?.({ lat: c.lat, lng: c.lng }, map.getZoom());
+      onMapViewChangeRef.current?.({
+        lat: c.lat,
+        lng: c.lng,
+        zoom: map.getZoom(),
+        bearing: map.getBearing(),
+        pitch: map.getPitch(),
+      });
     };
 
     fireViewChange(); // report initial centre immediately on load
