@@ -11,12 +11,14 @@ import type {
 } from "../../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import type { GeoJsonPolygon } from "../dialogs/TopoDialog";
+import type { TopoJob, DownloadUrl } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
+import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
 import classes from "./SidebarPanel.module.css";
-import OverlaysPanel from "./panels/OverlaysPanel";
 import LayersPanel from "./panels/LayersPanel";
-import ForgePanel from "./panels/ForgePanel";
-import FiltersPanel from "./panels/FiltersPanel";
+import CanyonsPanel from "./panels/CanyonsPanel";
+import GeoPdfsPanel from "./panels/GeoPdfsPanel";
+import LidarPanel from "./panels/LidarPanel";
 import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import CanyonDetailPanel from "./panels/CanyonDetailPanel";
@@ -25,10 +27,10 @@ import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
 
 const PANEL_TITLES: Record<PanelId, string> = {
-  overlays: "Overlays",
   layers: "Layers",
-  forge: "Forge",
-  filters: "Filters",
+  canyons: "Canyons",
+  geopdfs: "GeoPDFs",
+  lidar: "LiDAR Topos",
   "trip-logs": "Trip Logs",
   analytics: "Analytics",
   friends: "Friends",
@@ -41,7 +43,7 @@ function SidebarPanel({
   activePanel,
   onClose,
   onTopoFlyTarget,
-  // Overlays
+  // Layers (merged overlays+basemap)
   showOwnedCanyons,
   setShowOwnedCanyons,
   showSharedCanyons,
@@ -52,28 +54,37 @@ function SidebarPanel({
   setLidarLayerToggles,
   lidarLayerOrder,
   setLidarLayerOrder,
-  completedTopoJobs,
-  lidarJobToggles,
-  setLidarJobToggles,
-  // Layers
   baseLayers,
   activeLayerId,
   onActiveLayerChange,
   mapView,
-  // Forge
+  // Canyons
+  canyons,
+  sharedCanyons,
   onAddCanyon,
   onOpenCanyonCsvImport,
-  onOpenTopo,
-  onOpenTopoTemplates,
-  onOpenGeoPdf,
-  onOpenGeoPdfTemplates,
   onStartAreaSelection,
   selectingArea,
   onCancelAreaSelection,
   onRefetch,
-  // Filters
   filters,
   onChangeFilters,
+  onFlyToCanyon,
+  // GeoPDFs
+  onOpenGeoPdf,
+  onOpenGeoPdfWithTemplate,
+  onEditGeoPdfTemplate,
+  onCreateGeoPdfTemplate,
+  geoPdfTemplateRefetch,
+  // LiDAR
+  activeTopoJobs,
+  topoDownloadUrls,
+  completedTopoJobs,
+  lidarJobToggles,
+  setLidarJobToggles,
+  onOpenTopo,
+  onRefetchCompletedTopoJobs,
+  onOpenTopoWithTemplate,
   // Friends
   friends,
   friendRequests,
@@ -97,7 +108,6 @@ function SidebarPanel({
   onRefetchAnalytics,
   customFieldDefs,
   onCustomFieldDefsChange,
-  canyons,
   // Analytics
   analytics,
   analyticsLoading,
@@ -105,39 +115,48 @@ function SidebarPanel({
   activePanel: PanelId | null;
   onClose: () => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygon) => void;
-  // Overlays
+  // Layers
   showOwnedCanyons: boolean;
-  setShowOwnedCanyons: (show: boolean) => void;
+  setShowOwnedCanyons: (v: boolean) => void;
   showSharedCanyons: boolean;
-  setShowSharedCanyons: (show: boolean) => void;
+  setShowSharedCanyons: (v: boolean) => void;
   lidarEnabled: boolean;
   setLidarEnabled: (v: boolean) => void;
   lidarLayerToggles: Record<string, boolean>;
   setLidarLayerToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
   lidarLayerOrder: string[];
   setLidarLayerOrder: (v: string[] | ((prev: string[]) => string[])) => void;
-  completedTopoJobs: CompletedTopoJob[];
-  lidarJobToggles: Record<string, boolean>;
-  setLidarJobToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
-  // Layers
   baseLayers: readonly { id: string; name: string; tiles: string[]; maxzoom: number }[];
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
-  // Forge
+  // Canyons
+  canyons: TCanyon[];
+  sharedCanyons: TCanyon[];
   onAddCanyon: () => void;
   onOpenCanyonCsvImport: () => void;
-  onOpenTopo: () => void;
-  onOpenTopoTemplates: () => void;
-  onOpenGeoPdf: () => void;
-  onOpenGeoPdfTemplates: () => void;
   onStartAreaSelection: () => void;
   selectingArea: boolean;
   onCancelAreaSelection: () => void;
   onRefetch: () => void;
-  // Filters
   filters: TFilters;
-  onChangeFilters: (filters: TFilters) => void;
+  onChangeFilters: (f: TFilters) => void;
+  onFlyToCanyon: (lat: number, lng: number) => void;
+  // GeoPDFs
+  onOpenGeoPdf: () => void;
+  onOpenGeoPdfWithTemplate: (id: string) => void;
+  onEditGeoPdfTemplate: (t: GeoPdfTemplate) => void;
+  onCreateGeoPdfTemplate: () => void;
+  geoPdfTemplateRefetch: number;
+  // LiDAR
+  activeTopoJobs: TopoJob[];
+  topoDownloadUrls: Record<string, DownloadUrl[]>;
+  completedTopoJobs: CompletedTopoJob[];
+  lidarJobToggles: Record<string, boolean>;
+  setLidarJobToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
+  onOpenTopo: () => void;
+  onRefetchCompletedTopoJobs: () => void;
+  onOpenTopoWithTemplate: (templateId: string) => void;
   // Friends
   friends: TFriend[];
   friendRequests: TFriendRequest[];
@@ -161,7 +180,6 @@ function SidebarPanel({
   onRefetchAnalytics: () => void;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
-  canyons: TCanyon[];
   // Analytics
   analytics: TAnalytics | null;
   analyticsLoading: boolean;
@@ -182,8 +200,8 @@ function SidebarPanel({
         </button>
       </div>
       <div className={classes.panelBody}>
-        {activePanel === "overlays" && (
-          <OverlaysPanel
+        {activePanel === "layers" && (
+          <LayersPanel
             showOwnedCanyons={showOwnedCanyons}
             setShowOwnedCanyons={setShowOwnedCanyons}
             showSharedCanyons={showSharedCanyons}
@@ -194,35 +212,48 @@ function SidebarPanel({
             setLidarLayerToggles={setLidarLayerToggles}
             lidarLayerOrder={lidarLayerOrder}
             setLidarLayerOrder={setLidarLayerOrder}
-            completedTopoJobs={completedTopoJobs}
-            lidarJobToggles={lidarJobToggles}
-            setLidarJobToggles={setLidarJobToggles}
-          />
-        )}
-        {activePanel === "layers" && (
-          <LayersPanel
             layers={baseLayers}
             activeLayerId={activeLayerId}
             onActiveLayerChange={onActiveLayerChange}
             mapView={mapView}
           />
         )}
-        {activePanel === "forge" && (
-          <ForgePanel
+        {activePanel === "canyons" && (
+          <CanyonsPanel
+            canyons={canyons}
+            sharedCanyons={sharedCanyons}
             onAddCanyon={onAddCanyon}
             onOpenCanyonCsvImport={onOpenCanyonCsvImport}
-            onOpenTopo={onOpenTopo}
-            onOpenTopoTemplates={onOpenTopoTemplates}
-            onOpenGeoPdf={onOpenGeoPdf}
-            onOpenGeoPdfTemplates={onOpenGeoPdfTemplates}
             onStartAreaSelection={onStartAreaSelection}
-            selectingArea={selectingArea}
             onCancelAreaSelection={onCancelAreaSelection}
+            selectingArea={selectingArea}
             onRefetch={onRefetch}
+            filters={filters}
+            onChangeFilters={onChangeFilters}
+            onFlyToCanyon={onFlyToCanyon}
           />
         )}
-        {activePanel === "filters" && (
-          <FiltersPanel filters={filters} onChangeFilters={onChangeFilters} />
+        {activePanel === "geopdfs" && (
+          <GeoPdfsPanel
+            onOpenGeoPdf={onOpenGeoPdf}
+            onOpenGeoPdfWithTemplate={onOpenGeoPdfWithTemplate}
+            onEditGeoPdfTemplate={onEditGeoPdfTemplate}
+            onCreateGeoPdfTemplate={onCreateGeoPdfTemplate}
+            refetchTrigger={geoPdfTemplateRefetch}
+          />
+        )}
+        {activePanel === "lidar" && (
+          <LidarPanel
+            activeTopoJobs={activeTopoJobs}
+            topoDownloadUrls={topoDownloadUrls}
+            completedTopoJobs={completedTopoJobs}
+            lidarJobToggles={lidarJobToggles}
+            setLidarJobToggles={setLidarJobToggles}
+            onOpenTopo={onOpenTopo}
+            onTopoFlyTarget={onTopoFlyTarget}
+            onRefetchCompletedTopoJobs={onRefetchCompletedTopoJobs}
+            onOpenTopoWithTemplate={onOpenTopoWithTemplate}
+          />
         )}
         {activePanel === "friends" && (
           <FriendsPanel

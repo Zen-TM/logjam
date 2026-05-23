@@ -1,8 +1,8 @@
 import {
   Layers,
   Map,
-  Hammer,
-  SlidersHorizontal,
+  MapPin,
+  Mountain,
   BookOpen,
   BarChart3,
   Users,
@@ -13,10 +13,10 @@ import type { PanelId } from "./panels";
 import classes from "./NavRail.module.css";
 
 const TOP_ITEMS: { id: PanelId; label: string; Icon: typeof Layers }[] = [
-  { id: "overlays", label: "Overlays", Icon: Layers },
-  { id: "layers", label: "Layers", Icon: Map },
-  { id: "forge", label: "Forge", Icon: Hammer },
-  { id: "filters", label: "Filters", Icon: SlidersHorizontal },
+  { id: "layers", label: "Layers", Icon: Layers },
+  { id: "canyons", label: "Canyons", Icon: MapPin },
+  { id: "geopdfs", label: "GeoPDFs", Icon: Map },
+  { id: "lidar", label: "LiDAR", Icon: Mountain },
   { id: "trip-logs", label: "Trip Logs", Icon: BookOpen },
   { id: "analytics", label: "Analytics", Icon: BarChart3 },
   { id: "friends", label: "Friends", Icon: Users },

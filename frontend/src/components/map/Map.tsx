@@ -136,6 +136,8 @@ function Map({
   onMapViewChange,
   topoFlyTarget,
   onTopoFlyConsumed,
+  flyToCanyon,
+  onFlyToCanyonConsumed,
 }: {
   filters: TFilters;
   canyons: TCanyon[];
@@ -168,6 +170,8 @@ function Map({
   ) => void;
   topoFlyTarget?: { type: string; coordinates: number[][][] } | null;
   onTopoFlyConsumed?: () => void;
+  flyToCanyon?: { lat: number; lng: number } | null;
+  onFlyToCanyonConsumed?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -1277,6 +1281,21 @@ function Map({
     );
     onTopoFlyConsumedRef.current?.();
   }, [topoFlyTarget, mapLoaded]);
+
+  const onFlyToCanyonConsumedRef = useRef(onFlyToCanyonConsumed);
+  useEffect(() => {
+    onFlyToCanyonConsumedRef.current = onFlyToCanyonConsumed;
+  }, [onFlyToCanyonConsumed]);
+
+  useEffect(() => {
+    if (!flyToCanyon || !mapLoaded || !mapRef.current) return;
+    mapRef.current.flyTo({
+      center: [flyToCanyon.lng, flyToCanyon.lat],
+      zoom: 16,
+      duration: 1500,
+    });
+    onFlyToCanyonConsumedRef.current?.();
+  }, [flyToCanyon, mapLoaded]);
 
   // GeoPDF extent selection: ref for overlay rectangle
   const geoPdfFrameRef = useRef<HTMLDivElement>(null);

@@ -1,0 +1,278 @@
+/* CanyonsPanel — search, add, select, filters accordion, low-freq actions */
+
+.root {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+/* ── Search ─────────────────────────────────────────────────────────────────── */
+
+.searchWrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  composes: input from '@styles/shared.module.css';
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45em 0.7em;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+.searchInput::placeholder {
+  color: var(--theme-text-muted);
+  opacity: 0.6;
+}
+
+.searchResults {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--theme-secondary);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
+  border-radius: var(--radius-sm);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  z-index: 10;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.searchResultItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--theme-text-primary);
+  font-size: var(--text-sm);
+  padding: 0.45em 0.7em;
+  cursor: pointer;
+}
+
+.searchResultItem:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+}
+
+.searchEmpty {
+  padding: 0.45em 0.7em;
+  font-size: var(--text-sm);
+  color: var(--theme-text-muted);
+  opacity: 0.7;
+  background: var(--theme-secondary);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+/* ── Primary action buttons ─────────────────────────────────────────────────── */
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  flex-shrink: 0;
+}
+
+.addButton {
+  composes: btn btnFilledNeutral btnMd btnFull from '@styles/shared.module.css';
+}
+
+.selectButton {
+  composes: btn btnOutlineAccent btnFull from '@styles/shared.module.css';
+  padding: 0.5em 1em;
+}
+
+/* ── Filters accordion ──────────────────────────────────────────────────────── */
+
+.accordion {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.accordionExpanded {
+  flex: 1;
+}
+
+.accordionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  color: var(--theme-text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: 0.5em 0.7em;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  flex-shrink: 0;
+}
+
+.accordionHeader:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 5%, transparent);
+}
+
+.chevron {
+  transition: transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.accordionBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  border-top: 1px solid color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+}
+
+.accordionScroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.6em 0.7em 0;
+}
+
+.accordionFooter {
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.6em;
+  padding: 0.5em 0.7em;
+  border-top: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+}
+
+.applyButton {
+  composes: btn btnFilledNeutral btnMd from '@styles/shared.module.css';
+  flex: 1;
+}
+
+.resetButton {
+  composes: btn btnGhost btnMd from '@styles/shared.module.css';
+  flex: 1;
+}
+
+/* ── Filter form elements ───────────────────────────────────────────────────── */
+
+.section {
+  margin-bottom: 0.75em;
+}
+
+.sectionHeader {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--theme-text-muted);
+  opacity: var(--opacity-muted, 0.6);
+  margin: 0 0 0.4em 0;
+}
+
+.sliderGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+}
+
+.sliderCell {
+  min-width: 0;
+}
+
+.sliderLabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: -0.25em;
+}
+
+.sliderLabelText {
+  font-size: var(--text-sm);
+  color: var(--theme-text-primary);
+}
+
+.sliderValue {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.selectGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.selectCell {
+  min-width: 0;
+}
+
+.selectLabel {
+  font-size: var(--text-sm);
+  color: var(--theme-text-primary);
+  margin-bottom: 0.3em;
+}
+
+.selectContainer {
+  display: flex;
+  gap: 0.4em;
+  align-items: center;
+}
+
+.select {
+  flex: 1;
+  min-width: 0;
+}
+
+.numberInput {
+  composes: input from '@styles/shared.module.css';
+  width: 50%;
+  flex-shrink: 0;
+  padding: 0.3em 0.4em;
+}
+
+/* ── Footer: low-freq actions ───────────────────────────────────────────────── */
+
+.footerActions {
+  flex-shrink: 0;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.divider {
+  composes: divider from '@styles/shared.module.css';
+  margin: 0;
+}
+
+.ghostButton {
+  composes: btn btnGhost btnFull from '@styles/shared.module.css';
+  padding: 0.5em 1em;
+}
+
+.ghostButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.refreshResult {
+  font-size: var(--text-xs);
+  color: var(--theme-text-primary);
+  opacity: 0.7;
+}

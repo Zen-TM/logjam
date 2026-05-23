@@ -1,3 +1,102 @@
+/* LayersPanel — merged overlays + basemap */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.sectionLabel {
+  composes: sectionLabel from '@styles/shared.module.css';
+  padding: 0.25em 0;
+  margin-bottom: 0.3em;
+}
+
+.basemapLabel {
+  margin-top: 0.75em;
+}
+
+/* ── Canyon visibility toggles ──────────────────────────────────────────────── */
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-base);
+  padding: 0.1em 0;
+}
+
+.lidarRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-base);
+  padding: 0.1em 0;
+  border-top: 1px solid color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
+  margin-top: 0.3em;
+  padding-top: 0.4em;
+}
+
+/* ── LiDAR layer list (inline, no accordion) ────────────────────────────────── */
+
+.lidarLayers {
+  display: flex;
+  flex-direction: column;
+  padding-left: 0.5em;
+  margin-top: 0.15em;
+  margin-bottom: 0.3em;
+}
+
+.layerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  padding: 0.1em 0;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-fast);
+}
+
+.layerRow:hover {
+  background-color: color-mix(in srgb, var(--theme-text-primary) 6%, transparent);
+}
+
+.layerRowDragOver {
+  border-top: 2px solid var(--theme-bonus-1);
+}
+
+.layerRowDragging {
+  opacity: 0.4;
+}
+
+.dragSentinel {
+  height: 1.5em;
+}
+
+.dragSentinelActive {
+  border-top: 2px solid var(--theme-bonus-1);
+}
+
+.layerRowLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.dragHandle {
+  color: var(--theme-text-primary);
+  opacity: 0.4;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+}
+
+.dragHandle:hover {
+  opacity: 0.8;
+}
+
+/* ── Basemap gallery ─────────────────────────────────────────────────────────── */
+
 .gallery {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

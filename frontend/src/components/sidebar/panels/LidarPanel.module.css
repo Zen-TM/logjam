@@ -1,0 +1,276 @@
+/* LidarPanel */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+
+.sectionLabel {
+  composes: sectionLabel from '@styles/shared.module.css';
+}
+
+/* ── Active jobs section ─────────────────────────────────────────────────────── */
+
+.activeSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  padding: 0.5em 0.6em;
+  background: color-mix(in srgb, var(--theme-accent) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 30%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.activeJobRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  padding: 0.2em 0;
+}
+
+.activeJobName {
+  font-size: var(--text-sm);
+  color: var(--theme-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activeJobMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.activeJobStatus {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.activeJobEta {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.showAllButton {
+  background: none;
+  border: none;
+  color: var(--theme-accent);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  padding: 0.2em 0;
+  text-align: left;
+}
+
+.showAllButton:hover {
+  opacity: 0.8;
+}
+
+/* ── Primary action buttons ─────────────────────────────────────────────────── */
+
+.primaryButton {
+  composes: btn btnFilledNeutral btnMd btnFull from '@styles/shared.module.css';
+}
+
+.outlineButton {
+  composes: btn btnOutlineAccent btnFull from '@styles/shared.module.css';
+  padding: 0.5em 1em;
+}
+
+/* ── Accordion ───────────────────────────────────────────────────────────────── */
+
+.accordion {
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.accordionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
+  color: var(--theme-text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: 0.5em 0.7em;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+
+.accordionHeader:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 5%, transparent);
+}
+
+.chevron {
+  transition: transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.accordionBody {
+  border-top: 1px solid color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
+  display: flex;
+  flex-direction: column;
+  padding: 0.3em 0;
+}
+
+.emptyHint {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.7;
+  padding: 0.4em 0.7em;
+}
+
+/* ── Template rows ───────────────────────────────────────────────────────────── */
+
+.templateItem {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.3em 0.7em;
+  border-radius: var(--radius-sm);
+}
+
+.templateItem:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 5%, transparent);
+}
+
+.lockIcon {
+  color: var(--theme-text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.templateName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--theme-text-primary);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+}
+
+.templateName:hover {
+  color: var(--theme-accent);
+}
+
+.templateDate {
+  font-size: var(--text-xs);
+  opacity: 0.5;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Completed job rows ─────────────────────────────────────────────────────── */
+
+.jobItem {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.3em 0.5em;
+}
+
+.jobItem:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 5%, transparent);
+}
+
+.jobName {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  color: var(--theme-text-primary);
+}
+
+.jobName:hover .jobLabel {
+  color: var(--theme-accent);
+}
+
+.jobLabel {
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jobSubtitle {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.7;
+}
+
+/* ── Shared action/confirm buttons ──────────────────────────────────────────── */
+
+.actionButton {
+  padding: 0.2em 0.4em;
+  background: color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+  color: var(--theme-text-primary);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 50%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.actionButton:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+}
+
+.deleteButton {
+  composes: actionButton;
+}
+
+.deleteButton:hover {
+  border-color: var(--theme-warning);
+  color: var(--theme-warning);
+}
+
+.confirmRow {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  font-size: var(--text-xs);
+  flex-shrink: 0;
+}
+
+.confirmText {
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.confirmYes {
+  composes: actionButton;
+  border-color: var(--theme-warning);
+  color: var(--theme-warning);
+  background: color-mix(in srgb, var(--theme-warning) 12%, transparent);
+}
+
+.confirmYes:hover {
+  background: color-mix(in srgb, var(--theme-warning) 20%, transparent);
+}
+
+.confirmNo {
+  composes: actionButton;
+}

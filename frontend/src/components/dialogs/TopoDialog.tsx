@@ -349,7 +349,7 @@ export default function TopoDialog({
   downloadUrlsMap,
   onJobCreated,
   focusJobId,
-  onOpenTemplates,
+  initialTemplateId,
 }: {
   open: boolean;
   onClose: () => void;
@@ -359,7 +359,7 @@ export default function TopoDialog({
   downloadUrlsMap: Record<string, DownloadUrl[]>;
   onJobCreated: (job: TopoJob) => void;
   focusJobId?: string | null;
-  onOpenTemplates: () => void;
+  initialTemplateId?: string | null;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -391,16 +391,25 @@ export default function TopoDialog({
     try {
       const list = await apiFetch<TopoTemplate[]>("/topo-templates");
       setTemplates(list);
+      return list;
     } catch (e) {
       console.error(e);
+      return [] as TopoTemplate[];
     }
   }, []);
 
   useEffect(() => {
-    if (open) {
-      void refreshTemplates();
-    }
-  }, [open, refreshTemplates]);
+    if (!open) return;
+    refreshTemplates().then((list) => {
+      if (initialTemplateId) {
+        const t = list.find((x) => x.id === initialTemplateId);
+        if (t) {
+          setSelectedTemplateId(t.id);
+          setSettings(cloneTopoSettings(t.config));
+        }
+      }
+    });
+  }, [open, refreshTemplates, initialTemplateId]);
 
   function selectTemplate(id: string) {
     setSelectedTemplateId(id);
@@ -1048,6 +1057,14 @@ export default function TopoDialog({
             size="small"
             value={selectedTemplateId}
             onChange={(e) => selectTemplate(String(e.target.value))}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  backgroundColor: "var(--theme-primary)",
+                  color: "var(--theme-text-primary)",
+                },
+              },
+            }}
             sx={{
               minWidth: 180,
               color: "var(--theme-text-primary)",
@@ -1067,14 +1084,6 @@ export default function TopoDialog({
             sx={outlinedAccentSx}
           >
             Save as template
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={onOpenTemplates}
-            sx={outlinedAccentSx}
-          >
-            Manage templates
           </Button>
         </Box>
 

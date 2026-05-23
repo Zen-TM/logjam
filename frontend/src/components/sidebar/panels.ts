@@ -1,8 +1,8 @@
 export type PanelId =
-  | "overlays"
   | "layers"
-  | "forge"
-  | "filters"
+  | "canyons"
+  | "geopdfs"
+  | "lidar"
   | "trip-logs"
   | "analytics"
   | "friends"

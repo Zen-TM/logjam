@@ -11,9 +11,7 @@ import type {
   GeoJsonPolygon,
 } from "./dialogs/TopoDialog";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
-import GeoPdfTemplatesDialog from "./dialogs/GeoPdfTemplatesDialog";
-import type { GeoPdfTemplate } from "./dialogs/GeoPdfTemplatesDialog";
-import TopoTemplatesDialog from "./dialogs/TopoTemplatesDialog";
+import type { GeoPdfTemplate } from "./dialogs/GeoPdfDialog";
 import CanyonDialog from "./dialogs/CanyonDialog";
 import CanyonCsvImportDialog from "./dialogs/CanyonCsvImportDialog";
 import SelectedCanyonsDialog from "./dialogs/SelectedCanyonsDialog";
@@ -130,14 +128,20 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     zoom: number;
   } | null>(null);
 
-  // GeoPDF Templates dialog
-  const [showGeoPdfTemplates, setShowGeoPdfTemplates] = useState(false);
+  // GeoPDF template editing state (undefined = normal mode, null = new template, object = edit)
   const [editingGeoPdfTemplate, setEditingGeoPdfTemplate] = useState<
     GeoPdfTemplate | null | undefined
   >(undefined);
+  // ID to pre-select when opening GeoPdfDialog in normal mode
+  const [initialGeoPdfTemplateId, setInitialGeoPdfTemplateId] = useState<string | null>(null);
+  // Bumped after template save/delete to trigger panel refetch
+  const [geoPdfTemplateRefetch, setGeoPdfTemplateRefetch] = useState(0);
 
-  // Topo Templates dialog
-  const [showTopoTemplates, setShowTopoTemplates] = useState(false);
+  // Topo template: ID to pre-select when opening TopoDialog
+  const [initialTopoTemplateId, setInitialTopoTemplateId] = useState<string | null>(null);
+
+  // Canyon fly-to target
+  const [flyToCanyon, setFlyToCanyon] = useState<{ lat: number; lng: number } | null>(null);
 
   // LiDAR topo panel state — lifted so it persists across panel open/close
   const [lidarEnabled, setLidarEnabled] = useState(false);
@@ -483,6 +487,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           setShowTopo(false);
           setSelectingTopoBbox(false);
           setFocusTopoJobId(null);
+          setInitialTopoTemplateId(null);
         }}
         onSelectBbox={() => {
           setShowTopo(false);
@@ -493,17 +498,14 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         downloadUrlsMap={topoDownloadUrls}
         onJobCreated={handleTopoJobCreated}
         focusJobId={focusTopoJobId}
-        onOpenTemplates={() => setShowTopoTemplates(true)}
-      />
-      <TopoTemplatesDialog
-        open={showTopoTemplates}
-        onClose={() => setShowTopoTemplates(false)}
+        initialTemplateId={initialTopoTemplateId}
       />
       <GeoPdfDialog
         open={showGeoPdf}
         onClose={() => {
           setShowGeoPdf(false);
           setEditingGeoPdfTemplate(undefined);
+          setInitialGeoPdfTemplateId(null);
         }}
         onSelectOnMap={(aspect, paperDims, extent, scale) => {
           setGeoPdfPaperAspect(aspect);
@@ -526,17 +528,9 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         onTemplateSaved={() => {
           setEditingGeoPdfTemplate(undefined);
           setShowGeoPdf(false);
-          setShowGeoPdfTemplates(true);
+          setGeoPdfTemplateRefetch((n) => n + 1);
         }}
-      />
-      <GeoPdfTemplatesDialog
-        open={showGeoPdfTemplates}
-        onClose={() => setShowGeoPdfTemplates(false)}
-        onEditTemplate={(template) => {
-          setEditingGeoPdfTemplate(template);
-          setShowGeoPdfTemplates(false);
-          setShowGeoPdf(true);
-        }}
+        initialTemplateId={initialGeoPdfTemplateId}
       />
       <div className={dimUI ? classes.dimmed : undefined}>
         <NavRail
@@ -555,24 +549,62 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           setShowOwnedCanyons={setShowOwnedCanyons}
           showSharedCanyons={showSharedCanyons}
           setShowSharedCanyons={setShowSharedCanyons}
+          lidarEnabled={lidarEnabled}
+          setLidarEnabled={setLidarEnabled}
+          lidarLayerToggles={lidarLayerToggles}
+          setLidarLayerToggles={setLidarLayerToggles}
+          lidarLayerOrder={lidarLayerOrder}
+          setLidarLayerOrder={setLidarLayerOrder}
           baseLayers={BASE_LAYERS}
           activeLayerId={activeLayerId}
           onActiveLayerChange={setActiveLayerId}
           mapView={mapCenter}
+          canyons={canyons}
+          sharedCanyons={sharedCanyons}
           onAddCanyon={() => setShowAdd(true)}
           onOpenCanyonCsvImport={() => setShowCanyonCsvImport(true)}
-          onOpenTopo={() => setShowTopo(true)}
-          onOpenTopoTemplates={() => setShowTopoTemplates(true)}
-          onOpenGeoPdf={() => setShowGeoPdf(true)}
-          onOpenGeoPdfTemplates={() => setShowGeoPdfTemplates(true)}
           onStartAreaSelection={startAreaSelection}
           selectingArea={selectingArea}
           onCancelAreaSelection={cancelAreaSelection}
-          onRefetch={() => {
-            refetch();
-          }}
+          onRefetch={refetch}
           filters={filters}
           onChangeFilters={setFilters}
+          onFlyToCanyon={(lat, lng) => setFlyToCanyon({ lat, lng })}
+          onOpenGeoPdf={() => {
+            setEditingGeoPdfTemplate(undefined);
+            setInitialGeoPdfTemplateId(null);
+            setShowGeoPdf(true);
+          }}
+          onOpenGeoPdfWithTemplate={(id) => {
+            setEditingGeoPdfTemplate(undefined);
+            setInitialGeoPdfTemplateId(id);
+            setShowGeoPdf(true);
+          }}
+          onEditGeoPdfTemplate={(t) => {
+            setEditingGeoPdfTemplate(t);
+            setInitialGeoPdfTemplateId(null);
+            setShowGeoPdf(true);
+          }}
+          onCreateGeoPdfTemplate={() => {
+            setEditingGeoPdfTemplate(null);
+            setInitialGeoPdfTemplateId(null);
+            setShowGeoPdf(true);
+          }}
+          geoPdfTemplateRefetch={geoPdfTemplateRefetch}
+          activeTopoJobs={activeTopoJobs}
+          topoDownloadUrls={topoDownloadUrls}
+          completedTopoJobs={completedTopoJobs}
+          lidarJobToggles={lidarJobToggles}
+          setLidarJobToggles={setLidarJobToggles}
+          onOpenTopo={() => {
+            setInitialTopoTemplateId(null);
+            setShowTopo(true);
+          }}
+          onRefetchCompletedTopoJobs={refetchCompletedTopoJobs}
+          onOpenTopoWithTemplate={(templateId) => {
+            setInitialTopoTemplateId(templateId);
+            setShowTopo(true);
+          }}
           friends={friends}
           friendRequests={friendRequests}
           onRefetchFriends={refetchFriends}
@@ -592,18 +624,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           onRefetchAnalytics={refetchAnalytics}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={setCustomFieldDefs}
-          canyons={canyons}
           analytics={analytics}
           analyticsLoading={analyticsLoading}
-          lidarEnabled={lidarEnabled}
-          setLidarEnabled={setLidarEnabled}
-          lidarLayerToggles={lidarLayerToggles}
-          setLidarLayerToggles={setLidarLayerToggles}
-          lidarLayerOrder={lidarLayerOrder}
-          setLidarLayerOrder={setLidarLayerOrder}
-          completedTopoJobs={completedTopoJobs}
-          lidarJobToggles={lidarJobToggles}
-          setLidarJobToggles={setLidarJobToggles}
         />
       </div>
       <Map
@@ -646,6 +668,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         onMapViewChange={(center, zoom) => setMapCenter({ ...center, zoom })}
         topoFlyTarget={topoFlyTarget}
         onTopoFlyConsumed={() => setTopoFlyTarget(null)}
+        flyToCanyon={flyToCanyon}
+        onFlyToCanyonConsumed={() => setFlyToCanyon(null)}
       />
 
       {selectingArea && (

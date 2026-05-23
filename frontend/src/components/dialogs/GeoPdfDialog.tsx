@@ -53,7 +53,7 @@ export type GeoPdfTemplateConfig = Omit<GeoPdfConfig, "extent"> & {
   scale?: number;
 };
 
-type GeoPdfTemplate = {
+export type GeoPdfTemplate = {
   id: string;
   name: string;
   config: GeoPdfTemplateConfig;
@@ -111,6 +111,7 @@ function GeoPdfDialog({
   templateMode,
   editingTemplate,
   onTemplateSaved,
+  initialTemplateId,
 }: {
   open: boolean;
   onClose: () => void;
@@ -130,6 +131,7 @@ function GeoPdfDialog({
   templateMode?: boolean;
   editingTemplate?: GeoPdfTemplate | null;
   onTemplateSaved?: () => void;
+  initialTemplateId?: string | null;
 }) {
   // ── State ────────────────────────────────────────────────────────────────
 
@@ -220,9 +222,32 @@ function GeoPdfDialog({
   useEffect(() => {
     if (!open || templateMode) return;
     apiFetch<GeoPdfTemplate[]>("/geo-pdf-templates")
-      .then(setTemplates)
+      .then((list) => {
+        setTemplates(list);
+        if (initialTemplateId) {
+          const t = list.find((x) => x.id === initialTemplateId);
+          if (t) {
+            const c = t.config;
+            setSelectedTemplateId(t.id);
+            setExtentState((prev: ExtentState) => {
+              let updated = { ...prev, paperSize: c.paperSize, orientation: c.orientation, ...(c.customRatio ? { customRatio: c.customRatio } : {}) };
+              updated = applyPaperChange(updated, c.paperSize, c.customRatio);
+              if (c.scale !== undefined) updated = applyScaleChange(updated, c.scale);
+              return updated;
+            });
+            setSelectedBaseLayer(c.baseLayer);
+            setSelectedOverlays(new Set(c.overlays));
+            if (c.elements.title !== undefined) { setTitleEnabled(true); setTitleText(c.elements.title); } else { setTitleEnabled(false); }
+            setCompassEnabled(c.elements.compass);
+            setContourEnabled(c.elements.contourInterval !== undefined);
+            setScaleTextEnabled(c.elements.scaleText);
+            setScaleBarEnabled(c.elements.scaleBar);
+            if (c.elements.gridLines !== undefined) { setGridLinesEnabled(true); setGridLinesMode(c.elements.gridLines); } else { setGridLinesEnabled(false); }
+          }
+        }
+      })
       .catch((err) => { console.error(err); });
-  }, [open, templateMode]);
+  }, [open, templateMode, initialTemplateId]);
 
   // Populate fields from editingTemplate when entering template mode
   useEffect(() => {
