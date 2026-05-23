@@ -698,10 +698,15 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
       <SelectedCanyonsDialog
         open={selectedAreaCanyonIds.length > 0}
         selectedCanyons={selectedAreaCanyons}
+        availableCanyons={allCanyons}
         ownedCanyonIds={ownedCanyonIds}
         friends={friends}
         onClose={() => setSelectedAreaCanyonIds([])}
         onDeleted={refetch}
+        onRemoveCanyon={(id) => setSelectedAreaCanyonIds((ids) => ids.filter((x) => x !== id))}
+        onAddCanyon={(id) =>
+          setSelectedAreaCanyonIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
+        }
       />
     </div>
   );

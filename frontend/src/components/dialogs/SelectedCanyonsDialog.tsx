@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -12,9 +12,9 @@ import {
   TextField,
   Select,
   MenuItem,
-  Divider,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import { ChevronRight, Minus, Plus } from "lucide-react";
 import type { TCanyon, TFriend } from "../../canyonUtils";
 import { deleteCanyon, shareCanyonWith } from "../../canyonUtils";
 import { useToast } from "../feedback/ToastProvider";
@@ -26,28 +26,60 @@ import classes from "./SelectedCanyonsDialog.module.css";
 function SelectedCanyonsDialog({
   open,
   selectedCanyons,
+  availableCanyons,
   ownedCanyonIds,
   friends,
   onClose,
   onDeleted,
+  onRemoveCanyon,
+  onAddCanyon,
 }: {
   open: boolean;
   selectedCanyons: TCanyon[];
+  availableCanyons: TCanyon[];
   ownedCanyonIds: Set<string>;
   friends: TFriend[];
   onClose: () => void;
   onDeleted: () => void;
+  onRemoveCanyon: (id: string) => void;
+  onAddCanyon: (id: string) => void;
 }) {
+  const [listOpen, setListOpen] = useState(false);
   const [shareSearch, setShareSearch] = useState("");
   const [shareFriendIds, setShareFriendIds] = useState<string[]>([]);
   const [sharing, setSharing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [exportFormat, setExportFormat] = useState<TExportFormat>("gpx");
+  const [canyonSearch, setCanyonSearch] = useState("");
+  const canyonSearchRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
+
+  // Reset list state when dialog opens/closes
+  useEffect(() => {
+    if (!open) {
+      setListOpen(false);
+      setCanyonSearch("");
+    }
+  }, [open]);
 
   const busy = sharing || deleting;
   const ownedCanyons = selectedCanyons.filter((c) => ownedCanyonIds.has(c.id));
+  const sharedCount = selectedCanyons.length - ownedCanyons.length;
+
+  const selectedIds = new Set(selectedCanyons.map((c) => c.id));
+  const canyonSearchResults =
+    canyonSearch.length >= 3
+      ? availableCanyons
+          .filter(
+            (c) =>
+              !selectedIds.has(c.id) &&
+              ([c.name, ...c.altNames].some((n) =>
+                n.toLowerCase().includes(canyonSearch.toLowerCase()),
+              )),
+          )
+          .slice(0, 6)
+      : [];
 
   async function handleShare() {
     if (shareFriendIds.length === 0 || ownedCanyons.length === 0) return;
@@ -100,6 +132,18 @@ function SelectedCanyonsDialog({
     }
   }
 
+  function handleAddCanyonResult(id: string) {
+    onAddCanyon(id);
+    setCanyonSearch("");
+    canyonSearchRef.current?.focus();
+  }
+
+  function handleCanyonSearchKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" && canyonSearchResults.length === 1) {
+      handleAddCanyonResult(canyonSearchResults[0].id);
+    }
+  }
+
   const dialogSx = {
     backgroundColor: "var(--theme-primary)",
     color: "var(--theme-text-primary)",
@@ -142,57 +186,164 @@ function SelectedCanyonsDialog({
             minHeight: 0,
             flex: "1 1 auto",
             overflow: "hidden",
+            gap: "0.75em",
           }}
         >
-          <Box className={classes.canyonList}>
-            {selectedCanyons.map((c) => (
-              <div key={c.id} className={classes.canyonRow}>
-                <Typography variant="body2" component="span">
-                  {c.name}
-                </Typography>
-                {!ownedCanyonIds.has(c.id) && (
-                  <span className={classes.sharedLabel}>(shared)</span>
-                )}
-              </div>
-            ))}
-          </Box>
-
-          <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 1 }} />
-
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1, pb: 0.5 }}>
-            <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
-              Export {selectedCanyons.length} canyon{selectedCanyons.length !== 1 ? "s" : ""} as:
-            </Typography>
-            <Select
-              size="small"
-              value={exportFormat}
-              onChange={(e) => setExportFormat(e.target.value as TExportFormat)}
-              sx={{
-                fontSize: "0.85em",
-                color: "var(--theme-text-primary)",
-                "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-                "& .MuiSvgIcon-root": { color: "var(--theme-text-primary)" },
-              }}
-              MenuProps={{
-                PaperProps: {
-                  sx: { backgroundColor: "var(--theme-primary)", color: "var(--theme-text-primary)" },
-                },
-              }}
+          {/* Canyon list accordion */}
+          <Box>
+            <button
+              className={classes.accordionHeader}
+              onClick={() => setListOpen((v) => !v)}
+              aria-expanded={listOpen}
             >
-              <MenuItem value="gpx">GPX</MenuItem>
-              <MenuItem value="kml">KML</MenuItem>
-              <MenuItem value="geojson">GeoJSON</MenuItem>
-            </Select>
+              <ChevronRight
+                size={14}
+                className={`${classes.chevron} ${listOpen ? classes.chevronOpen : ""}`}
+              />
+              <span>
+                View list ({selectedCanyons.length} canyon{selectedCanyons.length !== 1 ? "s" : ""}
+                {sharedCount > 0 ? `, ${sharedCount} shared` : ""})
+              </span>
+            </button>
+
+            {listOpen && (
+              <Box className={classes.accordionBody}>
+                <Box className={classes.canyonList}>
+                  {selectedCanyons.map((c) => (
+                    <div key={c.id} className={classes.canyonRow}>
+                      <button
+                        className={classes.minusButton}
+                        onClick={() => onRemoveCanyon(c.id)}
+                        aria-label={`Remove ${c.name}`}
+                      >
+                        <Minus size={12} />
+                      </button>
+                      <span className={classes.canyonName}>
+                        <Typography variant="body2" component="span">
+                          {c.name}
+                        </Typography>
+                        {!ownedCanyonIds.has(c.id) && (
+                          <span className={classes.sharedLabel}>(shared)</span>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </Box>
+
+                {/* Add canyon search — pinned below list */}
+                <Box className={classes.searchAddRow}>
+                  {canyonSearchResults.length > 0 && (
+                    <Box className={classes.searchResultsDropdown}>
+                      {canyonSearchResults.map((c) => (
+                        <div
+                          key={c.id}
+                          className={classes.searchResultItem}
+                          onClick={() => handleAddCanyonResult(c.id)}
+                        >
+                          {c.name}
+                          {c.altNames.length > 0 && (
+                            <span style={{ opacity: 0.55, marginLeft: "0.4em", fontSize: "0.9em" }}>
+                              ({c.altNames.join(", ")})
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </Box>
+                  )}
+                  <TextField
+                    inputRef={canyonSearchRef}
+                    placeholder="Search canyons to add..."
+                    value={canyonSearch}
+                    onChange={(e) => setCanyonSearch(e.target.value)}
+                    onKeyDown={handleCanyonSearchKeyDown}
+                    size="small"
+                    sx={{
+                      flex: 1,
+                      "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.8em" },
+                      "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
+                    }}
+                  />
+                  <button
+                    className={classes.addButton}
+                    onClick={() => {
+                      if (canyonSearchResults.length === 1) handleAddCanyonResult(canyonSearchResults[0].id);
+                    }}
+                    disabled={canyonSearchResults.length !== 1}
+                    aria-label="Add canyon"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </Box>
+              </Box>
+            )}
           </Box>
 
-          <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 1 }} />
+          {/* Export card */}
+          <Box className={classes.actionCard}>
+            <span className={classes.cardHeading}>Export</span>
+            <Box className={classes.cardRow}>
+              <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
+                Format:
+              </Typography>
+              <Select
+                size="small"
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value as TExportFormat)}
+                sx={{
+                  fontSize: "0.85em",
+                  color: "var(--theme-text-primary)",
+                  "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
+                  "& .MuiSvgIcon-root": { color: "var(--theme-text-primary)" },
+                }}
+                MenuProps={{
+                  PaperProps: {
+                    sx: { backgroundColor: "var(--theme-primary)", color: "var(--theme-text-primary)" },
+                  },
+                }}
+              >
+                <MenuItem value="gpx">GPX</MenuItem>
+                <MenuItem value="kml">KML</MenuItem>
+                <MenuItem value="geojson">GeoJSON</MenuItem>
+              </Select>
+              <Box className={classes.cardRowRight}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleExport}
+                  disabled={busy}
+                  sx={{
+                    borderColor: "var(--theme-accent)",
+                    color: "var(--theme-accent)",
+                    "&:hover": {
+                      backgroundColor: "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
+                      borderColor: "var(--theme-accent)",
+                    },
+                  }}
+                >
+                  Download
+                </Button>
+              </Box>
+            </Box>
+          </Box>
 
-          <Box className={classes.actions}>
-            {ownedCanyons.length > 0 ? (
+          {/* Share card */}
+          <Box className={classes.actionCard}>
+            <span className={classes.cardHeading}>
+              Share{ownedCanyons.length > 0 ? ` (${ownedCanyons.length} owned)` : ""}
+            </span>
+            {ownedCanyons.length === 0 ? (
               <>
-                <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-                  Share {ownedCanyons.length} owned canyon{ownedCanyons.length !== 1 ? "s" : ""} with:
+                <Typography variant="body2" className={classes.disabledText}>
+                  No owned canyons in selection. Sharing applies to your own canyons only.
                 </Typography>
+                <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+                  <Button variant="contained" color="secondary" size="small" disabled>
+                    Share
+                  </Button>
+                </Box>
+              </>
+            ) : (
+              <>
                 <TextField
                   placeholder="Search friends..."
                   value={shareSearch}
@@ -244,69 +395,34 @@ function SelectedCanyonsDialog({
                     })}
                   </div>
                 )}
+                <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+                  <Button
+                    variant="contained"
+                    color="secondary"
+                    size="small"
+                    onClick={handleShare}
+                    disabled={busy || shareFriendIds.length === 0}
+                  >
+                    {sharing
+                      ? "Sharing..."
+                      : `Share with ${shareFriendIds.length > 0 ? shareFriendIds.length : ""}`
+                          .trim()}
+                  </Button>
+                </Box>
               </>
-            ) : (
-              <Typography variant="body2" sx={{ opacity: 0.6 }}>
-                No owned canyons in selection. Bulk actions only apply to your own canyons.
-              </Typography>
             )}
           </Box>
         </DialogContent>
 
         <DialogActions>
           {ownedCanyons.length > 0 && (
-            <>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={handleExport}
-                disabled={busy}
-                sx={{
-                  borderColor: "var(--theme-accent)",
-                  color: "var(--theme-accent)",
-                  "&:hover": {
-                    backgroundColor: "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
-                    borderColor: "var(--theme-accent)",
-                  },
-                }}
-              >
-                Export
-              </Button>
-              <Button
-                variant="contained"
-                color="secondary"
-                size="small"
-                onClick={handleShare}
-                disabled={busy || shareFriendIds.length === 0}
-              >
-                {sharing ? "Sharing..." : "Share Selected"}
-              </Button>
-              <Button
-                color="error"
-                onClick={() => setShowDeleteConfirm(true)}
-                disabled={busy}
-                sx={{ mr: "auto", order: -1 }}
-              >
-                Delete Selected
-              </Button>
-            </>
-          )}
-          {ownedCanyons.length === 0 && (
             <Button
-              variant="outlined"
-              size="small"
-              onClick={handleExport}
+              color="error"
+              onClick={() => setShowDeleteConfirm(true)}
               disabled={busy}
-              sx={{
-                borderColor: "var(--theme-accent)",
-                color: "var(--theme-accent)",
-                "&:hover": {
-                  backgroundColor: "color-mix(in srgb, var(--theme-accent) 12%, transparent)",
-                  borderColor: "var(--theme-accent)",
-                },
-              }}
+              sx={{ mr: "auto" }}
             >
-              Export
+              Delete {ownedCanyons.length} owned
             </Button>
           )}
           <Button onClick={onClose} disabled={busy} sx={{ color: "var(--theme-text-primary)" }}>
