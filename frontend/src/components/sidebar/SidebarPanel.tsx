@@ -8,6 +8,7 @@ import type {
   TNotification,
   TTripLog,
   TAnalytics,
+  TUser,
 } from "../../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygon } from "../dialogs/TopoDialog";
@@ -84,6 +85,8 @@ function SidebarPanel({
   setLidarJobToggles,
   onOpenTopo,
   onRefetchCompletedTopoJobs,
+  onQuotaChanged,
+  currentUser,
   onOpenTopoWithTemplate,
   // Friends
   friends,
@@ -157,6 +160,8 @@ function SidebarPanel({
   setLidarJobToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
   onOpenTopo: () => void;
   onRefetchCompletedTopoJobs: () => void;
+  onQuotaChanged: () => void;
+  currentUser: TUser | null;
   onOpenTopoWithTemplate: (templateId: string) => void;
   // Friends
   friends: TFriend[];
@@ -255,6 +260,7 @@ function SidebarPanel({
             onTopoFlyTarget={onTopoFlyTarget}
             onRefetchCompletedTopoJobs={onRefetchCompletedTopoJobs}
             onOpenTopoWithTemplate={onOpenTopoWithTemplate}
+            onQuotaChanged={onQuotaChanged}
           />
         )}
         {activePanel === "friends" && (
@@ -284,6 +290,7 @@ function SidebarPanel({
             customFieldDefs={customFieldDefs}
             onRefetchTripLogs={onRefetchTripLogs}
             onRefetchAnalytics={onRefetchAnalytics}
+            onQuotaChanged={onQuotaChanged}
           />
         )}
         {activePanel === "trip-logs" && (
@@ -297,9 +304,10 @@ function SidebarPanel({
             canyons={canyons}
             onPickCoords={onPickCoords}
             pickingCoords={pickingCoords}
+            onQuotaChanged={onQuotaChanged}
           />
         )}
-        {activePanel === "account" && <AccountPanel />}
+        {activePanel === "account" && <AccountPanel currentUser={currentUser} />}
         {activePanel === "canyon-detail" && (
           <CanyonDetailPanel
             canyon={canyon}
@@ -313,6 +321,7 @@ function SidebarPanel({
             onCancelPickCoords={onCancelPickCoords}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
+            onQuotaChanged={onQuotaChanged}
           />
         )}
       </div>

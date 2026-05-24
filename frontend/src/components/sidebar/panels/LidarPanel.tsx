@@ -55,6 +55,7 @@ function LidarPanel({
   onTopoFlyTarget,
   onRefetchCompletedTopoJobs,
   onOpenTopoWithTemplate,
+  onQuotaChanged,
 }: {
   activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
@@ -66,6 +67,7 @@ function LidarPanel({
   onTopoFlyTarget: (footprint: GeoJsonPolygon) => void;
   onRefetchCompletedTopoJobs: () => void;
   onOpenTopoWithTemplate: (templateId: string) => void;
+  onQuotaChanged: () => void;
 }) {
   const toast = useToast();
 
@@ -123,12 +125,13 @@ function LidarPanel({
         });
         setDeletingJobId(null);
         onRefetchCompletedTopoJobs();
+        onQuotaChanged();
       } catch (err) {
         console.error(err);
         toast.error(messageFromError(err, "Couldn't delete LiDAR topo. Please try again."));
       }
     },
-    [toast, setLidarJobToggles, onRefetchCompletedTopoJobs],
+    [toast, setLidarJobToggles, onRefetchCompletedTopoJobs, onQuotaChanged],
   );
 
   // Active jobs with cap-and-disclose

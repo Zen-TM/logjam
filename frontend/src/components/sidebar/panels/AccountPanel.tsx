@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import {
-  fetchCurrentUser,
   updateUsername,
   updateNotificationPreferences,
   exportUserData,
+  type TUser,
 } from "../../../canyonUtils";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -25,7 +25,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-function AccountPanel() {
+function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
   const { signOut } = useAuth();
   const toast = useToast();
   const { schemeId, schemes, isHydrating, isSaving, error: themeError, setThemeScheme } =
@@ -37,11 +37,6 @@ function AccountPanel() {
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [usernameSaved, setUsernameSaved] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
-  const [storageUsedBytes, setStorageUsedBytes] = useState<number | null>(null);
-  const [storageQuotaBytes, setStorageQuotaBytes] = useState<number | null>(null);
-  const [tileUsed, setTileUsed] = useState<number | null>(null);
-  const [tileQuota, setTileQuota] = useState<number | null>(null);
-  const [tileResetAt, setTileResetAt] = useState<string | null>(null);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
@@ -49,23 +44,15 @@ function AccountPanel() {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    fetchCurrentUser()
-      .then((u) => {
-        setCurrentUsername(u.username);
-        setUsernameInput(u.username);
-        setEmail(u.email);
-        setStorageUsedBytes(u.storageUsedBytes);
-        setStorageQuotaBytes(u.storageQuotaBytes);
-        setTileUsed(u.weeklyTileUsage);
-        setTileQuota(u.weeklyTileQuota);
-        setTileResetAt(u.weeklyTileResetAt);
-        setNotifPrefs({
-          ...DEFAULT_NOTIFICATION_PREFERENCES,
-          ...(u.uiPreferences?.notifications ?? {}),
-        });
-      })
-      .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't load account details.")); });
-  }, [toast]);
+    if (!currentUser) return;
+    setCurrentUsername(currentUser.username);
+    setUsernameInput(currentUser.username);
+    setEmail(currentUser.email);
+    setNotifPrefs({
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      ...(currentUser.uiPreferences?.notifications ?? {}),
+    });
+  }, [currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleToggleNotif(key: keyof NotificationPreferences) {
     if (!notifPrefs) return;
@@ -201,35 +188,35 @@ function AccountPanel() {
 
       <span className={classes.sectionLabel} title="Counts media files and topo job outputs (MBTiles/PMTiles and LiDAR ZIPs). Does not count cached map tiles.">Storage</span>
       <div className={classes.divider} />
-      {storageUsedBytes === null || storageQuotaBytes === null ? (
+      {!currentUser ? (
         <p className={classes.state}>Loading...</p>
       ) : (
         <>
           <progress
             className={classes.storageBar}
-            value={storageUsedBytes}
-            max={storageQuotaBytes}
+            value={currentUser.storageUsedBytes}
+            max={currentUser.storageQuotaBytes}
           />
           <span className={classes.storageLabel}>
-            {formatBytes(storageUsedBytes)} of {formatBytes(storageQuotaBytes)} used
+            {formatBytes(currentUser.storageUsedBytes)} of {formatBytes(currentUser.storageQuotaBytes)} used
           </span>
         </>
       )}
 
       <span className={classes.sectionLabel} title="Weekly quota for LiDAR map tiles served to the browser. Resets on the date shown.">LiDAR Processing</span>
       <div className={classes.divider} />
-      {tileUsed === null || tileQuota === null ? (
+      {!currentUser ? (
         <p className={classes.state}>Loading...</p>
       ) : (
         <>
           <progress
             className={classes.storageBar}
-            value={tileUsed}
-            max={tileQuota}
+            value={currentUser.weeklyTileUsage}
+            max={currentUser.weeklyTileQuota}
           />
           <span className={classes.storageLabel}>
-            {tileUsed} / {tileQuota} tiles this week
-            {tileResetAt ? ` · resets ${new Date(tileResetAt).toLocaleDateString("en-AU", { weekday: "short", month: "short", day: "numeric" })}` : ""}
+            {currentUser.weeklyTileUsage} / {currentUser.weeklyTileQuota} tiles this week
+            {currentUser.weeklyTileResetAt ? ` · resets ${new Date(currentUser.weeklyTileResetAt).toLocaleDateString("en-AU", { weekday: "short", month: "short", day: "numeric" })}` : ""}
           </span>
         </>
       )}

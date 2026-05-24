@@ -28,6 +28,7 @@ import {
   useNotifications,
   useTripLogs,
   useAnalytics,
+  useCurrentUser,
   fetchCurrentUser,
   recordConsent,
   passesFilters,
@@ -285,6 +286,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     refetch: refetchTripLogs,
   } = useTripLogs(authenticated);
   const { analytics, loading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(authenticated);
+  const { currentUser, refetchCurrentUser } = useCurrentUser(authenticated);
 
   const [customFieldDefs, setCustomFieldDefs] = useState<
     TripLogCustomFieldDef[]
@@ -657,6 +659,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
             setShowTopo(true);
           }}
           onRefetchCompletedTopoJobs={refetchCompletedTopoJobs}
+          onQuotaChanged={refetchCurrentUser}
+          currentUser={currentUser}
           onOpenTopoWithTemplate={(templateId) => {
             setInitialTopoTemplateId(templateId);
             setShowTopo(true);
@@ -795,6 +799,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         friends={friends}
         onClose={() => setSelectedAreaCanyonIds([])}
         onDeleted={refetch}
+        onQuotaChanged={refetchCurrentUser}
         onRemoveCanyon={(id) => setSelectedAreaCanyonIds((ids) => ids.filter((x) => x !== id))}
         onAddCanyon={(id) =>
           setSelectedAreaCanyonIds((ids) => (ids.includes(id) ? ids : [...ids, id]))

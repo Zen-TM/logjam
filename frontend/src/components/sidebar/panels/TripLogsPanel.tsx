@@ -17,6 +17,7 @@ function TripLogsPanel({
   canyons,
   onPickCoords,
   pickingCoords,
+  onQuotaChanged,
 }: {
   tripLogs: TTripLog[];
   loading: boolean;
@@ -27,6 +28,7 @@ function TripLogsPanel({
   canyons: TCanyon[];
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
+  onQuotaChanged: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -147,6 +149,7 @@ function TripLogsPanel({
         onDeleted={() => {
           onRefetchTripLogs();
           onRefetchAnalytics();
+          onQuotaChanged();
         }}
       />
 

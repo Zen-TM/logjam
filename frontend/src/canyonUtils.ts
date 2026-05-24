@@ -382,6 +382,22 @@ export function fetchCurrentUser(): Promise<TUser> {
   return apiFetch<TUser>("/users/me");
 }
 
+export function useCurrentUser(enabled: boolean) {
+  const [currentUser, setCurrentUser] = useState<TUser | null>(null);
+  const [fetchCount, setFetchCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    fetchCurrentUser()
+      .then(setCurrentUser)
+      .catch(console.error);
+  }, [enabled, fetchCount]);
+
+  const refetchCurrentUser = useCallback(() => setFetchCount((n) => n + 1), []);
+
+  return { currentUser, refetchCurrentUser };
+}
+
 export function updateCurrentUserThemeScheme(
   themeSchemeId: ThemeSchemeId,
 ): Promise<TUser> {

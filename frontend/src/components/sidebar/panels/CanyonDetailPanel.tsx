@@ -38,6 +38,7 @@ function CanyonDetailPanel({
   onCancelPickCoords,
   customFieldDefs,
   onCustomFieldDefsChange,
+  onQuotaChanged,
 }: {
   canyon: TCanyon | undefined;
   isOwnedCanyon: boolean;
@@ -50,6 +51,7 @@ function CanyonDetailPanel({
   onCancelPickCoords: () => void;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  onQuotaChanged: () => void;
 }) {
   const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
@@ -112,6 +114,7 @@ function CanyonDetailPanel({
       setDeleting(false);
       setSelectedCanyonID(null);
       onRefetch();
+      onQuotaChanged();
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't delete canyon. Please try again."));
@@ -559,6 +562,7 @@ function CanyonDetailPanel({
           getTripLogs(canyon.id)
             .then(setTripLogs)
             .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't refresh trip logs.")); });
+          onQuotaChanged();
         }}
       />
     </>

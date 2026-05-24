@@ -31,6 +31,7 @@ function SelectedCanyonsDialog({
   friends,
   onClose,
   onDeleted,
+  onQuotaChanged,
   onRemoveCanyon,
   onAddCanyon,
 }: {
@@ -41,6 +42,7 @@ function SelectedCanyonsDialog({
   friends: TFriend[];
   onClose: () => void;
   onDeleted: () => void;
+  onQuotaChanged?: () => void;
   onRemoveCanyon: (id: string) => void;
   onAddCanyon: (id: string) => void;
 }) {
@@ -122,6 +124,7 @@ function SelectedCanyonsDialog({
         await deleteCanyon(c.id);
       }
       setShowDeleteConfirm(false);
+      onQuotaChanged?.();
       onDeleted();
       onClose();
     } catch (err) {
