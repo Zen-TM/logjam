@@ -7,6 +7,7 @@ import { refreshFromRopeWiki } from "../../../canyonUtils";
 import type { RefreshResult } from "../../../canyonUtils";
 import RopeWikiReviewDialog from "../../dialogs/RopeWikiReviewDialog";
 import { useToast } from "../../feedback/ToastProvider";
+import { messageFromError } from "../../../errors/messageFromError";
 
 function CanyonsPanel({
   canyons,
@@ -214,8 +215,10 @@ function CanyonsPanel({
       toast.success(
         `Imported successfully! ${result.added} added, ${result.updated} updated`,
       );
-    } catch {
+    } catch (err) {
+      console.error(err);
       setRefreshResult(null);
+      toast.error(messageFromError(err, "Couldn't import from RopeWiki."));
     } finally {
       setRefreshing(false);
     }
