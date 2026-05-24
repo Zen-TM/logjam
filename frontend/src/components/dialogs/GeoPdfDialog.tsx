@@ -26,7 +26,6 @@ import type {
   PaperSize,
   Orientation,
   CoordMode,
-  LockMode,
   PivotPoint,
 } from "@logjam/shared";
 import {
