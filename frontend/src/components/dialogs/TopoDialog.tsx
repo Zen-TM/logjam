@@ -534,7 +534,7 @@ export default function TopoDialog({
       if (tileUsed + stats.tileCount > tileQuota) {
         const remaining = Math.max(0, tileQuota - tileUsed);
         const resetStr = tileResetAt
-          ? ` Quota resets ${new Date(tileResetAt).toLocaleDateString("en-AU", { weekday: "short", month: "short", day: "numeric" })}.`
+          ? ` Quota resets ${new Date(new Date(tileResetAt).getTime() + 86400000).toLocaleDateString("en-AU", { weekday: "short"})}.`
           : "";
         setError(
           `Weekly tile quota exceeded. This job needs ${stats.tileCount} tiles but only ${remaining} remain.${resetStr}`,

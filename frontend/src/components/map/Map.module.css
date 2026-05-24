@@ -6,6 +6,15 @@
   bottom: 0;
 }
 
+:global(#map .maplibregl-ctrl-bottom-left) {
+  margin-left: 0;
+  transition: margin-left var(--transition-med) ease-out;
+}
+
+:global(#map[data-sidebar-open="true"] .maplibregl-ctrl-bottom-left) {
+  margin-left: var(--panel-width);
+}
+
 .pickBanner {
   position: absolute;
   top: 50px;

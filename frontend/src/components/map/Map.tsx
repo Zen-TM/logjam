@@ -139,6 +139,7 @@ function Map({
   onTopoFlyConsumed,
   flyToCanyon,
   onFlyToCanyonConsumed,
+  sidebarOpen,
 }: {
   filters: TFilters;
   canyons: TCanyon[];
@@ -183,6 +184,7 @@ function Map({
   onTopoFlyConsumed?: () => void;
   flyToCanyon?: { lat: number; lng: number } | null;
   onFlyToCanyonConsumed?: () => void;
+  sidebarOpen?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -224,11 +226,13 @@ function Map({
       zoom: initialView?.zoom ?? INITIAL_ZOOM,
       bearing: initialView?.bearing ?? 0,
       pitch: initialView?.pitch ?? 0,
+      attributionControl: false,
     });
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");
+    map.addControl(new maplibregl.AttributionControl(), "bottom-left");
     map.addControl(
-      new maplibregl.ScaleControl({ unit: "metric" }),
+      new maplibregl.ScaleControl({ unit: "metric", maxWidth: 200 }),
       "bottom-right",
     );
 
@@ -1518,7 +1522,7 @@ function Map({
   }, []);
 
   return (
-    <div id="map" className={classes.map}>
+    <div id="map" className={classes.map} data-sidebar-open={sidebarOpen ? "true" : "false"}>
       <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
       {pickingCoords && (
         <div className={classes.pickBanner}>

@@ -731,6 +731,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         onTopoFlyConsumed={() => setTopoFlyTarget(null)}
         flyToCanyon={flyToCanyon}
         onFlyToCanyonConsumed={() => setFlyToCanyon(null)}
+        sidebarOpen={activePanel !== null}
       />
 
       {selectingArea && (
