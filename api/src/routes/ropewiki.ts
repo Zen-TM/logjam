@@ -107,11 +107,12 @@ async function applyAutoLinkAndCreate(
       const existing = existingByCanyonId.get(p.bestCanyonId!)!;
       const fresh = withOzUltimate(rawFresh, existing.altNames);
       const merged = mergeFillNulls(existing, fresh);
+      const { ropeWikiOwnedFields, ...mergedFields } = merged;
       return prisma.canyon.update({
         where: { id: existing.id },
         data: {
-          ...merged,
-          ropeWikiSnapshot: snapshotFromLink(fresh, merged.ropeWikiOwnedFields),
+          ...mergedFields,
+          ropeWikiSnapshot: snapshotFromLink(fresh, ropeWikiOwnedFields),
         },
       });
     });
@@ -282,12 +283,13 @@ router.post(
       }
       const freshWithOz = withOzUltimate(fresh, target.altNames);
       const merged = mergeFillNulls(target, freshWithOz);
+      const { ropeWikiOwnedFields, ...mergedFields } = merged;
       updates.push(
         prisma.canyon.update({
           where: { id: target.id },
           data: {
-            ...merged,
-            ropeWikiSnapshot: snapshotFromLink(freshWithOz, merged.ropeWikiOwnedFields),
+            ...mergedFields,
+            ropeWikiSnapshot: snapshotFromLink(freshWithOz, ropeWikiOwnedFields),
           },
         }),
       );
