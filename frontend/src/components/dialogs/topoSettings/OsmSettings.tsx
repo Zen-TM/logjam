@@ -39,12 +39,16 @@ export default function OsmSettings({ value, onChange }: Props) {
         <div className={styles.featureRow}>
           <span />
           <span />
-          <span className={styles.bandHeader}>Colour</span>
-          <span className={styles.labelWithTooltip}>
-            <span className={styles.bandHeader}>Width</span>
-            <Tooltip title="Line width in pixels at zoom 18 (maximum detail level). Scales automatically at other zoom levels. Typical: 3–5 for thin paths, 10–15 for prominent roads." placement="top" arrow>
-              <InfoOutlinedIcon className={styles.infoIcon} />
-            </Tooltip>
+          <span className={styles.colourCell}>
+            <span className={styles.bandHeader}>Colour</span>
+          </span>
+          <span className={styles.widthCell}>
+            <span className={styles.headerWithTooltip}>
+              <span className={styles.bandHeader}>Width</span>
+              <Tooltip title="Line width in pixels at zoom 18 (maximum detail level). Scales automatically at other zoom levels. Typical: 3–5 for thin paths, 10–15 for prominent roads." placement="top" arrow>
+                <InfoOutlinedIcon className={styles.infoIcon} />
+              </Tooltip>
+            </span>
           </span>
         </div>
         {OSM_FEATURE_KEYS.map((key) => {

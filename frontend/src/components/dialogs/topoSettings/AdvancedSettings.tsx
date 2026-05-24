@@ -24,15 +24,14 @@ export default function AdvancedSettings({ value, onChange }: Props) {
       <Tabs
         value={tab}
         onChange={(_, v) => setTab(v)}
-        variant="scrollable"
-        scrollButtons="auto"
+        variant="fullWidth"
       >
-        <Tab label="Layers" />
-        <Tab label="Hillshade" />
-        <Tab label="Slope" />
-        <Tab label="Vegetation" />
-        <Tab label="Contours" />
-        <Tab label="OSM" />
+        <Tab label="Layers" sx={{ minWidth: 0, px: 0.75, fontSize: "0.8em" }} />
+        <Tab label="Hillshade" sx={{ minWidth: 0, px: 0.75, fontSize: "0.8em" }} />
+        <Tab label="Slope" sx={{ minWidth: 0, px: 0.75, fontSize: "0.8em" }} />
+        <Tab label="Vegetation" sx={{ minWidth: 0, px: 0.75, fontSize: "0.8em" }} />
+        <Tab label="Contours" sx={{ minWidth: 0, px: 0.75, fontSize: "0.8em" }} />
+        <Tab label="OSM" sx={{ minWidth: 0, px: 0.75, fontSize: "0.8em" }} />
       </Tabs>
 
       {tab === 0 && <LayerToggles value={value} onChange={onChange} />}

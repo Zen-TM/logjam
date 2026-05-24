@@ -62,7 +62,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
       </div>
 
       <Tooltip title="Maximum 8 bands — each is a separate colour pass in the tile pipeline." placement="top" arrow>
-        <span>
+        <span style={{ display: "inline-block", alignSelf: "flex-start" }}>
           <button
             type="button"
             className={styles.addButton}

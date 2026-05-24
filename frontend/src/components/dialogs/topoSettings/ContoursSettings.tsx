@@ -27,9 +27,9 @@ export default function ContoursSettings({ value, onChange }: Props) {
       <h4 className={styles.sectionTitle}>Zoom bands</h4>
       {value.zoomBands.map((band, idx) => (
         <div key={idx} className={styles.section}>
-          <span className={styles.formationName}>
+          <div className={styles.zoomBandHeading}>
             Zoom {band.zoomMin}–{band.zoomMax}
-          </span>
+          </div>
           <SettingsRow
             label="Interval (m)"
             tooltip="Vertical spacing between contour lines at this zoom range."

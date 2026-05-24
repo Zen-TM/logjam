@@ -132,12 +132,38 @@
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto;
   gap: 6px 16px;
-  max-height: 320px;
-  overflow-y: auto;
   padding-right: 8px;
 }
 
 .formationName {
   font-size: 0.85em;
   color: var(--theme-text-primary);
+}
+
+.zoomBandHeading {
+  font-size: 0.75em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+  color: var(--theme-text-primary);
+  text-align: center;
+  margin: 8px 0 2px;
+}
+
+.colourCell {
+  display: flex;
+  align-items: center;
+}
+
+.widthCell {
+  display: flex;
+  align-items: center;
+  width: 90px;
+}
+
+.headerWithTooltip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
