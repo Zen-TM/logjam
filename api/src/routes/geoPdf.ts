@@ -66,14 +66,13 @@ router.post(
     });
     if (!userRow) throw new AppError(404, "User not found");
 
-    const pdfBuffer = await generateGeoPdf(config, userRow.id);
-
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      'attachment; filename="logjam-export.pdf"',
-    );
-    res.send(pdfBuffer);
+    res.setHeader("Content-Disposition", 'attachment; filename="logjam-export.pdf"');
+    res.setHeader("Cache-Control", "no-store");
+    res.flushHeaders();
+
+    const pdfBuffer = await generateGeoPdf(config, userRow.id);
+    res.end(pdfBuffer);
   },
 );
 

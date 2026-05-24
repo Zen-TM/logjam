@@ -191,6 +191,40 @@ export async function apiFetchBlob(
   return res.blob();
 }
 
+// Like apiFetchBlob but calls onAccepted() as soon as headers arrive (server
+// has accepted the request) — before the body is available. Lets callers close
+// dialogs / show toasts without waiting for the full response body.
+export async function apiFetchBlobStreamed(
+  path: string,
+  options: { method?: string; body?: unknown },
+  onAccepted: () => void,
+): Promise<Blob> {
+  const token = await getIdToken();
+  const method = options.method ?? "GET";
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(options.body != null && { "Content-Type": "application/json" }),
+    },
+    ...(options.body != null && { body: JSON.stringify(options.body) }),
+  });
+  if (!res.ok) {
+    if (res.status === 401) notifySessionExpired();
+    let serverMessage: string | undefined;
+    try {
+      const body = await res.clone().json();
+      if (typeof body?.error === "string") serverMessage = body.error;
+    } catch {
+      // non-JSON body — ignore
+    }
+    throw new ApiError(res.status, path, method, serverMessage);
+  }
+  // Headers received — server accepted. Fire callback before awaiting body.
+  onAccepted();
+  return res.blob();
+}
+
 export type RopeWikiCandidatePayload = {
   ropeWikiId: number;
   rw: {

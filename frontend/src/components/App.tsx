@@ -11,7 +11,7 @@ import type {
   GeoJsonPolygon,
 } from "./dialogs/TopoDialog";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
-import type { GeoPdfTemplate } from "./dialogs/GeoPdfDialog";
+import type { GeoPdfTemplate, GeoPdfJob } from "./dialogs/GeoPdfDialog";
 import CanyonDialog from "./dialogs/CanyonDialog";
 import CanyonCsvImportDialog from "./dialogs/CanyonCsvImportDialog";
 import SelectedCanyonsDialog from "./dialogs/SelectedCanyonsDialog";
@@ -134,6 +134,9 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   const [initialGeoPdfTemplateId, setInitialGeoPdfTemplateId] = useState<string | null>(null);
   // Bumped after template save/delete to trigger panel refetch
   const [geoPdfTemplateRefetch, setGeoPdfTemplateRefetch] = useState(0);
+
+  // In-flight GeoPDF jobs (tab-local; discarded on reload by design)
+  const [geoPdfJobs, setGeoPdfJobs] = useState<GeoPdfJob[]>([]);
 
   // Topo template: ID to pre-select when opening TopoDialog
   const [initialTopoTemplateId, setInitialTopoTemplateId] = useState<string | null>(null);
@@ -409,6 +412,30 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     toast.success(`Topo job submitted: "${job.name ?? "Unnamed"}"`);
   }, [toast]);
 
+  const addGeoPdfJob = useCallback((job: GeoPdfJob) => {
+    setGeoPdfJobs((prev) => [job, ...prev]);
+  }, []);
+
+  const markGeoPdfJobProcessing = useCallback((id: string) => {
+    setGeoPdfJobs((prev) =>
+      prev.map((j) => (j.id === id ? { ...j, status: "processing" as const } : j)),
+    );
+  }, []);
+
+  const removeGeoPdfJob = useCallback((id: string) => {
+    setGeoPdfJobs((prev) => prev.filter((j) => j.id !== id));
+  }, []);
+
+  useEffect(() => {
+    if (geoPdfJobs.length === 0) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [geoPdfJobs.length]);
+
   // Capture ?topoJob=<id> deep link on mount, stash in sessionStorage so it
   // survives a Cognito sign-in redirect, then clean the URL immediately.
   useEffect(() => {
@@ -556,6 +583,9 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           setGeoPdfTemplateRefetch((n) => n + 1);
         }}
         initialTemplateId={initialGeoPdfTemplateId}
+        addGeoPdfJob={addGeoPdfJob}
+        markGeoPdfJobProcessing={markGeoPdfJobProcessing}
+        removeGeoPdfJob={removeGeoPdfJob}
       />
       <div className={dimUI ? classes.dimmed : undefined}>
         <NavRail
@@ -617,6 +647,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
             setShowGeoPdf(true);
           }}
           geoPdfTemplateRefetch={geoPdfTemplateRefetch}
+          geoPdfJobs={geoPdfJobs}
           activeTopoJobs={activeTopoJobs}
           completedTopoJobs={completedTopoJobs}
           lidarJobToggles={lidarJobToggles}

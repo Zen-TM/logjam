@@ -20,6 +20,37 @@
   margin-top: 0.5em;
 }
 
+/* ── Active jobs ─────────────────────────────────────────────────────────────── */
+
+.activeSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.activeJobRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+  padding: 0.45em 0.6em;
+  background: var(--theme-secondary);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.activeJobName {
+  font-size: var(--text-sm);
+  color: var(--theme-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activeJobStatus {
+  font-size: var(--text-xs);
+  opacity: 0.5;
+}
+
 /* ── Template list ───────────────────────────────────────────────────────────── */
 
 .templateList {

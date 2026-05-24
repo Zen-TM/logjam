@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
+import { LinearProgress } from "@mui/material";
 import classes from "./GeoPdfsPanel.module.css";
 import { apiFetch } from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
-import type { GeoPdfTemplate } from "../../dialogs/GeoPdfDialog";
+import type { GeoPdfTemplate, GeoPdfJob } from "../../dialogs/GeoPdfDialog";
 
 function relativeDate(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -26,12 +27,14 @@ function GeoPdfsPanel({
   onEditGeoPdfTemplate,
   onCreateGeoPdfTemplate,
   refetchTrigger,
+  geoPdfJobs = [],
 }: {
   onOpenGeoPdf: () => void;
   onOpenGeoPdfWithTemplate: (id: string) => void;
   onEditGeoPdfTemplate: (template: GeoPdfTemplate) => void;
   onCreateGeoPdfTemplate: () => void;
   refetchTrigger: number;
+  geoPdfJobs?: GeoPdfJob[];
 }) {
   const toast = useToast();
   const [templates, setTemplates] = useState<GeoPdfTemplate[]>([]);
@@ -68,6 +71,28 @@ function GeoPdfsPanel({
 
   return (
     <div className={classes.root}>
+      {geoPdfJobs.length > 0 && (
+        <div className={classes.activeSection}>
+          <div className={classes.sectionLabel}>Active</div>
+          {geoPdfJobs.map((job) => (
+            <div key={job.id} className={classes.activeJobRow}>
+              <div className={classes.activeJobName}>{job.configSummary}</div>
+              <LinearProgress
+                variant="indeterminate"
+                sx={{
+                  height: 3,
+                  borderRadius: 2,
+                  backgroundColor: "rgba(255,255,255,0.1)",
+                  "& .MuiLinearProgress-bar": { backgroundColor: "var(--theme-accent)" },
+                }}
+              />
+              <div className={classes.activeJobStatus}>
+                {job.status === "submitting" ? "Submitting…" : "Generating…"}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       <button className={classes.primaryButton} onClick={onOpenGeoPdf}>
         Download Area as GeoPDF
       </button>

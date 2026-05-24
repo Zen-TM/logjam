@@ -12,7 +12,7 @@ import type {
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygon } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
-import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
+import type { GeoPdfTemplate, GeoPdfJob } from "../dialogs/GeoPdfDialog";
 import classes from "./SidebarPanel.module.css";
 import LayersPanel from "./panels/LayersPanel";
 import CanyonsPanel from "./panels/CanyonsPanel";
@@ -76,6 +76,7 @@ function SidebarPanel({
   onEditGeoPdfTemplate,
   onCreateGeoPdfTemplate,
   geoPdfTemplateRefetch,
+  geoPdfJobs,
   // LiDAR
   activeTopoJobs,
   completedTopoJobs,
@@ -148,6 +149,7 @@ function SidebarPanel({
   onEditGeoPdfTemplate: (t: GeoPdfTemplate) => void;
   onCreateGeoPdfTemplate: () => void;
   geoPdfTemplateRefetch: number;
+  geoPdfJobs: GeoPdfJob[];
   // LiDAR
   activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
@@ -240,6 +242,7 @@ function SidebarPanel({
             onEditGeoPdfTemplate={onEditGeoPdfTemplate}
             onCreateGeoPdfTemplate={onCreateGeoPdfTemplate}
             refetchTrigger={geoPdfTemplateRefetch}
+            geoPdfJobs={geoPdfJobs}
           />
         )}
         {activePanel === "lidar" && (

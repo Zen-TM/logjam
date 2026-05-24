@@ -18,9 +18,10 @@ import type { TBbox } from "../map/Map";
 import { BASE_LAYERS } from "../map/Map";
 import { TOPO_LAYERS } from "../../topoLayerTypes";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
-import { apiFetch, apiFetchBlob, type TCanyon } from "../../canyonUtils";
+import { apiFetch, apiFetchBlobStreamed, type TCanyon } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import { useToast } from "../feedback/ToastProvider";
 import type {
   ExtentState,
   PaperSize,
@@ -58,6 +59,13 @@ export type GeoPdfTemplate = {
   config: GeoPdfTemplateConfig;
   createdAt: string;
   updatedAt: string;
+};
+
+export type GeoPdfJob = {
+  id: string;
+  startedAt: number;
+  configSummary: string;
+  status: "submitting" | "processing";
 };
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -111,6 +119,9 @@ function GeoPdfDialog({
   editingTemplate,
   onTemplateSaved,
   initialTemplateId,
+  addGeoPdfJob,
+  markGeoPdfJobProcessing,
+  removeGeoPdfJob,
 }: {
   open: boolean;
   onClose: () => void;
@@ -131,8 +142,13 @@ function GeoPdfDialog({
   editingTemplate?: GeoPdfTemplate | null;
   onTemplateSaved?: () => void;
   initialTemplateId?: string | null;
+  addGeoPdfJob?: (job: GeoPdfJob) => void;
+  markGeoPdfJobProcessing?: (id: string) => void;
+  removeGeoPdfJob?: (id: string) => void;
 }) {
   // ── State ────────────────────────────────────────────────────────────────
+
+  const toast = useToast();
 
   const [extentState, setExtentState] =
     useState<ExtentState>(DEFAULT_EXTENT_STATE);
@@ -583,19 +599,34 @@ function GeoPdfDialog({
       config.canyonMarkers = markers;
     }
 
+    const jobId = crypto.randomUUID();
+    addGeoPdfJob?.({
+      id: jobId,
+      startedAt: Date.now(),
+      configSummary: `${config.paperSize} · ${config.baseLayer}`,
+      status: "submitting",
+    });
+
     try {
-      const blob = await apiFetchBlob("/geo-pdf", {
-        method: "POST",
-        body: config,
-      });
+      const blob = await apiFetchBlobStreamed(
+        "/geo-pdf",
+        { method: "POST", body: config },
+        () => {
+          markGeoPdfJobProcessing?.(jobId);
+          toast.success("GeoPDF submitted — keep this tab open while processing.");
+          onClose();
+        },
+      );
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = "logjam-export.pdf";
       a.click();
       URL.revokeObjectURL(url);
+      removeGeoPdfJob?.(jobId);
     } catch (e) {
       console.error(e);
+      removeGeoPdfJob?.(jobId);
       setError(messageFromError(e, "Couldn't generate PDF. Please try again."));
     } finally {
       setGenerating(false);
@@ -612,6 +643,11 @@ function GeoPdfDialog({
     scaleBarEnabled,
     gridLinesEnabled,
     gridLinesMode,
+    addGeoPdfJob,
+    markGeoPdfJobProcessing,
+    removeGeoPdfJob,
+    toast,
+    onClose,
   ]);
 
   const toggleOverlay = useCallback((name: string) => {
