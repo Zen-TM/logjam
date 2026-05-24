@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
-import { Slider, Select, MenuItem } from "@mui/material";
+import { Slider, Select, MenuItem, Switch } from "@mui/material";
 import classes from "./CanyonsPanel.module.css";
 import type { TCanyon, TFilters } from "../../../canyonUtils";
 import { refreshFromRopeWiki } from "../../../canyonUtils";
@@ -81,6 +81,7 @@ function CanyonsPanel({
     longest_pitch: filters.longest_pitch ?? ["Any", 0],
     hours: filters.hours ?? ["Any", 0],
     wetsuits: filters.wetsuits ?? [1, 5],
+    include_unknowns: filters.include_unknowns ?? false,
   });
 
   function sliderCell(
@@ -184,6 +185,7 @@ function CanyonsPanel({
       longest_pitch: null,
       hours: null,
       wetsuits: null,
+      include_unknowns: false,
     };
     onChangeFilters(reset);
     setFilterInputs({
@@ -195,6 +197,7 @@ function CanyonsPanel({
       longest_pitch: ["Any", 0],
       hours: ["Any", 0],
       wetsuits: [1, 5],
+      include_unknowns: false,
     });
   }
 
@@ -289,6 +292,18 @@ function CanyonsPanel({
         {filtersOpen && (
           <div className={classes.accordionBody}>
             <div className={classes.accordionScroll}>
+              <div
+                className={classes.toggleRow}
+                title="When on, canyons missing data for an active filter field are still shown. When off, they're hidden as soon as that filter is changed from its default."
+              >
+                <span>Include unknowns</span>
+                <Switch
+                  size="small"
+                  checked={filterInputs.include_unknowns}
+                  onChange={(_, v) => setFilterInputs({ ...filterInputs, include_unknowns: v })}
+                  color="secondary"
+                />
+              </div>
               <div className={classes.section}>
                 <div className={classes.sectionHeader}>Grades</div>
                 <div className={classes.sliderGrid}>

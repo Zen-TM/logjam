@@ -170,6 +170,17 @@
 
 /* ── Filter form elements ───────────────────────────────────────────────────── */
 
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  color: var(--theme-text-primary);
+  padding: 0 0 0.5em 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
+  margin-bottom: 0.75em;
+}
+
 .section {
   margin-bottom: 0.75em;
 }

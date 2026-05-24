@@ -99,6 +99,7 @@ export type TFilters = {
   longest_pitch: ["Any" | "Less than" | "More than" | "Exactly", number] | null;
   hours: ["Any" | "Less than" | "More than" | "Exactly", number] | null;
   wetsuits: number[] | null;
+  include_unknowns: boolean;
 };
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
@@ -748,6 +749,7 @@ export const emptyFilters: TFilters = {
   longest_pitch: null,
   hours: null,
   wetsuits: null,
+  include_unknowns: false,
 };
 
 export function hasActiveFilters(filters: TFilters): boolean {
@@ -772,13 +774,15 @@ export function hasActiveFilters(filters: TFilters): boolean {
 }
 
 export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
+  const includeUnknowns = filters.include_unknowns;
+
   function passesSliderFilter(
     value: number | null | undefined,
     filter: number[] | null,
     range: [number, number],
   ): boolean {
     if (filter && (filter[0] !== range[0] || filter[1] !== range[1])) {
-      if (value == null) return false;
+      if (value == null) return includeUnknowns;
       if (value < filter[0] || value > filter[1]) return false;
     }
     return true;
@@ -789,7 +793,7 @@ export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
     filter: ["Any" | "Less than" | "More than" | "Exactly", number] | null,
   ): boolean {
     if (filter && filter[0] !== "Any") {
-      if (value == null) return false;
+      if (value == null) return includeUnknowns;
       if (filter[0] === "Less than" && value >= filter[1]) return false;
       if (filter[0] === "More than" && value <= filter[1]) return false;
       if (filter[0] === "Exactly" && value !== filter[1]) return false;
