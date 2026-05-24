@@ -246,10 +246,26 @@ def run_tippecanoe_contours(geojson_dir: str, out_dir: str) -> Path | None:
 
 
 def run_tippecanoe_features(geojson_dir: str, out_dir: str) -> Path | None:
-    """Convert OSM features GeoJSON to vector MBTiles via tippecanoe."""
+    """Convert OSM features GeoJSON to vector MBTiles via tippecanoe.
+
+    Returns None when the input is missing or has zero features. tippecanoe
+    fails with "Did not read any valid geometries" on empty FeatureCollections,
+    which would otherwise kill the whole job (e.g. when Overpass returns 0
+    matches in a remote area, or the user disables every OSM feature class).
+    """
     input_path = Path(geojson_dir) / "osm_features.geojson"
     if not input_path.exists():
         log.warning("No OSM features GeoJSON found — skipping vector features.")
+        return None
+
+    try:
+        with open(input_path, "r", encoding="utf-8") as f:
+            feature_count = len(json.load(f).get("features", []))
+    except (json.JSONDecodeError, OSError) as e:
+        log.warning(f"Could not parse {input_path} ({e}) — skipping vector features.")
+        return None
+    if feature_count == 0:
+        log.warning("OSM features GeoJSON contains 0 features — skipping vector features.")
         return None
 
     out_path = Path(out_dir) / "features_vector.mbtiles"
@@ -355,8 +371,7 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
         )
 
     footprint_local = geojson_dir / "footprint.geojson"
-    osm_failed = not (geojson_dir / "osm_features.geojson").exists()
-    if osm_failed:
+    if not (geojson_dir / "osm_features.geojson").exists():
         log.warning("OSM features GeoJSON missing — Overpass fetch failed in pipeline.")
 
     # ── Vector tiles for contours + OSM features ────────────────────────
@@ -374,6 +389,9 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
     features_vector = run_tippecanoe_features(str(geojson_dir), str(vector_dir))
     if features_vector is not None:
         vector_mbtiles_by_layer["features"] = features_vector
+    # True when no features layer will be produced — covers missing GeoJSON
+    # (Overpass failure) and empty GeoJSON (no matches / all classes disabled).
+    osm_failed = features_vector is None
 
     # ── Optional: upload intermediates for debugging ────────────────────
     if keep_intermediates and pipeline_work_dir is not None:
@@ -401,8 +419,18 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
     # layers, not the composite.
     output_keys = []
     total_output_bytes = 0
+    # Vector layers whose tippecanoe step produced no MBTiles (empty input).
+    # The raster MBTiles for these layers would still exist but is useless on
+    # its own — the frontend reads vector PMTiles for these layers, so falling
+    # back to the raster would produce a layer the frontend can't interpret.
+    skipped_vector_layers = {
+        name for name in ("features", "contours") if name not in vector_mbtiles_by_layer
+    }
     for mbtiles_path in sorted(output_dir.glob("*.mbtiles")):
         name        = mbtiles_path.stem
+        if name in skipped_vector_layers:
+            log.info(f"Skipping upload of {name}.mbtiles (no vector tiles produced).")
+            continue
         mbtiles_key = f"outputs/{job_id}/{name}.mbtiles"
 
         log.info(f"Uploading {name}.mbtiles …")
