@@ -153,7 +153,7 @@ function ChangeEmailDialog({
           <>
             <Typography sx={{ color: "var(--theme-text-muted)", fontSize: "var(--text-sm)" }}>
               A verification code was sent to{" "}
-              <strong style={{ color: "var(--theme-text-primary)" }}>{pendingEmail}</strong>.
+              <strong style={{ color: "var(--theme-text-primary)" }}>{pendingEmail}</strong> (check spam).
               Enter it below.
             </Typography>
             <TextField

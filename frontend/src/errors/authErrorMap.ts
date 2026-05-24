@@ -4,7 +4,7 @@ const AUTH_ERROR_CODES: Record<string, string> = {
   UserNotFoundException: "No account found with that email address.",
   UsernameExistsException: "An account with that email already exists.",
   InvalidPasswordException: "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.",
-  CodeMismatchException: "Incorrect verification code. Please check your email and try again.",
+  CodeMismatchException: "Incorrect verification code. Please check your email (check spam) and try again.",
   ExpiredCodeException: "That verification code has expired. Please request a new one.",
   LimitExceededException: "Too many attempts. Please wait a few minutes and try again.",
   InvalidParameterException: "Please check your details and try again.",

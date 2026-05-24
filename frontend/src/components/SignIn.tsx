@@ -145,7 +145,7 @@ function SignIn({
         <form className={classes.form} onSubmit={handleConfirm}>
           <h1 className={classes.title}>Logjam</h1>
           <p className={classes.subtitle}>
-            Check your email for a verification code
+            Check your email for a verification code (check spam)
           </p>
           <TextField
             label="Verification code"
@@ -158,7 +158,7 @@ function SignIn({
           />
           {displayError && <ErrorBanner message={displayError} />}
           {resendSuccess && (
-            <p className={classes.successBanner}>New code sent — check your email.</p>
+            <p className={classes.successBanner}>New code sent — check your email (check spam).</p>
           )}
           <Button
             type="submit"
