@@ -331,6 +331,15 @@ export function deleteCanyon(id: string): Promise<void> {
   return apiFetch<void>(`/canyons/${id}`, { method: "DELETE" });
 }
 
+export function bulkDeleteCanyons(
+  ids: string[],
+): Promise<{ deletedIds: string[] }> {
+  return apiFetch<{ deletedIds: string[] }>("/canyons/bulk/delete", {
+    method: "POST",
+    body: { ids },
+  });
+}
+
 
 export function useCanyons(enabled: boolean) {
   const [canyons, setCanyons] = useState<TCanyon[]>([]);

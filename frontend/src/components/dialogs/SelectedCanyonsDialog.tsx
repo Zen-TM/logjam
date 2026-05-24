@@ -16,7 +16,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import { ChevronRight, Minus, Plus } from "lucide-react";
 import type { TCanyon, TFriend } from "../../canyonUtils";
-import { deleteCanyon, shareCanyonWith } from "../../canyonUtils";
+import { bulkDeleteCanyons, shareCanyonWith } from "../../canyonUtils";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import type { TExportFormat } from "../../canyonExport";
@@ -120,9 +120,7 @@ function SelectedCanyonsDialog({
   async function handleDelete() {
     setDeleting(true);
     try {
-      for (const c of ownedCanyons) {
-        await deleteCanyon(c.id);
-      }
+      await bulkDeleteCanyons(ownedCanyons.map((c) => c.id));
       setShowDeleteConfirm(false);
       onQuotaChanged?.();
       onDeleted();
