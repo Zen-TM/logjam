@@ -47,6 +47,7 @@ import {
 import { mergeCanyon } from "../../csvImport/mergeCanyon";
 import type { ConflictPolicy } from "../../csvImport/mergeCanyon";
 import { matchCanyonByName } from "../../csvImport/matchCanyon";
+import { norm } from "@logjam/shared";
 import { fieldSx, selectSx, menuPaperProps, SectionLabel } from "../../csvImport/dialogStyles";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
@@ -318,6 +319,30 @@ function splitByMatch(
   }
 
   return { matched, unmatched };
+}
+
+function filterCanyonOptions(
+  options: TCanyon[],
+  state: { inputValue: string },
+): TCanyon[] {
+  const q = norm(state.inputValue);
+  if (!q) return options.slice(0, 50);
+
+  type Scored = { canyon: TCanyon; score: number };
+  const scored: Scored[] = [];
+  for (const c of options) {
+    const name = norm(c.name);
+    const altMatches = c.altNames.map(norm);
+    let score = 0;
+    if (name === q || altMatches.includes(q)) score = 4;
+    else if (name.startsWith(q) || altMatches.some((a) => a.startsWith(q))) score = 3;
+    else if (name.includes(q) || altMatches.some((a) => a.includes(q))) score = 2;
+    if (score > 0) scored.push({ canyon: c, score });
+  }
+  scored.sort(
+    (a, b) => b.score - a.score || a.canyon.name.localeCompare(b.canyon.name),
+  );
+  return scored.slice(0, 50).map((s) => s.canyon);
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -1141,6 +1166,9 @@ function CanyonCsvImportDialog({
                     size="small"
                     options={canyons}
                     getOptionLabel={(c) => c.name}
+                    getOptionKey={(c) => c.id}
+                    filterOptions={filterCanyonOptions}
+                    clearOnBlur={false}
                     value={null}
                     onChange={(_, canyon) => {
                       if (canyon) {

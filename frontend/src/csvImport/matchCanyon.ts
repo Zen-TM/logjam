@@ -12,13 +12,31 @@ export function matchCanyonByName(
   csvName: string,
   canyons: TCanyon[],
 ): MatchResult {
-  const query = stripWaterwaySuffix(csvName);
-  const matches = canyons.filter(
+  const csvNorm = norm(csvName);
+  const csvStripped = stripWaterwaySuffix(csvName);
+
+  const exact = canyons.filter(
     (c) =>
-      norm(c.name).includes(query) ||
-      c.altNames.some((a) => norm(a).includes(query)),
+      norm(c.name) === csvNorm ||
+      c.altNames.some((a) => norm(a) === csvNorm),
   );
-  if (matches.length === 1) return { kind: "match", canyon: matches[0] };
-  if (matches.length > 1) return { kind: "ambiguous", canyons: matches };
+  if (exact.length === 1) return { kind: "match", canyon: exact[0] };
+  if (exact.length > 1) return { kind: "ambiguous", canyons: exact };
+
+  const stripped = canyons.filter(
+    (c) =>
+      stripWaterwaySuffix(c.name) === csvStripped ||
+      c.altNames.some((a) => stripWaterwaySuffix(a) === csvStripped),
+  );
+  if (stripped.length === 1) return { kind: "match", canyon: stripped[0] };
+  if (stripped.length > 1) return { kind: "ambiguous", canyons: stripped };
+
+  const fuzzy = canyons.filter(
+    (c) =>
+      norm(c.name).includes(csvStripped) ||
+      c.altNames.some((a) => norm(a).includes(csvStripped)),
+  );
+  if (fuzzy.length === 1) return { kind: "match", canyon: fuzzy[0] };
+  if (fuzzy.length > 1) return { kind: "ambiguous", canyons: fuzzy };
   return { kind: "none" };
 }
