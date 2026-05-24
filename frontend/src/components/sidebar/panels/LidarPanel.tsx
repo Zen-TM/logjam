@@ -5,8 +5,8 @@ import classes from "./LidarPanel.module.css";
 import { apiFetch } from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
-import type { TopoJob, DownloadUrl, TopoTemplate } from "../../dialogs/TopoDialog";
-import type { CompletedTopoJob, GeoJsonGeometry } from "../../../topoLayerTypes";
+import type { TopoJob, TopoTemplate, GeoJsonPolygon } from "../../dialogs/TopoDialog";
+import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import TopoTemplateEditDialog from "../../dialogs/TopoTemplateEditDialog";
 
 function relativeDate(iso: string | null): string {
@@ -39,12 +39,6 @@ function jobEtaLabel(job: TopoJob): string {
   return "";
 }
 
-function jobProgress(job: TopoJob): number | null {
-  if (job.status !== "processing") return null;
-  if (job.tileCount == null || job.tileCount === 0) return null;
-  return 0; // indeterminate while processing — LinearProgress handles this
-}
-
 const switchSx = (color: string) => ({
   "& .MuiSwitch-switchBase.Mui-checked": { color },
   "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
@@ -54,7 +48,6 @@ const switchSx = (color: string) => ({
 
 function LidarPanel({
   activeTopoJobs,
-  topoDownloadUrls,
   completedTopoJobs,
   lidarJobToggles,
   setLidarJobToggles,
@@ -64,14 +57,13 @@ function LidarPanel({
   onOpenTopoWithTemplate,
 }: {
   activeTopoJobs: TopoJob[];
-  topoDownloadUrls: Record<string, DownloadUrl[]>;
   completedTopoJobs: CompletedTopoJob[];
   lidarJobToggles: Record<string, boolean>;
   setLidarJobToggles: (
     v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>),
   ) => void;
   onOpenTopo: () => void;
-  onTopoFlyTarget: (footprint: GeoJsonGeometry) => void;
+  onTopoFlyTarget: (footprint: GeoJsonPolygon) => void;
   onRefetchCompletedTopoJobs: () => void;
   onOpenTopoWithTemplate: (templateId: string) => void;
 }) {
@@ -305,7 +297,7 @@ function LidarPanel({
                   <button
                     className={classes.jobName}
                     onClick={() => {
-                      if (job.footprint) onTopoFlyTarget(job.footprint);
+                      if (job.footprint) onTopoFlyTarget(job.footprint as GeoJsonPolygon);
                     }}
                     title="Fly to this topo on map"
                   >

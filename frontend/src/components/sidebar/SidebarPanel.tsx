@@ -10,8 +10,7 @@ import type {
   TAnalytics,
 } from "../../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
-import type { GeoJsonPolygon } from "../dialogs/TopoDialog";
-import type { TopoJob, DownloadUrl } from "../dialogs/TopoDialog";
+import type { TopoJob, GeoJsonPolygon } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
 import classes from "./SidebarPanel.module.css";
@@ -79,7 +78,6 @@ function SidebarPanel({
   geoPdfTemplateRefetch,
   // LiDAR
   activeTopoJobs,
-  topoDownloadUrls,
   completedTopoJobs,
   lidarJobToggles,
   setLidarJobToggles,
@@ -152,7 +150,6 @@ function SidebarPanel({
   geoPdfTemplateRefetch: number;
   // LiDAR
   activeTopoJobs: TopoJob[];
-  topoDownloadUrls: Record<string, DownloadUrl[]>;
   completedTopoJobs: CompletedTopoJob[];
   lidarJobToggles: Record<string, boolean>;
   setLidarJobToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
@@ -248,7 +245,6 @@ function SidebarPanel({
         {activePanel === "lidar" && (
           <LidarPanel
             activeTopoJobs={activeTopoJobs}
-            topoDownloadUrls={topoDownloadUrls}
             completedTopoJobs={completedTopoJobs}
             lidarJobToggles={lidarJobToggles}
             setLidarJobToggles={setLidarJobToggles}

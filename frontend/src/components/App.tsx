@@ -618,7 +618,6 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           }}
           geoPdfTemplateRefetch={geoPdfTemplateRefetch}
           activeTopoJobs={activeTopoJobs}
-          topoDownloadUrls={topoDownloadUrls}
           completedTopoJobs={completedTopoJobs}
           lidarJobToggles={lidarJobToggles}
           setLidarJobToggles={setLidarJobToggles}

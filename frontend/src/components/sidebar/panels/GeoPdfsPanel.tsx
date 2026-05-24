@@ -36,7 +36,7 @@ function GeoPdfsPanel({
   const toast = useToast();
   const [templates, setTemplates] = useState<GeoPdfTemplate[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [fetchCount, setFetchCount] = useState(0);
+  const [fetchCount] = useState(0);
 
   const loadTemplates = useCallback(async () => {
     try {
