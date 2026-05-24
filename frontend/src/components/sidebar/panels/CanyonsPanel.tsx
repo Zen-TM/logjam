@@ -6,6 +6,7 @@ import type { TCanyon, TFilters } from "../../../canyonUtils";
 import { refreshFromRopeWiki } from "../../../canyonUtils";
 import type { RefreshResult } from "../../../canyonUtils";
 import RopeWikiReviewDialog from "../../dialogs/RopeWikiReviewDialog";
+import { useToast } from "../../feedback/ToastProvider";
 
 function CanyonsPanel({
   canyons,
@@ -197,6 +198,7 @@ function CanyonsPanel({
   }
 
   // RopeWiki refresh
+  const toast = useToast();
   const [refreshing, setRefreshing] = useState(false);
   const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -209,12 +211,15 @@ function CanyonsPanel({
       setRefreshResult(result);
       onRefetch();
       if (result.review.length > 0) setReviewOpen(true);
+      toast.success(
+        `Imported successfully! ${result.added} added, ${result.updated} updated`,
+      );
     } catch {
       setRefreshResult(null);
     } finally {
       setRefreshing(false);
     }
-  }, [onRefetch]);
+  }, [onRefetch, toast]);
 
   return (
     <div className={classes.root}>
@@ -331,17 +336,8 @@ function CanyonsPanel({
           onClick={handleRefresh}
           disabled={refreshing}
         >
-          {refreshing ? "Refreshing…" : "Refresh from RopeWiki"}
+          {refreshing ? "Importing..." : "Import from RopeWiki"}
         </button>
-        {refreshResult && (
-          <span className={classes.refreshResult}>
-            {refreshResult.added} added
-            {refreshResult.autoLinked > 0 && `, ${refreshResult.autoLinked} linked`}
-            , {refreshResult.updated} updated, {refreshResult.unchanged} unchanged
-            {refreshResult.userEdited > 0 && `, ${refreshResult.userEdited} kept (edited)`}
-            {refreshResult.review.length > 0 && `, ${refreshResult.review.length} need review`}
-          </span>
-        )}
       </div>
 
       {refreshResult && (
