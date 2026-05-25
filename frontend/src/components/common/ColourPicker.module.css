@@ -57,3 +57,80 @@
   outline: none;
   border-color: var(--theme-accent);
 }
+
+.satPanel {
+  position: relative;
+  width: 200px;
+  height: 150px;
+  border-radius: var(--radius-sm);
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+}
+
+.satPanelGradients {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(to right, #fff, transparent),
+    linear-gradient(to bottom, transparent, #000);
+  pointer-events: none;
+}
+
+.hueSlider {
+  position: relative;
+  width: 200px;
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(
+    to right,
+    hsl(0, 100%, 50%),
+    hsl(60, 100%, 50%),
+    hsl(120, 100%, 50%),
+    hsl(180, 100%, 50%),
+    hsl(240, 100%, 50%),
+    hsl(300, 100%, 50%),
+    hsl(360, 100%, 50%)
+  );
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+
+.alphaSlider {
+  position: relative;
+  width: 200px;
+  height: 14px;
+  border-radius: 7px;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  background-image:
+    linear-gradient(45deg, #888 25%, transparent 25%),
+    linear-gradient(-45deg, #888 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #888 75%),
+    linear-gradient(-45deg, transparent 75%, #888 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  background-color: #ccc;
+}
+
+.alphaGradient {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.pickerThumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 1;
+}
