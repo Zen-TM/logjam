@@ -814,7 +814,7 @@ function Map({
             id: layerId,
             type: "raster",
             source: srcId,
-            paint: { "raster-opacity": 1 },
+            paint: { "raster-opacity": 1, "raster-resampling": "nearest" },
           });
         }
       } else {
