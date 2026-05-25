@@ -8,6 +8,7 @@ import TopoDialog from "./dialogs/TopoDialog";
 import type {
   TopoJob,
   GeoJsonPolygon,
+  DownloadUrl,
 } from "./dialogs/TopoDialog";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
 import type { GeoPdfTemplate, GeoPdfJob } from "./dialogs/GeoPdfDialog";
@@ -428,34 +429,62 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     return () => window.removeEventListener("beforeunload", handler);
   }, [geoPdfJobs.length]);
 
-  // Capture ?topoJob=<id> deep link on mount, stash in sessionStorage so it
-  // survives a Cognito sign-in redirect, then clean the URL immediately.
+  // Capture ?topoJob=<id>[&download=<layer>] deep link on mount, stash in
+  // sessionStorage so it survives a Cognito sign-in redirect, then clean URL.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const jobId = params.get("topoJob");
     if (jobId) {
+      const layer = params.get("download");
       sessionStorage.setItem("pendingTopoJobId", jobId);
+      if (layer) sessionStorage.setItem("pendingTopoDownload", layer);
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
 
-  // After auth, resolve any stashed deep-link job and open TopoDialog on it.
+  // After auth, resolve any stashed deep-link job.
+  // With ?download=<layer>: fetch presigned URL for that layer and trigger download.
+  // Without ?download: open TopoDialog (existing behaviour).
   useEffect(() => {
     if (!authenticated) return;
     const jobId = sessionStorage.getItem("pendingTopoJobId");
     if (!jobId) return;
     sessionStorage.removeItem("pendingTopoJobId");
-    apiFetch<TopoJob>(`/topo-jobs/${jobId}`)
-      .then((job) => {
-        setActiveTopoJobs((prev) =>
-          prev.some((j) => j.id === job.id) ? prev : [job, ...prev],
-        );
-        setShowTopo(true);
-      })
-      .catch((err) => {
-        console.error(err);
-        toast.error(messageFromError(err, "Couldn't load topo job."));
-      });
+    const layer = sessionStorage.getItem("pendingTopoDownload");
+    if (layer) sessionStorage.removeItem("pendingTopoDownload");
+
+    if (layer) {
+      apiFetch<DownloadUrl[]>(`/topo-jobs/${jobId}/download-urls`)
+        .then((urls) => {
+          const entry = urls.find((u) => u.name === layer);
+          if (!entry) {
+            toast.error(`Download layer "${layer}" not found for this job.`);
+            return;
+          }
+          const a = document.createElement("a");
+          a.href = entry.mbtilesUrl;
+          a.download = `${entry.name}.mbtiles`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        })
+        .catch((err) => {
+          console.error(err);
+          toast.error(messageFromError(err, "Couldn't start download."));
+        });
+    } else {
+      apiFetch<TopoJob>(`/topo-jobs/${jobId}`)
+        .then((job) => {
+          setActiveTopoJobs((prev) =>
+            prev.some((j) => j.id === job.id) ? prev : [job, ...prev],
+          );
+          setShowTopo(true);
+        })
+        .catch((err) => {
+          console.error(err);
+          toast.error(messageFromError(err, "Couldn't load topo job."));
+        });
+    }
   }, [authenticated, toast]);
 
   // Show import dialog once when user has no canyons after first fetch completes

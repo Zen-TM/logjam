@@ -166,7 +166,20 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
         log.warning("FRONTEND_URL not set — skipping completion email")
         return
 
-    app_link = f"{FRONTEND_URL}/?topoJob={job_id}"
+    base = FRONTEND_URL.rstrip("/")
+
+    def _display(name: str) -> str:
+        return "Composite (all layers)" if name == "composite" else name.capitalize()
+
+    layers_text = "\n".join(
+        f"  {_display(o['name'])}: {base}/?topoJob={job_id}&download={o['name']}"
+        for o in output_keys
+    )
+    layers_html = "\n".join(
+        f'    <li><a href="{base}/?topoJob={job_id}&download={o["name"]}">'
+        f'{_display(o["name"])}.mbtiles</a></li>'
+        for o in output_keys
+    )
 
     osm_warning_text = (
         "\n\nNote: OSM features (tracks, waterways, peaks, etc.) are unavailable "
@@ -183,7 +196,9 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
     text_body = "\n".join([
         "Your topo map job is complete.",
         "",
-        f"Open Logjam to download your MBTiles files: {app_link}",
+        "Click a link below to download that layer (you must be signed in to Logjam):",
+        "",
+        layers_text,
         "",
         "You can also view these layers as overlays in the app.",
     ]) + osm_warning_text
@@ -192,7 +207,10 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
         "<html>",
         "  <body>",
         "    <p>Your topo map job is complete.</p>",
-        f'    <p><a href="{app_link}">Open in Logjam</a> to download your MBTiles files.</p>',
+        "    <p>Click a link below to download that layer (you must be signed in to Logjam):</p>",
+        "    <ul>",
+        layers_html,
+        "    </ul>",
         "    <p>You can also view these layers as overlays in the app.</p>",
         f"    {osm_warning_html}",
         "  </body>",
