@@ -34,10 +34,12 @@ function ChangeEmailDialog({
   open,
   onClose,
   onSuccess,
+  currentEmail = "",
 }: {
   open: boolean;
   onClose: () => void;
   onSuccess: (newEmail: string) => void;
+  currentEmail?: string;
 }) {
   const [stage, setStage] = useState<Stage>("input");
   const [newEmail, setNewEmail] = useState("");
@@ -59,6 +61,10 @@ function ChangeEmailDialog({
   async function handleSendCode() {
     const trimmed = newEmail.trim();
     if (!trimmed) return;
+    if (currentEmail && trimmed.toLowerCase() === currentEmail.toLowerCase()) {
+      setError("That's already your current email address.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -70,6 +76,21 @@ function ChangeEmailDialog({
     } catch (err) {
       console.error(err);
       setError(messageFromError(err, "Couldn't send verification code. Please try again."));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResend() {
+    setLoading(true);
+    setError(null);
+    try {
+      await updateUserAttribute({
+        userAttribute: { attributeKey: "email", value: pendingEmail },
+      });
+    } catch (err) {
+      console.error(err);
+      setError(messageFromError(err, "Couldn't resend verification code. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -204,15 +225,24 @@ function ChangeEmailDialog({
               </Button>
             )}
             {stage === "verify" && (
-              <Button
-                variant="contained"
-                color="secondary"
-                disabled={!code.trim() || loading}
-                onClick={handleConfirm}
-                startIcon={loading ? <CircularProgress size={14} color="inherit" /> : undefined}
-              >
-                {loading ? "Confirming…" : "Confirm"}
-              </Button>
+              <>
+                <Button
+                  onClick={handleResend}
+                  disabled={loading}
+                  sx={{ color: "var(--theme-text-muted)" }}
+                >
+                  Resend code
+                </Button>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  disabled={!code.trim() || loading}
+                  onClick={handleConfirm}
+                  startIcon={loading ? <CircularProgress size={14} color="inherit" /> : undefined}
+                >
+                  {loading ? "Confirming…" : "Confirm"}
+                </Button>
+              </>
             )}
           </>
         )}

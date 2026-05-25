@@ -322,6 +322,7 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
         open={changeEmailOpen}
         onClose={() => setChangeEmailOpen(false)}
         onSuccess={(newEmail) => setEmail(newEmail)}
+        currentEmail={email ?? ""}
       />
 
       <Footer />
