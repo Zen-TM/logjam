@@ -29,7 +29,7 @@
 }
 
 .consentRow a {
-  color: var(--theme-accent);
+  color: var(--theme-text-primary);
 }
 
 .form {

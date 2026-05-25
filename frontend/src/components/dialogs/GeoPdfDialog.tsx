@@ -1375,11 +1375,6 @@ function GeoPdfDialog({
           </Button>
         )}
       </DialogActions>
-      {generating && !templateMode && (
-        <Typography variant="caption" sx={{ px: 3, pb: 1, opacity: 0.7 }}>
-          This may take up to a minute for large areas.
-        </Typography>
-      )}
     </Dialog>
   );
 }
