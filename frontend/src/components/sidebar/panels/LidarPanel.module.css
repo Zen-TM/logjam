@@ -182,13 +182,6 @@
   color: var(--theme-accent);
 }
 
-.templateDate {
-  font-size: var(--text-xs);
-  opacity: 0.5;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
 /* ── Completed job rows ─────────────────────────────────────────────────────── */
 
 .jobItem {

@@ -10,21 +10,6 @@ import type { TopoJob, TopoTemplate, GeoJsonPolygon } from "../../dialogs/TopoDi
 import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import TopoTemplateEditDialog from "../../dialogs/TopoTemplateEditDialog";
 
-function relativeDate(iso: string | null): string {
-  if (!iso) return "";
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  const weeks = Math.floor(days / 7);
-  if (weeks < 5) return `${weeks}w ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-}
 
 function jobEtaLabel(job: TopoJob): string {
   if (job.status === "uploading") return "Uploading…";
@@ -257,9 +242,7 @@ function LidarPanel({
                 >
                   {t.name}
                 </button>
-                <span className={classes.templateDate}>
-                  {t.isSystem ? "system" : relativeDate(t.updatedAt)}
-                </span>
+
                 {!t.isSystem && (
                   deletingTemplateId === t.id ? (
                     <div className={classes.confirmRow}>
