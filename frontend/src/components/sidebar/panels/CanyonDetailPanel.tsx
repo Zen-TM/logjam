@@ -6,23 +6,22 @@ import {
   DialogContentText,
   DialogActions,
   Button,
-  TextField,
 } from "@mui/material";
+import { Pencil } from "lucide-react";
 import classes from "./CanyonDetailPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import CanyonDialog from "../../dialogs/CanyonDialog";
+import ShareCanyonDialog from "../../dialogs/ShareCanyonDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
-import type { TCanyon, TFriend, TCanyonShare, TTripLog } from "../../../canyonUtils";
+import type { TCanyon, TFriend, TTripLog } from "../../../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import {
   formatCanyonGrade,
   deleteCanyon,
-  shareCanyonWith,
-  unshareCanyonWith,
-  getCanyonShares,
   copyCanyon,
+  unshareCanyonWith,
   getTripLogs,
 } from "../../../canyonUtils";
 
@@ -57,8 +56,8 @@ function CanyonDetailPanel({
   const [showEdit, setShowEdit] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
 
-  // Trip log state
   const [tripLogs, setTripLogs] = useState<TTripLog[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [showTripLogDialog, setShowTripLogDialog] = useState(false);
@@ -66,29 +65,8 @@ function CanyonDetailPanel({
   const [viewingTripLog, setViewingTripLog] = useState<TTripLog | null>(null);
   const [editingTripLog, setEditingTripLog] = useState<TTripLog | undefined>(undefined);
 
-  // Sharing state
-  const [showShareSelector, setShowShareSelector] = useState(false);
-  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
-  const [shareSearch, setShareSearch] = useState("");
-  const [canyonShares, setCanyonShares] = useState<TCanyonShare[]>([]);
-  const [sharing, setSharing] = useState(false);
   const [copying, setCopying] = useState(false);
 
-  // Reset sharing state and fetch shares when canyon changes
-  useEffect(() => {
-    setShowShareSelector(false);
-    setSelectedFriendIds([]);
-    setShareSearch("");
-    if (!canyon || !isOwnedCanyon) {
-      setCanyonShares([]);
-      return;
-    }
-    getCanyonShares(canyon.id)
-      .then(setCanyonShares)
-      .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't load shares.")); });
-  }, [canyon?.id, isOwnedCanyon, toast]);
-
-  // Fetch trip logs when canyon changes
   useEffect(() => {
     if (!canyon) {
       setTripLogs([]);
@@ -97,8 +75,12 @@ function CanyonDetailPanel({
     setLoadingTrips(true);
     getTripLogs(canyon.id)
       .then(setTripLogs)
-      .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't load trip logs.")); })
+      .catch((err) => {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't load trip logs."));
+      })
       .finally(() => setLoadingTrips(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canyon?.id, toast]);
 
   if (!canyon) {
@@ -119,39 +101,6 @@ function CanyonDetailPanel({
       console.error(err);
       toast.error(messageFromError(err, "Couldn't delete canyon. Please try again."));
       setDeleting(false);
-    }
-  }
-
-  async function handleShareCanyon() {
-    if (!canyon || selectedFriendIds.length === 0) return;
-    setSharing(true);
-    try {
-      for (const friendId of selectedFriendIds) {
-        await shareCanyonWith(canyon.id, friendId);
-      }
-      setSelectedFriendIds([]);
-      setShowShareSelector(false);
-      getCanyonShares(canyon.id)
-        .then(setCanyonShares)
-        .catch((err) => { console.error(err); });
-    } catch (err) {
-      console.error(err);
-      toast.error(messageFromError(err, "Couldn't share canyon. Please try again."));
-    } finally {
-      setSharing(false);
-    }
-  }
-
-  async function handleUnshare(userId: string) {
-    if (!canyon) return;
-    try {
-      await unshareCanyonWith(canyon.id, userId);
-      getCanyonShares(canyon.id)
-        .then(setCanyonShares)
-        .catch((err) => { console.error(err); });
-    } catch (err) {
-      console.error(err);
-      toast.error(messageFromError(err, "Couldn't remove share. Please try again."));
     }
   }
 
@@ -193,243 +142,94 @@ function CanyonDetailPanel({
 
   return (
     <>
-      <div className={classes.canyonInfo}>
-        {canyon.altNames.length > 0 && (
-          <p className={classes.altNames}>
-            Also known as: {canyon.altNames.join(", ")}
-          </p>
-        )}
-        {canyon.ropeWikiId != null && (
-          <p className={classes.disclaimer}>
-            Canyon data imported from RopeWiki.
-          </p>
-        )}
-        {canyonGrade && (
-          <p>
-            <b>Grade:</b> {canyonGrade}
-          </p>
-        )}
-        <p>
-          <b>Location:</b> {canyon.latitude.toFixed(4)},{" "}
-          {canyon.longitude.toFixed(4)}
-        </p>
-        {canyon.quality != null && (
-          <p>
-            <b>Quality:</b> {canyon.quality}/5
-          </p>
-        )}
-        {canyon.numAbseils != null && (
-          <p>
-            <b>Pitches:</b> {canyon.numAbseils}
-          </p>
-        )}
-        {canyon.longestAbseil != null && (
-          <p>
-            <b>Longest Pitch:</b> {canyon.longestAbseil}m
-          </p>
-        )}
-        {canyon.hours != null && (
-          <p>
-            <b>Hours:</b> {canyon.hours}
-          </p>
-        )}
-        {canyon.wetsuits != null && (
-          <p>
-            <b>Wetsuits Required:</b> {canyon.wetsuits}/5
-          </p>
-        )}
-        {canyon.attributes.sources && canyon.attributes.sources.length > 0 && (
-          <div>
-            <b>Sources:</b>
-            <ul className={classes.sourcesList}>
-              {canyon.attributes.sources.map(([label, url], i) => (
-                <li key={i}>
-                  {url ? (
-                    <a href={url} target="_blank" rel="noopener noreferrer">
-                      {label}
-                    </a>
-                  ) : (
-                    label
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {isOwnedCanyon && (
-          <div className={classes.canyonActions}>
-            <button
-              className={classes.editButton}
-              onClick={() => setShowEdit(true)}
-            >
-              Edit
-            </button>
-            <button
-              className={classes.logTripButton}
-              onClick={() => {
-                setEditingTripLog(undefined);
-                setShowTripLogDialog(true);
-              }}
-            >
-              Log Trip
-            </button>
-            <button
-              className={classes.deleteButton}
-              onClick={() => setShowDeleteConfirm(true)}
-            >
-              Delete
-            </button>
+      <div className={classes.root}>
+        {(canyon.ropeWikiId != null || canyon.altNames.length > 0) && (
+          <div className={classes.headerMeta}>
+            {canyon.ropeWikiId != null && (
+              <p className={classes.disclaimer}>Canyon data imported from RopeWiki.</p>
+            )}
+            {canyon.altNames.length > 0 && (
+              <p className={classes.altNames}>Also known as: {canyon.altNames.join(", ")}</p>
+            )}
           </div>
         )}
 
-        {/* Sharing UI (owned canyons only) */}
-        {isOwnedCanyon && (
-          <div className={classes.shareSection}>
-            <button
-              className={classes.shareButton}
-              onClick={() => setShowShareSelector(!showShareSelector)}
-            >
-              Share Canyon
-            </button>
-            {showShareSelector && (
-              <div className={classes.shareSelector}>
-                {friends.length === 0 ? (
-                  <span className={classes.caption}>
-                    Add friends first to share canyons.
-                  </span>
-                ) : (
-                  <>
-                    <TextField
-                      placeholder="Search friends..."
-                      value={shareSearch}
-                      onChange={(e) => setShareSearch(e.target.value)}
-                      size="small"
-                      fullWidth
-                      sx={{
-                        "& .MuiInputBase-input": { fontSize: "0.85em" },
-                      }}
-                    />
-                    {shareSearch.length > 0 && (
-                      <div className={classes.searchResults}>
-                        {friends
-                          .filter(
-                            (f) =>
-                              f.username
-                                .toLowerCase()
-                                .includes(shareSearch.toLowerCase()) &&
-                              !selectedFriendIds.includes(f.id) &&
-                              !canyonShares.some(
-                                (s) => s.sharedWith.id === f.id,
-                              ),
-                          )
-                          .map((friend) => (
-                            <div
-                              key={friend.id}
-                              className={classes.searchResultItem}
-                            >
-                              <span>{friend.username}</span>
-                              <button
-                                className={classes.addToShareButton}
-                                onClick={() => {
-                                  setSelectedFriendIds([
-                                    ...selectedFriendIds,
-                                    friend.id,
-                                  ]);
-                                  setShareSearch("");
-                                }}
-                              >
-                                Add
-                              </button>
-                            </div>
-                          ))}
-                      </div>
+        <div
+          className={classes.attributesBox}
+          onClick={(e) => {
+            if ((e.target as HTMLElement).closest("a")) return;
+            setShowEdit(true);
+          }}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") setShowEdit(true);
+          }}
+          aria-label="Canyon attributes — click to edit"
+        >
+          <button
+            className={classes.editIcon}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowEdit(true);
+            }}
+            aria-label="Edit canyon"
+          >
+            <Pencil size={14} />
+          </button>
+          {canyonGrade && (
+            <p>
+              <b>Grade:</b> {canyonGrade}
+            </p>
+          )}
+          <p>
+            <b>Location:</b> {canyon.latitude.toFixed(4)}, {canyon.longitude.toFixed(4)}
+          </p>
+          {canyon.quality != null && (
+            <p>
+              <b>Quality:</b> {canyon.quality}/5
+            </p>
+          )}
+          {canyon.numAbseils != null && (
+            <p>
+              <b>Pitches:</b> {canyon.numAbseils}
+            </p>
+          )}
+          {canyon.longestAbseil != null && (
+            <p>
+              <b>Longest Pitch:</b> {canyon.longestAbseil}m
+            </p>
+          )}
+          {canyon.hours != null && (
+            <p>
+              <b>Hours:</b> {canyon.hours}
+            </p>
+          )}
+          {canyon.wetsuits != null && (
+            <p>
+              <b>Wetsuits Required:</b> {canyon.wetsuits}/5
+            </p>
+          )}
+          {canyon.attributes.sources && canyon.attributes.sources.length > 0 && (
+            <div>
+              <b>Sources:</b>
+              <ul className={classes.sourcesList}>
+                {canyon.attributes.sources.map(([label, url], i) => (
+                  <li key={i}>
+                    {url ? (
+                      <a href={url} target="_blank" rel="noopener noreferrer">
+                        {label}
+                      </a>
+                    ) : (
+                      label
                     )}
-                    {selectedFriendIds.length > 0 && (
-                      <div className={classes.selectedFriends}>
-                        {selectedFriendIds.map((id) => {
-                          const f = friends.find((fr) => fr.id === id);
-                          if (!f) return null;
-                          return (
-                            <span key={id} className={classes.friendChip}>
-                              {f.username}
-                              <button
-                                className={classes.chipRemove}
-                                onClick={() =>
-                                  setSelectedFriendIds(
-                                    selectedFriendIds.filter(
-                                      (fid) => fid !== id,
-                                    ),
-                                  )
-                                }
-                              >
-                                ✕
-                              </button>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-                    <button
-                      className={classes.shareButton}
-                      onClick={handleShareCanyon}
-                      disabled={sharing || selectedFriendIds.length === 0}
-                    >
-                      {sharing ? "Sharing..." : "Confirm Share"}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-            {canyonShares.length > 0 && (
-              <div className={classes.sharedWithList}>
-                <span className={classes.tripLogsHeader}>Shared with:</span>
-                {canyonShares.map((share) => (
-                  <div key={share.id} className={classes.sharedWithRow}>
-                    <span>{share.sharedWith.username}</span>
-                    <button
-                      className={classes.unshareButton}
-                      onClick={() => handleUnshare(share.sharedWith.id)}
-                    >
-                      Unshare
-                    </button>
-                  </div>
+                  </li>
                 ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Shared canyon actions */}
-        {!isOwnedCanyon && (
-          <div className={classes.shareSection}>
-            <div className={classes.copyActions}>
-              <button
-                className={classes.copyButton}
-                onClick={() => handleCopyCanyon(false)}
-                disabled={copying}
-              >
-                Copy to My Canyons
-              </button>
-              <button
-                className={classes.copyButton}
-                onClick={() => handleCopyCanyon(true)}
-                disabled={copying}
-              >
-                Copy and Remove
-              </button>
+              </ul>
             </div>
-            <button
-              className={classes.removeSharedButton}
-              onClick={handleRemoveShared}
-              disabled={copying}
-            >
-              Remove from Shared
-            </button>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Trip Logs list */}
-        <div className={classes.tripLogsSection}>
+        <div className={classes.tripLogsRegion}>
           <div className={classes.tripLogsHeader}>
             Trip Logs {tripLogs.length > 0 && `(${tripLogs.length})`}
           </div>
@@ -437,7 +237,9 @@ function CanyonDetailPanel({
             <span className={classes.caption}>Loading...</span>
           ) : tripLogs.length === 0 ? (
             <span className={classes.caption}>
-              {isOwnedCanyon ? "No trips logged yet." : "Trip logs are private to the canyon owner."}
+              {isOwnedCanyon
+                ? "No trips logged yet."
+                : "Trip logs are private to the canyon owner."}
             </span>
           ) : (
             <div className={classes.tripLogList}>
@@ -459,7 +261,9 @@ function CanyonDetailPanel({
                   </span>
                   {trip.notes && (
                     <span className={classes.tripLogNotes}>
-                      {trip.notes.length > 60 ? trip.notes.slice(0, 60) + "…" : trip.notes}
+                      {trip.notes.length > 60
+                        ? trip.notes.slice(0, 60) + "…"
+                        : trip.notes}
                     </span>
                   )}
                 </button>
@@ -467,9 +271,68 @@ function CanyonDetailPanel({
             </div>
           )}
         </div>
+
+        <div className={classes.footer}>
+          <div className={classes.divider} />
+          {isOwnedCanyon ? (
+            <>
+              <div className={classes.footerRow}>
+                <button
+                  className={classes.ghostBtn}
+                  onClick={() => setShowShareDialog(true)}
+                >
+                  Share
+                </button>
+                <button
+                  className={classes.ghostBtn}
+                  onClick={() => {
+                    setEditingTripLog(undefined);
+                    setShowTripLogDialog(true);
+                  }}
+                >
+                  Log Trip
+                </button>
+              </div>
+              <button
+                className={classes.dangerBtn}
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                Delete
+              </button>
+            </>
+          ) : (
+            <>
+              <div className={classes.footerRow}>
+                <button
+                  className={classes.ghostBtn}
+                  title="Copy to My Canyons"
+                  onClick={() => handleCopyCanyon(false)}
+                  disabled={copying}
+                >
+                  Copy
+                </button>
+                <button
+                  className={classes.ghostBtn}
+                  title="Remove from Shared"
+                  onClick={handleRemoveShared}
+                  disabled={copying}
+                >
+                  Remove from Shared
+                </button>
+              </div>
+              <button
+                className={classes.ghostBtnFull}
+                title="Copy to My Canyons and remove from Shared"
+                onClick={() => handleCopyCanyon(true)}
+                disabled={copying}
+              >
+                Copy and Remove
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Edit canyon dialog */}
       <CanyonDialog
         canyon={canyon}
         open={showEdit && !pickingCoords}
@@ -479,7 +342,15 @@ function CanyonDetailPanel({
         onCancelPickCoords={onCancelPickCoords}
       />
 
-      {/* Delete confirmation */}
+      {isOwnedCanyon && (
+        <ShareCanyonDialog
+          canyon={canyon}
+          friends={friends}
+          open={showShareDialog}
+          onClose={() => setShowShareDialog(false)}
+        />
+      )}
+
       <Dialog
         open={showDeleteConfirm}
         onClose={deleting ? undefined : () => setShowDeleteConfirm(false)}
@@ -520,7 +391,6 @@ function CanyonDetailPanel({
         </DialogActions>
       </Dialog>
 
-      {/* Trip Log create/edit dialog */}
       <TripLogDialog
         open={showTripLogDialog && !pickingCoords}
         onClose={() => {
@@ -530,10 +400,12 @@ function CanyonDetailPanel({
         onSaved={() => {
           setShowTripLogDialog(false);
           setEditingTripLog(undefined);
-          // Refresh trip logs
           getTripLogs(canyon.id)
             .then(setTripLogs)
-            .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't refresh trip logs.")); });
+            .catch((err) => {
+              console.error(err);
+              toast.error(messageFromError(err, "Couldn't refresh trip logs."));
+            });
         }}
         canyonId={canyon.id}
         canyonName={canyon.name}
@@ -542,7 +414,6 @@ function CanyonDetailPanel({
         onCustomFieldDefsChange={onCustomFieldDefsChange}
       />
 
-      {/* Trip Log view dialog */}
       <TripLogViewDialog
         open={showTripLogView}
         onClose={() => {
@@ -561,7 +432,10 @@ function CanyonDetailPanel({
         onDeleted={() => {
           getTripLogs(canyon.id)
             .then(setTripLogs)
-            .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't refresh trip logs.")); });
+            .catch((err) => {
+              console.error(err);
+              toast.error(messageFromError(err, "Couldn't refresh trip logs."));
+            });
           onQuotaChanged();
         }}
       />

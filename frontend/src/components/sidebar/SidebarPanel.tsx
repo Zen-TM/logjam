@@ -207,7 +207,7 @@ function SidebarPanel({
           <X size={18} />
         </button>
       </div>
-      <div className={classes.panelBody}>
+      <div className={classes.panelBody} data-active-panel={activePanel}>
         {activePanel === "layers" && (
           <LayersPanel
             showOwnedCanyons={showOwnedCanyons}
