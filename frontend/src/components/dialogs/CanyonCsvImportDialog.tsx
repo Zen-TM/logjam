@@ -492,6 +492,18 @@ function CanyonCsvImportDialog({
     mismatches: ColumnMismatch[],
   ) {
     const prepared = processRows(rows, assignments, newAttrForms, mismatchChoices, mismatches);
+
+    if (canyons.length === 0) {
+      setStage({
+        name: "confirm",
+        creates: prepared,
+        replaces: [],
+        discardCount: 0,
+        newAttrKeys: collectNewAttrKeys(),
+      });
+      return;
+    }
+
     const { matched, unmatched } = splitByMatch(prepared, canyons);
 
     // Init unmatched resolutions
