@@ -640,69 +640,100 @@ function Map({
     }
 
     map.getCanvas().style.cursor = "crosshair";
-    map.boxZoom.disable();
-    map.dragPan.disable();
 
-    let start: { x: number; y: number } | null = null;
+    // First corner stored as geographic coords so the overlay tracks map pans/zooms.
+    let startLngLat: { lng: number; lat: number } | null = null;
     let box: HTMLDivElement | null = null;
 
-    function onMouseDown(e: MouseEvent) {
-      start = { x: e.clientX, y: e.clientY };
-      box = document.createElement("div");
-      box.style.position = "absolute";
-      box.style.border = "2px dashed #22d3ee";
-      box.style.backgroundColor = "rgba(34, 211, 238, 0.1)";
-      box.style.pointerEvents = "none";
-      box.style.zIndex = "10";
-      container.appendChild(box);
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener("mouseup", onMouseUp);
-    }
-
-    function onMouseMove(e: MouseEvent) {
-      if (!start || !box) return;
-      const minX = Math.min(start.x, e.clientX);
-      const minY = Math.min(start.y, e.clientY);
-      const maxX = Math.max(start.x, e.clientX);
-      const maxY = Math.max(start.y, e.clientY);
+    function updateOverlay(cursorX: number, cursorY: number) {
+      if (!startLngLat || !box) return;
       const rect = container.getBoundingClientRect();
+      const startPx = map.project([startLngLat.lng, startLngLat.lat]);
+      const p1x = startPx.x + rect.left;
+      const p1y = startPx.y + rect.top;
+      const minX = Math.min(p1x, cursorX);
+      const minY = Math.min(p1y, cursorY);
+      const maxX = Math.max(p1x, cursorX);
+      const maxY = Math.max(p1y, cursorY);
       box.style.left = minX - rect.left + "px";
       box.style.top = minY - rect.top + "px";
       box.style.width = maxX - minX + "px";
       box.style.height = maxY - minY + "px";
     }
 
-    function onMouseUp(e: MouseEvent) {
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
+    // Kept in closure so map 'move' can call it without a cursor event.
+    let lastCursorX = 0;
+    let lastCursorY = 0;
+
+    function onMouseMove(e: MouseEvent) {
+      lastCursorX = e.clientX;
+      lastCursorY = e.clientY;
+      updateOverlay(e.clientX, e.clientY);
+    }
+
+    function onMapMove() {
+      updateOverlay(lastCursorX, lastCursorY);
+    }
+
+    function cancelSelection() {
       if (box) {
         box.remove();
         box = null;
       }
-      if (!start || !map) return;
-
-      const rect = container.getBoundingClientRect();
-      const p1 = map.unproject([start.x - rect.left, start.y - rect.top]);
-      const p2 = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
-
-      start = null;
-      onBboxSelectedRef.current?.({
-        west: Math.min(p1.lng, p2.lng),
-        south: Math.min(p1.lat, p2.lat),
-        east: Math.max(p1.lng, p2.lng),
-        north: Math.max(p1.lat, p2.lat),
-      });
+      startLngLat = null;
+      document.removeEventListener("mousemove", onMouseMove);
+      map.off("move", onMapMove);
     }
 
-    container.addEventListener("mousedown", onMouseDown);
+    function onClick(e: MouseEvent) {
+      if (!startLngLat) {
+        // First click — anchor first corner.
+        const rect = container.getBoundingClientRect();
+        const lngLat = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+        startLngLat = { lng: lngLat.lng, lat: lngLat.lat };
+        lastCursorX = e.clientX;
+        lastCursorY = e.clientY;
+
+        box = document.createElement("div");
+        box.style.position = "absolute";
+        box.style.border = "2px dashed #22d3ee";
+        box.style.backgroundColor = "rgba(34, 211, 238, 0.1)";
+        box.style.pointerEvents = "none";
+        box.style.zIndex = "10";
+        container.appendChild(box);
+
+        document.addEventListener("mousemove", onMouseMove);
+        map.on("move", onMapMove);
+      } else {
+        // Second click — finalize bbox.
+        const rect = container.getBoundingClientRect();
+        const p1 = startLngLat;
+        const p2 = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
+
+        cancelSelection();
+
+        onBboxSelectedRef.current?.({
+          west: Math.min(p1.lng, p2.lng),
+          south: Math.min(p1.lat, p2.lat),
+          east: Math.max(p1.lng, p2.lng),
+          north: Math.max(p1.lat, p2.lat),
+        });
+      }
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") cancelSelection();
+    }
+
+    container.addEventListener("click", onClick);
+    document.addEventListener("keydown", onKeyDown);
 
     return () => {
-      container.removeEventListener("mousedown", onMouseDown);
+      container.removeEventListener("click", onClick);
+      document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
+      map.off("move", onMapMove);
       if (box) box.remove();
-      map.boxZoom.enable();
-      map.dragPan.enable();
       map.getCanvas().style.cursor = "";
     };
   }, [selectingBbox, mapLoaded]);
