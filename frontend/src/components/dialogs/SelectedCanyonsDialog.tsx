@@ -125,6 +125,7 @@ function SelectedCanyonsDialog({
       onQuotaChanged?.();
       onDeleted();
       onClose();
+      toast.success(`${ownedCanyons.length} canyon${ownedCanyons.length === 1 ? "" : "s"} deleted`);
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't delete canyons. Please try again."));
