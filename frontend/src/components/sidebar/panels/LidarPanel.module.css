@@ -10,26 +10,30 @@
   composes: sectionLabel from '@styles/shared.module.css';
 }
 
-/* ── Active jobs section ─────────────────────────────────────────────────────── */
+/* ── Active job ribbons ───────────────────────────────────────────────────────── */
 
-.activeSection {
+/* Bleeds past SidebarPanel body padding (12px top, 16px sides) to sit flush */
+.ribbonStack {
   display: flex;
   flex-direction: column;
-  gap: 0.3em;
-  padding: 0.5em 0.6em;
-  background: color-mix(in srgb, var(--theme-accent) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--theme-accent) 30%, transparent);
-  border-radius: var(--radius-sm);
+  margin: -12px -16px 0;
 }
 
-.activeJobRow {
+.ribbon {
   display: flex;
   flex-direction: column;
-  gap: 0.2em;
-  padding: 0.2em 0;
 }
 
-.activeJobName {
+.ribbonHead {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.35em 16px 0.25em;
+}
+
+.ribbonName {
+  flex: 1;
+  min-width: 0;
   font-size: var(--text-sm);
   color: var(--theme-text-primary);
   overflow: hidden;
@@ -37,24 +41,32 @@
   white-space: nowrap;
 }
 
-.activeJobMeta {
+.ribbonEta {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ribbonEtaFailed {
+  composes: ribbonEta;
+  color: var(--theme-warning);
+}
+
+.ribbonDismiss {
+  background: none;
+  border: none;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  padding: 0;
   display: flex;
   align-items: center;
-  gap: 0.5em;
+  flex-shrink: 0;
+  opacity: 0.6;
 }
 
-.activeJobStatus {
-  font-size: var(--text-xs);
-  color: var(--theme-text-muted);
-  opacity: 0.8;
-  white-space: nowrap;
-}
-
-.activeJobEta {
-  font-size: var(--text-xs);
-  color: var(--theme-text-muted);
-  opacity: 0.7;
-  white-space: nowrap;
+.ribbonDismiss:hover {
+  opacity: 1;
 }
 
 .showAllButton {
@@ -63,7 +75,7 @@
   color: var(--theme-accent);
   font-size: var(--text-xs);
   cursor: pointer;
-  padding: 0.2em 0;
+  padding: 0.2em 16px;
   text-align: left;
 }
 
@@ -182,6 +194,7 @@
 .jobItem {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.4em;
   padding: 0.3em 0.5em;
 }
@@ -273,4 +286,32 @@
 
 .confirmNo {
   composes: actionButton;
+}
+
+/* ── Download menu ────────────────────────────────────────────────────────────── */
+
+.downloadMenu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  padding: 0.3em 0.5em;
+  background: color-mix(in srgb, var(--theme-text-primary) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+  border-radius: var(--radius-sm);
+  flex-basis: 100%;
+}
+
+.downloadLink {
+  font-size: var(--text-xs);
+  color: var(--theme-accent);
+  text-decoration: none;
+  padding: 0.15em 0.2em;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.downloadLink:hover {
+  text-decoration: underline;
 }

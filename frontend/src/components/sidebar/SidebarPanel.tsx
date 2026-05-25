@@ -85,6 +85,7 @@ function SidebarPanel({
   setLidarJobToggles,
   onOpenTopo,
   onRefetchCompletedTopoJobs,
+  onDismissActiveJob,
   onQuotaChanged,
   currentUser,
   onOpenTopoWithTemplate,
@@ -160,6 +161,7 @@ function SidebarPanel({
   setLidarJobToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
   onOpenTopo: () => void;
   onRefetchCompletedTopoJobs: () => void;
+  onDismissActiveJob: (jobId: string) => void;
   onQuotaChanged: () => void;
   currentUser: TUser | null;
   onOpenTopoWithTemplate: (templateId: string) => void;
@@ -259,6 +261,7 @@ function SidebarPanel({
             onOpenTopo={onOpenTopo}
             onTopoFlyTarget={onTopoFlyTarget}
             onRefetchCompletedTopoJobs={onRefetchCompletedTopoJobs}
+            onDismissActiveJob={onDismissActiveJob}
             onOpenTopoWithTemplate={onOpenTopoWithTemplate}
             onQuotaChanged={onQuotaChanged}
           />

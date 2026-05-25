@@ -8,10 +8,8 @@ import {
   Typography,
   Box,
   CircularProgress,
-  LinearProgress,
   Chip,
   IconButton,
-  Divider,
   Tooltip,
   Collapse,
   Accordion,
@@ -345,20 +343,14 @@ export default function TopoDialog({
   onClose,
   onSelectBbox,
   pendingBbox,
-  jobs,
-  downloadUrlsMap,
   onJobCreated,
-  focusJobId,
   initialTemplateId,
 }: {
   open: boolean;
   onClose: () => void;
   onSelectBbox: () => void;
   pendingBbox: TBbox | null;
-  jobs: TopoJob[];
-  downloadUrlsMap: Record<string, DownloadUrl[]>;
   onJobCreated: (job: TopoJob) => void;
-  focusJobId?: string | null;
   initialTemplateId?: string | null;
 }) {
   const [file, setFile] = useState<File | null>(null);
@@ -617,106 +609,6 @@ export default function TopoDialog({
       </DialogTitle>
 
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
-        {/* ── Job status list ── */}
-        {jobs.length > 0 && (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" gutterBottom>
-              Jobs
-            </Typography>
-            {[...jobs]
-              .sort((a, b) =>
-                a.id === focusJobId ? -1 : b.id === focusJobId ? 1 : 0,
-              )
-              .map((j) => {
-                const urls = downloadUrlsMap[j.id] ?? null;
-                const isRunning =
-                  j.status === "pending" || j.status === "processing";
-                const isComplete = j.status === "complete";
-                const isFailed = j.status === "failed";
-                const isFocused = j.id === focusJobId;
-                return (
-                  <Box
-                    key={j.id}
-                    sx={{
-                      mb: 1.5,
-                      ...(isFocused && {
-                        p: 1,
-                        borderRadius: 1,
-                        border: "1px solid var(--theme-accent)",
-                      }),
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1,
-                        mb: 0.5,
-                      }}
-                    >
-                      {isRunning && <CircularProgress size={14} />}
-                      <Chip
-                        size="small"
-                        label={
-                          j.status === "pending"
-                            ? "Queued"
-                            : j.status === "processing"
-                              ? "Processing"
-                              : j.status === "complete"
-                                ? "Complete"
-                                : "Failed"
-                        }
-                        color={
-                          isComplete
-                            ? "success"
-                            : isFailed
-                              ? "error"
-                              : "default"
-                        }
-                      />
-                      {j.name && (
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {j.name}
-                        </Typography>
-                      )}
-                      {isRunning && j.estimatedSeconds != null && (
-                        <Typography variant="caption" color="text.secondary">
-                          ~{Math.round(j.estimatedSeconds / 60)} min
-                        </Typography>
-                      )}
-                    </Box>
-                    {isRunning && <LinearProgress sx={{ mb: 0.5 }} />}
-                    {isFailed && (
-                      <Typography variant="caption" color="error">
-                        {j.errorMessage ?? "Processing failed. Please try again."}
-                      </Typography>
-                    )}
-                    {isComplete && urls && (
-                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                        {urls.map((u) => (
-                          <Fragment key={u.name}>
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              href={u.mbtilesUrl}
-                              download={`${u.name}.mbtiles`}
-                              sx={outlinedAccentSx}
-                            >
-                              {u.name}.mbtiles
-                            </Button>
-                          </Fragment>
-                        ))}
-                      </Box>
-                    )}
-                  </Box>
-                );
-              })}
-            <Divider
-              sx={{ mt: 1, mb: 2, borderColor: "rgba(255,255,255,0.1)" }}
-            />
-          </Box>
-        )}
-
         {/* ── Instructions toggle ── */}
         <Box
           component="button"

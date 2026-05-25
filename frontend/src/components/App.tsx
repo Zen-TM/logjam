@@ -7,7 +7,6 @@ import ImportDialog from "./dialogs/ImportDialog";
 import TopoDialog from "./dialogs/TopoDialog";
 import type {
   TopoJob,
-  DownloadUrl,
   GeoJsonPolygon,
 } from "./dialogs/TopoDialog";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
@@ -80,13 +79,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   const [showTopo, setShowTopo] = useState(false);
   const [selectingTopoBbox, setSelectingTopoBbox] = useState(false);
   const [pendingTopoBbox, setPendingTopoBbox] = useState<TBbox | null>(null);
-  const [focusTopoJobId, setFocusTopoJobId] = useState<string | null>(null);
-
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
-  const [topoDownloadUrls, setTopoDownloadUrls] = useState<
-    Record<string, DownloadUrl[]>
-  >({});
   const [topoFlyTarget, setTopoFlyTarget] = useState<GeoJsonPolygon | null>(
     null,
   );
@@ -390,10 +384,6 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
             prev.map((j) => (j.id === updated.id ? updated : j)),
           );
           if (updated.status === "complete") {
-            const urls = await apiFetch<DownloadUrl[]>(
-              `/topo-jobs/${updated.id}/download-urls`,
-            );
-            setTopoDownloadUrls((prev) => ({ ...prev, [updated.id]: urls }));
             setActiveTopoJobs((prev) =>
               prev.filter((j) => j.id !== updated.id),
             );
@@ -456,17 +446,10 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     if (!jobId) return;
     sessionStorage.removeItem("pendingTopoJobId");
     apiFetch<TopoJob>(`/topo-jobs/${jobId}`)
-      .then(async (job) => {
+      .then((job) => {
         setActiveTopoJobs((prev) =>
           prev.some((j) => j.id === job.id) ? prev : [job, ...prev],
         );
-        if (job.status === "complete") {
-          const urls = await apiFetch<DownloadUrl[]>(
-            `/topo-jobs/${job.id}/download-urls`,
-          );
-          setTopoDownloadUrls((prev) => ({ ...prev, [job.id]: urls }));
-        }
-        setFocusTopoJobId(job.id);
         setShowTopo(true);
       })
       .catch((err) => {
@@ -540,7 +523,6 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         onClose={() => {
           setShowTopo(false);
           setSelectingTopoBbox(false);
-          setFocusTopoJobId(null);
           setInitialTopoTemplateId(null);
         }}
         onSelectBbox={() => {
@@ -548,10 +530,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           setSelectingTopoBbox(true);
         }}
         pendingBbox={pendingTopoBbox}
-        jobs={activeTopoJobs}
-        downloadUrlsMap={topoDownloadUrls}
         onJobCreated={handleTopoJobCreated}
-        focusJobId={focusTopoJobId}
         initialTemplateId={initialTopoTemplateId}
       />
       <GeoPdfDialog
@@ -659,6 +638,9 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
             setShowTopo(true);
           }}
           onRefetchCompletedTopoJobs={refetchCompletedTopoJobs}
+          onDismissActiveJob={(jobId) =>
+            setActiveTopoJobs((prev) => prev.filter((j) => j.id !== jobId))
+          }
           onQuotaChanged={refetchCurrentUser}
           currentUser={currentUser}
           onOpenTopoWithTemplate={(templateId) => {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Switch, LinearProgress } from "@mui/material";
-import { ChevronDown, Lock } from "lucide-react";
+import { ChevronDown, Lock, X, Download } from "lucide-react";
+import type { DownloadUrl } from "../../dialogs/TopoDialog";
 import classes from "./LidarPanel.module.css";
 import { apiFetch } from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -54,6 +55,7 @@ function LidarPanel({
   onOpenTopo,
   onTopoFlyTarget,
   onRefetchCompletedTopoJobs,
+  onDismissActiveJob,
   onOpenTopoWithTemplate,
   onQuotaChanged,
 }: {
@@ -66,6 +68,7 @@ function LidarPanel({
   onOpenTopo: () => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygon) => void;
   onRefetchCompletedTopoJobs: () => void;
+  onDismissActiveJob: (jobId: string) => void;
   onOpenTopoWithTemplate: (templateId: string) => void;
   onQuotaChanged: () => void;
 }) {
@@ -85,6 +88,33 @@ function LidarPanel({
 
   // Active jobs: show first 3, rest behind disclosure
   const [showAllActive, setShowAllActive] = useState(false);
+
+  // Download URLs — fetched on demand per completed job
+  const [downloadingJobId, setDownloadingJobId] = useState<string | null>(null);
+  const [openDownloadJobId, setOpenDownloadJobId] = useState<string | null>(null);
+  const [downloadUrlsCache, setDownloadUrlsCache] = useState<Record<string, DownloadUrl[]>>({});
+
+  const handleDownloadClick = useCallback(async (jobId: string) => {
+    if (openDownloadJobId === jobId) {
+      setOpenDownloadJobId(null);
+      return;
+    }
+    if (downloadUrlsCache[jobId]) {
+      setOpenDownloadJobId(jobId);
+      return;
+    }
+    setDownloadingJobId(jobId);
+    try {
+      const urls = await apiFetch<DownloadUrl[]>(`/topo-jobs/${jobId}/download-urls`);
+      setDownloadUrlsCache((prev) => ({ ...prev, [jobId]: urls }));
+      setOpenDownloadJobId(jobId);
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't load download links."));
+    } finally {
+      setDownloadingJobId(null);
+    }
+  }, [openDownloadJobId, downloadUrlsCache, toast]);
 
   const loadTemplates = useCallback(async () => {
     try {
@@ -140,38 +170,40 @@ function LidarPanel({
 
   return (
     <div className={classes.root}>
-      {/* Active jobs section — only shown when jobs are running */}
+      {/* Active jobs — full-width ribbon(s) flush with panel header */}
       {activeTopoJobs.length > 0 && (
-        <div className={classes.activeSection}>
-          <div className={classes.sectionLabel}>Active</div>
-          {activeVisible.map((job) => (
-            <div key={job.id} className={classes.activeJobRow}>
-              <div className={classes.activeJobName}>
-                {job.name ?? "Unnamed"}
-              </div>
-              <div className={classes.activeJobMeta}>
-                <span className={classes.activeJobStatus}>
-                  {job.status === "uploading" ? "Uploading" :
-                   job.status === "pending" ? "Queued" :
-                   job.status === "processing" ? "Processing" :
-                   job.status === "failed" ? "Failed" : job.status}
-                </span>
-                {job.status === "processing" && (
+        <div className={classes.ribbonStack}>
+          {activeVisible.map((job) => {
+            const isFailed = job.status === "failed";
+            return (
+              <div key={job.id} className={classes.ribbon}>
+                <div className={classes.ribbonHead}>
+                  <span className={classes.ribbonName}>{job.name ?? "Unnamed"}</span>
+                  {isFailed && (
+                    <button
+                      className={classes.ribbonDismiss}
+                      onClick={() => onDismissActiveJob(job.id)}
+                      title="Dismiss"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                  <span className={isFailed ? classes.ribbonEtaFailed : classes.ribbonEta}>
+                    {jobEtaLabel(job)}
+                  </span>
+                </div>
+                {isFailed ? (
                   <LinearProgress
-                    variant="indeterminate"
-                    sx={{
-                      flex: 1,
-                      height: 3,
-                      borderRadius: 2,
-                      backgroundColor: "rgba(255,255,255,0.1)",
-                      "& .MuiLinearProgress-bar": { backgroundColor: "var(--theme-accent)" },
-                    }}
+                    variant="determinate"
+                    value={100}
+                    sx={{ "& .MuiLinearProgress-bar": { backgroundColor: "var(--theme-warning)" } }}
                   />
+                ) : (
+                  <LinearProgress />
                 )}
-                <span className={classes.activeJobEta}>{jobEtaLabel(job)}</span>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {hasMoreActive && (
             <button
               className={classes.showAllButton}
@@ -316,12 +348,36 @@ function LidarPanel({
                       <button className={classes.confirmNo} onClick={() => setDeletingJobId(null)}>No</button>
                     </div>
                   ) : (
-                    <button
-                      className={classes.deleteButton}
-                      onClick={() => setDeletingJobId(job.jobId)}
-                    >
-                      Delete
-                    </button>
+                    <>
+                      <button
+                        className={classes.actionButton}
+                        onClick={() => void handleDownloadClick(job.jobId)}
+                        title="Download .mbtiles"
+                        disabled={downloadingJobId === job.jobId}
+                      >
+                        <Download size={12} />
+                      </button>
+                      <button
+                        className={classes.deleteButton}
+                        onClick={() => setDeletingJobId(job.jobId)}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                  {openDownloadJobId === job.jobId && downloadUrlsCache[job.jobId] && (
+                    <div className={classes.downloadMenu}>
+                      {downloadUrlsCache[job.jobId].map((u) => (
+                        <a
+                          key={u.name}
+                          className={classes.downloadLink}
+                          href={u.mbtilesUrl}
+                          download={`${u.name}.mbtiles`}
+                        >
+                          {u.name}.mbtiles
+                        </a>
+                      ))}
+                    </div>
                   )}
                 </div>
               );
