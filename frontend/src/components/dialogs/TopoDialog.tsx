@@ -379,6 +379,22 @@ export default function TopoDialog({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (open) return;
+    setFile(null);
+    setError(null);
+    setDragging(false);
+    setValidating(false);
+    setStats(null);
+    setValidationError(null);
+    setSettings(cloneTopoSettings(TOPO_SETTINGS_DEFAULTS));
+    setSelectedTemplateId(DEFAULT_TEMPLATE_ID);
+    setAdvancedOpen(false);
+    setSaveAsName("");
+    setShowSaveAs(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [open]);
+
   const refreshTemplates = useCallback(async () => {
     try {
       const list = await apiFetch<TopoTemplate[]>("/topo-templates");

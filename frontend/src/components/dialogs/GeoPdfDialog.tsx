@@ -201,7 +201,30 @@ function GeoPdfDialog({
 
   // ── Effects ──────────────────────────────────────────────────────────────
 
-  // Sync layers + initialise extent from current map view on first open.
+  // Reset all state on close (but not on the map round-trip close).
+  useEffect(() => {
+    if (open) return;
+    if (returningFromMapSelect.current) return;
+    setExtentState(DEFAULT_EXTENT_STATE);
+    setSelectedTemplateId(null);
+    setTemplateName("");
+    setShowSaveTemplate(false);
+    setTitleEnabled(false);
+    setTitleText("");
+    setCompassEnabled(true);
+    setContourEnabled(false);
+    setScaleTextEnabled(true);
+    setScaleBarEnabled(true);
+    setGridLinesEnabled(false);
+    setGridLinesMode("latlon");
+    setShowOwnedCanyonsOnPdf(true);
+    setShowSharedCanyonsOnPdf(true);
+    setError(null);
+    setEditTemplateName("");
+    setRawN(""); setRawS(""); setRawE(""); setRawW(""); setRawScale("");
+  }, [open]);
+
+  // Sync layers + seed extent from current map view on open.
   useEffect(() => {
     if (!open) return;
 
@@ -213,10 +236,7 @@ function GeoPdfDialog({
     }
     returningFromMapSelect.current = false;
 
-    // Only seed the extent when it has never been set; preserve any prior
-    // selection so closing and reopening the dialog keeps the user's bounds.
     setExtentState((prev) => {
-      if (prev.north !== 0 || prev.south !== 0) return prev;
       if (!mapCenter) return prev;
       const paper = getPaperDimensions(prev);
       const mapW = paper.w - 2 * GEOPDF_PADDING_MM;
