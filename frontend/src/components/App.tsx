@@ -752,7 +752,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           onClearFilters={clearFilters}
         />
       )}
-      {filtersActive && !dimUI && filteredCanyons.length === 0 && (
+      {filtersActive && canyonsLoaded && !dimUI && filteredCanyons.length === 0 && (
         <FilterEmptyState onClearFilters={clearFilters} />
       )}
 
