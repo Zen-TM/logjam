@@ -18,9 +18,22 @@
   gap: 8px;
 }
 
-.importBtn {
-  composes: btn btnFilledAccent btnMd btnFull from '@styles/shared.module.css';
+.footerActions {
   flex-shrink: 0;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.divider {
+  composes: divider from '@styles/shared.module.css';
+  margin: 0;
+}
+
+.ghostButton {
+  composes: btn btnGhost btnFull from '@styles/shared.module.css';
+  padding: 0.5em 1em;
 }
 
 .filters {

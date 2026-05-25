@@ -57,9 +57,6 @@ function TripLogsPanel({
 
   return (
     <div className={classes.panel}>
-      <button className={classes.importBtn} onClick={() => setShowImport(true)}>
-        Import from CSV
-      </button>
       <div className={classes.filters}>
         <TextField
           placeholder="Search by canyon name..."
@@ -129,6 +126,14 @@ function TripLogsPanel({
           ))}
         </div>
       )}
+
+      {/* Low-frequency actions */}
+      <div className={classes.footerActions}>
+        <div className={classes.divider} />
+        <button className={classes.ghostButton} onClick={() => setShowImport(true)}>
+          Import from CSV
+        </button>
+      </div>
 
       {/* View dialog */}
       <TripLogViewDialog
