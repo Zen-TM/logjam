@@ -6,8 +6,10 @@ import {
   DialogContentText,
   DialogActions,
   Button,
+  IconButton,
   TextField,
 } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 import classes from "./FriendsPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -222,13 +224,26 @@ function FriendsPanel({
       {showRemoveConfirm && (
         <Dialog
           open
-          onClose={
-            removingFriendId ? undefined : () => setShowRemoveConfirm(null)
-          }
+          maxWidth="sm"
+          fullWidth
+          onClose={removingFriendId ? undefined : () => setShowRemoveConfirm(null)}
+          PaperProps={{
+            sx: { backgroundColor: "var(--theme-primary)", color: "var(--theme-text-primary)" },
+          }}
         >
-          <DialogTitle>Remove Friend</DialogTitle>
-          <DialogContent>
-            <DialogContentText>
+          <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
+            Remove Friend
+            <IconButton
+              size="small"
+              onClick={() => setShowRemoveConfirm(null)}
+              disabled={removingFriendId != null}
+              sx={{ color: "var(--theme-text-primary)" }}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
+            <DialogContentText sx={{ color: "var(--theme-text-primary)" }}>
               Remove {showRemoveConfirm.username}? Shared canyons between you
               will be unshared.
             </DialogContentText>
@@ -237,6 +252,7 @@ function FriendsPanel({
             <Button
               onClick={() => setShowRemoveConfirm(null)}
               disabled={removingFriendId != null}
+              sx={{ color: "var(--theme-text-primary)" }}
             >
               Cancel
             </Button>
