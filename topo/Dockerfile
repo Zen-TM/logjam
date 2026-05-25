@@ -87,6 +87,7 @@ RUN pip install --upgrade pip && \
 WORKDIR /app
 COPY worker.py /app/worker.py
 COPY topo_mbtiles.py /app/topo_mbtiles.py
+COPY icons/ /app/icons/
 
 # ------------------------------------------------------------
 # 5. Entrypoint

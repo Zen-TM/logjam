@@ -4,12 +4,29 @@ import {
   OSM_FEATURE_KEYS,
   OSM_FEATURE_LABELS,
   OSM_FEATURE_TAG_HINTS,
+  OSM_POINT_FEATURE_KEYS,
   type OsmFeaturesSettings as OsmFeaturesSettingsValue,
   type OsmFeatureKey,
   type OsmFeatureStyle,
+  type OsmPointFeatureKey,
 } from "@logjam/shared";
 import ColourPicker from "../../common/ColourPicker";
 import styles from "./topoSettings.module.css";
+
+const POINT_KEY_SET = new Set<OsmFeatureKey>(OSM_POINT_FEATURE_KEYS);
+
+const ICON_FILENAMES: Record<OsmPointFeatureKey, string> = {
+  campsite: "campsite.png",
+  peak: "peak.png",
+  spring: "spring.png",
+  gate: "gate.png",
+  cave: "cave.png",
+  ford: "ford.png",
+  waterfall: "waterfall.png",
+  trailhead: "trailhead.png",
+  viewpoint: "viewpoint.png",
+  hut: "hut.png",
+};
 
 interface Props {
   value: OsmFeaturesSettingsValue;
@@ -30,9 +47,9 @@ export default function OsmSettings({ value, onChange }: Props) {
   return (
     <div className={styles.tabPanel}>
       <p className={styles.helpText}>
-        Toggle individual OSM feature categories on or off, and tweak their
-        colour and stroke width. Tag hints describe which OSM tags each category
-        fetches.
+        Toggle individual OSM feature categories on or off. Line features (waterways,
+        tracks, roads) support colour and stroke width overrides. Point features use
+        fixed topographic icons. Tag hints show which OSM tags each category fetches.
       </p>
 
       <div>
@@ -40,7 +57,7 @@ export default function OsmSettings({ value, onChange }: Props) {
           <span />
           <span />
           <span className={styles.colourCell}>
-            <span className={styles.bandHeader}>Colour</span>
+            <span className={styles.bandHeader}>Style</span>
           </span>
           <span className={styles.widthCell}>
             <span className={styles.headerWithTooltip}>
@@ -54,6 +71,7 @@ export default function OsmSettings({ value, onChange }: Props) {
         {OSM_FEATURE_KEYS.map((key) => {
           const style = value.features[key];
           const rowClass = `${styles.featureRow} ${style.enabled ? "" : styles.featureRowDisabled}`;
+          const isPoint = POINT_KEY_SET.has(key);
           return (
             <div key={key} className={rowClass}>
               <Switch
@@ -68,22 +86,34 @@ export default function OsmSettings({ value, onChange }: Props) {
                 </Tooltip>
               </span>
               <span className={styles.colourCell}>
-                <ColourPicker
-                  value={style.colour}
-                  onChange={(c) => setFeature(key, { colour: c })}
-                  ariaLabel={`${OSM_FEATURE_LABELS[key]} colour`}
-                />
+                {isPoint ? (
+                  <Tooltip title="Fixed topographic icon" placement="top" arrow>
+                    <img
+                      src={`/topo-icons/${ICON_FILENAMES[key as OsmPointFeatureKey]}`}
+                      alt={OSM_FEATURE_LABELS[key]}
+                      className={styles.featureIcon}
+                    />
+                  </Tooltip>
+                ) : (
+                  <ColourPicker
+                    value={style.colour}
+                    onChange={(c) => setFeature(key, { colour: c })}
+                    ariaLabel={`${OSM_FEATURE_LABELS[key]} colour`}
+                  />
+                )}
               </span>
               <span className={styles.widthCell}>
-                <input
-                  type="number"
-                  className={styles.numberInput}
-                  min={0}
-                  step={1}
-                  value={style.widthZ18}
-                  onChange={(e) => setFeature(key, { widthZ18: Number(e.target.value) })}
-                  aria-label={`${OSM_FEATURE_LABELS[key]} width at zoom 18`}
-                />
+                {!isPoint && (
+                  <input
+                    type="number"
+                    className={styles.numberInput}
+                    min={0}
+                    step={1}
+                    value={style.widthZ18}
+                    onChange={(e) => setFeature(key, { widthZ18: Number(e.target.value) })}
+                    aria-label={`${OSM_FEATURE_LABELS[key]} width at zoom 18`}
+                  />
+                )}
               </span>
             </div>
           );

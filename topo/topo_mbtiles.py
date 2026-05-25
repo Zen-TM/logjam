@@ -55,6 +55,18 @@ import numpy as np
 import requests
 from PIL import Image, ImageDraw, ImageFont
 from osgeo import gdal, ogr, osr
+
+# ---------------------------------------------------------------------------
+# Icon cache (loaded per-process on first use; lives in icons/ next to this file)
+# ---------------------------------------------------------------------------
+_ICON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
+_ICON_CACHE: dict = {}
+
+
+def _load_icon(name: str) -> Image.Image:
+    if name not in _ICON_CACHE:
+        _ICON_CACHE[name] = Image.open(os.path.join(_ICON_DIR, name)).convert("RGBA")
+    return _ICON_CACHE[name]
 from shapely.geometry import shape, mapping, Polygon, MultiPolygon, box as shapely_box
 from shapely.ops import unary_union
 
@@ -283,18 +295,18 @@ OSM_STYLE_META = {
     "road":      {"colour": (80,   80,  80, 230),  "width_z18": 4,  "dash": None},
     "building":  {"colour": (160, 140, 120, 200),  "width_z18": 2,  "dash": None, "fill": (160, 140, 120, 60)},
     "power":     {"colour": (200, 160,   0, 200),  "width_z18": 1,  "dash": (4, 6)},
-    "campsite":  {"colour": (0,   160,  80, 230),  "point": True,   "symbol": "▲", "size_z18": 14},
-    "peak":      {"colour": (80,   50,  20, 240),  "point": True,   "symbol": "▲", "size_z18": 12},
-    "spring":    {"colour": (30,   90, 210, 230),  "point": True,   "symbol": "●", "size_z18": 8},
-    "gate":      {"colour": (70,   70,  70, 220),  "point": True,   "symbol": "×", "size_z18": 10},
-    "cave":      {"colour": (60,   30,  10, 230),  "point": True,   "symbol": "◆", "size_z18": 10},
+    "campsite":  {"colour": (0,   160,  80, 230),  "point": True,   "icon": "campsite.png",  "size_z18": 20},
+    "peak":      {"colour": (80,   50,  20, 240),  "point": True,   "icon": "peak.png",      "size_z18": 18},
+    "spring":    {"colour": (30,   90, 210, 230),  "point": True,   "icon": "spring.png",    "size_z18": 18},
+    "gate":      {"colour": (70,   70,  70, 220),  "point": True,   "icon": "gate.png",      "size_z18": 18},
+    "cave":      {"colour": (60,   30,  10, 230),  "point": True,   "icon": "cave.png",      "size_z18": 18},
     # Newly added features (disabled by default).
     "bridge":    {"colour": (64,  48,  40, 230),  "width_z18": 3,  "dash": None},
-    "ford":      {"colour": (30,  144, 255, 230), "point": True,   "symbol": "≈", "size_z18": 12},
-    "waterfall": {"colour": (30,  106, 210, 240), "point": True,   "symbol": "▼", "size_z18": 14},
-    "trailhead": {"colour": (160, 64,  32, 230),  "point": True,   "symbol": "✦", "size_z18": 14},
-    "viewpoint": {"colour": (128, 96,  32, 230),  "point": True,   "symbol": "◉", "size_z18": 14},
-    "hut":       {"colour": (80,  56,  32, 230),  "point": True,   "symbol": "⌂", "size_z18": 14},
+    "ford":      {"colour": (30,  144, 255, 230), "point": True,   "icon": "ford.png",      "size_z18": 20},
+    "waterfall": {"colour": (30,  106, 210, 240), "point": True,   "icon": "waterfall.png", "size_z18": 20},
+    "trailhead": {"colour": (160, 64,  32, 230),  "point": True,   "icon": "trailhead.png", "size_z18": 20},
+    "viewpoint": {"colour": (128, 96,  32, 230),  "point": True,   "icon": "viewpoint.png", "size_z18": 20},
+    "hut":       {"colour": (80,  56,  32, 230),  "point": True,   "icon": "hut.png",       "size_z18": 20},
 }
 
 # ---------------------------------------------------------------------------
@@ -1939,13 +1951,26 @@ def render_features_tile(
             lon, lat = geom["coordinates"]
             if lon_min <= lon <= lon_max and lat_min <= lat <= lat_max:
                 px, py = lonlat_to_px(lon, lat)
-                sym = style.get("symbol", "●")
-                sz = max(6, int(style.get("size_z18", 12) * (zoom / 18) ** 0.5))
-                try:
-                    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", sz)
-                except Exception:
-                    font = ImageFont.load_default()
-                draw.text((px - sz // 2, py - sz // 2), sym, fill=style["colour"], font=font)
+                icon_name = style.get("icon")
+                if icon_name:
+                    try:
+                        icon = _load_icon(icon_name)
+                        target = max(12, int(style.get("size_z18", 20) * (zoom / 18) ** 0.5))
+                        if icon.size != (target, target):
+                            icon = icon.resize((target, target), Image.LANCZOS)
+                        ix = int(px) - target // 2
+                        iy = int(py) - target // 2
+                        # Clip icon to tile bounds
+                        src_x0 = max(0, -ix)
+                        src_y0 = max(0, -iy)
+                        src_x1 = min(target, TILE_SIZE - ix)
+                        src_y1 = min(target, TILE_SIZE - iy)
+                        dst_x = max(0, ix)
+                        dst_y = max(0, iy)
+                        if src_x1 > src_x0 and src_y1 > src_y0:
+                            img.alpha_composite(icon.crop((src_x0, src_y0, src_x1, src_y1)), (dst_x, dst_y))
+                    except Exception:
+                        pass
 
         elif gtype == "LineString":
             coords = geom.get("coordinates", [])

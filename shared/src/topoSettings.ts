@@ -84,6 +84,19 @@ export const OSM_FEATURE_KEYS: OsmFeatureKey[] = [
   "bridge", "ford", "waterfall", "trailhead", "viewpoint", "hut",
 ];
 
+// Point features use fixed-design bitmap icons — no colour/width override.
+export const OSM_POINT_FEATURE_KEYS = [
+  "campsite", "peak", "spring", "gate", "cave",
+  "ford", "waterfall", "trailhead", "viewpoint", "hut",
+] as const;
+export type OsmPointFeatureKey = typeof OSM_POINT_FEATURE_KEYS[number];
+
+// Line/polygon features retain colour + width overrides.
+export const OSM_LINE_FEATURE_KEYS = [
+  "waterway", "track", "road", "building", "power", "bridge",
+] as const;
+export type OsmLineFeatureKey = typeof OSM_LINE_FEATURE_KEYS[number];
+
 // Labels used by the OSM features UI tab.
 export const OSM_FEATURE_LABELS: Record<OsmFeatureKey, string> = {
   waterway: "Waterways",

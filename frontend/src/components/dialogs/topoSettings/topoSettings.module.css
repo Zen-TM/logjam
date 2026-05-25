@@ -162,6 +162,14 @@
   width: 90px;
 }
 
+.featureIcon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  display: block;
+  opacity: 0.9;
+}
+
 .headerWithTooltip {
   display: inline-flex;
   align-items: center;
