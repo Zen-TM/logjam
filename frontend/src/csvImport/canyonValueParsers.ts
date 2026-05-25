@@ -141,13 +141,56 @@ export function parseAltNames(raw: string): ParseResult<string[]> {
   };
 }
 
+function extractSourceLabelFromUrl(url: URL): string {
+  const host = url.hostname.replace(/^www\./, "");
+  const firstLabel = host.split(".")[0];
+  return firstLabel || host;
+}
+
+function tryParseUrl(s: string): URL | null {
+  try {
+    return new URL(s);
+  } catch {
+    // fall through to scheme-less attempt
+  }
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/|$)/i.test(s)) {
+    try {
+      return new URL("https://" + s);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 // Parses sources from various formats:
+// - JSON object {label: url, ...} (url may be null)
 // - JSON [[label, url], ...]
 // - JSON [{label, url}, ...]
-// - Newline or comma-separated URLs (label defaults to URL)
+// - Newline or comma-separated tokens: URLs get hostname-derived labels,
+//   plain text becomes a name-only source with empty URL.
 export function parseSources(raw: string): ParseResult<[string, string][]> {
   const trimmed = raw.trim();
   if (!trimmed) return { ok: true, value: [] };
+
+  if (trimmed.startsWith("{")) {
+    try {
+      const obj = JSON.parse(trimmed) as Record<string, unknown>;
+      if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
+        throw new Error();
+      }
+      const result: [string, string][] = [];
+      for (const [key, value] of Object.entries(obj)) {
+        const label = key.trim();
+        if (!label) continue;
+        const url = typeof value === "string" ? value : "";
+        result.push([label, url]);
+      }
+      return { ok: true, value: result };
+    } catch {
+      return { ok: false, reason: "unparsableJson", raw };
+    }
+  }
 
   if (trimmed.startsWith("[")) {
     try {
@@ -170,13 +213,18 @@ export function parseSources(raw: string): ParseResult<[string, string][]> {
     }
   }
 
-  // Plain URLs separated by newline or comma
   const sep = trimmed.includes("\n") ? "\n" : ",";
-  const urls = trimmed.split(sep).map((s) => s.trim()).filter(Boolean);
-  return {
-    ok: true,
-    value: urls.map((url) => [url, url] as [string, string]),
-  };
+  const tokens = trimmed.split(sep).map((s) => s.trim()).filter(Boolean);
+  const result: [string, string][] = [];
+  for (const token of tokens) {
+    const url = tryParseUrl(token);
+    if (url) {
+      result.push([extractSourceLabelFromUrl(url), token]);
+    } else {
+      result.push([token, ""]);
+    }
+  }
+  return { ok: true, value: result };
 }
 
 export function parseByRole(
