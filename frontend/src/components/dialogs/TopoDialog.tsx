@@ -32,10 +32,10 @@ import {
   parseZipCentralDirectory,
   classifyElvisEntries,
   ElvisZipError,
-  TOPO_SETTINGS_DEFAULTS,
-  cloneTopoSettings,
+  RASTER_TEMPLATE_DEFAULTS,
+  cloneRasterTemplateSettings,
   type ElvisStats,
-  type TopoSettings,
+  type RasterTemplateSettings,
 } from "@logjam/shared";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
 
@@ -43,7 +43,7 @@ export type TopoTemplate = {
   id: string;
   name: string;
   isSystem: boolean;
-  config: TopoSettings;
+  config: RasterTemplateSettings;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -370,7 +370,7 @@ export default function TopoDialog({
   const [storageQuota, setStorageQuota] = useState<number | null>(null);
 
   // Advanced settings + templates
-  const [settings, setSettings] = useState<TopoSettings>(() => cloneTopoSettings(TOPO_SETTINGS_DEFAULTS));
+  const [settings, setSettings] = useState<RasterTemplateSettings>(() => cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS));
   const [templates, setTemplates] = useState<TopoTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -387,7 +387,7 @@ export default function TopoDialog({
     setValidating(false);
     setStats(null);
     setValidationError(null);
-    setSettings(cloneTopoSettings(TOPO_SETTINGS_DEFAULTS));
+    setSettings(cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS));
     setSelectedTemplateId(DEFAULT_TEMPLATE_ID);
     setAdvancedOpen(false);
     setSaveAsName("");
@@ -413,7 +413,7 @@ export default function TopoDialog({
         const t = list.find((x) => x.id === initialTemplateId);
         if (t) {
           setSelectedTemplateId(t.id);
-          setSettings(cloneTopoSettings(t.config));
+          setSettings(cloneRasterTemplateSettings(t.config));
         }
       }
     });
@@ -422,7 +422,7 @@ export default function TopoDialog({
   function selectTemplate(id: string) {
     setSelectedTemplateId(id);
     const t = templates.find((x) => x.id === id);
-    if (t) setSettings(cloneTopoSettings(t.config));
+    if (t) setSettings(cloneRasterTemplateSettings(t.config));
   }
 
   async function handleSaveAsTemplate() {

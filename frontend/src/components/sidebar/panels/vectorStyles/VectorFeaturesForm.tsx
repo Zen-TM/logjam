@@ -5,13 +5,13 @@ import {
   OSM_FEATURE_LABELS,
   OSM_FEATURE_TAG_HINTS,
   OSM_POINT_FEATURE_KEYS,
-  type OsmFeaturesSettings as OsmFeaturesSettingsValue,
   type OsmFeatureKey,
   type OsmFeatureStyle,
   type OsmPointFeatureKey,
+  type VectorStyleSettings,
 } from "@logjam/shared";
-import ColourPicker from "../../common/ColourPicker";
-import styles from "./topoSettings.module.css";
+import ColourPicker from "../../../common/ColourPicker";
+import styles from "../../../dialogs/topoSettings/topoSettings.module.css";
 
 const POINT_KEY_SET = new Set<OsmFeatureKey>(OSM_POINT_FEATURE_KEYS);
 
@@ -29,27 +29,22 @@ const ICON_FILENAMES: Record<OsmPointFeatureKey, string> = {
 };
 
 interface Props {
-  value: OsmFeaturesSettingsValue;
-  onChange: (next: OsmFeaturesSettingsValue) => void;
+  value: VectorStyleSettings["features"];
+  onChange: (next: VectorStyleSettings["features"]) => void;
 }
 
-export default function OsmSettings({ value, onChange }: Props) {
+export default function VectorFeaturesForm({ value, onChange }: Props) {
   const setFeature = (key: OsmFeatureKey, delta: Partial<OsmFeatureStyle>) => {
-    onChange({
-      ...value,
-      features: {
-        ...value.features,
-        [key]: { ...value.features[key], ...delta },
-      },
-    });
+    onChange({ ...value, [key]: { ...value[key], ...delta } });
   };
 
   return (
     <div className={styles.tabPanel}>
       <p className={styles.helpText}>
-        Toggle individual OSM feature categories on or off. Line features (waterways,
-        tracks, roads) support colour and stroke width overrides. Point features use
-        fixed topographic icons. Tag hints show which OSM tags each category fetches.
+        Toggle individual OSM feature categories on or off. Line features
+        (waterways, tracks, roads) support colour and stroke width overrides.
+        Point features use fixed topographic icons. Changes apply live to all
+        completed LiDAR jobs.
       </p>
 
       <div>
@@ -69,7 +64,7 @@ export default function OsmSettings({ value, onChange }: Props) {
           </span>
         </div>
         {OSM_FEATURE_KEYS.map((key) => {
-          const style = value.features[key];
+          const style = value[key];
           const rowClass = `${styles.featureRow} ${style.enabled ? "" : styles.featureRowDisabled}`;
           const isPoint = POINT_KEY_SET.has(key);
           return (

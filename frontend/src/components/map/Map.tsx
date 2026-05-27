@@ -15,7 +15,14 @@ maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
 import classes from "./Map.module.css";
 import type { TCanyon, TFilters } from "../../canyonUtils";
 import { passesFilters } from "../../canyonUtils";
-import { extentFromCentreAndSize } from "@logjam/shared";
+import {
+  extentFromCentreAndSize,
+  OSM_LINE_FEATURE_KEYS,
+  type OsmFeatureKey,
+  type OsmFeatureStyle,
+  type VectorStyleSettings,
+  parseRgbaHex,
+} from "@logjam/shared";
 
 const SIDEBAR_TRANSITION_MS = 300;
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
@@ -111,6 +118,87 @@ export type TBbox = {
   north: number;
 };
 
+// ── Vector style helpers ──────────────────────────────────────────────────
+// Convert #RRGGBBAA → rgba(r,g,b,a) CSS string that MapLibre's paint expressions
+// accept.
+function rgbaCss(hex: string): string {
+  const [r, g, b, a] = parseRgbaHex(hex);
+  return `rgba(${r},${g},${b},${(a / 255).toFixed(3)})`;
+}
+
+// Pixel width interpolate(z12 → z18) for line features. widthZ18 is the
+// reference width in pixels at the maximum-detail zoom.
+function lineWidthInterp(widthZ18: number): maplibregl.ExpressionSpecification {
+  const w12 = Math.max(0.25, widthZ18 * 0.25);
+  return [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    12,
+    w12,
+    18,
+    widthZ18,
+  ];
+}
+
+// Contour width is specified in ground metres by the user; convert to a pixel
+// width at z18 using a fixed scale that roughly matches the legacy hardcoded
+// values (default 18 m → ≈2.25 px, default 8 m → ≈1 px).
+function contourPixelWidth(widthM: number): maplibregl.ExpressionSpecification {
+  const w18 = widthM / 8;
+  const w12 = Math.max(0.3, w18 * 0.4);
+  return [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    12,
+    w12,
+    18,
+    w18,
+  ];
+}
+
+// Fallback when vectorStyle has not yet loaded — keeps the legacy default look
+// rather than rendering invisible layers.
+const VECTOR_STYLE_FALLBACK: VectorStyleSettings = {
+  contours: {
+    majorColour: "#503c28dc",
+    minorColour: "#785a3ca0",
+    majorWidthM: 18,
+    minorWidthM: 8,
+  },
+  features: {
+    waterway:  { enabled: true,  colour: "#2878dcdc", widthZ18: 3 },
+    track:     { enabled: true,  colour: "#a0641edc", widthZ18: 2 },
+    road:      { enabled: true,  colour: "#505050e6", widthZ18: 4 },
+    building:  { enabled: true,  colour: "#a08c78c8", widthZ18: 2 },
+    power:     { enabled: true,  colour: "#c8a000c8", widthZ18: 1 },
+    campsite:  { enabled: true,  colour: "#00a050e6", widthZ18: 14 },
+    peak:      { enabled: true,  colour: "#503214f0", widthZ18: 12 },
+    spring:    { enabled: true,  colour: "#1e5ad2e6", widthZ18: 8 },
+    gate:      { enabled: true,  colour: "#464646dc", widthZ18: 10 },
+    cave:      { enabled: true,  colour: "#3c1e0ae6", widthZ18: 10 },
+    bridge:    { enabled: false, colour: "#403028e6", widthZ18: 3 },
+    ford:      { enabled: false, colour: "#1e90ffe6", widthZ18: 8 },
+    waterfall: { enabled: false, colour: "#1e6ad2f0", widthZ18: 10 },
+    trailhead: { enabled: false, colour: "#a04020e6", widthZ18: 12 },
+    viewpoint: { enabled: false, colour: "#806020e6", widthZ18: 12 },
+    hut:       { enabled: false, colour: "#503820e6", widthZ18: 12 },
+  },
+};
+
+const OSM_LINE_KEY_SET = new Set<OsmFeatureKey>(OSM_LINE_FEATURE_KEYS);
+
+function feat(vs: VectorStyleSettings, key: OsmFeatureKey): OsmFeatureStyle {
+  return vs.features[key];
+}
+
+// Stable hash for the dependency-array trigger that re-applies vector style.
+function vectorStyleHash(vs: VectorStyleSettings | null | undefined): string {
+  return vs ? JSON.stringify(vs) : "";
+}
+
+
 function Map({
   filters,
   canyons,
@@ -125,6 +213,7 @@ function Map({
   selectingBbox,
   onBboxSelected,
   topoLayers,
+  vectorStyle,
   activeLayerId,
   selectingGeoPdfExtent,
   geoPdfPaperAspect,
@@ -158,6 +247,7 @@ function Map({
     pmtilesUrl: string;
     format?: "raster" | "vector";
   }[];
+  vectorStyle?: VectorStyleSettings | null;
   activeLayerId: string;
   selectingGeoPdfExtent?: boolean;
   geoPdfPaperAspect?: number;
@@ -190,6 +280,7 @@ function Map({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const prevTopoKeyRef = useRef<string>("");
+  const prevVectorStyleHashRef = useRef<string>("");
 
   // Keep refs up to date for use inside event handlers
   const selectCanyonRef = useRef(selectCanyon);
@@ -743,10 +834,13 @@ function Map({
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
     const layers = topoLayers ?? [];
+    const vs = vectorStyle ?? VECTOR_STYLE_FALLBACK;
 
-    // Skip if topo layers haven't actually changed (avoids flicker from
-    // new array references with identical contents)
-    const topoKey = layers.map((l) => `${l.id}:${l.pmtilesUrl}`).join("|");
+    // Skip if topo layers AND vector style haven't actually changed (avoids
+    // flicker from new array references with identical contents). vectorStyle
+    // is included so live edits in the LiDAR Topos panel re-paint the map.
+    const topoKey = layers.map((l) => `${l.id}:${l.pmtilesUrl}`).join("|")
+                  + "::" + vectorStyleHash(vs);
     if (topoKey === prevTopoKeyRef.current) return;
     prevTopoKeyRef.current = topoKey;
 
@@ -760,7 +854,12 @@ function Map({
         .layers.map((l) => l.id)
         .filter((lid) => lid.startsWith(`topo-${entryId}-`));
 
-    // Remove layers/sources no longer in topoLayers
+    // Remove layers/sources no longer in topoLayers. Additionally, if the
+    // vector style hash changed, drop every topo-* vector layer so they're
+    // re-created below with the new paint expressions (sources stay — only
+    // layers rebuild, no PMTiles refetch).
+    const vsChanged = prevVectorStyleHashRef.current !== vectorStyleHash(vs);
+    prevVectorStyleHashRef.current = vectorStyleHash(vs);
     const allTopoLayerIds = map
       .getStyle()
       .layers.map((l) => l.id)
@@ -771,9 +870,9 @@ function Map({
       const dashIdx = withoutPrefix.indexOf("-");
       if (dashIdx < 0) continue;
       const entryId = withoutPrefix.slice(0, dashIdx);
-      if (!activeIds.has(entryId)) {
-        if (map.getLayer(lid)) map.removeLayer(lid);
-      }
+      const isVectorChild = !lid.endsWith("-raster");
+      const drop = !activeIds.has(entryId) || (vsChanged && isVectorChild);
+      if (drop && map.getLayer(lid)) map.removeLayer(lid);
     }
     // Remove orphaned sources
     for (const entryId of [
@@ -831,16 +930,8 @@ function Map({
               "source-layer": "contours",
               filter: ["!=", ["%", ["to-number", ["get", "elev"]], 50], 0],
               paint: {
-                "line-color": "rgba(120, 90, 60, 0.55)",
-                "line-width": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  12,
-                  0.5,
-                  18,
-                  1.2,
-                ],
+                "line-color": rgbaCss(vs.contours.minorColour),
+                "line-width": contourPixelWidth(vs.contours.minorWidthM),
               },
               minzoom: 14,
             });
@@ -855,16 +946,8 @@ function Map({
               "source-layer": "contours",
               filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
               paint: {
-                "line-color": "rgba(80, 60, 40, 0.85)",
-                "line-width": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  12,
-                  1,
-                  18,
-                  2.5,
-                ],
+                "line-color": rgbaCss(vs.contours.majorColour),
+                "line-width": contourPixelWidth(vs.contours.majorWidthM),
               },
             });
           }
@@ -894,101 +977,92 @@ function Map({
                 "text-max-angle": 60,
               },
               paint: {
-                "text-color": "rgba(80, 60, 40, 0.9)",
+                "text-color": rgbaCss(vs.contours.majorColour),
                 "text-halo-color": "rgba(255, 255, 255, 0.8)",
                 "text-halo-width": 1.5,
               },
             });
           }
         } else {
-          // OSM features vector source — one layer per category
-          const featureLayers: {
+          // OSM features vector source — one layer per category, driven by
+          // the live VectorStyleSettings. Per-category `enabled` skips the
+          // addLayer call entirely (no paint cost), so toggling a category
+          // off in the UI removes it from the map on next effect run.
+          type FeatureLayerSpec = {
+            key: OsmFeatureKey;
             suffix: string;
             filter: maplibregl.ExpressionSpecification;
             style: object;
-          }[] = [
+          };
+          const featureLayers: FeatureLayerSpec[] = [
             {
+              key: "waterway",
               suffix: "waterway",
               filter: ["==", ["get", "_category"], "waterway"],
               style: {
                 type: "line",
                 paint: {
-                  "line-color": "rgba(40,120,220,0.85)",
-                  "line-width": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    12,
-                    1,
-                    18,
-                    3,
-                  ],
+                  "line-color": rgbaCss(feat(vs, "waterway").colour),
+                  "line-width": lineWidthInterp(feat(vs, "waterway").widthZ18),
                 },
               },
             },
             {
+              key: "track",
               suffix: "track",
               filter: ["==", ["get", "_category"], "track"],
               style: {
                 type: "line",
                 paint: {
-                  "line-color": "rgba(160,100,30,0.85)",
-                  "line-width": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    12,
-                    0.8,
-                    18,
-                    2,
-                  ],
+                  "line-color": rgbaCss(feat(vs, "track").colour),
+                  "line-width": lineWidthInterp(feat(vs, "track").widthZ18),
                   "line-dasharray": [4, 2],
                 },
               },
             },
             {
+              key: "road",
               suffix: "road",
               filter: ["==", ["get", "_category"], "road"],
               style: {
                 type: "line",
                 paint: {
-                  "line-color": "rgba(80,80,80,0.9)",
-                  "line-width": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    12,
-                    1,
-                    18,
-                    4,
-                  ],
+                  "line-color": rgbaCss(feat(vs, "road").colour),
+                  "line-width": lineWidthInterp(feat(vs, "road").widthZ18),
                 },
               },
             },
             {
+              key: "building",
               suffix: "building",
               filter: ["==", ["get", "_category"], "building"],
               style: {
                 type: "fill",
                 paint: {
-                  "fill-color": "rgba(160,140,120,0.3)",
-                  "fill-outline-color": "rgba(160,140,120,0.8)",
+                  // Buildings get a translucent fill of the configured colour
+                  // and a solid outline; we synthesise the translucent fill by
+                  // halving the alpha implicitly via the rgba CSS output of
+                  // the user's colour.
+                  "fill-color": rgbaCss(feat(vs, "building").colour),
+                  "fill-outline-color": rgbaCss(feat(vs, "building").colour),
                 },
               },
             },
             {
+              key: "power",
               suffix: "power",
               filter: ["==", ["get", "_category"], "power"],
               style: {
                 type: "line",
                 paint: {
-                  "line-color": "rgba(200,160,0,0.8)",
-                  "line-width": 1,
+                  "line-color": rgbaCss(feat(vs, "power").colour),
+                  "line-width": feat(vs, "power").widthZ18,
                   "line-dasharray": [3, 4],
                 },
               },
             },
             {
+              key: "peak",
               suffix: "peak",
               filter: ["==", ["get", "_category"], "peak"],
               style: {
@@ -1023,22 +1097,23 @@ function Map({
                     ["linear"],
                     ["zoom"],
                     12,
-                    11,
+                    feat(vs, "peak").widthZ18 * 0.9,
                     18,
-                    15,
+                    feat(vs, "peak").widthZ18 + 3,
                   ],
                   "text-anchor": "top",
                   "text-justify": "center",
                   "text-allow-overlap": false,
                 },
                 paint: {
-                  "text-color": "rgba(80,50,20,0.95)",
+                  "text-color": rgbaCss(feat(vs, "peak").colour),
                   "text-halo-color": "rgba(255,255,255,0.85)",
                   "text-halo-width": 1.5,
                 },
               },
             },
             {
+              key: "campsite",
               suffix: "campsite",
               filter: ["==", ["get", "_category"], "campsite"],
               style: {
@@ -1052,20 +1127,21 @@ function Map({
                     ["linear"],
                     ["zoom"],
                     12,
-                    11,
+                    feat(vs, "campsite").widthZ18 * 0.8,
                     18,
-                    15,
+                    feat(vs, "campsite").widthZ18,
                   ],
                   "text-allow-overlap": true,
                 },
                 paint: {
-                  "text-color": "rgba(0,140,80,0.95)",
+                  "text-color": rgbaCss(feat(vs, "campsite").colour),
                   "text-halo-color": "rgba(255,255,255,0.85)",
                   "text-halo-width": 1.5,
                 },
               },
             },
             {
+              key: "cave",
               suffix: "cave",
               filter: ["==", ["get", "_category"], "cave"],
               style: {
@@ -1079,20 +1155,21 @@ function Map({
                     ["linear"],
                     ["zoom"],
                     12,
-                    10,
+                    feat(vs, "cave").widthZ18 * 0.8,
                     18,
-                    14,
+                    feat(vs, "cave").widthZ18,
                   ],
                   "text-allow-overlap": true,
                 },
                 paint: {
-                  "text-color": "rgba(60,30,10,0.95)",
+                  "text-color": rgbaCss(feat(vs, "cave").colour),
                   "text-halo-color": "rgba(255,255,255,0.85)",
                   "text-halo-width": 1.5,
                 },
               },
             },
             {
+              key: "spring",
               suffix: "spring",
               filter: ["==", ["get", "_category"], "spring"],
               style: {
@@ -1106,20 +1183,21 @@ function Map({
                     ["linear"],
                     ["zoom"],
                     12,
-                    9,
+                    feat(vs, "spring").widthZ18 * 0.8,
                     18,
-                    13,
+                    feat(vs, "spring").widthZ18,
                   ],
                   "text-allow-overlap": true,
                 },
                 paint: {
-                  "text-color": "rgba(30,90,210,0.95)",
+                  "text-color": rgbaCss(feat(vs, "spring").colour),
                   "text-halo-color": "rgba(255,255,255,0.85)",
                   "text-halo-width": 1.5,
                 },
               },
             },
             {
+              key: "gate",
               suffix: "gate",
               filter: ["==", ["get", "_category"], "gate"],
               style: {
@@ -1133,21 +1211,22 @@ function Map({
                     ["linear"],
                     ["zoom"],
                     14,
-                    11,
+                    feat(vs, "gate").widthZ18 * 0.9,
                     18,
-                    15,
+                    feat(vs, "gate").widthZ18 + 3,
                   ],
                   "text-allow-overlap": true,
                 },
                 paint: {
-                  "text-color": "rgba(70,70,70,0.95)",
+                  "text-color": rgbaCss(feat(vs, "gate").colour),
                   "text-halo-color": "rgba(255,255,255,0.85)",
                   "text-halo-width": 1.5,
                 },
               },
             },
           ];
-          for (const { suffix, filter, style } of featureLayers) {
+          for (const { key, suffix, filter, style } of featureLayers) {
+            if (!feat(vs, key).enabled) continue;
             const lid = `topo-${id}-${suffix}`;
             if (!map.getLayer(lid)) {
               map.addLayer({
@@ -1159,42 +1238,51 @@ function Map({
               } as maplibregl.LayerSpecification);
             }
           }
+          void OSM_LINE_KEY_SET; // silence unused-import warning until line widths use it.
 
-          // Feature name labels for line categories (waterway, track, road)
+          // Feature name labels for line categories (waterway, track, road).
+          // Label colour follows the line colour from VectorStyleSettings so a
+          // user re-tinting "tracks" gets matching label text without a second
+          // colour picker.
           const featureLabelLayers: {
+            key: OsmFeatureKey;
             suffix: string;
             filter: maplibregl.ExpressionSpecification;
             color: string;
           }[] = [
             {
+              key: "waterway",
               suffix: "waterway-label",
               filter: [
                 "all",
                 ["==", ["get", "_category"], "waterway"],
                 ["has", "name"],
               ],
-              color: "rgba(20,80,180,0.95)",
+              color: rgbaCss(feat(vs, "waterway").colour),
             },
             {
+              key: "track",
               suffix: "track-label",
               filter: [
                 "all",
                 ["==", ["get", "_category"], "track"],
                 ["has", "name"],
               ],
-              color: "rgba(120,75,20,0.95)",
+              color: rgbaCss(feat(vs, "track").colour),
             },
             {
+              key: "road",
               suffix: "road-label",
               filter: [
                 "all",
                 ["==", ["get", "_category"], "road"],
                 ["any", ["has", "name"], ["has", "ref"]],
               ],
-              color: "rgba(50,50,50,0.95)",
+              color: rgbaCss(feat(vs, "road").colour),
             },
           ];
-          for (const { suffix, filter, color } of featureLabelLayers) {
+          for (const { key, suffix, filter, color } of featureLabelLayers) {
+            if (!feat(vs, key).enabled) continue;
             const lid = `topo-${id}-${suffix}`;
             if (!map.getLayer(lid)) {
               map.addLayer({
@@ -1235,16 +1323,18 @@ function Map({
 
           // Name labels for point categories at z14+ (campsite, cave, spring, gate)
           const pointLabelLayers: {
+            key: OsmFeatureKey;
             suffix: string;
             category: string;
             color: string;
           }[] = [
-            { suffix: "campsite-label", category: "campsite", color: "rgba(0,140,80,0.95)" },
-            { suffix: "cave-label", category: "cave", color: "rgba(60,30,10,0.95)" },
-            { suffix: "spring-label", category: "spring", color: "rgba(30,90,210,0.95)" },
-            { suffix: "gate-label", category: "gate", color: "rgba(70,70,70,0.95)" },
+            { key: "campsite", suffix: "campsite-label", category: "campsite", color: rgbaCss(feat(vs, "campsite").colour) },
+            { key: "cave",     suffix: "cave-label",     category: "cave",     color: rgbaCss(feat(vs, "cave").colour) },
+            { key: "spring",   suffix: "spring-label",   category: "spring",   color: rgbaCss(feat(vs, "spring").colour) },
+            { key: "gate",     suffix: "gate-label",     category: "gate",     color: rgbaCss(feat(vs, "gate").colour) },
           ];
-          for (const { suffix, category, color } of pointLabelLayers) {
+          for (const { key, suffix, category, color } of pointLabelLayers) {
+            if (!feat(vs, key).enabled) continue;
             const lid = `topo-${id}-${suffix}`;
             if (!map.getLayer(lid)) {
               map.addLayer({
@@ -1311,7 +1401,7 @@ function Map({
         map.moveLayer(cid);
       }
     }
-  }, [topoLayers, mapLoaded]);
+  }, [topoLayers, vectorStyle, mapLoaded]);
 
   // Fly to a topo job's bbox when requested from App.tsx
   const onTopoFlyConsumedRef = useRef(onTopoFlyConsumed);

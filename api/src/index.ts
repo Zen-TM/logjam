@@ -24,6 +24,7 @@ import ropewikiRouter from "./routes/ropewiki";
 import topoJobsRouter from "./routes/topoJobs";
 import geoPdfTemplatesRouter from "./routes/geoPdfTemplates";
 import topoTemplatesRouter from "./routes/topoTemplates";
+import vectorStyleRouter from "./routes/vectorStyle";
 import geoPdfRouter from "./routes/geoPdf";
 import analyticsRouter from "./routes/analytics";
 
@@ -66,7 +67,7 @@ app.use(
       if (env.CORS_ORIGIN_LIST.includes(origin)) return callback(null, true);
       return callback(null, false);
     },
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Fake-Auth", "X-Request-Id"],
     exposedHeaders: ["X-Request-Id"],
     credentials: true,
@@ -130,6 +131,7 @@ app.use("/ropewiki", ropewikiRouter);
 app.use("/topo-jobs", topoJobsRouter);
 app.use("/geo-pdf-templates", geoPdfTemplatesRouter);
 app.use("/topo-templates", topoTemplatesRouter);
+app.use("/vector-style", vectorStyleRouter);
 app.use("/geo-pdf", geoPdfRouter);
 app.use("/analytics", analyticsRouter);
 

@@ -77,6 +77,73 @@ ALL_LAYERS: frozenset[str] = frozenset({
     "features",
 })
 
+# Hardcoded fallback when User.vector_style is NULL. Must match
+# VECTOR_STYLE_DEFAULTS in shared/src/topoSettings.ts. Used only as a safety
+# net — the migration backfills every user row, so this should rarely fire.
+VECTOR_STYLE_DEFAULTS: dict = {
+    "contours": {
+        "majorColour": "#503c28dc",
+        "minorColour": "#785a3ca0",
+        "majorWidthM": 18,
+        "minorWidthM": 8,
+    },
+    "features": {
+        "waterway":  {"enabled": True,  "colour": "#2878dcdc", "widthZ18": 3},
+        "track":     {"enabled": True,  "colour": "#a0641edc", "widthZ18": 2},
+        "road":      {"enabled": True,  "colour": "#505050e6", "widthZ18": 4},
+        "building":  {"enabled": True,  "colour": "#a08c78c8", "widthZ18": 2},
+        "power":     {"enabled": True,  "colour": "#c8a000c8", "widthZ18": 1},
+        "campsite":  {"enabled": True,  "colour": "#00a050e6", "widthZ18": 14},
+        "peak":      {"enabled": True,  "colour": "#503214f0", "widthZ18": 12},
+        "spring":    {"enabled": True,  "colour": "#1e5ad2e6", "widthZ18": 8},
+        "gate":      {"enabled": True,  "colour": "#464646dc", "widthZ18": 10},
+        "cave":      {"enabled": True,  "colour": "#3c1e0ae6", "widthZ18": 10},
+        "bridge":    {"enabled": False, "colour": "#403028e6", "widthZ18": 3},
+        "ford":      {"enabled": False, "colour": "#1e90ffe6", "widthZ18": 8},
+        "waterfall": {"enabled": False, "colour": "#1e6ad2f0", "widthZ18": 10},
+        "trailhead": {"enabled": False, "colour": "#a04020e6", "widthZ18": 12},
+        "viewpoint": {"enabled": False, "colour": "#806020e6", "widthZ18": 12},
+        "hut":       {"enabled": False, "colour": "#503820e6", "widthZ18": 12},
+    },
+}
+
+
+def merge_settings(layer_options: Optional[dict], vector_style: Optional[dict]) -> dict:
+    """
+    Merge the per-job RasterTemplateSettings (layer_options) with the
+    user-level VectorStyleSettings snapshot into the legacy TopoSettings
+    shape that topo_mbtiles.py consumes.
+
+    Output keys:
+      hillshade, slope, vegetation       - from layer_options (or empty/missing)
+      contours: zoomBands + enabled      - from layer_options.contours
+                majorColour/minorColour/
+                majorWidthM/minorWidthM  - from vector_style.contours
+      features: enabled                  - from layer_options.features.enabled
+                features                 - from vector_style.features
+    """
+    raster = layer_options or {}
+    vec = vector_style or VECTOR_STYLE_DEFAULTS
+
+    merged = {
+        "hillshade":  raster.get("hillshade"),
+        "slope":      raster.get("slope"),
+        "vegetation": raster.get("vegetation"),
+    }
+    merged = {k: v for k, v in merged.items() if v is not None}
+
+    raster_contours = raster.get("contours") or {}
+    vec_contours = vec.get("contours") or VECTOR_STYLE_DEFAULTS["contours"]
+    merged["contours"] = {**raster_contours, **vec_contours}
+
+    raster_features = raster.get("features") or {}
+    vec_features = vec.get("features") or VECTOR_STYLE_DEFAULTS["features"]
+    merged["features"] = {
+        "enabled": raster_features.get("enabled", True),
+        "features": vec_features,
+    }
+    return merged
+
 s3  = boto3.client("s3",  region_name=AWS_REGION)
 ses = boto3.client("ses", region_name=AWS_REGION) if SES_FROM else None
 
@@ -342,21 +409,25 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
     log.info(f"Downloading {s3_input_key} …")
     s3.download_file(BUCKET, s3_input_key, str(zip_path))
 
-    # Run topo_mbtiles.py with all layers. The per-job render settings
-    # (layer toggles + cosmetic knobs) come from TopoJob.layer_options and are
-    # passed to the pipeline as a JSON file via --settings-json. If the column
-    # is null, the pipeline falls back to its built-in Default preset.
+    # Merge per-job raster template settings (TopoJob.layer_options) with the
+    # vector style snapshot taken at job-submit time
+    # (TopoJob.vector_style_snapshot) into the legacy TopoSettings shape that
+    # topo_mbtiles.py expects. The pipeline uses the merged dict to drive both
+    # raster compositing colours and OSM/contour selection.
     output_dir = Path(tmp) / "output"
     output_dir.mkdir()
     geojson_dir = Path(tmp) / "geojson_export"
     geojson_dir.mkdir()
-    keep_intermediates = os.environ.get("TOPO_KEEP_INTERMEDIATES") == "1"
-    pipeline_work_dir: Optional[Path] = None
+    # Worker now always pins --work-dir so we can upload styled per-layer
+    # GeoTIFFs (TopoExportDialog GeoTIFF format option).
+    pipeline_work_dir = Path(tmp) / "pipeline_work"
+    pipeline_work_dir.mkdir()
     cmd = [
         "python3",
         str(Path(__file__).parent / "topo_mbtiles.py"),
         str(zip_path),
         "--output",  str(output_dir),
+        "--work-dir", str(pipeline_work_dir),
         "--workers", str(os.cpu_count() or 4),
         "--layers",  "all",
         "--export-geojson",   str(geojson_dir),
@@ -364,22 +435,13 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
     ]
 
     layer_options = job.get("layer_options")
-    if layer_options:
-        settings_path = Path(tmp) / "settings.json"
-        # psycopg2 RealDictCursor decodes jsonb as dict; if a raw string
-        # somehow comes through, json.dump still produces valid JSON.
-        with open(settings_path, "w", encoding="utf-8") as f:
-            json.dump(layer_options, f)
-        cmd.extend(["--settings-json", str(settings_path)])
-        log.info(f"Per-job render settings written to {settings_path}")
-    else:
-        log.info("No per-job render settings — using Default preset.")
-
-    if keep_intermediates:
-        pipeline_work_dir = Path(tmp) / "pipeline_work"
-        pipeline_work_dir.mkdir()
-        cmd.extend(["--work-dir", str(pipeline_work_dir)])
-        log.info(f"TOPO_KEEP_INTERMEDIATES=1 — intermediates will be kept at {pipeline_work_dir}")
+    vector_style_snapshot = job.get("vector_style_snapshot")
+    merged_settings = merge_settings(layer_options, vector_style_snapshot)
+    settings_path = Path(tmp) / "settings.json"
+    with open(settings_path, "w", encoding="utf-8") as f:
+        json.dump(merged_settings, f)
+    cmd.extend(["--settings-json", str(settings_path)])
+    log.info(f"Merged render settings written to {settings_path}")
     log.info("Running pipeline …")
     result = subprocess.run(cmd)
     if result.returncode != 0:
@@ -411,14 +473,44 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
     # (Overpass failure) and empty GeoJSON (no matches / all classes disabled).
     osm_failed = features_vector is None
 
-    # ── Optional: upload intermediates for debugging ────────────────────
-    if keep_intermediates and pipeline_work_dir is not None:
+    # ── Upload per-layer GeoTIFFs for the Export… dialog ────────────────
+    # Single-band raw intermediates from the pipeline work dir. Users with
+    # GIS tooling (QGIS, ArcGIS) apply their own colormap. Vegetation is the
+    # scrub-density ratio raster, only present in Modes B and C.
+    geotiff_prefix = f"outputs/{job_id}"
+    geotiff_uploads = [
+        ("hillshade.tif",   pipeline_work_dir / "hillshade.tif"),
+        ("slope.tif",       pipeline_work_dir / "slope.tif"),
+        ("vegetation.tif",  pipeline_work_dir / "scrub_density.tif"),
+    ]
+    for s3_name, local in geotiff_uploads:
+        if local.exists():
+            try:
+                s3.upload_file(str(local), BUCKET, f"{geotiff_prefix}/{s3_name}")
+                total_geotiff_bytes = local.stat().st_size
+                log.info(f"Uploaded {geotiff_prefix}/{s3_name} ({total_geotiff_bytes} bytes)")
+            except Exception as e:
+                log.warning(f"Failed to upload {s3_name}: {e}")
+        else:
+            log.info(f"GeoTIFF source {local.name} not present — skipped")
+
+    # ── Upload raw vector GeoJSONs for the Export… dialog ───────────────
+    for geojson_name in ("contours_5m.geojson", "osm_features.geojson"):
+        local = geojson_dir / geojson_name
+        if local.exists():
+            try:
+                s3.upload_file(str(local), BUCKET, f"{geotiff_prefix}/{geojson_name}")
+                log.info(f"Uploaded {geotiff_prefix}/{geojson_name}")
+            except Exception as e:
+                log.warning(f"Failed to upload {geojson_name}: {e}")
+
+    # ── Optional: upload extra debug intermediates ──────────────────────
+    if os.environ.get("TOPO_KEEP_INTERMEDIATES") == "1":
         debug_prefix = f"jobs/{job_id}/debug"
         debug_files = [
             "dtm_raw.tif", "dtm_filled.tif",
             "scrub_count_raw.tif", "understorey_count_raw.tif",
-            "scrub_density.tif", "footprint.geojson",
-            "hillshade.tif", "slope.tif",
+            "footprint.geojson",
         ]
         for fname in debug_files:
             local = pipeline_work_dir / fname

@@ -281,6 +281,35 @@
   composes: actionButton;
 }
 
+/* ── Vector styles accordion ────────────────────────────────────────────────── */
+
+.vectorStyleTabs {
+  display: flex;
+  gap: 0.25em;
+  padding: 0.3em 0.5em 0;
+}
+
+.vectorStyleTab {
+  flex: 1;
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+  border-radius: var(--radius-sm);
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  padding: 0.3em 0.5em;
+}
+
+.vectorStyleTab:hover {
+  color: var(--theme-text-primary);
+}
+
+.vectorStyleTabActive {
+  background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
+  border-color: var(--theme-accent);
+  color: var(--theme-text-primary);
+}
+
 /* ── Download menu ────────────────────────────────────────────────────────────── */
 
 .downloadMenu {

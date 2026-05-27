@@ -1,10 +1,27 @@
-// Topo generation render settings. Single source of truth for defaults and
-// validation. Consumed by API (POST /topo-jobs, /topo-templates), frontend
-// (TopoDialog), and worker.py (defence-in-depth re-validation).
+// Topo generation render settings.
+//
+// As of Stage 1, settings are split into two slices:
+//
+//   RasterTemplateSettings — persisted on TopoTemplate.config. Drives raster
+//     bake (hillshade tint, vegetation colors, slope bins, contour interval
+//     bands at composite-bake time). Selected per-job via the template picker.
+//
+//   VectorStyleSettings — persisted on User.vectorStyle (one active style per
+//     user). Drives both (a) the live MapLibre paint expressions on vector
+//     PMTiles in-app and (b) the per-job composite raster bake. Snapshotted
+//     into TopoJob.vectorStyleSnapshot at job-submit time so the composite
+//     reflects the style at submission, while in-app paint always reflects
+//     the live user value.
+//
+// Frontend, API, and worker all import these types + validators from here.
 
 export type TopoLayerKey = "hillshade" | "vegetation" | "slope" | "contours" | "features";
 
 export type RgbaHex = string; // #RRGGBBAA, lowercase hex
+
+// ---------------------------------------------------------------------------
+// Raster template slice
+// ---------------------------------------------------------------------------
 
 export interface HillshadeSettings {
   enabled: boolean;
@@ -45,37 +62,55 @@ export interface ContourZoomBand {
   majorEveryN: number;   // every Nth contour rendered with major style
 }
 
-export interface ContoursSettings {
+// Raster-bake-only contour fields. Vector contour colors/widths live in
+// VectorStyleSettings now and apply at composite-bake time via the snapshot.
+export interface RasterContoursSettings {
   enabled: boolean;
   zoomBands: ContourZoomBand[];   // length 3, indices/zooms fixed
-  majorColour: RgbaHex;
-  minorColour: RgbaHex;
-  majorWidthM: number;             // line thickness in ground metres
-  minorWidthM: number;
 }
+
+// Raster-bake-only OSM features toggle. Per-category fields live in
+// VectorStyleSettings.
+export interface RasterFeaturesSettings {
+  enabled: boolean;
+}
+
+export interface RasterTemplateSettings {
+  hillshade: HillshadeSettings;
+  slope: SlopeSettings;
+  vegetation: VegetationSettings;
+  contours: RasterContoursSettings;
+  features: RasterFeaturesSettings;
+}
+
+// ---------------------------------------------------------------------------
+// Vector style slice (per-user, live)
+// ---------------------------------------------------------------------------
 
 export type OsmFeatureKey =
   | "waterway" | "track" | "road" | "building" | "power"
   | "campsite" | "peak" | "spring" | "gate" | "cave"
   | "bridge" | "ford" | "waterfall" | "trailhead" | "viewpoint" | "hut";
 
+// Per-category vector style. `enabled` controls both paint-time layer presence
+// in-app and composite-bake-time inclusion. Worker always fetches all
+// categories from Overpass unconditionally.
 export interface OsmFeatureStyle {
   enabled: boolean;
   colour: RgbaHex;
   widthZ18: number;   // applies to line/point styling; >= 0
 }
 
-export interface OsmFeaturesSettings {
-  enabled: boolean;
-  features: Record<OsmFeatureKey, OsmFeatureStyle>;
+export interface VectorContoursStyle {
+  majorColour: RgbaHex;
+  minorColour: RgbaHex;
+  majorWidthM: number;  // line thickness in ground metres
+  minorWidthM: number;
 }
 
-export interface TopoSettings {
-  hillshade: HillshadeSettings;
-  slope: SlopeSettings;
-  vegetation: VegetationSettings;
-  contours: ContoursSettings;
-  features: OsmFeaturesSettings;
+export interface VectorStyleSettings {
+  contours: VectorContoursStyle;
+  features: Record<OsmFeatureKey, OsmFeatureStyle>;
 }
 
 export const OSM_FEATURE_KEYS: OsmFeatureKey[] = [
@@ -160,7 +195,11 @@ export const SVTM_FORMATIONS: string[] = [
   "Alpine Complex",
 ];
 
-export const TOPO_SETTINGS_DEFAULTS: TopoSettings = {
+// ---------------------------------------------------------------------------
+// Defaults
+// ---------------------------------------------------------------------------
+
+export const RASTER_TEMPLATE_DEFAULTS: RasterTemplateSettings = {
   hillshade: {
     enabled: true,
     colour: "#ffffffff",
@@ -214,31 +253,36 @@ export const TOPO_SETTINGS_DEFAULTS: TopoSettings = {
       { zoomMin: 15, zoomMax: 16, intervalM: 10, majorEveryN: 5 },
       { zoomMin: 17, zoomMax: 18, intervalM: 5, majorEveryN: 10 },
     ],
+  },
+  features: {
+    enabled: true,
+  },
+};
+
+export const VECTOR_STYLE_DEFAULTS: VectorStyleSettings = {
+  contours: {
     majorColour: "#503c28dc",
     minorColour: "#785a3ca0",
     majorWidthM: 18,
     minorWidthM: 8,
   },
   features: {
-    enabled: true,
-    features: {
-      waterway: { enabled: true, colour: "#2878dcdc", widthZ18: 3 },
-      track:    { enabled: true, colour: "#a0641edc", widthZ18: 2 },
-      road:     { enabled: true, colour: "#505050e6", widthZ18: 4 },
-      building: { enabled: true, colour: "#a08c78c8", widthZ18: 2 },
-      power:    { enabled: true, colour: "#c8a000c8", widthZ18: 1 },
-      campsite: { enabled: true, colour: "#00a050e6", widthZ18: 14 },
-      peak:     { enabled: true, colour: "#503214f0", widthZ18: 12 },
-      spring:   { enabled: true, colour: "#1e5ad2e6", widthZ18: 8 },
-      gate:     { enabled: true, colour: "#464646dc", widthZ18: 10 },
-      cave:     { enabled: true, colour: "#3c1e0ae6", widthZ18: 10 },
-      bridge:   { enabled: false, colour: "#403028e6", widthZ18: 3 },
-      ford:     { enabled: false, colour: "#1e90ffe6", widthZ18: 8 },
-      waterfall:{ enabled: false, colour: "#1e6ad2f0", widthZ18: 10 },
-      trailhead:{ enabled: false, colour: "#a04020e6", widthZ18: 12 },
-      viewpoint:{ enabled: false, colour: "#806020e6", widthZ18: 12 },
-      hut:      { enabled: false, colour: "#503820e6", widthZ18: 12 },
-    },
+    waterway: { enabled: true, colour: "#2878dcdc", widthZ18: 3 },
+    track:    { enabled: true, colour: "#a0641edc", widthZ18: 2 },
+    road:     { enabled: true, colour: "#505050e6", widthZ18: 4 },
+    building: { enabled: true, colour: "#a08c78c8", widthZ18: 2 },
+    power:    { enabled: true, colour: "#c8a000c8", widthZ18: 1 },
+    campsite: { enabled: true, colour: "#00a050e6", widthZ18: 14 },
+    peak:     { enabled: true, colour: "#503214f0", widthZ18: 12 },
+    spring:   { enabled: true, colour: "#1e5ad2e6", widthZ18: 8 },
+    gate:     { enabled: true, colour: "#464646dc", widthZ18: 10 },
+    cave:     { enabled: true, colour: "#3c1e0ae6", widthZ18: 10 },
+    bridge:   { enabled: false, colour: "#403028e6", widthZ18: 3 },
+    ford:     { enabled: false, colour: "#1e90ffe6", widthZ18: 8 },
+    waterfall:{ enabled: false, colour: "#1e6ad2f0", widthZ18: 10 },
+    trailhead:{ enabled: false, colour: "#a04020e6", widthZ18: 12 },
+    viewpoint:{ enabled: false, colour: "#806020e6", widthZ18: 12 },
+    hut:      { enabled: false, colour: "#503820e6", widthZ18: 12 },
   },
 };
 
@@ -246,15 +290,15 @@ export const TOPO_SETTINGS_DEFAULTS: TopoSettings = {
 // Validation (dep-free — frontend has no zod)
 // ---------------------------------------------------------------------------
 
-export interface ValidationOk {
+export interface ValidationOk<T> {
   ok: true;
-  value: TopoSettings;
+  value: T;
 }
 export interface ValidationFail {
   ok: false;
   errors: string[];
 }
-export type ValidationResult = ValidationOk | ValidationFail;
+export type ValidationResult<T> = ValidationOk<T> | ValidationFail;
 
 const HEX_RGBA_RE = /^#[0-9a-fA-F]{8}$/;
 
@@ -273,7 +317,7 @@ function inRange(n: unknown, lo: number, hi: number): n is number {
 
 const MAX_SLOPE_BANDS = 8;
 
-export function validateTopoSettings(input: unknown): ValidationResult {
+export function validateRasterTemplateSettings(input: unknown): ValidationResult<RasterTemplateSettings> {
   const errors: string[] = [];
   if (!isObject(input)) {
     return { ok: false, errors: ["root must be an object"] };
@@ -282,11 +326,24 @@ export function validateTopoSettings(input: unknown): ValidationResult {
   validateHillshade(input.hillshade, errors);
   validateSlope(input.slope, errors);
   validateVegetation(input.vegetation, errors);
-  validateContours(input.contours, errors);
-  validateFeatures(input.features, errors);
+  validateRasterContours(input.contours, errors);
+  validateRasterFeatures(input.features, errors);
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, value: input as unknown as TopoSettings };
+  return { ok: true, value: input as unknown as RasterTemplateSettings };
+}
+
+export function validateVectorStyleSettings(input: unknown): ValidationResult<VectorStyleSettings> {
+  const errors: string[] = [];
+  if (!isObject(input)) {
+    return { ok: false, errors: ["root must be an object"] };
+  }
+
+  validateVectorContours(input.contours, errors);
+  validateVectorFeatures(input.features, errors);
+
+  if (errors.length > 0) return { ok: false, errors };
+  return { ok: true, value: input as unknown as VectorStyleSettings };
 }
 
 function validateHillshade(v: unknown, errors: string[]): void {
@@ -345,7 +402,7 @@ function validateVegetation(v: unknown, errors: string[]): void {
   }
 }
 
-function validateContours(v: unknown, errors: string[]): void {
+function validateRasterContours(v: unknown, errors: string[]): void {
   if (!isObject(v)) { errors.push("contours must be an object"); return; }
   pushIf(errors, typeof v.enabled === "boolean", "contours.enabled must be boolean");
   if (!Array.isArray(v.zoomBands) || v.zoomBands.length !== 3) {
@@ -359,25 +416,32 @@ function validateContours(v: unknown, errors: string[]): void {
       pushIf(errors, inRange(band.majorEveryN, 1, 100) && Number.isInteger(band.majorEveryN), `contours.zoomBands[${i}].majorEveryN must be integer 1..100`);
     });
   }
+}
+
+function validateRasterFeatures(v: unknown, errors: string[]): void {
+  if (!isObject(v)) { errors.push("features must be an object"); return; }
+  pushIf(errors, typeof v.enabled === "boolean", "features.enabled must be boolean");
+}
+
+function validateVectorContours(v: unknown, errors: string[]): void {
+  if (!isObject(v)) { errors.push("contours must be an object"); return; }
   pushIf(errors, typeof v.majorColour === "string" && HEX_RGBA_RE.test(v.majorColour as string), "contours.majorColour must be #RRGGBBAA");
   pushIf(errors, typeof v.minorColour === "string" && HEX_RGBA_RE.test(v.minorColour as string), "contours.minorColour must be #RRGGBBAA");
   pushIf(errors, inRange(v.majorWidthM, 0, 200), "contours.majorWidthM must be 0..200");
   pushIf(errors, inRange(v.minorWidthM, 0, 200), "contours.minorWidthM must be 0..200");
 }
 
-function validateFeatures(v: unknown, errors: string[]): void {
-  if (!isObject(v)) { errors.push("features must be an object"); return; }
-  pushIf(errors, typeof v.enabled === "boolean", "features.enabled must be boolean");
-  if (!isObject(v.features)) {
-    errors.push("features.features must be an object");
+function validateVectorFeatures(v: unknown, errors: string[]): void {
+  if (!isObject(v)) {
+    errors.push("features must be an object");
     return;
   }
   for (const key of OSM_FEATURE_KEYS) {
-    const style = (v.features as Record<string, unknown>)[key];
-    if (!isObject(style)) { errors.push(`features.features.${key} must be an object`); continue; }
-    pushIf(errors, typeof style.enabled === "boolean", `features.features.${key}.enabled must be boolean`);
-    pushIf(errors, typeof style.colour === "string" && HEX_RGBA_RE.test(style.colour as string), `features.features.${key}.colour must be #RRGGBBAA`);
-    pushIf(errors, inRange(style.widthZ18, 0, 100), `features.features.${key}.widthZ18 must be 0..100`);
+    const style = (v as Record<string, unknown>)[key];
+    if (!isObject(style)) { errors.push(`features.${key} must be an object`); continue; }
+    pushIf(errors, typeof style.enabled === "boolean", `features.${key}.enabled must be boolean`);
+    pushIf(errors, typeof style.colour === "string" && HEX_RGBA_RE.test(style.colour as string), `features.${key}.colour must be #RRGGBBAA`);
+    pushIf(errors, inRange(style.widthZ18, 0, 100), `features.${key}.widthZ18 must be 0..100`);
   }
 }
 
@@ -401,7 +465,10 @@ export function rgbaToHex(r: number, g: number, b: number, a: number): RgbaHex {
   return `#${clip(r)}${clip(g)}${clip(b)}${clip(a)}`;
 }
 
-// Deep clone via JSON. TopoSettings is plain JSON-safe data.
-export function cloneTopoSettings(s: TopoSettings): TopoSettings {
-  return JSON.parse(JSON.stringify(s)) as TopoSettings;
+export function cloneRasterTemplateSettings(s: RasterTemplateSettings): RasterTemplateSettings {
+  return JSON.parse(JSON.stringify(s)) as RasterTemplateSettings;
+}
+
+export function cloneVectorStyleSettings(s: VectorStyleSettings): VectorStyleSettings {
+  return JSON.parse(JSON.stringify(s)) as VectorStyleSettings;
 }

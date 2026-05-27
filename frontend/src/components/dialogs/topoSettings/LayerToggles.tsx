@@ -1,14 +1,14 @@
 import { Switch } from "@mui/material";
-import type { TopoSettings } from "@logjam/shared";
+import type { RasterTemplateSettings } from "@logjam/shared";
 import SettingsRow from "./SettingsRow";
 import styles from "./topoSettings.module.css";
 
 interface Props {
-  value: TopoSettings;
-  onChange: (next: TopoSettings) => void;
+  value: RasterTemplateSettings;
+  onChange: (next: RasterTemplateSettings) => void;
 }
 
-const LAYER_INFO: { key: keyof TopoSettings; label: string; description: string }[] = [
+const LAYER_INFO: { key: keyof RasterTemplateSettings; label: string; description: string }[] = [
   { key: "hillshade",  label: "Hillshade",   description: "Shaded relief raster from the DTM. Adds depth cueing to terrain." },
   { key: "vegetation", label: "Vegetation",  description: "Scrub density raster from LiDAR pulse ratios. Requires LAZ/LAS input." },
   { key: "slope",      label: "Slope",       description: "Slope-angle bands coloured by steepness." },
@@ -17,7 +17,7 @@ const LAYER_INFO: { key: keyof TopoSettings; label: string; description: string 
 ];
 
 export default function LayerToggles({ value, onChange }: Props) {
-  const setEnabled = (key: keyof TopoSettings, enabled: boolean) => {
+  const setEnabled = (key: keyof RasterTemplateSettings, enabled: boolean) => {
     onChange({
       ...value,
       [key]: { ...value[key], enabled },

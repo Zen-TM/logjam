@@ -13,7 +13,8 @@ import {
   parseZipCentralDirectory,
   classifyElvisEntries,
   ElvisZipError,
-  validateTopoSettings,
+  validateRasterTemplateSettings,
+  VECTOR_STYLE_DEFAULTS,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
@@ -47,16 +48,21 @@ router.post(
     await assertCanSubmit(user, tileCount);
     await assertHasStorageQuota(user.id);
 
-    // Optional advanced render settings. Default preset is used when absent —
-    // worker.py falls back to its built-in defaults if layerOptions is null.
+    // Optional raster template settings. Worker falls back to its built-in
+    // defaults if layerOptions is null.
     let layerOptions: object | undefined;
     if (settings !== undefined && settings !== null) {
-      const validation = validateTopoSettings(settings);
+      const validation = validateRasterTemplateSettings(settings);
       if (!validation.ok) {
         throw new AppError(400, `Invalid topo settings: ${validation.errors.join("; ")}`);
       }
       layerOptions = validation.value as object;
     }
+
+    // Snapshot the user's live vector style at submission time. The composite
+    // raster bake uses this snapshot; in-app display reads the live value
+    // independently. Falls back to defaults if the column is null.
+    const vectorStyleSnapshot = (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
 
     const estimatedSeconds = tileCount ? Math.round(tileCount * 8.5) * 60 : null;
 
@@ -68,6 +74,7 @@ router.post(
         tileCount: tileCount ?? null,
         estimatedSeconds,
         layerOptions: layerOptions ?? undefined,
+        vectorStyleSnapshot,
       },
     });
 
@@ -336,6 +343,92 @@ router.get(
     );
 
     res.json(signed);
+  },
+);
+
+// POST /topo-jobs/:id/export-urls — presigned GET URLs for arbitrary
+// {layers[], format} selections. Powers TopoExportDialog.
+//
+// Bundling semantics:
+//   - format="mbtiles" + layers covers all five → returns single
+//     `composite.mbtiles` URL (one entry, name="composite").
+//   - any other combination → returns one URL per requested layer in the
+//     chosen format.
+//
+// Raster layers (hillshade, vegetation, slope) only have mbtiles/geotiff
+// outputs; vector layers (contours, features) only have mbtiles/geojson. The
+// route rejects any layer/format mismatch with 400.
+router.post(
+  "/:id/export-urls",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const jobId = getParam(req.params.id);
+    const job = await prisma.topoJob.findUnique({ where: { id: jobId } });
+    if (!job) throw new AppError(404, "Job not found");
+    if (job.userId !== user.id) throw new AppError(403, "Access denied");
+    if (job.status !== "complete") throw new AppError(400, "Job is not complete");
+
+    const { layers, format } = req.body as {
+      layers?: unknown;
+      format?: unknown;
+    };
+
+    if (!Array.isArray(layers) || layers.length === 0) {
+      throw new AppError(400, "layers must be a non-empty array");
+    }
+    if (format !== "mbtiles" && format !== "geotiff" && format !== "geojson") {
+      throw new AppError(400, "format must be mbtiles, geotiff, or geojson");
+    }
+
+    const requested = new Set<TopoLayerName>();
+    for (const l of layers) {
+      const meta = TOPO_LAYERS.find((x) => x.name === l);
+      if (!meta) throw new AppError(400, `Unknown layer: ${String(l)}`);
+      if (format === "geotiff" && meta.format !== "raster") {
+        throw new AppError(400, `Layer ${meta.name} is vector — GeoTIFF not available`);
+      }
+      if (format === "geojson" && meta.format !== "vector") {
+        throw new AppError(400, `Layer ${meta.name} is raster — GeoJSON not available`);
+      }
+      requested.add(meta.name);
+    }
+
+    const presignTtlSeconds = 86400;
+    const sign = (Key: string) =>
+      getSignedUrl(s3, new GetObjectCommand({ Bucket: TOPO_BUCKET, Key }), {
+        expiresIn: presignTtlSeconds,
+      });
+
+    // Composite shortcut: mbtiles + all five layers selected.
+    const allFive =
+      format === "mbtiles" &&
+      TOPO_LAYERS.every((l) => requested.has(l.name));
+    if (allFive) {
+      const url = await sign(`outputs/${jobId}/composite.mbtiles`);
+      res.json({ urls: [{ name: "composite", url }] });
+      return;
+    }
+
+    // Per-layer in chosen format. Map name → S3 key.
+    const ext =
+      format === "mbtiles" ? "mbtiles" : format === "geotiff" ? "tif" : "geojson";
+    const keyFor = (name: TopoLayerName): string => {
+      if (format === "geojson") {
+        // contours_5m.geojson vs osm_features.geojson — fixed worker filenames.
+        if (name === "contours") return `outputs/${jobId}/contours_5m.geojson`;
+        if (name === "features") return `outputs/${jobId}/osm_features.geojson`;
+      }
+      return `outputs/${jobId}/${name}.${ext}`;
+    };
+
+    const urls = await Promise.all(
+      [...requested].map(async (name) => ({
+        name,
+        url: await sign(keyFor(name)),
+      })),
+    );
+    res.json({ urls });
   },
 );
 

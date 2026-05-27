@@ -14,6 +14,7 @@ model User {
   username            String         @unique
   email               String         @unique
   uiPreferences       Json           @default("{}") @map("ui_preferences")
+  vectorStyle         Json?          @map("vector_style")
   storageUsedBytes    BigInt         @default(0) @map("storage_used_bytes")
   storageQuotaBytes   BigInt         @default(5368709120) @map("storage_quota_bytes")
   weeklyTileQuota     Int            @default(100) @map("weekly_tile_quota")
@@ -149,6 +150,7 @@ model TopoJob {
   tileCount     Int?     @map("tile_count")
   estimatedSeconds Int?  @map("estimated_seconds")
   layerOptions  Json?    @map("layer_options")
+  vectorStyleSnapshot Json? @map("vector_style_snapshot")
   s3InputKey    String?  @map("s3_input_key")
   s3OutputKeys  Json?    @map("s3_output_keys")
   // s3OutputKeys shape: { name: string, mbtilesKey: string, pmtilesKey: string }[]

@@ -13,9 +13,9 @@ import { apiFetch } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import {
-  TOPO_SETTINGS_DEFAULTS,
-  cloneTopoSettings,
-  type TopoSettings,
+  RASTER_TEMPLATE_DEFAULTS,
+  cloneRasterTemplateSettings,
+  type RasterTemplateSettings,
 } from "@logjam/shared";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
 import type { TopoTemplate } from "./TopoDialog";
@@ -32,8 +32,8 @@ function TopoTemplateEditDialog({
   onSaved: () => void;
 }) {
   const [name, setName] = useState("");
-  const [settings, setSettings] = useState<TopoSettings>(() =>
-    cloneTopoSettings(TOPO_SETTINGS_DEFAULTS),
+  const [settings, setSettings] = useState<RasterTemplateSettings>(() =>
+    cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS),
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,10 +43,10 @@ function TopoTemplateEditDialog({
     setError(null);
     if (editingTemplate) {
       setName(editingTemplate.name);
-      setSettings(cloneTopoSettings(editingTemplate.config));
+      setSettings(cloneRasterTemplateSettings(editingTemplate.config));
     } else {
       setName("");
-      setSettings(cloneTopoSettings(TOPO_SETTINGS_DEFAULTS));
+      setSettings(cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS));
     }
   }, [open, editingTemplate]);
 

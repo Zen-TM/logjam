@@ -827,6 +827,39 @@ export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
   return true;
 }
 
+// ── Vector style (live, per-user) ─────────────────────────────
+
+import type { VectorStyleSettings } from "@logjam/shared";
+
+export function useVectorStyle(enabled: boolean) {
+  const [vectorStyle, setVectorStyle] = useState<VectorStyleSettings | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fetchCount, setFetchCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    setLoading(true);
+    apiFetch<VectorStyleSettings>("/vector-style")
+      .then((v) => { setVectorStyle(v); setError(null); })
+      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load vector style.")); })
+      .finally(() => setLoading(false));
+  }, [enabled, fetchCount]);
+
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+
+  const save = useCallback(async (next: VectorStyleSettings): Promise<VectorStyleSettings> => {
+    const saved = await apiFetch<VectorStyleSettings>("/vector-style", {
+      method: "PUT",
+      body: next,
+    });
+    setVectorStyle(saved);
+    return saved;
+  }, []);
+
+  return { vectorStyle, loading, error, refetch, save };
+}
+
 export function formatCanyonGrade(canyon: TCanyon): string | null {
   const { vGrade, aGrade, commitment } = canyon;
   if (!vGrade && !aGrade && !commitment) return null;

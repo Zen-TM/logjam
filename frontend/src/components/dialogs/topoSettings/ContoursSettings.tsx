@@ -1,16 +1,13 @@
-import type { ContoursSettings as ContoursSettingsValue, ContourZoomBand } from "@logjam/shared";
-import ColourPicker from "../../common/ColourPicker";
+import type { RasterContoursSettings, ContourZoomBand } from "@logjam/shared";
 import SettingsRow from "./SettingsRow";
 import styles from "./topoSettings.module.css";
 
 interface Props {
-  value: ContoursSettingsValue;
-  onChange: (next: ContoursSettingsValue) => void;
+  value: RasterContoursSettings;
+  onChange: (next: RasterContoursSettings) => void;
 }
 
 export default function ContoursSettings({ value, onChange }: Props) {
-  const patch = (delta: Partial<ContoursSettingsValue>) => onChange({ ...value, ...delta });
-
   const setBand = (idx: number, delta: Partial<ContourZoomBand>) => {
     const zoomBands = value.zoomBands.map((b, i) => (i === idx ? { ...b, ...delta } : b));
     onChange({ ...value, zoomBands });
@@ -20,8 +17,10 @@ export default function ContoursSettings({ value, onChange }: Props) {
     <div className={styles.tabPanel}>
       <p className={styles.helpText}>
         Three fixed zoom bands. For each, set the contour interval (metres
-        between lines) and how often a major line is drawn. The major colour
-        and width apply to every Nth line; the minor style applies to the rest.
+        between lines) and how often a major line is drawn. Contour colours and
+        widths live in <strong>Vector styles</strong> on the LiDAR Topos panel
+        and apply live to the map; this dialog covers only what the composite
+        raster bake needs.
       </p>
 
       <h4 className={styles.sectionTitle}>Zoom bands</h4>
@@ -59,36 +58,6 @@ export default function ContoursSettings({ value, onChange }: Props) {
           </SettingsRow>
         </div>
       ))}
-
-      <h4 className={styles.sectionTitle}>Major lines</h4>
-      <SettingsRow label="Major colour" tooltip="Colour applied to every Nth contour line.">
-        <ColourPicker value={value.majorColour} onChange={(c) => patch({ majorColour: c })} />
-      </SettingsRow>
-      <SettingsRow label="Major width (m)" tooltip="Line thickness in ground metres for major contours.">
-        <input
-          type="number"
-          className={styles.numberInput}
-          min={0}
-          step={1}
-          value={value.majorWidthM}
-          onChange={(e) => patch({ majorWidthM: Number(e.target.value) })}
-        />
-      </SettingsRow>
-
-      <h4 className={styles.sectionTitle}>Minor lines</h4>
-      <SettingsRow label="Minor colour" tooltip="Colour applied to all non-major contour lines.">
-        <ColourPicker value={value.minorColour} onChange={(c) => patch({ minorColour: c })} />
-      </SettingsRow>
-      <SettingsRow label="Minor width (m)" tooltip="Line thickness in ground metres for minor contours.">
-        <input
-          type="number"
-          className={styles.numberInput}
-          min={0}
-          step={1}
-          value={value.minorWidthM}
-          onChange={(e) => patch({ minorWidthM: Number(e.target.value) })}
-        />
-      </SettingsRow>
     </div>
   );
 }

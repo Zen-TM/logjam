@@ -1,14 +1,19 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Switch, LinearProgress } from "@mui/material";
-import { ChevronDown, Lock, X, Download } from "lucide-react";
-import type { DownloadUrl } from "../../dialogs/TopoDialog";
+import { ChevronDown, Lock, X } from "lucide-react";
 import classes from "./LidarPanel.module.css";
-import { apiFetch } from "../../../canyonUtils";
+import { apiFetch, useVectorStyle } from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import type { TopoJob, TopoTemplate, GeoJsonPolygon } from "../../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import TopoTemplateEditDialog from "../../dialogs/TopoTemplateEditDialog";
+import TopoExportDialog from "../../dialogs/TopoExportDialog";
+import VectorContoursForm from "./vectorStyles/VectorContoursForm";
+import VectorFeaturesForm from "./vectorStyles/VectorFeaturesForm";
+import type { VectorStyleSettings } from "@logjam/shared";
+
+const VECTOR_STYLE_SAVE_DEBOUNCE_MS = 400;
 
 
 function jobEtaLabel(job: TopoJob): string {
@@ -67,6 +72,37 @@ function LidarPanel({
   const [editingTemplate, setEditingTemplate] = useState<TopoTemplate | null>(null);
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
 
+  // Vector styles accordion — live, per-user, debounced PUT
+  const [vectorStylesOpen, setVectorStylesOpen] = useState(false);
+  const [vectorStyleTab, setVectorStyleTab] = useState<"contours" | "features">("contours");
+  const vectorStyleHook = useVectorStyle(true);
+  const [draftVectorStyle, setDraftVectorStyle] = useState<VectorStyleSettings | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Seed the editable draft from the server-loaded value, but never blow away
+  // an in-flight edit by re-syncing after the hook refetches (e.g. after a
+  // save round-trip — saved value equals draft already).
+  useEffect(() => {
+    if (vectorStyleHook.vectorStyle && draftVectorStyle === null) {
+      setDraftVectorStyle(vectorStyleHook.vectorStyle);
+    }
+  }, [vectorStyleHook.vectorStyle, draftVectorStyle]);
+
+  const scheduleVectorStyleSave = useCallback((next: VectorStyleSettings) => {
+    setDraftVectorStyle(next);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      vectorStyleHook.save(next).catch((err) => {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't save vector style."));
+      });
+    }, VECTOR_STYLE_SAVE_DEBOUNCE_MS);
+  }, [vectorStyleHook, toast]);
+
+  useEffect(() => () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+  }, []);
+
   // Topo jobs accordion
   const [jobsOpen, setJobsOpen] = useState(false);
   const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
@@ -74,32 +110,8 @@ function LidarPanel({
   // Active jobs: show first 3, rest behind disclosure
   const [showAllActive, setShowAllActive] = useState(false);
 
-  // Download URLs — fetched on demand per completed job
-  const [downloadingJobId, setDownloadingJobId] = useState<string | null>(null);
-  const [openDownloadJobId, setOpenDownloadJobId] = useState<string | null>(null);
-  const [downloadUrlsCache, setDownloadUrlsCache] = useState<Record<string, DownloadUrl[]>>({});
-
-  const handleDownloadClick = useCallback(async (jobId: string) => {
-    if (openDownloadJobId === jobId) {
-      setOpenDownloadJobId(null);
-      return;
-    }
-    if (downloadUrlsCache[jobId]) {
-      setOpenDownloadJobId(jobId);
-      return;
-    }
-    setDownloadingJobId(jobId);
-    try {
-      const urls = await apiFetch<DownloadUrl[]>(`/topo-jobs/${jobId}/download-urls`);
-      setDownloadUrlsCache((prev) => ({ ...prev, [jobId]: urls }));
-      setOpenDownloadJobId(jobId);
-    } catch (err) {
-      console.error(err);
-      toast.error(messageFromError(err, "Couldn't load download links."));
-    } finally {
-      setDownloadingJobId(null);
-    }
-  }, [openDownloadJobId, downloadUrlsCache, toast]);
+  // Export dialog — one open at a time, keyed by job
+  const [exportJob, setExportJob] = useState<CompletedTopoJob | null>(null);
 
   const loadTemplates = useCallback(async () => {
     try {
@@ -276,6 +288,58 @@ function LidarPanel({
         )}
       </div>
 
+      {/* Vector styles accordion */}
+      <div className={classes.accordion}>
+        <button
+          className={classes.accordionHeader}
+          onClick={() => setVectorStylesOpen((v) => !v)}
+          aria-expanded={vectorStylesOpen}
+        >
+          <span>Vector styles</span>
+          <ChevronDown
+            size={14}
+            className={`${classes.chevron} ${vectorStylesOpen ? classes.chevronOpen : ""}`}
+          />
+        </button>
+        {vectorStylesOpen && (
+          <div className={classes.accordionBody}>
+            <div className={classes.vectorStyleTabs}>
+              <button
+                className={`${classes.vectorStyleTab} ${vectorStyleTab === "contours" ? classes.vectorStyleTabActive : ""}`}
+                onClick={() => setVectorStyleTab("contours")}
+              >
+                Contours
+              </button>
+              <button
+                className={`${classes.vectorStyleTab} ${vectorStyleTab === "features" ? classes.vectorStyleTabActive : ""}`}
+                onClick={() => setVectorStyleTab("features")}
+              >
+                Features
+              </button>
+            </div>
+            {draftVectorStyle === null ? (
+              <div className={classes.emptyHint}>
+                {vectorStyleHook.error ?? "Loading…"}
+              </div>
+            ) : vectorStyleTab === "contours" ? (
+              <VectorContoursForm
+                value={draftVectorStyle.contours}
+                onChange={(next) =>
+                  scheduleVectorStyleSave({ ...draftVectorStyle, contours: next })
+                }
+              />
+            ) : (
+              <VectorFeaturesForm
+                value={draftVectorStyle.features}
+                onChange={(next) =>
+                  scheduleVectorStyleSave({ ...draftVectorStyle, features: next })
+                }
+              />
+            )}
+          </div>
+        )}
+      </div>
+
       {/* My LiDAR Topos accordion */}
       <div className={classes.accordion}>
         <button
@@ -334,11 +398,10 @@ function LidarPanel({
                     <>
                       <button
                         className={classes.actionButton}
-                        onClick={() => void handleDownloadClick(job.jobId)}
-                        title="Download .mbtiles"
-                        disabled={downloadingJobId === job.jobId}
+                        onClick={() => setExportJob(job)}
+                        title="Export…"
                       >
-                        <Download size={12} />
+                        Export…
                       </button>
                       <button
                         className={classes.deleteButton}
@@ -347,20 +410,6 @@ function LidarPanel({
                         Delete
                       </button>
                     </>
-                  )}
-                  {openDownloadJobId === job.jobId && downloadUrlsCache[job.jobId] && (
-                    <div className={classes.downloadMenu}>
-                      {downloadUrlsCache[job.jobId].map((u) => (
-                        <a
-                          key={u.name}
-                          className={classes.downloadLink}
-                          href={u.mbtilesUrl}
-                          download={`${u.name}.mbtiles`}
-                        >
-                          {u.name}.mbtiles
-                        </a>
-                      ))}
-                    </div>
                   )}
                 </div>
               );
@@ -374,6 +423,12 @@ function LidarPanel({
         onClose={() => setTemplateEditOpen(false)}
         editingTemplate={editingTemplate}
         onSaved={() => setTemplateFetchCount((n) => n + 1)}
+      />
+
+      <TopoExportDialog
+        open={exportJob !== null}
+        onClose={() => setExportJob(null)}
+        job={exportJob}
       />
     </div>
   );

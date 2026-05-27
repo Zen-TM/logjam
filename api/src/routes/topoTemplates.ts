@@ -3,7 +3,7 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
-import { TOPO_SETTINGS_DEFAULTS, validateTopoSettings } from "@logjam/shared";
+import { RASTER_TEMPLATE_DEFAULTS, validateRasterTemplateSettings } from "@logjam/shared";
 
 const router = Router();
 
@@ -25,7 +25,7 @@ function defaultTemplate() {
     userId: null,
     name: "Default",
     isSystem: true,
-    config: TOPO_SETTINGS_DEFAULTS,
+    config: RASTER_TEMPLATE_DEFAULTS,
     createdAt: null,
     updatedAt: null,
   };
@@ -76,7 +76,7 @@ router.post(
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       throw new AppError(400, "name is required");
     }
-    const validation = validateTopoSettings(config);
+    const validation = validateRasterTemplateSettings(config);
     if (!validation.ok) {
       throw new AppError(400, `Invalid topo settings: ${validation.errors.join("; ")}`);
     }
@@ -116,7 +116,7 @@ router.patch(
       data.name = name.trim();
     }
     if (config !== undefined) {
-      const validation = validateTopoSettings(config);
+      const validation = validateRasterTemplateSettings(config);
       if (!validation.ok) {
         throw new AppError(400, `Invalid topo settings: ${validation.errors.join("; ")}`);
       }

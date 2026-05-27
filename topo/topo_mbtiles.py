@@ -1463,21 +1463,16 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
                        settings: Optional[Dict[str, Any]] = None) -> Optional[str]:
     """Download OSM data via Overpass API, then clip to the data footprint. Returns path to GeoJSON.
 
-    Only queries feature classes that are `enabled` in `settings.features.features`.
-    Saves Overpass bandwidth when users disable categories.
+    Queries ALL supported feature classes unconditionally. Per-category
+    `enabled` is a paint/composite decision now (lives in VectorStyleSettings
+    on the user) — fetching everything means toggling a category in the UI
+    never requires a LiDAR rerun.
     """
+    del settings  # No per-category filter applied here anymore.
     log.info("Fetching OSM features from Overpass API …")
     bbox = f"{lat_min},{lon_min},{lat_max},{lon_max}"
 
-    feature_settings = (settings or {}).get("features", {}).get("features", {})
-    parts = []
-    for key, tag_filter in OSM_FEATURE_QUERIES.items():
-        cfg = feature_settings.get(key)
-        if cfg is None or cfg.get("enabled", True):
-            parts.append(f'nwr{tag_filter}({bbox});')
-    if not parts:
-        log.info("All OSM feature classes disabled — skipping Overpass.")
-        return None
+    parts = [f'nwr{tag_filter}({bbox});' for tag_filter in OSM_FEATURE_QUERIES.values()]
 
     query = f"""
     [out:json][timeout:120];
@@ -2483,16 +2478,22 @@ def main():
         log.info(f"Coverage: lon {lon_min:.4f}–{lon_max:.4f}, lat {lat_min:.4f}–{lat_max:.4f}")
 
         # ── Step 5: OSM features ─────────────────────────────────────────────
+        # OSM is always fetched (unless --skip-osm for offline tests). The
+        # per-category enablement flag now lives in VectorStyleSettings and
+        # only influences paint/composite, not the fetch step.
         fp = footprint_path if os.path.exists(footprint_path) else None
         osm_geojson = None
-        features_enabled = settings.get("features", {}).get("enabled", True)
-        if not args.skip_osm and features_enabled:
+        if not args.skip_osm:
             with bench.step("Fetch OSM features (Overpass API)"):
                 osm_geojson = fetch_osm_features(lon_min, lat_min, lon_max, lat_max, work_dir,
                                                   footprint_path=fp, settings=settings)
 
         # ── Step 6: Contours ─────────────────────────────────────────────────
-        contour_intervals = sorted({float(b["intervalM"])
+        # 5 m is forced into the interval set so the GeoJSON export and the
+        # vector contours PMTiles the frontend renders are always present,
+        # independent of the template's per-zoom intervalM choices (which
+        # drive only raster compositing).
+        contour_intervals = sorted({5.0} | {float(b["intervalM"])
                                     for b in settings.get("contours", {}).get("zoomBands", [])})
         contours_enabled = settings.get("contours", {}).get("enabled", True) and bool(contour_intervals)
         contour_paths: Dict[float, str] = {}

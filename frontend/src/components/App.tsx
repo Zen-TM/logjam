@@ -29,6 +29,7 @@ import {
   useTripLogs,
   useAnalytics,
   useCurrentUser,
+  useVectorStyle,
   fetchCurrentUser,
   recordConsent,
   passesFilters,
@@ -282,6 +283,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   } = useTripLogs(authenticated);
   const { analytics, loading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(authenticated);
   const { currentUser, refetchCurrentUser } = useCurrentUser(authenticated);
+  const { vectorStyle } = useVectorStyle(authenticated);
 
   const [customFieldDefs, setCustomFieldDefs] = useState<
     TripLogCustomFieldDef[]
@@ -720,6 +722,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           setShowTopo(true);
         }}
         topoLayers={combinedTopoLayers}
+        vectorStyle={vectorStyle}
         activeLayerId={activeLayerId}
         selectingGeoPdfExtent={selectingGeoPdfExtent}
         geoPdfPaperAspect={geoPdfPaperAspect}
