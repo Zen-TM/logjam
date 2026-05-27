@@ -87,12 +87,23 @@ RUN pip install --upgrade pip && \
 WORKDIR /app
 COPY worker.py /app/worker.py
 COPY topo_mbtiles.py /app/topo_mbtiles.py
+COPY export_worker.py /app/export_worker.py
+COPY renderers/ /app/renderers/
 COPY icons/ /app/icons/
 
 # ------------------------------------------------------------
 # 5. Entrypoint
 # ------------------------------------------------------------
-# Job ID and AWS config come from environment variables (set by ECS RunTask).
-# Required: JOB_ID, S3_BUCKET_TOPO, DATABASE_URL
-# Optional: SQS_QUEUE_URL, SES_FROM_EMAIL, AWS_REGION
+# Single image, two ECS task definitions:
+#   - logjam-topo-worker         → command override ["python3", "/app/worker.py"]
+#   - logjam-topo-export-worker  → command override ["python3", "/app/export_worker.py"]
+# Required env (topo job):     JOB_ID, S3_BUCKET_TOPO, DATABASE_URL
+# Required env (export job):   EXPORT_JOB_ID, S3_BUCKET_TOPO, DATABASE_URL
+# Optional: SES_FROM_EMAIL, FRONTEND_URL, AWS_REGION
+#
+# Stage 2 plan called for headless MapLibre Native here. The current export
+# worker reuses topo_mbtiles' Python tile compositor instead, which avoids
+# the Mesa + node20 + libmaplibre-gl-native stack entirely. If we move to
+# MapLibre Native later, add the GL deps before this line and keep the same
+# entrypoint contract — export_worker.py orchestration stays unchanged.
 ENTRYPOINT ["python3", "/app/worker.py"]

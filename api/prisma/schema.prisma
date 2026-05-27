@@ -29,6 +29,7 @@ model User {
   media               Media[]
   notifications       Notification[]
   topoJobs            TopoJob[]
+  topoExportJobs      TopoExportJob[]
   tripLogs            TripLog[]
   geoPdfTemplates     GeoPdfTemplate[]
   topoTemplates       TopoTemplate[]
@@ -153,7 +154,10 @@ model TopoJob {
   vectorStyleSnapshot Json? @map("vector_style_snapshot")
   s3InputKey    String?  @map("s3_input_key")
   s3OutputKeys  Json?    @map("s3_output_keys")
-  // s3OutputKeys shape: { name: string, mbtilesKey: string, pmtilesKey: string }[]
+  // s3OutputKeys shape: { name: string, cogKey: string|null, pmtilesKey: string|null }[]
+  // Raster layers (hillshade/vegetation/slope): cogKey set, pmtilesKey set (for in-app display).
+  // Vector layers (contours/features): cogKey null, pmtilesKey set.
+  // Composite + downloadable formats are produced on-demand by the export worker.
   outputBytes   BigInt?  @map("output_bytes")
   errorMessage  String?  @map("error_message")
   createdAt     DateTime @default(now()) @map("created_at")
@@ -161,6 +165,36 @@ model TopoJob {
   user          User     @relation(fields: [userId], references: [id])
 
   @@map("topo_jobs")
+}
+
+// On-demand export pipeline (Stage 2). One row per user-requested export of
+// one (or more, future) completed TopoJob into a downloadable artefact. ECS
+// task `logjam-topo-export-worker` consumes the row, produces the artefact,
+// uploads it to s3://BUCKET/exports/{id}/{filename}, updates status, and
+// emails the user. Replaces job-time composite MBTiles + stored MBTiles.
+model TopoExportJob {
+  id                  String    @id @default(uuid())
+  userId              String    @map("user_id")
+  sourceJobIds        String[]  @map("source_job_ids")
+  // Single-element array for now; multi-job composites are a Stage 3 stretch.
+  layers              String[]
+  // Subset of TopoLayerKey (hillshade/vegetation/slope/contours/features).
+  format              String
+  // "mbtiles" | "geotiff" | "gpkg" | "geojson" | "gpx" (kmz deferred)
+  bundling            String
+  // "composite" | "per-layer"
+  vectorStyleSnapshot Json      @map("vector_style_snapshot")
+  status              String    @default("queued")
+  // queued | running | completed | failed
+  resultKey           String?   @map("result_key")
+  resultBytes         BigInt?   @map("result_bytes")
+  errorMessage        String?   @map("error_message")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  completedAt         DateTime? @map("completed_at")
+  user                User      @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("topo_export_jobs")
 }
 
 model GeoPdfTemplate {

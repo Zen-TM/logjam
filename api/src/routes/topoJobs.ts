@@ -18,7 +18,7 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
-import { assertCanSubmit, getWeeklyTileUsage } from "../lib/tileQuota";
+import { assertCanSubmit } from "../lib/tileQuota";
 import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
 import { deleteS3Prefix } from "../lib/s3Cleanup";
 
@@ -229,11 +229,10 @@ router.get(
 );
 
 // GET /topo-jobs/completed-overlays — bulk overlay PMTiles URLs for the
-// authenticated user's completed jobs. Replaces the old /topo-layers route.
-// Returns one entry per completed job, each with presigned PMTiles URLs for
-// every layer in TOPO_LAYERS that the job produced. Composite is excluded
-// (MBTiles-only). URLs expire in 24h; response includes `expiresAt` so the
-// client can pre-refetch before tiles start returning 403.
+// authenticated user's completed jobs. Returns one entry per completed job,
+// each with presigned PMTiles URLs for every layer the job produced.
+// URLs expire in 24h; response includes `expiresAt` so the client can
+// pre-refetch before tiles start returning 403.
 router.get(
   "/completed-overlays",
   requireAuth,
@@ -262,7 +261,7 @@ router.get(
       jobs.map(async (j) => {
         const outputs =
           (j.s3OutputKeys as
-            | { name: string; mbtilesKey: string; pmtilesKey: string | null }[]
+            | { name: string; cogKey: string | null; pmtilesKey: string | null }[]
             | null) ?? [];
         const layers = await Promise.all(
           outputs
@@ -310,127 +309,8 @@ router.get(
   },
 );
 
-// GET /topo-jobs/:id/download-urls — presigned GET URLs for all outputs
-router.get(
-  "/:id/download-urls",
-  requireAuth,
-  async (req: AuthenticatedRequest, res: Response) => {
-    const user = await getUser(req.user!.sub);
-    const job = await prisma.topoJob.findUnique({ where: { id: getParam(req.params.id) } });
-    if (!job) throw new AppError(404, "Job not found");
-    if (job.userId !== user.id) throw new AppError(403, "Access denied");
-    if (job.status !== "complete") throw new AppError(400, "Job is not complete");
-
-    const outputs = job.s3OutputKeys as { name: string; mbtilesKey: string; pmtilesKey: string }[] | null;
-    if (!outputs?.length) throw new AppError(500, "No output keys recorded");
-
-    const signed = await Promise.all(
-      outputs.map(async (o) => ({
-        name: o.name,
-        mbtilesUrl: await getSignedUrl(
-          s3,
-          new GetObjectCommand({ Bucket: TOPO_BUCKET, Key: o.mbtilesKey }),
-          { expiresIn: 86400 }, // 24 hours
-        ),
-        pmtilesUrl: o.pmtilesKey
-          ? await getSignedUrl(
-              s3,
-              new GetObjectCommand({ Bucket: TOPO_BUCKET, Key: o.pmtilesKey }),
-              { expiresIn: 86400 },
-            )
-          : null,
-      })),
-    );
-
-    res.json(signed);
-  },
-);
-
-// POST /topo-jobs/:id/export-urls — presigned GET URLs for arbitrary
-// {layers[], format} selections. Powers TopoExportDialog.
-//
-// Bundling semantics:
-//   - format="mbtiles" + layers covers all five → returns single
-//     `composite.mbtiles` URL (one entry, name="composite").
-//   - any other combination → returns one URL per requested layer in the
-//     chosen format.
-//
-// Raster layers (hillshade, vegetation, slope) only have mbtiles/geotiff
-// outputs; vector layers (contours, features) only have mbtiles/geojson. The
-// route rejects any layer/format mismatch with 400.
-router.post(
-  "/:id/export-urls",
-  requireAuth,
-  async (req: AuthenticatedRequest, res: Response) => {
-    const user = await getUser(req.user!.sub);
-    const jobId = getParam(req.params.id);
-    const job = await prisma.topoJob.findUnique({ where: { id: jobId } });
-    if (!job) throw new AppError(404, "Job not found");
-    if (job.userId !== user.id) throw new AppError(403, "Access denied");
-    if (job.status !== "complete") throw new AppError(400, "Job is not complete");
-
-    const { layers, format } = req.body as {
-      layers?: unknown;
-      format?: unknown;
-    };
-
-    if (!Array.isArray(layers) || layers.length === 0) {
-      throw new AppError(400, "layers must be a non-empty array");
-    }
-    if (format !== "mbtiles" && format !== "geotiff" && format !== "geojson") {
-      throw new AppError(400, "format must be mbtiles, geotiff, or geojson");
-    }
-
-    const requested = new Set<TopoLayerName>();
-    for (const l of layers) {
-      const meta = TOPO_LAYERS.find((x) => x.name === l);
-      if (!meta) throw new AppError(400, `Unknown layer: ${String(l)}`);
-      if (format === "geotiff" && meta.format !== "raster") {
-        throw new AppError(400, `Layer ${meta.name} is vector — GeoTIFF not available`);
-      }
-      if (format === "geojson" && meta.format !== "vector") {
-        throw new AppError(400, `Layer ${meta.name} is raster — GeoJSON not available`);
-      }
-      requested.add(meta.name);
-    }
-
-    const presignTtlSeconds = 86400;
-    const sign = (Key: string) =>
-      getSignedUrl(s3, new GetObjectCommand({ Bucket: TOPO_BUCKET, Key }), {
-        expiresIn: presignTtlSeconds,
-      });
-
-    // Composite shortcut: mbtiles + all five layers selected.
-    const allFive =
-      format === "mbtiles" &&
-      TOPO_LAYERS.every((l) => requested.has(l.name));
-    if (allFive) {
-      const url = await sign(`outputs/${jobId}/composite.mbtiles`);
-      res.json({ urls: [{ name: "composite", url }] });
-      return;
-    }
-
-    // Per-layer in chosen format. Map name → S3 key.
-    const ext =
-      format === "mbtiles" ? "mbtiles" : format === "geotiff" ? "tif" : "geojson";
-    const keyFor = (name: TopoLayerName): string => {
-      if (format === "geojson") {
-        // contours_5m.geojson vs osm_features.geojson — fixed worker filenames.
-        if (name === "contours") return `outputs/${jobId}/contours_5m.geojson`;
-        if (name === "features") return `outputs/${jobId}/osm_features.geojson`;
-      }
-      return `outputs/${jobId}/${name}.${ext}`;
-    };
-
-    const urls = await Promise.all(
-      [...requested].map(async (name) => ({
-        name,
-        url: await sign(keyFor(name)),
-      })),
-    );
-    res.json({ urls });
-  },
-);
+// (Stage 2) Per-job download URLs are gone. All downloads now go through
+// POST /topo-exports → the export worker. See routes/topoExports.ts.
 
 // DELETE /topo-jobs/:id — delete job and all S3 objects
 router.delete(

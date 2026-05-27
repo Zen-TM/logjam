@@ -23,7 +23,8 @@ Outputs (in ./output/):
   - features.mbtiles
   - slope.mbtiles
   - contours.mbtiles
-  - composite.mbtiles    ← all available layers composited
+  Stage 2: composite is no longer produced at job time — the export worker
+  builds it on demand against the user's current vector style.
 
 Usage:
   python topo_mbtiles.py /path/to/elvis_download.zip [--workers N] [--output ./output]
@@ -2225,30 +2226,30 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
         "contours":   contour_img,
     }
 
-    # Individual layers
+    # Individual layers — composite is built on demand by the export worker
+    # in Stage 2; the renderer no longer emits a composite tile.
     for lname in cfg.layers:
         png = img_to_png(layer_imgs[lname])
         if png is not None:
             results[lname] = png
 
-    # Composite: stack bottom → top
-    composite = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
-    active_order = ["hillshade", "vegetation", "features", "slope", "contours"]
-    for lname in active_order:
-        composite = Image.alpha_composite(composite, layer_imgs[lname])
-    comp_png = img_to_png(composite)
-    if comp_png is not None:
-        results["composite"] = comp_png
-
     return z, x, y, results
 
 
 def generate_all_tiles(cfg: RenderConfig, workers: int):
-    """Iterate over all zoom levels and tiles, render in parallel, write MBTiles."""
+    """Iterate over all zoom levels and tiles, render in parallel, write MBTiles.
+
+    Stage 2: composite MBTiles is no longer produced at job time. Composite
+    output is built on demand by the export worker against the latest vector
+    style. Per-layer raster MBTiles are still emitted because they are the
+    source for both the in-app PMTiles (vector layers from tippecanoe, raster
+    layers from these MBTiles) and the canonical-source COG conversion
+    (worker.py converts the styled MBTiles → COG via GDAL's MBTiles driver).
+    """
     output_dir = cfg.output_dir
     os.makedirs(output_dir, exist_ok=True)
 
-    layer_names = cfg.layers + ["composite"]
+    layer_names = list(cfg.layers)
 
     # Open all MBTiles connections
     conns = {}
@@ -2395,9 +2396,11 @@ def main():
     parser.add_argument("--layers", default="all",
                         help=(
                             "Comma-separated list of layers to generate "
-                            "(hillshade, vegetation, features, slope, contours, composite). "
-                            "Defaults to 'all'. 'composite' is always included. "
-                            "Per-layer `enabled` flags in --settings-json also disable layers."
+                            "(hillshade, vegetation, features, slope, contours). "
+                            "Defaults to 'all'. Per-layer `enabled` flags in "
+                            "--settings-json also disable layers. As of Stage 2 "
+                            "composite is no longer produced at job time — the "
+                            "export worker builds it on demand."
                         ))
     parser.add_argument("--settings-json", default=None, metavar="PATH",
                         help=(
@@ -2551,7 +2554,7 @@ def main():
 
         # ── Summary ──────────────────────────────────────────────────────────
         log.info(f"\n✓ Done! MBTiles written to: {args.output}")
-        for name in active_layers + ["composite"]:
+        for name in active_layers:
             log.info(f"  {name}.mbtiles")
         if not contents.has_vegetation:
             log.info("  (vegetation.mbtiles not produced — no LAZ/LAS in input ZIP)")

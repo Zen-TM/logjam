@@ -67,8 +67,9 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 JOB_ID       = os.environ["JOB_ID"]
 
 # Canonical list of layer types that get rendered onto the map.
-# Composite is intentionally absent — it's MBTiles-only (email download).
-# Keep in sync with: api/src/constants/topoLayers.ts, frontend/src/topoLayerTypes.ts
+# Composite is intentionally absent — Stage 2 builds it on demand in the
+# export worker. Keep in sync with: api/src/constants/topoLayers.ts,
+# frontend/src/topoLayerTypes.ts.
 ALL_LAYERS: frozenset[str] = frozenset({
     "hillshade",
     "vegetation",
@@ -76,6 +77,9 @@ ALL_LAYERS: frozenset[str] = frozenset({
     "contours",
     "features",
 })
+
+RASTER_LAYERS: frozenset[str] = frozenset({"hillshade", "vegetation", "slope"})
+VECTOR_LAYERS: frozenset[str] = frozenset({"contours", "features"})
 
 # Hardcoded fallback when User.vector_style is NULL. Must match
 # VECTOR_STYLE_DEFAULTS in shared/src/topoSettings.ts. Used only as a safety
@@ -234,19 +238,10 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
         return
 
     base = FRONTEND_URL.rstrip("/")
-
-    def _display(name: str) -> str:
-        return "Composite (all layers)" if name == "composite" else name.capitalize()
-
-    layers_text = "\n".join(
-        f"  {_display(o['name'])}: {base}/?topoJob={job_id}&download={o['name']}"
-        for o in output_keys
-    )
-    layers_html = "\n".join(
-        f'    <li><a href="{base}/?topoJob={job_id}&download={o["name"]}">'
-        f'{_display(o["name"])}.mbtiles</a></li>'
-        for o in output_keys
-    )
+    # Stage 2: job-completion email links the user to the topo job so they can
+    # open the Export… dialog. Downloads are now produced on demand by the
+    # export worker; the job itself only provides display PMTiles + COG sources.
+    open_url = f"{base}/?topoJob={job_id}"
 
     osm_warning_text = (
         "\n\nNote: OSM features (tracks, waterways, peaks, etc.) are unavailable "
@@ -263,22 +258,19 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
     text_body = "\n".join([
         "Your topo map job is complete.",
         "",
-        "Click a link below to download that layer (you must be signed in to Logjam):",
+        f"Open it in Logjam: {open_url}",
         "",
-        layers_text,
-        "",
-        "You can also view these layers as overlays in the app.",
+        "Use the Export… button on the job card to download MBTiles, GeoTIFF, "
+        "GeoPackage, GeoJSON, or GPX outputs.",
     ]) + osm_warning_text
 
     html_body = "\n".join([
         "<html>",
         "  <body>",
         "    <p>Your topo map job is complete.</p>",
-        "    <p>Click a link below to download that layer (you must be signed in to Logjam):</p>",
-        "    <ul>",
-        layers_html,
-        "    </ul>",
-        "    <p>You can also view these layers as overlays in the app.</p>",
+        f'    <p><a href="{open_url}">Open it in Logjam</a></p>',
+        "    <p>Use the <strong>Export…</strong> button on the job card to "
+        "download MBTiles, GeoTIFF, GeoPackage, GeoJSON, or GPX outputs.</p>",
         f"    {osm_warning_html}",
         "  </body>",
         "</html>",
@@ -473,34 +465,16 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
     # (Overpass failure) and empty GeoJSON (no matches / all classes disabled).
     osm_failed = features_vector is None
 
-    # ── Upload per-layer GeoTIFFs for the Export… dialog ────────────────
-    # Single-band raw intermediates from the pipeline work dir. Users with
-    # GIS tooling (QGIS, ArcGIS) apply their own colormap. Vegetation is the
-    # scrub-density ratio raster, only present in Modes B and C.
-    geotiff_prefix = f"outputs/{job_id}"
-    geotiff_uploads = [
-        ("hillshade.tif",   pipeline_work_dir / "hillshade.tif"),
-        ("slope.tif",       pipeline_work_dir / "slope.tif"),
-        ("vegetation.tif",  pipeline_work_dir / "scrub_density.tif"),
-    ]
-    for s3_name, local in geotiff_uploads:
-        if local.exists():
-            try:
-                s3.upload_file(str(local), BUCKET, f"{geotiff_prefix}/{s3_name}")
-                total_geotiff_bytes = local.stat().st_size
-                log.info(f"Uploaded {geotiff_prefix}/{s3_name} ({total_geotiff_bytes} bytes)")
-            except Exception as e:
-                log.warning(f"Failed to upload {s3_name}: {e}")
-        else:
-            log.info(f"GeoTIFF source {local.name} not present — skipped")
-
-    # ── Upload raw vector GeoJSONs for the Export… dialog ───────────────
+    # ── Upload raw vector GeoJSONs for the export worker ────────────────
+    # Stage 2: the export worker reads these directly when producing
+    # GeoJSON / GPX / GPKG outputs.
+    output_prefix = f"outputs/{job_id}"
     for geojson_name in ("contours_5m.geojson", "osm_features.geojson"):
         local = geojson_dir / geojson_name
         if local.exists():
             try:
-                s3.upload_file(str(local), BUCKET, f"{geotiff_prefix}/{geojson_name}")
-                log.info(f"Uploaded {geotiff_prefix}/{geojson_name}")
+                s3.upload_file(str(local), BUCKET, f"{output_prefix}/{geojson_name}")
+                log.info(f"Uploaded {output_prefix}/{geojson_name}")
             except Exception as e:
                 log.warning(f"Failed to upload {geojson_name}: {e}")
 
@@ -523,60 +497,82 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
             else:
                 log.info(f"Debug artefact {fname} not present — skipped")
 
-    # ── Per-job upload (MBTiles + PMTiles) ──────────────────────────────
-    # Every produced *.mbtiles is uploaded. Composite is MBTiles-only — it is
-    # used solely for the completion email; the map renders the individual
-    # layers, not the composite.
+    # ── Per-job upload (COG + PMTiles) ──────────────────────────────────
+    # Stage 2: raster layers store a single styled COG (canonical source for
+    # downstream export rendering) + PMTiles (in-app display). Vector layers
+    # store PMTiles only — the raw GeoJSON uploaded above is the export
+    # source. Per-layer raster MBTiles and composite.mbtiles are no longer
+    # uploaded; the export worker produces those on demand.
+    cog_dir = Path(tmp) / "cog"
+    cog_dir.mkdir(exist_ok=True)
     output_keys = []
     total_output_bytes = 0
-    # Vector layers whose tippecanoe step produced no MBTiles (empty input).
-    # The raster MBTiles for these layers would still exist but is useless on
-    # its own — the frontend reads vector PMTiles for these layers, so falling
-    # back to the raster would produce a layer the frontend can't interpret.
     skipped_vector_layers = {
-        name for name in ("features", "contours") if name not in vector_mbtiles_by_layer
+        name for name in VECTOR_LAYERS if name not in vector_mbtiles_by_layer
     }
-    for mbtiles_path in sorted(output_dir.glob("*.mbtiles")):
-        name        = mbtiles_path.stem
+    for name in sorted(ALL_LAYERS):
         if name in skipped_vector_layers:
-            log.info(f"Skipping upload of {name}.mbtiles (no vector tiles produced).")
+            log.info(f"Skipping {name} (no vector tiles produced).")
             continue
-        mbtiles_key = f"outputs/{job_id}/{name}.mbtiles"
+        styled_mbtiles = output_dir / f"{name}.mbtiles"
+        if not styled_mbtiles.exists():
+            log.info(f"Skipping {name} (renderer did not emit {styled_mbtiles.name}).")
+            continue
 
-        log.info(f"Uploading {name}.mbtiles …")
-        s3.upload_file(str(mbtiles_path), BUCKET, mbtiles_key)
-        total_output_bytes += mbtiles_path.stat().st_size
-
+        cog_key: Optional[str] = None
         pmtiles_key: Optional[str] = None
-        if name in ALL_LAYERS:
-            # Vector layers (contours, features) get their PMTiles from the
-            # tippecanoe-produced vector MBTiles, not from the raster MBTiles
-            # that backs the composite + Gaia download.
-            pmtiles_source = vector_mbtiles_by_layer.get(name, mbtiles_path)
-            with sqlite3.connect(str(pmtiles_source)) as _conn:
-                _row = _conn.execute("SELECT value FROM metadata WHERE name='maxzoom'").fetchone()
-                maxzoom = int(_row[0]) if _row else 18
-                tile_count = _conn.execute("SELECT COUNT(*) FROM tiles").fetchone()[0]
 
-            if tile_count == 0:
-                # Layer is entirely transparent (e.g. vegetation on a Mode-A job).
-                # mbtiles_to_pmtiles crashes on empty inputs. Leave pmtiles_key=None
-                # so the frontend knows there's no PMTiles for this layer.
-                log.info(f"Skipping PMTiles conversion for {name} (0 tiles — layer is empty)")
-            else:
-                pmtiles_path = output_dir / f"{name}.pmtiles"
-                pmtiles_key  = f"outputs/{job_id}/{name}.pmtiles"
-                log.info(f"Converting {name} → PMTiles ({tile_count} tiles, source={pmtiles_source.name}) …")
-                mbtiles_to_pmtiles(str(pmtiles_source), str(pmtiles_path), maxzoom)
-                log.info(f"Uploading {name}.pmtiles …")
-                s3.upload_file(str(pmtiles_path), BUCKET, pmtiles_key)
-                total_output_bytes += pmtiles_path.stat().st_size
+        # Raster layers — convert styled MBTiles → COG via GDAL's MBTiles
+        # driver. The MBTiles driver mosaics the tile pyramid into a virtual
+        # raster, then COG creation rolls overviews back in.
+        if name in RASTER_LAYERS:
+            local_cog = cog_dir / f"{name}.tif"
+            log.info(f"Converting {name}.mbtiles → COG …")
+            try:
+                from osgeo import gdal as _gdal
+                _gdal.Translate(
+                    str(local_cog),
+                    str(styled_mbtiles),
+                    format="COG",
+                    creationOptions=[
+                        "COMPRESS=DEFLATE",
+                        "BIGTIFF=IF_SAFER",
+                        "BLOCKSIZE=512",
+                        "OVERVIEWS=AUTO",
+                    ],
+                )
+            except Exception as e:
+                log.warning(f"Failed COG conversion for {name}: {e}")
+                local_cog = None
+
+            if local_cog and local_cog.exists():
+                cog_key = f"{output_prefix}/{name}.tif"
+                log.info(f"Uploading {cog_key} …")
+                s3.upload_file(str(local_cog), BUCKET, cog_key)
+                total_output_bytes += local_cog.stat().st_size
+
+        # PMTiles for in-app display. Vector layers use the tippecanoe output;
+        # raster layers reuse the styled MBTiles.
+        pmtiles_source = vector_mbtiles_by_layer.get(name, styled_mbtiles)
+        with sqlite3.connect(str(pmtiles_source)) as _conn:
+            _row = _conn.execute("SELECT value FROM metadata WHERE name='maxzoom'").fetchone()
+            maxzoom = int(_row[0]) if _row else 18
+            tile_count = _conn.execute("SELECT COUNT(*) FROM tiles").fetchone()[0]
+
+        if tile_count == 0:
+            log.info(f"Skipping PMTiles for {name} (0 tiles — layer is empty)")
         else:
-            log.info(f"Skipping PMTiles conversion for {name} (MBTiles-only layer)")
+            pmtiles_path = output_dir / f"{name}.pmtiles"
+            pmtiles_key = f"{output_prefix}/{name}.pmtiles"
+            log.info(f"Converting {name} → PMTiles ({tile_count} tiles, source={pmtiles_source.name}) …")
+            mbtiles_to_pmtiles(str(pmtiles_source), str(pmtiles_path), maxzoom)
+            log.info(f"Uploading {pmtiles_key} …")
+            s3.upload_file(str(pmtiles_path), BUCKET, pmtiles_key)
+            total_output_bytes += pmtiles_path.stat().st_size
 
         output_keys.append({
             "name":       name,
-            "mbtilesKey": mbtiles_key,
+            "cogKey":     cog_key,
             "pmtilesKey": pmtiles_key,
         })
 

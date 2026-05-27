@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -15,17 +15,23 @@ import {
   CircularProgress,
   Tooltip,
   Box,
+  Chip,
+  List,
+  ListItem,
+  ListItemText,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { apiFetch } from "../../canyonUtils";
+import {
+  EXPORT_FORMAT_RULES,
+  validateExportRequest,
+  type ExportFormat,
+  type ExportBundling,
+  type TopoLayerKey,
+} from "@logjam/shared";
+import { apiFetch, useTopoExports } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { TOPO_LAYERS, type CompletedTopoJob } from "../../topoLayerTypes";
-
-type ExportFormat = "mbtiles" | "geotiff" | "geojson";
-type Bundling = "perLayer" | "composite";
-
-type LayerName = (typeof TOPO_LAYERS)[number]["name"];
 
 interface Props {
   open: boolean;
@@ -33,120 +39,71 @@ interface Props {
   job: CompletedTopoJob | null;
 }
 
-const ALL_LAYER_NAMES = TOPO_LAYERS.map((l) => l.name);
+const ALL_LAYER_NAMES = TOPO_LAYERS.map((l) => l.name) as TopoLayerKey[];
 
-function layersForFormat(format: ExportFormat): LayerName[] {
-  if (format === "geotiff") return TOPO_LAYERS.filter((l) => l.format === "raster").map((l) => l.name);
-  if (format === "geojson") return TOPO_LAYERS.filter((l) => l.format === "vector").map((l) => l.name);
-  return ALL_LAYER_NAMES;
+const FORMAT_ORDER: ExportFormat[] = ["mbtiles", "geotiff", "gpkg", "geojson", "gpx"];
+
+function formatBytes(n: number | null): string {
+  if (n === null) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-function fileExt(format: ExportFormat, name: LayerName): string {
-  if (format === "mbtiles") return "mbtiles";
-  if (format === "geotiff") return "tif";
-  // GeoJSON exports use fixed pipeline filenames.
-  return name === "contours" ? "geojson" : "geojson";
-}
-
-function downloadFilename(format: ExportFormat, name: LayerName): string {
-  if (format === "geojson") {
-    if (name === "contours") return "contours_5m.geojson";
-    if (name === "features") return "osm_features.geojson";
-  }
-  return `${name}.${fileExt(format, name)}`;
-}
-
-// ── Minimal ZIP (store, no compression) ───────────────────────────────────
-// Reused pattern from TopoDialog's shapefile builder. Browser-native ZIP
-// support doesn't exist; bringing in JSZip just for this is overkill.
-function buildStoreZip(files: { name: string; bytes: Uint8Array }[]): Blob {
-  const enc = new TextEncoder();
-  const locals: Uint8Array[] = [];
-  const centrals: Uint8Array[] = [];
-  let offset = 0;
-
-  for (const f of files) {
-    const nameBytes = enc.encode(f.name);
-    let crc = 0xffffffff;
-    for (const b of f.bytes) {
-      crc ^= b;
-      for (let i = 0; i < 8; i++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
-    }
-    crc = (crc ^ 0xffffffff) >>> 0;
-
-    const local = new Uint8Array(30 + nameBytes.length + f.bytes.length);
-    const lv = new DataView(local.buffer);
-    lv.setUint32(0, 0x04034b50, true);
-    lv.setUint16(4, 20, true);
-    lv.setUint16(8, 0, true);
-    lv.setUint32(14, crc, true);
-    lv.setUint32(18, f.bytes.length, true);
-    lv.setUint32(22, f.bytes.length, true);
-    lv.setUint16(26, nameBytes.length, true);
-    local.set(nameBytes, 30);
-    local.set(f.bytes, 30 + nameBytes.length);
-    locals.push(local);
-
-    const central = new Uint8Array(46 + nameBytes.length);
-    const cv = new DataView(central.buffer);
-    cv.setUint32(0, 0x02014b50, true);
-    cv.setUint16(4, 20, true);
-    cv.setUint16(6, 20, true);
-    cv.setUint16(10, 0, true);
-    cv.setUint32(16, crc, true);
-    cv.setUint32(20, f.bytes.length, true);
-    cv.setUint32(24, f.bytes.length, true);
-    cv.setUint16(28, nameBytes.length, true);
-    cv.setUint32(42, offset, true);
-    central.set(nameBytes, 46);
-    centrals.push(central);
-
-    offset += local.length;
-  }
-
-  const centralSize = centrals.reduce((s, c) => s + c.length, 0);
-  const eocd = new Uint8Array(22);
-  const ev = new DataView(eocd.buffer);
-  ev.setUint32(0, 0x06054b50, true);
-  ev.setUint16(8, files.length, true);
-  ev.setUint16(10, files.length, true);
-  ev.setUint32(12, centralSize, true);
-  ev.setUint32(16, offset, true);
-
-  return new Blob([...locals, ...centrals, eocd], { type: "application/zip" });
-}
-
-function triggerDownload(blob: Blob | string, filename: string) {
-  const url = typeof blob === "string" ? blob : URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  if (typeof blob !== "string") setTimeout(() => URL.revokeObjectURL(url), 1000);
+function timeAgo(iso: string): string {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
 }
 
 export default function TopoExportDialog({ open, onClose, job }: Props) {
   const [format, setFormat] = useState<ExportFormat>("mbtiles");
-  const [selected, setSelected] = useState<Set<LayerName>>(() => new Set(ALL_LAYER_NAMES));
-  const [bundling, setBundling] = useState<Bundling>("composite");
+  const [bundling, setBundling] = useState<ExportBundling>("composite");
+  const [selected, setSelected] = useState<Set<TopoLayerKey>>(() => new Set(ALL_LAYER_NAMES));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const validLayersForCurrentFormat = useMemo(() => layersForFormat(format), [format]);
+  // Poll while dialog is open so users see status flip from queued → completed.
+  const { exports, loading: exportsLoading, refetch: refetchExports } = useTopoExports(open, open ? 5000 : 0);
 
-  // Whenever format changes, prune selected to those valid in the new format.
-  const onFormatChange = (next: ExportFormat) => {
-    setFormat(next);
-    const valid = new Set(layersForFormat(next));
-    setSelected((prev) => new Set([...prev].filter((l) => valid.has(l))));
-    // Composite is only meaningful for MBTiles + all five layers; collapse to
-    // per-layer otherwise so the user isn't stuck on a disabled option.
-    if (next !== "mbtiles") setBundling("perLayer");
-  };
+  const rule = EXPORT_FORMAT_RULES[format];
 
-  const toggleLayer = (name: LayerName) => {
+  // Whenever format changes, prune selection + force bundling into a legal state.
+  useEffect(() => {
+    setSelected((prev) => {
+      const next = new Set<TopoLayerKey>();
+      for (const l of prev) {
+        const meta = TOPO_LAYERS.find((m) => m.name === l)!;
+        if (meta.format === "raster" && rule.allowRaster) next.add(l);
+        if (meta.format === "vector" && rule.allowVector) next.add(l);
+      }
+      if (next.size === 0) {
+        for (const meta of TOPO_LAYERS) {
+          if (meta.format === "raster" && rule.allowRaster) next.add(meta.name);
+          if (meta.format === "vector" && rule.allowVector) next.add(meta.name);
+        }
+      }
+      return next;
+    });
+    setBundling((prev) => {
+      if (prev === "composite" && !rule.allowComposite) return "per-layer";
+      if (prev === "per-layer" && !rule.allowPerLayer) return "composite";
+      return prev;
+    });
+  }, [format, rule]);
+
+  const validationResult = useMemo(() => {
+    return validateExportRequest({
+      format,
+      bundling,
+      layers: [...selected],
+    });
+  }, [format, bundling, selected]);
+
+  const toggleLayer = (name: TopoLayerKey) => {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
@@ -155,48 +112,26 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
     });
   };
 
-  const allFiveMbtiles =
-    format === "mbtiles" && validLayersForCurrentFormat.every((l) => selected.has(l));
-  const compositeAvailable = allFiveMbtiles;
-  const effectiveBundling: Bundling = compositeAvailable ? bundling : "perLayer";
-
-  const canSubmit = !submitting && job !== null && selected.size > 0;
+  const canSubmit = !submitting && job !== null && validationResult.ok;
 
   async function handleExport() {
     if (!job) return;
     setSubmitting(true);
     setError(null);
     try {
-      const { urls } = await apiFetch<{ urls: { name: string; url: string }[] }>(
-        `/topo-jobs/${job.jobId}/export-urls`,
-        {
-          method: "POST",
-          body: { layers: [...selected], format },
+      await apiFetch<{ id: string }>("/topo-exports", {
+        method: "POST",
+        body: {
+          sourceJobIds: [job.jobId],
+          layers: [...selected],
+          format,
+          bundling,
         },
-      );
-
-      if (effectiveBundling === "composite" && urls.length === 1) {
-        triggerDownload(urls[0].url, "composite.mbtiles");
-        onClose();
-        return;
-      }
-
-      // Per-layer: fetch each presigned URL, bundle into a ZIP, download once.
-      const files = await Promise.all(
-        urls.map(async (u) => {
-          const res = await fetch(u.url);
-          if (!res.ok) throw new Error(`Download failed for ${u.name}`);
-          const bytes = new Uint8Array(await res.arrayBuffer());
-          return { name: downloadFilename(format, u.name as LayerName), bytes };
-        }),
-      );
-      const zip = buildStoreZip(files);
-      const safeName = (job.name ?? job.jobId).replace(/[^a-z0-9_-]+/gi, "_");
-      triggerDownload(zip, `${safeName}_${format}.zip`);
-      onClose();
+      });
+      refetchExports();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Export failed. Please try again."));
+      setError(messageFromError(err, "Couldn't queue the export."));
     } finally {
       setSubmitting(false);
     }
@@ -215,16 +150,9 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
         },
       }}
     >
-      <DialogTitle
-        sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}
-      >
+      <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
         Export topo job
-        <IconButton
-          size="small"
-          onClick={onClose}
-          disabled={submitting}
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
+        <IconButton size="small" onClick={onClose} disabled={submitting} sx={{ color: "var(--theme-text-primary)" }}>
           <CloseIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
@@ -239,10 +167,16 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
 
         <Box sx={{ mb: 2 }}>
           <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Format</Typography>
-          <RadioGroup row value={format} onChange={(e) => onFormatChange(e.target.value as ExportFormat)}>
-            <FormControlLabel value="mbtiles" control={<Radio size="small" />} label="MBTiles" />
-            <FormControlLabel value="geotiff" control={<Radio size="small" />} label="GeoTIFF (raster only)" />
-            <FormControlLabel value="geojson" control={<Radio size="small" />} label="GeoJSON (vector only)" />
+          <RadioGroup row value={format} onChange={(e) => setFormat(e.target.value as ExportFormat)}>
+            {FORMAT_ORDER.map((f) => (
+              <Tooltip key={f} title={EXPORT_FORMAT_RULES[f].description} placement="top" arrow>
+                <FormControlLabel
+                  value={f}
+                  control={<Radio size="small" />}
+                  label={EXPORT_FORMAT_RULES[f].label}
+                />
+              </Tooltip>
+            ))}
           </RadioGroup>
         </Box>
 
@@ -250,7 +184,9 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
           <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Layers</Typography>
           <FormControl component="fieldset">
             {TOPO_LAYERS.map((l) => {
-              const eligible = validLayersForCurrentFormat.includes(l.name);
+              const eligible =
+                (l.format === "raster" && rule.allowRaster) ||
+                (l.format === "vector" && rule.allowVector);
               return (
                 <FormControlLabel
                   key={l.name}
@@ -262,7 +198,7 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
                       onChange={() => toggleLayer(l.name)}
                     />
                   }
-                  label={`${l.label}${!eligible ? ` (n/a for ${format})` : ""}`}
+                  label={`${l.label}${!eligible ? ` (n/a for ${rule.label})` : ""}`}
                 />
               );
             })}
@@ -271,14 +207,23 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
 
         <Box sx={{ mb: 1 }}>
           <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Bundling</Typography>
-          <RadioGroup
-            row
-            value={effectiveBundling}
-            onChange={(e) => setBundling(e.target.value as Bundling)}
-          >
-            <FormControlLabel value="perLayer" control={<Radio size="small" />} label="One file per layer (ZIP)" />
+          <RadioGroup row value={bundling} onChange={(e) => setBundling(e.target.value as ExportBundling)}>
             <Tooltip
-              title={compositeAvailable ? "" : "Composite is only available with format=MBTiles and all five layers selected."}
+              title={rule.allowPerLayer ? "" : `${rule.label} is inherently bundled.`}
+              placement="top"
+              arrow
+            >
+              <span>
+                <FormControlLabel
+                  value="per-layer"
+                  control={<Radio size="small" />}
+                  label="One file per layer (ZIP)"
+                  disabled={!rule.allowPerLayer}
+                />
+              </span>
+            </Tooltip>
+            <Tooltip
+              title={rule.allowComposite ? "" : `${rule.label} cannot be composited.`}
               placement="top"
               arrow
             >
@@ -287,7 +232,7 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
                   value="composite"
                   control={<Radio size="small" />}
                   label="Single composite file"
-                  disabled={!compositeAvailable}
+                  disabled={!rule.allowComposite}
                 />
               </span>
             </Tooltip>
@@ -295,14 +240,78 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
         </Box>
 
         <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", display: "block", mt: 1 }}>
-          Composite reflects vector style at the time the job was submitted; live
-          vector style applies to in-app display only in this release.
+          Vector style: <strong>Active style</strong> — composites and styled exports use your live vector style at the moment of export submission. Edit it in the LiDAR Topos panel.
         </Typography>
+
+        {!validationResult.ok && (
+          <Typography variant="caption" sx={{ color: "var(--theme-warning)", display: "block", mt: 1 }}>
+            {validationResult.error}
+          </Typography>
+        )}
+
+        <Box sx={{ mt: 3 }}>
+          <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", display: "block", mb: 0.5 }}>
+            Recent exports
+          </Typography>
+          {exportsLoading && exports.length === 0 ? (
+            <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Loading…</Typography>
+          ) : exports.length === 0 ? (
+            <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>None yet.</Typography>
+          ) : (
+            <List dense disablePadding sx={{ maxHeight: 200, overflow: "auto" }}>
+              {exports.map((ex) => {
+                const isComplete = ex.status === "completed" && ex.downloadUrl;
+                const isFailed = ex.status === "failed";
+                return (
+                  <ListItem
+                    key={ex.id}
+                    disableGutters
+                    secondaryAction={
+                      isComplete ? (
+                        <Button
+                          size="small"
+                          href={ex.downloadUrl!}
+                          download
+                          sx={{ color: "var(--theme-accent)" }}
+                        >
+                          Download
+                        </Button>
+                      ) : null
+                    }
+                  >
+                    <ListItemText
+                      primary={
+                        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                          <strong>{ex.format.toUpperCase()}</strong>
+                          <Chip
+                            size="small"
+                            label={ex.status}
+                            color={isComplete ? "success" : isFailed ? "error" : "default"}
+                          />
+                          <span style={{ opacity: 0.7, fontSize: "0.8em" }}>
+                            {ex.layers.join(", ")} · {ex.bundling}
+                          </span>
+                        </Box>
+                      }
+                      secondary={
+                        <span style={{ color: "var(--theme-text-muted)", fontSize: "0.75em" }}>
+                          {timeAgo(ex.createdAt)}
+                          {ex.resultBytes !== null && ` · ${formatBytes(ex.resultBytes)}`}
+                          {isFailed && ex.errorMessage && ` · ${ex.errorMessage}`}
+                        </span>
+                      }
+                    />
+                  </ListItem>
+                );
+              })}
+            </List>
+          )}
+        </Box>
       </DialogContent>
 
       <DialogActions>
         <Button onClick={onClose} disabled={submitting} sx={{ color: "var(--theme-text-primary)" }}>
-          Cancel
+          Close
         </Button>
         <Button
           variant="contained"
@@ -310,7 +319,7 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
           disabled={!canSubmit}
           onClick={handleExport}
         >
-          {submitting ? <CircularProgress size={18} /> : "Export"}
+          {submitting ? <CircularProgress size={18} /> : "Start export"}
         </Button>
       </DialogActions>
     </Dialog>

@@ -829,7 +829,37 @@ export function passesFilters(canyon: TCanyon, filters: TFilters): boolean {
 
 // ── Vector style (live, per-user) ─────────────────────────────
 
-import type { VectorStyleSettings } from "@logjam/shared";
+import type { VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
+
+// ── Topo exports (Stage 2 on-demand pipeline) ────────────────
+
+export function useTopoExports(enabled: boolean, pollMs: number = 0) {
+  const [exports, setExports] = useState<TopoExportJobView[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fetchCount, setFetchCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    setLoading(true);
+    apiFetch<{ exports: TopoExportJobView[] }>("/topo-exports")
+      .then((res) => { if (!cancelled) { setExports(res.exports); setError(null); } })
+      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load exports.")); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [enabled, fetchCount]);
+
+  useEffect(() => {
+    if (!enabled || pollMs <= 0) return;
+    const id = setInterval(() => setFetchCount((n) => n + 1), pollMs);
+    return () => clearInterval(id);
+  }, [enabled, pollMs]);
+
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+  return { exports, loading, error, refetch };
+}
+
 
 export function useVectorStyle(enabled: boolean) {
   const [vectorStyle, setVectorStyle] = useState<VectorStyleSettings | null>(null);

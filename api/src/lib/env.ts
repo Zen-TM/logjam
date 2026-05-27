@@ -23,6 +23,7 @@ const baseSchema = z.object({
   S3_BUCKET_MEDIA: z.string().optional(),
   ECS_CLUSTER: z.string().default("logjam-cluster"),
   ECS_TOPO_TASK_DEF: z.string().default("logjam-topo-worker"),
+  ECS_TOPO_EXPORT_TASK_DEF: z.string().default("logjam-topo-export-worker"),
   ECS_SUBNETS: z.string().optional(),
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),
