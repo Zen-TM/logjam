@@ -3,6 +3,10 @@ CLAUDE.md
 .mcp.json
 repomix-output.xml
 
+# Python bytecode
+__pycache__/
+*.pyc
+
 # Dependencies
 node_modules/
 

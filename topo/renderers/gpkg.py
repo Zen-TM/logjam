@@ -65,7 +65,9 @@ def render_gpkg(ctx: RenderContext) -> Path:
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            raise RenderError(f"gdal_translate GPKG raster failed:\n{result.stderr.strip()}")
+            raise RenderError(
+                f"gdal_translate GPKG raster ({', '.join(raster_layers)}) failed:\n{result.stderr.strip()}"
+            )
 
     if not dst.exists():
         raise RenderError("GPKG produced no output file (no layers selected?)")

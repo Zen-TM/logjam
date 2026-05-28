@@ -129,6 +129,20 @@ function NotificationsPanel({
                   (n.payload.jobName
                     ? `${n.payload.jobName} topo failed`
                     : "LiDAR topo processing failed")}
+                {n.type === "topo_export_complete" && (
+                  n.payload.status === "failed" ? (
+                    <>
+                      {`${String(n.payload.format ?? "Topo").toUpperCase()} export failed`}
+                      {typeof n.payload.errorMessage === "string" && (
+                        <div className={classes.notificationWarning}>
+                          {n.payload.errorMessage}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    `${String(n.payload.format ?? "Topo").toUpperCase()} export ready — open the LiDAR panel to download`
+                  )
+                )}
               </div>
               <div className={classes.notificationTime}>
                 {new Date(n.createdAt).toLocaleDateString()}

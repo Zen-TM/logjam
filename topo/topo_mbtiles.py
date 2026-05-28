@@ -2530,7 +2530,10 @@ def main():
         # CLI --layers further narrows the list (e.g. for debugging single layers).
         if args.layers and args.layers.lower() != "all":
             requested = {l.strip().lower() for l in args.layers.split(",") if l.strip()}
-            requested.discard("composite")
+            if "composite" in requested:
+                log.warning("--layers 'composite' is a no-op since Stage 2; "
+                            "composites are built on demand by the export worker. Ignoring.")
+                requested.discard("composite")
             active_layers = [l for l in active_layers if l in requested]
 
         cfg = RenderConfig(

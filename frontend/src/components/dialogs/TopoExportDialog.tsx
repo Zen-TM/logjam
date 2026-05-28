@@ -39,9 +39,20 @@ interface Props {
   job: CompletedTopoJob | null;
 }
 
-const ALL_LAYER_NAMES = TOPO_LAYERS.map((l) => l.name) as TopoLayerKey[];
-
 const FORMAT_ORDER: ExportFormat[] = ["mbtiles", "geotiff", "gpkg", "geojson", "gpx"];
+
+const INITIAL_FORMAT: ExportFormat = "mbtiles";
+
+// Layers eligible for a given format, per EXPORT_FORMAT_RULES.
+function layersForFormat(format: ExportFormat): Set<TopoLayerKey> {
+  const rule = EXPORT_FORMAT_RULES[format];
+  const next = new Set<TopoLayerKey>();
+  for (const meta of TOPO_LAYERS) {
+    if (meta.format === "raster" && rule.allowRaster) next.add(meta.name as TopoLayerKey);
+    if (meta.format === "vector" && rule.allowVector) next.add(meta.name as TopoLayerKey);
+  }
+  return next;
+}
 
 function formatBytes(n: number | null): string {
   if (n === null) return "";
@@ -60,9 +71,9 @@ function timeAgo(iso: string): string {
 }
 
 export default function TopoExportDialog({ open, onClose, job }: Props) {
-  const [format, setFormat] = useState<ExportFormat>("mbtiles");
+  const [format, setFormat] = useState<ExportFormat>(INITIAL_FORMAT);
   const [bundling, setBundling] = useState<ExportBundling>("composite");
-  const [selected, setSelected] = useState<Set<TopoLayerKey>>(() => new Set(ALL_LAYER_NAMES));
+  const [selected, setSelected] = useState<Set<TopoLayerKey>>(() => layersForFormat(INITIAL_FORMAT));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -239,9 +250,15 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
           </RadioGroup>
         </Box>
 
-        <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", display: "block", mt: 1 }}>
-          Vector style: <strong>Active style</strong> — composites and styled exports use your live vector style at the moment of export submission. Edit it in the LiDAR Topos panel.
-        </Typography>
+        <Tooltip
+          placement="top"
+          arrow
+          title="Each export freezes your vector style at the instant you press Start export. Editing the style afterwards does not change exports already in the list — re-export to apply new styling. The timestamp on each recent export is when its style was snapshotted."
+        >
+          <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", display: "block", mt: 1, cursor: "help", textDecoration: "underline dotted" }}>
+            Vector style: <strong>Active style</strong> — composites and styled exports use your live vector style at the moment of export submission. Edit it in the LiDAR Topos panel.
+          </Typography>
+        </Tooltip>
 
         {!validationResult.ok && (
           <Typography variant="caption" sx={{ color: "var(--theme-warning)", display: "block", mt: 1 }}>

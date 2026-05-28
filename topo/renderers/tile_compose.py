@@ -6,7 +6,7 @@ implementation using GDAL + PIL that reuses the existing tile compositor in
 topo_mbtiles.py. Headless MapLibre Native can replace this implementation
 later behind the same render_composite_to_* function signatures.
 
-Composite logic:
+MBTiles composite (`render_composite_to_mbtiles`):
   1. Load source COGs for selected raster layers (already styled).
   2. Load raw vector GeoJSONs for selected vector layers.
   3. Compose the snapshotted VectorStyleSettings into the legacy TopoSettings
@@ -15,8 +15,13 @@ Composite logic:
      - For each raster layer: gdal.Warp the COG into a 256x256 RGBA PNG window.
      - For each vector layer: call topo_mbtiles.render_contours_tile / render_features_tile.
      - Alpha-composite in order: hillshade → vegetation → features → slope → contours.
-  5. Write to MBTiles for the MBTiles renderer; mosaic to a single COG for the
-     GeoTIFF renderer.
+
+GeoTIFF composite (`render_composite_to_geotiff`):
+  Raster-only — vectors are excluded by `EXPORT_FORMAT_RULES.geotiff.allowVector
+  = false`. Alpha-aware `gdal.Warp` chain over the source COGs: create an empty
+  RGBA destination matching the first COG's grid, then warp each layer in
+  bottom→top order with `srcAlpha=True, dstAlpha=True` so GDAL performs
+  source-over compositing against existing destination pixels. Re-encode as COG.
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ import logging
 import os
 import sqlite3
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -59,7 +65,11 @@ def _vector_style_to_render_settings(vector_style: Dict[str, Any]) -> Dict[str, 
     re-rendering contours and features."""
     defaults = tm._default_render_settings()
     if not isinstance(vector_style, dict):
-        return defaults
+        # The API validator enforces the snapshot shape on write, so a non-dict
+        # here means corruption — fail loudly rather than silently default-style.
+        raise RenderError(
+            f"Malformed vector_style_snapshot (expected dict, got {type(vector_style).__name__})"
+        )
 
     contours_in = vector_style.get("contours", {}) or {}
     defaults["contours"].update({
@@ -181,6 +191,20 @@ def _prepare_sources(ctx: RenderContext, layers: List[str]) -> Tuple[
     return raster_cogs, contour_paths, features_geojson, settings
 
 
+def _composite_tile_worker(args: Tuple) -> Tuple[int, int, int, bytes | None]:
+    """ProcessPoolExecutor entrypoint — must be module-level to be picklable."""
+    z, x, y, raster_cogs, contour_paths, features_geojson, settings = args
+    png = _composite_tile(z, x, y, raster_cogs, contour_paths, features_geojson, settings)
+    return z, x, y, png
+
+
+def _composite_workers() -> int:
+    env = os.environ.get("TOPO_TILE_WORKERS")
+    if env:
+        return max(1, int(env))
+    return max(1, min(8, os.cpu_count() or 1))
+
+
 def render_composite_to_mbtiles(ctx: RenderContext, layers: List[str]) -> Path:
     raster_cogs, contour_paths, features_geojson, settings = _prepare_sources(ctx, layers)
     lon_min, lat_min, lon_max, lat_max = _bbox_union(ctx.source_jobs)
@@ -190,26 +214,49 @@ def render_composite_to_mbtiles(ctx: RenderContext, layers: List[str]) -> Path:
         dst.unlink()
     conn = create_mbtiles(str(dst), "composite", "Topo composite export")
 
+    tile_jobs = [
+        (z, x, y, raster_cogs, contour_paths, features_geojson, settings)
+        for z in range(ZOOM_MIN, ZOOM_MAX + 1)
+        for x, y in tiles_for_bbox(lon_min, lat_min, lon_max, lat_max, z)
+    ]
+
+    # Render tiles in parallel; sqlite is single-writer so inserts stay in the
+    # foreground as results arrive.
+    workers = _composite_workers()
     total = 0
-    for z in range(ZOOM_MIN, ZOOM_MAX + 1):
-        for x, y in tiles_for_bbox(lon_min, lat_min, lon_max, lat_max, z):
-            png = _composite_tile(z, x, y, raster_cogs, contour_paths, features_geojson, settings)
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(_composite_tile_worker, job) for job in tile_jobs]
+        for future in as_completed(futures):
+            z, x, y, png = future.result()
             if png is not None:
                 insert_tile(conn, z, x, y, png)
                 total += 1
+
+    if total == 0:
+        conn.close()
+        dst.unlink(missing_ok=True)
+        raise RenderError(
+            "Composite MBTiles produced no tiles (footprint too small for the configured zoom range)"
+        )
+
     finalise_bounds(conn, lon_min, lat_min, lon_max, lat_max)
     conn.commit()
     conn.close()
-    log.info(f"Composite MBTiles written: {total} tiles → {dst}")
+    log.info(f"Composite MBTiles written: {total} tiles using {workers} worker(s) → {dst}")
     return dst
 
 
 def render_composite_to_geotiff(ctx: RenderContext, raster_layers: List[str]) -> Path:
     """Composite the selected raster COGs into a single GeoTIFF.
 
-    Strategy: alpha-blend the source COGs in a multi-step gdal.Warp call,
-    then translate to a COG. Vector layers are NOT included in the GeoTIFF
-    composite — Stage 2 GeoTIFF format is raster-only (see EXPORT_FORMAT_RULES).
+    Raster-only — vector layers are NOT included (Stage 2 GeoTIFF format is
+    raster-only, see EXPORT_FORMAT_RULES.geotiff.allowVector = false).
+
+    Strategy: create an empty RGBA destination matching the first COG's grid,
+    then warp each source COG (bottom→top) into it with srcAlpha/dstAlpha so
+    GDAL performs source-over alpha compositing against the existing pixels.
+    BuildVRT is deliberately NOT used — it mosaics rather than alpha-blends, and
+    a nodata mask corrupts the RGBA alpha band and drops valid colour-0 pixels.
     """
     if not raster_layers:
         raise RenderError("GeoTIFF composite requires at least one raster layer")
@@ -217,25 +264,43 @@ def render_composite_to_geotiff(ctx: RenderContext, raster_layers: List[str]) ->
     job_id = ctx.primary_job["id"]
     cogs = [ctx.cog_path(job_id, l) for l in raster_layers]
 
-    # Build a VRT that stacks the inputs, then warp-merge with destination
-    # alpha so transparent pixels from earlier layers are filled by later ones.
-    vrt = ctx.work_dir / "composite.vrt"
-    gdal.BuildVRT(
-        str(vrt),
-        [str(c) for c in cogs],
-        VRTNodata=0,
-        srcNodata=0,
-    )
+    # Use the first COG as the spatial template (extent + resolution + SRS).
+    # Single-job composites share the source MBTiles grid, so cogs[0] covers
+    # the full footprint at native resolution.
+    template = gdal.Open(str(cogs[0]))
+    if template is None:
+        raise RenderError(f"Could not open source COG {cogs[0]}")
+    geotransform = template.GetGeoTransform()
+    projection = template.GetProjectionRef()
+    xsize, ysize = template.RasterXSize, template.RasterYSize
+    template = None
 
     intermediate = ctx.work_dir / "composite_intermediate.tif"
-    gdal.Warp(
-        str(intermediate),
-        str(vrt),
-        format="GTiff",
-        resampleAlg="bilinear",
-        dstAlpha=True,
-        creationOptions=["COMPRESS=DEFLATE", "TILED=YES"],
+    driver = gdal.GetDriverByName("GTiff")
+    dst_ds = driver.Create(
+        str(intermediate), xsize, ysize, 4, gdal.GDT_Byte,
+        options=["COMPRESS=DEFLATE", "TILED=YES", "BIGTIFF=IF_SAFER"],
     )
+    dst_ds.SetGeoTransform(geotransform)
+    dst_ds.SetProjection(projection)
+    dst_ds.GetRasterBand(4).SetColorInterpretation(gdal.GCI_AlphaBand)
+    for band_index in range(1, 5):
+        dst_ds.GetRasterBand(band_index).Fill(0)
+    dst_ds.FlushCache()
+    dst_ds = None
+
+    # Warp each COG onto the destination. Warping into an existing dataset does
+    # not re-initialise it (no INIT_DEST), so each layer composites over the
+    # previous one using source alpha.
+    for cog in cogs:
+        gdal.Warp(
+            str(intermediate),
+            str(cog),
+            format="GTiff",
+            srcAlpha=True,
+            dstAlpha=True,
+            resampleAlg="bilinear",
+        )
 
     dst = ctx.work_dir / "composite.tif"
     gdal.Translate(
@@ -250,7 +315,6 @@ def render_composite_to_geotiff(ctx: RenderContext, raster_layers: List[str]) ->
         ],
     )
     intermediate.unlink(missing_ok=True)
-    vrt.unlink(missing_ok=True)
     return dst
 
 

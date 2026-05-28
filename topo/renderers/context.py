@@ -50,7 +50,6 @@ class RenderContext:
         upstream job did not produce a COG."""
         if layer not in RASTER_LAYERS:
             raise RenderError(f"Layer '{layer}' has no COG (not a raster layer)")
-        key = (job_id, layer)
         cache_key = f"{job_id}/{layer}.tif"
         if cache_key in self._cog_paths:
             return self._cog_paths[cache_key]

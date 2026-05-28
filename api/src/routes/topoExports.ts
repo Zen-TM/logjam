@@ -7,15 +7,17 @@
 // GET /topo-exports for the recent-exports list and pre-signed download URLs.
 
 import { Router, Response } from "express";
+import { z } from "zod";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { RunTaskCommand } from "@aws-sdk/client-ecs";
 import { s3, ecs } from "../services/awsClients";
 import {
   EXPORT_FORMAT_RULES,
+  RASTER_LAYERS,
   validateExportRequest,
   VECTOR_STYLE_DEFAULTS,
   type ExportFormat,
@@ -25,6 +27,15 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
+
+const exportRequestSchema = z.object({
+  sourceJobIds: z.array(z.string()).length(1),
+  layers: z.array(z.string()).min(1),
+  format: z.enum(Object.keys(EXPORT_FORMAT_RULES) as [string, ...string[]]),
+  bundling: z.enum(["composite", "per-layer"]),
+});
+
+type S3OutputKey = { name: string; cogKey: string | null; pmtilesKey: string | null };
 
 const router = Router();
 
@@ -94,36 +105,20 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
 
-    const { sourceJobIds, layers, format, bundling } = req.body as {
-      sourceJobIds?: unknown;
-      layers?: unknown;
-      format?: unknown;
-      bundling?: unknown;
-    };
+    const parsed = exportRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(400, parsed.error.issues[0]?.message ?? "Invalid export request");
+    }
+    const { sourceJobIds, bundling } = parsed.data;
+    const format = parsed.data.format as ExportFormat;
+    const layers = parsed.data.layers as TopoLayerKey[];
 
-    if (!Array.isArray(sourceJobIds) || sourceJobIds.length !== 1) {
-      throw new AppError(400, "sourceJobIds must be a single-element array");
-    }
-    if (!Array.isArray(layers) || !layers.every((l) => typeof l === "string")) {
-      throw new AppError(400, "layers must be an array of strings");
-    }
-    if (typeof format !== "string" || !(format in EXPORT_FORMAT_RULES)) {
-      throw new AppError(400, "format must be one of " + Object.keys(EXPORT_FORMAT_RULES).join(","));
-    }
-    if (bundling !== "composite" && bundling !== "per-layer") {
-      throw new AppError(400, "bundling must be 'composite' or 'per-layer'");
-    }
-
-    const v = validateExportRequest({
-      format: format as ExportFormat,
-      bundling,
-      layers: layers as TopoLayerKey[],
-    });
+    const v = validateExportRequest({ format, bundling, layers });
     if (!v.ok) throw new AppError(400, v.error);
 
     // Ownership check on every source job.
     const jobs = await prisma.topoJob.findMany({
-      where: { id: { in: sourceJobIds as string[] }, userId: user.id },
+      where: { id: { in: sourceJobIds }, userId: user.id },
     });
     if (jobs.length !== sourceJobIds.length) {
       throw new AppError(404, "One or more source jobs not found");
@@ -134,25 +129,42 @@ router.post(
       }
     }
 
-    const queued = await prisma.topoExportJob.count({
-      where: { userId: user.id, status: { in: ["queued", "running"] } },
-    });
-    if (queued >= MAX_QUEUED_PER_USER) {
-      throw new AppError(429, `Too many concurrent exports (limit ${MAX_QUEUED_PER_USER})`);
+    // Reject pre-Stage-2 jobs whose outputs predate the COG export source:
+    // they would otherwise fail deep inside the export worker. Only raster
+    // layers need a COG; vector layers export from raw GeoJSON.
+    const requestedRasterLayers = layers.filter((l) => RASTER_LAYERS.includes(l));
+    for (const j of jobs) {
+      const outputs = (j.s3OutputKeys as S3OutputKey[] | null) ?? [];
+      for (const layer of requestedRasterLayers) {
+        const match = outputs.find((o) => o.name === layer);
+        if (!match?.cogKey) {
+          throw new AppError(400, "Re-run this job to enable exports");
+        }
+      }
     }
 
     const vectorStyleSnapshot = (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
 
-    const exportJob = await prisma.topoExportJob.create({
-      data: {
-        userId: user.id,
-        sourceJobIds: sourceJobIds as string[],
-        layers: layers as string[],
-        format,
-        bundling,
-        vectorStyleSnapshot,
-        status: "queued",
-      },
+    // Count + create in one transaction so concurrent submissions can't both
+    // pass the per-user cap.
+    const exportJob = await prisma.$transaction(async (tx) => {
+      const queued = await tx.topoExportJob.count({
+        where: { userId: user.id, status: { in: ["queued", "running"] } },
+      });
+      if (queued >= MAX_QUEUED_PER_USER) {
+        throw new AppError(429, `Too many concurrent exports (limit ${MAX_QUEUED_PER_USER})`);
+      }
+      return tx.topoExportJob.create({
+        data: {
+          userId: user.id,
+          sourceJobIds,
+          layers: layers as string[],
+          format,
+          bundling,
+          vectorStyleSnapshot,
+          status: "queued",
+        },
+      });
     });
 
     if (ECS_SUBNETS.length) {
@@ -233,9 +245,24 @@ router.delete(
     });
     if (!row) throw new AppError(404, "Export not found");
     if (row.userId !== user.id) throw new AppError(403, "Access denied");
-    // No best-effort S3 delete here yet — the export bucket has an
-    // independent lifecycle policy that ages exports out automatically.
-    await prisma.topoExportJob.delete({ where: { id: row.id } });
+    if (row.status === "queued" || row.status === "running") {
+      throw new AppError(409, "Cannot delete an in-progress export");
+    }
+
+    // Delete the S3 object and reclaim the storage quota in the same
+    // transaction as the row delete so a completed export never orphans bytes.
+    if (row.status === "completed" && row.resultKey) {
+      await s3.send(new DeleteObjectCommand({ Bucket: TOPO_BUCKET, Key: row.resultKey }));
+    }
+    await prisma.$transaction(async (tx) => {
+      if (row.status === "completed" && row.resultBytes) {
+        await tx.user.update({
+          where: { id: user.id },
+          data: { storageUsedBytes: { decrement: row.resultBytes } },
+        });
+      }
+      await tx.topoExportJob.delete({ where: { id: row.id } });
+    });
     res.status(204).send();
   },
 );

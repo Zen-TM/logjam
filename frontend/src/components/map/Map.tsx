@@ -836,11 +836,15 @@ function Map({
     const layers = topoLayers ?? [];
     const vs = vectorStyle ?? VECTOR_STYLE_FALLBACK;
 
+    // TODO(finding-13): JSON.stringify is order-dependent; swap for a structural
+    // hash if VectorStyleSettings grows. Computed once per effect run.
+    const vsHash = vectorStyleHash(vs);
+
     // Skip if topo layers AND vector style haven't actually changed (avoids
     // flicker from new array references with identical contents). vectorStyle
     // is included so live edits in the LiDAR Topos panel re-paint the map.
     const topoKey = layers.map((l) => `${l.id}:${l.pmtilesUrl}`).join("|")
-                  + "::" + vectorStyleHash(vs);
+                  + "::" + vsHash;
     if (topoKey === prevTopoKeyRef.current) return;
     prevTopoKeyRef.current = topoKey;
 
@@ -858,8 +862,8 @@ function Map({
     // vector style hash changed, drop every topo-* vector layer so they're
     // re-created below with the new paint expressions (sources stay — only
     // layers rebuild, no PMTiles refetch).
-    const vsChanged = prevVectorStyleHashRef.current !== vectorStyleHash(vs);
-    prevVectorStyleHashRef.current = vectorStyleHash(vs);
+    const vsChanged = prevVectorStyleHashRef.current !== vsHash;
+    prevVectorStyleHashRef.current = vsHash;
     const allTopoLayerIds = map
       .getStyle()
       .layers.map((l) => l.id)

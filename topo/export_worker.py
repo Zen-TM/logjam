@@ -108,6 +108,27 @@ def get_user_email(conn, user_id: str) -> Optional[str]:
     return row["email"] if row else None
 
 
+def increment_user_storage(conn, user_id: str, delta_bytes: int):
+    """Atomically add delta_bytes to the user's storage_used_bytes."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE users SET storage_used_bytes = storage_used_bytes + %s WHERE id = %s",
+            (delta_bytes, user_id),
+        )
+    conn.commit()
+
+
+def create_notification(conn, user_id: str, notif_type: str, payload: dict):
+    import uuid as _uuid
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO notifications (id, user_id, type, payload, read, created_at) "
+            "VALUES (%s, %s, %s, %s, false, NOW())",
+            (str(_uuid.uuid4()), user_id, notif_type, json.dumps(payload)),
+        )
+    conn.commit()
+
+
 def send_completion_email(to_email: str, export_job_id: str, format_: str, ok: bool, error: Optional[str]):
     if not ses or not FRONTEND_URL:
         return
@@ -219,25 +240,38 @@ def main():
         # Keep raw exception out of the user-facing error message.
         error_msg = "Export failed. Contact support with export ID " + EXPORT_JOB_ID
 
-    completed_at_sql = "NOW()"
     if error_msg or result_key is None:
-        update_status(
-            conn, EXPORT_JOB_ID, "failed",
-            error_message=error_msg or "Unknown failure",
-            completed_at=None,
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE topo_export_jobs "
+                "SET status = 'failed', error_message = %s, completed_at = NOW() "
+                "WHERE id = %s",
+                (error_msg or "Unknown failure", EXPORT_JOB_ID),
+            )
+        conn.commit()
         ok = False
     else:
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE topo_export_jobs "
                 "SET status = 'completed', result_key = %s, result_bytes = %s, "
-                f"    completed_at = {completed_at_sql} "
+                "    completed_at = NOW() "
                 "WHERE id = %s",
                 (result_key, result_bytes, EXPORT_JOB_ID),
             )
         conn.commit()
+        increment_user_storage(conn, export_job["user_id"], result_bytes)
         ok = True
+
+    create_notification(
+        conn, export_job["user_id"], "topo_export_complete",
+        {
+            "exportJobId": EXPORT_JOB_ID,
+            "format": export_job["format"],
+            "status": "completed" if ok else "failed",
+            "errorMessage": None if ok else (error_msg or "Unknown failure"),
+        },
+    )
 
     try:
         email = get_user_email(conn, export_job["user_id"])
