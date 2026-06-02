@@ -25,3 +25,12 @@ export async function decrementStorageUsed(userId: string, bytes: bigint): Promi
     WHERE id = ${userId}
   `;
 }
+
+export async function incrementStorageUsed(userId: string, bytes: bigint): Promise<void> {
+  if (bytes <= 0n) return;
+  await prisma.$executeRaw`
+    UPDATE users
+    SET storage_used_bytes = storage_used_bytes + ${bytes}
+    WHERE id = ${userId}
+  `;
+}

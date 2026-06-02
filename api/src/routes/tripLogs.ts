@@ -7,6 +7,7 @@ import { getParam } from "../lib/getParam";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
+import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -42,10 +43,20 @@ router.get(
     const trips = await prisma.tripLog.findMany({
       where: { canyonId },
       orderBy: { date: "desc" },
-      include: { media: true },
     });
 
-    res.json(trips);
+    const tripIds = trips.map((trip) => trip.id);
+    const mediaRows = tripIds.length
+      ? await prisma.media.findMany({
+          where: { linkedType: "tripLog", linkedId: { in: tripIds } },
+          orderBy: { createdAt: "asc" },
+        })
+      : [];
+    const mediaByTrip = await mediaItemsByLinkedId(mediaRows);
+
+    res.json(
+      trips.map((trip) => ({ ...trip, media: mediaByTrip.get(trip.id) ?? [] })),
+    );
   },
 );
 
@@ -63,7 +74,7 @@ router.get(
     const id = getParam(req.params.id);
     const trip = await prisma.tripLog.findUnique({
       where: { id },
-      include: { media: true, canyon: { select: { id: true, name: true, ownerId: true } } },
+      include: { canyon: { select: { id: true, name: true, ownerId: true } } },
     });
     if (!trip) throw new AppError(404, "Trip log not found");
 
@@ -74,7 +85,11 @@ router.get(
     });
     if (!isOwner && !isShared) throw new AppError(403, "Access denied");
 
-    res.json(trip);
+    const mediaRows = await prisma.media.findMany({
+      where: { linkedType: "tripLog", linkedId: id },
+      orderBy: { createdAt: "asc" },
+    });
+    res.json({ ...trip, media: await toMediaItems(mediaRows) });
   },
 );
 

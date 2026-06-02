@@ -16,14 +16,17 @@ import ShareCanyonDialog from "../../dialogs/ShareCanyonDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import type { TCanyon, TFriend, TTripLog } from "../../../canyonUtils";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
+import type { TripLogCustomFieldDef, MediaItem } from "@logjam/shared";
 import {
   formatCanyonGrade,
   deleteCanyon,
   copyCanyon,
   unshareCanyonWith,
   getTripLogs,
+  getCanyonDetail,
 } from "../../../canyonUtils";
+import MediaUpload from "../../media/MediaUpload";
+import MediaGallery from "../../media/MediaGallery";
 
 function CanyonDetailPanel({
   canyon,
@@ -59,6 +62,7 @@ function CanyonDetailPanel({
   const [showShareDialog, setShowShareDialog] = useState(false);
 
   const [tripLogs, setTripLogs] = useState<TTripLog[]>([]);
+  const [canyonMedia, setCanyonMedia] = useState<MediaItem[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(false);
   const [showTripLogDialog, setShowTripLogDialog] = useState(false);
   const [showTripLogView, setShowTripLogView] = useState(false);
@@ -70,14 +74,19 @@ function CanyonDetailPanel({
   useEffect(() => {
     if (!canyon) {
       setTripLogs([]);
+      setCanyonMedia([]);
       return;
     }
     setLoadingTrips(true);
-    getTripLogs(canyon.id)
-      .then(setTripLogs)
+    // One fetch yields canyon-level media plus (for owners) the trip logs.
+    getCanyonDetail(canyon.id)
+      .then((detail) => {
+        setTripLogs(detail.tripLogs ?? []);
+        setCanyonMedia(detail.media);
+      })
       .catch((err) => {
         console.error(err);
-        toast.error(messageFromError(err, "Couldn't load trip logs."));
+        toast.error(messageFromError(err, "Couldn't load canyon details."));
       })
       .finally(() => setLoadingTrips(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -136,6 +145,16 @@ function CanyonDetailPanel({
     } finally {
       setCopying(false);
     }
+  }
+
+  function handleMediaUploaded(item: MediaItem) {
+    setCanyonMedia((prev) => [...prev, item]);
+    onQuotaChanged();
+  }
+
+  function handleMediaDeleted(id: string) {
+    setCanyonMedia((prev) => prev.filter((m) => m.id !== id));
+    onQuotaChanged();
   }
 
   const canyonGrade = formatCanyonGrade(canyon);
@@ -270,6 +289,32 @@ function CanyonDetailPanel({
               ))}
             </div>
           )}
+        </div>
+
+        <div className={classes.mediaRegion}>
+          <div className={classes.divider} />
+          <div className={classes.mediaHeader}>
+            Photos &amp; Files {canyonMedia.length > 0 && `(${canyonMedia.length})`}
+          </div>
+          {isOwnedCanyon && (
+            <MediaUpload
+              linkedType="canyon"
+              linkedId={canyon.id}
+              onUploaded={handleMediaUploaded}
+            />
+          )}
+          <div className={classes.mediaScroll}>
+            <MediaGallery
+              media={canyonMedia}
+              canDelete={isOwnedCanyon}
+              onDeleted={handleMediaDeleted}
+              emptyText={
+                isOwnedCanyon
+                  ? "No photos or files yet."
+                  : "No shared photos or files."
+              }
+            />
+          </div>
         </div>
 
         <div className={classes.footer}>
@@ -423,6 +468,8 @@ function CanyonDetailPanel({
         tripLog={viewingTripLog}
         canyonName={canyon.name}
         customFieldDefs={customFieldDefs}
+        canManageMedia={isOwnedCanyon}
+        onMediaChanged={onQuotaChanged}
         onEdit={() => {
           setShowTripLogView(false);
           setEditingTripLog(viewingTripLog ?? undefined);

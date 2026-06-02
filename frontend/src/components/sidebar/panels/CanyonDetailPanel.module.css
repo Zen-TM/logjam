@@ -140,6 +140,28 @@
   line-height: 1.35;
 }
 
+/* ─── Media region ────────────────────────────────────────────────────────── */
+
+.mediaRegion {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.mediaHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.mediaScroll {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
 /* ─── Footer actions ──────────────────────────────────────────────────────── */
 
 .footer {

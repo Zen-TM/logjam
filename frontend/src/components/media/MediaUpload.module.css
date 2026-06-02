@@ -1,0 +1,65 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 1rem;
+  border: 1px dashed color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
+  border-radius: var(--radius-md);
+  background-color: rgba(255, 255, 255, 0.02);
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.dropzone:hover {
+  border-color: var(--theme-accent);
+  background-color: color-mix(in srgb, var(--theme-accent) 8%, transparent);
+}
+
+.dragging {
+  border-color: var(--theme-accent);
+  background-color: color-mix(in srgb, var(--theme-accent) 8%, transparent);
+}
+
+.locked {
+  opacity: 0.6;
+  cursor: default;
+  pointer-events: none;
+}
+
+.hint {
+  font-size: var(--text-sm);
+  color: var(--theme-text-primary);
+}
+
+.sub {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+}
+
+.spinner {
+  animation: media-upload-spin 1s linear infinite;
+}
+
+@keyframes media-upload-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error {
+  font-size: var(--text-xs);
+  color: var(--theme-warning);
+  word-break: break-word;
+}

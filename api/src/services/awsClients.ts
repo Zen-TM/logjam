@@ -9,6 +9,12 @@ const endpoint = process.env.AWS_ENDPOINT_URL;
 
 export const s3 = new S3Client({
   region,
+  // Don't auto-add CRC32 integrity checksums to uploads. Since SDK v3.729 this
+  // defaults to "when_supported", which bakes an x-amz-checksum-crc32 requirement
+  // into presigned PUT URLs that a plain browser fetch can't satisfy (S3 returns
+  // 400 "Value for x-amz-checksum-crc32 header is invalid"). WHEN_REQUIRED still
+  // adds checksums for operations that mandate them (e.g. DeleteObjects).
+  requestChecksumCalculation: "WHEN_REQUIRED",
   ...(endpoint && { endpoint, forcePathStyle: true }),
 });
 

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
-import type { ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences } from "@logjam/shared";
+import type { ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
 
@@ -28,6 +28,8 @@ export type TCanyon = {
   ropeWikiId: number | null;
   createdAt: string;
   updatedAt: string;
+  // Populated only by the canyon-detail endpoint (GET /canyons/:id), not the list.
+  media?: MediaItem[];
 };
 
 export type TUser = {
@@ -57,6 +59,8 @@ export type TTripLog = {
   customFields: Record<string, unknown>;
   createdAt: string;
   canyon?: { id: string; name: string };
+  // Populated by the per-canyon trip endpoints (GET /canyons/:id/trips[/:id]).
+  media?: MediaItem[];
 };
 
 export type TFriend = {
@@ -341,6 +345,17 @@ export function bulkDeleteCanyons(
   });
 }
 
+// Full canyon record incl. canyon-level media (and, for owners, trip logs with
+// their media). The list endpoints omit media; this is the only source for it.
+export type TCanyonDetail = TCanyon & {
+  media: MediaItem[];
+  tripLogs?: (TTripLog & { media: MediaItem[] })[];
+};
+
+export function getCanyonDetail(id: string): Promise<TCanyonDetail> {
+  return apiFetch<TCanyonDetail>(`/canyons/${id}`);
+}
+
 
 export function useCanyons(enabled: boolean) {
   const [canyons, setCanyons] = useState<TCanyon[]>([]);
@@ -458,6 +473,12 @@ export function getTripLogs(canyonId: string): Promise<TTripLog[]> {
   return apiFetch<TTripLog[]>(`/canyons/${canyonId}/trips`);
 }
 
+// Single trip log incl. its media (with fresh presigned URLs). Used by the
+// view dialog, which needs media regardless of which list it was opened from.
+export function getTripLog(canyonId: string, id: string): Promise<TTripLog> {
+  return apiFetch<TTripLog>(`/canyons/${canyonId}/trips/${id}`);
+}
+
 export function createTripLog(
   canyonId: string,
   data: { date: string; notes?: string | null; customFields?: Record<string, unknown> },
@@ -561,6 +582,70 @@ export function useTripLogs(enabled: boolean) {
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
   return { tripLogs, loading, error, refetch };
+}
+
+// ── Media (object storage) ────────────────────────────────────
+
+type MediaUploadMeta = {
+  linkedType: MediaLinkedType;
+  linkedId: string;
+  filename: string;
+  mediaType: string;
+};
+
+type PresignMediaResponse = {
+  mediaId: string;
+  displayUploadUrl: string;
+  thumbnailUploadUrl: string | null;
+};
+
+// Direct PUT to a presigned S3 URL. Intentionally a raw fetch (not apiFetch):
+// the target is S3, not our API, and it must NOT carry the Authorization header.
+// The Content-Type must match what the presign signed, or S3 rejects it.
+async function putToPresignedUrl(
+  url: string,
+  body: Blob,
+  contentType: string,
+): Promise<void> {
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body,
+  });
+  if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+}
+
+// Orchestrates the two-phase upload: presign → PUT display (+ thumbnail) → confirm.
+// `thumbnail` is the client-generated JPEG for images/videos, or null for tracks.
+export async function uploadMedia(params: {
+  linkedType: MediaLinkedType;
+  linkedId: string;
+  file: File;
+  mediaType: string;
+  thumbnail: Blob | null;
+}): Promise<MediaItem> {
+  const meta: MediaUploadMeta = {
+    linkedType: params.linkedType,
+    linkedId: params.linkedId,
+    filename: params.file.name,
+    mediaType: params.mediaType,
+  };
+  const presigned = await apiFetch<PresignMediaResponse>("/media/presign", {
+    method: "POST",
+    body: meta,
+  });
+  await putToPresignedUrl(presigned.displayUploadUrl, params.file, params.mediaType);
+  if (presigned.thumbnailUploadUrl && params.thumbnail) {
+    await putToPresignedUrl(presigned.thumbnailUploadUrl, params.thumbnail, "image/jpeg");
+  }
+  return apiFetch<MediaItem>(`/media/${presigned.mediaId}/confirm`, {
+    method: "POST",
+    body: meta,
+  });
+}
+
+export function deleteMedia(id: string): Promise<void> {
+  return apiFetch<void>(`/media/${id}`, { method: "DELETE" });
 }
 
 // ── Analytics ─────────────────────────────────────────────────

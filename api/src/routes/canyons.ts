@@ -7,6 +7,7 @@ import { getParam } from "../lib/getParam";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
+import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -194,14 +195,46 @@ router.get(
       if (!share) throw new AppError(403, "Access denied");
     }
 
-    const canyon = await prisma.canyon.findUnique({
-      where: { id: canyonId },
-      include: isOwner
-        ? { tripLogs: { orderBy: { date: "desc" }, include: { media: true } }, media: true }
-        : { media: true },
-    });
+    // Media is polymorphic with no FK relation, so it's fetched by
+    // (linkedType, linkedId) and presigned here. Owners also get trip logs and
+    // their media; share recipients receive canyon-level media only.
+    if (isOwner) {
+      const canyon = await prisma.canyon.findUnique({
+        where: { id: canyonId },
+        include: { tripLogs: { orderBy: { date: "desc" } } },
+      });
+      if (!canyon) throw new AppError(404, "Canyon not found");
 
-    res.json(canyon);
+      const tripIds = canyon.tripLogs.map((trip) => trip.id);
+      const [canyonMedia, tripMediaRows] = await Promise.all([
+        prisma.media.findMany({
+          where: { linkedType: "canyon", linkedId: canyonId },
+          orderBy: { createdAt: "asc" },
+        }),
+        tripIds.length
+          ? prisma.media.findMany({
+              where: { linkedType: "tripLog", linkedId: { in: tripIds } },
+              orderBy: { createdAt: "asc" },
+            })
+          : [],
+      ]);
+
+      const mediaByTrip = await mediaItemsByLinkedId(tripMediaRows);
+      const tripLogs = canyon.tripLogs.map((trip) => ({
+        ...trip,
+        media: mediaByTrip.get(trip.id) ?? [],
+      }));
+      res.json({ ...canyon, media: await toMediaItems(canyonMedia), tripLogs });
+      return;
+    }
+
+    const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
+    if (!canyon) throw new AppError(404, "Canyon not found");
+    const canyonMedia = await prisma.media.findMany({
+      where: { linkedType: "canyon", linkedId: canyonId },
+      orderBy: { createdAt: "asc" },
+    });
+    res.json({ ...canyon, media: await toMediaItems(canyonMedia) });
   },
 );
 

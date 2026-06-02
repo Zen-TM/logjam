@@ -145,6 +145,7 @@ function TripLogsPanel({
         tripLog={viewingTripLog}
         canyonName={viewingTripLog?.canyon?.name ?? ""}
         customFieldDefs={customFieldDefs}
+        onMediaChanged={onQuotaChanged}
         onEdit={() => {
           setShowViewDialog(false);
           setEditingTripLog(viewingTripLog ?? undefined);

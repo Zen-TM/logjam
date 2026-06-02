@@ -13,6 +13,7 @@ const CSP_PROD = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://*.cloudfront.net https://*.s3.ap-southeast-2.amazonaws.com https://tile.openstreetmap.org https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org https://a.tile-cyclosm.openstreetmap.fr https://b.tile-cyclosm.openstreetmap.fr https://c.tile-cyclosm.openstreetmap.fr https://a.tile.opentopomap.org https://b.tile.opentopomap.org https://c.tile.opentopomap.org https://demotiles.maplibre.org https://maps.six.nsw.gov.au https://elevation.fsdf.org.au",
   "font-src 'self' data:",
+  "media-src 'self' blob: https://*.cloudfront.net https://*.s3.ap-southeast-2.amazonaws.com",
   "connect-src 'self' https://api.logjamnsw.com https://cognito-idp.ap-southeast-2.amazonaws.com https://*.auth.ap-southeast-2.amazoncognito.com https://*.cloudfront.net https://*.s3.ap-southeast-2.amazonaws.com https://tile.openstreetmap.org https://a.tile.openstreetmap.org https://b.tile.openstreetmap.org https://c.tile.openstreetmap.org https://a.tile-cyclosm.openstreetmap.fr https://b.tile-cyclosm.openstreetmap.fr https://c.tile-cyclosm.openstreetmap.fr https://a.tile.opentopomap.org https://b.tile.opentopomap.org https://c.tile.opentopomap.org https://demotiles.maplibre.org https://maps.six.nsw.gov.au https://elevation.fsdf.org.au",
   "worker-src 'self' blob:",
   "base-uri 'self'",

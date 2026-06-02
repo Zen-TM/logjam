@@ -357,22 +357,16 @@ function TripLogDialog({
             </Button>
           )}
 
-          {/* File uploads — placeholder */}
+          {/* Media is attached from the trip view — uploads need a saved trip
+              log to link to, so creation/editing of files lives there. */}
           <Box className={classes.uploadPlaceholder}>
             <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", mb: 0.5 }}>
-              Photos &amp; Videos
+              Photos, Videos &amp; Files
             </Typography>
             <Typography variant="body2" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
-              File uploads coming soon
-            </Typography>
-          </Box>
-
-          <Box className={classes.uploadPlaceholder}>
-            <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", mb: 0.5 }}>
-              GPX / Track File
-            </Typography>
-            <Typography variant="body2" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
-              File uploads coming soon
+              {tripLog
+                ? "Open this trip from the canyon panel to add or remove photos, videos and GPX/KML files."
+                : "Save this trip log first, then open it to add photos, videos and GPX/KML files."}
             </Typography>
           </Box>
 

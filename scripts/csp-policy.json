@@ -45,12 +45,13 @@
   },
   "verification": [
     "Local: `cd frontend && npm run build && grep Content-Security-Policy dist/index.html` — should show meta tag.",
-    "Production: open browser DevTools console after deploy. Hit every map basemap, sign in, create a trip log, run a topo job, search friends. Any 'Refused to ...' messages indicate a missing allowlist entry.",
+    "Production: open browser DevTools console after deploy. Hit every map basemap, sign in, create a trip log, upload + view a photo and a video, download a GPX/KML, run a topo job, search friends. Any 'Refused to ...' messages indicate a missing allowlist entry.",
     "Production headers: `curl -I https://logjamnsw.com/` should show Strict-Transport-Security, X-Content-Type-Options, X-Frame-Options, Referrer-Policy (from managed CloudFront policy)."
   ],
   "notes": [
     "Dev server (vite dev) intentionally has NO CSP — HMR uses inline scripts + eval which 'self' would block.",
     "'unsafe-inline' for style-src is required by MUI/emotion runtime style injection. Never relax script-src.",
-    "If new tile providers / image hosts are added, update CSP_PROD in frontend/vite.config.ts AND the allowlist in this file."
+    "If new tile providers / image hosts are added, update CSP_PROD in frontend/vite.config.ts AND the allowlist in this file.",
+    "media-src allows blob: plus awsAssetHosts so uploaded videos (presigned S3 URLs) play inline via <video>; img-src/connect-src already cover photo display + presigned PUT uploads."
   ]
 }

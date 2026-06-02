@@ -379,6 +379,7 @@ function DrilldownHeatmap({
         tripLog={viewingTripLog}
         canyonName={viewingTripLog?.canyon?.name ?? ""}
         customFieldDefs={customFieldDefs}
+        onMediaChanged={onQuotaChanged}
         onEdit={() => setViewingTripLog(null)}
         onDeleted={() => {
           setViewingTripLog(null);

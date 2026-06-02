@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -11,11 +11,13 @@ import {
   Divider,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
+import type { TripLogCustomFieldDef, MediaItem } from "@logjam/shared";
 import type { TTripLog } from "../../canyonUtils";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
-import { deleteTripLog } from "../../canyonUtils";
+import { deleteTripLog, getTripLog } from "../../canyonUtils";
+import MediaUpload from "../media/MediaUpload";
+import MediaGallery from "../media/MediaGallery";
 import classes from "./TripLogViewDialog.module.css";
 
 function formatDate(iso: string): string {
@@ -40,6 +42,8 @@ function TripLogViewDialog({
   customFieldDefs,
   onEdit,
   onDeleted,
+  canManageMedia = true,
+  onMediaChanged,
 }: {
   open: boolean;
   onClose: () => void;
@@ -48,10 +52,39 @@ function TripLogViewDialog({
   customFieldDefs: TripLogCustomFieldDef[];
   onEdit: () => void;
   onDeleted: () => void;
+  canManageMedia?: boolean;
+  onMediaChanged?: () => void;
 }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
   const toast = useToast();
+
+  // Fetch the trip's media (with fresh presigned URLs) whenever the dialog opens.
+  // The trip passed in may come from a list that doesn't include media.
+  useEffect(() => {
+    if (!open || !tripLog) return;
+    const { canyonId, id } = tripLog;
+    setMediaLoading(true);
+    getTripLog(canyonId, id)
+      .then((full) => setMedia(full.media ?? []))
+      .catch((err) => {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't load trip files."));
+      })
+      .finally(() => setMediaLoading(false));
+  }, [open, tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleMediaUploaded(item: MediaItem) {
+    setMedia((prev) => [...prev, item]);
+    onMediaChanged?.();
+  }
+
+  function handleMediaDeleted(id: string) {
+    setMedia((prev) => prev.filter((m) => m.id !== id));
+    onMediaChanged?.();
+  }
 
   async function handleDelete() {
     if (!tripLog) return;
@@ -107,16 +140,6 @@ function TripLogViewDialog({
         </DialogTitle>
 
         <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
-          {/* GPX / Track File placeholder */}
-          <Box className={classes.section}>
-            <Typography variant="caption" className={classes.sectionLabel}>
-              Track File
-            </Typography>
-            <Typography variant="body2" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
-              File uploads coming soon
-            </Typography>
-          </Box>
-
           {/* Custom field values */}
           {customFieldDefs.length > 0 && (
             <>
@@ -154,15 +177,33 @@ function TripLogViewDialog({
             </>
           )}
 
-          {/* Media grid placeholder */}
+          {/* Media — photos, videos, GPX/KML tracks */}
           <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 1.5 }} />
           <Box className={classes.section}>
             <Typography variant="caption" className={classes.sectionLabel}>
-              Photos &amp; Videos
+              Photos, Videos &amp; Files
             </Typography>
-            <Typography variant="body2" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
-              File uploads coming soon
-            </Typography>
+            {canManageMedia && (
+              <Box sx={{ mb: 1 }}>
+                <MediaUpload
+                  linkedType="tripLog"
+                  linkedId={tripLog.id}
+                  onUploaded={handleMediaUploaded}
+                />
+              </Box>
+            )}
+            {mediaLoading ? (
+              <Typography variant="body2" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
+                Loading files…
+              </Typography>
+            ) : (
+              <MediaGallery
+                media={media}
+                canDelete={canManageMedia}
+                onDeleted={handleMediaDeleted}
+                emptyText="No photos or files yet."
+              />
+            )}
           </Box>
         </DialogContent>
 

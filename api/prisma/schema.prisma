@@ -63,7 +63,6 @@ model Canyon {
   forkedFrom       Canyon?       @relation("CanyonForks", fields: [forkedFromId], references: [id])
   forks            Canyon[]      @relation("CanyonForks")
   owner            User          @relation(fields: [ownerId], references: [id])
-  media            Media[]       @relation("CanyonMedia")
   tripLogs         TripLog[]
 
   @@unique([ownerId, ropeWikiId])
@@ -90,7 +89,6 @@ model TripLog {
   notes        String?
   customFields Json     @default("{}") @map("custom_fields")
   createdAt    DateTime @default(now()) @map("created_at")
-  media        Media[]  @relation("TripLogMedia")
   canyon       Canyon   @relation(fields: [canyonId], references: [id])
   user         User     @relation(fields: [userId], references: [id])
 
@@ -100,6 +98,11 @@ model TripLog {
 model Media {
   id             String   @id @default(uuid())
   ownerId        String   @map("owner_id")
+  // Polymorphic link to a Canyon or TripLog. Deliberately NO database foreign
+  // key on linkedId: a single column cannot FK two tables (the previous schema
+  // declared FKs to both canyons and trip_logs, which made every insert fail).
+  // Integrity is enforced in the route layer (ownership checks on attach) and
+  // cleaned up explicitly on canyon/trip/account deletion.
   linkedType     String   @map("linked_type")
   linkedId       String   @map("linked_id")
   s3KeyThumbnail String?  @map("s3_key_thumbnail")
@@ -109,9 +112,8 @@ model Media {
   fileSizeBytes  BigInt   @map("file_size_bytes")
   createdAt      DateTime @default(now()) @map("created_at")
   owner          User     @relation(fields: [ownerId], references: [id])
-  canyon         Canyon?  @relation("CanyonMedia", fields: [linkedId], references: [id], map: "media_canyon_linked_id_fkey")
-  tripLog        TripLog? @relation("TripLogMedia", fields: [linkedId], references: [id], map: "media_triplog_linked_id_fkey")
 
+  @@index([linkedType, linkedId])
   @@map("media")
 }
 
