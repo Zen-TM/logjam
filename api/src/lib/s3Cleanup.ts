@@ -20,6 +20,7 @@ export async function deleteS3Prefix(bucket: string, prefix: string): Promise<vo
     } while (continuationToken);
   } catch (err) {
     console.error({ bucket, prefix, err }, "s3_delete_prefix_failed");
+    throw err;
   }
 }
 
@@ -33,5 +34,20 @@ export async function deleteS3Keys(bucket: string, keys: string[]): Promise<void
     }
   } catch (err) {
     console.error({ bucket, keyCount: valid.length, sampleKeys: valid.slice(0, 5), err }, "s3_delete_keys_failed");
+    throw err;
+  }
+}
+
+/**
+ * Best-effort variant for rollback paths that are about to throw a more
+ * meaningful error (e.g. quota exceeded). Logs the failure (via deleteS3Keys)
+ * but never rejects, so the caller's intended error response is not masked by a
+ * generic 500 from a cleanup miss.
+ */
+export async function deleteS3KeysBestEffort(bucket: string, keys: string[]): Promise<void> {
+  try {
+    await deleteS3Keys(bucket, keys);
+  } catch {
+    // Already logged inside deleteS3Keys; orphan is acceptable on this path.
   }
 }

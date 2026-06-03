@@ -330,7 +330,17 @@ export function validateRasterTemplateSettings(input: unknown): ValidationResult
   validateRasterFeatures(input.features, errors);
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, value: input as unknown as RasterTemplateSettings };
+  // Each sub-validator above has confirmed its field's full shape, so a single
+  // narrowing cast per field is sound (no `as unknown` escape hatch). TS now
+  // checks that every interface member is accounted for here.
+  const value: RasterTemplateSettings = {
+    hillshade: input.hillshade as HillshadeSettings,
+    slope: input.slope as SlopeSettings,
+    vegetation: input.vegetation as VegetationSettings,
+    contours: input.contours as RasterContoursSettings,
+    features: input.features as RasterFeaturesSettings,
+  };
+  return { ok: true, value };
 }
 
 export function validateVectorStyleSettings(input: unknown): ValidationResult<VectorStyleSettings> {
@@ -343,7 +353,11 @@ export function validateVectorStyleSettings(input: unknown): ValidationResult<Ve
   validateVectorFeatures(input.features, errors);
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, value: input as unknown as VectorStyleSettings };
+  const value: VectorStyleSettings = {
+    contours: input.contours as VectorContoursStyle,
+    features: input.features as Record<OsmFeatureKey, OsmFeatureStyle>,
+  };
+  return { ok: true, value };
 }
 
 function validateHillshade(v: unknown, errors: string[]): void {

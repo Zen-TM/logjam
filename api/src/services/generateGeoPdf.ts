@@ -34,7 +34,7 @@ import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { s3 as s3Client } from "./awsClients";
 import { PMTiles } from "pmtiles";
 import type { Source } from "pmtiles";
-import { VectorTile } from "@mapbox/vector-tile";
+import { VectorTile, VectorTileFeature } from "@mapbox/vector-tile";
 import Pbf from "pbf";
 import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName } from "../constants/topoLayers";
@@ -380,7 +380,9 @@ export async function generateGeoPdf(
   const mapCanvas = createCanvas(nativeW, nativeH);
   const mapCtx = mapCanvas.getContext("2d");
   mapCtx.imageSmoothingEnabled = true;
-  (mapCtx as any).imageSmoothingQuality = "high";
+  // imageSmoothingQuality is a valid DOM property but absent from node-canvas's
+  // type defs; scope the cast to this property rather than widening to `any`.
+  (mapCtx as typeof mapCtx & { imageSmoothingQuality: string }).imageSmoothingQuality = "high";
 
   // Element DPI: how many pixels per inch at native canvas size
   const elementDpi = (nativeW / mapWidthMm) * MM_PER_INCH;
@@ -835,7 +837,7 @@ function interpZoom(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function renderVectorFeature(
   ctx: CanvasRenderingContext2D,
-  feature: any,
+  feature: VectorTileFeature,
   dx: number,
   dy: number,
   zoom: number,
@@ -890,7 +892,7 @@ function renderVectorFeature(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function renderContourFeature(
   ctx: CanvasRenderingContext2D,
-  feature: any,
+  feature: VectorTileFeature,
   dx: number,
   dy: number,
   zoom: number,
@@ -1001,7 +1003,7 @@ function bufferLineLabel(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function renderOsmFeature(
   ctx: CanvasRenderingContext2D,
-  feature: any,
+  feature: VectorTileFeature,
   dx: number,
   dy: number,
   zoom: number,

@@ -41,9 +41,9 @@ export function isNotificationPreferences(
   value: unknown,
 ): value is Partial<NotificationPreferences> {
   if (typeof value !== "object" || value === null) return false;
-  const obj = value as Record<string, unknown>;
+  const candidate = value as Record<string, unknown>;
   for (const key of ["topoEmail", "friendRequestInApp", "shareInApp"] as const) {
-    if (key in obj && typeof obj[key] !== "boolean") return false;
+    if (key in candidate && typeof candidate[key] !== "boolean") return false;
   }
   return true;
 }
@@ -52,14 +52,14 @@ function normalizeNotificationPreferences(value: unknown): NotificationPreferenc
   if (typeof value !== "object" || value === null) {
     return { ...DEFAULT_NOTIFICATION_PREFERENCES };
   }
-  const obj = value as Record<string, unknown>;
+  const prefs = value as Record<string, unknown>;
   return {
-    topoEmail: typeof obj.topoEmail === "boolean" ? obj.topoEmail : DEFAULT_NOTIFICATION_PREFERENCES.topoEmail,
+    topoEmail: typeof prefs.topoEmail === "boolean" ? prefs.topoEmail : DEFAULT_NOTIFICATION_PREFERENCES.topoEmail,
     friendRequestInApp:
-      typeof obj.friendRequestInApp === "boolean"
-        ? obj.friendRequestInApp
+      typeof prefs.friendRequestInApp === "boolean"
+        ? prefs.friendRequestInApp
         : DEFAULT_NOTIFICATION_PREFERENCES.friendRequestInApp,
-    shareInApp: typeof obj.shareInApp === "boolean" ? obj.shareInApp : DEFAULT_NOTIFICATION_PREFERENCES.shareInApp,
+    shareInApp: typeof prefs.shareInApp === "boolean" ? prefs.shareInApp : DEFAULT_NOTIFICATION_PREFERENCES.shareInApp,
   };
 }
 
@@ -148,12 +148,12 @@ export function isThemeSchemeId(value: unknown): value is ThemeSchemeId {
 
 export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
   if (typeof value === "object" && value !== null) {
-    const obj = value as Record<string, unknown>;
-    const themeSchemeId = isThemeSchemeId(obj.themeSchemeId)
-      ? obj.themeSchemeId
+    const prefs = value as Record<string, unknown>;
+    const themeSchemeId = isThemeSchemeId(prefs.themeSchemeId)
+      ? prefs.themeSchemeId
       : DEFAULT_THEME_SCHEME_ID;
-    const tripLogCustomFields = Array.isArray(obj.tripLogCustomFields)
-      ? (obj.tripLogCustomFields as unknown[]).filter(
+    const tripLogCustomFields = Array.isArray(prefs.tripLogCustomFields)
+      ? (prefs.tripLogCustomFields as unknown[]).filter(
           (f): f is import("./tripLogFields.js").TripLogCustomFieldDef => {
             if (typeof f !== "object" || f === null) return false;
             const c = f as Record<string, unknown>;
@@ -165,7 +165,7 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
           },
         )
       : [];
-    const notifications = normalizeNotificationPreferences(obj.notifications);
+    const notifications = normalizeNotificationPreferences(prefs.notifications);
     return { themeSchemeId, tripLogCustomFields, notifications };
   }
 

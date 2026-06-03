@@ -103,8 +103,14 @@ async function applyAutoLinkAndCreate(
 
   if (toAutoLink.length > 0) {
     const updates = toAutoLink.map((p) => {
-      const rawFresh = parsedByRwId.get(p.ropeWikiId)!;
-      const existing = existingByCanyonId.get(p.bestCanyonId!)!;
+      const rawFresh = parsedByRwId.get(p.ropeWikiId);
+      if (!rawFresh)
+        throw new AppError(500, `Missing parsed RopeWiki canyon for id ${p.ropeWikiId}`);
+      if (!p.bestCanyonId)
+        throw new AppError(500, `Auto-link proposal for RopeWiki id ${p.ropeWikiId} has no bestCanyonId`);
+      const existing = existingByCanyonId.get(p.bestCanyonId);
+      if (!existing)
+        throw new AppError(500, `Missing existing canyon for id ${p.bestCanyonId}`);
       const fresh = withOzUltimate(rawFresh, existing.altNames);
       const merged = mergeFillNulls(existing, fresh);
       const { ropeWikiOwnedFields, ...mergedFields } = merged;
@@ -121,21 +127,28 @@ async function applyAutoLinkAndCreate(
     }
   }
 
-  const review: ReviewCandidatePayload[] = toReview.map((p) => ({
-    ropeWikiId: p.ropeWikiId,
-    rw: parsedByRwId.get(p.ropeWikiId)!,
-    candidates: p.candidates.map((s) => {
-      const existing = existingByCanyonId.get(s.canyonId)!;
-      return {
-        canyonId: existing.id,
-        name: existing.name,
-        latitude: existing.latitude,
-        longitude: existing.longitude,
-        distanceMeters: Math.round(s.distanceMeters),
-        nameMatch: s.nameMatch,
-      };
-    }),
-  }));
+  const review: ReviewCandidatePayload[] = toReview.map((p) => {
+    const rw = parsedByRwId.get(p.ropeWikiId);
+    if (!rw)
+      throw new AppError(500, `Missing parsed RopeWiki canyon for id ${p.ropeWikiId}`);
+    return {
+      ropeWikiId: p.ropeWikiId,
+      rw,
+      candidates: p.candidates.map((s) => {
+        const existing = existingByCanyonId.get(s.canyonId);
+        if (!existing)
+          throw new AppError(500, `Missing existing canyon for id ${s.canyonId}`);
+        return {
+          canyonId: existing.id,
+          name: existing.name,
+          latitude: existing.latitude,
+          longitude: existing.longitude,
+          distanceMeters: Math.round(s.distanceMeters),
+          nameMatch: s.nameMatch,
+        };
+      }),
+    };
+  });
 
   return {
     imported: toCreate.length,

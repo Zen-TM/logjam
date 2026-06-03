@@ -14,7 +14,7 @@ import {
   decrementStorageUsed,
   getStorageUsage,
 } from "../lib/storageQuota";
-import { deleteS3Keys } from "../lib/s3Cleanup";
+import { deleteS3Keys, deleteS3KeysBestEffort } from "../lib/s3Cleanup";
 import { toMediaItem } from "../lib/mediaPresign";
 import {
   mediaCategory,
@@ -168,7 +168,10 @@ router.post(
       throw new AppError(400, "File has not been uploaded yet");
     }
     if (displayBytes > MEDIA_SIZE_CAPS[category]) {
-      await deleteS3Keys(MEDIA_BUCKET, [displayKey, thumbnailKey]);
+      // Best-effort orphan cleanup; the size-limit AppError below is the
+      // meaningful response, so a cleanup failure (already logged) must not
+      // mask it with a generic 500.
+      await deleteS3KeysBestEffort(MEDIA_BUCKET, [displayKey, thumbnailKey]);
       const limitMb = Math.round(MEDIA_SIZE_CAPS[category] / 1024 / 1024);
       throw new AppError(413, `File exceeds the ${limitMb} MB limit for ${category}s`);
     }
@@ -181,7 +184,7 @@ router.post(
         );
         thumbnailBytes = head.ContentLength ?? 0;
       } catch {
-        await deleteS3Keys(MEDIA_BUCKET, [displayKey]);
+        await deleteS3KeysBestEffort(MEDIA_BUCKET, [displayKey]);
         throw new AppError(400, "Thumbnail has not been uploaded yet");
       }
     }
@@ -193,7 +196,7 @@ router.post(
     const { used, quota } = await getStorageUsage(user.id);
     if (used > quota) {
       await decrementStorageUsed(user.id, totalBytes);
-      await deleteS3Keys(
+      await deleteS3KeysBestEffort(
         MEDIA_BUCKET,
         expectThumb ? [displayKey, thumbnailKey] : [displayKey],
       );
