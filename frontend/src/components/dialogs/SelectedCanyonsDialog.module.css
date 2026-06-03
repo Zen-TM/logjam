@@ -65,21 +65,18 @@
 .minusButton {
   flex-shrink: 0;
   background: none;
-  border: 1px solid transparent;
-  color: var(--theme-text-primary);
-  opacity: 0.45;
+  border: 1px solid var(--theme-warning);
+  color: var(--theme-warning);
   cursor: pointer;
   padding: 2px 4px;
   display: flex;
   align-items: center;
   border-radius: var(--radius-sm);
-  transition: opacity var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 
 .minusButton:hover {
-  opacity: 1;
-  border-color: var(--theme-warning);
-  color: var(--theme-warning);
+  background-color: color-mix(in srgb, var(--theme-warning) 15%, transparent);
 }
 
 /* Search-add row (pinned below list) */
