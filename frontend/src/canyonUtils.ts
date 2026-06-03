@@ -945,6 +945,10 @@ export function useTopoExports(enabled: boolean, pollMs: number = 0) {
   return { exports, loading, error, refetch };
 }
 
+export function deleteTopoExport(id: string): Promise<void> {
+  return apiFetch<void>(`/topo-exports/${id}`, { method: "DELETE" });
+}
+
 
 export function useVectorStyle(enabled: boolean) {
   const [vectorStyle, setVectorStyle] = useState<VectorStyleSettings | null>(null);

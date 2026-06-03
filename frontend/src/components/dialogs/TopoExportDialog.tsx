@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -18,9 +18,12 @@ import {
   Chip,
   List,
   ListItem,
-  ListItemText,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import DownloadIcon from "@mui/icons-material/Download";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import {
   EXPORT_FORMAT_RULES,
   validateExportRequest,
@@ -28,7 +31,7 @@ import {
   type ExportBundling,
   type TopoLayerKey,
 } from "@logjam/shared";
-import { apiFetch, useTopoExports } from "../../canyonUtils";
+import { apiFetch, deleteTopoExport, useTopoExports } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { TOPO_LAYERS, type CompletedTopoJob } from "../../topoLayerTypes";
@@ -42,6 +45,9 @@ interface Props {
 const FORMAT_ORDER: ExportFormat[] = ["mbtiles", "geotiff", "gpkg", "geojson", "gpx"];
 
 const INITIAL_FORMAT: ExportFormat = "mbtiles";
+
+const VECTOR_STYLE_TOOLTIP =
+  "Each export freezes your vector style at the instant you press Start export. Editing the style afterwards does not change exports already in the list — re-export to apply new styling. The timestamp on each recent export is when its style was snapshotted.";
 
 // Layers eligible for a given format, per EXPORT_FORMAT_RULES.
 function layersForFormat(format: ExportFormat): Set<TopoLayerKey> {
@@ -70,17 +76,68 @@ function timeAgo(iso: string): string {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
+// Programmatically trigger a browser download for a presigned URL.
+function triggerDownload(url: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 export default function TopoExportDialog({ open, onClose, job }: Props) {
   const [format, setFormat] = useState<ExportFormat>(INITIAL_FORMAT);
   const [bundling, setBundling] = useState<ExportBundling>("composite");
   const [selected, setSelected] = useState<Set<TopoLayerKey>>(() => layersForFormat(INITIAL_FORMAT));
   const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Poll while dialog is open so users see status flip from queued → completed.
   const { exports, loading: exportsLoading, refetch: refetchExports } = useTopoExports(open, open ? 5000 : 0);
 
   const rule = EXPORT_FORMAT_RULES[format];
+
+  // Auto-download bookkeeping: snapshot exports already completed when the
+  // dialog opened so we only auto-download exports that complete during this
+  // session, and never download the same one twice.
+  const alreadyCompletedIds = useRef<Set<string>>(new Set());
+  const autoDownloadedIds = useRef<Set<string>>(new Set());
+  const snapshotTaken = useRef(false);
+
+  useEffect(() => {
+    if (!open) {
+      snapshotTaken.current = false;
+      alreadyCompletedIds.current = new Set();
+      autoDownloadedIds.current = new Set();
+    }
+  }, [open]);
+
+  // Snapshot pre-existing completed exports on first load after open, then
+  // auto-download any that transition to completed while the dialog stays open.
+  useEffect(() => {
+    if (!open) return;
+    if (!snapshotTaken.current) {
+      if (exportsLoading) return; // wait for the first real fetch
+      for (const ex of exports) {
+        if (ex.status === "completed") alreadyCompletedIds.current.add(ex.id);
+      }
+      snapshotTaken.current = true;
+      return;
+    }
+    for (const ex of exports) {
+      if (
+        ex.status === "completed" &&
+        ex.downloadUrl &&
+        !alreadyCompletedIds.current.has(ex.id) &&
+        !autoDownloadedIds.current.has(ex.id)
+      ) {
+        autoDownloadedIds.current.add(ex.id);
+        triggerDownload(ex.downloadUrl);
+      }
+    }
+  }, [open, exports, exportsLoading]);
 
   // Whenever format changes, prune selection + force bundling into a legal state.
   useEffect(() => {
@@ -148,6 +205,20 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
     }
   }
 
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    setError(null);
+    try {
+      await deleteTopoExport(id);
+      refetchExports();
+    } catch (err) {
+      console.error(err);
+      setError(messageFromError(err, "Couldn't delete export."));
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <Dialog
       open={open}
@@ -162,18 +233,13 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
       }}
     >
       <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
-        Export topo job
+        Export {job?.name ?? "Unnamed job"}
         <IconButton size="small" onClick={onClose} disabled={submitting} sx={{ color: "var(--theme-text-primary)" }}>
           <CloseIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
 
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
-        {job && (
-          <Typography variant="body2" sx={{ mb: 2, color: "var(--theme-text-muted)" }}>
-            {job.name ?? "Unnamed job"}
-          </Typography>
-        )}
         {error && <ErrorBanner message={error} />}
 
         <Typography
@@ -193,89 +259,90 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
           navigation, judgement, or rescue planning.
         </Typography>
 
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Format</Typography>
-          <RadioGroup row value={format} onChange={(e) => setFormat(e.target.value as ExportFormat)}>
-            {FORMAT_ORDER.map((f) => (
-              <Tooltip key={f} title={EXPORT_FORMAT_RULES[f].description} placement="top" arrow>
-                <FormControlLabel
-                  value={f}
-                  control={<Radio size="small" />}
-                  label={EXPORT_FORMAT_RULES[f].label}
-                />
+        <Box sx={{ display: "flex", gap: 3, flexDirection: { xs: "column", sm: "row" }, mb: 2 }}>
+          {/* Left column: Format + Bundling (bundling legality depends on format). */}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Format</Typography>
+            <RadioGroup value={format} onChange={(e) => setFormat(e.target.value as ExportFormat)}>
+              {FORMAT_ORDER.map((f) => (
+                <Tooltip key={f} title={EXPORT_FORMAT_RULES[f].description} placement="right" arrow>
+                  <FormControlLabel
+                    value={f}
+                    control={<Radio size="small" />}
+                    label={EXPORT_FORMAT_RULES[f].label}
+                  />
+                </Tooltip>
+              ))}
+            </RadioGroup>
+
+            <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", display: "block", mt: 1 }}>Bundling</Typography>
+            <RadioGroup value={bundling} onChange={(e) => setBundling(e.target.value as ExportBundling)}>
+              <Tooltip
+                title={rule.allowPerLayer ? "" : `${rule.label} is inherently bundled.`}
+                placement="right"
+                arrow
+              >
+                <span>
+                  <FormControlLabel
+                    value="per-layer"
+                    control={<Radio size="small" />}
+                    label="One file per layer (ZIP)"
+                    disabled={!rule.allowPerLayer}
+                  />
+                </span>
               </Tooltip>
-            ))}
-          </RadioGroup>
+              <Tooltip
+                title={rule.allowComposite ? "" : `${rule.label} cannot be composited.`}
+                placement="right"
+                arrow
+              >
+                <span>
+                  <FormControlLabel
+                    value="composite"
+                    control={<Radio size="small" />}
+                    label="Single composite file"
+                    disabled={!rule.allowComposite}
+                  />
+                </span>
+              </Tooltip>
+            </RadioGroup>
+          </Box>
+
+          {/* Right column: Layers. */}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Layers</Typography>
+            <FormControl component="fieldset">
+              {TOPO_LAYERS.map((l) => {
+                const eligible =
+                  (l.format === "raster" && rule.allowRaster) ||
+                  (l.format === "vector" && rule.allowVector);
+                return (
+                  <FormControlLabel
+                    key={l.name}
+                    control={
+                      <Checkbox
+                        size="small"
+                        checked={selected.has(l.name)}
+                        disabled={!eligible}
+                        onChange={() => toggleLayer(l.name)}
+                      />
+                    }
+                    label={`${l.label}${!eligible ? ` (n/a for ${rule.label})` : ""}`}
+                  />
+                );
+              })}
+            </FormControl>
+          </Box>
         </Box>
 
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Layers</Typography>
-          <FormControl component="fieldset">
-            {TOPO_LAYERS.map((l) => {
-              const eligible =
-                (l.format === "raster" && rule.allowRaster) ||
-                (l.format === "vector" && rule.allowVector);
-              return (
-                <FormControlLabel
-                  key={l.name}
-                  control={
-                    <Checkbox
-                      size="small"
-                      checked={selected.has(l.name)}
-                      disabled={!eligible}
-                      onChange={() => toggleLayer(l.name)}
-                    />
-                  }
-                  label={`${l.label}${!eligible ? ` (n/a for ${rule.label})` : ""}`}
-                />
-              );
-            })}
-          </FormControl>
-        </Box>
-
-        <Box sx={{ mb: 1 }}>
-          <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Bundling</Typography>
-          <RadioGroup row value={bundling} onChange={(e) => setBundling(e.target.value as ExportBundling)}>
-            <Tooltip
-              title={rule.allowPerLayer ? "" : `${rule.label} is inherently bundled.`}
-              placement="top"
-              arrow
-            >
-              <span>
-                <FormControlLabel
-                  value="per-layer"
-                  control={<Radio size="small" />}
-                  label="One file per layer (ZIP)"
-                  disabled={!rule.allowPerLayer}
-                />
-              </span>
-            </Tooltip>
-            <Tooltip
-              title={rule.allowComposite ? "" : `${rule.label} cannot be composited.`}
-              placement="top"
-              arrow
-            >
-              <span>
-                <FormControlLabel
-                  value="composite"
-                  control={<Radio size="small" />}
-                  label="Single composite file"
-                  disabled={!rule.allowComposite}
-                />
-              </span>
-            </Tooltip>
-          </RadioGroup>
-        </Box>
-
-        <Tooltip
-          placement="top"
-          arrow
-          title="Each export freezes your vector style at the instant you press Start export. Editing the style afterwards does not change exports already in the list — re-export to apply new styling. The timestamp on each recent export is when its style was snapshotted."
-        >
-          <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", display: "block", mt: 1, cursor: "help", textDecoration: "underline dotted" }}>
-            Vector style: <strong>Active style</strong> — composites and styled exports use your live vector style at the moment of export submission. Edit it in the LiDAR Topos panel.
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>
+            Active vector style applied
           </Typography>
-        </Tooltip>
+          <Tooltip placement="top" arrow title={VECTOR_STYLE_TOOLTIP}>
+            <InfoOutlinedIcon sx={{ fontSize: "0.95rem", color: "var(--theme-text-muted)", cursor: "help" }} />
+          </Tooltip>
+        </Box>
 
         {!validationResult.ok && (
           <Typography variant="caption" sx={{ color: "var(--theme-warning)", display: "block", mt: 1 }}>
@@ -294,47 +361,59 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
           ) : (
             <List dense disablePadding sx={{ maxHeight: 200, overflow: "auto" }}>
               {exports.map((ex) => {
-                const isComplete = ex.status === "completed" && ex.downloadUrl;
+                const isComplete = ex.status === "completed" && !!ex.downloadUrl;
                 const isFailed = ex.status === "failed";
+                const isInProgress = ex.status === "queued" || ex.status === "running";
+                const detail = `${ex.layers.join(", ")} · ${ex.bundling}`;
                 return (
-                  <ListItem
-                    key={ex.id}
-                    disableGutters
-                    secondaryAction={
-                      isComplete ? (
-                        <Button
+                  <ListItem key={ex.id} disableGutters sx={{ gap: 1, py: 0.5 }}>
+                    <Tooltip title={detail} placement="top" arrow>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1, minWidth: 0, cursor: "default" }}>
+                        <strong>{ex.format.toUpperCase()}</strong>
+                        <Chip
+                          size="small"
+                          label={ex.status}
+                          color={isComplete ? "success" : isFailed ? "error" : "default"}
+                        />
+                        {ex.resultBytes !== null && (
+                          <span style={{ opacity: 0.7, fontSize: "0.8em" }}>{formatBytes(ex.resultBytes)}</span>
+                        )}
+                        <span style={{ color: "var(--theme-text-muted)", fontSize: "0.8em" }}>
+                          {timeAgo(ex.createdAt)}
+                        </span>
+                        {isFailed && ex.errorMessage && (
+                          <Tooltip title={ex.errorMessage} placement="top" arrow>
+                            <ErrorOutlineIcon sx={{ fontSize: "0.95rem", color: "var(--theme-warning)", cursor: "help" }} />
+                          </Tooltip>
+                        )}
+                      </Box>
+                    </Tooltip>
+                    {isComplete && (
+                      <Tooltip title="Download" placement="top" arrow>
+                        <IconButton
                           size="small"
                           href={ex.downloadUrl!}
                           download
                           sx={{ color: "var(--theme-accent)" }}
                         >
-                          Download
-                        </Button>
-                      ) : null
-                    }
-                  >
-                    <ListItemText
-                      primary={
-                        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                          <strong>{ex.format.toUpperCase()}</strong>
-                          <Chip
+                          <DownloadIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {!isInProgress && (
+                      <Tooltip title="Delete" placement="top" arrow>
+                        <span>
+                          <IconButton
                             size="small"
-                            label={ex.status}
-                            color={isComplete ? "success" : isFailed ? "error" : "default"}
-                          />
-                          <span style={{ opacity: 0.7, fontSize: "0.8em" }}>
-                            {ex.layers.join(", ")} · {ex.bundling}
-                          </span>
-                        </Box>
-                      }
-                      secondary={
-                        <span style={{ color: "var(--theme-text-muted)", fontSize: "0.75em" }}>
-                          {timeAgo(ex.createdAt)}
-                          {ex.resultBytes !== null && ` · ${formatBytes(ex.resultBytes)}`}
-                          {isFailed && ex.errorMessage && ` · ${ex.errorMessage}`}
+                            onClick={() => handleDelete(ex.id)}
+                            disabled={deletingId === ex.id}
+                            sx={{ color: "var(--theme-text-muted)" }}
+                          >
+                            {deletingId === ex.id ? <CircularProgress size={16} /> : <DeleteOutlineIcon fontSize="small" />}
+                          </IconButton>
                         </span>
-                      }
-                    />
+                      </Tooltip>
+                    )}
                   </ListItem>
                 );
               })}
