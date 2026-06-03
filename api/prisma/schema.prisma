@@ -60,12 +60,13 @@ model Canyon {
   wetsuits         Int?
   hours            Float?
   shares           CanyonShare[]
-  forkedFrom       Canyon?       @relation("CanyonForks", fields: [forkedFromId], references: [id])
+  forkedFrom       Canyon?       @relation("CanyonForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
   forks            Canyon[]      @relation("CanyonForks")
-  owner            User          @relation(fields: [ownerId], references: [id])
+  owner            User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   tripLogs         TripLog[]
 
   @@unique([ownerId, ropeWikiId])
+  @@index([ownerId])
   @@map("canyons")
 }
 
@@ -76,8 +77,9 @@ model Notification {
   payload   Json
   read      Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("notifications")
 }
 
@@ -89,9 +91,11 @@ model TripLog {
   notes        String?
   customFields Json     @default("{}") @map("custom_fields")
   createdAt    DateTime @default(now()) @map("created_at")
-  canyon       Canyon   @relation(fields: [canyonId], references: [id])
-  user         User     @relation(fields: [userId], references: [id])
+  canyon       Canyon   @relation(fields: [canyonId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([canyonId])
+  @@index([userId])
   @@map("trip_logs")
 }
 
@@ -111,8 +115,9 @@ model Media {
   filename       String
   fileSizeBytes  BigInt   @map("file_size_bytes")
   createdAt      DateTime @default(now()) @map("created_at")
-  owner          User     @relation(fields: [ownerId], references: [id])
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
+  @@index([ownerId])
   @@index([linkedType, linkedId])
   @@map("media")
 }
@@ -123,10 +128,11 @@ model Friendship {
   addresseeId String   @map("addressee_id")
   status      String   @default("pending")
   createdAt   DateTime @default(now()) @map("created_at")
-  addressee   User     @relation("addressee", fields: [addresseeId], references: [id])
-  requester   User     @relation("requester", fields: [requesterId], references: [id])
+  addressee   User     @relation("addressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+  requester   User     @relation("requester", fields: [requesterId], references: [id], onDelete: Cascade)
 
   @@unique([requesterId, addresseeId])
+  @@index([addresseeId])
   @@map("friendships")
 }
 
@@ -136,10 +142,13 @@ model CanyonShare {
   sharedById   String   @map("shared_by_id")
   sharedWithId String   @map("shared_with_id")
   createdAt    DateTime @default(now()) @map("created_at")
-  canyon       Canyon   @relation(fields: [canyonId], references: [id])
-  sharedBy     User     @relation("sharedBy", fields: [sharedById], references: [id])
-  sharedWith   User     @relation("sharedWith", fields: [sharedWithId], references: [id])
+  canyon       Canyon   @relation(fields: [canyonId], references: [id], onDelete: Cascade)
+  sharedBy     User     @relation("sharedBy", fields: [sharedById], references: [id], onDelete: Cascade)
+  sharedWith   User     @relation("sharedWith", fields: [sharedWithId], references: [id], onDelete: Cascade)
 
+  @@index([canyonId])
+  @@index([sharedWithId])
+  @@index([sharedById])
   @@map("canyon_shares")
 }
 
@@ -162,10 +171,18 @@ model TopoJob {
   // Composite + downloadable formats are produced on-demand by the export worker.
   outputBytes   BigInt?  @map("output_bytes")
   errorMessage  String?  @map("error_message")
+  // Set when the worker transitions the job to "processing". Distinguishes a
+  // stale-stuck job from one that simply hasn't been picked up yet, so the
+  // reaper can apply a separate (longer) timeout to actively-running jobs.
+  startedAt     DateTime? @map("started_at")
+  // Number of times the job has been launched. Bounds reaper re-launch attempts.
+  attemptCount  Int      @default(0) @map("attempt_count")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
-  user          User     @relation(fields: [userId], references: [id])
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([status])
   @@map("topo_jobs")
 }
 
@@ -193,7 +210,7 @@ model TopoExportJob {
   errorMessage        String?   @map("error_message")
   createdAt           DateTime  @default(now()) @map("created_at")
   completedAt         DateTime? @map("completed_at")
-  user                User      @relation(fields: [userId], references: [id])
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@map("topo_export_jobs")
@@ -207,8 +224,9 @@ model GeoPdfTemplate {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("geo_pdf_templates")
 }
 
@@ -220,7 +238,8 @@ model TopoTemplate {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("topo_templates")
 }

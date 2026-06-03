@@ -3,15 +3,10 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
+import { resolveUser as getUser } from "../lib/resolveUser";
 import { validateGeoPdfConfig } from "@logjam/shared";
 
 const router = Router();
-
-async function getUser(cognitoSub: string) {
-  const user = await prisma.user.findUnique({ where: { cognitoId: cognitoSub } });
-  if (!user) throw new AppError(404, "User not found");
-  return user;
-}
 
 // GET / — list all templates for current user
 router.get(

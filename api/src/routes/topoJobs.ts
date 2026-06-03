@@ -21,6 +21,7 @@ import { getParam } from "../lib/getParam";
 import { assertCanSubmit } from "../lib/tileQuota";
 import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
 import { deleteS3Prefix } from "../lib/s3Cleanup";
+import { resolveUser as getUser } from "../lib/resolveUser";
 
 const router = Router();
 
@@ -39,12 +40,6 @@ const ECS_CLUSTER = env.ECS_CLUSTER;
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
 const ECS_SECURITY_GROUPS = env.ECS_SECURITY_GROUPS_LIST;
-
-async function getUser(cognitoSub: string) {
-  const user = await prisma.user.findUnique({ where: { cognitoId: cognitoSub } });
-  if (!user) throw new AppError(404, "User not found");
-  return user;
-}
 
 // POST /topo-jobs — create job + return presigned S3 upload URL
 router.post(
@@ -181,6 +176,7 @@ router.post(
       where: { id: jobId },
       data: {
         status: "pending",
+        attemptCount: { increment: 1 },
         ...(verifiedTileCount !== null
           ? {
               tileCount: verifiedTileCount,
@@ -192,8 +188,9 @@ router.post(
 
     // ECS RunTask owns lifecycle; status column owns retry semantics.
     if (ECS_SUBNETS.length) {
+      let runTaskFailures: { reason?: string; detail?: string }[] = [];
       try {
-        await ecs.send(new RunTaskCommand({
+        const result = await ecs.send(new RunTaskCommand({
           cluster: ECS_CLUSTER,
           taskDefinition: ECS_TASK_DEFINITION,
           launchType: "FARGATE",
@@ -211,7 +208,24 @@ router.post(
             }],
           },
         }));
-      } catch {
+        // RunTask returns HTTP 200 with a populated `failures[]` (and no
+        // `tasks`) when the task cannot be placed — capacity, ENI, subnet or
+        // image-pull issues — without throwing. The try/catch alone would miss
+        // this and strand the job in `pending` forever (ARCH-002a).
+        runTaskFailures = result.failures ?? [];
+        if (runTaskFailures.length > 0 || (result.tasks?.length ?? 0) === 0) {
+          throw new Error(
+            `RunTask placement failed: ${runTaskFailures
+              .map((f) => f.reason ?? "unknown")
+              .join(", ") || "no task started"}`,
+          );
+        }
+      } catch (launchErr) {
+        // Do not leak the raw AWS error to the client or the job row; log the
+        // reason server-side (no canyon coords/names involved here).
+        console.error(
+          JSON.stringify({ event: "topo_runtask_failed", jobId, reasons: runTaskFailures.map((f) => f.reason) }),
+        );
         await prisma.topoJob.update({
           where: { id: jobId },
           data: { status: "failed", errorMessage: "Failed to launch processing task." },
@@ -345,13 +359,17 @@ router.delete(
     if (!job) throw new AppError(404, "Job not found");
     if (job.userId !== user.id) throw new AppError(403, "Access denied");
 
-    await prisma.topoJob.delete({ where: { id: jobId } });
-
+    // S3-first (ARCH-004): delete the objects before the DB row and the quota
+    // decrement. deleteS3Prefix throws on failure, so if any prefix fails the
+    // row survives and a retried DELETE re-derives the same jobId-keyed prefixes
+    // — no orphaned objects, and the quota is only decremented once the bytes
+    // are confirmed gone. (decrementStorageUsed clamps at 0 — keep it for that.)
     await Promise.all(
       [`inputs/${jobId}/`, `outputs/${jobId}/`, `jobs/${jobId}/`].map((prefix) =>
         deleteS3Prefix(TOPO_BUCKET, prefix),
       ),
     );
+    await prisma.topoJob.delete({ where: { id: jobId } });
     await decrementStorageUsed(job.userId, job.outputBytes ?? 0n);
 
     res.status(204).send();

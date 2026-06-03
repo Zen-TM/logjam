@@ -3,6 +3,7 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { ropeWikiHeavyLimiter } from "../middleware/rateLimit";
+import { resolveUser as loadUser } from "../lib/resolveUser";
 import {
   snapshotFromCreate,
   snapshotFromLink,
@@ -53,12 +54,6 @@ type ReviewCandidatePayload = {
     nameMatch: boolean;
   }[];
 };
-
-async function loadUser(sub: string) {
-  const user = await prisma.user.findUnique({ where: { cognitoId: sub } });
-  if (!user) throw new AppError(404, "User not found");
-  return user;
-}
 
 async function applyAutoLinkAndCreate(
   ownerId: string,

@@ -11,6 +11,7 @@ import { logger } from "./lib/logger";
 import prisma from "./services/prisma";
 import { errorHandler } from "./middleware/errorHandler";
 import { globalLimiter } from "./middleware/rateLimit";
+import { startTopoJobReaper } from "./lib/topoJobReaper";
 import usersRouter from "./routes/users";
 import canyonsRouter from "./routes/canyons";
 import tripLogsRouter from "./routes/tripLogs";
@@ -145,12 +146,18 @@ const server = app.listen(env.PORT, () => {
   logger.info({ port: env.PORT, nodeEnv: env.NODE_ENV }, "api_started");
 });
 
+// Periodic sweep that force-fails topo jobs stuck in pending/processing past a
+// timeout (ARCH-002). No-op when TOPO_REAPER_INTERVAL_MS=0.
+const stopTopoJobReaper = startTopoJobReaper();
+
 const SHUTDOWN_TIMEOUT_MS = 25_000;
 
 function shutdown(signal: string) {
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ signal }, "shutdown_initiated");
+
+  stopTopoJobReaper();
 
   const force = setTimeout(() => {
     logger.error("shutdown_timeout_force_exit");

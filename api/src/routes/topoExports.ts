@@ -27,6 +27,7 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
+import { resolveUser as getUser } from "../lib/resolveUser";
 
 const exportRequestSchema = z.object({
   sourceJobIds: z.array(z.string()).length(1),
@@ -49,12 +50,6 @@ const ECS_SECURITY_GROUPS = env.ECS_SECURITY_GROUPS_LIST;
 // Cap to prevent users from flooding ECS with queued exports.
 const MAX_QUEUED_PER_USER = 5;
 const PRESIGN_TTL_SECONDS = 86400; // 24h
-
-async function getUser(cognitoSub: string) {
-  const user = await prisma.user.findUnique({ where: { cognitoId: cognitoSub } });
-  if (!user) throw new AppError(404, "User not found");
-  return user;
-}
 
 async function presignResult(resultKey: string | null): Promise<{ url: string; expiresAt: string } | null> {
   if (!resultKey) return null;

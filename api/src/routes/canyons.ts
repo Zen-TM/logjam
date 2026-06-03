@@ -339,6 +339,19 @@ router.delete(
       select: { s3KeyDisplay: true, s3KeyThumbnail: true, fileSizeBytes: true },
     });
 
+    // S3-first (ARCH-004): the media S3 keys are already captured in `media`
+    // above, so delete the blobs before the DB rows. deleteS3Keys throws on
+    // failure (CH-002), aborting before any row is removed — no orphaned blobs,
+    // and the DB still holds the canyon/media if a retry is needed.
+    const s3Keys = media.flatMap((m) =>
+      [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
+    );
+    const totalBytes = media.reduce((sum, m) => sum + (m.fileSizeBytes ?? 0n), 0n);
+    await deleteS3Keys(MEDIA_BUCKET, s3Keys);
+
+    // Trip logs, canyon shares and (since the cascade migration) canyon-linked
+    // children all FK-cascade on canyon delete, but media has no DB FK on its
+    // polymorphic linkedId — keep its deleteMany explicit.
     await prisma.$transaction([
       prisma.media.deleteMany({
         where: { linkedType: "tripLog", linkedId: { in: tripIds } },
@@ -351,11 +364,6 @@ router.delete(
       prisma.canyon.delete({ where: { id } }),
     ]);
 
-    const s3Keys = media.flatMap((m) =>
-      [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
-    );
-    const totalBytes = media.reduce((sum, m) => sum + (m.fileSizeBytes ?? 0n), 0n);
-    await deleteS3Keys(MEDIA_BUCKET, s3Keys);
     await decrementStorageUsed(user.id, totalBytes);
 
     res.status(204).send();

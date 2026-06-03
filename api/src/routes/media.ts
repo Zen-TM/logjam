@@ -8,6 +8,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from "../services/awsClients";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
+import { resolveUser as getUser } from "../lib/resolveUser";
 import {
   assertHasStorageQuota,
   incrementStorageUsed,
@@ -29,12 +30,6 @@ const router = Router();
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const UPLOAD_URL_TTL_SECONDS = 900; // 15 minutes
 const THUMBNAIL_MIME = "image/jpeg";
-
-async function getUser(cognitoSub: string) {
-  const user = await prisma.user.findUnique({ where: { cognitoId: cognitoSub } });
-  if (!user) throw new AppError(404, "User not found");
-  return user;
-}
 
 // Only the owner of the target canyon (or the canyon owning the trip log) may
 // attach media — even on canyons shared with them.

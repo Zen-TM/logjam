@@ -350,14 +350,52 @@ router.delete(
     const user = await prisma.user.findUnique({ where: { cognitoId: sub } });
     if (!user) throw new AppError(404, "User not found");
 
-    const [topoJobs, media] = await Promise.all([
+    // Pre-fetch every S3 pointer the user owns BEFORE touching the DB. Once the
+    // rows are deleted the keys are unrecoverable, so cleanup must run S3-first:
+    // if an S3 delete throws, the DB rows still exist and a retried DELETE /me
+    // can re-derive the keys (ARCH-004 — no orphaned objects, no lost keys).
+    const [topoJobs, topoExportJobs, media] = await Promise.all([
       prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
+      prisma.topoExportJob.findMany({
+        where: { userId: user.id },
+        select: { id: true, resultKey: true },
+      }),
       prisma.media.findMany({
         where: { ownerId: user.id },
         select: { s3KeyDisplay: true, s3KeyThumbnail: true },
       }),
     ]);
 
+    const mediaKeys = media.flatMap((m) =>
+      [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
+    );
+    const exportResultKeys = topoExportJobs
+      .map((e) => e.resultKey)
+      .filter((k): k is string => Boolean(k));
+
+    // S3 cleanup first. The helpers throw on failure (see lib/s3Cleanup.ts), so
+    // any error here aborts before the DB transaction — the account is not
+    // deleted and the user can retry. Belt-and-braces against bucket-lifecycle
+    // drift, not a substitute for it.
+    await Promise.all([
+      deleteS3Keys(MEDIA_BUCKET, mediaKeys),
+      deleteS3Keys(TOPO_BUCKET, exportResultKeys),
+      ...topoJobs.flatMap(({ id }) => [
+        deleteS3Prefix(TOPO_BUCKET, `inputs/${id}/`),
+        deleteS3Prefix(TOPO_BUCKET, `outputs/${id}/`),
+        deleteS3Prefix(TOPO_BUCKET, `jobs/${id}/`),
+      ]),
+      ...topoExportJobs.map(({ id }) =>
+        deleteS3Prefix(TOPO_BUCKET, `exports/${id}/`),
+      ),
+    ]);
+
+    // The user-owned FKs are now ON DELETE CASCADE (see migration
+    // 20260604000000_add_fk_indexes_and_cascades), so `user.delete` alone
+    // removes every child row. The explicit deleteMany calls are retained as
+    // defense-in-depth and to keep the delete deterministic if a future child
+    // table is added without a cascade. `Media` has a polymorphic linkedId with
+    // no DB FK, so its row delete MUST stay explicit.
     await prisma.$transaction([
       prisma.notification.deleteMany({ where: { userId: user.id } }),
       prisma.canyonShare.deleteMany({
@@ -367,24 +405,13 @@ router.delete(
         where: { OR: [{ requesterId: user.id }, { addresseeId: user.id }] },
       }),
       prisma.topoJob.deleteMany({ where: { userId: user.id } }),
+      prisma.topoExportJob.deleteMany({ where: { userId: user.id } }),
       prisma.media.deleteMany({ where: { ownerId: user.id } }),
       prisma.tripLog.deleteMany({ where: { userId: user.id } }),
       prisma.canyon.deleteMany({ where: { ownerId: user.id } }),
       prisma.geoPdfTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.topoTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.user.delete({ where: { id: user.id } }),
-    ]);
-
-    const mediaKeys = media.flatMap((m) =>
-      [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
-    );
-    await Promise.all([
-      deleteS3Keys(MEDIA_BUCKET, mediaKeys),
-      ...topoJobs.flatMap(({ id }) => [
-        deleteS3Prefix(TOPO_BUCKET, `inputs/${id}/`),
-        deleteS3Prefix(TOPO_BUCKET, `outputs/${id}/`),
-        deleteS3Prefix(TOPO_BUCKET, `jobs/${id}/`),
-      ]),
     ]);
 
     res.status(204).end();

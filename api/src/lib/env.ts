@@ -30,6 +30,15 @@ const baseSchema = z.object({
   TOPO_CDN_BASE_URL: z.string().url().optional(),
 
   SES_FROM_ADDRESS: z.string().optional(),
+
+  // Stuck-topo-job reaper (ARCH-002). A job stuck in `pending` longer than the
+  // PENDING timeout (task never placed / never started) or in `processing`
+  // longer than the PROCESSING timeout (Fargate task SIGKILLed before its
+  // Python `except` ran) is force-failed by the periodic sweep. Set
+  // TOPO_REAPER_INTERVAL_MS to 0 to disable the sweep entirely.
+  TOPO_REAPER_INTERVAL_MS: z.coerce.number().int().nonnegative().default(300_000), // 5 min
+  TOPO_REAPER_PENDING_TIMEOUT_MS: z.coerce.number().int().positive().default(900_000), // 15 min
+  TOPO_REAPER_PROCESSING_TIMEOUT_MS: z.coerce.number().int().positive().default(10_800_000), // 3 h
 });
 
 type Env = z.infer<typeof baseSchema> & {

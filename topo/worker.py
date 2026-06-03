@@ -28,6 +28,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -158,8 +159,16 @@ def db_connect():
     return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
-def update_status(conn, job_id: str, status: str, **kwargs):
-    """Update a job's status and optional extra columns."""
+def update_status(conn, job_id: str, status: str, storage_delta_bytes: int = 0, **kwargs):
+    """Update a job's status and optional extra columns.
+
+    If storage_delta_bytes is non-zero, the owner's storage_used_bytes is
+    incremented in the SAME transaction/commit as the status update. This closes
+    the ARCH-009 partial-failure window: a crash between the "complete" status
+    write and the storage increment could otherwise leave a completed job whose
+    bytes were never quota-accounted (under-count, no reconciliation given the
+    no-reaper-for-storage gap).
+    """
     set_clauses = ["status = %s", "updated_at = NOW()"]
     values = [status]
     for col, val in kwargs.items():
@@ -171,17 +180,12 @@ def update_status(conn, job_id: str, status: str, **kwargs):
             f"UPDATE topo_jobs SET {', '.join(set_clauses)} WHERE id = %s",
             values,
         )
-    conn.commit()
-
-
-def increment_user_storage(conn, job_id: str, delta_bytes: int):
-    """Atomically add delta_bytes to the job owner's storage_used_bytes."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "UPDATE users SET storage_used_bytes = storage_used_bytes + %s"
-            " WHERE id = (SELECT user_id FROM topo_jobs WHERE id = %s)",
-            (delta_bytes, job_id),
-        )
+        if storage_delta_bytes:
+            cur.execute(
+                "UPDATE users SET storage_used_bytes = storage_used_bytes + %s"
+                " WHERE id = (SELECT user_id FROM topo_jobs WHERE id = %s)",
+                (storage_delta_bytes, job_id),
+            )
     conn.commit()
 
 
@@ -586,7 +590,10 @@ def main():
 
     conn = db_connect()
     job  = get_job(conn, JOB_ID)
-    update_status(conn, JOB_ID, "processing")
+    # started_at anchors the reaper's "processing" staleness timeout (ARCH-002):
+    # it distinguishes a long-but-alive job from a dead one. NOW() rather than a
+    # column passthrough so it reflects actual worker start.
+    update_status(conn, JOB_ID, "processing", started_at=datetime.now(timezone.utc))
 
     try:
         with tempfile.TemporaryDirectory() as tmp:
@@ -606,9 +613,12 @@ def main():
         except Exception as e:
             log.warning(f"Failed to delete input ZIP {job['s3_input_key']}: {e}")
 
-        update_status(conn, JOB_ID, "complete", **extra)
-        if total_output_bytes > 0:
-            increment_user_storage(conn, JOB_ID, total_output_bytes)
+        # Status flip + storage increment committed together (ARCH-009).
+        update_status(
+            conn, JOB_ID, "complete",
+            storage_delta_bytes=total_output_bytes if total_output_bytes > 0 else 0,
+            **extra,
+        )
         log.info(f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded"
                  + (" (OSM features missing — Overpass failed)" if osm_failed else ""))
 

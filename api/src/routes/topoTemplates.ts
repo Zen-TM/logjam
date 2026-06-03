@@ -3,17 +3,12 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
+import { resolveUser as getUser } from "../lib/resolveUser";
 import { RASTER_TEMPLATE_DEFAULTS, validateRasterTemplateSettings } from "@logjam/shared";
 
 const router = Router();
 
 const DEFAULT_TEMPLATE_ID = "default";
-
-async function getUser(cognitoSub: string) {
-  const user = await prisma.user.findUnique({ where: { cognitoId: cognitoSub } });
-  if (!user) throw new AppError(404, "User not found");
-  return user;
-}
 
 // The "Default" preset is synthetic: it is not persisted as a per-user row.
 // The route surfaces it as a virtual, read-only template at the top of the

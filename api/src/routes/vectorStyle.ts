@@ -6,14 +6,9 @@ import {
   VECTOR_STYLE_DEFAULTS,
   validateVectorStyleSettings,
 } from "@logjam/shared";
+import { resolveUser as getUser } from "../lib/resolveUser";
 
 const router = Router();
-
-async function getUser(cognitoSub: string) {
-  const user = await prisma.user.findUnique({ where: { cognitoId: cognitoSub } });
-  if (!user) throw new AppError(404, "User not found");
-  return user;
-}
 
 // GET / — current user's active vector style. Returns defaults if the column
 // is null (new users created before the migration ran, or test fixtures).
