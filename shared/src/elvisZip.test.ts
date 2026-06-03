@@ -3,6 +3,7 @@ import {
   parseZipCentralDirectory,
   classifyElvisEntries,
   ElvisZipError,
+  isUnsafeZipEntryName,
 } from "./elvisZip";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -106,6 +107,23 @@ describe("parseZipCentralDirectory", () => {
     const zip = buildZip([]);
     const entries = parse(zip);
     expect(entries).toHaveLength(0);
+  });
+});
+
+describe("isUnsafeZipEntryName", () => {
+  it("accepts normal ELVIS paths", () => {
+    expect(isUnsafeZipEntryName("folder/sub/file.laz")).toBe(false);
+    expect(isUnsafeZipEntryName("NSW Government/DEM/2 Metre/x.tif")).toBe(false);
+  });
+
+  it("rejects absolute and traversal paths", () => {
+    expect(isUnsafeZipEntryName("/etc/passwd")).toBe(true);
+    expect(isUnsafeZipEntryName("\\\\evil")).toBe(true);
+    expect(isUnsafeZipEntryName("../evil")).toBe(true);
+    expect(isUnsafeZipEntryName("a/../../b")).toBe(true);
+    expect(isUnsafeZipEntryName("a\\..\\b")).toBe(true);
+    expect(isUnsafeZipEntryName("C:/Windows/evil")).toBe(true);
+    expect(isUnsafeZipEntryName("C:\\Windows\\evil")).toBe(true);
   });
 });
 
@@ -244,6 +262,30 @@ describe("classifyElvisEntries", () => {
     ]);
     const stats = classifyElvisEntries(parse(zip));
     expect(stats.demResolutionMeters).toBeNull();
+  });
+
+  it("throws UNSAFE_PATH on a parent-directory traversal entry (zip-slip)", () => {
+    const zip = buildZip([
+      { name: "Survey-AHD_1234567_56_0001_0001_2m.tif", size: 1000 },
+      { name: "../../../app/evil.py", size: 10 },
+    ]);
+    let err: ElvisZipError | undefined;
+    try {
+      classifyElvisEntries(parse(zip));
+    } catch (e) {
+      err = e as ElvisZipError;
+    }
+    expect(err?.code).toBe("UNSAFE_PATH");
+  });
+
+  it("throws UNSAFE_PATH on an absolute path entry", () => {
+    const zip = buildZip([
+      { name: "Survey-AHD_1234567_56_0001_0001_2m.tif", size: 1000 },
+      { name: "/etc/cron.d/evil", size: 10 },
+    ]);
+    expect(() => classifyElvisEntries(parse(zip))).toThrowError(
+      expect.objectContaining({ code: "UNSAFE_PATH" }),
+    );
   });
 
   it("collects unique tile IDs across LAZ and DEM", () => {

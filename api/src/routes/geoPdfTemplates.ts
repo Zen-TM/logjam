@@ -3,6 +3,7 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
+import { validateGeoPdfConfig } from "@logjam/shared";
 
 const router = Router();
 
@@ -55,6 +56,10 @@ router.post(
     if (!config || typeof config !== "object") {
       throw new AppError(400, "config is required and must be an object");
     }
+    const configError = validateGeoPdfConfig(config);
+    if (configError) {
+      throw new AppError(400, configError);
+    }
 
     const template = await prisma.geoPdfTemplate.create({
       data: {
@@ -90,6 +95,10 @@ router.patch(
     if (config !== undefined) {
       if (typeof config !== "object") {
         throw new AppError(400, "config must be an object");
+      }
+      const configError = validateGeoPdfConfig(config);
+      if (configError) {
+        throw new AppError(400, configError);
       }
       data.config = config;
     }

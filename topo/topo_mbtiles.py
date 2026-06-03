@@ -40,6 +40,7 @@ import os
 import re
 import shutil
 import sqlite3
+import stat
 import struct
 import subprocess
 import sys
@@ -599,6 +600,39 @@ class ElvisContents:
         return "\n".join(lines)
 
 
+def _safe_extract_zip(zip_path: str, work_dir: str) -> None:
+    """
+    Extract a user-supplied ZIP into ``work_dir``, rejecting any entry that
+    would escape the target directory (zip-slip) or that is a symlink.
+
+    The ELVIS upload is fully attacker-controlled (presigned PUT). Although
+    modern CPython's ``extractall`` normalizes leading ``/`` and ``..``, we do
+    not rely on stdlib behaviour: every entry is validated explicitly and the
+    first unsafe entry raises ``RuntimeError`` (mapped to a safe user message by
+    ``worker.py``'s ``safe_error_message``). Symlink entries are rejected
+    outright since a symlink followed by a later write can still escape.
+    """
+    work_root = os.path.realpath(work_dir)
+    with zipfile.ZipFile(zip_path) as zf:
+        for info in zf.infolist():
+            name = info.filename
+            # Reject absolute paths and explicit parent-dir traversal.
+            if name.startswith("/") or name.startswith("\\") or os.path.isabs(name):
+                raise RuntimeError("ZIP contains an unsafe absolute path entry.")
+            normalized = name.replace("\\", "/")
+            if ".." in normalized.split("/"):
+                raise RuntimeError("ZIP contains an unsafe path-traversal entry.")
+            # Reject symlinks (Unix mode stored in the high 16 bits of external_attr).
+            mode = info.external_attr >> 16
+            if mode and stat.S_ISLNK(mode):
+                raise RuntimeError("ZIP contains a symlink entry, which is not allowed.")
+            # Final containment check on the resolved path.
+            dest = os.path.realpath(os.path.join(work_root, name))
+            if dest != work_root and not dest.startswith(work_root + os.sep):
+                raise RuntimeError("ZIP entry would extract outside the work directory.")
+        zf.extractall(work_dir)
+
+
 def extract_elvis_zip(zip_path: str, work_dir: str) -> ElvisContents:
     """
     Unzip and detect what ELVIS has provided, choosing the fastest pipeline.
@@ -608,8 +642,7 @@ def extract_elvis_zip(zip_path: str, work_dir: str) -> ElvisContents:
       - .laz/.las     → point clouds (needed for DSM / vegetation)
     """
     log.info(f"Extracting {zip_path} …")
-    with zipfile.ZipFile(zip_path) as zf:
-        zf.extractall(work_dir)
+    _safe_extract_zip(zip_path, work_dir)
 
     las_files = list(Path(work_dir).rglob("*.laz")) + list(Path(work_dir).rglob("*.las"))
     all_tifs = list(Path(work_dir).rglob("*.tif")) + list(Path(work_dir).rglob("*.tiff"))

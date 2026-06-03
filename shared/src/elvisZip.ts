@@ -1,4 +1,23 @@
-export type ElvisZipErrorCode = "NOT_A_ZIP" | "TRUNCATED" | "NO_USABLE_FILES" | "EMPTY_ZIP";
+export type ElvisZipErrorCode =
+  | "NOT_A_ZIP"
+  | "TRUNCATED"
+  | "NO_USABLE_FILES"
+  | "EMPTY_ZIP"
+  | "UNSAFE_PATH";
+
+/**
+ * Rejects ZIP entry names that would escape the extraction directory
+ * (zip-slip). Mirrors the worker-side guard in topo/topo_mbtiles.py
+ * (_safe_extract_zip) so the API pre-check blocks a malicious upload before
+ * ECS spin-up. Returns true if the name is unsafe.
+ */
+export function isUnsafeZipEntryName(filename: string): boolean {
+  if (filename.startsWith("/") || filename.startsWith("\\")) return true;
+  // Windows drive-absolute path, e.g. "C:\\evil" or "C:/evil".
+  if (/^[A-Za-z]:[/\\]/.test(filename)) return true;
+  const parts = filename.replace(/\\/g, "/").split("/");
+  return parts.includes("..");
+}
 
 export class ElvisZipError extends Error {
   code: ElvisZipErrorCode;
@@ -138,6 +157,12 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
   const demResolutions = new Set<number>();
 
   for (const entry of entries) {
+    if (isUnsafeZipEntryName(entry.filename)) {
+      throw new ElvisZipError(
+        "UNSAFE_PATH",
+        "The ZIP contains an unsafe file path (absolute or parent-directory traversal) and was rejected.",
+      );
+    }
     uncompressedBytes += entry.uncompressedSize;
     compressedBytes += entry.compressedSize;
 

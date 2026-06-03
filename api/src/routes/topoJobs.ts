@@ -26,6 +26,15 @@ const router = Router();
 
 const env = getEnv();
 const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
+
+// Input-ZIP size caps (zip-bomb / disk-DoS guard for the Fargate worker).
+// A legitimate ELVIS export is bounded by the weekly tile quota (default 100
+// tiles, ~17 MB compressed LAZ + ~5 MB DEM each). These caps sit well above
+// any realistic export while rejecting pathological archives before the worker
+// is launched. The uncompressed cap is the real bomb guard; the compressed cap
+// bounds wasted S3 transfer/storage.
+const MAX_INPUT_ZIP_COMPRESSED_BYTES = 25 * 1024 * 1024 * 1024; // 25 GB
+const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
 const ECS_CLUSTER = env.ECS_CLUSTER;
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
@@ -122,6 +131,11 @@ router.post(
       throw new AppError(400, "ZIP file has not been uploaded yet");
     }
 
+    // Reject an oversized upload before reading/extracting it (compressed cap).
+    if (objectSize > MAX_INPUT_ZIP_COMPRESSED_BYTES) {
+      throw new AppError(413, "Uploaded ZIP exceeds the maximum allowed size.");
+    }
+
     // Re-validate ZIP central directory from S3 (range-GET last 64 KB).
     // Catches bypassed clients or corrupted uploads before paying ECS spin-up cost.
     // 64 KB fits ~900 central-directory entries — sufficient for all realistic ELVIS zips.
@@ -142,6 +156,14 @@ router.post(
         objectSize,
       );
       const zipStats = classifyElvisEntries(entries);
+      // Zip-bomb guard: reject if the declared uncompressed payload would
+      // exhaust the worker's disk before the worker is ever launched.
+      if (zipStats.uncompressedBytes > MAX_INPUT_ZIP_UNCOMPRESSED_BYTES) {
+        throw new AppError(
+          413,
+          "ZIP uncompressed size exceeds the maximum allowed for processing.",
+        );
+      }
       verifiedTileCount = zipStats.tileCount || null;
     } catch (e) {
       if (e instanceof ElvisZipError) {

@@ -26,6 +26,18 @@ if (process.env.AUTH_MODE === "fake") {
   }
 }
 
+// Positive fail-closed assertion: any AWS container runtime (ECS/EB Fargate)
+// MUST run cognito auth. This catches a misconfigured prod task even if the
+// AUTH_MODE=fake heuristics above were somehow all defeated.
+if (
+  process.env.ECS_CONTAINER_METADATA_URI_V4 &&
+  process.env.AUTH_MODE !== "cognito"
+) {
+  throw new Error(
+    `AUTH_MODE must be "cognito" in an AWS container runtime (got "${process.env.AUTH_MODE}").`,
+  );
+}
+
 let client: jwksClient.JwksClient | null = null;
 
 function getClient() {
@@ -86,6 +98,9 @@ export function requireAuth(
     getKey,
     {
       issuer: `https://cognito-idp.${process.env.COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}`,
+      // Cognito ID tokens carry aud=<app client id>. Asserting audience rejects
+      // tokens minted for a different app client in the same user pool.
+      audience: process.env.COGNITO_APP_CLIENT_ID,
       algorithms: ["RS256"],
     },
     (err, decoded) => {
@@ -95,11 +110,35 @@ export function requireAuth(
       }
 
       const payload = decoded as jwt.JwtPayload;
+
+      // Reject Cognito access tokens (token_use=access). They are signed by the
+      // same JWKS under the same issuer but lack identity claims (email,
+      // preferred_username). Only ID tokens establish identity here.
+      if (payload.token_use !== "id") {
+        res.status(401).json({ error: "Invalid token type" });
+        return;
+      }
+
+      // Assert the identity claims this app relies on are present and typed.
+      // A partially-populated req.user (undefined email) would otherwise reach
+      // prisma.user.create and either crash or create an inconsistent row.
+      const username =
+        payload.preferred_username || payload["cognito:username"];
+      if (
+        typeof payload.sub !== "string" ||
+        typeof payload.email !== "string" ||
+        typeof username !== "string" ||
+        username.length === 0
+      ) {
+        res.status(401).json({ error: "Token is missing required identity claims" });
+        return;
+      }
+
       req.user = {
-        sub: payload.sub!,
+        sub: payload.sub,
         email: payload.email,
         emailVerified: payload.email_verified === true,
-        username: payload.preferred_username || payload["cognito:username"],
+        username,
       };
 
       next();
