@@ -7,8 +7,10 @@
   border-radius: var(--radius-sm);
 }
 
-.uploadPlaceholder {
-  padding: 0.75rem;
-  border: 1px dashed color-mix(in srgb, var(--theme-text-primary) 15%, transparent);
-  border-radius: var(--radius-sm);
+.mediaScroll {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 40vh;
+  overflow-y: auto;
 }

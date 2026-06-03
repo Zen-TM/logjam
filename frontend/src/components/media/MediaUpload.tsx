@@ -14,11 +14,16 @@ export default function MediaUpload({
   linkedId,
   onUploaded,
   disabled,
+  resolveLinkedId,
 }: {
   linkedType: MediaLinkedType;
   linkedId: string;
   onUploaded: (item: MediaItem) => void;
   disabled?: boolean;
+  // When set, awaited once per upload batch to obtain the linkedId. Lets a
+  // not-yet-saved entity (e.g. a draft trip log) be materialised on first
+  // upload instead of requiring an existing id up front.
+  resolveLinkedId?: () => Promise<string>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -29,29 +34,38 @@ export default function MediaUpload({
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
+    // Snapshot before any await: the caller resets the input value (emptying
+    // the live FileList) immediately after invoking us.
+    const selected = Array.from(files);
     setErrors([]);
     setBusy(true);
     const failures: string[] = [];
-    for (const file of Array.from(files)) {
-      const resolved = resolveMediaType(file);
-      if (!resolved) {
-        failures.push(`${file.name}: unsupported file type`);
-        continue;
+    try {
+      const targetId = resolveLinkedId ? await resolveLinkedId() : linkedId;
+      for (const file of selected) {
+        const resolved = resolveMediaType(file);
+        if (!resolved) {
+          failures.push(`${file.name}: unsupported file type`);
+          continue;
+        }
+        try {
+          const thumbnail = await generateThumbnail(file, resolved.category);
+          const item = await uploadMedia({
+            linkedType,
+            linkedId: targetId,
+            file,
+            mediaType: resolved.mediaType,
+            thumbnail,
+          });
+          onUploaded(item);
+        } catch (err) {
+          console.error(err);
+          failures.push(`${file.name}: ${messageFromError(err, "upload failed")}`);
+        }
       }
-      try {
-        const thumbnail = await generateThumbnail(file, resolved.category);
-        const item = await uploadMedia({
-          linkedType,
-          linkedId,
-          file,
-          mediaType: resolved.mediaType,
-          thumbnail,
-        });
-        onUploaded(item);
-      } catch (err) {
-        console.error(err);
-        failures.push(`${file.name}: ${messageFromError(err, "upload failed")}`);
-      }
+    } catch (err) {
+      console.error(err);
+      failures.push(messageFromError(err, "Couldn't prepare upload."));
     }
     setErrors(failures);
     setBusy(false);
@@ -105,9 +119,12 @@ export default function MediaUpload({
           multiple
           hidden
           onChange={(e) => {
-            const files = e.target.files;
-            e.target.value = "";
-            void handleFiles(files);
+            const input = e.target;
+            // handleFiles copies the FileList synchronously (Array.from) before
+            // its first await, so resetting value afterwards is safe. Resetting
+            // before would empty the live FileList and drop the selection.
+            void handleFiles(input.files);
+            input.value = "";
           }}
         />
       </div>

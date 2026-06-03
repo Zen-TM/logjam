@@ -128,8 +128,7 @@
 /* ─── Trip logs region ────────────────────────────────────────────────────── */
 
 .tripLogsRegion {
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 0.4em;
@@ -145,8 +144,7 @@
 }
 
 .tripLogList {
-  flex: 1;
-  min-height: 0;
+  height: 160px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -186,7 +184,8 @@
 /* ─── Media region ────────────────────────────────────────────────────────── */
 
 .mediaRegion {
-  flex-shrink: 0;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 0.4em;
@@ -201,8 +200,12 @@
 }
 
 .mediaScroll {
-  max-height: 220px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
 }
 
 /* ─── Footer actions ──────────────────────────────────────────────────────── */

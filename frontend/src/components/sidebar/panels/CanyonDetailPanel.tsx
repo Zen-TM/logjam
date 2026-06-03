@@ -314,13 +314,6 @@ function CanyonDetailPanel({
           <div className={classes.mediaHeader}>
             Photos &amp; Files {canyonMedia.length > 0 && `(${canyonMedia.length})`}
           </div>
-          {isOwnedCanyon && (
-            <MediaUpload
-              linkedType="canyon"
-              linkedId={canyon.id}
-              onUploaded={handleMediaUploaded}
-            />
-          )}
           <div className={classes.mediaScroll}>
             <MediaGallery
               media={canyonMedia}
@@ -332,6 +325,13 @@ function CanyonDetailPanel({
                   : "No shared photos or files."
               }
             />
+            {isOwnedCanyon && (
+              <MediaUpload
+                linkedType="canyon"
+                linkedId={canyon.id}
+                onUploaded={handleMediaUploaded}
+              />
+            )}
           </div>
         </div>
 

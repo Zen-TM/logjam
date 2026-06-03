@@ -183,27 +183,27 @@ function TripLogViewDialog({
             <Typography variant="caption" className={classes.sectionLabel}>
               Photos, Videos &amp; Files
             </Typography>
-            {canManageMedia && (
-              <Box sx={{ mb: 1 }}>
+            <div className={classes.mediaScroll}>
+              {mediaLoading ? (
+                <Typography variant="body2" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
+                  Loading files…
+                </Typography>
+              ) : (
+                <MediaGallery
+                  media={media}
+                  canDelete={canManageMedia}
+                  onDeleted={handleMediaDeleted}
+                  emptyText="No photos or files yet."
+                />
+              )}
+              {canManageMedia && (
                 <MediaUpload
                   linkedType="tripLog"
                   linkedId={tripLog.id}
                   onUploaded={handleMediaUploaded}
                 />
-              </Box>
-            )}
-            {mediaLoading ? (
-              <Typography variant="body2" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
-                Loading files…
-              </Typography>
-            ) : (
-              <MediaGallery
-                media={media}
-                canDelete={canManageMedia}
-                onDeleted={handleMediaDeleted}
-                emptyText="No photos or files yet."
-              />
-            )}
+              )}
+            </div>
           </Box>
         </DialogContent>
 

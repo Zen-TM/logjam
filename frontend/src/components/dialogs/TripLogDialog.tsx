@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -17,14 +17,19 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { ErrorBanner } from "../feedback/ErrorBanner";
-import type { TripLogCustomFieldDef, TripLogCustomFieldType } from "@logjam/shared";
+import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
 import { CUSTOM_FIELD_TYPES, makeCustomFieldKey, coerceFieldValue } from "@logjam/shared";
 import type { TTripLog } from "../../canyonUtils";
 import {
   createTripLog,
   updateTripLog,
+  deleteTripLog,
+  getTripLog,
   updateUserPreferences,
 } from "../../canyonUtils";
+import { messageFromError } from "../../errors/messageFromError";
+import MediaUpload from "../media/MediaUpload";
+import MediaGallery from "../media/MediaGallery";
 import classes from "./TripLogDialog.module.css";
 
 function todayDateString(): string {
@@ -56,6 +61,16 @@ function TripLogDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Media. In edit mode the trip already exists; in create mode we lazily
+  // materialise a draft trip on first upload so files have something to link to.
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [draftTripId, setDraftTripId] = useState<string | null>(null);
+  // Set once the trip has been saved/committed, so closing won't delete it.
+  const committedRef = useRef(false);
+  // De-dupes concurrent draft creation when several files upload at once.
+  const draftPromiseRef = useRef<Promise<string> | null>(null);
+
   // Add custom field form state
   const [showAddField, setShowAddField] = useState(false);
   const [newFieldLabel, setNewFieldLabel] = useState("");
@@ -86,7 +101,78 @@ function TripLogDialog({
     setShowAddField(false);
     setNewFieldLabel("");
     setNewFieldType("string");
+    // Reset media/draft tracking each time the dialog opens.
+    setMedia([]);
+    setDraftTripId(null);
+    committedRef.current = false;
+    draftPromiseRef.current = null;
   }, [open, tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // In edit mode, fetch the trip's existing media (with fresh presigned URLs).
+  useEffect(() => {
+    if (!open || !tripLog) return;
+    const { canyonId: tripCanyonId, id } = tripLog;
+    setMediaLoading(true);
+    getTripLog(tripCanyonId, id)
+      .then((full) => setMedia(full.media ?? []))
+      .catch((err) => {
+        console.error(err);
+        setError(messageFromError(err, "Couldn't load trip files."));
+      })
+      .finally(() => setMediaLoading(false));
+  }, [open, tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The trip id media should link to: a real trip in edit mode, otherwise a
+  // draft created on first upload. Guarded so concurrent uploads create one trip.
+  function ensureLinkedTripId(): Promise<string> {
+    if (tripLog) return Promise.resolve(tripLog.id);
+    if (draftTripId) return Promise.resolve(draftTripId);
+    if (draftPromiseRef.current) return draftPromiseRef.current;
+
+    const customFields: Record<string, unknown> = {};
+    for (const def of customFieldDefs) {
+      customFields[def.key] = coerceFieldValue(getFieldValue(def.key), def.type);
+    }
+    const promise = createTripLog(canyonId, {
+      date,
+      notes: notes || null,
+      customFields,
+    })
+      .then((trip) => {
+        setDraftTripId(trip.id);
+        return trip.id;
+      })
+      .catch((err) => {
+        draftPromiseRef.current = null;
+        throw err;
+      });
+    draftPromiseRef.current = promise;
+    return promise;
+  }
+
+  function handleMediaUploaded(item: MediaItem) {
+    setMedia((prev) => [...prev, item]);
+  }
+
+  function handleMediaDeleted(id: string) {
+    setMedia((prev) => prev.filter((m) => m.id !== id));
+  }
+
+  // Cancel/close. If a draft trip was materialised but never saved, delete it
+  // (cascades its media from S3 + DB + quota) before closing.
+  async function handleRequestClose() {
+    if (saving) return;
+    if (draftTripId && !committedRef.current) {
+      try {
+        await deleteTripLog(canyonId, draftTripId);
+      } catch (err) {
+        console.error(err);
+        setError(messageFromError(err, "Couldn't discard uploaded files. Please try again."));
+        return;
+      }
+    }
+    onClose();
+  }
 
   function getFieldValue(key: string): string {
     return fieldValues[key] ?? "";
@@ -113,9 +199,13 @@ function TripLogDialog({
 
       if (tripLog) {
         await updateTripLog(canyonId, tripLog.id, { date, notes: notes || null, customFields });
+      } else if (draftTripId) {
+        // A draft was already created to hold uploaded files — persist the form.
+        await updateTripLog(canyonId, draftTripId, { date, notes: notes || null, customFields });
       } else {
         await createTripLog(canyonId, { date, notes: notes || null, customFields });
       }
+      committedRef.current = true;
       onSaved();
       onClose();
     } catch {
@@ -200,7 +290,7 @@ function TripLogDialog({
   return (
     <Dialog
       open={open}
-      onClose={saving ? undefined : onClose}
+      onClose={saving ? undefined : () => void handleRequestClose()}
       maxWidth="sm"
       fullWidth
       PaperProps={{
@@ -227,7 +317,7 @@ function TripLogDialog({
         </Box>
         <IconButton
           size="small"
-          onClick={onClose}
+          onClick={() => void handleRequestClose()}
           disabled={saving}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -357,17 +447,33 @@ function TripLogDialog({
             </Button>
           )}
 
-          {/* Media is attached from the trip view — uploads need a saved trip
-              log to link to, so creation/editing of files lives there. */}
-          <Box className={classes.uploadPlaceholder}>
-            <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", mb: 0.5 }}>
+          {/* Media. In create mode the first upload lazily creates a draft trip
+              to link files to; cancelling deletes it (and its files). */}
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Photos, Videos &amp; Files
             </Typography>
-            <Typography variant="body2" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
-              {tripLog
-                ? "Open this trip from the canyon panel to add or remove photos, videos and GPX/KML files."
-                : "Save this trip log first, then open it to add photos, videos and GPX/KML files."}
-            </Typography>
+            <div className={classes.mediaScroll}>
+              {mediaLoading ? (
+                <Typography variant="body2" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
+                  Loading files…
+                </Typography>
+              ) : (
+                <MediaGallery
+                  media={media}
+                  canDelete
+                  onDeleted={handleMediaDeleted}
+                  emptyText="No photos or files yet."
+                />
+              )}
+              <MediaUpload
+                linkedType="tripLog"
+                linkedId={tripLog ? tripLog.id : ""}
+                resolveLinkedId={tripLog ? undefined : ensureLinkedTripId}
+                onUploaded={handleMediaUploaded}
+                disabled={saving}
+              />
+            </div>
           </Box>
 
           {error && <ErrorBanner message={error} />}
@@ -376,7 +482,7 @@ function TripLogDialog({
 
       <DialogActions>
         <Button
-          onClick={onClose}
+          onClick={() => void handleRequestClose()}
           disabled={saving}
           sx={{ color: "var(--theme-text-primary)" }}
         >
