@@ -1,11 +1,18 @@
+import path from "path";
 import {
   createCanvas,
   loadImage,
   type Canvas,
   type CanvasRenderingContext2D,
+  type Image,
 } from "canvas";
 import PDFDocument from "pdfkit";
-import type { GeoPdfConfig } from "@logjam/shared";
+import type {
+  GeoPdfConfig,
+  VectorStyleSettings,
+  OsmFeatureStyle,
+  OsmPointFeatureKey,
+} from "@logjam/shared";
 import {
   getPaperDimensions,
   GEOPDF_PADDING_MM,
@@ -15,6 +22,13 @@ import {
   detectMgaZone,
   GEOPDF_BASE_LAYER_CONFIG,
   overlayAttributionLines,
+  OSM_POINT_FEATURE_KEYS,
+  OSM_POINT_ICON,
+  iconTargetPx,
+  rgbaCssFromHex,
+  contourWidthStops,
+  featureLineWidthStops,
+  lerpZoom,
 } from "@logjam/shared";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { s3 as s3Client } from "./awsClients";
@@ -63,6 +77,37 @@ const MIN_CONTOUR_LABEL_DISTANCE = 150; // px — ~4x sparser label density
 
 const SCALE_BAR_DISTANCES = [100, 250, 500, 1000, 2000, 5000, 10000];
 const DEG_TO_RAD = Math.PI / 180;
+
+// Point-feature icon PNGs, bundled under api/assets/topo-icons (Dockerfile COPY).
+// __dirname resolves to api/src/services in dev and /app/dist/services in prod;
+// "../../assets" therefore lands on api/assets and /app/assets respectively.
+const ICON_DIR = path.resolve(__dirname, "../../assets/topo-icons");
+
+/**
+ * Pre-load the PNG icons for every enabled point category into a synchronously
+ * accessible cache. Must happen before the (sync) per-feature render loop since
+ * `loadImage` is async. Failures are logged and skipped (icon simply omitted).
+ */
+async function loadPointIcons(
+  vectorStyle: VectorStyleSettings,
+): Promise<Map<OsmPointFeatureKey, Image>> {
+  const cache = new Map<OsmPointFeatureKey, Image>();
+  await Promise.all(
+    OSM_POINT_FEATURE_KEYS.filter((k) => vectorStyle.features[k]?.enabled).map(
+      async (key) => {
+        try {
+          const img = await loadImage(path.join(ICON_DIR, OSM_POINT_ICON[key].file));
+          cache.set(key, img);
+        } catch (e) {
+          console.warn(
+            `GeoPDF: failed to load icon for ${key}: ${e instanceof Error ? e.message : e}`,
+          );
+        }
+      },
+    ),
+  );
+  return cache;
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -154,13 +199,15 @@ function formatDistance(m: number): string {
 
 type TileCoord = { x: number; y: number; z: number };
 
-/** Buffered contour label — drawn after all overlay lines to keep labels on top */
+/** Buffered label (contour elevation or feature name) — drawn after all overlay
+ * lines to keep labels on top. `text` may contain "\n" for stacked lines. */
 type PendingLabel = {
   x: number;
   y: number;
   angle: number;
   text: string;
   fontSize: number;
+  color: string;
 };
 
 /** Transform mapping tile-grid pixel space to output mapCanvas pixel space */
@@ -264,6 +311,7 @@ function latLonToCanvasPx(
 export async function generateGeoPdf(
   config: GeoPdfConfig,
   userId: string,
+  vectorStyle: VectorStyleSettings,
 ): Promise<Buffer> {
   // 1. Paper dimensions (in mm and pt only — canvas will be native tile resolution)
   const paper = getPaperDimensions({
@@ -411,6 +459,11 @@ export async function generateGeoPdf(
     const pendingLabels: PendingLabel[] = [];
     const placedLabelPositions: Array<{ x: number; y: number }> = [];
 
+    // Point-feature icons must be loaded before the sync per-feature render loop.
+    const iconCache = config.overlays.includes("features")
+      ? await loadPointIcons(vectorStyle)
+      : new Map<OsmPointFeatureKey, Image>();
+
     for (const overlayName of sortedOverlays as TopoLayerName[]) {
       const layerDef = TOPO_LAYERS.find((l) => l.name === overlayName);
       if (!layerDef) continue;
@@ -427,6 +480,8 @@ export async function generateGeoPdf(
               overlayTransform,
               overlayName,
               overlayZoom,
+              vectorStyle,
+              iconCache,
               placedLabelPositions,
               pendingLabels,
             );
@@ -691,6 +746,8 @@ async function fetchAndDrawPMTilesVectorDirect(
   transform: TileToMapTransform,
   layerName: string,
   zoom: number,
+  vectorStyle: VectorStyleSettings,
+  iconCache: Map<OsmPointFeatureKey, Image>,
   placedLabels: Array<{ x: number; y: number }> = [],
   pendingLabels: PendingLabel[] = [],
 ): Promise<void> {
@@ -720,6 +777,8 @@ async function fetchAndDrawPMTilesVectorDirect(
             layerName,
             transform.scaleX,
             transform.scaleY,
+            vectorStyle,
+            iconCache,
             placedLabels,
             pendingLabels,
           );
@@ -746,11 +805,17 @@ function flushPendingLabels(
     ctx.font = `600 ${lbl.fontSize}px sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-    ctx.lineWidth = 4;
-    ctx.strokeText(lbl.text, 0, 0);
-    ctx.fillStyle = "rgba(200, 120, 30, 0.92)";
-    ctx.fillText(lbl.text, 0, 0);
+    const lines = lbl.text.split("\n");
+    const lineHeight = lbl.fontSize * 1.2;
+    const startY = -((lines.length - 1) / 2) * lineHeight;
+    for (let i = 0; i < lines.length; i++) {
+      const y = startY + i * lineHeight;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.lineWidth = 4;
+      ctx.strokeText(lines[i], 0, y);
+      ctx.fillStyle = lbl.color;
+      ctx.fillText(lines[i], 0, y);
+    }
     ctx.restore();
   }
 }
@@ -777,6 +842,8 @@ function renderVectorFeature(
   layerName: string,
   transformScaleX = 1,
   transformScaleY = 1,
+  vectorStyle: VectorStyleSettings,
+  iconCache: Map<OsmPointFeatureKey, Image>,
   placedLabels: Array<{ x: number; y: number }> = [],
   pendingLabels: PendingLabel[] = [],
 ) {
@@ -797,6 +864,7 @@ function renderVectorFeature(
       scaleY,
       geomType,
       props,
+      vectorStyle,
       placedLabels,
       pendingLabels,
     );
@@ -811,6 +879,10 @@ function renderVectorFeature(
       scaleY,
       geomType,
       props,
+      vectorStyle,
+      iconCache,
+      placedLabels,
+      pendingLabels,
     );
   }
 }
@@ -826,6 +898,7 @@ function renderContourFeature(
   scaleY: number,
   geomType: number,
   props: Record<string, unknown>,
+  vectorStyle: VectorStyleSettings,
   placedLabels: Array<{ x: number; y: number }> = [],
   pendingLabels: PendingLabel[] = [],
 ) {
@@ -833,13 +906,16 @@ function renderContourFeature(
   const elev = Number(props.elev ?? 0);
   const isMajor = elev % 50 === 0;
 
-  // Minor contours only visible at z13+
-  if (!isMajor && zoom < 13) return;
+  // Minor contours only visible at z14+ (matches the live overlay's minzoom)
+  if (!isMajor && zoom < 14) return;
 
-  const lineWidth = isMajor
-    ? interpZoom(zoom, 12, 1, 18, 2.5)
-    : interpZoom(zoom, 12, 0.5, 18, 1.2);
-  const color = isMajor ? "rgba(200, 120, 30, 0.88)" : "rgba(200, 120, 30, 0.45)";
+  // Colour + width come from the user's live vector style, evaluated at the
+  // export tile zoom with the same stops the MapLibre overlay uses.
+  const cs = vectorStyle.contours;
+  const stops = contourWidthStops(isMajor ? cs.majorWidthM : cs.minorWidthM);
+  const lineWidth = lerpZoom(zoom, stops.z12, stops.z18);
+  const color = rgbaCssFromHex(isMajor ? cs.majorColour : cs.minorColour);
+  const labelColor = rgbaCssFromHex(cs.majorColour);
 
   const geometry = feature.loadGeometry();
   ctx.strokeStyle = color;
@@ -882,20 +958,45 @@ function renderContourFeature(
         angle,
         text: `${elev}m`,
         fontSize: interpZoom(zoom, 14, 9, 18, 12),
+        color: labelColor,
       });
     }
   }
 }
 
-const POINT_CATEGORIES = new Set([
-  "campsite",
-  "peak",
-  "spring",
-  "gate",
-  "viewpoint",
-  "cave",
-  "picnic",
-]);
+const POINT_KEY_SET = new Set<string>(OSM_POINT_FEATURE_KEYS);
+
+/** Buffer a name label at the midpoint of the longest ring of a line feature. */
+function bufferLineLabel(
+  geometry: { x: number; y: number }[][],
+  dx: number,
+  dy: number,
+  scaleX: number,
+  scaleY: number,
+  zoom: number,
+  text: string,
+  color: string,
+  placedLabels: Array<{ x: number; y: number }>,
+  pendingLabels: PendingLabel[],
+) {
+  if (zoom < 14 || !text) return;
+  let ring: { x: number; y: number }[] | null = null;
+  for (const r of geometry) if (!ring || r.length > ring.length) ring = r;
+  if (!ring || ring.length < 2) return;
+  const mid = Math.floor(ring.length / 2);
+  const mx = dx + ring[mid].x * scaleX;
+  const my = dy + ring[mid].y * scaleY;
+  if (placedLabels.some((p) => Math.hypot(p.x - mx, p.y - my) < MIN_CONTOUR_LABEL_DISTANCE)) return;
+  placedLabels.push({ x: mx, y: my });
+  const prev = mid > 0 ? mid - 1 : 0;
+  const next = mid < ring.length - 1 ? mid + 1 : ring.length - 1;
+  const ax = (ring[next].x - ring[prev].x) * scaleX;
+  const ay = (ring[next].y - ring[prev].y) * scaleY;
+  let angle = Math.atan2(ay, ax);
+  if (angle > Math.PI / 2) angle -= Math.PI;
+  if (angle < -Math.PI / 2) angle += Math.PI;
+  pendingLabels.push({ x: mx, y: my, angle, text, fontSize: interpZoom(zoom, 14, 9, 18, 12), color });
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function renderOsmFeature(
@@ -908,62 +1009,104 @@ function renderOsmFeature(
   scaleY: number,
   geomType: number,
   props: Record<string, unknown>,
+  vectorStyle: VectorStyleSettings,
+  iconCache: Map<OsmPointFeatureKey, Image>,
+  placedLabels: Array<{ x: number; y: number }> = [],
+  pendingLabels: PendingLabel[] = [],
 ) {
   const category = String(props._category ?? "");
+  const style = (vectorStyle.features as Record<string, OsmFeatureStyle | undefined>)[category];
+  if (!style || !style.enabled) return; // per-category enable mirrors the overlay
   const geometry = feature.loadGeometry();
+  const colour = rgbaCssFromHex(style.colour);
 
+  // Point categories → fixed PNG icon (+ optional name label at z14+).
+  if (POINT_KEY_SET.has(category)) {
+    if (geomType !== 1) return;
+    const key = category as OsmPointFeatureKey;
+    const minzoom = key === "gate" ? 14 : 12;
+    if (zoom < minzoom) return;
+    const icon = iconCache.get(key);
+    const t = iconTargetPx(OSM_POINT_ICON[key].sizeZ18, zoom);
+    const name = typeof props.name === "string" ? props.name : "";
+    for (const ring of geometry) {
+      for (const pt of ring) {
+        const px = dx + pt.x * scaleX;
+        const py = dy + pt.y * scaleY;
+        if (icon) ctx.drawImage(icon, px - t / 2, py - t / 2, t, t);
+        if (zoom >= 14) {
+          let text = name;
+          if (key === "peak") {
+            const ele = props.ele;
+            const eleStr =
+              ele !== undefined && ele !== null && `${ele}`.trim() !== "" ? `${ele} m` : "";
+            text = [name, eleStr].filter(Boolean).join("\n");
+          }
+          if (text) {
+            pendingLabels.push({
+              x: px,
+              y: py + t / 2 + interpZoom(zoom, 14, 7, 18, 9),
+              angle: 0,
+              text,
+              fontSize: interpZoom(zoom, 14, 9, 18, 12),
+              color: colour,
+            });
+          }
+        }
+      }
+    }
+    return;
+  }
+
+  // Line / fill categories.
   switch (category) {
     case "waterway":
+    case "road": {
+      const s = featureLineWidthStops(style.widthZ18);
       drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
-        color: "rgba(40,120,220,0.85)",
-        width: interpZoom(zoom, 12, 1, 18, 3),
+        color: colour,
+        width: lerpZoom(zoom, s.z12, s.z18),
       });
+      const label =
+        category === "road"
+          ? (typeof props.name === "string" && props.name) ||
+            (typeof props.ref === "string" ? props.ref : "")
+          : typeof props.name === "string"
+            ? props.name
+            : "";
+      bufferLineLabel(geometry, dx, dy, scaleX, scaleY, zoom, label, colour, placedLabels, pendingLabels);
       break;
-    case "track":
+    }
+    case "track": {
+      const s = featureLineWidthStops(style.widthZ18);
       drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
-        color: "rgba(160,100,30,0.85)",
-        width: interpZoom(zoom, 12, 0.8, 18, 2),
+        color: colour,
+        width: lerpZoom(zoom, s.z12, s.z18),
         dash: [4, 2],
       });
+      const label = typeof props.name === "string" ? props.name : "";
+      bufferLineLabel(geometry, dx, dy, scaleX, scaleY, zoom, label, colour, placedLabels, pendingLabels);
       break;
-    case "road":
+    }
+    case "power":
+      // Power lines use a constant pixel width (matches the overlay).
       drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
-        color: "rgba(80,80,80,0.9)",
-        width: interpZoom(zoom, 12, 1, 18, 4),
+        color: colour,
+        width: style.widthZ18,
+        dash: [3, 4],
       });
       break;
     case "building":
       if (geomType === 3) {
         drawFillFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
-          fill: "rgba(160,140,120,0.3)",
-          outline: "rgba(160,140,120,0.8)",
+          fill: colour,
+          outline: colour,
         });
       }
       break;
-    case "power":
-      drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
-        color: "rgba(200,160,0,0.8)",
-        width: 1,
-        dash: [3, 4],
-      });
-      break;
     default:
-      if (POINT_CATEGORIES.has(category) && geomType === 1) {
-        const radius = interpZoom(zoom, 12, 3, 18, 7);
-        for (const ring of geometry) {
-          for (const pt of ring) {
-            const px = dx + pt.x * scaleX;
-            const py = dy + pt.y * scaleY;
-            ctx.beginPath();
-            ctx.arc(px, py, radius, 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(0,140,80,0.9)";
-            ctx.fill();
-            ctx.strokeStyle = "#fff";
-            ctx.lineWidth = 1;
-            ctx.stroke();
-          }
-        }
-      }
+      // Other categories (e.g. bridge) have no live overlay layer — skip to
+      // stay consistent with the on-screen map.
       break;
   }
 }

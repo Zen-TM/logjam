@@ -6,6 +6,11 @@ import {
   cloneVectorStyleSettings,
   parseRgbaHex,
   rgbaToHex,
+  rgbaCssFromHex,
+  contourWidthStops,
+  featureLineWidthStops,
+  lerpZoom,
+  iconTargetPx,
   validateRasterTemplateSettings,
   validateVectorStyleSettings,
 } from "./topoSettings";
@@ -96,5 +101,39 @@ describe("helpers", () => {
   it("parseRgbaHex / rgbaToHex round-trip", () => {
     expect(parseRgbaHex("#11223344")).toEqual([0x11, 0x22, 0x33, 0x44]);
     expect(rgbaToHex(0x11, 0x22, 0x33, 0x44)).toBe("#11223344");
+  });
+});
+
+describe("vector paint helpers", () => {
+  it("rgbaCssFromHex converts alpha to 0..1", () => {
+    expect(rgbaCssFromHex("#11223380")).toBe("rgba(17,34,51,0.502)");
+    expect(rgbaCssFromHex("#000000ff")).toBe("rgba(0,0,0,1.000)");
+  });
+
+  it("contourWidthStops floors z12 at 0.3", () => {
+    expect(contourWidthStops(18)).toEqual({ z12: 0.9, z18: 2.25 });
+    expect(contourWidthStops(0.1).z12).toBe(0.3); // tiny width still floored
+  });
+
+  it("featureLineWidthStops floors z12 at 0.25", () => {
+    expect(featureLineWidthStops(4)).toEqual({ z12: 1, z18: 4 });
+    expect(featureLineWidthStops(0.4).z12).toBe(0.25);
+  });
+
+  it("lerpZoom interpolates and clamps to [12,18]", () => {
+    expect(lerpZoom(12, 1, 4)).toBe(1);
+    expect(lerpZoom(18, 1, 4)).toBe(4);
+    expect(lerpZoom(15, 0, 6)).toBe(3);
+    expect(lerpZoom(10, 1, 4)).toBe(1); // clamped low
+    expect(lerpZoom(20, 1, 4)).toBe(4); // clamped high
+  });
+
+  it("iconTargetPx mirrors the Python sizing law", () => {
+    expect(iconTargetPx(20, 18)).toBe(20);
+    expect(iconTargetPx(18, 18)).toBe(18);
+    expect(iconTargetPx(20, 12)).toBe(16);
+    expect(iconTargetPx(18, 12)).toBe(15);
+    expect(iconTargetPx(20, 15)).toBe(18);
+    expect(iconTargetPx(20, 6)).toBe(12); // floored at 12
   });
 });

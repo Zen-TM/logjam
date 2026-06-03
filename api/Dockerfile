@@ -58,6 +58,9 @@ RUN npx prisma generate
 
 COPY --from=builder /app/dist ./dist
 
+# Static assets read at runtime (e.g. topo point-feature icons for GeoPDF).
+COPY api/assets ./assets/
+
 EXPOSE 8080
 
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]

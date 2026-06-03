@@ -472,3 +472,68 @@ export function cloneRasterTemplateSettings(s: RasterTemplateSettings): RasterTe
 export function cloneVectorStyleSettings(s: VectorStyleSettings): VectorStyleSettings {
   return JSON.parse(JSON.stringify(s)) as VectorStyleSettings;
 }
+
+// ---------------------------------------------------------------------------
+// Vector paint helpers (shared by the live MapLibre overlay and the GeoPDF
+// canvas renderer so both stay in lockstep — single source of truth for the
+// colour + width math).
+// ---------------------------------------------------------------------------
+
+/** #RRGGBBAA → `rgba(r,g,b,a)` CSS string (alpha 0..1). */
+export function rgbaCssFromHex(hex: RgbaHex): string {
+  const [r, g, b, a] = parseRgbaHex(hex);
+  return `rgba(${r},${g},${b},${(a / 255).toFixed(3)})`;
+}
+
+/** Zoom stops {z12, z18} for a contour width given in ground metres. */
+export function contourWidthStops(widthM: number): { z12: number; z18: number } {
+  const w18 = widthM / 8;
+  return { z12: Math.max(0.3, w18 * 0.4), z18: w18 };
+}
+
+/** Zoom stops {z12, z18} for a line feature width given in pixels at z18. */
+export function featureLineWidthStops(widthZ18: number): { z12: number; z18: number } {
+  return { z12: Math.max(0.25, widthZ18 * 0.25), z18: widthZ18 };
+}
+
+/**
+ * Point-evaluate a linear z12→z18 interpolation at an arbitrary zoom (clamped
+ * to the [12, 18] domain). Mirrors the MapLibre `["interpolate", ["linear"],
+ * ["zoom"], 12, z12, 18, z18]` expression for use in the canvas renderer.
+ */
+export function lerpZoom(zoom: number, z12: number, z18: number): number {
+  const t = Math.max(0, Math.min(1, (zoom - 12) / (18 - 12)));
+  return z12 + t * (z18 - z12);
+}
+
+// ---------------------------------------------------------------------------
+// Point-feature icons. Source of truth for filename + size is the Python
+// pipeline (topo/topo_mbtiles.py OSM_STYLE_META); mirrored here so the web map
+// and GeoPDF render the same icons at the same size as the MBTiles export.
+// Icons are non-recolourable PNGs (24×24 native), so point categories carry no
+// user colour/width override for the glyph itself.
+// ---------------------------------------------------------------------------
+
+export const OSM_POINT_ICON: Record<OsmPointFeatureKey, { file: string; sizeZ18: number }> = {
+  campsite:  { file: "campsite.png",  sizeZ18: 20 },
+  peak:      { file: "peak.png",      sizeZ18: 18 },
+  spring:    { file: "spring.png",    sizeZ18: 18 },
+  gate:      { file: "gate.png",      sizeZ18: 18 },
+  cave:      { file: "cave.png",      sizeZ18: 18 },
+  ford:      { file: "ford.png",      sizeZ18: 20 },
+  waterfall: { file: "waterfall.png", sizeZ18: 20 },
+  trailhead: { file: "trailhead.png", sizeZ18: 20 },
+  viewpoint: { file: "viewpoint.png", sizeZ18: 20 },
+  hut:       { file: "hut.png",       sizeZ18: 20 },
+};
+
+/** Natural pixel dimension of every point icon PNG. */
+export const OSM_POINT_ICON_NATURAL_PX = 24;
+
+/**
+ * On-screen icon edge length in pixels at a given zoom. Mirrors the Python
+ * sizing law `max(12, round(size_z18 * (zoom / 18) ** 0.5))`.
+ */
+export function iconTargetPx(sizeZ18: number, zoom: number): number {
+  return Math.max(12, Math.round(sizeZ18 * Math.pow(zoom / 18, 0.5)));
+}

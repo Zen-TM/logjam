@@ -18,10 +18,17 @@ import { passesFilters } from "../../canyonUtils";
 import {
   extentFromCentreAndSize,
   OSM_LINE_FEATURE_KEYS,
+  OSM_POINT_FEATURE_KEYS,
+  OSM_POINT_ICON,
+  OSM_POINT_ICON_NATURAL_PX,
+  iconTargetPx,
+  rgbaCssFromHex,
+  contourWidthStops,
+  featureLineWidthStops,
   type OsmFeatureKey,
+  type OsmPointFeatureKey,
   type OsmFeatureStyle,
   type VectorStyleSettings,
-  parseRgbaHex,
 } from "@logjam/shared";
 
 const SIDEBAR_TRANSITION_MS = 300;
@@ -122,42 +129,41 @@ export type TBbox = {
 };
 
 // ── Vector style helpers ──────────────────────────────────────────────────
+// Colour + width math lives in @logjam/shared so the live overlay and the
+// GeoPDF canvas renderer stay in lockstep. These thin wrappers adapt the shared
+// pure helpers into MapLibre paint expressions.
+
 // Convert #RRGGBBAA → rgba(r,g,b,a) CSS string that MapLibre's paint expressions
 // accept.
 function rgbaCss(hex: string): string {
-  const [r, g, b, a] = parseRgbaHex(hex);
-  return `rgba(${r},${g},${b},${(a / 255).toFixed(3)})`;
+  return rgbaCssFromHex(hex);
 }
 
 // Pixel width interpolate(z12 → z18) for line features. widthZ18 is the
 // reference width in pixels at the maximum-detail zoom.
 function lineWidthInterp(widthZ18: number): maplibregl.ExpressionSpecification {
-  const w12 = Math.max(0.25, widthZ18 * 0.25);
-  return [
-    "interpolate",
-    ["linear"],
-    ["zoom"],
-    12,
-    w12,
-    18,
-    widthZ18,
-  ];
+  const { z12, z18 } = featureLineWidthStops(widthZ18);
+  return ["interpolate", ["linear"], ["zoom"], 12, z12, 18, z18];
 }
 
 // Contour width is specified in ground metres by the user; convert to a pixel
-// width at z18 using a fixed scale that roughly matches the legacy hardcoded
-// values (default 18 m → ≈2.25 px, default 8 m → ≈1 px).
+// width via the shared stops (default 18 m → ≈2.25 px, default 8 m → ≈1 px).
 function contourPixelWidth(widthM: number): maplibregl.ExpressionSpecification {
-  const w18 = widthM / 8;
-  const w12 = Math.max(0.3, w18 * 0.4);
+  const { z12, z18 } = contourWidthStops(widthM);
+  return ["interpolate", ["linear"], ["zoom"], 12, z12, 18, z18];
+}
+
+// icon-size for a point category: scale the 24×24 source PNG so its on-screen
+// edge ≈ iconTargetPx (mirrors the Python/MBTiles sizing) across z12→z18.
+function iconSizeInterp(sizeZ18: number): maplibregl.ExpressionSpecification {
   return [
     "interpolate",
     ["linear"],
     ["zoom"],
     12,
-    w12,
+    iconTargetPx(sizeZ18, 12) / OSM_POINT_ICON_NATURAL_PX,
     18,
-    w18,
+    iconTargetPx(sizeZ18, 18) / OSM_POINT_ICON_NATURAL_PX,
   ];
 }
 
@@ -866,6 +872,32 @@ function Map({
     };
   }, [selectingBbox, mapLoaded]);
 
+  // Lazily register point-feature icons. MapLibre fires `styleimagemissing`
+  // when a symbol layer references an icon-image that isn't loaded yet; we load
+  // the PNG from /topo-icons and addImage it, then MapLibre re-renders. This
+  // avoids any ordering coupling with the topo-layer effect below.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+    const PREFIX = "topo-icon-";
+    const onMissing = (e: { id: string }) => {
+      const id = e.id;
+      if (!id || !id.startsWith(PREFIX) || map.hasImage(id)) return;
+      const key = id.slice(PREFIX.length) as OsmPointFeatureKey;
+      const meta = OSM_POINT_ICON[key];
+      if (!meta) return;
+      const img = new Image(OSM_POINT_ICON_NATURAL_PX, OSM_POINT_ICON_NATURAL_PX);
+      img.onload = () => {
+        if (!map.hasImage(id)) map.addImage(id, img);
+      };
+      img.src = `/topo-icons/${meta.file}`;
+    };
+    map.on("styleimagemissing", onMissing);
+    return () => {
+      map.off("styleimagemissing", onMissing);
+    };
+  }, [mapLoaded]);
+
   // Topo overlay layers (PMTiles — raster and vector)
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -1104,169 +1136,6 @@ function Map({
                 },
               },
             },
-            {
-              key: "peak",
-              suffix: "peak",
-              filter: ["==", ["get", "_category"], "peak"],
-              style: {
-                type: "symbol",
-                minzoom: 12,
-                layout: {
-                  "text-field": [
-                    "case",
-                    ["all", ["has", "name"], ["has", "ele"]],
-                    [
-                      "concat",
-                      "▲\n",
-                      ["get", "name"],
-                      "\n",
-                      ["to-string", ["get", "ele"]],
-                      " m",
-                    ],
-                    ["has", "name"],
-                    ["concat", "▲\n", ["get", "name"]],
-                    ["has", "ele"],
-                    [
-                      "concat",
-                      "▲\n",
-                      ["to-string", ["get", "ele"]],
-                      " m",
-                    ],
-                    "▲",
-                  ],
-                  "text-font": ["Open Sans Semibold"],
-                  "text-size": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    12,
-                    feat(vs, "peak").widthZ18 * 0.9,
-                    18,
-                    feat(vs, "peak").widthZ18 + 3,
-                  ],
-                  "text-anchor": "top",
-                  "text-justify": "center",
-                  "text-allow-overlap": false,
-                },
-                paint: {
-                  "text-color": rgbaCss(feat(vs, "peak").colour),
-                  "text-halo-color": "rgba(255,255,255,0.85)",
-                  "text-halo-width": 1.5,
-                },
-              },
-            },
-            {
-              key: "campsite",
-              suffix: "campsite",
-              filter: ["==", ["get", "_category"], "campsite"],
-              style: {
-                type: "symbol",
-                minzoom: 12,
-                layout: {
-                  "text-field": "▲",
-                  "text-font": ["Open Sans Semibold"],
-                  "text-size": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    12,
-                    feat(vs, "campsite").widthZ18 * 0.8,
-                    18,
-                    feat(vs, "campsite").widthZ18,
-                  ],
-                  "text-allow-overlap": true,
-                },
-                paint: {
-                  "text-color": rgbaCss(feat(vs, "campsite").colour),
-                  "text-halo-color": "rgba(255,255,255,0.85)",
-                  "text-halo-width": 1.5,
-                },
-              },
-            },
-            {
-              key: "cave",
-              suffix: "cave",
-              filter: ["==", ["get", "_category"], "cave"],
-              style: {
-                type: "symbol",
-                minzoom: 12,
-                layout: {
-                  "text-field": "◆",
-                  "text-font": ["Open Sans Semibold"],
-                  "text-size": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    12,
-                    feat(vs, "cave").widthZ18 * 0.8,
-                    18,
-                    feat(vs, "cave").widthZ18,
-                  ],
-                  "text-allow-overlap": true,
-                },
-                paint: {
-                  "text-color": rgbaCss(feat(vs, "cave").colour),
-                  "text-halo-color": "rgba(255,255,255,0.85)",
-                  "text-halo-width": 1.5,
-                },
-              },
-            },
-            {
-              key: "spring",
-              suffix: "spring",
-              filter: ["==", ["get", "_category"], "spring"],
-              style: {
-                type: "symbol",
-                minzoom: 12,
-                layout: {
-                  "text-field": "●",
-                  "text-font": ["Open Sans Semibold"],
-                  "text-size": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    12,
-                    feat(vs, "spring").widthZ18 * 0.8,
-                    18,
-                    feat(vs, "spring").widthZ18,
-                  ],
-                  "text-allow-overlap": true,
-                },
-                paint: {
-                  "text-color": rgbaCss(feat(vs, "spring").colour),
-                  "text-halo-color": "rgba(255,255,255,0.85)",
-                  "text-halo-width": 1.5,
-                },
-              },
-            },
-            {
-              key: "gate",
-              suffix: "gate",
-              filter: ["==", ["get", "_category"], "gate"],
-              style: {
-                type: "symbol",
-                minzoom: 14,
-                layout: {
-                  "text-field": "×",
-                  "text-font": ["Open Sans Semibold"],
-                  "text-size": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    14,
-                    feat(vs, "gate").widthZ18 * 0.9,
-                    18,
-                    feat(vs, "gate").widthZ18 + 3,
-                  ],
-                  "text-allow-overlap": true,
-                },
-                paint: {
-                  "text-color": rgbaCss(feat(vs, "gate").colour),
-                  "text-halo-color": "rgba(255,255,255,0.85)",
-                  "text-halo-width": 1.5,
-                },
-              },
-            },
           ];
           for (const { key, suffix, filter, style } of featureLayers) {
             if (!feat(vs, key).enabled) continue;
@@ -1364,56 +1233,69 @@ function Map({
             }
           }
 
-          // Name labels for point categories at z14+ (campsite, cave, spring, gate)
-          const pointLabelLayers: {
-            key: OsmFeatureKey;
-            suffix: string;
-            category: string;
-            color: string;
-          }[] = [
-            { key: "campsite", suffix: "campsite-label", category: "campsite", color: rgbaCss(feat(vs, "campsite").colour) },
-            { key: "cave",     suffix: "cave-label",     category: "cave",     color: rgbaCss(feat(vs, "cave").colour) },
-            { key: "spring",   suffix: "spring-label",   category: "spring",   color: rgbaCss(feat(vs, "spring").colour) },
-            { key: "gate",     suffix: "gate-label",     category: "gate",     color: rgbaCss(feat(vs, "gate").colour) },
-          ];
-          for (const { key, suffix, category, color } of pointLabelLayers) {
+          // Point features → fixed PNG icons (one symbol layer per enabled
+          // category). Icons aren't user-recolourable; size mirrors the Python
+          // pipeline so they match the MBTiles export. Missing images are loaded
+          // lazily via the `styleimagemissing` handler above.
+          for (const key of OSM_POINT_FEATURE_KEYS) {
             if (!feat(vs, key).enabled) continue;
-            const lid = `topo-${id}-${suffix}`;
-            if (!map.getLayer(lid)) {
-              map.addLayer({
-                id: lid,
-                type: "symbol",
-                source: srcId,
-                "source-layer": "features",
-                filter: [
-                  "all",
-                  ["==", ["get", "_category"], category],
-                  ["has", "name"],
-                ],
-                minzoom: 14,
-                layout: {
-                  "text-field": ["get", "name"],
-                  "text-font": ["Open Sans Semibold"],
-                  "text-size": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    14,
-                    9,
-                    18,
-                    12,
-                  ],
-                  "text-anchor": "top",
-                  "text-offset": [0, 0.8],
-                  "text-optional": true,
-                },
-                paint: {
-                  "text-color": color,
-                  "text-halo-color": "rgba(255,255,255,0.85)",
-                  "text-halo-width": 1.5,
-                },
-              });
-            }
+            const lid = `topo-${id}-${key}`;
+            if (map.getLayer(lid)) continue;
+            map.addLayer({
+              id: lid,
+              type: "symbol",
+              source: srcId,
+              "source-layer": "features",
+              filter: ["==", ["get", "_category"], key],
+              minzoom: key === "gate" ? 14 : 12,
+              layout: {
+                "icon-image": `topo-icon-${key}`,
+                "icon-size": iconSizeInterp(OSM_POINT_ICON[key].sizeZ18),
+                "icon-allow-overlap": true,
+              },
+            });
+          }
+
+          // Name labels for point features at z14+. Peaks also show elevation.
+          // Label colour follows the category colour from VectorStyleSettings.
+          for (const key of OSM_POINT_FEATURE_KEYS) {
+            if (!feat(vs, key).enabled) continue;
+            const lid = `topo-${id}-${key}-label`;
+            if (map.getLayer(lid)) continue;
+            const textField: maplibregl.ExpressionSpecification =
+              key === "peak"
+                ? [
+                    "case",
+                    ["all", ["has", "name"], ["has", "ele"]],
+                    ["concat", ["get", "name"], "\n", ["to-string", ["get", "ele"]], " m"],
+                    ["has", "name"],
+                    ["get", "name"],
+                    ["has", "ele"],
+                    ["concat", ["to-string", ["get", "ele"]], " m"],
+                    "",
+                  ]
+                : ["coalesce", ["get", "name"], ""];
+            map.addLayer({
+              id: lid,
+              type: "symbol",
+              source: srcId,
+              "source-layer": "features",
+              filter: ["==", ["get", "_category"], key],
+              minzoom: 14,
+              layout: {
+                "text-field": textField,
+                "text-font": ["Open Sans Semibold"],
+                "text-size": ["interpolate", ["linear"], ["zoom"], 14, 9, 18, 12],
+                "text-anchor": "top",
+                "text-offset": [0, 0.8],
+                "text-optional": true,
+              },
+              paint: {
+                "text-color": rgbaCss(feat(vs, key).colour),
+                "text-halo-color": "rgba(255,255,255,0.85)",
+                "text-halo-width": 1.5,
+              },
+            });
           }
         }
       }
