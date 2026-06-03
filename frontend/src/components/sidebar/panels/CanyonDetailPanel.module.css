@@ -15,6 +15,49 @@
   flex-shrink: 0;
 }
 
+.safetyWarning {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+  padding: 0.5em 0.6em;
+  margin: 0 0 0.5em;
+  border: 1px solid color-mix(in srgb, var(--theme-warning) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--theme-warning) 12%, transparent);
+}
+
+.safetyIcon {
+  flex-shrink: 0;
+  margin-top: 0.1em;
+  color: var(--theme-warning);
+}
+
+.safetyText {
+  flex: 1;
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  color: var(--theme-text-primary);
+}
+
+.safetyDismiss {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--theme-text-muted);
+  opacity: 0.7;
+  transition: opacity var(--transition-fast);
+}
+
+.safetyDismiss:hover {
+  opacity: 1;
+}
+
 .disclaimer {
   font-size: var(--text-xs);
   opacity: 0.6;

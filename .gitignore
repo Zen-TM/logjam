@@ -3,6 +3,10 @@ CLAUDE.md
 .mcp.json
 repomix-output.xml
 
+# Audit skill outputs (local-only)
+docs/audits/
+.audit-tmp/
+
 # Python bytecode
 __pycache__/
 *.pyc

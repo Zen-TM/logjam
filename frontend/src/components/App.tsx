@@ -41,6 +41,7 @@ import FilterStatusChip from "./map/FilterStatusChip";
 import FilterEmptyState from "./map/FilterEmptyState";
 import { PENDING_CONSENT_STORAGE_KEY } from "../consent";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
+import { TOPO_OVERLAY_SOURCE, GEOPDF_OVERLAY_ATTRIBUTION } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import { useLocalStorage } from "../useLocalStorage";
 import { Button } from "@mui/material";
@@ -184,9 +185,16 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
       id: string;
       pmtilesUrl: string;
       format?: "raster" | "vector";
+      attribution?: string;
     }[] = [];
     for (const layerName of lidarLayerOrder) {
       if (!lidarLayerToggles[layerName]) continue;
+      // Credit the overlay's open-data source (ELVIS / SVTM / OSM) so MapLibre's
+      // AttributionControl surfaces the required CC BY / ODbL attribution.
+      const overlaySource = TOPO_OVERLAY_SOURCE[layerName];
+      const attribution = overlaySource
+        ? GEOPDF_OVERLAY_ATTRIBUTION[overlaySource]
+        : undefined;
       for (const job of completedTopoJobs) {
         if (!(lidarJobToggles[job.jobId] ?? true)) continue;
         const match = job.layers.find((l) => l.name === layerName);
@@ -195,6 +203,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           id: `${job.jobId}-${layerName}`,
           pmtilesUrl: match.pmtilesUrl,
           format: match.format,
+          attribution,
         });
       }
     }

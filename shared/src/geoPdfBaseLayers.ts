@@ -6,13 +6,13 @@ export const GEOPDF_BASE_LAYER_CONFIG: Record<
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
     maxNativeZoom: 16,
-    attribution: "Base map © NSW Spatial Services (SIX Maps)",
+    attribution: "Base map © Department of Customer Service (NSW) — SIX Maps, 2026",
   },
   "six-imagery": {
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
     maxNativeZoom: 20,
-    attribution: "Imagery © NSW Spatial Services (SIX Maps)",
+    attribution: "Imagery © Department of Customer Service (NSW) — SIX Maps, 2026",
   },
   osm: {
     urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -33,3 +33,54 @@ export const GEOPDF_BASE_LAYER_CONFIG: Record<
       "Base map © CyclOSM, © OpenStreetMap contributors",
   },
 };
+
+// ── Overlay attribution ───────────────────────────────────────────────────────
+// Logjam's topo overlays derive from three open-data sources, each requiring its
+// own credit wherever the derived material is shared (map UI + exported GeoPDF):
+//   - hillshade / slope / contours → ELVIS LiDAR (Geoscience Australia + NSW), CC BY 4.0
+//   - vegetation                   → NSW State Vegetation Type Map (SVTM), CC BY 4.0
+//   - features                     → OpenStreetMap, ODbL
+// Single source of truth so the frontend AttributionControl and the PDF agree.
+
+export type OverlaySource = "elevation" | "vegetation" | "features";
+
+export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
+  elevation:
+    "Elevation data © Geoscience Australia / NSW Spatial Services (CC BY 4.0)",
+  vegetation:
+    "Vegetation data © State of NSW (DCCEEW) — State Vegetation Type Map (CC BY 4.0)",
+  features: "Features © OpenStreetMap contributors",
+};
+
+// Maps each selectable overlay layer name to its underlying data source.
+// Keep in sync with TOPO_LAYERS (api/src/constants/topoLayers.ts).
+export const TOPO_OVERLAY_SOURCE: Record<string, OverlaySource> = {
+  hillshade: "elevation",
+  slope: "elevation",
+  contours: "elevation",
+  vegetation: "vegetation",
+  features: "features",
+};
+
+// Stable display order for credit lines.
+const OVERLAY_SOURCE_ORDER: OverlaySource[] = [
+  "elevation",
+  "vegetation",
+  "features",
+];
+
+/**
+ * Deduped attribution lines for the given active overlay layer names, in stable
+ * source order. e.g. ["hillshade","slope","features"] →
+ * ["Elevation data © …", "Features © OpenStreetMap contributors"].
+ */
+export function overlayAttributionLines(overlays: string[]): string[] {
+  const sources = new Set<OverlaySource>();
+  for (const name of overlays) {
+    const source = TOPO_OVERLAY_SOURCE[name];
+    if (source) sources.add(source);
+  }
+  return OVERLAY_SOURCE_ORDER.filter((s) => sources.has(s)).map(
+    (s) => GEOPDF_OVERLAY_ATTRIBUTION[s],
+  );
+}

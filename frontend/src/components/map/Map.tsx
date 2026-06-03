@@ -89,7 +89,8 @@ export const BASE_LAYERS = [
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
     ],
     maxzoom: 16,
-    attribution: '<a href="https://maps.six.nsw.gov.au/">SIX Maps</a>',
+    attribution:
+      '&copy; Department of Customer Service (NSW) — <a href="https://maps.six.nsw.gov.au/">SIX Maps</a>, 2026',
   },
   {
     id: "six-base",
@@ -98,7 +99,8 @@ export const BASE_LAYERS = [
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
     ],
     maxzoom: 18,
-    attribution: '<a href="https://maps.six.nsw.gov.au/">SIX Maps</a>',
+    attribution:
+      '&copy; Department of Customer Service (NSW) — <a href="https://maps.six.nsw.gov.au/">SIX Maps</a>, 2026',
   },
   {
     id: "six-imagery",
@@ -107,7 +109,8 @@ export const BASE_LAYERS = [
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
     ],
     maxzoom: 18,
-    attribution: '<a href="https://maps.six.nsw.gov.au/">SIX Maps</a>',
+    attribution:
+      '&copy; Department of Customer Service (NSW) — <a href="https://maps.six.nsw.gov.au/">SIX Maps</a>, 2026',
   },
 ];
 
@@ -246,6 +249,7 @@ function Map({
     id: string;
     pmtilesUrl: string;
     format?: "raster" | "vector";
+    attribution?: string;
   }[];
   vectorStyle?: VectorStyleSettings | null;
   activeLayerId: string;
@@ -924,7 +928,7 @@ function Map({
     }
 
     // Add sources + layers for new entries
-    layers.forEach(({ id, pmtilesUrl, format }) => {
+    layers.forEach(({ id, pmtilesUrl, format, attribution }) => {
       const srcId = `topo-src-${id}`;
       const fmt = format ?? "raster";
 
@@ -934,11 +938,13 @@ function Map({
             type: "raster",
             url: `pmtiles://${pmtilesUrl}`,
             tileSize: 256,
+            attribution,
           });
         } else {
           map.addSource(srcId, {
             type: "vector",
             url: `pmtiles://${pmtilesUrl}`,
+            attribution,
           });
         }
       }

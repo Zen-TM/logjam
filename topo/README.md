@@ -20,6 +20,28 @@ Zoom range: **z12–z18**
 
 ---
 
+## Data sources & licences
+
+Outputs are derived from third-party open data. Each source requires attribution
+wherever the derived material is shared (in-app map UI and exported GeoPDF/MBTiles).
+Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
+(`GEOPDF_OVERLAY_ATTRIBUTION`).
+
+| Source | Used for | Licence | Required credit |
+|--------|----------|---------|-----------------|
+| **ELVIS LiDAR** (Geoscience Australia + NSW Spatial Services) | hillshade, slope, contours | CC BY 4.0 | "Elevation data © Geoscience Australia / NSW Spatial Services (CC BY 4.0)" |
+| **NSW State Vegetation Type Map (SVTM)** | vegetation | CC BY 4.0 *(to confirm via SEED portal — see note)* | "Vegetation data © State of NSW (DCCEEW) — State Vegetation Type Map (CC BY 4.0)" |
+| **OpenStreetMap** | features | ODbL | "Features © OpenStreetMap contributors" |
+| **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
+
+> **SVTM licence — unconfirmed.** NSW open data on the SEED portal
+> (<https://datasets.seed.nsw.gov.au/>) is typically CC BY 4.0, but the exact
+> SVTM licence and the precise required attribution string have not yet been
+> verified. Confirm before any public release and update the credit strings if
+> the licence differs.
+
+---
+
 ## Quick start (Docker — recommended)
 
 ### Prerequisites

@@ -726,6 +726,11 @@ function GeoPdfDialog({
       </DialogTitle>
 
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
+        <p className={classes.safetyWarning} role="note">
+          Generated maps use user-generated and third-party data that may be
+          inaccurate or outdated. Not a substitute for your own navigation,
+          judgement, or rescue planning.
+        </p>
         {/* ── Template name (template mode) ────────────────────── */}
         {templateMode && (
           <div className={classes.section}>

@@ -176,6 +176,23 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
         )}
         {error && <ErrorBanner message={error} />}
 
+        <Typography
+          variant="caption"
+          component="p"
+          sx={{
+            mb: 2,
+            p: 1,
+            borderRadius: 1,
+            border: "1px solid color-mix(in srgb, var(--theme-warning) 45%, transparent)",
+            background: "color-mix(in srgb, var(--theme-warning) 12%, transparent)",
+            color: "var(--theme-text-primary)",
+          }}
+        >
+          Exported data is user-generated and derived from third-party sources;
+          it may be inaccurate or outdated. Not a substitute for your own
+          navigation, judgement, or rescue planning.
+        </Typography>
+
         <Box sx={{ mb: 2 }}>
           <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Format</Typography>
           <RadioGroup row value={format} onChange={(e) => setFormat(e.target.value as ExportFormat)}>

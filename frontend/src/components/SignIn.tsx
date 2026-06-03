@@ -50,6 +50,7 @@ function SignIn({
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendSuccess, setResendSuccess] = useState(false);
   const [consented, setConsented] = useState(false);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -95,6 +96,10 @@ function SignIn({
     }
     if (!consented) {
       setLocalError("You must agree to the Terms and Privacy Policy");
+      return;
+    }
+    if (!ageConfirmed) {
+      setLocalError("You must confirm you are 16 or older");
       return;
     }
     setSubmitting(true);
@@ -341,12 +346,21 @@ function SignIn({
               <a href="/privacy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
             </span>
           </label>
+          <label className={classes.consentRow}>
+            <input
+              type="checkbox"
+              checked={ageConfirmed}
+              onChange={(e) => setAgeConfirmed(e.target.checked)}
+              required
+            />
+            <span>I confirm I am 16 years of age or older.</span>
+          </label>
           {displayError && <ErrorBanner message={displayError} />}
           <Button
             type="submit"
             variant="contained"
             fullWidth
-            disabled={submitting || !consented}
+            disabled={submitting || !consented || !ageConfirmed}
           >
             {submitting ? "Creating account..." : "Sign up"}
           </Button>

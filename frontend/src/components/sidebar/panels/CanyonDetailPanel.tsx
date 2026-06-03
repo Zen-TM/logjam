@@ -7,7 +7,7 @@ import {
   DialogActions,
   Button,
 } from "@mui/material";
-import { Pencil } from "lucide-react";
+import { Pencil, TriangleAlert, X } from "lucide-react";
 import classes from "./CanyonDetailPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -57,6 +57,7 @@ function CanyonDetailPanel({
 }) {
   const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
+  const [safetyDismissed, setSafetyDismissed] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -162,6 +163,23 @@ function CanyonDetailPanel({
   return (
     <>
       <div className={classes.root}>
+        {!safetyDismissed && (
+          <div className={classes.safetyWarning} role="note">
+            <TriangleAlert size={16} className={classes.safetyIcon} />
+            <span className={classes.safetyText}>
+              Data is user-generated and may be inaccurate or outdated. Not a
+              substitute for your own navigation, judgement, or rescue planning.
+            </span>
+            <button
+              type="button"
+              className={classes.safetyDismiss}
+              aria-label="Dismiss safety warning"
+              onClick={() => setSafetyDismissed(true)}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
         {(canyon.ropeWikiId != null || canyon.altNames.length > 0) && (
           <div className={classes.headerMeta}>
             {canyon.ropeWikiId != null && (
