@@ -67,15 +67,18 @@ router.post(
         },
       });
       if (notifyRecipient) {
+        // Store only reference IDs — never denormalise plaintext canyon names
+        // or usernames into the payload (PRIV-005). Display strings are resolved
+        // from the live canyon/user rows at read time in notifications.ts. This
+        // is what makes revoked/deleted shares stop surfacing a name at all
+        // (PRIV-001/003): if the reference is gone there is nothing to resolve.
         await tx.notification.create({
           data: {
             userId: sharedWithUserId,
             type: "canyon_shared",
             payload: {
               canyonId,
-              canyonName: canyon.name,
               sharedById: user.id,
-              sharedByUsername: user.username,
             },
           },
         });
@@ -113,7 +116,20 @@ router.delete(
     const isSharee = targetUserId === user.id;
     if (!isSharer && !isSharee) throw new AppError(403, "Access denied");
 
-    await prisma.canyonShare.delete({ where: { id: share.id } });
+    // Revoke the share AND remove the recipient's canyon_shared notification
+    // for this canyon in one transaction (PRIV-001). The read-time filter would
+    // already hide the name, but revocation should purge the recipient's
+    // residual row, not leave it at rest.
+    await prisma.$transaction([
+      prisma.canyonShare.delete({ where: { id: share.id } }),
+      prisma.notification.deleteMany({
+        where: {
+          userId: targetUserId,
+          type: "canyon_shared",
+          payload: { path: ["canyonId"], equals: canyonId },
+        },
+      }),
+    ]);
 
     res.status(204).send();
   },

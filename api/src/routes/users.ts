@@ -15,6 +15,7 @@ import { userPatchLimiter } from "../middleware/rateLimit";
 import { verifyEmail } from "../services/email";
 import { cognitoIdp } from "../services/awsClients";
 import { getWeeklyTileUsage } from "../lib/tileQuota";
+import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
 
@@ -216,7 +217,13 @@ router.patch(
     } = {};
 
     if (consentVersion !== undefined) {
-      if (typeof consentVersion !== "string" || consentVersion.length === 0 || consentVersion.length > 64) {
+      // Only accept consent recorded against the server's current version.
+      // Rejecting arbitrary/stale strings keeps the consent record trustworthy
+      // (self-attestation otherwise lets a client stamp any version).
+      if (
+        typeof consentVersion !== "string" ||
+        consentVersion !== CURRENT_CONSENT_VERSION
+      ) {
         throw new AppError(400, "Invalid consentVersion");
       }
       updates.consentVersion = consentVersion;
@@ -354,17 +361,33 @@ router.delete(
     // rows are deleted the keys are unrecoverable, so cleanup must run S3-first:
     // if an S3 delete throws, the DB rows still exist and a retried DELETE /me
     // can re-derive the keys (ARCH-004 — no orphaned objects, no lost keys).
-    const [topoJobs, topoExportJobs, media] = await Promise.all([
-      prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
-      prisma.topoExportJob.findMany({
-        where: { userId: user.id },
-        select: { id: true, resultKey: true },
-      }),
-      prisma.media.findMany({
-        where: { ownerId: user.id },
-        select: { s3KeyDisplay: true, s3KeyThumbnail: true },
-      }),
-    ]);
+    const [topoJobs, topoExportJobs, media, ownedCanyons, friendships] =
+      await Promise.all([
+        prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
+        prisma.topoExportJob.findMany({
+          where: { userId: user.id },
+          select: { id: true, resultKey: true },
+        }),
+        prisma.media.findMany({
+          where: { ownerId: user.id },
+          select: { s3KeyDisplay: true, s3KeyThumbnail: true },
+        }),
+        // Canyon IDs and friendship IDs are needed to purge cross-user
+        // notifications that reference this user's data (PRIV-003).
+        prisma.canyon.findMany({
+          where: { ownerId: user.id },
+          select: { id: true },
+        }),
+        prisma.friendship.findMany({
+          where: {
+            OR: [{ requesterId: user.id }, { addresseeId: user.id }],
+          },
+          select: { id: true },
+        }),
+      ]);
+
+    const ownedCanyonIds = ownedCanyons.map((c) => c.id);
+    const friendshipIds = friendships.map((f) => f.id);
 
     const mediaKeys = media.flatMap((m) =>
       [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
@@ -398,6 +421,35 @@ router.delete(
     // no DB FK, so its row delete MUST stay explicit.
     await prisma.$transaction([
       prisma.notification.deleteMany({ where: { userId: user.id } }),
+      // Purge notifications held by OTHER users that reference this user's data
+      // (PRIV-003): canyon_shared rows pointing at any of the deleted user's
+      // canyons, and friend_request(_accepted) rows pointing at any friendship
+      // this user was party to. The cascade removes the canyons/shares/
+      // friendships but not the recipient's denormalised notification rows.
+      ...(ownedCanyonIds.length > 0
+        ? [
+            prisma.notification.deleteMany({
+              where: {
+                type: "canyon_shared",
+                OR: ownedCanyonIds.map((canyonId) => ({
+                  payload: { path: ["canyonId"], equals: canyonId },
+                })),
+              },
+            }),
+          ]
+        : []),
+      ...(friendshipIds.length > 0
+        ? [
+            prisma.notification.deleteMany({
+              where: {
+                type: { in: ["friend_request", "friend_request_accepted"] },
+                OR: friendshipIds.map((friendshipId) => ({
+                  payload: { path: ["friendshipId"], equals: friendshipId },
+                })),
+              },
+            }),
+          ]
+        : []),
       prisma.canyonShare.deleteMany({
         where: { OR: [{ sharedById: user.id }, { sharedWithId: user.id }] },
       }),

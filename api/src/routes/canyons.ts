@@ -361,6 +361,16 @@ router.delete(
       }),
       prisma.tripLog.deleteMany({ where: { canyonId: id } }),
       prisma.canyonShare.deleteMany({ where: { canyonId: id } }),
+      // Purge canyon_shared notifications held by OTHER users (the share
+      // recipients) that reference this canyon — not just the owner's own rows
+      // (PRIV-003). The read-time filter would hide them, but deletion removes
+      // the residual record at rest.
+      prisma.notification.deleteMany({
+        where: {
+          type: "canyon_shared",
+          payload: { path: ["canyonId"], equals: id },
+        },
+      }),
       prisma.canyon.delete({ where: { id } }),
     ]);
 

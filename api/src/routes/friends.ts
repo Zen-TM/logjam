@@ -137,6 +137,7 @@ router.post(
         },
       });
       if (notifyAddressee) {
+        // Reference IDs only — username is resolved at read time (PRIV-005).
         await tx.notification.create({
           data: {
             userId: addresseeId,
@@ -144,7 +145,6 @@ router.post(
             payload: {
               friendshipId: created.id,
               requesterId: user.id,
-              requesterUsername: user.username,
             },
           },
         });
@@ -186,6 +186,7 @@ router.patch(
         data: { status: "accepted" },
       });
       if (notifyRequester) {
+        // Reference IDs only — username is resolved at read time (PRIV-005).
         await tx.notification.create({
           data: {
             userId: friendship.requesterId,
@@ -193,7 +194,6 @@ router.patch(
             payload: {
               friendshipId: id,
               acceptedById: user.id,
-              acceptedByUsername: user.username,
             },
           },
         });
@@ -227,7 +227,19 @@ router.patch(
     if (friendship.status !== "pending")
       throw new AppError(400, "Friend request is not pending");
 
-    await prisma.friendship.delete({ where: { id } });
+    // Delete the friendship and purge this user's own friend_request
+    // notification that referenced it (PRIV-003 — clean the row, don't rely on
+    // the read-time filter alone).
+    await prisma.$transaction([
+      prisma.notification.deleteMany({
+        where: {
+          userId: user.id,
+          type: "friend_request",
+          payload: { path: ["friendshipId"], equals: id },
+        },
+      }),
+      prisma.friendship.delete({ where: { id } }),
+    ]);
 
     res.status(204).send();
   },
@@ -261,6 +273,20 @@ router.delete(
         ? friendship.addresseeId
         : friendship.requesterId;
 
+    // Collect the shares being revoked BEFORE deleting them, so we can also
+    // purge each recipient's canyon_shared notification for the now-unshared
+    // canyon (PRIV-001). Unfriend revokes shares in both directions, so the
+    // notification purge targets both users' recipient rows.
+    const revokedShares = await prisma.canyonShare.findMany({
+      where: {
+        OR: [
+          { sharedById: user.id, sharedWithId: otherId },
+          { sharedById: otherId, sharedWithId: user.id },
+        ],
+      },
+      select: { canyonId: true, sharedWithId: true },
+    });
+
     await prisma.$transaction([
       // Revoke any canyons shared between these two users
       prisma.canyonShare.deleteMany({
@@ -269,6 +295,25 @@ router.delete(
             { sharedById: user.id, sharedWithId: otherId },
             { sharedById: otherId, sharedWithId: user.id },
           ],
+        },
+      }),
+      // Drop the recipient's residual canyon_shared notifications for each
+      // canyon whose share was just revoked.
+      ...revokedShares.map((s) =>
+        prisma.notification.deleteMany({
+          where: {
+            userId: s.sharedWithId,
+            type: "canyon_shared",
+            payload: { path: ["canyonId"], equals: s.canyonId },
+          },
+        }),
+      ),
+      // Purge the friend_request / friend_request_accepted notifications that
+      // referenced this friendship on either party's side.
+      prisma.notification.deleteMany({
+        where: {
+          type: { in: ["friend_request", "friend_request_accepted"] },
+          payload: { path: ["friendshipId"], equals: id },
         },
       }),
       prisma.friendship.delete({ where: { id } }),
