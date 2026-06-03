@@ -1446,11 +1446,17 @@ function Map({
       }
 
       // Solve for zoom: at zoom z and latitude lat,
-      //   metres_per_pixel = 156543.03 × cos(lat) / 2^z
-      // We want metres_per_pixel × framePxW = targetWidthM
+      //   metres_per_pixel = 78271.52 × cos(lat) / 2^z
+      // MapLibre GL uses 512px tiles, so its zoom resolution constant is
+      // earthCircumference / 512 = 78271.52 (NOT the 256-tile 156543.03 used by
+      // Leaflet/Google and by the server's XYZ tile-zoom math). Using the 256
+      // constant here over-zooms by exactly one level — the dashed frame then
+      // shows half the intended ground width, which both shrinks the on-screen
+      // frame and halves the scale when the extent is re-derived on Confirm.
+      // We want metres_per_pixel × framePxW = targetWidthM.
       const cosLat = Math.cos((targetCenter[1] * Math.PI) / 180);
       const metresPerPixel = targetWidthM / framePxW;
-      const targetZoom = Math.log2((156543.03 * cosLat) / metresPerPixel);
+      const targetZoom = Math.log2((78271.52 * cosLat) / metresPerPixel);
 
       m.easeTo({
         center: targetCenter,

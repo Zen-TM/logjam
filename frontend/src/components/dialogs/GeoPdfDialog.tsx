@@ -187,8 +187,24 @@ function GeoPdfDialog({
   // Template mode name
   const [editTemplateName, setEditTemplateName] = useState("");
 
-  // Tracks when dialog is reopening after "Select on map" — skip layer reset in that case
+  // Tracks when dialog is reopening after "Select on map" — tells the
+  // reset-on-close effect this close is a round trip, so it preserves state
+  // and the per-session init guards instead of resetting them.
   const returningFromMapSelect = useRef(false);
+
+  // Per-session init guards. A template (and the map-view seed) auto-fills the
+  // dialog ONCE per genuine open; after that the user is free to edit fields and
+  // those edits must survive (e.g. across a "Select on map" round trip) until the
+  // dialog is genuinely closed. Reset only in the genuine-close branch below.
+  const seededViewRef = useRef(false);
+  const appliedTemplateRef = useRef(false);
+
+  // Latest props read at open time without making them effect triggers — these
+  // change reference on map move / topo-job polling and must not re-run init.
+  const mapCenterRef = useRef(mapCenter);
+  mapCenterRef.current = mapCenter;
+  const activeLayerIdRef = useRef(activeLayerId);
+  activeLayerIdRef.current = activeLayerId;
 
   // Raw string state for extent/scale inputs (deferred recalculation)
   const focusedField = useRef<"n" | "s" | "e" | "w" | "scale" | null>(null);
@@ -204,6 +220,8 @@ function GeoPdfDialog({
   useEffect(() => {
     if (open) return;
     if (returningFromMapSelect.current) return;
+    seededViewRef.current = false;
+    appliedTemplateRef.current = false;
     setExtentState(DEFAULT_EXTENT_STATE);
     setSelectedTemplateId(null);
     setTemplateName("");
@@ -223,34 +241,39 @@ function GeoPdfDialog({
     setRawN(""); setRawS(""); setRawE(""); setRawW(""); setRawScale("");
   }, [open]);
 
-  // Sync layers + seed extent from current map view on open.
+  // Seed layers + extent from the current map view, once per genuine open.
+  // The returningFromMapSelect flag is cleared here (the close it described has
+  // happened); the seededViewRef gate skips re-seeding on the map round trip and
+  // on prop-reference churn, so user edits survive.
   useEffect(() => {
     if (!open) return;
-
-    if (!returningFromMapSelect.current) {
-      setSelectedBaseLayer(
-        activeLayerId.startsWith("osm") ? "six-topo" : activeLayerId,
-      );
-      setSelectedOverlays(new Set(TOPO_LAYERS.map((l) => l.name)));
-    }
     returningFromMapSelect.current = false;
+    if (seededViewRef.current) return;
+    seededViewRef.current = true;
 
+    const activeLayer = activeLayerIdRef.current;
+    setSelectedBaseLayer(
+      activeLayer.startsWith("osm") ? "six-topo" : activeLayer,
+    );
+    setSelectedOverlays(new Set(TOPO_LAYERS.map((l) => l.name)));
+
+    const center = mapCenterRef.current;
+    if (!center) return;
     setExtentState((prev) => {
-      if (!mapCenter) return prev;
       const paper = getPaperDimensions(prev);
       const mapW = paper.w - 2 * GEOPDF_PADDING_MM;
       const mapH = paper.h - 2 * GEOPDF_PADDING_MM;
       const widthM = prev.scale * (mapW / 1000);
       const heightM = prev.scale * (mapH / 1000);
       const bounds = extentFromCentreAndSize(
-        mapCenter.lat,
-        mapCenter.lng,
+        center.lat,
+        center.lng,
         widthM,
         heightM,
       );
       return { ...prev, ...bounds };
     });
-  }, [open, activeLayerId, completedTopoJobs, mapCenter]);
+  }, [open]);
 
   // Fetch templates on open (only in normal mode)
   useEffect(() => {
@@ -258,9 +281,12 @@ function GeoPdfDialog({
     apiFetch<GeoPdfTemplate[]>("/geo-pdf-templates")
       .then((list) => {
         setTemplates(list);
-        if (initialTemplateId) {
+        // Apply the launch template once per genuine open. On the map round-trip
+        // reopen this ref is still set, so the user's edits are not overwritten.
+        if (initialTemplateId && !appliedTemplateRef.current) {
           const t = list.find((x) => x.id === initialTemplateId);
           if (t) {
+            appliedTemplateRef.current = true;
             const c = t.config;
             setSelectedTemplateId(t.id);
             setExtentState((prev: ExtentState) => {

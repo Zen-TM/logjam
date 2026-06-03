@@ -83,17 +83,25 @@ export function geoHeightMeters(state: ExtentState): number {
   return (state.north - state.south) * METERS_PER_DEG_LAT;
 }
 
-/** Calculate scale denominator from current extent and paper size. */
+/**
+ * Calculate scale denominator from current extent and paper size.
+ *
+ * Scale is defined against the drawable MAP AREA (paper minus padding), not the
+ * full sheet, because the exported map image fills the map area — so the printed
+ * ratio is geoWidth / mapAreaWidth. A stated 1:10000 must therefore mean the
+ * extent spans 10000 × mapAreaWidth on the ground.
+ */
 export function calcScale(state: ExtentState): number {
-  const paper = getPaperDimensions(state);
-  const paperWidthM = paper.w / 1000;
-  return geoWidthMeters(state) / paperWidthM;
+  const map = getMapDimensions(state);
+  const mapWidthM = map.w / 1000;
+  return geoWidthMeters(state) / mapWidthM;
 }
 
-/** Paper aspect ratio (width / height). */
-function paperAspectRatio(state: ExtentState): number {
-  const paper = getPaperDimensions(state);
-  return paper.w / paper.h;
+/** Map-area aspect ratio (width / height) — the extent must match this so the
+ * image isn't stretched when drawn into the padded map area. */
+function mapAreaAspectRatio(state: ExtentState): number {
+  const map = getMapDimensions(state);
+  return map.w / map.h;
 }
 
 /** Map (geographic) aspect ratio (width / height in meters). */
@@ -128,9 +136,9 @@ export function extentFromCentreAndSize(
  * This is the core layout function used by multiple apply* functions.
  */
 function extentsFromScaleAndPivot(state: ExtentState, scale: number): ExtentState {
-  const paper = getPaperDimensions(state);
-  const targetWidthM = scale * (paper.w / 1000);
-  const targetHeightM = scale * (paper.h / 1000);
+  const map = getMapDimensions(state);
+  const targetWidthM = scale * (map.w / 1000);
+  const targetHeightM = scale * (map.h / 1000);
 
   const midLat = (state.north + state.south) / 2;
   const targetWidthDeg = targetWidthM / metersPerDegLon(midLat);
@@ -188,7 +196,7 @@ function pivotFractions(pivot: PivotPoint): {
  * Distributes the E/W change according to the pivot.
  */
 function fixEWForRatio(state: ExtentState): ExtentState {
-  const ratio = paperAspectRatio(state);
+  const ratio = mapAreaAspectRatio(state);
   const heightM = geoHeightMeters(state);
   const targetWidthM = heightM * ratio;
   const midLat = (state.north + state.south) / 2;
@@ -209,7 +217,7 @@ function fixEWForRatio(state: ExtentState): ExtentState {
  * Distributes the N/S change according to the pivot.
  */
 function fixNSForRatio(state: ExtentState): ExtentState {
-  const ratio = paperAspectRatio(state);
+  const ratio = mapAreaAspectRatio(state);
   const widthM = geoWidthMeters(state);
   const targetHeightM = widthM / ratio;
   const targetHeightDeg = targetHeightM / METERS_PER_DEG_LAT;
