@@ -1,9 +1,9 @@
 import { Switch, Tooltip } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import {
-  OSM_FEATURE_KEYS,
   OSM_FEATURE_LABELS,
   OSM_FEATURE_TAG_HINTS,
+  OSM_LINE_FEATURE_KEYS,
   OSM_POINT_FEATURE_KEYS,
   type OsmFeatureKey,
   type OsmFeatureStyle,
@@ -48,57 +48,48 @@ export default function VectorFeaturesForm({ value, onChange }: Props) {
       </p>
 
       <div>
-        <div className={styles.featureRow}>
-          <span />
-          <span />
-          <span className={styles.colourCell}>
-            <span className={styles.bandHeader}>Style</span>
-          </span>
-          <span className={styles.widthCell}>
-            <span className={styles.headerWithTooltip}>
-              <span className={styles.bandHeader}>Width</span>
-              <Tooltip title="Line width in pixels at zoom 18 (maximum detail level). Scales automatically at other zoom levels. Typical: 3–5 for thin paths, 10–15 for prominent roads." placement="top" arrow>
-                <InfoOutlinedIcon className={styles.infoIcon} />
-              </Tooltip>
-            </span>
-          </span>
-        </div>
-        {OSM_FEATURE_KEYS.map((key) => {
+        {[...OSM_LINE_FEATURE_KEYS, ...OSM_POINT_FEATURE_KEYS].map((key) => {
           const style = value[key];
           const rowClass = `${styles.featureRow} ${style.enabled ? "" : styles.featureRowDisabled}`;
           const isPoint = POINT_KEY_SET.has(key);
           return (
             <div key={key} className={rowClass}>
-              <Switch
-                size="small"
-                checked={style.enabled}
-                onChange={(_, checked) => setFeature(key, { enabled: checked })}
-              />
-              <span className={styles.labelWithTooltip}>
-                {OSM_FEATURE_LABELS[key]}
-                <Tooltip title={OSM_FEATURE_TAG_HINTS[key]} placement="top" arrow>
-                  <InfoOutlinedIcon className={styles.infoIcon} />
-                </Tooltip>
-              </span>
-              <span className={styles.colourCell}>
-                {isPoint ? (
-                  <Tooltip title="Fixed topographic icon" placement="top" arrow>
-                    <img
-                      src={`/topo-icons/${ICON_FILENAMES[key as OsmPointFeatureKey]}`}
-                      alt={OSM_FEATURE_LABELS[key]}
-                      className={styles.featureIcon}
-                    />
+              <div className={styles.featureTopLine}>
+                <Switch
+                  size="small"
+                  checked={style.enabled}
+                  onChange={(_, checked) => setFeature(key, { enabled: checked })}
+                />
+                <span className={styles.labelWithTooltip}>
+                  {OSM_FEATURE_LABELS[key]}
+                  <Tooltip title={OSM_FEATURE_TAG_HINTS[key]} placement="top" arrow>
+                    <InfoOutlinedIcon className={styles.infoIcon} />
                   </Tooltip>
-                ) : (
-                  <ColourPicker
-                    value={style.colour}
-                    onChange={(c) => setFeature(key, { colour: c })}
-                    ariaLabel={`${OSM_FEATURE_LABELS[key]} colour`}
-                  />
-                )}
-              </span>
-              <span className={styles.widthCell}>
-                {!isPoint && (
+                </span>
+                <span className={styles.colourCell}>
+                  {isPoint ? (
+                    <Tooltip title="Fixed topographic icon" placement="top" arrow>
+                      <img
+                        src={`/topo-icons/${ICON_FILENAMES[key as OsmPointFeatureKey]}`}
+                        alt={OSM_FEATURE_LABELS[key]}
+                        className={styles.featureIcon}
+                      />
+                    </Tooltip>
+                  ) : (
+                    <ColourPicker
+                      value={style.colour}
+                      onChange={(c) => setFeature(key, { colour: c })}
+                      ariaLabel={`${OSM_FEATURE_LABELS[key]} colour`}
+                    />
+                  )}
+                </span>
+              </div>
+              {!isPoint && (
+                <div className={styles.featureWidthLine}>
+                  <span className={styles.featureWidthLabel}>Width</span>
+                  <Tooltip title="Line width in pixels at zoom 18 (maximum detail level). Scales automatically at other zoom levels. Typical: 3–5 for thin paths, 10–15 for prominent roads." placement="top" arrow>
+                    <InfoOutlinedIcon className={styles.infoIcon} />
+                  </Tooltip>
                   <input
                     type="number"
                     className={styles.numberInput}
@@ -108,8 +99,8 @@ export default function VectorFeaturesForm({ value, onChange }: Props) {
                     onChange={(e) => setFeature(key, { widthZ18: Number(e.target.value) })}
                     aria-label={`${OSM_FEATURE_LABELS[key]} width at zoom 18`}
                   />
-                )}
-              </span>
+                </div>
+              )}
             </div>
           );
         })}
