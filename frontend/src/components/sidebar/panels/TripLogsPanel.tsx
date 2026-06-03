@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react";
-import { TextField } from "@mui/material";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import type { TCanyon, TTripLog } from "../../../canyonUtils";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
@@ -58,35 +57,33 @@ function TripLogsPanel({
   return (
     <div className={classes.panel}>
       <div className={classes.filters}>
-        <TextField
+        <input
+          type="text"
+          className={classes.searchInput}
           placeholder="Search by canyon name..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          size="small"
-          fullWidth
-          sx={{ "& .MuiInputBase-input": { fontSize: "0.85em" } }}
+          aria-label="Search trip logs by canyon name"
         />
         <div className={classes.dateRow}>
-          <TextField
-            label="From"
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            size="small"
-            fullWidth
-            InputLabelProps={{ shrink: true }}
-            sx={{ "& .MuiInputBase-input": { fontSize: "0.85em" } }}
-          />
-          <TextField
-            label="To"
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            size="small"
-            fullWidth
-            InputLabelProps={{ shrink: true }}
-            sx={{ "& .MuiInputBase-input": { fontSize: "0.85em" } }}
-          />
+          <label className={classes.dateField}>
+            <span className={classes.dateLabel}>From</span>
+            <input
+              type="date"
+              className={classes.dateInput}
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+            />
+          </label>
+          <label className={classes.dateField}>
+            <span className={classes.dateLabel}>To</span>
+            <input
+              type="date"
+              className={classes.dateInput}
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+            />
+          </label>
         </div>
       </div>
 

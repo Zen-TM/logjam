@@ -25,15 +25,19 @@ function GeoPdfsPanel({
   const toast = useToast();
   const [templates, setTemplates] = useState<GeoPdfTemplate[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [fetchCount] = useState(0);
 
   const loadTemplates = useCallback(async () => {
+    setLoading(true);
     try {
       const list = await apiFetch<GeoPdfTemplate[]>("/geo-pdf-templates");
       setTemplates(list);
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't load GeoPDF templates."));
+    } finally {
+      setLoading(false);
     }
   }, [toast]);
 
@@ -91,8 +95,12 @@ function GeoPdfsPanel({
           Templates ({templates.length})
         </div>
         <div className={classes.accordionBody}>
-          {templates.length === 0 && (
-            <div className={classes.emptyHint}>No templates yet.</div>
+          {loading ? (
+            <div className={classes.emptyHint}>Loading templates…</div>
+          ) : (
+            templates.length === 0 && (
+              <div className={classes.emptyHint}>No templates yet.</div>
+            )
           )}
           {templates.map((t) => (
             <div key={t.id} className={classes.templateItem}>

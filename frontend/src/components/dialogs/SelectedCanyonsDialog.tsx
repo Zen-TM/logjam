@@ -237,18 +237,19 @@ function SelectedCanyonsDialog({
                   {canyonSearchResults.length > 0 && (
                     <Box className={classes.searchResultsDropdown}>
                       {canyonSearchResults.map((c) => (
-                        <div
+                        <button
                           key={c.id}
+                          type="button"
                           className={classes.searchResultItem}
                           onClick={() => handleAddCanyonResult(c.id)}
                         >
                           {c.name}
                           {c.altNames.length > 0 && (
-                            <span style={{ opacity: 0.55, marginLeft: "0.4em", fontSize: "0.9em" }}>
+                            <span className={classes.searchResultAltNames}>
                               ({c.altNames.join(", ")})
                             </span>
                           )}
-                        </div>
+                        </button>
                       ))}
                     </Box>
                   )}

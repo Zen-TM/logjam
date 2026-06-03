@@ -106,13 +106,27 @@
 }
 
 .searchResultItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--theme-text-primary);
   padding: 0.4em 0.75em;
   font-size: var(--text-sm);
   cursor: pointer;
 }
 
-.searchResultItem:hover {
-  background-color: rgba(255, 255, 255, 0.08);
+.searchResultItem:hover,
+.searchResultItem:focus-visible {
+  background-color: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+  outline: none;
+}
+
+.searchResultAltNames {
+  opacity: 0.55;
+  margin-left: 0.4em;
+  font-size: 0.9em;
 }
 
 .addButton {

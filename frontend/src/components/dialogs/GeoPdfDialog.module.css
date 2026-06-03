@@ -36,23 +36,15 @@
 }
 
 .smallButton {
+  composes: btn btnGhost btnXs from "@styles/shared.module.css";
   padding: 0.3em 0.7em;
-  background: transparent;
-  color: var(--theme-text-primary);
-  border: 1px solid var(--theme-secondary);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  cursor: pointer;
   white-space: nowrap;
 }
 
 .smallButtonActive {
-  composes: smallButton;
-  background: var(--theme-secondary);
-}
-
-.smallButton:hover {
-  background: color-mix(in srgb, var(--theme-secondary) 20%, transparent);
+  composes: btn btnFilledNeutral btnXs from "@styles/shared.module.css";
+  padding: 0.3em 0.7em;
+  white-space: nowrap;
 }
 
 /* ── Paper ───────────────────────────────────────────────── */

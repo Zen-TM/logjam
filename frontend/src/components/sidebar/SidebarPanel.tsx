@@ -209,7 +209,7 @@ function SidebarPanel({
     <div className={classes.panel}>
       <div className={classes.panelHeader}>
         <h2 className={classes.panelTitle}>{title}</h2>
-        <button className={classes.closeButton} onClick={onClose}>
+        <button className={classes.closeButton} onClick={onClose} aria-label="Close panel">
           <X size={18} />
         </button>
       </div>

@@ -40,6 +40,20 @@
   position: relative;
 }
 
+.searchInput {
+  composes: input from '@styles/shared.module.css';
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45em 0.7em;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+.searchInput::placeholder {
+  color: var(--theme-text-muted);
+  opacity: 0.6;
+}
+
 .searchResults {
   composes: searchResults from '@styles/shared.module.css';
 }

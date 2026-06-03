@@ -18,6 +18,43 @@
   gap: 8px;
 }
 
+.searchInput {
+  composes: input from '@styles/shared.module.css';
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45em 0.7em;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+
+.searchInput::placeholder {
+  color: var(--theme-text-muted);
+  opacity: 0.6;
+}
+
+.dateField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  flex: 1;
+  min-width: 0;
+}
+
+.dateLabel {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+}
+
+.dateInput {
+  composes: input from '@styles/shared.module.css';
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4em 0.5em;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+  color-scheme: dark;
+}
+
 .footerActions {
   flex-shrink: 0;
   margin-top: auto;

@@ -229,13 +229,10 @@
 /* ── Shared action/confirm buttons ──────────────────────────────────────────── */
 
 .actionButton {
-  padding: 0.2em 0.4em;
+  composes: btn btnXs from '@styles/shared.module.css';
   background: color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
   color: var(--theme-text-primary);
   border: 1px solid color-mix(in srgb, var(--theme-accent) 50%, transparent);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  cursor: pointer;
   flex-shrink: 0;
   white-space: nowrap;
 }

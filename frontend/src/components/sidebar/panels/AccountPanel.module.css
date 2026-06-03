@@ -204,7 +204,7 @@
 }
 
 .signOutBtn {
-  composes: btn btnOutlineWarning btnSm btnFull from '@styles/shared.module.css';
+  composes: btn btnGhost btnSm btnFull from '@styles/shared.module.css';
 }
 
 .deleteAccountBtn {

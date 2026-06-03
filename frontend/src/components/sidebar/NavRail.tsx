@@ -48,6 +48,7 @@ function NavRail({
           className={`${classes.navItem} ${activePanel === id ? classes.active : ""}`}
           onClick={() => handleClick(id)}
           title={label}
+          aria-label={label}
         >
           <Icon size={20} />
           <span className={classes.label}>{label}</span>
@@ -62,6 +63,7 @@ function NavRail({
           className={`${classes.navItem} ${activePanel === id ? classes.active : ""}`}
           onClick={() => handleClick(id)}
           title={label}
+          aria-label={label}
         >
           <Icon size={20} />
           <span className={classes.label}>{label}</span>

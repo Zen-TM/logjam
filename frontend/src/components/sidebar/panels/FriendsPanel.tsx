@@ -7,7 +7,6 @@ import {
   DialogActions,
   Button,
   IconButton,
-  TextField,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import classes from "./FriendsPanel.module.css";
@@ -129,14 +128,13 @@ function FriendsPanel({
     <>
       <div className={classes.optionsContent}>
         <div className={classes.friendSearchContainer}>
-          <TextField
+          <input
+            type="text"
+            className={classes.searchInput}
             placeholder="Search by username..."
             value={friendSearch}
-            color="secondary"
             onChange={(e) => setFriendSearch(e.target.value)}
-            size="small"
-            fullWidth
-            sx={{ "& .MuiInputBase-input": { fontSize: "0.85em" } }}
+            aria-label="Search friends by username"
           />
           {searchResults.length > 0 && (
             <div className={classes.searchResults}>

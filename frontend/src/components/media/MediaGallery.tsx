@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Trash2, FileDown, X, Play } from "lucide-react";
 import { mediaCategory, type MediaItem } from "@logjam/shared";
 import { deleteMedia } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
+import { ErrorBanner } from "../feedback/ErrorBanner";
 import classes from "./MediaGallery.module.css";
 
 export default function MediaGallery({
@@ -19,6 +20,49 @@ export default function MediaGallery({
   const [lightbox, setLightbox] = useState<MediaItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const lightboxRef = useRef<HTMLDivElement>(null);
+  const lightboxCloseRef = useRef<HTMLButtonElement>(null);
+  const triggerBeforeLightboxRef = useRef<HTMLElement | null>(null);
+
+  // Focus management + focus trap for the lightbox dialog (WCAG 2.1.2 / 4.1.2).
+  useEffect(() => {
+    if (!lightbox) return;
+    triggerBeforeLightboxRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    lightboxCloseRef.current?.focus();
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setLightbox(null);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const container = lightboxRef.current;
+      if (!container) return;
+      const focusable = Array.from(
+        container.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, video[controls], [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => !el.hasAttribute("disabled"));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      triggerBeforeLightboxRef.current?.focus();
+    };
+  }, [lightbox]);
 
   const tracks = media.filter((m) => mediaCategory(m.mediaType) === "track");
   const visual = media.filter((m) => mediaCategory(m.mediaType) !== "track");
@@ -109,11 +153,19 @@ export default function MediaGallery({
         </div>
       )}
 
-      {error && <div className={classes.error}>{error}</div>}
+      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       {lightbox && (
-        <div className={classes.lightbox} onClick={() => setLightbox(null)} role="dialog">
+        <div
+          ref={lightboxRef}
+          className={classes.lightbox}
+          onClick={() => setLightbox(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Media preview"
+        >
           <button
+            ref={lightboxCloseRef}
             className={classes.lightboxClose}
             onClick={() => setLightbox(null)}
             aria-label="Close"

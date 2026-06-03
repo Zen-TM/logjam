@@ -69,6 +69,17 @@ function NotificationsPanel({
     }
   }
 
+  async function handleNotificationActivate(n: TNotification) {
+    if (!n.read) {
+      await markNotificationRead(n.id);
+      onRefetchNotifications();
+    }
+    if (n.type === "canyon_shared" && n.payload.canyonId) {
+      setSelectedCanyonID(n.payload.canyonId as string);
+      setActivePanel("canyon-detail");
+    }
+  }
+
   const visibleNotifications = notifications.filter(
     (n) => !actionedIds.has(n.id),
   );
@@ -95,14 +106,13 @@ function NotificationsPanel({
             <div
               key={n.id}
               className={`${classes.notificationItem} ${!n.read ? classes.notificationUnread : ""}`}
-              onClick={async () => {
-                if (!n.read) {
-                  await markNotificationRead(n.id);
-                  onRefetchNotifications();
-                }
-                if (n.type === "canyon_shared" && n.payload.canyonId) {
-                  setSelectedCanyonID(n.payload.canyonId as string);
-                  setActivePanel("canyon-detail");
+              role="button"
+              tabIndex={0}
+              onClick={() => handleNotificationActivate(n)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleNotificationActivate(n);
                 }
               }}
             >

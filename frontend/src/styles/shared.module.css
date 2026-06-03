@@ -68,6 +68,11 @@
 
 /* ─── Size modifiers ──────────────────────────────────────────────────────── */
 
+.btnXs {
+  padding: 0.2em 0.4em;
+  font-size: var(--text-xs);
+}
+
 .btnSm {
   padding: 0.2em 0.5em;
   font-size: var(--text-sm);

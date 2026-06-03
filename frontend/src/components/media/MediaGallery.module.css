@@ -21,8 +21,8 @@
   aspect-ratio: 1 / 1;
   border-radius: var(--radius-sm);
   overflow: hidden;
-  background-color: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: color-mix(in srgb, var(--theme-text-primary) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
 }
 
 .tileButton {
@@ -120,8 +120,8 @@
   min-width: 0;
   padding: 0.4rem 0.5rem;
   border-radius: var(--radius-sm);
-  background-color: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: color-mix(in srgb, var(--theme-text-primary) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
   color: var(--theme-text-primary);
   text-decoration: none;
   font-size: var(--text-sm);
@@ -129,7 +129,7 @@
 }
 
 .trackLink:hover {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
 }
 
 .trackName {
@@ -161,11 +161,6 @@
 .deleteBtnInline:disabled {
   opacity: 0.5;
   cursor: default;
-}
-
-.error {
-  font-size: var(--text-xs);
-  color: var(--theme-warning);
 }
 
 .lightbox {

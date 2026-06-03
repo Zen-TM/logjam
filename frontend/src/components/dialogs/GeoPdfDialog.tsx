@@ -306,8 +306,11 @@ function GeoPdfDialog({
           }
         }
       })
-      .catch((err) => { console.error(err); });
-  }, [open, templateMode, initialTemplateId]);
+      .catch((err) => {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't load GeoPDF templates."));
+      });
+  }, [open, templateMode, initialTemplateId, toast]);
 
   // Populate fields from editingTemplate when entering template mode
   useEffect(() => {
