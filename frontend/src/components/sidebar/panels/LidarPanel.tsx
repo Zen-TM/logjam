@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Switch, LinearProgress } from "@mui/material";
 import { ChevronDown, Lock, X } from "lucide-react";
 import classes from "./LidarPanel.module.css";
-import { apiFetch, useVectorStyle } from "../../../canyonUtils";
+import { apiFetch } from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import type { TopoJob, TopoTemplate, GeoJsonPolygon } from "../../dialogs/TopoDialog";
@@ -12,8 +12,6 @@ import TopoExportDialog from "../../dialogs/TopoExportDialog";
 import VectorContoursForm from "./vectorStyles/VectorContoursForm";
 import VectorFeaturesForm from "./vectorStyles/VectorFeaturesForm";
 import type { VectorStyleSettings } from "@logjam/shared";
-
-const VECTOR_STYLE_SAVE_DEBOUNCE_MS = 400;
 
 
 function jobEtaLabel(job: TopoJob): string {
@@ -48,6 +46,8 @@ function LidarPanel({
   onDismissActiveJob,
   onOpenTopoWithTemplate,
   onQuotaChanged,
+  vectorStyle,
+  onVectorStyleChange,
 }: {
   activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
@@ -61,6 +61,8 @@ function LidarPanel({
   onDismissActiveJob: (jobId: string) => void;
   onOpenTopoWithTemplate: (templateId: string) => void;
   onQuotaChanged: () => void;
+  vectorStyle: VectorStyleSettings | null;
+  onVectorStyleChange: (next: VectorStyleSettings) => void;
 }) {
   const toast = useToast();
 
@@ -72,36 +74,10 @@ function LidarPanel({
   const [editingTemplate, setEditingTemplate] = useState<TopoTemplate | null>(null);
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
 
-  // Vector styles accordion — live, per-user, debounced PUT
+  // Vector styles accordion — controlled by App; edits apply live to the map
+  // (optimistic) and the server PUT is debounced inside useLiveVectorStyle.
   const [vectorStylesOpen, setVectorStylesOpen] = useState(false);
   const [vectorStyleTab, setVectorStyleTab] = useState<"contours" | "features">("contours");
-  const vectorStyleHook = useVectorStyle(true);
-  const [draftVectorStyle, setDraftVectorStyle] = useState<VectorStyleSettings | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Seed the editable draft from the server-loaded value, but never blow away
-  // an in-flight edit by re-syncing after the hook refetches (e.g. after a
-  // save round-trip — saved value equals draft already).
-  useEffect(() => {
-    if (vectorStyleHook.vectorStyle && draftVectorStyle === null) {
-      setDraftVectorStyle(vectorStyleHook.vectorStyle);
-    }
-  }, [vectorStyleHook.vectorStyle, draftVectorStyle]);
-
-  const scheduleVectorStyleSave = useCallback((next: VectorStyleSettings) => {
-    setDraftVectorStyle(next);
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      vectorStyleHook.save(next).catch((err) => {
-        console.error(err);
-        toast.error(messageFromError(err, "Couldn't save vector style."));
-      });
-    }, VECTOR_STYLE_SAVE_DEBOUNCE_MS);
-  }, [vectorStyleHook, toast]);
-
-  useEffect(() => () => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-  }, []);
 
   // Topo jobs accordion
   const [jobsOpen, setJobsOpen] = useState(false);
@@ -317,22 +293,20 @@ function LidarPanel({
                 Features
               </button>
             </div>
-            {draftVectorStyle === null ? (
-              <div className={classes.emptyHint}>
-                {vectorStyleHook.error ?? "Loading…"}
-              </div>
+            {vectorStyle === null ? (
+              <div className={classes.emptyHint}>Loading…</div>
             ) : vectorStyleTab === "contours" ? (
               <VectorContoursForm
-                value={draftVectorStyle.contours}
+                value={vectorStyle.contours}
                 onChange={(next) =>
-                  scheduleVectorStyleSave({ ...draftVectorStyle, contours: next })
+                  onVectorStyleChange({ ...vectorStyle, contours: next })
                 }
               />
             ) : (
               <VectorFeaturesForm
-                value={draftVectorStyle.features}
+                value={vectorStyle.features}
                 onChange={(next) =>
-                  scheduleVectorStyleSave({ ...draftVectorStyle, features: next })
+                  onVectorStyleChange({ ...vectorStyle, features: next })
                 }
               />
             )}

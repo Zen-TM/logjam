@@ -29,7 +29,7 @@ import {
   useTripLogs,
   useAnalytics,
   useCurrentUser,
-  useVectorStyle,
+  useLiveVectorStyle,
   fetchCurrentUser,
   recordConsent,
   passesFilters,
@@ -292,7 +292,11 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   } = useTripLogs(authenticated);
   const { analytics, loading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(authenticated);
   const { currentUser, refetchCurrentUser } = useCurrentUser(authenticated);
-  const { vectorStyle } = useVectorStyle(authenticated);
+  const {
+    vectorStyle,
+    setVectorStyle: setLiveVectorStyle,
+    saveError: vectorStyleSaveError,
+  } = useLiveVectorStyle(authenticated);
 
   const [customFieldDefs, setCustomFieldDefs] = useState<
     TripLogCustomFieldDef[]
@@ -310,6 +314,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   useEffect(() => { if (notificationsError) toast.error(notificationsError); }, [notificationsError, toast]);
   useEffect(() => { if (tripLogsError) toast.error(tripLogsError); }, [tripLogsError, toast]);
   useEffect(() => { if (analyticsError) toast.error(analyticsError); }, [analyticsError, toast]);
+  useEffect(() => { if (vectorStyleSaveError) toast.error(vectorStyleSaveError); }, [vectorStyleSaveError, toast]);
 
   useEffect(() => {
     if (!authenticated) return;
@@ -708,6 +713,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           onCustomFieldDefsChange={setCustomFieldDefs}
           analytics={analytics}
           analyticsLoading={analyticsLoading}
+          vectorStyle={vectorStyle}
+          onVectorStyleChange={setLiveVectorStyle}
         />
       </div>
       <Map

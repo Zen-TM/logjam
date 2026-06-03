@@ -10,7 +10,7 @@ import type {
   TAnalytics,
   TUser,
 } from "../../canyonUtils";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
+import type { TripLogCustomFieldDef, VectorStyleSettings } from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygon } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate, GeoPdfJob } from "../dialogs/GeoPdfDialog";
@@ -115,6 +115,9 @@ function SidebarPanel({
   // Analytics
   analytics,
   analyticsLoading,
+  // Vector styles
+  vectorStyle,
+  onVectorStyleChange,
 }: {
   activePanel: PanelId | null;
   onClose: () => void;
@@ -191,6 +194,9 @@ function SidebarPanel({
   // Analytics
   analytics: TAnalytics | null;
   analyticsLoading: boolean;
+  // Vector styles
+  vectorStyle: VectorStyleSettings | null;
+  onVectorStyleChange: (next: VectorStyleSettings) => void;
 }) {
   if (!activePanel) return null;
 
@@ -264,6 +270,8 @@ function SidebarPanel({
             onDismissActiveJob={onDismissActiveJob}
             onOpenTopoWithTemplate={onOpenTopoWithTemplate}
             onQuotaChanged={onQuotaChanged}
+            vectorStyle={vectorStyle}
+            onVectorStyleChange={onVectorStyleChange}
           />
         )}
         {activePanel === "friends" && (

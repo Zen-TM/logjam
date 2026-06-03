@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
 import type { ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
@@ -973,6 +973,50 @@ export function useVectorStyle(enabled: boolean) {
   }, []);
 
   return { vectorStyle, loading, error, refetch, save };
+}
+
+const VECTOR_STYLE_SAVE_DEBOUNCE_MS = 400;
+
+// useLiveVectorStyle: wraps useVectorStyle to give a single, app-level source of
+// truth for the vector style. The returned `vectorStyle` updates optimistically
+// the instant `setVectorStyle` is called (so the map repaints live), while the
+// server PUT is debounced. This lets the LiDAR Topos panel be a controlled editor
+// whose edits flow straight to the MapLibre overlay without a page refresh.
+export function useLiveVectorStyle(enabled: boolean): {
+  vectorStyle: VectorStyleSettings | null;
+  setVectorStyle: (next: VectorStyleSettings) => void;
+  loadError: string | null;
+  saveError: string | null;
+} {
+  const { vectorStyle: serverStyle, error: loadError, save } = useVectorStyle(enabled);
+  const [liveStyle, setLiveStyle] = useState<VectorStyleSettings | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Seed the live style once from the server value; never clobber an in-flight
+  // edit on a later server refetch (the saved value already equals the draft).
+  useEffect(() => {
+    if (serverStyle && liveStyle === null) setLiveStyle(serverStyle);
+  }, [serverStyle, liveStyle]);
+
+  const setVectorStyle = useCallback((next: VectorStyleSettings) => {
+    setLiveStyle(next);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      save(next)
+        .then(() => setSaveError(null))
+        .catch((err) => {
+          console.error(err);
+          setSaveError(messageFromError(err, "Couldn't save vector style."));
+        });
+    }, VECTOR_STYLE_SAVE_DEBOUNCE_MS);
+  }, [save]);
+
+  useEffect(() => () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+  }, []);
+
+  return { vectorStyle: liveStyle, setVectorStyle, loadError, saveError };
 }
 
 export function formatCanyonGrade(canyon: TCanyon): string | null {

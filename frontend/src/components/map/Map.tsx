@@ -202,11 +202,58 @@ function feat(vs: VectorStyleSettings, key: OsmFeatureKey): OsmFeatureStyle {
   return vs.features[key];
 }
 
-// Stable hash for the dependency-array trigger that re-applies vector style.
-function vectorStyleHash(vs: VectorStyleSettings | null | undefined): string {
-  return vs ? JSON.stringify(vs) : "";
-}
+// Apply every user-controllable colour/width to one topo entry's vector layers
+// in place via setPaintProperty. This is the single source of the style→paint
+// mapping: it's called both when layers are first created (structural effect)
+// and on every live VectorStyleSettings change (paint effect), so colour/width
+// edits never require dropping and recreating layers. Each set is guarded by
+// getLayer, so it's a no-op for a layer that doesn't exist (disabled category,
+// raster entry, or not yet created).
+function applyVectorPaint(
+  map: maplibregl.Map,
+  entryId: string,
+  isContours: boolean,
+  vs: VectorStyleSettings,
+): void {
+  const setPaint = (
+    lid: string,
+    prop: string,
+    value: string | number | maplibregl.ExpressionSpecification,
+  ): void => {
+    if (map.getLayer(lid)) map.setPaintProperty(lid, prop, value);
+  };
 
+  if (isContours) {
+    setPaint(`topo-${entryId}-minor`, "line-color", rgbaCss(vs.contours.minorColour));
+    setPaint(`topo-${entryId}-minor`, "line-width", contourPixelWidth(vs.contours.minorWidthM));
+    setPaint(`topo-${entryId}-major`, "line-color", rgbaCss(vs.contours.majorColour));
+    setPaint(`topo-${entryId}-major`, "line-width", contourPixelWidth(vs.contours.majorWidthM));
+    setPaint(`topo-${entryId}-labels`, "text-color", rgbaCss(vs.contours.majorColour));
+    return;
+  }
+
+  // Line features with name labels — label text follows the line colour.
+  for (const key of ["waterway", "track", "road"] as const) {
+    const colour = rgbaCss(feat(vs, key).colour);
+    setPaint(`topo-${entryId}-${key}`, "line-color", colour);
+    setPaint(`topo-${entryId}-${key}`, "line-width", lineWidthInterp(feat(vs, key).widthZ18));
+    setPaint(`topo-${entryId}-${key}-label`, "text-color", colour);
+  }
+
+  // Power lines: raw pixel width (no zoom interpolation), no labels.
+  setPaint(`topo-${entryId}-power`, "line-color", rgbaCss(feat(vs, "power").colour));
+  setPaint(`topo-${entryId}-power`, "line-width", feat(vs, "power").widthZ18);
+
+  // Buildings: translucent fill + matching outline, no width control.
+  const buildingColour = rgbaCss(feat(vs, "building").colour);
+  setPaint(`topo-${entryId}-building`, "fill-color", buildingColour);
+  setPaint(`topo-${entryId}-building`, "fill-outline-color", buildingColour);
+
+  // Point feature name labels follow the category colour (icons are fixed PNGs).
+  for (const key of OSM_POINT_FEATURE_KEYS) {
+    setPaint(`topo-${entryId}-${key}-label`, "text-color", rgbaCss(feat(vs, key).colour));
+  }
+}
 
 function Map({
   filters,
@@ -290,7 +337,15 @@ function Map({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const prevTopoKeyRef = useRef<string>("");
-  const prevVectorStyleHashRef = useRef<string>("");
+  const prevEnabledKeyRef = useRef<string>("");
+
+  // Live vector style read by the structural topo effect without being a dep
+  // (so colour/width edits don't recreate layers — the paint effect handles
+  // those). The structural effect re-runs only when `enabledKey` flips.
+  const vectorStyleRef = useRef(vectorStyle);
+  const enabledKey = vectorStyle
+    ? Object.values(vectorStyle.features).map((f) => (f.enabled ? "1" : "0")).join("")
+    : "";
 
   // Keep refs up to date for use inside event handlers
   const selectCanyonRef = useRef(selectCanyon);
@@ -310,6 +365,10 @@ function Map({
   useEffect(() => {
     onMapViewChangeRef.current = onMapViewChange;
   }, [onMapViewChange]);
+
+  useEffect(() => {
+    vectorStyleRef.current = vectorStyle;
+  }, [vectorStyle]);
 
   // Initialise map once
   useEffect(() => {
@@ -898,22 +957,22 @@ function Map({
     };
   }, [mapLoaded]);
 
-  // Topo overlay layers (PMTiles — raster and vector)
+  // Topo overlay layers (PMTiles — raster and vector). STRUCTURAL pass: adds and
+  // removes sources/layers when the layer set or a per-category `enabled` flag
+  // changes. Colour/width are NOT applied here — they come from the paint pass
+  // below — so colour-picker drags never recreate layers. Reads the style from a
+  // ref so colour/width edits don't retrigger this effect; it re-runs only when
+  // `enabledKey` flips.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
     const layers = topoLayers ?? [];
-    const vs = vectorStyle ?? VECTOR_STYLE_FALLBACK;
+    const vs = vectorStyleRef.current ?? VECTOR_STYLE_FALLBACK;
 
-    // TODO(finding-13): JSON.stringify is order-dependent; swap for a structural
-    // hash if VectorStyleSettings grows. Computed once per effect run.
-    const vsHash = vectorStyleHash(vs);
-
-    // Skip if topo layers AND vector style haven't actually changed (avoids
-    // flicker from new array references with identical contents). vectorStyle
-    // is included so live edits in the LiDAR Topos panel re-paint the map.
+    // Skip if the layer set and enabled flags are unchanged (avoids flicker from
+    // new array references with identical contents).
     const topoKey = layers.map((l) => `${l.id}:${l.pmtilesUrl}`).join("|")
-                  + "::" + vsHash;
+                  + "::" + enabledKey;
     if (topoKey === prevTopoKeyRef.current) return;
     prevTopoKeyRef.current = topoKey;
 
@@ -927,12 +986,13 @@ function Map({
         .layers.map((l) => l.id)
         .filter((lid) => lid.startsWith(`topo-${entryId}-`));
 
-    // Remove layers/sources no longer in topoLayers. Additionally, if the
-    // vector style hash changed, drop every topo-* vector layer so they're
-    // re-created below with the new paint expressions (sources stay — only
-    // layers rebuild, no PMTiles refetch).
-    const vsChanged = prevVectorStyleHashRef.current !== vsHash;
-    prevVectorStyleHashRef.current = vsHash;
+    // Remove layers/sources no longer in topoLayers. Additionally, when an
+    // enable/disable toggle changed, drop every feature layer so they're
+    // re-created below per the current `enabled` flags (sources stay — only
+    // layers rebuild, no PMTiles refetch). Contour and raster layers persist;
+    // their look updates via the paint pass.
+    const structureChanged = prevEnabledKeyRef.current !== enabledKey;
+    prevEnabledKeyRef.current = enabledKey;
     const allTopoLayerIds = map
       .getStyle()
       .layers.map((l) => l.id)
@@ -943,8 +1003,10 @@ function Map({
       const dashIdx = withoutPrefix.indexOf("-");
       if (dashIdx < 0) continue;
       const entryId = withoutPrefix.slice(0, dashIdx);
-      const isVectorChild = !lid.endsWith("-raster");
-      const drop = !activeIds.has(entryId) || (vsChanged && isVectorChild);
+      const isContourChild =
+        lid.endsWith("-minor") || lid.endsWith("-major") || lid.endsWith("-labels");
+      const isFeatureChild = !lid.endsWith("-raster") && !isContourChild;
+      const drop = !activeIds.has(entryId) || (structureChanged && isFeatureChild);
       if (drop && map.getLayer(lid)) map.removeLayer(lid);
     }
     // Remove orphaned sources
@@ -1004,10 +1066,6 @@ function Map({
               source: srcId,
               "source-layer": "contours",
               filter: ["!=", ["%", ["to-number", ["get", "elev"]], 50], 0],
-              paint: {
-                "line-color": rgbaCss(vs.contours.minorColour),
-                "line-width": contourPixelWidth(vs.contours.minorWidthM),
-              },
               minzoom: 14,
             });
           }
@@ -1020,10 +1078,6 @@ function Map({
               source: srcId,
               "source-layer": "contours",
               filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
-              paint: {
-                "line-color": rgbaCss(vs.contours.majorColour),
-                "line-width": contourPixelWidth(vs.contours.majorWidthM),
-              },
             });
           }
           // Elevation labels on major contours at z12+
@@ -1052,17 +1106,17 @@ function Map({
                 "text-max-angle": 60,
               },
               paint: {
-                "text-color": rgbaCss(vs.contours.majorColour),
                 "text-halo-color": "rgba(255, 255, 255, 0.8)",
                 "text-halo-width": 1.5,
               },
             });
           }
         } else {
-          // OSM features vector source — one layer per category, driven by
-          // the live VectorStyleSettings. Per-category `enabled` skips the
-          // addLayer call entirely (no paint cost), so toggling a category
-          // off in the UI removes it from the map on next effect run.
+          // OSM features vector source — one layer per category. Per-category
+          // `enabled` skips the addLayer call entirely, so toggling a category
+          // off removes it from the map on the next structural run. Only static
+          // paint (dasharrays) is set here; colour and width are applied by
+          // applyVectorPaint so live edits don't recreate layers.
           type FeatureLayerSpec = {
             key: OsmFeatureKey;
             suffix: string;
@@ -1074,13 +1128,7 @@ function Map({
               key: "waterway",
               suffix: "waterway",
               filter: ["==", ["get", "_category"], "waterway"],
-              style: {
-                type: "line",
-                paint: {
-                  "line-color": rgbaCss(feat(vs, "waterway").colour),
-                  "line-width": lineWidthInterp(feat(vs, "waterway").widthZ18),
-                },
-              },
+              style: { type: "line" },
             },
             {
               key: "track",
@@ -1088,40 +1136,22 @@ function Map({
               filter: ["==", ["get", "_category"], "track"],
               style: {
                 type: "line",
-                paint: {
-                  "line-color": rgbaCss(feat(vs, "track").colour),
-                  "line-width": lineWidthInterp(feat(vs, "track").widthZ18),
-                  "line-dasharray": [4, 2],
-                },
+                paint: { "line-dasharray": [4, 2] },
               },
             },
             {
               key: "road",
               suffix: "road",
               filter: ["==", ["get", "_category"], "road"],
-              style: {
-                type: "line",
-                paint: {
-                  "line-color": rgbaCss(feat(vs, "road").colour),
-                  "line-width": lineWidthInterp(feat(vs, "road").widthZ18),
-                },
-              },
+              style: { type: "line" },
             },
             {
               key: "building",
+              // Buildings get a translucent fill of the configured colour and a
+              // matching outline (both applied by applyVectorPaint).
               suffix: "building",
               filter: ["==", ["get", "_category"], "building"],
-              style: {
-                type: "fill",
-                paint: {
-                  // Buildings get a translucent fill of the configured colour
-                  // and a solid outline; we synthesise the translucent fill by
-                  // halving the alpha implicitly via the rgba CSS output of
-                  // the user's colour.
-                  "fill-color": rgbaCss(feat(vs, "building").colour),
-                  "fill-outline-color": rgbaCss(feat(vs, "building").colour),
-                },
-              },
+              style: { type: "fill" },
             },
             {
               key: "power",
@@ -1129,11 +1159,7 @@ function Map({
               filter: ["==", ["get", "_category"], "power"],
               style: {
                 type: "line",
-                paint: {
-                  "line-color": rgbaCss(feat(vs, "power").colour),
-                  "line-width": feat(vs, "power").widthZ18,
-                  "line-dasharray": [3, 4],
-                },
+                paint: { "line-dasharray": [3, 4] },
               },
             },
           ];
@@ -1160,7 +1186,6 @@ function Map({
             key: OsmFeatureKey;
             suffix: string;
             filter: maplibregl.ExpressionSpecification;
-            color: string;
           }[] = [
             {
               key: "waterway",
@@ -1170,7 +1195,6 @@ function Map({
                 ["==", ["get", "_category"], "waterway"],
                 ["has", "name"],
               ],
-              color: rgbaCss(feat(vs, "waterway").colour),
             },
             {
               key: "track",
@@ -1180,7 +1204,6 @@ function Map({
                 ["==", ["get", "_category"], "track"],
                 ["has", "name"],
               ],
-              color: rgbaCss(feat(vs, "track").colour),
             },
             {
               key: "road",
@@ -1190,10 +1213,9 @@ function Map({
                 ["==", ["get", "_category"], "road"],
                 ["any", ["has", "name"], ["has", "ref"]],
               ],
-              color: rgbaCss(feat(vs, "road").colour),
             },
           ];
-          for (const { key, suffix, filter, color } of featureLabelLayers) {
+          for (const { key, suffix, filter } of featureLabelLayers) {
             if (!feat(vs, key).enabled) continue;
             const lid = `topo-${id}-${suffix}`;
             if (!map.getLayer(lid)) {
@@ -1225,7 +1247,6 @@ function Map({
                   "text-max-angle": 30,
                 },
                 paint: {
-                  "text-color": color,
                   "text-halo-color": "rgba(255,255,255,0.8)",
                   "text-halo-width": 1.5,
                 },
@@ -1291,7 +1312,6 @@ function Map({
                 "text-optional": true,
               },
               paint: {
-                "text-color": rgbaCss(feat(vs, key).colour),
                 "text-halo-color": "rgba(255,255,255,0.85)",
                 "text-halo-width": 1.5,
               },
@@ -1300,6 +1320,12 @@ function Map({
         }
       }
     });
+
+    // Paint freshly created (or rebuilt) layers with the current style so they
+    // never flash a default colour before the paint effect runs.
+    for (const { id } of layers) {
+      applyVectorPaint(map, id, id.includes("contours"), vs);
+    }
 
     // Reorder: ensure layers appear in the order specified by topoLayers array.
     // Each entry may own multiple MapLibre layers — move them all as a group.
@@ -1325,6 +1351,19 @@ function Map({
       if (map.getLayer(cid)) {
         map.moveLayer(cid);
       }
+    }
+  }, [topoLayers, enabledKey, mapLoaded]);
+
+  // PAINT pass: apply live colour/width to existing topo layers in place. Runs on
+  // every vectorStyle change (including colour-picker drags) without recreating
+  // layers — so editing is smooth and triggers no PMTiles refetch. setPaintProperty
+  // calls are no-ops for layers that don't exist (guarded inside applyVectorPaint).
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+    const vs = vectorStyle ?? VECTOR_STYLE_FALLBACK;
+    for (const { id } of topoLayers ?? []) {
+      applyVectorPaint(map, id, id.includes("contours"), vs);
     }
   }, [topoLayers, vectorStyle, mapLoaded]);
 
