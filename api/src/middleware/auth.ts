@@ -100,7 +100,7 @@ export function requireAuth(
       issuer: `https://cognito-idp.${process.env.COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}`,
       // Cognito ID tokens carry aud=<app client id>. Asserting audience rejects
       // tokens minted for a different app client in the same user pool.
-      audience: process.env.COGNITO_APP_CLIENT_ID,
+      audience: process.env.COGNITO_CLIENT_ID,
       algorithms: ["RS256"],
     },
     (err, decoded) => {

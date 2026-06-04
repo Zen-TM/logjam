@@ -13,7 +13,7 @@ const baseSchema = z.object({
   FAKE_USER_SUB: z.string().optional(),
   COGNITO_REGION: z.string().optional(),
   COGNITO_USER_POOL_ID: z.string().optional(),
-  COGNITO_APP_CLIENT_ID: z.string().optional(),
+  COGNITO_CLIENT_ID: z.string().optional(),
 
   AWS_REGION: z.string().default("ap-southeast-2"),
   AWS_ENDPOINT_URL: z.string().url().optional(),
@@ -66,7 +66,7 @@ export function validateEnv(): Env {
   if (env.AUTH_MODE === "cognito") {
     const c1 = required("COGNITO_REGION", env.COGNITO_REGION);
     const c2 = required("COGNITO_USER_POOL_ID", env.COGNITO_USER_POOL_ID);
-    const c3 = required("COGNITO_APP_CLIENT_ID", env.COGNITO_APP_CLIENT_ID);
+    const c3 = required("COGNITO_CLIENT_ID", env.COGNITO_CLIENT_ID);
     if (c1) missing.push(c1);
     if (c2) missing.push(c2);
     if (c3) missing.push(c3);
