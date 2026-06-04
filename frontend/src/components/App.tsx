@@ -409,8 +409,9 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
             refetchNotifications();
             refetchCompletedTopoJobs();
           }
-        } catch {
-          // silent — will retry next tick
+        } catch (err) {
+          console.error(`Topo job poll failed for ${job.id}:`, err);
+          // transient — will retry next tick
         }
       }
     }, 10_000);

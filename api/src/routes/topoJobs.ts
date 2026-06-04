@@ -338,7 +338,23 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const job = await prisma.topoJob.findUnique({ where: { id: getParam(req.params.id) } });
+    const job = await prisma.topoJob.findUnique({
+      where: { id: getParam(req.params.id) },
+      select: {
+        id: true,
+        userId: true, // needed for ownership check below
+        status: true,
+        name: true,
+        footprint: true,
+        tileCount: true,
+        estimatedSeconds: true,
+        layerOptions: true,
+        errorMessage: true,
+        createdAt: true,
+        updatedAt: true,
+        s3OutputKeys: true,
+      },
+    });
     if (!job) throw new AppError(404, "Job not found");
     if (job.userId !== user.id) throw new AppError(403, "Access denied");
     res.json(job);
