@@ -206,6 +206,17 @@ def main():
                 vector_style=export_job["vector_style_snapshot"],
             )
 
+            # Drop layers the source job never produced (e.g. OSM features when
+            # Overpass returned nothing) so one empty layer can't fail the whole
+            # export. Only a request with no usable layers at all is fatal.
+            available = ctx.available_layers(ctx.layers)
+            dropped = [l for l in ctx.layers if l not in available]
+            if dropped:
+                log.info(f"Dropping layers with no data for this job: {dropped}")
+            if not available:
+                raise RenderError("None of the selected layers have data for this job.")
+            ctx.layers = available
+
             fmt = export_job["format"]
             log.info(
                 f"Rendering format={fmt} bundling={ctx.bundling} "

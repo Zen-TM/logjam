@@ -30,6 +30,7 @@ import {
   useAnalytics,
   useCurrentUser,
   useLiveVectorStyle,
+  useTopoExports,
   fetchCurrentUser,
   recordConsent,
   passesFilters,
@@ -48,6 +49,16 @@ import { Button } from "@mui/material";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
 import { messageFromError } from "../errors/messageFromError";
+
+// Programmatically trigger a browser download for a presigned URL.
+function triggerDownload(url: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 
 function App() {
   const toast = useToast();
@@ -389,6 +400,49 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     return () => clearTimeout(timer);
   }, [authenticated, overlaysExpiresAt, refetchCompletedTopoJobs]);
 
+  // Topo exports (Stage 2 on-demand pipeline). Owned at App level so the
+  // recent-exports list (rendered in the LiDAR panel accordion) and the
+  // auto-download on completion work regardless of which panel or dialog is
+  // open. The hook self-throttles: it only polls while an export is in
+  // progress.
+  const {
+    exports: topoExports,
+    refetch: refetchTopoExports,
+  } = useTopoExports(authenticated);
+
+  // Auto-download exports that complete during this session. Snapshot the
+  // exports already completed on first successful fetch so we never download a
+  // pre-existing export, and never download the same one twice.
+  const alreadyCompletedExportIds = useRef<Set<string>>(new Set());
+  const autoDownloadedExportIds = useRef<Set<string>>(new Set());
+  const exportSnapshotTaken = useRef(false);
+  useEffect(() => {
+    if (!authenticated) {
+      exportSnapshotTaken.current = false;
+      alreadyCompletedExportIds.current = new Set();
+      autoDownloadedExportIds.current = new Set();
+      return;
+    }
+    if (!exportSnapshotTaken.current) {
+      for (const ex of topoExports) {
+        if (ex.status === "completed") alreadyCompletedExportIds.current.add(ex.id);
+      }
+      exportSnapshotTaken.current = true;
+      return;
+    }
+    for (const ex of topoExports) {
+      if (
+        ex.status === "completed" &&
+        ex.downloadUrl &&
+        !alreadyCompletedExportIds.current.has(ex.id) &&
+        !autoDownloadedExportIds.current.has(ex.id)
+      ) {
+        autoDownloadedExportIds.current.add(ex.id);
+        triggerDownload(ex.downloadUrl);
+      }
+    }
+  }, [authenticated, topoExports]);
+
   // Poll non-terminal jobs every 10 s; fire snackbar on completion
   useEffect(() => {
     const nonTerminal = activeTopoJobs.filter(
@@ -679,6 +733,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           geoPdfJobs={geoPdfJobs}
           activeTopoJobs={activeTopoJobs}
           completedTopoJobs={completedTopoJobs}
+          topoExports={topoExports}
+          onRefetchTopoExports={refetchTopoExports}
           lidarJobToggles={lidarJobToggles}
           setLidarJobToggles={setLidarJobToggles}
           onOpenTopo={() => {

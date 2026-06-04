@@ -10,7 +10,7 @@ import type {
   TAnalytics,
   TUser,
 } from "../../canyonUtils";
-import type { TripLogCustomFieldDef, VectorStyleSettings } from "@logjam/shared";
+import type { TripLogCustomFieldDef, VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygon } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate, GeoPdfJob } from "../dialogs/GeoPdfDialog";
@@ -81,6 +81,8 @@ function SidebarPanel({
   // LiDAR
   activeTopoJobs,
   completedTopoJobs,
+  topoExports,
+  onRefetchTopoExports,
   lidarJobToggles,
   setLidarJobToggles,
   onOpenTopo,
@@ -160,6 +162,8 @@ function SidebarPanel({
   // LiDAR
   activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
+  topoExports: TopoExportJobView[];
+  onRefetchTopoExports: () => void;
   lidarJobToggles: Record<string, boolean>;
   setLidarJobToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
   onOpenTopo: () => void;
@@ -262,6 +266,8 @@ function SidebarPanel({
           <LidarPanel
             activeTopoJobs={activeTopoJobs}
             completedTopoJobs={completedTopoJobs}
+            topoExports={topoExports}
+            onRefetchTopoExports={onRefetchTopoExports}
             lidarJobToggles={lidarJobToggles}
             setLidarJobToggles={setLidarJobToggles}
             onOpenTopo={onOpenTopo}

@@ -918,7 +918,10 @@ import type { VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
 
 // ── Topo exports (Stage 2 on-demand pipeline) ────────────────
 
-export function useTopoExports(enabled: boolean, pollMs: number = 0) {
+// Polls every `pollMs` while enabled AND at least one export is in progress
+// (queued/running), so a completing export is observed without always-on
+// polling. Falls back to a single fetch once everything is terminal.
+export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
   const [exports, setExports] = useState<TopoExportJobView[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -935,11 +938,14 @@ export function useTopoExports(enabled: boolean, pollMs: number = 0) {
     return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
+  const hasInProgress = exports.some(
+    (e) => e.status === "queued" || e.status === "running",
+  );
   useEffect(() => {
-    if (!enabled || pollMs <= 0) return;
+    if (!enabled || pollMs <= 0 || !hasInProgress) return;
     const id = setInterval(() => setFetchCount((n) => n + 1), pollMs);
     return () => clearInterval(id);
-  }, [enabled, pollMs]);
+  }, [enabled, pollMs, hasInProgress]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
   return { exports, loading, error, refetch };

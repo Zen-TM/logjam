@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Switch, LinearProgress } from "@mui/material";
-import { ChevronDown, Lock, X } from "lucide-react";
+import { ChevronDown, Lock, X, Download, Trash2 } from "lucide-react";
 import classes from "./LidarPanel.module.css";
-import { apiFetch } from "../../../canyonUtils";
+import { apiFetch, deleteTopoExport } from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import type { TopoJob, TopoTemplate, GeoJsonPolygon } from "../../dialogs/TopoDialog";
@@ -11,8 +11,24 @@ import TopoTemplateEditDialog from "../../dialogs/TopoTemplateEditDialog";
 import TopoExportDialog from "../../dialogs/TopoExportDialog";
 import VectorContoursForm from "./vectorStyles/VectorContoursForm";
 import VectorFeaturesForm from "./vectorStyles/VectorFeaturesForm";
-import type { VectorStyleSettings } from "@logjam/shared";
+import type { VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
 
+
+function formatBytes(n: number | null): string {
+  if (n === null) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function timeAgo(iso: string): string {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
 
 function jobEtaLabel(job: TopoJob): string {
   if (job.status === "uploading") return "Uploading…";
@@ -38,6 +54,8 @@ const switchSx = (color: string) => ({
 function LidarPanel({
   activeTopoJobs,
   completedTopoJobs,
+  topoExports,
+  onRefetchTopoExports,
   lidarJobToggles,
   setLidarJobToggles,
   onOpenTopo,
@@ -51,6 +69,8 @@ function LidarPanel({
 }: {
   activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
+  topoExports: TopoExportJobView[];
+  onRefetchTopoExports: () => void;
   lidarJobToggles: Record<string, boolean>;
   setLidarJobToggles: (
     v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>),
@@ -88,6 +108,25 @@ function LidarPanel({
 
   // Export dialog — one open at a time, keyed by job
   const [exportJob, setExportJob] = useState<CompletedTopoJob | null>(null);
+
+  // Exports accordion
+  const [exportsOpen, setExportsOpen] = useState(false);
+  const [deletingExportId, setDeletingExportId] = useState<string | null>(null);
+
+  // Resolve an export's source job to a display name. The source job may have
+  // been deleted since the export was created.
+  const jobNameById = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const job of completedTopoJobs) {
+      const dateStr = new Date(job.createdAt).toLocaleDateString(undefined, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+      byId.set(job.jobId, job.name ?? dateStr);
+    }
+    return byId;
+  }, [completedTopoJobs]);
 
   const loadTemplates = useCallback(async () => {
     try {
@@ -135,6 +174,23 @@ function LidarPanel({
       }
     },
     [toast, setLidarJobToggles, onRefetchCompletedTopoJobs, onQuotaChanged],
+  );
+
+  const handleDeleteExport = useCallback(
+    async (id: string) => {
+      setDeletingExportId(id);
+      try {
+        await deleteTopoExport(id);
+        onRefetchTopoExports();
+        onQuotaChanged();
+      } catch (err) {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't delete export."));
+      } finally {
+        setDeletingExportId(null);
+      }
+    },
+    [onRefetchTopoExports, onQuotaChanged, toast],
   );
 
   // Active jobs with cap-and-disclose
@@ -392,6 +448,73 @@ function LidarPanel({
         )}
       </div>
 
+      {/* Exports accordion */}
+      <div className={classes.accordion}>
+        <button
+          className={classes.accordionHeader}
+          onClick={() => setExportsOpen((v) => !v)}
+          aria-expanded={exportsOpen}
+        >
+          <span>Exports ({topoExports.length})</span>
+          <ChevronDown
+            size={14}
+            className={`${classes.chevron} ${exportsOpen ? classes.chevronOpen : ""}`}
+          />
+        </button>
+        {exportsOpen && (
+          <div className={classes.accordionBody}>
+            {topoExports.length === 0 && (
+              <div className={classes.emptyHint}>No exports yet.</div>
+            )}
+            {topoExports.map((ex) => {
+              const isComplete = ex.status === "completed" && !!ex.downloadUrl;
+              const isFailed = ex.status === "failed";
+              const isInProgress = ex.status === "queued" || ex.status === "running";
+              const jobLabel = jobNameById.get(ex.sourceJobIds[0]) ?? "Deleted job";
+              const metaParts = [
+                ex.format.toUpperCase(),
+                ex.status,
+                ...(ex.resultBytes !== null ? [formatBytes(ex.resultBytes)] : []),
+                timeAgo(ex.createdAt),
+              ];
+              return (
+                <div key={ex.id} className={classes.exportItem}>
+                  <div className={classes.exportMain}>
+                    <span className={classes.exportLabel}>{jobLabel}</span>
+                    <span
+                      className={isFailed ? classes.exportMetaFailed : classes.exportMeta}
+                      title={isFailed && ex.errorMessage ? ex.errorMessage : undefined}
+                    >
+                      {metaParts.join(" · ")}
+                    </span>
+                  </div>
+                  {isComplete && (
+                    <a
+                      className={classes.iconDownloadButton}
+                      href={ex.downloadUrl!}
+                      download
+                      title="Download"
+                    >
+                      <Download size={14} />
+                    </a>
+                  )}
+                  {!isInProgress && (
+                    <button
+                      className={classes.iconDeleteButton}
+                      onClick={() => handleDeleteExport(ex.id)}
+                      disabled={deletingExportId === ex.id}
+                      title="Delete export"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <TopoTemplateEditDialog
         open={templateEditOpen}
         onClose={() => setTemplateEditOpen(false)}
@@ -403,6 +526,7 @@ function LidarPanel({
         open={exportJob !== null}
         onClose={() => setExportJob(null)}
         job={exportJob}
+        onExportQueued={onRefetchTopoExports}
       />
     </div>
   );

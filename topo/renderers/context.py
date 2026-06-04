@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from dataclasses import dataclass, field
@@ -17,6 +18,19 @@ class RenderError(Exception):
 
 RASTER_LAYERS = {"hillshade", "vegetation", "slope"}
 VECTOR_LAYERS = {"contours", "features"}
+
+
+def _geojson_has_features(path: Path) -> bool:
+    """True if the GeoJSON FeatureCollection carries at least one feature.
+    Guards against sources that were uploaded but contain no data (e.g. an
+    Overpass query that returned nothing)."""
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return False
+    features = data.get("features") if isinstance(data, dict) else None
+    return bool(features)
 
 
 @dataclass
@@ -43,6 +57,32 @@ class RenderContext:
 
     def output_keys_for(self, job: dict) -> List[dict]:
         return list(job.get("s3_output_keys") or [])
+
+    def available_layers(self, requested: List[str]) -> List[str]:
+        """Filter the requested layers down to those the primary source job
+        actually produced with non-empty data. Raster layers are checked via
+        the s3_output_keys manifest (no S3 call); vector layers are probed by
+        downloading the GeoJSON (cached for the later render) and confirming it
+        carries at least one feature. Layers with no data are dropped, not
+        fatal — the export proceeds with whatever remains."""
+        job = self.primary_job
+        job_id = job["id"]
+        available: List[str] = []
+        for layer in requested:
+            if layer in RASTER_LAYERS:
+                match = next(
+                    (o for o in self.output_keys_for(job) if o.get("name") == layer), None
+                )
+                if match and match.get("cogKey"):
+                    available.append(layer)
+            elif layer in VECTOR_LAYERS:
+                try:
+                    path = self.geojson_path(job_id, layer)
+                except RenderError:
+                    continue  # source GeoJSON missing — drop the layer
+                if _geojson_has_features(path):
+                    available.append(layer)
+        return available
 
     def cog_path(self, job_id: str, layer: str) -> Path:
         """Local Path to the styled COG for a given job/layer, downloading on

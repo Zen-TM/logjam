@@ -278,6 +278,85 @@
   composes: actionButton;
 }
 
+/* ── Export rows ─────────────────────────────────────────────────────────────── */
+
+.exportItem {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.3em 0.5em;
+}
+
+.exportItem:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 5%, transparent);
+}
+
+.exportMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.exportLabel {
+  font-size: var(--text-sm);
+  color: var(--theme-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exportMeta {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exportMetaFailed {
+  composes: exportMeta;
+  color: var(--theme-warning);
+  opacity: 1;
+}
+
+.iconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.2em;
+  color: var(--theme-text-muted);
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.iconDownloadButton {
+  composes: iconButton;
+  color: var(--theme-accent);
+}
+
+.iconDownloadButton:hover {
+  background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
+}
+
+.iconDeleteButton {
+  composes: iconButton;
+}
+
+.iconDeleteButton:hover:not(:disabled) {
+  color: var(--theme-warning);
+  background: color-mix(in srgb, var(--theme-warning) 14%, transparent);
+}
+
 /* ── Vector styles accordion ────────────────────────────────────────────────── */
 
 .vectorStyleTabs {
