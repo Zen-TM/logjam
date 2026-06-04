@@ -163,7 +163,12 @@ ZOOM_MAX = 18
 LABEL_SPACING_PX = 550
 # Margin (px) grown around each placed label box for the per-tile collision
 # declutter (see declutter_labels). Larger = more breathing room, fewer labels.
-LABEL_MIN_GAP_PX = 6
+# Sized to mimic MapLibre's global symbol collision so the export isn't a
+# label flood when zoomed out (see render_features_tile / render_contours_tile).
+LABEL_MIN_GAP_PX = 44
+# Labels are only drawn at z14+, matching the web map (its label layers use
+# minzoom 14). Contour/feature lines still draw below this; only labels gate.
+LABEL_MIN_ZOOM = 14
 
 # Vegetation (scrub density) layer — for bushbashing avoidance.
 # Normalized Relative Density (NRD): walking-height returns (0.25–2.0 m HAG)
@@ -300,10 +305,10 @@ OSM_FEATURE_QUERIES = {
 # in the per-job settings — those settings carry {enabled, colour, widthZ18}.
 OSM_STYLE_META = {
     "waterway":  {"colour": (40, 120, 220, 220),  "width_z18": 3,  "dash": None},
-    "track":     {"colour": (160, 100,  30, 220),  "width_z18": 2,  "dash": (8, 4)},
+    "track":     {"colour": (160, 100,  30, 220),  "width_z18": 2,  "dash": (4, 2)},
     "road":      {"colour": (80,   80,  80, 230),  "width_z18": 4,  "dash": None},
     "building":  {"colour": (160, 140, 120, 200),  "width_z18": 2,  "dash": None, "fill": (160, 140, 120, 60)},
-    "power":     {"colour": (200, 160,   0, 200),  "width_z18": 1,  "dash": (4, 6)},
+    "power":     {"colour": (200, 160,   0, 200),  "width_z18": 1,  "dash": (3, 4)},
     "campsite":  {"colour": (0,   160,  80, 230),  "point": True,   "icon": "campsite.png",  "size_z18": 20},
     "peak":      {"colour": (80,   50,  20, 240),  "point": True,   "icon": "peak.png",      "size_z18": 18},
     "spring":    {"colour": (30,   90, 210, 230),  "point": True,   "icon": "spring.png",    "size_z18": 18},
@@ -569,6 +574,39 @@ def line_label_anchors(coords, zoom: int, spacing_px: float) -> List[Tuple[float
         anchors.append(_point_at_distance(pts, seg_len, target))
         target += spacing_px
     return anchors
+
+
+def label_font_size(zoom: int) -> int:
+    """On-screen label px, matching the web map's text-size ramp
+    (interpolate linear zoom 14→9px, 18→12px)."""
+    return int(round(9 + (12 - 9) * (zoom - 14) / (18 - 14)))
+
+
+def draw_dashed_line(draw, pts, fill, width: int, dash) -> None:
+    """Draw a polyline as dashes. `dash` = (on, off) in line-width units, the
+    same convention as MapLibre's line-dasharray. The dash phase carries across
+    segments so the pattern stays continuous around bends."""
+    on_px = max(1.0, dash[0] * width)
+    off_px = max(1.0, dash[1] * width)
+    period = on_px + off_px
+    pos = 0.0  # distance walked so far, used to keep dashes continuous
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        seg = math.hypot(x1 - x0, y1 - y0)
+        if seg <= 0:
+            continue
+        ux, uy = (x1 - x0) / seg, (y1 - y0) / seg
+        d = 0.0
+        while d < seg:
+            phase = (pos + d) % period
+            if phase < on_px:
+                run = min(on_px - phase, seg - d)
+                sx, sy = x0 + ux * d, y0 + uy * d
+                ex, ey = x0 + ux * (d + run), y0 + uy * (d + run)
+                draw.line([(sx, sy), (ex, ey)], fill=fill, width=width)
+                d += run
+            else:
+                d += period - phase
+        pos += seg
 
 
 def tile_label_box(draw, world_xy, tile_x: int, tile_y: int,
@@ -2129,18 +2167,22 @@ def render_features_tile(
             pts = [lonlat_to_px(c[0], c[1]) for c in coords]
             if len(pts) >= 2:
                 w = max(1, int(style.get("width_z18", 2) * zoom / 18))
-                draw.line(pts, fill=style["colour"], width=w)
+                dash = style.get("dash")
+                if dash:
+                    draw_dashed_line(draw, pts, style["colour"], w, dash)
+                else:
+                    draw.line(pts, fill=style["colour"], width=w)
 
                 # Labels for waterways, tracks, roads (only at z14+). Anchors
                 # are spaced along the full line in global pixel space so long
                 # lines get several evenly spaced labels, each drawn in exactly
                 # one tile (no cross-tile duplicates, no edge clipping).
                 label_cats = {"waterway", "track", "road"}
-                if zoom >= 14 and cat in label_cats:
+                if zoom >= LABEL_MIN_ZOOM and cat in label_cats:
                     tags = feat.get("properties", {})
                     label = tags.get("name") or tags.get("ref")
                     if label:
-                        label_size = max(7, int(10 * zoom / 18))
+                        label_size = label_font_size(zoom)
                         try:
                             lbl_font = ImageFont.truetype(
                                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", label_size)
@@ -2220,7 +2262,7 @@ def render_contours_tile(
 
     try:
         font_major = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                                        max(8, int(11 * zoom / 16)))
+                                        label_font_size(zoom))
     except Exception:
         font_major = ImageFont.load_default()
 
@@ -2297,7 +2339,7 @@ def render_contours_tile(
                                     * zoom / 16 / 6))
             draw.line(pts, fill=colour, width=line_width)
 
-            if label_interval and is_major and len(pts) >= 4:
+            if zoom >= LABEL_MIN_ZOOM and label_interval and is_major and len(pts) >= 4:
                 label = f"{int(elev)}m"
                 for anchor in line_label_anchors(coords, zoom, LABEL_SPACING_PX):
                     pending_labels.append((anchor, label, colour))
