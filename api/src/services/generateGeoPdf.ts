@@ -72,6 +72,10 @@ const geomagnetism = require("geomagnetism");
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const MM_PER_INCH = 25.4;
+// CSS reference DPI the MapLibre overlay styles are authored against. Used to
+// translate the print scale into the display zoom MapLibre would show it at, and
+// to scale CSS-pixel style values (font/line/dash) up to the print canvas.
+const STYLE_DPI = 96;
 const TILE_SIZE = 256;
 const CONCURRENCY = 8;
 const MIN_CONTOUR_LABEL_DISTANCE = 150; // px — ~4x sparser label density
@@ -173,6 +177,18 @@ function computeZoom(
   return Math.max(MIN_ZOOM, Math.min(maxNativeZoom, Math.ceil(z)));
 }
 
+/**
+ * The display zoom MapLibre would render this print scale at on a 96-DPI screen.
+ * Unlike `computeZoom` (a tile-resolution zoom inflated by the 300-DPI print
+ * target), this is the zoom that drives style *visibility* and interpolation, so
+ * contour/label/point gating in the PDF matches the live overlay. Returned as an
+ * unclamped float — gating needs values below the z14 threshold.
+ */
+function displayZoomForScale(scale: number, latDeg: number): number {
+  const cosLat = Math.cos(Math.abs(latDeg) * DEG_TO_RAD);
+  return Math.log2((156543.03 * cosLat * STYLE_DPI) / (scale * 0.0254));
+}
+
 /** Convert longitude to tile X index at given zoom */
 function lon2tileX(lon: number, z: number): number {
   return Math.floor(((lon + 180) / 360) * Math.pow(2, z));
@@ -240,6 +256,8 @@ type PendingLabel = {
   angle: number;
   text: string;
   fontSize: number;
+  /** Halo stroke width in canvas px (MapLibre text-halo-width × pxScale). */
+  haloWidth: number;
   color: string;
 };
 
@@ -383,6 +401,11 @@ export async function generateGeoPdf(
   const TARGET_DPI = 300;
   const zoom = computeZoom(config.scale, centreLat, TARGET_DPI, maxNativeZoom);
 
+  // Display zoom equivalent of the print scale — drives vector overlay style
+  // visibility/interpolation so the export matches the live MapLibre overlay
+  // (the 300-DPI `zoom` above sits ~1.6 levels higher and must not gate styles).
+  const styleZoom = displayZoomForScale(config.scale, centreLat);
+
   // 3. Compute the tile transform at zoom=1 scale so we know the native source size.
   const { north: extNorth, south: extSouth, east: extEast, west: extWest } = config.extent;
   const probeTransform = computeTileToMapTransform(
@@ -419,6 +442,11 @@ export async function generateGeoPdf(
 
   // Element DPI: how many pixels per inch at native canvas size
   const elementDpi = (nativeW / mapWidthMm) * MM_PER_INCH;
+
+  // Scale factor from MapLibre CSS pixels (96-DPI reference) to output-canvas
+  // pixels. Derived from the *actual* canvas DPI so physical sizes match the
+  // overlay regardless of `computeZoom`'s ceil rounding.
+  const vectorPxScale = elementDpi / STYLE_DPI;
 
   // Shared tile transform with scale = 1 (canvas IS the tile pixel grid)
   const transform = computeTileToMapTransform(
@@ -520,7 +548,8 @@ export async function generateGeoPdf(
               archive,
               overlayTransform,
               overlayName,
-              overlayZoom,
+              styleZoom,
+              vectorPxScale,
               vectorStyle,
               iconCache,
               placedLabelPositions,
@@ -794,7 +823,8 @@ async function fetchAndDrawPMTilesVectorDirect(
   archive: PMTiles,
   transform: TileToMapTransform,
   layerName: string,
-  zoom: number,
+  styleZoom: number,
+  pxScale: number,
   vectorStyle: VectorStyleSettings,
   iconCache: Map<OsmPointFeatureKey, Image>,
   placedLabels: Array<{ x: number; y: number }> = [],
@@ -822,7 +852,8 @@ async function fetchAndDrawPMTilesVectorDirect(
             feature,
             tileDx,
             tileDy,
-            zoom,
+            styleZoom,
+            pxScale,
             layerName,
             transform.scaleX,
             transform.scaleY,
@@ -863,7 +894,7 @@ function flushPendingLabels(
     for (let i = 0; i < lines.length; i++) {
       const y = startY + i * lineHeight;
       ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-      ctx.lineWidth = 4;
+      ctx.lineWidth = lbl.haloWidth;
       ctx.strokeText(lines[i], 0, y);
       ctx.fillStyle = lbl.color;
       ctx.fillText(lines[i], 0, y);
@@ -890,7 +921,8 @@ function renderVectorFeature(
   feature: VectorTileFeature,
   dx: number,
   dy: number,
-  zoom: number,
+  styleZoom: number,
+  pxScale: number,
   layerName: string,
   transformScaleX = 1,
   transformScaleY = 1,
@@ -911,7 +943,8 @@ function renderVectorFeature(
       feature,
       dx,
       dy,
-      zoom,
+      styleZoom,
+      pxScale,
       scaleX,
       scaleY,
       geomType,
@@ -926,7 +959,8 @@ function renderVectorFeature(
       feature,
       dx,
       dy,
-      zoom,
+      styleZoom,
+      pxScale,
       scaleX,
       scaleY,
       geomType,
@@ -945,7 +979,8 @@ function renderContourFeature(
   feature: VectorTileFeature,
   dx: number,
   dy: number,
-  zoom: number,
+  styleZoom: number,
+  pxScale: number,
   scaleX: number,
   scaleY: number,
   geomType: number,
@@ -958,14 +993,16 @@ function renderContourFeature(
   const elev = Number(props.elev ?? 0);
   const isMajor = elev % 50 === 0;
 
-  // Minor contours only visible at z14+ (matches the live overlay's minzoom)
-  if (!isMajor && zoom < 14) return;
+  // Minor contours only visible at z14+ (matches the live overlay's minzoom).
+  // Major contours have no minzoom in the overlay, so they always render.
+  if (!isMajor && styleZoom < 14) return;
 
   // Colour + width come from the user's live vector style, evaluated at the
-  // export tile zoom with the same stops the MapLibre overlay uses.
+  // display zoom with the same stops the MapLibre overlay uses, then scaled from
+  // CSS pixels to canvas pixels.
   const cs = vectorStyle.contours;
   const stops = contourWidthStops(isMajor ? cs.majorWidthM : cs.minorWidthM);
-  const lineWidth = lerpZoom(zoom, stops.z12, stops.z18);
+  const lineWidth = lerpZoom(styleZoom, stops.z12, stops.z18) * pxScale;
   const color = rgbaCssFromHex(isMajor ? cs.majorColour : cs.minorColour);
   const labelColor = rgbaCssFromHex(cs.majorColour);
 
@@ -985,7 +1022,7 @@ function renderContourFeature(
     ctx.stroke();
 
     // Buffer elevation label on major contours at z14+ — drawn after all lines
-    if (isMajor && zoom >= 14 && ring.length >= 2) {
+    if (isMajor && styleZoom >= 14 && ring.length >= 2) {
       const mid = Math.floor(ring.length / 2);
       const mx = dx + ring[mid].x * scaleX;
       const my = dy + ring[mid].y * scaleY;
@@ -1009,7 +1046,8 @@ function renderContourFeature(
         y: my,
         angle,
         text: `${elev}m`,
-        fontSize: interpZoom(zoom, 14, 9, 18, 12),
+        fontSize: interpZoom(styleZoom, 14, 9, 18, 12) * pxScale,
+        haloWidth: 1.5 * pxScale,
         color: labelColor,
       });
     }
@@ -1025,13 +1063,14 @@ function bufferLineLabel(
   dy: number,
   scaleX: number,
   scaleY: number,
-  zoom: number,
+  styleZoom: number,
+  pxScale: number,
   text: string,
   color: string,
   placedLabels: Array<{ x: number; y: number }>,
   pendingLabels: PendingLabel[],
 ) {
-  if (zoom < 14 || !text) return;
+  if (styleZoom < 14 || !text) return;
   let ring: { x: number; y: number }[] | null = null;
   for (const r of geometry) if (!ring || r.length > ring.length) ring = r;
   if (!ring || ring.length < 2) return;
@@ -1047,7 +1086,15 @@ function bufferLineLabel(
   let angle = Math.atan2(ay, ax);
   if (angle > Math.PI / 2) angle -= Math.PI;
   if (angle < -Math.PI / 2) angle += Math.PI;
-  pendingLabels.push({ x: mx, y: my, angle, text, fontSize: interpZoom(zoom, 14, 9, 18, 12), color });
+  pendingLabels.push({
+    x: mx,
+    y: my,
+    angle,
+    text,
+    fontSize: interpZoom(styleZoom, 14, 9, 18, 12) * pxScale,
+    haloWidth: 1.5 * pxScale,
+    color,
+  });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1056,7 +1103,8 @@ function renderOsmFeature(
   feature: VectorTileFeature,
   dx: number,
   dy: number,
-  zoom: number,
+  styleZoom: number,
+  pxScale: number,
   scaleX: number,
   scaleY: number,
   geomType: number,
@@ -1077,16 +1125,16 @@ function renderOsmFeature(
     if (geomType !== 1) return;
     const key = category as OsmPointFeatureKey;
     const minzoom = key === "gate" ? 14 : 12;
-    if (zoom < minzoom) return;
+    if (styleZoom < minzoom) return;
     const icon = iconCache.get(key);
-    const t = iconTargetPx(OSM_POINT_ICON[key].sizeZ18, zoom);
+    const t = iconTargetPx(OSM_POINT_ICON[key].sizeZ18, styleZoom) * pxScale;
     const name = typeof props.name === "string" ? props.name : "";
     for (const ring of geometry) {
       for (const pt of ring) {
         const px = dx + pt.x * scaleX;
         const py = dy + pt.y * scaleY;
         if (icon) ctx.drawImage(icon, px - t / 2, py - t / 2, t, t);
-        if (zoom >= 14) {
+        if (styleZoom >= 14) {
           let text = name;
           if (key === "peak") {
             const ele = props.ele;
@@ -1097,10 +1145,11 @@ function renderOsmFeature(
           if (text) {
             pendingLabels.push({
               x: px,
-              y: py + t / 2 + interpZoom(zoom, 14, 7, 18, 9),
+              y: py + t / 2 + interpZoom(styleZoom, 14, 7, 18, 9) * pxScale,
               angle: 0,
               text,
-              fontSize: interpZoom(zoom, 14, 9, 18, 12),
+              fontSize: interpZoom(styleZoom, 14, 9, 18, 12) * pxScale,
+              haloWidth: 1.5 * pxScale,
               color: colour,
             });
           }
@@ -1117,7 +1166,7 @@ function renderOsmFeature(
       const s = featureLineWidthStops(style.widthZ18);
       drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
         color: colour,
-        width: lerpZoom(zoom, s.z12, s.z18),
+        width: lerpZoom(styleZoom, s.z12, s.z18) * pxScale,
       });
       const label =
         category === "road"
@@ -1126,28 +1175,34 @@ function renderOsmFeature(
           : typeof props.name === "string"
             ? props.name
             : "";
-      bufferLineLabel(geometry, dx, dy, scaleX, scaleY, zoom, label, colour, placedLabels, pendingLabels);
+      bufferLineLabel(geometry, dx, dy, scaleX, scaleY, styleZoom, pxScale, label, colour, placedLabels, pendingLabels);
       break;
     }
     case "track": {
       const s = featureLineWidthStops(style.widthZ18);
+      // MapLibre line-dasharray units are multiples of the line width, so scale
+      // the [4,2] pattern by the final canvas width to match the overlay.
+      const width = lerpZoom(styleZoom, s.z12, s.z18) * pxScale;
       drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
         color: colour,
-        width: lerpZoom(zoom, s.z12, s.z18),
-        dash: [4, 2],
+        width,
+        dash: [4 * width, 2 * width],
       });
       const label = typeof props.name === "string" ? props.name : "";
-      bufferLineLabel(geometry, dx, dy, scaleX, scaleY, zoom, label, colour, placedLabels, pendingLabels);
+      bufferLineLabel(geometry, dx, dy, scaleX, scaleY, styleZoom, pxScale, label, colour, placedLabels, pendingLabels);
       break;
     }
-    case "power":
-      // Power lines use a constant pixel width (matches the overlay).
+    case "power": {
+      // Power lines use a constant pixel width (matches the overlay). Dasharray
+      // [3,4] is in line-width units → scale by the final canvas width.
+      const width = style.widthZ18 * pxScale;
       drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
         color: colour,
-        width: style.widthZ18,
-        dash: [3, 4],
+        width,
+        dash: [3 * width, 4 * width],
       });
       break;
+    }
     case "building":
       if (geomType === 3) {
         drawFillFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
