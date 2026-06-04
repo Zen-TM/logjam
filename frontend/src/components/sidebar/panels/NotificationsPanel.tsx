@@ -183,11 +183,11 @@ function NotificationsPanel({
                 <div className={classes.notificationActions}>
                   <button
                     className={classes.acceptButton}
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
                       onTopoFlyTarget(n.payload.footprint as GeoJsonPolygon);
                       if (!n.read) {
-                        markNotificationRead(n.id).catch((err) => { console.error(err); });
+                        await markNotificationRead(n.id);
                         onRefetchNotifications();
                       }
                     }}
