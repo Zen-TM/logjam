@@ -191,9 +191,11 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
       if (!lidarLayerToggles[layerName]) continue;
       // Credit the overlay's open-data source (ELVIS / SVTM / OSM) so MapLibre's
       // AttributionControl surfaces the required CC BY / ODbL attribution.
-      const overlaySource = TOPO_OVERLAY_SOURCE[layerName];
-      const attribution = overlaySource
-        ? GEOPDF_OVERLAY_ATTRIBUTION[overlaySource]
+      // A layer may credit more than one source (e.g. vegetation density is a
+      // LiDAR CHM, so it credits both elevation and the SVTM vegetation source).
+      const overlaySources = TOPO_OVERLAY_SOURCE[layerName] ?? [];
+      const attribution = overlaySources.length
+        ? overlaySources.map((s) => GEOPDF_OVERLAY_ATTRIBUTION[s]).join(" · ")
         : undefined;
       for (const job of completedTopoJobs) {
         if (!(lidarJobToggles[job.jobId] ?? true)) continue;

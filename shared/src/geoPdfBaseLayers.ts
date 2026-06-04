@@ -52,14 +52,17 @@ export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
   features: "Features © OpenStreetMap contributors",
 };
 
-// Maps each selectable overlay layer name to its underlying data source.
+// Maps each selectable overlay layer name to its underlying data source(s).
+// A layer may draw on more than one source: the vegetation density layer is a
+// LiDAR Canopy Height Model (DSM − DTM), so it credits both the elevation source
+// and the SVTM vegetation source.
 // Keep in sync with TOPO_LAYERS (api/src/constants/topoLayers.ts).
-export const TOPO_OVERLAY_SOURCE: Record<string, OverlaySource> = {
-  hillshade: "elevation",
-  slope: "elevation",
-  contours: "elevation",
-  vegetation: "vegetation",
-  features: "features",
+export const TOPO_OVERLAY_SOURCE: Record<string, OverlaySource[]> = {
+  hillshade: ["elevation"],
+  slope: ["elevation"],
+  contours: ["elevation"],
+  vegetation: ["elevation", "vegetation"],
+  features: ["features"],
 };
 
 // Stable display order for credit lines.
@@ -77,8 +80,7 @@ const OVERLAY_SOURCE_ORDER: OverlaySource[] = [
 export function overlayAttributionLines(overlays: string[]): string[] {
   const sources = new Set<OverlaySource>();
   for (const name of overlays) {
-    const source = TOPO_OVERLAY_SOURCE[name];
-    if (source) sources.add(source);
+    for (const source of TOPO_OVERLAY_SOURCE[name] ?? []) sources.add(source);
   }
   return OVERLAY_SOURCE_ORDER.filter((s) => sources.has(s)).map(
     (s) => GEOPDF_OVERLAY_ATTRIBUTION[s],

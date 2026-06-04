@@ -18,7 +18,6 @@ export interface GeoPdfConfig {
   elements: {
     title?: string;
     compass: boolean;
-    contourInterval?: number;
     scaleText: boolean;
     scaleBar: boolean;
     gridLines?: CoordMode;

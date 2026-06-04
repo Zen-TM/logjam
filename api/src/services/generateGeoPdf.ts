@@ -108,7 +108,7 @@ const MAP_FONT = '"Source Sans 3"';
 // legibility over busy topo basemaps, not app-theme cohesion (deliberate).
 const INK = "#22271f"; // primary text / bars — warm charcoal
 const INK_MUTED = "rgba(40, 44, 38, 0.78)"; // grid lines, attribution
-const PAPER_FILL = "rgba(250, 247, 240, 0.88)"; // soft-card panel fill (warm cream)
+const PAPER_FILL = "rgba(250, 247, 240, 0.80)"; // soft-card panel fill (warm cream)
 const HAIRLINE = "rgba(70, 64, 52, 0.45)"; // panel border, ticks
 const ACCENT = "#9C5A2E"; // sparse flourishes (iron-oxide brown)
 // Desaturated compass-arm hint tones (still TN-red / GN-blue / MN-green family).
@@ -442,6 +442,11 @@ export async function generateGeoPdf(
   }
 
   // 7. Overlay tiles from PMTiles archives in S3
+  // Track which overlay layers actually painted data onto this map (a layer is
+  // only "rendered" if at least one overlapping completed job carried its tiles).
+  // Drives the attribution credits so we never credit a source whose data isn't
+  // on the page (e.g. a layer selected over an area with no LiDAR coverage).
+  const renderedOverlays = new Set<string>();
   if (config.overlays.length > 0) {
     const topoBucket = process.env.S3_BUCKET_TOPO ?? "logjam-topo-jobs";
     const s3 = s3Client;
@@ -507,8 +512,9 @@ export async function generateGeoPdf(
         const source = new S3Source(topoBucket, pmtilesKey, s3);
         const archive = new PMTiles(source);
         try {
+          let drew = 0;
           if (layerDef.format === "vector") {
-            await fetchAndDrawPMTilesVectorDirect(
+            drew = await fetchAndDrawPMTilesVectorDirect(
               mapCtx,
               overlayTransform.tiles,
               archive,
@@ -521,13 +527,14 @@ export async function generateGeoPdf(
               pendingLabels,
             );
           } else {
-            await fetchAndDrawPMTilesRasterDirect(
+            drew = await fetchAndDrawPMTilesRasterDirect(
               mapCtx,
               overlayTransform.tiles,
               archive,
               overlayTransform,
             );
           }
+          if (drew > 0) renderedOverlays.add(overlayName);
         } catch (e) {
           // A job may legitimately lack a given layer (e.g. Mode-A jobs skip
           // vegetation). Treat S3 404 / PMTiles errors as "this job doesn't
@@ -585,18 +592,6 @@ export async function generateGeoPdf(
     );
   }
 
-  if (config.elements.contourInterval !== undefined) {
-    stackY = drawContourInterval(
-      mapCtx,
-      config.elements.contourInterval,
-      stackY,
-      elementMargin,
-      elementPadH,
-      elementPadV,
-      elementDpi,
-    );
-  }
-
   if (config.elements.compass) {
     stackY = drawCompass(mapCtx, config, stackY, elementMargin, elementDpi);
   }
@@ -612,8 +607,16 @@ export async function generateGeoPdf(
     );
   }
 
-  // Attribution bottom-right
-  drawAttribution(mapCtx, nativeW, nativeH, elementMargin, elementDpi, config);
+  // Attribution bottom-right — credit only layers that actually painted data.
+  drawAttribution(
+    mapCtx,
+    nativeW,
+    nativeH,
+    elementMargin,
+    elementDpi,
+    config,
+    Array.from(renderedOverlays),
+  );
 
   // 9. Build PDF with GeoPDF georeferencing metadata
   const pdfBuffer = await buildPdf(
@@ -736,19 +739,23 @@ class S3Source implements Source {
   }
 }
 
-/** Fetch raster PMTiles and draw directly onto the output canvas */
+/**
+ * Fetch raster PMTiles and draw directly onto the output canvas. Returns the
+ * number of tiles that actually painted data (0 = this layer contributed nothing
+ * to the map, so it must not be credited in the attribution block).
+ */
 async function fetchAndDrawPMTilesRasterDirect(
   mapCtx: CanvasRenderingContext2D,
   tiles: TileCoord[],
   archive: PMTiles,
   transform: TileToMapTransform,
-): Promise<void> {
-  await pMap(
+): Promise<number> {
+  const drawn = await pMap(
     tiles,
     async (tile) => {
       try {
         const result = await archive.getZxy(tile.z, tile.x, tile.y);
-        if (!result?.data) return;
+        if (!result?.data) return 0;
         const img = await loadImage(Buffer.from(result.data));
 
         const rawX =
@@ -763,17 +770,24 @@ async function fetchAndDrawPMTilesRasterDirect(
         const dy1 = Math.ceil(rawY + TILE_SIZE * transform.scaleY);
 
         mapCtx.drawImage(img, 0, 0, TILE_SIZE, TILE_SIZE, dx0, dy0, dx1 - dx0, dy1 - dy0);
+        return 1;
       } catch (err) {
         console.warn(
           `Failed to fetch raster PMTile ${tile.z}/${tile.x}/${tile.y}: ${err}`,
         );
+        return 0;
       }
     },
     CONCURRENCY,
   );
+  return drawn.reduce<number>((a, b) => a + b, 0);
 }
 
-/** Fetch vector PMTiles and render features directly onto the output canvas */
+/**
+ * Fetch vector PMTiles and render features directly onto the output canvas.
+ * Returns the number of tiles whose source layer was present (0 = this layer
+ * contributed nothing, so it must not be credited in the attribution block).
+ */
 async function fetchAndDrawPMTilesVectorDirect(
   mapCtx: CanvasRenderingContext2D,
   tiles: TileCoord[],
@@ -785,13 +799,13 @@ async function fetchAndDrawPMTilesVectorDirect(
   iconCache: Map<OsmPointFeatureKey, Image>,
   placedLabels: Array<{ x: number; y: number }> = [],
   pendingLabels: PendingLabel[] = [],
-): Promise<void> {
-  await pMap(
+): Promise<number> {
+  const drawn = await pMap(
     tiles,
     async (tile) => {
       try {
         const result = await archive.getZxy(tile.z, tile.x, tile.y);
-        if (!result?.data) return;
+        if (!result?.data) return 0;
         const vt = new VectorTile(new Pbf(result.data));
         const tileDx =
           ((tile.x - transform.minTileX) * TILE_SIZE - transform.offsetX) *
@@ -800,7 +814,7 @@ async function fetchAndDrawPMTilesVectorDirect(
           ((tile.y - transform.minTileY) * TILE_SIZE - transform.offsetY) *
           transform.scaleY;
         const sourceLayer = vt.layers[layerName];
-        if (!sourceLayer) return;
+        if (!sourceLayer) return 0;
         for (let i = 0; i < sourceLayer.length; i++) {
           const feature = sourceLayer.feature(i);
           renderVectorFeature(
@@ -818,14 +832,17 @@ async function fetchAndDrawPMTilesVectorDirect(
             pendingLabels,
           );
         }
+        return 1;
       } catch (err) {
         console.warn(
           `Failed to render vector PMTile ${tile.z}/${tile.x}/${tile.y}: ${err}`,
         );
+        return 0;
       }
     },
     CONCURRENCY,
   );
+  return drawn.reduce<number>((a, b) => a + b, 0);
 }
 
 /** Draw all buffered contour labels — called after all overlay lines are rendered */
@@ -1366,31 +1383,6 @@ function drawScaleText(
   return y - mmToPx(1, dpi);
 }
 
-function drawContourInterval(
-  ctx: CanvasRenderingContext2D,
-  interval: number,
-  stackY: number,
-  margin: number,
-  padH: number,
-  padV: number,
-  dpi: number,
-): number {
-  const text = `${interval}m contours`;
-  const fontSize = mmToPx(2.5, dpi);
-  ctx.font = `${fontSize}px ${MAP_FONT}`;
-  const metrics = ctx.measureText(text);
-  const boxW = metrics.width + padH * 2;
-  const boxH = fontSize + padV * 2;
-  const x = margin;
-  const y = stackY - boxH;
-
-  drawElementBackground(ctx, x, y, boxW, boxH, dpi);
-  ctx.fillStyle = INK;
-  ctx.fillText(text, x + padH, y + padV + fontSize * 0.85);
-
-  return y - mmToPx(1, dpi);
-}
-
 function drawCompass(
   ctx: CanvasRenderingContext2D,
   config: GeoPdfConfig,
@@ -1424,9 +1416,58 @@ function drawCompass(
   const readoutGap = mmToPx(3.5, dpi);
   const rowH = readoutFont * 1.55;
   const bottomPad = mmToPx(3, dpi);
+  const readoutInset = mmToPx(4, dpi);
+  const sidePad = mmToPx(3.5, dpi);
+  const starR = mmToPx(1.7, dpi);
+  const barbLen = mmToPx(3, dpi);
+  const barbW = mmToPx(1.7, dpi);
+  // Tip-label radial offsets beyond each arm tip (shared by sizing + drawing).
+  const tnLabelExtra = starR + mmToPx(2.2, dpi);
+  const mnLabelExtra = mmToPx(3, dpi);
+  const gnLabelExtra = mmToPx(2.6, dpi);
+
+  const fmtDecl = (v: number) => `${Math.abs(v).toFixed(1)}° ${v >= 0 ? "E" : "W"}`;
+
+  // ── Dynamic width ──────────────────────────────────────────────────────────
+  // The fixed 34 mm box left wide gutters. Size the panel to the wider of two
+  // content blocks: the arm/label cluster, and the two-line declination readout.
+  // x-offsets below are measured RELATIVE TO THE ARM ORIGIN (positive = right).
+  const armX: number[] = [0];
+  ctx.font = `bold ${tipFont}px ${MAP_FONT}`;
+  const addArm = (deg: number, len: number, labelExtra: number, label: string) => {
+    const s = Math.sin(deg * DEG_TO_RAD);
+    armX.push(s * len, s * len - starR, s * len + starR); // tip + star/tick spread
+    const lw = ctx.measureText(label).width;
+    const lcx = s * (len + labelExtra);
+    armX.push(lcx - lw / 2, lcx + lw / 2);
+  };
+  addArm(0, armTN, tnLabelExtra, "TN");
+  addArm(magDecl, armMN, mnLabelExtra, "MN");
+  addArm(gridConv, armGN, gnLabelExtra, "GN");
+  // MN half-arrow barb reaches perpendicular to its arm.
+  {
+    const r = magDecl * DEG_TO_RAD;
+    armX.push(Math.sin(r) * (armMN - barbLen) + Math.cos(r) * barbW);
+  }
+  const leftHalf = -Math.min(...armX);
+  const rightHalf = Math.max(...armX);
+  const armBlockWidth = 2 * (Math.max(leftHalf, rightHalf) + sidePad);
+
+  // Readout block: bold abbreviation + regular value, per row; take the widest.
+  let readoutRowWidth = 0;
+  for (const [abbr, val] of [
+    ["MN", fmtDecl(magDecl)],
+    ["GN", fmtDecl(gridConv)],
+  ] as const) {
+    ctx.font = `bold ${readoutFont}px ${MAP_FONT}`;
+    const w = ctx.measureText(abbr + "  ").width;
+    ctx.font = `${readoutFont}px ${MAP_FONT}`;
+    readoutRowWidth = Math.max(readoutRowWidth, w + ctx.measureText(val).width);
+  }
+  const readoutBlockWidth = readoutInset + readoutRowWidth + mmToPx(2, dpi);
 
   const arrowAreaH = headroom + armTN;
-  const boxW = mmToPx(34, dpi);
+  const boxW = Math.max(armBlockWidth, readoutBlockWidth, mmToPx(20, dpi));
   const boxH =
     topPad + arrowAreaH + readoutGap + 2 * rowH + bottomPad;
   const boxX = margin;
@@ -1476,10 +1517,8 @@ function drawCompass(
     const r = deg * DEG_TO_RAD;
     const dir = { x: Math.sin(r), y: -Math.cos(r) }; // along arm toward tip
     const perp = { x: -dir.y, y: dir.x }; // left of travel
-    const headLen = mmToPx(3, dpi);
-    const headW = mmToPx(1.7, dpi);
-    const base = { x: tip.x - dir.x * headLen, y: tip.y - dir.y * headLen };
-    const side = { x: base.x + perp.x * headW, y: base.y + perp.y * headW };
+    const base = { x: tip.x - dir.x * barbLen, y: tip.y - dir.y * barbLen };
+    const side = { x: base.x + perp.x * barbW, y: base.y + perp.y * barbW };
     ctx.beginPath();
     ctx.moveTo(tip.x, tip.y);
     ctx.lineTo(base.x, base.y);
@@ -1501,7 +1540,6 @@ function drawCompass(
   ctx.fill();
 
   // Tip symbology
-  const starR = mmToPx(1.7, dpi);
   drawStar(tnTip.x, tnTip.y, starR, TN_COLOR);
   drawHalfArrow(mnTip, magDecl, MN_COLOR);
   // GN: short perpendicular tick across the tip
@@ -1522,19 +1560,18 @@ function drawCompass(
   ctx.font = `bold ${tipFont}px ${MAP_FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const tnLabel = bearingPt(0, armTN + starR + mmToPx(2.2, dpi));
+  const tnLabel = bearingPt(0, armTN + tnLabelExtra);
   ctx.fillStyle = TN_COLOR;
   ctx.fillText("TN", tnLabel.x, tnLabel.y);
-  const mnLabel = bearingPt(magDecl, armMN + mmToPx(3, dpi));
+  const mnLabel = bearingPt(magDecl, armMN + mnLabelExtra);
   ctx.fillStyle = MN_COLOR;
   ctx.fillText("MN", mnLabel.x, mnLabel.y);
-  const gnLabel = bearingPt(gridConv, armGN + mmToPx(2.6, dpi));
+  const gnLabel = bearingPt(gridConv, armGN + gnLabelExtra);
   ctx.fillStyle = GN_COLOR;
   ctx.fillText("GN", gnLabel.x, gnLabel.y);
 
   // ── Angle readout (relative to true north, cardinal-suffixed) ──────────────
-  const fmtDecl = (v: number) => `${Math.abs(v).toFixed(1)}° ${v >= 0 ? "E" : "W"}`;
-  const rx = boxX + mmToPx(4, dpi);
+  const rx = boxX + readoutInset;
   let ry = cy + readoutGap + rowH / 2;
   ctx.textAlign = "start";
   ctx.textBaseline = "middle";
@@ -1777,6 +1814,7 @@ function drawAttribution(
   margin: number,
   dpi: number,
   config: GeoPdfConfig,
+  renderedOverlays: string[],
 ) {
   const fontSize = mmToPx(1.8, dpi);
   ctx.font = `${fontSize}px ${MAP_FONT}`;
@@ -1789,13 +1827,14 @@ function drawAttribution(
     "Base map data";
 
   // Stack credit lines bottom-up: "Generated by Logjam", then the base-map
-  // credit, then one line per active overlay data source (elevation / vegetation
-  // / features) — each open-data licence requires its own attribution.
+  // credit, then one line per overlay data source that actually rendered
+  // (elevation / vegetation / features) — each open-data licence requires its
+  // own attribution, but only where its data is on the page.
   const lineStep = fontSize + mmToPx(0.5, dpi);
   const lines = [
     "Generated by Logjam",
     baseAttrib,
-    ...overlayAttributionLines(config.overlays),
+    ...overlayAttributionLines(renderedOverlays),
   ];
   lines.forEach((line, index) => {
     ctx.fillText(line, widthPx - margin, heightPx - margin - lineStep * index);

@@ -95,12 +95,6 @@ const DEFAULT_EXTENT_STATE: ExtentState = {
   pivot: "mc",
 };
 
-function getContourInterval(scale: number): number {
-  if (scale <= 10000) return 5;
-  if (scale <= 25000) return 10;
-  return 50;
-}
-
 // ── Component ────────────────────────────────────────────────────────────────
 
 function GeoPdfDialog({
@@ -170,7 +164,6 @@ function GeoPdfDialog({
   const [titleEnabled, setTitleEnabled] = useState(false);
   const [titleText, setTitleText] = useState("");
   const [compassEnabled, setCompassEnabled] = useState(true);
-  const [contourEnabled, setContourEnabled] = useState(false);
   const [scaleTextEnabled, setScaleTextEnabled] = useState(true);
   const [scaleBarEnabled, setScaleBarEnabled] = useState(true);
   const [gridLinesEnabled, setGridLinesEnabled] = useState(false);
@@ -229,7 +222,6 @@ function GeoPdfDialog({
     setTitleEnabled(false);
     setTitleText("");
     setCompassEnabled(true);
-    setContourEnabled(false);
     setScaleTextEnabled(true);
     setScaleBarEnabled(true);
     setGridLinesEnabled(false);
@@ -299,7 +291,6 @@ function GeoPdfDialog({
             setSelectedOverlays(new Set(c.overlays));
             if (c.elements.title !== undefined) { setTitleEnabled(true); setTitleText(c.elements.title); } else { setTitleEnabled(false); }
             setCompassEnabled(c.elements.compass);
-            setContourEnabled(c.elements.contourInterval !== undefined);
             setScaleTextEnabled(c.elements.scaleText);
             setScaleBarEnabled(c.elements.scaleBar);
             if (c.elements.gridLines !== undefined) { setGridLinesEnabled(true); setGridLinesMode(c.elements.gridLines); } else { setGridLinesEnabled(false); }
@@ -340,7 +331,6 @@ function GeoPdfDialog({
         setTitleEnabled(false);
       }
       setCompassEnabled(c.elements.compass);
-      setContourEnabled(c.elements.contourInterval !== undefined);
       setScaleTextEnabled(c.elements.scaleText);
       setScaleBarEnabled(c.elements.scaleBar);
       if (c.elements.gridLines !== undefined) {
@@ -354,13 +344,6 @@ function GeoPdfDialog({
       setEditTemplateName("");
     }
   }, [open, templateMode, editingTemplate]);
-
-  // Clear contour interval text when contours overlay is deselected
-  useEffect(() => {
-    const hasContours =
-      selectedOverlays.has("contours");
-    if (!hasContours) setContourEnabled(false);
-  }, [selectedOverlays]);
 
   // True when any of the user's completed-job footprints overlaps the current
   // export extent. Falls back to true when no footprints are stored or the
@@ -398,11 +381,6 @@ function GeoPdfDialog({
       );
     });
   }, [completedTopoJobs, extentState, templateMode]);
-
-  // Clear contour element when LiDAR coverage leaves the extent
-  useEffect(() => {
-    if (!lidarOverlap) setContourEnabled(false);
-  }, [lidarOverlap]);
 
   // Populate extent from map selection — always receives both extent and scale
   useEffect(() => {
@@ -503,7 +481,6 @@ function GeoPdfDialog({
         setTitleEnabled(false);
       }
       setCompassEnabled(c.elements.compass);
-      setContourEnabled(c.elements.contourInterval !== undefined);
       setScaleTextEnabled(c.elements.scaleText);
       setScaleBarEnabled(c.elements.scaleBar);
       if (c.elements.gridLines !== undefined) {
@@ -531,9 +508,6 @@ function GeoPdfDialog({
       elements: {
         ...(titleEnabled ? { title: titleText } : {}),
         compass: compassEnabled,
-        ...(contourEnabled
-          ? { contourInterval: getContourInterval(extentState.scale) }
-          : {}),
         scaleText: scaleTextEnabled,
         scaleBar: scaleBarEnabled,
         ...(gridLinesEnabled ? { gridLines: gridLinesMode } : {}),
@@ -546,7 +520,6 @@ function GeoPdfDialog({
       titleEnabled,
       titleText,
       compassEnabled,
-      contourEnabled,
       scaleTextEnabled,
       scaleBarEnabled,
       gridLinesEnabled,
@@ -615,9 +588,6 @@ function GeoPdfDialog({
       elements: {
         ...(titleEnabled ? { title: titleText } : {}),
         compass: compassEnabled,
-        ...(contourEnabled
-          ? { contourInterval: getContourInterval(extentState.scale) }
-          : {}),
         scaleText: scaleTextEnabled,
         scaleBar: scaleBarEnabled,
         ...(gridLinesEnabled ? { gridLines: gridLinesMode } : {}),
@@ -686,7 +656,6 @@ function GeoPdfDialog({
     titleEnabled,
     titleText,
     compassEnabled,
-    contourEnabled,
     scaleTextEnabled,
     scaleBarEnabled,
     gridLinesEnabled,
@@ -703,9 +672,6 @@ function GeoPdfDialog({
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
       else next.add(name);
-      if (name === "contours" && !next.has("contours")) {
-        setContourEnabled(false);
-      }
       return next;
     });
   }, []);
@@ -1276,34 +1242,6 @@ function GeoPdfDialog({
             />
             <span>North arrow (TN / GN / MN)</span>
           </div>
-
-          {lidarOverlap && (
-            <div className={classes.elementRow}>
-              <input
-                type="checkbox"
-                checked={contourEnabled}
-                onChange={(e) => setContourEnabled(e.target.checked)}
-                disabled={!selectedOverlays.has("contours")}
-                style={{
-                  accentColor: "var(--theme-accent)",
-                }}
-              />
-              <span
-                style={
-                  !selectedOverlays.has("contours")
-                    ? { opacity: 0.5 }
-                    : undefined
-                }
-              >
-                Contour interval text
-              </span>
-              {contourEnabled && extentState.scale > 0 && (
-                <span className={classes.elementSuffix}>
-                  {getContourInterval(extentState.scale)}m
-                </span>
-              )}
-            </div>
-          )}
 
           <div className={classes.elementRow}>
             <input
