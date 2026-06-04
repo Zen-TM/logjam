@@ -2,6 +2,7 @@ import path from "path";
 import {
   createCanvas,
   loadImage,
+  registerFont,
   type Canvas,
   type CanvasRenderingContext2D,
   type Image,
@@ -82,6 +83,38 @@ const DEG_TO_RAD = Math.PI / 180;
 // __dirname resolves to api/src/services in dev and /app/dist/services in prod;
 // "../../assets" therefore lands on api/assets and /app/assets respectively.
 const ICON_DIR = path.resolve(__dirname, "../../assets/topo-icons");
+
+// ── Embedded overlay font ────────────────────────────────────────────────────
+// Source Sans 3 (SIL OFL), bundled under api/assets/fonts (Dockerfile COPY).
+// Registered at module load so every canvas context created below resolves the
+// "Logjam Map" family. node-canvas needs TTF/OTF (not woff2). Two static weights
+// share one family so the `bold ...` font strings keep working.
+const FONT_DIR = path.resolve(__dirname, "../../assets/fonts");
+// node-canvas (cairo/fontconfig) ignores a custom `family` override and keys the
+// face by the font file's own family name, so register under the real name and
+// reference it (quoted, since it contains spaces) in every `ctx.font` string.
+registerFont(path.join(FONT_DIR, "SourceSans3-Regular.ttf"), {
+  family: "Source Sans 3",
+  weight: "normal",
+});
+registerFont(path.join(FONT_DIR, "SourceSans3-SemiBold.ttf"), {
+  family: "Source Sans 3",
+  weight: "bold",
+});
+const MAP_FONT = '"Source Sans 3"';
+
+// ── Fixed cartographic palette ───────────────────────────────────────────────
+// Theme-independent ink palette for all overlay text/lines/panels. Chosen for
+// legibility over busy topo basemaps, not app-theme cohesion (deliberate).
+const INK = "#22271f"; // primary text / bars — warm charcoal
+const INK_MUTED = "rgba(40, 44, 38, 0.78)"; // grid lines, attribution
+const PAPER_FILL = "rgba(250, 247, 240, 0.88)"; // soft-card panel fill (warm cream)
+const HAIRLINE = "rgba(70, 64, 52, 0.45)"; // panel border, ticks
+const ACCENT = "#9C5A2E"; // sparse flourishes (iron-oxide brown)
+// Desaturated compass-arm hint tones (still TN-red / GN-blue / MN-green family).
+const TN_COLOR = "#a23b34"; // true north — muted brick red
+const GN_COLOR = "#3f5d7a"; // grid north — muted slate blue
+const MN_COLOR = "#3f6b46"; // magnetic north — muted forest green
 
 /**
  * Pre-load the PNG icons for every enabled point category into a synchronously
@@ -804,7 +837,7 @@ function flushPendingLabels(
     ctx.save();
     ctx.translate(lbl.x, lbl.y);
     ctx.rotate(lbl.angle);
-    ctx.font = `600 ${lbl.fontSize}px sans-serif`;
+    ctx.font = `bold ${lbl.fontSize}px ${MAP_FONT}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     const lines = lbl.text.split("\n");
@@ -1195,11 +1228,23 @@ function drawElementBackground(
   h: number,
   dpi: number,
 ) {
+  const radius = mmToPx(1.2, dpi);
+
+  // Soft drop shadow + warm-paper fill, then a hairline border with no shadow.
   ctx.save();
-  ctx.globalAlpha = 0.7;
-  ctx.fillStyle = "white";
-  drawRoundedRect(ctx, x, y, w, h, mmToPx(1, dpi));
+  ctx.shadowColor = "rgba(0, 0, 0, 0.22)";
+  ctx.shadowBlur = mmToPx(0.9, dpi);
+  ctx.shadowOffsetY = mmToPx(0.4, dpi);
+  ctx.fillStyle = PAPER_FILL;
+  drawRoundedRect(ctx, x, y, w, h, radius);
   ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = HAIRLINE;
+  ctx.lineWidth = mmToPx(0.2, dpi);
+  drawRoundedRect(ctx, x, y, w, h, radius);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -1212,7 +1257,7 @@ function drawTitle(
   dpi: number,
 ) {
   const fontSize = mmToPx(4, dpi);
-  ctx.font = `bold ${fontSize}px sans-serif`;
+  ctx.font = `bold ${fontSize}px ${MAP_FONT}`;
   const metrics = ctx.measureText(title);
   const boxW = metrics.width + padH * 2;
   const boxH = fontSize + padV * 2;
@@ -1220,8 +1265,16 @@ function drawTitle(
   const y = margin;
 
   drawElementBackground(ctx, x, y, boxW, boxH, dpi);
-  ctx.fillStyle = "#1a1a1a";
+  ctx.fillStyle = INK;
   ctx.fillText(title, x + padH, y + padV + fontSize * 0.85);
+
+  // Thin accent rule under the title.
+  ctx.strokeStyle = ACCENT;
+  ctx.lineWidth = mmToPx(0.5, dpi);
+  ctx.beginPath();
+  ctx.moveTo(x + padH, y + padV + fontSize + mmToPx(0.6, dpi));
+  ctx.lineTo(x + padH + metrics.width, y + padV + fontSize + mmToPx(0.6, dpi));
+  ctx.stroke();
 }
 
 function drawScaleBar(
@@ -1254,7 +1307,7 @@ function drawScaleBar(
   const segWidth = barWidthPx / segments;
 
   const labelText = formatDistance(barDistM);
-  ctx.font = `${fontSize}px sans-serif`;
+  ctx.font = `${fontSize}px ${MAP_FONT}`;
   const labelW = ctx.measureText(labelText).width;
 
   const boxW = barWidthPx + padH * 2 + labelW + mmToPx(2, dpi);
@@ -1266,18 +1319,18 @@ function drawScaleBar(
 
   // Draw alternating segments
   for (let i = 0; i < segments; i++) {
-    ctx.fillStyle = i % 2 === 0 ? "#1a1a1a" : "white";
+    ctx.fillStyle = i % 2 === 0 ? INK : "white";
     ctx.fillRect(x + padH + i * segWidth, y + padV, segWidth, barHeight);
   }
 
   // Bar border
-  ctx.strokeStyle = "#1a1a1a";
+  ctx.strokeStyle = INK;
   ctx.lineWidth = 1;
   ctx.strokeRect(x + padH, y + padV, barWidthPx, barHeight);
 
   // Labels
-  ctx.fillStyle = "#1a1a1a";
-  ctx.font = `${fontSize}px sans-serif`;
+  ctx.fillStyle = INK;
+  ctx.font = `${fontSize}px ${MAP_FONT}`;
   ctx.fillText("0", x + padH, y + padV + barHeight + fontSize + mmToPx(0.5, dpi));
   ctx.fillText(
     labelText,
@@ -1299,7 +1352,7 @@ function drawScaleText(
 ): number {
   const text = `1:${Math.round(config.scale).toLocaleString()}`;
   const fontSize = mmToPx(3, dpi);
-  ctx.font = `bold ${fontSize}px sans-serif`;
+  ctx.font = `bold ${fontSize}px ${MAP_FONT}`;
   const metrics = ctx.measureText(text);
   const boxW = metrics.width + padH * 2;
   const boxH = fontSize + padV * 2;
@@ -1307,7 +1360,7 @@ function drawScaleText(
   const y = stackY - boxH;
 
   drawElementBackground(ctx, x, y, boxW, boxH, dpi);
-  ctx.fillStyle = "#1a1a1a";
+  ctx.fillStyle = INK;
   ctx.fillText(text, x + padH, y + padV + fontSize * 0.85);
 
   return y - mmToPx(1, dpi);
@@ -1324,7 +1377,7 @@ function drawContourInterval(
 ): number {
   const text = `${interval}m contours`;
   const fontSize = mmToPx(2.5, dpi);
-  ctx.font = `${fontSize}px sans-serif`;
+  ctx.font = `${fontSize}px ${MAP_FONT}`;
   const metrics = ctx.measureText(text);
   const boxW = metrics.width + padH * 2;
   const boxH = fontSize + padV * 2;
@@ -1332,7 +1385,7 @@ function drawContourInterval(
   const y = stackY - boxH;
 
   drawElementBackground(ctx, x, y, boxW, boxH, dpi);
-  ctx.fillStyle = "#1a1a1a";
+  ctx.fillStyle = INK;
   ctx.fillText(text, x + padH, y + padV + fontSize * 0.85);
 
   return y - mmToPx(1, dpi);
@@ -1356,96 +1409,147 @@ function drawCompass(
   // Grid convergence
   const gridConv = gridConvergence(midLat, midLon);
 
-  const boxW = mmToPx(40, dpi);
-  const arrowLen = mmToPx(15, dpi);
-  const arrowSectionH = arrowLen + mmToPx(6, dpi); // headroom above + tip
-  const legendRowH = mmToPx(6, dpi);
-  const legendRows = 3;
-  const boxH = arrowSectionH + legendRows * legendRowH + mmToPx(4, dpi); // 4mm bottom pad
+  // ── Layout ───────────────────────────────────────────────────────────────
+  // Standard declination diagram: three arms from one origin at their TRUE
+  // angles (no exaggeration). Arms have distinct lengths (TN longest, GN
+  // shortest, MN medium) so the near-coincident TN/GN arms stay distinguishable
+  // and their tip labels land at different radii without colliding.
+  const armTN = mmToPx(16, dpi);
+  const armMN = mmToPx(13, dpi);
+  const armGN = mmToPx(10, dpi);
+  const headroom = mmToPx(5.5, dpi); // star + TN label above the longest arm
+  const topPad = mmToPx(2, dpi);
+  const tipFont = mmToPx(2.3, dpi);
+  const readoutFont = mmToPx(2.6, dpi);
+  const readoutGap = mmToPx(3.5, dpi);
+  const rowH = readoutFont * 1.55;
+  const bottomPad = mmToPx(3, dpi);
 
+  const arrowAreaH = headroom + armTN;
+  const boxW = mmToPx(34, dpi);
+  const boxH =
+    topPad + arrowAreaH + readoutGap + 2 * rowH + bottomPad;
   const boxX = margin;
   const boxY = stackY - boxH;
 
   drawElementBackground(ctx, boxX, boxY, boxW, boxH, dpi);
 
-  // Arrow origin: horizontally centred, with arrowLen of space above
   const cx = boxX + boxW / 2;
-  const cy = boxY + mmToPx(3, dpi) + arrowLen; // 3mm top pad + arrow length
+  const cy = boxY + topPad + arrowAreaH; // arm origin (base), arms point up
 
-  // Draw a single north arrow (no tip labels)
-  function drawArrow(angleDeg: number, color: string) {
-    const angleRad = -angleDeg * DEG_TO_RAD;
-    const tipX = cx + Math.sin(angleRad) * arrowLen;
-    const tipY = cy - Math.cos(angleRad) * arrowLen;
+  // Bearing (deg, clockwise from up, +ve = east) → screen point at radius `len`.
+  const bearingPt = (deg: number, len: number) => {
+    const r = deg * DEG_TO_RAD;
+    return { x: cx + Math.sin(r) * len, y: cy - Math.cos(r) * len };
+  };
 
+  const drawArm = (deg: number, len: number, color: string) => {
+    const tip = bearingPt(deg, len);
     ctx.strokeStyle = color;
-    ctx.lineWidth = mmToPx(0.4, dpi);
+    ctx.lineWidth = mmToPx(0.45, dpi);
     ctx.beginPath();
     ctx.moveTo(cx, cy);
-    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(tip.x, tip.y);
     ctx.stroke();
+    return tip;
+  };
 
-    // Filled arrowhead
-    const headLen = mmToPx(2.5, dpi);
-    const headAngle = 0.35;
-    ctx.fillStyle = color;
+  // Five-point star (points up), filled — marks True North per convention.
+  const drawStar = (x: number, y: number, rOuter: number, color: string) => {
+    const rInner = rOuter * 0.42;
     ctx.beginPath();
-    ctx.moveTo(tipX, tipY);
-    ctx.lineTo(
-      tipX - headLen * Math.sin(angleRad - headAngle),
-      tipY + headLen * Math.cos(angleRad - headAngle),
-    );
-    ctx.lineTo(
-      tipX - headLen * Math.sin(angleRad + headAngle),
-      tipY + headLen * Math.cos(angleRad + headAngle),
-    );
+    for (let i = 0; i < 10; i++) {
+      const rad = i % 2 === 0 ? rOuter : rInner;
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const px = x + Math.cos(a) * rad;
+      const py = y + Math.sin(a) * rad;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
     ctx.closePath();
+    ctx.fillStyle = color;
     ctx.fill();
+  };
+
+  // Single-sided barb (half-arrowhead) at MN tip, per convention.
+  const drawHalfArrow = (tip: { x: number; y: number }, deg: number, color: string) => {
+    const r = deg * DEG_TO_RAD;
+    const dir = { x: Math.sin(r), y: -Math.cos(r) }; // along arm toward tip
+    const perp = { x: -dir.y, y: dir.x }; // left of travel
+    const headLen = mmToPx(3, dpi);
+    const headW = mmToPx(1.7, dpi);
+    const base = { x: tip.x - dir.x * headLen, y: tip.y - dir.y * headLen };
+    const side = { x: base.x + perp.x * headW, y: base.y + perp.y * headW };
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(base.x, base.y);
+    ctx.lineTo(side.x, side.y);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  };
+
+  // ── Arms (longest first so shorter arms read on top near the origin) ───────
+  const tnTip = drawArm(0, armTN, TN_COLOR);
+  const mnTip = drawArm(magDecl, armMN, MN_COLOR);
+  const gnTip = drawArm(gridConv, armGN, GN_COLOR);
+
+  // Origin dot
+  ctx.fillStyle = INK;
+  ctx.beginPath();
+  ctx.arc(cx, cy, mmToPx(0.5, dpi), 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tip symbology
+  const starR = mmToPx(1.7, dpi);
+  drawStar(tnTip.x, tnTip.y, starR, TN_COLOR);
+  drawHalfArrow(mnTip, magDecl, MN_COLOR);
+  // GN: short perpendicular tick across the tip
+  ctx.strokeStyle = GN_COLOR;
+  ctx.lineWidth = mmToPx(0.45, dpi);
+  {
+    const r = gridConv * DEG_TO_RAD;
+    const perp = { x: Math.cos(r), y: Math.sin(r) };
+    const t = mmToPx(1, dpi);
+    ctx.beginPath();
+    ctx.moveTo(gnTip.x - perp.x * t, gnTip.y - perp.y * t);
+    ctx.lineTo(gnTip.x + perp.x * t, gnTip.y + perp.y * t);
+    ctx.stroke();
   }
 
-  // Draw all three arrows (MN first so TN/GN render on top)
-  drawArrow(magDecl, "#16a34a");
-  drawArrow(gridConv, "#2563eb");
-  drawArrow(0, "#e11d48");
-
-  // Legend: coloured line swatch + label text
-  const legendFontSize = mmToPx(2.5, dpi);
-  const swatchLen = mmToPx(5, dpi);
-  const swatchLineW = mmToPx(0.5, dpi);
-  const legendX = boxX + mmToPx(3, dpi);
-  const legendTextX = legendX + swatchLen + mmToPx(2, dpi);
-  let legendY = boxY + arrowSectionH + mmToPx(1, dpi);
-
-  ctx.font = `${legendFontSize}px sans-serif`;
+  // Tip labels — placed just beyond each tip along its bearing; distinct arm
+  // lengths keep them from colliding.
+  ctx.font = `bold ${tipFont}px ${MAP_FONT}`;
+  ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  const tnLabel = bearingPt(0, armTN + starR + mmToPx(2.2, dpi));
+  ctx.fillStyle = TN_COLOR;
+  ctx.fillText("TN", tnLabel.x, tnLabel.y);
+  const mnLabel = bearingPt(magDecl, armMN + mmToPx(3, dpi));
+  ctx.fillStyle = MN_COLOR;
+  ctx.fillText("MN", mnLabel.x, mnLabel.y);
+  const gnLabel = bearingPt(gridConv, armGN + mmToPx(2.6, dpi));
+  ctx.fillStyle = GN_COLOR;
+  ctx.fillText("GN", gnLabel.x, gnLabel.y);
+
+  // ── Angle readout (relative to true north, cardinal-suffixed) ──────────────
+  const fmtDecl = (v: number) => `${Math.abs(v).toFixed(1)}° ${v >= 0 ? "E" : "W"}`;
+  const rx = boxX + mmToPx(4, dpi);
+  let ry = cy + readoutGap + rowH / 2;
   ctx.textAlign = "start";
-
-  const entries: [string, string, string][] = [
-    ["#e11d48", "TN", ""],
-    ["#2563eb", "GN", `${gridConv >= 0 ? "+" : ""}${gridConv.toFixed(2)}°`],
-    ["#16a34a", "MN", `${magDecl >= 0 ? "+" : ""}${magDecl.toFixed(1)}°`],
-  ];
-
-  for (const [color, abbr, desc] of entries) {
-    const rowMidY = legendY + legendRowH / 2;
-
-    // Coloured swatch line
-    ctx.strokeStyle = color;
-    ctx.lineWidth = swatchLineW;
-    ctx.beginPath();
-    ctx.moveTo(legendX, rowMidY);
-    ctx.lineTo(legendX + swatchLen, rowMidY);
-    ctx.stroke();
-
-    // Abbreviation (bold) + description
-    ctx.fillStyle = "#1a1a1a";
-    ctx.font = `bold ${legendFontSize}px sans-serif`;
-    ctx.fillText(abbr, legendTextX, rowMidY);
-    const abbrW = ctx.measureText(abbr + " ").width;
-    ctx.font = `${legendFontSize}px sans-serif`;
-    ctx.fillText(desc, legendTextX + abbrW, rowMidY);
-
-    legendY += legendRowH;
+  ctx.textBaseline = "middle";
+  for (const [color, abbr, val] of [
+    [MN_COLOR, "MN", fmtDecl(magDecl)],
+    [GN_COLOR, "GN", fmtDecl(gridConv)],
+  ] as const) {
+    ctx.fillStyle = color;
+    ctx.font = `bold ${readoutFont}px ${MAP_FONT}`;
+    ctx.fillText(abbr, rx, ry);
+    const abbrW = ctx.measureText(abbr + "  ").width;
+    ctx.fillStyle = INK;
+    ctx.font = `${readoutFont}px ${MAP_FONT}`;
+    ctx.fillText(val, rx + abbrW, ry);
+    ry += rowH;
   }
 
   // Reset context state
@@ -1494,7 +1598,7 @@ function drawCanyonMarkers(
 
     // Name label at scales <= 1:50000
     if (config.scale <= 50000 && marker.name) {
-      ctx.font = `${labelFontSize}px sans-serif`;
+      ctx.font = `${labelFontSize}px ${MAP_FONT}`;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
 
@@ -1507,7 +1611,7 @@ function drawCanyonMarkers(
       ctx.lineJoin = "round";
       ctx.strokeText(marker.name, labelX, labelY);
 
-      ctx.fillStyle = "#1a1a1a";
+      ctx.fillStyle = INK;
       ctx.fillText(marker.name, labelX, labelY);
     }
   }
@@ -1536,21 +1640,21 @@ function drawGridLabel(
 
   let curX = x;
 
-  ctx.font = `${smallFontSize}px sans-serif`;
+  ctx.font = `${smallFontSize}px ${MAP_FONT}`;
   ctx.fillText(prefix, curX, y);
   curX += ctx.measureText(prefix).width;
 
-  ctx.font = `bold ${largeFontSize}px sans-serif`;
+  ctx.font = `bold ${largeFontSize}px ${MAP_FONT}`;
   ctx.fillText(principal, curX, y);
   curX += ctx.measureText(principal).width;
 
   if (interval < 10000) {
-    ctx.font = `${smallFontSize}px sans-serif`;
+    ctx.font = `${smallFontSize}px ${MAP_FONT}`;
     ctx.fillText("000", curX, y);
   }
 
   // Restore font
-  ctx.font = `${smallFontSize}px sans-serif`;
+  ctx.font = `${smallFontSize}px ${MAP_FONT}`;
 }
 
 function drawGridLines(
@@ -1563,9 +1667,9 @@ function drawGridLines(
   const { north, south, east, west } = config.extent;
   const fontSize = mmToPx(2, dpi);
   const largeFontSize = mmToPx(3.2, dpi);
-  ctx.font = `${fontSize}px sans-serif`;
-  ctx.strokeStyle = "rgba(40, 40, 40, 0.65)";
-  ctx.fillStyle = "rgba(20, 20, 20, 0.9)";
+  ctx.font = `${fontSize}px ${MAP_FONT}`;
+  ctx.strokeStyle = INK_MUTED;
+  ctx.fillStyle = INK;
   ctx.lineWidth = 2.5;
 
   if (config.elements.gridLines === "enNorthing") {
@@ -1675,8 +1779,8 @@ function drawAttribution(
   config: GeoPdfConfig,
 ) {
   const fontSize = mmToPx(1.8, dpi);
-  ctx.font = `${fontSize}px sans-serif`;
-  ctx.fillStyle = "rgba(60, 60, 60, 0.8)";
+  ctx.font = `${fontSize}px ${MAP_FONT}`;
+  ctx.fillStyle = INK_MUTED;
   ctx.textAlign = "right";
   ctx.textBaseline = "bottom";
 
