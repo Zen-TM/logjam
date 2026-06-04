@@ -258,11 +258,8 @@
 
 .safetyWarning {
   margin: 0 0 0.75rem;
-  padding: 0.5em 0.6em;
   font-size: var(--text-xs);
-  line-height: 1.35;
-  color: var(--theme-text-primary);
-  border: 1px solid color-mix(in srgb, var(--theme-warning) 45%, transparent);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--theme-warning) 12%, transparent);
+  line-height: 1.4;
+  color: var(--theme-text-muted);
+  opacity: 0.75;
 }

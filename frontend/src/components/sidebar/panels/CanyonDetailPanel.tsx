@@ -57,7 +57,9 @@ function CanyonDetailPanel({
 }) {
   const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
-  const [safetyDismissed, setSafetyDismissed] = useState(false);
+  const [safetyDismissed, setSafetyDismissed] = useState(
+    () => localStorage.getItem('logjam.safetyDismissed') === '1'
+  );
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
@@ -174,7 +176,10 @@ function CanyonDetailPanel({
               type="button"
               className={classes.safetyDismiss}
               aria-label="Dismiss safety warning"
-              onClick={() => setSafetyDismissed(true)}
+              onClick={() => {
+                localStorage.setItem('logjam.safetyDismissed', '1');
+                setSafetyDismissed(true);
+              }}
             >
               <X size={14} />
             </button>

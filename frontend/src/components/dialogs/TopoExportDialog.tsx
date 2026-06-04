@@ -247,11 +247,8 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
           component="p"
           sx={{
             mb: 2,
-            p: 1,
-            borderRadius: 1,
-            border: "1px solid color-mix(in srgb, var(--theme-warning) 45%, transparent)",
-            background: "color-mix(in srgb, var(--theme-warning) 12%, transparent)",
-            color: "var(--theme-text-primary)",
+            color: "var(--theme-text-muted)",
+            opacity: 0.75,
           }}
         >
           Exported data is user-generated and derived from third-party sources;
