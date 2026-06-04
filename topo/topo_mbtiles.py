@@ -158,6 +158,10 @@ WGS84_EPSG = 4326
 ZOOM_MIN = 12
 ZOOM_MAX = 18
 
+# Minimum on-screen spacing between repeated labels along a single line
+# (contours / waterways / tracks / roads), measured in Web-Mercator pixels.
+LABEL_SPACING_PX = 300
+
 # Vegetation (scrub density) layer — for bushbashing avoidance.
 # Normalized Relative Density (NRD): walking-height returns (0.25–2.0 m HAG)
 # divided by walking-height + everything-below (HAG ≤ 2.0 m including ground).
@@ -455,7 +459,7 @@ def load_render_settings(path: Optional[str]) -> Dict[str, Any]:
 
 def active_layers_from_settings(settings: Dict[str, Any], has_vegetation: bool) -> List[str]:
     """Return ordered layer list filtered by settings.<layer>.enabled."""
-    order = ["hillshade", "vegetation", "features", "slope", "contours"]
+    order = ["hillshade", "vegetation", "slope", "contours", "features"]
     out = []
     for name in order:
         if name == "vegetation" and not has_vegetation:
@@ -512,6 +516,79 @@ def tiles_for_bbox(lon_min, lat_min, lon_max, lat_max, zoom) -> Generator[Tuple[
     for x in range(x0, x1 + 1):
         for y in range(y0, y1 + 1):
             yield x, y
+
+
+def lonlat_to_world_px(lon: float, lat: float, zoom: int) -> Tuple[float, float]:
+    """Continuous global Web-Mercator pixel coords at `zoom` (TILE_SIZE px per
+    tile). The float counterpart of lon_lat_to_tile. Per-tile label placement
+    uses this so every tile computes identical anchor positions for a line and
+    they never disagree across tile boundaries."""
+    world = (2 ** zoom) * TILE_SIZE
+    x = (lon + 180.0) / 360.0 * world
+    lat_r = math.radians(lat)
+    y = (1.0 - math.log(math.tan(lat_r) + 1.0 / math.cos(lat_r)) / math.pi) / 2.0 * world
+    return x, y
+
+
+def _point_at_distance(pts, seg_len, dist: float) -> Tuple[float, float]:
+    """Interpolate the (x, y) at cumulative arc-length `dist` along `pts`."""
+    acc = 0.0
+    for i, d in enumerate(seg_len):
+        if acc + d >= dist:
+            t = (dist - acc) / d if d > 0 else 0.0
+            x0, y0 = pts[i]
+            x1, y1 = pts[i + 1]
+            return (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
+        acc += d
+    return pts[-1]
+
+
+def line_label_anchors(coords, zoom: int, spacing_px: float) -> List[Tuple[float, float]]:
+    """Anchor points (global world-pixel xy) spaced ~spacing_px apart along a
+    polyline, measured in Web-Mercator pixels at `zoom`. Deterministic from the
+    full line geometry, so adjacent tiles agree on the anchors and never
+    double-draw a label. Lines shorter than spacing_px get a single anchor at
+    their arc-length midpoint so short lines still get one label."""
+    if len(coords) < 2:
+        return []
+    pts = [lonlat_to_world_px(c[0], c[1], zoom) for c in coords]
+    seg_len = [math.hypot(x1 - x0, y1 - y0)
+               for (x0, y0), (x1, y1) in zip(pts, pts[1:])]
+    total = sum(seg_len)
+    if total <= 0.0:
+        return []
+    if total < spacing_px:
+        return [_point_at_distance(pts, seg_len, total / 2.0)]
+    anchors = []
+    # Start half a step in so labels don't hug the line ends.
+    target = spacing_px / 2.0
+    while target < total:
+        anchors.append(_point_at_distance(pts, seg_len, target))
+        target += spacing_px
+    return anchors
+
+
+def draw_tile_label(draw, world_xy, tile_x: int, tile_y: int,
+                    text: str, font, fill) -> bool:
+    """Draw `text` for an anchor given in global world-pixel coords, but only if
+    the anchor falls inside this tile (half-open bounds → exactly one tile owns
+    each anchor, so a label is never duplicated across tiles). The origin is
+    clamped to keep the text fully inside the tile so it is never clipped at a
+    tile edge. White halo then coloured text. Returns True if drawn."""
+    wx, wy = world_xy
+    ox = tile_x * TILE_SIZE
+    oy = tile_y * TILE_SIZE
+    if not (ox <= wx < ox + TILE_SIZE and oy <= wy < oy + TILE_SIZE):
+        return False
+    lx, ly = wx - ox, wy - oy
+    bbox = draw.textbbox((0, 0), text, font=font)
+    w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    tx = min(max(2.0, lx - w / 2.0), TILE_SIZE - w - 2.0)
+    ty = min(max(2.0, ly - h / 2.0), TILE_SIZE - h - 2.0)
+    for dx, dy in [(-1,-1),(1,-1),(-1,1),(1,1),(0,-1),(0,1),(-1,0),(1,0)]:
+        draw.text((tx + dx, ty + dy), text, fill=(255, 255, 255, 200), font=font)
+    draw.text((tx, ty), text, fill=fill, font=font)
+    return True
 
 # ---------------------------------------------------------------------------
 # MBTiles helpers
@@ -1943,10 +2020,14 @@ def render_features_tile(
 
     lon_min, lat_min, lon_max, lat_max = bbox_wgs84
     scale = ground_metres_per_pixel(zoom)
+    # This tile's index, used to claim line-label anchors (see draw_tile_label).
+    tile_x, tile_y = lon_lat_to_tile((lon_min + lon_max) / 2.0,
+                                     (lat_min + lat_max) / 2.0, zoom)
 
     try:
         gj = _load_geojson(geojson_path)
-    except Exception:
+    except Exception as e:
+        log.warning(f"Feature geojson load failed ({geojson_path}): {e}")
         return img
 
     draw = ImageDraw.Draw(img)
@@ -1959,6 +2040,10 @@ def render_features_tile(
         px = (lon - lon_min) / (lon_max - lon_min) * TILE_SIZE
         py = (lat_max - lat) / (lat_max - lat_min) * TILE_SIZE
         return px, py
+
+    # Line-name labels are collected here and drawn after every feature so
+    # later feature lines never cross over the label text.
+    pending_labels: List[Tuple[Tuple[float, float], str, Any, Any]] = []
 
     for feat in gj.get("features", []):
         cat = feat.get("properties", {}).get("_category")
@@ -1998,8 +2083,8 @@ def render_features_tile(
                         dst_y = max(0, iy)
                         if src_x1 > src_x0 and src_y1 > src_y0:
                             img.alpha_composite(icon.crop((src_x0, src_y0, src_x1, src_y1)), (dst_x, dst_y))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        log.warning(f"Icon render failed for '{icon_name}': {e}")
 
         elif gtype == "LineString":
             coords = geom.get("coordinates", [])
@@ -2017,7 +2102,10 @@ def render_features_tile(
                 w = max(1, int(style.get("width_z18", 2) * zoom / 18))
                 draw.line(pts, fill=style["colour"], width=w)
 
-                # Labels for waterways, tracks, roads (only at z14+)
+                # Labels for waterways, tracks, roads (only at z14+). Anchors
+                # are spaced along the full line in global pixel space so long
+                # lines get several evenly spaced labels, each drawn in exactly
+                # one tile (no cross-tile duplicates, no edge clipping).
                 label_cats = {"waterway", "track", "road"}
                 if zoom >= 14 and cat in label_cats:
                     tags = feat.get("properties", {})
@@ -2029,18 +2117,9 @@ def render_features_tile(
                                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", label_size)
                         except Exception:
                             lbl_font = ImageFont.load_default()
-                        # Place label near the midpoint of the visible segment
-                        visible = [
-                            p for p, c in zip(pts, coords)
-                            if lon_min <= c[0] <= lon_max and lat_min <= c[1] <= lat_max
-                        ]
-                        if len(visible) >= 2:
-                            mid = visible[len(visible) // 2]
-                            lbl_colour = style["colour"][:3] + (230,)
-                            for dx, dy in [(-1,-1),(1,-1),(-1,1),(1,1),(0,-1),(0,1),(-1,0),(1,0)]:
-                                draw.text((mid[0]+dx, mid[1]+dy), label,
-                                          fill=(255,255,255,200), font=lbl_font)
-                            draw.text(mid, label, fill=lbl_colour, font=lbl_font)
+                        lbl_colour = style["colour"][:3] + (230,)
+                        for anchor in line_label_anchors(coords, zoom, LABEL_SPACING_PX):
+                            pending_labels.append((anchor, label, lbl_font, lbl_colour))
 
         elif gtype == "Polygon":
             coords = geom.get("coordinates", [[]])[0]
@@ -2051,6 +2130,10 @@ def render_features_tile(
                     draw.polygon(pts, fill=fill_col)
                 w = max(1, int(style.get("width_z18", 2) * zoom / 18))
                 draw.line(pts + [pts[0]], fill=style["colour"], width=w)
+
+    # Draw labels last so they sit on top of every feature line.
+    for anchor, text, lbl_font, lbl_colour in pending_labels:
+        draw_tile_label(draw, anchor, tile_x, tile_y, text, lbl_font, lbl_colour)
 
     return img
 
@@ -2065,6 +2148,9 @@ def render_contours_tile(
     draw = ImageDraw.Draw(img)
 
     lon_min, lat_min, lon_max, lat_max = bbox_wgs84
+    # This tile's index, used to claim line-label anchors (see draw_tile_label).
+    tile_x, tile_y = lon_lat_to_tile((lon_min + lon_max) / 2.0,
+                                     (lat_min + lat_max) / 2.0, zoom)
 
     contour_settings = settings.get("contours", {})
     zoom_bands = contour_settings.get("zoomBands", [])
@@ -2099,15 +2185,17 @@ def render_contours_tile(
     try:
         font_major = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
                                         max(8, int(11 * zoom / 16)))
-        font_minor = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                                        max(6, int(9 * zoom / 16)))
     except Exception:
-        font_major = font_minor = ImageFont.load_default()
+        font_major = ImageFont.load_default()
 
     # A contour at elevation E is "major" if E is a multiple of
     # (interval * majorEveryN) at the current zoom. The geojson contains lines
     # at the requested interval; we read elev and bucket here.
     major_modulus = active_interval * max(major_every_n, 1)
+
+    # Elevation labels are collected here and drawn after every line pass so
+    # contour lines never cross over the label text.
+    pending_labels: List[Tuple[Tuple[float, float], str, Any]] = []
 
     # Draw from largest interval first (so smaller sit on top)
     for interval in intervals_to_draw:
@@ -2116,7 +2204,8 @@ def render_contours_tile(
             continue
         try:
             gj = _load_geojson(path)
-        except Exception:
+        except Exception as e:
+            log.warning(f"Contour geojson load failed for interval {interval} ({path}): {e}")
             continue
 
         # When this interval is coarser than the active interval (e.g. drawing
@@ -2149,6 +2238,16 @@ def render_contours_tile(
                 continue
 
             elev = feat.get("properties", {}).get("elev")
+            # Only draw lines belonging to this interval. Lets a single 5 m
+            # geojson back multiple interval keys (composite export); no-op for
+            # the job pipeline's per-interval geojsons (every line already
+            # satisfies elev % interval == 0).
+            if elev is None:
+                continue
+            ratio = float(elev) / interval
+            if abs(ratio - round(ratio)) > 1e-3:
+                continue
+
             # Major if elevation is a multiple of (active_interval * majorEveryN).
             # Inherited coarser-band lines (e.g. 50m drawn under the 5m band)
             # naturally satisfy this condition without a separate override.
@@ -2162,19 +2261,14 @@ def render_contours_tile(
                                     * zoom / 16 / 6))
             draw.line(pts, fill=colour, width=line_width)
 
-            if label_interval and is_major and len(pts) >= 4 and elev is not None:
-                visible_pts = [
-                    p for p, c in zip(pts, coords)
-                    if lon_min <= c[0] <= lon_max and lat_min <= c[1] <= lat_max
-                ]
-                if not visible_pts:
-                    visible_pts = pts
-                mid = visible_pts[len(visible_pts) // 2]
+            if label_interval and is_major and len(pts) >= 4:
                 label = f"{int(elev)}m"
-                font = font_major if is_major else font_minor
-                for dx, dy in [(-1,-1),(1,-1),(-1,1),(1,1),(0,-1),(0,1),(-1,0),(1,0)]:
-                    draw.text((mid[0]+dx, mid[1]+dy), label, fill=(255,255,255,200), font=font)
-                draw.text(mid, label, fill=colour, font=font)
+                for anchor in line_label_anchors(coords, zoom, LABEL_SPACING_PX):
+                    pending_labels.append((anchor, label, colour))
+
+    # Draw labels last so they sit on top of every contour line.
+    for anchor, text, colour in pending_labels:
+        draw_tile_label(draw, anchor, tile_x, tile_y, text, font_major, colour)
 
     return img
 

@@ -142,8 +142,9 @@ def _composite_tile(
     """Render one composite tile. Returns PNG bytes or None if fully transparent."""
     composite = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
 
-    # Order matches topo_mbtiles.render_tile_job composite order.
-    order = ["hillshade", "vegetation", "features", "slope", "contours"]
+    # Order matches topo_mbtiles.render_tile_job composite order. OSM features
+    # are topmost so roads/water/labels read over contours, matching the web map.
+    order = ["hillshade", "vegetation", "slope", "contours", "features"]
     bbox_wgs84 = tile_to_bbox(x, y, z)
 
     for layer in order:
@@ -177,16 +178,26 @@ def _prepare_sources(ctx: RenderContext, layers: List[str]) -> Tuple[
         if layer in RASTER_LAYERS:
             raster_cogs[layer] = ctx.cog_path(job_id, layer)
         elif layer == "contours":
-            contour_paths[5.0] = str(ctx.geojson_path(job_id, "contours"))
+            # Only contours_5m.geojson is published for export; it holds every
+            # 5 m line keyed by `elev`. Register it under both the 50 m and 5 m
+            # interval keys so render_contours_tile can serve both bands from
+            # the one file — its modulo filter keeps only the matching lines.
+            geojson_5m = str(ctx.geojson_path(job_id, "contours"))
+            contour_paths[50.0] = geojson_5m
+            contour_paths[5.0] = geojson_5m
         elif layer == "features":
             features_geojson = str(ctx.geojson_path(job_id, "features"))
 
     settings = _vector_style_to_render_settings(ctx.vector_style)
-    # Force a single-band 5 m contour interval so render_contours_tile picks
-    # up the GeoJSON (the renderer keys contour paths by intervalM).
+    # Reproduce the web map's contour zoom behaviour: only major (50 m) contours
+    # at z12-13, full 5 m contours + 50 m labels at z14+. The 50 m lines (drawn
+    # by the coarser inherited pass) carry the elevation labels; the 5 m pass
+    # fills in minor contours. Matches the frontend `minzoom: 14` minor/label
+    # layers in Map.tsx.
     settings["contours"].setdefault("enabled", True)
     settings["contours"]["zoomBands"] = [
-        {"zoomMin": 12, "zoomMax": 18, "intervalM": 5, "majorEveryN": 10},
+        {"zoomMin": 12, "zoomMax": 13, "intervalM": 50, "majorEveryN": 1},
+        {"zoomMin": 14, "zoomMax": 18, "intervalM": 5, "majorEveryN": 10},
     ]
     return raster_cogs, contour_paths, features_geojson, settings
 
