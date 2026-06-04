@@ -160,7 +160,10 @@ ZOOM_MAX = 18
 
 # Minimum on-screen spacing between repeated labels along a single line
 # (contours / waterways / tracks / roads), measured in Web-Mercator pixels.
-LABEL_SPACING_PX = 300
+LABEL_SPACING_PX = 550
+# Margin (px) grown around each placed label box for the per-tile collision
+# declutter (see declutter_labels). Larger = more breathing room, fewer labels.
+LABEL_MIN_GAP_PX = 6
 
 # Vegetation (scrub density) layer — for bushbashing avoidance.
 # Normalized Relative Density (NRD): walking-height returns (0.25–2.0 m HAG)
@@ -568,27 +571,53 @@ def line_label_anchors(coords, zoom: int, spacing_px: float) -> List[Tuple[float
     return anchors
 
 
-def draw_tile_label(draw, world_xy, tile_x: int, tile_y: int,
-                    text: str, font, fill) -> bool:
-    """Draw `text` for an anchor given in global world-pixel coords, but only if
-    the anchor falls inside this tile (half-open bounds → exactly one tile owns
-    each anchor, so a label is never duplicated across tiles). The origin is
-    clamped to keep the text fully inside the tile so it is never clipped at a
-    tile edge. White halo then coloured text. Returns True if drawn."""
+def tile_label_box(draw, world_xy, tile_x: int, tile_y: int,
+                   text: str, font) -> Optional[Tuple[float, float, float, float]]:
+    """Tile-local placement box (tx, ty, w, h) for a label anchored at global
+    world-pixel `world_xy`, or None if the anchor isn't owned by this tile.
+    Ownership uses half-open bounds → exactly one tile owns each anchor, so a
+    label is never duplicated across tiles. The origin is clamped to keep the
+    text fully inside the tile so it is never clipped at a tile edge."""
     wx, wy = world_xy
     ox = tile_x * TILE_SIZE
     oy = tile_y * TILE_SIZE
     if not (ox <= wx < ox + TILE_SIZE and oy <= wy < oy + TILE_SIZE):
-        return False
+        return None
     lx, ly = wx - ox, wy - oy
     bbox = draw.textbbox((0, 0), text, font=font)
     w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
     tx = min(max(2.0, lx - w / 2.0), TILE_SIZE - w - 2.0)
     ty = min(max(2.0, ly - h / 2.0), TILE_SIZE - h - 2.0)
+    return (tx, ty, w, h)
+
+
+def draw_label_box(draw, box, text: str, font, fill) -> None:
+    """Draw `text` at a placement box from tile_label_box: white halo then
+    coloured text on top."""
+    tx, ty, _w, _h = box
     for dx, dy in [(-1,-1),(1,-1),(-1,1),(1,1),(0,-1),(0,1),(-1,0),(1,0)]:
         draw.text((tx + dx, ty + dy), text, fill=(255, 255, 255, 200), font=font)
     draw.text((tx, ty), text, fill=fill, font=font)
-    return True
+
+
+def declutter_labels(items):
+    """Greedy per-tile min-distance declutter. `items` is an ordered list of
+    (box, payload), higher-priority labels first, where box = (tx, ty, w, h).
+    Keep a label only if its box, grown by LABEL_MIN_GAP_PX, overlaps no
+    already-kept box. Returns kept payloads in input order. Per-tile only (no
+    shared state) so cross-tile anchor ownership / determinism is unchanged."""
+    kept = []
+    kept_rects = []
+    for box, payload in items:
+        x0, y0, w, h = box
+        r = (x0 - LABEL_MIN_GAP_PX, y0 - LABEL_MIN_GAP_PX,
+             x0 + w + LABEL_MIN_GAP_PX, y0 + h + LABEL_MIN_GAP_PX)
+        if any(r[0] < k[2] and r[2] > k[0] and r[1] < k[3] and r[3] > k[1]
+               for k in kept_rects):
+            continue
+        kept_rects.append(r)
+        kept.append(payload)
+    return kept
 
 # ---------------------------------------------------------------------------
 # MBTiles helpers
@@ -2131,9 +2160,16 @@ def render_features_tile(
                 w = max(1, int(style.get("width_z18", 2) * zoom / 18))
                 draw.line(pts + [pts[0]], fill=style["colour"], width=w)
 
-    # Draw labels last so they sit on top of every feature line.
+    # Draw labels last so they sit on top of every feature line. Declutter
+    # first: keep only labels owned by this tile, then drop any whose box
+    # overlaps a higher-priority kept one. Priority = insertion (geojson) order.
+    candidates = []
     for anchor, text, lbl_font, lbl_colour in pending_labels:
-        draw_tile_label(draw, anchor, tile_x, tile_y, text, lbl_font, lbl_colour)
+        box = tile_label_box(draw, anchor, tile_x, tile_y, text, lbl_font)
+        if box is not None:
+            candidates.append((box, (box, text, lbl_font, lbl_colour)))
+    for box, text, lbl_font, lbl_colour in declutter_labels(candidates):
+        draw_label_box(draw, box, text, lbl_font, lbl_colour)
 
     return img
 
@@ -2266,9 +2302,17 @@ def render_contours_tile(
                 for anchor in line_label_anchors(coords, zoom, LABEL_SPACING_PX):
                     pending_labels.append((anchor, label, colour))
 
-    # Draw labels last so they sit on top of every contour line.
+    # Draw labels last so they sit on top of every contour line. Declutter
+    # first: keep only labels owned by this tile, then drop any whose box
+    # overlaps a higher-priority kept one. pending_labels is appended coarser-
+    # interval-first, so insertion order already prioritises major-most contours.
+    candidates = []
     for anchor, text, colour in pending_labels:
-        draw_tile_label(draw, anchor, tile_x, tile_y, text, font_major, colour)
+        box = tile_label_box(draw, anchor, tile_x, tile_y, text, font_major)
+        if box is not None:
+            candidates.append((box, (box, text, colour)))
+    for box, text, colour in declutter_labels(candidates):
+        draw_label_box(draw, box, text, font_major, colour)
 
     return img
 
