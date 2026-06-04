@@ -12,6 +12,7 @@ import {
   deleteNotification,
   acceptFriendRequest,
   declineFriendRequest,
+  getTopoExport,
 } from "../../../canyonUtils";
 
 function NotificationsPanel({
@@ -66,6 +67,26 @@ function NotificationsPanel({
         next.delete(notificationId);
         return next;
       });
+    }
+  }
+
+  async function handleDownloadExport(n: TNotification) {
+    try {
+      const view = await getTopoExport(n.payload.exportJobId as string);
+      if (!view.downloadUrl) throw new Error("Export has no download URL");
+      const a = document.createElement("a");
+      a.href = view.downloadUrl;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      if (!n.read) {
+        markNotificationRead(n.id).catch((err) => { console.error(err); });
+        onRefetchNotifications();
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't download the export."));
     }
   }
 
@@ -150,7 +171,9 @@ function NotificationsPanel({
                       )}
                     </>
                   ) : (
-                    `${String(n.payload.format ?? "Topo").toUpperCase()} export ready — open the LiDAR panel to download`
+                    `${String(n.payload.format ?? "Topo").toUpperCase()} export${
+                      n.payload.jobName ? ` for ${n.payload.jobName}` : ""
+                    } ready — view exports in the LiDAR panel`
                   )
                 )}
               </div>
@@ -193,6 +216,19 @@ function NotificationsPanel({
                     }}
                   >
                     Zoom to map
+                  </button>
+                </div>
+              )}
+              {n.type === "topo_export_complete" && n.payload.status === "completed" && (
+                <div className={classes.notificationActions}>
+                  <button
+                    className={classes.acceptButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadExport(n);
+                    }}
+                  >
+                    Download
                   </button>
                 </div>
               )}

@@ -184,11 +184,13 @@ def main():
     error_msg: Optional[str] = None
     result_key: Optional[str] = None
     result_bytes: Optional[int] = None
+    job_name: Optional[str] = None
 
     try:
         source_jobs = get_source_jobs(conn, list(export_job["source_job_ids"]))
         if not source_jobs:
             raise RuntimeError("No source jobs found for this export")
+        job_name = source_jobs[0].get("name")
         for sj in source_jobs:
             if sj["user_id"] != export_job["user_id"]:
                 raise RuntimeError(f"Source job {sj['id']} not owned by requester")
@@ -279,6 +281,7 @@ def main():
         {
             "exportJobId": EXPORT_JOB_ID,
             "format": export_job["format"],
+            "jobName": job_name,
             "status": "completed" if ok else "failed",
             "errorMessage": None if ok else (error_msg or "Unknown failure"),
         },

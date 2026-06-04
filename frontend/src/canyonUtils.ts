@@ -955,6 +955,10 @@ export function deleteTopoExport(id: string): Promise<void> {
   return apiFetch<void>(`/topo-exports/${id}`, { method: "DELETE" });
 }
 
+export function getTopoExport(id: string): Promise<TopoExportJobView> {
+  return apiFetch<TopoExportJobView>(`/topo-exports/${id}`);
+}
+
 
 export function useVectorStyle(enabled: boolean) {
   const [vectorStyle, setVectorStyle] = useState<VectorStyleSettings | null>(null);
