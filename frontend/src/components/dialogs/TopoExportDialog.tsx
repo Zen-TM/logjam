@@ -7,7 +7,7 @@ import {
   Button,
   IconButton,
   Typography,
-  FormControl,
+  FormGroup,
   FormControlLabel,
   Checkbox,
   RadioGroup,
@@ -105,10 +105,12 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
   const alreadyCompletedIds = useRef<Set<string>>(new Set());
   const autoDownloadedIds = useRef<Set<string>>(new Set());
   const snapshotTaken = useRef(false);
+  const sawLoading = useRef(false);
 
   useEffect(() => {
     if (!open) {
       snapshotTaken.current = false;
+      sawLoading.current = false;
       alreadyCompletedIds.current = new Set();
       autoDownloadedIds.current = new Set();
     }
@@ -119,7 +121,15 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
   useEffect(() => {
     if (!open) return;
     if (!snapshotTaken.current) {
-      if (exportsLoading) return; // wait for the first real fetch
+      // Wait until we've observed a fetch in flight, then snapshot from the
+      // fetch that follows. `loading` starts false, so without this gate the
+      // baseline would be taken from stale/empty `exports` and the first real
+      // fetch's completed exports would be mistaken for fresh completions.
+      if (exportsLoading) {
+        sawLoading.current = true;
+        return;
+      }
+      if (!sawLoading.current) return; // no fresh fetch observed yet
       for (const ex of exports) {
         if (ex.status === "completed") alreadyCompletedIds.current.add(ex.id);
       }
@@ -308,7 +318,7 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
           {/* Right column: Layers. */}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Layers</Typography>
-            <FormControl component="fieldset">
+            <FormGroup>
               {TOPO_LAYERS.map((l) => {
                 const eligible =
                   (l.format === "raster" && rule.allowRaster) ||
@@ -328,7 +338,7 @@ export default function TopoExportDialog({ open, onClose, job }: Props) {
                   />
                 );
               })}
-            </FormControl>
+            </FormGroup>
           </Box>
         </Box>
 
