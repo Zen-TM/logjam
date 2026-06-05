@@ -13,10 +13,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+import _native_stub  # noqa: F401,E402  (stubs osgeo when absent on the host)
 
 import numpy as np
 from osgeo import gdal, osr
+
+# This suite runs a real GDAL Warp; when osgeo is the host stub, the class is
+# skipped (it runs for real inside the worker Docker image where GDAL exists).
+# The imports still resolve under the stub so module collection succeeds.
+_REAL_GDAL = not _native_stub.is_stubbed("osgeo")
 
 from renderers.context import RenderContext
 from renderers.tile_compose import render_composite_to_geotiff
@@ -54,6 +62,7 @@ def _make_ctx(work_dir: Path, cog_paths: dict) -> RenderContext:
     return ctx
 
 
+@unittest.skipUnless(_REAL_GDAL, "real GDAL required (host has no osgeo)")
 class TestCompositeGeoTiff(unittest.TestCase):
     def test_two_disjoint_layers_both_survive(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -6,7 +6,7 @@ const env = getEnv();
 // Redact paths that could leak canyon coordinates or names into logs.
 // Pino redaction is shallow on nested objects unless the path is exact;
 // enumerate every known leak vector for canyon/trip-log payloads.
-const redactPaths = [
+export const redactPaths = [
   // Express request body shapes for canyon/trip endpoints
   'req.body.latitude',
   'req.body.longitude',
