@@ -114,6 +114,8 @@ function SidebarPanel({
   onRefetchAnalytics,
   customFieldDefs,
   onCustomFieldDefsChange,
+  canyonCustomFieldDefs,
+  onCanyonCustomFieldDefsChange,
   // Analytics
   analytics,
   analyticsLoading,
@@ -195,6 +197,8 @@ function SidebarPanel({
   onRefetchAnalytics: () => void;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  canyonCustomFieldDefs: TripLogCustomFieldDef[];
+  onCanyonCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
   // Analytics
   analytics: TAnalytics | null;
   analyticsLoading: boolean;
@@ -338,6 +342,8 @@ function SidebarPanel({
             onCancelPickCoords={onCancelPickCoords}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
+            canyonCustomFieldDefs={canyonCustomFieldDefs}
+            onCanyonCustomFieldDefsChange={onCanyonCustomFieldDefsChange}
             onQuotaChanged={onQuotaChanged}
           />
         )}

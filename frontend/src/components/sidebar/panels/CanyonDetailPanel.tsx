@@ -28,6 +28,24 @@ import {
 import MediaUpload from "../../media/MediaUpload";
 import MediaGallery from "../../media/MediaGallery";
 
+// Format a stored custom-field value for display. Returns null when the value
+// is empty so the caller can skip rendering the row entirely.
+function formatCustomFieldValue(
+  value: unknown,
+  type: TripLogCustomFieldDef["type"],
+): string | null {
+  if (value == null || value === "") return null;
+  if (type === "boolean") return value ? "Yes" : "No";
+  if (type === "date" && typeof value === "string") {
+    return new Date(value).toLocaleDateString("en-AU", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  }
+  return String(value);
+}
+
 function CanyonDetailPanel({
   canyon,
   isOwnedCanyon,
@@ -40,6 +58,8 @@ function CanyonDetailPanel({
   onCancelPickCoords,
   customFieldDefs,
   onCustomFieldDefsChange,
+  canyonCustomFieldDefs,
+  onCanyonCustomFieldDefsChange,
   onQuotaChanged,
 }: {
   canyon: TCanyon | undefined;
@@ -53,6 +73,8 @@ function CanyonDetailPanel({
   onCancelPickCoords: () => void;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  canyonCustomFieldDefs: TripLogCustomFieldDef[];
+  onCanyonCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
   onQuotaChanged: () => void;
 }) {
   const toast = useToast();
@@ -269,6 +291,18 @@ function CanyonDetailPanel({
               </ul>
             </div>
           )}
+          {canyonCustomFieldDefs.map((def) => {
+            const display = formatCustomFieldValue(
+              canyon.attributes.customFields?.[def.key],
+              def.type,
+            );
+            if (display == null) return null;
+            return (
+              <p key={def.key}>
+                <b>{def.label}:</b> {display}
+              </p>
+            );
+          })}
         </div>
 
         <div className={classes.tripLogsRegion}>
@@ -408,6 +442,8 @@ function CanyonDetailPanel({
         onSaved={onRefetch}
         onPickCoords={onPickCoords}
         onCancelPickCoords={onCancelPickCoords}
+        customFieldDefs={canyonCustomFieldDefs}
+        onCustomFieldDefsChange={onCanyonCustomFieldDefsChange}
       />
 
       {isOwnedCanyon && (

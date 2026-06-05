@@ -34,6 +34,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
 export type UserUiPreferences = {
   themeSchemeId: ThemeSchemeId;
   tripLogCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
+  canyonCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
   notifications: NotificationPreferences;
 };
 
@@ -146,32 +147,39 @@ export function isThemeSchemeId(value: unknown): value is ThemeSchemeId {
   );
 }
 
+function normalizeCustomFieldDefs(
+  value: unknown,
+): import("./tripLogFields.js").TripLogCustomFieldDef[] {
+  if (!Array.isArray(value)) return [];
+  return (value as unknown[]).filter(
+    (f): f is import("./tripLogFields.js").TripLogCustomFieldDef => {
+      if (typeof f !== "object" || f === null) return false;
+      const c = f as Record<string, unknown>;
+      return (
+        typeof c.key === "string" &&
+        typeof c.label === "string" &&
+        typeof c.type === "string"
+      );
+    },
+  );
+}
+
 export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
   if (typeof value === "object" && value !== null) {
     const prefs = value as Record<string, unknown>;
     const themeSchemeId = isThemeSchemeId(prefs.themeSchemeId)
       ? prefs.themeSchemeId
       : DEFAULT_THEME_SCHEME_ID;
-    const tripLogCustomFields = Array.isArray(prefs.tripLogCustomFields)
-      ? (prefs.tripLogCustomFields as unknown[]).filter(
-          (f): f is import("./tripLogFields.js").TripLogCustomFieldDef => {
-            if (typeof f !== "object" || f === null) return false;
-            const c = f as Record<string, unknown>;
-            return (
-              typeof c.key === "string" &&
-              typeof c.label === "string" &&
-              typeof c.type === "string"
-            );
-          },
-        )
-      : [];
+    const tripLogCustomFields = normalizeCustomFieldDefs(prefs.tripLogCustomFields);
+    const canyonCustomFields = normalizeCustomFieldDefs(prefs.canyonCustomFields);
     const notifications = normalizeNotificationPreferences(prefs.notifications);
-    return { themeSchemeId, tripLogCustomFields, notifications };
+    return { themeSchemeId, tripLogCustomFields, canyonCustomFields, notifications };
   }
 
   return {
     themeSchemeId: DEFAULT_THEME_SCHEME_ID,
     tripLogCustomFields: [],
+    canyonCustomFields: [],
     notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES },
   };
 }

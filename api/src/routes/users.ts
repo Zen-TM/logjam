@@ -198,10 +198,11 @@ router.patch(
   userPatchLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
-    const { username, themeSchemeId, tripLogCustomFields, notifications, consentVersion } = req.body as {
+    const { username, themeSchemeId, tripLogCustomFields, canyonCustomFields, notifications, consentVersion } = req.body as {
       username?: unknown;
       themeSchemeId?: unknown;
       tripLogCustomFields?: unknown;
+      canyonCustomFields?: unknown;
       notifications?: unknown;
       consentVersion?: unknown;
     };
@@ -241,6 +242,7 @@ router.patch(
     if (
       themeSchemeId !== undefined ||
       tripLogCustomFields !== undefined ||
+      canyonCustomFields !== undefined ||
       notifications !== undefined
     ) {
       if (themeSchemeId !== undefined && !isThemeSchemeId(themeSchemeId)) {
@@ -254,6 +256,14 @@ router.patch(
           throw new AppError(400, "Invalid tripLogCustomFields");
         }
       }
+      if (canyonCustomFields !== undefined) {
+        if (
+          !Array.isArray(canyonCustomFields) ||
+          !canyonCustomFields.every(isTripLogCustomFieldDef)
+        ) {
+          throw new AppError(400, "Invalid canyonCustomFields");
+        }
+      }
       if (notifications !== undefined && !isNotificationPreferences(notifications)) {
         throw new AppError(400, "Invalid notifications");
       }
@@ -263,6 +273,7 @@ router.patch(
         ...current,
         ...(themeSchemeId !== undefined ? { themeSchemeId } : {}),
         ...(tripLogCustomFields !== undefined ? { tripLogCustomFields } : {}),
+        ...(canyonCustomFields !== undefined ? { canyonCustomFields } : {}),
         ...(notifications !== undefined
           ? { notifications: { ...current.notifications, ...(notifications as Record<string, boolean>) } }
           : {}),

@@ -314,6 +314,9 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   const [customFieldDefs, setCustomFieldDefs] = useState<
     TripLogCustomFieldDef[]
   >([]);
+  const [canyonCustomFieldDefs, setCanyonCustomFieldDefs] = useState<
+    TripLogCustomFieldDef[]
+  >([]);
 
   // Refresh analytics whenever the analytics panel opens
   useEffect(() => {
@@ -335,6 +338,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     fetchCurrentUser()
       .then((user) => {
         setCustomFieldDefs(user.uiPreferences?.tripLogCustomFields ?? []);
+        setCanyonCustomFieldDefs(user.uiPreferences?.canyonCustomFields ?? []);
         const pending = localStorage.getItem(PENDING_CONSENT_STORAGE_KEY);
         if (pending && !user.consentedAt) {
           recordConsent(pending)
@@ -784,6 +788,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           onRefetchAnalytics={refetchAnalytics}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={setCustomFieldDefs}
+          canyonCustomFieldDefs={canyonCustomFieldDefs}
+          onCanyonCustomFieldDefsChange={setCanyonCustomFieldDefs}
           analytics={analytics}
           analyticsLoading={analyticsLoading}
           vectorStyle={vectorStyle}
@@ -893,6 +899,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         onSaved={refetch}
         onPickCoords={startPickingCoords}
         onCancelPickCoords={cancelPickingCoords}
+        customFieldDefs={canyonCustomFieldDefs}
+        onCustomFieldDefsChange={setCanyonCustomFieldDefs}
       />
 
       <SelectedCanyonsDialog

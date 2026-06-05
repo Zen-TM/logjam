@@ -6,6 +6,7 @@ import { messageFromError } from "./errors/messageFromError";
 
 export type TCanyonAttributes = {
   sources?: [string, string][];
+  customFields?: Record<string, unknown>;
 };
 
 export type TCanyon = {
@@ -46,6 +47,7 @@ export type TUser = {
   uiPreferences?: {
     themeSchemeId?: ThemeSchemeId;
     tripLogCustomFields?: TripLogCustomFieldDef[];
+    canyonCustomFields?: TripLogCustomFieldDef[];
     notifications?: NotificationPreferences;
   } | null;
 };
@@ -436,6 +438,7 @@ export function updateUserPreferences(
   prefs: Partial<{
     themeSchemeId: ThemeSchemeId;
     tripLogCustomFields: TripLogCustomFieldDef[];
+    canyonCustomFields: TripLogCustomFieldDef[];
     notifications: Partial<NotificationPreferences>;
   }>,
 ): Promise<TUser> {
