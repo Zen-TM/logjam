@@ -8,10 +8,10 @@ import { redactPaths } from "./logger";
 // logs in plain text.
 function captureLog(obj: unknown): Record<string, unknown> {
   const lines: string[] = [];
-  const stream = { write: (s: string) => void lines.push(s) };
+  const stream: pino.DestinationStream = { write: (s: string) => void lines.push(s) };
   const log = pino(
     { redact: { paths: redactPaths, censor: "[redacted]" } },
-    stream as NodeJS.WritableStream,
+    stream,
   );
   log.info(obj as object, "msg");
   return JSON.parse(lines[0]);
