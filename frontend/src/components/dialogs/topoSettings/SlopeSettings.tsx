@@ -14,6 +14,13 @@ const MAX_BANDS = 8;
 export default function SlopeSettings({ value, onChange }: Props) {
   const setBand = (idx: number, delta: Partial<SlopeBand>) => {
     const bands = value.bands.map((b, i) => (i === idx ? { ...b, ...delta } : b));
+    // Keep adjacent bands contiguous: a band's `to` is the next band's `from`.
+    if (delta.toDeg !== undefined && idx < bands.length - 1) {
+      bands[idx + 1] = { ...bands[idx + 1], fromDeg: delta.toDeg };
+    }
+    if (delta.fromDeg !== undefined && idx > 0) {
+      bands[idx - 1] = { ...bands[idx - 1], toDeg: delta.fromDeg };
+    }
     onChange({ ...value, bands });
   };
   const removeBand = (idx: number) => {

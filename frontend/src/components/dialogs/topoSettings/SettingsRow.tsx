@@ -8,11 +8,12 @@ interface SettingsRowProps {
   tooltip?: string;
   children: ReactNode;
   trailing?: ReactNode;
+  disabled?: boolean;
 }
 
-export default function SettingsRow({ label, tooltip, children, trailing }: SettingsRowProps) {
+export default function SettingsRow({ label, tooltip, children, trailing, disabled }: SettingsRowProps) {
   return (
-    <div className={styles.row}>
+    <div className={`${styles.row} ${disabled ? styles.disabled : ""}`}>
       <span className={styles.labelWithTooltip}>
         {label}
         {tooltip && (

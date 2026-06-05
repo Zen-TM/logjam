@@ -28,6 +28,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
       <SettingsRow
         label="Azimuth (°)"
         tooltip="Sun direction in degrees clockwise from north. 315° = NW, the standard cartographic light."
+        disabled={value.multidirectional}
       >
         <input
           type="number"
@@ -44,6 +45,7 @@ export default function HillshadeSettings({ value, onChange }: Props) {
       <SettingsRow
         label="Altitude (°)"
         tooltip="Sun elevation above the horizon. Lower values cast longer shadows."
+        disabled={value.multidirectional}
       >
         <input
           type="number"

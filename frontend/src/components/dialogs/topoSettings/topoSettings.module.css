@@ -53,6 +53,12 @@
   border-color: var(--theme-accent);
 }
 
+.numberInput:disabled,
+.textInput:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .disabled {
   opacity: 0.5;
   pointer-events: none;
