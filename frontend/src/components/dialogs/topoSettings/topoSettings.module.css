@@ -79,6 +79,17 @@
   color: var(--theme-text-primary);
 }
 
+.bandHeaderCell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lockedCell {
+  font-size: 0.9em;
+  color: var(--theme-text-muted);
+}
+
 .removeButton {
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
@@ -105,8 +116,14 @@
   font-size: 0.85em;
 }
 
-.addButton:hover {
+.addButton:hover:not(:disabled) {
   background: color-mix(in srgb, var(--theme-accent) 10%, transparent);
+}
+
+.addButton:disabled {
+  border-color: color-mix(in srgb, var(--theme-text-muted) 40%, transparent);
+  color: var(--theme-text-muted);
+  cursor: not-allowed;
 }
 
 .featureRow {

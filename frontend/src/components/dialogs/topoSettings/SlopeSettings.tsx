@@ -42,20 +42,27 @@ export default function SlopeSettings({ value, onChange }: Props) {
       <p className={styles.helpText}>
         Slope bands colour terrain by steepness. Pixels below the lowest band's
         <em> from</em> angle are transparent. Bands must not overlap and{" "}
-        <em>from</em> must be less than <em>to</em>.{" "}
-        <Tooltip title="Slope is computed in degrees from the DTM. Below the lowest band's from-angle, the layer is transparent." placement="top" arrow>
-          <InfoOutlinedIcon className={styles.infoIcon} />
-        </Tooltip>
+        <em>from</em> must be less than <em>to</em>.
       </p>
 
       <div className={styles.bandTable}>
-        <Tooltip title="Slope angle in degrees from horizontal. Flat ground ≈ 0–5°; steep trail ≈ 20–30°; cliff / technical terrain ≈ 45°+." placement="top" arrow>
+        <span className={styles.bandHeaderCell}>
           <span className={styles.bandHeader}>From °</span>
-        </Tooltip>
-        <Tooltip title="Upper bound of this slope band in degrees. Must be greater than From °." placement="top" arrow>
+          <Tooltip title="Slope angle in degrees from horizontal. Flat ground ≈ 0–5°; steep trail ≈ 20–30°; cliff / technical terrain ≈ 45°+." placement="top" arrow>
+            <InfoOutlinedIcon className={styles.infoIcon} />
+          </Tooltip>
+        </span>
+        <span className={styles.bandHeaderCell}>
           <span className={styles.bandHeader}>To °</span>
-        </Tooltip>
+          <Tooltip title="Upper bound of this slope band in degrees. Must be greater than From °." placement="top" arrow>
+            <InfoOutlinedIcon className={styles.infoIcon} />
+          </Tooltip>
+        </span>
         <span className={styles.bandHeader}>Colour</span>
+        <span />
+        <span className={styles.lockedCell}>0</span>
+        <span className={styles.lockedCell}>{value.bands[0].fromDeg}</span>
+        <span className={styles.lockedCell}>Transparent</span>
         <span />
         {value.bands.map((band, idx) => (
           <Row
@@ -98,19 +105,19 @@ function Row({ band, onChange, onRemove, canRemove }: RowProps) {
         type="number"
         className={styles.numberInput}
         min={0}
-        max={90}
+        max={band.toDeg - 1}
         step={1}
         value={band.fromDeg}
-        onChange={(e) => onChange({ fromDeg: Number(e.target.value) })}
+        onChange={(e) => onChange({ fromDeg: Math.min(Number(e.target.value), band.toDeg - 1) })}
       />
       <input
         type="number"
         className={styles.numberInput}
-        min={0}
+        min={band.fromDeg + 1}
         max={90}
         step={1}
         value={band.toDeg}
-        onChange={(e) => onChange({ toDeg: Number(e.target.value) })}
+        onChange={(e) => onChange({ toDeg: Math.max(Number(e.target.value), band.fromDeg + 1) })}
       />
       <ColourPicker value={band.colour} onChange={(c) => onChange({ colour: c })} />
       {canRemove ? (

@@ -241,15 +241,6 @@
   background: color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
 }
 
-.deleteButton {
-  composes: actionButton;
-}
-
-.deleteButton:hover {
-  border-color: var(--theme-warning);
-  color: var(--theme-warning);
-}
-
 .confirmRow {
   display: flex;
   align-items: center;

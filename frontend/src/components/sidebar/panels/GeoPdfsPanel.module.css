@@ -128,13 +128,31 @@
   background: color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
 }
 
-.deleteButton {
-  composes: actionButton;
+.iconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.2em;
+  color: var(--theme-text-muted);
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
 }
 
-.deleteButton:hover {
-  border-color: var(--theme-warning);
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.iconDeleteButton {
+  composes: iconButton;
+}
+
+.iconDeleteButton:hover:not(:disabled) {
   color: var(--theme-warning);
+  background: color-mix(in srgb, var(--theme-warning) 14%, transparent);
 }
 
 .confirmRow {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { LinearProgress } from "@mui/material";
+import { Trash2 } from "lucide-react";
 import classes from "./GeoPdfsPanel.module.css";
 import { apiFetch } from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -137,10 +138,11 @@ function GeoPdfsPanel({
                     Edit
                   </button>
                   <button
-                    className={classes.deleteButton}
+                    className={classes.iconDeleteButton}
                     onClick={() => setDeletingId(t.id)}
+                    title="Delete template"
                   >
-                    Delete
+                    <Trash2 size={14} />
                   </button>
                 </>
               )}

@@ -198,7 +198,9 @@ function CanyonDialog({
       onClose();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't save canyon. Please try again."));
+      setError(
+        messageFromError(err, "Couldn't save canyon. Please try again."),
+      );
     } finally {
       setSaving(false);
     }
@@ -215,17 +217,29 @@ function CanyonDialog({
           backgroundColor: "var(--theme-primary)",
           color: "var(--theme-text-primary)",
           "& .MuiInputBase-input": { color: "var(--theme-text-primary)" },
-          "& .MuiInputBase-inputMultiline": { color: "var(--theme-text-primary)" },
-          "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-          "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-          "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
+          "& .MuiInputBase-inputMultiline": {
+            color: "var(--theme-text-primary)",
+          },
+          "& .MuiOutlinedInput-notchedOutline": {
+            borderColor: "var(--theme-accent)",
+          },
+          "& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline": {
+            borderColor: "var(--theme-accent)",
+          },
+          "& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline":
+            { borderColor: "var(--theme-accent)" },
           "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
           "& .MuiInputLabel-root.Mui-focused": { color: "var(--theme-accent)" },
         },
       }}
     >
       <DialogTitle
-        sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          pb: 1,
+        }}
       >
         {isEdit ? "Edit Canyon" : "Add Canyon"}
         <IconButton
@@ -251,15 +265,6 @@ function CanyonDialog({
             value={altNames}
             onChange={(e) => setAltNames(e.target.value)}
             size="small"
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <Tooltip title="Other names this canyon is known by. Used in search and for cross-referencing guidebooks." placement="top" arrow>
-                    <InfoOutlinedIcon sx={{ fontSize: "1rem", color: "var(--theme-text-muted)", cursor: "help" }} />
-                  </Tooltip>
-                </InputAdornment>
-              ),
-            }}
           />
           <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
             <TextField
@@ -272,8 +277,18 @@ function CanyonDialog({
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Tooltip title="WGS84 decimal degrees (standard GPS format). Stored privately — only visible to people you share this canyon with." placement="top" arrow>
-                      <InfoOutlinedIcon sx={{ fontSize: "1rem", color: "var(--theme-text-muted)", cursor: "help" }} />
+                    <Tooltip
+                      title="WGS84 decimal degrees (standard GPS format)."
+                      placement="top"
+                      arrow
+                    >
+                      <InfoOutlinedIcon
+                        sx={{
+                          fontSize: "1rem",
+                          color: "var(--theme-text-muted)",
+                          cursor: "help",
+                        }}
+                      />
                     </Tooltip>
                   </InputAdornment>
                 ),
@@ -289,8 +304,18 @@ function CanyonDialog({
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Tooltip title="WGS84 decimal degrees (standard GPS format). Stored privately — only visible to people you share this canyon with." placement="top" arrow>
-                      <InfoOutlinedIcon sx={{ fontSize: "1rem", color: "var(--theme-text-muted)", cursor: "help" }} />
+                    <Tooltip
+                      title="WGS84 decimal degrees (standard GPS format)."
+                      placement="top"
+                      arrow
+                    >
+                      <InfoOutlinedIcon
+                        sx={{
+                          fontSize: "1rem",
+                          color: "var(--theme-text-muted)",
+                          cursor: "help",
+                        }}
+                      />
                     </Tooltip>
                   </InputAdornment>
                 ),
@@ -311,7 +336,16 @@ function CanyonDialog({
           </Box>
           <Box sx={{ display: "flex", gap: 2 }}>
             <Tooltip
-              title={<a href="https://ropewiki.com/French_rating" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>Vertical technical difficulty — French rating system ↗</a>}
+              title={
+                <a
+                  href="https://ropewiki.com/French_rating"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "inherit" }}
+                >
+                  Vertical technical difficulty — French rating system ↗
+                </a>
+              }
               placement="top"
               arrow
             >
@@ -320,7 +354,9 @@ function CanyonDialog({
                   label="V Grade"
                   value={vGrade}
                   onChange={(e) =>
-                    setVGrade(e.target.value === "" ? "" : Number(e.target.value))
+                    setVGrade(
+                      e.target.value === "" ? "" : Number(e.target.value),
+                    )
                   }
                   select
                   size="small"
@@ -338,7 +374,16 @@ function CanyonDialog({
               </Box>
             </Tooltip>
             <Tooltip
-              title={<a href="https://ropewiki.com/French_rating" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>Aquatic difficulty of water sections — French rating system ↗</a>}
+              title={
+                <a
+                  href="https://ropewiki.com/French_rating"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "inherit" }}
+                >
+                  Aquatic difficulty of water sections — French rating system ↗
+                </a>
+              }
               placement="top"
               arrow
             >
@@ -347,7 +392,9 @@ function CanyonDialog({
                   label="A Grade"
                   value={aGrade}
                   onChange={(e) =>
-                    setAGrade(e.target.value === "" ? "" : Number(e.target.value))
+                    setAGrade(
+                      e.target.value === "" ? "" : Number(e.target.value),
+                    )
                   }
                   select
                   size="small"
@@ -365,7 +412,17 @@ function CanyonDialog({
               </Box>
             </Tooltip>
             <Tooltip
-              title={<a href="https://ropewiki.com/French_rating" target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>Difficulty of escape or retreat once committed — French rating system ↗</a>}
+              title={
+                <a
+                  href="https://ropewiki.com/French_rating"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "inherit" }}
+                >
+                  Difficulty of escape or retreat once committed — French rating
+                  system ↗
+                </a>
+              }
               placement="top"
               arrow
             >
@@ -395,13 +452,19 @@ function CanyonDialog({
             </Tooltip>
           </Box>
           <Box sx={{ display: "flex", gap: 2 }}>
-            <Tooltip title="Subjective overall quality. 1 = unremarkable; 5 = exceptional. Consider scenery, technical interest, and uniqueness." placement="top" arrow>
+            <Tooltip
+              title="Subjective overall quality. 1 = unremarkable; 5 = exceptional."
+              placement="top"
+              arrow
+            >
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <TextField
                   label="Quality (1-5)"
                   value={quality}
                   onChange={(e) =>
-                    setQuality(e.target.value === "" ? "" : Number(e.target.value))
+                    setQuality(
+                      e.target.value === "" ? "" : Number(e.target.value),
+                    )
                   }
                   select
                   size="small"
@@ -418,13 +481,19 @@ function CanyonDialog({
                 </TextField>
               </Box>
             </Tooltip>
-            <Tooltip title="Wetsuit necessity. 1 = not needed (dry or warm); 5 = essential even in summer (cold, sustained swims)." placement="top" arrow>
+            <Tooltip
+              title="Wetsuit necessity. 1 = not needed (dry or warm); 5 = essential."
+              placement="top"
+              arrow
+            >
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <TextField
                   label="Wetsuits (1-5)"
                   value={wetsuits}
                   onChange={(e) =>
-                    setWetsuits(e.target.value === "" ? "" : Number(e.target.value))
+                    setWetsuits(
+                      e.target.value === "" ? "" : Number(e.target.value),
+                    )
                   }
                   select
                   size="small"
@@ -453,8 +522,14 @@ function CanyonDialog({
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Tooltip title="Number of distinct rope drops (abseils/rappels). Each pitch is a separate setup." placement="top" arrow>
-                      <InfoOutlinedIcon sx={{ fontSize: "1rem", color: "var(--theme-text-muted)", cursor: "help" }} />
+                    <Tooltip title="Number of abseils." placement="top" arrow>
+                      <InfoOutlinedIcon
+                        sx={{
+                          fontSize: "1rem",
+                          color: "var(--theme-text-muted)",
+                          cursor: "help",
+                        }}
+                      />
                     </Tooltip>
                   </InputAdornment>
                 ),
@@ -470,8 +545,18 @@ function CanyonDialog({
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Tooltip title="Length of the longest single abseil in metres, measured along the rope." placement="top" arrow>
-                      <InfoOutlinedIcon sx={{ fontSize: "1rem", color: "var(--theme-text-muted)", cursor: "help" }} />
+                    <Tooltip
+                      title="Length of the longest single abseil in metres, measured along the rope."
+                      placement="top"
+                      arrow
+                    >
+                      <InfoOutlinedIcon
+                        sx={{
+                          fontSize: "1rem",
+                          color: "var(--theme-text-muted)",
+                          cursor: "help",
+                        }}
+                      />
                     </Tooltip>
                   </InputAdornment>
                 ),
@@ -487,8 +572,18 @@ function CanyonDialog({
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    <Tooltip title="Estimated total trip duration for an average group, car-to-car." placement="top" arrow>
-                      <InfoOutlinedIcon sx={{ fontSize: "1rem", color: "var(--theme-text-muted)", cursor: "help" }} />
+                    <Tooltip
+                      title="Estimated total trip duration for an average group, car-to-car."
+                      placement="top"
+                      arrow
+                    >
+                      <InfoOutlinedIcon
+                        sx={{
+                          fontSize: "1rem",
+                          color: "var(--theme-text-muted)",
+                          cursor: "help",
+                        }}
+                      />
                     </Tooltip>
                   </InputAdornment>
                 ),

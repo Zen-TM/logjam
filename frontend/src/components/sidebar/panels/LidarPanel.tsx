@@ -306,10 +306,11 @@ function LidarPanel({
                         Edit
                       </button>
                       <button
-                        className={classes.deleteButton}
+                        className={classes.iconDeleteButton}
                         onClick={() => setDeletingTemplateId(t.id)}
+                        title="Delete template"
                       >
-                        Delete
+                        <Trash2 size={14} />
                       </button>
                     </>
                   )
@@ -429,15 +430,16 @@ function LidarPanel({
                       <button
                         className={classes.actionButton}
                         onClick={() => setExportJob(job)}
-                        title="Export…"
+                        title="Export"
                       >
-                        Export…
+                        Export
                       </button>
                       <button
-                        className={classes.deleteButton}
+                        className={classes.iconDeleteButton}
                         onClick={() => setDeletingJobId(job.jobId)}
+                        title="Delete LiDAR topo"
                       >
-                        Delete
+                        <Trash2 size={14} />
                       </button>
                     </>
                   )}
