@@ -407,6 +407,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   // progress.
   const {
     exports: topoExports,
+    loading: topoExportsLoading,
     refetch: refetchTopoExports,
   } = useTopoExports(authenticated);
 
@@ -416,13 +417,26 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   const alreadyCompletedExportIds = useRef<Set<string>>(new Set());
   const autoDownloadedExportIds = useRef<Set<string>>(new Set());
   const exportSnapshotTaken = useRef(false);
+  // The hook returns exports=[] synchronously before its first fetch resolves.
+  // Snapshotting that empty list would mark a real, pre-existing completed
+  // export as "new" once the fetch lands, auto-downloading it on every page
+  // load. Gate the snapshot until a fetch has actually completed.
+  const exportFetchResolved = useRef(false);
   useEffect(() => {
     if (!authenticated) {
       exportSnapshotTaken.current = false;
+      exportFetchResolved.current = false;
       alreadyCompletedExportIds.current = new Set();
       autoDownloadedExportIds.current = new Set();
       return;
     }
+    if (topoExportsLoading) {
+      exportFetchResolved.current = true;
+      return;
+    }
+    // Not loading, but no fetch has resolved yet → this is the initial empty
+    // list, not real data. Wait for the first real fetch.
+    if (!exportFetchResolved.current) return;
     if (!exportSnapshotTaken.current) {
       for (const ex of topoExports) {
         if (ex.status === "completed") alreadyCompletedExportIds.current.add(ex.id);
@@ -441,7 +455,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         triggerDownload(ex.downloadUrl);
       }
     }
-  }, [authenticated, topoExports]);
+  }, [authenticated, topoExports, topoExportsLoading]);
 
   // Poll non-terminal jobs every 10 s; fire snackbar on completion
   useEffect(() => {
