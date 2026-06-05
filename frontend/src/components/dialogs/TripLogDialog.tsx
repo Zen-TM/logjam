@@ -377,30 +377,32 @@ function TripLogDialog({
               <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 New Custom Field
               </Typography>
-              <TextField
-                label="Field Label"
-                value={newFieldLabel}
-                onChange={(e) => setNewFieldLabel(e.target.value)}
-                size="small"
-                fullWidth
-                placeholder="e.g. Group Size"
-                sx={{
-                  "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.9em" },
-                  "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
-                  "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-                }}
-              />
+              <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
+                This field will be created for all trip logs.
+              </Typography>
               <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                <Typography variant="body2" sx={{ color: "var(--theme-text-muted)", flexShrink: 0 }}>
-                  Type:
-                </Typography>
+                <TextField
+                  label="Field Label"
+                  value={newFieldLabel}
+                  onChange={(e) => setNewFieldLabel(e.target.value)}
+                  size="small"
+                  fullWidth
+                  placeholder="e.g. Group Size"
+                  sx={{
+                    "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.9em" },
+                    "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
+                    "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
+                  }}
+                />
                 <Select
                   value={newFieldType}
                   onChange={(e) => setNewFieldType(e.target.value as TripLogCustomFieldType)}
                   size="small"
+                  MenuProps={{ PaperProps: { sx: { backgroundColor: "var(--theme-primary)", color: "var(--theme-text-primary)" } } }}
                   sx={{
                     color: "var(--theme-text-primary)",
                     fontSize: "0.85em",
+                    flexShrink: 0,
                     "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
                     "& .MuiSvgIcon-root": { color: "var(--theme-text-muted)" },
                   }}
