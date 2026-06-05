@@ -3,7 +3,7 @@ import { detectColumns } from "./detectColumns";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 
 const customFields: TripLogCustomFieldDef[] = [
-  { key: "water_level", label: "Water Level", type: "text" },
+  { key: "water_level", label: "Water Level", type: "string" },
 ];
 
 describe("detectColumns", () => {

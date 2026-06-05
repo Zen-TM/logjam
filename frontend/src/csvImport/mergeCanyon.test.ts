@@ -2,7 +2,11 @@ import { describe, it, expect } from "vitest";
 import { mergeCanyon } from "./mergeCanyon";
 import type { TCanyon, BulkCanyonInput } from "../canyonUtils";
 
-function existingCanyon(overrides: Partial<TCanyon> = {}): TCanyon {
+function existingCanyon(
+  overrides: Partial<Omit<TCanyon, "attributes">> & {
+    attributes?: Record<string, unknown>;
+  } = {},
+): TCanyon {
   return {
     id: "c1",
     name: "Existing Name",
