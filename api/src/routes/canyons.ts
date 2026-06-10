@@ -347,30 +347,31 @@ router.delete(
 
     // Trip logs, canyon shares and (since the cascade migration) canyon-linked
     // children all FK-cascade on canyon delete, but media has no DB FK on its
-    // polymorphic linkedId — keep its deleteMany explicit.
-    await prisma.$transaction([
-      prisma.media.deleteMany({
+    // polymorphic linkedId — keep its deleteMany explicit. The quota decrement
+    // shares the transaction (ARCH-004) so a crash after the row deletes can't
+    // leave the quota over-counted.
+    await prisma.$transaction(async (tx) => {
+      await tx.media.deleteMany({
         where: { linkedType: "tripLog", linkedId: { in: tripIds } },
-      }),
-      prisma.media.deleteMany({
+      });
+      await tx.media.deleteMany({
         where: { linkedType: "canyon", linkedId: id },
-      }),
-      prisma.tripLog.deleteMany({ where: { canyonId: id } }),
-      prisma.canyonShare.deleteMany({ where: { canyonId: id } }),
+      });
+      await tx.tripLog.deleteMany({ where: { canyonId: id } });
+      await tx.canyonShare.deleteMany({ where: { canyonId: id } });
       // Purge canyon_shared notifications held by OTHER users (the share
       // recipients) that reference this canyon — not just the owner's own rows
       // (PRIV-003). The read-time filter would hide them, but deletion removes
       // the residual record at rest.
-      prisma.notification.deleteMany({
+      await tx.notification.deleteMany({
         where: {
           type: "canyon_shared",
           payload: { path: ["canyonId"], equals: id },
         },
-      }),
-      prisma.canyon.delete({ where: { id } }),
-    ]);
-
-    await decrementStorageUsed(user.id, totalBytes);
+      });
+      await tx.canyon.delete({ where: { id } });
+      await decrementStorageUsed(user.id, totalBytes, tx);
+    });
 
     res.status(204).send();
   },

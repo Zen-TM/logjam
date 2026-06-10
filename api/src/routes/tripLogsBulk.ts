@@ -121,17 +121,23 @@ router.post(
       select: { s3KeyDisplay: true, s3KeyThumbnail: true, fileSizeBytes: true },
     });
 
-    await prisma.$transaction([
-      prisma.media.deleteMany({ where: { linkedType: "tripLog", linkedId: { in: ownedIds } } }),
-      prisma.tripLog.deleteMany({ where: { id: { in: ownedIds } } }),
-    ]);
-
+    // S3-first (ARCH-004): blobs go before the rows, so an S3 failure leaves
+    // the rows (and therefore the keys) intact for a retried delete. The row
+    // deletes and the quota decrement then share one transaction so a crash
+    // between them can't leave the quota over-counted.
     const s3Keys = media.flatMap((m) =>
       [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
     );
     const totalBytes = media.reduce((sum, m) => sum + (m.fileSizeBytes ?? 0n), 0n);
     await deleteS3Keys(MEDIA_BUCKET, s3Keys);
-    await decrementStorageUsed(user.id, totalBytes);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.media.deleteMany({
+        where: { linkedType: "tripLog", linkedId: { in: ownedIds } },
+      });
+      await tx.tripLog.deleteMany({ where: { id: { in: ownedIds } } });
+      await decrementStorageUsed(user.id, totalBytes, tx);
+    });
 
     res.json({ deletedIds: ownedIds });
   },
