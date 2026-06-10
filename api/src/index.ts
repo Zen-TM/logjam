@@ -79,7 +79,17 @@ app.use(
 
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    // The API serves JSON and attachment-disposition PDFs only — never
+    // inline-rendered HTML. A deny-all CSP is harmless for fetch() consumers
+    // and closes the gap should any endpoint ever return renderable content.
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    // COEP deliberately disabled: it buys nothing for a JSON API and can
+    // interfere with credentialed cross-origin embedding of responses.
     crossOriginEmbedderPolicy: false,
     strictTransportSecurity: {
       maxAge: 63072000,
