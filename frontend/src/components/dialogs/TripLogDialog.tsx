@@ -208,8 +208,9 @@ function TripLogDialog({
       committedRef.current = true;
       onSaved();
       onClose();
-    } catch {
-      setError("Failed to save trip log. Please try again.");
+    } catch (err) {
+      console.error(err);
+      setError(messageFromError(err, "Couldn't save trip log. Please try again."));
     } finally {
       setSaving(false);
     }
@@ -234,8 +235,9 @@ function TripLogDialog({
       setShowAddField(false);
       setNewFieldLabel("");
       setNewFieldType("string");
-    } catch {
-      setError("Failed to save custom field. Please try again.");
+    } catch (err) {
+      console.error(err);
+      setError(messageFromError(err, "Couldn't save custom field. Please try again."));
     } finally {
       setAddingField(false);
     }
