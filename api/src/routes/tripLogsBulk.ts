@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
+import { resolveUser } from "../lib/resolveUser";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -25,10 +26,7 @@ router.post(
   "/",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const { trips } = req.body as { trips: BulkTripInput[] };
     if (!Array.isArray(trips) || trips.length === 0) {
@@ -89,10 +87,7 @@ router.post(
   "/delete",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const { ids } = req.body as { ids: unknown };
     if (!Array.isArray(ids) || ids.length === 0) {

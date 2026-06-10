@@ -9,6 +9,7 @@ import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
 import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
 import { getCanyonRole, requireCanyonOwner } from "../lib/canyonAccess";
+import { resolveUser } from "../lib/resolveUser";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -20,10 +21,7 @@ router.get(
   "/",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const canyonId = getParam(req.params.canyonId);
     const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
@@ -63,10 +61,7 @@ router.get(
   "/:id",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
     const trip = await prisma.tripLog.findUnique({
@@ -100,10 +95,7 @@ router.post(
   "/",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const canyonId = getParam(req.params.canyonId);
     const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
@@ -136,10 +128,7 @@ router.patch(
   "/:id",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
     const trip = await prisma.tripLog.findUnique({
@@ -175,10 +164,7 @@ router.delete(
   "/:id",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
     const trip = await prisma.tripLog.findUnique({
