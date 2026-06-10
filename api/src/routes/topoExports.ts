@@ -27,6 +27,7 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
+import { assertHasStorageQuota } from "../lib/storageQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
 
 const exportRequestSchema = z.object({
@@ -99,6 +100,14 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
+
+    // Entry gate (ARCH-012): every byte-producing flow checks storage quota at
+    // submission. The worker charges result_bytes unconditionally on
+    // completion, so without this an over-quota user could keep accruing.
+    // No pre-render size estimate exists, so this is the same soft gate the
+    // other flows use (in-flight work may still finish past quota, bounded by
+    // the per-user concurrency cap).
+    await assertHasStorageQuota(user.id);
 
     const parsed = exportRequestSchema.safeParse(req.body);
     if (!parsed.success) {
