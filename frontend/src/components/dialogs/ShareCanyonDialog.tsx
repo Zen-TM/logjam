@@ -159,6 +159,13 @@ function ShareCanyonDialog({
             )}
           </div>
         )}
+        {friends.length > 0 && (
+          <p className={classes.caption}>
+            Recipients can copy or export shared canyons while the share is
+            active. Unsharing won&rsquo;t remove copies they&rsquo;ve already
+            made.
+          </p>
+        )}
         {canyonShares.length > 0 && (
           <div className={classes.sharedWithList}>
             <span className={classes.sharedWithHeader}>Shared with:</span>

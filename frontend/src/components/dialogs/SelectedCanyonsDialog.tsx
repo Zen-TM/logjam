@@ -347,6 +347,11 @@ function SelectedCanyonsDialog({
               </>
             ) : (
               <>
+                <Typography variant="body2" className={classes.shareCaveat}>
+                  Recipients can copy or export shared canyons while the share
+                  is active. Unsharing won&rsquo;t remove copies they&rsquo;ve
+                  already made.
+                </Typography>
                 <TextField
                   placeholder="Search friends..."
                   value={shareSearch}

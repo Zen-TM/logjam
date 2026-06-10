@@ -15,7 +15,7 @@
   </head>
   <body>
     <h1>Logjam — Privacy Policy</h1>
-    <p class="updated">Last updated: 2026-06-03</p>
+    <p class="updated">Last updated: 2026-06-11</p>
 
     <p>
       Logjam is built as a <strong>private</strong> tool. Privacy is a design
@@ -52,7 +52,9 @@
     <h2>What we do not do</h2>
     <ul>
       <li>No third-party analytics, advertising, or telemetry leaving your
-          account.</li>
+          account. (Map tiles are fetched from third-party providers so the
+          map can render — see &ldquo;Third-party map services&rdquo; below
+          for exactly what they receive.)</li>
       <li>No public or unauthenticated endpoints on user data — every API
           route requires authentication.</li>
       <li>No default public sharing. Sharing is explicit, per-canyon, between
@@ -67,6 +69,12 @@
       canyon-level media. Per-trip notes, per-trip media, and your trip-log
       history remain private to you.
     </p>
+    <p>
+      While a canyon is shared with someone, they can copy it into their own
+      account or export it to a file on their device. Revoking a share stops
+      future access through Logjam, but it does not retract copies or exports
+      the recipient has already made.
+    </p>
 
     <h2>Where data is hosted</h2>
     <p>
@@ -74,6 +82,38 @@
       Photos, topo input, and rendered tiles are stored in S3. The database is
       RDS PostgreSQL. Email goes via Amazon SES. Authentication is Amazon
       Cognito.
+    </p>
+
+    <h2>Third-party map services</h2>
+    <p>
+      Rendering maps requires fetching tiles and map data from third-party
+      providers. None of these requests carry your account identity, but they
+      do carry location information about the map areas involved:
+    </p>
+    <ul>
+      <li><strong>Basemap tiles in your browser:</strong> when you pan or zoom
+          the map, your browser requests tiles directly from the operator of
+          the selected base layer &mdash; the OpenStreetMap Foundation
+          (<code>tile.openstreetmap.org</code>), OpenTopoMap, CyclOSM
+          (<code>openstreetmap.fr</code>), or NSW Spatial Services / DCS SIX
+          Maps (<code>maps.six.nsw.gov.au</code> &mdash; the topographic, base,
+          and imagery layers). The operator receives your IP address and the
+          tile coordinates of the areas you view, which at high zoom indicate
+          the locations you are looking at.</li>
+      <li><strong>Server-side GeoPDF rendering:</strong> when you generate a
+          GeoPDF, our servers fetch the same providers&rsquo; tiles for the
+          export area. The providers see our server&rsquo;s requests &mdash;
+          your IP address and account are not sent.</li>
+      <li><strong>Topo jobs:</strong> our rendering worker requests
+          OpenStreetMap data for the job&rsquo;s footprint bounding box from
+          public Overpass API mirrors (<code>overpass-api.de</code>,
+          <code>overpass.kumi.systems</code>,
+          <code>overpass.private.coffee</code>). No account identifiers are
+          sent.</li>
+    </ul>
+    <p>
+      These providers operate under their own privacy policies and are not
+      given any way to associate the requests with your Logjam account.
     </p>
 
     <h2>Email</h2>
@@ -91,10 +131,12 @@
       <li><strong>Export &amp; access:</strong> the Account panel has a
           "Download my data" button that produces a complete machine-readable
           JSON copy of the personal information we hold about you &mdash;
-          canyons, trip logs, templates, shares, and media metadata. No request
-          to us is required; the export is generated on demand in the app.
-          (Media file contents are not included in the JSON; the metadata
-          identifies each item.)</li>
+          canyons, trip logs, GeoPDF and topo templates, topo job records
+          (including their map footprints), shares, notifications, and media
+          metadata. No request to us is required; the export is generated on
+          demand in the app. (Media file contents are not included in the
+          JSON; the metadata identifies each item. Topo tile files are not
+          included; the job records identify them.)</li>
       <li><strong>Delete:</strong> the Account panel has a "Delete account"
           button that permanently removes every record we hold for you,
           including canyons, trip logs, media, friendships, shares, and
@@ -126,8 +168,11 @@
     <h2>Retention</h2>
     <p>
       Data is retained until you delete it or the account. Operational logs
-      may persist in AWS CloudWatch for up to 90 days after the originating
-      record is removed.
+      are retained in AWS CloudWatch after the originating record is removed:
+      API request logs expire automatically within 7 days; rendering-worker
+      job logs do not yet expire automatically, and we are moving them to a
+      90-day automatic expiry. All operational logs are scrubbed so canyon
+      names and coordinates do not appear in plain text.
     </p>
 
     <h2>Children</h2>
