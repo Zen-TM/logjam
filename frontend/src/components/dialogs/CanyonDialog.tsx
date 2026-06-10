@@ -24,6 +24,7 @@ import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput from "./CustomFieldInput";
+import { getFieldValue as getFieldValueFor } from "./customFieldValues";
 
 const V_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
 const A_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -239,7 +240,7 @@ function CanyonDialog({
   }
 
   function getFieldValue(key: string): string {
-    return fieldValues[key] ?? "";
+    return getFieldValueFor(fieldValues, customFieldDefs, key);
   }
 
   function setFieldValue(key: string, value: string) {

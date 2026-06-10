@@ -29,6 +29,7 @@ import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput from "./CustomFieldInput";
+import { getFieldValue as getFieldValueFor } from "./customFieldValues";
 import classes from "./TripLogDialog.module.css";
 
 function todayDateString(): string {
@@ -174,7 +175,7 @@ function TripLogDialog({
   }
 
   function getFieldValue(key: string): string {
-    return fieldValues[key] ?? "";
+    return getFieldValueFor(fieldValues, customFieldDefs, key);
   }
 
   function setFieldValue(key: string, value: string) {
