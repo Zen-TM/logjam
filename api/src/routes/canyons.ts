@@ -8,6 +8,8 @@ import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
 import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
+import { requireCanyonAccess } from "../lib/canyonAccess";
+import { resolveUser } from "../lib/resolveUser";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -29,10 +31,7 @@ router.get(
   "/",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
     res.json(await fetchCanyons({ ownerId: user.id }));
   },
 );
@@ -42,10 +41,7 @@ router.get(
   "/shared",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
     res.json(
       await fetchCanyons({ shares: { some: { sharedWithId: user.id } } }),
     );
@@ -58,10 +54,7 @@ router.post(
   "/",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const {
       name,
@@ -116,21 +109,15 @@ router.post(
   "/:id/copy",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const canyonId = getParam(req.params.id);
     const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
     if (!canyon) throw new AppError(404, "Canyon not found");
 
-    // Check if the user has access to the canyon
-    const isOwner = canyon.ownerId === user.id;
-    const isShared = await prisma.canyonShare.findFirst({
-      where: { canyonId, sharedWithId: user.id },
-    });
-    if (!isOwner && !isShared) throw new AppError(403, "Access denied");
+    // Owner and share recipients may copy (hybrid model: the canyon record
+    // itself is visible to sharees).
+    await requireCanyonAccess(user.id, canyon);
 
     // Create a copy of the canyon.
     // Drop ropeWikiId + ropeWikiSnapshot: @@unique([ownerId, ropeWikiId]) would
@@ -173,10 +160,7 @@ router.get(
   "/:id",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const canyonId = getParam(req.params.id);
 
@@ -187,13 +171,11 @@ router.get(
     });
     if (!stub) throw new AppError(404, "Canyon not found");
 
-    const isOwner = stub.ownerId === user.id;
-    if (!isOwner) {
-      const share = await prisma.canyonShare.findFirst({
-        where: { canyonId, sharedWithId: user.id },
-      });
-      if (!share) throw new AppError(403, "Access denied");
-    }
+    const role = await requireCanyonAccess(user.id, {
+      id: canyonId,
+      ownerId: stub.ownerId,
+    });
+    const isOwner = role === "owner";
 
     // Media is polymorphic with no FK relation, so it's fetched by
     // (linkedType, linkedId) and presigned here. Owners also get trip logs and
@@ -244,10 +226,7 @@ router.patch(
   "/:id",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const canyon = await prisma.canyon.findUnique({
       where: { id: getParam(req.params.id) },
@@ -307,10 +286,7 @@ router.delete(
   "/:id",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const canyon = await prisma.canyon.findUnique({
       where: { id: getParam(req.params.id) },
@@ -351,30 +327,31 @@ router.delete(
 
     // Trip logs, canyon shares and (since the cascade migration) canyon-linked
     // children all FK-cascade on canyon delete, but media has no DB FK on its
-    // polymorphic linkedId — keep its deleteMany explicit.
-    await prisma.$transaction([
-      prisma.media.deleteMany({
+    // polymorphic linkedId — keep its deleteMany explicit. The quota decrement
+    // shares the transaction (ARCH-004) so a crash after the row deletes can't
+    // leave the quota over-counted.
+    await prisma.$transaction(async (tx) => {
+      await tx.media.deleteMany({
         where: { linkedType: "tripLog", linkedId: { in: tripIds } },
-      }),
-      prisma.media.deleteMany({
+      });
+      await tx.media.deleteMany({
         where: { linkedType: "canyon", linkedId: id },
-      }),
-      prisma.tripLog.deleteMany({ where: { canyonId: id } }),
-      prisma.canyonShare.deleteMany({ where: { canyonId: id } }),
+      });
+      await tx.tripLog.deleteMany({ where: { canyonId: id } });
+      await tx.canyonShare.deleteMany({ where: { canyonId: id } });
       // Purge canyon_shared notifications held by OTHER users (the share
       // recipients) that reference this canyon — not just the owner's own rows
       // (PRIV-003). The read-time filter would hide them, but deletion removes
       // the residual record at rest.
-      prisma.notification.deleteMany({
+      await tx.notification.deleteMany({
         where: {
           type: "canyon_shared",
           payload: { path: ["canyonId"], equals: id },
         },
-      }),
-      prisma.canyon.delete({ where: { id } }),
-    ]);
-
-    await decrementStorageUsed(user.id, totalBytes);
+      });
+      await tx.canyon.delete({ where: { id } });
+      await decrementStorageUsed(user.id, totalBytes, tx);
+    });
 
     res.status(204).send();
   },

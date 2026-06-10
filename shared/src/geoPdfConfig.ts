@@ -1,4 +1,5 @@
 import type { PaperSize, Orientation, CoordMode } from "./geoPdfExtent.js";
+import { TOPO_LAYERS } from "./topoSettings.js";
 
 export interface CanyonMarker {
   lat: number;
@@ -48,14 +49,10 @@ export const VALID_GEOPDF_BASE_LAYERS = new Set<string>([
   "six-imagery",
 ]);
 
-// Keep in sync with TOPO_LAYERS (api/src/constants/topoLayers.ts).
-export const VALID_GEOPDF_OVERLAY_NAMES = new Set<string>([
-  "hillshade",
-  "vegetation",
-  "slope",
-  "contours",
-  "features",
-]);
+// Derived from the canonical TOPO_LAYERS list (ARCH-010) — cannot drift.
+export const VALID_GEOPDF_OVERLAY_NAMES = new Set<string>(
+  TOPO_LAYERS.map((l) => l.name),
+);
 
 /**
  * Validates the security-relevant fields of a GeoPdfConfig against the

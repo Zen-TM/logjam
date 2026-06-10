@@ -465,6 +465,8 @@ function LidarPanel({
         </button>
         {exportsOpen && (
           <div className={classes.accordionBody}>
+            {/* Matches the server-side TOPO_EXPORT_TTL_MS sweep (7 days). */}
+            <div className={classes.emptyHint}>Exports are kept for 7 days.</div>
             {topoExports.length === 0 && (
               <div className={classes.emptyHint}>No exports yet.</div>
             )}

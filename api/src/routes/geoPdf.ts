@@ -8,7 +8,7 @@ import {
   VECTOR_STYLE_DEFAULTS,
   validateGeoPdfConfig,
 } from "@logjam/shared";
-import prisma from "../services/prisma";
+import { resolveUser } from "../lib/resolveUser";
 
 const router = Router();
 
@@ -61,11 +61,7 @@ router.post(
       // its per-job overlay lookups to this user's completed topo jobs only.
       // Load the live vector style too so the exported LiDAR topo matches the
       // on-screen MapLibre overlay.
-      const userRow = await prisma.user.findUnique({
-        where: { cognitoId: req.user!.sub },
-        select: { id: true, vectorStyle: true },
-      });
-      if (!userRow) throw new AppError(404, "User not found");
+      const userRow = await resolveUser(req.user!.sub);
 
       // null = new user with no saved style → defaults (same as GET /vector-style
       // and the overlay fallback). Invalid stored JSON → warn + defaults.

@@ -4,6 +4,7 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { normalizeUserUiPreferences } from "@logjam/shared";
+import { resolveUser } from "../lib/resolveUser";
 
 const router = Router();
 
@@ -13,10 +14,7 @@ router.post(
   "/:id/share",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const canyonId = getParam(req.params.id);
     const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
@@ -96,10 +94,7 @@ router.delete(
   "/:id/share/:userId",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const canyonId = getParam(req.params.id);
     const rawUserId = getParam(req.params.userId);
@@ -141,10 +136,7 @@ router.get(
   "/:id/shares",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const canyonId = getParam(req.params.id);
     const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });

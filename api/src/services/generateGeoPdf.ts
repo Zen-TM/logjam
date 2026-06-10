@@ -36,11 +36,12 @@ import { s3 as s3Client } from "./awsClients";
 import { PMTiles } from "pmtiles";
 import type { Source } from "pmtiles";
 import { VectorTile, VectorTileFeature } from "@mapbox/vector-tile";
-import Pbf from "pbf";
+import { PbfReader } from "pbf";
 import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName } from "../constants/topoLayers";
 import { AppError } from "../middleware/errorHandler";
 import prisma from "./prisma";
+import { logger, redactTilePathPatterns } from "../lib/logger";
 
 /** Bounding box of a GeoJSON Polygon/MultiPolygon coords ring. */
 function geomBbox(
@@ -136,8 +137,9 @@ async function loadPointIcons(
           const img = await loadImage(path.join(ICON_DIR, OSM_POINT_ICON[key].file));
           cache.set(key, img);
         } catch (e) {
-          console.warn(
-            `GeoPDF: failed to load icon for ${key}: ${e instanceof Error ? e.message : e}`,
+          logger.warn(
+            { icon: key, err: e instanceof Error ? e.message : String(e) },
+            "GeoPDF: failed to load icon",
           );
         }
       },
@@ -568,9 +570,15 @@ export async function generateGeoPdf(
           // A job may legitimately lack a given layer (e.g. Mode-A jobs skip
           // vegetation). Treat S3 404 / PMTiles errors as "this job doesn't
           // contribute this overlay" and continue.
-          // eslint-disable-next-line no-console
-          console.warn(
-            `GeoPDF: skipping ${overlayName} for job ${job.id}: ${e instanceof Error ? e.message : e}`,
+          logger.warn(
+            {
+              overlay: overlayName,
+              jobId: job.id,
+              err: redactTilePathPatterns(
+                e instanceof Error ? e.message : String(e),
+              ),
+            },
+            "GeoPDF: skipping overlay for job",
           );
         }
       }
@@ -732,8 +740,11 @@ async function fetchAndDrawHttpTilesDirect(
       } catch (err) {
         mapCtx.fillStyle = "#e8e8e8";
         mapCtx.fillRect(dx0, dy0, dx1 - dx0, dy1 - dy0);
-        console.warn(
-          `Failed to fetch tile ${tile.z}/${tile.x}/${tile.y}: ${err}`,
+        // Privacy: never log tile x/y — at these zooms a tile index is an
+        // approximate coordinate of the export AOI (SEC-002).
+        logger.warn(
+          { source: "http-tile", z: tile.z, err: redactTilePathPatterns(String(err)) },
+          "GeoPDF: failed to fetch base-layer tile",
         );
       }
     },
@@ -801,8 +812,9 @@ async function fetchAndDrawPMTilesRasterDirect(
         mapCtx.drawImage(img, 0, 0, TILE_SIZE, TILE_SIZE, dx0, dy0, dx1 - dx0, dy1 - dy0);
         return 1;
       } catch (err) {
-        console.warn(
-          `Failed to fetch raster PMTile ${tile.z}/${tile.x}/${tile.y}: ${err}`,
+        logger.warn(
+          { source: "raster-pmtile", z: tile.z, err: redactTilePathPatterns(String(err)) },
+          "GeoPDF: failed to fetch raster PMTile",
         );
         return 0;
       }
@@ -836,7 +848,7 @@ async function fetchAndDrawPMTilesVectorDirect(
       try {
         const result = await archive.getZxy(tile.z, tile.x, tile.y);
         if (!result?.data) return 0;
-        const vt = new VectorTile(new Pbf(result.data));
+        const vt = new VectorTile(new PbfReader(result.data));
         const tileDx =
           ((tile.x - transform.minTileX) * TILE_SIZE - transform.offsetX) *
           transform.scaleX;
@@ -865,8 +877,9 @@ async function fetchAndDrawPMTilesVectorDirect(
         }
         return 1;
       } catch (err) {
-        console.warn(
-          `Failed to render vector PMTile ${tile.z}/${tile.x}/${tile.y}: ${err}`,
+        logger.warn(
+          { source: "vector-pmtile", z: tile.z, err: redactTilePathPatterns(String(err)) },
+          "GeoPDF: failed to render vector PMTile",
         );
         return 0;
       }
@@ -1982,7 +1995,10 @@ async function buildPdf(
       }
     } catch (err) {
       // GeoPDF metadata is best-effort — PDF renders correctly without it.
-      console.warn("Failed to inject GeoPDF metadata:", err);
+      logger.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        "GeoPDF: failed to inject GeoPDF metadata",
+      );
     }
 
     doc.end();

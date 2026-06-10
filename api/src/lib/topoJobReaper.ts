@@ -1,64 +1,240 @@
+import { StopTaskCommand } from "@aws-sdk/client-ecs";
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import prisma from "../services/prisma";
+import { ecs, s3 } from "../services/awsClients";
+import { decrementStorageUsed } from "./storageQuota";
 import { getEnv } from "./env";
 import { logger } from "./logger";
 
-// Stuck-topo-job reaper (ARCH-002).
+// Stuck-job reaper for both topo pipelines (Design L4).
 //
-// The job model is "ECS RunTask owns lifecycle; TopoJob.status owns retry; no
-// SQS". Nothing transitions a job out of `pending`/`processing` except the
-// worker's own success/except path, so two failure modes strand a job forever:
+// The job model is "ECS RunTask owns lifecycle; the status column owns retry;
+// no SQS". Nothing transitions a job out of `pending`/`processing` (or an
+// export out of `queued`/`running`) except the worker's own success/except
+// path, so two failure modes strand a row forever:
 //
-//   (a) RunTask placed the task but it never started (image-pull, ENI, capacity)
-//       → job stays `pending`. The synchronous `.failures` check in
-//       routes/topoJobs.ts catches the *placement* failure, but not a task that
-//       was placed and then died before the Python process came up.
+//   (a) RunTask placed the task but it never started (image-pull, ENI,
+//       capacity) → row stays `pending`/`queued`. The synchronous placement
+//       check in lib/ecsRunTask.ts catches the *placement* failure, but not a
+//       task that was placed and then died before the Python process came up.
 //   (b) The Fargate container was SIGKILLed (spot reclaim, OOM, task stopped)
-//       before the worker's `except` ran → job stays `processing`.
+//       before the worker's `except` ran → row stays `processing`/`running`.
 //
-// This sweep force-fails jobs that have been stuck past a generous timeout. It
-// is intentionally conservative: the processing timeout is hours, well beyond a
-// legitimate long job, so it only reaps jobs that are genuinely dead.
+// Sweeps:
+//   topo_jobs · pending          — flat timeout, anchored on updatedAt.
+//   topo_jobs · processing       — per-job deadline (processingDeadline below):
+//       the flat timeout is only a floor; jobs with an estimate get
+//       ESTIMATE_SAFETY_FACTOR × estimatedSeconds, so a legitimately long
+//       render (the API estimates ~8.5 min/tile — ~14 h at the default
+//       100-tile quota) is never reaped mid-run (ARCH-001).
+//   topo_export_jobs · queued    — flat timeout, anchored on createdAt.
+//   topo_export_jobs · running   — flat timeout, anchored on startedAt
+//       (createdAt fallback for rows that predate the startedAt column).
 //
-// Single-instance assumption: like the in-memory rate limiters (ARCH-007), this
-// in-API sweep assumes one API instance. With >1 instance multiple sweeps would
-// race, but the update is idempotent (only flips still-stuck rows to `failed`)
-// so a double-sweep is harmless. If the deployment scales horizontally, move
-// this to an EventBridge→Lambda or scheduled ECS task instead.
+// Every reaped in-flight row with a persisted ecsTaskArn gets a best-effort
+// ECS StopTask — a missed stop is harmless because the workers' terminal
+// status writes are guarded (`WHERE status = ...`), so a reaped-but-alive
+// task can no longer resurrect a failed row or charge storage (Design L1).
+//
+// Single-instance assumption: like the in-memory rate limiters, this in-API
+// sweep assumes one API instance. With >1 instance multiple sweeps would
+// race, but every update is status-guarded and idempotent, and StopTask is
+// idempotent on stopped tasks, so a double-sweep is harmless. If the
+// deployment scales horizontally, move this to an EventBridge→Lambda or
+// scheduled ECS task instead.
 
-const REAPER_ERROR_MESSAGE =
-  "Processing timed out — the job did not complete in the expected time and was marked failed. You can retry it.";
+// Retry means submitting a new job/export — the reaper never re-launches
+// anything (see the attempt_count comment in schema.prisma, ARCH-008).
+const REAPER_JOB_MESSAGE =
+  "Processing timed out — the job did not complete in the expected time and was marked failed. Submit a new job to retry.";
+const REAPER_EXPORT_MESSAGE =
+  "The export did not complete in the expected time and was marked failed. Submit a new export to retry.";
+
+// Headroom multiplier on the API's own duration estimate. A code constant,
+// not an env knob: if real runtimes drift from the estimate, fix the estimate
+// at its source (routes/topoJobs.ts), not here.
+export const ESTIMATE_SAFETY_FACTOR = 2;
 
 /**
- * One reaper pass. Marks `pending` jobs older than the pending timeout and
- * `processing` jobs older than the processing timeout as `failed`. Returns the
- * number of jobs reaped. Throws on DB error (fail loud — the caller logs).
+ * Deadline after which a `processing` topo job is considered dead (pure —
+ * prime unit-test target). Anchored on startedAt (written by the worker when
+ * it begins), falling back to updatedAt for rows that predate the column.
+ * The per-job budget is the flat processing timeout or twice the API's own
+ * estimate, whichever is larger.
+ */
+export function processingDeadline(
+  job: {
+    startedAt: Date | null;
+    updatedAt: Date;
+    estimatedSeconds: number | null;
+  },
+  processingTimeoutMs: number,
+): Date {
+  const anchor = job.startedAt ?? job.updatedAt;
+  const budgetMs = Math.max(
+    processingTimeoutMs,
+    job.estimatedSeconds !== null
+      ? ESTIMATE_SAFETY_FACTOR * job.estimatedSeconds * 1000
+      : 0,
+  );
+  return new Date(anchor.getTime() + budgetMs);
+}
+
+/**
+ * Best-effort StopTask for reaped rows that still have a live Fargate task.
+ * Never throws: a missed stop only costs Fargate time — the workers' guarded
+ * terminal writes make a zombie task otherwise harmless.
+ */
+async function stopTasksBestEffort(
+  rows: { id: string; ecsTaskArn: string | null }[],
+  event: string,
+): Promise<void> {
+  const env = getEnv();
+  for (const row of rows) {
+    if (!row.ecsTaskArn) continue;
+    try {
+      await ecs.send(
+        new StopTaskCommand({
+          cluster: env.ECS_CLUSTER,
+          task: row.ecsTaskArn,
+          reason: "Reaped by topo job reaper",
+        }),
+      );
+    } catch (err) {
+      logger.warn({ err, id: row.id }, event);
+    }
+  }
+}
+
+/**
+ * One reaper pass over both job tables. Returns the number of rows reaped.
+ * Throws on DB error (fail loud — the caller logs). All updates are
+ * status-guarded so a row that reaches a terminal state between read and
+ * write is left untouched.
  */
 export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number> {
   const env = getEnv();
+  let reaped = 0;
+
+  // topo_jobs · pending: anchored on updatedAt (set when /start flipped it).
   const pendingCutoff = new Date(now.getTime() - env.TOPO_REAPER_PENDING_TIMEOUT_MS);
-  const processingCutoff = new Date(now.getTime() - env.TOPO_REAPER_PROCESSING_TIMEOUT_MS);
+  const pendingResult = await prisma.topoJob.updateMany({
+    where: { status: "pending", updatedAt: { lt: pendingCutoff } },
+    data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
+  });
+  reaped += pendingResult.count;
 
-  // `pending`: anchored on updatedAt (set when /start flipped it to pending).
-  // `processing`: anchored on startedAt (set by the worker when it begins);
-  // fall back to updatedAt for older rows that predate the startedAt column.
-  const result = await prisma.$transaction([
-    prisma.topoJob.updateMany({
-      where: { status: "pending", updatedAt: { lt: pendingCutoff } },
-      data: { status: "failed", errorMessage: REAPER_ERROR_MESSAGE },
-    }),
-    prisma.topoJob.updateMany({
-      where: {
-        status: "processing",
-        OR: [
-          { startedAt: { lt: processingCutoff } },
-          { startedAt: null, updatedAt: { lt: processingCutoff } },
-        ],
-      },
-      data: { status: "failed", errorMessage: REAPER_ERROR_MESSAGE },
-    }),
-  ]);
+  // topo_jobs · processing: per-job deadline (see processingDeadline).
+  const processingJobs = await prisma.topoJob.findMany({
+    where: { status: "processing" },
+    select: {
+      id: true,
+      startedAt: true,
+      updatedAt: true,
+      estimatedSeconds: true,
+      ecsTaskArn: true,
+    },
+  });
+  const overdueJobs = processingJobs.filter(
+    (job) => processingDeadline(job, env.TOPO_REAPER_PROCESSING_TIMEOUT_MS) < now,
+  );
+  if (overdueJobs.length > 0) {
+    const result = await prisma.topoJob.updateMany({
+      // status kept in the WHERE: a job that completed between the read and
+      // this write must not be flipped back to failed.
+      where: { id: { in: overdueJobs.map((j) => j.id) }, status: "processing" },
+      data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
+    });
+    reaped += result.count;
+    await stopTasksBestEffort(overdueJobs, "topo_job_reaper_stop_task_failed");
+  }
 
-  return result.reduce((sum, r) => sum + r.count, 0);
+  // topo_export_jobs · queued: anchored on createdAt.
+  const exportQueuedCutoff = new Date(
+    now.getTime() - env.TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS,
+  );
+  const queuedExportResult = await prisma.topoExportJob.updateMany({
+    where: { status: "queued", createdAt: { lt: exportQueuedCutoff } },
+    data: { status: "failed", errorMessage: REAPER_EXPORT_MESSAGE },
+  });
+  reaped += queuedExportResult.count;
+
+  // topo_export_jobs · running: anchored on startedAt (createdAt fallback).
+  const exportRunningCutoff = new Date(
+    now.getTime() - env.TOPO_REAPER_EXPORT_RUNNING_TIMEOUT_MS,
+  );
+  const overdueExports = await prisma.topoExportJob.findMany({
+    where: {
+      status: "running",
+      OR: [
+        { startedAt: { lt: exportRunningCutoff } },
+        { startedAt: null, createdAt: { lt: exportRunningCutoff } },
+      ],
+    },
+    select: { id: true, ecsTaskArn: true },
+  });
+  if (overdueExports.length > 0) {
+    const result = await prisma.topoExportJob.updateMany({
+      where: { id: { in: overdueExports.map((e) => e.id) }, status: "running" },
+      data: { status: "failed", errorMessage: REAPER_EXPORT_MESSAGE },
+    });
+    reaped += result.count;
+    await stopTasksBestEffort(
+      overdueExports,
+      "topo_export_reaper_stop_task_failed",
+    );
+  }
+
+  return reaped;
+}
+
+/**
+ * Export-expiry sweep (ARCH-006): completed exports older than
+ * TOPO_EXPORT_TTL_MS (default 7 days, 0 disables) are removed — S3 object
+ * first (idempotent: the bucket's `expire-exports` lifecycle rule, verified
+ * 2026-06-11 as 7-day expiry on `exports/`, may have beaten us), then one
+ * transaction decrementing the storage charge and deleting the row. This
+ * makes the in-app accounting authoritative: rows stop presigning dead keys
+ * and the quota is reclaimed when the bytes actually disappear, with the S3
+ * rule kept as backstop. Returns the number of exports expired.
+ *
+ * Per-row failures are logged and skipped (the row simply survives to the
+ * next sweep) so one bad row can't wedge the others.
+ */
+export async function expireCompletedExports(
+  now: Date = new Date(),
+): Promise<number> {
+  const env = getEnv();
+  if (env.TOPO_EXPORT_TTL_MS === 0) return 0;
+  const bucket = env.S3_BUCKET_TOPO ?? "";
+
+  const cutoff = new Date(now.getTime() - env.TOPO_EXPORT_TTL_MS);
+  const expiredRows = await prisma.topoExportJob.findMany({
+    where: { status: "completed", completedAt: { lt: cutoff } },
+    select: { id: true, userId: true, resultKey: true, resultBytes: true },
+  });
+
+  let expired = 0;
+  for (const row of expiredRows) {
+    try {
+      // S3 first (Design Q delete ordering): DeleteObject succeeds on a
+      // missing key, so a lifecycle-rule head start is harmless; an S3
+      // failure leaves the row for retry next sweep.
+      if (row.resultKey) {
+        await s3.send(
+          new DeleteObjectCommand({ Bucket: bucket, Key: row.resultKey }),
+        );
+      }
+      await prisma.$transaction(async (tx) => {
+        await decrementStorageUsed(row.userId, row.resultBytes ?? 0n, tx);
+        await tx.topoExportJob.delete({ where: { id: row.id } });
+      });
+      expired += 1;
+    } catch (err) {
+      logger.error({ err, id: row.id }, "topo_export_expiry_failed");
+    }
+  }
+  return expired;
 }
 
 let timer: NodeJS.Timeout | null = null;
@@ -85,6 +261,13 @@ export function startTopoJobReaper(): () => void {
         // next interval.
         logger.error({ err }, "topo_job_reaper_failed");
       });
+    expireCompletedExports()
+      .then((count) => {
+        if (count > 0) logger.info({ count }, "topo_exports_expired");
+      })
+      .catch((err) => {
+        logger.error({ err }, "topo_export_expiry_sweep_failed");
+      });
   };
 
   // Run once shortly after boot (catches jobs stranded while the API was down),
@@ -98,6 +281,9 @@ export function startTopoJobReaper(): () => void {
       intervalMs: env.TOPO_REAPER_INTERVAL_MS,
       pendingTimeoutMs: env.TOPO_REAPER_PENDING_TIMEOUT_MS,
       processingTimeoutMs: env.TOPO_REAPER_PROCESSING_TIMEOUT_MS,
+      exportQueuedTimeoutMs: env.TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS,
+      exportRunningTimeoutMs: env.TOPO_REAPER_EXPORT_RUNNING_TIMEOUT_MS,
+      exportTtlMs: env.TOPO_EXPORT_TTL_MS,
     },
     "topo_job_reaper_started",
   );

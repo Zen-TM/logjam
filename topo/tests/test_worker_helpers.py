@@ -2,7 +2,8 @@
 
 worker.py reads required env vars and creates a boto3 client at import time, so
 we set placeholder env before importing. It does not import GDAL, so no osgeo
-stub is needed for this module — but boto3/psycopg2/pmtiles must be installed.
+stub is needed for this module; boto3/psycopg2/pmtiles are stubbed by
+_native_stub when absent on the host.
 """
 import os
 import subprocess

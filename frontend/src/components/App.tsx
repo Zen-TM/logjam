@@ -40,9 +40,15 @@ import {
 } from "../canyonUtils";
 import FilterStatusChip from "./map/FilterStatusChip";
 import FilterEmptyState from "./map/FilterEmptyState";
-import { PENDING_CONSENT_STORAGE_KEY } from "../consent";
+import {
+  CURRENT_CONSENT_VERSION,
+  PENDING_CONSENT_STORAGE_KEY,
+  needsReconsent,
+} from "../consent";
+import ConsentGate from "./ConsentGate";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { TOPO_OVERLAY_SOURCE, GEOPDF_OVERLAY_ATTRIBUTION } from "@logjam/shared";
+import type { OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import { useLocalStorage } from "../useLocalStorage";
 import { Button } from "@mui/material";
@@ -204,7 +210,13 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
       // AttributionControl surfaces the required CC BY / ODbL attribution.
       // A layer may credit more than one source (e.g. vegetation density is a
       // LiDAR CHM, so it credits both elevation and the SVTM vegetation source).
-      const overlaySources = TOPO_OVERLAY_SOURCE[layerName] ?? [];
+      // layerName comes from persisted user state (string), so index the
+      // TopoLayerName-keyed record defensively rather than crash on a stale
+      // stored name.
+      const overlaySources =
+        (TOPO_OVERLAY_SOURCE as Record<string, OverlaySource[] | undefined>)[
+          layerName
+        ] ?? [];
       const attribution = overlaySources.length
         ? overlaySources.map((s) => GEOPDF_OVERLAY_ATTRIBUTION[s]).join(" · ")
         : undefined;
@@ -304,7 +316,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     refetch: refetchTripLogs,
   } = useTripLogs(authenticated);
   const { analytics, loading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(authenticated);
-  const { currentUser, refetchCurrentUser } = useCurrentUser(authenticated);
+  const { currentUser, refetchCurrentUser, applyCurrentUser } = useCurrentUser(authenticated);
   const {
     vectorStyle,
     setVectorStyle: setLiveVectorStyle,
@@ -334,22 +346,37 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
 
   useEffect(() => {
     if (!authenticated) return;
+    // Best-effort: hydration prefetch for the map/sidebar; UI degrades
+    // gracefully (panels show their own empty/error states) if this fails.
     hydrateFromUser().catch(console.error);
     fetchCurrentUser()
       .then((user) => {
         setCustomFieldDefs(user.uiPreferences?.tripLogCustomFields ?? []);
         setCanyonCustomFieldDefs(user.uiPreferences?.canyonCustomFields ?? []);
+        // Record the consent given on the sign-up form. Only a pending value
+        // matching the current version is recordable (the server 400s any
+        // other), and only while the user's stored version is actually stale —
+        // this also covers a stale-version user who re-signed-up, which the
+        // old `!user.consentedAt` check silently skipped.
         const pending = localStorage.getItem(PENDING_CONSENT_STORAGE_KEY);
-        if (pending && !user.consentedAt) {
+        if (pending === CURRENT_CONSENT_VERSION && needsReconsent(user)) {
           recordConsent(pending)
-            .then(() => localStorage.removeItem(PENDING_CONSENT_STORAGE_KEY))
-            .catch((err) => { console.error(err); });
+            .then((updated) => {
+              // Sync the cached user before dropping the pending key so the
+              // ConsentGate never flashes for a fresh sign-up.
+              applyCurrentUser(updated);
+              localStorage.removeItem(PENDING_CONSENT_STORAGE_KEY);
+            })
+            .catch((err) => {
+              console.error(err);
+              toast.error(messageFromError(err, "Couldn't record your consent. It will be retried next time you sign in."));
+            });
         } else if (pending) {
           localStorage.removeItem(PENDING_CONSENT_STORAGE_KEY);
         }
       })
       .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't load your preferences.")); });
-  }, [authenticated, hydrateFromUser, toast]);
+  }, [authenticated, hydrateFromUser, toast, applyCurrentUser]);
 
   // Resume tracking any jobs that were pending/processing before page load
   useEffect(() => {
@@ -361,6 +388,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         );
         if (resumable.length) setActiveTopoJobs(resumable);
       })
+      // Best-effort: if this fails, in-progress jobs simply won't resume
+      // polling until the next page load — non-critical background refresh.
       .catch((err) => { console.error(err); });
   }, [authenticated]);
 
@@ -382,6 +411,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           return next;
         });
       })
+      // Best-effort: called again on the next poll tick / job completion,
+      // so a transient failure here is non-critical.
       .catch((err) => { console.error(err); });
   }, []);
 
@@ -625,6 +656,18 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         goToForgotPassword={auth.goToForgotPassword}
       />
     );
+  }
+
+  // Blocking re-consent gate (PRIV-002): a signed-in user whose recorded
+  // consent version is stale or absent must re-consent before using the app
+  // (the privacy.html / tos.html "re-consent on next sign-in" promise). The
+  // pending-key fast path keeps the gate from flashing for fresh sign-ups
+  // whose consent PATCH (recorded by the effect above) is still in flight.
+  const pendingConsentMatchesCurrent =
+    localStorage.getItem(PENDING_CONSENT_STORAGE_KEY) ===
+    CURRENT_CONSENT_VERSION;
+  if (currentUser && needsReconsent(currentUser) && !pendingConsentMatchesCurrent) {
+    return <ConsentGate onAccepted={applyCurrentUser} onSignOut={auth.signOut} />;
   }
 
   const dimUI = pickingCoords || selectingArea || selectingGeoPdfExtent;

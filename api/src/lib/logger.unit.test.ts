@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import pino from "pino";
-import { redactPaths } from "./logger";
+import { redactPaths, redactTilePathPatterns } from "./logger";
 
 // Build a pino logger using the SAME redact paths the app logger uses, but
 // writing to an in-memory buffer so we can assert what actually gets censored.
@@ -50,5 +50,40 @@ describe("logger redaction", () => {
     const out = captureLog({ req: { body: { id: "canyon-1" } } });
     const body = (out.req as { body: Record<string, unknown> }).body;
     expect(body.id).toBe("canyon-1");
+  });
+});
+
+// Guards the SEC-002 boundary: tile z/x/y indices are approximate coordinates
+// and must never reach logs, even embedded in fetch-error URLs.
+describe("redactTilePathPatterns", () => {
+  it("strips a full tile URL including host and z/x/y path", () => {
+    const out = redactTilePathPatterns(
+      "Failed: https://tiles.example/17/120342/78711.png 404",
+    );
+    expect(out).not.toMatch(/tiles\.example/);
+    expect(out).not.toMatch(/\d+\/\d+\/\d+/);
+    expect(out).toContain("[redacted-url]");
+    expect(out).toContain("404");
+  });
+
+  it("strips a bare z/x/y triple", () => {
+    expect(redactTilePathPatterns("tile 12/3456/7890 failed")).toBe(
+      "tile [redacted-tile] failed",
+    );
+  });
+
+  it("strips multiple triples and URLs in one message", () => {
+    const out = redactTilePathPatterns(
+      "retry 14/123/456 then http://cdn.example/15/7/8.png and 16/99/100",
+    );
+    expect(out).not.toMatch(/\d+\/\d+\/\d+/);
+    expect(out).not.toMatch(/cdn\.example/);
+  });
+
+  it("leaves coordinate-free messages unchanged", () => {
+    expect(redactTilePathPatterns("HTTP 404")).toBe("HTTP 404");
+    expect(redactTilePathPatterns("Error: socket hang up")).toBe(
+      "Error: socket hang up",
+    );
   });
 });

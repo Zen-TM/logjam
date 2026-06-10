@@ -1,11 +1,11 @@
 import { ApiError } from "./ApiError";
 import { mapAuthError } from "./authErrorMap";
 
-const STATUS_MESSAGES: Record<number, string> = {
+const STATUS_MESSAGES: Record<number, string | undefined> = {
   401: "You're not authorised to do that. Please sign in and try again.",
   403: "You don't have permission to do that.",
   404: "The requested item could not be found.",
-  409: undefined as unknown as string, // let serverMessage win for 409 (domain-specific conflicts)
+  409: undefined, // let serverMessage win for 409 (domain-specific conflicts)
   429: "Too many requests. Please wait a moment and try again.",
   500: "Something went wrong on the server. Please try again.",
   503: "The server is temporarily unavailable. Please try again shortly.",

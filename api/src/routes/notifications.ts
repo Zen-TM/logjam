@@ -3,6 +3,7 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
+import { resolveUser } from "../lib/resolveUser";
 
 const router = Router();
 
@@ -32,10 +33,7 @@ router.get(
   "/",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const notifications = await prisma.notification.findMany({
       where: { userId: user.id },
@@ -156,10 +154,7 @@ router.get(
   "/unread-count",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const count = await prisma.notification.count({
       where: { userId: user.id, read: false },
@@ -175,10 +170,7 @@ router.patch(
   "/:id/read",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
     const notification = await prisma.notification.findUnique({
@@ -203,10 +195,7 @@ router.patch(
   "/read-all",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     await prisma.notification.updateMany({
       where: { userId: user.id, read: false },
@@ -223,10 +212,7 @@ router.delete(
   "/:id",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
     const notification = await prisma.notification.findUnique({
@@ -248,10 +234,7 @@ router.delete(
   "/",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     await prisma.notification.deleteMany({
       where: { userId: user.id, read: true },

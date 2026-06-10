@@ -1,5 +1,6 @@
 import { Router, Response } from "express";
 import { randomUUID } from "crypto";
+import { Prisma } from "@prisma/client";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
@@ -16,6 +17,7 @@ import {
   getStorageUsage,
 } from "../lib/storageQuota";
 import { deleteS3Keys, deleteS3KeysBestEffort } from "../lib/s3Cleanup";
+import { validateUploadSizes } from "../lib/mediaUploadValidation";
 import { toMediaItem } from "../lib/mediaPresign";
 import {
   mediaCategory,
@@ -97,13 +99,21 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const { linkedType, linkedId, filename, mediaType } = req.body ?? {};
+    const { linkedType, linkedId, filename, mediaType, sizeBytes, thumbnailSizeBytes } =
+      req.body ?? {};
     if (typeof linkedId !== "string")
       throw new AppError(400, "linkedId is required");
     const category = validateMediaType(mediaType, filename);
+    // Declared sizes bound the presigned PUTs (SEC-003): they are signed into
+    // Content-Length below, so S3 rejects uploads that exceed the declaration.
+    const sizes = validateUploadSizes(category, sizeBytes, thumbnailSizeBytes);
     await assertOwnsTarget(user.id, linkedType, linkedId);
-    // Soft pre-check; the authoritative quota check happens on confirm.
-    await assertHasStorageQuota(user.id);
+    // Headroom pre-check including the declared upload; the authoritative
+    // quota charge still happens on confirm against the real S3 size.
+    await assertHasStorageQuota(
+      user.id,
+      BigInt(sizes.sizeBytes + (sizes.thumbnailSizeBytes ?? 0)),
+    );
 
     const mediaId = randomUUID();
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);
@@ -114,6 +124,7 @@ router.post(
         Bucket: MEDIA_BUCKET,
         Key: displayKey,
         ContentType: mediaType,
+        ContentLength: sizes.sizeBytes,
       }),
       { expiresIn: UPLOAD_URL_TTL_SECONDS },
     );
@@ -126,6 +137,7 @@ router.post(
           Bucket: MEDIA_BUCKET,
           Key: thumbnailKey,
           ContentType: THUMBNAIL_MIME,
+          ContentLength: sizes.thumbnailSizeBytes!,
         }),
         { expiresIn: UPLOAD_URL_TTL_SECONDS },
       );
@@ -148,6 +160,17 @@ router.post(
       throw new AppError(400, "linkedId is required");
     const category = validateMediaType(mediaType, filename);
     await assertOwnsTarget(user.id, linkedType, linkedId);
+
+    // Idempotent confirm (ARCH-005): if the row already exists, this confirm
+    // already succeeded — return it without re-charging quota, so client
+    // retries / double-clicks are benign no-ops. A foreign-owned row can't
+    // happen with server-minted UUIDs, but fail closed anyway.
+    const existing = await prisma.media.findUnique({ where: { id: mediaId } });
+    if (existing) {
+      if (existing.ownerId !== user.id) throw new AppError(403, "Access denied");
+      res.status(200).json(await toMediaItem(existing));
+      return;
+    }
 
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);
     const expectThumb = categoryHasThumbnail(category);
@@ -186,34 +209,59 @@ router.post(
 
     const totalBytes = BigInt(displayBytes + thumbnailBytes);
 
-    // Charge first, then verify we didn't blow the quota — roll back if we did.
-    await incrementStorageUsed(user.id, totalBytes);
-    const { used, quota } = await getStorageUsage(user.id);
-    if (used > quota) {
-      await decrementStorageUsed(user.id, totalBytes);
-      await deleteS3KeysBestEffort(
-        MEDIA_BUCKET,
-        expectThumb ? [displayKey, thumbnailKey] : [displayKey],
-      );
-      throw new AppError(507, "Storage quota exceeded", {
-        used: used.toString(),
-        quota: quota.toString(),
+    // One interactive transaction (ARCH-005 / Design Q): the quota charge,
+    // the over-quota check and the row creation commit — or roll back —
+    // together. No crash window can leave the quota charged without a row,
+    // and an over-quota throw undoes the charge without a manual decrement.
+    let media;
+    try {
+      media = await prisma.$transaction(async (tx) => {
+        await incrementStorageUsed(user.id, totalBytes, tx);
+        const { used, quota } = await getStorageUsage(user.id, tx);
+        if (used > quota) {
+          throw new AppError(507, "Storage quota exceeded", {
+            used: used.toString(),
+            quota: quota.toString(),
+          });
+        }
+        return tx.media.create({
+          data: {
+            id: mediaId,
+            ownerId: user.id,
+            linkedType,
+            linkedId,
+            s3KeyDisplay: displayKey,
+            s3KeyThumbnail: expectThumb ? thumbnailKey : null,
+            mediaType,
+            filename,
+            fileSizeBytes: totalBytes,
+          },
+        });
       });
+    } catch (err) {
+      if (err instanceof AppError && err.statusCode === 507) {
+        // Transaction rolled back (charge undone); remove the uploaded
+        // objects best-effort so the 507 is not masked by a cleanup failure.
+        await deleteS3KeysBestEffort(
+          MEDIA_BUCKET,
+          expectThumb ? [displayKey, thumbnailKey] : [displayKey],
+        );
+        throw err;
+      }
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        // A concurrent duplicate confirm won the race: this transaction
+        // rolled back (nothing double-charged) — return the winner's row.
+        const winner = await prisma.media.findUnique({ where: { id: mediaId } });
+        if (winner && winner.ownerId === user.id) {
+          res.status(200).json(await toMediaItem(winner));
+          return;
+        }
+      }
+      throw err;
     }
-
-    const media = await prisma.media.create({
-      data: {
-        id: mediaId,
-        ownerId: user.id,
-        linkedType,
-        linkedId,
-        s3KeyDisplay: displayKey,
-        s3KeyThumbnail: expectThumb ? thumbnailKey : null,
-        mediaType,
-        filename,
-        fileSizeBytes: totalBytes,
-      },
-    });
 
     res.status(201).json(await toMediaItem(media));
   },
@@ -231,14 +279,20 @@ router.delete(
     if (!media) throw new AppError(404, "Media not found");
     if (media.ownerId !== user.id) throw new AppError(403, "Access denied");
 
-    await prisma.media.delete({ where: { id } });
+    // S3-first (ARCH-004): blobs go before the row, so an S3 failure leaves
+    // the row (and therefore the keys) intact for a retried DELETE. The row
+    // delete and the quota decrement then share one transaction so a crash
+    // between them can't leave the quota over-counted.
     await deleteS3Keys(
       MEDIA_BUCKET,
       [media.s3KeyDisplay, media.s3KeyThumbnail].filter((k): k is string =>
         Boolean(k),
       ),
     );
-    await decrementStorageUsed(user.id, media.fileSizeBytes);
+    await prisma.$transaction(async (tx) => {
+      await tx.media.delete({ where: { id } });
+      await decrementStorageUsed(user.id, media.fileSizeBytes, tx);
+    });
 
     res.status(204).send();
   },

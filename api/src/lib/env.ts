@@ -38,7 +38,19 @@ const baseSchema = z.object({
   // TOPO_REAPER_INTERVAL_MS to 0 to disable the sweep entirely.
   TOPO_REAPER_INTERVAL_MS: z.coerce.number().int().nonnegative().default(300_000), // 5 min
   TOPO_REAPER_PENDING_TIMEOUT_MS: z.coerce.number().int().positive().default(900_000), // 15 min
+  // Floor for the per-job processing deadline: the reaper allows
+  // max(this, ESTIMATE_SAFETY_FACTOR × estimatedSeconds) per job, so a
+  // legitimately long render (the API estimates ~8.5 min/tile) is never
+  // reaped mid-run (ARCH-001).
   TOPO_REAPER_PROCESSING_TIMEOUT_MS: z.coerce.number().int().positive().default(10_800_000), // 3 h
+  // TopoExportJob sweeps (ARCH-002): queued rows older than the QUEUED timeout
+  // (task never placed/started) and running rows older than the RUNNING
+  // timeout (worker SIGKILLed before its except path ran) are force-failed.
+  TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS: z.coerce.number().int().positive().default(900_000), // 15 min
+  TOPO_REAPER_EXPORT_RUNNING_TIMEOUT_MS: z.coerce.number().int().positive().default(10_800_000), // 3 h
+  // Completed exports older than this are swept: S3 object deleted, quota
+  // decremented, row removed (ARCH-006). 0 disables the sweep.
+  TOPO_EXPORT_TTL_MS: z.coerce.number().int().nonnegative().default(604_800_000), // 7 days
 });
 
 type Env = z.infer<typeof baseSchema> & {

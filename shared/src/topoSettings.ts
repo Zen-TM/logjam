@@ -15,7 +15,31 @@
 //
 // Frontend, API, and worker all import these types + validators from here.
 
-export type TopoLayerKey = "hillshade" | "vegetation" | "slope" | "contours" | "features";
+// ---------------------------------------------------------------------------
+// Topo layers — canonical list (ARCH-010)
+// ---------------------------------------------------------------------------
+// The single source of truth for the layers rendered on the map and selectable
+// as GeoPDF overlays. Composite is intentionally absent — it's MBTiles-only
+// (email download), not a map layer. Everything TS-side derives from this list
+// (TopoLayerKey, RASTER_LAYERS/VECTOR_LAYERS in topoExport.ts, the GeoPDF
+// overlay allowlist); api/src/constants/topoLayers.ts and
+// frontend/src/topoLayerTypes.ts are thin re-exports. The only structurally
+// unavoidable mirror is topo/worker.py → ALL_LAYERS (Python).
+
+export const TOPO_LAYERS = [
+  { name: "hillshade", label: "Hillshade", format: "raster" },
+  { name: "vegetation", label: "Vegetation", format: "raster" },
+  { name: "slope", label: "Slope", format: "raster" },
+  { name: "contours", label: "Contours", format: "vector" },
+  { name: "features", label: "Features", format: "vector" },
+] as const;
+
+export type TopoLayerMeta = (typeof TOPO_LAYERS)[number];
+// Derived from the list so the union and the list cannot diverge.
+export type TopoLayerKey = TopoLayerMeta["name"];
+// Alias kept for call sites that grew up on the api/frontend constant files.
+export type TopoLayerName = TopoLayerKey;
+export type TopoLayerFormat = TopoLayerMeta["format"];
 
 export type RgbaHex = string; // #RRGGBBAA, lowercase hex
 

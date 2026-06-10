@@ -1,0 +1,45 @@
+.container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--theme-primary);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 360px;
+  padding: 2rem;
+  background-color: var(--theme-secondary);
+  border-radius: var(--radius-lg);
+  color: var(--theme-text-primary);
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.body {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--theme-text-primary);
+}
+
+.body a {
+  color: var(--theme-accent);
+}
+
+.consentRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: var(--theme-text-primary);
+}
+
+.consentRow input {
+  margin-top: 3px;
+}

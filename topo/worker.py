@@ -67,10 +67,10 @@ SES_FROM     = os.environ.get("SES_FROM_EMAIL", "")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 JOB_ID       = os.environ["JOB_ID"]
 
-# Canonical list of layer types that get rendered onto the map.
-# Composite is intentionally absent — Stage 2 builds it on demand in the
-# export worker. Keep in sync with: api/src/constants/topoLayers.ts,
-# frontend/src/topoLayerTypes.ts.
+# Python mirror of the canonical layer list — keep in sync with
+# shared/src/topoSettings.ts → TOPO_LAYERS (the TS side all derives from it;
+# this is the only remaining hand-synced copy, ARCH-010). Composite is
+# intentionally absent — Stage 2 builds it on demand in the export worker.
 ALL_LAYERS: frozenset[str] = frozenset({
     "hillshade",
     "vegetation",
@@ -159,8 +159,9 @@ def db_connect():
     return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
-def update_status(conn, job_id: str, status: str, storage_delta_bytes: int = 0, **kwargs):
-    """Update a job's status and optional extra columns.
+def update_status(conn, job_id: str, status: str, storage_delta_bytes: int = 0,
+                  expected_status: Optional[str] = None, **kwargs) -> int:
+    """Update a job's status and optional extra columns. Returns rows updated.
 
     If storage_delta_bytes is non-zero, the owner's storage_used_bytes is
     incremented in the SAME transaction/commit as the status update. This closes
@@ -168,6 +169,14 @@ def update_status(conn, job_id: str, status: str, storage_delta_bytes: int = 0, 
     write and the storage increment could otherwise leave a completed job whose
     bytes were never quota-accounted (under-count, no reconciliation given the
     no-reaper-for-storage gap).
+
+    With expected_status the UPDATE is guarded (`AND status = %s`), making
+    status transitions write-once (Design L1): if the job was reaped or
+    deleted mid-run the write matches 0 rows, the storage increment is
+    SKIPPED, and the caller must skip notification/email and self-clean any
+    uploaded outputs. This is what stops a reaped-but-alive worker from
+    resurrecting a `failed` job to `complete` (ARCH-001) or charging storage
+    for a job the user no longer has (ARCH-007).
     """
     set_clauses = ["status = %s", "updated_at = NOW()"]
     values = [status]
@@ -175,18 +184,39 @@ def update_status(conn, job_id: str, status: str, storage_delta_bytes: int = 0, 
         set_clauses.append(f"{col} = %s")
         values.append(json.dumps(val) if isinstance(val, (dict, list)) else val)
     values.append(job_id)
+    where = "WHERE id = %s"
+    if expected_status is not None:
+        where += " AND status = %s"
+        values.append(expected_status)
     with conn.cursor() as cur:
         cur.execute(
-            f"UPDATE topo_jobs SET {', '.join(set_clauses)} WHERE id = %s",
+            f"UPDATE topo_jobs SET {', '.join(set_clauses)} {where}",
             values,
         )
-        if storage_delta_bytes:
+        updated = cur.rowcount
+        if updated and storage_delta_bytes:
             cur.execute(
                 "UPDATE users SET storage_used_bytes = storage_used_bytes + %s"
                 " WHERE id = (SELECT user_id FROM topo_jobs WHERE id = %s)",
                 (storage_delta_bytes, job_id),
             )
     conn.commit()
+    return updated
+
+
+def delete_s3_prefix_best_effort(prefix: str):
+    """Best-effort delete of every object under prefix (reaped-job self-clean).
+    Never raises — the objects are unreferenced either way and the account-
+    delete prefix sweep is the backstop."""
+    try:
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=BUCKET, Prefix=prefix):
+            keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+            if keys:
+                s3.delete_objects(Bucket=BUCKET, Delete={"Objects": keys})
+        log.info(f"Cleaned up s3://{BUCKET}/{prefix}")
+    except Exception as e:
+        log.warning(f"Best-effort cleanup of {prefix} failed: {e}")
 
 
 def get_job(conn, job_id: str) -> dict:
@@ -593,7 +623,16 @@ def main():
     # started_at anchors the reaper's "processing" staleness timeout (ARCH-002):
     # it distinguishes a long-but-alive job from a dead one. NOW() rather than a
     # column passthrough so it reflects actual worker start.
-    update_status(conn, JOB_ID, "processing", started_at=datetime.now(timezone.utc))
+    # Guarded on `pending` (Design L1): if the job was reaped or deleted while
+    # the task spun up, claim nothing and exit cleanly without processing.
+    claimed = update_status(conn, JOB_ID, "processing",
+                            expected_status="pending",
+                            started_at=datetime.now(timezone.utc))
+    if claimed == 0:
+        log.warning(f"Job {JOB_ID} is no longer pending (reaped or deleted) — "
+                    "exiting without processing.")
+        conn.close()
+        return
 
     try:
         with tempfile.TemporaryDirectory() as tmp:
@@ -614,11 +653,22 @@ def main():
             log.warning(f"Failed to delete input ZIP {job['s3_input_key']}: {e}")
 
         # Status flip + storage increment committed together (ARCH-009).
-        update_status(
+        # Guarded on `processing` (Design L1): if the job was reaped or
+        # DELETEd mid-run, 0 rows match — the storage increment is skipped
+        # inside update_status, and we self-clean the re-uploaded outputs and
+        # skip notification/email instead of resurrecting a failed job.
+        updated = update_status(
             conn, JOB_ID, "complete",
+            expected_status="processing",
             storage_delta_bytes=total_output_bytes if total_output_bytes > 0 else 0,
             **extra,
         )
+        if updated == 0:
+            log.warning(f"Job {JOB_ID} was reaped or deleted mid-run — "
+                        "cleaning up outputs and skipping notification/email.")
+            delete_s3_prefix_best_effort(f"outputs/{JOB_ID}/")
+            return
+
         log.info(f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded"
                  + (" (OSM features missing — Overpass failed)" if osm_failed else ""))
 
@@ -635,7 +685,16 @@ def main():
 
     except Exception as e:
         log.error(f"Job {JOB_ID} failed: {e}", exc_info=True)
-        update_status(conn, JOB_ID, "failed", error_message=safe_error_message(e))
+        updated = update_status(conn, JOB_ID, "failed",
+                                expected_status="processing",
+                                error_message=safe_error_message(e))
+        if updated == 0:
+            # Already reaped/deleted — outcome is moot. Clean up any partial
+            # uploads and exit 0 so ECS doesn't surface a duplicate failure.
+            log.warning(f"Job {JOB_ID} was reaped or deleted mid-run — "
+                        "skipping failure notification.")
+            delete_s3_prefix_best_effort(f"outputs/{JOB_ID}/")
+            return
         create_notification(conn, job["user_id"], "topo_failed", {
             "jobId": JOB_ID,
             "jobName": job.get("name"),

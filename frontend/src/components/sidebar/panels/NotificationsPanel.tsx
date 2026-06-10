@@ -37,6 +37,8 @@ function NotificationsPanel({
     setActionedIds((prev) => new Set([...prev, notificationId]));
     try {
       await acceptFriendRequest(friendshipId);
+      // Best-effort: the friend request itself succeeded; failing to mark/clear
+      // this notification just leaves it visible until the next refetch.
       markNotificationRead(notificationId).catch((err) => { console.error(err); });
       deleteNotification(notificationId).catch((err) => { console.error(err); });
       onRefetchFriends();
@@ -56,6 +58,8 @@ function NotificationsPanel({
     setActionedIds((prev) => new Set([...prev, notificationId]));
     try {
       await declineFriendRequest(friendshipId);
+      // Best-effort: the decline itself succeeded; failing to mark/clear this
+      // notification just leaves it visible until the next refetch.
       markNotificationRead(notificationId).catch((err) => { console.error(err); });
       deleteNotification(notificationId).catch((err) => { console.error(err); });
       onRefetchNotifications();
@@ -81,6 +85,8 @@ function NotificationsPanel({
       a.click();
       a.remove();
       if (!n.read) {
+        // Best-effort: the download already started; failing to mark this
+        // notification read just leaves it unread until the next refetch.
         markNotificationRead(n.id).catch((err) => { console.error(err); });
         onRefetchNotifications();
       }

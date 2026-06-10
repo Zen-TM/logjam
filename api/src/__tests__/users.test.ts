@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
+import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 //
@@ -71,16 +72,69 @@ describe("users routes (fake auth = alice)", () => {
     expect(restore.body.uiPreferences.notifications.topoEmail).toBe(original);
   });
 
+  // Consent boundary (PRIV-002): the server is the integrity half of the
+  // re-consent mechanism — it must reject any consentVersion other than the
+  // current constant, and must expose consentVersion so the client gate
+  // (frontend needsReconsent/ConsentGate) can fire after a version bump.
+  it("PATCH /users/me rejects a consentVersion that is not the current constant", async () => {
+    const res = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ consentVersion: "2020-01-01" });
+    expect(res.status).toBe(400);
+  });
+
+  it("PATCH /users/me records the current consent version and sets consentedAt", async () => {
+    const res = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ consentVersion: CURRENT_CONSENT_VERSION });
+    expect(res.status).toBe(200);
+    expect(res.body.consentVersion).toBe(CURRENT_CONSENT_VERSION);
+    expect(res.body.consentedAt).toBeTruthy();
+  });
+
+  it("GET /users/me echoes consentVersion so the client re-consent gate can fire", async () => {
+    const res = await request(API_URL).get("/users/me").set(AUTH);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("consentVersion");
+  });
+
   it("GET /users/me/export returns the caller's data with bigint fields as numbers", async () => {
     const res = await request(API_URL).get("/users/me/export").set(AUTH);
     expect(res.status).toBe(200);
-    expect(res.body.schemaVersion).toBe(1);
+    expect(res.body.schemaVersion).toBe(2);
     expect(res.body.user.username).toBe("alice");
     expect(Array.isArray(res.body.canyons)).toBe(true);
     expect(Array.isArray(res.body.tripLogs)).toBe(true);
     expect(Array.isArray(res.body.media)).toBe(true);
     for (const item of res.body.media) {
       expect(typeof item.fileSizeBytes).toBe("number");
+    }
+  });
+
+  // PRIV-004: privacy.html promises a "complete machine-readable JSON copy"
+  // (APP 12 access). schemaVersion 2 adds the previously omitted user-owned
+  // collections — topo jobs carry location-bearing footprints, so their
+  // absence made "complete" inaccurate. BigInt byte fields (topoJob
+  // outputBytes, topoExportJob resultBytes) must serialise via the global
+  // replacer without crashing.
+  it("GET /users/me/export includes topo jobs, topo exports, topo templates, and notifications (schemaVersion 2)", async () => {
+    const res = await request(API_URL).get("/users/me/export").set(AUTH);
+    expect(res.status).toBe(200);
+    expect(res.body.schemaVersion).toBe(2);
+    expect(Array.isArray(res.body.topoJobs)).toBe(true);
+    expect(Array.isArray(res.body.topoExportJobs)).toBe(true);
+    expect(Array.isArray(res.body.topoTemplates)).toBe(true);
+    expect(Array.isArray(res.body.notifications)).toBe(true);
+    for (const job of res.body.topoJobs) {
+      // footprint geometry round-trips; byte counts are plain numbers.
+      expect(job).toHaveProperty("footprint");
+      if (job.outputBytes != null) expect(typeof job.outputBytes).toBe("number");
+    }
+    for (const exportJob of res.body.topoExportJobs) {
+      if (exportJob.resultBytes != null)
+        expect(typeof exportJob.resultBytes).toBe("number");
     }
   });
 });

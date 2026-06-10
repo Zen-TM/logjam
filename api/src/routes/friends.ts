@@ -5,6 +5,7 @@ import { AppError } from "../middleware/errorHandler";
 import { friendsSearchLimiter } from "../middleware/rateLimit";
 import { getParam } from "../lib/getParam";
 import { normalizeUserUiPreferences } from "@logjam/shared";
+import { resolveUser } from "../lib/resolveUser";
 
 async function wantsInAppNotification(
   userId: string,
@@ -26,10 +27,7 @@ router.get(
   "/",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const friendships = await prisma.friendship.findMany({
       where: {
@@ -65,10 +63,7 @@ router.get(
   "/requests",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const requests = await prisma.friendship.findMany({
       where: {
@@ -90,10 +85,7 @@ router.post(
   "/request",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const { addresseeId } = req.body;
     if (!addresseeId) throw new AppError(400, "addresseeId is required");
@@ -162,10 +154,7 @@ router.patch(
   "/:id/accept",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
     const friendship = await prisma.friendship.findUnique({ where: { id } });
@@ -211,10 +200,7 @@ router.patch(
   "/:id/decline",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
     const friendship = await prisma.friendship.findUnique({ where: { id } });
@@ -251,10 +237,7 @@ router.delete(
   "/:id",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
     const friendship = await prisma.friendship.findUnique({ where: { id } });
@@ -330,10 +313,7 @@ router.get(
   requireAuth,
   friendsSearchLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const { q } = req.query;
     if (!q || typeof q !== "string" || q.length < 3) {

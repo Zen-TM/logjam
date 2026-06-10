@@ -62,6 +62,9 @@ describe("validateEnv — valid configurations", () => {
     expect(env.PORT).toBe(8080);
     expect(env.AWS_REGION).toBe("ap-southeast-2");
     expect(env.TOPO_REAPER_INTERVAL_MS).toBe(300_000);
+    expect(env.TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS).toBe(900_000);
+    expect(env.TOPO_REAPER_EXPORT_RUNNING_TIMEOUT_MS).toBe(10_800_000);
+    expect(env.TOPO_EXPORT_TTL_MS).toBe(604_800_000);
   });
 });
 

@@ -13,18 +13,18 @@ import {
   Typography,
   Tooltip,
   InputAdornment,
-  Checkbox,
-  FormControlLabel,
-  Select,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import type { TripLogCustomFieldDef, TripLogCustomFieldType } from "@logjam/shared";
-import { CUSTOM_FIELD_TYPES, makeCustomFieldKey, coerceFieldValue } from "@logjam/shared";
+import { makeCustomFieldKey, coerceFieldValue } from "@logjam/shared";
 import type { TCanyon } from "../../canyonUtils";
 import { updateCanyon, createCanyon, updateUserPreferences } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import AddCustomFieldForm from "./AddCustomFieldForm";
+import CustomFieldInput from "./CustomFieldInput";
+import { getFieldValue as getFieldValueFor } from "./customFieldValues";
 
 const V_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
 const A_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -240,7 +240,7 @@ function CanyonDialog({
   }
 
   function getFieldValue(key: string): string {
-    return fieldValues[key] ?? "";
+    return getFieldValueFor(fieldValues, customFieldDefs, key);
   }
 
   function setFieldValue(key: string, value: string) {
@@ -272,47 +272,6 @@ function CanyonDialog({
     } finally {
       setAddingField(false);
     }
-  }
-
-  function renderCustomField(def: TripLogCustomFieldDef) {
-    const value = getFieldValue(def.key);
-
-    if (def.type === "boolean") {
-      return (
-        <FormControlLabel
-          key={def.key}
-          control={
-            <Checkbox
-              checked={value === "true"}
-              onChange={(e) => setFieldValue(def.key, String(e.target.checked))}
-              sx={{ color: "var(--theme-text-muted)" }}
-            />
-          }
-          label={def.label}
-          sx={{ color: "var(--theme-text-primary)" }}
-        />
-      );
-    }
-
-    return (
-      <TextField
-        key={def.key}
-        label={def.label}
-        value={value}
-        onChange={(e) => setFieldValue(def.key, e.target.value)}
-        type={def.type === "integer" || def.type === "float" ? "number" : def.type === "date" ? "date" : "text"}
-        size="small"
-        fullWidth
-        InputLabelProps={def.type === "date" ? { shrink: true } : undefined}
-        slotProps={
-          def.type === "integer"
-            ? { htmlInput: { step: 1 } }
-            : def.type === "float"
-              ? { htmlInput: { step: "any" } }
-              : undefined
-        }
-      />
-    );
   }
 
   return (
@@ -714,67 +673,29 @@ function CanyonDialog({
               <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Custom Fields
               </Typography>
-              {customFieldDefs.map(renderCustomField)}
+              {customFieldDefs.map((def) => (
+                <CustomFieldInput
+                  key={def.key}
+                  def={def}
+                  value={getFieldValue(def.key)}
+                  onChange={(v) => setFieldValue(def.key, v)}
+                />
+              ))}
             </Box>
           )}
 
           {/* Add custom field */}
           {showAddField ? (
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-              <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                New Custom Field
-              </Typography>
-              <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
-                This field will be created for all canyons.
-              </Typography>
-              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                <TextField
-                  label="Field Label"
-                  value={newFieldLabel}
-                  onChange={(e) => setNewFieldLabel(e.target.value)}
-                  size="small"
-                  fullWidth
-                  placeholder="e.g. Water Temp"
-                />
-                <Select
-                  value={newFieldType}
-                  onChange={(e) => setNewFieldType(e.target.value as TripLogCustomFieldType)}
-                  size="small"
-                  MenuProps={selectProps.MenuProps}
-                  sx={{
-                    ...selectSx,
-                    fontSize: "0.85em",
-                    flexShrink: 0,
-                    "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-                  }}
-                >
-                  {CUSTOM_FIELD_TYPES.map((t) => (
-                    <MenuItem key={t.value} value={t.value}>
-                      {t.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </Box>
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  size="small"
-                  onClick={handleAddField}
-                  disabled={addingField || !newFieldLabel.trim()}
-                >
-                  {addingField ? <CircularProgress size={16} /> : "Add Field"}
-                </Button>
-                <Button
-                  size="small"
-                  onClick={() => { setShowAddField(false); setNewFieldLabel(""); }}
-                  disabled={addingField}
-                  sx={{ color: "var(--theme-text-primary)" }}
-                >
-                  Cancel
-                </Button>
-              </Box>
-            </Box>
+            <AddCustomFieldForm
+              entityNoun="canyons"
+              label={newFieldLabel}
+              onLabelChange={setNewFieldLabel}
+              type={newFieldType}
+              onTypeChange={setNewFieldType}
+              onAdd={handleAddField}
+              onCancel={() => { setShowAddField(false); setNewFieldLabel(""); }}
+              adding={addingField}
+            />
           ) : (
             <Button
               size="small"

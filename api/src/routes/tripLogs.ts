@@ -8,6 +8,8 @@ import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
 import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
+import { getCanyonRole, requireCanyonOwner } from "../lib/canyonAccess";
+import { resolveUser } from "../lib/resolveUser";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -19,22 +21,15 @@ router.get(
   "/",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const canyonId = getParam(req.params.canyonId);
     const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
     if (!canyon) throw new AppError(404, "Canyon not found");
 
-    // Check access — owner or shared
-    const isOwner = canyon.ownerId === user.id;
-    if (!isOwner) {
-      const isShared = await prisma.canyonShare.findFirst({
-        where: { canyonId, sharedWithId: user.id },
-      });
-      if (!isShared) throw new AppError(403, "Access denied");
+    const role = await getCanyonRole(user.id, canyon);
+    if (role === "none") throw new AppError(403, "Access denied");
+    if (role === "shared") {
       // Trip logs are owner-private (hybrid sharing model).
       res.json([]);
       return;
@@ -66,10 +61,7 @@ router.get(
   "/:id",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
     const trip = await prisma.tripLog.findUnique({
@@ -77,13 +69,17 @@ router.get(
       include: { canyon: { select: { id: true, name: true, ownerId: true } } },
     });
     if (!trip) throw new AppError(404, "Trip log not found");
+    if (trip.canyonId !== getParam(req.params.canyonId))
+      throw new AppError(404, "Trip log not found");
 
-    // Check access via the parent canyon
-    const isOwner = trip.canyon.ownerId === user.id;
-    const isShared = await prisma.canyonShare.findFirst({
-      where: { canyonId: trip.canyonId, sharedWithId: user.id },
-    });
-    if (!isOwner && !isShared) throw new AppError(403, "Access denied");
+    // Per-trip notes and media are owner-private (hybrid sharing model) —
+    // share recipients must NOT reach them, and get 404 (not 403) so the
+    // response is no existence oracle for trip IDs (SEC-001).
+    requireCanyonOwner(
+      user.id,
+      trip.canyon,
+      new AppError(404, "Trip log not found"),
+    );
 
     const mediaRows = await prisma.media.findMany({
       where: { linkedType: "tripLog", linkedId: id },
@@ -99,10 +95,7 @@ router.post(
   "/",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const canyonId = getParam(req.params.canyonId);
     const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
@@ -135,10 +128,7 @@ router.patch(
   "/:id",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
     const trip = await prisma.tripLog.findUnique({
@@ -174,10 +164,7 @@ router.delete(
   "/:id",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
-    const user = await prisma.user.findUnique({
-      where: { cognitoId: req.user!.sub },
-    });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
     const trip = await prisma.tripLog.findUnique({
@@ -195,19 +182,23 @@ router.delete(
       select: { s3KeyDisplay: true, s3KeyThumbnail: true, fileSizeBytes: true },
     });
 
-    await prisma.$transaction([
-      prisma.media.deleteMany({
-        where: { linkedType: "tripLog", linkedId: id },
-      }),
-      prisma.tripLog.delete({ where: { id } }),
-    ]);
-
+    // S3-first (ARCH-004): blobs go before the rows, so an S3 failure leaves
+    // the rows (and therefore the keys) intact for a retried DELETE. The row
+    // deletes and the quota decrement then share one transaction so a crash
+    // between them can't leave the quota over-counted.
     const s3Keys = media.flatMap((m) =>
       [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
     );
     const totalBytes = media.reduce((sum, m) => sum + (m.fileSizeBytes ?? 0n), 0n);
     await deleteS3Keys(MEDIA_BUCKET, s3Keys);
-    await decrementStorageUsed(user.id, totalBytes);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.media.deleteMany({
+        where: { linkedType: "tripLog", linkedId: id },
+      });
+      await tx.tripLog.delete({ where: { id } });
+      await decrementStorageUsed(user.id, totalBytes, tx);
+    });
 
     res.status(204).send();
   },

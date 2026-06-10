@@ -13,8 +13,7 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { RunTaskCommand } from "@aws-sdk/client-ecs";
-import { s3, ecs } from "../services/awsClients";
+import { s3 } from "../services/awsClients";
 import {
   EXPORT_FORMAT_RULES,
   RASTER_LAYERS,
@@ -27,6 +26,8 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
+import { launchFargateTask } from "../lib/ecsRunTask";
+import { assertHasStorageQuota } from "../lib/storageQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
 
 const exportRequestSchema = z.object({
@@ -42,10 +43,10 @@ const router = Router();
 
 const env = getEnv();
 const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
-const ECS_CLUSTER = env.ECS_CLUSTER;
 const ECS_EXPORT_TASK_DEF = env.ECS_TOPO_EXPORT_TASK_DEF;
+// Empty subnet list = local dev without LocalStack ECS: skip the launch and
+// leave the export queued for manual worker runs.
 const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
-const ECS_SECURITY_GROUPS = env.ECS_SECURITY_GROUPS_LIST;
 
 // Cap to prevent users from flooding ECS with queued exports.
 const MAX_QUEUED_PER_USER = 5;
@@ -100,6 +101,14 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
 
+    // Entry gate (ARCH-012): every byte-producing flow checks storage quota at
+    // submission. The worker charges result_bytes unconditionally on
+    // completion, so without this an over-quota user could keep accruing.
+    // No pre-render size estimate exists, so this is the same soft gate the
+    // other flows use (in-flight work may still finish past quota, bounded by
+    // the per-user concurrency cap).
+    await assertHasStorageQuota(user.id);
+
     const parsed = exportRequestSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(400, parsed.error.issues[0]?.message ?? "Invalid export request");
@@ -141,8 +150,10 @@ router.post(
     const vectorStyleSnapshot = (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
 
     // Count + create in one transaction so concurrent submissions can't both
-    // pass the per-user cap.
+    // pass the per-user cap. The user-row lock closes the read-committed
+    // double-read window the same way /topo-jobs/:id/start does (ARCH-009).
     const exportJob = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
       const queued = await tx.topoExportJob.count({
         where: { userId: user.id, status: { in: ["queued", "running"] } },
       });
@@ -162,27 +173,29 @@ router.post(
       });
     });
 
+    // launchFargateTask (Design L3) throws on placement failure (`failures[]`
+    // populated / no task) as well as on SDK errors, so a launch problem can
+    // never strand the export in `queued` (ARCH-002).
     if (ECS_SUBNETS.length) {
       try {
-        await ecs.send(new RunTaskCommand({
-          cluster: ECS_CLUSTER,
+        const taskArn = await launchFargateTask({
           taskDefinition: ECS_EXPORT_TASK_DEF,
-          launchType: "FARGATE",
-          networkConfiguration: {
-            awsvpcConfiguration: {
-              subnets: ECS_SUBNETS,
-              securityGroups: ECS_SECURITY_GROUPS,
-              assignPublicIp: "ENABLED",
-            },
-          },
-          overrides: {
-            containerOverrides: [{
-              name: "topo-export-worker",
-              environment: [{ name: "EXPORT_JOB_ID", value: exportJob.id }],
-            }],
-          },
-        }));
-      } catch {
+          containerName: "topo-export-worker",
+          environment: [{ name: "EXPORT_JOB_ID", value: exportJob.id }],
+        });
+        // Persist the ARN (Design L2) so the reaper can StopTask it.
+        await prisma.topoExportJob.update({
+          where: { id: exportJob.id },
+          data: { ecsTaskArn: taskArn },
+        });
+      } catch (launchErr) {
+        console.error(
+          JSON.stringify({
+            event: "topo_export_runtask_failed",
+            exportJobId: exportJob.id,
+            reason: String(launchErr),
+          }),
+        );
         await prisma.topoExportJob.update({
           where: { id: exportJob.id },
           data: { status: "failed", errorMessage: "Failed to launch export task." },

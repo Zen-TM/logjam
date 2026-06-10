@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -175,8 +174,14 @@ model TopoJob {
   // stale-stuck job from one that simply hasn't been picked up yet, so the
   // reaper can apply a separate (longer) timeout to actively-running jobs.
   startedAt     DateTime? @map("started_at")
-  // Number of times the job has been launched. Bounds reaper re-launch attempts.
+  // Number of times /start has launched this job (currently at most 1 — the
+  // status guard means a job can never re-enter /start; kept for forensics
+  // and a possible future bounded re-launch).
   attemptCount  Int      @default(0) @map("attempt_count")
+  // ARN of the Fargate task launched for this job (Design L2). Lets the
+  // reaper and DELETE handler issue a best-effort ECS StopTask instead of
+  // letting an orphaned task run to completion. Null until RunTask succeeds.
+  ecsTaskArn    String?  @map("ecs_task_arn")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -208,6 +213,12 @@ model TopoExportJob {
   resultKey           String?   @map("result_key")
   resultBytes         BigInt?   @map("result_bytes")
   errorMessage        String?   @map("error_message")
+  // Set when the export worker transitions the row to "running" — anchors the
+  // reaper's running-timeout (mirrors topo_jobs.started_at).
+  startedAt           DateTime? @map("started_at")
+  // ARN of the Fargate task launched for this export (Design L2) — see
+  // TopoJob.ecsTaskArn.
+  ecsTaskArn          String?   @map("ecs_task_arn")
   createdAt           DateTime  @default(now()) @map("created_at")
   completedAt         DateTime? @map("completed_at")
   user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -3,11 +3,11 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
+import { StopTaskCommand } from "@aws-sdk/client-ecs";
 import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName, TopoLayerFormat } from "../constants/topoLayers";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import { RunTaskCommand } from "@aws-sdk/client-ecs";
 import { s3, ecs } from "../services/awsClients";
 import {
   parseZipCentralDirectory,
@@ -18,6 +18,7 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
+import { launchFargateTask } from "../lib/ecsRunTask";
 import { assertCanSubmit } from "../lib/tileQuota";
 import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
 import { deleteS3Prefix } from "../lib/s3Cleanup";
@@ -36,10 +37,10 @@ const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
 // bounds wasted S3 transfer/storage.
 const MAX_INPUT_ZIP_COMPRESSED_BYTES = 25 * 1024 * 1024 * 1024; // 25 GB
 const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
-const ECS_CLUSTER = env.ECS_CLUSTER;
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
+// Empty subnet list = local dev without LocalStack ECS: skip the launch and
+// leave the job pending for manual worker runs.
 const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
-const ECS_SECURITY_GROUPS = env.ECS_SECURITY_GROUPS_LIST;
 
 // POST /topo-jobs — create job + return presigned S3 upload URL
 router.post(
@@ -167,64 +168,57 @@ router.post(
       throw e;
     }
 
-    // Authoritative quota check against server-counted tiles from the actual ZIP.
-    // The job is still "uploading" so it won't appear in the weekly aggregate.
-    await assertCanSubmit(user, verifiedTileCount);
-    await assertHasStorageQuota(user.id);
-
-    await prisma.topoJob.update({
-      where: { id: jobId },
-      data: {
-        status: "pending",
-        attemptCount: { increment: 1 },
-        ...(verifiedTileCount !== null
-          ? {
-              tileCount: verifiedTileCount,
-              estimatedSeconds: Math.round(verifiedTileCount * 8.5) * 60,
-            }
-          : {}),
-      },
+    // Authoritative quota check against server-counted tiles from the actual
+    // ZIP, serialised per user (ARCH-009): the user-row lock prevents two
+    // concurrent /start calls from both reading the same weekly aggregate and
+    // both passing. The job is still "uploading" so it won't appear in the
+    // aggregate. RunTask stays outside the transaction (no AWS calls inside
+    // DB transactions); the earlier checks above remain advisory pre-checks.
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
+      await assertCanSubmit(user, verifiedTileCount, tx);
+      await assertHasStorageQuota(user.id, 0n, tx);
+      const flipped = await tx.topoJob.updateMany({
+        // Status guard doubles as a double-/start race close: a concurrent
+        // second /start finds 0 rows and 400s instead of double-launching.
+        where: { id: jobId, status: "uploading" },
+        data: {
+          status: "pending",
+          attemptCount: { increment: 1 },
+          ...(verifiedTileCount !== null
+            ? {
+                tileCount: verifiedTileCount,
+                estimatedSeconds: Math.round(verifiedTileCount * 8.5) * 60,
+              }
+            : {}),
+        },
+      });
+      if (flipped.count === 0) {
+        throw new AppError(400, "Job is not awaiting upload");
+      }
     });
 
     // ECS RunTask owns lifecycle; status column owns retry semantics.
+    // launchFargateTask (Design L3) throws on placement failure (`failures[]`
+    // populated / no task) as well as on SDK errors, so a launch problem can
+    // never strand the job in `pending` (ARCH-002a).
     if (ECS_SUBNETS.length) {
-      let runTaskFailures: { reason?: string; detail?: string }[] = [];
       try {
-        const result = await ecs.send(new RunTaskCommand({
-          cluster: ECS_CLUSTER,
+        const taskArn = await launchFargateTask({
           taskDefinition: ECS_TASK_DEFINITION,
-          launchType: "FARGATE",
-          networkConfiguration: {
-            awsvpcConfiguration: {
-              subnets: ECS_SUBNETS,
-              securityGroups: ECS_SECURITY_GROUPS,
-              assignPublicIp: "ENABLED",
-            },
-          },
-          overrides: {
-            containerOverrides: [{
-              name: "topo-worker",
-              environment: [{ name: "JOB_ID", value: jobId }],
-            }],
-          },
-        }));
-        // RunTask returns HTTP 200 with a populated `failures[]` (and no
-        // `tasks`) when the task cannot be placed — capacity, ENI, subnet or
-        // image-pull issues — without throwing. The try/catch alone would miss
-        // this and strand the job in `pending` forever (ARCH-002a).
-        runTaskFailures = result.failures ?? [];
-        if (runTaskFailures.length > 0 || (result.tasks?.length ?? 0) === 0) {
-          throw new Error(
-            `RunTask placement failed: ${runTaskFailures
-              .map((f) => f.reason ?? "unknown")
-              .join(", ") || "no task started"}`,
-          );
-        }
+          containerName: "topo-worker",
+          environment: [{ name: "JOB_ID", value: jobId }],
+        });
+        // Persist the ARN (Design L2) so the reaper / DELETE can StopTask it.
+        await prisma.topoJob.update({
+          where: { id: jobId },
+          data: { ecsTaskArn: taskArn },
+        });
       } catch (launchErr) {
         // Do not leak the raw AWS error to the client or the job row; log the
         // reason server-side (no canyon coords/names involved here).
         console.error(
-          JSON.stringify({ event: "topo_runtask_failed", jobId, reasons: runTaskFailures.map((f) => f.reason) }),
+          JSON.stringify({ event: "topo_runtask_failed", jobId, reason: String(launchErr) }),
         );
         await prisma.topoJob.update({
           where: { id: jobId },
@@ -364,7 +358,10 @@ router.get(
 // (Stage 2) Per-job download URLs are gone. All downloads now go through
 // POST /topo-exports → the export worker. See routes/topoExports.ts.
 
-// DELETE /topo-jobs/:id — delete job and all S3 objects
+// DELETE /topo-jobs/:id — delete job and all S3 objects. In-flight jobs are
+// cancel-then-purged (Design L5): the row is force-failed (status-guarded)
+// so the worker can't complete it mid-delete, the Fargate task is stopped
+// best-effort, and only then are the prefixes purged and the row removed.
 router.delete(
   "/:id",
   requireAuth,
@@ -374,6 +371,59 @@ router.delete(
     const job = await prisma.topoJob.findUnique({ where: { id: jobId } });
     if (!job) throw new AppError(404, "Job not found");
     if (job.userId !== user.id) throw new AppError(403, "Access denied");
+
+    // A running export is actively reading this job's COGs from
+    // outputs/{jobId}/ — refuse until it finishes (no FK on sourceJobIds, so
+    // this is the only referential guard).
+    const runningExports = await prisma.topoExportJob.count({
+      where: { status: "running", sourceJobIds: { has: jobId } },
+    });
+    if (runningExports > 0) {
+      throw new AppError(
+        409,
+        "An export of this job is currently running. Try again when it finishes.",
+      );
+    }
+
+    if (job.status === "pending" || job.status === "processing") {
+      // Cancel: status-guarded flip so a worker that completes between the
+      // ownership read and this write wins (its storage charge then matches
+      // the fresh outputBytes re-read below). After the flip, the worker's
+      // guarded terminal write (Design L1) matches 0 rows and self-cleans, so
+      // a missed StopTask only costs Fargate time.
+      await prisma.topoJob.updateMany({
+        where: { id: jobId, status: { in: ["pending", "processing"] } },
+        data: { status: "failed", errorMessage: "Canceled by user." },
+      });
+      if (job.ecsTaskArn) {
+        try {
+          await ecs.send(
+            new StopTaskCommand({
+              cluster: env.ECS_CLUSTER,
+              task: job.ecsTaskArn,
+              reason: "Job deleted by user",
+            }),
+          );
+        } catch (stopErr) {
+          console.error(
+            JSON.stringify({
+              event: "topo_job_delete_stop_task_failed",
+              jobId,
+              reason: String(stopErr),
+            }),
+          );
+        }
+      }
+    }
+
+    // Re-read outputBytes: the worker may have completed between the
+    // ownership read and the cancel flip — the decrement must match what was
+    // actually charged.
+    const fresh = await prisma.topoJob.findUnique({
+      where: { id: jobId },
+      select: { outputBytes: true },
+    });
+    if (!fresh) throw new AppError(404, "Job not found");
 
     // S3-first (ARCH-004): delete the objects before the DB row and the quota
     // decrement. deleteS3Prefix throws on failure, so if any prefix fails the
@@ -385,8 +435,21 @@ router.delete(
         deleteS3Prefix(TOPO_BUCKET, prefix),
       ),
     );
-    await prisma.topoJob.delete({ where: { id: jobId } });
-    await decrementStorageUsed(job.userId, job.outputBytes ?? 0n);
+
+    // One transaction (Design Q): queued exports referencing this job are
+    // force-failed with a clear message (their COG source is about to
+    // disappear), and the row delete commits with the quota decrement.
+    await prisma.$transaction(async (tx) => {
+      await tx.topoExportJob.updateMany({
+        where: { status: "queued", sourceJobIds: { has: jobId } },
+        data: {
+          status: "failed",
+          errorMessage: "A source topo job was deleted before the export started.",
+        },
+      });
+      await tx.topoJob.delete({ where: { id: jobId } });
+      await decrementStorageUsed(job.userId, fresh.outputBytes ?? 0n, tx);
+    });
 
     res.status(204).send();
   },

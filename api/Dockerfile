@@ -21,15 +21,16 @@ RUN cd /shared && npm ci && npm run build
 WORKDIR /app
 
 COPY api/package*.json ./
+COPY api/prisma.config.ts ./
 COPY api/prisma ./prisma/
 
 RUN npm ci
+RUN npx prisma generate
 
 COPY api/tsconfig.json ./
 COPY api/src ./src/
 
 RUN npm run build
-RUN npx prisma generate
 
 FROM node:20-slim AS production
 
@@ -51,6 +52,7 @@ COPY --from=builder /shared/dist /shared/dist/
 WORKDIR /app
 
 COPY api/package*.json ./
+COPY api/prisma.config.ts ./
 COPY api/prisma ./prisma/
 
 RUN npm ci --only=production

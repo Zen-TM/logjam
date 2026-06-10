@@ -417,12 +417,16 @@ export function useCurrentUser(enabled: boolean) {
     if (!enabled) return;
     fetchCurrentUser()
       .then(setCurrentUser)
+      // Best-effort: background refresh of the cached current user; callers
+      // that need a fresh value already surface their own load errors.
       .catch(console.error);
   }, [enabled, fetchCount]);
 
   const refetchCurrentUser = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { currentUser, refetchCurrentUser };
+  // Synchronously replace the cached user (e.g. with the row returned by a
+  // consent PATCH) so gates keyed on user fields update without a refetch gap.
+  return { currentUser, refetchCurrentUser, applyCurrentUser: setCurrentUser };
 }
 
 export function updateCurrentUserThemeScheme(
@@ -633,9 +637,15 @@ export async function uploadMedia(params: {
     filename: params.file.name,
     mediaType: params.mediaType,
   };
+  // Declared sizes are signed into the presigned PUT's Content-Length, so the
+  // uploaded bytes must match what's declared here (server caps per category).
   const presigned = await apiFetch<PresignMediaResponse>("/media/presign", {
     method: "POST",
-    body: meta,
+    body: {
+      ...meta,
+      sizeBytes: params.file.size,
+      thumbnailSizeBytes: params.thumbnail ? params.thumbnail.size : undefined,
+    },
   });
   await putToPresignedUrl(presigned.displayUploadUrl, params.file, params.mediaType);
   if (presigned.thumbnailUploadUrl && params.thumbnail) {
