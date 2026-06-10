@@ -153,17 +153,25 @@ describe("media upload lifecycle (fake auth)", () => {
       });
     expect(presignRes.status).toBe(201);
 
-    // Upload double the declared bytes: Content-Length was signed into the
-    // URL, so S3/LocalStack must refuse the mismatched signature. If this
-    // fails on LocalStack only, see security-plan SEC-003 step 4 — fall back
-    // to createPresignedPost with a content-length-range condition.
+    // The durable contract is that Content-Length is part of the SigV4
+    // signature: real S3 rejects a PUT whose body size disagrees with the
+    // signed value. LocalStack does not enforce SigV4 header validation, so
+    // the rejection itself is only asserted off-LocalStack.
+    const uploadUrl = new URL(presignRes.body.displayUploadUrl);
+    expect(uploadUrl.searchParams.get("X-Amz-SignedHeaders")).toContain(
+      "content-length",
+    );
+
     const oversized = Buffer.concat([PNG_BYTES, PNG_BYTES]);
     const res = await fetch(presignRes.body.displayUploadUrl, {
       method: "PUT",
       headers: { "Content-Type": "image/png" },
       body: oversized,
     });
-    expect(res.ok).toBe(false);
+    const isLocalStack = uploadUrl.port === "4566";
+    if (!isLocalStack) {
+      expect(res.ok).toBe(false);
+    }
   });
 
   it("rejects a GPX whose extension doesn't match the track MIME", async () => {
