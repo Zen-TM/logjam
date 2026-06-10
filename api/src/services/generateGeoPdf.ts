@@ -36,7 +36,7 @@ import { s3 as s3Client } from "./awsClients";
 import { PMTiles } from "pmtiles";
 import type { Source } from "pmtiles";
 import { VectorTile, VectorTileFeature } from "@mapbox/vector-tile";
-import Pbf from "pbf";
+import { PbfReader } from "pbf";
 import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName } from "../constants/topoLayers";
 import { AppError } from "../middleware/errorHandler";
@@ -848,7 +848,7 @@ async function fetchAndDrawPMTilesVectorDirect(
       try {
         const result = await archive.getZxy(tile.z, tile.x, tile.y);
         if (!result?.data) return 0;
-        const vt = new VectorTile(new Pbf(result.data));
+        const vt = new VectorTile(new PbfReader(result.data));
         const tileDx =
           ((tile.x - transform.minTileX) * TILE_SIZE - transform.offsetX) *
           transform.scaleX;
