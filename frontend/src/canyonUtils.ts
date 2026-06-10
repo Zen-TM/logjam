@@ -422,7 +422,9 @@ export function useCurrentUser(enabled: boolean) {
 
   const refetchCurrentUser = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { currentUser, refetchCurrentUser };
+  // Synchronously replace the cached user (e.g. with the row returned by a
+  // consent PATCH) so gates keyed on user fields update without a refetch gap.
+  return { currentUser, refetchCurrentUser, applyCurrentUser: setCurrentUser };
 }
 
 export function updateCurrentUserThemeScheme(

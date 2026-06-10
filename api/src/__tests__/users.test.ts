@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
+import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 //
@@ -69,6 +70,34 @@ describe("users routes (fake auth = alice)", () => {
       .send({ notifications: { topoEmail: original } });
     expect(restore.status).toBe(200);
     expect(restore.body.uiPreferences.notifications.topoEmail).toBe(original);
+  });
+
+  // Consent boundary (PRIV-002): the server is the integrity half of the
+  // re-consent mechanism — it must reject any consentVersion other than the
+  // current constant, and must expose consentVersion so the client gate
+  // (frontend needsReconsent/ConsentGate) can fire after a version bump.
+  it("PATCH /users/me rejects a consentVersion that is not the current constant", async () => {
+    const res = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ consentVersion: "2020-01-01" });
+    expect(res.status).toBe(400);
+  });
+
+  it("PATCH /users/me records the current consent version and sets consentedAt", async () => {
+    const res = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ consentVersion: CURRENT_CONSENT_VERSION });
+    expect(res.status).toBe(200);
+    expect(res.body.consentVersion).toBe(CURRENT_CONSENT_VERSION);
+    expect(res.body.consentedAt).toBeTruthy();
+  });
+
+  it("GET /users/me echoes consentVersion so the client re-consent gate can fire", async () => {
+    const res = await request(API_URL).get("/users/me").set(AUTH);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("consentVersion");
   });
 
   it("GET /users/me/export returns the caller's data with bigint fields as numbers", async () => {
