@@ -7,8 +7,7 @@ import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName, TopoLayerFormat } from "../constants/topoLayers";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import { RunTaskCommand } from "@aws-sdk/client-ecs";
-import { s3, ecs } from "../services/awsClients";
+import { s3 } from "../services/awsClients";
 import {
   parseZipCentralDirectory,
   classifyElvisEntries,
@@ -18,6 +17,7 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
+import { launchFargateTask } from "../lib/ecsRunTask";
 import { assertCanSubmit } from "../lib/tileQuota";
 import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
 import { deleteS3Prefix } from "../lib/s3Cleanup";
@@ -36,10 +36,10 @@ const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
 // bounds wasted S3 transfer/storage.
 const MAX_INPUT_ZIP_COMPRESSED_BYTES = 25 * 1024 * 1024 * 1024; // 25 GB
 const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
-const ECS_CLUSTER = env.ECS_CLUSTER;
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
+// Empty subnet list = local dev without LocalStack ECS: skip the launch and
+// leave the job pending for manual worker runs.
 const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
-const ECS_SECURITY_GROUPS = env.ECS_SECURITY_GROUPS_LIST;
 
 // POST /topo-jobs — create job + return presigned S3 upload URL
 router.post(
@@ -187,44 +187,26 @@ router.post(
     });
 
     // ECS RunTask owns lifecycle; status column owns retry semantics.
+    // launchFargateTask (Design L3) throws on placement failure (`failures[]`
+    // populated / no task) as well as on SDK errors, so a launch problem can
+    // never strand the job in `pending` (ARCH-002a).
     if (ECS_SUBNETS.length) {
-      let runTaskFailures: { reason?: string; detail?: string }[] = [];
       try {
-        const result = await ecs.send(new RunTaskCommand({
-          cluster: ECS_CLUSTER,
+        const taskArn = await launchFargateTask({
           taskDefinition: ECS_TASK_DEFINITION,
-          launchType: "FARGATE",
-          networkConfiguration: {
-            awsvpcConfiguration: {
-              subnets: ECS_SUBNETS,
-              securityGroups: ECS_SECURITY_GROUPS,
-              assignPublicIp: "ENABLED",
-            },
-          },
-          overrides: {
-            containerOverrides: [{
-              name: "topo-worker",
-              environment: [{ name: "JOB_ID", value: jobId }],
-            }],
-          },
-        }));
-        // RunTask returns HTTP 200 with a populated `failures[]` (and no
-        // `tasks`) when the task cannot be placed — capacity, ENI, subnet or
-        // image-pull issues — without throwing. The try/catch alone would miss
-        // this and strand the job in `pending` forever (ARCH-002a).
-        runTaskFailures = result.failures ?? [];
-        if (runTaskFailures.length > 0 || (result.tasks?.length ?? 0) === 0) {
-          throw new Error(
-            `RunTask placement failed: ${runTaskFailures
-              .map((f) => f.reason ?? "unknown")
-              .join(", ") || "no task started"}`,
-          );
-        }
+          containerName: "topo-worker",
+          environment: [{ name: "JOB_ID", value: jobId }],
+        });
+        // Persist the ARN (Design L2) so the reaper / DELETE can StopTask it.
+        await prisma.topoJob.update({
+          where: { id: jobId },
+          data: { ecsTaskArn: taskArn },
+        });
       } catch (launchErr) {
         // Do not leak the raw AWS error to the client or the job row; log the
         // reason server-side (no canyon coords/names involved here).
         console.error(
-          JSON.stringify({ event: "topo_runtask_failed", jobId, reasons: runTaskFailures.map((f) => f.reason) }),
+          JSON.stringify({ event: "topo_runtask_failed", jobId, reason: String(launchErr) }),
         );
         await prisma.topoJob.update({
           where: { id: jobId },

@@ -27,6 +27,7 @@ import logging
 import os
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -86,19 +87,61 @@ def get_source_jobs(conn, source_job_ids: list[str]) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def update_status(conn, export_job_id: str, status: str, **kwargs):
+def update_status(conn, export_job_id: str, status: str, storage_delta_bytes: int = 0,
+                  expected_status: Optional[str] = None, **kwargs) -> int:
+    """Update the export row's status and optional extra columns. Returns rows
+    updated.
+
+    If storage_delta_bytes is non-zero, the owner's storage_used_bytes is
+    incremented in the SAME transaction/commit as the status update — the
+    two-commit window worker.py already closed (ARCH-003): a crash between a
+    `completed` commit and a separate storage commit would leave a
+    downloadable export whose bytes were never quota-accounted.
+
+    With expected_status the UPDATE is guarded (`AND status = %s`), making
+    transitions write-once (Design L1): a reaped/deleted export matches 0
+    rows, the storage charge is SKIPPED, and the caller must self-clean and
+    skip notification/email.
+    """
     set_clauses = ["status = %s"]
     values: list = [status]
     for col, val in kwargs.items():
         set_clauses.append(f"{col} = %s")
         values.append(val)
     values.append(export_job_id)
+    where = "WHERE id = %s"
+    if expected_status is not None:
+        where += " AND status = %s"
+        values.append(expected_status)
     with conn.cursor() as cur:
         cur.execute(
-            f"UPDATE topo_export_jobs SET {', '.join(set_clauses)} WHERE id = %s",
+            f"UPDATE topo_export_jobs SET {', '.join(set_clauses)} {where}",
             values,
         )
+        updated = cur.rowcount
+        if updated and storage_delta_bytes:
+            cur.execute(
+                "UPDATE users SET storage_used_bytes = storage_used_bytes + %s"
+                " WHERE id = (SELECT user_id FROM topo_export_jobs WHERE id = %s)",
+                (storage_delta_bytes, export_job_id),
+            )
     conn.commit()
+    return updated
+
+
+def delete_s3_prefix_best_effort(prefix: str):
+    """Best-effort delete of every object under prefix (reaped-export
+    self-clean). Never raises — the objects are unreferenced either way and
+    the account-delete prefix sweep is the backstop."""
+    try:
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=BUCKET, Prefix=prefix):
+            keys = [{"Key": obj["Key"]} for obj in page.get("Contents", [])]
+            if keys:
+                s3.delete_objects(Bucket=BUCKET, Delete={"Objects": keys})
+        log.info(f"Cleaned up s3://{BUCKET}/{prefix}")
+    except Exception as e:
+        log.warning(f"Best-effort cleanup of {prefix} failed: {e}")
 
 
 def get_user_email(conn, user_id: str) -> Optional[str]:
@@ -106,16 +149,6 @@ def get_user_email(conn, user_id: str) -> Optional[str]:
         cur.execute("SELECT email FROM users WHERE id = %s", (user_id,))
         row = cur.fetchone()
     return row["email"] if row else None
-
-
-def increment_user_storage(conn, user_id: str, delta_bytes: int):
-    """Atomically add delta_bytes to the user's storage_used_bytes."""
-    with conn.cursor() as cur:
-        cur.execute(
-            "UPDATE users SET storage_used_bytes = storage_used_bytes + %s WHERE id = %s",
-            (delta_bytes, user_id),
-        )
-    conn.commit()
 
 
 def create_notification(conn, user_id: str, notif_type: str, payload: dict):
@@ -179,7 +212,17 @@ def main():
         log.error(f"Could not load export job: {e}")
         sys.exit(1)
 
-    update_status(conn, EXPORT_JOB_ID, "running")
+    # Guarded on `queued` (Design L1): if the export was reaped or deleted
+    # while the task spun up, claim nothing and exit cleanly. started_at
+    # anchors the reaper's running-timeout (mirrors topo_jobs.started_at).
+    claimed = update_status(conn, EXPORT_JOB_ID, "running",
+                            expected_status="queued",
+                            started_at=datetime.now(timezone.utc))
+    if claimed == 0:
+        log.warning(f"Export {EXPORT_JOB_ID} is no longer queued (reaped or "
+                    "deleted) — exiting without rendering.")
+        conn.close()
+        return
 
     error_msg: Optional[str] = None
     result_key: Optional[str] = None
@@ -253,28 +296,37 @@ def main():
         # Keep raw exception out of the user-facing error message.
         error_msg = "Export failed. Contact support with export ID " + EXPORT_JOB_ID
 
+    # Terminal write guarded on `running` (Design L1). On success the storage
+    # charge shares the same commit as the status flip (ARCH-003) — never a
+    # separate commit.
     if error_msg or result_key is None:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE topo_export_jobs "
-                "SET status = 'failed', error_message = %s, completed_at = NOW() "
-                "WHERE id = %s",
-                (error_msg or "Unknown failure", EXPORT_JOB_ID),
-            )
-        conn.commit()
+        updated = update_status(
+            conn, EXPORT_JOB_ID, "failed",
+            expected_status="running",
+            error_message=error_msg or "Unknown failure",
+            completed_at=datetime.now(timezone.utc),
+        )
         ok = False
     else:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE topo_export_jobs "
-                "SET status = 'completed', result_key = %s, result_bytes = %s, "
-                "    completed_at = NOW() "
-                "WHERE id = %s",
-                (result_key, result_bytes, EXPORT_JOB_ID),
-            )
-        conn.commit()
-        increment_user_storage(conn, export_job["user_id"], result_bytes)
+        updated = update_status(
+            conn, EXPORT_JOB_ID, "completed",
+            expected_status="running",
+            storage_delta_bytes=result_bytes,
+            result_key=result_key,
+            result_bytes=result_bytes,
+            completed_at=datetime.now(timezone.utc),
+        )
         ok = True
+
+    if updated == 0:
+        # Export was reaped or deleted mid-render: nothing references the
+        # uploaded artefact and no storage was charged — self-clean and skip
+        # notification/email. Exit 0 either way (the outcome is moot).
+        log.warning(f"Export {EXPORT_JOB_ID} was reaped or deleted mid-run — "
+                    "cleaning up and skipping notification/email.")
+        delete_s3_prefix_best_effort(f"exports/{EXPORT_JOB_ID}/")
+        conn.close()
+        return
 
     create_notification(
         conn, export_job["user_id"], "topo_export_complete",

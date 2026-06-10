@@ -20,6 +20,12 @@ except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
     _IMPORT_ERR = _exc
 
+# These tests do real array maths — a MagicMock numpy (lean host) would only
+# produce nonsense. Same convention as the is_stubbed("osgeo") GDAL skips.
+if _IMPORT_OK and _native_stub.is_stubbed("numpy"):
+    _IMPORT_OK = False
+    _IMPORT_ERR = "numpy is stubbed on this host (real array maths required)"
+
 
 @unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestRenderHillshade(unittest.TestCase):
