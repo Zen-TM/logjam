@@ -8,6 +8,7 @@ import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
 import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
+import { requireCanyonAccess } from "../lib/canyonAccess";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -125,12 +126,9 @@ router.post(
     const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
     if (!canyon) throw new AppError(404, "Canyon not found");
 
-    // Check if the user has access to the canyon
-    const isOwner = canyon.ownerId === user.id;
-    const isShared = await prisma.canyonShare.findFirst({
-      where: { canyonId, sharedWithId: user.id },
-    });
-    if (!isOwner && !isShared) throw new AppError(403, "Access denied");
+    // Owner and share recipients may copy (hybrid model: the canyon record
+    // itself is visible to sharees).
+    await requireCanyonAccess(user.id, canyon);
 
     // Create a copy of the canyon.
     // Drop ropeWikiId + ropeWikiSnapshot: @@unique([ownerId, ropeWikiId]) would
@@ -187,13 +185,11 @@ router.get(
     });
     if (!stub) throw new AppError(404, "Canyon not found");
 
-    const isOwner = stub.ownerId === user.id;
-    if (!isOwner) {
-      const share = await prisma.canyonShare.findFirst({
-        where: { canyonId, sharedWithId: user.id },
-      });
-      if (!share) throw new AppError(403, "Access denied");
-    }
+    const role = await requireCanyonAccess(user.id, {
+      id: canyonId,
+      ownerId: stub.ownerId,
+    });
+    const isOwner = role === "owner";
 
     // Media is polymorphic with no FK relation, so it's fetched by
     // (linkedType, linkedId) and presigned here. Owners also get trip logs and

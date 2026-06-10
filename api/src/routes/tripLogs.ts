@@ -8,6 +8,7 @@ import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
 import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
+import { getCanyonRole, requireCanyonOwner } from "../lib/canyonAccess";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -28,13 +29,9 @@ router.get(
     const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
     if (!canyon) throw new AppError(404, "Canyon not found");
 
-    // Check access — owner or shared
-    const isOwner = canyon.ownerId === user.id;
-    if (!isOwner) {
-      const isShared = await prisma.canyonShare.findFirst({
-        where: { canyonId, sharedWithId: user.id },
-      });
-      if (!isShared) throw new AppError(403, "Access denied");
+    const role = await getCanyonRole(user.id, canyon);
+    if (role === "none") throw new AppError(403, "Access denied");
+    if (role === "shared") {
       // Trip logs are owner-private (hybrid sharing model).
       res.json([]);
       return;
@@ -77,13 +74,17 @@ router.get(
       include: { canyon: { select: { id: true, name: true, ownerId: true } } },
     });
     if (!trip) throw new AppError(404, "Trip log not found");
+    if (trip.canyonId !== getParam(req.params.canyonId))
+      throw new AppError(404, "Trip log not found");
 
-    // Check access via the parent canyon
-    const isOwner = trip.canyon.ownerId === user.id;
-    const isShared = await prisma.canyonShare.findFirst({
-      where: { canyonId: trip.canyonId, sharedWithId: user.id },
-    });
-    if (!isOwner && !isShared) throw new AppError(403, "Access denied");
+    // Per-trip notes and media are owner-private (hybrid sharing model) —
+    // share recipients must NOT reach them, and get 404 (not 403) so the
+    // response is no existence oracle for trip IDs (SEC-001).
+    requireCanyonOwner(
+      user.id,
+      trip.canyon,
+      new AppError(404, "Trip log not found"),
+    );
 
     const mediaRows = await prisma.media.findMany({
       where: { linkedType: "tripLog", linkedId: id },
