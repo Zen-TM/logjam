@@ -417,6 +417,8 @@ export function useCurrentUser(enabled: boolean) {
     if (!enabled) return;
     fetchCurrentUser()
       .then(setCurrentUser)
+      // Best-effort: background refresh of the cached current user; callers
+      // that need a fresh value already surface their own load errors.
       .catch(console.error);
   }, [enabled, fetchCount]);
 

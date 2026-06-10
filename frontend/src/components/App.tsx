@@ -346,6 +346,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
 
   useEffect(() => {
     if (!authenticated) return;
+    // Best-effort: hydration prefetch for the map/sidebar; UI degrades
+    // gracefully (panels show their own empty/error states) if this fails.
     hydrateFromUser().catch(console.error);
     fetchCurrentUser()
       .then((user) => {
@@ -386,6 +388,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         );
         if (resumable.length) setActiveTopoJobs(resumable);
       })
+      // Best-effort: if this fails, in-progress jobs simply won't resume
+      // polling until the next page load — non-critical background refresh.
       .catch((err) => { console.error(err); });
   }, [authenticated]);
 
@@ -407,6 +411,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           return next;
         });
       })
+      // Best-effort: called again on the next poll tick / job completion,
+      // so a transient failure here is non-critical.
       .catch((err) => { console.error(err); });
   }, []);
 
