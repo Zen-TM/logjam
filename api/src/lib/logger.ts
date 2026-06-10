@@ -30,6 +30,20 @@ export const redactPaths = [
   'req.headers.cookie',
 ];
 
+/**
+ * Strip tile URLs and z/x/y tile-index triples from a log message. A web-
+ * mercator tile index at the zooms we render (up to z18) localises a map area
+ * to ~150 m — an approximate coordinate, which the CLAUDE.md privacy rule
+ * forbids in logs. Pino redact paths cannot help with pre-interpolated
+ * strings (e.g. fetch errors embedding the request URL), so coordinate-
+ * bearing fragments are removed before the message is logged at all.
+ */
+export function redactTilePathPatterns(message: string): string {
+  return message
+    .replace(/\bhttps?:\/\/\S+/gi, "[redacted-url]")
+    .replace(/\b\d+\/\d+\/\d+\b/g, "[redacted-tile]");
+}
+
 export const logger = pino({
   level: env.LOG_LEVEL,
   redact: {
