@@ -7,7 +7,7 @@ vi.mock("../services/prisma", () => ({
 }));
 
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { AppError, errorHandler } from "../middleware/errorHandler";
 import {
   getCanyonRole,
   requireCanyonAccess,
@@ -90,5 +90,88 @@ describe("requireCanyonOwner", () => {
     expect(() => requireCanyonOwner("friend-1", CANYON, denial)).toThrow(
       denial,
     );
+  });
+});
+
+// PRIV-001 promise anchor. privacy.html ("How sharing works") commits:
+// "Per-trip notes, per-trip media, and your trip-log history remain private
+// to you." These tests pin the exact wire-shape a share recipient receives
+// from the single-trip GET deny path — if that policy wording ever changes,
+// these tests are the deliberate stop to revisit the boundary.
+describe("sharee single-trip denial (privacy.html: per-trip data 'remain private to you')", () => {
+  it("sharee cannot read per-trip notes — denial body has no owner-private fields or presigned-URL markers", () => {
+    // A share recipient ("shared" role, not owner) hitting
+    // GET /canyons/:canyonId/trips/:id is denied by requireCanyonOwner with
+    // the 404 anti-oracle denial (routes/tripLogs.ts).
+    let denial: AppError | undefined;
+    try {
+      requireCanyonOwner(
+        "friend-1",
+        CANYON,
+        new AppError(404, "Trip log not found"),
+      );
+    } catch (e) {
+      denial = e as AppError;
+    }
+    expect(denial).toBeInstanceOf(AppError);
+    expect(denial!.statusCode).toBe(404);
+
+    // Run the denial through the real errorHandler to capture the exact JSON
+    // body the sharee would receive on the wire.
+    let status = 0;
+    let body: unknown;
+    const res = {
+      status(code: number) {
+        status = code;
+        return this;
+      },
+      json(payload: unknown) {
+        body = payload;
+      },
+    };
+    const req = { log: { warn: vi.fn(), error: vi.fn() } };
+    errorHandler(denial!, req as never, res as never, (() => {}) as never);
+
+    expect(status).toBe(404);
+    const wire = JSON.stringify(body);
+    // None of the owner-private trip-log field names or presigned-media
+    // markers may appear anywhere in the response body.
+    for (const marker of [
+      "notes",
+      "customFields",
+      "media",
+      "date",
+      "X-Amz-",
+      "url",
+    ]) {
+      expect(wire).not.toContain(marker);
+    }
+  });
+
+  it("a stranger gets the identical denial as a sharee — no role oracle on owner-private trips", () => {
+    const shareeDenial = (() => {
+      try {
+        requireCanyonOwner(
+          "friend-1",
+          CANYON,
+          new AppError(404, "Trip log not found"),
+        );
+      } catch (e) {
+        return e as AppError;
+      }
+    })();
+    const strangerDenial = (() => {
+      try {
+        requireCanyonOwner(
+          "stranger-1",
+          CANYON,
+          new AppError(404, "Trip log not found"),
+        );
+      } catch (e) {
+        return e as AppError;
+      }
+    })();
+    expect(shareeDenial!.statusCode).toBe(strangerDenial!.statusCode);
+    expect(shareeDenial!.message).toBe(strangerDenial!.message);
   });
 });

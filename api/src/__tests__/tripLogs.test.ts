@@ -66,6 +66,45 @@ describe("trip log single GET (fake auth = alice)", () => {
     }
   });
 
+  // PRIV-001 promise anchor — privacy.html ("How sharing works"): "Per-trip
+  // notes, per-trip media, and your trip-log history remain private to you."
+  // Fake auth is single-user, so the path-mismatch 404 below is the same
+  // requireCanyonOwner deny path a share recipient hits; assert the WHOLE
+  // body, not just the status, so no owner-private field can ride along.
+  it("denial body contains no per-trip notes, custom fields, or presigned-URL markers (privacy.html: 'remain private to you')", async () => {
+    const canyonA = await createCanyon("PRIV-001 denial body A");
+    const canyonB = await createCanyon("PRIV-001 denial body B");
+    try {
+      const createRes = await request(API_URL)
+        .post(`/canyons/${canyonA}/trips`)
+        .set(AUTH)
+        .send({
+          date: "2026-06-02",
+          notes: "owner-private beta PRIV-001",
+          customFields: { anchors: "owner-private rigging detail" },
+        });
+      expect(createRes.status).toBe(201);
+      const tripId = createRes.body.id as string;
+
+      const res = await request(API_URL)
+        .get(`/canyons/${canyonB}/trips/${tripId}`)
+        .set(AUTH);
+      expect(res.status).toBe(404);
+
+      const wire = JSON.stringify(res.body);
+      expect(wire).not.toContain("owner-private beta PRIV-001");
+      expect(wire).not.toContain("owner-private rigging detail");
+      expect(wire).not.toContain("notes");
+      expect(wire).not.toContain("customFields");
+      expect(wire).not.toContain("media");
+      // Presigned S3 URL marker — a denial must never carry media URLs.
+      expect(wire).not.toContain("X-Amz-");
+    } finally {
+      await request(API_URL).delete(`/canyons/${canyonA}`).set(AUTH);
+      await request(API_URL).delete(`/canyons/${canyonB}`).set(AUTH);
+    }
+  });
+
   it("404s for a non-existent trip id", async () => {
     const canyonId = await createCanyon("SEC-001 missing trip");
     try {
