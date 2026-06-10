@@ -1,20 +1,9 @@
 /**
- * Canonical list of topo layer types that are rendered on the map and selectable
- * as GeoPDF overlays. Composite is intentionally absent — it's MBTiles-only
- * (email download), not a map layer.
+ * Thin re-export — the canonical TOPO_LAYERS list lives in
+ * shared/src/topoSettings.ts (ARCH-010). Kept so existing
+ * `../constants/topoLayers` importers need no churn.
  *
- * Keep in sync with:
- *   - topo/worker.py          → ALL_LAYERS
- *   - frontend/src/topoLayerTypes.ts
+ * The only remaining mirror is topo/worker.py → ALL_LAYERS (Python).
  */
-export const TOPO_LAYERS = [
-  { name: "hillshade", label: "Hillshade", format: "raster" },
-  { name: "vegetation", label: "Vegetation", format: "raster" },
-  { name: "slope", label: "Slope", format: "raster" },
-  { name: "contours", label: "Contours", format: "vector" },
-  { name: "features", label: "Features", format: "vector" },
-] as const;
-
-export type TopoLayerMeta = (typeof TOPO_LAYERS)[number];
-export type TopoLayerName = TopoLayerMeta["name"];
-export type TopoLayerFormat = "raster" | "vector";
+export { TOPO_LAYERS } from "@logjam/shared";
+export type { TopoLayerMeta, TopoLayerName, TopoLayerFormat } from "@logjam/shared";

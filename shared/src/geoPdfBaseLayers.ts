@@ -1,3 +1,5 @@
+import type { TopoLayerName } from "./topoSettings.js";
+
 export const GEOPDF_BASE_LAYER_CONFIG: Record<
   string,
   { urlTemplate: string; maxNativeZoom: number; attribution: string }
@@ -56,8 +58,10 @@ export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
 // A layer may draw on more than one source: the vegetation density layer is a
 // LiDAR Canopy Height Model (DSM − DTM), so it credits both the elevation source
 // and the SVTM vegetation source.
-// Keep in sync with TOPO_LAYERS (api/src/constants/topoLayers.ts).
-export const TOPO_OVERLAY_SOURCE: Record<string, OverlaySource[]> = {
+// Keyed by the canonical TopoLayerName (topoSettings.ts TOPO_LAYERS): the
+// values are per-layer data and stay hand-maintained, but a missing or extra
+// key is now a compile error (ARCH-010).
+export const TOPO_OVERLAY_SOURCE: Record<TopoLayerName, OverlaySource[]> = {
   hillshade: ["elevation"],
   slope: ["elevation"],
   contours: ["elevation"],
@@ -80,7 +84,12 @@ const OVERLAY_SOURCE_ORDER: OverlaySource[] = [
 export function overlayAttributionLines(overlays: string[]): string[] {
   const sources = new Set<OverlaySource>();
   for (const name of overlays) {
-    for (const source of TOPO_OVERLAY_SOURCE[name] ?? []) sources.add(source);
+    // Callers pass already-validated overlay names, but this is also used on
+    // raw config input — tolerate unknown names rather than crash.
+    const layerSources = (
+      TOPO_OVERLAY_SOURCE as Record<string, OverlaySource[] | undefined>
+    )[name];
+    for (const source of layerSources ?? []) sources.add(source);
   }
   return OVERLAY_SOURCE_ORDER.filter((s) => sources.has(s)).map(
     (s) => GEOPDF_OVERLAY_ATTRIBUTION[s],

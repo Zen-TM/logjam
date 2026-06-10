@@ -3,7 +3,7 @@
 // Both API validation and frontend dialog disable/enable logic read from
 // EXPORT_FORMAT_RULES below so the rules can only diverge in one place.
 
-import type { TopoLayerKey } from "./topoSettings.js";
+import { TOPO_LAYERS, type TopoLayerKey } from "./topoSettings.js";
 
 export type ExportFormat = "mbtiles" | "geotiff" | "gpkg" | "geojson" | "gpx";
 // KMZ is intentionally deferred (Stage 3) until Avenza-structure quirks are
@@ -15,8 +15,14 @@ export type ExportStatus = "queued" | "running" | "completed" | "failed";
 
 export const EXPORT_FORMATS: ExportFormat[] = ["mbtiles", "geotiff", "gpkg", "geojson", "gpx"];
 
-export const RASTER_LAYERS: TopoLayerKey[] = ["hillshade", "vegetation", "slope"];
-export const VECTOR_LAYERS: TopoLayerKey[] = ["contours", "features"];
+// Derived from the canonical TOPO_LAYERS list (ARCH-010) so a new layer can
+// never be missed here.
+export const RASTER_LAYERS: TopoLayerKey[] = TOPO_LAYERS.filter(
+  (l) => l.format === "raster",
+).map((l) => l.name);
+export const VECTOR_LAYERS: TopoLayerKey[] = TOPO_LAYERS.filter(
+  (l) => l.format === "vector",
+).map((l) => l.name);
 
 export interface ExportFormatRule {
   format: ExportFormat;

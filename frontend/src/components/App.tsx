@@ -43,6 +43,7 @@ import FilterEmptyState from "./map/FilterEmptyState";
 import { PENDING_CONSENT_STORAGE_KEY } from "../consent";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { TOPO_OVERLAY_SOURCE, GEOPDF_OVERLAY_ATTRIBUTION } from "@logjam/shared";
+import type { OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import { useLocalStorage } from "../useLocalStorage";
 import { Button } from "@mui/material";
@@ -204,7 +205,13 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
       // AttributionControl surfaces the required CC BY / ODbL attribution.
       // A layer may credit more than one source (e.g. vegetation density is a
       // LiDAR CHM, so it credits both elevation and the SVTM vegetation source).
-      const overlaySources = TOPO_OVERLAY_SOURCE[layerName] ?? [];
+      // layerName comes from persisted user state (string), so index the
+      // TopoLayerName-keyed record defensively rather than crash on a stale
+      // stored name.
+      const overlaySources =
+        (TOPO_OVERLAY_SOURCE as Record<string, OverlaySource[] | undefined>)[
+          layerName
+        ] ?? [];
       const attribution = overlaySources.length
         ? overlaySources.map((s) => GEOPDF_OVERLAY_ATTRIBUTION[s]).join(" · ")
         : undefined;

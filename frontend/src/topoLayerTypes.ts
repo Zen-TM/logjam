@@ -1,22 +1,13 @@
 /**
- * Topo layer types — shared frontend constant.
- *
- * Canonical source: api/src/constants/topoLayers.ts — keep in sync.
- * Also mirrored in: topo/worker.py → ALL_LAYERS
- *
- * Composite is intentionally absent — it's MBTiles-only (email download),
- * not a map layer.
+ * Topo layer constants — thin re-export. The canonical TOPO_LAYERS list lives
+ * in shared/src/topoSettings.ts (ARCH-010); the only remaining mirror is
+ * topo/worker.py → ALL_LAYERS (Python). The view types below are
+ * frontend-local.
  */
-export const TOPO_LAYERS = [
-  { name: "hillshade", label: "Hillshade", format: "raster" },
-  { name: "vegetation", label: "Vegetation", format: "raster" },
-  { name: "slope", label: "Slope", format: "raster" },
-  { name: "contours", label: "Contours", format: "vector" },
-  { name: "features", label: "Features", format: "vector" },
-] as const;
+export { TOPO_LAYERS } from "@logjam/shared";
+export type { TopoLayerName, TopoLayerFormat } from "@logjam/shared";
 
-export type TopoLayerName = (typeof TOPO_LAYERS)[number]["name"];
-export type TopoLayerFormat = "raster" | "vector";
+import type { TopoLayerName, TopoLayerFormat } from "@logjam/shared";
 
 /** A polygon footprint as returned in GeoJSON form by the topo-jobs API. */
 export type GeoJsonGeometry = {

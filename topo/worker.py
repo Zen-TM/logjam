@@ -67,10 +67,10 @@ SES_FROM     = os.environ.get("SES_FROM_EMAIL", "")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 JOB_ID       = os.environ["JOB_ID"]
 
-# Canonical list of layer types that get rendered onto the map.
-# Composite is intentionally absent — Stage 2 builds it on demand in the
-# export worker. Keep in sync with: api/src/constants/topoLayers.ts,
-# frontend/src/topoLayerTypes.ts.
+# Python mirror of the canonical layer list — keep in sync with
+# shared/src/topoSettings.ts → TOPO_LAYERS (the TS side all derives from it;
+# this is the only remaining hand-synced copy, ARCH-010). Composite is
+# intentionally absent — Stage 2 builds it on demand in the export worker.
 ALL_LAYERS: frozenset[str] = frozenset({
     "hillshade",
     "vegetation",
