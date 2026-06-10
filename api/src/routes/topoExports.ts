@@ -150,8 +150,10 @@ router.post(
     const vectorStyleSnapshot = (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
 
     // Count + create in one transaction so concurrent submissions can't both
-    // pass the per-user cap.
+    // pass the per-user cap. The user-row lock closes the read-committed
+    // double-read window the same way /topo-jobs/:id/start does (ARCH-009).
     const exportJob = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
       const queued = await tx.topoExportJob.count({
         where: { userId: user.id, status: { in: ["queued", "running"] } },
       });

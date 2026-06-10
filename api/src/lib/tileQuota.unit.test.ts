@@ -59,4 +59,29 @@ describe("assertCanSubmit", () => {
     expect(err.details.quota).toBe(100);
     expect(err.details.resetAt).toBeTypeOf("string");
   });
+
+  it("passes when used + requested lands exactly at quota", async () => {
+    aggregate.mockResolvedValue({ _sum: { tileCount: 40 } });
+    await expect(assertCanSubmit(user, 60)).resolves.toBeUndefined();
+  });
+
+  it("throws 429 one tile over the boundary", async () => {
+    aggregate.mockResolvedValue({ _sum: { tileCount: 40 } });
+    await expect(assertCanSubmit(user, 61)).rejects.toMatchObject({
+      statusCode: 429,
+    });
+  });
+
+  // ARCH-009: /start runs the authoritative check inside a user-row-locked
+  // transaction and passes `tx`; the aggregate must go through that client.
+  it("aggregates through the provided transaction client", async () => {
+    const tx = {
+      topoJob: {
+        aggregate: vi.fn().mockResolvedValue({ _sum: { tileCount: 10 } }),
+      },
+    };
+    await assertCanSubmit(user, 20, tx as never);
+    expect(tx.topoJob.aggregate).toHaveBeenCalledTimes(1);
+    expect(aggregate).not.toHaveBeenCalled();
+  });
 });

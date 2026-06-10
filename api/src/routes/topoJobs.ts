@@ -167,23 +167,34 @@ router.post(
       throw e;
     }
 
-    // Authoritative quota check against server-counted tiles from the actual ZIP.
-    // The job is still "uploading" so it won't appear in the weekly aggregate.
-    await assertCanSubmit(user, verifiedTileCount);
-    await assertHasStorageQuota(user.id);
-
-    await prisma.topoJob.update({
-      where: { id: jobId },
-      data: {
-        status: "pending",
-        attemptCount: { increment: 1 },
-        ...(verifiedTileCount !== null
-          ? {
-              tileCount: verifiedTileCount,
-              estimatedSeconds: Math.round(verifiedTileCount * 8.5) * 60,
-            }
-          : {}),
-      },
+    // Authoritative quota check against server-counted tiles from the actual
+    // ZIP, serialised per user (ARCH-009): the user-row lock prevents two
+    // concurrent /start calls from both reading the same weekly aggregate and
+    // both passing. The job is still "uploading" so it won't appear in the
+    // aggregate. RunTask stays outside the transaction (no AWS calls inside
+    // DB transactions); the earlier checks above remain advisory pre-checks.
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
+      await assertCanSubmit(user, verifiedTileCount, tx);
+      await assertHasStorageQuota(user.id, 0n, tx);
+      const flipped = await tx.topoJob.updateMany({
+        // Status guard doubles as a double-/start race close: a concurrent
+        // second /start finds 0 rows and 400s instead of double-launching.
+        where: { id: jobId, status: "uploading" },
+        data: {
+          status: "pending",
+          attemptCount: { increment: 1 },
+          ...(verifiedTileCount !== null
+            ? {
+                tileCount: verifiedTileCount,
+                estimatedSeconds: Math.round(verifiedTileCount * 8.5) * 60,
+              }
+            : {}),
+        },
+      });
+      if (flipped.count === 0) {
+        throw new AppError(400, "Job is not awaiting upload");
+      }
     });
 
     // ECS RunTask owns lifecycle; status column owns retry semantics.
