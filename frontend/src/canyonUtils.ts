@@ -633,9 +633,15 @@ export async function uploadMedia(params: {
     filename: params.file.name,
     mediaType: params.mediaType,
   };
+  // Declared sizes are signed into the presigned PUT's Content-Length, so the
+  // uploaded bytes must match what's declared here (server caps per category).
   const presigned = await apiFetch<PresignMediaResponse>("/media/presign", {
     method: "POST",
-    body: meta,
+    body: {
+      ...meta,
+      sizeBytes: params.file.size,
+      thumbnailSizeBytes: params.thumbnail ? params.thumbnail.size : undefined,
+    },
   });
   await putToPresignedUrl(presigned.displayUploadUrl, params.file, params.mediaType);
   if (presigned.thumbnailUploadUrl && params.thumbnail) {

@@ -10,9 +10,15 @@ export async function getStorageUsage(userId: string) {
   return { used: user.storageUsedBytes, quota: user.storageQuotaBytes };
 }
 
-export async function assertHasStorageQuota(userId: string) {
+/**
+ * Throws 507 when the user has no storage headroom. With `pendingBytes` the
+ * check covers a declared upcoming upload (`used + pendingBytes > quota`);
+ * without it the legacy "already at/over quota" semantics apply. The
+ * authoritative charge still happens at confirm against the real S3 size.
+ */
+export async function assertHasStorageQuota(userId: string, pendingBytes = 0n) {
   const { used, quota } = await getStorageUsage(userId);
-  if (used >= quota) {
+  if (used >= quota || used + pendingBytes > quota) {
     throw new AppError(507, "Storage quota exceeded", { used: used.toString(), quota: quota.toString() });
   }
 }

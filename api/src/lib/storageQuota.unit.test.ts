@@ -49,6 +49,27 @@ describe("assertHasStorageQuota", () => {
     expect(err.statusCode).toBe(507);
     expect(err.details).toEqual({ used: "500", quota: "500" });
   });
+
+  // SEC-003 headroom variant: the presign pre-check must account for the
+  // declared pending upload, not just current usage.
+  it("throws 507 when used + pendingBytes exceeds quota", async () => {
+    findUnique.mockResolvedValue({ storageUsedBytes: 400n, storageQuotaBytes: 500n });
+    const err = await assertHasStorageQuota("u1", 101n).catch((e) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect(err.statusCode).toBe(507);
+  });
+
+  it("passes when used + pendingBytes lands exactly at quota", async () => {
+    findUnique.mockResolvedValue({ storageUsedBytes: 400n, storageQuotaBytes: 500n });
+    await expect(assertHasStorageQuota("u1", 100n)).resolves.toBeUndefined();
+  });
+
+  it("default pendingBytes keeps the legacy at-quota rejection", async () => {
+    findUnique.mockResolvedValue({ storageUsedBytes: 500n, storageQuotaBytes: 500n });
+    await expect(assertHasStorageQuota("u1")).rejects.toMatchObject({
+      statusCode: 507,
+    });
+  });
 });
 
 describe("increment/decrement storage", () => {

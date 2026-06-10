@@ -39,6 +39,8 @@ describe("media upload lifecycle (fake auth)", () => {
         linkedId: canyonId,
         filename: "test-photo.png",
         mediaType: "image/png",
+        sizeBytes: PNG_BYTES.length,
+        thumbnailSizeBytes: PNG_BYTES.length,
       });
     expect(presignRes.status).toBe(201);
     const { mediaId, displayUploadUrl, thumbnailUploadUrl } = presignRes.body;
@@ -98,8 +100,70 @@ describe("media upload lifecycle (fake auth)", () => {
         linkedId: canyonId,
         filename: "archive.zip",
         mediaType: "application/zip",
+        sizeBytes: 1024,
       });
     expect(res.status).toBe(400);
+  });
+
+  it("rejects a presign without sizeBytes (SEC-003)", async () => {
+    const canyonsRes = await request(API_URL).get("/canyons").set(AUTH);
+    const canyonId: string = canyonsRes.body[0].id;
+    const res = await request(API_URL)
+      .post("/media/presign")
+      .set(AUTH)
+      .send({
+        linkedType: "canyon",
+        linkedId: canyonId,
+        filename: "test-photo.png",
+        mediaType: "image/png",
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a presign whose sizeBytes exceeds the category cap (SEC-003)", async () => {
+    const canyonsRes = await request(API_URL).get("/canyons").set(AUTH);
+    const canyonId: string = canyonsRes.body[0].id;
+    const res = await request(API_URL)
+      .post("/media/presign")
+      .set(AUTH)
+      .send({
+        linkedType: "canyon",
+        linkedId: canyonId,
+        filename: "test-photo.png",
+        mediaType: "image/png",
+        sizeBytes: 31 * 1024 * 1024, // image cap is 30 MB
+        thumbnailSizeBytes: PNG_BYTES.length,
+      });
+    expect(res.status).toBe(413);
+  });
+
+  it("S3 rejects an upload larger than the signed Content-Length (SEC-003)", async () => {
+    const canyonsRes = await request(API_URL).get("/canyons").set(AUTH);
+    const canyonId: string = canyonsRes.body[0].id;
+    const presignRes = await request(API_URL)
+      .post("/media/presign")
+      .set(AUTH)
+      .send({
+        linkedType: "canyon",
+        linkedId: canyonId,
+        filename: "test-photo.png",
+        mediaType: "image/png",
+        sizeBytes: PNG_BYTES.length,
+        thumbnailSizeBytes: PNG_BYTES.length,
+      });
+    expect(presignRes.status).toBe(201);
+
+    // Upload double the declared bytes: Content-Length was signed into the
+    // URL, so S3/LocalStack must refuse the mismatched signature. If this
+    // fails on LocalStack only, see security-plan SEC-003 step 4 — fall back
+    // to createPresignedPost with a content-length-range condition.
+    const oversized = Buffer.concat([PNG_BYTES, PNG_BYTES]);
+    const res = await fetch(presignRes.body.displayUploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "image/png" },
+      body: oversized,
+    });
+    expect(res.ok).toBe(false);
   });
 
   it("rejects a GPX whose extension doesn't match the track MIME", async () => {
@@ -113,6 +177,7 @@ describe("media upload lifecycle (fake auth)", () => {
         linkedId: canyonId,
         filename: "track.png",
         mediaType: "application/gpx+xml",
+        sizeBytes: 1024,
       });
     expect(res.status).toBe(400);
   });
@@ -130,6 +195,8 @@ describe("media upload lifecycle (fake auth)", () => {
         linkedId: sharedCanyonId,
         filename: "test-photo.png",
         mediaType: "image/png",
+        sizeBytes: PNG_BYTES.length,
+        thumbnailSizeBytes: PNG_BYTES.length,
       });
     expect(res.status).toBe(403);
   });

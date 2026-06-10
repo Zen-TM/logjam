@@ -16,6 +16,7 @@ import {
   getStorageUsage,
 } from "../lib/storageQuota";
 import { deleteS3Keys, deleteS3KeysBestEffort } from "../lib/s3Cleanup";
+import { validateUploadSizes } from "../lib/mediaUploadValidation";
 import { toMediaItem } from "../lib/mediaPresign";
 import {
   mediaCategory,
@@ -97,13 +98,21 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const { linkedType, linkedId, filename, mediaType } = req.body ?? {};
+    const { linkedType, linkedId, filename, mediaType, sizeBytes, thumbnailSizeBytes } =
+      req.body ?? {};
     if (typeof linkedId !== "string")
       throw new AppError(400, "linkedId is required");
     const category = validateMediaType(mediaType, filename);
+    // Declared sizes bound the presigned PUTs (SEC-003): they are signed into
+    // Content-Length below, so S3 rejects uploads that exceed the declaration.
+    const sizes = validateUploadSizes(category, sizeBytes, thumbnailSizeBytes);
     await assertOwnsTarget(user.id, linkedType, linkedId);
-    // Soft pre-check; the authoritative quota check happens on confirm.
-    await assertHasStorageQuota(user.id);
+    // Headroom pre-check including the declared upload; the authoritative
+    // quota charge still happens on confirm against the real S3 size.
+    await assertHasStorageQuota(
+      user.id,
+      BigInt(sizes.sizeBytes + (sizes.thumbnailSizeBytes ?? 0)),
+    );
 
     const mediaId = randomUUID();
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);
@@ -114,6 +123,7 @@ router.post(
         Bucket: MEDIA_BUCKET,
         Key: displayKey,
         ContentType: mediaType,
+        ContentLength: sizes.sizeBytes,
       }),
       { expiresIn: UPLOAD_URL_TTL_SECONDS },
     );
@@ -126,6 +136,7 @@ router.post(
           Bucket: MEDIA_BUCKET,
           Key: thumbnailKey,
           ContentType: THUMBNAIL_MIME,
+          ContentLength: sizes.thumbnailSizeBytes!,
         }),
         { expiresIn: UPLOAD_URL_TTL_SECONDS },
       );
