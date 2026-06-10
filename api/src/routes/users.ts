@@ -318,25 +318,44 @@ router.get(
     const user = await prisma.user.findUnique({ where: { cognitoId: sub } });
     if (!user) throw new AppError(404, "User not found");
 
-    const [canyons, tripLogs, geoPdfTemplates, sharesGiven, sharesReceived, media] =
-      await Promise.all([
-        prisma.canyon.findMany({ where: { ownerId: user.id } }),
-        prisma.tripLog.findMany({ where: { userId: user.id } }),
-        prisma.geoPdfTemplate.findMany({ where: { userId: user.id } }),
-        prisma.canyonShare.findMany({
-          where: { sharedById: user.id },
-          include: { sharedWith: { select: { id: true, username: true } } },
-        }),
-        prisma.canyonShare.findMany({
-          where: { sharedWithId: user.id },
-          include: { sharedBy: { select: { id: true, username: true } } },
-        }),
-        prisma.media.findMany({ where: { ownerId: user.id } }),
-      ]);
+    const [
+      canyons,
+      tripLogs,
+      geoPdfTemplates,
+      sharesGiven,
+      sharesReceived,
+      media,
+      topoJobs,
+      topoExportJobs,
+      topoTemplates,
+      notifications,
+    ] = await Promise.all([
+      prisma.canyon.findMany({ where: { ownerId: user.id } }),
+      prisma.tripLog.findMany({ where: { userId: user.id } }),
+      prisma.geoPdfTemplate.findMany({ where: { userId: user.id } }),
+      prisma.canyonShare.findMany({
+        where: { sharedById: user.id },
+        include: { sharedWith: { select: { id: true, username: true } } },
+      }),
+      prisma.canyonShare.findMany({
+        where: { sharedWithId: user.id },
+        include: { sharedBy: { select: { id: true, username: true } } },
+      }),
+      prisma.media.findMany({ where: { ownerId: user.id } }),
+      // PRIV-004: privacy.html promises a *complete* copy (APP 12). Topo jobs
+      // carry location-bearing personal information (footprint geometry,
+      // user-typed names) and must be included, along with export jobs,
+      // topo templates, and notifications (reference-IDs-only payloads).
+      prisma.topoJob.findMany({ where: { userId: user.id } }),
+      prisma.topoExportJob.findMany({ where: { userId: user.id } }),
+      prisma.topoTemplate.findMany({ where: { userId: user.id } }),
+      prisma.notification.findMany({ where: { userId: user.id } }),
+    ]);
 
     const payload = {
       exportedAt: new Date().toISOString(),
-      schemaVersion: 1,
+      // v2: adds topoJobs, topoExportJobs, topoTemplates, notifications.
+      schemaVersion: 2,
       user: serializeUserForResponse(user),
       canyons,
       tripLogs,
@@ -349,6 +368,12 @@ router.get(
         ...m,
         fileSizeBytes: Number(m.fileSizeBytes),
       })),
+      // Topo job records identify their tile outputs (S3 keys are job-UUID
+      // paths, no coordinates); tile files themselves are not included.
+      topoJobs,
+      topoExportJobs,
+      topoTemplates,
+      notifications,
     };
 
     const filename = `logjam-export-${new Date().toISOString().slice(0, 10)}.json`;

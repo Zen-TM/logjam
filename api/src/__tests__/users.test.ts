@@ -103,13 +103,38 @@ describe("users routes (fake auth = alice)", () => {
   it("GET /users/me/export returns the caller's data with bigint fields as numbers", async () => {
     const res = await request(API_URL).get("/users/me/export").set(AUTH);
     expect(res.status).toBe(200);
-    expect(res.body.schemaVersion).toBe(1);
+    expect(res.body.schemaVersion).toBe(2);
     expect(res.body.user.username).toBe("alice");
     expect(Array.isArray(res.body.canyons)).toBe(true);
     expect(Array.isArray(res.body.tripLogs)).toBe(true);
     expect(Array.isArray(res.body.media)).toBe(true);
     for (const item of res.body.media) {
       expect(typeof item.fileSizeBytes).toBe("number");
+    }
+  });
+
+  // PRIV-004: privacy.html promises a "complete machine-readable JSON copy"
+  // (APP 12 access). schemaVersion 2 adds the previously omitted user-owned
+  // collections — topo jobs carry location-bearing footprints, so their
+  // absence made "complete" inaccurate. BigInt byte fields (topoJob
+  // outputBytes, topoExportJob resultBytes) must serialise via the global
+  // replacer without crashing.
+  it("GET /users/me/export includes topo jobs, topo exports, topo templates, and notifications (schemaVersion 2)", async () => {
+    const res = await request(API_URL).get("/users/me/export").set(AUTH);
+    expect(res.status).toBe(200);
+    expect(res.body.schemaVersion).toBe(2);
+    expect(Array.isArray(res.body.topoJobs)).toBe(true);
+    expect(Array.isArray(res.body.topoExportJobs)).toBe(true);
+    expect(Array.isArray(res.body.topoTemplates)).toBe(true);
+    expect(Array.isArray(res.body.notifications)).toBe(true);
+    for (const job of res.body.topoJobs) {
+      // footprint geometry round-trips; byte counts are plain numbers.
+      expect(job).toHaveProperty("footprint");
+      if (job.outputBytes != null) expect(typeof job.outputBytes).toBe("number");
+    }
+    for (const exportJob of res.body.topoExportJobs) {
+      if (exportJob.resultBytes != null)
+        expect(typeof exportJob.resultBytes).toBe("number");
     }
   });
 });
