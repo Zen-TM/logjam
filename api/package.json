@@ -9,9 +9,6 @@
     "test": "vitest run",
     "test:unit": "vitest run -c vitest.unit.config.ts"
   },
-  "prisma": {
-    "seed": "ts-node prisma/seed.ts"
-  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -24,7 +21,8 @@
     "@aws-sdk/s3-request-presigner": "^3.1010.0",
     "@logjam/shared": "file:../shared",
     "@mapbox/vector-tile": "^3.0.0",
-    "@prisma/client": "^6.19.3",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "canvas": "^3.2.3",
     "cors": "^2.8.6",
     "csv-parse": "^6.2.1",
@@ -52,7 +50,7 @@
     "@types/pg": "^8.18.0",
     "@types/supertest": "^6.0.2",
     "nodemon": "^3.1.14",
-    "prisma": "^6.19.3",
+    "prisma": "^7.8.0",
     "supertest": "^7.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
