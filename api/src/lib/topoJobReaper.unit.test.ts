@@ -4,17 +4,20 @@ vi.mock("../services/prisma", () => ({
   default: {
     topoJob: { updateMany: vi.fn(), findMany: vi.fn() },
     topoExportJob: { updateMany: vi.fn(), findMany: vi.fn() },
+    $transaction: vi.fn(),
   },
 }));
 
 vi.mock("../services/awsClients", () => ({
   ecs: { send: vi.fn() },
+  s3: { send: vi.fn() },
 }));
 
 import prisma from "../services/prisma";
-import { ecs } from "../services/awsClients";
+import { ecs, s3 } from "../services/awsClients";
 import {
   reapStuckTopoJobs,
+  expireCompletedExports,
   processingDeadline,
   ESTIMATE_SAFETY_FACTOR,
 } from "./topoJobReaper";
@@ -31,6 +34,16 @@ const exportFindMany = (
   prisma as unknown as { topoExportJob: { findMany: Mock } }
 ).topoExportJob.findMany;
 const ecsSend = (ecs as unknown as { send: Mock }).send;
+const s3Send = (s3 as unknown as { send: Mock }).send;
+const transaction = (prisma as unknown as { $transaction: Mock }).$transaction;
+
+// Transaction client handed to the expiry sweep's interactive callback.
+const txExportDelete = vi.fn();
+const txExecuteRaw = vi.fn();
+const txClient = {
+  $executeRaw: txExecuteRaw,
+  topoExportJob: { delete: txExportDelete },
+};
 
 const NOW = new Date("2026-06-05T12:00:00.000Z");
 const env = getEnv();
@@ -41,6 +54,14 @@ beforeEach(() => {
   exportUpdateMany.mockReset().mockResolvedValue({ count: 0 });
   exportFindMany.mockReset().mockResolvedValue([]);
   ecsSend.mockReset().mockResolvedValue({});
+  s3Send.mockReset().mockResolvedValue({});
+  txExportDelete.mockReset().mockResolvedValue({});
+  txExecuteRaw.mockReset().mockResolvedValue(1);
+  transaction
+    .mockReset()
+    .mockImplementation(async (fn: (tx: typeof txClient) => Promise<unknown>) =>
+      fn(txClient),
+    );
 });
 
 // ── processingDeadline (pure per-job deadline, ARCH-001) ────────────────────
@@ -234,5 +255,85 @@ describe("reapStuckTopoJobs — topo_export_jobs (ARCH-002)", () => {
     // No processing/running rows → only pending (2) + queued (3).
     const count = await reapStuckTopoJobs(NOW);
     expect(count).toBe(5);
+  });
+});
+
+// ── expireCompletedExports (ARCH-006 export-expiry sweep) ───────────────────
+
+describe("expireCompletedExports", () => {
+  const expiredRow = {
+    id: "exp-1",
+    userId: "u1",
+    resultKey: "exports/exp-1/result.zip",
+    resultBytes: 1234n,
+  };
+
+  it("selects only completed rows past the TTL", async () => {
+    await expireCompletedExports(NOW);
+    expect(exportFindMany).toHaveBeenCalledTimes(1);
+    const where = exportFindMany.mock.calls[0][0].where;
+    expect(where.status).toBe("completed");
+    expect(where.completedAt.lt).toEqual(
+      new Date(NOW.getTime() - env.TOPO_EXPORT_TTL_MS),
+    );
+  });
+
+  it("deletes the S3 object, then decrements quota and deletes the row in one tx", async () => {
+    exportFindMany.mockResolvedValue([expiredRow]);
+
+    const count = await expireCompletedExports(NOW);
+
+    expect(count).toBe(1);
+    expect(s3Send).toHaveBeenCalledTimes(1);
+    expect(s3Send.mock.calls[0][0].input).toMatchObject({
+      Key: "exports/exp-1/result.zip",
+    });
+    // Decrement (raw UPDATE through the tx client) and row delete both went
+    // through the transaction client — one commit (Design Q).
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(txExecuteRaw).toHaveBeenCalledTimes(1);
+    expect(txExportDelete).toHaveBeenCalledWith({ where: { id: "exp-1" } });
+    // S3 delete strictly before the DB transaction.
+    expect(s3Send.mock.invocationCallOrder[0]).toBeLessThan(
+      transaction.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("cleans up rows without a resultKey and skips the S3 call", async () => {
+    exportFindMany.mockResolvedValue([{ ...expiredRow, resultKey: null }]);
+    const count = await expireCompletedExports(NOW);
+    expect(count).toBe(1);
+    expect(s3Send).not.toHaveBeenCalled();
+    expect(txExportDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("an S3 failure skips that row but does not abort the sweep", async () => {
+    exportFindMany.mockResolvedValue([
+      expiredRow,
+      { ...expiredRow, id: "exp-2", resultKey: "exports/exp-2/result.zip" },
+    ]);
+    s3Send
+      .mockRejectedValueOnce(new Error("transient"))
+      .mockResolvedValueOnce({});
+
+    const count = await expireCompletedExports(NOW);
+
+    // First row survives for the next sweep; second is cleaned.
+    expect(count).toBe(1);
+    expect(txExportDelete).toHaveBeenCalledTimes(1);
+    expect(txExportDelete).toHaveBeenCalledWith({ where: { id: "exp-2" } });
+  });
+
+  it("TOPO_EXPORT_TTL_MS=0 disables the sweep entirely", async () => {
+    const liveEnv = getEnv() as { TOPO_EXPORT_TTL_MS: number };
+    const original = liveEnv.TOPO_EXPORT_TTL_MS;
+    liveEnv.TOPO_EXPORT_TTL_MS = 0;
+    try {
+      const count = await expireCompletedExports(NOW);
+      expect(count).toBe(0);
+      expect(exportFindMany).not.toHaveBeenCalled();
+    } finally {
+      liveEnv.TOPO_EXPORT_TTL_MS = original;
+    }
   });
 });

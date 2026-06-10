@@ -1,6 +1,8 @@
 import { StopTaskCommand } from "@aws-sdk/client-ecs";
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import prisma from "../services/prisma";
-import { ecs } from "../services/awsClients";
+import { ecs, s3 } from "../services/awsClients";
+import { decrementStorageUsed } from "./storageQuota";
 import { getEnv } from "./env";
 import { logger } from "./logger";
 
@@ -186,6 +188,55 @@ export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number>
   return reaped;
 }
 
+/**
+ * Export-expiry sweep (ARCH-006): completed exports older than
+ * TOPO_EXPORT_TTL_MS (default 7 days, 0 disables) are removed — S3 object
+ * first (idempotent: the bucket's `expire-exports` lifecycle rule, verified
+ * 2026-06-11 as 7-day expiry on `exports/`, may have beaten us), then one
+ * transaction decrementing the storage charge and deleting the row. This
+ * makes the in-app accounting authoritative: rows stop presigning dead keys
+ * and the quota is reclaimed when the bytes actually disappear, with the S3
+ * rule kept as backstop. Returns the number of exports expired.
+ *
+ * Per-row failures are logged and skipped (the row simply survives to the
+ * next sweep) so one bad row can't wedge the others.
+ */
+export async function expireCompletedExports(
+  now: Date = new Date(),
+): Promise<number> {
+  const env = getEnv();
+  if (env.TOPO_EXPORT_TTL_MS === 0) return 0;
+  const bucket = env.S3_BUCKET_TOPO ?? "";
+
+  const cutoff = new Date(now.getTime() - env.TOPO_EXPORT_TTL_MS);
+  const expiredRows = await prisma.topoExportJob.findMany({
+    where: { status: "completed", completedAt: { lt: cutoff } },
+    select: { id: true, userId: true, resultKey: true, resultBytes: true },
+  });
+
+  let expired = 0;
+  for (const row of expiredRows) {
+    try {
+      // S3 first (Design Q delete ordering): DeleteObject succeeds on a
+      // missing key, so a lifecycle-rule head start is harmless; an S3
+      // failure leaves the row for retry next sweep.
+      if (row.resultKey) {
+        await s3.send(
+          new DeleteObjectCommand({ Bucket: bucket, Key: row.resultKey }),
+        );
+      }
+      await prisma.$transaction(async (tx) => {
+        await decrementStorageUsed(row.userId, row.resultBytes ?? 0n, tx);
+        await tx.topoExportJob.delete({ where: { id: row.id } });
+      });
+      expired += 1;
+    } catch (err) {
+      logger.error({ err, id: row.id }, "topo_export_expiry_failed");
+    }
+  }
+  return expired;
+}
+
 let timer: NodeJS.Timeout | null = null;
 
 /**
@@ -210,6 +261,13 @@ export function startTopoJobReaper(): () => void {
         // next interval.
         logger.error({ err }, "topo_job_reaper_failed");
       });
+    expireCompletedExports()
+      .then((count) => {
+        if (count > 0) logger.info({ count }, "topo_exports_expired");
+      })
+      .catch((err) => {
+        logger.error({ err }, "topo_export_expiry_sweep_failed");
+      });
   };
 
   // Run once shortly after boot (catches jobs stranded while the API was down),
@@ -225,6 +283,7 @@ export function startTopoJobReaper(): () => void {
       processingTimeoutMs: env.TOPO_REAPER_PROCESSING_TIMEOUT_MS,
       exportQueuedTimeoutMs: env.TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS,
       exportRunningTimeoutMs: env.TOPO_REAPER_EXPORT_RUNNING_TIMEOUT_MS,
+      exportTtlMs: env.TOPO_EXPORT_TTL_MS,
     },
     "topo_job_reaper_started",
   );
