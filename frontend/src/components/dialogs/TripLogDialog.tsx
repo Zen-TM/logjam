@@ -9,16 +9,12 @@ import {
   TextField,
   Typography,
   Box,
-  Checkbox,
-  FormControlLabel,
-  Select,
-  MenuItem,
   CircularProgress,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
-import { CUSTOM_FIELD_TYPES, makeCustomFieldKey, coerceFieldValue } from "@logjam/shared";
+import { makeCustomFieldKey, coerceFieldValue } from "@logjam/shared";
 import type { TTripLog } from "../../canyonUtils";
 import {
   createTripLog,
@@ -28,8 +24,11 @@ import {
   updateUserPreferences,
 } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
+import { fieldSx } from "../../csvImport/dialogStyles";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
+import AddCustomFieldForm from "./AddCustomFieldForm";
+import CustomFieldInput from "./CustomFieldInput";
 import classes from "./TripLogDialog.module.css";
 
 function todayDateString(): string {
@@ -243,52 +242,6 @@ function TripLogDialog({
     }
   }
 
-  function renderCustomField(def: TripLogCustomFieldDef) {
-    const value = getFieldValue(def.key);
-
-    if (def.type === "boolean") {
-      return (
-        <FormControlLabel
-          key={def.key}
-          control={
-            <Checkbox
-              checked={value === "true"}
-              onChange={(e) => setFieldValue(def.key, String(e.target.checked))}
-              sx={{ color: "var(--theme-text-muted)" }}
-            />
-          }
-          label={def.label}
-          sx={{ color: "var(--theme-text-primary)" }}
-        />
-      );
-    }
-
-    return (
-      <TextField
-        key={def.key}
-        label={def.label}
-        value={value}
-        onChange={(e) => setFieldValue(def.key, e.target.value)}
-        type={def.type === "integer" || def.type === "float" ? "number" : def.type === "date" ? "date" : "text"}
-        size="small"
-        fullWidth
-        InputLabelProps={def.type === "date" ? { shrink: true } : undefined}
-        slotProps={
-          def.type === "integer"
-            ? { htmlInput: { step: 1 } }
-            : def.type === "float"
-              ? { htmlInput: { step: "any" } }
-              : undefined
-        }
-        sx={{
-          "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.9em" },
-          "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
-          "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-        }}
-      />
-    );
-  }
-
   return (
     <Dialog
       open={open}
@@ -339,11 +292,7 @@ function TripLogDialog({
             fullWidth
             required
             InputLabelProps={{ shrink: true }}
-            sx={{
-              "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.9em" },
-              "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
-              "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-            }}
+            sx={fieldSx}
           />
 
           {/* Notes */}
@@ -356,11 +305,7 @@ function TripLogDialog({
             size="small"
             fullWidth
             placeholder="Trip notes, conditions, observations..."
-            sx={{
-              "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.9em" },
-              "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
-              "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-            }}
+            sx={fieldSx}
           />
 
           {/* Custom fields */}
@@ -369,73 +314,29 @@ function TripLogDialog({
               <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Custom Fields
               </Typography>
-              {customFieldDefs.map(renderCustomField)}
+              {customFieldDefs.map((def) => (
+                <CustomFieldInput
+                  key={def.key}
+                  def={def}
+                  value={getFieldValue(def.key)}
+                  onChange={(v) => setFieldValue(def.key, v)}
+                />
+              ))}
             </Box>
           )}
 
           {/* Add custom field */}
           {showAddField ? (
-            <Box className={classes.addFieldForm}>
-              <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                New Custom Field
-              </Typography>
-              <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
-                This field will be created for all trip logs.
-              </Typography>
-              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                <TextField
-                  label="Field Label"
-                  value={newFieldLabel}
-                  onChange={(e) => setNewFieldLabel(e.target.value)}
-                  size="small"
-                  fullWidth
-                  placeholder="e.g. Group Size"
-                  sx={{
-                    "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.9em" },
-                    "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
-                    "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-                  }}
-                />
-                <Select
-                  value={newFieldType}
-                  onChange={(e) => setNewFieldType(e.target.value as TripLogCustomFieldType)}
-                  size="small"
-                  MenuProps={{ PaperProps: { sx: { backgroundColor: "var(--theme-primary)", color: "var(--theme-text-primary)" } } }}
-                  sx={{
-                    color: "var(--theme-text-primary)",
-                    fontSize: "0.85em",
-                    flexShrink: 0,
-                    "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-                    "& .MuiSvgIcon-root": { color: "var(--theme-text-muted)" },
-                  }}
-                >
-                  {CUSTOM_FIELD_TYPES.map((t) => (
-                    <MenuItem key={t.value} value={t.value}>
-                      {t.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </Box>
-              <Box sx={{ display: "flex", gap: 1 }}>
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  size="small"
-                  onClick={handleAddField}
-                  disabled={addingField || !newFieldLabel.trim()}
-                >
-                  {addingField ? <CircularProgress size={16} /> : "Add Field"}
-                </Button>
-                <Button
-                  size="small"
-                  onClick={() => { setShowAddField(false); setNewFieldLabel(""); }}
-                  disabled={addingField}
-                  sx={{ color: "var(--theme-text-primary)" }}
-                >
-                  Cancel
-                </Button>
-              </Box>
-            </Box>
+            <AddCustomFieldForm
+              entityNoun="trip logs"
+              label={newFieldLabel}
+              onLabelChange={setNewFieldLabel}
+              type={newFieldType}
+              onTypeChange={setNewFieldType}
+              onAdd={handleAddField}
+              onCancel={() => { setShowAddField(false); setNewFieldLabel(""); }}
+              adding={addingField}
+            />
           ) : (
             <Button
               size="small"
