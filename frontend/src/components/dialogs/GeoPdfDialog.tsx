@@ -43,7 +43,9 @@ import {
   toEastingNorthing,
   extentFromCentreAndSize,
 } from "@logjam/shared";
-import type { GeoPdfConfig, CanyonMarker } from "@logjam/shared";
+import type { GeoPdfConfig } from "@logjam/shared";
+import { useLocalStorage } from "../../useLocalStorage";
+import { buildCanyonMarkers } from "./geoPdfCanyonMarkers";
 import classes from "./GeoPdfDialog.module.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -169,9 +171,17 @@ function GeoPdfDialog({
   const [gridLinesEnabled, setGridLinesEnabled] = useState(false);
   const [gridLinesMode, setGridLinesMode] = useState<CoordMode>("latlon");
 
-  // Canyon overlays
-  const [showOwnedCanyonsOnPdf, setShowOwnedCanyonsOnPdf] = useState(true);
-  const [showSharedCanyonsOnPdf, setShowSharedCanyonsOnPdf] = useState(true);
+  // Canyon overlays. Persisted so a deliberate opt-in survives reopen.
+  // Shared canyons default OFF (PRIV-006): a friend consented to in-app
+  // viewing, not to being named on a printable artifact — opt-in only.
+  const [showOwnedCanyonsOnPdf, setShowOwnedCanyonsOnPdf] = useLocalStorage(
+    "logjam.geoPdf.showOwnedCanyons",
+    true,
+  );
+  const [showSharedCanyonsOnPdf, setShowSharedCanyonsOnPdf] = useLocalStorage(
+    "logjam.geoPdf.showSharedCanyons",
+    false,
+  );
 
   // Generation
   const [generating, setGenerating] = useState(false);
@@ -226,8 +236,8 @@ function GeoPdfDialog({
     setScaleBarEnabled(true);
     setGridLinesEnabled(false);
     setGridLinesMode("latlon");
-    setShowOwnedCanyonsOnPdf(true);
-    setShowSharedCanyonsOnPdf(true);
+    // Canyon-marker toggles are deliberately NOT reset — they persist via
+    // localStorage so the user's explicit choice carries across sessions.
     setError(null);
     setEditTemplateName("");
     setRawN(""); setRawS(""); setRawE(""); setRawW(""); setRawScale("");
@@ -594,25 +604,13 @@ function GeoPdfDialog({
       },
     };
 
-    // Build canyon markers from canyons within the current extent
-    const markers: CanyonMarker[] = [];
-    const ext = config.extent;
-    if (showOwnedCanyonsOnPdf && canyons) {
-      for (const c of canyons) {
-        if (c.latitude >= ext.south && c.latitude <= ext.north &&
-            c.longitude >= ext.west && c.longitude <= ext.east) {
-          markers.push({ lat: c.latitude, lon: c.longitude, name: c.name, color: "owned" });
-        }
-      }
-    }
-    if (showSharedCanyonsOnPdf && sharedCanyons) {
-      for (const c of sharedCanyons) {
-        if (c.latitude >= ext.south && c.latitude <= ext.north &&
-            c.longitude >= ext.west && c.longitude <= ext.east) {
-          markers.push({ lat: c.latitude, lon: c.longitude, name: c.name, color: "shared" });
-        }
-      }
-    }
+    // Build canyon markers from canyons within the current extent. Shared
+    // canyons are opt-in only (PRIV-006) — boundary enforced and tested in
+    // buildCanyonMarkers.
+    const markers = buildCanyonMarkers(canyons, sharedCanyons, config.extent, {
+      includeOwned: showOwnedCanyonsOnPdf,
+      includeShared: showSharedCanyonsOnPdf,
+    });
     if (markers.length > 0) {
       config.canyonMarkers = markers;
     }
