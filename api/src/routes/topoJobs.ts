@@ -3,11 +3,12 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
+import { StopTaskCommand } from "@aws-sdk/client-ecs";
 import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName, TopoLayerFormat } from "../constants/topoLayers";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
-import { s3 } from "../services/awsClients";
+import { s3, ecs } from "../services/awsClients";
 import {
   parseZipCentralDirectory,
   classifyElvisEntries,
@@ -357,7 +358,10 @@ router.get(
 // (Stage 2) Per-job download URLs are gone. All downloads now go through
 // POST /topo-exports → the export worker. See routes/topoExports.ts.
 
-// DELETE /topo-jobs/:id — delete job and all S3 objects
+// DELETE /topo-jobs/:id — delete job and all S3 objects. In-flight jobs are
+// cancel-then-purged (Design L5): the row is force-failed (status-guarded)
+// so the worker can't complete it mid-delete, the Fargate task is stopped
+// best-effort, and only then are the prefixes purged and the row removed.
 router.delete(
   "/:id",
   requireAuth,
@@ -367,6 +371,59 @@ router.delete(
     const job = await prisma.topoJob.findUnique({ where: { id: jobId } });
     if (!job) throw new AppError(404, "Job not found");
     if (job.userId !== user.id) throw new AppError(403, "Access denied");
+
+    // A running export is actively reading this job's COGs from
+    // outputs/{jobId}/ — refuse until it finishes (no FK on sourceJobIds, so
+    // this is the only referential guard).
+    const runningExports = await prisma.topoExportJob.count({
+      where: { status: "running", sourceJobIds: { has: jobId } },
+    });
+    if (runningExports > 0) {
+      throw new AppError(
+        409,
+        "An export of this job is currently running. Try again when it finishes.",
+      );
+    }
+
+    if (job.status === "pending" || job.status === "processing") {
+      // Cancel: status-guarded flip so a worker that completes between the
+      // ownership read and this write wins (its storage charge then matches
+      // the fresh outputBytes re-read below). After the flip, the worker's
+      // guarded terminal write (Design L1) matches 0 rows and self-cleans, so
+      // a missed StopTask only costs Fargate time.
+      await prisma.topoJob.updateMany({
+        where: { id: jobId, status: { in: ["pending", "processing"] } },
+        data: { status: "failed", errorMessage: "Canceled by user." },
+      });
+      if (job.ecsTaskArn) {
+        try {
+          await ecs.send(
+            new StopTaskCommand({
+              cluster: env.ECS_CLUSTER,
+              task: job.ecsTaskArn,
+              reason: "Job deleted by user",
+            }),
+          );
+        } catch (stopErr) {
+          console.error(
+            JSON.stringify({
+              event: "topo_job_delete_stop_task_failed",
+              jobId,
+              reason: String(stopErr),
+            }),
+          );
+        }
+      }
+    }
+
+    // Re-read outputBytes: the worker may have completed between the
+    // ownership read and the cancel flip — the decrement must match what was
+    // actually charged.
+    const fresh = await prisma.topoJob.findUnique({
+      where: { id: jobId },
+      select: { outputBytes: true },
+    });
+    if (!fresh) throw new AppError(404, "Job not found");
 
     // S3-first (ARCH-004): delete the objects before the DB row and the quota
     // decrement. deleteS3Prefix throws on failure, so if any prefix fails the
@@ -378,8 +435,21 @@ router.delete(
         deleteS3Prefix(TOPO_BUCKET, prefix),
       ),
     );
-    await prisma.topoJob.delete({ where: { id: jobId } });
-    await decrementStorageUsed(job.userId, job.outputBytes ?? 0n);
+
+    // One transaction (Design Q): queued exports referencing this job are
+    // force-failed with a clear message (their COG source is about to
+    // disappear), and the row delete commits with the quota decrement.
+    await prisma.$transaction(async (tx) => {
+      await tx.topoExportJob.updateMany({
+        where: { status: "queued", sourceJobIds: { has: jobId } },
+        data: {
+          status: "failed",
+          errorMessage: "A source topo job was deleted before the export started.",
+        },
+      });
+      await tx.topoJob.delete({ where: { id: jobId } });
+      await decrementStorageUsed(job.userId, fresh.outputBytes ?? 0n, tx);
+    });
 
     res.status(204).send();
   },
