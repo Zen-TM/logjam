@@ -63,6 +63,11 @@ COPY --from=builder /app/dist ./dist
 # Static assets read at runtime (e.g. topo point-feature icons for GeoPDF).
 COPY api/assets ./assets/
 
+# RDS CA bundle for verified TLS to Postgres. node-postgres (Prisma 7 driver
+# adapter) does not negotiate TLS by default; services/prisma.ts enables
+# verified TLS whenever this file exists. Covers all AWS regions.
+ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/rds-ca.pem
+
 EXPOSE 8080
 
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
