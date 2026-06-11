@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { databaseUrlFromEnv } from "../lib/databaseUrl";
+import { currentDbPassword } from "../lib/dbPassword";
 
 const databaseUrl = databaseUrlFromEnv();
 
@@ -17,8 +18,14 @@ if (process.env.DATABASE_SSL_CA && !existsSync(process.env.DATABASE_SSL_CA)) {
 }
 const ssl = existsSync(caPath) ? { ca: readFileSync(caPath, "utf8") } : undefined;
 
+// `password` as an async function is evaluated by node-postgres on every NEW
+// physical connection and overrides the connectionString's password, so the
+// pool keeps working across RDS password rotations without a restart (see
+// lib/dbPassword.ts). The boot-time password in the URL is only a fallback
+// for pg internals that never invoke the callback.
 const adapter = new PrismaPg({
   connectionString: databaseUrl,
+  password: () => currentDbPassword(),
   ssl,
 });
 
