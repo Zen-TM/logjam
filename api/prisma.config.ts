@@ -1,6 +1,20 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
-import { composeDatabaseUrl } from "./src/lib/databaseUrl";
+
+// Inline mirror of src/lib/databaseUrl.ts composeDatabaseUrl — this file is
+// loaded by the Prisma CLI during the Docker build BEFORE src/ is copied in
+// (`prisma generate` runs right after `npm ci`), so it must not import from
+// src/. Keep in sync with the canonical helper.
+function composeDatabaseUrl(parts: {
+  host: string;
+  port?: string;
+  name: string;
+  user: string;
+  password: string;
+}): string {
+  const port = parts.port ?? "5432";
+  return `postgresql://${encodeURIComponent(parts.user)}:${encodeURIComponent(parts.password)}@${parts.host}:${port}/${parts.name}`;
+}
 
 // `prisma generate` (run during the Docker build, before DB_HOST/DB_USER/
 // DB_PASSWORD are injected at container runtime) doesn't need a real DB
