@@ -26,3 +26,5 @@ dist/
 snapshots/*.sql
 localstack-data/
 postgres-data/
+# AWS task-def files may carry account-specific config — keep out of git
+scripts/geo-pdf-worker-task-def.json
