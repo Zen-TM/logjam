@@ -170,9 +170,8 @@
       Data is retained until you delete it or the account. Operational logs
       are retained in AWS CloudWatch after the originating record is removed:
       API request logs expire automatically within 7 days; rendering-worker
-      job logs do not yet expire automatically, and we are moving them to a
-      90-day automatic expiry. All operational logs are scrubbed so canyon
-      names and coordinates do not appear in plain text.
+      job logs have a 90-day automatic expiry. All operational logs are scrubbed 
+      so canyon names and coordinates do not appear in plain text.
     </p>
 
     <h2>Children</h2>
