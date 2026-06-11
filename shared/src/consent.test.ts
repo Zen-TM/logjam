@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CURRENT_CONSENT_VERSION, needsReconsent } from "./consent";
+import { CURRENT_CONSENT_VERSION, needsReconsent } from "./consent.js";
 
 // Consent is a privacy/legal boundary (root CLAUDE.md): privacy.html and
 // tos.html promise "you will be asked to re-consent on next sign-in" after a
