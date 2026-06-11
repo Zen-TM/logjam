@@ -53,6 +53,13 @@ jobs:
         run: |
           sed -i "s|logjam-api:latest|logjam-api:$IMAGE_TAG|g" api/Dockerrun.aws.json
 
+      # Bundle .ebextensions with the Dockerrun so env-var option_settings
+      # (e.g. the DB_* connection parts) apply atomically with the version
+      # that requires them.
+      - name: Create deployment bundle
+        run: |
+          cd api && zip -r deploy.zip Dockerrun.aws.json .ebextensions
+
       - name: Deploy to Elastic Beanstalk
         uses: einaregilsson/beanstalk-deploy@v22
         with:
@@ -63,5 +70,5 @@ jobs:
           environment_name: ${{ env.EB_ENVIRONMENT }}
           version_label: ${{ github.sha }}
           region: ${{ secrets.AWS_REGION }}
-          deployment_package: api/Dockerrun.aws.json
+          deployment_package: api/deploy.zip
           wait_for_deployment: true
