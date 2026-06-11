@@ -3,6 +3,7 @@ import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import prisma from "../services/prisma";
 import { ecs, s3 } from "../services/awsClients";
 import { decrementStorageUsed } from "./storageQuota";
+import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
 import { getEnv } from "./env";
 import { logger } from "./logger";
 
@@ -268,6 +269,9 @@ export function startTopoJobReaper(): () => void {
       .catch((err) => {
         logger.error({ err }, "topo_export_expiry_sweep_failed");
       });
+    sweepOrphanedMediaUploads().catch((err) => {
+      logger.error({ err }, "media_orphan_sweep_failed");
+    });
   };
 
   // Run once shortly after boot (catches jobs stranded while the API was down),

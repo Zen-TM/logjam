@@ -51,6 +51,12 @@ const baseSchema = z.object({
   // Completed exports older than this are swept: S3 object deleted, quota
   // decremented, row removed (ARCH-006). 0 disables the sweep.
   TOPO_EXPORT_TTL_MS: z.coerce.number().int().nonnegative().default(604_800_000), // 7 days
+  // Unconfirmed media uploads (presigned PUT done, /media/:id/confirm never
+  // called — no Media row exists) are orphans in S3 with no quota charge
+  // (SEC-003). Objects older than this with no confirmed row are deleted by
+  // the periodic sweep. Must comfortably exceed UPLOAD_URL_TTL_SECONDS so an
+  // in-flight upload+confirm is never raced. 0 disables the sweep.
+  MEDIA_ORPHAN_TTL_MS: z.coerce.number().int().nonnegative().default(86_400_000), // 24 h
 });
 
 type Env = z.infer<typeof baseSchema> & {
