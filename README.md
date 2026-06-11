@@ -158,8 +158,12 @@ Canyons (all owned by alice, all in the Blue Mountains):
 Use this when you need realistic data (real canyon records from prod) without risk of touching prod:
 
 ```bash
-# 1. Set your prod DB URL (keep this secret — never commit)
-export DATABASE_URL_PROD="postgresql://user:pass@prod-host/logjam"
+# 1. Set your prod DB connection params (keep these secret — never commit;
+#    fetch the password from Secrets Manager)
+export DB_HOST_PROD="prod-host"
+export DB_NAME_PROD="logjam"
+export DB_USER_PROD="logjam_admin"
+export DB_PASSWORD_PROD="..."
 
 # 2. Dump + sanitize
 make snapshot

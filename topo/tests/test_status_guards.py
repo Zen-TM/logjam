@@ -14,7 +14,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402
 
 os.environ.setdefault("S3_BUCKET_TOPO", "test-bucket")
-os.environ.setdefault("DATABASE_URL", "postg:///test")
+os.environ.setdefault("DB_HOST", "localhost")
+os.environ.setdefault("DB_NAME", "test")
+os.environ.setdefault("DB_USER", "test")
+os.environ.setdefault("DB_PASSWORD", "test")
 os.environ.setdefault("JOB_ID", "job-123")
 os.environ.setdefault("EXPORT_JOB_ID", "export-123")
 

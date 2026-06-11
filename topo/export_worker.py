@@ -13,7 +13,12 @@ and emails the user a download link via SES.
 Required env:
     EXPORT_JOB_ID       UUID of the TopoExportJob row
     S3_BUCKET_TOPO      bucket holding source outputs + result key
-    DATABASE_URL        Postgres
+    DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
+                        Postgres connection parts (DB_PORT optional, default
+                        5432). DB_USER/DB_PASSWORD are ECS-secrets-injected
+                        from the RDS-managed Secrets Manager secret; the
+                        connection string is composed at import time (see
+                        compose_database_url below).
 Optional env:
     SES_FROM_EMAIL      verified SES sender (skips email if unset)
     FRONTEND_URL        for the deep-link in the email body
@@ -30,6 +35,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 import boto3
 import psycopg2
@@ -52,9 +58,44 @@ logging.basicConfig(
 )
 log = logging.getLogger("export_worker")
 
+def compose_database_url() -> str:
+    """Compose a Postgres connection string from discrete DB_* env vars.
+
+    Mirrored in worker.py — keep both copies in sync. User and password are
+    URL-quoted (safe="") because RDS-generated passwords contain characters
+    like "!" that aren't valid unescaped in a URL. Fails loud, listing
+    missing var NAMES only (never values).
+    """
+    host = os.environ.get("DB_HOST")
+    name = os.environ.get("DB_NAME")
+    user = os.environ.get("DB_USER")
+    password = os.environ.get("DB_PASSWORD")
+    port = os.environ.get("DB_PORT", "5432")
+
+    missing = [
+        var_name
+        for var_name, value in (
+            ("DB_HOST", host),
+            ("DB_NAME", name),
+            ("DB_USER", user),
+            ("DB_PASSWORD", password),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(
+            f"Missing required environment variables for database connection: {', '.join(missing)}"
+        )
+
+    return (
+        f"postgresql://{quote(user, safe='')}:{quote(password, safe='')}"
+        f"@{host}:{port}/{name}"
+    )
+
+
 AWS_REGION   = os.environ.get("AWS_REGION", "ap-southeast-2")
 BUCKET       = os.environ["S3_BUCKET_TOPO"]
-DATABASE_URL = os.environ["DATABASE_URL"]
+DATABASE_URL = compose_database_url()
 SES_FROM     = os.environ.get("SES_FROM_EMAIL", "")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 EXPORT_JOB_ID = os.environ["EXPORT_JOB_ID"]

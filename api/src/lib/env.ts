@@ -7,7 +7,19 @@ const baseSchema = z.object({
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
 
-  DATABASE_URL: z.string().url(),
+  // Postgres connection is composed at runtime from these discrete parts
+  // (see lib/databaseUrl.ts) — never DATABASE_URL. DB_USER/DB_PASSWORD are
+  // ECS-secrets-injected in Fargate workers, or resolved from DB_SECRET_ID
+  // by src/boot.ts before this schema is parsed in the EB API container.
+  DB_HOST: z.string(),
+  DB_PORT: z.coerce.number().int().positive().default(5432),
+  DB_NAME: z.string(),
+  DB_USER: z.string(),
+  DB_PASSWORD: z.string(),
+  // Secrets Manager secret id/ARN; only used by src/boot.ts to resolve
+  // DB_USER/DB_PASSWORD before the app's getEnv() runs. Optional because
+  // ECS workers get DB_USER/DB_PASSWORD injected directly.
+  DB_SECRET_ID: z.string().optional(),
 
   AUTH_MODE: z.enum(["fake", "cognito"]),
   FAKE_USER_SUB: z.string().optional(),

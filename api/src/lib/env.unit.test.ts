@@ -24,7 +24,10 @@ beforeEach(() => {
   setEnv({
     NODE_ENV: "development",
     AUTH_MODE: "fake",
-    DATABASE_URL: "postgres://u@localhost:5432/db",
+    DB_HOST: "localhost",
+    DB_NAME: "db",
+    DB_USER: "u",
+    DB_PASSWORD: "p",
   });
 });
 
@@ -60,6 +63,7 @@ describe("validateEnv — valid configurations", () => {
   it("applies defaults for unset numeric/string fields", () => {
     const env = validateEnv();
     expect(env.PORT).toBe(8080);
+    expect(env.DB_PORT).toBe(5432);
     expect(env.AWS_REGION).toBe("ap-southeast-2");
     expect(env.TOPO_REAPER_INTERVAL_MS).toBe(300_000);
     expect(env.TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS).toBe(900_000);
@@ -69,8 +73,14 @@ describe("validateEnv — valid configurations", () => {
 });
 
 describe("validateEnv — failure paths exit the process", () => {
-  it("exits when DATABASE_URL is missing", () => {
-    delete process.env.DATABASE_URL;
+  it("exits when DB_HOST is missing", () => {
+    delete process.env.DB_HOST;
+    expect(() => validateEnv()).toThrow(/process\.exit/);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it("exits when DB_PASSWORD is missing", () => {
+    delete process.env.DB_PASSWORD;
     expect(() => validateEnv()).toThrow(/process\.exit/);
     expect(exitSpy).toHaveBeenCalledWith(1);
   });

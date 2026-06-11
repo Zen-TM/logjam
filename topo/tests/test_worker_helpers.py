@@ -15,12 +15,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402
 
 os.environ.setdefault("S3_BUCKET_TOPO", "test-bucket")
-os.environ.setdefault("DATABASE_URL", "postg:///test")
+os.environ.setdefault("DB_HOST", "localhost")
+os.environ.setdefault("DB_NAME", "test")
+os.environ.setdefault("DB_USER", "test")
+os.environ.setdefault("DB_PASSWORD", "test")
 os.environ.setdefault("JOB_ID", "job-123")
 
 try:
     import worker  # noqa: E402
-    from worker import merge_settings, safe_error_message, wants_topo_email  # noqa: E402
+    from worker import (  # noqa: E402
+        compose_database_url,
+        merge_settings,
+        safe_error_message,
+        wants_topo_email,
+    )
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
@@ -125,6 +133,55 @@ class TestWantsTopoEmail(unittest.TestCase):
     def test_non_bool_value_defaults_true(self):
         row = {"ui_preferences": {"notifications": {"topoEmail": "yes"}}}
         self.assertTrue(wants_topo_email(_FakeConn(row), "u1"))
+
+
+@unittest.skipUnless(_IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}")
+class TestComposeDatabaseUrl(unittest.TestCase):
+    def setUp(self):
+        self._saved = {
+            k: os.environ.get(k)
+            for k in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD")
+        }
+
+    def tearDown(self):
+        for k, v in self._saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def test_url_encodes_special_characters(self):
+        os.environ["DB_HOST"] = "db.example.com"
+        os.environ["DB_PORT"] = "5432"
+        os.environ["DB_NAME"] = "logjam"
+        os.environ["DB_USER"] = "logjam_admin"
+        os.environ["DB_PASSWORD"] = "p@ss!w0rd#"
+        url = compose_database_url()
+        self.assertEqual(
+            url,
+            "postgresql://logjam_admin:p%40ss%21w0rd%23@db.example.com:5432/logjam",
+        )
+
+    def test_default_port(self):
+        os.environ["DB_HOST"] = "localhost"
+        os.environ.pop("DB_PORT", None)
+        os.environ["DB_NAME"] = "logjam"
+        os.environ["DB_USER"] = "logjam"
+        os.environ["DB_PASSWORD"] = "logjam"
+        url = compose_database_url()
+        self.assertIn(":5432/logjam", url)
+
+    def test_missing_vars_lists_names_only(self):
+        os.environ.pop("DB_HOST", None)
+        os.environ.pop("DB_NAME", None)
+        os.environ["DB_USER"] = "u"
+        os.environ["DB_PASSWORD"] = "secret-value"
+        with self.assertRaises(RuntimeError) as ctx:
+            compose_database_url()
+        msg = str(ctx.exception)
+        self.assertIn("DB_HOST", msg)
+        self.assertIn("DB_NAME", msg)
+        self.assertNotIn("secret-value", msg)
 
 
 if __name__ == "__main__":

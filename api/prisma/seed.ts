@@ -1,11 +1,8 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { databaseUrlFromEnv } from "../src/lib/databaseUrl";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL env var is required");
-}
-
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg({ connectionString: databaseUrlFromEnv() });
 const prisma = new PrismaClient({ adapter });
 
 const ALICE_ID = "00000000-0000-0000-0000-000000000001";

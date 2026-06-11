@@ -1,10 +1,9 @@
 import { readFileSync, existsSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { databaseUrlFromEnv } from "../lib/databaseUrl";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL env var is required");
-}
+const databaseUrl = databaseUrlFromEnv();
 
 // node-postgres (unlike the pre-7 Prisma engine) does NOT negotiate TLS by
 // default, and RDS rejects unencrypted connections ("no pg_hba.conf entry ...
@@ -19,7 +18,7 @@ if (process.env.DATABASE_SSL_CA && !existsSync(process.env.DATABASE_SSL_CA)) {
 const ssl = existsSync(caPath) ? { ca: readFileSync(caPath, "utf8") } : undefined;
 
 const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: databaseUrl,
   ssl,
 });
 

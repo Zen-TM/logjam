@@ -6,7 +6,7 @@ import jwt from "jsonwebtoken";
 // Three independent signals — any one is sufficient to refuse:
 //   1. NODE_ENV is not "development" or "test"
 //   2. AWS runtime env vars present (ECS/EB inject these)
-//   3. DATABASE_URL points to a non-local host
+//   3. DB_HOST points to a non-local host
 if (process.env.AUTH_MODE === "fake") {
   const env = process.env.NODE_ENV;
   const looksProd = env !== "development" && env !== "test";
@@ -14,10 +14,10 @@ if (process.env.AUTH_MODE === "fake") {
     Boolean(process.env.AWS_EXECUTION_ENV) ||
     Boolean(process.env.ECS_CONTAINER_METADATA_URI_V4) ||
     Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
-  const dbUrl = process.env.DATABASE_URL ?? "";
+  const dbHost = process.env.DB_HOST ?? "";
   const dbHostNonLocal =
-    dbUrl !== "" &&
-    !/@(localhost|127\.0\.0\.1|host\.docker\.internal|postgres)(:|\/|$)/.test(dbUrl);
+    dbHost !== "" &&
+    !/^(localhost|127\.0\.0\.1|host\.docker\.internal|postgres)$/.test(dbHost);
   if (looksProd || hasAwsRuntime || dbHostNonLocal) {
     throw new Error(
       `AUTH_MODE=fake refused: detected non-dev runtime ` +

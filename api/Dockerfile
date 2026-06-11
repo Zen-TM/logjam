@@ -70,4 +70,4 @@ ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/rds-c
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["node", "dist/boot.js"]

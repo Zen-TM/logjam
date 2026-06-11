@@ -116,7 +116,7 @@ describe("auth module-load fail-closed guards", () => {
     vi.resetModules();
     process.env.AUTH_MODE = "fake";
     process.env.NODE_ENV = "production";
-    process.env.DATABASE_URL = "postgres://u@localhost/db";
+    process.env.DB_HOST = "localhost";
     await expect(import("./auth")).rejects.toThrow(/refused/);
   });
 
@@ -124,7 +124,7 @@ describe("auth module-load fail-closed guards", () => {
     vi.resetModules();
     process.env.AUTH_MODE = "fake";
     process.env.NODE_ENV = "test";
-    process.env.DATABASE_URL = "postgres://u@prod.abc.ap-southeast-2.rds.amazonaws.com/db";
+    process.env.DB_HOST = "prod.abc.ap-southeast-2.rds.amazonaws.com";
     await expect(import("./auth")).rejects.toThrow(/refused/);
   });
 
@@ -132,7 +132,7 @@ describe("auth module-load fail-closed guards", () => {
     vi.resetModules();
     process.env.AUTH_MODE = "fake";
     process.env.NODE_ENV = "test";
-    process.env.DATABASE_URL = "postgres://u@localhost/db";
+    process.env.DB_HOST = "localhost";
     process.env.ECS_CONTAINER_METADATA_URI_V4 = "http://169.254.170.2/v4";
     // fake+ECS trips the fake-refused guard first; assert it throws.
     await expect(import("./auth")).rejects.toThrow();
@@ -142,7 +142,7 @@ describe("auth module-load fail-closed guards", () => {
     vi.resetModules();
     process.env.AUTH_MODE = "fake";
     process.env.NODE_ENV = "development";
-    process.env.DATABASE_URL = "postgres://u@localhost:5432/db";
+    process.env.DB_HOST = "localhost";
     delete process.env.ECS_CONTAINER_METADATA_URI_V4;
     delete process.env.AWS_EXECUTION_ENV;
     await expect(import("./auth")).resolves.toBeDefined();

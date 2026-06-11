@@ -97,8 +97,10 @@ COPY icons/ /app/icons/
 # Single image, two ECS task definitions:
 #   - logjam-topo-worker         → command override ["python3", "/app/worker.py"]
 #   - logjam-topo-export-worker  → command override ["python3", "/app/export_worker.py"]
-# Required env (topo job):     JOB_ID, S3_BUCKET_TOPO, DATABASE_URL
-# Required env (export job):   EXPORT_JOB_ID, S3_BUCKET_TOPO, DATABASE_URL
+# Required env (topo job):     JOB_ID, S3_BUCKET_TOPO, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
+# Required env (export job):   EXPORT_JOB_ID, S3_BUCKET_TOPO, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
+# (DB_PORT optional, default 5432; DB_USER/DB_PASSWORD are ECS-secrets-injected
+#  from the RDS-managed Secrets Manager secret)
 # Optional: SES_FROM_EMAIL, FRONTEND_URL, AWS_REGION
 #
 # Stage 2 plan called for headless MapLibre Native here. The current export

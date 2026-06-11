@@ -40,7 +40,11 @@ services:
       context: topo
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql://logjam:logjam@postgres:5432/logjam
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: logjam
+      DB_USER: logjam
+      DB_PASSWORD: logjam
       AWS_ENDPOINT_URL: http://localstack:4566
       AWS_REGION: ap-southeast-2
       AWS_ACCESS_KEY_ID: test

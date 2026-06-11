@@ -12,7 +12,8 @@
 //      mid-run — delete the uploaded object and exit 0.
 //   5. Notification row (+ optional SES email — TODO, see below).
 //
-// Required env: GEO_PDF_JOB_ID, DATABASE_URL, S3_BUCKET_TOPO (via getEnv()).
+// Required env: GEO_PDF_JOB_ID, DB_HOST/DB_PORT/DB_NAME (ECS-injected
+// DB_USER/DB_PASSWORD), S3_BUCKET_TOPO (via getEnv()).
 
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { s3 } from "../services/awsClients";

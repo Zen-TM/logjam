@@ -12,9 +12,9 @@ dev: shared
 	docker compose up -d postgres localstack
 	@$(MAKE) _wait-healthy
 	@echo "Running migrations..."
-	cd api && DATABASE_URL=postgresql://logjam:logjam@localhost:5432/logjam npx prisma migrate deploy
+	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma migrate deploy
 	@echo "Seeding fixtures..."
-	cd api && DATABASE_URL=postgresql://logjam:logjam@localhost:5432/logjam npx prisma db seed
+	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma db seed
 	@echo ""
 	@echo "  Infra ready. Start app servers in separate terminals:"
 	@echo "    Terminal 1: cd api  && npm run dev"
@@ -36,7 +36,7 @@ dev-snapshot:
 	@echo "Restoring snapshot into DB..."
 	docker compose exec -T postgres psql -U logjam logjam < snapshots/latest.sql
 	@echo "Applying any migrations not present in snapshot..."
-	cd api && DATABASE_URL=postgresql://logjam:logjam@localhost:5432/logjam npx prisma migrate deploy
+	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma migrate deploy
 	@echo ""
 	@echo "  Snapshot loaded. Start app servers:"
 	@echo "    Terminal 1: AUTH_MODE=cognito cd api  && npm run dev"
@@ -47,8 +47,8 @@ reset: shared
 	docker compose down -v
 	docker compose up -d postgres localstack
 	@$(MAKE) _wait-healthy
-	cd api && DATABASE_URL=postgresql://logjam:logjam@localhost:5432/logjam npx prisma migrate deploy
-	cd api && DATABASE_URL=postgresql://logjam:logjam@localhost:5432/logjam npx prisma db seed
+	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma migrate deploy
+	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma db seed
 	@echo "Reset complete."
 
 ## Build the shared package — api + frontend import @logjam/shared via file:../shared
@@ -59,13 +59,15 @@ shared:
 
 ## Re-run seed without wiping volumes
 seed:
-	cd api && DATABASE_URL=postgresql://logjam:logjam@localhost:5432/logjam npx prisma db seed
+	cd api && DB_HOST=localhost DB_PORT=5432 DB_NAME=logjam DB_USER=logjam DB_PASSWORD=logjam npx prisma db seed
 
 ## Dump + sanitize prod DB into snapshots/latest.sql
-## Requires DATABASE_URL_PROD env var pointing at the prod RDS instance.
+## Requires DB_HOST_PROD, DB_NAME_PROD, DB_USER_PROD and DB_PASSWORD_PROD env
+## vars pointing at the prod RDS instance (DB_PORT_PROD optional, default 5432).
+## Password lives in Secrets Manager — fetch it manually before running this.
 snapshot:
-	@if [ -z "$$DATABASE_URL_PROD" ]; then \
-		echo "ERROR: DATABASE_URL_PROD is not set."; \
+	@if [ -z "$$DB_HOST_PROD" ] || [ -z "$$DB_NAME_PROD" ] || [ -z "$$DB_USER_PROD" ] || [ -z "$$DB_PASSWORD_PROD" ]; then \
+		echo "ERROR: DB_HOST_PROD, DB_NAME_PROD, DB_USER_PROD and DB_PASSWORD_PROD must all be set."; \
 		exit 1; \
 	fi
 	mkdir -p snapshots

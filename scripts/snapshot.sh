@@ -1,12 +1,17 @@
 #!/bin/bash
 # Dump and sanitize the prod DB into snapshots/latest.sql.
-# Requires DATABASE_URL_PROD to be set in the environment.
+# Requires DB_HOST_PROD, DB_NAME_PROD, DB_USER_PROD, DB_PASSWORD_PROD to be set
+# in the environment (DB_PORT_PROD optional, defaults to 5432). pg_dump takes
+# discrete connection flags, so no URL/encoding is needed.
 set -e
 
-if [ -z "$DATABASE_URL_PROD" ]; then
-  echo "ERROR: DATABASE_URL_PROD is not set."
+if [ -z "$DB_HOST_PROD" ] || [ -z "$DB_NAME_PROD" ] || [ -z "$DB_USER_PROD" ] || [ -z "$DB_PASSWORD_PROD" ]; then
+  echo "ERROR: DB_HOST_PROD, DB_NAME_PROD, DB_USER_PROD and DB_PASSWORD_PROD must all be set."
   exit 1
 fi
+
+DB_PORT_PROD="${DB_PORT_PROD:-5432}"
+export PGPASSWORD="$DB_PASSWORD_PROD"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -16,7 +21,7 @@ TEMP_DB="logjam_snapshot_sanitize"
 mkdir -p "$SNAPSHOTS_DIR"
 
 echo "Dumping prod DB..."
-pg_dump --no-owner --no-acl "$DATABASE_URL_PROD" > "$SNAPSHOTS_DIR/raw.sql"
+pg_dump --no-owner --no-acl -h "$DB_HOST_PROD" -p "$DB_PORT_PROD" -U "$DB_USER_PROD" "$DB_NAME_PROD" > "$SNAPSHOTS_DIR/raw.sql"
 
 echo "Creating temp DB for sanitization..."
 createdb "$TEMP_DB" 2>/dev/null || true
