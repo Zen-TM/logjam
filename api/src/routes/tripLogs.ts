@@ -138,8 +138,14 @@ router.patch(
     if (!trip) throw new AppError(404, "Trip log not found");
     if (trip.canyonId !== getParam(req.params.canyonId))
       throw new AppError(404, "Trip log not found");
-    if (trip.canyon.ownerId !== user.id)
-      throw new AppError(403, "Only the canyon owner can edit trip logs");
+
+    // Owner-private resource — 404 (not 403) for non-owners so the response
+    // is no existence oracle for trip IDs (SEC-001).
+    requireCanyonOwner(
+      user.id,
+      trip.canyon,
+      new AppError(404, "Trip log not found"),
+    );
 
     const { date, notes, customFields } = req.body;
 
@@ -174,8 +180,14 @@ router.delete(
     if (!trip) throw new AppError(404, "Trip log not found");
     if (trip.canyonId !== getParam(req.params.canyonId))
       throw new AppError(404, "Trip log not found");
-    if (trip.canyon.ownerId !== user.id)
-      throw new AppError(403, "Only the canyon owner can delete trip logs");
+
+    // Owner-private resource — 404 (not 403) for non-owners so the response
+    // is no existence oracle for trip IDs (SEC-001).
+    requireCanyonOwner(
+      user.id,
+      trip.canyon,
+      new AppError(404, "Trip log not found"),
+    );
 
     const media = await prisma.media.findMany({
       where: { linkedType: "tripLog", linkedId: id },
