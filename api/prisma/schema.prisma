@@ -29,6 +29,7 @@ model User {
   notifications       Notification[]
   topoJobs            TopoJob[]
   topoExportJobs      TopoExportJob[]
+  geoPdfJobs          GeoPdfJob[]
   tripLogs            TripLog[]
   geoPdfTemplates     GeoPdfTemplate[]
   topoTemplates       TopoTemplate[]
@@ -225,6 +226,34 @@ model TopoExportJob {
 
   @@index([userId, createdAt])
   @@map("topo_export_jobs")
+}
+
+// Async GeoPDF generation (mirrors TopoExportJob). Submitted via POST
+// /geo-pdf, rendered by ECS task `logjam-geo-pdf-worker`
+// (api/src/worker/geoPdfWorker.ts), uploaded to
+// s3://BUCKET/exports/geo-pdf/{id}/logjam-export.pdf.
+model GeoPdfJob {
+  id                  String    @id @default(uuid())
+  userId              String    @map("user_id")
+  config              Json
+  vectorStyleSnapshot Json      @map("vector_style_snapshot")
+  status              String    @default("queued")
+  // queued | running | completed | failed
+  resultKey           String?   @map("result_key")
+  resultBytes         BigInt?   @map("result_bytes")
+  errorMessage        String?   @map("error_message")
+  // Set when the worker transitions the row to "running" — anchors the
+  // reaper's running-timeout (mirrors topo_export_jobs.started_at).
+  startedAt           DateTime? @map("started_at")
+  // ARN of the Fargate task launched for this job (Design L2) — see
+  // TopoExportJob.ecsTaskArn.
+  ecsTaskArn          String?   @map("ecs_task_arn")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  completedAt         DateTime? @map("completed_at")
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("geo_pdf_jobs")
 }
 
 model GeoPdfTemplate {

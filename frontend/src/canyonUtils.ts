@@ -972,6 +972,47 @@ export function getTopoExport(id: string): Promise<TopoExportJobView> {
   return apiFetch<TopoExportJobView>(`/topo-exports/${id}`);
 }
 
+// ── GeoPDF jobs (async export pipeline) ──────────────────────
+
+export type { GeoPdfJobView } from "@logjam/shared";
+import type { GeoPdfJobView } from "@logjam/shared";
+
+// Polls every `pollMs` while enabled AND at least one job is in progress
+// (queued/running), mirroring useTopoExports.
+export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
+  const [jobs, setJobs] = useState<GeoPdfJobView[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fetchCount, setFetchCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    setLoading(true);
+    apiFetch<{ jobs: GeoPdfJobView[] }>("/geo-pdf")
+      .then((res) => { if (!cancelled) { setJobs(res.jobs); setError(null); } })
+      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load GeoPDF jobs.")); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [enabled, fetchCount]);
+
+  const hasInProgress = jobs.some(
+    (j) => j.status === "queued" || j.status === "running",
+  );
+  useEffect(() => {
+    if (!enabled || pollMs <= 0 || !hasInProgress) return;
+    const id = setInterval(() => setFetchCount((n) => n + 1), pollMs);
+    return () => clearInterval(id);
+  }, [enabled, pollMs, hasInProgress]);
+
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+  return { jobs, loading, error, refetch };
+}
+
+export function deleteGeoPdfJob(id: string): Promise<void> {
+  return apiFetch<void>(`/geo-pdf/${id}`, { method: "DELETE" });
+}
+
 
 export function useVectorStyle(enabled: boolean) {
   const [vectorStyle, setVectorStyle] = useState<VectorStyleSettings | null>(null);

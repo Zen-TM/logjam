@@ -25,6 +25,7 @@ const baseSchema = z.object({
   ECS_CLUSTER: z.string().default("logjam-cluster"),
   ECS_TOPO_TASK_DEF: z.string().default("logjam-topo-worker"),
   ECS_TOPO_EXPORT_TASK_DEF: z.string().default("logjam-topo-export-worker"),
+  ECS_GEO_PDF_TASK_DEF: z.string().default("logjam-geo-pdf-worker"),
   ECS_SUBNETS: z.string().optional(),
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),
@@ -51,6 +52,12 @@ const baseSchema = z.object({
   // Completed exports older than this are swept: S3 object deleted, quota
   // decremented, row removed (ARCH-006). 0 disables the sweep.
   TOPO_EXPORT_TTL_MS: z.coerce.number().int().nonnegative().default(604_800_000), // 7 days
+  // GeoPdfJob sweeps (mirrors TOPO_REAPER_EXPORT_*_TIMEOUT_MS): queued rows
+  // older than the QUEUED timeout (task never placed/started) and running
+  // rows older than the RUNNING timeout (worker SIGKILLed before its terminal
+  // write) are force-failed.
+  GEO_PDF_QUEUED_TIMEOUT_MS: z.coerce.number().int().positive().default(900_000), // 15 min
+  GEO_PDF_RUNNING_TIMEOUT_MS: z.coerce.number().int().positive().default(1_800_000), // 30 min
   // Unconfirmed media uploads (presigned PUT done, /media/:id/confirm never
   // called — no Media row exists) are orphans in S3 with no quota charge
   // (SEC-003). Objects older than this with no confirmed row are deleted by

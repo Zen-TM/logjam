@@ -50,6 +50,8 @@ const REAPER_JOB_MESSAGE =
   "Processing timed out — the job did not complete in the expected time and was marked failed. Submit a new job to retry.";
 const REAPER_EXPORT_MESSAGE =
   "The export did not complete in the expected time and was marked failed. Submit a new export to retry.";
+const REAPER_GEO_PDF_MESSAGE =
+  "GeoPDF generation timed out — the job did not complete in the expected time and was marked failed. Submit a new job to retry.";
 
 // Headroom multiplier on the API's own duration estimate. A code constant,
 // not an env knob: if real runtimes drift from the estimate, fix the estimate
@@ -186,6 +188,42 @@ export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number>
     );
   }
 
+  // geo_pdf_jobs · queued: anchored on createdAt (mirrors topo_export_jobs).
+  const geoPdfQueuedCutoff = new Date(
+    now.getTime() - env.GEO_PDF_QUEUED_TIMEOUT_MS,
+  );
+  const queuedGeoPdfResult = await prisma.geoPdfJob.updateMany({
+    where: { status: "queued", createdAt: { lt: geoPdfQueuedCutoff } },
+    data: { status: "failed", errorMessage: REAPER_GEO_PDF_MESSAGE },
+  });
+  reaped += queuedGeoPdfResult.count;
+
+  // geo_pdf_jobs · running: anchored on startedAt (createdAt fallback).
+  const geoPdfRunningCutoff = new Date(
+    now.getTime() - env.GEO_PDF_RUNNING_TIMEOUT_MS,
+  );
+  const overdueGeoPdfJobs = await prisma.geoPdfJob.findMany({
+    where: {
+      status: "running",
+      OR: [
+        { startedAt: { lt: geoPdfRunningCutoff } },
+        { startedAt: null, createdAt: { lt: geoPdfRunningCutoff } },
+      ],
+    },
+    select: { id: true, ecsTaskArn: true },
+  });
+  if (overdueGeoPdfJobs.length > 0) {
+    const result = await prisma.geoPdfJob.updateMany({
+      where: { id: { in: overdueGeoPdfJobs.map((j) => j.id) }, status: "running" },
+      data: { status: "failed", errorMessage: REAPER_GEO_PDF_MESSAGE },
+    });
+    reaped += result.count;
+    await stopTasksBestEffort(
+      overdueGeoPdfJobs,
+      "geo_pdf_reaper_stop_task_failed",
+    );
+  }
+
   return reaped;
 }
 
@@ -238,6 +276,46 @@ export async function expireCompletedExports(
   return expired;
 }
 
+/**
+ * GeoPdfJob expiry sweep — same shape as expireCompletedExports, reusing
+ * TOPO_EXPORT_TTL_MS (0 disables). Completed jobs older than the cutoff are
+ * removed: S3 object deleted, storage charge decremented, row removed in one
+ * transaction. Per-row failures are logged and skipped so one bad row can't
+ * wedge the others.
+ */
+export async function expireCompletedGeoPdfJobs(
+  now: Date = new Date(),
+): Promise<number> {
+  const env = getEnv();
+  if (env.TOPO_EXPORT_TTL_MS === 0) return 0;
+  const bucket = env.S3_BUCKET_TOPO ?? "";
+
+  const cutoff = new Date(now.getTime() - env.TOPO_EXPORT_TTL_MS);
+  const expiredRows = await prisma.geoPdfJob.findMany({
+    where: { status: "completed", completedAt: { lt: cutoff } },
+    select: { id: true, userId: true, resultKey: true, resultBytes: true },
+  });
+
+  let expired = 0;
+  for (const row of expiredRows) {
+    try {
+      if (row.resultKey) {
+        await s3.send(
+          new DeleteObjectCommand({ Bucket: bucket, Key: row.resultKey }),
+        );
+      }
+      await prisma.$transaction(async (tx) => {
+        await decrementStorageUsed(row.userId, row.resultBytes ?? 0n, tx);
+        await tx.geoPdfJob.delete({ where: { id: row.id } });
+      });
+      expired += 1;
+    } catch (err) {
+      logger.error({ err, id: row.id }, "geo_pdf_expiry_failed");
+    }
+  }
+  return expired;
+}
+
 let timer: NodeJS.Timeout | null = null;
 
 /**
@@ -269,6 +347,13 @@ export function startTopoJobReaper(): () => void {
       .catch((err) => {
         logger.error({ err }, "topo_export_expiry_sweep_failed");
       });
+    expireCompletedGeoPdfJobs()
+      .then((count) => {
+        if (count > 0) logger.info({ count }, "geo_pdf_jobs_expired");
+      })
+      .catch((err) => {
+        logger.error({ err }, "geo_pdf_expiry_sweep_failed");
+      });
     sweepOrphanedMediaUploads().catch((err) => {
       logger.error({ err }, "media_orphan_sweep_failed");
     });
@@ -288,6 +373,8 @@ export function startTopoJobReaper(): () => void {
       exportQueuedTimeoutMs: env.TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS,
       exportRunningTimeoutMs: env.TOPO_REAPER_EXPORT_RUNNING_TIMEOUT_MS,
       exportTtlMs: env.TOPO_EXPORT_TTL_MS,
+      geoPdfQueuedTimeoutMs: env.GEO_PDF_QUEUED_TIMEOUT_MS,
+      geoPdfRunningTimeoutMs: env.GEO_PDF_RUNNING_TIMEOUT_MS,
     },
     "topo_job_reaper_started",
   );

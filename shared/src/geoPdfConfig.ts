@@ -124,3 +124,20 @@ export function validateGeoPdfConfig(input: unknown): string | null {
 
   return null;
 }
+
+// Status lifecycle for an async GeoPDF render job. Mirrors ExportStatus on
+// TopoExportJob — kept as its own type so the two pipelines can diverge.
+export type GeoPdfJobStatus = "queued" | "running" | "completed" | "failed";
+
+// Server-side view of a GeoPdfJob row returned to the client. Mirrors the
+// Prisma model with serializable dates and the BigInt cast away.
+export interface GeoPdfJobView {
+  id: string;
+  status: GeoPdfJobStatus;
+  resultBytes: number | null;
+  errorMessage: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  downloadUrl: string | null; // presigned, set only when status=completed
+  downloadExpiresAt: string | null;
+}

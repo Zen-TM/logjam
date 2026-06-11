@@ -20,38 +20,7 @@
   margin-top: 0.5em;
 }
 
-/* ── Active jobs ─────────────────────────────────────────────────────────────── */
-
-.activeSection {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4em;
-}
-
-.activeJobRow {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25em;
-  padding: 0.45em 0.6em;
-  background: var(--theme-secondary);
-  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
-  border-radius: var(--radius-sm);
-}
-
-.activeJobName {
-  font-size: var(--text-sm);
-  color: var(--theme-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.activeJobStatus {
-  font-size: var(--text-xs);
-  opacity: 0.5;
-}
-
-/* ── Template accordion ──────────────────────────────────────────────────────── */
+/* ── Accordion ───────────────────────────────────────────────────────────────── */
 
 .accordion {
   border: 1px solid color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
@@ -61,10 +30,29 @@
 .accordionHeader {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  background: none;
+  border: none;
   color: var(--theme-text-primary);
   font-size: var(--text-sm);
   font-weight: 600;
   padding: 0.5em 0.7em;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+
+.accordionHeader:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 5%, transparent);
+}
+
+.chevron {
+  transition: transform var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
 }
 
 .accordionBody {
@@ -181,4 +169,56 @@
 
 .confirmNo {
   composes: actionButton;
+}
+
+/* ── Generated PDF rows ──────────────────────────────────────────────────────── */
+
+.jobItem {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.3em 0.5em;
+}
+
+.jobItem:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 5%, transparent);
+}
+
+.jobMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.jobLabel {
+  font-size: var(--text-sm);
+  color: var(--theme-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jobMeta {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jobMetaFailed {
+  composes: jobMeta;
+  color: var(--theme-warning);
+  opacity: 1;
+}
+
+.iconDownloadButton {
+  composes: iconButton;
+  color: var(--theme-accent);
+}
+
+.iconDownloadButton:hover {
+  background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
 }

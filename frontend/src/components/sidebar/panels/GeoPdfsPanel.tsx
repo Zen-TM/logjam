@@ -1,12 +1,26 @@
 import { useState, useEffect, useCallback } from "react";
-import { LinearProgress } from "@mui/material";
-import { Trash2 } from "lucide-react";
+import { ChevronDown, Download, Trash2 } from "lucide-react";
 import classes from "./GeoPdfsPanel.module.css";
-import { apiFetch } from "../../../canyonUtils";
+import { apiFetch, useGeoPdfJobs, deleteGeoPdfJob } from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
-import type { GeoPdfTemplate, GeoPdfJob } from "../../dialogs/GeoPdfDialog";
+import type { GeoPdfTemplate } from "../../dialogs/GeoPdfDialog";
 
+function formatBytes(n: number | null): string {
+  if (n === null) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function timeAgo(iso: string): string {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
 
 function GeoPdfsPanel({
   onOpenGeoPdf,
@@ -14,20 +28,49 @@ function GeoPdfsPanel({
   onEditGeoPdfTemplate,
   onCreateGeoPdfTemplate,
   refetchTrigger,
-  geoPdfJobs = [],
+  geoPdfJobsRefetch,
 }: {
   onOpenGeoPdf: () => void;
   onOpenGeoPdfWithTemplate: (id: string) => void;
   onEditGeoPdfTemplate: (template: GeoPdfTemplate) => void;
   onCreateGeoPdfTemplate: () => void;
   refetchTrigger: number;
-  geoPdfJobs?: GeoPdfJob[];
+  geoPdfJobsRefetch: number;
 }) {
   const toast = useToast();
   const [templates, setTemplates] = useState<GeoPdfTemplate[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchCount] = useState(0);
+
+  // Generated GeoPDF jobs accordion
+  const [jobsOpen, setJobsOpen] = useState(false);
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
+  const { jobs, loading: jobsLoading, error: jobsError, refetch: refetchJobs } = useGeoPdfJobs(true);
+
+  useEffect(() => {
+    if (geoPdfJobsRefetch > 0) refetchJobs();
+  }, [geoPdfJobsRefetch, refetchJobs]);
+
+  useEffect(() => {
+    if (jobsError) toast.error(jobsError);
+  }, [jobsError, toast]);
+
+  const handleDeleteJob = useCallback(
+    async (id: string) => {
+      setDeletingJobId(id);
+      try {
+        await deleteGeoPdfJob(id);
+        refetchJobs();
+      } catch (err) {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't delete GeoPDF."));
+      } finally {
+        setDeletingJobId(null);
+      }
+    },
+    [refetchJobs, toast],
+  );
 
   const loadTemplates = useCallback(async () => {
     setLoading(true);
@@ -62,28 +105,6 @@ function GeoPdfsPanel({
 
   return (
     <div className={classes.root}>
-      {geoPdfJobs.length > 0 && (
-        <div className={classes.activeSection}>
-          <div className={classes.sectionLabel}>Active</div>
-          {geoPdfJobs.map((job) => (
-            <div key={job.id} className={classes.activeJobRow}>
-              <div className={classes.activeJobName}>{job.configSummary}</div>
-              <LinearProgress
-                variant="indeterminate"
-                sx={{
-                  height: 3,
-                  borderRadius: 2,
-                  backgroundColor: "rgba(255,255,255,0.1)",
-                  "& .MuiLinearProgress-bar": { backgroundColor: "var(--theme-accent)" },
-                }}
-              />
-              <div className={classes.activeJobStatus}>
-                {job.status === "submitting" ? "Submitting…" : "Generating…"}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
       <button className={classes.primaryButton} onClick={onOpenGeoPdf}>
         Download Area as GeoPDF
       </button>
@@ -149,6 +170,83 @@ function GeoPdfsPanel({
             </div>
           ))}
         </div>
+      </div>
+
+      <div className={classes.accordion}>
+        <button
+          className={classes.accordionHeader}
+          onClick={() => setJobsOpen((v) => !v)}
+          aria-expanded={jobsOpen}
+        >
+          <span>Generated PDFs ({jobs.length})</span>
+          <ChevronDown
+            size={14}
+            className={`${classes.chevron} ${jobsOpen ? classes.chevronOpen : ""}`}
+          />
+        </button>
+        {jobsOpen && (
+          <div className={classes.accordionBody}>
+            {jobsLoading && jobs.length === 0 && (
+              <div className={classes.emptyHint}>Loading…</div>
+            )}
+            {!jobsLoading && jobs.length === 0 && (
+              <div className={classes.emptyHint}>No GeoPDFs generated yet.</div>
+            )}
+            {jobs.map((job) => {
+              const isComplete = job.status === "completed" && !!job.downloadUrl;
+              const isFailed = job.status === "failed";
+              const isInProgress = job.status === "queued" || job.status === "running";
+              const statusLabel =
+                job.status === "queued" ? "Queued"
+                : job.status === "running" ? "Generating…"
+                : job.status === "failed" ? "Failed"
+                : "Ready";
+              const metaParts = [
+                statusLabel,
+                ...(job.resultBytes !== null ? [formatBytes(job.resultBytes)] : []),
+                timeAgo(job.createdAt),
+              ];
+              const dateStr = new Date(job.createdAt).toLocaleDateString(undefined, {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              });
+              return (
+                <div key={job.id} className={classes.jobItem}>
+                  <div className={classes.jobMain}>
+                    <span className={classes.jobLabel}>GeoPDF · {dateStr}</span>
+                    <span
+                      className={isFailed ? classes.jobMetaFailed : classes.jobMeta}
+                      title={isFailed && job.errorMessage ? job.errorMessage : undefined}
+                    >
+                      {metaParts.join(" · ")}
+                    </span>
+                  </div>
+                  {isComplete && (
+                    <a
+                      className={classes.iconDownloadButton}
+                      href={job.downloadUrl!}
+                      download
+                      title="Download"
+                    >
+                      <Download size={14} />
+                    </a>
+                  )}
+                  {!isInProgress && (
+                    <button
+                      className={classes.iconDeleteButton}
+                      onClick={() => handleDeleteJob(job.id)}
+                      disabled={deletingJobId === job.id}
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
