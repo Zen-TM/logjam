@@ -1,0 +1,40 @@
+{
+  "family": "logjam-geo-pdf-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "4096",
+  "executionRoleArn": "arn:aws:iam::620853681701:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::620853681701:role/logjam-topo-worker-role",
+  "containerDefinitions": [
+    {
+      "name": "geo-pdf-worker",
+      "image": "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest",
+      "command": ["node", "dist/worker/geoPdfWorker.js"],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "AUTH_MODE", "value": "cognito" },
+        { "name": "AWS_REGION", "value": "ap-southeast-2" },
+        { "name": "DATABASE_URL", "value": "FILL_FROM_EB_ENV" },
+        { "name": "S3_BUCKET_TOPO", "value": "logjam-topo-jobs" },
+        { "name": "S3_BUCKET_MEDIA", "value": "logjam-media" },
+        { "name": "CORS_ORIGIN", "value": "FILL_FROM_EB_ENV" },
+        { "name": "TOPO_CDN_BASE_URL", "value": "FILL_FROM_EB_ENV" },
+        { "name": "ECS_SUBNETS", "value": "FILL_FROM_EB_ENV" },
+        { "name": "ECS_SECURITY_GROUPS", "value": "FILL_FROM_EB_ENV" },
+        { "name": "COGNITO_REGION", "value": "ap-southeast-2" },
+        { "name": "COGNITO_USER_POOL_ID", "value": "FILL_FROM_EB_ENV" },
+        { "name": "COGNITO_CLIENT_ID", "value": "FILL_FROM_EB_ENV" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/logjam-geo-pdf-worker",
+          "awslogs-create-group": "true",
+          "awslogs-region": "ap-southeast-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
