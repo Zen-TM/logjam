@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -55,6 +56,7 @@ function TripLogDialog({
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
 }) {
+  const isMobile = useIsMobile();
   const [date, setDate] = useState(todayDateString());
   const [notes, setNotes] = useState("");
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
@@ -245,6 +247,7 @@ function TripLogDialog({
 
   return (
     <Dialog
+      fullScreen={isMobile}
       open={open}
       onClose={saving ? undefined : () => void handleRequestClose()}
       maxWidth="sm"

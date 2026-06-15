@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -31,6 +32,7 @@ function TopoTemplateEditDialog({
   editingTemplate: TopoTemplate | null;
   onSaved: () => void;
 }) {
+  const isMobile = useIsMobile();
   const [name, setName] = useState("");
   const [settings, setSettings] = useState<RasterTemplateSettings>(() =>
     cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS),
@@ -86,6 +88,7 @@ function TopoTemplateEditDialog({
 
   return (
     <Dialog
+      fullScreen={isMobile}
       open={open}
       onClose={saving ? undefined : onClose}
       maxWidth="sm"

@@ -1,4 +1,8 @@
+import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
+import { useIsMobile } from "../../useIsMobile";
+import BottomSheet from "./BottomSheet";
+import type { SheetSnap } from "./BottomSheet";
 import type { PanelId } from "./panels";
 import type {
   TCanyon,
@@ -122,6 +126,8 @@ function SidebarPanel({
   // Vector styles
   vectorStyle,
   onVectorStyleChange,
+  // Mobile: collapse the bottom sheet to peek during map-pick flows
+  collapseToPeek,
 }: {
   activePanel: PanelId | null;
   onClose: () => void;
@@ -205,7 +211,27 @@ function SidebarPanel({
   // Vector styles
   vectorStyle: VectorStyleSettings | null;
   onVectorStyleChange: (next: VectorStyleSettings) => void;
+  // Mobile
+  collapseToPeek: boolean;
 }) {
+  const isMobile = useIsMobile();
+  const [sheetSnap, setSheetSnap] = useState<SheetSnap>("half");
+  // Remember the snap to restore to once a map-pick flow ends.
+  const snapBeforePeek = useRef<SheetSnap>("half");
+  const snapRef = useRef<SheetSnap>(sheetSnap);
+  snapRef.current = sheetSnap;
+
+  useEffect(() => {
+    if (collapseToPeek) {
+      snapBeforePeek.current = snapRef.current;
+      setSheetSnap("peek");
+    } else {
+      setSheetSnap(snapBeforePeek.current);
+    }
+    // Intentionally only reacts to collapseToPeek; snap is read via ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collapseToPeek]);
+
   if (!activePanel) return null;
 
   const title =
@@ -213,8 +239,8 @@ function SidebarPanel({
       ? canyon.name
       : PANEL_TITLES[activePanel];
 
-  return (
-    <div className={classes.panel}>
+  const panelContent = (
+    <>
       <div className={classes.panelHeader}>
         <h2 className={classes.panelTitle}>{title}</h2>
         <button className={classes.closeButton} onClick={onClose} aria-label="Close panel">
@@ -348,8 +374,18 @@ function SidebarPanel({
           />
         )}
       </div>
-    </div>
+    </>
   );
+
+  if (isMobile) {
+    return (
+      <BottomSheet snap={sheetSnap} onSnapChange={setSheetSnap}>
+        {panelContent}
+      </BottomSheet>
+    );
+  }
+
+  return <div className={classes.panel}>{panelContent}</div>;
 }
 
 export default SidebarPanel;

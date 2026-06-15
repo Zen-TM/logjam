@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -55,6 +56,7 @@ function TripLogViewDialog({
   canManageMedia?: boolean;
   onMediaChanged?: () => void;
 }) {
+  const isMobile = useIsMobile();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -107,6 +109,7 @@ function TripLogViewDialog({
   return (
     <>
       <Dialog
+        fullScreen={isMobile}
         open={open && !showDeleteConfirm}
         onClose={onClose}
         maxWidth="sm"

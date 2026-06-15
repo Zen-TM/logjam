@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -134,6 +135,7 @@ function TripLogCsvImportDialog({
   onRefetchAnalytics: () => void;
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
 }) {
+  const isMobile = useIsMobile();
   const [stage, setStage] = useState<Stage>({ name: "select-file" });
   const [parseError, setParseError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -1107,6 +1109,7 @@ function TripLogCsvImportDialog({
 
   return (
     <Dialog
+      fullScreen={isMobile}
       open={open}
       onClose={isImporting ? undefined : handleClose}
       maxWidth="sm"

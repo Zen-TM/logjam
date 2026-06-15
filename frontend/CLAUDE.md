@@ -164,3 +164,15 @@ Bumping `CURRENT_CONSENT_VERSION` (only with materially changed ToS/privacy word
 Add when a label alone doesn't convey units, scale, or consequence. Content: what it means + a real-world example if helpful. Skip if self-explanatory.
 
 Patterns: topo settings use `SettingsRow tooltip="..."`. MUI dialog text fields use `InputProps.endAdornment` with an `InfoOutlinedIcon`. Select fields (dropdown arrow conflicts) wrap the whole `TextField` in `<Tooltip><Box sx={{ flex: 1, minWidth: 0 }}>`. Sidebar panels use native HTML `title` attribute. Links in tooltips: pass `ReactNode` to `title` (MUI Tooltip is interactive by default). Disabled buttons need a `<span>` wrapper.
+
+### Mobile / responsive
+
+Single breakpoint: **`max-width: 768px`**, the canonical source being `useIsMobile()` (`src/useIsMobile.ts`, `MOBILE_MAX_WIDTH_PX`). Every mobile CSS `@media (max-width: 768px)` block and the hook must agree on this value.
+
+- **Two mechanisms, kept in sync:** CSS media queries in the co-located `.module.css` for layout; `useIsMobile()` in JS for behaviour CSS can't express (rendering `BottomSheet` vs the desktop flyout, `fullScreen` dialogs, collapsing the sheet during map-pick).
+- **Layout model on mobile:** map is full-bleed (`--nav-rail-width` overridden to `0` in `index.css`); NavRail becomes a fixed horizontal-scroll **bottom strip**; the active panel renders in a draggable **bottom sheet** (`sidebar/BottomSheet.tsx`, snap points peek/half/full).
+- **z-index contract (don't break):** bottom sheet `z-index: 4`, backdrop `3`, and the mobile NavRail **must be above the sheet (`z-index: 5`)**. The sheet is bottom-anchored above the nav (`bottom: var(--bottom-nav-height)`); its drag translate sweeps its bottom edge *over* the nav region, so the nav only stays visible/tappable because it paints on top. Lowering the nav's z-index silently traps the user in whatever panel is open.
+- **New dialogs:** add `fullScreen={isMobile}` on the `<Dialog>`. Collapse any multi-column `sx` flex/grid rows to one column on mobile (`flexDirection: isMobile ? "column" : "row"`, or a CSS media query). Small confirm sub-dialogs stay centered (don't fullScreen them).
+- **Map-pick flows** (coord pick, area/bbox/extent select): App passes `collapseToPeek` to SidebarPanel so the sheet drops to peek and the map is reachable; dialog-initiated picks already hide their own dialog.
+- **Heavy authoring tools** (GeoPDF, topo settings, CSV import) are desktop-first: `fullScreen` + `overflow-x` on dense grids + a "best on a larger screen" note, **not** full reflow.
+- Use `100dvh` (not `100vh`) for full-height containers — mobile address-bar resize.

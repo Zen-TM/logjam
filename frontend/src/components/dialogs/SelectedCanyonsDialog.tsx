@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -46,6 +47,7 @@ function SelectedCanyonsDialog({
   onRemoveCanyon: (id: string) => void;
   onAddCanyon: (id: string) => void;
 }) {
+  const isMobile = useIsMobile();
   const [listOpen, setListOpen] = useState(false);
   const [shareSearch, setShareSearch] = useState("");
   const [shareFriendIds, setShareFriendIds] = useState<string[]>([]);
@@ -164,6 +166,7 @@ function SelectedCanyonsDialog({
   return (
     <>
       <Dialog
+        fullScreen={isMobile}
         open={open && !showDeleteConfirm}
         onClose={busy ? undefined : onClose}
         maxWidth="sm"

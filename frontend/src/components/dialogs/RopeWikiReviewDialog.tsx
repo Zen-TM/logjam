@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -43,6 +44,7 @@ function RopeWikiReviewDialog({
   onClose: () => void;
   onApplied: () => void;
 }) {
+  const isMobile = useIsMobile();
   const [decisions, setDecisions] = useState<Record<number, DecisionState>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +88,7 @@ function RopeWikiReviewDialog({
 
   return (
     <Dialog
+      fullScreen={isMobile}
       open={open}
       onClose={submitting ? undefined : onClose}
       maxWidth="sm"

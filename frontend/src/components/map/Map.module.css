@@ -15,6 +15,24 @@
   margin-left: var(--panel-width);
 }
 
+/* Mobile (≤768px): the panel is a bottom sheet, not a left flyout — don't shift
+   controls right. Lift bottom controls and the GeoPDF confirm bar above the
+   bottom nav strip. Keep in sync with useIsMobile() / MOBILE_MAX_WIDTH_PX. */
+@media (max-width: 768px) {
+  :global(#map[data-sidebar-open="true"] .maplibregl-ctrl-bottom-left) {
+    margin-left: 0;
+  }
+
+  :global(#map .maplibregl-ctrl-bottom-left),
+  :global(#map .maplibregl-ctrl-bottom-right) {
+    margin-bottom: var(--bottom-nav-height);
+  }
+
+  .geoPdfConfirmBar {
+    bottom: calc(40px + var(--bottom-nav-height));
+  }
+}
+
 .pickBanner {
   position: absolute;
   top: 50px;

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -25,6 +26,7 @@ function ImportDialog({
   onClose: () => void;
   onImported: () => void;
 }) {
+  const isMobile = useIsMobile();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +49,7 @@ function ImportDialog({
 
   return (
     <Dialog
+      fullScreen={isMobile}
       open={open}
       onClose={loading ? undefined : onClose}
       maxWidth="sm"

@@ -1,0 +1,63 @@
+.backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* Leave the bottom nav strip uncovered so it stays tappable. */
+  bottom: var(--bottom-nav-height);
+  background: color-mix(in srgb, black 40%, transparent);
+  z-index: 3;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  /* Sit above the bottom nav strip so panel switching stays reachable. */
+  bottom: var(--bottom-nav-height);
+  height: calc(100dvh - var(--bottom-nav-height));
+  background-color: var(--theme-primary);
+  color: var(--theme-text-primary);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+  /* Snap animation. Suppressed mid-drag via inline style. */
+  transition: transform var(--transition-med) ease-out;
+  touch-action: none;
+}
+
+/* Drag handle bar — the only grab area, so panel-body scroll stays usable. */
+.handle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0 4px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.handle:active {
+  cursor: grabbing;
+}
+
+.grip {
+  width: 36px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background-color: color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
+}
+
+/* Sheet content fills the rest; child panel manages its own scroll. */
+.content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}

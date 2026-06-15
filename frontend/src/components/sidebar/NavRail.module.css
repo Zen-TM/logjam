@@ -57,6 +57,40 @@
   white-space: nowrap;
 }
 
+/* Mobile (≤768px): NavRail becomes a fixed, horizontally-scrollable bottom
+   strip. Keep in sync with useIsMobile() / MOBILE_MAX_WIDTH_PX. */
+@media (max-width: 768px) {
+  .navRail {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: var(--bottom-nav-height);
+    /* Above the bottom sheet (z-index 4) so it stays visible and tappable. */
+    z-index: 5;
+    flex-direction: row;
+    align-items: center;
+    padding: 0 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    /* Top shadow instead of the desktop right-edge shadow. */
+    box-shadow: 0 -8px 8px -4px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Vertical spacer between groups is meaningless in a horizontal scroll strip. */
+  .spacer {
+    flex: 0 0 8px;
+  }
+
+  .navItem {
+    flex: 0 0 auto;
+    margin-bottom: 0;
+    margin-right: 4px;
+  }
+}
+
 .badge {
   position: absolute;
   top: 2px;

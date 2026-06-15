@@ -1,6 +1,7 @@
 .app {
   position: relative;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -19,4 +20,11 @@
   display: flex;
   gap: 0.75rem;
   z-index: 10;
+}
+
+/* Mobile: lift above the peeked bottom sheet (~96px) during area selection. */
+@media (max-width: 768px) {
+  .selectAllButtons {
+    bottom: calc(96px + 1rem);
+  }
 }

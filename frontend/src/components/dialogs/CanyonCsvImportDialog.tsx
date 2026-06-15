@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -358,6 +359,7 @@ function CanyonCsvImportDialog({
   canyons: TCanyon[];
   onRefetchCanyons: () => void;
 }) {
+  const isMobile = useIsMobile();
   const [stage, setStage] = useState<Stage>({ name: "select-file" });
   const [parseError, setParseError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -765,7 +767,7 @@ function CanyonCsvImportDialog({
 
   if (stage.name === "select-file") {
     return (
-      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
+      <Dialog open={open} fullScreen={isMobile} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
         {renderTitle("Import Canyons from CSV")}
         <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
@@ -822,7 +824,7 @@ function CanyonCsvImportDialog({
   if (stage.name === "mapping") {
     const { headers } = stage;
     return (
-      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: paperSx }}>
+      <Dialog open={open} fullScreen={isMobile} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: paperSx }}>
         {renderTitle("Import Canyons — Map Columns")}
         <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1, pt: 1 }}>
@@ -901,7 +903,7 @@ function CanyonCsvImportDialog({
   if (stage.name === "mismatch-resolve") {
     const { mismatches } = stage;
     return (
-      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: paperSx }}>
+      <Dialog open={open} fullScreen={isMobile} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: paperSx }}>
         {renderTitle("Import Canyons — Resolve Type Mismatches")}
         <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, pt: 1 }}>
@@ -1094,7 +1096,7 @@ function CanyonCsvImportDialog({
     }
 
     return (
-      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: paperSx }}>
+      <Dialog open={open} fullScreen={isMobile} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: paperSx }}>
         {renderTitle("Import Canyons — Unmatched Names")}
         <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1, pt: 1 }}>
@@ -1237,7 +1239,7 @@ function CanyonCsvImportDialog({
     }
 
     return (
-      <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: paperSx }}>
+      <Dialog open={open} fullScreen={isMobile} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: paperSx }}>
         {renderTitle("Import Canyons — Matched Names")}
         <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1, pt: 1 }}>
@@ -1399,7 +1401,7 @@ function CanyonCsvImportDialog({
   if (stage.name === "confirm") {
     const { creates, replaces, discardCount, newAttrKeys } = stage;
     return (
-      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
+      <Dialog open={open} fullScreen={isMobile} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
         {renderTitle("Import Canyons — Confirm")}
         <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: 1 }}>
@@ -1468,7 +1470,7 @@ function CanyonCsvImportDialog({
 
   if (stage.name === "importing") {
     return (
-      <Dialog open={open} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
+      <Dialog open={open} fullScreen={isMobile} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
         {renderTitle("Import Canyons")}
         <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
           <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", py: 4, gap: 2 }}>
@@ -1485,7 +1487,7 @@ function CanyonCsvImportDialog({
   if (stage.name === "result") {
     const { created, replaced, errors } = stage;
     return (
-      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
+      <Dialog open={open} fullScreen={isMobile} onClose={onClose} maxWidth="sm" fullWidth PaperProps={{ sx: paperSx }}>
         {renderTitle("Import Complete")}
         <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: 1 }}>

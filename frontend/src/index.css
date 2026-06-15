@@ -18,6 +18,7 @@
   /* Layout */
   --nav-rail-width: 56px;
   --panel-width: 280px;
+  --bottom-nav-height: 56px;
 
   /* Border radius */
   --radius-sm: 4px;
@@ -56,5 +57,13 @@ body {
 @media (prefers-color-scheme: dark) {
   .icon {
     filter: invert(1);
+  }
+}
+
+/* Mobile (≤768px): map goes full-bleed (no left nav rail); navigation moves to
+   a fixed bottom strip. Keep in sync with useIsMobile() / MOBILE_MAX_WIDTH_PX. */
+@media (max-width: 768px) {
+  :root {
+    --nav-rail-width: 0px;
   }
 }

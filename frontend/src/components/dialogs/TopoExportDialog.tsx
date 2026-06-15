@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -58,6 +59,7 @@ function layersForFormat(format: ExportFormat): Set<TopoLayerKey> {
 }
 
 export default function TopoExportDialog({ open, onClose, job, onExportQueued }: Props) {
+  const isMobile = useIsMobile();
   const [format, setFormat] = useState<ExportFormat>(INITIAL_FORMAT);
   const [bundling, setBundling] = useState<ExportBundling>("composite");
   const [selected, setSelected] = useState<Set<TopoLayerKey>>(() => layersForFormat(INITIAL_FORMAT));
@@ -149,6 +151,7 @@ export default function TopoExportDialog({ open, onClose, job, onExportQueued }:
 
   return (
     <Dialog
+      fullScreen={isMobile}
       open={open}
       onClose={submitting ? undefined : onClose}
       maxWidth="sm"

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -40,6 +41,7 @@ function DeleteAccountDialog({
   username: string;
   onDeleted: () => void;
 }) {
+  const isMobile = useIsMobile();
   const [confirmInput, setConfirmInput] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +73,7 @@ function DeleteAccountDialog({
 
   return (
     <Dialog
+      fullScreen={isMobile}
       open={open}
       maxWidth="sm"
       fullWidth

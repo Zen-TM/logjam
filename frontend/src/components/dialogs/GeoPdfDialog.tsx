@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -137,6 +138,7 @@ function GeoPdfDialog({
 
   const [extentState, setExtentState] =
     useState<ExtentState>(DEFAULT_EXTENT_STATE);
+  const isMobile = useIsMobile();
   const [templates, setTemplates] = useState<GeoPdfTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
     null,
@@ -654,6 +656,7 @@ function GeoPdfDialog({
 
   return (
     <Dialog
+      fullScreen={isMobile}
       open={open}
       onClose={generating ? undefined : onClose}
       maxWidth="sm"
@@ -690,6 +693,17 @@ function GeoPdfDialog({
       </DialogTitle>
 
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
+        {isMobile && (
+          <div
+            style={{
+              marginBottom: "12px",
+              fontSize: "0.85em",
+              color: "var(--theme-text-muted)",
+            }}
+          >
+            This tool is best used on a larger screen.
+          </div>
+        )}
         <p className={classes.safetyWarning} role="note">
           Generated maps use user-generated and third-party data that may be
           inaccurate or outdated. Not a substitute for your own navigation,

@@ -651,6 +651,10 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   }
 
   const dimUI = pickingCoords || selectingArea || selectingGeoPdfExtent;
+  // Mobile: any map-selection flow needs the bottom sheet out of the way so the
+  // map is tappable. Collapses the sheet to peek; restored when the flow ends.
+  const mapInteractionActive =
+    pickingCoords || selectingArea || selectingGeoPdfExtent || selectingTopoBbox;
 
   return (
     <div className={classes.app}>
@@ -815,6 +819,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           analyticsLoading={analyticsLoading}
           vectorStyle={vectorStyle}
           onVectorStyleChange={setLiveVectorStyle}
+          collapseToPeek={mapInteractionActive}
         />
       </div>
       <Map

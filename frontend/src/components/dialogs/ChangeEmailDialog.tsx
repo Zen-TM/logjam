@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -41,6 +42,7 @@ function ChangeEmailDialog({
   onSuccess: (newEmail: string) => void;
   currentEmail?: string;
 }) {
+  const isMobile = useIsMobile();
   const [stage, setStage] = useState<Stage>("input");
   const [newEmail, setNewEmail] = useState("");
   const [code, setCode] = useState("");
@@ -121,6 +123,7 @@ function ChangeEmailDialog({
 
   return (
     <Dialog
+      fullScreen={isMobile}
       open={open}
       maxWidth="sm"
       fullWidth

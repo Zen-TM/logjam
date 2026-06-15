@@ -1,4 +1,5 @@
 import { useState, useRef, Fragment, useEffect, useCallback } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -353,6 +354,7 @@ export default function TopoDialog({
   onJobCreated: (job: TopoJob) => void;
   initialTemplateId?: string | null;
 }) {
+  const isMobile = useIsMobile();
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -595,6 +597,7 @@ export default function TopoDialog({
 
   return (
     <Dialog
+      fullScreen={isMobile}
       open={open}
       onClose={handleClose}
       maxWidth="sm"
@@ -625,6 +628,14 @@ export default function TopoDialog({
       </DialogTitle>
 
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
+        {isMobile && (
+          <Typography
+            variant="caption"
+            sx={{ display: "block", mb: 1.5, color: "var(--theme-text-muted)" }}
+          >
+            This tool is best used on a larger screen.
+          </Typography>
+        )}
         {/* ── Instructions toggle ── */}
         <Box
           component="button"

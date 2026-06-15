@@ -71,6 +71,20 @@
   gap: 8px 12px;
 }
 
+/* Mobile: dense raster grids are an advanced setting — keep them from
+   overflowing the viewport. Scrolls horizontally rather than reflowing. */
+@media (max-width: 768px) {
+  .bandTable {
+    overflow-x: auto;
+    font-size: 0.85em;
+    gap: 6px 8px;
+  }
+
+  .row {
+    gap: 6px 8px;
+  }
+}
+
 .bandHeader {
   font-size: 0.7em;
   text-transform: uppercase;

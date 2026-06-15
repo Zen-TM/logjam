@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -79,6 +80,7 @@ function CanyonDialog({
 }) {
   const isEdit = canyon != null;
 
+  const isMobile = useIsMobile();
   const [name, setName] = useState("");
   const [altNames, setAltNames] = useState("");
   const [latitude, setLatitude] = useState("");
@@ -276,6 +278,7 @@ function CanyonDialog({
 
   return (
     <Dialog
+      fullScreen={isMobile}
       open={open}
       onClose={saving ? undefined : onClose}
       maxWidth="sm"
@@ -334,7 +337,7 @@ function CanyonDialog({
             onChange={(e) => setAltNames(e.target.value)}
             size="small"
           />
-          <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: isMobile ? "stretch" : "center" }}>
             <TextField
               label="Latitude"
               value={latitude}
@@ -402,7 +405,7 @@ function CanyonDialog({
               📍 Select on Map
             </Button>
           </Box>
-          <Box sx={{ display: "flex", gap: 2 }}>
+          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2 }}>
             <Tooltip
               title={
                 <a
@@ -519,7 +522,7 @@ function CanyonDialog({
               </Box>
             </Tooltip>
           </Box>
-          <Box sx={{ display: "flex", gap: 2 }}>
+          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2 }}>
             <Tooltip
               title="Subjective overall quality. 1 = unremarkable; 5 = exceptional."
               placement="top"
@@ -579,7 +582,7 @@ function CanyonDialog({
               </Box>
             </Tooltip>
           </Box>
-          <Box sx={{ display: "flex", gap: 2 }}>
+          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2 }}>
             <TextField
               label="Pitches"
               value={numAbseils}
