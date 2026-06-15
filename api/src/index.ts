@@ -1,5 +1,14 @@
 import dotenv from "dotenv";
-dotenv.config();
+import path from "path";
+// Local dev (run from api/ via `npm run dev`) loads the Terraform-generated root
+// .env.local — the single source of dev env (infra/terraform/envs/local). In
+// production NODE_ENV is already set by the EB/ECS container, so env comes from
+// there and we skip the file (dotenv.config() is a harmless no-op if absent).
+if (process.env.NODE_ENV === "production") {
+  dotenv.config();
+} else {
+  dotenv.config({ path: path.resolve(__dirname, "../../.env.local") });
+}
 
 import express from "express";
 import cors from "cors";
