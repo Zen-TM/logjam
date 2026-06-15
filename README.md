@@ -22,45 +22,79 @@ Canyoning in the Blue Mountains is driven by exploration and discovery in remote
 
 ### Frontend
 
-- React + TypeScript
-- MapLibre GL JS
+- React 19 + TypeScript
 - Vite
+- MapLibre GL JS (map rendering)
+- MUI (Material UI) components
+- AWS Amplify (Cognito auth client)
 
-### Backend
+### Backend (API)
 
-- Node.js + Express + TypeScript
-- Prisma ORM
-- PostgreSQL (AWS RDS)
-- AWS Cognito (authentication)
-- AWS S3 (media storage)
-- AWS ECS Fargate (topo job processing)
-- AWS SES (email notifications)
+- Node.js + Express 5 + TypeScript
+- Prisma ORM (driver adapter: `@prisma/adapter-pg`)
+- PostgreSQL (AWS RDS in prod)
+- zod (env + input validation), pino (logging)
 
-### Infrastructure
+### Topo pipeline
 
-- AWS Elastic Beanstalk (API hosting)
-- AWS S3 + CloudFront (frontend hosting)
-- AWS ECR (container registry)
-- Docker
+- Python + GDAL + PDAL (LiDAR → DEM/contour processing)
+- tippecanoe (MBTiles/PMTiles tiling)
+- Runs as on-demand ECS Fargate workers
+
+### Shared
+
+- `shared/` TypeScript package of cross-package types/utils (consumed by api + frontend, mirrored by topo)
+
+### AWS
+
+- Cognito (auth) · S3 (media + topo artifacts) · CloudFront (SPA + tile/API CDN, +WAF)
+- ECS Fargate (topo/export/geo-pdf workers) · Elastic Beanstalk (API) · ECR (images)
+- RDS (Postgres) · Secrets Manager (DB creds) · SES (email)
+
+### Infrastructure as Code & local dev
+
+- **Terraform** — single source of truth for all AWS infra (`infra/terraform/`); the same modules provision LocalStack S3 for local dev
+- Docker + Docker Compose (local Postgres + LocalStack)
+- Vitest (unit/integration tests across api, frontend, shared)
 
 ## Project Structure
 
 ```
 logjam/
-├── frontend/          # React/TypeScript frontend
+├── api/                    # Express 5 + Prisma + TypeScript backend
+│   ├── prisma/             # schema.prisma + migrations
 │   └── src/
-│       ├── components/
-│       │   ├── map/
-│       │   └── sidebar/
-│       └── ...
-└── api/               # Express/TypeScript backend
-    ├── src/
-    │   ├── middleware/
-    │   ├── routes/
-    │   ├── services/
-    │   └── index.ts
-    └── prisma/
-        └── schema.prisma
+│       ├── constants/
+│       ├── lib/            # env, auth access, reapers, ecsRunTask, logger, ...
+│       ├── middleware/     # auth, errorHandler, rateLimit
+│       ├── routes/         # one file per resource
+│       ├── services/       # prisma, awsClients, email, ...
+│       ├── worker/         # geoPdfWorker (runs as an ECS task)
+│       ├── __tests__/      # integration tests (need a running local API)
+│       ├── boot.ts         # prod entrypoint (resolve DB secret, migrate, start)
+│       └── index.ts        # app bootstrap + route registration
+├── frontend/               # React 19 + Vite + MapLibre + MUI
+│   └── src/
+│       ├── components/      # map, sidebar, dialogs, ...
+│       ├── csvImport/       # CSV/RopeWiki import
+│       ├── errors/ · styles/
+│       └── canyonUtils.ts, useAuth.ts, ...
+├── shared/                 # cross-package TS types/utils (geoPdf*, elvisZip, ...)
+│   └── src/                # built to shared/dist (api + frontend import from there)
+├── topo/                   # Python/GDAL/PDAL MBTiles pipeline (ECS workers)
+│   ├── renderers/ · SVTM/ · icons/
+│   ├── worker.py · export_worker.py · topo_mbtiles.py
+│   └── Dockerfile
+├── infra/terraform/        # IaC — single source of truth (see its README)
+│   ├── bootstrap/          # creates the S3 state bucket
+│   ├── modules/storage/    # reusable S3 bucket module (prod + local)
+│   ├── envs/prod/          # real AWS (S3 backend)
+│   ├── envs/local/         # LocalStack S3 + generates root .env.local
+│   └── templates/
+├── scripts/                # snapshot, log-retention, task-def template
+├── docs/                   # audits, etc.
+├── docker-compose.yml      # local Postgres + LocalStack
+└── Makefile                # dev / reset / snapshot targets
 ```
 
 ## Local Development
