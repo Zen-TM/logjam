@@ -199,12 +199,6 @@ export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number>
   reaped += queuedGeoPdfResult.count;
 
   // geo_pdf_jobs · running: anchored on startedAt (createdAt fallback).
-  // GeoPDF now renders on an async-invoked Lambda, not Fargate — there is no
-  // stoppable task handle, so unlike topo jobs/exports above this branch does
-  // NOT StopTask. Marking the row failed is sufficient: if the Lambda is still
-  // running it self-cleans (its terminal write is guarded on `status =
-  // 'running'`, so it deletes its uploaded object and skips the notification),
-  // and the Lambda's own timeout caps any genuinely stuck run.
   const geoPdfRunningCutoff = new Date(
     now.getTime() - env.GEO_PDF_RUNNING_TIMEOUT_MS,
   );
@@ -216,7 +210,7 @@ export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number>
         { startedAt: null, createdAt: { lt: geoPdfRunningCutoff } },
       ],
     },
-    select: { id: true },
+    select: { id: true, ecsTaskArn: true },
   });
   if (overdueGeoPdfJobs.length > 0) {
     const result = await prisma.geoPdfJob.updateMany({
@@ -224,6 +218,10 @@ export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number>
       data: { status: "failed", errorMessage: REAPER_GEO_PDF_MESSAGE },
     });
     reaped += result.count;
+    await stopTasksBestEffort(
+      overdueGeoPdfJobs,
+      "geo_pdf_reaper_stop_task_failed",
+    );
   }
 
   return reaped;

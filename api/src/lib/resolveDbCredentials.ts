@@ -6,17 +6,16 @@ import {
 // Populate DB_USER/DB_PASSWORD in process.env from the RDS-managed Secrets
 // Manager secret (DB_SECRET_ID) when DB_PASSWORD is not already set.
 //
-// Why this exists in two callers: lib/databaseUrl.ts composes the connection
-// string from DB_USER/DB_PASSWORD and throws if either is missing, so both the
-// EB container entrypoint (src/boot.ts) and the GeoPDF Lambda
-// (src/worker/geoPdfLambda.ts) must resolve credentials BEFORE prisma.ts is
+// Why this exists: lib/databaseUrl.ts composes the connection string from
+// DB_USER/DB_PASSWORD and throws if either is missing, so the EB container
+// entrypoint (src/boot.ts) must resolve credentials BEFORE prisma.ts is
 // imported. ECS Fargate workers get DB_USER/DB_PASSWORD via ECS secrets
 // injection and local dev sets DB_PASSWORD directly, so for them this is a
 // no-op. (lib/dbPassword.ts separately re-resolves the *password* per physical
 // connection for rotation; this fills the env once at startup.)
 //
-// Throws on any resolution failure. Never logs secret values. Callers decide
-// whether to exit (boot) or let the error surface (Lambda invocation failure).
+// Throws on any resolution failure. Never logs secret values. The caller
+// (boot) decides whether to exit.
 
 export async function resolveDbCredentials(): Promise<void> {
   if (process.env.DB_PASSWORD) {

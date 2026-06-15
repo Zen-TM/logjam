@@ -38,11 +38,6 @@ const baseSchema = z.object({
   ECS_TOPO_TASK_DEF: z.string().default("logjam-topo-worker"),
   ECS_TOPO_EXPORT_TASK_DEF: z.string().default("logjam-topo-export-worker"),
   ECS_GEO_PDF_TASK_DEF: z.string().default("logjam-geo-pdf-worker"),
-  // Name/ARN of the Lambda function that renders GeoPDFs. When set, POST
-  // /geo-pdf async-invokes it instead of launching a Fargate task; unset in
-  // local dev (no LocalStack Lambda) leaves the job `queued` for a manual
-  // `make geo-pdf-run`, mirroring the empty-ECS_SUBNETS dev path.
-  LAMBDA_GEO_PDF_FUNCTION: z.string().optional(),
   ECS_SUBNETS: z.string().optional(),
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),

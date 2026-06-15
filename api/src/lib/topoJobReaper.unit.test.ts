@@ -375,8 +375,11 @@ describe("reapStuckTopoJobs — geo_pdf_jobs", () => {
     ]);
   });
 
-  it("force-fails overdue running GeoPDF jobs status-guarded without StopTask (Lambda render, no task handle)", async () => {
-    geoPdfFindMany.mockResolvedValue([{ id: "g1" }, { id: "g2" }]);
+  it("force-fails overdue running GeoPDF jobs status-guarded and stops their tasks", async () => {
+    geoPdfFindMany.mockResolvedValue([
+      { id: "g1", ecsTaskArn: "arn:task/g1" },
+      { id: "g2", ecsTaskArn: null },
+    ]);
     // First geoPdfUpdateMany call is the queued sweep (nothing), second is
     // the running sweep (both rows).
     geoPdfUpdateMany
@@ -388,9 +391,8 @@ describe("reapStuckTopoJobs — geo_pdf_jobs", () => {
     const runningUpdate = geoPdfUpdateMany.mock.calls[1][0];
     expect(runningUpdate.where.id.in).toEqual(["g1", "g2"]);
     expect(runningUpdate.where.status).toBe("running");
-    // GeoPDF renders on an async Lambda — no stoppable task, so the reaper
-    // never calls StopTask for these (unlike topo jobs/exports).
-    expect(ecsSend).not.toHaveBeenCalled();
+    expect(ecsSend).toHaveBeenCalledTimes(1);
+    expect(ecsSend.mock.calls[0][0].input).toMatchObject({ task: "arn:task/g1" });
     expect(count).toBe(2);
   });
 

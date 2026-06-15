@@ -66,9 +66,9 @@ export function parseStoredVectorStyle(snapshot: unknown): VectorStyleSettings {
  * Process a single GeoPdfJob end-to-end: claim (queued→running) → render →
  * upload → terminal write (+ storage charge in the same transaction) → notify.
  * Returns 0 on success or a clean no-op (job reaped / not `queued` / missing),
- * 1 on render failure. Shared by the CLI worker entrypoint below and the Lambda
- * handler (api/src/worker/geoPdfLambda.ts) — all lifecycle invariants
- * (Design L1, ARCH-003, privacy rule) live here, not in either wrapper.
+ * 1 on render failure. Called by the CLI worker entrypoint below (the ECS
+ * Fargate task) — all lifecycle invariants (Design L1, ARCH-003, privacy rule)
+ * live here, not in the wrapper.
  */
 export async function processGeoPdfJob(jobId: string): Promise<number> {
   const env = getEnv();
