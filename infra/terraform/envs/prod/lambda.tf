@@ -58,8 +58,13 @@ resource "aws_lambda_function" "geo_pdf_worker" {
   role          = aws_iam_role.geo_pdf_lambda.arn
   package_type  = "Image"
   image_uri     = "${aws_ecr_repository.api.repository_url}:latest"
-  memory_size   = 4096 # match the Fargate worker's 4GB (node-canvas render)
-  timeout       = 300  # 5 min; render is ~27s, well under (and under the
+  # 3008 = the account's current per-function memory cap (the un-raised Lambda
+  # default; hard max is 10240 via a Service Quota increase). Not a downgrade
+  # from the old 1 vCPU / 4GB Fargate worker: Lambda couples CPU to memory, so
+  # 3008MB yields ~1.79 vCPU (more CPU, slightly less RAM). If a large/high-DPI
+  # export OOMs, the job fails cleanly and we raise the quota to bump this.
+  memory_size = 3008
+  timeout     = 300 # 5 min; render is ~27s, well under (and under the
   # GEO_PDF_RUNNING_TIMEOUT_MS reaper backstop)
   architectures = ["x86_64"]
 
