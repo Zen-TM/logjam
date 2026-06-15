@@ -18,13 +18,14 @@ services:
   localstack:
     image: localstack/localstack:3.8
     environment:
-      SERVICES: s3,sqs
+      SERVICES: s3
       DEFAULT_REGION: ap-southeast-2
       AWS_DEFAULT_REGION: ap-southeast-2
     ports:
       - "4566:4566"
     volumes:
-      - ./scripts/seed-localstack.sh:/etc/localstack/init/ready.d/seed.sh:ro
+      # Buckets are provisioned by Terraform (infra/terraform/envs/local),
+      # invoked from `make dev` / `make reset` — not by an init script.
       - localstack-data:/var/lib/localstack
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health | grep -q running"]
@@ -50,7 +51,6 @@ services:
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
       S3_BUCKET_TOPO: logjam-topo-local
-      SQS_QUEUE_URL: http://localstack:4566/000000000000/logjam-topo-jobs-local
       FRONTEND_URL: http://localhost:5173
     depends_on:
       postgres:

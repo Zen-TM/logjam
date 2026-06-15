@@ -1,0 +1,44 @@
+name: terraform-ci
+
+# Static Terraform checks on PRs touching infra. Read-only: no AWS credentials,
+# no backend access, no plan/apply. Catches formatting + syntax/reference errors
+# before merge. (plan-on-PR is a later addition — it needs the CI role to gain
+# read perms + state access.)
+
+on:
+  pull_request:
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.13"
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive infra/terraform
+
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        root: [bootstrap, envs/prod, envs/local]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.13"
+      # -backend=false: install providers + modules without touching remote
+      # state or needing AWS credentials.
+      - name: terraform init (no backend)
+        run: terraform -chdir=infra/terraform/${{ matrix.root }} init -backend=false -input=false
+      - name: terraform validate
+        run: terraform -chdir=infra/terraform/${{ matrix.root }} validate
