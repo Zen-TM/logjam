@@ -1,0 +1,12 @@
+# Terraform — never commit local provider mirror or state
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Generated, env-specific config doc (never committed — may carry resource ids)
+envs/prod/.env.prod.generated
+
+# Keep .terraform.lock.hcl IN git (pins provider versions) — do NOT ignore it

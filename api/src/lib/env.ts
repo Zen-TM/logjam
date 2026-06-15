@@ -42,8 +42,6 @@ const baseSchema = z.object({
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),
 
-  SES_FROM_ADDRESS: z.string().optional(),
-
   // Stuck-topo-job reaper (ARCH-002). A job stuck in `pending` longer than the
   // PENDING timeout (task never placed / never started) or in `processing`
   // longer than the PROCESSING timeout (Fargate task SIGKILLed before its
