@@ -64,11 +64,13 @@ resource "aws_lambda_function" "geo_pdf_worker" {
   architectures = ["x86_64"]
 
   image_config {
-    # Override the image ENTRYPOINT (EB's `node dist/boot.js`) with the RIC, and
-    # CMD with the handler. npx --no-install resolves the RIC from the bundled
-    # node_modules without network. working_directory must be /app so npx finds
-    # node_modules/.bin/aws-lambda-ric.
-    entry_point       = ["/usr/local/bin/npx", "--no-install", "aws-lambda-ric"]
+    # Override the image ENTRYPOINT (EB's `node dist/boot.js`) with the RIC run
+    # by its real entry path, and CMD with the handler. Invoking via the real
+    # path (not the node_modules/.bin shim) is required — the shim's relative
+    # ESM imports resolve from the wrong base (ERR_MODULE_NOT_FOUND). Verified
+    # locally with the Lambda Runtime Interface Emulator. working_directory /app
+    # so the handler path resolves against dist/.
+    entry_point       = ["/usr/local/bin/node", "/app/node_modules/aws-lambda-ric/bin/index.mjs"]
     command           = ["dist/worker/geoPdfLambda.handler"]
     working_directory = "/app"
   }
