@@ -30,7 +30,7 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
-import { launchFargateTask } from "../lib/ecsRunTask";
+import { invokeGeoPdfLambda } from "../lib/lambdaInvoke";
 import { assertHasStorageQuota } from "../lib/storageQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
 
@@ -38,10 +38,10 @@ const router = Router();
 
 const env = getEnv();
 const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
-const ECS_GEO_PDF_TASK_DEF = env.ECS_GEO_PDF_TASK_DEF;
-// Empty subnet list = local dev without LocalStack ECS: skip the launch and
-// leave the job queued for manual worker runs.
-const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
+// Unset in local dev (no LocalStack Lambda): skip the invoke and leave the job
+// queued for a manual `make geo-pdf-run`, mirroring the old empty-ECS_SUBNETS
+// dev path.
+const LAMBDA_GEO_PDF_FUNCTION = env.LAMBDA_GEO_PDF_FUNCTION;
 
 // Cap to prevent users from flooding ECS with queued GeoPDF jobs. Mirrors the
 // per-user in-flight cap pattern in topoExports.ts, but tighter — GeoPDF jobs
@@ -134,25 +134,19 @@ router.post(
       });
     });
 
-    // launchFargateTask (Design L3) throws on placement failure (`failures[]`
-    // populated / no task) as well as on SDK errors, so a launch problem can
-    // never strand the job in `queued` (ARCH-002).
-    if (ECS_SUBNETS.length) {
+    // invokeGeoPdfLambda throws on a rejected invoke (throttling, function
+    // not found, permission denied, non-202 status) as well as SDK errors, so
+    // a launch problem can never strand the job in `queued` (ARCH-002). The
+    // async Lambda has no stoppable handle, so ecsTaskArn is left null — the
+    // reaper marks overdue jobs failed and the orphaned Lambda self-cleans via
+    // its status-guarded terminal write.
+    if (LAMBDA_GEO_PDF_FUNCTION) {
       try {
-        const taskArn = await launchFargateTask({
-          taskDefinition: ECS_GEO_PDF_TASK_DEF,
-          containerName: "geo-pdf-worker",
-          environment: [{ name: "GEO_PDF_JOB_ID", value: job.id }],
-        });
-        // Persist the ARN (Design L2) so the reaper can StopTask it.
-        await prisma.geoPdfJob.update({
-          where: { id: job.id },
-          data: { ecsTaskArn: taskArn },
-        });
+        await invokeGeoPdfLambda(job.id);
       } catch (launchErr) {
         console.error(
           JSON.stringify({
-            event: "geo_pdf_runtask_failed",
+            event: "geo_pdf_invoke_failed",
             geoPdfJobId: job.id,
             reason: String(launchErr),
           }),

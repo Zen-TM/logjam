@@ -62,13 +62,15 @@ export function parseStoredVectorStyle(snapshot: unknown): VectorStyleSettings {
   return VECTOR_STYLE_DEFAULTS;
 }
 
-async function main(): Promise<number> {
-  const jobId = process.env.GEO_PDF_JOB_ID;
-  if (!jobId) {
-    logger.error("geo_pdf_worker_missing_job_id");
-    return 1;
-  }
-
+/**
+ * Process a single GeoPdfJob end-to-end: claim (queued→running) → render →
+ * upload → terminal write (+ storage charge in the same transaction) → notify.
+ * Returns 0 on success or a clean no-op (job reaped / not `queued` / missing),
+ * 1 on render failure. Shared by the CLI worker entrypoint below and the Lambda
+ * handler (api/src/worker/geoPdfLambda.ts) — all lifecycle invariants
+ * (Design L1, ARCH-003, privacy rule) live here, not in either wrapper.
+ */
+export async function processGeoPdfJob(jobId: string): Promise<number> {
   const env = getEnv();
   const bucket = env.S3_BUCKET_TOPO ?? "";
 
@@ -190,6 +192,17 @@ async function main(): Promise<number> {
   // generic SES send helper is out of scope for this change.
 
   return ok ? 0 : 1;
+}
+
+// CLI entrypoint: read the job ID from the env var the (legacy Fargate) launch
+// path and `make geo-pdf-run` pass, then delegate to the shared processor.
+async function main(): Promise<number> {
+  const jobId = process.env.GEO_PDF_JOB_ID;
+  if (!jobId) {
+    logger.error("geo_pdf_worker_missing_job_id");
+    return 1;
+  }
+  return processGeoPdfJob(jobId);
 }
 
 // Only run main() when executed directly (node dist/worker/geoPdfWorker.js),

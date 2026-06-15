@@ -8,6 +8,11 @@
 # The cluster (aws_ecs_cluster) lives in ecs_cluster.tf, added after its
 # CloudFormation stack is retired.
 
+# SUPERSEDED by aws_lambda_function.geo_pdf_worker (lambda.tf). GeoPDF now
+# renders on Lambda, not Fargate — POST /geo-pdf no longer RunTasks this. Kept
+# for one transition cycle so rollback is a one-line route revert; remove this
+# resource (and its log group in logging.tf) in a follow-up apply once the
+# Lambda path is verified in prod.
 resource "aws_ecs_task_definition" "geo_pdf_worker" {
   container_definitions = jsonencode([{
     command = ["node", "dist/worker/geoPdfWorker.js"]

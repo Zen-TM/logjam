@@ -32,6 +32,20 @@ COPY api/src ./src/
 
 RUN npm run build
 
+# AWS Lambda Runtime Interface Client. The GeoPDF render runs as a
+# container-image Lambda reusing THIS image (entry_point overridden to the RIC,
+# command to dist/worker/geoPdfLambda.handler — see
+# infra/terraform/envs/prod/lambda.tf). aws-lambda-ric is a native addon (builds
+# against libcurl), so it's built here in the builder stage (which has the
+# toolchain) and copied into the production stage below — same node:20-slim base,
+# so the compiled binary is ABI-compatible. EB and ECS ignore it. Stage the
+# package dir AND its .bin symlink so `npx --no-install aws-lambda-ric` resolves
+# at runtime without network.
+RUN npm install --no-save aws-lambda-ric \
+  && mkdir -p /tmp/ric/.bin \
+  && cp -r node_modules/aws-lambda-ric /tmp/ric/aws-lambda-ric \
+  && cp -P node_modules/.bin/aws-lambda-ric /tmp/ric/.bin/aws-lambda-ric
+
 FROM node:20-slim AS production
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -41,6 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg62-turbo \
     libgif7 \
     librsvg2-2 \
+    libcurl4 \
     openssl \
   && rm -rf /var/lib/apt/lists/*
 
@@ -59,6 +74,13 @@ RUN npm ci --only=production
 RUN npx prisma generate
 
 COPY --from=builder /app/dist ./dist
+
+# Lambda Runtime Interface Client (built in the builder stage). Placed AFTER
+# `npm ci --only=production` so it isn't pruned. The .bin symlink is relative
+# (→ ../aws-lambda-ric/...) and resolves against the copied package dir, so
+# `npx --no-install aws-lambda-ric` (the Lambda entry_point) works offline.
+COPY --from=builder /tmp/ric/aws-lambda-ric ./node_modules/aws-lambda-ric
+COPY --from=builder /tmp/ric/.bin/aws-lambda-ric ./node_modules/.bin/aws-lambda-ric
 
 # Static assets read at runtime (e.g. topo point-feature icons for GeoPDF).
 COPY api/assets ./assets/

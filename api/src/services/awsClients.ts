@@ -1,5 +1,6 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import { ECSClient } from "@aws-sdk/client-ecs";
+import { LambdaClient } from "@aws-sdk/client-lambda";
 import { SESClient } from "@aws-sdk/client-ses";
 import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
 
@@ -19,6 +20,11 @@ export const s3 = new S3Client({
 });
 
 export const ecs = new ECSClient({
+  region,
+  ...(endpoint && { endpoint }),
+});
+
+export const lambda = new LambdaClient({
   region,
   ...(endpoint && { endpoint }),
 });

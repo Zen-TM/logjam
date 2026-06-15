@@ -12,55 +12,18 @@
 // Fails loud (exit 1) on any error. Never logs secret values.
 
 import { spawnSync } from "node:child_process";
-import {
-  SecretsManagerClient,
-  GetSecretValueCommand,
-} from "@aws-sdk/client-secrets-manager";
+import { resolveDbCredentials } from "./lib/resolveDbCredentials";
 
-async function resolveDbCredentials(): Promise<void> {
-  if (process.env.DB_PASSWORD) {
-    return;
-  }
-
-  const secretId = process.env.DB_SECRET_ID;
-  if (!secretId) {
-    console.error(
-      "boot: neither DB_PASSWORD nor DB_SECRET_ID is set — cannot resolve database credentials.",
-    );
-    process.exit(1);
-  }
-
+async function main(): Promise<void> {
   try {
-    const client = new SecretsManagerClient({
-      region: process.env.AWS_REGION ?? "ap-southeast-2",
-      endpoint: process.env.AWS_ENDPOINT_URL,
-    });
-    const result = await client.send(
-      new GetSecretValueCommand({ SecretId: secretId }),
-    );
-    if (!result.SecretString) {
-      throw new Error("Secret has no SecretString");
-    }
-    const parsed = JSON.parse(result.SecretString) as {
-      username?: string;
-      password?: string;
-    };
-    if (!parsed.username || !parsed.password) {
-      throw new Error("Secret JSON is missing username or password field");
-    }
-    process.env.DB_USER = parsed.username;
-    process.env.DB_PASSWORD = parsed.password;
+    await resolveDbCredentials();
   } catch (err) {
     const e = err as Error;
     console.error(
-      `boot: failed to resolve DB credentials from Secrets Manager (${e.constructor.name}: ${e.message})`,
+      `boot: failed to resolve DB credentials (${e.constructor.name}: ${e.message})`,
     );
     process.exit(1);
   }
-}
-
-async function main(): Promise<void> {
-  await resolveDbCredentials();
 
   const migrate = spawnSync("npx", ["prisma", "migrate", "deploy"], {
     stdio: "inherit",
