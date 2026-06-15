@@ -1,6 +1,7 @@
 CLAUDE.md
 .claude
 .mcp.json
+.playwright-mcp/
 repomix-output.xml
 
 # Audit skill outputs (local-only)
