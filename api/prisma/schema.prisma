@@ -163,6 +163,13 @@ model TopoJob {
   estimatedSeconds Int?  @map("estimated_seconds")
   layerOptions  Json?    @map("layer_options")
   vectorStyleSnapshot Json? @map("vector_style_snapshot")
+  // Auto-export config captured at submit (AutoExportSettings). When enabled,
+  // the reaper queues a TopoExportJob once this job reaches "complete".
+  autoExport    Json?    @map("auto_export")
+  // Set by the reaper when it has handled the auto-export (queued it or
+  // recorded why it couldn't). Dedup marker: a non-null value means "don't
+  // auto-export again", so overlapping sweeps can't double-queue.
+  autoExportedAt DateTime? @map("auto_exported_at")
   s3InputKey    String?  @map("s3_input_key")
   s3OutputKeys  Json?    @map("s3_output_keys")
   // s3OutputKeys shape: { name: string, cogKey: string|null, pmtilesKey: string|null }[]
@@ -275,6 +282,7 @@ model TopoTemplate {
   userId    String   @map("user_id")
   name      String
   config    Json
+  autoExport Json?   @map("auto_export")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

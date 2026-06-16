@@ -91,6 +91,8 @@ Additive only. Never silently delete existing conventions — flag stale entries
 
 - **Canyon share visibility (hybrid model):** `CanyonShare` recipients see the canyon record including canyon-level `notes` and canyon-level `media`. Per-trip `notes`, per-trip `media`, and the trip log list are owner-private. Single source of the access decision: `api/src/lib/canyonAccess.ts` (`getCanyonRole` / `requireCanyonAccess` / `requireCanyonOwner`) — used by `api/src/routes/canyons.ts` (GET `/:id`, POST `/:id/copy`) and `api/src/routes/tripLogs.ts` (GET `/`, GET `/:id`). Any new endpoint on shared canyons must derive its decision from these helpers, not inline owner/share checks.
 - **Friend search and lists are username-only:** `/friends/search`, `/friends`, and `/friends/requests` never return `email`. Drop `email` from any `select` on user joins in the friends routes.
+- **Topo export legality has one source:** `reconcileExportSelection` / `validateExportRequest` in `shared/src/topoExport.ts`. New export surfaces (dialogs, auto-export, reaper) call these — never re-derive format/bundling/layer rules.
+- **Reaper-driven auto-queued jobs dedup via a status-guarded `*-At` claim column:** flip the marker (e.g. `TopoJob.autoExportedAt`) null→now in one `updateMany` and only act when it flips exactly one row, so overlapping sweeps / multiple API instances can't double-queue. See `queueAutoExports` in `api/src/lib/topoJobReaper.ts`.
 
 ## Testing
 

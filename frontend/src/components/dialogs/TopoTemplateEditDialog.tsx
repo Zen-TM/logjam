@@ -15,8 +15,10 @@ import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import {
   RASTER_TEMPLATE_DEFAULTS,
+  AUTO_EXPORT_DEFAULTS,
   cloneRasterTemplateSettings,
   type RasterTemplateSettings,
+  type AutoExportSettings,
 } from "@logjam/shared";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
 import type { TopoTemplate } from "./TopoDialog";
@@ -37,6 +39,9 @@ function TopoTemplateEditDialog({
   const [settings, setSettings] = useState<RasterTemplateSettings>(() =>
     cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS),
   );
+  const [autoExport, setAutoExport] = useState<AutoExportSettings>(() => ({
+    ...AUTO_EXPORT_DEFAULTS,
+  }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,9 +51,16 @@ function TopoTemplateEditDialog({
     if (editingTemplate) {
       setName(editingTemplate.name);
       setSettings(cloneRasterTemplateSettings(editingTemplate.config));
+      // Older templates predate auto-export (null) — fall back to defaults.
+      setAutoExport(
+        editingTemplate.autoExport
+          ? { ...editingTemplate.autoExport, layers: [...editingTemplate.autoExport.layers] }
+          : { ...AUTO_EXPORT_DEFAULTS },
+      );
     } else {
       setName("");
       setSettings(cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS));
+      setAutoExport({ ...AUTO_EXPORT_DEFAULTS });
     }
   }, [open, editingTemplate]);
 
@@ -61,12 +73,12 @@ function TopoTemplateEditDialog({
       if (editingTemplate) {
         await apiFetch(`/topo-templates/${editingTemplate.id}`, {
           method: "PATCH",
-          body: { name: trimmed, config: settings },
+          body: { name: trimmed, config: settings, autoExport },
         });
       } else {
         await apiFetch("/topo-templates", {
           method: "POST",
-          body: { name: trimmed, config: settings },
+          body: { name: trimmed, config: settings, autoExport },
         });
       }
       onSaved();
@@ -130,7 +142,12 @@ function TopoTemplateEditDialog({
           fullWidth
           sx={{ ...inputSx, mb: 2 }}
         />
-        <AdvancedSettings value={settings} onChange={setSettings} />
+        <AdvancedSettings
+          value={settings}
+          onChange={setSettings}
+          autoExport={autoExport}
+          onAutoExportChange={setAutoExport}
+        />
       </DialogContent>
 
       <DialogActions>

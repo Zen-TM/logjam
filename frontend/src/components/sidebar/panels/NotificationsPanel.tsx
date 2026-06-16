@@ -182,6 +182,16 @@ function NotificationsPanel({
                     } ready — view exports in the LiDAR panel`
                   )
                 )}
+                {n.type === "topo_export_skipped" && (
+                  <>
+                    Auto-export didn&apos;t run
+                    {typeof n.payload.reason === "string" && (
+                      <div className={classes.notificationWarning}>
+                        {n.payload.reason}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
               <div className={classes.notificationTime}>
                 {new Date(n.createdAt).toLocaleDateString()}

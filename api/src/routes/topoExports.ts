@@ -26,7 +26,7 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
-import { launchFargateTask } from "../lib/ecsRunTask";
+import { createAndLaunchTopoExport } from "../lib/topoExportLauncher";
 import { assertHasStorageQuota } from "../lib/storageQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
 
@@ -43,13 +43,6 @@ const router = Router();
 
 const env = getEnv();
 const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
-const ECS_EXPORT_TASK_DEF = env.ECS_TOPO_EXPORT_TASK_DEF;
-// Empty subnet list = local dev without LocalStack ECS: skip the launch and
-// leave the export queued for manual worker runs.
-const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
-
-// Cap to prevent users from flooding ECS with queued exports.
-const MAX_QUEUED_PER_USER = 5;
 const PRESIGN_TTL_SECONDS = 86400; // 24h
 
 async function presignResult(resultKey: string | null): Promise<{ url: string; expiresAt: string } | null> {
@@ -149,62 +142,19 @@ router.post(
 
     const vectorStyleSnapshot = (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
 
-    // Count + create in one transaction so concurrent submissions can't both
-    // pass the per-user cap. The user-row lock closes the read-committed
-    // double-read window the same way /topo-jobs/:id/start does (ARCH-009).
-    const exportJob = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
-      const queued = await tx.topoExportJob.count({
-        where: { userId: user.id, status: { in: ["queued", "running"] } },
-      });
-      if (queued >= MAX_QUEUED_PER_USER) {
-        throw new AppError(429, `Too many concurrent exports (limit ${MAX_QUEUED_PER_USER})`);
-      }
-      return tx.topoExportJob.create({
-        data: {
-          userId: user.id,
-          sourceJobIds,
-          layers: layers as string[],
-          format,
-          bundling,
-          vectorStyleSnapshot,
-          status: "queued",
-        },
-      });
+    // Cap-checked create + ECS launch — shared with the reaper's auto-export
+    // pass so both enforce the same per-user concurrency limit (ARCH-009) and
+    // fail-on-launch semantics (ARCH-002).
+    const exportJobId = await createAndLaunchTopoExport({
+      userId: user.id,
+      sourceJobIds,
+      layers,
+      format,
+      bundling,
+      vectorStyleSnapshot,
     });
 
-    // launchFargateTask (Design L3) throws on placement failure (`failures[]`
-    // populated / no task) as well as on SDK errors, so a launch problem can
-    // never strand the export in `queued` (ARCH-002).
-    if (ECS_SUBNETS.length) {
-      try {
-        const taskArn = await launchFargateTask({
-          taskDefinition: ECS_EXPORT_TASK_DEF,
-          containerName: "topo-export-worker",
-          environment: [{ name: "EXPORT_JOB_ID", value: exportJob.id }],
-        });
-        // Persist the ARN (Design L2) so the reaper can StopTask it.
-        await prisma.topoExportJob.update({
-          where: { id: exportJob.id },
-          data: { ecsTaskArn: taskArn },
-        });
-      } catch (launchErr) {
-        console.error(
-          JSON.stringify({
-            event: "topo_export_runtask_failed",
-            exportJobId: exportJob.id,
-            reason: String(launchErr),
-          }),
-        );
-        await prisma.topoExportJob.update({
-          where: { id: exportJob.id },
-          data: { status: "failed", errorMessage: "Failed to launch export task." },
-        });
-        throw new AppError(500, "Failed to launch export job");
-      }
-    }
-
-    res.status(201).json({ id: exportJob.id });
+    res.status(201).json({ id: exportJobId });
   },
 );
 

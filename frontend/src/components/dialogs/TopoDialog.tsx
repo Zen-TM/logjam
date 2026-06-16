@@ -34,9 +34,11 @@ import {
   classifyElvisEntries,
   ElvisZipError,
   RASTER_TEMPLATE_DEFAULTS,
+  AUTO_EXPORT_DEFAULTS,
   cloneRasterTemplateSettings,
   type ElvisStats,
   type RasterTemplateSettings,
+  type AutoExportSettings,
 } from "@logjam/shared";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
 
@@ -45,11 +47,20 @@ export type TopoTemplate = {
   name: string;
   isSystem: boolean;
   config: RasterTemplateSettings;
+  autoExport: AutoExportSettings | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
 
 const DEFAULT_TEMPLATE_ID = "default";
+
+// Deep-copy a template's auto-export slice (or fall back to defaults for older
+// templates saved before the feature existed) so edits don't mutate the cached
+// template list.
+function cloneAutoExport(value: AutoExportSettings | null): AutoExportSettings {
+  if (!value) return { ...AUTO_EXPORT_DEFAULTS };
+  return { ...value, layers: [...value.layers] };
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -373,6 +384,7 @@ export default function TopoDialog({
 
   // Advanced settings + templates
   const [settings, setSettings] = useState<RasterTemplateSettings>(() => cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS));
+  const [autoExport, setAutoExport] = useState<AutoExportSettings>(() => ({ ...AUTO_EXPORT_DEFAULTS }));
   const [templates, setTemplates] = useState<TopoTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -390,6 +402,7 @@ export default function TopoDialog({
     setStats(null);
     setValidationError(null);
     setSettings(cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS));
+    setAutoExport({ ...AUTO_EXPORT_DEFAULTS });
     setSelectedTemplateId(DEFAULT_TEMPLATE_ID);
     setAdvancedOpen(false);
     setSaveAsName("");
@@ -416,6 +429,7 @@ export default function TopoDialog({
         if (t) {
           setSelectedTemplateId(t.id);
           setSettings(cloneRasterTemplateSettings(t.config));
+          setAutoExport(cloneAutoExport(t.autoExport));
         }
       }
     });
@@ -424,7 +438,10 @@ export default function TopoDialog({
   function selectTemplate(id: string) {
     setSelectedTemplateId(id);
     const t = templates.find((x) => x.id === id);
-    if (t) setSettings(cloneRasterTemplateSettings(t.config));
+    if (t) {
+      setSettings(cloneRasterTemplateSettings(t.config));
+      setAutoExport(cloneAutoExport(t.autoExport));
+    }
   }
 
   async function handleSaveAsTemplate() {
@@ -433,7 +450,7 @@ export default function TopoDialog({
     try {
       const created = await apiFetch<TopoTemplate>("/topo-templates", {
         method: "POST",
-        body: { name, config: settings },
+        body: { name, config: settings, autoExport },
       });
       setSaveAsName("");
       setShowSaveAs(false);
@@ -565,6 +582,7 @@ export default function TopoDialog({
           jobName: stats.surveyNames[0] || null,
           filename: file.name,
           settings,
+          autoExport,
         },
       });
 
@@ -1053,7 +1071,12 @@ export default function TopoDialog({
             <Typography variant="body2">Advanced settings</Typography>
           </AccordionSummary>
           <AccordionDetails sx={{ pt: 0 }}>
-            <AdvancedSettings value={settings} onChange={setSettings} />
+            <AdvancedSettings
+              value={settings}
+              onChange={setSettings}
+              autoExport={autoExport}
+              onAutoExportChange={setAutoExport}
+            />
           </AccordionDetails>
         </Accordion>
       </DialogContent>

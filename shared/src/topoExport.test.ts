@@ -1,10 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { TOPO_LAYERS } from "./topoSettings";
+import { TOPO_LAYERS, RASTER_TEMPLATE_DEFAULTS, cloneRasterTemplateSettings } from "./topoSettings";
 import {
   RASTER_LAYERS,
   VECTOR_LAYERS,
+  AUTO_EXPORT_DEFAULTS,
+  producedLayers,
+  reconcileExportSelection,
+  validateAutoExportSettings,
   validateExportRequest,
   type ExportFormat,
+  type TopoLayerKey,
 } from "./topoExport";
 import { VALID_GEOPDF_OVERLAY_NAMES } from "./geoPdfConfig";
 import { TOPO_OVERLAY_SOURCE } from "./geoPdfBaseLayers";
@@ -129,5 +134,130 @@ describe("validateExportRequest", () => {
         layers: ["features"],
       }),
     ).toEqual({ ok: true });
+  });
+});
+
+describe("producedLayers", () => {
+  it("returns every layer when all slices are enabled (the defaults)", () => {
+    expect(producedLayers(RASTER_TEMPLATE_DEFAULTS).sort()).toEqual(
+      TOPO_LAYERS.map((l) => l.name).sort(),
+    );
+  });
+
+  it("omits a layer whose slice is disabled", () => {
+    const s = cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS);
+    s.vegetation.enabled = false;
+    s.contours.enabled = false;
+    const out = producedLayers(s);
+    expect(out).not.toContain("vegetation");
+    expect(out).not.toContain("contours");
+    expect(out).toContain("hillshade");
+  });
+
+  it("returns an empty list when every slice is disabled", () => {
+    const s = cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS);
+    s.hillshade.enabled = false;
+    s.vegetation.enabled = false;
+    s.slope.enabled = false;
+    s.contours.enabled = false;
+    s.features.enabled = false;
+    expect(producedLayers(s)).toEqual([]);
+  });
+});
+
+describe("reconcileExportSelection", () => {
+  const all = new Set<TopoLayerKey>(TOPO_LAYERS.map((l) => l.name));
+
+  it("drops layers that are not available", () => {
+    const out = reconcileExportSelection(
+      { format: "mbtiles", bundling: "composite", layers: ["hillshade", "contours"] },
+      new Set<TopoLayerKey>(["hillshade"]),
+    );
+    expect(out.layers).toEqual(["hillshade"]);
+  });
+
+  it("drops layers not eligible for the format (raster for geojson)", () => {
+    const out = reconcileExportSelection(
+      { format: "geojson", bundling: "per-layer", layers: ["hillshade", "contours"] },
+      all,
+    );
+    expect(out.layers).toEqual(["contours"]);
+  });
+
+  it("falls back to all available+eligible layers when the selection empties out", () => {
+    const out = reconcileExportSelection(
+      { format: "geotiff", bundling: "composite", layers: ["contours"] }, // vector, n/a for geotiff
+      all,
+    );
+    // geotiff is raster-only → falls back to the raster layers.
+    expect(out.layers.sort()).toEqual(["hillshade", "slope", "vegetation"]);
+  });
+
+  it("coerces bundling to a legal value for the format", () => {
+    // gpkg cannot be per-layer → composite.
+    expect(
+      reconcileExportSelection(
+        { format: "gpkg", bundling: "per-layer", layers: ["hillshade"] },
+        all,
+      ).bundling,
+    ).toBe("composite");
+    // geojson cannot composite → per-layer.
+    expect(
+      reconcileExportSelection(
+        { format: "geojson", bundling: "composite", layers: ["contours"] },
+        all,
+      ).bundling,
+    ).toBe("per-layer");
+  });
+
+  it("is idempotent", () => {
+    const once = reconcileExportSelection(
+      { format: "geojson", bundling: "composite", layers: ["hillshade", "contours"] },
+      all,
+    );
+    const twice = reconcileExportSelection(once, all);
+    expect(twice).toEqual(once);
+  });
+});
+
+describe("validateAutoExportSettings", () => {
+  it("accepts the defaults", () => {
+    const r = validateAutoExportSettings(AUTO_EXPORT_DEFAULTS);
+    expect(r.ok).toBe(true);
+  });
+
+  it("rejects a non-object", () => {
+    expect(validateAutoExportSettings(null).ok).toBe(false);
+    expect(validateAutoExportSettings([]).ok).toBe(false);
+  });
+
+  it("rejects an unknown format", () => {
+    const r = validateAutoExportSettings({
+      enabled: true,
+      format: "kmz",
+      bundling: "composite",
+      layers: ["hillshade"],
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects an illegal format/layer combination (raster for geojson)", () => {
+    const r = validateAutoExportSettings({
+      enabled: true,
+      format: "geojson",
+      bundling: "per-layer",
+      layers: ["hillshade"],
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it("rejects an unknown layer name", () => {
+    const r = validateAutoExportSettings({
+      enabled: false,
+      format: "mbtiles",
+      bundling: "composite",
+      layers: ["bogus"],
+    });
+    expect(r.ok).toBe(false);
   });
 });
