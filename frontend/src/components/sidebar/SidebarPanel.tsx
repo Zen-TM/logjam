@@ -280,6 +280,7 @@ function SidebarPanel({
             onChangeFilters={onChangeFilters}
             filtersAccordionSignal={filtersAccordionSignal}
             onFlyToCanyon={onFlyToCanyon}
+            canyonCustomFieldDefs={canyonCustomFieldDefs}
           />
         )}
         {activePanel === "geopdfs" && (

@@ -36,6 +36,7 @@ export type UserUiPreferences = {
   tripLogCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
   canyonCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
   notifications: NotificationPreferences;
+  autoDownloadGeoPdfs: boolean;
 };
 
 export function isNotificationPreferences(
@@ -173,7 +174,9 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     const tripLogCustomFields = normalizeCustomFieldDefs(prefs.tripLogCustomFields);
     const canyonCustomFields = normalizeCustomFieldDefs(prefs.canyonCustomFields);
     const notifications = normalizeNotificationPreferences(prefs.notifications);
-    return { themeSchemeId, tripLogCustomFields, canyonCustomFields, notifications };
+    const autoDownloadGeoPdfs =
+      typeof prefs.autoDownloadGeoPdfs === "boolean" ? prefs.autoDownloadGeoPdfs : true;
+    return { themeSchemeId, tripLogCustomFields, canyonCustomFields, notifications, autoDownloadGeoPdfs };
   }
 
   return {
@@ -181,5 +184,6 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     tripLogCustomFields: [],
     canyonCustomFields: [],
     notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES },
+    autoDownloadGeoPdfs: true,
   };
 }
