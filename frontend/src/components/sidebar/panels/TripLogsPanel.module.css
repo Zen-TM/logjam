@@ -73,6 +73,11 @@
   padding: 0.5em 1em;
 }
 
+.logTripButton {
+  composes: btn btnFilledAccent btnMd btnFull from '@styles/shared.module.css';
+  flex-shrink: 0;
+}
+
 .filters {
   display: flex;
   flex-direction: column;

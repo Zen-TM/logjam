@@ -69,7 +69,7 @@ router.get(
       include: { canyon: { select: { id: true, name: true, ownerId: true } } },
     });
     if (!trip) throw new AppError(404, "Trip log not found");
-    if (trip.canyonId !== getParam(req.params.canyonId))
+    if (!trip.canyon || trip.canyonId !== getParam(req.params.canyonId))
       throw new AppError(404, "Trip log not found");
 
     // Per-trip notes and media are owner-private (hybrid sharing model) —
@@ -136,7 +136,7 @@ router.patch(
       include: { canyon: true },
     });
     if (!trip) throw new AppError(404, "Trip log not found");
-    if (trip.canyonId !== getParam(req.params.canyonId))
+    if (!trip.canyon || trip.canyonId !== getParam(req.params.canyonId))
       throw new AppError(404, "Trip log not found");
 
     // Owner-private resource — 404 (not 403) for non-owners so the response
@@ -178,7 +178,7 @@ router.delete(
       include: { canyon: true },
     });
     if (!trip) throw new AppError(404, "Trip log not found");
-    if (trip.canyonId !== getParam(req.params.canyonId))
+    if (!trip.canyon || trip.canyonId !== getParam(req.params.canyonId))
       throw new AppError(404, "Trip log not found");
 
     // Owner-private resource — 404 (not 403) for non-owners so the response

@@ -54,7 +54,7 @@ export type TUser = {
 
 export type TTripLog = {
   id: string;
-  canyonId: string;
+  canyonId: string | null;
   userId: string;
   date: string;
   notes: string | null;
@@ -482,33 +482,39 @@ export function getTripLogs(canyonId: string): Promise<TTripLog[]> {
 
 // Single trip log incl. its media (with fresh presigned URLs). Used by the
 // view dialog, which needs media regardless of which list it was opened from.
-export function getTripLog(canyonId: string, id: string): Promise<TTripLog> {
-  return apiFetch<TTripLog>(`/canyons/${canyonId}/trips/${id}`);
+export function getTripLog(id: string): Promise<TTripLog> {
+  return apiFetch<TTripLog>(`/trips/${id}`);
 }
 
-export function createTripLog(
-  canyonId: string,
-  data: { date: string; notes?: string | null; customFields?: Record<string, unknown> },
-): Promise<TTripLog> {
-  return apiFetch<TTripLog>(`/canyons/${canyonId}/trips`, {
+export function createTripLog(data: {
+  date: string;
+  notes?: string | null;
+  customFields?: Record<string, unknown>;
+  canyonId?: string | null;
+}): Promise<TTripLog> {
+  return apiFetch<TTripLog>("/trips", {
     method: "POST",
     body: data,
   });
 }
 
 export function updateTripLog(
-  canyonId: string,
   id: string,
-  data: { date?: string; notes?: string | null; customFields?: Record<string, unknown> },
+  data: {
+    date?: string;
+    notes?: string | null;
+    customFields?: Record<string, unknown>;
+    canyonId?: string | null;
+  },
 ): Promise<TTripLog> {
-  return apiFetch<TTripLog>(`/canyons/${canyonId}/trips/${id}`, {
+  return apiFetch<TTripLog>(`/trips/${id}`, {
     method: "PATCH",
     body: data,
   });
 }
 
-export function deleteTripLog(canyonId: string, id: string): Promise<void> {
-  return apiFetch<void>(`/canyons/${canyonId}/trips/${id}`, { method: "DELETE" });
+export function deleteTripLog(id: string): Promise<void> {
+  return apiFetch<void>(`/trips/${id}`, { method: "DELETE" });
 }
 
 export type BulkTripLogInput = {
