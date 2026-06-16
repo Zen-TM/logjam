@@ -153,19 +153,55 @@
 .accordionFooter {
   flex-shrink: 0;
   display: flex;
-  gap: 0.6em;
+  flex-direction: column;
+  gap: 0.5em;
   padding: 0.5em 0.7em;
   border-top: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
 }
 
-.applyButton {
-  composes: btn btnFilledNeutral btnMd from '@styles/shared.module.css';
-  flex: 1;
+.resetButton {
+  composes: btn btnGhost btnMd btnFull from '@styles/shared.module.css';
 }
 
-.resetButton {
-  composes: btn btnGhost btnMd from '@styles/shared.module.css';
-  flex: 1;
+/* ── Active-filter badge on the collapsed header ─────────────────────────────── */
+
+.accordionTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.filterBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4em;
+  height: 1.4em;
+  padding: 0 0.4em;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--theme-accent) 25%, transparent);
+  color: var(--theme-text-primary);
+}
+
+/* ── Per-filter clear button ─────────────────────────────────────────────────── */
+
+.clearFilterBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--theme-text-muted);
+  opacity: 0.7;
+}
+
+.clearFilterBtn:hover {
+  opacity: 1;
+  color: var(--theme-text-primary);
 }
 
 /* ── Filter form elements ───────────────────────────────────────────────────── */
@@ -176,9 +212,6 @@
   justify-content: space-between;
   font-size: var(--text-sm);
   color: var(--theme-text-primary);
-  padding: 0 0 0.5em 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
-  margin-bottom: 0.75em;
 }
 
 .section {
@@ -208,7 +241,7 @@
 .sliderLabel {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   margin-bottom: -0.25em;
 }
 
@@ -217,10 +250,30 @@
   color: var(--theme-text-primary);
 }
 
+.sliderValueGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+}
+
 .sliderValue {
   font-size: var(--text-xs);
   color: var(--theme-text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* Full-range slider reads as "Any" / inactive, distinct from a deliberate range. */
+.sliderInactive .sliderLabelText,
+.sliderInactive .sliderValue {
+  opacity: 0.55;
+}
+
+.sliderInactive :global(.MuiSlider-track) {
+  opacity: 0.35;
+}
+
+.sliderInactive :global(.MuiSlider-thumb) {
+  opacity: 0.55;
 }
 
 .selectGrid {
@@ -234,6 +287,9 @@
 }
 
 .selectLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: var(--text-sm);
   color: var(--theme-text-primary);
   margin-bottom: 0.3em;
@@ -255,6 +311,87 @@
   width: 50%;
   flex-shrink: 0;
   padding: 0.3em 0.4em;
+}
+
+.dateRow {
+  display: flex;
+  gap: 0.4em;
+}
+
+.dateField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  flex: 1;
+  min-width: 0;
+}
+
+.dateLabel {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+}
+
+.dateInput {
+  composes: input from '@styles/shared.module.css';
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4em 0.5em;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+  color-scheme: dark;
+}
+
+/* ── Live filtered results ───────────────────────────────────────────────────── */
+
+.results {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  overflow: hidden;
+}
+
+.resultsHeader {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.7;
+  padding: 0 2px;
+}
+
+.resultsEmpty {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.6;
+  padding: 0 2px;
+}
+
+.resultsList {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  overflow-y: auto;
+}
+
+.resultCard {
+  composes: tripCard from '@styles/shared.module.css';
+}
+
+.resultCard:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 9%, transparent);
+}
+
+.resultName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.resultMeta {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
 }
 
 /* ── Footer: low-freq actions ───────────────────────────────────────────────── */

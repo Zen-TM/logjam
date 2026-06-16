@@ -1,13 +1,52 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import { ChevronDown } from "lucide-react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { ChevronDown, X } from "lucide-react";
 import { Slider, Select, MenuItem, Switch } from "@mui/material";
 import classes from "./CanyonsPanel.module.css";
-import type { TCanyon, TFilters } from "../../../canyonUtils";
-import { refreshFromRopeWiki } from "../../../canyonUtils";
+import type { TCanyon, TFilters, TDateRange } from "../../../canyonUtils";
+import { refreshFromRopeWiki, passesFilters, activeFilterCount } from "../../../canyonUtils";
 import type { RefreshResult } from "../../../canyonUtils";
 import RopeWikiReviewDialog from "../../dialogs/RopeWikiReviewDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
+
+type SliderKey = "v_grade" | "a_grade" | "commitment" | "quality" | "wetsuits";
+type ThresholdKey = "pitches" | "longest_pitch" | "hours";
+
+const SLIDER_RANGES: Record<SliderKey, [number, number]> = {
+  v_grade: [1, 7],
+  a_grade: [1, 7],
+  commitment: [1, 6],
+  quality: [1, 5],
+  wetsuits: [1, 5],
+};
+
+const OWNERSHIP_OPTIONS: { value: TFilters["ownership"]; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "owned", label: "Mine" },
+  { value: "shared", label: "Shared with me" },
+];
+
+const ROPEWIKI_OPTIONS: { value: TFilters["ropewiki"]; label: string }[] = [
+  { value: "any", label: "Any" },
+  { value: "linked", label: "Linked" },
+  { value: "unlinked", label: "Not linked" },
+];
+
+const SELECT_MENU_PROPS = {
+  PaperProps: {
+    sx: {
+      backgroundColor: "var(--theme-primary)",
+      boxShadow: "0 8px 16px rgba(0, 0, 0, 0.3)",
+    },
+  },
+} as const;
+
+function gradeSummary(c: TCanyon): string {
+  const parts: string[] = [];
+  if (c.vGrade != null) parts.push(`V${c.vGrade}`);
+  if (c.aGrade != null) parts.push(`A${c.aGrade}`);
+  return parts.join(" ");
+}
 
 function CanyonsPanel({
   canyons,
@@ -41,10 +80,9 @@ function CanyonsPanel({
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
-  const allCanyons = [...canyons, ...sharedCanyons];
   const results =
     query.length >= 3
-      ? allCanyons.filter((c) => {
+      ? [...canyons, ...sharedCanyons].filter((c) => {
           const q = query.toLowerCase();
           if (c.name.toLowerCase().includes(q)) return true;
           return c.altNames.some((a) => a.toLowerCase().includes(q));
@@ -72,95 +110,156 @@ function CanyonsPanel({
   useEffect(() => {
     if (filtersAccordionSignal > 0) setFiltersOpen(true);
   }, [filtersAccordionSignal]);
-  const [filterInputs, setFilterInputs] = useState({
-    v_grade: filters.v_grade ?? [1, 7],
-    a_grade: filters.a_grade ?? [1, 7],
-    commitment: filters.commitment ?? [1, 6],
-    quality: filters.quality ?? [1, 5],
-    pitches: filters.pitches ?? ["Any", 0],
-    longest_pitch: filters.longest_pitch ?? ["Any", 0],
-    hours: filters.hours ?? ["Any", 0],
-    wetsuits: filters.wetsuits ?? [1, 5],
-    include_unknowns: filters.include_unknowns ?? false,
-  });
+
+  const activeCount = activeFilterCount(filters);
+
+  // Live results below the controls (owned bucket vs shared bucket — ownership
+  // is structural, so each list is filtered with its own isOwned flag).
+  const filteredCanyons = useMemo(
+    () => [
+      ...canyons
+        .filter((c) => passesFilters(c, filters, true))
+        .map((c) => ({ canyon: c, owned: true })),
+      ...sharedCanyons
+        .filter((c) => passesFilters(c, filters, false))
+        .map((c) => ({ canyon: c, owned: false })),
+    ],
+    [canyons, sharedCanyons, filters],
+  );
+
+  // ── Live filtering ─────────────────────────────────────────────
+  // Sliders keep a local draft so the thumb tracks the drag smoothly; the
+  // global filter only commits on release (onChangeCommitted). Full range
+  // commits as null — the canonical "inactive" value (see canyonUtils).
+  const draftFromFilters = useCallback(
+    (f: TFilters): Record<SliderKey, number[]> => ({
+      v_grade: f.v_grade ?? SLIDER_RANGES.v_grade,
+      a_grade: f.a_grade ?? SLIDER_RANGES.a_grade,
+      commitment: f.commitment ?? SLIDER_RANGES.commitment,
+      quality: f.quality ?? SLIDER_RANGES.quality,
+      wetsuits: f.wetsuits ?? SLIDER_RANGES.wetsuits,
+    }),
+    [],
+  );
+  const [sliderDraft, setSliderDraft] = useState(() => draftFromFilters(filters));
+  useEffect(() => {
+    setSliderDraft(draftFromFilters(filters));
+  }, [filters, draftFromFilters]);
+
+  function commitSlider(key: SliderKey, v: number[]) {
+    const [min, max] = SLIDER_RANGES[key];
+    const value = v[0] === min && v[1] === max ? null : v;
+    onChangeFilters({ ...filters, [key]: value });
+  }
+
+  function clearFilter(key: keyof TFilters, emptyValue: TFilters[keyof TFilters]) {
+    onChangeFilters({ ...filters, [key]: emptyValue });
+  }
+
+  function clearButton(onClick: () => void) {
+    return (
+      <button
+        type="button"
+        className={classes.clearFilterBtn}
+        onClick={onClick}
+        aria-label="Clear this filter"
+      >
+        <X size={12} />
+      </button>
+    );
+  }
 
   function sliderCell(
-    name: keyof typeof filterInputs,
+    key: SliderKey,
     displayName: string,
-    range: [number, number],
-    step = 1,
+    tooltip?: string,
   ) {
-    const value = Array.isArray(filterInputs[name]) && typeof filterInputs[name][0] === "number"
-      ? (filterInputs[name] as number[])
-      : range;
+    const range = SLIDER_RANGES[key];
+    const value = sliderDraft[key];
+    const isFull = value[0] === range[0] && value[1] === range[1];
+    const isActive = filters[key] != null;
     return (
-      <div className={classes.sliderCell} key={name}>
+      <div
+        className={`${classes.sliderCell} ${isFull ? classes.sliderInactive : ""}`}
+        key={key}
+        title={tooltip}
+      >
         <div className={classes.sliderLabel}>
           <span className={classes.sliderLabelText}>{displayName}</span>
-          <span className={classes.sliderValue}>{value[0]}–{value[1]}</span>
+          <span className={classes.sliderValueGroup}>
+            <span className={classes.sliderValue}>
+              {isFull ? "Any" : `${value[0]}–${value[1]}`}
+            </span>
+            {isActive && clearButton(() => clearFilter(key, null))}
+          </span>
         </div>
         <Slider
-          id={name}
+          id={key}
           color="secondary"
-          marks={step === 1}
-          step={step}
+          marks
+          step={1}
           min={range[0]}
           max={range[1]}
           value={value}
           valueLabelDisplay="auto"
           onChange={(_e, v) => {
             if (Array.isArray(v) && v.length === 2) {
-              setFilterInputs({ ...filterInputs, [name]: v });
+              setSliderDraft((d) => ({ ...d, [key]: v }));
             }
+          }}
+          onChangeCommitted={(_e, v) => {
+            if (Array.isArray(v) && v.length === 2) commitSlider(key, v);
           }}
         />
       </div>
     );
   }
 
-  function selectCell(name: keyof typeof filterInputs, displayName: string) {
+  function thresholdCell(key: ThresholdKey, displayName: string) {
+    const current = filters[key];
+    const op = current?.[0] ?? "Any";
+    const num = current?.[1] ?? 0;
+    const isActive = current != null && op !== "Any";
     return (
-      <div className={classes.selectCell} key={name}>
-        <div className={classes.selectLabel}>{displayName}</div>
+      <div className={classes.selectCell} key={key}>
+        <div className={classes.selectLabel}>
+          <span>{displayName}</span>
+          {isActive && clearButton(() => clearFilter(key, null))}
+        </div>
         <div className={classes.selectContainer}>
           <Select
-            id={`${name}Operator`}
+            id={`${key}Operator`}
             className={classes.select}
             color="secondary"
             size="small"
-            value={(filterInputs[name] as [string, number])[0] ?? "Any"}
+            value={op}
             onChange={(e) => {
-              setFilterInputs({
-                ...filterInputs,
-                [name]: [e.target.value, (filterInputs[name] as [string, number])[1] || 0],
+              const nextOp = e.target.value as
+                | "Any"
+                | "Less than"
+                | "More than"
+                | "Exactly";
+              onChangeFilters({
+                ...filters,
+                [key]: nextOp === "Any" ? null : [nextOp, num],
               });
             }}
-            MenuProps={{
-              PaperProps: {
-                sx: {
-                  backgroundColor: "var(--theme-primary)",
-                  boxShadow: "0 8px 16px rgba(0, 0, 0, 0.3)",
-                },
-              },
-            }}
+            MenuProps={SELECT_MENU_PROPS}
           >
             <MenuItem value="Any">Any</MenuItem>
             <MenuItem value="Less than">&lt;</MenuItem>
             <MenuItem value="More than">&gt;</MenuItem>
             <MenuItem value="Exactly">=</MenuItem>
           </Select>
-          {(filterInputs[name] as [string, number])[0] !== "Any" && (
+          {op !== "Any" && (
             <input
               type="number"
               className={classes.numberInput}
-              value={(filterInputs[name] as [string, number])[1] || 0}
+              value={num}
               onChange={(e) => {
                 const v = parseInt(e.target.value, 10);
                 if (!isNaN(v)) {
-                  setFilterInputs({
-                    ...filterInputs,
-                    [name]: [(filterInputs[name] as [string, number])[0], v],
-                  });
+                  onChangeFilters({ ...filters, [key]: [op, v] });
                 }
               }}
             />
@@ -170,33 +269,97 @@ function CanyonsPanel({
     );
   }
 
-  function handleApply() {
-    onChangeFilters({ ...filters, ...filterInputs, name: null });
+  function choiceCell<K extends "ownership" | "ropewiki">(
+    key: K,
+    displayName: string,
+    options: { value: TFilters[K]; label: string }[],
+    inactiveValue: TFilters[K],
+  ) {
+    const value = filters[key];
+    const isActive = value !== inactiveValue;
+    return (
+      <div className={classes.selectCell} key={key}>
+        <div className={classes.selectLabel}>
+          <span>{displayName}</span>
+          {isActive && clearButton(() => clearFilter(key, inactiveValue))}
+        </div>
+        <Select
+          className={classes.select}
+          color="secondary"
+          size="small"
+          value={value}
+          onChange={(e) =>
+            onChangeFilters({ ...filters, [key]: e.target.value as TFilters[K] })
+          }
+          MenuProps={SELECT_MENU_PROPS}
+        >
+          {options.map((o) => (
+            <MenuItem key={o.value} value={o.value}>
+              {o.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </div>
+    );
+  }
+
+  function dateRangeCell(key: "created_at" | "updated_at", displayName: string) {
+    const range = filters[key];
+    const from = range?.[0] ?? "";
+    const to = range?.[1] ?? "";
+    const isActive = range != null && (range[0] != null || range[1] != null);
+    function update(nextFrom: string, nextTo: string) {
+      const start = nextFrom || null;
+      const end = nextTo || null;
+      const next: TDateRange | null =
+        start == null && end == null ? null : [start, end];
+      onChangeFilters({ ...filters, [key]: next });
+    }
+    return (
+      <div className={classes.selectCell} key={key}>
+        <div className={classes.selectLabel}>
+          <span>{displayName}</span>
+          {isActive && clearButton(() => clearFilter(key, null))}
+        </div>
+        <div className={classes.dateRow}>
+          <label className={classes.dateField}>
+            <span className={classes.dateLabel}>From</span>
+            <input
+              type="date"
+              className={classes.dateInput}
+              value={from}
+              onChange={(e) => update(e.target.value, to)}
+            />
+          </label>
+          <label className={classes.dateField}>
+            <span className={classes.dateLabel}>To</span>
+            <input
+              type="date"
+              className={classes.dateInput}
+              value={to}
+              onChange={(e) => update(from, e.target.value)}
+            />
+          </label>
+        </div>
+      </div>
+    );
   }
 
   function handleReset() {
-    const reset: TFilters = {
+    onChangeFilters({
       name: null,
-      v_grade: [1, 7],
-      a_grade: [1, 7],
-      commitment: [1, 6],
-      quality: [1, 5],
+      v_grade: null,
+      a_grade: null,
+      commitment: null,
+      quality: null,
       pitches: null,
       longest_pitch: null,
       hours: null,
       wetsuits: null,
-      include_unknowns: false,
-    };
-    onChangeFilters(reset);
-    setFilterInputs({
-      v_grade: [1, 7],
-      a_grade: [1, 7],
-      commitment: [1, 6],
-      quality: [1, 5],
-      pitches: ["Any", 0],
-      longest_pitch: ["Any", 0],
-      hours: ["Any", 0],
-      wetsuits: [1, 5],
+      ownership: "all",
+      created_at: null,
+      updated_at: null,
+      ropewiki: "any",
       include_unknowns: false,
     });
   }
@@ -283,7 +446,12 @@ function CanyonsPanel({
           onClick={() => setFiltersOpen((v) => !v)}
           aria-expanded={filtersOpen}
         >
-          <span>Filters</span>
+          <span className={classes.accordionTitle}>
+            Filters
+            {activeCount > 0 && (
+              <span className={classes.filterBadge}>{activeCount}</span>
+            )}
+          </span>
           <ChevronDown
             size={16}
             className={`${classes.chevron} ${filtersOpen ? classes.chevronOpen : ""}`}
@@ -292,6 +460,49 @@ function CanyonsPanel({
         {filtersOpen && (
           <div className={classes.accordionBody}>
             <div className={classes.accordionScroll}>
+              <div className={classes.section}>
+                <div className={classes.sectionHeader}>Grades</div>
+                <div className={classes.sliderGrid}>
+                  {sliderCell("v_grade", "Vertical")}
+                  {sliderCell("a_grade", "Aquatic")}
+                  {sliderCell("commitment", "Commitment")}
+                </div>
+              </div>
+              <div className={classes.section}>
+                <div className={classes.sectionHeader}>Character</div>
+                <div className={classes.sliderGrid}>
+                  {sliderCell("quality", "Quality")}
+                  {sliderCell(
+                    "wetsuits",
+                    "Wetsuits",
+                    "Wetsuit necessity. 1 = not needed (dry or warm); 5 = essential.",
+                  )}
+                </div>
+              </div>
+              <div className={classes.section}>
+                <div className={classes.sectionHeader}>Logistics</div>
+                <div className={classes.selectGrid}>
+                  {thresholdCell("pitches", "Pitches")}
+                  {thresholdCell("longest_pitch", "Longest pitch (m)")}
+                  {thresholdCell("hours", "Hours (h)")}
+                </div>
+              </div>
+              <div className={classes.section}>
+                <div className={classes.sectionHeader}>Source</div>
+                <div className={classes.selectGrid}>
+                  {choiceCell("ownership", "Ownership", OWNERSHIP_OPTIONS, "all")}
+                  {choiceCell("ropewiki", "RopeWiki link", ROPEWIKI_OPTIONS, "any")}
+                </div>
+              </div>
+              <div className={classes.section}>
+                <div className={classes.sectionHeader}>Dates</div>
+                <div className={classes.selectGrid}>
+                  {dateRangeCell("created_at", "Added")}
+                  {dateRangeCell("updated_at", "Updated")}
+                </div>
+              </div>
+            </div>
+            <div className={classes.accordionFooter}>
               <div
                 className={classes.toggleRow}
                 title="When on, canyons missing data for an active filter field are still shown. When off, they're hidden as soon as that filter is changed from its default."
@@ -299,43 +510,47 @@ function CanyonsPanel({
                 <span>Include unknowns</span>
                 <Switch
                   size="small"
-                  checked={filterInputs.include_unknowns}
-                  onChange={(_, v) => setFilterInputs({ ...filterInputs, include_unknowns: v })}
+                  checked={filters.include_unknowns}
+                  onChange={(_, v) =>
+                    onChangeFilters({ ...filters, include_unknowns: v })
+                  }
                   color="secondary"
                 />
               </div>
-              <div className={classes.section}>
-                <div className={classes.sectionHeader}>Grades</div>
-                <div className={classes.sliderGrid}>
-                  {sliderCell("v_grade", "Vertical", [1, 7])}
-                  {sliderCell("a_grade", "Aquatic", [1, 7])}
-                  {sliderCell("commitment", "Commitment", [1, 6])}
-                </div>
-              </div>
-              <div className={classes.section}>
-                <div className={classes.sectionHeader}>Character</div>
-                <div className={classes.sliderGrid}>
-                  {sliderCell("quality", "Quality", [1, 5])}
-                  {sliderCell("wetsuits", "Wetsuits", [1, 5])}
-                </div>
-              </div>
-              <div className={classes.section}>
-                <div className={classes.sectionHeader}>Logistics</div>
-                <div className={classes.selectGrid}>
-                  {selectCell("pitches", "Pitches")}
-                  {selectCell("longest_pitch", "Longest pitch")}
-                  {selectCell("hours", "Hours")}
-                </div>
-              </div>
-            </div>
-            <div className={classes.accordionFooter}>
-              <button className={classes.applyButton} onClick={handleApply}>
-                Apply
-              </button>
               <button className={classes.resetButton} onClick={handleReset}>
                 Reset
               </button>
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Live filtered results */}
+      <div className={classes.results}>
+        <div className={classes.resultsHeader}>
+          {filteredCanyons.length} canyon{filteredCanyons.length === 1 ? "" : "s"}
+        </div>
+        {filteredCanyons.length === 0 ? (
+          <span className={classes.resultsEmpty}>
+            No canyons match the current filters.
+          </span>
+        ) : (
+          <div className={classes.resultsList}>
+            {filteredCanyons.map(({ canyon, owned }) => {
+              const meta = [gradeSummary(canyon), owned ? "" : "Shared"]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <button
+                  key={canyon.id}
+                  className={classes.resultCard}
+                  onClick={() => onFlyToCanyon(canyon.latitude, canyon.longitude)}
+                >
+                  <span className={classes.resultName}>{canyon.name}</span>
+                  {meta && <span className={classes.resultMeta}>{meta}</span>}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>

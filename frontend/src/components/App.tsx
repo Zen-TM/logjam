@@ -68,7 +68,13 @@ function triggerDownload(url: string) {
 
 function App() {
   const toast = useToast();
-  const [filters, setFilters] = useLocalStorage<TFilters>("logjam.filters", emptyFilters);
+  const [storedFilters, setFilters] = useLocalStorage<TFilters>("logjam.filters", emptyFilters);
+  // Backfill defaults for any filter keys missing from older persisted state, so
+  // new fields (ownership, ropewiki, date ranges) never read as undefined.
+  const filters = useMemo<TFilters>(
+    () => ({ ...emptyFilters, ...storedFilters }),
+    [storedFilters],
+  );
   const [filtersAccordionSignal, setFiltersAccordionSignal] = useState(0);
   const [selectedCanyonID, setSelectedCanyonID] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
@@ -602,7 +608,10 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   // Derived values
   const allCanyons = [...canyons, ...sharedCanyons];
   const filteredCanyons = useMemo(
-    () => allCanyons.filter((c) => passesFilters(c, filters)),
+    () => [
+      ...canyons.filter((c) => passesFilters(c, filters, true)),
+      ...sharedCanyons.filter((c) => passesFilters(c, filters, false)),
+    ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [canyons, sharedCanyons, filters],
   );

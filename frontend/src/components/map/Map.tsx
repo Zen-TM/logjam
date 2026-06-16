@@ -608,7 +608,9 @@ function Map({
     ) as maplibregl.GeoJSONSource;
     if (ownedSource) {
       ownedSource.setData(
-        toFeatureCollection(canyons.filter((c) => passesFilters(c, filters))),
+        toFeatureCollection(
+          canyons.filter((c) => passesFilters(c, filters, true)),
+        ),
       );
     }
 
@@ -618,7 +620,7 @@ function Map({
     if (sharedSource) {
       sharedSource.setData(
         toFeatureCollection(
-          sharedCanyons.filter((c) => passesFilters(c, filters)),
+          sharedCanyons.filter((c) => passesFilters(c, filters, false)),
         ),
       );
     }
