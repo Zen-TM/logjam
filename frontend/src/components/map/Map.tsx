@@ -194,6 +194,7 @@ const VECTOR_STYLE_FALLBACK: VectorStyleSettings = {
     viewpoint: { enabled: false, colour: "#806020e6", widthZ18: 12 },
     hut:       { enabled: false, colour: "#503820e6", widthZ18: 12 },
   },
+  labelScale: 1,
 };
 
 const OSM_LINE_KEY_SET = new Set<OsmFeatureKey>(OSM_LINE_FEATURE_KEYS);
