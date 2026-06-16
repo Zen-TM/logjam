@@ -101,8 +101,12 @@
   border-radius: var(--radius-sm);
 }
 
+/* When open the accordion holds its natural (content) height and resists
+   shrinking (low shrink factor); the results list below absorbs the slack and
+   shrinks first. The accordion only gives up height once the list has reached
+   its min (~1.2 cards), at which point accordionScroll scrolls internally. */
 .accordionExpanded {
-  flex: 1;
+  flex: 0 1 auto;
 }
 
 .accordionHeader {
@@ -301,16 +305,55 @@
   align-items: center;
 }
 
+/* Native select, styled to the house input (accent border, compact height) so
+   it matches the adjacent number/text/date inputs exactly. Full-width when it
+   stands alone (ownership, RopeWiki, boolean custom fields). */
+/* Shared height so a select sitting beside a number input (or any two adjacent
+   field controls) lines up exactly — native widgets differ by a px or two
+   otherwise. 2em at the text-sm font size matches across all four controls. */
+.select,
+.numberInput,
+.customTextInput,
+.dateInput {
+  height: 2em;
+}
+
 .select {
+  composes: input from '@styles/shared.module.css';
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.35em 0.5em;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  color-scheme: dark;
+}
+
+/* Operator select + threshold number share a row and split it evenly; both
+   compose the same input base so their borders and heights line up. */
+.selectContainer .select {
   flex: 1;
-  min-width: 0;
+  width: auto;
 }
 
 .numberInput {
   composes: input from '@styles/shared.module.css';
-  width: 50%;
-  flex-shrink: 0;
-  padding: 0.3em 0.4em;
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0.35em 0.5em;
+}
+
+.customTextInput {
+  composes: input from '@styles/shared.module.css';
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.35em 0.5em;
+  font-size: var(--text-sm);
+}
+
+.customTextInput::placeholder {
+  color: var(--theme-text-muted);
+  opacity: 0.6;
 }
 
 .dateRow {
@@ -335,7 +378,7 @@
   composes: input from '@styles/shared.module.css';
   width: 100%;
   box-sizing: border-box;
-  padding: 0.4em 0.5em;
+  padding: 0.35em 0.5em;
   font-size: var(--text-sm);
   border-radius: var(--radius-sm);
   color-scheme: dark;
@@ -344,8 +387,10 @@
 /* ── Live filtered results ───────────────────────────────────────────────────── */
 
 .results {
-  flex: 1;
-  min-height: 0;
+  /* High shrink factor so the list yields height before the accordion does;
+     min-height keeps ~1.2 cards (plus the count header) visible as the floor. */
+  flex: 1 100 auto;
+  min-height: 5.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.3em;

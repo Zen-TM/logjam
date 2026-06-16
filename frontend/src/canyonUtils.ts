@@ -99,6 +99,16 @@ export type TNotification = {
 // [start, end] inclusive ISO-date bounds (yyyy-mm-dd from a date input); either bound nullable.
 export type TDateRange = [string | null, string | null];
 
+// A single active custom-field filter. Self-describing (carries its own kind)
+// so passesFilters can apply it without consulting the field definitions. The
+// kind maps from the field's TripLogCustomFieldType: string→text,
+// integer/float→number, date→date, boolean→boolean.
+export type TCustomFieldFilter =
+  | { kind: "text"; value: string }
+  | { kind: "number"; op: "Less than" | "More than" | "Exactly"; value: number }
+  | { kind: "date"; range: TDateRange }
+  | { kind: "boolean"; value: boolean };
+
 export type TFilters = {
   name: string | null;
   v_grade: number[] | null;
@@ -113,6 +123,9 @@ export type TFilters = {
   created_at: TDateRange | null;
   updated_at: TDateRange | null;
   ropewiki: "any" | "linked" | "unlinked";
+  // Active custom-field filters keyed by field key. Only active filters are
+  // present; clearing a field deletes its key. Empty {} means none active.
+  custom: Record<string, TCustomFieldFilter>;
   include_unknowns: boolean;
 };
 
@@ -866,6 +879,7 @@ export const emptyFilters: TFilters = {
   created_at: null,
   updated_at: null,
   ropewiki: "any",
+  custom: {},
   include_unknowns: false,
 };
 
@@ -923,10 +937,44 @@ const COUNTED_FILTER_KEYS: (keyof TFilters)[] = [
 ];
 
 export function activeFilterCount(filters: TFilters): number {
-  return COUNTED_FILTER_KEYS.reduce(
+  const builtIn = COUNTED_FILTER_KEYS.reduce(
     (count, key) => count + (isFilterActive(filters, key) ? 1 : 0),
     0,
   );
+  return builtIn + Object.keys(filters.custom ?? {}).length;
+}
+
+// Maps a custom-field definition type to the filter kind it produces, so a
+// stored filter can be validated against the current definition.
+const CUSTOM_TYPE_TO_KIND: Record<
+  TripLogCustomFieldDef["type"],
+  TCustomFieldFilter["kind"]
+> = {
+  string: "text",
+  integer: "number",
+  float: "number",
+  date: "date",
+  boolean: "boolean",
+};
+
+// Drops custom-field filters that no longer correspond to a live definition
+// (deleted field) or whose stored kind no longer matches the field's type
+// (deleted-then-recreated with a different type). Returns the same reference
+// when nothing changes so callers can rely on identity stability.
+export function reconcileCustomFilters(
+  filters: TFilters,
+  defs: TripLogCustomFieldDef[],
+): TFilters {
+  const current = filters.custom ?? {};
+  const next: Record<string, TCustomFieldFilter> = {};
+  for (const [key, filter] of Object.entries(current)) {
+    const def = defs.find((d) => d.key === key);
+    if (def && CUSTOM_TYPE_TO_KIND[def.type] === filter.kind) {
+      next[key] = filter;
+    }
+  }
+  if (Object.keys(next).length === Object.keys(current).length) return filters;
+  return { ...filters, custom: next };
 }
 
 export function hasActiveFilters(filters: TFilters): boolean {
@@ -1017,6 +1065,33 @@ export function passesFilters(
     return false;
   if (!passesDateRangeFilter(canyon.createdAt, filters.created_at)) return false;
   if (!passesDateRangeFilter(canyon.updatedAt, filters.updated_at)) return false;
+
+  for (const [key, filter] of Object.entries(filters.custom ?? {})) {
+    const value = canyon.attributes?.customFields?.[key];
+    if (value == null) {
+      if (!includeUnknowns) return false;
+      continue;
+    }
+    switch (filter.kind) {
+      case "text":
+        if (!String(value).toLowerCase().includes(filter.value.toLowerCase()))
+          return false;
+        break;
+      case "number": {
+        const num = typeof value === "number" ? value : Number(value);
+        if (filter.op === "Less than" && !(num < filter.value)) return false;
+        if (filter.op === "More than" && !(num > filter.value)) return false;
+        if (filter.op === "Exactly" && num !== filter.value) return false;
+        break;
+      }
+      case "boolean":
+        if (Boolean(value) !== filter.value) return false;
+        break;
+      case "date":
+        if (!passesDateRangeFilter(String(value), filter.range)) return false;
+        break;
+    }
+  }
 
   return true;
 }

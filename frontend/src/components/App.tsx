@@ -37,6 +37,7 @@ import {
   passesFilters,
   hasActiveFilters,
   emptyFilters,
+  reconcileCustomFilters,
   apiFetch,
 } from "../canyonUtils";
 import FilterStatusChip from "./map/FilterStatusChip";
@@ -70,11 +71,21 @@ function triggerDownload(url: string) {
 function App() {
   const toast = useToast();
   const [storedFilters, setFilters] = useLocalStorage<TFilters>("logjam.filters", emptyFilters);
+  // Declared here (not with the other field-def state below) because the filters
+  // memo needs it to prune custom filters whose definition no longer exists.
+  const [canyonCustomFieldDefs, setCanyonCustomFieldDefs] = useState<
+    TripLogCustomFieldDef[]
+  >([]);
   // Backfill defaults for any filter keys missing from older persisted state, so
-  // new fields (ownership, ropewiki, date ranges) never read as undefined.
+  // new fields (ownership, ropewiki, date ranges, custom) never read as undefined,
+  // then drop custom-field filters orphaned by a since-deleted definition.
   const filters = useMemo<TFilters>(
-    () => ({ ...emptyFilters, ...storedFilters }),
-    [storedFilters],
+    () =>
+      reconcileCustomFilters(
+        { ...emptyFilters, ...storedFilters },
+        canyonCustomFieldDefs,
+      ),
+    [storedFilters, canyonCustomFieldDefs],
   );
   const [filtersAccordionSignal, setFiltersAccordionSignal] = useState(0);
   const [selectedCanyonID, setSelectedCanyonID] = useState<string | null>(null);
@@ -331,9 +342,6 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   } = useLiveVectorStyle(authenticated);
 
   const [customFieldDefs, setCustomFieldDefs] = useState<
-    TripLogCustomFieldDef[]
-  >([]);
-  const [canyonCustomFieldDefs, setCanyonCustomFieldDefs] = useState<
     TripLogCustomFieldDef[]
   >([]);
 

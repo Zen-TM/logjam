@@ -3,11 +3,17 @@ import {
   passesFilters,
   hasActiveFilters,
   activeFilterCount,
+  reconcileCustomFilters,
   emptyFilters,
 } from "./canyonUtils";
 import type { TCanyon, TFilters } from "./canyonUtils";
+import type { TripLogCustomFieldDef } from "@logjam/shared";
 
-function canyon(overrides: Partial<TCanyon> = {}): TCanyon {
+// Override type permits null on any field so tests can simulate canyons with
+// missing values (the API types them non-null, but filters must handle gaps).
+function canyon(
+  overrides: Partial<{ [K in keyof TCanyon]: TCanyon[K] | null }> = {},
+): TCanyon {
   return {
     id: "c1",
     name: "Empress Canyon",
@@ -130,6 +136,116 @@ describe("activeFilterCount", () => {
   it("does not count name or include_unknowns", () => {
     const f = filters({ name: "empress", include_unknowns: true });
     expect(activeFilterCount(f)).toBe(0);
+  });
+});
+
+describe("passesFilters — custom fields", () => {
+  function withCustom(customFields: Record<string, unknown>): TCanyon {
+    return canyon({ attributes: { customFields } });
+  }
+
+  it("text filter matches case-insensitive substring", () => {
+    const f = filters({ custom: { water: { kind: "text", value: "HIGH" } } });
+    expect(passesFilters(withCustom({ water: "Very high flow" }), f, true)).toBe(true);
+    expect(passesFilters(withCustom({ water: "low" }), f, true)).toBe(false);
+  });
+
+  it("number filter applies Less than / More than / Exactly", () => {
+    const less = filters({ custom: { size: { kind: "number", op: "Less than", value: 5 } } });
+    expect(passesFilters(withCustom({ size: 4 }), less, true)).toBe(true);
+    expect(passesFilters(withCustom({ size: 5 }), less, true)).toBe(false);
+
+    const more = filters({ custom: { size: { kind: "number", op: "More than", value: 5 } } });
+    expect(passesFilters(withCustom({ size: 6 }), more, true)).toBe(true);
+    expect(passesFilters(withCustom({ size: 5 }), more, true)).toBe(false);
+
+    const exact = filters({ custom: { size: { kind: "number", op: "Exactly", value: 5 } } });
+    expect(passesFilters(withCustom({ size: 5 }), exact, true)).toBe(true);
+    expect(passesFilters(withCustom({ size: 4 }), exact, true)).toBe(false);
+  });
+
+  it("number filter works for float values", () => {
+    const f = filters({ custom: { depth: { kind: "number", op: "More than", value: 2.5 } } });
+    expect(passesFilters(withCustom({ depth: 2.75 }), f, true)).toBe(true);
+    expect(passesFilters(withCustom({ depth: 2.25 }), f, true)).toBe(false);
+  });
+
+  it("date filter applies start bound and inclusive end day", () => {
+    const f = filters({ custom: { last_visit: { kind: "date", range: ["2026-02-01", "2026-06-16"] } } });
+    expect(passesFilters(withCustom({ last_visit: "2026-03-01" }), f, true)).toBe(true);
+    expect(passesFilters(withCustom({ last_visit: "2026-06-16" }), f, true)).toBe(true);
+    expect(passesFilters(withCustom({ last_visit: "2026-01-15" }), f, true)).toBe(false);
+  });
+
+  it("boolean filter matches exact truthiness", () => {
+    const yes = filters({ custom: { done: { kind: "boolean", value: true } } });
+    expect(passesFilters(withCustom({ done: true }), yes, true)).toBe(true);
+    expect(passesFilters(withCustom({ done: false }), yes, true)).toBe(false);
+
+    const no = filters({ custom: { done: { kind: "boolean", value: false } } });
+    expect(passesFilters(withCustom({ done: false }), no, true)).toBe(true);
+    expect(passesFilters(withCustom({ done: true }), no, true)).toBe(false);
+  });
+
+  it("hides canyons missing a custom value unless include_unknowns is on", () => {
+    const off = filters({ custom: { size: { kind: "number", op: "More than", value: 3 } } });
+    expect(passesFilters(withCustom({}), off, true)).toBe(false);
+    const on = filters({
+      custom: { size: { kind: "number", op: "More than", value: 3 } },
+      include_unknowns: true,
+    });
+    expect(passesFilters(withCustom({}), on, true)).toBe(true);
+  });
+});
+
+describe("activeFilterCount — custom fields", () => {
+  it("counts each active custom filter once", () => {
+    const f = filters({
+      v_grade: [2, 5],
+      custom: {
+        water: { kind: "text", value: "high" },
+        size: { kind: "number", op: "More than", value: 3 },
+      },
+    });
+    expect(activeFilterCount(f)).toBe(3);
+  });
+
+  it("is unaffected by an empty custom map", () => {
+    expect(activeFilterCount(filters({ custom: {} }))).toBe(0);
+  });
+});
+
+describe("reconcileCustomFilters", () => {
+  const defs: TripLogCustomFieldDef[] = [
+    { key: "size", label: "Group size", type: "integer" },
+    { key: "water", label: "Water level", type: "string" },
+  ];
+
+  it("drops a filter whose definition no longer exists", () => {
+    const f = filters({
+      custom: {
+        size: { kind: "number", op: "More than", value: 3 },
+        gone: { kind: "text", value: "x" },
+      },
+    });
+    const out = reconcileCustomFilters(f, defs);
+    expect(Object.keys(out.custom)).toEqual(["size"]);
+  });
+
+  it("drops a filter whose kind no longer matches the field type", () => {
+    // 'water' is now a string field, but a stale numeric filter persists.
+    const f = filters({
+      custom: { water: { kind: "number", op: "Exactly", value: 1 } },
+    });
+    const out = reconcileCustomFilters(f, defs);
+    expect(out.custom).toEqual({});
+  });
+
+  it("returns the same reference when nothing is pruned", () => {
+    const f = filters({
+      custom: { size: { kind: "number", op: "More than", value: 3 } },
+    });
+    expect(reconcileCustomFilters(f, defs)).toBe(f);
   });
 });
 

@@ -1,10 +1,16 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { ChevronDown, X } from "lucide-react";
-import { Slider, Select, MenuItem, Switch } from "@mui/material";
+import { Slider, Switch } from "@mui/material";
 import classes from "./CanyonsPanel.module.css";
-import type { TCanyon, TFilters, TDateRange } from "../../../canyonUtils";
+import type {
+  TCanyon,
+  TFilters,
+  TDateRange,
+  TCustomFieldFilter,
+} from "../../../canyonUtils";
 import { refreshFromRopeWiki, passesFilters, activeFilterCount } from "../../../canyonUtils";
 import type { RefreshResult } from "../../../canyonUtils";
+import type { TripLogCustomFieldDef } from "@logjam/shared";
 import RopeWikiReviewDialog from "../../dialogs/RopeWikiReviewDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -32,15 +38,6 @@ const ROPEWIKI_OPTIONS: { value: TFilters["ropewiki"]; label: string }[] = [
   { value: "unlinked", label: "Not linked" },
 ];
 
-const SELECT_MENU_PROPS = {
-  PaperProps: {
-    sx: {
-      backgroundColor: "var(--theme-primary)",
-      boxShadow: "0 8px 16px rgba(0, 0, 0, 0.3)",
-    },
-  },
-} as const;
-
 function gradeSummary(c: TCanyon): string {
   const parts: string[] = [];
   if (c.vGrade != null) parts.push(`V${c.vGrade}`);
@@ -61,6 +58,7 @@ function CanyonsPanel({
   onChangeFilters,
   filtersAccordionSignal,
   onFlyToCanyon,
+  canyonCustomFieldDefs,
 }: {
   canyons: TCanyon[];
   sharedCanyons: TCanyon[];
@@ -74,6 +72,7 @@ function CanyonsPanel({
   onChangeFilters: (f: TFilters) => void;
   filtersAccordionSignal: number;
   onFlyToCanyon: (lat: number, lng: number) => void;
+  canyonCustomFieldDefs: TripLogCustomFieldDef[];
 }) {
   // Search
   const [query, setQuery] = useState("");
@@ -227,11 +226,9 @@ function CanyonsPanel({
           {isActive && clearButton(() => clearFilter(key, null))}
         </div>
         <div className={classes.selectContainer}>
-          <Select
+          <select
             id={`${key}Operator`}
             className={classes.select}
-            color="secondary"
-            size="small"
             value={op}
             onChange={(e) => {
               const nextOp = e.target.value as
@@ -244,13 +241,12 @@ function CanyonsPanel({
                 [key]: nextOp === "Any" ? null : [nextOp, num],
               });
             }}
-            MenuProps={SELECT_MENU_PROPS}
           >
-            <MenuItem value="Any">Any</MenuItem>
-            <MenuItem value="Less than">&lt;</MenuItem>
-            <MenuItem value="More than">&gt;</MenuItem>
-            <MenuItem value="Exactly">=</MenuItem>
-          </Select>
+            <option value="Any">Any</option>
+            <option value="Less than">&lt;</option>
+            <option value="More than">&gt;</option>
+            <option value="Exactly">=</option>
+          </select>
           {op !== "Any" && (
             <input
               type="number"
@@ -283,22 +279,19 @@ function CanyonsPanel({
           <span>{displayName}</span>
           {isActive && clearButton(() => clearFilter(key, inactiveValue))}
         </div>
-        <Select
+        <select
           className={classes.select}
-          color="secondary"
-          size="small"
           value={value}
           onChange={(e) =>
             onChangeFilters({ ...filters, [key]: e.target.value as TFilters[K] })
           }
-          MenuProps={SELECT_MENU_PROPS}
         >
           {options.map((o) => (
-            <MenuItem key={o.value} value={o.value}>
+            <option key={o.value} value={o.value}>
               {o.label}
-            </MenuItem>
+            </option>
           ))}
-        </Select>
+        </select>
       </div>
     );
   }
@@ -345,6 +338,184 @@ function CanyonsPanel({
     );
   }
 
+  // ── Custom-field filters ───────────────────────────────────────
+  // Custom filters live in a single keyed map; setting a key activates that
+  // field's filter, passing null deletes it (the inactive state).
+  function setCustomFilter(key: string, value: TCustomFieldFilter | null) {
+    const nextCustom = { ...filters.custom };
+    if (value == null) delete nextCustom[key];
+    else nextCustom[key] = value;
+    onChangeFilters({ ...filters, custom: nextCustom });
+  }
+
+  function customTextCell(def: TripLogCustomFieldDef) {
+    const current = filters.custom[def.key];
+    const value = current?.kind === "text" ? current.value : "";
+    const isActive = current?.kind === "text";
+    return (
+      <div className={classes.selectCell} key={def.key}>
+        <div className={classes.selectLabel}>
+          <span>{def.label}</span>
+          {isActive && clearButton(() => setCustomFilter(def.key, null))}
+        </div>
+        <input
+          type="text"
+          className={classes.customTextInput}
+          placeholder="Contains…"
+          value={value}
+          onChange={(e) => {
+            const v = e.target.value;
+            setCustomFilter(def.key, v === "" ? null : { kind: "text", value: v });
+          }}
+        />
+      </div>
+    );
+  }
+
+  function customNumberCell(def: TripLogCustomFieldDef) {
+    const current = filters.custom[def.key];
+    const active = current?.kind === "number" ? current : null;
+    const op = active?.op ?? "Any";
+    const num = active?.value ?? 0;
+    return (
+      <div className={classes.selectCell} key={def.key}>
+        <div className={classes.selectLabel}>
+          <span>{def.label}</span>
+          {active && clearButton(() => setCustomFilter(def.key, null))}
+        </div>
+        <div className={classes.selectContainer}>
+          <select
+            className={classes.select}
+            value={op}
+            onChange={(e) => {
+              const nextOp = e.target.value as
+                | "Any"
+                | "Less than"
+                | "More than"
+                | "Exactly";
+              setCustomFilter(
+                def.key,
+                nextOp === "Any"
+                  ? null
+                  : { kind: "number", op: nextOp, value: num },
+              );
+            }}
+          >
+            <option value="Any">Any</option>
+            <option value="Less than">&lt;</option>
+            <option value="More than">&gt;</option>
+            <option value="Exactly">=</option>
+          </select>
+          {op !== "Any" && (
+            <input
+              type="number"
+              step={def.type === "float" ? "any" : 1}
+              className={classes.numberInput}
+              value={num}
+              onChange={(e) => {
+                const v =
+                  def.type === "float"
+                    ? parseFloat(e.target.value)
+                    : parseInt(e.target.value, 10);
+                if (!isNaN(v))
+                  setCustomFilter(def.key, { kind: "number", op, value: v });
+              }}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function customDateCell(def: TripLogCustomFieldDef) {
+    const current = filters.custom[def.key];
+    const range = current?.kind === "date" ? current.range : null;
+    const from = range?.[0] ?? "";
+    const to = range?.[1] ?? "";
+    const isActive = current?.kind === "date";
+    function update(nextFrom: string, nextTo: string) {
+      const start = nextFrom || null;
+      const end = nextTo || null;
+      setCustomFilter(
+        def.key,
+        start == null && end == null
+          ? null
+          : { kind: "date", range: [start, end] },
+      );
+    }
+    return (
+      <div className={classes.selectCell} key={def.key}>
+        <div className={classes.selectLabel}>
+          <span>{def.label}</span>
+          {isActive && clearButton(() => setCustomFilter(def.key, null))}
+        </div>
+        <div className={classes.dateRow}>
+          <label className={classes.dateField}>
+            <span className={classes.dateLabel}>From</span>
+            <input
+              type="date"
+              className={classes.dateInput}
+              value={from}
+              onChange={(e) => update(e.target.value, to)}
+            />
+          </label>
+          <label className={classes.dateField}>
+            <span className={classes.dateLabel}>To</span>
+            <input
+              type="date"
+              className={classes.dateInput}
+              value={to}
+              onChange={(e) => update(from, e.target.value)}
+            />
+          </label>
+        </div>
+      </div>
+    );
+  }
+
+  function customBooleanCell(def: TripLogCustomFieldDef) {
+    const current = filters.custom[def.key];
+    const active = current?.kind === "boolean" ? current : null;
+    const value = active ? (active.value ? "yes" : "no") : "any";
+    return (
+      <div className={classes.selectCell} key={def.key}>
+        <div className={classes.selectLabel}>
+          <span>{def.label}</span>
+          {active && clearButton(() => setCustomFilter(def.key, null))}
+        </div>
+        <select
+          className={classes.select}
+          value={value}
+          onChange={(e) => {
+            const v = e.target.value;
+            setCustomFilter(
+              def.key,
+              v === "any" ? null : { kind: "boolean", value: v === "yes" },
+            );
+          }}
+        >
+          <option value="any">Any</option>
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+      </div>
+    );
+  }
+
+  function customFieldCell(def: TripLogCustomFieldDef) {
+    switch (def.type) {
+      case "string":
+        return customTextCell(def);
+      case "integer":
+      case "float":
+        return customNumberCell(def);
+      case "date":
+        return customDateCell(def);
+      case "boolean":
+        return customBooleanCell(def);
+    }
+  }
+
   function handleReset() {
     onChangeFilters({
       name: null,
@@ -360,6 +531,7 @@ function CanyonsPanel({
       created_at: null,
       updated_at: null,
       ropewiki: "any",
+      custom: {},
       include_unknowns: false,
     });
   }
@@ -501,6 +673,14 @@ function CanyonsPanel({
                   {dateRangeCell("updated_at", "Updated")}
                 </div>
               </div>
+              {canyonCustomFieldDefs.length > 0 && (
+                <div className={classes.section}>
+                  <div className={classes.sectionHeader}>Custom fields</div>
+                  <div className={classes.selectGrid}>
+                    {canyonCustomFieldDefs.map((def) => customFieldCell(def))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className={classes.accordionFooter}>
               <div
