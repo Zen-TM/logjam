@@ -5,6 +5,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Autocomplete,
   Button,
   IconButton,
   TextField,
@@ -16,7 +17,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
 import { makeCustomFieldKey, coerceFieldValue } from "@logjam/shared";
-import type { TTripLog } from "../../canyonUtils";
+import type { TCanyon, TTripLog } from "../../canyonUtils";
 import {
   createTripLog,
   updateTripLog,
@@ -41,8 +42,7 @@ function TripLogDialog({
   open,
   onClose,
   onSaved,
-  canyonId,
-  canyonName,
+  canyons,
   tripLog,
   customFieldDefs,
   onCustomFieldDefsChange,
@@ -50,8 +50,7 @@ function TripLogDialog({
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
-  canyonId: string;
-  canyonName: string;
+  canyons: TCanyon[];
   tripLog?: TTripLog;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
@@ -59,6 +58,7 @@ function TripLogDialog({
   const isMobile = useIsMobile();
   const [date, setDate] = useState(todayDateString());
   const [notes, setNotes] = useState("");
+  const [selectedCanyonId, setSelectedCanyonId] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +87,7 @@ function TripLogDialog({
     if (tripLog) {
       setDate(tripLog.date.split("T")[0]);
       setNotes(tripLog.notes ?? "");
+      setSelectedCanyonId(tripLog.canyonId);
       // Populate existing custom field values as strings
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
@@ -97,6 +98,7 @@ function TripLogDialog({
     } else {
       setDate(todayDateString());
       setNotes("");
+      setSelectedCanyonId(null);
       setFieldValues({});
     }
     setError(null);
@@ -113,9 +115,9 @@ function TripLogDialog({
   // In edit mode, fetch the trip's existing media (with fresh presigned URLs).
   useEffect(() => {
     if (!open || !tripLog) return;
-    const { canyonId: tripCanyonId, id } = tripLog;
+    const { id } = tripLog;
     setMediaLoading(true);
-    getTripLog(tripCanyonId, id)
+    getTripLog(id)
       .then((full) => setMedia(full.media ?? []))
       .catch((err) => {
         console.error(err);
@@ -135,10 +137,11 @@ function TripLogDialog({
     for (const def of customFieldDefs) {
       customFields[def.key] = coerceFieldValue(getFieldValue(def.key), def.type);
     }
-    const promise = createTripLog(canyonId, {
+    const promise = createTripLog({
       date,
       notes: notes || null,
       customFields,
+      canyonId: selectedCanyonId,
     })
       .then((trip) => {
         setDraftTripId(trip.id);
@@ -166,7 +169,7 @@ function TripLogDialog({
     if (saving) return;
     if (draftTripId && !committedRef.current) {
       try {
-        await deleteTripLog(canyonId, draftTripId);
+        await deleteTripLog(draftTripId);
       } catch (err) {
         console.error(err);
         setError(messageFromError(err, "Couldn't discard uploaded files. Please try again."));
@@ -200,12 +203,27 @@ function TripLogDialog({
       }
 
       if (tripLog) {
-        await updateTripLog(canyonId, tripLog.id, { date, notes: notes || null, customFields });
+        await updateTripLog(tripLog.id, {
+          date,
+          notes: notes || null,
+          customFields,
+          canyonId: selectedCanyonId,
+        });
       } else if (draftTripId) {
         // A draft was already created to hold uploaded files — persist the form.
-        await updateTripLog(canyonId, draftTripId, { date, notes: notes || null, customFields });
+        await updateTripLog(draftTripId, {
+          date,
+          notes: notes || null,
+          customFields,
+          canyonId: selectedCanyonId,
+        });
       } else {
-        await createTripLog(canyonId, { date, notes: notes || null, customFields });
+        await createTripLog({
+          date,
+          notes: notes || null,
+          customFields,
+          canyonId: selectedCanyonId,
+        });
       }
       committedRef.current = true;
       onSaved();
@@ -263,17 +281,9 @@ function TripLogDialog({
       <DialogTitle
         sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}
       >
-        <Box>
-          <Typography variant="h6" component="span">
-            {tripLog ? "Edit Trip Log" : "Log Trip"}
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{ color: "var(--theme-text-muted)", mt: 0.25 }}
-          >
-            {canyonName}
-          </Typography>
-        </Box>
+        <Typography variant="h6" component="span">
+          {tripLog ? "Edit Trip Log" : "Log Trip"}
+        </Typography>
         <IconButton
           size="small"
           onClick={() => void handleRequestClose()}
@@ -286,6 +296,30 @@ function TripLogDialog({
 
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {/* Canyon (optional — defaults to None) */}
+          <Autocomplete
+            options={canyons}
+            getOptionLabel={(c) => c.name}
+            size="small"
+            value={canyons.find((c) => c.id === selectedCanyonId) ?? null}
+            onChange={(_, c) => setSelectedCanyonId(c?.id ?? null)}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Canyon (optional)"
+                placeholder="None"
+                size="small"
+                sx={fieldSx}
+              />
+            )}
+            PaperComponent={({ children }) => (
+              <Box sx={{ backgroundColor: "var(--theme-primary)", color: "var(--theme-text-primary)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                {children}
+              </Box>
+            )}
+            sx={{ "& .MuiInputBase-input": { color: "var(--theme-text-primary)" } }}
+          />
+
           {/* Date */}
           <TextField
             label="Date"

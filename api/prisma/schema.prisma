@@ -85,13 +85,13 @@ model Notification {
 
 model TripLog {
   id           String   @id @default(uuid())
-  canyonId     String   @map("canyon_id")
+  canyonId     String?  @map("canyon_id")
   userId       String   @map("user_id")
   date         DateTime
   notes        String?
   customFields Json     @default("{}") @map("custom_fields")
   createdAt    DateTime @default(now()) @map("created_at")
-  canyon       Canyon   @relation(fields: [canyonId], references: [id], onDelete: Cascade)
+  canyon       Canyon?  @relation(fields: [canyonId], references: [id], onDelete: Cascade)
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([canyonId])

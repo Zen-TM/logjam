@@ -36,6 +36,7 @@ function TripLogsPanel({
   const [editingTripLog, setEditingTripLog] = useState<TTripLog | undefined>(undefined);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
   const filtered = useMemo(() => {
@@ -56,6 +57,13 @@ function TripLogsPanel({
 
   return (
     <div className={classes.panel}>
+      <button
+        className={classes.logTripButton}
+        onClick={() => setShowCreateDialog(true)}
+      >
+        Log Trip
+      </button>
+
       <div className={classes.filters}>
         <input
           type="text"
@@ -105,7 +113,7 @@ function TripLogsPanel({
               }}
             >
               <span className={classes.canyonName}>
-                {trip.canyon?.name ?? "Unknown Canyon"}
+                {trip.canyon?.name ?? "No canyon"}
               </span>
               <span className={classes.tripDate}>
                 {new Date(trip.date).toLocaleDateString("en-AU", {
@@ -140,7 +148,7 @@ function TripLogsPanel({
           setViewingTripLog(null);
         }}
         tripLog={viewingTripLog}
-        canyonName={viewingTripLog?.canyon?.name ?? ""}
+        canyonName={viewingTripLog?.canyon?.name ?? "No canyon"}
         customFieldDefs={customFieldDefs}
         onMediaChanged={onQuotaChanged}
         onEdit={() => {
@@ -170,13 +178,27 @@ function TripLogsPanel({
             onRefetchTripLogs();
             onRefetchAnalytics();
           }}
-          canyonId={editingTripLog.canyonId}
-          canyonName={editingTripLog.canyon?.name ?? ""}
+          canyons={canyons}
           tripLog={editingTripLog}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={onCustomFieldDefsChange}
         />
       )}
+
+      {/* Create dialog (canyon optional, defaults to None) */}
+      <TripLogDialog
+        open={showCreateDialog}
+        onClose={() => setShowCreateDialog(false)}
+        onSaved={() => {
+          setShowCreateDialog(false);
+          onRefetchTripLogs();
+          onRefetchAnalytics();
+          onQuotaChanged();
+        }}
+        canyons={canyons}
+        customFieldDefs={customFieldDefs}
+        onCustomFieldDefsChange={onCustomFieldDefsChange}
+      />
 
       {/* CSV import dialog */}
       <TripLogCsvImportDialog

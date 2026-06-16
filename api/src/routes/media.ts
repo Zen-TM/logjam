@@ -51,10 +51,10 @@ async function assertOwnsTarget(
   } else if (linkedType === "tripLog") {
     const trip = await prisma.tripLog.findUnique({
       where: { id: linkedId },
-      select: { canyon: { select: { ownerId: true } } },
+      select: { userId: true },
     });
     if (!trip) throw new AppError(404, "Trip log not found");
-    if (trip.canyon.ownerId !== userId)
+    if (trip.userId !== userId)
       throw new AppError(403, "Only the owner can attach media");
   } else {
     throw new AppError(400, "Invalid linkedType");

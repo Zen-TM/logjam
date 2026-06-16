@@ -99,11 +99,11 @@ router.post(
 
     const trips = await prisma.tripLog.findMany({
       where: { id: { in: ids as string[] } },
-      include: { canyon: { select: { ownerId: true } } },
+      select: { id: true, userId: true },
     });
 
     const ownedIds = trips
-      .filter((t) => t.canyon.ownerId === user.id)
+      .filter((t) => t.userId === user.id)
       .map((t) => t.id);
 
     if (ownedIds.length === 0) {

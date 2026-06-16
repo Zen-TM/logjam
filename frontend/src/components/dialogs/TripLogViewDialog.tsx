@@ -67,9 +67,9 @@ function TripLogViewDialog({
   // The trip passed in may come from a list that doesn't include media.
   useEffect(() => {
     if (!open || !tripLog) return;
-    const { canyonId, id } = tripLog;
+    const { id } = tripLog;
     setMediaLoading(true);
-    getTripLog(canyonId, id)
+    getTripLog(id)
       .then((full) => setMedia(full.media ?? []))
       .catch((err) => {
         console.error(err);
@@ -92,7 +92,7 @@ function TripLogViewDialog({
     if (!tripLog) return;
     setDeleting(true);
     try {
-      await deleteTripLog(tripLog.canyonId, tripLog.id);
+      await deleteTripLog(tripLog.id);
       setShowDeleteConfirm(false);
       onDeleted();
       onClose();
