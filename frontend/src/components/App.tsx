@@ -17,7 +17,7 @@ import CanyonCsvImportDialog from "./dialogs/CanyonCsvImportDialog";
 import SelectedCanyonsDialog from "./dialogs/SelectedCanyonsDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
-import type { TFilters, TCanyon } from "../canyonUtils";
+import type { TFilters, TCanyon, GeoPdfJobView } from "../canyonUtils";
 import type { PanelId } from "./sidebar/panels";
 import { TOPO_LAYERS } from "../topoLayerTypes";
 import type { CompletedTopoJob, CompletedOverlaysResponse } from "../topoLayerTypes";
@@ -31,6 +31,7 @@ import {
   useCurrentUser,
   useLiveVectorStyle,
   useTopoExports,
+  useGeoPdfJobs,
   fetchCurrentUser,
   recordConsent,
   passesFilters,
@@ -452,6 +453,11 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     refetch: refetchTopoExports,
   } = useTopoExports(authenticated);
 
+  // GeoPDF jobs are also polled here (in addition to the sidebar panel) so
+  // auto-download works even when the Generated PDFs panel is closed. The hook
+  // self-throttles: it only polls while a job is queued/running.
+  const { jobs: geoPdfJobs, refetch: refetchGeoPdfJobs } = useGeoPdfJobs(authenticated);
+
   // Auto-download exports that complete during this session. Snapshot the
   // exports already completed on first successful fetch so we never download a
   // pre-existing export, and never download the same one twice.
@@ -498,6 +504,32 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     }
   }, [authenticated, topoExports, topoExportsLoading]);
 
+  // Auto-download GeoPDFs that this tab queued during this session. Arming is
+  // in-memory only: a job id is added to armedGeoPdfJobIds when queued here, and
+  // the ref is empty on a fresh load, so pre-existing completed jobs returned by
+  // GET /geo-pdf are never armed and never auto-download (the new-browser bug).
+  const armedGeoPdfJobIds = useRef<Set<string>>(new Set());
+  const autoDownloadedGeoPdfJobIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const job of geoPdfJobs) {
+      if (!armedGeoPdfJobIds.current.has(job.id)) continue;
+      if (job.status === "failed") {
+        armedGeoPdfJobIds.current.delete(job.id);
+        continue;
+      }
+      if (
+        job.status === "completed" &&
+        job.downloadUrl &&
+        !autoDownloadedGeoPdfJobIds.current.has(job.id)
+      ) {
+        autoDownloadedGeoPdfJobIds.current.add(job.id);
+        armedGeoPdfJobIds.current.delete(job.id);
+        triggerDownload(job.downloadUrl);
+        toast.success("GeoPDF downloaded.");
+      }
+    }
+  }, [geoPdfJobs, toast]);
+
   // Poll non-terminal jobs every 10 s; fire snackbar on completion
   useEffect(() => {
     const nonTerminal = activeTopoJobs.filter(
@@ -533,9 +565,16 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     toast.success(`Topo job submitted: "${job.name ?? "Unnamed"}"`);
   }, [toast]);
 
-  const handleGeoPdfJobQueued = useCallback(() => {
+  const handleGeoPdfJobQueued = useCallback((job: GeoPdfJobView) => {
     setGeoPdfJobsRefetch((n) => n + 1);
-  }, []);
+    // Arm for auto-download if the user hasn't disabled it (default on).
+    if (currentUser?.uiPreferences?.autoDownloadGeoPdfs ?? true) {
+      armedGeoPdfJobIds.current.add(job.id);
+    }
+    // Kick the App-level poller so it picks up the freshly queued job and starts
+    // polling toward completion (the panel may be closed).
+    refetchGeoPdfJobs();
+  }, [currentUser, refetchGeoPdfJobs]);
 
   // Capture ?topoJob=<id>[&download=<layer>] deep link on mount, stash in
   // sessionStorage so it survives a Cognito sign-in redirect, then clean URL.

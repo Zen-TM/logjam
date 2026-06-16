@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import {
   updateUsername,
   updateNotificationPreferences,
+  updateUserPreferences,
   exportUserData,
   type TUser,
 } from "../../../canyonUtils";
@@ -41,6 +42,8 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
   const [notifSaving, setNotifSaving] = useState(false);
+  const [autoDownloadGeoPdfs, setAutoDownloadGeoPdfs] = useState<boolean | null>(null);
+  const [autoDownloadSaving, setAutoDownloadSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
@@ -52,6 +55,7 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
       ...DEFAULT_NOTIFICATION_PREFERENCES,
       ...(currentUser.uiPreferences?.notifications ?? {}),
     });
+    setAutoDownloadGeoPdfs(currentUser.uiPreferences?.autoDownloadGeoPdfs ?? true);
   }, [currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleToggleNotif(key: keyof NotificationPreferences) {
@@ -68,6 +72,23 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
       toast.error(messageFromError(err, "Couldn't save notification setting."));
     } finally {
       setNotifSaving(false);
+    }
+  }
+
+  async function handleToggleAutoDownload() {
+    if (autoDownloadGeoPdfs === null) return;
+    const previous = autoDownloadGeoPdfs;
+    const next = !autoDownloadGeoPdfs;
+    setAutoDownloadGeoPdfs(next);
+    setAutoDownloadSaving(true);
+    try {
+      await updateUserPreferences({ autoDownloadGeoPdfs: next });
+    } catch (err) {
+      console.error(err);
+      setAutoDownloadGeoPdfs(previous);
+      toast.error(messageFromError(err, "Couldn't save download setting."));
+    } finally {
+      setAutoDownloadSaving(false);
     }
   }
 
@@ -289,6 +310,26 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
               disabled={notifSaving}
             />
             <span className={classes.notifLabel}>In-app notification when a canyon is shared with me</span>
+          </label>
+        </div>
+      )}
+
+      <span className={classes.sectionLabel}>Downloads</span>
+      <div className={classes.divider} />
+      {autoDownloadGeoPdfs === null ? (
+        <p className={classes.state}>Loading...</p>
+      ) : (
+        <div className={classes.notifGroup}>
+          <label className={classes.notifRow}>
+            <input
+              type="checkbox"
+              checked={autoDownloadGeoPdfs}
+              onChange={handleToggleAutoDownload}
+              disabled={autoDownloadSaving}
+            />
+            <span className={classes.notifLabel}>
+              Auto-download a GeoPDF when it finishes generating (this browser only)
+            </span>
           </label>
         </div>
       )}

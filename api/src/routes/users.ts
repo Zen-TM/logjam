@@ -198,12 +198,13 @@ router.patch(
   userPatchLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
-    const { username, themeSchemeId, tripLogCustomFields, canyonCustomFields, notifications, consentVersion } = req.body as {
+    const { username, themeSchemeId, tripLogCustomFields, canyonCustomFields, notifications, autoDownloadGeoPdfs, consentVersion } = req.body as {
       username?: unknown;
       themeSchemeId?: unknown;
       tripLogCustomFields?: unknown;
       canyonCustomFields?: unknown;
       notifications?: unknown;
+      autoDownloadGeoPdfs?: unknown;
       consentVersion?: unknown;
     };
 
@@ -243,7 +244,8 @@ router.patch(
       themeSchemeId !== undefined ||
       tripLogCustomFields !== undefined ||
       canyonCustomFields !== undefined ||
-      notifications !== undefined
+      notifications !== undefined ||
+      autoDownloadGeoPdfs !== undefined
     ) {
       if (themeSchemeId !== undefined && !isThemeSchemeId(themeSchemeId)) {
         throw new AppError(400, "Invalid themeSchemeId");
@@ -267,6 +269,9 @@ router.patch(
       if (notifications !== undefined && !isNotificationPreferences(notifications)) {
         throw new AppError(400, "Invalid notifications");
       }
+      if (autoDownloadGeoPdfs !== undefined && typeof autoDownloadGeoPdfs !== "boolean") {
+        throw new AppError(400, "Invalid autoDownloadGeoPdfs");
+      }
 
       const current = normalizeUserUiPreferences(user.uiPreferences);
       updates.uiPreferences = {
@@ -277,6 +282,7 @@ router.patch(
         ...(notifications !== undefined
           ? { notifications: { ...current.notifications, ...(notifications as Record<string, boolean>) } }
           : {}),
+        ...(autoDownloadGeoPdfs !== undefined ? { autoDownloadGeoPdfs } : {}),
       };
     }
 

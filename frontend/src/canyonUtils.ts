@@ -49,6 +49,7 @@ export type TUser = {
     tripLogCustomFields?: TripLogCustomFieldDef[];
     canyonCustomFields?: TripLogCustomFieldDef[];
     notifications?: NotificationPreferences;
+    autoDownloadGeoPdfs?: boolean;
   } | null;
 };
 
@@ -451,6 +452,7 @@ export function updateUserPreferences(
     tripLogCustomFields: TripLogCustomFieldDef[];
     canyonCustomFields: TripLogCustomFieldDef[];
     notifications: Partial<NotificationPreferences>;
+    autoDownloadGeoPdfs: boolean;
   }>,
 ): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });

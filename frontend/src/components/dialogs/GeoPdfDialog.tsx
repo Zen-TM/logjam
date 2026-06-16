@@ -130,7 +130,7 @@ function GeoPdfDialog({
   editingTemplate?: GeoPdfTemplate | null;
   onTemplateSaved?: () => void;
   initialTemplateId?: string | null;
-  onJobQueued?: () => void;
+  onJobQueued?: (job: GeoPdfJobView) => void;
 }) {
   // ── State ────────────────────────────────────────────────────────────────
 
@@ -608,9 +608,9 @@ function GeoPdfDialog({
     }
 
     try {
-      await apiFetch<GeoPdfJobView>("/geo-pdf", { method: "POST", body: config });
+      const job = await apiFetch<GeoPdfJobView>("/geo-pdf", { method: "POST", body: config });
       toast.success("GeoPDF queued — see Generated PDFs below for the download.");
-      onJobQueued?.();
+      onJobQueued?.(job);
       onClose();
     } catch (e) {
       console.error(e);
