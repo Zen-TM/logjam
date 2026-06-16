@@ -135,7 +135,14 @@ export interface VectorContoursStyle {
 export interface VectorStyleSettings {
   contours: VectorContoursStyle;
   features: Record<OsmFeatureKey, OsmFeatureStyle>;
+  // Global multiplier on the label text-size ramp (contour elevations + feature
+  // names) across the live map and baked exports. 1 = the default 9px@z14→12px@z18.
+  labelScale: number;
 }
+
+// Label-size multiplier bounds — shared by the frontend slider and the validator.
+export const LABEL_SCALE_MIN = 0.5;
+export const LABEL_SCALE_MAX = 2;
 
 export const OSM_FEATURE_KEYS: OsmFeatureKey[] = [
   "waterway", "track", "road", "building", "power",
@@ -308,6 +315,7 @@ export const VECTOR_STYLE_DEFAULTS: VectorStyleSettings = {
     viewpoint:{ enabled: false, colour: "#806020e6", widthZ18: 12 },
     hut:      { enabled: false, colour: "#503820e6", widthZ18: 12 },
   },
+  labelScale: 1,
 };
 
 // ---------------------------------------------------------------------------
@@ -376,10 +384,18 @@ export function validateVectorStyleSettings(input: unknown): ValidationResult<Ve
   validateVectorContours(input.contours, errors);
   validateVectorFeatures(input.features, errors);
 
+  // labelScale is a later addition: pre-existing stored styles omit it, so an
+  // absent value is valid and normalises to 1. A present value must be in range.
+  if (input.labelScale !== undefined) {
+    pushIf(errors, inRange(input.labelScale, LABEL_SCALE_MIN, LABEL_SCALE_MAX),
+      `labelScale must be ${LABEL_SCALE_MIN}..${LABEL_SCALE_MAX}`);
+  }
+
   if (errors.length > 0) return { ok: false, errors };
   const value: VectorStyleSettings = {
     contours: input.contours as VectorContoursStyle,
     features: input.features as Record<OsmFeatureKey, OsmFeatureStyle>,
+    labelScale: input.labelScale === undefined ? 1 : (input.labelScale as number),
   };
   return { ok: true, value };
 }

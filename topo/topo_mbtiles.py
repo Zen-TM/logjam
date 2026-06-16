@@ -403,6 +403,7 @@ def _default_render_settings() -> Dict[str, Any]:
             "enabled": True,
             "features": features,
         },
+        "labelScale": 1,
     }
 
 
@@ -452,6 +453,12 @@ def _validate_render_settings(settings: Dict[str, Any]) -> None:
         if key not in ALL_OSM_KEYS:
             raise ValueError(f"unknown OSM feature key: {key}")
         _parse_rgba_hex(style["colour"])
+
+    # Global label-size multiplier (LABEL_SCALE_MIN..MAX in shared). Absent on
+    # pre-field settings — default to 1 rather than reject.
+    label_scale = settings.get("labelScale", 1)
+    if not isinstance(label_scale, (int, float)) or not (0.5 <= float(label_scale) <= 2):
+        raise ValueError("labelScale must be 0.5..2")
 
 
 def load_render_settings(path: Optional[str]) -> Dict[str, Any]:
@@ -576,10 +583,11 @@ def line_label_anchors(coords, zoom: int, spacing_px: float) -> List[Tuple[float
     return anchors
 
 
-def label_font_size(zoom: int) -> int:
+def label_font_size(zoom: int, scale: float = 1.0) -> int:
     """On-screen label px, matching the web map's text-size ramp
-    (interpolate linear zoom 14→9px, 18→12px)."""
-    return int(round(9 + (12 - 9) * (zoom - 14) / (18 - 14)))
+    (interpolate linear zoom 14→9px, 18→12px), multiplied by the user's
+    global labelScale (default 1) so baked tile labels match the overlay."""
+    return max(1, int(round((9 + (12 - 9) * (zoom - 14) / (18 - 14)) * scale)))
 
 
 def draw_dashed_line(draw, pts, fill, width: int, dash) -> None:
@@ -2182,7 +2190,8 @@ def render_features_tile(
                     tags = feat.get("properties", {})
                     label = tags.get("name") or tags.get("ref")
                     if label:
-                        label_size = label_font_size(zoom)
+                        label_size = label_font_size(
+                            zoom, float(settings.get("labelScale", 1) or 1))
                         try:
                             lbl_font = ImageFont.truetype(
                                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", label_size)
@@ -2262,7 +2271,7 @@ def render_contours_tile(
 
     try:
         font_major = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                                        label_font_size(zoom))
+                                        label_font_size(zoom, float(settings.get("labelScale", 1) or 1)))
     except Exception:
         font_major = ImageFont.load_default()
 

@@ -202,6 +202,13 @@ function feat(vs: VectorStyleSettings, key: OsmFeatureKey): OsmFeatureStyle {
   return vs.features[key];
 }
 
+// The label text-size zoom ramp (9px@z14→12px@z18) scaled by the user's global
+// labelScale. Single source for every topo label layer; the GeoPDF service and
+// the Python tile baker apply the same ramp×scale so exports match the map.
+function labelTextSizeExpr(scale: number): maplibregl.ExpressionSpecification {
+  return ["interpolate", ["linear"], ["zoom"], 14, 9 * scale, 18, 12 * scale];
+}
+
 // Apply every user-controllable colour/width to one topo entry's vector layers
 // in place via setPaintProperty. This is the single source of the style→paint
 // mapping: it's called both when layers are first created (structural effect)
@@ -222,6 +229,12 @@ function applyVectorPaint(
   ): void => {
     if (map.getLayer(lid)) map.setPaintProperty(lid, prop, value);
   };
+  // text-size is a layout property, not paint. setLayoutProperty triggers a
+  // relayout (cheap for the handful of label layers) and never recreates them.
+  const sizeExpr = labelTextSizeExpr(vs.labelScale ?? 1);
+  const setLabelSize = (lid: string): void => {
+    if (map.getLayer(lid)) map.setLayoutProperty(lid, "text-size", sizeExpr);
+  };
 
   if (isContours) {
     setPaint(`topo-${entryId}-minor`, "line-color", rgbaCss(vs.contours.minorColour));
@@ -229,6 +242,7 @@ function applyVectorPaint(
     setPaint(`topo-${entryId}-major`, "line-color", rgbaCss(vs.contours.majorColour));
     setPaint(`topo-${entryId}-major`, "line-width", contourPixelWidth(vs.contours.majorWidthM));
     setPaint(`topo-${entryId}-labels`, "text-color", rgbaCss(vs.contours.majorColour));
+    setLabelSize(`topo-${entryId}-labels`);
     return;
   }
 
@@ -238,6 +252,7 @@ function applyVectorPaint(
     setPaint(`topo-${entryId}-${key}`, "line-color", colour);
     setPaint(`topo-${entryId}-${key}`, "line-width", lineWidthInterp(feat(vs, key).widthZ18));
     setPaint(`topo-${entryId}-${key}-label`, "text-color", colour);
+    setLabelSize(`topo-${entryId}-${key}-label`);
   }
 
   // Power lines: raw pixel width (no zoom interpolation), no labels.
@@ -252,6 +267,7 @@ function applyVectorPaint(
   // Point feature name labels follow the category colour (icons are fixed PNGs).
   for (const key of OSM_POINT_FEATURE_KEYS) {
     setPaint(`topo-${entryId}-${key}-label`, "text-color", rgbaCss(feat(vs, key).colour));
+    setLabelSize(`topo-${entryId}-${key}-label`);
   }
 }
 
@@ -1095,15 +1111,7 @@ function Map({
               layout: {
                 "text-field": ["concat", ["to-string", ["get", "elev"]], "m"],
                 "text-font": ["Open Sans Semibold"],
-                "text-size": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  14,
-                  9,
-                  18,
-                  12,
-                ],
+                "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
                 "symbol-placement": "line",
                 "text-max-angle": 60,
               },
@@ -1236,15 +1244,7 @@ function Map({
                     "",
                   ],
                   "text-font": ["Open Sans Semibold"],
-                  "text-size": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    14,
-                    9,
-                    18,
-                    12,
-                  ],
+                  "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
                   "symbol-placement": "line",
                   "text-max-angle": 30,
                 },
@@ -1308,7 +1308,7 @@ function Map({
               layout: {
                 "text-field": textField,
                 "text-font": ["Open Sans Semibold"],
-                "text-size": ["interpolate", ["linear"], ["zoom"], 14, 9, 18, 12],
+                "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
                 "text-anchor": "top",
                 "text-offset": [0, 0.8],
                 "text-optional": true,

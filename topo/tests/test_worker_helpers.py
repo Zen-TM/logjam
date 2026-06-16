@@ -110,6 +110,15 @@ class TestMergeSettings(unittest.TestCase):
         # raster contour fields are preserved alongside vector style.
         self.assertEqual(merged["contours"]["zoomBands"], [1, 2, 3])
 
+    def test_label_scale_passthrough(self):
+        merged = merge_settings(None, {"labelScale": 1.5})
+        self.assertEqual(merged["labelScale"], 1.5)
+
+    def test_label_scale_defaults_when_absent(self):
+        # Vector styles snapshotted before labelScale existed omit it → default 1.
+        merged = merge_settings(None, {"contours": {}})
+        self.assertEqual(merged["labelScale"], 1)
+
 
 @unittest.skipUnless(_IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestWantsTopoEmail(unittest.TestCase):

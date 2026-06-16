@@ -150,6 +150,7 @@ VECTOR_STYLE_DEFAULTS: dict = {
         "viewpoint": {"enabled": False, "colour": "#806020e6", "widthZ18": 12},
         "hut":       {"enabled": False, "colour": "#503820e6", "widthZ18": 12},
     },
+    "labelScale": 1,
 }
 
 
@@ -187,6 +188,10 @@ def merge_settings(layer_options: Optional[dict], vector_style: Optional[dict]) 
         "enabled": raster_features.get("enabled", True),
         "features": vec_features,
     }
+
+    # Global label-size multiplier (default 1). Absent on styles stored before
+    # the field existed, so fall back rather than assume it's present.
+    merged["labelScale"] = vec.get("labelScale", VECTOR_STYLE_DEFAULTS["labelScale"])
     return merged
 
 s3  = boto3.client("s3",  region_name=AWS_REGION)

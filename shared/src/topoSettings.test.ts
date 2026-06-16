@@ -95,6 +95,30 @@ describe("VectorStyleSettings", () => {
     const result = validateVectorStyleSettings(bad);
     expect(result.ok).toBe(false);
   });
+
+  it("defaults labelScale to 1 when absent (pre-existing stored styles)", () => {
+    const legacy = cloneVectorStyleSettings(VECTOR_STYLE_DEFAULTS);
+    // @ts-expect-error — simulate a style stored before labelScale existed
+    delete legacy.labelScale;
+    const result = validateVectorStyleSettings(legacy);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.labelScale).toBe(1);
+  });
+
+  it("rejects out-of-range labelScale", () => {
+    const bad = cloneVectorStyleSettings(VECTOR_STYLE_DEFAULTS);
+    bad.labelScale = 5;
+    const result = validateVectorStyleSettings(bad);
+    expect(result.ok).toBe(false);
+  });
+
+  it("accepts an in-range labelScale", () => {
+    const ok = cloneVectorStyleSettings(VECTOR_STYLE_DEFAULTS);
+    ok.labelScale = 1.6;
+    const result = validateVectorStyleSettings(ok);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.labelScale).toBe(1.6);
+  });
 });
 
 describe("helpers", () => {

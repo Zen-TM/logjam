@@ -81,6 +81,11 @@ def _vector_style_to_render_settings(vector_style: Dict[str, Any]) -> Dict[str, 
     if isinstance(features_in, dict):
         # Render expects {"features": {category: {enabled, colour, widthZ18}}}
         defaults["features"]["features"] = features_in
+
+    # Global label-size multiplier — absent on pre-field snapshots, so keep the
+    # default (1) rather than dropping it, else exports ignore the user's choice.
+    if "labelScale" in vector_style:
+        defaults["labelScale"] = vector_style["labelScale"]
     return defaults
 
 
