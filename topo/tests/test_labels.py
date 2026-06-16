@@ -86,6 +86,19 @@ class TestLabelFontSize(unittest.TestCase):
         sizes = [label_font_size(z) for z in range(14, 19)]
         self.assertEqual(sizes, sorted(sizes))
 
+    def test_default_scale_is_identity(self):
+        for z in range(14, 19):
+            self.assertEqual(label_font_size(z), label_font_size(z, 1.0))
+
+    def test_scale_multiplies_size(self):
+        # 9px @ z14 → 18px at 2×; 4px at 0.5× (round(4.5)→4, banker's rounding).
+        self.assertEqual(label_font_size(14, 2.0), 18)
+        self.assertEqual(label_font_size(14, 0.5), 4)
+        self.assertEqual(label_font_size(18, 2.0), 24)
+
+    def test_never_below_one_px(self):
+        self.assertGreaterEqual(label_font_size(14, 0.01), 1)
+
 
 @unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestTileLabelBox(unittest.TestCase):

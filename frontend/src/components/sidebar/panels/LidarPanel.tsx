@@ -11,6 +11,7 @@ import TopoTemplateEditDialog from "../../dialogs/TopoTemplateEditDialog";
 import TopoExportDialog from "../../dialogs/TopoExportDialog";
 import VectorContoursForm from "./vectorStyles/VectorContoursForm";
 import VectorFeaturesForm from "./vectorStyles/VectorFeaturesForm";
+import VectorLabelSizeForm from "./vectorStyles/VectorLabelSizeForm";
 import type { VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
 
 
@@ -336,6 +337,14 @@ function LidarPanel({
         </button>
         {vectorStylesOpen && (
           <div className={classes.accordionBody}>
+            {vectorStyle !== null && (
+              <VectorLabelSizeForm
+                value={vectorStyle.labelScale ?? 1}
+                onChange={(next) =>
+                  onVectorStyleChange({ ...vectorStyle, labelScale: next })
+                }
+              />
+            )}
             <div className={classes.vectorStyleTabs}>
               <button
                 className={`${classes.vectorStyleTab} ${vectorStyleTab === "contours" ? classes.vectorStyleTabActive : ""}`}

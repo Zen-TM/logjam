@@ -928,6 +928,13 @@ function interpZoom(
   return v1 + t * (v2 - v1);
 }
 
+// Label font size in canvas px: the same 9px@z14→12px@z18 ramp as the live map
+// and the Python tile baker, scaled by the user's global labelScale (default 1)
+// and the device-pixel scale. Single source so GeoPDF labels match the overlay.
+function labelFontSize(styleZoom: number, pxScale: number, labelScale: number): number {
+  return interpZoom(styleZoom, 14, 9, 18, 12) * labelScale * pxScale;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function renderVectorFeature(
   ctx: CanvasRenderingContext2D,
@@ -1059,7 +1066,7 @@ function renderContourFeature(
         y: my,
         angle,
         text: `${elev}m`,
-        fontSize: interpZoom(styleZoom, 14, 9, 18, 12) * pxScale,
+        fontSize: labelFontSize(styleZoom, pxScale, vectorStyle.labelScale ?? 1),
         haloWidth: 1.5 * pxScale,
         color: labelColor,
       });
@@ -1082,6 +1089,7 @@ function bufferLineLabel(
   color: string,
   placedLabels: Array<{ x: number; y: number }>,
   pendingLabels: PendingLabel[],
+  labelScale: number,
 ) {
   if (styleZoom < 14 || !text) return;
   let ring: { x: number; y: number }[] | null = null;
@@ -1104,7 +1112,7 @@ function bufferLineLabel(
     y: my,
     angle,
     text,
-    fontSize: interpZoom(styleZoom, 14, 9, 18, 12) * pxScale,
+    fontSize: labelFontSize(styleZoom, pxScale, labelScale),
     haloWidth: 1.5 * pxScale,
     color,
   });
@@ -1161,7 +1169,7 @@ function renderOsmFeature(
               y: py + t / 2 + interpZoom(styleZoom, 14, 7, 18, 9) * pxScale,
               angle: 0,
               text,
-              fontSize: interpZoom(styleZoom, 14, 9, 18, 12) * pxScale,
+              fontSize: labelFontSize(styleZoom, pxScale, vectorStyle.labelScale ?? 1),
               haloWidth: 1.5 * pxScale,
               color: colour,
             });
@@ -1188,7 +1196,7 @@ function renderOsmFeature(
           : typeof props.name === "string"
             ? props.name
             : "";
-      bufferLineLabel(geometry, dx, dy, scaleX, scaleY, styleZoom, pxScale, label, colour, placedLabels, pendingLabels);
+      bufferLineLabel(geometry, dx, dy, scaleX, scaleY, styleZoom, pxScale, label, colour, placedLabels, pendingLabels, vectorStyle.labelScale ?? 1);
       break;
     }
     case "track": {
@@ -1202,7 +1210,7 @@ function renderOsmFeature(
         dash: [4 * width, 2 * width],
       });
       const label = typeof props.name === "string" ? props.name : "";
-      bufferLineLabel(geometry, dx, dy, scaleX, scaleY, styleZoom, pxScale, label, colour, placedLabels, pendingLabels);
+      bufferLineLabel(geometry, dx, dy, scaleX, scaleY, styleZoom, pxScale, label, colour, placedLabels, pendingLabels, vectorStyle.labelScale ?? 1);
       break;
     }
     case "power": {
