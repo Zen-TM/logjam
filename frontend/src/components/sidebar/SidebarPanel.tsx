@@ -358,6 +358,7 @@ function SidebarPanel({
         {activePanel === "canyon-detail" && (
           <CanyonDetailPanel
             canyon={canyon}
+            canyons={canyons}
             isOwnedCanyon={isOwnedCanyon}
             friends={friends}
             onRefetch={onRefetch}

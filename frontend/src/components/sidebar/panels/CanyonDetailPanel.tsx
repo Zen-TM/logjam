@@ -48,6 +48,7 @@ function formatCustomFieldValue(
 
 function CanyonDetailPanel({
   canyon,
+  canyons,
   isOwnedCanyon,
   friends,
   onRefetch,
@@ -63,6 +64,7 @@ function CanyonDetailPanel({
   onQuotaChanged,
 }: {
   canyon: TCanyon | undefined;
+  canyons: TCanyon[];
   isOwnedCanyon: boolean;
   friends: TFriend[];
   onRefetch: () => void;
@@ -511,8 +513,8 @@ function CanyonDetailPanel({
               toast.error(messageFromError(err, "Couldn't refresh trip logs."));
             });
         }}
-        canyonId={canyon.id}
-        canyonName={canyon.name}
+        canyons={canyons}
+        defaultCanyonId={canyon.id}
         tripLog={editingTripLog}
         customFieldDefs={customFieldDefs}
         onCustomFieldDefsChange={onCustomFieldDefsChange}

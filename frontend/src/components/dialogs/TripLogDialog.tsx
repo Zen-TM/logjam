@@ -43,6 +43,7 @@ function TripLogDialog({
   onClose,
   onSaved,
   canyons,
+  defaultCanyonId = null,
   tripLog,
   customFieldDefs,
   onCustomFieldDefsChange,
@@ -51,6 +52,9 @@ function TripLogDialog({
   onClose: () => void;
   onSaved: () => void;
   canyons: TCanyon[];
+  // Create-mode default selection (e.g. the canyon whose detail panel opened the
+  // dialog). Edit mode always uses the trip's own canyonId. Defaults to None.
+  defaultCanyonId?: string | null;
   tripLog?: TTripLog;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
@@ -98,7 +102,7 @@ function TripLogDialog({
     } else {
       setDate(todayDateString());
       setNotes("");
-      setSelectedCanyonId(null);
+      setSelectedCanyonId(defaultCanyonId);
       setFieldValues({});
     }
     setError(null);
