@@ -38,6 +38,12 @@ function cspMetaPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Pin the dev port. strictPort makes Vite fail loudly if 5173 is taken
+  // (e.g. an orphaned server from a prior session) instead of silently
+  // falling back to 5174 — which the API's CORS_ORIGIN (localhost:5173)
+  // would then reject, surfacing as a confusing "CORS request did not
+  // succeed" rather than the real cause.
+  server: { port: 5173, strictPort: true },
   plugins: [react(), cspMetaPlugin()],
   resolve: {
     alias: {
