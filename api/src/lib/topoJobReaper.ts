@@ -385,6 +385,7 @@ export async function queueAutoExports(now: Date = new Date()): Promise<number> 
       autoExport: true,
       s3OutputKeys: true,
       vectorStyleSnapshot: true,
+      footprint: true,
     },
   });
 
@@ -397,6 +398,18 @@ export async function queueAutoExports(now: Date = new Date()): Promise<number> 
         data: { autoExportedAt: now },
       });
       if (claim.count !== 1) continue;
+
+      // A footprint-less job (legacy / failed-but-marked-complete) crashes the
+      // export worker at render_composite_*. Skip with a notification; the claim
+      // above keeps it from being retried each sweep.
+      if (job.footprint === null) {
+        await notifyAutoExportSkipped(
+          job.userId,
+          job.id,
+          "the source job is missing its footprint — re-run it",
+        );
+        continue;
+      }
 
       const parsed = validateAutoExportSettings(job.autoExport);
       if (!parsed.ok || !parsed.value.enabled) continue; // claimed; nothing to do

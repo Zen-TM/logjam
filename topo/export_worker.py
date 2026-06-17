@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -57,6 +58,17 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("export_worker")
+
+_PATH_RE = re.compile(r"(/[^\s:'\"]+)+")
+
+
+def _scrub_paths(message: str) -> str:
+    """Strip absolute filesystem paths (temp dirs, internal files) from a
+    user-facing error so subprocess stderr can't leak /tmp/... or /app/... into
+    the failure email or the notification shown in the dialog. The
+    human-readable prefix (e.g. 'tippecanoe (features) failed:') survives."""
+    return _PATH_RE.sub("<path>", message)
+
 
 def compose_database_url() -> str:
     """Compose a Postgres connection string from discrete DB_* env vars.
@@ -330,8 +342,9 @@ def main():
             result_bytes = result_local.stat().st_size
 
     except RenderError as e:
-        error_msg = str(e)
-        log.error(f"RenderError: {error_msg}")
+        raw = str(e)
+        log.error(f"RenderError: {raw}")          # full detail stays in worker logs
+        error_msg = _scrub_paths(raw)             # path-free for DB notification + email
     except Exception as e:
         log.error(f"Unexpected failure: {e}", exc_info=True)
         # Keep raw exception out of the user-facing error message.

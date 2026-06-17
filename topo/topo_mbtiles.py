@@ -85,6 +85,11 @@ logging.basicConfig(
 )
 log = logging.getLogger("topo")
 
+# Composite stacking order, bottom→top. Hand-synced mirror of TOPO_LAYERS in
+# shared/src/topoSettings.ts — keep in lockstep when layers change. Imported by
+# renderers/tile_compose.py so the order lives in one place.
+COMPOSITE_LAYER_ORDER = ["hillshade", "vegetation", "slope", "contours", "features"]
+
 # ---------------------------------------------------------------------------
 # Benchmark timer
 # ---------------------------------------------------------------------------
@@ -474,7 +479,7 @@ def load_render_settings(path: Optional[str]) -> Dict[str, Any]:
 
 def active_layers_from_settings(settings: Dict[str, Any], has_vegetation: bool) -> List[str]:
     """Return ordered layer list filtered by settings.<layer>.enabled."""
-    order = ["hillshade", "vegetation", "slope", "contours", "features"]
+    order = COMPOSITE_LAYER_ORDER
     out = []
     for name in order:
         if name == "vegetation" and not has_vegetation:

@@ -14,7 +14,8 @@ MBTiles composite (`render_composite_to_mbtiles`):
   4. For each (z, x, y) tile in the bbox:
      - For each raster layer: gdal.Warp the COG into a 256x256 RGBA PNG window.
      - For each vector layer: call topo_mbtiles.render_contours_tile / render_features_tile.
-     - Alpha-composite in order: hillshade → vegetation → features → slope → contours.
+     - Alpha-composite in order: hillshade → vegetation → slope → contours → features
+       (topo_mbtiles.COMPOSITE_LAYER_ORDER).
 
 GeoTIFF composite (`render_composite_to_geotiff`):
   Raster-only — vectors are excluded by `EXPORT_FORMAT_RULES.geotiff.allowVector
@@ -149,7 +150,7 @@ def _composite_tile(
 
     # Order matches topo_mbtiles.render_tile_job composite order. OSM features
     # are topmost so roads/water/labels read over contours, matching the web map.
-    order = ["hillshade", "vegetation", "slope", "contours", "features"]
+    order = tm.COMPOSITE_LAYER_ORDER
     bbox_wgs84 = tile_to_bbox(x, y, z)
 
     for layer in order:
