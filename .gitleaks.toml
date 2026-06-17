@@ -1,0 +1,25 @@
+# gitleaks config for Logjam.
+#
+# Extends the default ruleset, then allowlists values that gitleaks' generic
+# high-entropy heuristics flag but which are NOT secrets.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public, non-secret identifiers safe to commit"
+
+# Cognito App Client ID and User Pool ID are PUBLIC identifiers. The browser SPA
+# needs both for its Amplify auth config, so they ship in the public JS bundle
+# regardless. They are not credentials — a Cognito public client has no secret,
+# and the user pool's sign-in endpoints are public by design. Security comes from
+# the pool's own policy, not from keeping these IDs hidden.
+# Committed env *templates* hold only placeholders / empty values by design.
+paths = [
+  '''.*\.example$''',
+]
+
+regexTarget = "match"
+regexes = [
+  '''545ofbb8l9d1sl6ggbmk6oonn9''',          # Cognito App Client ID (public)
+  '''ap-southeast-2_x5zPhJXMk''',             # Cognito User Pool ID (public)
+]

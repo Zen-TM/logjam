@@ -286,4 +286,9 @@ Output: MBTiles files for import into Gaia GPS
 
 ## Licence
 
-Private — all rights reserved.
+Logjam is licensed under the **GNU Affero General Public License v3.0**
+(AGPL-3.0) — see [`LICENSE`](LICENSE). Notably, if you run a modified version as
+a network service, AGPL-3.0 requires you to make your modified source available
+to its users.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening issues or pull requests.
