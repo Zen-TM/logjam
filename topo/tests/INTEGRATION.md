@@ -42,7 +42,7 @@ from source).
 Steps:
 
 1. Build the image: `docker compose build` (in `topo/`).
-2. Bring up the dev stack (`make dev`) so Postgres + LocalStack S3 are reachable
+2. Bring up the dev stack (`make dev`) so Postgres + MiniStack S3 are reachable
    from the container, and put a small ELVIS ZIP at `topo/input/elvis.zip`
    (smallest available tile — see `README.md` perf table).
 3. Seed a `topo_jobs` row in `status='processing'` for the seeded alice user with

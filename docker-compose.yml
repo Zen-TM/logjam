@@ -15,49 +15,38 @@ services:
       timeout: 5s
       retries: 10
 
-  localstack:
-    image: localstack/localstack:3.8
+  # MiniStack — drop-in LocalStack-compatible AWS emulator (port 4566). Unlike
+  # LocalStack Community it also EXECUTES ECS RunTask containers via the host
+  # Docker socket, so topo/export/GeoPDF workers launch locally exactly as they
+  # do in prod (no manual worker runs). Buckets + ECS task defs are provisioned
+  # by Terraform (infra/terraform/envs/local), invoked from `make dev`/`make reset`.
+  ministack:
+    image: ministackorg/ministack
     environment:
-      SERVICES: s3
+      SERVICES: s3,ecs,ses,cognito,secretsmanager
       DEFAULT_REGION: ap-southeast-2
       AWS_DEFAULT_REGION: ap-southeast-2
+      # Network that RunTask-launched worker containers join, so they resolve
+      # `postgres` and `ministack` by name. Must match the compose network below.
+      DOCKER_NETWORK: logjam-local
     ports:
       - "4566:4566"
     volumes:
-      # Buckets are provisioned by Terraform (infra/terraform/envs/local),
-      # invoked from `make dev` / `make reset` — not by an init script.
-      - localstack-data:/var/lib/localstack
+      - ministack-data:/var/lib/ministack
+      # Required for ECS RunTask to spawn worker containers (Docker-out-of-Docker).
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health | grep -q running"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health | grep -q '\"s3\": \"available\"'"]
       interval: 5s
       timeout: 5s
       retries: 20
 
-  # Topo pipeline worker — opt in with: docker compose --profile topo up topo-worker
-  topo-worker:
-    profiles:
-      - topo
-    build:
-      context: topo
-      dockerfile: Dockerfile
-    environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_NAME: logjam
-      DB_USER: logjam
-      DB_PASSWORD: logjam
-      AWS_ENDPOINT_URL: http://localstack:4566
-      AWS_REGION: ap-southeast-2
-      AWS_ACCESS_KEY_ID: test
-      AWS_SECRET_ACCESS_KEY: test
-      S3_BUCKET_TOPO: logjam-topo-local
-      FRONTEND_URL: http://localhost:5173
-    depends_on:
-      postgres:
-        condition: service_healthy
-      localstack:
-        condition: service_healthy
-
 volumes:
   postgres-data:
-  localstack-data:
+  ministack-data:
+
+# Fixed network name so MiniStack's DOCKER_NETWORK is deterministic (not derived
+# from the project directory). Worker containers launched via RunTask attach here.
+networks:
+  default:
+    name: logjam-local

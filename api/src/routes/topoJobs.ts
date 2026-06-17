@@ -39,8 +39,9 @@ const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
 const MAX_INPUT_ZIP_COMPRESSED_BYTES = 25 * 1024 * 1024 * 1024; // 25 GB
 const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
-// Empty subnet list = local dev without LocalStack ECS: skip the launch and
-// leave the job pending for manual worker runs.
+// Non-empty subnet list = launch the worker via RunTask. Local dev sets dummy
+// subnets (.env.local) so MiniStack spawns the worker container; an empty list
+// disables the launch and leaves the job pending.
 const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
 
 // POST /topo-jobs — create job + return presigned S3 upload URL

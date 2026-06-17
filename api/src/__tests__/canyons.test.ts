@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 
-// Requires `make dev` to be running (Postgres + LocalStack + API on :8080) with
+// Requires `make dev` to be running (Postgres + MiniStack + API on :8080) with
 // AUTH_MODE=fake (every request authenticates as the seeded alice user).
 //
 // These tests create their own canyons and delete them again, so they do not

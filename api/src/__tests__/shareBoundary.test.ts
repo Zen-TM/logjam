@@ -13,7 +13,7 @@ import {
 
 // Multi-user / share-boundary coverage (gap 1, SEC-001 regression).
 //
-// Requires `make dev` (Postgres + LocalStack + API on :8080) with AUTH_MODE=fake.
+// Requires `make dev` (Postgres + MiniStack + API on :8080) with AUTH_MODE=fake.
 // Exercises the hybrid-share boundary from the RECIPIENT and STRANGER sides —
 // the perspectives the old single-user fake auth could not reach. Seed baseline:
 // alice owns SHARED_CANYON_ID and shares it with bob; carol is shared nothing.
