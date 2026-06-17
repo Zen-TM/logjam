@@ -609,7 +609,7 @@ function GeoPdfDialog({
 
     try {
       const job = await apiFetch<GeoPdfJobView>("/geo-pdf", { method: "POST", body: config });
-      toast.success("GeoPDF queued — see Generated PDFs below for the download.");
+      toast.success("GeoPDF queued — download will appear in the GeoPDFs panel.");
       onJobQueued?.(job);
       onClose();
     } catch (e) {

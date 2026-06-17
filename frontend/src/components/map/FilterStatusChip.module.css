@@ -5,7 +5,7 @@
   z-index: 1;
   display: flex;
   align-items: center;
-  background: color-mix(in srgb, var(--theme-warning) 25%, transparent);
+  background: var(--theme-secondary);
   border: 1px solid color-mix(in srgb, var(--theme-warning) 55%, transparent);
   color: var(--theme-warning);
   border-radius: var(--radius-md);
