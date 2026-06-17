@@ -43,7 +43,8 @@ function GeoPdfsPanel({
   const [loading, setLoading] = useState(true);
   const [fetchCount] = useState(0);
 
-  // Generated GeoPDF jobs accordion
+  // Accordion state
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
   const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
   const { jobs, loading: jobsLoading, error: jobsError, refetch: refetchJobs } = useGeoPdfJobs(true);
@@ -113,9 +114,18 @@ function GeoPdfsPanel({
       </button>
 
       <div className={classes.accordion}>
-        <div className={classes.accordionHeader}>
-          Templates ({templates.length})
-        </div>
+        <button
+          className={classes.accordionHeader}
+          onClick={() => setTemplatesOpen((v) => !v)}
+          aria-expanded={templatesOpen}
+        >
+          <span>Templates ({templates.length})</span>
+          <ChevronDown
+            size={14}
+            className={`${classes.chevron} ${templatesOpen ? classes.chevronOpen : ""}`}
+          />
+        </button>
+        {templatesOpen && (
         <div className={classes.accordionBody}>
           {loading ? (
             <div className={classes.emptyHint}>Loading templates…</div>
@@ -170,6 +180,7 @@ function GeoPdfsPanel({
             </div>
           ))}
         </div>
+        )}
       </div>
 
       <div className={classes.accordion}>

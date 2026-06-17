@@ -124,6 +124,12 @@ router.post(
       if (j.status !== "complete") {
         throw new AppError(400, `Job ${j.id} is not complete`);
       }
+      // A job without a footprint (legacy / failed-but-marked-complete) crashes
+      // the export worker at render_composite_* ("No source-job footprints
+      // available"). Reject here; re-running the job recomputes the footprint.
+      if (j.footprint === null) {
+        throw new AppError(400, "Re-run this job to enable exports");
+      }
     }
 
     // Reject pre-Stage-2 jobs whose outputs predate the COG export source:
