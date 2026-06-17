@@ -75,6 +75,66 @@ describe("fetchAndParseRopeWiki", () => {
   });
 });
 
+// Branch coverage for the individual field parsers, driven through the public
+// CSV path (parseDMS / parseRating / parseLongestRappel / parseHours /
+// parseRappels / parseQuality are module-private). The rating cell carries the
+// same HTML-ish markup RopeWiki emits, so tag-stripping is exercised here too.
+describe("fetchAndParseRopeWiki — field parser branches", () => {
+  const COORD = "33° 1′ 1″ S, 150° 1′ 1″ E"; // valid DMS, every row reuses it
+  const HEADER =
+    "pageid,location,coords,quality,rating,longest,min time,number of rappels";
+
+  function rows(...dataRows: string[]) {
+    return [HEADER, ...dataRows].join("\n");
+  }
+
+  it("parses longest rappel in feet, metres, and bare-number (assumed feet)", async () => {
+    mockFetchCsv(
+      rows(
+        `1,Feet,"${COORD}",,,30 ft,,`,
+        `2,Metres,"${COORD}",,,18 m,,`,
+        `3,Bare,"${COORD}",,,100,,`,
+      ),
+    );
+    const { canyons } = await fetchAndParseRopeWiki();
+    expect(canyons.map((c) => c.longestAbseil)).toEqual([9.1, 18, 30.5]);
+  });
+
+  it("parses min time as a single value and as a range mean", async () => {
+    mockFetchCsv(
+      rows(`1,Single,"${COORD}",,,,2 hours,`, `2,Range,"${COORD}",,,,3-5 hours,`),
+    );
+    const { canyons } = await fetchAndParseRopeWiki();
+    expect(canyons.map((c) => c.hours)).toEqual([2, 4]);
+  });
+
+  it("takes the first number of a rappel-count range", async () => {
+    mockFetchCsv(rows(`1,Rappels,"${COORD}",,,,,4-8`));
+    const { canyons } = await fetchAndParseRopeWiki();
+    expect(canyons[0].numAbseils).toBe(4);
+  });
+
+  it("extracts grade, aid, and Roman-numeral commitment from rating markup", async () => {
+    mockFetchCsv(
+      rows(
+        `1,RomanIV,"${COORD}",,3B (v2a1 IV),,,`,
+        `2,TaggedVI,"${COORD}",,(<i>v3a2</i> VI),,,`,
+        `3,NoParens,"${COORD}",,no grade here,,,`,
+      ),
+    );
+    const { canyons } = await fetchAndParseRopeWiki();
+    expect({ v: canyons[0].vGrade, a: canyons[0].aGrade, c: canyons[0].commitment }).toEqual({ v: 2, a: 1, c: 4 });
+    expect({ v: canyons[1].vGrade, a: canyons[1].aGrade, c: canyons[1].commitment }).toEqual({ v: 3, a: 2, c: 6 });
+    expect({ v: canyons[2].vGrade, a: canyons[2].aGrade, c: canyons[2].commitment }).toEqual({ v: null, a: null, c: null });
+  });
+
+  it("rejects out-of-range quality as null", async () => {
+    mockFetchCsv(rows(`1,Good,"${COORD}",4,,,,`, `2,Bad,"${COORD}",6,,,,`));
+    const { canyons } = await fetchAndParseRopeWiki();
+    expect(canyons.map((c) => c.quality)).toEqual([4, null]);
+  });
+});
+
 function sampleCanyon(overrides: Partial<RopeWikiCanyon> = {}): RopeWikiCanyon {
   return {
     ropeWikiId: 1,

@@ -287,6 +287,76 @@ describe("reapStuckTopoJobs — topo_export_jobs (ARCH-002)", () => {
   });
 });
 
+// ── Legacy prod row shapes (gap 6) ──────────────────────────────────────────
+// Rows created before the ecsTaskArn / startedAt columns existed carry NULLs
+// there (migration 20260610135419 backfills nothing). The reaper unit tests
+// above use fresh fixtures; these assert the NULL-bearing legacy shapes are
+// swept sanely — reaped via the updatedAt/createdAt fallbacks, never crashing on
+// the NULL, and never issuing a StopTask with a null task ARN.
+describe("reapStuckTopoJobs — legacy prod row shapes (gap 6)", () => {
+  it("reaps a processing job with NULL startedAt and NULL ecsTaskArn via the updatedAt fallback", async () => {
+    const old = new Date(
+      NOW.getTime() - env.TOPO_REAPER_PROCESSING_TIMEOUT_MS - 60_000,
+    );
+    jobFindMany.mockResolvedValue([
+      {
+        id: "legacy-job",
+        startedAt: null, // pre-startedAt column
+        updatedAt: old,
+        estimatedSeconds: null,
+        ecsTaskArn: null, // pre-task_arn column
+      },
+    ]);
+    jobUpdateMany.mockResolvedValue({ count: 1 });
+
+    const count = await reapStuckTopoJobs(NOW);
+
+    const processingUpdate = jobUpdateMany.mock.calls[1][0];
+    expect(processingUpdate.where.id.in).toEqual(["legacy-job"]);
+    expect(processingUpdate.where.status).toBe("processing");
+    expect(processingUpdate.data.status).toBe("failed");
+    // No task ARN → no StopTask attempted with a null task.
+    expect(ecsSend).not.toHaveBeenCalled();
+    expect(count).toBeGreaterThanOrEqual(1);
+  });
+
+  it("reaps a running export with NULL startedAt and NULL ecsTaskArn without a StopTask", async () => {
+    exportFindMany.mockResolvedValue([{ id: "legacy-export", ecsTaskArn: null }]);
+    exportUpdateMany
+      .mockResolvedValueOnce({ count: 0 }) // queued sweep
+      .mockResolvedValueOnce({ count: 1 }); // running sweep
+
+    const count = await reapStuckTopoJobs(NOW);
+
+    expect(exportUpdateMany.mock.calls[1][0].where.id.in).toEqual([
+      "legacy-export",
+    ]);
+    expect(ecsSend).not.toHaveBeenCalled();
+    expect(count).toBeGreaterThanOrEqual(1);
+  });
+
+  it("a mixed sweep of legacy NULL-ARN rows never calls StopTask", async () => {
+    const old = new Date(
+      NOW.getTime() - env.TOPO_REAPER_PROCESSING_TIMEOUT_MS - 60_000,
+    );
+    jobFindMany.mockResolvedValue([
+      { id: "j", startedAt: null, updatedAt: old, estimatedSeconds: null, ecsTaskArn: null },
+    ]);
+    jobUpdateMany.mockResolvedValue({ count: 1 });
+    exportFindMany.mockResolvedValue([{ id: "e", ecsTaskArn: null }]);
+    exportUpdateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+    geoPdfFindMany.mockResolvedValue([{ id: "g", ecsTaskArn: null }]);
+    geoPdfUpdateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+
+    await expect(reapStuckTopoJobs(NOW)).resolves.toBeGreaterThanOrEqual(3);
+    expect(ecsSend).not.toHaveBeenCalled();
+  });
+});
+
 // ── expireCompletedExports (ARCH-006 export-expiry sweep) ───────────────────
 
 describe("expireCompletedExports", () => {

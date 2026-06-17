@@ -28,7 +28,9 @@ router.get(
     if (!canyon) throw new AppError(404, "Canyon not found");
 
     const role = await getCanyonRole(user.id, canyon);
-    if (role === "none") throw new AppError(403, "Access denied");
+    // 404 (not 403) so the status is no existence oracle for a canyon the
+    // caller cannot see — matches GET /canyons/:id (requireCanyonAccess).
+    if (role === "none") throw new AppError(404, "Canyon not found");
     if (role === "shared") {
       // Trip logs are owner-private (hybrid sharing model).
       res.json([]);

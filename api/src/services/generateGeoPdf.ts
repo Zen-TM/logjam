@@ -35,8 +35,15 @@ import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { s3 as s3Client } from "./awsClients";
 import { PMTiles } from "pmtiles";
 import type { Source } from "pmtiles";
-import { VectorTile, VectorTileFeature } from "@mapbox/vector-tile";
-import { PbfReader } from "pbf";
+import { VectorTileFeature } from "@mapbox/vector-tile";
+import { decodeVectorTileLayer } from "./geoPdfVectorTile";
+import {
+  TILE_SIZE,
+  latToMercY,
+  computeTileToMapTransform,
+  type TileCoord,
+  type TileToMapTransform,
+} from "./geoPdfTileMath";
 import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName } from "../constants/topoLayers";
 import { AppError } from "../middleware/errorHandler";
@@ -77,7 +84,6 @@ const MM_PER_INCH = 25.4;
 // translate the print scale into the display zoom MapLibre would show it at, and
 // to scale CSS-pixel style values (font/line/dash) up to the print canvas.
 const STYLE_DPI = 96;
-const TILE_SIZE = 256;
 const CONCURRENCY = 8;
 const MIN_CONTOUR_LABEL_DISTANCE = 150; // px — ~4x sparser label density
 
@@ -161,12 +167,6 @@ function mmToPt(mm: number): number {
 
 const MIN_ZOOM = 8;
 
-/** Spherical Mercator Y (same scale as Web Mercator tile math) */
-function latToMercY(lat: number): number {
-  const s = Math.sin(lat * DEG_TO_RAD);
-  return 0.5 * Math.log((1 + s) / (1 - s));
-}
-
 /** Compute the tile zoom level that provides at least 1 source pixel per output pixel */
 function computeZoom(
   scale: number,
@@ -189,31 +189,6 @@ function computeZoom(
 function displayZoomForScale(scale: number, latDeg: number): number {
   const cosLat = Math.cos(Math.abs(latDeg) * DEG_TO_RAD);
   return Math.log2((156543.03 * cosLat * STYLE_DPI) / (scale * 0.0254));
-}
-
-/** Convert longitude to tile X index at given zoom */
-function lon2tileX(lon: number, z: number): number {
-  return Math.floor(((lon + 180) / 360) * Math.pow(2, z));
-}
-
-/** Convert latitude to tile Y index at given zoom */
-function lat2tileY(lat: number, z: number): number {
-  const latRad = lat * DEG_TO_RAD;
-  return Math.floor(
-    ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
-      Math.pow(2, z),
-  );
-}
-
-/** Convert tile X index to longitude (west edge) */
-function tileX2lon(x: number, z: number): number {
-  return (x / Math.pow(2, z)) * 360 - 180;
-}
-
-/** Convert tile Y index to latitude (north edge) */
-function tileY2lat(y: number, z: number): number {
-  const n = Math.PI - (2 * Math.PI * y) / Math.pow(2, z);
-  return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
 }
 
 /** Simple concurrency limiter */
@@ -247,8 +222,8 @@ function formatDistance(m: number): string {
 }
 
 // ── Tile transform helpers ──────────────────────────────────────────────────
-
-type TileCoord = { x: number; y: number; z: number };
+// TileCoord, TileToMapTransform and computeTileToMapTransform now live in the
+// pure, unit-tested ./geoPdfTileMath module (imported above).
 
 /** Buffered label (contour elevation or feature name) — drawn after all overlay
  * lines to keep labels on top. `text` may contain "\n" for stacked lines. */
@@ -262,83 +237,6 @@ type PendingLabel = {
   haloWidth: number;
   color: string;
 };
-
-/** Transform mapping tile-grid pixel space to output mapCanvas pixel space */
-interface TileToMapTransform {
-  minTileX: number;
-  minTileY: number;
-  tiles: TileCoord[];
-  offsetX: number; // pixel offset within tile grid where extent starts
-  offsetY: number;
-  scaleX: number; // ratio: output pixels / source pixels
-  scaleY: number;
-  /** Native source width in pixels (before scaleX) — used to size the canvas */
-  srcW: number;
-  /** Native source height in pixels (before scaleY) — used to size the canvas */
-  srcH: number;
-}
-
-/**
- * Compute the transform from tile-grid pixel space to output canvas pixel space.
- *
- * The Y axis uses spherical Mercator (latToMercY) so the output canvas matches
- * the same projection as the tile grid and as the web-map frame the user drew.
- */
-function computeTileToMapTransform(
-  zoom: number,
-  north: number,
-  south: number,
-  east: number,
-  west: number,
-  widthPx: number,
-  heightPx: number,
-): TileToMapTransform {
-  const minTileX = lon2tileX(west, zoom);
-  const maxTileX = lon2tileX(east, zoom);
-  const minTileY = lat2tileY(north, zoom);
-  const maxTileY = lat2tileY(south, zoom);
-
-  const tiles: TileCoord[] = [];
-  for (let y = minTileY; y <= maxTileY; y++) {
-    for (let x = minTileX; x <= maxTileX; x++) {
-      tiles.push({ x, y, z: zoom });
-    }
-  }
-
-  const tileGridW = (maxTileX - minTileX + 1) * TILE_SIZE;
-  const tileGridH = (maxTileY - minTileY + 1) * TILE_SIZE;
-
-  const tileOriginLon = tileX2lon(minTileX, zoom);
-  const tileOriginLat = tileY2lat(minTileY, zoom);
-  const tileEndLon = tileX2lon(maxTileX + 1, zoom);
-  const tileEndLat = tileY2lat(maxTileY + 1, zoom);
-
-  // X axis: longitude is linear in Mercator X — standard linear interpolation is correct.
-  const offsetX =
-    ((west - tileOriginLon) / (tileEndLon - tileOriginLon)) * tileGridW;
-  const srcW = ((east - west) / (tileEndLon - tileOriginLon)) * tileGridW;
-
-  // Y axis: use Mercator Y so the canvas projection matches the tile grid.
-  const mY_origin = latToMercY(tileOriginLat);
-  const mY_end = latToMercY(tileEndLat);
-  const mY_north = latToMercY(north);
-  const mY_south = latToMercY(south);
-
-  const offsetY = ((mY_origin - mY_north) / (mY_origin - mY_end)) * tileGridH;
-  const srcH = ((mY_north - mY_south) / (mY_origin - mY_end)) * tileGridH;
-
-  return {
-    minTileX,
-    minTileY,
-    tiles,
-    offsetX,
-    offsetY,
-    scaleX: widthPx / srcW,
-    scaleY: heightPx / srcH,
-    srcW,
-    srcH,
-  };
-}
 
 /**
  * Project a lat/lon point onto the Mercator-Y canvas used for rendering.
@@ -848,17 +746,18 @@ async function fetchAndDrawPMTilesVectorDirect(
       try {
         const result = await archive.getZxy(tile.z, tile.x, tile.y);
         if (!result?.data) return 0;
-        const vt = new VectorTile(new PbfReader(result.data));
+        const { present, features } = decodeVectorTileLayer(
+          result.data,
+          layerName,
+        );
         const tileDx =
           ((tile.x - transform.minTileX) * TILE_SIZE - transform.offsetX) *
           transform.scaleX;
         const tileDy =
           ((tile.y - transform.minTileY) * TILE_SIZE - transform.offsetY) *
           transform.scaleY;
-        const sourceLayer = vt.layers[layerName];
-        if (!sourceLayer) return 0;
-        for (let i = 0; i < sourceLayer.length; i++) {
-          const feature = sourceLayer.feature(i);
+        if (!present) return 0;
+        for (const feature of features) {
           renderVectorFeature(
             mapCtx,
             feature,

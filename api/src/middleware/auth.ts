@@ -66,6 +66,19 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
+// Dev-only fake actors, keyed by Cognito sub. Lets integration tests switch the
+// acting user per request via the `x-fake-sub` header WITHOUT restarting the API
+// (the old single-user limitation that made sharee/stranger perspectives
+// untestable — see SEC-001). Subs/usernames mirror api/prisma/seed.ts. This is
+// safe: the whole fake branch is unreachable outside AUTH_MODE=fake, which the
+// module-load guard above refuses in any non-dev runtime; the header is never
+// read in cognito mode.
+const FAKE_ACTORS: Record<string, { email: string; username: string }> = {
+  "fake-alice-sub": { email: "alice@local", username: "alice" },
+  "fake-bob-sub": { email: "bob@local", username: "bob" },
+  "fake-carol-sub": { email: "carol@local", username: "carol" },
+};
+
 export function requireAuth(
   req: AuthenticatedRequest,
   res: Response,
@@ -74,11 +87,19 @@ export function requireAuth(
   if (process.env.AUTH_MODE === "fake") {
     // Module-load guard above already refuses this in non-dev runtimes.
     // This per-request branch is defence-in-depth only.
+    const headerSub = req.headers["x-fake-sub"];
+    const sub =
+      (typeof headerSub === "string" && headerSub) ||
+      process.env.FAKE_USER_SUB ||
+      "fake-alice-sub";
+    // Known seed subs get a coherent identity; an unknown sub keeps the historical
+    // alice defaults so behaviour is unchanged when no override is present.
+    const actor = FAKE_ACTORS[sub] ?? { email: "alice@local", username: "alice" };
     req.user = {
-      sub: process.env.FAKE_USER_SUB ?? "fake-alice-sub",
-      email: "alice@local",
+      sub,
+      email: actor.email,
       emailVerified: true,
-      username: "alice",
+      username: actor.username,
     };
     next();
     return;

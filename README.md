@@ -238,7 +238,15 @@ Tests require the API to be running locally (do `make dev` + `cd api && npm run 
 cd api && npm test
 ```
 
-Covers: `/health` 200, `/users/me` returns alice under fake auth, `/canyons` returns seeded data.
+Covers: `/health` 200, `/users/me` returns alice under fake auth, `/canyons` returns seeded data, and the share/friend boundaries from the recipient's side.
+
+By default every fake-auth request is **alice**. To act as another seeded user (bob/carol — e.g. to exercise sharing), send an `x-fake-sub` header (honored only in `AUTH_MODE=fake`):
+
+```bash
+curl -H 'Authorization: Bearer x' -H 'x-fake-sub: fake-bob-sub' localhost:8080/canyons/shared
+```
+
+Integration tests use the `as(SUB)` helper in `api/src/__tests__/_actors.ts` for this. The suite hits an in-process rate limit (300 req/user/min) — let it drain or restart the API between rapid re-runs.
 
 ### Troubleshooting
 

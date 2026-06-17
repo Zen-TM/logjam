@@ -8,7 +8,7 @@ Express 5 + Prisma + TypeScript REST backend. Port 8080 dev.
 src/
   index.ts                 app bootstrap, route registration, error handler last
   middleware/
-    auth.ts                requireAuth — Cognito JWT verify, AUTH_MODE=fake bypass
+    auth.ts                requireAuth — Cognito JWT verify, AUTH_MODE=fake bypass (honors x-fake-sub header to switch acting user, fake mode only — see __tests__/_actors.ts)
     errorHandler.ts        AppError class + handler
   services/
     prisma.ts              singleton PrismaClient built on @prisma/adapter-pg (Prisma 7 driver adapter; default export)

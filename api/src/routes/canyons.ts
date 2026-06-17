@@ -8,7 +8,7 @@ import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
 import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
-import { requireCanyonAccess } from "../lib/canyonAccess";
+import { requireCanyonAccess, requireCanyonOwnerAccess } from "../lib/canyonAccess";
 import { resolveUser } from "../lib/resolveUser";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
@@ -233,8 +233,11 @@ router.patch(
     });
 
     if (!canyon) throw new AppError(404, "Canyon not found");
-    if (canyon.ownerId !== user.id)
-      throw new AppError(403, "Only the owner can edit a canyon");
+    await requireCanyonOwnerAccess(
+      user.id,
+      canyon,
+      "Only the owner can edit a canyon",
+    );
 
     const {
       name,
@@ -293,8 +296,11 @@ router.delete(
     });
 
     if (!canyon) throw new AppError(404, "Canyon not found");
-    if (canyon.ownerId !== user.id)
-      throw new AppError(403, "Only the owner can delete a canyon");
+    await requireCanyonOwnerAccess(
+      user.id,
+      canyon,
+      "Only the owner can delete a canyon",
+    );
 
     const id = getParam(req.params.id);
 
