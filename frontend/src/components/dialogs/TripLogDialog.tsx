@@ -289,6 +289,7 @@ function TripLogDialog({
           {tripLog ? "Edit Trip Log" : "Log Trip"}
         </Typography>
         <IconButton
+          aria-label="Close dialog"
           size="small"
           onClick={() => void handleRequestClose()}
           disabled={saving}
@@ -333,6 +334,7 @@ function TripLogDialog({
             size="small"
             fullWidth
             required
+            error={!date && error === "Date is required."}
             InputLabelProps={{ shrink: true }}
             sx={fieldSx}
           />

@@ -293,6 +293,23 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     setSelectedAreaCanyonIds([]);
   }, []);
 
+  // Reflect the active panel in the document title (WCAG 2.4.2 Page Titled).
+  useEffect(() => {
+    const panelTitles: Record<PanelId, string> = {
+      layers: "Layers",
+      canyons: "Canyons",
+      geopdfs: "GeoPDFs",
+      lidar: "LiDAR",
+      "trip-logs": "Trip Logs",
+      analytics: "Analytics",
+      friends: "Friends",
+      notifications: "Notifications",
+      account: "Account",
+      "canyon-detail": "Canyon",
+    };
+    document.title = activePanel ? `${panelTitles[activePanel]} — Logjam` : "Logjam";
+  }, [activePanel]);
+
   // When switching away from canyon-detail via NavRail, clear selectedCanyonID
   const handlePanelChange = useCallback((panel: PanelId | null) => {
     if (panel !== "canyon-detail") {
@@ -714,6 +731,9 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
 
   return (
     <div className={classes.app}>
+      <a href="#main-content" className={classes.skipLink}>
+        Skip to map
+      </a>
       <ImportDialog
         open={showImport}
         onClose={() => setShowImport(false)}
@@ -878,6 +898,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           collapseToPeek={mapInteractionActive}
         />
       </div>
+      <main id="main-content" className={classes.main}>
+      <h1 className={classes.visuallyHidden}>Logjam canyon map</h1>
       <Map
         filters={filters}
         canyons={canyons}
@@ -924,6 +946,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         onFlyToCanyonConsumed={() => setFlyToCanyon(null)}
         sidebarOpen={activePanel !== null}
       />
+      </main>
 
       {selectingArea && (
         <div className={classes.selectAllButtons}>

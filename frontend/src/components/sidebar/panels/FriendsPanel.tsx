@@ -232,6 +232,7 @@ function FriendsPanel({
           <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
             Remove Friend
             <IconButton
+              aria-label="Close dialog"
               size="small"
               onClick={() => setShowRemoveConfirm(null)}
               disabled={removingFriendId != null}

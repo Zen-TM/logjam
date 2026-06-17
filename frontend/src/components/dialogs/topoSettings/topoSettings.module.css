@@ -53,6 +53,12 @@
   border-color: var(--theme-accent);
 }
 
+.numberInput:focus-visible,
+.textInput:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 1px;
+}
+
 .numberInput:disabled,
 .textInput:disabled {
   opacity: 0.5;

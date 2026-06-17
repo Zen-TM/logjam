@@ -88,6 +88,17 @@ function LayersPanel({
     setDraggingIndex(null);
   }
 
+  // Keyboard-accessible alternative to drag reordering (WCAG 2.1.1 / 2.5.1).
+  function moveLayer(from: number, to: number) {
+    if (to < 0 || to >= lidarLayerOrder.length) return;
+    setLidarLayerOrder((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+  }
+
   const switchSx = (color: string) => ({
     "& .MuiSwitch-switchBase.Mui-checked": { color },
     "& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track": {
@@ -145,9 +156,23 @@ function LayersPanel({
                 onDragEnd={onDragEnd}
               >
                 <div className={classes.layerRowLeft}>
-                  <span className={classes.dragHandle}>
+                  <button
+                    type="button"
+                    className={classes.dragHandle}
+                    aria-label={`Reorder ${label}. Press up or down arrow to move.`}
+                    title="Drag, or focus and use ↑/↓ to reorder"
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        moveLayer(i, i - 1);
+                      } else if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        moveLayer(i, i + 1);
+                      }
+                    }}
+                  >
                     <GripVertical size={12} />
-                  </span>
+                  </button>
                   <span>{label}</span>
                 </div>
                 <Switch

@@ -110,6 +110,7 @@ function RopeWikiReviewDialog({
       >
         Review possible duplicates
         <IconButton
+          aria-label="Close dialog"
           size="small"
           onClick={submitting ? undefined : onClose}
           disabled={submitting}

@@ -83,16 +83,33 @@
   gap: 0.3em;
 }
 
+/* Grip is the drag handle AND the keyboard reorder control: focus it and use
+   ↑/↓ to move the layer (WCAG 2.1.1 alternative to pointer drag). */
 .dragHandle {
   color: var(--theme-text-primary);
   opacity: 0.4;
   cursor: grab;
   display: flex;
   align-items: center;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
 }
 
 .dragHandle:hover {
   opacity: 0.8;
+}
+
+.dragHandle:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+}
+
+.reorderBtn:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 1px;
 }
 
 /* ── Basemap gallery ─────────────────────────────────────────────────────────── */

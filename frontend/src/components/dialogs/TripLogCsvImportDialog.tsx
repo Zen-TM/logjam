@@ -1125,6 +1125,7 @@ function TripLogCsvImportDialog({
       <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
         {dialogTitle}
         <IconButton
+          aria-label="Close dialog"
           size="small"
           onClick={handleClose}
           disabled={isImporting}

@@ -123,6 +123,7 @@ function TopoTemplateEditDialog({
       >
         {editingTemplate ? "Edit Template" : "New Template"}
         <IconButton
+          aria-label="Close dialog"
           size="small"
           onClick={onClose}
           disabled={saving}

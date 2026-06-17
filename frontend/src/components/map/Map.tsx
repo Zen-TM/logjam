@@ -44,7 +44,7 @@ function readCssVar(name: string, fallback: string): string {
 
 function applyCanyonThemePaint(map: maplibregl.Map) {
   const owned = readCssVar("--owned-canyon-color", "#f97316");
-  const shared = readCssVar("--shared-canyon-color", "#3b82f6");
+  const shared = readCssVar("--shared-canyon-color", "#629bf8");
   const label = readCssVar("--theme-text-primary", "#ffffff");
   const halo = readCssVar("--theme-bonus-2", "#1a1a1a");
 

@@ -117,10 +117,14 @@
   cursor: pointer;
 }
 
-.searchResultItem:hover,
+.searchResultItem:hover {
+  background-color: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+}
+
 .searchResultItem:focus-visible {
   background-color: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
-  outline: none;
+  outline: 2px solid var(--theme-accent);
+  outline-offset: -2px;
 }
 
 .searchResultAltNames {

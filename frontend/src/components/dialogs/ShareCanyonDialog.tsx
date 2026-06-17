@@ -103,6 +103,7 @@ function ShareCanyonDialog({
         ) : (
           <div className={classes.content}>
             <TextField
+              inputProps={{ "aria-label": "Search friends to share with" }}
               placeholder="Search friends..."
               value={shareSearch}
               onChange={(e) => setShareSearch(e.target.value)}

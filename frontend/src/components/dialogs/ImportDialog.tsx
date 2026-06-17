@@ -64,6 +64,7 @@ function ImportDialog({
       <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
         Welcome to Logjam
         <IconButton
+          aria-label="Close dialog"
           size="small"
           onClick={loading ? undefined : onClose}
           disabled={loading}

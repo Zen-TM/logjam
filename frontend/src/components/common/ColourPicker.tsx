@@ -94,6 +94,19 @@ function SatBrightPanel({ hsva, onChange }: { hsva: Hsva; onChange: (s: number, 
   const { ref, onPointerDown, onPointerMove } = usePanelDrag(
     (x, y) => onChange(x * 100, (1 - y) * 100),
   );
+  function onKeyDown(e: React.KeyboardEvent) {
+    const step = e.shiftKey ? 10 : 1;
+    let { s, v } = hsva;
+    switch (e.key) {
+      case "ArrowLeft": s = Math.max(0, s - step); break;
+      case "ArrowRight": s = Math.min(100, s + step); break;
+      case "ArrowUp": v = Math.min(100, v + step); break;
+      case "ArrowDown": v = Math.max(0, v - step); break;
+      default: return;
+    }
+    e.preventDefault();
+    onChange(s, v);
+  }
   return (
     <div
       ref={ref}
@@ -101,6 +114,14 @@ function SatBrightPanel({ hsva, onChange }: { hsva: Hsva; onChange: (s: number, 
       style={{ backgroundColor: `hsl(${hsva.h}, 100%, 50%)` }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
+      onKeyDown={onKeyDown}
+      tabIndex={0}
+      role="slider"
+      aria-label="Saturation and brightness"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(hsva.s)}
+      aria-valuetext={`Saturation ${Math.round(hsva.s)}%, brightness ${Math.round(hsva.v)}%`}
     >
       <div className={styles.satPanelGradients} />
       <div
@@ -113,12 +134,35 @@ function SatBrightPanel({ hsva, onChange }: { hsva: Hsva; onChange: (s: number, 
 
 function HueSlider({ h, onChange }: { h: number; onChange: (h: number) => void }) {
   const { ref, onPointerDown, onPointerMove } = useSliderDrag((pct) => onChange(pct * 360));
+  function onKeyDown(e: React.KeyboardEvent) {
+    const step = e.shiftKey ? 15 : 1;
+    let next = h;
+    switch (e.key) {
+      case "ArrowLeft":
+      case "ArrowDown": next = (h - step + 360) % 360; break;
+      case "ArrowRight":
+      case "ArrowUp": next = (h + step) % 360; break;
+      case "Home": next = 0; break;
+      case "End": next = 360; break;
+      default: return;
+    }
+    e.preventDefault();
+    onChange(next);
+  }
   return (
     <div
       ref={ref}
       className={styles.hueSlider}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
+      onKeyDown={onKeyDown}
+      tabIndex={0}
+      role="slider"
+      aria-label="Hue"
+      aria-valuemin={0}
+      aria-valuemax={360}
+      aria-valuenow={Math.round(h)}
+      aria-valuetext={`${Math.round(h)} degrees`}
     >
       <div className={styles.pickerThumb} style={{ left: `${(h / 360) * 100}%`, top: "50%" }} />
     </div>
@@ -128,12 +172,35 @@ function HueSlider({ h, onChange }: { h: number; onChange: (h: number) => void }
 function AlphaSlider({ hsva, onChange }: { hsva: Hsva; onChange: (a: number) => void }) {
   const { ref, onPointerDown, onPointerMove } = useSliderDrag((pct) => onChange(pct));
   const solidColor = hsvaToHex({ ...hsva, a: 1 }).slice(0, 7); // #RRGGBB, no alpha
+  function onKeyDown(e: React.KeyboardEvent) {
+    const step = e.shiftKey ? 0.1 : 0.01;
+    let next = hsva.a;
+    switch (e.key) {
+      case "ArrowLeft":
+      case "ArrowDown": next = Math.max(0, hsva.a - step); break;
+      case "ArrowRight":
+      case "ArrowUp": next = Math.min(1, hsva.a + step); break;
+      case "Home": next = 0; break;
+      case "End": next = 1; break;
+      default: return;
+    }
+    e.preventDefault();
+    onChange(next);
+  }
   return (
     <div
       ref={ref}
       className={styles.alphaSlider}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
+      onKeyDown={onKeyDown}
+      tabIndex={0}
+      role="slider"
+      aria-label="Opacity"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(hsva.a * 100)}
+      aria-valuetext={`${Math.round(hsva.a * 100)}%`}
     >
       <div
         className={styles.alphaGradient}
@@ -197,6 +264,7 @@ export default function ColourPicker({ value, onChange, ariaLabel }: ColourPicke
           <AlphaSlider hsva={hsva} onChange={(a) => handlePickerChange({ ...hsva, a })} />
           <input
             type="text"
+            aria-label="Hex colour value (#RRGGBBAA)"
             className={styles.hexInput}
             value={hexDraft}
             onChange={(e) => setHexDraft(e.target.value)}
