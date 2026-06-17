@@ -39,8 +39,9 @@ const router = Router();
 const env = getEnv();
 const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
 const ECS_GEO_PDF_TASK_DEF = env.ECS_GEO_PDF_TASK_DEF;
-// Empty subnet list = local dev without LocalStack ECS: skip the launch and
-// leave the job queued for manual worker runs.
+// Non-empty subnet list = launch the worker via RunTask. Local dev sets dummy
+// subnets (.env.local) so MiniStack spawns the worker container; an empty list
+// disables the launch and leaves the job queued.
 const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
 
 // Cap to prevent users from flooding ECS with queued GeoPDF jobs. Mirrors the

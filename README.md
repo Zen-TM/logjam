@@ -53,8 +53,8 @@ Canyoning in the Blue Mountains is driven by exploration and discovery in remote
 
 ### Infrastructure as Code & local dev
 
-- **Terraform** — single source of truth for all AWS infra (`infra/terraform/`); the same modules provision LocalStack S3 for local dev
-- Docker + Docker Compose (local Postgres + LocalStack)
+- **Terraform** — single source of truth for all AWS infra (`infra/terraform/`); the same modules provision MiniStack S3 + ECS task defs for local dev
+- Docker + Docker Compose (local Postgres + MiniStack)
 - Vitest (unit/integration tests across api, frontend, shared)
 
 ## Project Structure
@@ -89,23 +89,23 @@ logjam/
 │   ├── bootstrap/          # creates the S3 state bucket
 │   ├── modules/storage/    # reusable S3 bucket module (prod + local)
 │   ├── envs/prod/          # real AWS (S3 backend)
-│   ├── envs/local/         # LocalStack S3 + generates root .env.local
+│   ├── envs/local/         # MiniStack S3 + ECS task defs + generates root .env.local
 │   └── templates/
 ├── scripts/                # snapshot, log-retention, task-def template
 ├── docs/                   # audits, etc.
-├── docker-compose.yml      # local Postgres + LocalStack
+├── docker-compose.yml      # local Postgres + MiniStack
 └── Makefile                # dev / reset / snapshot targets
 ```
 
 ## Local Development
 
-The local environment spins up a Postgres database and LocalStack (AWS emulator) via Docker. The API and frontend run on the host for fast hot-reload. No AWS account is needed for the default "fake auth" mode.
+The local environment spins up a Postgres database and MiniStack (a free, open-source LocalStack-compatible AWS emulator) via Docker. The API and frontend run on the host for fast hot-reload. No AWS account is needed for the default "fake auth" mode. Unlike LocalStack Community, MiniStack's ECS RunTask launches real worker containers, so topo/export/GeoPDF jobs run locally exactly as in prod.
 
 ### Prerequisites
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose)
 - Node.js 20+
-- [Terraform](https://developer.hashicorp.com/terraform/install) 1.10+ — `make dev`/`make reset` use it to provision the LocalStack S3 buckets and generate `.env.local`
+- [Terraform](https://developer.hashicorp.com/terraform/install) 1.10+ — `make dev`/`make reset` use it to provision the MiniStack S3 buckets + ECS task defs and generate `.env.local`
 - `make` (pre-installed on Linux/Mac; Windows users: use WSL)
 
 ### First-time setup
@@ -116,8 +116,9 @@ cd shared && npm install && npm run build && cd ..
 cd api && npm install && cd ..
 cd frontend && npm install && cd ..
 
-# 2. Start infra: Postgres + LocalStack, provision S3 + generate .env.local
-#    (via Terraform), migrate DB, seed fixtures.
+# 2. Build worker images + start infra: Postgres + MiniStack, provision S3 + ECS
+#    task defs + generate .env.local (via Terraform), migrate DB, seed fixtures.
+#    (First run builds the GDAL/PDAL worker image — slow; cached thereafter.)
 make dev
 ```
 
@@ -142,7 +143,8 @@ Open [http://localhost:5173](http://localhost:5173). You're logged in as **alice
 
 | Command | What it does |
 |---|---|
-| `make dev` | Start Postgres + LocalStack, provision S3 + generate `.env.local` (Terraform), run migrations, seed fixtures |
+| `make dev` | Build worker images, start Postgres + MiniStack, provision S3 + ECS task defs + generate `.env.local` (Terraform), run migrations, seed fixtures |
+| `make build-workers` | Build the worker Docker images (`logjam-topo-worker`, `logjam-api`) that MiniStack RunTask launches; rebuild after changing worker code |
 | `make reset` | Wipe all volumes + local TF state, restart infra, re-provision, re-migrate, re-seed |
 | `make seed` | Re-run seed without wiping volumes |
 | `make down` | Stop infra containers |
@@ -216,19 +218,22 @@ make dev-snapshot
 
 Verify the sanitization: `grep -i '@' snapshots/latest.sql | grep -v '@local'` should return nothing.
 
-### Topo pipeline (optional)
+### Topo / export / GeoPDF jobs
 
-The topo worker (Python/GDAL/PDAL) is not started by default. Opt in when needed:
+Jobs run automatically. Submitting a topo, export, or GeoPDF job in the UI makes
+the API call ECS RunTask, and MiniStack launches the corresponding worker
+container (`logjam-topo-worker` / `logjam-api`) on the `logjam-local` network —
+the same flow as prod. The worker reaches Postgres and S3 by container name,
+processes the job, writes output to MiniStack S3, and updates the job row.
 
-```bash
-docker compose --profile topo up topo-worker
-```
+Prerequisites: the worker images must exist (`make dev` builds them, or run
+`make build-workers`), and a heavy LiDAR topo job additionally needs its input
+LiDAR ZIP uploaded plus the SVTM formation GeoTIFF seeded at
+`s3://logjam-topo-local/svtm/svtm_formation.tif`. Watch running workers with
+`docker ps`; tail one with `docker logs -f <container>`.
 
-To manually trigger a job, run the worker with `JOB_ID` set (the API's `POST /topo-jobs/:id/start` does this via ECS RunTask in production):
-
-```bash
-docker compose --profile topo run --rm -e JOB_ID=<id> topo-worker
-```
+To debug a GeoPDF job in-process instead of in a container, use
+`make geo-pdf-run JOB=<geoPdfJobId>`.
 
 ### Running integration tests
 
@@ -250,11 +255,13 @@ Integration tests use the `as(SUB)` helper in `api/src/__tests__/_actors.ts` for
 
 ### Troubleshooting
 
-**Port conflicts** — default ports: Postgres `5432`, LocalStack `4566`, API `8080`, frontend `5173`. If another process holds a port, stop it or change the port in `.env.local` + `docker-compose.yml`.
+**Port conflicts** — default ports: Postgres `5432`, MiniStack `4566`, API `8080`, frontend `5173`. If another process holds a port, stop it or change the port in `.env.local` + `docker-compose.yml`.
 
 **Stale schema after migration** — if you add a migration while Postgres has data, just run `make reset` to wipe + re-migrate + re-seed.
 
-**LocalStack not ready** — if `make dev` fails with LocalStack connection errors, run `docker compose logs localstack` to check startup state. Re-run `make dev` once it stabilises.
+**MiniStack not ready** — if `make dev` fails with AWS connection errors, run `docker compose logs ministack` to check startup state. Re-run `make dev` once it stabilises.
+
+**Workers don't launch** — confirm the worker images exist (`docker images | grep logjam`) and rebuild with `make build-workers` if missing. MiniStack needs the Docker socket (mounted in `docker-compose.yml`) to spawn them.
 
 **Prisma client out of sync** — after editing `schema.prisma`, run `cd api && npx prisma generate` to regenerate the client before `npm run dev`.
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 
-// Requires `make dev` to be running (Postgres + LocalStack + API on :8080) with
+// Requires `make dev` to be running (Postgres + MiniStack + API on :8080) with
 // AUTH_MODE=fake (requests authenticate as the seeded alice user).
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
@@ -48,7 +48,7 @@ describe("media upload lifecycle (fake auth)", () => {
     expect(typeof displayUploadUrl).toBe("string");
     expect(typeof thumbnailUploadUrl).toBe("string"); // images carry a thumbnail
 
-    // Upload both copies straight to S3 (LocalStack)
+    // Upload both copies straight to S3 (MiniStack)
     await putToPresignedUrl(displayUploadUrl, PNG_BYTES, "image/png");
     await putToPresignedUrl(thumbnailUploadUrl, PNG_BYTES, "image/jpeg");
 
@@ -155,8 +155,8 @@ describe("media upload lifecycle (fake auth)", () => {
 
     // The durable contract is that Content-Length is part of the SigV4
     // signature: real S3 rejects a PUT whose body size disagrees with the
-    // signed value. LocalStack does not enforce SigV4 header validation, so
-    // the rejection itself is only asserted off-LocalStack.
+    // signed value. The local emulator (MiniStack/LocalStack on :4566) does not
+    // enforce SigV4 header validation, so the rejection is only asserted off it.
     const uploadUrl = new URL(presignRes.body.displayUploadUrl);
     expect(uploadUrl.searchParams.get("X-Amz-SignedHeaders")).toContain(
       "content-length",
@@ -168,8 +168,8 @@ describe("media upload lifecycle (fake auth)", () => {
       headers: { "Content-Type": "image/png" },
       body: oversized,
     });
-    const isLocalStack = uploadUrl.port === "4566";
-    if (!isLocalStack) {
+    const isLocalEmulator = uploadUrl.port === "4566";
+    if (!isLocalEmulator) {
       expect(res.ok).toBe(false);
     }
   });

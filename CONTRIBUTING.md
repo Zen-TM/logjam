@@ -46,7 +46,7 @@ for the canonical access-control and logging patterns.
 See `README.md` for full setup. In brief:
 
 ```bash
-make dev      # local Postgres + LocalStack + API + frontend (AUTH_MODE=fake)
+make dev      # local Postgres + MiniStack + API + frontend (AUTH_MODE=fake)
 make reset    # rebuild shared, reseed, restart
 ```
 

@@ -29,8 +29,9 @@ export interface CreateAndLaunchExportInput {
  * - launchFargateTask throws on placement failure as well as SDK errors, so a
  *   launch problem can never strand the export in `queued` (ARCH-002). On
  *   failure the row is force-failed and AppError(500) is thrown.
- * - Local dev without ECS subnets: skips the launch and leaves the row queued
- *   for a manual worker run.
+ * - Launch runs whenever ECS_SUBNETS is set — including local dev, where
+ *   MiniStack's RunTask spawns the worker container (dummy subnets in
+ *   .env.local flip this on). An empty subnet list disables the launch.
  *
  * Returns the created export job id.
  */

@@ -41,7 +41,7 @@ Prisma: `npx prisma generate` after schema change · `npx prisma migrate dev` fo
 
 | Env | Trigger | Auth | DB | AWS |
 |---|---|---|---|---|
-| **Local dev** | `make dev` + `.env.local` | `AUTH_MODE=fake`, seeded user (alice) | Local Postgres in docker | LocalStack via `AWS_ENDPOINT_URL` |
+| **Local dev** | `make dev` + `.env.local` | `AUTH_MODE=fake`, seeded user (alice) | Local Postgres in docker | MiniStack via `AWS_ENDPOINT_URL` (S3 + ECS RunTask: workers run as real local containers) |
 | **Prod** | deployed to AWS (EB runs API, ECS runs workers) | Cognito JWT | RDS | Real AWS, profile `logjam`, region `ap-southeast-2` |
 
 **Hard rules:**
@@ -51,7 +51,7 @@ Prisma: `npx prisma generate` after schema change · `npx prisma migrate dev` fo
 
 ## AWS architecture
 
-- **IaC = Terraform** (`infra/terraform/`, see its README). Single source of truth for prod AWS; same `storage` module provisions LocalStack S3 for dev. All resources below were imported, not recreated. Prod root `envs/prod` (S3 backend); `terraform output` gives canonical values. RDS/Cognito/CloudFront/EB carry `prevent_destroy`. CI still owns deploys (EB env ignores `setting`; task defs ride `:latest`).
+- **IaC = Terraform** (`infra/terraform/`, see its README). Single source of truth for prod AWS; the `envs/local` root reuses the same `storage` module for MiniStack S3 and adds `ecs.tf` (cluster + worker task defs) so MiniStack RunTask launches workers locally. All resources below were imported, not recreated. Prod root `envs/prod` (S3 backend); `terraform output` gives canonical values. RDS/Cognito/CloudFront/EB carry `prevent_destroy`. CI still owns deploys (EB env ignores `setting`; task defs ride `:latest`).
 - **VPC-bound:** data-plane access needs SSM Session Manager, not SSH.
 - **Elastic Beanstalk** runs API (single Docker container via `api/Dockerrun.aws.json`; image from ECR `logjam-api`).
 - **ECS Fargate** runs the on-demand workers — three task defs: `logjam-topo-worker` and `logjam-topo-export-worker` (one Python image with a command override, see `topo/Dockerfile`), plus `logjam-geo-pdf-worker` (the `logjam-api` Node image with command override `node dist/worker/geoPdfWorker.js`; template `scripts/geo-pdf-worker-task-def.json`). Launched on-demand by API via the shared `api/src/lib/ecsRunTask.ts` helper (`RunTaskCommand` + placement-failure check) with a job-ID env var (`JOB_ID` / `EXPORT_JOB_ID` / `GEO_PDF_JOB_ID`). Lifecycle owned by ECS; retry semantics owned by the `TopoJob`/`TopoExportJob`/`GeoPdfJob` status columns (no SQS). Stuck jobs/exports are swept by the in-API reaper (`api/src/lib/topoJobReaper.ts`); the API stops orphaned Fargate tasks via StopTask using the persisted task ARN.

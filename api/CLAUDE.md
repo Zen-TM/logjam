@@ -12,7 +12,7 @@ src/
     errorHandler.ts        AppError class + handler
   services/
     prisma.ts              singleton PrismaClient built on @prisma/adapter-pg (Prisma 7 driver adapter; default export)
-    awsClients.ts          s3/ecs/ses/cognitoIdp singletons (LocalStack-aware via AWS_ENDPOINT_URL). No SQS — topo jobs launch via ECS RunTask; retry is owned by the TopoJob.status column.
+    awsClients.ts          s3/ecs/ses/cognitoIdp singletons (emulator-aware via AWS_ENDPOINT_URL → MiniStack in dev). No SQS — topo jobs launch via ECS RunTask; retry is owned by the TopoJob.status column.
     email.ts               SES wrapper
     ropewiki.ts            external scraper
     generateGeoPdf.ts      GeoPDF rendering
@@ -80,7 +80,7 @@ Import clients from `services/awsClients.ts`:
 import { s3, ecs, ses, cognitoIdp } from "../services/awsClients";
 ```
 
-Client factory honors `AWS_ENDPOINT_URL` for LocalStack — never construct `S3Client` inline. Region defaults to `AWS_REGION` (`ap-southeast-2`); SES uses `COGNITO_REGION` if set.
+Client factory honors `AWS_ENDPOINT_URL` for the local emulator (MiniStack) — never construct `S3Client` inline. Region defaults to `AWS_REGION` (`ap-southeast-2`); SES uses `COGNITO_REGION` if set.
 
 Commands imported per-call from `@aws-sdk/client-*`:
 
@@ -102,7 +102,7 @@ All env is zod-validated at boot by `lib/env.ts` — read values via `getEnv()`,
 | `AUTH_MODE` | `fake` for local dev; throws if `production` |
 | `FAKE_USER_SUB` | local seeded user |
 | `AWS_REGION` | `ap-southeast-2` |
-| `AWS_ENDPOINT_URL` | LocalStack only |
+| `AWS_ENDPOINT_URL` | local emulator (MiniStack) only |
 | `S3_BUCKET_TOPO`, `S3_BUCKET_MEDIA` | topo pipeline / media uploads |
 | `ECS_CLUSTER`, `ECS_TOPO_TASK_DEF`, `ECS_TOPO_EXPORT_TASK_DEF`, `ECS_SUBNETS`, `ECS_SECURITY_GROUPS` | worker launches |
 | `CORS_ORIGIN` | comma-separated allowed origins; `*` if unset |
@@ -144,7 +144,7 @@ Register in `src/index.ts`. Mount paths can overlap (e.g. `/canyons` + `/canyons
 - `prisma.config.ts` owns the datasource URL and seed command — `schema.prisma` has no `datasource.url`, `package.json` has no `prisma.seed`.
 - `npm ci`/`npm install` no longer auto-generates the client: run `npx prisma generate` after a fresh install or `tsc` fails on missing types. The Dockerfile runs generate right after `npm ci` for this reason — keep that ordering.
 - Client construction needs the `@prisma/adapter-pg` driver adapter (see `services/prisma.ts`); anything importing it (incl. integration tests) needs `DB_HOST`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` at import time, composed via `lib/databaseUrl.ts` (`vitest.config.ts` loads dotenv for this).
-- **RDS TLS:** node-postgres does NOT negotiate TLS by default (the pre-7 Prisma engine did) — RDS rejects plain connections with `no pg_hba.conf entry ... no encryption`. The Docker image bundles the RDS CA at `/app/rds-ca.pem` (Dockerfile ADD); `services/prisma.ts` enables *verified* TLS whenever that file exists, and stays plain on the dev host where it doesn't. `DATABASE_SSL_CA` overrides the path (fails loud if missing). Broke prod on 2026-06-11; don't remove either half.
+- **RDS TLS:** node-postgres does NOT negotiate TLS by default (the pre-7 Prisma engine did) — RDS rejects plain connections with `no pg_hba.conf entry ... no encryption`. The Docker image bundles the RDS CA at `/app/rds-ca.pem` (Dockerfile ADD); `services/prisma.ts` enables *verified* TLS whenever that file exists, and stays plain on the dev host where it doesn't. `DATABASE_SSL_CA` overrides the path (fails loud if missing). `DATABASE_SSL=disable` forces a plain connection even when the CA is present — set only on local-dev worker task defs (`infra/terraform/envs/local/ecs.tf`), which run the prod image (CA bundled) against the local non-SSL Postgres. Broke prod on 2026-06-11; don't remove either half.
 
 ## Testing
 
