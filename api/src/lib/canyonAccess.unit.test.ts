@@ -12,6 +12,7 @@ import {
   getCanyonRole,
   requireCanyonAccess,
   requireCanyonOwner,
+  requireCanyonOwnerAccess,
 } from "./canyonAccess";
 
 const shareFindFirst = (
@@ -60,11 +61,42 @@ describe("requireCanyonAccess", () => {
     );
   });
 
-  it("throws 403 for a stranger", async () => {
+  it("throws 404 (not 403) for a stranger — no existence oracle for canyon IDs", async () => {
     shareFindFirst.mockResolvedValue(null);
     const err = await requireCanyonAccess("stranger-1", CANYON).catch((e) => e);
     expect(err).toBeInstanceOf(AppError);
+    expect(err.statusCode).toBe(404);
+  });
+});
+
+describe("requireCanyonOwnerAccess (owner-only canyon actions)", () => {
+  it("resolves for the owner", async () => {
+    await expect(
+      requireCanyonOwnerAccess("owner-1", CANYON, "owner only"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("throws 403 for a share recipient — they can see it but can't perform this action", async () => {
+    shareFindFirst.mockResolvedValue({ id: "share-1" });
+    const err = await requireCanyonOwnerAccess(
+      "friend-1",
+      CANYON,
+      "Only the owner can edit a canyon",
+    ).catch((e) => e);
+    expect(err).toBeInstanceOf(AppError);
     expect(err.statusCode).toBe(403);
+    expect(err.message).toBe("Only the owner can edit a canyon");
+  });
+
+  it("throws 404 for a stranger — invisible canyon, no existence oracle", async () => {
+    shareFindFirst.mockResolvedValue(null);
+    const err = await requireCanyonOwnerAccess(
+      "stranger-1",
+      CANYON,
+      "owner only",
+    ).catch((e) => e);
+    expect(err).toBeInstanceOf(AppError);
+    expect(err.statusCode).toBe(404);
   });
 });
 

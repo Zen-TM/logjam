@@ -29,15 +29,36 @@ export async function getCanyonRole(
 
 /**
  * Assert the user is owner or share recipient; returns the resolved role so
- * callers can branch owner-vs-sharee response shaping. Throws 403 otherwise.
+ * callers can branch owner-vs-sharee response shaping. Throws 404 (not 403) when
+ * the caller has no access, so the status is not an existence oracle for canyon
+ * IDs the caller is not allowed to see (matches the trip-level 404 in
+ * requireCanyonOwner).
  */
 export async function requireCanyonAccess(
   userId: string,
   canyon: { id: string; ownerId: string },
 ): Promise<Exclude<CanyonRole, "none">> {
   const role = await getCanyonRole(userId, canyon);
-  if (role === "none") throw new AppError(403, "Access denied");
+  if (role === "none") throw new AppError(404, "Canyon not found");
   return role;
+}
+
+/**
+ * Assert the user OWNS the canyon, for owner-only canyon-level actions
+ * (edit/delete/share/list-shares). Role-aware denial closes the existence
+ * oracle without lying to a sharee:
+ *   none   → 404 (caller can't see this canyon at all)
+ *   shared → 403 forbiddenMessage (caller sees it but lacks this permission)
+ * For trip-level owner checks use the sync requireCanyonOwner (always 404).
+ */
+export async function requireCanyonOwnerAccess(
+  userId: string,
+  canyon: { id: string; ownerId: string },
+  forbiddenMessage: string,
+): Promise<void> {
+  const role = await getCanyonRole(userId, canyon);
+  if (role === "none") throw new AppError(404, "Canyon not found");
+  if (role !== "owner") throw new AppError(403, forbiddenMessage);
 }
 
 /**

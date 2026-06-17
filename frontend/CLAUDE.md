@@ -140,6 +140,8 @@ Three surfaces. One rule each. **Never render raw `err.message` from `apiFetch` 
 
 `@playwright/test` lives here in `frontend/`. Config `playwright.config.ts`, specs in `e2e/`. Run: `npm run e2e` (headless), `npm run e2e:ui` (interactive).
 
+- **Real-Cognito auth-lifecycle spec** (`e2e/auth-lifecycle.spec.ts`) covers sign-in → consent gate → session persistence against a real pool. Env-gated — skips unless `E2E_AUTH_BASE_URL` + `E2E_TEST_EMAIL` + `E2E_TEST_PASSWORD` (a confirmed **staging** account) are set. No committed creds (privacy rule). Sign-up/confirm + token refresh are operator extensions documented in the spec header.
+
 - **Browser = system Google Chrome** via `channel: "chrome"`. Playwright's bundled chromium/firefox/webkit binaries are unsupported on the ubuntu 26.04 dev host (`does not support chromium on ubuntu26.04-x64`), so `npx playwright install` fails — don't rely on it. Chrome-only on host; use the Playwright Docker image for cross-browser. Playwright cannot drive system Firefox regardless (its "firefox" engine is a patched build, not the system install).
 - **Target via `E2E_BASE_URL`** (default `http://localhost:5173`). Config auto-starts the Vite dev server with `VITE_AUTH_MODE=fake` for local runs only; it does NOT start api/infra — bring those up first (`make dev` + `cd api && npm run dev`). Local fake-auth boots straight into the map (no login).
 - **Prod runs are unauth-only** (`E2E_BASE_URL=https://logjamnsw.com`): assert the sign-in screen renders, nothing more. Privacy rule — no committed credentials, no private user data exercised against prod. Don't add a credentialed prod login flow without explicit sign-off.

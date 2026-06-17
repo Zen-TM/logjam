@@ -5,6 +5,7 @@ import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { normalizeUserUiPreferences } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
+import { requireCanyonOwnerAccess } from "../lib/canyonAccess";
 
 const router = Router();
 
@@ -19,8 +20,11 @@ router.post(
     const canyonId = getParam(req.params.id);
     const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
     if (!canyon) throw new AppError(404, "Canyon not found");
-    if (canyon.ownerId !== user.id)
-      throw new AppError(403, "Only the owner can share a canyon");
+    await requireCanyonOwnerAccess(
+      user.id,
+      canyon,
+      "Only the owner can share a canyon",
+    );
 
     const { sharedWithUserId } = req.body;
     if (!sharedWithUserId)
@@ -141,8 +145,11 @@ router.get(
     const canyonId = getParam(req.params.id);
     const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
     if (!canyon) throw new AppError(404, "Canyon not found");
-    if (canyon.ownerId !== user.id)
-      throw new AppError(403, "Only the owner can view shares");
+    await requireCanyonOwnerAccess(
+      user.id,
+      canyon,
+      "Only the owner can view shares",
+    );
 
     const shares = await prisma.canyonShare.findMany({
       where: { canyonId },
