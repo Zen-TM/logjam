@@ -26,6 +26,7 @@ export default function VectorContoursForm({ value, onChange }: Props) {
       <SettingsRow label="Major width (m)" tooltip="Line thickness in ground metres for major contours.">
         <input
           type="number"
+          aria-label="Major contour width in metres"
           className={styles.numberInput}
           min={0}
           step={1}
@@ -41,6 +42,7 @@ export default function VectorContoursForm({ value, onChange }: Props) {
       <SettingsRow label="Minor width (m)" tooltip="Line thickness in ground metres for minor contours.">
         <input
           type="number"
+          aria-label="Minor contour width in metres"
           className={styles.numberInput}
           min={0}
           step={1}

@@ -222,6 +222,7 @@ function CanyonDetailPanel({
 
         <div
           className={classes.attributesBox}
+          role="button"
           onClick={(e) => {
             if ((e.target as HTMLElement).closest("a")) return;
             setShowEdit(true);

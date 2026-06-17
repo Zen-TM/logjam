@@ -683,6 +683,7 @@ function GeoPdfDialog({
             : "New Template"
           : "Export GeoPDF"}
         <IconButton
+          aria-label="Close dialog"
           size="small"
           onClick={onClose}
           disabled={generating}

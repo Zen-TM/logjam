@@ -21,13 +21,14 @@ MUI dialogs. Unlike sidebar panels, MUI `<Button>` and `<Typography>` are correc
 ```tsx
 <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
   Title text
-  <IconButton size="small" onClick={onClose} sx={{ color: "var(--theme-text-primary)" }}>
+  <IconButton aria-label="Close dialog" size="small" onClick={onClose} sx={{ color: "var(--theme-text-primary)" }}>
     <CloseIcon fontSize="small" />
   </IconButton>
 </DialogTitle>
 ```
 
 - Always include close `IconButton` (top-right). Use `@mui/icons-material` `CloseIcon` — this is the one place it's correct.
+- Always give the icon-only `IconButton` an `aria-label` (e.g. `"Close dialog"`) — MUI does not derive an accessible name from the icon child (WCAG 1.1.1).
 - Use `alignItems: "flex-start"` only when title has a multi-line subtitle block.
 
 ## DialogContent

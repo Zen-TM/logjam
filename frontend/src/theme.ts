@@ -7,12 +7,16 @@ export function createThemeFromTokens(tokens: ThemeTokens): Theme {
     palette: {
       primary: {
         main: tokens.accent,
+        // Accent is light enough to read as text on the dark primary bg (WCAG AA),
+        // so contained-accent buttons need a dark label, not white.
+        contrastText: tokens.primary,
       },
       secondary: {
         main: tokens.secondary,
       },
       warning: {
         main: tokens.warning,
+        contrastText: tokens.primary,
       },
       text: {
         primary: tokens.textPrimary,

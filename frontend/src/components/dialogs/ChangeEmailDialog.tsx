@@ -142,6 +142,7 @@ function ChangeEmailDialog({
       >
         {titles[stage]}
         <IconButton
+          aria-label="Close dialog"
           size="small"
           onClick={handleClose}
           disabled={loading}

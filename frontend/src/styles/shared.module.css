@@ -14,11 +14,19 @@
     background-color var(--transition-fast);
 }
 
+/* Visible keyboard focus for every composed button (WCAG 2.4.7). */
+.btn:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+}
+
 /* ─── Colour variants ─────────────────────────────────────────────────────── */
 
 .btnFilledAccent {
   background-color: var(--theme-accent);
-  color: var(--theme-text-primary);
+  /* Dark label: accent is tuned light enough to read as text on the dark primary bg,
+     so a near-white label on accent fails AA — use the dark primary as the label. */
+  color: var(--theme-primary);
   border: none;
 }
 

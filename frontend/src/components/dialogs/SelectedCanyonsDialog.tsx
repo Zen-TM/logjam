@@ -177,7 +177,7 @@ function SelectedCanyonsDialog({
           sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}
         >
           Selected Canyons ({selectedCanyons.length})
-          <IconButton size="small" onClick={onClose} disabled={busy} sx={{ color: "var(--theme-text-primary)" }}>
+          <IconButton aria-label="Close dialog" size="small" onClick={onClose} disabled={busy} sx={{ color: "var(--theme-text-primary)" }}>
             <CloseIcon fontSize="small" />
           </IconButton>
         </DialogTitle>
@@ -258,6 +258,7 @@ function SelectedCanyonsDialog({
                   )}
                   <TextField
                     inputRef={canyonSearchRef}
+                    inputProps={{ "aria-label": "Search canyons to add" }}
                     placeholder="Search canyons to add..."
                     value={canyonSearch}
                     onChange={(e) => setCanyonSearch(e.target.value)}
@@ -356,6 +357,7 @@ function SelectedCanyonsDialog({
                   already made.
                 </Typography>
                 <TextField
+                  inputProps={{ "aria-label": "Search friends to share with" }}
                   placeholder="Search friends..."
                   value={shareSearch}
                   onChange={(e) => setShareSearch(e.target.value)}

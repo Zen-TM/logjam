@@ -5,6 +5,46 @@
   overflow: hidden;
 }
 
+/* <main> landmark wrapper for the map. The map fills .app via position:absolute,
+   so this block collapses to zero height and doesn't disturb layout — but unlike
+   display:contents it is reliably exposed as a landmark to assistive tech. */
+.main {
+  display: block;
+}
+
+/* Screen-reader-only: present in the a11y tree, removed from the visual layout. */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Skip-to-content link (WCAG 2.4.1): visually hidden until keyboard-focused. */
+.skipLink {
+  position: absolute;
+  left: 8px;
+  top: -48px;
+  z-index: 100;
+  padding: 0.5em 1em;
+  border-radius: var(--radius-sm);
+  background-color: var(--theme-secondary);
+  color: var(--theme-text-primary);
+  text-decoration: none;
+  transition: top var(--transition-fast);
+}
+
+.skipLink:focus-visible {
+  top: 8px;
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+}
+
 /* Applied when dimUI is true (e.g. coord-picking mode) */
 .dimmed {
   pointer-events: none;

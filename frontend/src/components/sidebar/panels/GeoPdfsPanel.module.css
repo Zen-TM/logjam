@@ -7,7 +7,7 @@
 }
 
 .primaryButton {
-  composes: btn btnFilledNeutral btnMd btnFull from '@styles/shared.module.css';
+  composes: btn btnFilledAccent btnMd btnFull from '@styles/shared.module.css';
 }
 
 .outlineButton {

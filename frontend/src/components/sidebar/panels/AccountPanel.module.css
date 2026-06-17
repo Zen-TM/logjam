@@ -67,6 +67,11 @@
   border-color: var(--theme-accent);
 }
 
+.usernameInput:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 1px;
+}
+
 .usernameActions {
   display: flex;
   gap: 6px;

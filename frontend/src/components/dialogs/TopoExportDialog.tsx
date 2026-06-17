@@ -104,7 +104,7 @@ export default function TopoExportDialog({ open, onClose, job, onExportQueued }:
     >
       <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
         Export {job?.name ?? "Unnamed job"}
-        <IconButton size="small" onClick={onClose} disabled={submitting} sx={{ color: "var(--theme-text-primary)" }}>
+        <IconButton aria-label="Close dialog" size="small" onClick={onClose} disabled={submitting} sx={{ color: "var(--theme-text-primary)" }}>
           <CloseIcon fontSize="small" />
         </IconButton>
       </DialogTitle>

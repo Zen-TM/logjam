@@ -156,10 +156,15 @@ export default function MediaGallery({
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       {lightbox && (
+        // Backdrop click-to-dismiss. Keyboard users close via Escape (global
+        // handler in the effect above) or the labelled close button; focus is
+        // trapped within this dialog, so the pointer-only backdrop is an
+        // enhancement, not the sole control.
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events
         <div
           ref={lightboxRef}
           className={classes.lightbox}
-          onClick={() => setLightbox(null)}
+          onClick={(e) => { if (e.target === e.currentTarget) setLightbox(null); }}
           role="dialog"
           aria-modal="true"
           aria-label="Media preview"
@@ -172,7 +177,7 @@ export default function MediaGallery({
           >
             <X size={22} />
           </button>
-          <div className={classes.lightboxContent} onClick={(e) => e.stopPropagation()}>
+          <div className={classes.lightboxContent}>
             {mediaCategory(lightbox.mediaType) === "video" ? (
               <video
                 className={classes.lightboxMedia}

@@ -77,6 +77,8 @@ function CanyonsPanel({
   // Search
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  // Active option for keyboard navigation of the search-results listbox (-1 = none).
+  const [activeIndex, setActiveIndex] = useState(-1);
   const searchRef = useRef<HTMLDivElement>(null);
 
   const results =
@@ -91,16 +93,26 @@ function CanyonsPanel({
   function handleFlyTo(c: TCanyon) {
     setQuery("");
     setSearchOpen(false);
+    setActiveIndex(-1);
     onFlyToCanyon(c.latitude, c.longitude);
   }
 
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter" && results.length === 1) {
-      handleFlyTo(results[0]);
-    }
-    if (e.key === "Escape") {
+    const shown = results.slice(0, 8);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSearchOpen(true);
+      setActiveIndex((i) => Math.min(shown.length - 1, i + 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(0, i - 1));
+    } else if (e.key === "Enter") {
+      if (activeIndex >= 0 && activeIndex < shown.length) handleFlyTo(shown[activeIndex]);
+      else if (results.length === 1) handleFlyTo(results[0]);
+    } else if (e.key === "Escape") {
       setQuery("");
       setSearchOpen(false);
+      setActiveIndex(-1);
     }
   }
 
@@ -250,6 +262,7 @@ function CanyonsPanel({
           {op !== "Any" && (
             <input
               type="number"
+              aria-label={`${displayName} value`}
               className={classes.numberInput}
               value={num}
               onChange={(e) => {
@@ -360,6 +373,7 @@ function CanyonsPanel({
         </div>
         <input
           type="text"
+          aria-label={`Filter ${def.label} contains`}
           className={classes.customTextInput}
           placeholder="Contains…"
           value={value}
@@ -410,6 +424,7 @@ function CanyonsPanel({
             <input
               type="number"
               step={def.type === "float" ? "any" : 1}
+              aria-label={`${def.label} value`}
               className={classes.numberInput}
               value={num}
               onChange={(e) => {
@@ -569,22 +584,34 @@ function CanyonsPanel({
         <input
           className={classes.searchInput}
           type="text"
+          role="combobox"
+          aria-label="Search canyons"
+          aria-expanded={searchOpen && results.length > 0}
+          aria-controls="canyon-search-results"
+          aria-autocomplete="list"
+          aria-activedescendant={
+            activeIndex >= 0 ? `canyon-search-opt-${activeIndex}` : undefined
+          }
           placeholder="Search canyons…"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
             setSearchOpen(e.target.value.length >= 3);
+            setActiveIndex(-1);
           }}
           onKeyDown={handleSearchKeyDown}
           onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
           onFocus={() => { if (query.length >= 3) setSearchOpen(true); }}
         />
         {searchOpen && results.length > 0 && (
-          <ul className={classes.searchResults}>
-            {results.slice(0, 8).map((c) => (
-              <li key={c.id}>
+          <ul className={classes.searchResults} id="canyon-search-results" role="listbox">
+            {results.slice(0, 8).map((c, idx) => (
+              <li key={c.id} role="presentation">
                 <button
-                  className={classes.searchResultItem}
+                  id={`canyon-search-opt-${idx}`}
+                  role="option"
+                  aria-selected={idx === activeIndex}
+                  className={`${classes.searchResultItem} ${idx === activeIndex ? classes.searchResultItemActive : ""}`}
                   onMouseDown={(e) => { e.preventDefault(); handleFlyTo(c); }}
                 >
                   {c.name}
@@ -594,7 +621,7 @@ function CanyonsPanel({
           </ul>
         )}
         {searchOpen && query.length >= 3 && results.length === 0 && (
-          <div className={classes.searchEmpty}>No matches</div>
+          <div className={classes.searchEmpty} role="status" aria-live="polite">No matches</div>
         )}
       </div>
 

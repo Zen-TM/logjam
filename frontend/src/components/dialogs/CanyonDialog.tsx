@@ -99,6 +99,8 @@ function CanyonDialog({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Which field failed validation, so the input can show error state + aria-invalid.
+  const [invalidField, setInvalidField] = useState<"name" | "coords" | null>(null);
 
   // Add custom field form state
   const [showAddField, setShowAddField] = useState(false);
@@ -177,16 +179,19 @@ function CanyonDialog({
   async function handleSave() {
     setSaving(true);
     setError(null);
+    setInvalidField(null);
     try {
       const parsedLat = parseFloat(latitude);
       const parsedLng = parseFloat(longitude);
       if (!name.trim()) {
         setError("Name is required");
+        setInvalidField("name");
         setSaving(false);
         return;
       }
       if (!latitude || !longitude || isNaN(parsedLat) || isNaN(parsedLng)) {
         setError("Valid coordinates are required");
+        setInvalidField("coords");
         setSaving(false);
         return;
       }
@@ -314,6 +319,7 @@ function CanyonDialog({
       >
         {isEdit ? "Edit Canyon" : "Add Canyon"}
         <IconButton
+          aria-label="Close dialog"
           size="small"
           onClick={saving ? undefined : onClose}
           disabled={saving}
@@ -329,6 +335,7 @@ function CanyonDialog({
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
+            error={invalidField === "name"}
             size="small"
           />
           <TextField
@@ -343,6 +350,7 @@ function CanyonDialog({
               value={latitude}
               onChange={(e) => setLatitude(e.target.value)}
               type="number"
+              error={invalidField === "coords"}
               size="small"
               fullWidth
               InputProps={{
@@ -370,6 +378,7 @@ function CanyonDialog({
               value={longitude}
               onChange={(e) => setLongitude(e.target.value)}
               type="number"
+              error={invalidField === "coords"}
               size="small"
               fullWidth
               InputProps={{
@@ -746,6 +755,7 @@ function CanyonDialog({
                   fullWidth
                 />
                 <IconButton
+                  aria-label="Delete source"
                   size="small"
                   onClick={() => setSources(sources.filter((_, j) => j !== i))}
                   sx={{

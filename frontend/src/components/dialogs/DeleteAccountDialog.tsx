@@ -92,6 +92,7 @@ function DeleteAccountDialog({
       >
         Delete account
         <IconButton
+          aria-label="Close dialog"
           size="small"
           onClick={handleClose}
           disabled={deleting}
@@ -112,6 +113,7 @@ function DeleteAccountDialog({
         <TextField
           size="small"
           fullWidth
+          inputProps={{ "aria-label": "Type the confirmation phrase to delete your account" }}
           placeholder={expectedPhrase}
           value={confirmInput}
           onChange={(e) => setConfirmInput(e.target.value)}

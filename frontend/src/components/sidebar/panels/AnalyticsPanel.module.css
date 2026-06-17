@@ -192,11 +192,27 @@
 
 /* ── Heat scale classes ─────────────────────────── */
 
+/* Heat ramp is capped so the lighter steps stay dark enough for light cell text
+   to keep AA contrast (1.4.3); only the solid-accent peak (heat4) flips to dark
+   text. A continuous accent→primary ramp can't hold 4.5:1 small text through its
+   mid-tones, so heat1–3 stay in the dark band and heat4 jumps to solid accent. */
 .heat0 { background: color-mix(in srgb, var(--theme-text-primary) 4%, transparent); }
-.heat1 { background: color-mix(in srgb, var(--theme-accent) 25%, transparent); }
-.heat2 { background: color-mix(in srgb, var(--theme-accent) 50%, transparent); }
-.heat3 { background: color-mix(in srgb, var(--theme-accent) 75%, transparent); }
+.heat1 { background: color-mix(in srgb, var(--theme-accent) 12%, transparent); }
+.heat2 { background: color-mix(in srgb, var(--theme-accent) 20%, transparent); }
+.heat3 { background: color-mix(in srgb, var(--theme-accent) 28%, transparent); }
 .heat4 { background: var(--theme-accent); }
+
+/* Solid-accent peak: dark text reads on the light fill (heat1–3 keep light text). */
+.yearCell.heat4,
+.monthCell.heat4,
+.dayCell.heat4 {
+  color: var(--theme-primary);
+}
+
+.yearCell.heat4 .yearCount,
+.monthCell.heat4 .monthCount {
+  color: color-mix(in srgb, var(--theme-primary) 72%, transparent);
+}
 
 /* ── Years grid ─────────────────────────────────── */
 
@@ -308,6 +324,13 @@
 .dayCell:disabled {
   cursor: default;
   color: var(--theme-text-muted);
+}
+
+.yearCell:focus-visible,
+.monthCell:focus-visible,
+.dayCell:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 1px;
 }
 
 /* ── Day trips list ─────────────────────────────── */

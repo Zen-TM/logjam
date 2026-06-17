@@ -637,6 +637,7 @@ export default function TopoDialog({
       >
         Generate Topo Map
         <IconButton
+          aria-label="Close dialog"
           onClick={handleClose}
           size="small"
           sx={{ color: "var(--theme-text-primary)" }}

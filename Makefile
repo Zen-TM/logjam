@@ -115,5 +115,5 @@ _wait-healthy:
 	@echo "Waiting for Postgres..."
 	@until docker compose exec -T postgres pg_isready -U logjam > /dev/null 2>&1; do sleep 1; done
 	@echo "Waiting for LocalStack..."
-	@until curl -sf http://localhost:4566/_localstack/health | grep -q running > /dev/null 2>&1; do sleep 2; done
+	@until curl -sf http://localhost:4566/_localstack/health | grep -q '"s3": "available"' > /dev/null 2>&1; do sleep 2; done
 	@echo "Infra healthy."

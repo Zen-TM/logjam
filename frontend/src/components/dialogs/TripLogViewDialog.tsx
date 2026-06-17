@@ -134,6 +134,7 @@ function TripLogViewDialog({
             </Typography>
           </Box>
           <IconButton
+            aria-label="Close dialog"
             size="small"
             onClick={onClose}
             sx={{ color: "var(--theme-text-primary)", mt: 0.25 }}

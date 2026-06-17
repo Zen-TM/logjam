@@ -142,6 +142,7 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
         <div className={classes.usernameEdit}>
           <input
             className={classes.usernameInput}
+            aria-label="Edit username"
             value={usernameInput}
             onChange={(e) => setUsernameInput(e.target.value)}
             onKeyDown={(e) => {
