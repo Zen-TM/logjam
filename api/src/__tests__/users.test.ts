@@ -52,24 +52,32 @@ describe("users routes (fake auth = alice)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("PATCH /users/me updates a notification preference and restores it", async () => {
+  it("PATCH /users/me updates the email notification preferences and restores them", async () => {
+    const keys = ["topoEmail", "exportEmail", "geoPdfEmail"] as const;
     const before = await request(API_URL).get("/users/me").set(AUTH);
-    const original: boolean = before.body.uiPreferences.notifications.topoEmail;
+    const original: Record<string, boolean> = Object.fromEntries(
+      keys.map((k) => [k, before.body.uiPreferences.notifications[k]]),
+    );
 
+    const flipped = Object.fromEntries(keys.map((k) => [k, !original[k]]));
     const toggled = await request(API_URL)
       .patch("/users/me")
       .set(AUTH)
-      .send({ notifications: { topoEmail: !original } });
+      .send({ notifications: flipped });
     expect(toggled.status).toBe(200);
-    expect(toggled.body.uiPreferences.notifications.topoEmail).toBe(!original);
+    for (const k of keys) {
+      expect(toggled.body.uiPreferences.notifications[k]).toBe(!original[k]);
+    }
 
     // Restore so the seed user is left as found.
     const restore = await request(API_URL)
       .patch("/users/me")
       .set(AUTH)
-      .send({ notifications: { topoEmail: original } });
+      .send({ notifications: original });
     expect(restore.status).toBe(200);
-    expect(restore.body.uiPreferences.notifications.topoEmail).toBe(original);
+    for (const k of keys) {
+      expect(restore.body.uiPreferences.notifications[k]).toBe(original[k]);
+    }
   });
 
   // Consent boundary (PRIV-002): the server is the integrity half of the

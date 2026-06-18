@@ -9,7 +9,8 @@ const ALICE_ID = "00000000-0000-0000-0000-000000000001";
 const BOB_ID = "00000000-0000-0000-0000-000000000002";
 const CAROL_ID = "00000000-0000-0000-0000-000000000003";
 
-// Matches FAKE_USER_SUB default in auth middleware and .env.local.example
+// Matches FAKE_USER_SUB default in auth middleware and the Terraform-generated
+// .env.local (infra/terraform/templates/env.local.tftpl)
 const ALICE_COGNITO_ID = "fake-alice-sub";
 const BOB_COGNITO_ID = "fake-bob-sub";
 const CAROL_COGNITO_ID = "fake-carol-sub";

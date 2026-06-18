@@ -27,8 +27,8 @@ try:
         compose_database_url,
         merge_settings,
         safe_error_message,
-        wants_topo_email,
     )
+    from email_send import wants_email  # noqa: E402
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
@@ -121,27 +121,34 @@ class TestMergeSettings(unittest.TestCase):
 
 
 @unittest.skipUnless(_IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}")
-class TestWantsTopoEmail(unittest.TestCase):
+class TestWantsEmail(unittest.TestCase):
     def test_missing_user_returns_false(self):
-        self.assertFalse(wants_topo_email(_FakeConn(None), "u1"))
+        self.assertFalse(wants_email(_FakeConn(None), "u1", "topoEmail"))
 
     def test_no_prefs_defaults_true(self):
-        self.assertTrue(wants_topo_email(_FakeConn({"ui_preferences": None}), "u1"))
+        self.assertTrue(wants_email(_FakeConn({"ui_preferences": None}), "u1", "topoEmail"))
 
     def test_no_notifications_key_defaults_true(self):
-        self.assertTrue(wants_topo_email(_FakeConn({"ui_preferences": {"themeSchemeId": "x"}}), "u1"))
+        self.assertTrue(
+            wants_email(_FakeConn({"ui_preferences": {"themeSchemeId": "x"}}), "u1", "topoEmail")
+        )
 
     def test_explicit_false_is_respected(self):
-        row = {"ui_preferences": {"notifications": {"topoEmail": False}}}
-        self.assertFalse(wants_topo_email(_FakeConn(row), "u1"))
+        row = {"ui_preferences": {"notifications": {"exportEmail": False}}}
+        self.assertFalse(wants_email(_FakeConn(row), "u1", "exportEmail"))
 
     def test_explicit_true_is_respected(self):
-        row = {"ui_preferences": {"notifications": {"topoEmail": True}}}
-        self.assertTrue(wants_topo_email(_FakeConn(row), "u1"))
+        row = {"ui_preferences": {"notifications": {"geoPdfEmail": True}}}
+        self.assertTrue(wants_email(_FakeConn(row), "u1", "geoPdfEmail"))
 
     def test_non_bool_value_defaults_true(self):
         row = {"ui_preferences": {"notifications": {"topoEmail": "yes"}}}
-        self.assertTrue(wants_topo_email(_FakeConn(row), "u1"))
+        self.assertTrue(wants_email(_FakeConn(row), "u1", "topoEmail"))
+
+    def test_missing_specific_key_defaults_true(self):
+        # exportEmail absent while another key is present → default true.
+        row = {"ui_preferences": {"notifications": {"topoEmail": False}}}
+        self.assertTrue(wants_email(_FakeConn(row), "u1", "exportEmail"))
 
 
 @unittest.skipUnless(_IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}")

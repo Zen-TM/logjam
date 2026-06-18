@@ -33,7 +33,11 @@ locals {
     { name = "DB_USER", value = "logjam" },
     { name = "DB_PASSWORD", value = "logjam" },
     { name = "S3_BUCKET_TOPO", value = module.topo.bucket_id },
-    { name = "SES_FROM_EMAIL", value = "noreply@local" },
+    # RESEND_API_KEY blank by default → email_send.py / services/email.ts no-op
+    # (no real sends in local dev). Set TF_VAR_resend_api_key + TF_VAR_email_from
+    # to test real sends — see variables.tf.
+    { name = "EMAIL_FROM", value = var.email_from },
+    { name = "RESEND_API_KEY", value = var.resend_api_key },
     { name = "FRONTEND_URL", value = "http://localhost:5173/" },
   ]
 }

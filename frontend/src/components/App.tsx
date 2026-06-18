@@ -39,6 +39,7 @@ import {
   emptyFilters,
   reconcileCustomFilters,
   apiFetch,
+  getTopoExport,
 } from "../canyonUtils";
 import FilterStatusChip from "./map/FilterStatusChip";
 import FilterEmptyState from "./map/FilterEmptyState";
@@ -601,17 +602,30 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     refetchGeoPdfJobs();
   }, [currentUser, refetchGeoPdfJobs]);
 
-  // Capture ?topoJob=<id>[&download=<layer>] deep link on mount, stash in
-  // sessionStorage so it survives a Cognito sign-in redirect, then clean URL.
+  // Capture completion-email deep links on mount (?topoJob / ?export /
+  // ?geoPdfJob), stash in sessionStorage so they survive a Cognito sign-in
+  // redirect, then clean the URL once.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const jobId = params.get("topoJob");
-    if (jobId) {
+    let matched = false;
+    const topoJobId = params.get("topoJob");
+    if (topoJobId) {
       const layer = params.get("download");
-      sessionStorage.setItem("pendingTopoJobId", jobId);
+      sessionStorage.setItem("pendingTopoJobId", topoJobId);
       if (layer) sessionStorage.setItem("pendingTopoDownload", layer);
-      window.history.replaceState({}, "", window.location.pathname);
+      matched = true;
     }
+    const exportId = params.get("export");
+    if (exportId) {
+      sessionStorage.setItem("pendingExportId", exportId);
+      matched = true;
+    }
+    const geoPdfJobId = params.get("geoPdfJob");
+    if (geoPdfJobId) {
+      sessionStorage.setItem("pendingGeoPdfJobId", geoPdfJobId);
+      matched = true;
+    }
+    if (matched) window.history.replaceState({}, "", window.location.pathname);
   }, []);
 
   // After auth, resolve any stashed deep-link job.
@@ -658,6 +672,42 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         });
     }
   }, [authenticated, toast]);
+
+  // Resolve a stashed ?export=<id> deep link: download the export directly
+  // (mirrors NotificationsPanel.handleDownloadExport). A presign that has
+  // expired (no downloadUrl) opens the LiDAR panel so the user can re-presign.
+  useEffect(() => {
+    if (!authenticated) return;
+    const exportId = sessionStorage.getItem("pendingExportId");
+    if (!exportId) return;
+    sessionStorage.removeItem("pendingExportId");
+
+    getTopoExport(exportId)
+      .then((view) => {
+        if (view.downloadUrl) {
+          triggerDownload(view.downloadUrl);
+        } else {
+          setActivePanel("lidar");
+          toast.error("Export download expired — re-open it from the LiDAR panel.");
+        }
+      })
+      .catch((err) => {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't load the export."));
+      });
+  }, [authenticated, toast]);
+
+  // Resolve a stashed ?geoPdfJob=<id> deep link: open the GeoPDFs panel, whose
+  // job list carries per-item download buttons (and auto-download for jobs this
+  // tab queued). Refetch so a just-finished job shows immediately.
+  useEffect(() => {
+    if (!authenticated) return;
+    const geoPdfJobId = sessionStorage.getItem("pendingGeoPdfJobId");
+    if (!geoPdfJobId) return;
+    sessionStorage.removeItem("pendingGeoPdfJobId");
+    setActivePanel("geopdfs");
+    setGeoPdfJobsRefetch((n) => n + 1);
+  }, [authenticated]);
 
   // Show import dialog once when user has no canyons after first fetch completes
   useEffect(() => {

@@ -22,6 +22,9 @@ dist/
 .env
 .env.local
 .env.*.local
+# Terraform var files may carry secrets (e.g. TF_VAR_resend_api_key overrides)
+*.tfvars
+*.auto.tfvars
 
 # Local dev environment
 snapshots/*.sql

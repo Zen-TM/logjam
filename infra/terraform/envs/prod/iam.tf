@@ -64,6 +64,21 @@ resource "aws_iam_policy" "database_password_access" {
   })
 }
 
+# Lets the ECS execution role inject RESEND_API_KEY into the worker task defs at
+# launch (the three workers send transactional email via Resend; secret value
+# lives in Secrets Manager, never in Terraform/git).
+resource "aws_iam_policy" "resend_api_key_access" {
+  name = "ResendApiKeyAccess"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs*"
+    }]
+  })
+}
+
 resource "aws_iam_policy" "topo_worker" {
   name = "logjam-topo-worker-policy"
   policy = jsonencode({
@@ -81,12 +96,6 @@ resource "aws_iam_policy" "topo_worker" {
         Action   = "s3:ListBucket"
         Resource = "arn:aws:s3:::logjam-topo-jobs"
       },
-      {
-        Sid      = "SES"
-        Effect   = "Allow"
-        Action   = ["ses:SendEmail", "ses:SendRawEmail"]
-        Resource = "*"
-      },
     ]
   })
 }
@@ -101,6 +110,11 @@ resource "aws_iam_role_policy_attachment" "ecs_exec_aws_managed" {
 resource "aws_iam_role_policy_attachment" "ecs_exec_db_password" {
   role       = aws_iam_role.ecs_task_execution.name
   policy_arn = aws_iam_policy.database_password_access.arn
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_exec_resend_api_key" {
+  role       = aws_iam_role.ecs_task_execution.name
+  policy_arn = aws_iam_policy.resend_api_key_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "topo_worker_aws_managed" {

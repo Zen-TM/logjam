@@ -114,7 +114,7 @@ The local environment spins up a Postgres database and MiniStack (a free, open-s
 # 1. Clone and install dependencies
 cd shared && npm install && npm run build && cd ..
 cd api && npm install && cd ..
-cd frontend && npm install && cd ..
+cd frontend && npm install && cp .env.example .env && cd ..
 
 # 2. Build worker images + start infra: Postgres + MiniStack, provision S3 + ECS
 #    task defs + generate .env.local (via Terraform), migrate DB, seed fixtures.
@@ -126,6 +126,10 @@ make dev
 hand (it's gitignored and overwritten on each `make dev`/`make reset`). To change
 a dev value, edit `infra/terraform/envs/local/env-files.tf` (and add new vars to
 both `api/src/lib/env.ts` and `infra/terraform/templates/env.local.tftpl`).
+
+The **frontend** reads its own gitignored `frontend/.env` (Vite, not Terraform);
+step 1 copies it from `frontend/.env.example`, which defaults `VITE_AUTH_MODE=fake`
+for local dev. Without it the SPA falls back to Cognito and won't auto-login.
 
 Then open two more terminals:
 
