@@ -67,7 +67,6 @@ router.post(
       aGrade,
       commitment,
       quality,
-      wetsuits,
       hours,
 
       notes,
@@ -91,9 +90,8 @@ router.post(
         aGrade,
         commitment,
         quality,
-        wetsuits,
         hours,
-  
+
         notes,
         attributes: attributes ?? {},
       },
@@ -138,7 +136,6 @@ router.post(
         aGrade: canyon.aGrade,
         commitment: canyon.commitment,
         quality: canyon.quality,
-        wetsuits: canyon.wetsuits,
         hours: canyon.hours,
         notes: canyon.notes,
         attributes: canyon.attributes ?? Prisma.JsonNull,
@@ -250,7 +247,6 @@ router.patch(
       aGrade,
       commitment,
       quality,
-      wetsuits,
       hours,
 
       notes,
@@ -270,7 +266,6 @@ router.patch(
         ...(aGrade !== undefined && { aGrade }),
         ...(commitment !== undefined && { commitment }),
         ...(quality !== undefined && { quality }),
-        ...(wetsuits !== undefined && { wetsuits }),
         ...(hours !== undefined && { hours }),
         ...(notes !== undefined && { notes }),
         ...(attributes !== undefined && {

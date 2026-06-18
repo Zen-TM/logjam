@@ -17,7 +17,6 @@ function existingCanyon(
     aGrade: null,
     commitment: null,
     quality: null,
-    wetsuits: null,
     numAbseils: null,
     longestAbseil: null,
     hours: null,

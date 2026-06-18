@@ -24,7 +24,6 @@ type BulkCanyonInput = {
   aGrade?: number | null;
   commitment?: number | null;
   quality?: number | null;
-  wetsuits?: number | null;
   numAbseils?: number | null;
   longestAbseil?: number | null;
   hours?: number | null;
@@ -68,14 +67,20 @@ function validateInput(
     ["vGrade", input.vGrade, 1, 7],
     ["aGrade", input.aGrade, 1, 7],
     ["commitment", input.commitment, 1, 6],
-    ["quality", input.quality, 1, 5],
-    ["wetsuits", input.wetsuits, 1, 5],
   ];
   for (const [field, val, min, max] of gradeChecks) {
     if (val != null && (!Number.isInteger(val) || val < min || val > max)) {
       errors.push({ rowIndex, message: `Row ${rowIndex}: ${field} must be an integer between ${min} and ${max}` });
       return false;
     }
+  }
+  // quality is a decimal (1-5); allow non-integer values.
+  if (
+    input.quality != null &&
+    (!isFinite(input.quality) || input.quality < 1 || input.quality > 5)
+  ) {
+    errors.push({ rowIndex, message: `Row ${rowIndex}: quality must be a number between 1 and 5` });
+    return false;
   }
   return true;
 }
@@ -95,7 +100,6 @@ function toCreateData(
     aGrade: input.aGrade ?? null,
     commitment: input.commitment ?? null,
     quality: input.quality ?? null,
-    wetsuits: input.wetsuits ?? null,
     numAbseils: input.numAbseils ?? null,
     longestAbseil: input.longestAbseil ?? null,
     hours: input.hours ?? null,
@@ -188,7 +192,6 @@ router.post(
                 aGrade: data.aGrade ?? null,
                 commitment: data.commitment ?? null,
                 quality: data.quality ?? null,
-                wetsuits: data.wetsuits ?? null,
                 numAbseils: data.numAbseils ?? null,
                 longestAbseil: data.longestAbseil ?? null,
                 hours: data.hours ?? null,

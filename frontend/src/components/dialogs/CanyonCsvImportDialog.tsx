@@ -269,9 +269,7 @@ function processRows(
       } else if (role === "commitment") {
         input.commitment = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
       } else if (role === "quality") {
-        input.quality = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
-      } else if (role === "wetsuits") {
-        input.wetsuits = value != null && !isNaN(Number(value)) ? Math.round(Number(value)) : null;
+        input.quality = value != null && !isNaN(Number(value)) ? Number(value) : null;
       } else if (role === "sources") {
         attrs["sources"] = Array.isArray(value) ? value : [];
       } else if (role === "new-attr") {

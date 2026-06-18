@@ -11,7 +11,6 @@ export type CanyonFieldRole =
   | "aGrade"
   | "commitment"
   | "quality"
-  | "wetsuits"
   | "sources"
   | `attr:${string}`
   | "new-attr"
@@ -23,15 +22,14 @@ export const GRADE_RANGES: Partial<Record<CanyonFieldRole, [number, number]>> = 
   aGrade: [1, 7],
   commitment: [1, 6],
   quality: [1, 5],
-  wetsuits: [1, 5],
   numAbseils: [0, 999],
 };
 
 // Roles that map to integer fields on Canyon
-export const INT_ROLES = new Set<CanyonFieldRole>(["vGrade", "aGrade", "commitment", "quality", "wetsuits", "numAbseils"]);
+export const INT_ROLES = new Set<CanyonFieldRole>(["vGrade", "aGrade", "commitment", "numAbseils"]);
 
-// Roles that map to float fields
-export const FLOAT_ROLES = new Set<CanyonFieldRole>(["latitude", "longitude", "longestAbseil", "hours"]);
+// Roles that map to float fields (quality is a decimal 1-5)
+export const FLOAT_ROLES = new Set<CanyonFieldRole>(["latitude", "longitude", "longestAbseil", "hours", "quality"]);
 
 const ROLE_ALIASES: Record<string, CanyonFieldRole> = {};
 
@@ -57,7 +55,6 @@ registerAliases("vGrade", ["v grade", "v", "vgrade", "vertical grade", "v_grade"
 registerAliases("aGrade", ["a grade", "a", "agrade", "aquatic grade", "a_grade", "water grade"]);
 registerAliases("commitment", ["commitment", "commit"]);
 registerAliases("quality", ["quality", "stars", "rating", "qual"]);
-registerAliases("wetsuits", ["wetsuits", "wetsuit", "wetsuit rating", "wetsuit grade", "water temp"]);
 registerAliases("sources", ["sources", "source", "refs", "references", "links", "urls"]);
 
 export function detectCanyonColumns(
@@ -84,7 +81,6 @@ export const ROLE_LABELS: Record<string, string> = {
   aGrade: "A Grade",
   commitment: "Commitment",
   quality: "Quality",
-  wetsuits: "Wetsuits",
   sources: "Sources",
   "new-attr": "New custom attribute",
   discard: "Discard column",
@@ -93,7 +89,7 @@ export const ROLE_LABELS: Record<string, string> = {
 export const ALL_ASSIGNABLE_ROLES: CanyonFieldRole[] = [
   "name", "latitude", "longitude", "altNames", "notes",
   "numAbseils", "longestAbseil", "hours",
-  "vGrade", "aGrade", "commitment", "quality", "wetsuits",
+  "vGrade", "aGrade", "commitment", "quality",
   "sources", "new-attr", "discard",
 ];
 

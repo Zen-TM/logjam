@@ -5,7 +5,7 @@ export type ConflictPolicy = "keepExisting" | "useCsv";
 
 const SCALAR_FIELDS = [
   "name", "latitude", "longitude",
-  "vGrade", "aGrade", "commitment", "quality", "wetsuits",
+  "vGrade", "aGrade", "commitment", "quality",
   "numAbseils", "longestAbseil", "hours", "notes",
 ] as const;
 
