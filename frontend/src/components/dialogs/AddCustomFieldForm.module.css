@@ -6,3 +6,15 @@
   border: 1px solid color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
   border-radius: var(--radius-sm);
 }
+
+.boundsRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.actionsRow {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}

@@ -24,7 +24,6 @@ function canyon(
     aGrade: 3,
     commitment: 3,
     quality: 3,
-    wetsuits: 3,
     numAbseils: 8,
     longestAbseil: 30,
     hours: 4,

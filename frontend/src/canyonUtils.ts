@@ -22,7 +22,6 @@ export type TCanyon = {
   aGrade: number | null;
   commitment: number | null;
   quality: number | null;
-  wetsuits: number | null;
   hours: number | null;
   notes: string | null;
   attributes: TCanyonAttributes;
@@ -106,6 +105,9 @@ export type TDateRange = [string | null, string | null];
 export type TCustomFieldFilter =
   | { kind: "text"; value: string }
   | { kind: "number"; op: "Less than" | "More than" | "Exactly"; value: number }
+  // Inclusive [min, max] range for bounded integer/float fields; rendered as a
+  // double-ended slider. Full span commits as null (the inactive state).
+  | { kind: "numberRange"; range: [number, number] }
   | { kind: "date"; range: TDateRange }
   | { kind: "boolean"; value: boolean };
 
@@ -118,7 +120,6 @@ export type TFilters = {
   pitches: ["Any" | "Less than" | "More than" | "Exactly", number] | null;
   longest_pitch: ["Any" | "Less than" | "More than" | "Exactly", number] | null;
   hours: ["Any" | "Less than" | "More than" | "Exactly", number] | null;
-  wetsuits: number[] | null;
   ownership: "all" | "owned" | "shared";
   created_at: TDateRange | null;
   updated_at: TDateRange | null;
@@ -338,7 +339,6 @@ export type CreateCanyonData = {
   aGrade?: number | null;
   commitment?: number | null;
   quality?: number | null;
-  wetsuits?: number | null;
   hours?: number | null;
   notes?: string | null;
   attributes?: TCanyonAttributes;
@@ -565,7 +565,6 @@ export type BulkCanyonInput = {
   aGrade?: number | null;
   commitment?: number | null;
   quality?: number | null;
-  wetsuits?: number | null;
   numAbseils?: number | null;
   longestAbseil?: number | null;
   hours?: number | null;
@@ -874,7 +873,6 @@ export const emptyFilters: TFilters = {
   pitches: null,
   longest_pitch: null,
   hours: null,
-  wetsuits: null,
   ownership: "all",
   created_at: null,
   updated_at: null,
@@ -889,7 +887,6 @@ const RANGE_FILTER_DEFAULTS: [keyof TFilters, [number, number]][] = [
   ["a_grade", [1, 7]],
   ["commitment", [1, 6]],
   ["quality", [1, 5]],
-  ["wetsuits", [1, 5]],
 ];
 
 const THRESHOLD_FILTER_KEYS: (keyof TFilters)[] = [
@@ -944,18 +941,24 @@ export function activeFilterCount(filters: TFilters): number {
   return builtIn + Object.keys(filters.custom ?? {}).length;
 }
 
-// Maps a custom-field definition type to the filter kind it produces, so a
-// stored filter can be validated against the current definition.
-const CUSTOM_TYPE_TO_KIND: Record<
-  TripLogCustomFieldDef["type"],
-  TCustomFieldFilter["kind"]
-> = {
-  string: "text",
-  integer: "number",
-  float: "number",
-  date: "date",
-  boolean: "boolean",
-};
+// Maps a custom-field definition to the filter kind it produces, so a stored
+// filter can be validated against the current definition. Bounded integer/float
+// fields render a range slider (numberRange); unbounded ones use op+value.
+export function customFilterKind(
+  def: TripLogCustomFieldDef,
+): TCustomFieldFilter["kind"] {
+  switch (def.type) {
+    case "string":
+      return "text";
+    case "integer":
+    case "float":
+      return def.min != null && def.max != null ? "numberRange" : "number";
+    case "date":
+      return "date";
+    case "boolean":
+      return "boolean";
+  }
+}
 
 // Drops custom-field filters that no longer correspond to a live definition
 // (deleted field) or whose stored kind no longer matches the field's type
@@ -969,7 +972,7 @@ export function reconcileCustomFilters(
   const next: Record<string, TCustomFieldFilter> = {};
   for (const [key, filter] of Object.entries(current)) {
     const def = defs.find((d) => d.key === key);
-    if (def && CUSTOM_TYPE_TO_KIND[def.type] === filter.kind) {
+    if (def && customFilterKind(def) === filter.kind) {
       next[key] = filter;
     }
   }
@@ -1061,8 +1064,6 @@ export function passesFilters(
   if (!passesSelectNumberFilter(canyon.longestAbseil, filters.longest_pitch))
     return false;
   if (!passesSelectNumberFilter(canyon.hours, filters.hours)) return false;
-  if (!passesSliderFilter(canyon.wetsuits, filters.wetsuits, [1, 5]))
-    return false;
   if (!passesDateRangeFilter(canyon.createdAt, filters.created_at)) return false;
   if (!passesDateRangeFilter(canyon.updatedAt, filters.updated_at)) return false;
 
@@ -1082,6 +1083,15 @@ export function passesFilters(
         if (filter.op === "Less than" && !(num < filter.value)) return false;
         if (filter.op === "More than" && !(num > filter.value)) return false;
         if (filter.op === "Exactly" && num !== filter.value) return false;
+        break;
+      }
+      case "numberRange": {
+        const num = typeof value === "number" ? value : Number(value);
+        if (Number.isNaN(num)) {
+          if (!includeUnknowns) return false;
+          break;
+        }
+        if (num < filter.range[0] || num > filter.range[1]) return false;
         break;
       }
       case "boolean":

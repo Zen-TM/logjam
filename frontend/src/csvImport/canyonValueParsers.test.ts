@@ -13,6 +13,13 @@ describe("parseFloatStrict", () => {
   it("fails on a non-numeric string", () => {
     expect(parseFloatStrict("abc")).toEqual({ ok: false, reason: "nonNumeric", raw: "abc" });
   });
+  it("accepts an in-range decimal for a ranged role (quality)", () => {
+    expect(parseFloatStrict("3.5", "quality")).toEqual({ ok: true, value: 3.5 });
+  });
+  it("range-checks a ranged role (quality 1-5)", () => {
+    expect(parseFloatStrict("8", "quality")).toMatchObject({ ok: false, reason: "scaleMismatch" });
+    expect(parseFloatStrict("11", "quality")).toMatchObject({ ok: false, reason: "outOfRange" });
+  });
 });
 
 describe("parseIntStrict", () => {
@@ -23,8 +30,8 @@ describe("parseIntStrict", () => {
     expect(parseIntStrict("3.5", "vGrade")).toMatchObject({ ok: false, reason: "decimalInInt" });
   });
   it("rejects booleanish words", () => {
-    expect(parseIntStrict("yes", "wetsuits")).toMatchObject({ ok: false, reason: "booleanish" });
-    expect(parseIntStrict("no", "wetsuits")).toMatchObject({ ok: false, reason: "booleanish" });
+    expect(parseIntStrict("yes", "commitment")).toMatchObject({ ok: false, reason: "booleanish" });
+    expect(parseIntStrict("no", "commitment")).toMatchObject({ ok: false, reason: "booleanish" });
   });
   it("flags a likely scale mismatch (just above max, within 2x)", () => {
     // quality range is [1,5]; 8 ≤ 10 → scaleMismatch

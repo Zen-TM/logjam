@@ -133,6 +133,12 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
     const { canyons } = await fetchAndParseRopeWiki();
     expect(canyons.map((c) => c.quality)).toEqual([4, null]);
   });
+
+  it("preserves a decimal quality instead of rounding", async () => {
+    mockFetchCsv(rows(`1,Half,"${COORD}",3.5,,,,`));
+    const { canyons } = await fetchAndParseRopeWiki();
+    expect(canyons[0].quality).toBe(3.5);
+  });
 });
 
 function sampleCanyon(overrides: Partial<RopeWikiCanyon> = {}): RopeWikiCanyon {

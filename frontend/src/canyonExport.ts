@@ -21,7 +21,6 @@ function descriptionText(c: TCanyon): string {
   if (c.longestAbseil != null) parts.push(`Longest abseil: ${c.longestAbseil}m`);
   if (c.hours != null) parts.push(`Duration: ${c.hours}h`);
   if (c.quality != null) parts.push(`Quality: ${c.quality}`);
-  if (c.wetsuits != null) parts.push(`Wetsuits: ${c.wetsuits}`);
   if (c.notes) parts.push(`Notes: ${c.notes}`);
   return parts.join("\n");
 }

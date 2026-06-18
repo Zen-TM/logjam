@@ -283,12 +283,12 @@ function parseRappels(value: string): number | null {
   return null;
 }
 
-/** Parse quality stars (1-5). */
+/** Parse quality stars (1-5, decimals preserved). */
 function parseQuality(value: string): number | null {
   if (!value || !value.trim()) return null;
-  const numMatch = value.match(/(\d)/);
+  const numMatch = value.match(/(\d+(?:\.\d+)?)/);
   if (numMatch) {
-    const n = parseInt(numMatch[1]);
+    const n = parseFloat(numMatch[1]);
     return n >= 1 && n <= 5 ? n : null;
   }
   return null;

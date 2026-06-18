@@ -56,8 +56,7 @@ model Canyon {
   vGrade           Int?          @map("v_grade")
   aGrade           Int?          @map("a_grade")
   commitment       Int?
-  quality          Int?
-  wetsuits         Int?
+  quality          Float?
   hours            Float?
   shares           CanyonShare[]
   forkedFrom       Canyon?       @relation("CanyonForks", fields: [forkedFromId], references: [id], onDelete: SetNull)

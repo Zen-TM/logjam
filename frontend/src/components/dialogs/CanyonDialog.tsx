@@ -4,6 +4,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogContentText,
   DialogActions,
   Button,
   TextField,
@@ -17,8 +18,10 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import type { TripLogCustomFieldDef, TripLogCustomFieldType } from "@logjam/shared";
 import { makeCustomFieldKey, coerceFieldValue } from "@logjam/shared";
+import { sanitizeIntegerInput, sanitizeDecimalInput } from "../../numberInput";
 import type { TCanyon } from "../../canyonUtils";
 import { updateCanyon, createCanyon, updateUserPreferences } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
@@ -37,8 +40,6 @@ const COMMITMENTS = [
   { value: 5, label: "V" },
   { value: 6, label: "VI" },
 ] as const;
-const QUALITY_GRADES = [1, 2, 3, 4, 5] as const;
-const WETSUIT_GRADES = [1, 2, 3, 4, 5] as const;
 
 const selectSx = {
   "& .MuiSelect-select": { color: "var(--theme-text-primary)" },
@@ -91,8 +92,7 @@ function CanyonDialog({
   const [vGrade, setVGrade] = useState<number | "">("");
   const [aGrade, setAGrade] = useState<number | "">("");
   const [commitment, setCommitment] = useState<number | "">("");
-  const [quality, setQuality] = useState<number | "">("");
-  const [wetsuits, setWetsuits] = useState<number | "">("");
+  const [quality, setQuality] = useState("");
   const [hours, setHours] = useState("");
   const [sources, setSources] = useState<Source[]>([]);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
@@ -106,7 +106,15 @@ function CanyonDialog({
   const [showAddField, setShowAddField] = useState(false);
   const [newFieldLabel, setNewFieldLabel] = useState("");
   const [newFieldType, setNewFieldType] = useState<TripLogCustomFieldType>("string");
+  const [newFieldBounded, setNewFieldBounded] = useState(false);
+  const [newFieldMin, setNewFieldMin] = useState("");
+  const [newFieldMax, setNewFieldMax] = useState("");
   const [addingField, setAddingField] = useState(false);
+  const [addFieldError, setAddFieldError] = useState<string | null>(null);
+
+  // Custom-field deletion confirmation
+  const [fieldToDelete, setFieldToDelete] = useState<TripLogCustomFieldDef | null>(null);
+  const [deletingField, setDeletingField] = useState(false);
 
   const pickingRef = useRef(false);
 
@@ -129,8 +137,7 @@ function CanyonDialog({
       setVGrade(canyon.vGrade ?? "");
       setAGrade(canyon.aGrade ?? "");
       setCommitment(canyon.commitment ?? "");
-      setQuality(canyon.quality ?? "");
-      setWetsuits(canyon.wetsuits ?? "");
+      setQuality(canyon.quality != null ? String(canyon.quality) : "");
       setHours(canyon.hours != null ? String(canyon.hours) : "");
       setSources(
         (canyon.attributes.sources ?? []).map(([label, url]) => ({
@@ -157,7 +164,6 @@ function CanyonDialog({
       setAGrade("");
       setCommitment("");
       setQuality("");
-      setWetsuits("");
       setHours("");
       setSources([]);
       setFieldValues({});
@@ -166,6 +172,10 @@ function CanyonDialog({
     setShowAddField(false);
     setNewFieldLabel("");
     setNewFieldType("string");
+    setNewFieldBounded(false);
+    setNewFieldMin("");
+    setNewFieldMax("");
+    setAddFieldError(null);
   }, [open, canyon]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handlePickCoords() {
@@ -218,8 +228,7 @@ function CanyonDialog({
         vGrade: vGrade !== "" ? (vGrade as number) : null,
         aGrade: aGrade !== "" ? (aGrade as number) : null,
         commitment: commitment !== "" ? (commitment as number) : null,
-        quality: quality !== "" ? (quality as number) : null,
-        wetsuits: wetsuits !== "" ? (wetsuits as number) : null,
+        quality: quality ? parseFloat(quality) : null,
         hours: hours ? parseFloat(hours) : null,
         notes: notes || null,
         attributes: {
@@ -260,28 +269,83 @@ function CanyonDialog({
     // Generate a stable key from the label
     const key = makeCustomFieldKey(label);
     if (customFieldDefs.some((d) => d.key === key)) {
-      setError(`A field with the key "${key}" already exists.`);
+      setAddFieldError(`A field with the key "${key}" already exists.`);
       return;
     }
+
+    const isNumeric = newFieldType === "integer" || newFieldType === "float";
+    let bounds: { min: number; max: number } | null = null;
+    if (isNumeric && newFieldBounded) {
+      if (newFieldMin.trim() === "" || newFieldMax.trim() === "") {
+        setAddFieldError("Both min and max are required for a bounded field.");
+        return;
+      }
+      const min =
+        newFieldType === "integer" ? parseInt(newFieldMin, 10) : parseFloat(newFieldMin);
+      const max =
+        newFieldType === "integer" ? parseInt(newFieldMax, 10) : parseFloat(newFieldMax);
+      if (!isFinite(min) || !isFinite(max)) {
+        setAddFieldError("Min and max must be valid numbers.");
+        return;
+      }
+      if (min >= max) {
+        setAddFieldError("Minimum must be less than maximum.");
+        return;
+      }
+      bounds = { min, max };
+    }
+
     setAddingField(true);
-    setError(null);
+    setAddFieldError(null);
     try {
-      const newDef: TripLogCustomFieldDef = { key, label, type: newFieldType };
+      const newDef: TripLogCustomFieldDef = {
+        key,
+        label,
+        type: newFieldType,
+        ...(bounds ?? {}),
+      };
       const updatedDefs = [...customFieldDefs, newDef];
       await updateUserPreferences({ canyonCustomFields: updatedDefs });
       onCustomFieldDefsChange(updatedDefs);
       setShowAddField(false);
       setNewFieldLabel("");
       setNewFieldType("string");
+      setNewFieldBounded(false);
+      setNewFieldMin("");
+      setNewFieldMax("");
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't save custom field. Please try again."));
+      setAddFieldError(messageFromError(err, "Couldn't save custom field. Please try again."));
     } finally {
       setAddingField(false);
     }
   }
 
+  async function handleConfirmDeleteField() {
+    if (!fieldToDelete) return;
+    const key = fieldToDelete.key;
+    setDeletingField(true);
+    setError(null);
+    try {
+      const updatedDefs = customFieldDefs.filter((d) => d.key !== key);
+      await updateUserPreferences({ canyonCustomFields: updatedDefs });
+      onCustomFieldDefsChange(updatedDefs);
+      setFieldValues((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      setFieldToDelete(null);
+    } catch (err) {
+      console.error(err);
+      setError(messageFromError(err, "Couldn't delete custom field. Please try again."));
+    } finally {
+      setDeletingField(false);
+    }
+  }
+
   return (
+    <>
     <Dialog
       fullScreen={isMobile}
       open={open}
@@ -532,71 +596,70 @@ function CanyonDialog({
             </Tooltip>
           </Box>
           <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2 }}>
-            <Tooltip
-              title="Subjective overall quality. 1 = unremarkable; 5 = exceptional."
-              placement="top"
-              arrow
-            >
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <TextField
-                  label="Quality (1-5)"
-                  value={quality}
-                  onChange={(e) =>
-                    setQuality(
-                      e.target.value === "" ? "" : Number(e.target.value),
-                    )
-                  }
-                  select
-                  size="small"
-                  fullWidth
-                  sx={selectSx}
-                  SelectProps={selectProps}
-                >
-                  <MenuItem value="">None</MenuItem>
-                  {QUALITY_GRADES.map((q) => (
-                    <MenuItem key={q} value={q}>
-                      {q}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Box>
-            </Tooltip>
-            <Tooltip
-              title="Wetsuit necessity. 1 = not needed (dry or warm); 5 = essential."
-              placement="top"
-              arrow
-            >
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <TextField
-                  label="Wetsuits (1-5)"
-                  value={wetsuits}
-                  onChange={(e) =>
-                    setWetsuits(
-                      e.target.value === "" ? "" : Number(e.target.value),
-                    )
-                  }
-                  select
-                  size="small"
-                  fullWidth
-                  sx={selectSx}
-                  SelectProps={selectProps}
-                >
-                  <MenuItem value="">None</MenuItem>
-                  {WETSUIT_GRADES.map((w) => (
-                    <MenuItem key={w} value={w}>
-                      {w}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Box>
-            </Tooltip>
+            <TextField
+              label="Quality (1-5)"
+              value={quality}
+              onChange={(e) => setQuality(sanitizeDecimalInput(e.target.value))}
+              type="text"
+              inputMode="decimal"
+              size="small"
+              fullWidth
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip
+                      title="Subjective overall quality. 1 = unremarkable; 5 = exceptional. Decimals allowed."
+                      placement="top"
+                      arrow
+                    >
+                      <InfoOutlinedIcon
+                        sx={{
+                          fontSize: "1rem",
+                          color: "var(--theme-text-muted)",
+                          cursor: "help",
+                        }}
+                      />
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <TextField
+              label="Hours"
+              value={hours}
+              onChange={(e) => setHours(sanitizeDecimalInput(e.target.value))}
+              type="text"
+              inputMode="decimal"
+              size="small"
+              fullWidth
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip
+                      title="Estimated total trip duration for an average group, car-to-car."
+                      placement="top"
+                      arrow
+                    >
+                      <InfoOutlinedIcon
+                        sx={{
+                          fontSize: "1rem",
+                          color: "var(--theme-text-muted)",
+                          cursor: "help",
+                        }}
+                      />
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              }}
+            />
           </Box>
           <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2 }}>
             <TextField
               label="Pitches"
               value={numAbseils}
-              onChange={(e) => setNumAbseils(e.target.value)}
-              type="number"
+              onChange={(e) => setNumAbseils(sanitizeIntegerInput(e.target.value))}
+              type="text"
+              inputMode="numeric"
               size="small"
               fullWidth
               InputProps={{
@@ -618,8 +681,9 @@ function CanyonDialog({
             <TextField
               label="Longest Pitch (m)"
               value={longestAbseil}
-              onChange={(e) => setLongestAbseil(e.target.value)}
-              type="number"
+              onChange={(e) => setLongestAbseil(sanitizeDecimalInput(e.target.value))}
+              type="text"
+              inputMode="decimal"
               size="small"
               fullWidth
               InputProps={{
@@ -627,33 +691,6 @@ function CanyonDialog({
                   <InputAdornment position="end">
                     <Tooltip
                       title="Length of the longest single abseil in metres, measured along the rope."
-                      placement="top"
-                      arrow
-                    >
-                      <InfoOutlinedIcon
-                        sx={{
-                          fontSize: "1rem",
-                          color: "var(--theme-text-muted)",
-                          cursor: "help",
-                        }}
-                      />
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <TextField
-              label="Hours"
-              value={hours}
-              onChange={(e) => setHours(e.target.value)}
-              type="number"
-              size="small"
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip
-                      title="Estimated total trip duration for an average group, car-to-car."
                       placement="top"
                       arrow
                     >
@@ -686,12 +723,30 @@ function CanyonDialog({
                 Custom Fields
               </Typography>
               {customFieldDefs.map((def) => (
-                <CustomFieldInput
+                <Box
                   key={def.key}
-                  def={def}
-                  value={getFieldValue(def.key)}
-                  onChange={(v) => setFieldValue(def.key, v)}
-                />
+                  sx={{ display: "flex", gap: 1, alignItems: "center" }}
+                >
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <CustomFieldInput
+                      def={def}
+                      value={getFieldValue(def.key)}
+                      onChange={(v) => setFieldValue(def.key, v)}
+                    />
+                  </Box>
+                  <IconButton
+                    aria-label={`Delete custom field ${def.label}`}
+                    size="small"
+                    onClick={() => setFieldToDelete(def)}
+                    sx={{
+                      color: "var(--theme-text-muted)",
+                      flexShrink: 0,
+                      "&:hover": { color: "var(--theme-warning)" },
+                    }}
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Box>
               ))}
             </Box>
           )}
@@ -705,13 +760,32 @@ function CanyonDialog({
               type={newFieldType}
               onTypeChange={setNewFieldType}
               onAdd={handleAddField}
-              onCancel={() => { setShowAddField(false); setNewFieldLabel(""); }}
+              onCancel={() => {
+                setShowAddField(false);
+                setNewFieldLabel("");
+                setNewFieldBounded(false);
+                setNewFieldMin("");
+                setNewFieldMax("");
+                setAddFieldError(null);
+              }}
               adding={addingField}
+              error={addFieldError}
+              bounds={{
+                bounded: newFieldBounded,
+                onBoundedChange: setNewFieldBounded,
+                min: newFieldMin,
+                onMinChange: setNewFieldMin,
+                max: newFieldMax,
+                onMaxChange: setNewFieldMax,
+              }}
             />
           ) : (
             <Button
               size="small"
-              onClick={() => setShowAddField(true)}
+              onClick={() => {
+                setAddFieldError(null);
+                setShowAddField(true);
+              }}
               sx={{
                 color: "var(--theme-accent)",
                 textTransform: "none",
@@ -810,6 +884,47 @@ function CanyonDialog({
         </Button>
       </DialogActions>
     </Dialog>
+
+    <Dialog
+      open={fieldToDelete != null}
+      onClose={deletingField ? undefined : () => setFieldToDelete(null)}
+      maxWidth="xs"
+      fullWidth
+      PaperProps={{
+        sx: {
+          backgroundColor: "var(--theme-primary)",
+          color: "var(--theme-text-primary)",
+        },
+      }}
+    >
+      <DialogTitle>
+        Delete custom field “{fieldToDelete?.label}”?
+      </DialogTitle>
+      <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
+        <DialogContentText sx={{ color: "var(--theme-text-primary)" }}>
+          This removes the field from <b>all</b> your canyons, not just this one.
+          Any values already stored for it will no longer be shown.
+        </DialogContentText>
+      </DialogContent>
+      <DialogActions>
+        <Button
+          onClick={() => setFieldToDelete(null)}
+          disabled={deletingField}
+          sx={{ color: "var(--theme-text-primary)" }}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={handleConfirmDeleteField}
+          color="error"
+          variant="contained"
+          disabled={deletingField}
+        >
+          {deletingField ? <CircularProgress size={20} /> : "Delete"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+    </>
   );
 }
 

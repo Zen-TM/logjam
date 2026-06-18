@@ -271,11 +271,6 @@ function CanyonDetailPanel({
               <b>Hours:</b> {canyon.hours}
             </p>
           )}
-          {canyon.wetsuits != null && (
-            <p>
-              <b>Wetsuits Required:</b> {canyon.wetsuits}/5
-            </p>
-          )}
           {canyon.attributes.sources && canyon.attributes.sources.length > 0 && (
             <div>
               <b>Sources:</b>

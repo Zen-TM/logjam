@@ -13,7 +13,6 @@ function canyon(overrides: Partial<TCanyon> = {}): TCanyon {
     aGrade: null,
     commitment: null,
     quality: null,
-    wetsuits: null,
     numAbseils: 8,
     longestAbseil: 30,
     hours: 4,

@@ -17,11 +17,26 @@ export type MismatchKind =
   | "mixedTypes"
   | "emptyDominant";
 
-export function parseFloatStrict(raw: string): ParseResult<number> {
+export function parseFloatStrict(
+  raw: string,
+  role?: CanyonFieldRole,
+): ParseResult<number> {
   const trimmed = raw.trim();
   if (!trimmed) return { ok: true, value: NaN }; // empty = no value, caller handles
   const n = Number(trimmed);
   if (isNaN(n)) return { ok: false, reason: "nonNumeric", raw };
+  // Decimal fields with a declared range (e.g. quality 1-5) are range-checked
+  // like the integer grades; fields without a range entry pass through.
+  const range = role ? GRADE_RANGES[role] : undefined;
+  if (range) {
+    const [min, max] = range;
+    if (n < min || n > max) {
+      if (n > max && n <= max * 2) {
+        return { ok: false, reason: "scaleMismatch", raw };
+      }
+      return { ok: false, reason: "outOfRange", raw };
+    }
+  }
   return { ok: true, value: n };
 }
 
@@ -237,12 +252,11 @@ export function parseByRole(
       return parseLatLng(raw);
     case "longestAbseil":
     case "hours":
-      return parseFloatStrict(raw);
+    case "quality":
+      return parseFloatStrict(raw, role);
     case "vGrade":
     case "aGrade":
     case "commitment":
-    case "quality":
-    case "wetsuits":
     case "numAbseils":
       return parseIntStrict(raw, role);
     case "altNames":

@@ -11,11 +11,12 @@ import type {
 import { refreshFromRopeWiki, passesFilters, activeFilterCount } from "../../../canyonUtils";
 import type { RefreshResult } from "../../../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
+import { customFieldDisplayLabel } from "@logjam/shared";
 import RopeWikiReviewDialog from "../../dialogs/RopeWikiReviewDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 
-type SliderKey = "v_grade" | "a_grade" | "commitment" | "quality" | "wetsuits";
+type SliderKey = "v_grade" | "a_grade" | "commitment" | "quality";
 type ThresholdKey = "pitches" | "longest_pitch" | "hours";
 
 const SLIDER_RANGES: Record<SliderKey, [number, number]> = {
@@ -23,7 +24,6 @@ const SLIDER_RANGES: Record<SliderKey, [number, number]> = {
   a_grade: [1, 7],
   commitment: [1, 6],
   quality: [1, 5],
-  wetsuits: [1, 5],
 };
 
 const OWNERSHIP_OPTIONS: { value: TFilters["ownership"]; label: string }[] = [
@@ -148,7 +148,6 @@ function CanyonsPanel({
       a_grade: f.a_grade ?? SLIDER_RANGES.a_grade,
       commitment: f.commitment ?? SLIDER_RANGES.commitment,
       quality: f.quality ?? SLIDER_RANGES.quality,
-      wetsuits: f.wetsuits ?? SLIDER_RANGES.wetsuits,
     }),
     [],
   );
@@ -156,6 +155,28 @@ function CanyonsPanel({
   useEffect(() => {
     setSliderDraft(draftFromFilters(filters));
   }, [filters, draftFromFilters]);
+
+  // Bounded custom-field range sliders keep their own draft map, keyed by field
+  // key, synced from the committed filter (defaulting to the field's full span).
+  const customDraftFromFilters = useCallback(
+    (f: TFilters): Record<string, [number, number]> => {
+      const out: Record<string, [number, number]> = {};
+      for (const def of canyonCustomFieldDefs) {
+        if (def.min == null || def.max == null) continue;
+        const cur = f.custom[def.key];
+        out[def.key] =
+          cur?.kind === "numberRange" ? cur.range : [def.min, def.max];
+      }
+      return out;
+    },
+    [canyonCustomFieldDefs],
+  );
+  const [customSliderDraft, setCustomSliderDraft] = useState(() =>
+    customDraftFromFilters(filters),
+  );
+  useEffect(() => {
+    setCustomSliderDraft(customDraftFromFilters(filters));
+  }, [filters, customDraftFromFilters]);
 
   function commitSlider(key: SliderKey, v: number[]) {
     const [min, max] = SLIDER_RANGES[key];
@@ -517,13 +538,70 @@ function CanyonsPanel({
     );
   }
 
+  function customSliderCell(def: TripLogCustomFieldDef) {
+    const min = def.min as number;
+    const max = def.max as number;
+    const current = filters.custom[def.key];
+    const draft = customSliderDraft[def.key] ?? [min, max];
+    const isFull = draft[0] === min && draft[1] === max;
+    const isActive = current?.kind === "numberRange";
+    const isInt = def.type === "integer";
+    // Continuous-ish step for floats; integer step (with ticks) when small.
+    const step = isInt ? 1 : (max - min) / 100 || 1;
+    const showMarks = isInt && max - min <= 20;
+    const fmt = (n: number) => (isInt ? String(n) : String(Math.round(n * 100) / 100));
+    return (
+      <div
+        className={`${classes.sliderCell} ${isFull ? classes.sliderInactive : ""}`}
+        key={def.key}
+      >
+        <div className={classes.sliderLabel}>
+          <span className={classes.sliderLabelText}>
+            {customFieldDisplayLabel(def)}
+          </span>
+          <span className={classes.sliderValueGroup}>
+            <span className={classes.sliderValue}>
+              {isFull ? "Any" : `${fmt(draft[0])}–${fmt(draft[1])}`}
+            </span>
+            {isActive && clearButton(() => setCustomFilter(def.key, null))}
+          </span>
+        </div>
+        <Slider
+          color="secondary"
+          marks={showMarks}
+          step={step}
+          min={min}
+          max={max}
+          value={draft}
+          valueLabelDisplay="auto"
+          onChange={(_e, v) => {
+            if (Array.isArray(v) && v.length === 2) {
+              setCustomSliderDraft((d) => ({ ...d, [def.key]: v as [number, number] }));
+            }
+          }}
+          onChangeCommitted={(_e, v) => {
+            if (Array.isArray(v) && v.length === 2) {
+              const full = v[0] === min && v[1] === max;
+              setCustomFilter(
+                def.key,
+                full ? null : { kind: "numberRange", range: v as [number, number] },
+              );
+            }
+          }}
+        />
+      </div>
+    );
+  }
+
   function customFieldCell(def: TripLogCustomFieldDef) {
     switch (def.type) {
       case "string":
         return customTextCell(def);
       case "integer":
       case "float":
-        return customNumberCell(def);
+        return def.min != null && def.max != null
+          ? customSliderCell(def)
+          : customNumberCell(def);
       case "date":
         return customDateCell(def);
       case "boolean":
@@ -541,7 +619,6 @@ function CanyonsPanel({
       pitches: null,
       longest_pitch: null,
       hours: null,
-      wetsuits: null,
       ownership: "all",
       created_at: null,
       updated_at: null,
@@ -665,17 +742,7 @@ function CanyonsPanel({
                   {sliderCell("v_grade", "Vertical")}
                   {sliderCell("a_grade", "Aquatic")}
                   {sliderCell("commitment", "Commitment")}
-                </div>
-              </div>
-              <div className={classes.section}>
-                <div className={classes.sectionHeader}>Character</div>
-                <div className={classes.sliderGrid}>
                   {sliderCell("quality", "Quality")}
-                  {sliderCell(
-                    "wetsuits",
-                    "Wetsuits",
-                    "Wetsuit necessity. 1 = not needed (dry or warm); 5 = essential.",
-                  )}
                 </div>
               </div>
               <div className={classes.section}>

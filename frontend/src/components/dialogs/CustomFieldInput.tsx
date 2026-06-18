@@ -1,6 +1,8 @@
 import { Checkbox, FormControlLabel, TextField } from "@mui/material";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
+import { customFieldDisplayLabel } from "@logjam/shared";
 import { fieldSx } from "../../csvImport/dialogStyles";
+import { sanitizeNumericInput } from "../../numberInput";
 
 /**
  * A single custom-field input, shared between CanyonDialog and TripLogDialog
@@ -31,29 +33,52 @@ function CustomFieldInput({
             sx={{ color: "var(--theme-text-muted)" }}
           />
         }
-        label={def.label}
+        label={customFieldDisplayLabel(def)}
         sx={{ color: "var(--theme-text-primary)" }}
       />
     );
   }
 
+  const isNumeric = def.type === "integer" || def.type === "float";
+
+  // Bounded numeric fields clamp to [min, max] on blur so a value outside the
+  // declared range can't be saved (e.g. a 1-5 field can't hold 6).
+  function clampToBounds() {
+    if (!isNumeric || def.min == null || def.max == null) return;
+    if (value === "" || value === "-") return;
+    const n = def.type === "integer" ? parseInt(value, 10) : parseFloat(value);
+    if (Number.isNaN(n)) return;
+    const clamped = Math.min(def.max, Math.max(def.min, n));
+    if (clamped !== n) onChange(String(clamped));
+  }
+
   return (
     <TextField
       key={def.key}
-      label={def.label}
+      label={customFieldDisplayLabel(def)}
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      type={def.type === "integer" || def.type === "float" ? "number" : def.type === "date" ? "date" : "text"}
+      onChange={(e) =>
+        onChange(
+          isNumeric
+            ? sanitizeNumericInput(
+                e.target.value,
+                def.type as "integer" | "float",
+              )
+            : e.target.value,
+        )
+      }
+      onBlur={isNumeric ? clampToBounds : undefined}
+      type={def.type === "date" ? "date" : "text"}
+      inputMode={
+        def.type === "integer"
+          ? "numeric"
+          : def.type === "float"
+            ? "decimal"
+            : undefined
+      }
       size="small"
       fullWidth
       InputLabelProps={def.type === "date" ? { shrink: true } : undefined}
-      slotProps={
-        def.type === "integer"
-          ? { htmlInput: { step: 1 } }
-          : def.type === "float"
-            ? { htmlInput: { step: "any" } }
-            : undefined
-      }
       sx={fieldSx}
     />
   );
