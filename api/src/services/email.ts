@@ -25,13 +25,23 @@ export async function sendEmail(params: {
   }
   try {
     const resend = new Resend(RESEND_API_KEY);
-    await resend.emails.send({
+    // The Resend SDK does NOT throw on API errors (invalid key, unverified
+    // sender domain, etc.) — it returns them in `error`. Must inspect it, or
+    // failures are silent.
+    const { error } = await resend.emails.send({
       from: EMAIL_FROM,
       to: params.to,
       subject: params.subject,
       text: params.text,
       html: params.html,
     });
+    if (error) {
+      // error.name/message are API-level (no recipient/canyon detail).
+      logger.warn(
+        { errName: error.name, errMessage: error.message },
+        "email_send_rejected",
+      );
+    }
   } catch (err) {
     // Never reference recipient/canyon detail in the log (CLAUDE.md privacy
     // rule); the send is best-effort and the notification row already exists.

@@ -43,6 +43,7 @@ describe("sendEmail", () => {
   it("sends with from/to/subject/body when fully configured", async () => {
     env.RESEND_API_KEY = "re_x";
     env.EMAIL_FROM = "noreply@x";
+    sendMock.mockResolvedValue({ data: { id: "abc" }, error: null });
     await sendEmail(msg);
     expect(ResendCtor).toHaveBeenCalledWith("re_x");
     expect(sendMock).toHaveBeenCalledWith({
@@ -54,7 +55,18 @@ describe("sendEmail", () => {
     });
   });
 
-  it("swallows send failures (best-effort, never throws)", async () => {
+  it("does not throw when the SDK returns an API error in { error }", async () => {
+    env.RESEND_API_KEY = "re_x";
+    env.EMAIL_FROM = "noreply@x";
+    // Resend reports API errors (invalid key, unverified domain) here, not via throw.
+    sendMock.mockResolvedValue({
+      data: null,
+      error: { name: "validation_error", message: "API key is invalid" },
+    });
+    await expect(sendEmail(msg)).resolves.toBeUndefined();
+  });
+
+  it("swallows network failures (best-effort, never throws)", async () => {
     env.RESEND_API_KEY = "re_x";
     env.EMAIL_FROM = "noreply@x";
     sendMock.mockRejectedValue(new Error("boom"));
