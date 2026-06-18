@@ -21,12 +21,16 @@ export type ThemeScheme = {
 
 export type NotificationPreferences = {
   topoEmail: boolean;
+  exportEmail: boolean;
+  geoPdfEmail: boolean;
   friendRequestInApp: boolean;
   shareInApp: boolean;
 };
 
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   topoEmail: true,
+  exportEmail: true,
+  geoPdfEmail: true,
   friendRequestInApp: true,
   shareInApp: true,
 };
@@ -44,7 +48,13 @@ export function isNotificationPreferences(
 ): value is Partial<NotificationPreferences> {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
-  for (const key of ["topoEmail", "friendRequestInApp", "shareInApp"] as const) {
+  for (const key of [
+    "topoEmail",
+    "exportEmail",
+    "geoPdfEmail",
+    "friendRequestInApp",
+    "shareInApp",
+  ] as const) {
     if (key in candidate && typeof candidate[key] !== "boolean") return false;
   }
   return true;
@@ -57,6 +67,10 @@ function normalizeNotificationPreferences(value: unknown): NotificationPreferenc
   const prefs = value as Record<string, unknown>;
   return {
     topoEmail: typeof prefs.topoEmail === "boolean" ? prefs.topoEmail : DEFAULT_NOTIFICATION_PREFERENCES.topoEmail,
+    exportEmail:
+      typeof prefs.exportEmail === "boolean" ? prefs.exportEmail : DEFAULT_NOTIFICATION_PREFERENCES.exportEmail,
+    geoPdfEmail:
+      typeof prefs.geoPdfEmail === "boolean" ? prefs.geoPdfEmail : DEFAULT_NOTIFICATION_PREFERENCES.geoPdfEmail,
     friendRequestInApp:
       typeof prefs.friendRequestInApp === "boolean"
         ? prefs.friendRequestInApp

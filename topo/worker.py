@@ -17,7 +17,8 @@ Required environment variables:
                     composed at import time (see compose_database_url below).
 
 Optional environment variables:
-  SES_FROM_EMAIL    - Verified SES sender address (skips email if unset)
+  RESEND_API_KEY    - Resend API key (skips email if unset; see email_send.py)
+  EMAIL_FROM        - Verified sender address (skips email if unset)
   FRONTEND_URL      - Base URL of the Logjam web app (e.g. https://logjam.app)
                       Used to build the deep link in the completion email.
                       If unset, email is skipped with a warning.
@@ -40,6 +41,8 @@ from urllib.parse import quote
 import psycopg2
 import psycopg2.extras
 from pmtiles.convert import mbtiles_to_pmtiles
+
+from email_send import send_email, wants_email
 
 logging.basicConfig(
     level=logging.INFO,
@@ -103,7 +106,6 @@ def compose_database_url() -> str:
 AWS_REGION   = os.environ.get("AWS_REGION", "ap-southeast-2")
 BUCKET       = os.environ["S3_BUCKET_TOPO"]
 DATABASE_URL = compose_database_url()
-SES_FROM     = os.environ.get("SES_FROM_EMAIL", "")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 JOB_ID       = os.environ["JOB_ID"]
 
@@ -195,7 +197,6 @@ def merge_settings(layer_options: Optional[dict], vector_style: Optional[dict]) 
     return merged
 
 s3  = boto3.client("s3",  region_name=AWS_REGION)
-ses = boto3.client("ses", region_name=AWS_REGION) if SES_FROM else None
 
 
 # ── Database helpers ──────────────────────────────────────────────────────────
@@ -291,27 +292,10 @@ def get_user_email(conn, user_id: str) -> str | None:
     return row["email"] if row else None
 
 
-def wants_topo_email(conn, user_id: str) -> bool:
-    """Read users.ui_preferences.notifications.topoEmail; default True if absent."""
-    with conn.cursor() as cur:
-        cur.execute("SELECT ui_preferences FROM users WHERE id = %s", (user_id,))
-        row = cur.fetchone()
-    if not row:
-        return False
-    prefs = row["ui_preferences"] or {}
-    notifications = prefs.get("notifications") if isinstance(prefs, dict) else None
-    if not isinstance(notifications, dict):
-        return True
-    value = notifications.get("topoEmail")
-    return True if not isinstance(value, bool) else value
-
-
 # ── Email ─────────────────────────────────────────────────────────────────────
 
 def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
                           osm_failed: bool = False):
-    if not ses:
-        return
     if not FRONTEND_URL:
         log.warning("FRONTEND_URL not set — skipping completion email")
         return
@@ -354,20 +338,7 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
         "  </body>",
         "</html>",
     ])
-    try:
-        ses.send_email(
-            Source=SES_FROM,
-            Destination={"ToAddresses": [to_email]},
-            Message={
-                "Subject": {"Data": "Topo map ready — Logjam"},
-                "Body":    {
-                    "Text": {"Data": text_body},
-                    "Html": {"Data": html_body},
-                },
-            },
-        )
-    except Exception as e:
-        log.warning(f"Failed to send completion email: {e}")
+    send_email(to_email, "Topo map ready — Logjam", text_body, html_body)
 
 
 # ── Vector tile generation ────────────────────────────────────────────────────
@@ -725,7 +696,7 @@ def main():
         })
 
         email = get_user_email(conn, job["user_id"])
-        if email and wants_topo_email(conn, job["user_id"]):
+        if email and wants_email(conn, job["user_id"], "topoEmail"):
             send_completion_email(email, JOB_ID, output_keys, osm_failed=osm_failed)
 
     except Exception as e:

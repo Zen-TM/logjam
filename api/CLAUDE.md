@@ -12,8 +12,8 @@ src/
     errorHandler.ts        AppError class + handler
   services/
     prisma.ts              singleton PrismaClient built on @prisma/adapter-pg (Prisma 7 driver adapter; default export)
-    awsClients.ts          s3/ecs/ses/cognitoIdp singletons (emulator-aware via AWS_ENDPOINT_URL → MiniStack in dev). No SQS — topo jobs launch via ECS RunTask; retry is owned by the TopoJob.status column.
-    email.ts               SES wrapper
+    awsClients.ts          s3/ecs/cognitoIdp singletons (emulator-aware via AWS_ENDPOINT_URL → MiniStack in dev). No SQS — topo jobs launch via ECS RunTask; retry is owned by the TopoJob.status column.
+    email.ts               Resend transactional send helper (sendEmail; no-op if RESEND_API_KEY/EMAIL_FROM unset). Used by geoPdfWorker; Python workers send via topo/email_send.py.
     ropewiki.ts            external scraper
     generateGeoPdf.ts      GeoPDF rendering
   lib/                     cross-route building blocks — prefer these over inline logic
@@ -77,10 +77,10 @@ Never `new PrismaClient()` in route. Singleton handles connection pooling + dev-
 Import clients from `services/awsClients.ts`:
 
 ```ts
-import { s3, ecs, ses, cognitoIdp } from "../services/awsClients";
+import { s3, ecs, cognitoIdp } from "../services/awsClients";
 ```
 
-Client factory honors `AWS_ENDPOINT_URL` for the local emulator (MiniStack) — never construct `S3Client` inline. Region defaults to `AWS_REGION` (`ap-southeast-2`); SES uses `COGNITO_REGION` if set.
+Client factory honors `AWS_ENDPOINT_URL` for the local emulator (MiniStack) — never construct `S3Client` inline. Region defaults to `AWS_REGION` (`ap-southeast-2`). Transactional email is NOT AWS — see `services/email.ts` (Resend).
 
 Commands imported per-call from `@aws-sdk/client-*`:
 

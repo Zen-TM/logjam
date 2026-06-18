@@ -8,7 +8,7 @@ outputs from S3 (COGs for raster layers, raw GeoJSONs for vectors, vector
 PMTiles where needed), dispatches to the right renderer for the requested
 {format, bundling, layers}, uploads the artefact to:
     s3://$S3_BUCKET_TOPO/exports/<exportJobId>/<filename>
-and emails the user a download link via SES.
+and emails the user a download link via Resend (see email_send.py).
 
 Required env:
     EXPORT_JOB_ID       UUID of the TopoExportJob row
@@ -20,7 +20,8 @@ Required env:
                         connection string is composed at import time (see
                         compose_database_url below).
 Optional env:
-    SES_FROM_EMAIL      verified SES sender (skips email if unset)
+    RESEND_API_KEY      Resend API key (skips email if unset; see email_send.py)
+    EMAIL_FROM          verified sender (skips email if unset)
     FRONTEND_URL        for the deep-link in the email body
     AWS_REGION          default ap-southeast-2
 """
@@ -51,6 +52,7 @@ from renderers import (
     render_geojson,
     render_gpx,
 )
+from email_send import send_email, wants_email
 
 logging.basicConfig(
     level=logging.INFO,
@@ -108,12 +110,10 @@ def compose_database_url() -> str:
 AWS_REGION   = os.environ.get("AWS_REGION", "ap-southeast-2")
 BUCKET       = os.environ["S3_BUCKET_TOPO"]
 DATABASE_URL = compose_database_url()
-SES_FROM     = os.environ.get("SES_FROM_EMAIL", "")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 EXPORT_JOB_ID = os.environ["EXPORT_JOB_ID"]
 
 s3  = boto3.client("s3",  region_name=AWS_REGION)
-ses = boto3.client("ses", region_name=AWS_REGION) if SES_FROM else None
 
 
 def db_connect():
@@ -216,7 +216,7 @@ def create_notification(conn, user_id: str, notif_type: str, payload: dict):
 
 
 def send_completion_email(to_email: str, export_job_id: str, format_: str, ok: bool, error: Optional[str]):
-    if not ses or not FRONTEND_URL:
+    if not FRONTEND_URL:
         return
     base = FRONTEND_URL.rstrip("/")
     if ok:
@@ -242,17 +242,7 @@ def send_completion_email(to_email: str, export_job_id: str, format_: str, ok: b
             f"<p><strong>{safe_error}</strong></p>"
             f'<p><a href="{base}">Open Logjam to retry</a></p>'
         )
-    try:
-        ses.send_email(
-            Source=SES_FROM,
-            Destination={"ToAddresses": [to_email]},
-            Message={
-                "Subject": {"Data": subject},
-                "Body":    {"Text": {"Data": text}, "Html": {"Data": html}},
-            },
-        )
-    except Exception as e:
-        log.warning(f"Failed to send export email: {e}")
+    send_email(to_email, subject, text, html)
 
 
 def main():
@@ -395,7 +385,7 @@ def main():
 
     try:
         email = get_user_email(conn, export_job["user_id"])
-        if email:
+        if email and wants_email(conn, export_job["user_id"], "exportEmail"):
             send_completion_email(email, EXPORT_JOB_ID, export_job["format"], ok, error_msg)
     finally:
         conn.close()

@@ -33,7 +33,6 @@ resource "local_file" "env_local" {
     port              = "8080"
     node_env          = "development"
     cors_origin       = "http://localhost:5173"
-    ses_from_email    = "noreply@local"
     topo_cdn_base_url = "http://localhost:4566/${module.topo.bucket_id}"
 
     # Dummy non-empty VPC config flips the ECS_SUBNETS_LIST guard on, so the API

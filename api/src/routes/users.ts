@@ -12,7 +12,6 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { userPatchLimiter } from "../middleware/rateLimit";
-import { verifyEmail } from "../services/email";
 import { cognitoIdp } from "../services/awsClients";
 import { getWeeklyTileUsage } from "../lib/tileQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
@@ -96,8 +95,6 @@ router.get(
             username: initialUsername,
           },
         });
-        // Trigger SES sandbox verification so we can email this user
-        verifyEmail(email).catch(() => {});
       } catch (e) {
         if (
           !(e instanceof Prisma.PrismaClientKnownRequestError) ||
@@ -148,7 +145,6 @@ router.get(
               username: `${initialUsername}-${sub.slice(0, 6)}`,
             },
           });
-          verifyEmail(email).catch(() => {});
         } else {
           // cognitoId collision: a concurrent /users/me request just created
           // this record. Recover by fetching the record that won the race.
@@ -166,7 +162,6 @@ router.get(
           where: { id: user.id },
           data: { email },
         });
-        verifyEmail(email).catch(() => {});
       } catch (e) {
         if (
           e instanceof Prisma.PrismaClientKnownRequestError &&

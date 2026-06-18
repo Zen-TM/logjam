@@ -297,6 +297,24 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
           <label className={classes.notifRow}>
             <input
               type="checkbox"
+              checked={notifPrefs.exportEmail}
+              onChange={() => handleToggleNotif("exportEmail")}
+              disabled={notifSaving}
+            />
+            <span className={classes.notifLabel}>Email me when a topo export is ready</span>
+          </label>
+          <label className={classes.notifRow}>
+            <input
+              type="checkbox"
+              checked={notifPrefs.geoPdfEmail}
+              onChange={() => handleToggleNotif("geoPdfEmail")}
+              disabled={notifSaving}
+            />
+            <span className={classes.notifLabel}>Email me when a GeoPDF is ready</span>
+          </label>
+          <label className={classes.notifRow}>
+            <input
+              type="checkbox"
               checked={notifPrefs.friendRequestInApp}
               onChange={() => handleToggleNotif("friendRequestInApp")}
               disabled={notifSaving}

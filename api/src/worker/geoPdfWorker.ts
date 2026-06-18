@@ -21,8 +21,14 @@ import prisma from "../services/prisma";
 import { getEnv } from "../lib/env";
 import { logger } from "../lib/logger";
 import { generateGeoPdf } from "../services/generateGeoPdf";
+import { sendEmail } from "../services/email";
 import type { GeoPdfConfig, VectorStyleSettings } from "@logjam/shared";
-import { validateGeoPdfConfig, validateVectorStyleSettings, VECTOR_STYLE_DEFAULTS } from "@logjam/shared";
+import {
+  validateGeoPdfConfig,
+  validateVectorStyleSettings,
+  VECTOR_STYLE_DEFAULTS,
+  normalizeUserUiPreferences,
+} from "@logjam/shared";
 
 const GENERIC_FAILURE_MESSAGE =
   "GeoPDF generation failed. Submit a new job to retry.";
@@ -185,11 +191,32 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
     },
   });
 
-  // TODO: optional completion email via SES, mirroring
-  // topo/export_worker.py's send_completion_email (SES_FROM_EMAIL,
-  // FRONTEND_URL env vars). Not added here: api/src/services/email.ts only
-  // wraps SES identity verification, not transactional sends, and adding a
-  // generic SES send helper is out of scope for this change.
+  // Best-effort completion email (Resend), mirroring the Python workers'
+  // send_completion_email. Gated on the user's geoPdfEmail preference (default
+  // true). The in-app notification above is the source of truth — a missing
+  // email/pref or send failure never affects the job outcome.
+  const recipient = await prisma.user.findUnique({
+    where: { id: job.userId },
+    select: { email: true, uiPreferences: true },
+  });
+  const wantsEmail =
+    normalizeUserUiPreferences(recipient?.uiPreferences).notifications.geoPdfEmail;
+  if (recipient?.email && wantsEmail) {
+    const base = (env.FRONTEND_URL ?? "").replace(/\/$/, "");
+    const openUrl = base ? `${base}/?geoPdfJob=${jobId}` : "";
+    const openLink = openUrl ? `\n\nOpen Logjam: ${openUrl}` : "";
+    const openLinkHtml = openUrl
+      ? `<p><a href="${openUrl}">Open Logjam</a></p>`
+      : "";
+    const subject = ok ? "GeoPDF ready — Logjam" : "GeoPDF failed — Logjam";
+    const text = ok
+      ? `Your GeoPDF is ready to download.${openLink}`
+      : `Your GeoPDF could not be generated.\n\n${errorMessage ?? GENERIC_FAILURE_MESSAGE}${openLink}`;
+    const html = ok
+      ? `<p>Your GeoPDF is ready to download.</p>${openLinkHtml}`
+      : `<p>Your GeoPDF could not be generated.</p><p><strong>${errorMessage ?? GENERIC_FAILURE_MESSAGE}</strong></p>${openLinkHtml}`;
+    await sendEmail({ to: recipient.email, subject, text, html });
+  }
 
   return ok ? 0 : 1;
 }

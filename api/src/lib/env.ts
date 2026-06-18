@@ -42,6 +42,15 @@ const baseSchema = z.object({
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),
 
+  // Transactional email (Resend). Only the geoPdfWorker sends from the Node
+  // side; the API server itself sends none. Both optional so a worker with no
+  // key configured degrades to a no-op send (services/email.ts) instead of
+  // crashing — mirrors the Python workers' guard. FRONTEND_URL builds the
+  // completion-email deep link.
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().optional(),
+  FRONTEND_URL: z.string().url().optional(),
+
   // Stuck-topo-job reaper (ARCH-002). A job stuck in `pending` longer than the
   // PENDING timeout (task never placed / never started) or in `processing`
   // longer than the PROCESSING timeout (Fargate task SIGKILLed before its

@@ -39,11 +39,17 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       name  = "DB_PORT"
       value = "5432"
       }, {
+      name  = "EMAIL_FROM"
+      value = "noreply@notifications.logjamnsw.com"
+      }, {
       name  = "ECS_SECURITY_GROUPS"
       value = "sg-0543d2bbce86b5d2a"
       }, {
       name  = "ECS_SUBNETS"
       value = "subnet-0f59b0845905891be,subnet-0c10e1438a8fd0231"
+      }, {
+      name  = "FRONTEND_URL"
+      value = "https://logjamnsw.com/"
       }, {
       name  = "NODE_ENV"
       value = "production"
@@ -77,6 +83,9 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       }, {
       name      = "DB_USER"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:rds!db-6fa40c95-2bbc-4ee1-8f4e-de15c5abe3c4-4f8qWr:username::"
+      }, {
+      name      = "RESEND_API_KEY"
+      valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs:apiKey::"
     }]
     systemControls = []
     volumesFrom    = []
@@ -112,11 +121,11 @@ resource "aws_ecs_task_definition" "topo_worker" {
       name  = "GDAL_DISABLE_READDIR_ON_OPEN"
       value = "EMPTY_DIR"
       }, {
+      name  = "EMAIL_FROM"
+      value = "noreply@notifications.logjamnsw.com"
+      }, {
       name  = "S3_BUCKET_TOPO"
       value = "logjam-topo-jobs"
-      }, {
-      name  = "SES_FROM_EMAIL"
-      value = "noreply@logjamnsw.com"
       }, {
       name  = "SVTM_FORMATION_S3_PATH"
       value = "s3://logjam-topo-jobs/svtm/svtm_formation.tif"
@@ -147,6 +156,9 @@ resource "aws_ecs_task_definition" "topo_worker" {
       }, {
       name      = "DB_USER"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:rds!db-6fa40c95-2bbc-4ee1-8f4e-de15c5abe3c4-4f8qWr:username::"
+      }, {
+      name      = "RESEND_API_KEY"
+      valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs:apiKey::"
     }]
     systemControls = []
     volumesFrom    = []
@@ -182,14 +194,14 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       name  = "DB_PORT"
       value = "5432"
       }, {
+      name  = "EMAIL_FROM"
+      value = "noreply@notifications.logjamnsw.com"
+      }, {
       name  = "FRONTEND_URL"
       value = "https://logjamnsw.com/"
       }, {
       name  = "S3_BUCKET_TOPO"
       value = "logjam-topo-jobs"
-      }, {
-      name  = "SES_FROM_EMAIL"
-      value = "noreply@logjamnsw.com"
     }]
     essential = true
     image     = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
@@ -211,6 +223,9 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       }, {
       name      = "DB_USER"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:rds!db-6fa40c95-2bbc-4ee1-8f4e-de15c5abe3c4-4f8qWr:username::"
+      }, {
+      name      = "RESEND_API_KEY"
+      valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs:apiKey::"
     }]
     systemControls = []
     volumesFrom    = []

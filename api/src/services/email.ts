@@ -1,10 +1,43 @@
-import { VerifyEmailIdentityCommand } from "@aws-sdk/client-ses";
-import { ses } from "./awsClients";
+import { Resend } from "resend";
+import { getEnv } from "../lib/env";
+import { logger } from "../lib/logger";
 
 /**
- * Trigger SES sandbox verification for a recipient email.
- * SES will send them a verification link they must click.
+ * Send one transactional email via Resend. Best-effort: callers create the
+ * in-app notification first, so a send failure is logged and swallowed, never
+ * thrown.
+ *
+ * No-op (logged) when RESEND_API_KEY or EMAIL_FROM is unset — keeps local dev
+ * and any unconfigured worker quiet instead of failing. This replaces the
+ * former AWS SES path (SES production access was denied; Resend needs only DNS
+ * domain verification).
  */
-export async function verifyEmail(email: string): Promise<void> {
-  await ses.send(new VerifyEmailIdentityCommand({ EmailAddress: email }));
+export async function sendEmail(params: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}): Promise<void> {
+  const { RESEND_API_KEY, EMAIL_FROM } = getEnv();
+  if (!RESEND_API_KEY || !EMAIL_FROM) {
+    logger.info("email_skipped_no_resend_config");
+    return;
+  }
+  try {
+    const resend = new Resend(RESEND_API_KEY);
+    await resend.emails.send({
+      from: EMAIL_FROM,
+      to: params.to,
+      subject: params.subject,
+      text: params.text,
+      html: params.html,
+    });
+  } catch (err) {
+    // Never reference recipient/canyon detail in the log (CLAUDE.md privacy
+    // rule); the send is best-effort and the notification row already exists.
+    logger.warn(
+      { errClass: err instanceof Error ? err.constructor.name : typeof err },
+      "email_send_failed",
+    );
+  }
 }
