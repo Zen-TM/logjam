@@ -59,6 +59,64 @@ export function coerceFieldValue(value: string, type: TripLogCustomFieldType): u
   return value;
 }
 
+/**
+ * Raw form state for the "Add Custom Field" sub-form. Both CanyonDialog and
+ * TripLogDialog feed this into `buildCustomFieldDef` to get a validated
+ * `TripLogCustomFieldDef` or a user-facing error string.
+ */
+export type CustomFieldDraft = {
+  label: string;
+  type: TripLogCustomFieldType;
+  bounded: boolean;
+  min: string;
+  max: string;
+};
+
+/**
+ * Validate a custom-field draft and produce a `TripLogCustomFieldDef` ready
+ * for persistence, or a user-facing error string. Pure — no side effects.
+ */
+export function buildCustomFieldDef(
+  draft: CustomFieldDraft,
+  existingDefs: TripLogCustomFieldDef[],
+): { def: TripLogCustomFieldDef } | { error: string } {
+  const label = draft.label.trim();
+  if (!label) return { error: "Label is required." };
+
+  const key = makeCustomFieldKey(label);
+  if (existingDefs.some((d) => d.key === key)) {
+    return { error: `A field with the key "${key}" already exists.` };
+  }
+
+  const isNumeric = draft.type === "integer" || draft.type === "float";
+  let bounds: { min: number; max: number } | null = null;
+
+  if (isNumeric && draft.bounded) {
+    if (draft.min.trim() === "" || draft.max.trim() === "") {
+      return { error: "Both min and max are required for a bounded field." };
+    }
+    const min =
+      draft.type === "integer"
+        ? parseInt(draft.min, 10)
+        : parseFloat(draft.min);
+    const max =
+      draft.type === "integer"
+        ? parseInt(draft.max, 10)
+        : parseFloat(draft.max);
+    if (!isFinite(min) || !isFinite(max)) {
+      return { error: "Min and max must be valid numbers." };
+    }
+    if (min >= max) {
+      return { error: "Minimum must be less than maximum." };
+    }
+    bounds = { min, max };
+  }
+
+  return {
+    def: { key, label, type: draft.type, ...(bounds ?? {}) },
+  };
+}
+
 export function isTripLogCustomFieldDef(v: unknown): v is TripLogCustomFieldDef {
   if (typeof v !== "object" || v === null) return false;
   const c = v as Record<string, unknown>;

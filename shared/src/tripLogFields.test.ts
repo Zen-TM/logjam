@@ -3,7 +3,9 @@ import {
   makeCustomFieldKey,
   coerceFieldValue,
   isTripLogCustomFieldDef,
+  buildCustomFieldDef,
 } from "./tripLogFields.js";
+import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
 describe("makeCustomFieldKey", () => {
   it("lowercases and replaces non-alphanumeric runs with underscores", () => {
@@ -89,5 +91,104 @@ describe("isTripLogCustomFieldDef", () => {
     expect(isTripLogCustomFieldDef(null)).toBe(false);
     expect(isTripLogCustomFieldDef("a string")).toBe(false);
     expect(isTripLogCustomFieldDef(42)).toBe(false);
+  });
+});
+
+describe("buildCustomFieldDef", () => {
+  const existing: TripLogCustomFieldDef[] = [
+    { key: "group_size", label: "Group Size", type: "integer" },
+  ];
+
+  it("builds a plain string field", () => {
+    const result = buildCustomFieldDef(
+      { label: "Notes", type: "string", bounded: false, min: "", max: "" },
+      [],
+    );
+    expect(result).toEqual({ def: { key: "notes", label: "Notes", type: "string" } });
+  });
+
+  it("rejects empty label", () => {
+    const result = buildCustomFieldDef(
+      { label: "  ", type: "string", bounded: false, min: "", max: "" },
+      [],
+    );
+    expect(result).toEqual({ error: "Label is required." });
+  });
+
+  it("rejects duplicate key", () => {
+    const result = buildCustomFieldDef(
+      { label: "Group Size", type: "integer", bounded: false, min: "", max: "" },
+      existing,
+    );
+    expect("error" in result).toBe(true);
+    expect((result as { error: string }).error).toContain("already exists");
+  });
+
+  it("builds bounded integer field", () => {
+    const result = buildCustomFieldDef(
+      { label: "Rating", type: "integer", bounded: true, min: "1", max: "5" },
+      [],
+    );
+    expect(result).toEqual({
+      def: { key: "rating", label: "Rating", type: "integer", min: 1, max: 5 },
+    });
+  });
+
+  it("builds bounded float field", () => {
+    const result = buildCustomFieldDef(
+      { label: "Temperature", type: "float", bounded: true, min: "-10.5", max: "45.0" },
+      [],
+    );
+    expect(result).toEqual({
+      def: { key: "temperature", label: "Temperature", type: "float", min: -10.5, max: 45 },
+    });
+  });
+
+  it("rejects missing min for bounded field", () => {
+    const result = buildCustomFieldDef(
+      { label: "Rating", type: "integer", bounded: true, min: "", max: "5" },
+      [],
+    );
+    expect(result).toEqual({ error: "Both min and max are required for a bounded field." });
+  });
+
+  it("rejects missing max for bounded field", () => {
+    const result = buildCustomFieldDef(
+      { label: "Rating", type: "integer", bounded: true, min: "1", max: "" },
+      [],
+    );
+    expect(result).toEqual({ error: "Both min and max are required for a bounded field." });
+  });
+
+  it("rejects non-finite bounds", () => {
+    const result = buildCustomFieldDef(
+      { label: "Rating", type: "integer", bounded: true, min: "abc", max: "5" },
+      [],
+    );
+    expect(result).toEqual({ error: "Min and max must be valid numbers." });
+  });
+
+  it("rejects min >= max", () => {
+    const result = buildCustomFieldDef(
+      { label: "Rating", type: "integer", bounded: true, min: "5", max: "5" },
+      [],
+    );
+    expect(result).toEqual({ error: "Minimum must be less than maximum." });
+  });
+
+  it("ignores bounded flag for non-numeric types", () => {
+    const result = buildCustomFieldDef(
+      { label: "When", type: "date", bounded: true, min: "1", max: "5" },
+      [],
+    );
+    expect(result).toEqual({ def: { key: "when", label: "When", type: "date" } });
+  });
+
+  it("ignores bounded=false even for numeric types", () => {
+    const result = buildCustomFieldDef(
+      { label: "Count", type: "integer", bounded: false, min: "1", max: "5" },
+      [],
+    );
+    expect(result).toEqual({ def: { key: "count", label: "Count", type: "integer" } });
   });
 });
