@@ -1,10 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
+import type { ReactNode } from "react";
 import { ChevronDown, Download, Trash2 } from "lucide-react";
 import classes from "./GeoPdfsPanel.module.css";
 import { apiFetch, useGeoPdfJobs, deleteGeoPdfJob } from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
+import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import type { GeoPdfTemplate } from "../../dialogs/GeoPdfDialog";
+
+/** Descriptor for the shared confirm dialog — one delete kind at a time. */
+type PendingDelete = {
+  title: string;
+  message: ReactNode;
+  confirmLabel?: string;
+  onConfirm: () => Promise<void> | void;
+};
 
 function formatBytes(n: number | null): string {
   if (n === null) return "";
@@ -39,14 +49,17 @@ function GeoPdfsPanel({
 }) {
   const toast = useToast();
   const [templates, setTemplates] = useState<GeoPdfTemplate[]>([]);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchCount] = useState(0);
 
   // Accordion state
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
-  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
+
+  // Single shared delete-confirmation dialog, reused for templates and
+  // generated GeoPDFs. `confirmBusy` disables the dialog while the action runs.
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
   const { jobs, loading: jobsLoading, error: jobsError, refetch: refetchJobs } = useGeoPdfJobs(true);
 
   useEffect(() => {
@@ -59,15 +72,12 @@ function GeoPdfsPanel({
 
   const handleDeleteJob = useCallback(
     async (id: string) => {
-      setDeletingJobId(id);
       try {
         await deleteGeoPdfJob(id);
         refetchJobs();
       } catch (err) {
         console.error(err);
         toast.error(messageFromError(err, "Couldn't delete GeoPDF."));
-      } finally {
-        setDeletingJobId(null);
       }
     },
     [refetchJobs, toast],
@@ -95,7 +105,6 @@ function GeoPdfsPanel({
       try {
         await apiFetch(`/geo-pdf-templates/${id}`, { method: "DELETE" });
         setTemplates((prev) => prev.filter((t) => t.id !== id));
-        setDeletingId(null);
       } catch (err) {
         console.error(err);
         toast.error(messageFromError(err, "Couldn't delete template. Please try again."));
@@ -103,6 +112,20 @@ function GeoPdfsPanel({
     },
     [toast],
   );
+
+  // Runs the pending delete's action with the dialog in a busy state, then
+  // closes the dialog. The handlers above swallow their own errors (toast), so
+  // we always close on settle.
+  const runConfirm = useCallback(async () => {
+    if (!pendingDelete) return;
+    setConfirmBusy(true);
+    try {
+      await pendingDelete.onConfirm();
+    } finally {
+      setConfirmBusy(false);
+      setPendingDelete(null);
+    }
+  }, [pendingDelete]);
 
   return (
     <div className={classes.root}>
@@ -144,39 +167,26 @@ function GeoPdfsPanel({
                 {t.name}
               </button>
 
-              {deletingId === t.id ? (
-                <div className={classes.confirmRow}>
-                  <span className={classes.confirmText}>Delete?</span>
-                  <button
-                    className={classes.confirmYes}
-                    onClick={() => handleDelete(t.id)}
-                  >
-                    Yes
-                  </button>
-                  <button
-                    className={classes.confirmNo}
-                    onClick={() => setDeletingId(null)}
-                  >
-                    No
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <button
-                    className={classes.actionButton}
-                    onClick={() => onEditGeoPdfTemplate(t)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className={classes.iconDeleteButton}
-                    onClick={() => setDeletingId(t.id)}
-                    title="Delete template"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </>
-              )}
+              <button
+                className={classes.actionButton}
+                onClick={() => onEditGeoPdfTemplate(t)}
+              >
+                Edit
+              </button>
+              <button
+                className={classes.iconDeleteButton}
+                onClick={() =>
+                  setPendingDelete({
+                    title: `Delete template “${t.name}”?`,
+                    message:
+                      "This template will be permanently deleted. This cannot be undone.",
+                    onConfirm: () => handleDelete(t.id),
+                  })
+                }
+                title="Delete template"
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
           ))}
         </div>
@@ -246,8 +256,14 @@ function GeoPdfsPanel({
                   {!isInProgress && (
                     <button
                       className={classes.iconDeleteButton}
-                      onClick={() => handleDeleteJob(job.id)}
-                      disabled={deletingJobId === job.id}
+                      onClick={() =>
+                        setPendingDelete({
+                          title: `Delete GeoPDF · ${dateStr}?`,
+                          message:
+                            "This generated GeoPDF will be permanently deleted. This cannot be undone.",
+                          onConfirm: () => handleDeleteJob(job.id),
+                        })
+                      }
                       title="Delete"
                     >
                       <Trash2 size={14} />
@@ -259,6 +275,16 @@ function GeoPdfsPanel({
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={pendingDelete != null}
+        title={pendingDelete?.title ?? ""}
+        message={pendingDelete?.message}
+        confirmLabel={pendingDelete?.confirmLabel}
+        busy={confirmBusy}
+        onConfirm={runConfirm}
+        onClose={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

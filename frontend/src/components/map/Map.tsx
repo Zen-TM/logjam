@@ -279,6 +279,7 @@ function Map({
   selectCanyon,
   pickingCoords,
   onCoordsPicked,
+  onCancelPickCoords,
   showOwnedCanyons,
   showSharedCanyons,
   selectingArea,
@@ -309,6 +310,7 @@ function Map({
   selectCanyon: (id: string | null) => void;
   pickingCoords: boolean;
   onCoordsPicked: (lat: number, lng: number) => void;
+  onCancelPickCoords: () => void;
   showOwnedCanyons: boolean;
   showSharedCanyons: boolean;
   selectingArea: boolean;
@@ -1619,9 +1621,19 @@ function Map({
     <div id="map" className={classes.map} data-sidebar-open={sidebarOpen ? "true" : "false"}>
       <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
       {pickingCoords && (
-        <div className={classes.pickBanner}>
-          Click the map to select a location
-        </div>
+        <>
+          <div className={classes.pickBanner}>
+            Click the map to select a location
+          </div>
+          <div className={classes.geoPdfConfirmBar}>
+            <button
+              className={classes.geoPdfButton}
+              onClick={onCancelPickCoords}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
       )}
       {selectingArea && (
         <div className={classes.pickBanner}>

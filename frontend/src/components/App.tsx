@@ -962,6 +962,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         }}
         pickingCoords={pickingCoords}
         onCoordsPicked={handleCoordsPicked}
+        onCancelPickCoords={cancelPickingCoords}
         selectingArea={selectingArea}
         onAreaSelected={handleAreaSelected}
         selectingBbox={selectingTopoBbox}

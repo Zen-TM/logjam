@@ -280,6 +280,8 @@ function SidebarPanel({
             onChangeFilters={onChangeFilters}
             filtersAccordionSignal={filtersAccordionSignal}
             onFlyToCanyon={onFlyToCanyon}
+            setSelectedCanyonID={setSelectedCanyonID}
+            setActivePanel={setActivePanel}
             canyonCustomFieldDefs={canyonCustomFieldDefs}
           />
         )}
