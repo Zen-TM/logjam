@@ -22,8 +22,10 @@ import { toMediaItem } from "../lib/mediaPresign";
 import {
   mediaCategory,
   categoryHasThumbnail,
+  randomTrackColor,
   MEDIA_SIZE_CAPS,
   MEDIA_EXTENSION_BY_MIME,
+  TRACK_MIME_TYPES,
   type MediaCategory,
 } from "@logjam/shared";
 
@@ -59,6 +61,25 @@ async function assertOwnsTarget(
   } else {
     throw new AppError(400, "Invalid linkedType");
   }
+}
+
+// A canyon may have at most one track (GPX/KML). Trip logs are unconstrained.
+// Checked in both presign (fail fast) and confirm (authoritative — the presign
+// check can race; the orphan sweeper reclaims a blob whose confirm is rejected).
+async function assertCanyonTrackSlotFree(
+  linkedType: string,
+  linkedId: string,
+  category: MediaCategory,
+) {
+  if (linkedType !== "canyon" || category !== "track") return;
+  const existing = await prisma.media.count({
+    where: {
+      linkedType: "canyon",
+      linkedId,
+      mediaType: { in: TRACK_MIME_TYPES as unknown as string[] },
+    },
+  });
+  if (existing > 0) throw new AppError(409, "This canyon already has a track");
 }
 
 function validateMediaType(mediaType: unknown, filename: unknown): MediaCategory {
@@ -108,6 +129,7 @@ router.post(
     // Content-Length below, so S3 rejects uploads that exceed the declaration.
     const sizes = validateUploadSizes(category, sizeBytes, thumbnailSizeBytes);
     await assertOwnsTarget(user.id, linkedType, linkedId);
+    await assertCanyonTrackSlotFree(linkedType, linkedId, category);
     // Headroom pre-check including the declared upload; the authoritative
     // quota charge still happens on confirm against the real S3 size.
     await assertHasStorageQuota(
@@ -162,6 +184,8 @@ router.post(
     await assertOwnsTarget(user.id, linkedType, linkedId);
 
     // Idempotent confirm (ARCH-005): if the row already exists, this confirm
+    // already succeeded — return it (handled below) before the track-slot guard
+    // so a retried confirm of the same row is a no-op, not a spurious 409.
     // already succeeded — return it without re-charging quota, so client
     // retries / double-clicks are benign no-ops. A foreign-owned row can't
     // happen with server-minted UUIDs, but fail closed anyway.
@@ -171,6 +195,8 @@ router.post(
       res.status(200).json(await toMediaItem(existing));
       return;
     }
+
+    await assertCanyonTrackSlotFree(linkedType, linkedId, category);
 
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);
     const expectThumb = categoryHasThumbnail(category);
@@ -235,6 +261,9 @@ router.post(
             mediaType,
             filename,
             fileSizeBytes: totalBytes,
+            // Tracks get a stable random colour from the canonical palette;
+            // image/video media carry none.
+            color: category === "track" ? randomTrackColor() : null,
           },
         });
       });

@@ -113,6 +113,9 @@ model Media {
   mediaType      String   @map("media_type")
   filename       String
   fileSizeBytes  BigInt   @map("file_size_bytes")
+  // Assigned only for track (GPX/KML) media from the shared TRACK_COLORS palette;
+  // null for image/video. Drives the track card icon tint and map track layer.
+  color          String?
   createdAt      DateTime @default(now()) @map("created_at")
   owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 

@@ -18,16 +18,24 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import type { TripLogCustomFieldDef, TripLogCustomFieldType } from "@logjam/shared";
-import { makeCustomFieldKey, coerceFieldValue } from "@logjam/shared";
+import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
+import { makeCustomFieldKey, coerceFieldValue, mediaCategory } from "@logjam/shared";
 import { sanitizeIntegerInput, sanitizeDecimalInput } from "../../numberInput";
 import type { TCanyon } from "../../canyonUtils";
-import { updateCanyon, createCanyon, updateUserPreferences } from "../../canyonUtils";
+import {
+  updateCanyon,
+  createCanyon,
+  deleteCanyon,
+  getCanyonDetail,
+  updateUserPreferences,
+} from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput from "./CustomFieldInput";
 import ConfirmDialog from "./ConfirmDialog";
+import MediaUpload from "../media/MediaUpload";
+import MediaGallery from "../media/MediaGallery";
 import { getFieldValue as getFieldValueFor } from "./customFieldValues";
 
 const V_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -69,6 +77,7 @@ function CanyonDialog({
   onCancelPickCoords,
   customFieldDefs,
   onCustomFieldDefsChange,
+  onMediaChanged,
 }: {
   canyon: TCanyon | null;
   open: boolean;
@@ -78,6 +87,9 @@ function CanyonDialog({
   onCancelPickCoords: () => void;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  // Called after a media/track upload or delete so the opener (canyon detail
+  // panel) can refresh its slideshow/track without waiting for a Save.
+  onMediaChanged?: () => void;
 }) {
   const isEdit = canyon != null;
 
@@ -115,6 +127,15 @@ function CanyonDialog({
   // Custom-field deletion confirmation
   const [fieldToDelete, setFieldToDelete] = useState<TripLogCustomFieldDef | null>(null);
   const [deletingField, setDeletingField] = useState(false);
+
+  // Media. In edit mode the canyon exists; in create mode a draft canyon is
+  // lazily materialised on first upload so files have something to link to
+  // (mirrors TripLogDialog). Cancel deletes an uncommitted draft.
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [draftCanyonId, setDraftCanyonId] = useState<string | null>(null);
+  const committedRef = useRef(false);
+  const draftPromiseRef = useRef<Promise<string> | null>(null);
 
   const pickingRef = useRef(false);
 
@@ -176,7 +197,83 @@ function CanyonDialog({
     setNewFieldMin("");
     setNewFieldMax("");
     setAddFieldError(null);
+    // Reset media/draft tracking each time the dialog opens.
+    setMedia([]);
+    setDraftCanyonId(null);
+    committedRef.current = false;
+    draftPromiseRef.current = null;
   }, [open, canyon]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // In edit mode, fetch the canyon's existing media (fresh presigned URLs).
+  useEffect(() => {
+    if (!open || !canyon) return;
+    const { id } = canyon;
+    setMediaLoading(true);
+    getCanyonDetail(id)
+      .then((detail) => setMedia(detail.media))
+      .catch((err) => {
+        console.error(err);
+        setError(messageFromError(err, "Couldn't load canyon media."));
+      })
+      .finally(() => setMediaLoading(false));
+  }, [open, canyon?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The canyon id media should link to: the real canyon in edit mode, otherwise
+  // a draft created on first upload. Guarded so concurrent uploads create one.
+  function ensureLinkedCanyonId(): Promise<string> {
+    if (canyon) return Promise.resolve(canyon.id);
+    if (draftCanyonId) return Promise.resolve(draftCanyonId);
+    if (draftPromiseRef.current) return draftPromiseRef.current;
+
+    const parsedLat = parseFloat(latitude);
+    const parsedLng = parseFloat(longitude);
+    if (!name.trim() || !latitude || !longitude || isNaN(parsedLat) || isNaN(parsedLng)) {
+      return Promise.reject(new Error("Enter a name and location before adding media."));
+    }
+    const promise = createCanyon({
+      name: name.trim(),
+      latitude: parsedLat,
+      longitude: parsedLng,
+    })
+      .then((created) => {
+        setDraftCanyonId(created.id);
+        return created.id;
+      })
+      .catch((err) => {
+        draftPromiseRef.current = null;
+        throw err;
+      });
+    draftPromiseRef.current = promise;
+    return promise;
+  }
+
+  function handleMediaUploaded(item: MediaItem) {
+    setMedia((prev) => [...prev, item]);
+    onMediaChanged?.();
+  }
+
+  function handleMediaDeleted(id: string) {
+    setMedia((prev) => prev.filter((m) => m.id !== id));
+    onMediaChanged?.();
+  }
+
+  // Cancel/close. If a draft canyon was materialised but never saved, delete it
+  // (cascades its media from S3 + DB + quota) before closing.
+  async function handleRequestClose() {
+    if (saving) return;
+    if (!isEdit && draftCanyonId && !committedRef.current) {
+      try {
+        await deleteCanyon(draftCanyonId);
+        onSaved();
+      } catch (err) {
+        console.error(err);
+        setError(messageFromError(err, "Couldn't discard uploaded media. Please try again."));
+        return;
+      }
+    }
+    onCancelPickCoords();
+    onClose();
+  }
 
   function handlePickCoords() {
     pickingRef.current = true;
@@ -240,9 +337,13 @@ function CanyonDialog({
 
       if (isEdit) {
         await updateCanyon(canyon.id, data);
+      } else if (draftCanyonId) {
+        // A draft was already created to hold uploaded media — persist the form.
+        await updateCanyon(draftCanyonId, data);
       } else {
         await createCanyon(data);
       }
+      committedRef.current = true;
       onSaved();
       onClose();
     } catch (err) {
@@ -349,7 +450,7 @@ function CanyonDialog({
     <Dialog
       fullScreen={isMobile}
       open={open}
-      onClose={saving ? undefined : onClose}
+      onClose={saving ? undefined : () => void handleRequestClose()}
       maxWidth="sm"
       fullWidth
       PaperProps={{
@@ -385,7 +486,7 @@ function CanyonDialog({
         <IconButton
           aria-label="Close dialog"
           size="small"
-          onClick={saving ? undefined : onClose}
+          onClick={saving ? undefined : () => void handleRequestClose()}
           disabled={saving}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -860,15 +961,70 @@ function CanyonDialog({
             </Button>
           </Box>
 
+          {/* Media — photos/videos and a single optional track. In create mode
+              the first upload lazily materialises a draft canyon to link to. */}
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Photos &amp; Videos
+            </Typography>
+            {mediaLoading ? (
+              <Typography variant="body2" sx={{ color: "var(--theme-text-muted)", fontStyle: "italic" }}>
+                Loading media…
+              </Typography>
+            ) : (
+              <MediaGallery
+                media={media}
+                variant="visual"
+                canDelete
+                onDeleted={handleMediaDeleted}
+                emptyText="No photos or videos yet."
+              />
+            )}
+            <MediaUpload
+              category="visual"
+              linkedType="canyon"
+              linkedId={canyon ? canyon.id : ""}
+              resolveLinkedId={canyon ? undefined : ensureLinkedCanyonId}
+              onUploaded={handleMediaUploaded}
+              disabled={saving}
+            />
+          </Box>
+
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Track (GPX/KML)
+            </Typography>
+            {!mediaLoading && (
+              <MediaGallery
+                media={media}
+                variant="tracks"
+                canDelete
+                onDeleted={handleMediaDeleted}
+                emptyText="No track yet."
+              />
+            )}
+            <MediaUpload
+              category="track"
+              maxFiles={1}
+              linkedType="canyon"
+              linkedId={canyon ? canyon.id : ""}
+              resolveLinkedId={canyon ? undefined : ensureLinkedCanyonId}
+              onUploaded={handleMediaUploaded}
+              disabled={saving}
+              disabledReason={
+                media.some((m) => mediaCategory(m.mediaType) === "track")
+                  ? "This canyon already has a track. Delete it to add another."
+                  : undefined
+              }
+            />
+          </Box>
+
           {error && <ErrorBanner message={error} />}
         </Box>
       </DialogContent>
       <DialogActions>
         <Button
-          onClick={() => {
-            onCancelPickCoords();
-            onClose();
-          }}
+          onClick={() => void handleRequestClose()}
           disabled={saving}
           sx={{ color: "var(--theme-text-primary)" }}
         >

@@ -23,6 +23,7 @@ import { TOPO_LAYERS } from "../topoLayerTypes";
 import type { CompletedTopoJob, CompletedOverlaysResponse } from "../topoLayerTypes";
 import {
   useCanyons,
+  useCanyonTracks,
   useSharedCanyons,
   useFriends,
   useNotifications,
@@ -101,6 +102,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   // Layer visibility toggles
   const [showOwnedCanyons, setShowOwnedCanyons] = useLocalStorage("logjam.showOwnedCanyons", true);
   const [showSharedCanyons, setShowSharedCanyons] = useLocalStorage("logjam.showSharedCanyons", true);
+  const [showCanyonTracks, setShowCanyonTracks] = useLocalStorage("logjam.showCanyonTracks", false);
 
   // Coordinate picking mode for CanyonDialog
   const [pickingCoords, setPickingCoords] = useState(false);
@@ -333,6 +335,13 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
   const { canyons, loaded: canyonsLoaded, error: canyonsError, refetch } = useCanyons(authenticated);
   const { canyons: sharedCanyons, error: sharedError, refetch: refetchShared } =
     useSharedCanyons(authenticated);
+  const { tracks: canyonTracks, refetch: refetchCanyonTracks } = useCanyonTracks(
+    authenticated && showCanyonTracks,
+  );
+  // A canyon list change (e.g. after a track upload) should refresh the layer.
+  useEffect(() => {
+    if (showCanyonTracks) refetchCanyonTracks();
+  }, [canyons, sharedCanyons, showCanyonTracks, refetchCanyonTracks]);
   const {
     friends,
     requests: friendRequests,
@@ -856,6 +865,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           setShowOwnedCanyons={setShowOwnedCanyons}
           showSharedCanyons={showSharedCanyons}
           setShowSharedCanyons={setShowSharedCanyons}
+          showCanyonTracks={showCanyonTracks}
+          setShowCanyonTracks={setShowCanyonTracks}
           lidarEnabled={lidarEnabled}
           setLidarEnabled={setLidarEnabled}
           lidarLayerToggles={lidarLayerToggles}
@@ -956,6 +967,8 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         sharedCanyons={sharedCanyons}
         showOwnedCanyons={showOwnedCanyons}
         showSharedCanyons={showSharedCanyons}
+        showCanyonTracks={showCanyonTracks}
+        canyonTracks={canyonTracks}
         selectCanyon={(id) => {
           setSelectedCanyonID(id);
           setActivePanel("canyon-detail");

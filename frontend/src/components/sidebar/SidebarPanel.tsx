@@ -52,6 +52,8 @@ function SidebarPanel({
   setShowOwnedCanyons,
   showSharedCanyons,
   setShowSharedCanyons,
+  showCanyonTracks,
+  setShowCanyonTracks,
   lidarEnabled,
   setLidarEnabled,
   lidarLayerToggles,
@@ -137,6 +139,8 @@ function SidebarPanel({
   setShowOwnedCanyons: (v: boolean) => void;
   showSharedCanyons: boolean;
   setShowSharedCanyons: (v: boolean) => void;
+  showCanyonTracks: boolean;
+  setShowCanyonTracks: (v: boolean) => void;
   lidarEnabled: boolean;
   setLidarEnabled: (v: boolean) => void;
   lidarLayerToggles: Record<string, boolean>;
@@ -254,6 +258,8 @@ function SidebarPanel({
             setShowOwnedCanyons={setShowOwnedCanyons}
             showSharedCanyons={showSharedCanyons}
             setShowSharedCanyons={setShowSharedCanyons}
+            showCanyonTracks={showCanyonTracks}
+            setShowCanyonTracks={setShowCanyonTracks}
             lidarEnabled={lidarEnabled}
             setLidarEnabled={setLidarEnabled}
             lidarLayerToggles={lidarLayerToggles}

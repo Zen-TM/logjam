@@ -23,6 +23,7 @@ function imageRow(overrides: Partial<MediaRow> = {}): MediaRow {
     createdAt: new Date("2026-06-01T00:00:00.000Z"),
     s3KeyDisplay: "display/m1.jpg",
     s3KeyThumbnail: "thumb/m1.jpg",
+    color: null,
     ...overrides,
   };
 }
@@ -38,6 +39,19 @@ describe("toMediaItem", () => {
     expect(item.thumbnailUrl).toContain("thumb/m1.jpg");
     // An inline image is NOT forced to download.
     expect(item.displayUrl).not.toContain("attachment");
+    expect(item.color).toBeNull();
+  });
+
+  it("passes the track colour through to the DTO", async () => {
+    const item = await toMediaItem(
+      imageRow({
+        mediaType: "application/gpx+xml",
+        filename: "route.gpx",
+        s3KeyThumbnail: null,
+        color: "#e6194b",
+      }),
+    );
+    expect(item.color).toBe("#e6194b");
   });
 
   it("forces a download with the original filename for track files", async () => {

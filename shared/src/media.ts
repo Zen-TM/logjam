@@ -37,6 +37,29 @@ export const MEDIA_EXTENSION_BY_MIME: Record<string, string> = {
   "application/vnd.google-earth.kml+xml": "kml",
 };
 
+// Palette assigned to canyon/trip-log tracks at upload time and reused for the
+// track card icon and the map track layer. Hand-picked to be perceptually
+// distinct and legible on the map, avoiding the canyon-marker colours
+// (#f97316 owned, #629bf8 shared) and the topo layer tints.
+export const TRACK_COLORS = [
+  "#e6194b", // red
+  "#3cb44b", // green
+  "#ffe119", // yellow
+  "#911eb4", // purple
+  "#42d4f4", // cyan
+  "#f032e6", // magenta
+  "#bfef45", // lime
+  "#469990", // teal
+  "#9a6324", // brown
+  "#dcbeff", // lavender
+] as const;
+
+// Pick a random colour from the canonical track palette. Assigned server-side
+// when a track is confirmed so the colour is stable across the card and map.
+export function randomTrackColor(): string {
+  return TRACK_COLORS[Math.floor(Math.random() * TRACK_COLORS.length)];
+}
+
 export function mediaCategory(mimeType: string): MediaCategory | null {
   if ((IMAGE_MIME_TYPES as readonly string[]).includes(mimeType)) return "image";
   if ((VIDEO_MIME_TYPES as readonly string[]).includes(mimeType)) return "video";
@@ -61,4 +84,7 @@ export interface MediaItem {
   createdAt: string;
   displayUrl: string;
   thumbnailUrl: string | null;
+  // Assigned only for track (GPX/KML) media; null for image/video. Drives the
+  // track card icon tint and the map track layer colour.
+  color: string | null;
 }
