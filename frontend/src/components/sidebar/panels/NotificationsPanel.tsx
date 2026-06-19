@@ -133,19 +133,7 @@ function NotificationsPanel({
   );
 
   return (
-    <>
-      <div className={classes.header}>
-        <button
-          className={classes.markAllReadButton}
-          onClick={async () => {
-            await markAllNotificationsRead();
-            onRefetchNotifications();
-          }}
-        >
-          Mark all read
-        </button>
-      </div>
-
+    <div className={classes.root}>
       <div className={classes.notificationList}>
         {visibleNotifications.length === 0 ? (
           <span className={classes.emptyText}>No notifications.</span>
@@ -301,18 +289,31 @@ function NotificationsPanel({
         )}
       </div>
 
-      {visibleNotifications.some((n) => n.read) && (
+      {/* Low-frequency actions */}
+      <div className={classes.footerActions}>
+        <div className={classes.divider} />
         <button
-          className={classes.clearAllButton}
+          className={classes.markAllReadButton}
           onClick={async () => {
-            await clearReadNotifications();
+            await markAllNotificationsRead();
             onRefetchNotifications();
           }}
         >
-          Clear read notifications
+          Mark all read
         </button>
-      )}
-    </>
+        {visibleNotifications.some((n) => n.read) && (
+          <button
+            className={classes.clearAllButton}
+            onClick={async () => {
+              await clearReadNotifications();
+              onRefetchNotifications();
+            }}
+          >
+            Clear read notifications
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

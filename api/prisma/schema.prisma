@@ -87,6 +87,7 @@ model TripLog {
   canyonId     String?  @map("canyon_id")
   userId       String   @map("user_id")
   date         DateTime
+  displayName  String?  @map("display_name")
   notes        String?
   customFields Json     @default("{}") @map("custom_fields")
   createdAt    DateTime @default(now()) @map("created_at")

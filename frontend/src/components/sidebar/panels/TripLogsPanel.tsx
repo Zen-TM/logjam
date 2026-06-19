@@ -17,6 +17,7 @@ function TripLogsPanel({
   onPickCoords,
   pickingCoords,
   onQuotaChanged,
+  onRefetchCanyons,
 }: {
   tripLogs: TTripLog[];
   loading: boolean;
@@ -28,6 +29,7 @@ function TripLogsPanel({
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
   onQuotaChanged: () => void;
+  onRefetchCanyons: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -43,7 +45,10 @@ function TripLogsPanel({
     return tripLogs.filter((t) => {
       if (search.trim()) {
         const q = search.toLowerCase();
-        if (!t.canyon?.name.toLowerCase().includes(q)) return false;
+        const nameMatch =
+          t.canyon?.name.toLowerCase().includes(q) ||
+          t.displayName?.toLowerCase().includes(q);
+        if (!nameMatch) return false;
       }
       if (dateFrom) {
         if (new Date(t.date) < new Date(dateFrom)) return false;
@@ -68,10 +73,10 @@ function TripLogsPanel({
         <input
           type="text"
           className={classes.searchInput}
-          placeholder="Search by canyon name..."
+          placeholder="Search by canyon or trip name..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          aria-label="Search trip logs by canyon name"
+          aria-label="Search trip logs by canyon or trip name"
         />
         <div className={classes.dateRow}>
           <label className={classes.dateField}>
@@ -113,7 +118,7 @@ function TripLogsPanel({
               }}
             >
               <span className={classes.canyonName}>
-                {trip.canyon?.name ?? "No canyon"}
+                {trip.canyon?.name ?? trip.displayName ?? "No canyon"}
               </span>
               <span className={classes.tripDate}>
                 {new Date(trip.date).toLocaleDateString("en-AU", {
@@ -148,7 +153,7 @@ function TripLogsPanel({
           setViewingTripLog(null);
         }}
         tripLog={viewingTripLog}
-        canyonName={viewingTripLog?.canyon?.name ?? "No canyon"}
+        canyonName={viewingTripLog?.canyon?.name ?? viewingTripLog?.displayName ?? "No canyon"}
         customFieldDefs={customFieldDefs}
         onMediaChanged={onQuotaChanged}
         onEdit={() => {
@@ -167,7 +172,7 @@ function TripLogsPanel({
       {/* Edit dialog */}
       {editingTripLog && (
         <TripLogDialog
-          open={showEditDialog}
+          open={showEditDialog && !pickingCoords}
           onClose={() => {
             setShowEditDialog(false);
             setEditingTripLog(undefined);
@@ -182,12 +187,14 @@ function TripLogsPanel({
           tripLog={editingTripLog}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={onCustomFieldDefsChange}
+          onPickCoords={onPickCoords}
+          onCanyonCreated={onRefetchCanyons}
         />
       )}
 
-      {/* Create dialog (canyon optional, defaults to None) */}
+      {/* Create dialog */}
       <TripLogDialog
-        open={showCreateDialog}
+        open={showCreateDialog && !pickingCoords}
         onClose={() => setShowCreateDialog(false)}
         onSaved={() => {
           setShowCreateDialog(false);
@@ -198,6 +205,8 @@ function TripLogsPanel({
         canyons={canyons}
         customFieldDefs={customFieldDefs}
         onCustomFieldDefsChange={onCustomFieldDefsChange}
+        onPickCoords={onPickCoords}
+        onCanyonCreated={onRefetchCanyons}
       />
 
       {/* CSV import dialog */}

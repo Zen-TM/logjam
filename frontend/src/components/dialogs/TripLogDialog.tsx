@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
@@ -11,7 +11,9 @@ import {
   TextField,
   Typography,
   Box,
+  Chip,
   CircularProgress,
+  createFilterOptions,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { ErrorBanner } from "../feedback/ErrorBanner";
@@ -23,6 +25,7 @@ import {
   updateTripLog,
   deleteTripLog,
   getTripLog,
+  createCanyon,
   updateUserPreferences,
 } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
@@ -38,6 +41,27 @@ function todayDateString(): string {
   return new Date().toISOString().split("T")[0];
 }
 
+// ── Canyon option union ──────────────────────────────────────
+type CanyonOption =
+  | { kind: "existing"; canyon: TCanyon }
+  | { kind: "no-marker"; name: string }
+  | { kind: "create"; name: string };
+
+function getOptionLabel(opt: CanyonOption | string): string {
+  if (typeof opt === "string") return opt;
+  switch (opt.kind) {
+    case "existing":
+      return opt.canyon.name;
+    case "no-marker":
+    case "create":
+      return opt.name;
+  }
+}
+
+const canyonFilter = createFilterOptions<CanyonOption>();
+
+type CreateForm = { name: string; latitude: string; longitude: string };
+
 function TripLogDialog({
   open,
   onClose,
@@ -47,6 +71,8 @@ function TripLogDialog({
   tripLog,
   customFieldDefs,
   onCustomFieldDefsChange,
+  onPickCoords,
+  onCanyonCreated,
 }: {
   open: boolean;
   onClose: () => void;
@@ -58,11 +84,18 @@ function TripLogDialog({
   tripLog?: TTripLog;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  onPickCoords?: (onPicked: (lat: number, lng: number) => void) => void;
+  // Fired when an inline "Create new canyon" makes a real canyon, so the parent
+  // can refetch the canyon list/map (otherwise the new marker only shows after a
+  // manual refresh).
+  onCanyonCreated?: () => void;
 }) {
   const isMobile = useIsMobile();
   const [date, setDate] = useState(todayDateString());
   const [notes, setNotes] = useState("");
   const [selectedCanyonId, setSelectedCanyonId] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [creating, setCreating] = useState<CreateForm | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +109,8 @@ function TripLogDialog({
   const committedRef = useRef(false);
   // De-dupes concurrent draft creation when several files upload at once.
   const draftPromiseRef = useRef<Promise<string> | null>(null);
+  // Tracks pick-on-map cycle so the reset useEffect skips when returning.
+  const pickingRef = useRef(false);
 
   // Add custom field form state
   const [showAddField, setShowAddField] = useState(false);
@@ -87,15 +122,58 @@ function TripLogDialog({
   const [addingField, setAddingField] = useState(false);
   const [addFieldError, setAddFieldError] = useState<string | null>(null);
 
+  // Pre-wrap existing canyons as options once
+  const existingOptions: CanyonOption[] = useMemo(
+    () => canyons.map((c) => ({ kind: "existing" as const, canyon: c })),
+    [canyons],
+  );
+
+  // The current selection rendered as the Autocomplete value. All three modes
+  // (existing marker / named-only / inline-create) are real option values, so
+  // the Autocomplete stays the single source of truth — no freeSolo string path
+  // to clobber state on blur.
+  const canyonValue: CanyonOption | null = useMemo(() => {
+    if (creating) return { kind: "create", name: creating.name };
+    if (displayName !== null) return { kind: "no-marker", name: displayName };
+    if (selectedCanyonId) {
+      const c = canyons.find((c) => c.id === selectedCanyonId);
+      return c ? { kind: "existing", canyon: c } : null;
+    }
+    return null;
+  }, [creating, displayName, selectedCanyonId, canyons]);
+
+  // Keep a synthetic value present among options so MUI doesn't warn about an
+  // out-of-list value; the dropdown contents are governed by filterOptions.
+  const canyonOptions: CanyonOption[] = useMemo(
+    () =>
+      canyonValue && canyonValue.kind !== "existing"
+        ? [...existingOptions, canyonValue]
+        : existingOptions,
+    [existingOptions, canyonValue],
+  );
+
+  function clearCanyonSelection() {
+    setSelectedCanyonId(null);
+    setDisplayName(null);
+    setCreating(null);
+  }
+
   // Populate form when opening for edit (or reset on create).
   // We intentionally exclude customFieldDefs from deps — field defs shouldn't
   // reset the form values just because a new field was added mid-session.
   useEffect(() => {
     if (!open) return;
+    // Returning from a pick-on-map cycle — don't reset form state.
+    if (pickingRef.current) {
+      pickingRef.current = false;
+      return;
+    }
     if (tripLog) {
       setDate(tripLog.date.split("T")[0]);
       setNotes(tripLog.notes ?? "");
       setSelectedCanyonId(tripLog.canyonId);
+      setDisplayName(tripLog.canyonId ? null : tripLog.displayName ?? null);
+      setCreating(null);
       // Populate existing custom field values as strings
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
@@ -107,6 +185,8 @@ function TripLogDialog({
       setDate(todayDateString());
       setNotes("");
       setSelectedCanyonId(defaultCanyonId);
+      setDisplayName(null);
+      setCreating(null);
       setFieldValues({});
     }
     setError(null);
@@ -134,6 +214,31 @@ function TripLogDialog({
       .finally(() => setMediaLoading(false));
   }, [open, tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Resolve the trip payload (canyonId + displayName) from the current canyon
+  // selection state, potentially creating a new canyon inline.
+  async function resolveCanyonPayload(): Promise<{
+    canyonId: string | null;
+    displayName: string | null;
+  }> {
+    if (creating) {
+      if (!creating.name.trim()) throw new Error("Canyon name is required.");
+      const lat = parseFloat(creating.latitude);
+      const lng = parseFloat(creating.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng))
+        throw new Error("Valid latitude and longitude are required.");
+      const c = await createCanyon({
+        name: creating.name.trim(),
+        latitude: lat,
+        longitude: lng,
+      });
+      onCanyonCreated?.();
+      return { canyonId: c.id, displayName: null };
+    }
+    if (displayName) return { canyonId: null, displayName };
+    if (selectedCanyonId) return { canyonId: selectedCanyonId, displayName: null };
+    throw new Error("Choose a canyon or name your trip.");
+  }
+
   // The trip id media should link to: a real trip in edit mode, otherwise a
   // draft created on first upload. Guarded so concurrent uploads create one trip.
   function ensureLinkedTripId(): Promise<string> {
@@ -145,11 +250,13 @@ function TripLogDialog({
     for (const def of customFieldDefs) {
       customFields[def.key] = coerceFieldValue(getFieldValue(def.key), def.type);
     }
+    // Draft trips need a displayName or canyonId so the API accepts them.
     const promise = createTripLog({
       date,
       notes: notes || null,
       customFields,
       canyonId: selectedCanyonId,
+      displayName: selectedCanyonId ? null : displayName || "Draft",
     })
       .then((trip) => {
         setDraftTripId(trip.id);
@@ -195,6 +302,18 @@ function TripLogDialog({
     setFieldValues((prev) => ({ ...prev, [key]: value }));
   }
 
+  function handlePickCoords() {
+    if (!onPickCoords) return;
+    pickingRef.current = true;
+    onPickCoords((lat, lng) => {
+      setCreating((prev) =>
+        prev
+          ? { ...prev, latitude: lat.toFixed(6), longitude: lng.toFixed(6) }
+          : { name: "", latitude: lat.toFixed(6), longitude: lng.toFixed(6) },
+      );
+    });
+  }
+
   async function handleSave() {
     if (!date) {
       setError("Date is required.");
@@ -203,6 +322,9 @@ function TripLogDialog({
     setSaving(true);
     setError(null);
     try {
+      // Resolve canyon selection (may create a canyon inline)
+      const canyonPayload = await resolveCanyonPayload();
+
       // Build custom fields object — only include defined fields
       const customFields: Record<string, unknown> = {};
       for (const def of customFieldDefs) {
@@ -215,7 +337,7 @@ function TripLogDialog({
           date,
           notes: notes || null,
           customFields,
-          canyonId: selectedCanyonId,
+          ...canyonPayload,
         });
       } else if (draftTripId) {
         // A draft was already created to hold uploaded files — persist the form.
@@ -223,14 +345,14 @@ function TripLogDialog({
           date,
           notes: notes || null,
           customFields,
-          canyonId: selectedCanyonId,
+          ...canyonPayload,
         });
       } else {
         await createTripLog({
           date,
           notes: notes || null,
           customFields,
-          canyonId: selectedCanyonId,
+          ...canyonPayload,
         });
       }
       committedRef.current = true;
@@ -307,18 +429,94 @@ function TripLogDialog({
 
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          {/* Canyon (optional — defaults to None) */}
-          <Autocomplete
-            options={canyons}
-            getOptionLabel={(c) => c.name}
+          {/* Canyon — search an existing marker, name the trip with no marker,
+             or create a new canyon inline. All three are selectable option
+             values (no freeSolo), so MUI never reduces a typed string to null
+             and clobbers the selection. The lat/long row below appears when the
+             "Create new canyon" option is chosen. */}
+          <Autocomplete<CanyonOption, false, false, false>
+            options={canyonOptions}
+            getOptionLabel={getOptionLabel}
+            getOptionKey={(option) =>
+              // no-marker and create share the typed text as their label; without
+              // distinct keys React reconciles them as one option and leaves stale
+              // ghost rows from prior keystrokes.
+              option.kind === "existing"
+                ? option.canyon.id
+                : `${option.kind}:${option.name}`
+            }
+            value={canyonValue}
+            onChange={(_, val) => {
+              if (!val) {
+                clearCanyonSelection();
+                return;
+              }
+              switch (val.kind) {
+                case "existing":
+                  setSelectedCanyonId(val.canyon.id);
+                  setDisplayName(null);
+                  setCreating(null);
+                  break;
+                case "no-marker":
+                  setSelectedCanyonId(null);
+                  setDisplayName(val.name);
+                  setCreating(null);
+                  break;
+                case "create":
+                  setSelectedCanyonId(null);
+                  setDisplayName(null);
+                  setCreating((prev) => ({
+                    name: val.name,
+                    latitude: prev?.latitude ?? "",
+                    longitude: prev?.longitude ?? "",
+                  }));
+                  break;
+              }
+            }}
+            filterOptions={(options, params) => {
+              // Filter only real canyons; always re-append fresh synthetic
+              // options for the typed text so "no marker" / "create" are offered.
+              const existing = options.filter((o) => o.kind === "existing");
+              const filtered = canyonFilter(existing, params);
+              const input = params.inputValue.trim();
+              if (input) {
+                filtered.push(
+                  { kind: "no-marker", name: input },
+                  { kind: "create", name: input },
+                );
+              }
+              return filtered;
+            }}
+            isOptionEqualToValue={(opt, val) => {
+              if (opt.kind !== val.kind) return false;
+              if (opt.kind === "existing" && val.kind === "existing")
+                return opt.canyon.id === val.canyon.id;
+              return getOptionLabel(opt) === getOptionLabel(val);
+            }}
+            renderOption={(props, option) => {
+              const { key, ...rest } = props as React.HTMLAttributes<HTMLLIElement> & { key: string };
+              return (
+                <li key={key} {...rest}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, width: "100%" }}>
+                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {getOptionLabel(option)}
+                    </span>
+                    {option.kind === "no-marker" && (
+                      <Chip label="No canyon marker" size="small" sx={{ fontSize: "0.7em", height: 20 }} />
+                    )}
+                    {option.kind === "create" && (
+                      <Chip label="Create new canyon" size="small" color="primary" sx={{ fontSize: "0.7em", height: 20 }} />
+                    )}
+                  </Box>
+                </li>
+              );
+            }}
             size="small"
-            value={canyons.find((c) => c.id === selectedCanyonId) ?? null}
-            onChange={(_, c) => setSelectedCanyonId(c?.id ?? null)}
             renderInput={(params) => (
               <TextField
                 {...params}
-                label="Canyon (optional)"
-                placeholder="None"
+                label="Canyon"
+                placeholder="Search canyons or name this trip"
                 size="small"
                 sx={fieldSx}
               />
@@ -330,6 +528,48 @@ function TripLogDialog({
             )}
             sx={{ "& .MuiInputBase-input": { color: "var(--theme-text-primary)" } }}
           />
+
+          {/* Inline canyon creation — lat/long + pick on map. Name comes from
+              the canyon field text; no separate name input. */}
+          {creating && (
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <TextField
+                label="Latitude"
+                value={creating.latitude}
+                onChange={(e) =>
+                  setCreating((prev) => (prev ? { ...prev, latitude: e.target.value } : prev))
+                }
+                size="small"
+                sx={{ ...fieldSx, flex: 1 }}
+                placeholder="-33.123456"
+              />
+              <TextField
+                label="Longitude"
+                value={creating.longitude}
+                onChange={(e) =>
+                  setCreating((prev) => (prev ? { ...prev, longitude: e.target.value } : prev))
+                }
+                size="small"
+                sx={{ ...fieldSx, flex: 1 }}
+                placeholder="150.123456"
+              />
+              {onPickCoords && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={handlePickCoords}
+                  sx={{
+                    borderColor: "var(--theme-accent)",
+                    color: "var(--theme-accent)",
+                    flexShrink: 0,
+                    fontSize: "0.75em",
+                  }}
+                >
+                  Pick on map
+                </Button>
+              )}
+            </Box>
+          )}
 
           {/* Date */}
           <TextField

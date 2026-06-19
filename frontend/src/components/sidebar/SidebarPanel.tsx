@@ -361,6 +361,7 @@ function SidebarPanel({
             onPickCoords={onPickCoords}
             pickingCoords={pickingCoords}
             onQuotaChanged={onQuotaChanged}
+            onRefetchCanyons={onRefetch}
           />
         )}
         {activePanel === "account" && <AccountPanel currentUser={currentUser} />}

@@ -57,6 +57,7 @@ export type TTripLog = {
   canyonId: string | null;
   userId: string;
   date: string;
+  displayName: string | null;
   notes: string | null;
   customFields: Record<string, unknown>;
   createdAt: string;
@@ -548,6 +549,7 @@ export function createTripLog(data: {
   notes?: string | null;
   customFields?: Record<string, unknown>;
   canyonId?: string | null;
+  displayName?: string | null;
 }): Promise<TTripLog> {
   return apiFetch<TTripLog>("/trips", {
     method: "POST",
@@ -562,6 +564,7 @@ export function updateTripLog(
     notes?: string | null;
     customFields?: Record<string, unknown>;
     canyonId?: string | null;
+    displayName?: string | null;
   },
 ): Promise<TTripLog> {
   return apiFetch<TTripLog>(`/trips/${id}`, {
