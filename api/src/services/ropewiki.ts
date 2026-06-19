@@ -263,7 +263,7 @@ function parseLongestRappel(value: string): number | null {
   return null;
 }
 
-/** Parse "5 hours" or "4-6 hours" to a number. */
+/** Parse a time string like "5 hours", "4-6 hours", or "5 hr" to a number. */
 function parseHours(value: string): number | null {
   if (!value || !value.trim()) return null;
   const rangeMatch = value.match(/([\d.]+)\s*-\s*([\d.]+)/);
@@ -346,6 +346,7 @@ export async function fetchAndParseRopeWiki(): Promise<{
   const ratingCol = optionalCol("rating");
   const rappelsCol = optionalCol("rappels", "number of rappels");
   const longestCol = optionalCol("longest", "longest rappel");
+  const maxTimeCol = optionalCol("max time");
   const timeCol = optionalCol("min time", "time");
 
   const canyons: RopeWikiCanyon[] = [];
@@ -383,7 +384,9 @@ export async function fetchAndParseRopeWiki(): Promise<{
         rappelsCol >= 0 ? parseRappels(row[rappelsCol] || "") : null;
       const longestAbseil =
         longestCol >= 0 ? parseLongestRappel(row[longestCol] || "") : null;
-      const hours = timeCol >= 0 ? parseHours(row[timeCol] || "") : null;
+      const maxTimeRaw = maxTimeCol >= 0 ? row[maxTimeCol] || "" : "";
+      const minTimeRaw = timeCol >= 0 ? row[timeCol] || "" : "";
+      const hours = parseHours(maxTimeRaw) ?? parseHours(minTimeRaw);
 
       canyons.push({
         ropeWikiId: pageId,
