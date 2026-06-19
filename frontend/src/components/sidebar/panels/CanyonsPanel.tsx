@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { ChevronDown, X } from "lucide-react";
 import { Slider, Switch } from "@mui/material";
 import classes from "./CanyonsPanel.module.css";
@@ -10,6 +10,7 @@ import type {
 } from "../../../canyonUtils";
 import { refreshFromRopeWiki, passesFilters, activeFilterCount } from "../../../canyonUtils";
 import type { RefreshResult } from "../../../canyonUtils";
+import type { PanelId } from "../panels";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { customFieldDisplayLabel } from "@logjam/shared";
 import RopeWikiReviewDialog from "../../dialogs/RopeWikiReviewDialog";
@@ -58,6 +59,8 @@ function CanyonsPanel({
   onChangeFilters,
   filtersAccordionSignal,
   onFlyToCanyon,
+  setSelectedCanyonID,
+  setActivePanel,
   canyonCustomFieldDefs,
 }: {
   canyons: TCanyon[];
@@ -72,49 +75,13 @@ function CanyonsPanel({
   onChangeFilters: (f: TFilters) => void;
   filtersAccordionSignal: number;
   onFlyToCanyon: (lat: number, lng: number) => void;
+  setSelectedCanyonID: (id: string | null) => void;
+  setActivePanel: (panel: PanelId | null) => void;
   canyonCustomFieldDefs: TripLogCustomFieldDef[];
 }) {
-  // Search
+  // Search: a substring query that filters the canyon cards below (matches the
+  // primary name or any alternative name). ANDs with the filters.
   const [query, setQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
-  // Active option for keyboard navigation of the search-results listbox (-1 = none).
-  const [activeIndex, setActiveIndex] = useState(-1);
-  const searchRef = useRef<HTMLDivElement>(null);
-
-  const results =
-    query.length >= 3
-      ? [...canyons, ...sharedCanyons].filter((c) => {
-          const q = query.toLowerCase();
-          if (c.name.toLowerCase().includes(q)) return true;
-          return c.altNames.some((a) => a.toLowerCase().includes(q));
-        })
-      : [];
-
-  function handleFlyTo(c: TCanyon) {
-    setQuery("");
-    setSearchOpen(false);
-    setActiveIndex(-1);
-    onFlyToCanyon(c.latitude, c.longitude);
-  }
-
-  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    const shown = results.slice(0, 8);
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setSearchOpen(true);
-      setActiveIndex((i) => Math.min(shown.length - 1, i + 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIndex((i) => Math.max(0, i - 1));
-    } else if (e.key === "Enter") {
-      if (activeIndex >= 0 && activeIndex < shown.length) handleFlyTo(shown[activeIndex]);
-      else if (results.length === 1) handleFlyTo(results[0]);
-    } else if (e.key === "Escape") {
-      setQuery("");
-      setSearchOpen(false);
-      setActiveIndex(-1);
-    }
-  }
 
   // Filters accordion
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -126,17 +93,21 @@ function CanyonsPanel({
 
   // Live results below the controls (owned bucket vs shared bucket — ownership
   // is structural, so each list is filtered with its own isOwned flag).
-  const filteredCanyons = useMemo(
-    () => [
+  const filteredCanyons = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const matchesSearch = (c: TCanyon) =>
+      q === "" ||
+      c.name.toLowerCase().includes(q) ||
+      c.altNames.some((a) => a.toLowerCase().includes(q));
+    return [
       ...canyons
-        .filter((c) => passesFilters(c, filters, true))
+        .filter((c) => matchesSearch(c) && passesFilters(c, filters, true))
         .map((c) => ({ canyon: c, owned: true })),
       ...sharedCanyons
-        .filter((c) => passesFilters(c, filters, false))
+        .filter((c) => matchesSearch(c) && passesFilters(c, filters, false))
         .map((c) => ({ canyon: c, owned: false })),
-    ],
-    [canyons, sharedCanyons, filters],
-  );
+    ];
+  }, [canyons, sharedCanyons, filters, query]);
 
   // ── Live filtering ─────────────────────────────────────────────
   // Sliders keep a local draft so the thumb tracks the drag smoothly; the
@@ -656,52 +627,6 @@ function CanyonsPanel({
 
   return (
     <div className={classes.root}>
-      {/* Search */}
-      <div className={classes.searchWrapper} ref={searchRef}>
-        <input
-          className={classes.searchInput}
-          type="text"
-          role="combobox"
-          aria-label="Search canyons"
-          aria-expanded={searchOpen && results.length > 0}
-          aria-controls="canyon-search-results"
-          aria-autocomplete="list"
-          aria-activedescendant={
-            activeIndex >= 0 ? `canyon-search-opt-${activeIndex}` : undefined
-          }
-          placeholder="Search canyons…"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setSearchOpen(e.target.value.length >= 3);
-            setActiveIndex(-1);
-          }}
-          onKeyDown={handleSearchKeyDown}
-          onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
-          onFocus={() => { if (query.length >= 3) setSearchOpen(true); }}
-        />
-        {searchOpen && results.length > 0 && (
-          <ul className={classes.searchResults} id="canyon-search-results" role="listbox">
-            {results.slice(0, 8).map((c, idx) => (
-              <li key={c.id} role="presentation">
-                <button
-                  id={`canyon-search-opt-${idx}`}
-                  role="option"
-                  aria-selected={idx === activeIndex}
-                  className={`${classes.searchResultItem} ${idx === activeIndex ? classes.searchResultItemActive : ""}`}
-                  onMouseDown={(e) => { e.preventDefault(); handleFlyTo(c); }}
-                >
-                  {c.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {searchOpen && query.length >= 3 && results.length === 0 && (
-          <div className={classes.searchEmpty} role="status" aria-live="polite">No matches</div>
-        )}
-      </div>
-
       {/* Primary actions */}
       <div className={classes.actions}>
         <button className={classes.addButton} onClick={onAddCanyon}>
@@ -713,6 +638,28 @@ function CanyonsPanel({
         >
           {selectingArea ? "Cancel Selection" : "Select Canyons"}
         </button>
+      </div>
+
+      {/* Search — filters the cards below (by name or alternative names) */}
+      <div className={classes.searchWrapper}>
+        <input
+          className={classes.searchInput}
+          type="text"
+          aria-label="Search canyons"
+          placeholder="Search canyons…"
+          value={query}
+          onChange={(e) => {
+            const next = e.target.value;
+            // Collapse the filters accordion the instant a search begins so the
+            // cards sit right under the search box. Only on the empty→typed
+            // transition — don't fight a user who reopened filters mid-search.
+            if (query.trim() === "" && next.trim() !== "") setFiltersOpen(false);
+            setQuery(next);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setQuery("");
+          }}
+        />
       </div>
 
       {/* Filters accordion */}
@@ -806,7 +753,9 @@ function CanyonsPanel({
         </div>
         {filteredCanyons.length === 0 ? (
           <span className={classes.resultsEmpty}>
-            No canyons match the current filters.
+            {query.trim() !== "" || activeCount > 0
+              ? "No canyons match your search and filters."
+              : "No canyons yet."}
           </span>
         ) : (
           <div className={classes.resultsList}>
@@ -818,7 +767,11 @@ function CanyonsPanel({
                 <button
                   key={canyon.id}
                   className={classes.resultCard}
-                  onClick={() => onFlyToCanyon(canyon.latitude, canyon.longitude)}
+                  onClick={() => {
+                    onFlyToCanyon(canyon.latitude, canyon.longitude);
+                    setSelectedCanyonID(canyon.id);
+                    setActivePanel("canyon-detail");
+                  }}
                 >
                   <span className={classes.resultName}>{canyon.name}</span>
                   {meta && <span className={classes.resultMeta}>{meta}</span>}

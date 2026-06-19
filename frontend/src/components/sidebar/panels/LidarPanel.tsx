@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import type { ReactNode } from "react";
 import { Switch, LinearProgress } from "@mui/material";
 import { ChevronDown, Lock, X, Download, Trash2 } from "lucide-react";
 import classes from "./LidarPanel.module.css";
@@ -12,7 +13,16 @@ import TopoExportDialog from "../../dialogs/TopoExportDialog";
 import VectorContoursForm from "./vectorStyles/VectorContoursForm";
 import VectorFeaturesForm from "./vectorStyles/VectorFeaturesForm";
 import VectorLabelSizeForm from "./vectorStyles/VectorLabelSizeForm";
+import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import type { VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
+
+/** Descriptor for the shared confirm dialog — one delete kind at a time. */
+type PendingDelete = {
+  title: string;
+  message: ReactNode;
+  confirmLabel?: string;
+  onConfirm: () => Promise<void> | void;
+};
 
 
 function formatBytes(n: number | null): string {
@@ -93,7 +103,11 @@ function LidarPanel({
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [templateEditOpen, setTemplateEditOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<TopoTemplate | null>(null);
-  const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
+
+  // Single shared delete-confirmation dialog, reused for templates, topo jobs,
+  // and exports. `confirmBusy` disables the dialog while the action runs.
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   // Vector styles accordion — controlled by App; edits apply live to the map
   // (optimistic) and the server PUT is debounced inside useLiveVectorStyle.
@@ -102,7 +116,6 @@ function LidarPanel({
 
   // Topo jobs accordion
   const [jobsOpen, setJobsOpen] = useState(false);
-  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
 
   // Active jobs: show first 3, rest behind disclosure
   const [showAllActive, setShowAllActive] = useState(false);
@@ -112,7 +125,6 @@ function LidarPanel({
 
   // Exports accordion
   const [exportsOpen, setExportsOpen] = useState(false);
-  const [deletingExportId, setDeletingExportId] = useState<string | null>(null);
 
   // Resolve an export's source job to a display name. The source job may have
   // been deleted since the export was created.
@@ -148,7 +160,6 @@ function LidarPanel({
       try {
         await apiFetch(`/topo-templates/${id}`, { method: "DELETE" });
         setTemplates((prev) => prev.filter((t) => t.id !== id));
-        setDeletingTemplateId(null);
       } catch (err) {
         console.error(err);
         toast.error(messageFromError(err, "Couldn't delete template. Please try again."));
@@ -166,7 +177,6 @@ function LidarPanel({
           delete next[jobId];
           return next;
         });
-        setDeletingJobId(null);
         onRefetchCompletedTopoJobs();
         onQuotaChanged();
       } catch (err) {
@@ -179,7 +189,6 @@ function LidarPanel({
 
   const handleDeleteExport = useCallback(
     async (id: string) => {
-      setDeletingExportId(id);
       try {
         await deleteTopoExport(id);
         onRefetchTopoExports();
@@ -187,12 +196,24 @@ function LidarPanel({
       } catch (err) {
         console.error(err);
         toast.error(messageFromError(err, "Couldn't delete export."));
-      } finally {
-        setDeletingExportId(null);
       }
     },
     [onRefetchTopoExports, onQuotaChanged, toast],
   );
+
+  // Runs the pending delete's action with the dialog in a busy state, then
+  // closes the dialog. The handlers above swallow their own errors (toast), so
+  // we always close on settle.
+  const runConfirm = useCallback(async () => {
+    if (!pendingDelete) return;
+    setConfirmBusy(true);
+    try {
+      await pendingDelete.onConfirm();
+    } finally {
+      setConfirmBusy(false);
+      setPendingDelete(null);
+    }
+  }, [pendingDelete]);
 
   // Active jobs with cap-and-disclose
   const activeVisible = showAllActive ? activeTopoJobs : activeTopoJobs.slice(0, 3);
@@ -289,32 +310,31 @@ function LidarPanel({
                 </button>
 
                 {!t.isSystem && (
-                  deletingTemplateId === t.id ? (
-                    <div className={classes.confirmRow}>
-                      <span className={classes.confirmText}>Delete?</span>
-                      <button className={classes.confirmYes} onClick={() => handleDeleteTemplate(t.id)}>Yes</button>
-                      <button className={classes.confirmNo} onClick={() => setDeletingTemplateId(null)}>No</button>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        className={classes.actionButton}
-                        onClick={() => {
-                          setEditingTemplate(t);
-                          setTemplateEditOpen(true);
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className={classes.iconDeleteButton}
-                        onClick={() => setDeletingTemplateId(t.id)}
-                        title="Delete template"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </>
-                  )
+                  <>
+                    <button
+                      className={classes.actionButton}
+                      onClick={() => {
+                        setEditingTemplate(t);
+                        setTemplateEditOpen(true);
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className={classes.iconDeleteButton}
+                      onClick={() =>
+                        setPendingDelete({
+                          title: `Delete template “${t.name}”?`,
+                          message:
+                            "This template will be permanently deleted. This cannot be undone.",
+                          onConfirm: () => handleDeleteTemplate(t.id),
+                        })
+                      }
+                      title="Delete template"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </>
                 )}
               </div>
             ))}
@@ -428,30 +448,27 @@ function LidarPanel({
                       <span className={classes.jobSubtitle}>{subtitle}</span>
                     )}
                   </button>
-                  {deletingJobId === job.jobId ? (
-                    <div className={classes.confirmRow}>
-                      <span className={classes.confirmText}>Delete?</span>
-                      <button className={classes.confirmYes} onClick={() => handleDeleteJob(job.jobId)}>Yes</button>
-                      <button className={classes.confirmNo} onClick={() => setDeletingJobId(null)}>No</button>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        className={classes.actionButton}
-                        onClick={() => setExportJob(job)}
-                        title="Export"
-                      >
-                        Export
-                      </button>
-                      <button
-                        className={classes.iconDeleteButton}
-                        onClick={() => setDeletingJobId(job.jobId)}
-                        title="Delete LiDAR topo"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </>
-                  )}
+                  <button
+                    className={classes.actionButton}
+                    onClick={() => setExportJob(job)}
+                    title="Export"
+                  >
+                    Export
+                  </button>
+                  <button
+                    className={classes.iconDeleteButton}
+                    onClick={() =>
+                      setPendingDelete({
+                        title: `Delete “${label}”?`,
+                        message:
+                          "This LiDAR topo will be permanently deleted. This cannot be undone.",
+                        onConfirm: () => handleDeleteJob(job.jobId),
+                      })
+                    }
+                    title="Delete LiDAR topo"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               );
             })}
@@ -514,8 +531,14 @@ function LidarPanel({
                   {!isInProgress && (
                     <button
                       className={classes.iconDeleteButton}
-                      onClick={() => handleDeleteExport(ex.id)}
-                      disabled={deletingExportId === ex.id}
+                      onClick={() =>
+                        setPendingDelete({
+                          title: `Delete export “${jobLabel}”?`,
+                          message:
+                            "This export will be permanently deleted. This cannot be undone.",
+                          onConfirm: () => handleDeleteExport(ex.id),
+                        })
+                      }
                       title="Delete export"
                     >
                       <Trash2 size={14} />
@@ -540,6 +563,16 @@ function LidarPanel({
         onClose={() => setExportJob(null)}
         job={exportJob}
         onExportQueued={onRefetchTopoExports}
+      />
+
+      <ConfirmDialog
+        open={pendingDelete != null}
+        title={pendingDelete?.title ?? ""}
+        message={pendingDelete?.message}
+        confirmLabel={pendingDelete?.confirmLabel}
+        busy={confirmBusy}
+        onConfirm={runConfirm}
+        onClose={() => setPendingDelete(null)}
       />
     </div>
   );

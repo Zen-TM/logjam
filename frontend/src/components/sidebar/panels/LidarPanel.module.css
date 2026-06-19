@@ -241,34 +241,6 @@
   background: color-mix(in srgb, var(--theme-text-primary) 20%, transparent);
 }
 
-.confirmRow {
-  display: flex;
-  align-items: center;
-  gap: 0.3em;
-  font-size: var(--text-xs);
-  flex-shrink: 0;
-}
-
-.confirmText {
-  opacity: 0.8;
-  white-space: nowrap;
-}
-
-.confirmYes {
-  composes: actionButton;
-  border-color: var(--theme-warning);
-  color: var(--theme-warning);
-  background: color-mix(in srgb, var(--theme-warning) 12%, transparent);
-}
-
-.confirmYes:hover {
-  background: color-mix(in srgb, var(--theme-warning) 20%, transparent);
-}
-
-.confirmNo {
-  composes: actionButton;
-}
-
 /* ── Export rows ─────────────────────────────────────────────────────────────── */
 
 .exportItem {

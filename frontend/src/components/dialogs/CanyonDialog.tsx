@@ -4,7 +4,6 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogContentText,
   DialogActions,
   Button,
   TextField,
@@ -28,6 +27,7 @@ import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput from "./CustomFieldInput";
+import ConfirmDialog from "./ConfirmDialog";
 import { getFieldValue as getFieldValueFor } from "./customFieldValues";
 
 const V_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -885,45 +885,19 @@ function CanyonDialog({
       </DialogActions>
     </Dialog>
 
-    <Dialog
+    <ConfirmDialog
       open={fieldToDelete != null}
-      onClose={deletingField ? undefined : () => setFieldToDelete(null)}
-      maxWidth="xs"
-      fullWidth
-      PaperProps={{
-        sx: {
-          backgroundColor: "var(--theme-primary)",
-          color: "var(--theme-text-primary)",
-        },
-      }}
-    >
-      <DialogTitle>
-        Delete custom field “{fieldToDelete?.label}”?
-      </DialogTitle>
-      <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
-        <DialogContentText sx={{ color: "var(--theme-text-primary)" }}>
-          This removes the field from <b>all</b> your canyons, not just this one.
-          Any values already stored for it will no longer be shown.
-        </DialogContentText>
-      </DialogContent>
-      <DialogActions>
-        <Button
-          onClick={() => setFieldToDelete(null)}
-          disabled={deletingField}
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
-          Cancel
-        </Button>
-        <Button
-          onClick={handleConfirmDeleteField}
-          color="error"
-          variant="contained"
-          disabled={deletingField}
-        >
-          {deletingField ? <CircularProgress size={20} /> : "Delete"}
-        </Button>
-      </DialogActions>
-    </Dialog>
+      title={<>Delete custom field “{fieldToDelete?.label}”?</>}
+      message={
+        <>
+          This removes the field from <b>all</b> your canyons, not just this
+          one. Any values already stored for it will no longer be shown.
+        </>
+      }
+      busy={deletingField}
+      onConfirm={handleConfirmDeleteField}
+      onClose={() => setFieldToDelete(null)}
+    />
     </>
   );
 }
