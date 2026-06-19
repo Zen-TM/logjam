@@ -139,6 +139,27 @@ describe("fetchAndParseRopeWiki — field parser branches", () => {
     const { canyons } = await fetchAndParseRopeWiki();
     expect(canyons[0].quality).toBe(3.5);
   });
+
+  it("prefers max time over min time for hours", async () => {
+    const H = "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
+    mockFetchCsv([H, `1,Both,"${COORD}",,,,4 hours,,7 hours`].join("\n"));
+    const { canyons } = await fetchAndParseRopeWiki();
+    expect(canyons[0].hours).toBe(7);
+  });
+
+  it("falls back to min time when max time is empty", async () => {
+    const H = "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
+    mockFetchCsv([H, `1,MinOnly,"${COORD}",,,,3 hours,,`].join("\n"));
+    const { canyons } = await fetchAndParseRopeWiki();
+    expect(canyons[0].hours).toBe(3);
+  });
+
+  it("parses non-breaking-space format like '5\\u00a0hr'", async () => {
+    const H = "pageid,location,coords,quality,rating,longest,min time,number of rappels,max time";
+    mockFetchCsv([H, `1,Nbsp,"${COORD}",,,,,,5 hr`].join("\n"));
+    const { canyons } = await fetchAndParseRopeWiki();
+    expect(canyons[0].hours).toBe(5);
+  });
 });
 
 function sampleCanyon(overrides: Partial<RopeWikiCanyon> = {}): RopeWikiCanyon {
