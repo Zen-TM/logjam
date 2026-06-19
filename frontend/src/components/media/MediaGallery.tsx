@@ -1,71 +1,38 @@
-import { useEffect, useRef, useState } from "react";
-import { Trash2, FileDown, X, Play } from "lucide-react";
+import { useState } from "react";
+import { Trash2, FileDown, Play } from "lucide-react";
 import { mediaCategory, type MediaItem } from "@logjam/shared";
 import { deleteMedia } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import Lightbox from "./Lightbox";
+import TrackIcon from "./TrackIcon";
 import classes from "./MediaGallery.module.css";
 
+// `variant` selects which media this gallery surfaces:
+//   all     → visual grid + track list (default; legacy behaviour)
+//   visual  → photos/videos only
+//   tracks  → GPX/KML only
 export default function MediaGallery({
   media,
   canDelete,
   onDeleted,
   emptyText,
+  variant = "all",
 }: {
   media: MediaItem[];
   canDelete: boolean;
   onDeleted: (id: string) => void;
   emptyText?: string;
+  variant?: "all" | "visual" | "tracks";
 }) {
   const [lightbox, setLightbox] = useState<MediaItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const lightboxRef = useRef<HTMLDivElement>(null);
-  const lightboxCloseRef = useRef<HTMLButtonElement>(null);
-  const triggerBeforeLightboxRef = useRef<HTMLElement | null>(null);
-
-  // Focus management + focus trap for the lightbox dialog (WCAG 2.1.2 / 4.1.2).
-  useEffect(() => {
-    if (!lightbox) return;
-    triggerBeforeLightboxRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    lightboxCloseRef.current?.focus();
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setLightbox(null);
-        return;
-      }
-      if (e.key !== "Tab") return;
-      const container = lightboxRef.current;
-      if (!container) return;
-      const focusable = Array.from(
-        container.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, video[controls], [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((el) => !el.hasAttribute("disabled"));
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if (e.shiftKey && active === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      triggerBeforeLightboxRef.current?.focus();
-    };
-  }, [lightbox]);
 
   const tracks = media.filter((m) => mediaCategory(m.mediaType) === "track");
   const visual = media.filter((m) => mediaCategory(m.mediaType) !== "track");
+  const showVisual = variant !== "tracks";
+  const showTracks = variant !== "visual";
 
   async function handleDelete(id: string) {
     setDeletingId(id);
@@ -81,13 +48,16 @@ export default function MediaGallery({
     }
   }
 
-  if (media.length === 0) {
+  // Empty when nothing relevant to this variant is present.
+  const relevant =
+    variant === "visual" ? visual : variant === "tracks" ? tracks : media;
+  if (relevant.length === 0) {
     return <div className={classes.empty}>{emptyText ?? "No files yet."}</div>;
   }
 
   return (
     <div className={classes.root}>
-      {visual.length > 0 && (
+      {showVisual && visual.length > 0 && (
         <div className={classes.grid}>
           {visual.map((m) => {
             const isVideo = mediaCategory(m.mediaType) === "video";
@@ -130,12 +100,12 @@ export default function MediaGallery({
         </div>
       )}
 
-      {tracks.length > 0 && (
+      {showTracks && tracks.length > 0 && (
         <div className={classes.trackList}>
           {tracks.map((m) => (
             <div key={m.id} className={classes.trackRow}>
               <a className={classes.trackLink} href={m.displayUrl} download={m.filename}>
-                <FileDown size={16} />
+                {m.color ? <TrackIcon color={m.color} /> : <FileDown size={16} />}
                 <span className={classes.trackName}>{m.filename}</span>
               </a>
               {canDelete && (
@@ -155,46 +125,7 @@ export default function MediaGallery({
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
-      {lightbox && (
-        // Backdrop click-to-dismiss. Keyboard users close via Escape (global
-        // handler in the effect above) or the labelled close button; focus is
-        // trapped within this dialog, so the pointer-only backdrop is an
-        // enhancement, not the sole control.
-        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events
-        <div
-          ref={lightboxRef}
-          className={classes.lightbox}
-          onClick={(e) => { if (e.target === e.currentTarget) setLightbox(null); }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Media preview"
-        >
-          <button
-            ref={lightboxCloseRef}
-            className={classes.lightboxClose}
-            onClick={() => setLightbox(null)}
-            aria-label="Close"
-          >
-            <X size={22} />
-          </button>
-          <div className={classes.lightboxContent}>
-            {mediaCategory(lightbox.mediaType) === "video" ? (
-              <video
-                className={classes.lightboxMedia}
-                src={lightbox.displayUrl}
-                controls
-                autoPlay
-              />
-            ) : (
-              <img
-                className={classes.lightboxMedia}
-                src={lightbox.displayUrl}
-                alt={lightbox.filename}
-              />
-            )}
-          </div>
-        </div>
-      )}
+      {lightbox && <Lightbox item={lightbox} onClose={() => setLightbox(null)} />}
     </div>
   );
 }

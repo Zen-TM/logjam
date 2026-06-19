@@ -186,37 +186,81 @@
   line-height: 1.35;
 }
 
-/* ─── Media region ────────────────────────────────────────────────────────── */
+/* ─── Media (slideshow + track) ───────────────────────────────────────────── */
 
-.mediaRegion {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4em;
+.sectionLabel {
+  composes: sectionLabel from '@styles/shared.module.css';
 }
 
-.mediaHeader {
+.trackSection {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+}
+
+.trackCard {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  font-size: var(--text-sm);
-  font-weight: 600;
+  gap: 0.4em;
 }
 
-.mediaScroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+.trackCardLink {
   display: flex;
-  flex-direction: column;
-  gap: 0.4em;
+  align-items: center;
+  gap: 0.5em;
+  flex: 1;
+  min-width: 0;
+  padding: 0.45em 0.6em;
+  border-radius: var(--radius-sm);
+  background-color: color-mix(in srgb, var(--theme-text-primary) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+  color: var(--theme-text-primary);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  transition: background-color var(--transition-fast);
+}
+
+.trackCardLink:hover {
+  background-color: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+}
+
+.trackCardName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trackDeleteBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.trackDeleteBtn:hover {
+  color: var(--theme-warning);
+  border-color: var(--theme-warning);
+}
+
+.uploadBtn {
+  composes: btn btnFilledNeutral btnMd btnFull from '@styles/shared.module.css';
 }
 
 /* ─── Footer actions ──────────────────────────────────────────────────────── */
 
 .footer {
   flex-shrink: 0;
+  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 0.4em;

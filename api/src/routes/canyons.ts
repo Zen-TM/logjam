@@ -10,6 +10,7 @@ import { decrementStorageUsed } from "../lib/storageQuota";
 import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
 import { requireCanyonAccess, requireCanyonOwnerAccess } from "../lib/canyonAccess";
 import { resolveUser } from "../lib/resolveUser";
+import { TRACK_MIME_TYPES } from "@logjam/shared";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -44,6 +45,51 @@ router.get(
     const user = await resolveUser(req.user!.sub);
     res.json(
       await fetchCanyons({ shares: { some: { sharedWithId: user.id } } }),
+    );
+  },
+);
+
+// GET /canyons/tracks — track (GPX/KML) media for every canyon the user can
+// access (owned + shared), for the map track layer. Derived purely from the
+// user's own access set, so it never accepts an arbitrary id and preserves the
+// 404-not-403 anti-oracle: a canyon the user can't see is simply absent.
+// Returns minimal projection (no coords/names) — only the presigned track URL
+// and its colour.
+router.get(
+  "/tracks",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const accessible = await prisma.canyon.findMany({
+      where: {
+        OR: [
+          { ownerId: user.id },
+          { shares: { some: { sharedWithId: user.id } } },
+        ],
+      },
+      select: { id: true },
+    });
+    const canyonIds = accessible.map((canyon) => canyon.id);
+    if (canyonIds.length === 0) {
+      res.json([]);
+      return;
+    }
+    const rows = await prisma.media.findMany({
+      where: {
+        linkedType: "canyon",
+        linkedId: { in: canyonIds },
+        mediaType: { in: TRACK_MIME_TYPES as unknown as string[] },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    const items = await toMediaItems(rows);
+    res.json(
+      items.map((item) => ({
+        canyonId: item.linkedId,
+        mediaId: item.id,
+        color: item.color,
+        displayUrl: item.displayUrl,
+      })),
     );
   },
 );

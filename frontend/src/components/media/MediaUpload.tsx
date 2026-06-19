@@ -6,8 +6,20 @@ import { resolveMediaType, generateThumbnail } from "./mediaFiles";
 import { messageFromError } from "../../errors/messageFromError";
 import classes from "./MediaUpload.module.css";
 
-const ACCEPT =
-  "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm,.gpx,.kml";
+// One uploader serves both surfaces; the category narrows what's accepted.
+//   visual → photos + videos      track → GPX/KML only      (undefined → all)
+type UploadCategory = "visual" | "track";
+
+const ACCEPT_BY_CATEGORY: Record<UploadCategory, string> = {
+  visual: "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm",
+  track: ".gpx,.kml",
+};
+const ACCEPT_ALL = `${ACCEPT_BY_CATEGORY.visual},${ACCEPT_BY_CATEGORY.track}`;
+
+const HINT_BY_CATEGORY: Record<UploadCategory, string> = {
+  visual: "Photos & videos",
+  track: "GPX or KML",
+};
 
 export default function MediaUpload({
   linkedType,
@@ -15,6 +27,9 @@ export default function MediaUpload({
   onUploaded,
   disabled,
   resolveLinkedId,
+  category,
+  maxFiles,
+  disabledReason,
 }: {
   linkedType: MediaLinkedType;
   linkedId: string;
@@ -24,13 +39,31 @@ export default function MediaUpload({
   // not-yet-saved entity (e.g. a draft trip log) be materialised on first
   // upload instead of requiring an existing id up front.
   resolveLinkedId?: () => Promise<string>;
+  // Constrain accepted files. Mismatched files are rejected client-side; the
+  // server still validates authoritatively.
+  category?: UploadCategory;
+  // Cap files per selection (e.g. 1 for a canyon's single track). When 1, the
+  // native picker is single-select.
+  maxFiles?: number;
+  // When set, the dropzone is locked and shows this text instead of the hint
+  // (e.g. "This canyon already has a track").
+  disabledReason?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
 
-  const locked = Boolean(disabled) || busy;
+  const accept = category ? ACCEPT_BY_CATEGORY[category] : ACCEPT_ALL;
+  const subHint = category ? HINT_BY_CATEGORY[category] : "Photos, videos, GPX/KML";
+  const locked = Boolean(disabled) || Boolean(disabledReason) || busy;
+
+  // Whether a resolved file's category is allowed by the `category` prop.
+  function categoryAllowed(resolvedCategory: "image" | "video" | "track"): boolean {
+    if (!category) return true;
+    if (category === "track") return resolvedCategory === "track";
+    return resolvedCategory !== "track";
+  }
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -38,14 +71,24 @@ export default function MediaUpload({
     // the live FileList) immediately after invoking us.
     const selected = Array.from(files);
     setErrors([]);
-    setBusy(true);
     const failures: string[] = [];
+    if (maxFiles != null && selected.length > maxFiles) {
+      setErrors([`You can upload at most ${maxFiles} file${maxFiles === 1 ? "" : "s"} here.`]);
+      return;
+    }
+    setBusy(true);
     try {
       const targetId = resolveLinkedId ? await resolveLinkedId() : linkedId;
       for (const file of selected) {
         const resolved = resolveMediaType(file);
         if (!resolved) {
           failures.push(`${file.name}: unsupported file type`);
+          continue;
+        }
+        if (!categoryAllowed(resolved.category)) {
+          failures.push(
+            `${file.name}: ${category === "track" ? "expected a GPX or KML file" : "expected a photo or video"}`,
+          );
           continue;
         }
         try {
@@ -109,14 +152,18 @@ export default function MediaUpload({
           <Upload size={20} />
         )}
         <span className={classes.hint}>
-          {busy ? "Uploading…" : "Drop files or click to upload"}
+          {busy
+            ? "Uploading…"
+            : disabledReason
+              ? disabledReason
+              : "Drop files or click to upload"}
         </span>
-        <span className={classes.sub}>Photos, videos, GPX/KML</span>
+        {!disabledReason && <span className={classes.sub}>{subHint}</span>}
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPT}
-          multiple
+          accept={accept}
+          multiple={maxFiles !== 1}
           hidden
           onChange={(e) => {
             const input = e.target;

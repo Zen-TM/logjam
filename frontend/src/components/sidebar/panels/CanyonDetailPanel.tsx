@@ -7,7 +7,7 @@ import {
   DialogActions,
   Button,
 } from "@mui/material";
-import { Pencil, TriangleAlert, X } from "lucide-react";
+import { Pencil, TriangleAlert, X, Trash2 } from "lucide-react";
 import classes from "./CanyonDetailPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -15,18 +15,20 @@ import CanyonDialog from "../../dialogs/CanyonDialog";
 import ShareCanyonDialog from "../../dialogs/ShareCanyonDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
+import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import type { TCanyon, TFriend, TTripLog } from "../../../canyonUtils";
-import type { TripLogCustomFieldDef, MediaItem } from "@logjam/shared";
+import { mediaCategory, type TripLogCustomFieldDef, type MediaItem } from "@logjam/shared";
 import {
   formatCanyonGrade,
   deleteCanyon,
+  deleteMedia,
   copyCanyon,
   unshareCanyonWith,
   getTripLogs,
   getCanyonDetail,
 } from "../../../canyonUtils";
-import MediaUpload from "../../media/MediaUpload";
-import MediaGallery from "../../media/MediaGallery";
+import CanyonSlideshow from "../../media/CanyonSlideshow";
+import TrackIcon from "../../media/TrackIcon";
 
 // Format a stored custom-field value for display. Returns null when the value
 // is empty so the caller can skip rendering the row entirely.
@@ -87,6 +89,8 @@ function CanyonDetailPanel({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [trackToDelete, setTrackToDelete] = useState<MediaItem | null>(null);
+  const [deletingTrack, setDeletingTrack] = useState(false);
 
   const [tripLogs, setTripLogs] = useState<TTripLog[]>([]);
   const [canyonMedia, setCanyonMedia] = useState<MediaItem[]>([]);
@@ -174,21 +178,80 @@ function CanyonDetailPanel({
     }
   }
 
-  function handleMediaUploaded(item: MediaItem) {
-    setCanyonMedia((prev) => [...prev, item]);
+  // Re-pull canyon-level media after the edit dialog uploads/deletes, so the
+  // slideshow + track card reflect changes without waiting for a Save.
+  function reloadCanyonMedia() {
+    if (!canyon) return;
+    getCanyonDetail(canyon.id)
+      .then((detail) => setCanyonMedia(detail.media))
+      .catch((err) => {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't refresh media."));
+      });
     onQuotaChanged();
   }
 
-  function handleMediaDeleted(id: string) {
-    setCanyonMedia((prev) => prev.filter((m) => m.id !== id));
-    onQuotaChanged();
+  async function handleDeleteTrack() {
+    if (!trackToDelete) return;
+    setDeletingTrack(true);
+    try {
+      await deleteMedia(trackToDelete.id);
+      setCanyonMedia((prev) => prev.filter((m) => m.id !== trackToDelete.id));
+      setTrackToDelete(null);
+      onQuotaChanged();
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't delete track. Please try again."));
+    } finally {
+      setDeletingTrack(false);
+    }
   }
 
   const canyonGrade = formatCanyonGrade(canyon);
+  const visualMedia = canyonMedia.filter(
+    (m) => mediaCategory(m.mediaType) !== "track",
+  );
+  const track = canyonMedia.find((m) => mediaCategory(m.mediaType) === "track") ?? null;
+  const showMediaTop = visualMedia.length > 0 || track != null || isOwnedCanyon;
 
   return (
     <>
       <div className={classes.root}>
+        {visualMedia.length > 0 && <CanyonSlideshow media={visualMedia} />}
+
+        {track && (
+          <div className={classes.trackSection}>
+            <div className={classes.sectionLabel}>Track</div>
+            <div className={classes.trackCard}>
+              <a
+                className={classes.trackCardLink}
+                href={track.displayUrl}
+                download={track.filename}
+              >
+                <TrackIcon color={track.color} size={18} />
+                <span className={classes.trackCardName}>{track.filename}</span>
+              </a>
+              {isOwnedCanyon && (
+                <button
+                  className={classes.trackDeleteBtn}
+                  onClick={() => setTrackToDelete(track)}
+                  aria-label={`Delete track ${track.filename}`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isOwnedCanyon && (
+          <button className={classes.uploadBtn} onClick={() => setShowEdit(true)}>
+            Upload media
+          </button>
+        )}
+
+        {showMediaTop && <div className={classes.divider} />}
+
         {!safetyDismissed && (
           <div className={classes.safetyWarning} role="note">
             <TriangleAlert size={16} className={classes.safetyIcon} />
@@ -346,32 +409,6 @@ function CanyonDetailPanel({
           )}
         </div>
 
-        <div className={classes.mediaRegion}>
-          <div className={classes.divider} />
-          <div className={classes.mediaHeader}>
-            Photos &amp; Files {canyonMedia.length > 0 && `(${canyonMedia.length})`}
-          </div>
-          <div className={classes.mediaScroll}>
-            <MediaGallery
-              media={canyonMedia}
-              canDelete={isOwnedCanyon}
-              onDeleted={handleMediaDeleted}
-              emptyText={
-                isOwnedCanyon
-                  ? "No photos or files yet."
-                  : "No shared photos or files."
-              }
-            />
-            {isOwnedCanyon && (
-              <MediaUpload
-                linkedType="canyon"
-                linkedId={canyon.id}
-                onUploaded={handleMediaUploaded}
-              />
-            )}
-          </div>
-        </div>
-
         <div className={classes.footer}>
           <div className={classes.divider} />
           {isOwnedCanyon ? (
@@ -442,6 +479,21 @@ function CanyonDetailPanel({
         onCancelPickCoords={onCancelPickCoords}
         customFieldDefs={canyonCustomFieldDefs}
         onCustomFieldDefsChange={onCanyonCustomFieldDefsChange}
+        onMediaChanged={reloadCanyonMedia}
+      />
+
+      <ConfirmDialog
+        open={trackToDelete != null}
+        title="Delete track?"
+        message={
+          <>
+            This permanently deletes the track <b>{trackToDelete?.filename}</b>. This
+            cannot be undone.
+          </>
+        }
+        busy={deletingTrack}
+        onConfirm={handleDeleteTrack}
+        onClose={() => setTrackToDelete(null)}
       />
 
       {isOwnedCanyon && (

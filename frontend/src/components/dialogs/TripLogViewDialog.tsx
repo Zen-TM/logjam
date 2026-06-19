@@ -17,7 +17,6 @@ import type { TTripLog } from "../../canyonUtils";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import { deleteTripLog, getTripLog } from "../../canyonUtils";
-import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
 import classes from "./TripLogViewDialog.module.css";
 
@@ -77,11 +76,6 @@ function TripLogViewDialog({
       })
       .finally(() => setMediaLoading(false));
   }, [open, tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function handleMediaUploaded(item: MediaItem) {
-    setMedia((prev) => [...prev, item]);
-    onMediaChanged?.();
-  }
 
   function handleMediaDeleted(id: string) {
     setMedia((prev) => prev.filter((m) => m.id !== id));
@@ -181,11 +175,11 @@ function TripLogViewDialog({
             </>
           )}
 
-          {/* Media — photos, videos, GPX/KML tracks */}
+          {/* Media — photos & videos. Adding happens in the edit dialog. */}
           <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 1.5 }} />
           <Box className={classes.section}>
             <Typography variant="caption" className={classes.sectionLabel}>
-              Photos, Videos &amp; Files
+              Photos &amp; Videos
             </Typography>
             <div className={classes.mediaScroll}>
               {mediaLoading ? (
@@ -195,16 +189,29 @@ function TripLogViewDialog({
               ) : (
                 <MediaGallery
                   media={media}
+                  variant="visual"
                   canDelete={canManageMedia}
                   onDeleted={handleMediaDeleted}
-                  emptyText="No photos or files yet."
+                  emptyText="No photos or videos yet."
                 />
               )}
-              {canManageMedia && (
-                <MediaUpload
-                  linkedType="tripLog"
-                  linkedId={tripLog.id}
-                  onUploaded={handleMediaUploaded}
+            </div>
+          </Box>
+
+          {/* Tracks (GPX/KML) */}
+          <Divider sx={{ borderColor: "rgba(255,255,255,0.1)", my: 1.5 }} />
+          <Box className={classes.section}>
+            <Typography variant="caption" className={classes.sectionLabel}>
+              Tracks
+            </Typography>
+            <div className={classes.mediaScroll}>
+              {!mediaLoading && (
+                <MediaGallery
+                  media={media}
+                  variant="tracks"
+                  canDelete={canManageMedia}
+                  onDeleted={handleMediaDeleted}
+                  emptyText="No tracks yet."
                 />
               )}
             </div>

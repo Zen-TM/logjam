@@ -13,8 +13,9 @@ import { Protocol } from "pmtiles";
 const pmtilesProtocol = new Protocol();
 maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
 import classes from "./Map.module.css";
-import type { TCanyon, TFilters } from "../../canyonUtils";
+import type { TCanyon, TFilters, CanyonTrack } from "../../canyonUtils";
 import { passesFilters } from "../../canyonUtils";
+import { fetchTrackGeoJSON } from "../media/trackGeo";
 import {
   extentFromCentreAndSize,
   OSM_LINE_FEATURE_KEYS,
@@ -282,6 +283,8 @@ function Map({
   onCancelPickCoords,
   showOwnedCanyons,
   showSharedCanyons,
+  showCanyonTracks,
+  canyonTracks,
   selectingArea,
   onAreaSelected,
   selectingBbox,
@@ -313,6 +316,8 @@ function Map({
   onCancelPickCoords: () => void;
   showOwnedCanyons: boolean;
   showSharedCanyons: boolean;
+  showCanyonTracks: boolean;
+  canyonTracks: CanyonTrack[];
   selectingArea: boolean;
   onAreaSelected: (ids: string[]) => void;
   selectingBbox?: boolean;
@@ -437,6 +442,33 @@ function Map({
       map.addSource("canyons", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
+      });
+
+      // Canyon track (GPX/KML) line source + layer. Added before the canyon
+      // circle markers so the markers paint on top and stay clickable. Hidden
+      // until the "Canyon Tracks" layer is toggled on.
+      map.addSource("canyon-tracks", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: "canyon-tracks-lines",
+        type: "line",
+        source: "canyon-tracks",
+        layout: {
+          visibility: "none",
+          "line-cap": "round",
+          "line-join": "round",
+        },
+        paint: {
+          "line-color": [
+            "coalesce",
+            ["get", "color"],
+            readCssVar("--theme-accent", "#3b82f6"),
+          ],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 7, 2, 14, 4],
+          "line-opacity": 0.9,
+        },
       });
 
       // Shared canyon GeoJSON source (starts empty)
@@ -645,6 +677,43 @@ function Map({
     }
   }, [canyons, sharedCanyons, filters, mapLoaded]);
 
+  // Fetch + parse canyon track files into the line layer when enabled. Parsing
+  // is client-side (the API never echoes track contents — privacy rule); parsed
+  // GeoJSON is cached by mediaId so toggling/re-renders don't refetch.
+  // Keyed by mediaId. Plain object (not a JS Map) — `Map` is this component's name.
+  const trackGeoCacheRef = useRef<Record<string, GeoJSON.FeatureCollection>>({});
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || !showCanyonTracks) return;
+    let cancelled = false;
+    void (async () => {
+      const cache = trackGeoCacheRef.current;
+      const collections = await Promise.all(
+        canyonTracks.map(async (track) => {
+          const cached = cache[track.mediaId];
+          if (cached) return cached;
+          try {
+            const fc = await fetchTrackGeoJSON(track.displayUrl, track.color, track.canyonId);
+            cache[track.mediaId] = fc;
+            return fc;
+          } catch (err) {
+            // Best-effort: one bad track must not blank the whole layer.
+            console.error(err);
+            return null;
+          }
+        }),
+      );
+      if (cancelled) return;
+      const features = collections.flatMap((fc) => (fc ? fc.features : []));
+      const source = mapRef.current?.getSource("canyon-tracks") as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      source?.setData({ type: "FeatureCollection", features });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showCanyonTracks, canyonTracks, mapLoaded]);
+
   // Coordinate picking mode
   const onCoordsPickedRef = useRef(onCoordsPicked);
   useEffect(() => {
@@ -823,7 +892,12 @@ function Map({
       "visibility",
       vis(showSharedCanyons),
     );
-  }, [showOwnedCanyons, showSharedCanyons, mapLoaded]);
+    mapRef.current.setLayoutProperty(
+      "canyon-tracks-lines",
+      "visibility",
+      vis(showCanyonTracks),
+    );
+  }, [showOwnedCanyons, showSharedCanyons, showCanyonTracks, mapLoaded]);
 
   // Toggle base layer visibility
   useEffect(() => {

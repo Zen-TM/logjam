@@ -14,6 +14,8 @@ function LayersPanel({
   setShowOwnedCanyons,
   showSharedCanyons,
   setShowSharedCanyons,
+  showCanyonTracks,
+  setShowCanyonTracks,
   lidarEnabled,
   setLidarEnabled,
   lidarLayerToggles,
@@ -30,6 +32,8 @@ function LayersPanel({
   setShowOwnedCanyons: (v: boolean) => void;
   showSharedCanyons: boolean;
   setShowSharedCanyons: (v: boolean) => void;
+  showCanyonTracks: boolean;
+  setShowCanyonTracks: (v: boolean) => void;
   lidarEnabled: boolean;
   setLidarEnabled: (v: boolean) => void;
   lidarLayerToggles: Record<string, boolean>;
@@ -127,6 +131,15 @@ function LayersPanel({
           checked={showSharedCanyons}
           onChange={(_, v) => setShowSharedCanyons(v)}
           sx={switchSx("var(--shared-canyon-color)")}
+        />
+      </div>
+      <div className={classes.toggleRow}>
+        <span>Canyon Tracks</span>
+        <Switch
+          size="small"
+          checked={showCanyonTracks}
+          onChange={(_, v) => setShowCanyonTracks(v)}
+          sx={switchSx("var(--theme-accent)")}
         />
       </div>
 

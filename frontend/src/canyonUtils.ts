@@ -379,6 +379,41 @@ export function getCanyonDetail(id: string): Promise<TCanyonDetail> {
   return apiFetch<TCanyonDetail>(`/canyons/${id}`);
 }
 
+// A canyon's track (GPX/KML) for the map track layer: a presigned download URL
+// plus its assigned colour. Only canyons the user can access are returned.
+export type CanyonTrack = {
+  canyonId: string;
+  mediaId: string;
+  color: string | null;
+  displayUrl: string;
+};
+
+export function getCanyonTracks(): Promise<CanyonTrack[]> {
+  return apiFetch<CanyonTrack[]>("/canyons/tracks");
+}
+
+// Fetches canyon tracks only while the map layer is enabled. Bumping the
+// returned `refetch` re-pulls (e.g. after a track upload).
+export function useCanyonTracks(enabled: boolean) {
+  const [tracks, setTracks] = useState<CanyonTrack[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [fetchCount, setFetchCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    getCanyonTracks()
+      .then(setTracks)
+      .catch((err) => {
+        console.error(err);
+        setError(messageFromError(err, "Couldn't load canyon tracks."));
+      });
+  }, [enabled, fetchCount]);
+
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+
+  return { tracks, error, refetch };
+}
+
 
 export function useCanyons(enabled: boolean) {
   const [canyons, setCanyons] = useState<TCanyon[]>([]);

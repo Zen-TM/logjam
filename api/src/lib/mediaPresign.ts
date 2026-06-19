@@ -22,6 +22,7 @@ export type MediaRow = {
   createdAt: Date;
   s3KeyDisplay: string;
   s3KeyThumbnail: string | null;
+  color: string | null;
 };
 
 async function presignGet(
@@ -61,6 +62,7 @@ export async function toMediaItem(row: MediaRow): Promise<MediaItem> {
     createdAt: row.createdAt.toISOString(),
     displayUrl,
     thumbnailUrl,
+    color: row.color,
   };
 }
 

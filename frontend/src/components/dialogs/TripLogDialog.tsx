@@ -397,10 +397,11 @@ function TripLogDialog({
           )}
 
           {/* Media. In create mode the first upload lazily creates a draft trip
-              to link files to; cancelling deletes it (and its files). */}
+              to link files to; cancelling deletes it (and its files). Split into
+              photos/videos and tracks, both allowing multiple files. */}
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
             <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Photos, Videos &amp; Files
+              Photos &amp; Videos
             </Typography>
             <div className={classes.mediaScroll}>
               {mediaLoading ? (
@@ -410,12 +411,39 @@ function TripLogDialog({
               ) : (
                 <MediaGallery
                   media={media}
+                  variant="visual"
                   canDelete
                   onDeleted={handleMediaDeleted}
-                  emptyText="No photos or files yet."
+                  emptyText="No photos or videos yet."
                 />
               )}
               <MediaUpload
+                category="visual"
+                linkedType="tripLog"
+                linkedId={tripLog ? tripLog.id : ""}
+                resolveLinkedId={tripLog ? undefined : ensureLinkedTripId}
+                onUploaded={handleMediaUploaded}
+                disabled={saving}
+              />
+            </div>
+          </Box>
+
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Tracks (GPX/KML)
+            </Typography>
+            <div className={classes.mediaScroll}>
+              {!mediaLoading && (
+                <MediaGallery
+                  media={media}
+                  variant="tracks"
+                  canDelete
+                  onDeleted={handleMediaDeleted}
+                  emptyText="No tracks yet."
+                />
+              )}
+              <MediaUpload
+                category="track"
                 linkedType="tripLog"
                 linkedId={tripLog ? tripLog.id : ""}
                 resolveLinkedId={tripLog ? undefined : ensureLinkedTripId}
