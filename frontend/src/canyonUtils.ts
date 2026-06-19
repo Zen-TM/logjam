@@ -1190,6 +1190,10 @@ export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
   return { jobs, loading, error, refetch };
 }
 
+export function getGeoPdfJob(id: string): Promise<GeoPdfJobView> {
+  return apiFetch<GeoPdfJobView>(`/geo-pdf/${id}`);
+}
+
 export function deleteGeoPdfJob(id: string): Promise<void> {
   return apiFetch<void>(`/geo-pdf/${id}`, { method: "DELETE" });
 }
