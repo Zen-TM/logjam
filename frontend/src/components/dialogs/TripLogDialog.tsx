@@ -16,7 +16,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
-import { makeCustomFieldKey, coerceFieldValue } from "@logjam/shared";
+import { coerceFieldValue, buildCustomFieldDef } from "@logjam/shared";
 import type { TCanyon, TTripLog } from "../../canyonUtils";
 import {
   createTripLog,
@@ -81,7 +81,11 @@ function TripLogDialog({
   const [showAddField, setShowAddField] = useState(false);
   const [newFieldLabel, setNewFieldLabel] = useState("");
   const [newFieldType, setNewFieldType] = useState<TripLogCustomFieldType>("string");
+  const [newFieldBounded, setNewFieldBounded] = useState(false);
+  const [newFieldMin, setNewFieldMin] = useState("");
+  const [newFieldMax, setNewFieldMax] = useState("");
   const [addingField, setAddingField] = useState(false);
+  const [addFieldError, setAddFieldError] = useState<string | null>(null);
 
   // Populate form when opening for edit (or reset on create).
   // We intentionally exclude customFieldDefs from deps — field defs shouldn't
@@ -241,27 +245,29 @@ function TripLogDialog({
   }
 
   async function handleAddField() {
-    const label = newFieldLabel.trim();
-    if (!label) return;
-    // Generate a stable key from the label
-    const key = makeCustomFieldKey(label);
-    if (customFieldDefs.some((d) => d.key === key)) {
-      setError(`A field with the key "${key}" already exists.`);
+    const result = buildCustomFieldDef(
+      { label: newFieldLabel, type: newFieldType, bounded: newFieldBounded, min: newFieldMin, max: newFieldMax },
+      customFieldDefs,
+    );
+    if ("error" in result) {
+      setAddFieldError(result.error);
       return;
     }
     setAddingField(true);
-    setError(null);
+    setAddFieldError(null);
     try {
-      const newDef: TripLogCustomFieldDef = { key, label, type: newFieldType };
-      const updatedDefs = [...customFieldDefs, newDef];
+      const updatedDefs = [...customFieldDefs, result.def];
       await updateUserPreferences({ tripLogCustomFields: updatedDefs });
       onCustomFieldDefsChange(updatedDefs);
       setShowAddField(false);
       setNewFieldLabel("");
       setNewFieldType("string");
+      setNewFieldBounded(false);
+      setNewFieldMin("");
+      setNewFieldMax("");
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't save custom field. Please try again."));
+      setAddFieldError(messageFromError(err, "Couldn't save custom field. Please try again."));
     } finally {
       setAddingField(false);
     }
@@ -378,8 +384,24 @@ function TripLogDialog({
               type={newFieldType}
               onTypeChange={setNewFieldType}
               onAdd={handleAddField}
-              onCancel={() => { setShowAddField(false); setNewFieldLabel(""); }}
+              onCancel={() => {
+                setShowAddField(false);
+                setNewFieldLabel("");
+                setNewFieldBounded(false);
+                setNewFieldMin("");
+                setNewFieldMax("");
+                setAddFieldError(null);
+              }}
               adding={addingField}
+              error={addFieldError}
+              bounds={{
+                bounded: newFieldBounded,
+                onBoundedChange: setNewFieldBounded,
+                min: newFieldMin,
+                onMinChange: setNewFieldMin,
+                max: newFieldMax,
+                onMaxChange: setNewFieldMax,
+              }}
             />
           ) : (
             <Button

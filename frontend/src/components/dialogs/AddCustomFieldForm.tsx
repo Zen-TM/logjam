@@ -21,9 +21,9 @@ import classes from "./AddCustomFieldForm.module.css";
  * (UX-002: bordered box treatment for both; UX-003: shared field/select
  * styling so the type-select dropdown icon matches between dialogs).
  *
- * Bounds (min/max) are opt-in via the `bounds` prop group: only CanyonDialog
- * passes it, so TripLogDialog is unaffected. The bounds row only renders for
- * integer/float types.
+ * Bounds (min/max) are opt-in via the `bounds` prop group. Both CanyonDialog
+ * and TripLogDialog pass it. The bounds row only renders for integer/float
+ * types.
  */
 function AddCustomFieldForm({
   entityNoun,

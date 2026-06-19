@@ -19,7 +19,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
-import { makeCustomFieldKey, coerceFieldValue, mediaCategory } from "@logjam/shared";
+import { coerceFieldValue, mediaCategory, buildCustomFieldDef } from "@logjam/shared";
 import { sanitizeIntegerInput, sanitizeDecimalInput } from "../../numberInput";
 import type { TCanyon } from "../../canyonUtils";
 import {
@@ -365,47 +365,18 @@ function CanyonDialog({
   }
 
   async function handleAddField() {
-    const label = newFieldLabel.trim();
-    if (!label) return;
-    // Generate a stable key from the label
-    const key = makeCustomFieldKey(label);
-    if (customFieldDefs.some((d) => d.key === key)) {
-      setAddFieldError(`A field with the key "${key}" already exists.`);
+    const result = buildCustomFieldDef(
+      { label: newFieldLabel, type: newFieldType, bounded: newFieldBounded, min: newFieldMin, max: newFieldMax },
+      customFieldDefs,
+    );
+    if ("error" in result) {
+      setAddFieldError(result.error);
       return;
     }
-
-    const isNumeric = newFieldType === "integer" || newFieldType === "float";
-    let bounds: { min: number; max: number } | null = null;
-    if (isNumeric && newFieldBounded) {
-      if (newFieldMin.trim() === "" || newFieldMax.trim() === "") {
-        setAddFieldError("Both min and max are required for a bounded field.");
-        return;
-      }
-      const min =
-        newFieldType === "integer" ? parseInt(newFieldMin, 10) : parseFloat(newFieldMin);
-      const max =
-        newFieldType === "integer" ? parseInt(newFieldMax, 10) : parseFloat(newFieldMax);
-      if (!isFinite(min) || !isFinite(max)) {
-        setAddFieldError("Min and max must be valid numbers.");
-        return;
-      }
-      if (min >= max) {
-        setAddFieldError("Minimum must be less than maximum.");
-        return;
-      }
-      bounds = { min, max };
-    }
-
     setAddingField(true);
     setAddFieldError(null);
     try {
-      const newDef: TripLogCustomFieldDef = {
-        key,
-        label,
-        type: newFieldType,
-        ...(bounds ?? {}),
-      };
-      const updatedDefs = [...customFieldDefs, newDef];
+      const updatedDefs = [...customFieldDefs, result.def];
       await updateUserPreferences({ canyonCustomFields: updatedDefs });
       onCustomFieldDefsChange(updatedDefs);
       setShowAddField(false);
