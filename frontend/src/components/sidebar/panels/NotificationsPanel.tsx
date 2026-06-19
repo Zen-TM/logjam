@@ -13,6 +13,7 @@ import {
   acceptFriendRequest,
   declineFriendRequest,
   getTopoExport,
+  getGeoPdfJob,
 } from "../../../canyonUtils";
 
 function NotificationsPanel({
@@ -93,6 +94,26 @@ function NotificationsPanel({
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't download the export."));
+    }
+  }
+
+  async function handleDownloadGeoPdf(n: TNotification) {
+    try {
+      const job = await getGeoPdfJob(n.payload.geoPdfJobId as string);
+      if (!job.downloadUrl) throw new Error("GeoPDF has no download URL");
+      const a = document.createElement("a");
+      a.href = job.downloadUrl;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      if (!n.read) {
+        markNotificationRead(n.id).catch((err) => { console.error(err); });
+        onRefetchNotifications();
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't download the GeoPDF."));
     }
   }
 
@@ -192,6 +213,20 @@ function NotificationsPanel({
                     )}
                   </>
                 )}
+                {n.type === "geo_pdf_complete" && (
+                  n.payload.status === "failed" ? (
+                    <>
+                      GeoPDF generation failed
+                      {typeof n.payload.errorMessage === "string" && (
+                        <div className={classes.notificationWarning}>
+                          {n.payload.errorMessage}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    "GeoPDF ready — view in the GeoPDF panel"
+                  )
+                )}
               </div>
               <div className={classes.notificationTime}>
                 {new Date(n.createdAt).toLocaleDateString()}
@@ -242,6 +277,19 @@ function NotificationsPanel({
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDownloadExport(n);
+                    }}
+                  >
+                    Download
+                  </button>
+                </div>
+              )}
+              {n.type === "geo_pdf_complete" && n.payload.status === "completed" && (
+                <div className={classes.notificationActions}>
+                  <button
+                    className={classes.acceptButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadGeoPdf(n);
                     }}
                   >
                     Download
