@@ -20,6 +20,7 @@ router.get(
           select: {
             date: true,
             canyonId: true,
+            displayName: true,
             canyon: { select: { numAbseils: true } },
           },
         }),
@@ -39,7 +40,8 @@ router.get(
       const dateStr = t.date.toISOString().split("T")[0];
       tripDates[dateStr] = (tripDates[dateStr] ?? 0) + 1;
       distinctDays.add(dateStr);
-      if (t.canyonId) distinctCanyons.add(t.canyonId);
+      if (t.canyonId) distinctCanyons.add("id:" + t.canyonId);
+      else if (t.displayName) distinctCanyons.add("name:" + t.displayName);
 
       if (t.canyon?.numAbseils != null) {
         totalAbseils = (totalAbseils ?? 0) + t.canyon.numAbseils;

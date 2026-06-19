@@ -359,7 +359,7 @@ function DrilldownHeatmap({
                 onClick={() => setViewingTripLog(trip)}
               >
                 <span className={classes.tripCanyonName}>
-                  {trip.canyon?.name ?? "Unknown Canyon"}
+                  {trip.canyon?.name ?? trip.displayName ?? "Unknown Canyon"}
                 </span>
                 {trip.notes && (
                   <span className={classes.tripNotes}>
@@ -377,7 +377,7 @@ function DrilldownHeatmap({
         open={viewingTripLog !== null}
         onClose={() => setViewingTripLog(null)}
         tripLog={viewingTripLog}
-        canyonName={viewingTripLog?.canyon?.name ?? ""}
+        canyonName={viewingTripLog?.canyon?.name ?? viewingTripLog?.displayName ?? ""}
         customFieldDefs={customFieldDefs}
         onMediaChanged={onQuotaChanged}
         onEdit={() => setViewingTripLog(null)}

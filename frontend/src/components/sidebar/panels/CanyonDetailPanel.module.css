@@ -281,17 +281,15 @@
 }
 
 .ghostBtn {
-  composes: btn btnGhost from '@styles/shared.module.css';
-  padding: 0.5em 1em;
+  composes: btn btnOutlineAccent btnSm from '@styles/shared.module.css';
 }
 
 .ghostBtnFull {
-  composes: btn btnGhost btnFull from '@styles/shared.module.css';
-  padding: 0.5em 1em;
+  composes: btn btnOutlineAccent btnSm btnFull from '@styles/shared.module.css';
 }
 
 .dangerBtn {
-  composes: btn btnOutlineWarning btnMd btnFull from '@styles/shared.module.css';
+  composes: btn btnOutlineWarning btnSm btnFull from '@styles/shared.module.css';
 }
 
 /* ─── Caption ─────────────────────────────────────────────────────────────── */

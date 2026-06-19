@@ -1,13 +1,15 @@
 /* Styles for NotificationsPanel — notification list, accept/decline actions */
 
-.markAllReadButton {
-  composes: btn btnSm btnOutlineBonus1 from '@styles/shared.module.css';
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  gap: 0.5em;
 }
 
-.header {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 0.5em;
+.markAllReadButton {
+  composes: btn btnOutlineAccent btnSm btnFull from '@styles/shared.module.css';
 }
 
 .notificationList {
@@ -73,9 +75,19 @@
   composes: btn btnSm btnOutlineWarning from '@styles/shared.module.css';
 }
 
+.footerActions {
+  flex-shrink: 0;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.divider {
+  composes: divider from '@styles/shared.module.css';
+  margin: 0;
+}
+
 .clearAllButton {
-  composes: btn btnGhost btnFull from '@styles/shared.module.css';
-  padding: 0.5em;
-  font-size: var(--text-xs);
-  margin: 0.5em 0;
+  composes: btn btnOutlineAccent btnSm btnFull from '@styles/shared.module.css';
 }

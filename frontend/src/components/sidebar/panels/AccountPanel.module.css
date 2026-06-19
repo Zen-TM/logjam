@@ -209,7 +209,7 @@
 }
 
 .signOutBtn {
-  composes: btn btnGhost btnSm btnFull from '@styles/shared.module.css';
+  composes: btn btnOutlineAccent btnSm btnFull from '@styles/shared.module.css';
 }
 
 .deleteAccountBtn {

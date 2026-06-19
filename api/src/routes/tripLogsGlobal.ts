@@ -50,7 +50,12 @@ router.get(
       where: {
         userId: user.id,
         ...(search
-          ? { canyon: { name: { contains: search, mode: "insensitive" } } }
+          ? {
+              OR: [
+                { canyon: { name: { contains: search, mode: "insensitive" } } },
+                { displayName: { contains: search, mode: "insensitive" } },
+              ],
+            }
           : {}),
         ...(dateFrom || dateTo
           ? {
@@ -107,16 +112,22 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
 
-    const { date, notes, customFields, canyonId } = req.body;
+    const { date, notes, customFields, canyonId, displayName } = req.body;
     if (!date) throw new AppError(400, "date is required");
 
     const resolvedCanyonId = await resolveTripCanyonId(user.id, canyonId);
+    const trimmedDisplayName =
+      typeof displayName === "string" ? displayName.trim() : null;
+
+    if (!resolvedCanyonId && !trimmedDisplayName)
+      throw new AppError(400, "A canyon or trip name is required");
 
     const trip = await prisma.tripLog.create({
       data: {
         canyonId: resolvedCanyonId,
         userId: user.id,
         date: new Date(date),
+        displayName: resolvedCanyonId ? null : trimmedDisplayName,
         notes,
         customFields: customFields ?? {},
       },
@@ -140,7 +151,12 @@ router.patch(
     if (!trip || trip.userId !== user.id)
       throw new AppError(404, "Trip log not found");
 
-    const { date, notes, customFields, canyonId } = req.body;
+    const { date, notes, customFields, canyonId, displayName } = req.body;
+
+    const resolvedCanyonId =
+      canyonId !== undefined
+        ? await resolveTripCanyonId(user.id, canyonId)
+        : undefined;
 
     const updated = await prisma.tripLog.update({
       where: { id },
@@ -150,9 +166,17 @@ router.patch(
         ...(customFields !== undefined && {
           customFields: customFields ?? Prisma.JsonNull,
         }),
-        ...(canyonId !== undefined && {
-          canyonId: await resolveTripCanyonId(user.id, canyonId),
-        }),
+        ...(resolvedCanyonId !== undefined && { canyonId: resolvedCanyonId }),
+        // When a canyon marker is set, clear displayName (the two never coexist).
+        // Otherwise accept an explicit displayName update.
+        ...(resolvedCanyonId
+          ? { displayName: null }
+          : displayName !== undefined && {
+              displayName:
+                typeof displayName === "string"
+                  ? displayName.trim() || null
+                  : null,
+            }),
       },
     });
 
