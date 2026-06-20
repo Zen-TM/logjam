@@ -15,7 +15,7 @@
   </head>
   <body>
     <h1>Logjam — Privacy Policy</h1>
-    <p class="updated">Last updated: 2026-06-11</p>
+    <p class="updated">Last updated: 2026-06-21</p>
 
     <p>
       Logjam is built as a <strong>private</strong> tool. Privacy is a design
@@ -80,8 +80,38 @@
     <p>
       Logjam runs on AWS in the <code>ap-southeast-2</code> (Sydney) region.
       Photos, topo input, and rendered tiles are stored in S3. The database is
-      RDS PostgreSQL. Email goes via Amazon SES. Authentication is Amazon
-      Cognito.
+      RDS PostgreSQL. Transactional email is sent via Resend. Authentication is
+      Amazon Cognito.
+    </p>
+
+    <h2>Operator access</h2>
+    <p>
+      We will not pretend otherwise: Logjam is run by an operator who holds
+      administrative access to the servers and can, technically, read the data
+      stored in them. This is not end-to-end encryption, and losing your
+      password does not make your data unreadable to us.
+    </p>
+    <p>
+      What we do instead is make that access <em>accountable</em>. Operator
+      access to the database and storage is recorded in tamper-evident,
+      write-once audit logs that the operator cannot delete, and the application
+      itself connects with a restricted, non-administrative database account so
+      that operator access stands out from ordinary app traffic. We keep as
+      little as possible: no third-party analytics or telemetry, short retention
+      on topo data, and you can export or permanently delete your data yourself
+      at any time.
+    </p>
+    <p>
+      To be clear, this describes what is technically <em>possible</em>, not what
+      we do. We will not read, use, share, or sell your data for personal gain or
+      curiosity — only to operate, maintain, and debug the service on your behalf.
+      The controls above exist to keep that commitment accountable, rather than
+      something you simply have to take on faith.
+    </p>
+    <p>
+      The full commitment — including the honest limits of this approach and how
+      to verify the logging configuration in our source repository — is in our
+      <a href="https://github.com/Zen-TM/logjam/blob/main/docs/DATA-ACCESS-POLICY.md">Data-Access Policy</a>.
     </p>
 
     <h2>Third-party map services</h2>
