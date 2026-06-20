@@ -1,0 +1,58 @@
+.dropZone {
+  border: 2px dashed rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  text-align: center;
+  cursor: pointer;
+  background-color: rgba(255, 255, 255, 0.02);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.dropZoneActive {
+  border-color: var(--theme-accent);
+  background-color: color-mix(in srgb, var(--theme-accent) 8%, transparent);
+}
+
+.dropZone:hover {
+  border-color: var(--theme-accent);
+  background-color: color-mix(in srgb, var(--theme-accent) 8%, transparent);
+}
+
+.fileChip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+}
+
+.fileName {
+  font-weight: 600;
+  color: var(--theme-text-primary);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mappingFeedback {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+}
+
+.ignoredNotice {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+}
+
+.createForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 8px;
+  border-left: 2px solid var(--theme-accent);
+  margin-top: 8px;
+}

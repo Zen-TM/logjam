@@ -6,6 +6,8 @@ export * from "./tripLogFields.js";
 export * from "./elvisZip.js";
 export * from "./canyonNameMatch.js";
 export * from "./canyonGeo.js";
+export * from "./canyonMatch.js";
+export * from "./mergeCanyon.js";
 export * from "./weeklyQuota.js";
 export * from "./topoSettings.js";
 export * from "./topoExport.js";

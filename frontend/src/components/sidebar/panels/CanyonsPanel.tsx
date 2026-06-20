@@ -50,7 +50,7 @@ function CanyonsPanel({
   canyons,
   sharedCanyons,
   onAddCanyon,
-  onOpenCanyonCsvImport,
+  onOpenUnifiedImport,
   onStartAreaSelection,
   onCancelAreaSelection,
   selectingArea,
@@ -66,7 +66,7 @@ function CanyonsPanel({
   canyons: TCanyon[];
   sharedCanyons: TCanyon[];
   onAddCanyon: () => void;
-  onOpenCanyonCsvImport: () => void;
+  onOpenUnifiedImport: () => void;
   onStartAreaSelection: () => void;
   onCancelAreaSelection: () => void;
   selectingArea: boolean;
@@ -787,9 +787,9 @@ function CanyonsPanel({
         <div className={classes.divider} />
         <button
           className={classes.ghostButton}
-          onClick={onOpenCanyonCsvImport}
+          onClick={onOpenUnifiedImport}
         >
-          Import Canyons from CSV
+          Import from file
         </button>
         <button
           className={classes.ghostButton}

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
-import type { ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType } from "@logjam/shared";
+import type { ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, CanyonMergePolicy } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
 
@@ -49,6 +49,7 @@ export type TUser = {
     canyonCustomFields?: TripLogCustomFieldDef[];
     notifications?: NotificationPreferences;
     autoDownloadGeoPdfs?: boolean;
+    importMergePolicy?: CanyonMergePolicy;
   } | null;
 };
 
@@ -502,6 +503,7 @@ export function updateUserPreferences(
     canyonCustomFields: TripLogCustomFieldDef[];
     notifications: Partial<NotificationPreferences>;
     autoDownloadGeoPdfs: boolean;
+    importMergePolicy: CanyonMergePolicy;
   }>,
 ): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });
@@ -577,21 +579,7 @@ export function deleteTripLog(id: string): Promise<void> {
   return apiFetch<void>(`/trips/${id}`, { method: "DELETE" });
 }
 
-export type BulkTripLogInput = {
-  canyonId: string;
-  date: string;
-  notes?: string | null;
-  customFields?: Record<string, unknown>;
-};
-
-export type BulkTripLogResult = {
-  imported: number;
-  errors: { index: number; error: string }[];
-};
-
-export function bulkCreateTripLogs(trips: BulkTripLogInput[]): Promise<BulkTripLogResult> {
-  return apiFetch<BulkTripLogResult>("/trips/bulk", { method: "POST", body: { trips } });
-}
+// ── Unified file import (idempotent, batch-tagged) ────────────
 
 export type BulkCanyonInput = {
   name: string;
@@ -609,18 +597,65 @@ export type BulkCanyonInput = {
   attributes?: Record<string, unknown>;
 };
 
-export type BulkCanyonRequest =
-  | { mode: "create"; canyons: BulkCanyonInput[] }
-  | { mode: "replace"; replacements: { canyonId: string; data: BulkCanyonInput }[] };
+// One canyon row to import. The client decides per row whether the data should
+// merge into an existing canyon or create a new one (see the unified importer).
+export type BulkCanyonRow = {
+  data: BulkCanyonInput;
+  resolution: { kind: "create" } | { kind: "merge"; canyonId: string };
+};
+
+export type BulkCanyonRequest = {
+  importBatchId: string;
+  rows: BulkCanyonRow[];
+  mergePolicy?: CanyonMergePolicy;
+};
 
 export type BulkCanyonResult = {
+  batchId: string;
   created: number;
-  replaced: number;
+  merged: number;
+  skipped: number;
   errors: { rowIndex: number; message: string }[];
 };
 
 export function bulkCanyonImport(body: BulkCanyonRequest): Promise<BulkCanyonResult> {
   return apiFetch<BulkCanyonResult>("/canyons/bulk", { method: "POST", body });
+}
+
+// One trip row to import. `canyonId` is resolved client-side (null = canyon-less);
+// `sourceCanyonName` is ALWAYS the raw file string and is the idempotency basis.
+export type BulkTripLogInput = {
+  canyonId: string | null;
+  sourceCanyonName: string;
+  displayName?: string | null;
+  date: string;
+  notes?: string | null;
+  customFields?: Record<string, unknown>;
+};
+
+export type BulkTripLogRequest = {
+  importBatchId: string;
+  trips: BulkTripLogInput[];
+};
+
+export type BulkTripLogResult = {
+  batchId: string;
+  imported: number;
+  updated: number;
+  errors: { index: number; error: string }[];
+};
+
+export function bulkCreateTripLogs(body: BulkTripLogRequest): Promise<BulkTripLogResult> {
+  return apiFetch<BulkTripLogResult>("/trips/bulk", { method: "POST", body });
+}
+
+export type UndoImportResult = {
+  deletedCanyons: number;
+  deletedTrips: number;
+};
+
+export function undoImport(batchId: string): Promise<UndoImportResult> {
+  return apiFetch<UndoImportResult>(`/imports/${batchId}`, { method: "DELETE" });
 }
 
 export function getAllTripLogs(params?: {

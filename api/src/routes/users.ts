@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   isThemeSchemeId,
   normalizeUserUiPreferences,
+  normalizeImportMergePolicy,
   isTripLogCustomFieldDef,
   isNotificationPreferences,
 } from "@logjam/shared";
@@ -193,13 +194,14 @@ router.patch(
   userPatchLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
-    const { username, themeSchemeId, tripLogCustomFields, canyonCustomFields, notifications, autoDownloadGeoPdfs, consentVersion } = req.body as {
+    const { username, themeSchemeId, tripLogCustomFields, canyonCustomFields, notifications, autoDownloadGeoPdfs, importMergePolicy, consentVersion } = req.body as {
       username?: unknown;
       themeSchemeId?: unknown;
       tripLogCustomFields?: unknown;
       canyonCustomFields?: unknown;
       notifications?: unknown;
       autoDownloadGeoPdfs?: unknown;
+      importMergePolicy?: unknown;
       consentVersion?: unknown;
     };
 
@@ -240,7 +242,8 @@ router.patch(
       tripLogCustomFields !== undefined ||
       canyonCustomFields !== undefined ||
       notifications !== undefined ||
-      autoDownloadGeoPdfs !== undefined
+      autoDownloadGeoPdfs !== undefined ||
+      importMergePolicy !== undefined
     ) {
       if (themeSchemeId !== undefined && !isThemeSchemeId(themeSchemeId)) {
         throw new AppError(400, "Invalid themeSchemeId");
@@ -267,6 +270,12 @@ router.patch(
       if (autoDownloadGeoPdfs !== undefined && typeof autoDownloadGeoPdfs !== "boolean") {
         throw new AppError(400, "Invalid autoDownloadGeoPdfs");
       }
+      if (importMergePolicy !== undefined) {
+        const normalized = normalizeImportMergePolicy(importMergePolicy);
+        if (!normalized) {
+          throw new AppError(400, "Invalid importMergePolicy");
+        }
+      }
 
       const current = normalizeUserUiPreferences(user.uiPreferences);
       updates.uiPreferences = {
@@ -278,6 +287,7 @@ router.patch(
           ? { notifications: { ...current.notifications, ...(notifications as Record<string, boolean>) } }
           : {}),
         ...(autoDownloadGeoPdfs !== undefined ? { autoDownloadGeoPdfs } : {}),
+        ...(importMergePolicy !== undefined ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) } : {}),
       };
     }
 
