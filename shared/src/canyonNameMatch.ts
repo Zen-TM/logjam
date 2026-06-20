@@ -1,7 +1,9 @@
-// Canyon name normalization + fuzzy matching. Shared between API (RopeWiki
-// dedupe) and frontend (CSV import name matching).
+// Canyon name normalization primitives (lowercase/strip + waterway-suffix
+// stripping). Consumed by the unified matcher in canyonMatch.ts. The old
+// token-Jaccard nameMatchScore was retired once both the RopeWiki dedupe and
+// CSV import migrated to that single matcher.
 
-const WATERWAY_SUFFIXES = [
+export const WATERWAY_SUFFIXES = [
   "canyon",
   "canyons",
   "gorge",
@@ -49,38 +51,3 @@ export function stripWaterwaySuffix(name: string): string {
   return n;
 }
 
-function tokens(name: string): string[] {
-  return stripWaterwaySuffix(name)
-    .split(/[\s\-_/]+/)
-    .filter((t) => t.length > 1);
-}
-
-export type NameMatchScore = {
-  match: boolean;
-  tokenJaccard: number;
-  sharedTokens: number;
-};
-
-// Result is a triage hint, not a definitive judgement. `match` is true when
-// the two names should be treated as the same canyon by the dedupe pipeline.
-// Caller combines this with distance to reach an auto-link / review / new
-// decision.
-export function nameMatchScore(a: string, b: string): NameMatchScore {
-  const sa = stripWaterwaySuffix(a);
-  const sb = stripWaterwaySuffix(b);
-  if (!sa || !sb) return { match: false, tokenJaccard: 0, sharedTokens: 0 };
-  if (sa === sb) return { match: true, tokenJaccard: 1, sharedTokens: tokens(a).length };
-  if (sa.includes(sb) || sb.includes(sa)) {
-    const ta = new Set(tokens(a));
-    const tb = new Set(tokens(b));
-    const shared = [...ta].filter((t) => tb.has(t)).length;
-    const union = new Set([...ta, ...tb]).size || 1;
-    return { match: true, tokenJaccard: shared / union, sharedTokens: shared };
-  }
-  const ta = new Set(tokens(a));
-  const tb = new Set(tokens(b));
-  const shared = [...ta].filter((t) => tb.has(t)).length;
-  const union = new Set([...ta, ...tb]).size || 1;
-  const jaccard = shared / union;
-  return { match: jaccard >= 0.6, tokenJaccard: jaccard, sharedTokens: shared };
-}

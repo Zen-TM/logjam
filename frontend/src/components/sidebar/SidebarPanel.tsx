@@ -68,7 +68,7 @@ function SidebarPanel({
   canyons,
   sharedCanyons,
   onAddCanyon,
-  onOpenCanyonCsvImport,
+  onOpenUnifiedImport,
   onStartAreaSelection,
   selectingArea,
   onCancelAreaSelection,
@@ -155,7 +155,7 @@ function SidebarPanel({
   canyons: TCanyon[];
   sharedCanyons: TCanyon[];
   onAddCanyon: () => void;
-  onOpenCanyonCsvImport: () => void;
+  onOpenUnifiedImport: () => void;
   onStartAreaSelection: () => void;
   selectingArea: boolean;
   onCancelAreaSelection: () => void;
@@ -277,7 +277,7 @@ function SidebarPanel({
             canyons={canyons}
             sharedCanyons={sharedCanyons}
             onAddCanyon={onAddCanyon}
-            onOpenCanyonCsvImport={onOpenCanyonCsvImport}
+            onOpenUnifiedImport={onOpenUnifiedImport}
             onStartAreaSelection={onStartAreaSelection}
             onCancelAreaSelection={onCancelAreaSelection}
             selectingArea={selectingArea}
@@ -362,6 +362,7 @@ function SidebarPanel({
             pickingCoords={pickingCoords}
             onQuotaChanged={onQuotaChanged}
             onRefetchCanyons={onRefetch}
+            onOpenUnifiedImport={onOpenUnifiedImport}
           />
         )}
         {activePanel === "account" && <AccountPanel currentUser={currentUser} />}

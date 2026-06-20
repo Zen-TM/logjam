@@ -1,5 +1,6 @@
 import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
+import { randomUUID } from "node:crypto";
 import prisma from "../services/prisma";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
@@ -21,23 +22,24 @@ async function createCanyon(name: string): Promise<string> {
   return res.body.id as string;
 }
 
-describe("POST /canyons/bulk (fake auth = alice)", () => {
-  it("create mode: inserts valid rows and reports per-row errors for invalid ones", async () => {
+describe("POST /canyons/bulk — import contract (fake auth = alice)", () => {
+  it("creates valid rows and reports per-row errors for invalid ones", async () => {
+    const run = Date.now();
+    const goodName = `CH-002 bulk valid ${run}`;
     const res = await request(API_URL)
       .post("/canyons/bulk")
       .set(AUTH)
       .send({
-        mode: "create",
-        canyons: [
-          { name: "CH-002 bulk valid", latitude: -33.7, longitude: 150.3 },
-          { name: "", latitude: -33.7, longitude: 150.3 },
-          { name: "CH-002 bulk bad lat", latitude: 999, longitude: 150.3 },
-          { name: "CH-002 bulk bad grade", latitude: -33.7, longitude: 150.3, vGrade: 99 },
+        importBatchId: randomUUID(),
+        rows: [
+          { data: { name: goodName, latitude: -33.7, longitude: 150.3 }, resolution: { kind: "create" } },
+          { data: { name: "", latitude: -33.7, longitude: 150.3 }, resolution: { kind: "create" } },
+          { data: { name: `bad lat ${run}`, latitude: 999, longitude: 150.3 }, resolution: { kind: "create" } },
+          { data: { name: `bad grade ${run}`, latitude: -33.7, longitude: 150.3, vGrade: 99 }, resolution: { kind: "create" } },
         ],
       });
     expect(res.status).toBe(200);
     expect(res.body.created).toBe(1);
-    expect(res.body.replaced).toBe(0);
     expect(res.body.errors).toEqual([
       { rowIndex: 1, message: "Row 1: name is required" },
       { rowIndex: 2, message: "Row 2: invalid latitude" },
@@ -45,80 +47,70 @@ describe("POST /canyons/bulk (fake auth = alice)", () => {
     ]);
 
     const listRes = await request(API_URL).get("/canyons").set(AUTH);
-    const created = listRes.body.find((c: { name: string }) => c.name === "CH-002 bulk valid");
+    const created = listRes.body.find((c: { name: string }) => c.name === goodName);
     expect(created).toBeDefined();
 
     await request(API_URL).delete(`/canyons/${created.id}`).set(AUTH);
   });
 
-  it("create mode: rejects an empty canyons array with 400", async () => {
+  it("rejects an empty rows array with 400", async () => {
     const res = await request(API_URL)
       .post("/canyons/bulk")
       .set(AUTH)
-      .send({ mode: "create", canyons: [] });
+      .send({ importBatchId: randomUUID(), rows: [] });
     expect(res.status).toBe(400);
   });
 
-  it("rejects an unknown mode with 400", async () => {
-    const res = await request(API_URL)
-      .post("/canyons/bulk")
-      .set(AUTH)
-      .send({ mode: "frobnicate", canyons: [] });
-    expect(res.status).toBe(400);
-  });
-
-  it("replace mode: updates an owned canyon's fields", async () => {
-    const id = await createCanyon("CH-002 bulk replace target");
+  it("merges into an owned canyon by resolution", async () => {
+    const id = await createCanyon(`CH-002 bulk merge target ${Date.now()}`);
     try {
       const res = await request(API_URL)
         .post("/canyons/bulk")
         .set(AUTH)
         .send({
-          mode: "replace",
-          replacements: [
+          importBatchId: randomUUID(),
+          rows: [
             {
-              canyonId: id,
-              data: { name: "CH-002 bulk replace target (updated)", latitude: -33.8, longitude: 150.4 },
+              data: { name: "ignored — name is immutable on merge", latitude: -33.8, longitude: 150.4, notes: "merged in" },
+              resolution: { kind: "merge", canyonId: id },
             },
           ],
         });
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ created: 0, replaced: 1, errors: [] });
+      expect(res.body.merged).toBe(1);
 
       const getRes = await request(API_URL).get(`/canyons/${id}`).set(AUTH);
-      expect(getRes.body.name).toBe("CH-002 bulk replace target (updated)");
-      expect(getRes.body.latitude).toBeCloseTo(-33.8);
+      expect(getRes.body.notes).toBe("merged in"); // null field filled
     } finally {
       await request(API_URL).delete(`/canyons/${id}`).set(AUTH);
     }
   });
 
-  it("replace mode: a row with a non-existent canyonId is reported as a per-row error", async () => {
+  it("a merge row with a non-existent canyonId is reported as a per-row error", async () => {
     const res = await request(API_URL)
       .post("/canyons/bulk")
       .set(AUTH)
       .send({
-        mode: "replace",
-        replacements: [
+        importBatchId: randomUUID(),
+        rows: [
           {
-            canyonId: NONEXISTENT_ID,
-            data: { name: "CH-002 bulk nonexistent", latitude: -33.7, longitude: 150.3 },
+            data: { name: `CH-002 bulk nonexistent ${Date.now()}`, latitude: -33.7, longitude: 150.3 },
+            resolution: { kind: "merge", canyonId: NONEXISTENT_ID },
           },
         ],
       });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      created: 0,
-      replaced: 0,
-      errors: [{ rowIndex: 0, message: "Row 0: canyon not found" }],
-    });
+    expect(res.body.created).toBe(0);
+    expect(res.body.merged).toBe(0);
+    expect(res.body.errors).toHaveLength(1);
+    expect(res.body.errors[0].rowIndex).toBe(0);
   });
 
-  it("replace mode: rejects a foreign-owned canyonId with 403 (no rows updated)", async () => {
+  it("rejects merging into a foreign-owned canyonId with 403 (no rows changed)", async () => {
     const foreign = await prisma.canyon.create({
       data: {
         ownerId: BOB_ID,
-        name: "CH-002 bob's canyon",
+        name: `CH-002 bob's canyon ${Date.now()}`,
         latitude: -33.5,
         longitude: 150.1,
       },
@@ -128,19 +120,18 @@ describe("POST /canyons/bulk (fake auth = alice)", () => {
         .post("/canyons/bulk")
         .set(AUTH)
         .send({
-          mode: "replace",
-          replacements: [
+          importBatchId: randomUUID(),
+          rows: [
             {
-              canyonId: foreign.id,
-              data: { name: "CH-002 hijacked", latitude: -33.7, longitude: 150.3 },
+              data: { name: "CH-002 hijacked", latitude: -33.7, longitude: 150.3, notes: "hijack" },
+              resolution: { kind: "merge", canyonId: foreign.id },
             },
           ],
         });
       expect(res.status).toBe(403);
 
-      // Confirm the foreign canyon was not modified.
       const after = await prisma.canyon.findUnique({ where: { id: foreign.id } });
-      expect(after?.name).toBe("CH-002 bob's canyon");
+      expect(after?.notes).toBeNull();
     } finally {
       await prisma.canyon.delete({ where: { id: foreign.id } });
     }

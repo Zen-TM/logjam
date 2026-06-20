@@ -3,7 +3,6 @@ import type { TripLogCustomFieldDef } from "@logjam/shared";
 import type { TCanyon, TTripLog } from "../../../canyonUtils";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
-import TripLogCsvImportDialog from "../../dialogs/TripLogCsvImportDialog";
 import classes from "./TripLogsPanel.module.css";
 
 function TripLogsPanel({
@@ -18,6 +17,7 @@ function TripLogsPanel({
   pickingCoords,
   onQuotaChanged,
   onRefetchCanyons,
+  onOpenUnifiedImport,
 }: {
   tripLogs: TTripLog[];
   loading: boolean;
@@ -30,6 +30,7 @@ function TripLogsPanel({
   pickingCoords: boolean;
   onQuotaChanged: () => void;
   onRefetchCanyons: () => void;
+  onOpenUnifiedImport: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -39,7 +40,6 @@ function TripLogsPanel({
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [showImport, setShowImport] = useState(false);
 
   const filtered = useMemo(() => {
     return tripLogs.filter((t) => {
@@ -140,8 +140,8 @@ function TripLogsPanel({
       {/* Low-frequency actions */}
       <div className={classes.footerActions}>
         <div className={classes.divider} />
-        <button className={classes.ghostButton} onClick={() => setShowImport(true)}>
-          Import from CSV
+        <button className={classes.ghostButton} onClick={onOpenUnifiedImport}>
+          Import from file
         </button>
       </div>
 
@@ -207,19 +207,6 @@ function TripLogsPanel({
         onCustomFieldDefsChange={onCustomFieldDefsChange}
         onPickCoords={onPickCoords}
         onCanyonCreated={onRefetchCanyons}
-      />
-
-      {/* CSV import dialog */}
-      <TripLogCsvImportDialog
-        open={showImport && !pickingCoords}
-        onClose={() => setShowImport(false)}
-        canyons={canyons}
-        tripLogs={tripLogs}
-        customFieldDefs={customFieldDefs}
-        onCustomFieldDefsChange={onCustomFieldDefsChange}
-        onRefetchTripLogs={onRefetchTripLogs}
-        onRefetchAnalytics={onRefetchAnalytics}
-        onPickCoords={onPickCoords}
       />
     </div>
   );

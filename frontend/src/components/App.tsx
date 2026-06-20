@@ -3,7 +3,6 @@ import NavRail from "./sidebar/NavRail";
 import SidebarPanel from "./sidebar/SidebarPanel";
 import Map, { BASE_LAYERS } from "./map/Map";
 import SignIn from "./SignIn";
-import ImportDialog from "./dialogs/ImportDialog";
 import TopoDialog from "./dialogs/TopoDialog";
 import type {
   TopoJob,
@@ -13,7 +12,8 @@ import type {
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
 import type { GeoPdfTemplate } from "./dialogs/GeoPdfDialog";
 import CanyonDialog from "./dialogs/CanyonDialog";
-import CanyonCsvImportDialog from "./dialogs/CanyonCsvImportDialog";
+import UnifiedImportDialog from "./dialogs/UnifiedImportDialog";
+import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
 import SelectedCanyonsDialog from "./dialogs/SelectedCanyonsDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
@@ -94,9 +94,12 @@ function App() {
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
   const [activeLayerId, setActiveLayerId] = useLocalStorage("logjam.activeLayerId", BASE_LAYERS[0].id);
 
-  const [showImport, setShowImport] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
+  const [showUnifiedImport, setShowUnifiedImport] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  // True when the unified importer was opened from the onboarding wizard, so its
+  // Back/close returns to the welcome hub instead of dropping into an empty app.
+  const [importedFromOnboarding, setImportedFromOnboarding] = useState(false);
   const importChecked = useRef(false);
 
   // Layer visibility toggles
@@ -718,12 +721,14 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
     setGeoPdfJobsRefetch((n) => n + 1);
   }, [authenticated]);
 
-  // Show import dialog once when user has no canyons after first fetch completes
+  // First login (empty account): offer a non-forced onboarding choice once,
+  // after the first canyon fetch completes. The user picks RopeWiki, file
+  // import, or starting empty — nothing auto-runs.
   useEffect(() => {
     if (canyonsLoaded && !importChecked.current) {
       importChecked.current = true;
       if (canyons.length === 0) {
-        setShowImport(true);
+        setShowOnboarding(true);
       }
     }
   }, [canyonsLoaded, canyons.length]);
@@ -793,13 +798,6 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
       <a href="#main-content" className={classes.skipLink}>
         Skip to map
       </a>
-      <ImportDialog
-        open={showImport}
-        onClose={() => setShowImport(false)}
-        onImported={() => {
-          refetch();
-        }}
-      />
       <TopoDialog
         open={showTopo}
         onClose={() => {
@@ -880,7 +878,7 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
           canyons={canyons}
           sharedCanyons={sharedCanyons}
           onAddCanyon={() => setShowAdd(true)}
-          onOpenCanyonCsvImport={() => setShowCanyonCsvImport(true)}
+          onOpenUnifiedImport={() => setShowUnifiedImport(true)}
           onStartAreaSelection={startAreaSelection}
           selectingArea={selectingArea}
           onCancelAreaSelection={cancelAreaSelection}
@@ -1052,12 +1050,42 @@ const [showCanyonCsvImport, setShowCanyonCsvImport] = useState(false);
         <FilterEmptyState onClearFilters={clearFilters} />
       )}
 
-      {/* Canyon CSV import dialog */}
-      <CanyonCsvImportDialog
-        open={showCanyonCsvImport}
-        onClose={() => setShowCanyonCsvImport(false)}
+      {/* First-login onboarding choice */}
+      <OnboardingChoiceDialog
+        open={showOnboarding}
+        onLoaded={refetch}
+        onImportFiles={() => {
+          setShowOnboarding(false);
+          setImportedFromOnboarding(true);
+          setShowUnifiedImport(true);
+        }}
+        onStartEmpty={() => setShowOnboarding(false)}
+      />
+
+      {/* Unified file importer (canyons + logbooks) */}
+      <UnifiedImportDialog
+        open={showUnifiedImport && !pickingCoords}
+        onClose={() => {
+          setShowUnifiedImport(false);
+          setImportedFromOnboarding(false);
+        }}
+        onBack={
+          importedFromOnboarding
+            ? () => {
+                setShowUnifiedImport(false);
+                setImportedFromOnboarding(false);
+                setShowOnboarding(true);
+              }
+            : undefined
+        }
         canyons={canyons}
+        customFieldDefs={customFieldDefs}
+        onCustomFieldDefsChange={setCustomFieldDefs}
+        currentUser={currentUser}
         onRefetchCanyons={refetch}
+        onRefetchTripLogs={refetchTripLogs}
+        onRefetchAnalytics={refetchAnalytics}
+        onPickCoords={startPickingCoords}
       />
 
       {/* Add canyon dialog */}

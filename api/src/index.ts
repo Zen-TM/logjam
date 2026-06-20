@@ -39,6 +39,7 @@ import topoTemplatesRouter from "./routes/topoTemplates";
 import vectorStyleRouter from "./routes/vectorStyle";
 import geoPdfRouter from "./routes/geoPdf";
 import analyticsRouter from "./routes/analytics";
+import importsRouter from "./routes/imports";
 
 const env = getEnv();
 
@@ -145,6 +146,7 @@ app.use("/canyons", canyonsRouter);
 app.use("/canyons/:canyonId/trips", tripLogsRouter);
 app.use("/trips/bulk", tripLogsBulkRouter);
 app.use("/canyons/bulk", canyonsBulkRouter);
+app.use("/imports", importsRouter);
 app.use("/trips", tripLogsGlobalRouter);
 app.use("/canyons", sharingRouter);
 app.use("/friends", friendsRouter);

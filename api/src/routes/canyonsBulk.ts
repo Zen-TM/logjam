@@ -3,14 +3,18 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
-import { getEnv } from "../lib/env";
-import { deleteS3Keys } from "../lib/s3Cleanup";
-import { decrementStorageUsed } from "../lib/storageQuota";
+import {
+  mergeCanyon,
+  DEFAULT_CANYON_MERGE_POLICY,
+  type CanyonMergePolicy,
+  type MergeableField,
+} from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
-
-const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
+import { canyonImportKey } from "../lib/importKeys";
+import { deleteCanyonsCascade } from "../lib/bulkDelete";
 
 const BULK_DELETE_LIMIT = 500;
+const CHUNK_SIZE = 200;
 
 const router = Router();
 
@@ -29,10 +33,6 @@ type BulkCanyonInput = {
   hours?: number | null;
   attributes?: Record<string, unknown>;
 };
-
-type BulkRequest =
-  | { mode: "create"; canyons: BulkCanyonInput[] }
-  | { mode: "replace"; replacements: { canyonId: string; data: BulkCanyonInput }[] };
 
 type BulkError = { rowIndex: number; message: string };
 
@@ -85,128 +85,281 @@ function validateInput(
   return true;
 }
 
-function toCreateData(
-  input: BulkCanyonInput,
-  ownerId: string,
-): Prisma.CanyonCreateManyInput {
-  return {
-    ownerId,
-    name: input.name.trim(),
-    altNames: input.altNames ?? [],
-    latitude: input.latitude,
-    longitude: input.longitude,
-    notes: input.notes ?? null,
-    vGrade: input.vGrade ?? null,
-    aGrade: input.aGrade ?? null,
-    commitment: input.commitment ?? null,
-    quality: input.quality ?? null,
-    numAbseils: input.numAbseils ?? null,
-    longestAbseil: input.longestAbseil ?? null,
-    hours: input.hours ?? null,
-    attributes: (input.attributes ?? {}) as Prisma.InputJsonValue,
-  };
+const MERGEABLE_FIELD_NAMES: MergeableField[] = [
+  "vGrade", "aGrade", "commitment", "quality", "numAbseils", "longestAbseil", "hours", "notes",
+];
+
+function validateMergePolicy(policy: unknown): CanyonMergePolicy | null {
+  if (typeof policy !== "object" || policy === null) return null;
+  const candidate = policy as Record<string, unknown>;
+  for (const field of MERGEABLE_FIELD_NAMES) {
+    const value = candidate[field];
+    if (value !== "keepExisting" && value !== "useIncoming") return null;
+  }
+  // Drop unknown keys — reconstruct from known fields only.
+  const result = {} as CanyonMergePolicy;
+  for (const field of MERGEABLE_FIELD_NAMES) {
+    result[field] = candidate[field] as "keepExisting" | "useIncoming";
+  }
+  return result;
 }
 
-// POST /canyons/bulk
+type ImportRow = {
+  data: BulkCanyonInput;
+  resolution: { kind: "create" } | { kind: "merge"; canyonId: string };
+};
+
+type ImportRequest = {
+  importBatchId: string;
+  rows: ImportRow[];
+  mergePolicy?: unknown;
+};
+
+// POST /canyons/bulk — idempotent file-import endpoint
 router.post(
   "/",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
 
-    const body = req.body as BulkRequest;
+    const body = req.body as ImportRequest;
 
-    if (body.mode === "create") {
-      const { canyons } = body;
-      if (!Array.isArray(canyons) || canyons.length === 0) {
-        throw new AppError(400, "canyons array is required");
-      }
-
-      const errors: BulkError[] = [];
-      const validData: Prisma.CanyonCreateManyInput[] = [];
-
-      for (let i = 0; i < canyons.length; i++) {
-        if (validateInput(canyons[i], i, errors)) {
-          validData.push(toCreateData(canyons[i], user.id));
-        }
-      }
-
-      if (validData.length > 0) {
-        await prisma.canyon.createMany({ data: validData });
-      }
-
-      res.json({ created: validData.length, replaced: 0, errors });
-      return;
+    if (!body.importBatchId || typeof body.importBatchId !== "string") {
+      throw new AppError(400, "importBatchId is required");
+    }
+    if (!Array.isArray(body.rows) || body.rows.length === 0) {
+      throw new AppError(400, "rows array is required");
     }
 
-    if (body.mode === "replace") {
-      const { replacements } = body;
-      if (!Array.isArray(replacements) || replacements.length === 0) {
-        throw new AppError(400, "replacements array is required");
+    const policy: CanyonMergePolicy = body.mergePolicy
+      ? (validateMergePolicy(body.mergePolicy) ?? DEFAULT_CANYON_MERGE_POLICY)
+      : DEFAULT_CANYON_MERGE_POLICY;
+
+    // ---- Phase 1: Validate ALL rows before ANY write ----
+    const errors: BulkError[] = [];
+
+    type ValidatedRow = {
+      rowIndex: number;
+      data: BulkCanyonInput;
+      importKey: string;
+      resolution: ImportRow["resolution"];
+    };
+
+    const validRows: ValidatedRow[] = [];
+    for (let i = 0; i < body.rows.length; i++) {
+      const row = body.rows[i];
+      if (!row.data || !row.resolution) {
+        errors.push({ rowIndex: i, message: `Row ${i}: data and resolution are required` });
+        continue;
       }
+      if (row.resolution.kind !== "create" && row.resolution.kind !== "merge") {
+        errors.push({ rowIndex: i, message: `Row ${i}: resolution.kind must be "create" or "merge"` });
+        continue;
+      }
+      if (row.resolution.kind === "merge" && !row.resolution.canyonId) {
+        errors.push({ rowIndex: i, message: `Row ${i}: resolution.canyonId is required for merge` });
+        continue;
+      }
+      if (!validateInput(row.data, i, errors)) continue;
 
-      const errors: BulkError[] = [];
+      const importKey = canyonImportKey(row.data.name, row.data.latitude, row.data.longitude);
+      validRows.push({ rowIndex: i, data: row.data, importKey, resolution: row.resolution });
+    }
 
-      const candidateIds = replacements
-        .map((r) => r.canyonId)
-        .filter((id): id is string => Boolean(id));
-      const owned = await prisma.canyon.findMany({
-        where: { id: { in: candidateIds } },
-        select: { id: true, ownerId: true },
-      });
-      const ownerById = new Map(owned.map((c) => [c.id, c.ownerId]));
+    // Ownership-check all merge target canyons before writes.
+    const mergeTargetIds = validRows
+      .filter((r) => r.resolution.kind === "merge")
+      .map((r) => (r.resolution as { kind: "merge"; canyonId: string }).canyonId);
 
-      // validate + ownership-check all rows before any writes
-      const validReplacements: { canyonId: string; data: BulkCanyonInput }[] = [];
-      for (let i = 0; i < replacements.length; i++) {
-        const { canyonId, data } = replacements[i];
-        if (!canyonId) {
-          errors.push({ rowIndex: i, message: `Row ${i}: canyonId is required` });
+    const mergeTargetLookup = mergeTargetIds.length > 0
+      ? await prisma.canyon.findMany({
+          where: { id: { in: mergeTargetIds } },
+          select: {
+            id: true, ownerId: true, importKey: true,
+            name: true, latitude: true, longitude: true, altNames: true,
+            vGrade: true, aGrade: true, commitment: true, quality: true,
+            numAbseils: true, longestAbseil: true, hours: true, notes: true,
+            attributes: true,
+          },
+        })
+      : [];
+    const mergeTargetById = new Map(mergeTargetLookup.map((c) => [c.id, c]));
+
+    // Validate merge targets.
+    const rowsAfterTargetCheck: ValidatedRow[] = [];
+    for (const row of validRows) {
+      if (row.resolution.kind === "merge") {
+        const targetId = (row.resolution as { kind: "merge"; canyonId: string }).canyonId;
+        const target = mergeTargetById.get(targetId);
+        if (!target) {
+          errors.push({ rowIndex: row.rowIndex, message: `Row ${row.rowIndex}: target canyon not found` });
           continue;
         }
-        if (!validateInput(data, i, errors)) continue;
-
-        const ownerId = ownerById.get(canyonId);
-        if (ownerId === undefined) {
-          errors.push({ rowIndex: i, message: `Row ${i}: canyon not found` });
-          continue;
-        }
-        if (ownerId !== user.id) {
+        if (target.ownerId !== user.id) {
           throw new AppError(403, "Forbidden");
         }
-        validReplacements.push({ canyonId, data });
       }
-
-      if (validReplacements.length > 0) {
-        await prisma.$transaction(
-          validReplacements.map(({ canyonId, data }) =>
-            prisma.canyon.update({
-              where: { id: canyonId },
-              data: {
-                name: data.name.trim(),
-                altNames: data.altNames ?? [],
-                latitude: data.latitude,
-                longitude: data.longitude,
-                notes: data.notes ?? null,
-                vGrade: data.vGrade ?? null,
-                aGrade: data.aGrade ?? null,
-                commitment: data.commitment ?? null,
-                quality: data.quality ?? null,
-                numAbseils: data.numAbseils ?? null,
-                longestAbseil: data.longestAbseil ?? null,
-                hours: data.hours ?? null,
-                attributes: (data.attributes ?? {}) as Prisma.InputJsonValue,
-              },
-            }),
-          ),
-        );
-      }
-
-      res.json({ created: 0, replaced: validReplacements.length, errors });
-      return;
+      rowsAfterTargetCheck.push(row);
     }
 
-    throw new AppError(400, "mode must be 'create' or 'replace'");
+    // Look up existing canyons by importKey for idempotency.
+    const allImportKeys = rowsAfterTargetCheck.map((r) => r.importKey);
+    const existingByKey = new Map<string, typeof mergeTargetLookup[number]>();
+    if (allImportKeys.length > 0) {
+      const existing = await prisma.canyon.findMany({
+        where: { ownerId: user.id, importKey: { in: allImportKeys } },
+        select: {
+          id: true, ownerId: true, importKey: true,
+          name: true, latitude: true, longitude: true, altNames: true,
+          vGrade: true, aGrade: true, commitment: true, quality: true,
+          numAbseils: true, longestAbseil: true, hours: true, notes: true,
+          attributes: true,
+        },
+      });
+      for (const row of existing) {
+        if (row.importKey) existingByKey.set(row.importKey, row);
+      }
+    }
+
+    // ---- Phase 2: Build operations ----
+    type CreateOp = {
+      kind: "create";
+      data: Prisma.CanyonCreateManyInput;
+    };
+    type MergeOp = {
+      kind: "merge";
+      canyonId: string;
+      mergedData: Record<string, unknown>;
+      setImportKey: string | null; // Set importKey if canyon didn't have one.
+    };
+
+    const creates: CreateOp[] = [];
+    const merges: MergeOp[] = [];
+    let created = 0;
+    let merged = 0;
+
+    for (const row of rowsAfterTargetCheck) {
+      const { data, importKey, resolution } = row;
+
+      // Check if a canyon with this importKey already exists (idempotent).
+      const existingCanyon = existingByKey.get(importKey);
+      if (existingCanyon) {
+        // Merge into existing — do NOT create, do NOT touch its importBatchId.
+        // Cast attributes from Prisma JsonValue to Record<string, unknown> for mergeCanyon.
+        const mergedResult = mergeCanyon(
+          { ...existingCanyon, attributes: existingCanyon.attributes as Record<string, unknown> | null },
+          data,
+          policy,
+        );
+        merges.push({
+          kind: "merge",
+          canyonId: existingCanyon.id,
+          mergedData: {
+            altNames: mergedResult.altNames,
+            vGrade: mergedResult.vGrade ?? null,
+            aGrade: mergedResult.aGrade ?? null,
+            commitment: mergedResult.commitment ?? null,
+            quality: mergedResult.quality ?? null,
+            numAbseils: mergedResult.numAbseils ?? null,
+            longestAbseil: mergedResult.longestAbseil ?? null,
+            hours: mergedResult.hours ?? null,
+            notes: mergedResult.notes ?? null,
+            attributes: mergedResult.attributes as Prisma.InputJsonValue,
+          },
+          setImportKey: null, // Already has an importKey.
+        });
+        merged++;
+        continue;
+      }
+
+      if (resolution.kind === "merge") {
+        // Merge into a specific pre-existing canyon.
+        const targetId = (resolution as { kind: "merge"; canyonId: string }).canyonId;
+        const target = mergeTargetById.get(targetId)!;
+        const mergedResult = mergeCanyon(
+          { ...target, attributes: target.attributes as Record<string, unknown> | null },
+          data,
+          policy,
+        );
+        merges.push({
+          kind: "merge",
+          canyonId: targetId,
+          mergedData: {
+            altNames: mergedResult.altNames,
+            vGrade: mergedResult.vGrade ?? null,
+            aGrade: mergedResult.aGrade ?? null,
+            commitment: mergedResult.commitment ?? null,
+            quality: mergedResult.quality ?? null,
+            numAbseils: mergedResult.numAbseils ?? null,
+            longestAbseil: mergedResult.longestAbseil ?? null,
+            hours: mergedResult.hours ?? null,
+            notes: mergedResult.notes ?? null,
+            attributes: mergedResult.attributes as Prisma.InputJsonValue,
+          },
+          // Set importKey if currently null (so future re-imports are idempotent).
+          // Do NOT set importBatchId (pre-existing row — must survive undo).
+          setImportKey: target.importKey ? null : importKey,
+        });
+        merged++;
+      } else {
+        // Create new canyon with importKey AND importBatchId.
+        creates.push({
+          kind: "create",
+          data: {
+            ownerId: user.id,
+            name: data.name.trim(),
+            altNames: data.altNames ?? [],
+            latitude: data.latitude,
+            longitude: data.longitude,
+            notes: data.notes ?? null,
+            vGrade: data.vGrade ?? null,
+            aGrade: data.aGrade ?? null,
+            commitment: data.commitment ?? null,
+            quality: data.quality ?? null,
+            numAbseils: data.numAbseils ?? null,
+            longestAbseil: data.longestAbseil ?? null,
+            hours: data.hours ?? null,
+            attributes: (data.attributes ?? {}) as Prisma.InputJsonValue,
+            importKey,
+            importBatchId: body.importBatchId,
+          },
+        });
+        created++;
+      }
+    }
+
+    // ---- Phase 3: Execute in chunked transactions (size 200) ----
+    // Creates via createMany in chunks.
+    for (let i = 0; i < creates.length; i += CHUNK_SIZE) {
+      const chunk = creates.slice(i, i + CHUNK_SIZE);
+      await prisma.canyon.createMany({
+        data: chunk.map((op) => op.data),
+      });
+    }
+
+    // Merges (updates) via batched $transaction.
+    for (let i = 0; i < merges.length; i += CHUNK_SIZE) {
+      const chunk = merges.slice(i, i + CHUNK_SIZE);
+      await prisma.$transaction(
+        chunk.map((op) =>
+          prisma.canyon.update({
+            where: { id: op.canyonId },
+            data: {
+              ...op.mergedData,
+              ...(op.setImportKey ? { importKey: op.setImportKey } : {}),
+            },
+          }),
+        ),
+      );
+    }
+
+    res.json({
+      batchId: body.importBatchId,
+      created,
+      merged,
+      skipped: 0,
+      errors,
+    });
   },
 );
 
@@ -225,69 +378,8 @@ router.post(
       throw new AppError(400, `Cannot delete more than ${BULK_DELETE_LIMIT} canyons at once`);
     }
 
-    const owned = await prisma.canyon.findMany({
-      where: { id: { in: ids as string[] }, ownerId: user.id },
-      select: { id: true },
-    });
-    const ownedIds = owned.map((c) => c.id);
-    if (ownedIds.length === 0) {
-      res.json({ deletedIds: [] });
-      return;
-    }
-
-    const tripIds = (
-      await prisma.tripLog.findMany({
-        where: { canyonId: { in: ownedIds } },
-        select: { id: true },
-      })
-    ).map((t) => t.id);
-
-    const media = await prisma.media.findMany({
-      where: {
-        OR: [
-          { linkedType: "tripLog", linkedId: { in: tripIds } },
-          { linkedType: "canyon", linkedId: { in: ownedIds } },
-        ],
-      },
-      select: { s3KeyDisplay: true, s3KeyThumbnail: true, fileSizeBytes: true },
-    });
-
-    // S3-first (ARCH-004): blobs go before the rows, so an S3 failure leaves
-    // the rows (and therefore the keys) intact for a retried delete. The row
-    // deletes and the quota decrement then share one transaction so a crash
-    // between them can't leave the quota over-counted.
-    const s3Keys = media.flatMap((m) =>
-      [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
-    );
-    const totalBytes = media.reduce((sum, m) => sum + (m.fileSizeBytes ?? 0n), 0n);
-    await deleteS3Keys(MEDIA_BUCKET, s3Keys);
-
-    await prisma.$transaction(async (tx) => {
-      await tx.media.deleteMany({
-        where: { linkedType: "tripLog", linkedId: { in: tripIds } },
-      });
-      await tx.media.deleteMany({
-        where: { linkedType: "canyon", linkedId: { in: ownedIds } },
-      });
-      await tx.tripLog.deleteMany({ where: { canyonId: { in: ownedIds } } });
-      await tx.canyonShare.deleteMany({ where: { canyonId: { in: ownedIds } } });
-      // Purge canyon_shared notifications held by OTHER users (the share
-      // recipients) that reference the deleted canyons — not just the owner's
-      // own rows (PRIV-003), matching the single-delete path in canyons.ts.
-      // The OR list is bounded by BULK_DELETE_LIMIT.
-      await tx.notification.deleteMany({
-        where: {
-          type: "canyon_shared",
-          OR: ownedIds.map((canyonId) => ({
-            payload: { path: ["canyonId"], equals: canyonId },
-          })),
-        },
-      });
-      await tx.canyon.deleteMany({ where: { id: { in: ownedIds } } });
-      await decrementStorageUsed(user.id, totalBytes, tx);
-    });
-
-    res.json({ deletedIds: ownedIds });
+    const deletedIds = await deleteCanyonsCascade(user.id, ids as string[]);
+    res.json({ deletedIds });
   },
 );
 

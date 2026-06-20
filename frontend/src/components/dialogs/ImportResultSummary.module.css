@@ -1,0 +1,41 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.headline {
+  font-size: var(--text-sm);
+  color: var(--theme-text-primary);
+  line-height: 1.5;
+}
+
+.detailList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+}
+
+.detailItem {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.detailBullet {
+  flex-shrink: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--theme-text-muted);
+  margin-top: 0.45em;
+}
+
+.errorList {
+  color: var(--theme-warning);
+}

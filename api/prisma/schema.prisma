@@ -58,6 +58,8 @@ model Canyon {
   commitment       Int?
   quality          Float?
   hours            Float?
+  importKey        String?       @map("import_key")
+  importBatchId    String?       @map("import_batch_id")
   shares           CanyonShare[]
   forkedFrom       Canyon?       @relation("CanyonForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
   forks            Canyon[]      @relation("CanyonForks")
@@ -65,7 +67,9 @@ model Canyon {
   tripLogs         TripLog[]
 
   @@unique([ownerId, ropeWikiId])
+  @@unique([ownerId, importKey])
   @@index([ownerId])
+  @@index([ownerId, importBatchId])
   @@map("canyons")
 }
 
@@ -91,11 +95,15 @@ model TripLog {
   notes        String?
   customFields Json     @default("{}") @map("custom_fields")
   createdAt    DateTime @default(now()) @map("created_at")
+  importKey     String?  @map("import_key")
+  importBatchId String?  @map("import_batch_id")
   canyon       Canyon?  @relation(fields: [canyonId], references: [id], onDelete: Cascade)
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([canyonId])
   @@index([userId])
+  @@unique([userId, importKey])
+  @@index([userId, importBatchId])
   @@map("trip_logs")
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
@@ -18,20 +18,62 @@ import type {
 } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import MatchReview from "./MatchReview";
+import type { ReviewItem, ReviewDecision } from "./MatchReview";
 import classes from "./RopeWikiReviewDialog.module.css";
 
-type DecisionState = {
-  action: "link" | "create" | "skip";
-  targetCanyonId?: string;
-};
+// ── Adapter: RopeWikiCandidatePayload → ReviewItem ─────────────────────────
 
-function defaultDecision(row: RopeWikiCandidatePayload): DecisionState {
-  const top = row.candidates[0];
-  if (top && top.nameMatch && top.distanceMeters <= 1000) {
-    return { action: "link", targetCanyonId: top.canyonId };
-  }
-  return { action: "create" };
+function toReviewItem(row: RopeWikiCandidatePayload): ReviewItem {
+  const topCandidate = row.candidates[0];
+  const topIsGuess =
+    topCandidate !== undefined &&
+    topCandidate.nameMatch &&
+    topCandidate.distanceMeters <= 1000;
+
+  const options = row.candidates.map((c, i) => ({
+    id: c.canyonId,
+    label: c.name,
+    distanceMeters: c.distanceMeters,
+    isGuess: i === 0 && topIsGuess,
+  }));
+
+  const decision: ReviewDecision = topIsGuess
+    ? { kind: "link" as const, id: topCandidate.canyonId }
+    : { kind: "create" as const };
+
+  return {
+    incomingLabel: row.rw.name,
+    options,
+    allowCreate: true,
+    allowSkip: true,
+    allowNoCanyon: false,
+    decision,
+  };
 }
+
+/** Map ReviewItem decisions back to the RopeWikiApplyDecision format. */
+function toApplyDecision(
+  row: RopeWikiCandidatePayload,
+  item: ReviewItem,
+): RopeWikiApplyDecision {
+  const decision = item.decision;
+  switch (decision.kind) {
+    case "link":
+      return {
+        ropeWikiId: row.ropeWikiId,
+        action: "link",
+        targetCanyonId: decision.id,
+      };
+    case "create":
+      return { ropeWikiId: row.ropeWikiId, action: "create" };
+    case "skip":
+    case "noCanyon":
+      return { ropeWikiId: row.ropeWikiId, action: "skip" };
+  }
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
 
 function RopeWikiReviewDialog({
   open,
@@ -43,36 +85,36 @@ function RopeWikiReviewDialog({
   review: RopeWikiCandidatePayload[];
   onClose: () => void;
   onApplied: () => void;
-}) {
+}): React.JSX.Element {
   const isMobile = useIsMobile();
-  const [decisions, setDecisions] = useState<Record<number, DecisionState>>({});
+  const [items, setItems] = useState<ReviewItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    const next: Record<number, DecisionState> = {};
-    for (const row of review) next[row.ropeWikiId] = defaultDecision(row);
-    setDecisions(next);
+    setItems(review.map(toReviewItem));
     setError(null);
   }, [open, review]);
 
-  function setRow(ropeWikiId: number, value: DecisionState) {
-    setDecisions((d) => ({ ...d, [ropeWikiId]: value }));
-  }
+  const handleChange = useCallback(
+    (index: number, decision: ReviewDecision) => {
+      setItems((prev) => {
+        const next = [...prev];
+        next[index] = { ...next[index], decision };
+        return next;
+      });
+    },
+    [],
+  );
 
-  async function handleApply() {
+  async function handleApply(): Promise<void> {
     setSubmitting(true);
     setError(null);
     try {
-      const payload: RopeWikiApplyDecision[] = review.map((row) => {
-        const d = decisions[row.ropeWikiId] ?? defaultDecision(row);
-        return {
-          ropeWikiId: row.ropeWikiId,
-          action: d.action,
-          targetCanyonId: d.action === "link" ? d.targetCanyonId : undefined,
-        };
-      });
+      const payload: RopeWikiApplyDecision[] = review.map((row, i) =>
+        toApplyDecision(row, items[i]),
+      );
       await applyRopeWikiImport(payload);
       onApplied();
       onClose();
@@ -130,86 +172,7 @@ function RopeWikiReviewDialog({
             <ErrorBanner message={error} />
           </Box>
         )}
-        {review.map((row) => {
-          const decision = decisions[row.ropeWikiId] ?? defaultDecision(row);
-          return (
-            <div key={row.ropeWikiId} className={classes.row}>
-              <div>
-                <div className={classes.rwName}>{row.rw.name}</div>
-                <div className={classes.rwCoords}>
-                  RopeWiki · {row.rw.latitude.toFixed(4)},{" "}
-                  {row.rw.longitude.toFixed(4)}
-                </div>
-              </div>
-              <div className={classes.options}>
-                {row.candidates.map((c) => {
-                  const selected =
-                    decision.action === "link" &&
-                    decision.targetCanyonId === c.canyonId;
-                  return (
-                    <label
-                      key={c.canyonId}
-                      className={classes.option}
-                      htmlFor={`opt-${row.ropeWikiId}-${c.canyonId}`}
-                    >
-                      <input
-                        id={`opt-${row.ropeWikiId}-${c.canyonId}`}
-                        type="radio"
-                        name={`row-${row.ropeWikiId}`}
-                        checked={selected}
-                        onChange={() =>
-                          setRow(row.ropeWikiId, {
-                            action: "link",
-                            targetCanyonId: c.canyonId,
-                          })
-                        }
-                      />
-                      <span className={classes.optionLabel}>
-                        Link to <strong>{c.name}</strong>
-                      </span>
-                      <span className={classes.optionMeta}>
-                        {c.distanceMeters} m
-                      </span>
-                      {c.nameMatch && (
-                        <span className={classes.matchBadge}>name match</span>
-                      )}
-                    </label>
-                  );
-                })}
-                <label
-                  className={classes.option}
-                  htmlFor={`opt-${row.ropeWikiId}-create`}
-                >
-                  <input
-                    id={`opt-${row.ropeWikiId}-create`}
-                    type="radio"
-                    name={`row-${row.ropeWikiId}`}
-                    checked={decision.action === "create"}
-                    onChange={() =>
-                      setRow(row.ropeWikiId, { action: "create" })
-                    }
-                  />
-                  <span className={classes.optionLabel}>
-                    Create as new canyon
-                  </span>
-                </label>
-                <label
-                  className={classes.option}
-                  htmlFor={`opt-${row.ropeWikiId}-skip`}
-                >
-                  <input
-                    id={`opt-${row.ropeWikiId}-skip`}
-                    type="radio"
-                    name={`row-${row.ropeWikiId}`}
-                    checked={decision.action === "skip"}
-                    onChange={() => setRow(row.ropeWikiId, { action: "skip" })}
-                  />
-                  <span className={classes.optionLabel}>Skip</span>
-                </label>
-              </div>
-            </div>
-          );
-        })}
+        <MatchReview items={items} onChange={handleChange} />
       </DialogContent>
       <DialogActions>
         <Button

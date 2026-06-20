@@ -41,6 +41,7 @@ export type UserUiPreferences = {
   canyonCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
   notifications: NotificationPreferences;
   autoDownloadGeoPdfs: boolean;
+  importMergePolicy?: import("./mergeCanyon.js").CanyonMergePolicy;
 };
 
 export function isNotificationPreferences(
@@ -179,6 +180,32 @@ function normalizeCustomFieldDefs(
   );
 }
 
+const IMPORT_MERGE_POLICY_FIELDS = [
+  "vGrade", "aGrade", "commitment", "quality", "numAbseils", "longestAbseil", "hours", "notes",
+] as const;
+
+const VALID_MERGE_VALUES = new Set(["keepExisting", "useIncoming"]);
+
+/**
+ * Validate and normalize an importMergePolicy value. Returns the policy if
+ * valid (all known fields present with valid values, unknown keys dropped),
+ * or undefined if absent/invalid — in which case the caller should omit the
+ * field entirely (the default policy is applied at import time).
+ */
+export function normalizeImportMergePolicy(
+  value: unknown,
+): import("./mergeCanyon.js").CanyonMergePolicy | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const candidate = value as Record<string, unknown>;
+  const result: Record<string, string> = {};
+  for (const field of IMPORT_MERGE_POLICY_FIELDS) {
+    const v = candidate[field];
+    if (typeof v !== "string" || !VALID_MERGE_VALUES.has(v)) return undefined;
+    result[field] = v;
+  }
+  return result as unknown as import("./mergeCanyon.js").CanyonMergePolicy;
+}
+
 export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
   if (typeof value === "object" && value !== null) {
     const prefs = value as Record<string, unknown>;
@@ -190,7 +217,10 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     const notifications = normalizeNotificationPreferences(prefs.notifications);
     const autoDownloadGeoPdfs =
       typeof prefs.autoDownloadGeoPdfs === "boolean" ? prefs.autoDownloadGeoPdfs : true;
-    return { themeSchemeId, tripLogCustomFields, canyonCustomFields, notifications, autoDownloadGeoPdfs };
+    const importMergePolicy = normalizeImportMergePolicy(prefs.importMergePolicy);
+    const result: UserUiPreferences = { themeSchemeId, tripLogCustomFields, canyonCustomFields, notifications, autoDownloadGeoPdfs };
+    if (importMergePolicy) result.importMergePolicy = importMergePolicy;
+    return result;
   }
 
   return {
