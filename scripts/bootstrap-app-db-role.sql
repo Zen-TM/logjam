@@ -16,20 +16,17 @@
 
 \set ON_ERROR_STOP on
 
--- 1. Create the login role (no-op if it already exists, but keep the password
---    in sync from the secret on every run).
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'logjam_app') THEN
-    EXECUTE format(
-      'CREATE ROLE logjam_app LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS',
-      :'app_password'
-    );
-  ELSE
-    EXECUTE format('ALTER ROLE logjam_app WITH PASSWORD %L', :'app_password');
-  END IF;
-END
-$$;
+-- 1. Create the login role if missing, then (re)sync its password from the
+--    secret on every run. Done WITHOUT a DO/dollar-quoted block on purpose:
+--    psql does NOT substitute :'app_password' inside a $$...$$ string, so the
+--    password must be set in plain top-level statements. \gexec runs the
+--    CREATE only when the role does not yet exist (the SELECT returns no rows
+--    otherwise); the ALTER then sets the password unconditionally.
+SELECT 'CREATE ROLE logjam_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'logjam_app')
+\gexec
+
+ALTER ROLE logjam_app WITH PASSWORD :'app_password';
 
 -- 2. Audit cost vs. signal: drop READ logging for the application role only.
 --    The global pgaudit.log (logjam-pg16-pgaudit param group) is
