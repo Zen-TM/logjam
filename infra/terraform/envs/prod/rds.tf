@@ -73,6 +73,22 @@ resource "aws_db_instance" "main" {
 # placeholders ($1, $2 …), never literal coordinates or canyon names — this is
 # what keeps the audit logs compliant with the "no coords/names in plaintext
 # logs" rule while still recording WHO read WHAT tables WHEN.
+#
+# Cost vs. signal: the GLOBAL pgaudit.log below is "read,write,ddl,role", so any
+# OPERATOR/master session (logjam_admin) logs reads too — that is the privacy
+# point. But the application connects as the least-privilege role logjam_app,
+# whose normal traffic (reaper polling, per-request reads) is high-volume and
+# carries zero operator-access signal. So logjam_app gets a PER-ROLE override
+# that drops read logging (see scripts/bootstrap-app-db-role.sql:
+# `ALTER ROLE logjam_app SET pgaudit.log = 'write, ddl, role'`). App writes/DDL
+# stay logged; app reads do not. This cuts the dominant CloudWatch Logs
+# ingestion cost while leaving operator reads fully recorded.
+#
+# The residual gap (an operator could connect AS logjam_app to read with reads
+# suppressed) is made visible by log_connections = 1 below: every new connection
+# — role, source address, application — is recorded to the same WORM sink, so a
+# logjam_app session from a non-app source is anomalous and on record. This is
+# documented honestly in docs/DATA-ACCESS-POLICY.md.
 resource "aws_db_parameter_group" "pgaudit" {
   name        = "logjam-pg16-pgaudit"
   family      = "postgres16"
@@ -84,6 +100,8 @@ resource "aws_db_parameter_group" "pgaudit" {
     apply_method = "pending-reboot"
   }
 
+  # Global default: operator/master sessions log reads too. The app role
+  # overrides this per-role to drop reads (bootstrap-app-db-role.sql).
   parameter {
     name  = "pgaudit.log"
     value = "read,write,ddl,role"
@@ -99,5 +117,13 @@ resource "aws_db_parameter_group" "pgaudit" {
   parameter {
     name  = "pgaudit.log_catalog"
     value = "0"
+  }
+
+  # Record every connection (role + source address + application name) to the
+  # postgresql log -> WORM sink. Cheap (one line per connect, not per query) and
+  # makes an operator connecting as logjam_app to dodge read-logging visible.
+  parameter {
+    name  = "log_connections"
+    value = "1"
   }
 }

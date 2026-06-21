@@ -31,21 +31,34 @@ BEGIN
 END
 $$;
 
--- 2. Hand the application its own schema so migrate deploy can run DDL without
+-- 2. Audit cost vs. signal: drop READ logging for the application role only.
+--    The global pgaudit.log (logjam-pg16-pgaudit param group) is
+--    "read,write,ddl,role", so OPERATOR/master sessions still log reads — that
+--    is the privacy point. But logjam_app's normal traffic (reaper polling,
+--    per-request reads) is high-volume and carries zero operator-access signal,
+--    so logging it just inflates CloudWatch Logs ingestion cost. This per-role
+--    override keeps the app's writes/DDL audited while suppressing its reads.
+--    Operator reads stay fully recorded; the residual "operator connects AS
+--    logjam_app to dodge read-logging" gap is made visible by log_connections
+--    (every connection's role + source is logged to the WORM sink). Documented
+--    in docs/DATA-ACCESS-POLICY.md. Takes effect on the role's next session.
+ALTER ROLE logjam_app SET pgaudit.log = 'write, ddl, role';
+
+-- 3. Hand the application its own schema so migrate deploy can run DDL without
 --    superuser. (Postgres lets a role do anything within a schema it owns.)
 ALTER SCHEMA public OWNER TO logjam_app;
 
--- 3. Privileges on EVERYTHING already in the schema (tables created while the
+-- 4. Privileges on EVERYTHING already in the schema (tables created while the
 --    schema was owned by the master user).
 GRANT USAGE, CREATE ON SCHEMA public TO logjam_app;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO logjam_app;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO logjam_app;
 
--- 4. And on everything created in future (covers tables added by later
+-- 5. And on everything created in future (covers tables added by later
 --    migrations, whoever creates them).
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO logjam_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO logjam_app;
 
--- 5. Confirm it is NOT a superuser (the whole point).
+-- 6. Confirm it is NOT a superuser (the whole point).
 SELECT rolname, rolsuper, rolcreatedb, rolcreaterole
 FROM pg_roles WHERE rolname = 'logjam_app';

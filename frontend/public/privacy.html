@@ -96,10 +96,14 @@
       access to the database and storage is recorded in tamper-evident,
       write-once audit logs that the operator cannot delete, and the application
       itself connects with a restricted, non-administrative database account so
-      that operator access stands out from ordinary app traffic. We keep as
-      little as possible: no third-party analytics or telemetry, short retention
-      on topo data, and you can export or permanently delete your data yourself
-      at any time.
+      that operator access stands out from ordinary app traffic. The
+      application&rsquo;s own routine reads are not individually logged (they are
+      automatic, high-volume, and carry no operator-access signal), but every
+      operator read and every database connection &mdash; which account connected
+      and from where &mdash; is logged, so administrative access cannot quietly
+      hide among normal app activity. We keep as little as possible: no
+      third-party analytics or telemetry, short retention on topo data, and you
+      can export or permanently delete your data yourself at any time.
     </p>
     <p>
       To be clear, this describes what is technically <em>possible</em>, not what

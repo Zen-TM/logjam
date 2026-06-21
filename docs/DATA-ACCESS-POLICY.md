@@ -56,11 +56,20 @@ _deliberate, recorded, and impossible-to-hide_:
   - **CloudTrail S3 data events** on the media and topo buckets — object reads and
     writes.
   - **pgaudit** — direct SQL statements against the database, shipped off the
-    instance to the same WORM bucket.
+    instance to the same WORM bucket. Any read I run as the operator (master
+    account) is logged. The application itself runs as a separate restricted
+    role whose *routine reads are deliberately not logged* — they are
+    high-volume, automatic, and carry no operator-access signal, so logging them
+    would only add cost and noise. What **is** always logged is every *database
+    connection* (which role, from where), so the application's identity cannot be
+    used as a quiet back-door without leaving a record (see the honest limit
+    below), plus all writes and schema changes from any role.
 - **Least-privilege application role.** The application connects to the database as
   a dedicated non-superuser role, not the master account. My own ad-hoc database
   access uses the master account, so an operator read is **distinct in the logs**
-  from ordinary application traffic.
+  from ordinary application traffic — and because the application's own reads are
+  not logged while operator reads are, an operator read does not hide in a sea of
+  app traffic.
 - **Data minimisation.** No third-party analytics or telemetry. Short retention on
   topo/LiDAR artifacts. Operational logs are scrubbed so canyon names and
   coordinates never appear in plain text — and the audit logs above record SQL
@@ -74,7 +83,14 @@ I will not pretend this is airtight. It is not.
 
 1. **I can still read; I just can't erase the record.** WORM logging does not stop
    me reading the database. It means that if I do, I cannot silently delete the
-   evidence that I did.
+   evidence that I did. One nuance: to keep costs sane, the *application's* own
+   restricted role does not log its individual reads (only its writes and schema
+   changes). I hold that role's credentials too, so I *could* connect as the
+   application to read without each query being logged — but the **connection
+   itself is always logged** (which role connected, and from where). An operator
+   read via the application role from anywhere other than the app's own servers is
+   therefore anomalous and on the record, even though the individual statements
+   are not. The honest path — me reading as the master account — logs every read.
 2. **Snapshot exfiltration is recorded, but the downstream read is not.** I cannot
    query a backup invisibly — there is no read interface on a snapshot. To get
    data out I must restore, export, copy, or share it, and **every one of those is
