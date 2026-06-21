@@ -11,7 +11,11 @@
 #      logjam-topo-jobs (NOT the audit bucket itself — no recursion).
 #   3. pgaudit (direct SQL)          — shipped off the RDS instance to the same
 #      WORM bucket via CloudWatch Logs -> Kinesis Firehose (see rds.tf for the
-#      parameter group that turns pgaudit on).
+#      parameter group that turns pgaudit on). Operator/master sessions log
+#      reads+writes+ddl; the app role (logjam_app) drops read logging per-role
+#      for cost (its reads carry no operator-access signal), with
+#      log_connections capturing every connect so an operator using the app role
+#      to dodge read-logging is still recorded. See rds.tf + bootstrap SQL.
 #
 # Single-account caveat (documented in docs/DATA-ACCESS-POLICY.md): Object Lock
 # stops deletion of written entries even by root, but production root can still
