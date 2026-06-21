@@ -23,7 +23,7 @@ resource "aws_db_instance" "main" {
   dedicated_log_volume                = false
   delete_automated_backups            = true
   deletion_protection                 = true
-  enabled_cloudwatch_logs_exports     = []
+  enabled_cloudwatch_logs_exports     = ["postgresql"]
   engine                              = "postgres"
   engine_lifecycle_support            = "open-source-rds-extended-support-disabled"
   engine_version                      = "16.13"
@@ -38,7 +38,7 @@ resource "aws_db_instance" "main" {
   multi_az                            = false
   network_type                        = "IPV4"
   option_group_name                   = "default:postgres-16"
-  parameter_group_name                = "default.postgres16"
+  parameter_group_name                = aws_db_parameter_group.pgaudit.name
   performance_insights_enabled        = false
   port                                = 5432
   publicly_accessible                 = false
@@ -55,5 +55,49 @@ resource "aws_db_instance" "main" {
     # this attribute; ignoring it avoids a needless ModifyDBInstance against the
     # live master secret the whole app depends on.
     ignore_changes = [manage_master_user_password]
+  }
+}
+
+# pgaudit parameter group (operator-trust-plan Part C). Replaces the default
+# parameter group so we can preload pgaudit and capture direct SQL.
+#
+# IMPORTANT — applying this is NOT zero-downtime:
+#  - shared_preload_libraries is a STATIC parameter: it takes effect only after a
+#    DB REBOOT. Attaching this group + the reboot is an operator-gated step.
+#  - After the reboot, run `CREATE EXTENSION IF NOT EXISTS pgaudit;` once as the
+#    master user (see the operator-trust runbook) so the pgaudit.* settings
+#    below take effect.
+#
+# Privacy: pgaudit.log_parameter = 0 keeps bound query parameters OUT of the
+# logs. Prisma uses parameterized queries, so the logged statement text is
+# placeholders ($1, $2 …), never literal coordinates or canyon names — this is
+# what keeps the audit logs compliant with the "no coords/names in plaintext
+# logs" rule while still recording WHO read WHAT tables WHEN.
+resource "aws_db_parameter_group" "pgaudit" {
+  name        = "logjam-pg16-pgaudit"
+  family      = "postgres16"
+  description = "Postgres 16 with pgaudit enabled (operator-access auditing)."
+
+  parameter {
+    name         = "shared_preload_libraries"
+    value        = "pgaudit"
+    apply_method = "pending-reboot"
+  }
+
+  parameter {
+    name  = "pgaudit.log"
+    value = "read,write,ddl,role"
+  }
+
+  # Keep bound parameter values (coords/names) out of the audit log.
+  parameter {
+    name  = "pgaudit.log_parameter"
+    value = "0"
+  }
+
+  # Cut catalog-read noise (system tables), keeping the signal on user data.
+  parameter {
+    name  = "pgaudit.log_catalog"
+    value = "0"
   }
 }
