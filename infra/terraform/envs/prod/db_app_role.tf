@@ -26,8 +26,7 @@ resource "aws_secretsmanager_secret" "app_db" {
 
 # Lets the ECS task execution role inject logjam_app credentials into the worker
 # task defs at launch (mirrors aws_iam_policy.database_password_access for the
-# master secret). The EB API container reads it via DB_SECRET_ID at boot — the
-# EB instance role grant is EB-managed and added during cutover (see runbook).
+# master secret). The EB API container reads it via DB_SECRET_ID at boot.
 resource "aws_iam_policy" "app_db_password_access" {
   name = "AppDatabasePasswordAccess"
   policy = jsonencode({
@@ -42,5 +41,19 @@ resource "aws_iam_policy" "app_db_password_access" {
 
 resource "aws_iam_role_policy_attachment" "ecs_exec_app_db_password" {
   role       = aws_iam_role.ecs_task_execution.name
+  policy_arn = aws_iam_policy.app_db_password_access.arn
+}
+
+# EB instance role (logjam-eb-role) — the EB API container resolves logjam_app
+# credentials from DB_SECRET_ID at boot (api/src/boot.ts ->
+# resolveDbCredentials.ts) and re-resolves the password per connection
+# (lib/dbPassword.ts), so the EB instances need GetSecretValue on the new
+# secret. The role is EB-managed (created with the environment, not by this
+# config), so it is referenced by name rather than as a resource; the attachment
+# itself is tracked here so the grant is part of the committed proof artifact.
+# This MUST be applied before the EB env is cut over to the new DB_SECRET_ID,
+# or boot.ts fails closed (exit 1) unable to read the secret. See runbook D3.
+resource "aws_iam_role_policy_attachment" "eb_instance_app_db_password" {
+  role       = "logjam-eb-role"
   policy_arn = aws_iam_policy.app_db_password_access.arn
 }
