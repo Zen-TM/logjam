@@ -370,6 +370,14 @@
   padding: 0 2px;
 }
 
+.truncationNote {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--theme-warning);
+  opacity: 0.85;
+  padding: 0 2px;
+}
+
 .resultsList {
   flex: 1;
   min-height: 0;

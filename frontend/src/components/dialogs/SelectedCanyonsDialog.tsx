@@ -22,6 +22,7 @@ import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import type { TExportFormat } from "../../canyonExport";
 import { buildCanyonExport } from "../../canyonExport";
+import { fieldSx, selectSx, menuPaperProps } from "../../csvImport/dialogStyles";
 import classes from "./SelectedCanyonsDialog.module.css";
 
 function SelectedCanyonsDialog({
@@ -156,13 +157,6 @@ function SelectedCanyonsDialog({
     maxHeight: "85vh",
   };
 
-  const inputSx = {
-    mb: 0.5,
-    "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.85em" },
-    "& .MuiInputLabel-root": { color: "var(--theme-text-muted)" },
-    "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-  };
-
   return (
     <>
       <Dialog
@@ -264,11 +258,7 @@ function SelectedCanyonsDialog({
                     onChange={(e) => setCanyonSearch(e.target.value)}
                     onKeyDown={handleCanyonSearchKeyDown}
                     size="small"
-                    sx={{
-                      flex: 1,
-                      "& .MuiInputBase-input": { color: "var(--theme-text-primary)", fontSize: "0.8em" },
-                      "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-                    }}
+                    sx={{ ...fieldSx, flex: 1 }}
                   />
                   <button
                     className={classes.addButton}
@@ -296,17 +286,8 @@ function SelectedCanyonsDialog({
                 size="small"
                 value={exportFormat}
                 onChange={(e) => setExportFormat(e.target.value as TExportFormat)}
-                sx={{
-                  fontSize: "0.85em",
-                  color: "var(--theme-text-primary)",
-                  "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-                  "& .MuiSvgIcon-root": { color: "var(--theme-text-primary)" },
-                }}
-                MenuProps={{
-                  PaperProps: {
-                    sx: { backgroundColor: "var(--theme-primary)", color: "var(--theme-text-primary)" },
-                  },
-                }}
+                sx={selectSx}
+                MenuProps={menuPaperProps}
               >
                 <MenuItem value="gpx">GPX</MenuItem>
                 <MenuItem value="kml">KML</MenuItem>
@@ -363,7 +344,7 @@ function SelectedCanyonsDialog({
                   onChange={(e) => setShareSearch(e.target.value)}
                   size="small"
                   fullWidth
-                  sx={inputSx}
+                  sx={{ ...fieldSx, mb: 0.5 }}
                 />
                 {shareSearch.length > 0 && (
                   <Box>

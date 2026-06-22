@@ -66,6 +66,7 @@ function SidebarPanel({
   mapView,
   // Canyons
   canyons,
+  canyonsTotal,
   sharedCanyons,
   onAddCanyon,
   onOpenUnifiedImport,
@@ -115,6 +116,7 @@ function SidebarPanel({
   onCancelPickCoords,
   // Trip logs
   tripLogs,
+  tripLogsTotal,
   tripLogsLoading,
   onRefetchTripLogs,
   onRefetchAnalytics,
@@ -153,6 +155,7 @@ function SidebarPanel({
   mapView: { lng: number; lat: number; zoom: number } | null;
   // Canyons
   canyons: TCanyon[];
+  canyonsTotal: number | null;
   sharedCanyons: TCanyon[];
   onAddCanyon: () => void;
   onOpenUnifiedImport: () => void;
@@ -202,6 +205,7 @@ function SidebarPanel({
   onCancelPickCoords: () => void;
   // Trip logs
   tripLogs: TTripLog[];
+  tripLogsTotal: number | null;
   tripLogsLoading: boolean;
   onRefetchTripLogs: () => void;
   onRefetchAnalytics: () => void;
@@ -275,6 +279,7 @@ function SidebarPanel({
         {activePanel === "canyons" && (
           <CanyonsPanel
             canyons={canyons}
+            canyonsTotal={canyonsTotal}
             sharedCanyons={sharedCanyons}
             onAddCanyon={onAddCanyon}
             onOpenUnifiedImport={onOpenUnifiedImport}
@@ -352,6 +357,7 @@ function SidebarPanel({
         {activePanel === "trip-logs" && (
           <TripLogsPanel
             tripLogs={tripLogs}
+            tripLogsTotal={tripLogsTotal}
             loading={tripLogsLoading}
             onRefetchTripLogs={onRefetchTripLogs}
             onRefetchAnalytics={onRefetchAnalytics}

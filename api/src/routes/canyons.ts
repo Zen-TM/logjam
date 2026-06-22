@@ -16,11 +16,17 @@ const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
 const router = Router();
 
+// Hard cap on list responses. The body stays a bare array (consumers depend on
+// that shape); when the result hits the cap the true owner-filtered total is
+// surfaced via the X-Total-Count header so the UI can show "Showing N of TOTAL"
+// without a response-shape change (UX-001).
+const LIST_TAKE = 500;
+
 async function fetchCanyons(where: object) {
   return prisma.canyon.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    take: 500,
+    take: LIST_TAKE,
     include: {
       _count: { select: { tripLogs: true } },
     },
@@ -33,7 +39,13 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
-    res.json(await fetchCanyons({ ownerId: user.id }));
+    const where = { ownerId: user.id };
+    const [rows, total] = await Promise.all([
+      fetchCanyons(where),
+      prisma.canyon.count({ where }),
+    ]);
+    res.set("X-Total-Count", String(total));
+    res.json(rows);
   },
 );
 
@@ -43,9 +55,13 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
-    res.json(
-      await fetchCanyons({ shares: { some: { sharedWithId: user.id } } }),
-    );
+    const where = { shares: { some: { sharedWithId: user.id } } };
+    const [rows, total] = await Promise.all([
+      fetchCanyons(where),
+      prisma.canyon.count({ where }),
+    ]);
+    res.set("X-Total-Count", String(total));
+    res.json(rows);
   },
 );
 

@@ -194,6 +194,36 @@ export async function apiFetch<T>(
   return res.json();
 }
 
+// Like apiFetch but also surfaces the X-Total-Count header (the true owner-
+// filtered total before the server's list cap). `total` is null when the header
+// is absent or unparseable. Used by list hooks to show a "Showing N of TOTAL"
+// truncation caption (UX-001). The body shape is unchanged (a bare array), so
+// non-paginated consumers keep using plain apiFetch.
+export async function apiFetchWithTotal<T>(
+  path: string,
+): Promise<{ data: T; total: number | null }> {
+  const token = await getIdToken();
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    if (res.status === 401) notifySessionExpired();
+    let serverMessage: string | undefined;
+    try {
+      const body = await res.clone().json();
+      if (typeof body?.error === "string") serverMessage = body.error;
+    } catch {
+      // non-JSON body — ignore
+    }
+    throw new ApiError(res.status, path, "GET", serverMessage);
+  }
+  const header = res.headers.get("X-Total-Count");
+  const parsed = header == null ? NaN : Number(header);
+  const total = Number.isFinite(parsed) ? parsed : null;
+  const data = (await res.json()) as T;
+  return { data, total };
+}
+
 export async function apiFetchBlob(
   path: string,
   options?: { method?: string; body?: unknown },
@@ -419,6 +449,8 @@ export function useCanyonTracks(enabled: boolean) {
 
 export function useCanyons(enabled: boolean) {
   const [canyons, setCanyons] = useState<TCanyon[]>([]);
+  // True owner-filtered total before the server's list cap; null until known.
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -427,8 +459,11 @@ export function useCanyons(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     setLoading(true);
-    apiFetch<TCanyon[]>("/canyons")
-      .then(setCanyons)
+    apiFetchWithTotal<TCanyon[]>("/canyons")
+      .then(({ data, total }) => {
+        setCanyons(data);
+        setTotal(total);
+      })
       .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load canyons.")); })
       .finally(() => {
         setLoading(false);
@@ -438,7 +473,7 @@ export function useCanyons(enabled: boolean) {
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { canyons, loading, loaded, error, refetch };
+  return { canyons, total, loading, loaded, error, refetch };
 }
 
 export function useSharedCanyons(enabled: boolean) {
@@ -673,6 +708,8 @@ export function getAllTripLogs(params?: {
 
 export function useTripLogs(enabled: boolean) {
   const [tripLogs, setTripLogs] = useState<TTripLog[]>([]);
+  // True owner-filtered total before the server's list cap; null until known.
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
@@ -680,15 +717,18 @@ export function useTripLogs(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     setLoading(true);
-    getAllTripLogs()
-      .then(setTripLogs)
+    apiFetchWithTotal<TTripLog[]>("/trips")
+      .then(({ data, total }) => {
+        setTripLogs(data);
+        setTotal(total);
+      })
       .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load trip logs.")); })
       .finally(() => setLoading(false));
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { tripLogs, loading, error, refetch };
+  return { tripLogs, total, loading, error, refetch };
 }
 
 // ── Media (object storage) ────────────────────────────────────

@@ -46,33 +46,45 @@ router.get(
       dateTo?: string;
     };
 
-    const trips = await prisma.tripLog.findMany({
-      where: {
-        userId: user.id,
-        ...(search
-          ? {
-              OR: [
-                { canyon: { name: { contains: search, mode: "insensitive" } } },
-                { displayName: { contains: search, mode: "insensitive" } },
-              ],
-            }
-          : {}),
-        ...(dateFrom || dateTo
-          ? {
-              date: {
-                ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-                ...(dateTo ? { lte: new Date(dateTo) } : {}),
-              },
-            }
-          : {}),
-      },
-      orderBy: { date: "desc" },
-      take: 500,
-      include: {
-        canyon: { select: { id: true, name: true } },
-      },
-    });
+    // Same owner-filtered where for the page and the count, so X-Total-Count
+    // reflects exactly the set being truncated by the cap (UX-001).
+    const where = {
+      userId: user.id,
+      ...(search
+        ? {
+            OR: [
+              { canyon: { name: { contains: search, mode: "insensitive" } } },
+              { displayName: { contains: search, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+      ...(dateFrom || dateTo
+        ? {
+            date: {
+              ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+              ...(dateTo ? { lte: new Date(dateTo) } : {}),
+            },
+          }
+        : {}),
+    } satisfies Prisma.TripLogWhereInput;
 
+    // Hard cap on the list; the body stays a bare array (consumers depend on
+    // that shape) and the true total rides the X-Total-Count header so the UI
+    // can show "Showing N of TOTAL" without a response-shape change (UX-001).
+    const TRIP_LIST_TAKE = 500;
+    const [trips, total] = await Promise.all([
+      prisma.tripLog.findMany({
+        where,
+        orderBy: { date: "desc" },
+        take: TRIP_LIST_TAKE,
+        include: {
+          canyon: { select: { id: true, name: true } },
+        },
+      }),
+      prisma.tripLog.count({ where }),
+    ]);
+
+    res.set("X-Total-Count", String(total));
     res.json(trips);
   },
 );

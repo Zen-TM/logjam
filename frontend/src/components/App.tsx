@@ -335,7 +335,7 @@ function App() {
   const auth = useAuth();
   const authenticated = auth.state === "authenticated";
   const { hydrateFromUser } = useThemePreferences();
-  const { canyons, loaded: canyonsLoaded, error: canyonsError, refetch } = useCanyons(authenticated);
+  const { canyons, total: canyonsTotal, loaded: canyonsLoaded, error: canyonsError, refetch } = useCanyons(authenticated);
   const { canyons: sharedCanyons, error: sharedError, refetch: refetchShared } =
     useSharedCanyons(authenticated);
   const { tracks: canyonTracks, refetch: refetchCanyonTracks } = useCanyonTracks(
@@ -359,6 +359,7 @@ function App() {
   } = useNotifications(authenticated);
   const {
     tripLogs,
+    total: tripLogsTotal,
     loading: tripLogsLoading,
     error: tripLogsError,
     refetch: refetchTripLogs,
@@ -876,6 +877,7 @@ function App() {
           onActiveLayerChange={setActiveLayerId}
           mapView={mapCenter}
           canyons={canyons}
+          canyonsTotal={canyonsTotal}
           sharedCanyons={sharedCanyons}
           onAddCanyon={() => setShowAdd(true)}
           onOpenUnifiedImport={() => setShowUnifiedImport(true)}
@@ -943,6 +945,7 @@ function App() {
           pickingCoords={pickingCoords}
           onCancelPickCoords={cancelPickingCoords}
           tripLogs={tripLogs}
+          tripLogsTotal={tripLogsTotal}
           tripLogsLoading={tripLogsLoading}
           onRefetchTripLogs={refetchTripLogs}
           onRefetchAnalytics={refetchAnalytics}
