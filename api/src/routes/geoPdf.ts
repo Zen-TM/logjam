@@ -17,6 +17,7 @@ import { AppError } from "../middleware/errorHandler";
 import { GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from "../services/awsClients";
+import { logger } from "../lib/logger";
 import type {
   GeoPdfConfig,
   VectorStyleSettings,
@@ -110,7 +111,10 @@ router.post(
       if (result.ok) {
         vectorStyle = result.value;
       } else {
-        console.warn(`GeoPDF: invalid stored vector style for user, using defaults: ${result.errors.join("; ")}`);
+        logger.warn(
+          { errors: result.errors },
+          "geo_pdf_invalid_stored_vector_style_using_defaults",
+        );
       }
     }
 
@@ -151,12 +155,9 @@ router.post(
           data: { ecsTaskArn: taskArn },
         });
       } catch (launchErr) {
-        console.error(
-          JSON.stringify({
-            event: "geo_pdf_runtask_failed",
-            geoPdfJobId: job.id,
-            reason: String(launchErr),
-          }),
+        logger.error(
+          { geoPdfJobId: job.id, reason: String(launchErr) },
+          "geo_pdf_runtask_failed",
         );
         await prisma.geoPdfJob.update({
           where: { id: job.id },

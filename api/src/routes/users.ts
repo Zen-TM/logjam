@@ -18,6 +18,7 @@ import { getWeeklyTileUsage } from "../lib/tileQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
+import { logger } from "../lib/logger";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const TOPO_BUCKET = getEnv().S3_BUCKET_TOPO ?? "";
@@ -127,11 +128,10 @@ router.get(
             );
           }
 
-          console.warn(JSON.stringify({
-            event: "cognito_rebind",
-            oldSubHash: shortHash(oldSub),
-            newSubHash: shortHash(sub),
-          }));
+          logger.warn(
+            { oldSubHash: shortHash(oldSub), newSubHash: shortHash(sub) },
+            "cognito_rebind",
+          );
           user = await prisma.user.update({
             where: { email },
             data: { cognitoId: sub },

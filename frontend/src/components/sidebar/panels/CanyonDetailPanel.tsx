@@ -39,10 +39,13 @@ function formatCustomFieldValue(
   if (value == null || value === "") return null;
   if (type === "boolean") return value ? "Yes" : "No";
   if (type === "date" && typeof value === "string") {
+    // Date-typed custom fields are stored as UTC-midnight (date-only); format in
+    // UTC so AEST (UTC+10/+11) doesn't render the prior day.
     return new Date(value).toLocaleDateString("en-AU", {
       year: "numeric",
       month: "long",
       day: "numeric",
+      timeZone: "UTC",
     });
   }
   return String(value);
@@ -394,6 +397,9 @@ function CanyonDetailPanel({
                       year: "numeric",
                       month: "short",
                       day: "numeric",
+                      // Trip dates are stored as UTC-midnight (date-only); format
+                      // in UTC so AEST (UTC+10/+11) doesn't render the prior day.
+                      timeZone: "UTC",
                     })}
                   </span>
                   {trip.notes && (

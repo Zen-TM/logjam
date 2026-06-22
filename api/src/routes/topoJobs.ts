@@ -23,6 +23,7 @@ import { launchFargateTask } from "../lib/ecsRunTask";
 import { assertCanSubmit } from "../lib/tileQuota";
 import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
 import { deleteS3Prefix } from "../lib/s3Cleanup";
+import { logger } from "../lib/logger";
 import { resolveUser as getUser } from "../lib/resolveUser";
 
 const router = Router();
@@ -232,8 +233,9 @@ router.post(
       } catch (launchErr) {
         // Do not leak the raw AWS error to the client or the job row; log the
         // reason server-side (no canyon coords/names involved here).
-        console.error(
-          JSON.stringify({ event: "topo_runtask_failed", jobId, reason: String(launchErr) }),
+        logger.error(
+          { jobId, reason: String(launchErr) },
+          "topo_runtask_failed",
         );
         await prisma.topoJob.update({
           where: { id: jobId },
@@ -420,12 +422,9 @@ router.delete(
             }),
           );
         } catch (stopErr) {
-          console.error(
-            JSON.stringify({
-              event: "topo_job_delete_stop_task_failed",
-              jobId,
-              reason: String(stopErr),
-            }),
+          logger.error(
+            { jobId, reason: String(stopErr) },
+            "topo_job_delete_stop_task_failed",
           );
         }
       }

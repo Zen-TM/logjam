@@ -22,7 +22,14 @@ import classes from "./TripLogViewDialog.module.css";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString("en-AU", { year: "numeric", month: "long", day: "numeric" });
+  // Trip dates (and date-typed custom fields) are stored as UTC-midnight
+  // (date-only); format in UTC so AEST (UTC+10/+11) doesn't render the prior day.
+  return d.toLocaleDateString("en-AU", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function formatFieldValue(value: unknown, type: TripLogCustomFieldDef["type"]): string {

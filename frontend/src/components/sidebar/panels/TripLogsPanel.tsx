@@ -128,6 +128,9 @@ function TripLogsPanel({
                   year: "numeric",
                   month: "short",
                   day: "numeric",
+                  // Trip dates are stored as UTC-midnight (date-only); format in
+                  // UTC so AEST (UTC+10/+11) doesn't render the prior day.
+                  timeZone: "UTC",
                 })}
               </span>
               {trip.notes && (
