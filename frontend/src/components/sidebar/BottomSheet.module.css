@@ -54,9 +54,12 @@
   background-color: color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
 }
 
-/* Sheet content fills the rest; child panel manages its own scroll. */
+/* Sheet content is sized (inline height) to the *visible* portion of the sheet
+ * by BottomSheet.tsx, so the panel body's overflow-y scrolls within the on-screen
+ * area. flex: none lets the explicit height win (flex-grow would stretch it to the
+ * full off-screen sheet height). Child panel manages its own scroll. */
 .content {
-  flex: 1;
+  flex: none;
   min-height: 0;
   display: flex;
   flex-direction: column;

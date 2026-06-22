@@ -68,3 +68,11 @@
   overflow: hidden;
   padding: 0;
 }
+
+/* On mobile the bottom sheet can sit at the half snap, so canyon-detail must
+ * scroll as one column (the panel manages its own internal scroll on desktop). */
+@media (max-width: 768px) {
+  .panelBody[data-active-panel="canyon-detail"] {
+    overflow-y: auto;
+  }
+}
