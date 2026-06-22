@@ -51,6 +51,35 @@ describe("logger redaction", () => {
     const body = (out.req as { body: Record<string, unknown> }).body;
     expect(body.id).toBe("canyon-1");
   });
+
+  // PRIV-001 defence-in-depth: array-shaped bulk-import/create payloads carry
+  // user-typed names the coordinate wildcards can't reach. No log site emits
+  // these today (unproven hardening), but the redact paths must censor them if
+  // one ever does.
+  it("censors array-shaped bulk-import canyon names/coords", () => {
+    const out = captureLog({
+      req: {
+        body: {
+          rows: [
+            { data: { name: "Secret Canyon", latitude: -33.5, longitude: 150.3, altNames: ["X"], notes: "beta" } },
+          ],
+        },
+      },
+    });
+    const row = ((out.req as { body: { rows: Array<{ data: Record<string, unknown> }> } }).body.rows)[0].data;
+    expect(row.name).toBe("[redacted]");
+    expect(row.latitude).toBe("[redacted]");
+    expect(row.longitude).toBe("[redacted]");
+    expect(row.altNames).toBe("[redacted]");
+    expect(row.notes).toBe("[redacted]");
+  });
+
+  it("censors array-shaped bulk trip names", () => {
+    const out = captureLog({ req: { body: { trips: [{ name: "Secret trip", notes: "beta" }] } } });
+    const trip = ((out.req as { body: { trips: Array<Record<string, unknown>> } }).body.trips)[0];
+    expect(trip.name).toBe("[redacted]");
+    expect(trip.notes).toBe("[redacted]");
+  });
 });
 
 // Guards the SEC-002 boundary: tile z/x/y indices are approximate coordinates

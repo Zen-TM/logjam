@@ -24,6 +24,26 @@ export const redactPaths = [
   '*.longitude',
   '*.coords',
   '*.coordinates',
+  // Array-shaped bulk-import/bulk-create payloads carry user-typed canyon/trip
+  // names that the *.latitude wildcard can't reach (it only matches coordinate
+  // keys). Unproven hardening: no log site currently emits req.body for these
+  // routes (canyonsBulk/tripLogsBulk/imports log nothing; pino-http omits the
+  // body; errorHandler logs safeErrorForLog(err), not the body), but redacting
+  // them belt-and-braces guards the mandatory privacy boundary if a future log
+  // site ever carries the payload. See PRIV-001 defence-in-depth.
+  'req.body.rows[*].data.name',
+  'req.body.rows[*].data.altNames',
+  'req.body.rows[*].data.notes',
+  'req.body.rows[*].data.latitude',
+  'req.body.rows[*].data.longitude',
+  'req.body.trips[*].name',
+  'req.body.trips[*].notes',
+  'req.body.canyons[*].name',
+  'req.body.canyons[*].altNames',
+  'req.body.canyons[*].notes',
+  'req.body.canyons[*].latitude',
+  'req.body.canyons[*].longitude',
+  'req.body.displayName',
   // Authorization headers (never log credentials)
   'req.headers.authorization',
   'req.headers["x-fake-auth"]',
