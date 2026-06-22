@@ -299,3 +299,26 @@
   color: var(--theme-text-muted);
   opacity: 0.6;
 }
+
+/* ─── Mobile ───────────────────────────────────────────────────────────────── */
+
+/* On mobile the panelBody scrolls (see SidebarPanel.module.css), so the panel
+ * flows naturally instead of pinning to a fixed-height parent. min-height keeps
+ * the margin-top:auto footer at the bottom when content is short; the inner
+ * scroll boxes become caps (max-height) so they don't create a nested scroll. */
+@media (max-width: 768px) {
+  .root {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .attributesBox {
+    height: auto;
+    max-height: 180px;
+  }
+
+  .tripLogList {
+    height: auto;
+    max-height: 160px;
+  }
+}

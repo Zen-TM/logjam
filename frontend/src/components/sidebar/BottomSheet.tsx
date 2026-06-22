@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode, PointerEvent as ReactPointerEvent } from "react";
 import classes from "./BottomSheet.module.css";
 
@@ -38,6 +38,21 @@ function nearestSnap(translate: number, viewportHeight: number): SheetSnap {
   );
 }
 
+/** Track window.innerHeight reactively (orientation change, address-bar toggle). */
+function useViewportHeight(): number {
+  const [vh, setVh] = useState(() =>
+    typeof window === "undefined" ? 800 : window.innerHeight,
+  );
+  useEffect(() => {
+    function onResize() {
+      setVh(window.innerHeight);
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return vh;
+}
+
 /** Draggable bottom sheet for mobile panels. Controlled snap point so callers
  *  (App.tsx) can collapse it to "peek" during map-pick flows. */
 function BottomSheet({
@@ -49,37 +64,57 @@ function BottomSheet({
   onSnapChange: (snap: SheetSnap) => void;
   children: ReactNode;
 }) {
+  const viewportHeight = useViewportHeight();
+
   // Live drag translate in px; null when not dragging (snap drives transform).
   const [dragTranslate, setDragTranslate] = useState<number | null>(null);
   const dragStart = useRef<{ pointerY: number; baseTranslate: number } | null>(null);
+
+  // Measure the drag-handle height so the content region is sized exactly to
+  // the visible area below it. Robust against padding/font changes.
+  const handleRef = useRef<HTMLDivElement>(null);
+  const [handleHeight, setHandleHeight] = useState(20); // safe initial guess
+  useLayoutEffect(() => {
+    if (handleRef.current) {
+      setHandleHeight(handleRef.current.offsetHeight);
+    }
+  }, []);
 
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     event.currentTarget.setPointerCapture(event.pointerId);
     dragStart.current = {
       pointerY: event.clientY,
-      baseTranslate: snapTranslate(snap, window.innerHeight),
+      baseTranslate: snapTranslate(snap, viewportHeight),
     };
-    setDragTranslate(snapTranslate(snap, window.innerHeight));
+    setDragTranslate(snapTranslate(snap, viewportHeight));
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     if (!dragStart.current) return;
     const delta = event.clientY - dragStart.current.pointerY;
-    const maxTranslate = sheetHeightPx(window.innerHeight) - PEEK_REVEAL_PX;
+    const maxTranslate = sheetHeightPx(viewportHeight) - PEEK_REVEAL_PX;
     const next = Math.min(Math.max(dragStart.current.baseTranslate + delta, 0), maxTranslate);
     setDragTranslate(next);
   }
 
   function handlePointerUp() {
     if (dragTranslate !== null) {
-      onSnapChange(nearestSnap(dragTranslate, window.innerHeight));
+      onSnapChange(nearestSnap(dragTranslate, viewportHeight));
     }
     dragStart.current = null;
     setDragTranslate(null);
   }
 
-  const translate =
-    dragTranslate ?? snapTranslate(snap, typeof window === "undefined" ? 800 : window.innerHeight);
+  const translate = dragTranslate ?? snapTranslate(snap, viewportHeight);
+
+  // The sheet element is always full-height and slides down via translateY.
+  // Size the content region to only the *visible* portion so overflow-y: auto
+  // in the panel body scrolls within the on-screen area, not into the
+  // off-screen lower half of the sheet.
+  const visibleContentHeight = Math.max(
+    0,
+    sheetHeightPx(viewportHeight) - translate - handleHeight,
+  );
 
   return (
     <>
@@ -98,6 +133,7 @@ function BottomSheet({
         }}
       >
         <div
+          ref={handleRef}
           className={classes.handle}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
@@ -106,7 +142,9 @@ function BottomSheet({
         >
           <div className={classes.grip} />
         </div>
-        <div className={classes.content}>{children}</div>
+        <div className={classes.content} style={{ height: visibleContentHeight }}>
+          {children}
+        </div>
       </div>
     </>
   );
