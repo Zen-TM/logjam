@@ -7,6 +7,7 @@ import classes from "./TripLogsPanel.module.css";
 
 function TripLogsPanel({
   tripLogs,
+  tripLogsTotal,
   loading,
   onRefetchTripLogs,
   onRefetchAnalytics,
@@ -20,6 +21,8 @@ function TripLogsPanel({
   onOpenUnifiedImport,
 }: {
   tripLogs: TTripLog[];
+  // True trip-log total before the server's list cap; null until known.
+  tripLogsTotal: number | null;
   loading: boolean;
   onRefetchTripLogs: () => void;
   onRefetchAnalytics: () => void;
@@ -125,6 +128,9 @@ function TripLogsPanel({
                   year: "numeric",
                   month: "short",
                   day: "numeric",
+                  // Trip dates are stored as UTC-midnight (date-only); format in
+                  // UTC so AEST (UTC+10/+11) doesn't render the prior day.
+                  timeZone: "UTC",
                 })}
               </span>
               {trip.notes && (
@@ -135,6 +141,16 @@ function TripLogsPanel({
             </button>
           ))}
         </div>
+      )}
+
+      {/* The server caps the trip-log list; warn when the loaded set is a
+          truncated view of the true total so the oldest trips aren't silently
+          hidden (UX-001). */}
+      {!loading && tripLogsTotal != null && tripLogsTotal > tripLogs.length && (
+        <span className={classes.truncationNote}>
+          Showing your {tripLogs.length} most recent trips of {tripLogsTotal}.
+          Older ones aren&rsquo;t loaded.
+        </span>
       )}
 
       {/* Low-frequency actions */}

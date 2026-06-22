@@ -149,6 +149,10 @@ Three surfaces. One rule each. **Never render raw `err.message` from `apiFetch` 
 
 ## Conventions log (additive)
 
+### Dialog inputs/selects use shared sx — never inline
+
+Every MUI `TextField`/`Select` in a dialog applies `fieldSx`/`selectSx`/`menuPaperProps` from `csvImport/dialogStyles.tsx` — never inline an `sx` that re-implements input/select colors, border, or menu paper. Spread extras on top (`sx={{ ...fieldSx, mb: 0.5 }}`). For a `<TextField select>`, the menu props nest one level deeper: `SelectProps={{ MenuProps: menuPaperProps }}` (a bare `<Select>` takes `MenuProps={menuPaperProps}`). Inline variants drifted (focused-label color, icon color, font size) across dialogs — UX-002/003 (2026-06-22), continuation of the 2026-06-10 UX-003.
+
 ### Custom-field forms in dialogs
 
 Never re-implement the add-custom-field sub-form or per-field inputs inline — use `dialogs/AddCustomFieldForm.tsx` + `dialogs/CustomFieldInput.tsx`, which source `fieldSx`/`selectSx`/`menuPaperProps` from `csvImport/dialogStyles.tsx`. The two dialogs drifted visually when this was duplicated (UX-002/003). Unset boolean custom fields default to `false` via `dialogs/customFieldValues.ts` so the unchecked checkbox and the persisted value agree — don't reintroduce a `null` state in edit forms.
@@ -178,3 +182,7 @@ Single breakpoint: **`max-width: 768px`**, the canonical source being `useIsMobi
 - **Map-pick flows** (coord pick, area/bbox/extent select): App passes `collapseToPeek` to SidebarPanel so the sheet drops to peek and the map is reachable; dialog-initiated picks already hide their own dialog.
 - **Heavy authoring tools** (GeoPDF, topo settings, CSV import) are desktop-first: `fullScreen` + `overflow-x` on dense grids + a "best on a larger screen" note, **not** full reflow.
 - Use `100dvh` (not `100vh`) for full-height containers — mobile address-bar resize.
+
+### Date-only values format with `timeZone: "UTC"`
+
+Trip-log dates and date-typed custom fields are stored as UTC-midnight (the API does `new Date("YYYY-MM-DD")`, date-only). Any `new Date(iso).toLocaleDateString(...)` displaying one of these MUST pass `timeZone: "UTC"`, or AEST (UTC+10/+11) renders the previous calendar day (CH-001, 2026-06-22). This applies only to date-only values; true timestamps (`createdAt`, `*ResetAt`) display in local TZ correctly without it. Filter comparisons stay consistent because both sides parse as UTC midnight.

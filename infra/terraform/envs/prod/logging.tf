@@ -1,6 +1,11 @@
 # CloudWatch log groups for the three ECS workers. 90-day retention
 # (previously set by scripts/set-log-retention.sh; now Terraform owns it).
-# EB and Container Insights groups are left unmanaged (AWS auto-creates them).
+#
+# The EB API log groups (/aws/elasticbeanstalk/logjam-api-prod/*) are NOT managed
+# here — their names are dynamic and AWS auto-creates them. Their 7-day retention
+# is enforced EB-natively via RetentionInDays in api/.ebextensions/cloudwatch-logs.config
+# (recreation-safe, CI-applied on deploy), backing the privacy.html retention claim
+# (PRIV-001). Container Insights groups remain unmanaged (AWS default).
 
 resource "aws_cloudwatch_log_group" "topo_worker" {
   name              = "/ecs/logjam-topo-worker"

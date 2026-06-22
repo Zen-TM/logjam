@@ -48,6 +48,7 @@ function gradeSummary(c: TCanyon): string {
 
 function CanyonsPanel({
   canyons,
+  canyonsTotal,
   sharedCanyons,
   onAddCanyon,
   onOpenUnifiedImport,
@@ -64,6 +65,8 @@ function CanyonsPanel({
   canyonCustomFieldDefs,
 }: {
   canyons: TCanyon[];
+  // True owned-canyon total before the server's list cap; null until known.
+  canyonsTotal: number | null;
   sharedCanyons: TCanyon[];
   onAddCanyon: () => void;
   onOpenUnifiedImport: () => void;
@@ -751,6 +754,15 @@ function CanyonsPanel({
         <div className={classes.resultsHeader}>
           {filteredCanyons.length} canyon{filteredCanyons.length === 1 ? "" : "s"}
         </div>
+        {/* The server caps the owned-canyon list; warn when the loaded set is a
+            truncated view of the true total so the oldest canyons aren't
+            silently hidden (UX-001). */}
+        {canyonsTotal != null && canyonsTotal > canyons.length && (
+          <div className={classes.truncationNote}>
+            Showing your {canyons.length} most recent canyons of {canyonsTotal}.
+            Older ones aren&rsquo;t loaded.
+          </div>
+        )}
         {filteredCanyons.length === 0 ? (
           <span className={classes.resultsEmpty}>
             {query.trim() !== "" || activeCount > 0

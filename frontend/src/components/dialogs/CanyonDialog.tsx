@@ -37,6 +37,7 @@ import ConfirmDialog from "./ConfirmDialog";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
 import { getFieldValue as getFieldValueFor } from "./customFieldValues";
+import { selectSx, menuPaperProps } from "../../csvImport/dialogStyles";
 
 const V_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
 const A_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -48,23 +49,6 @@ const COMMITMENTS = [
   { value: 5, label: "V" },
   { value: 6, label: "VI" },
 ] as const;
-
-const selectSx = {
-  "& .MuiSelect-select": { color: "var(--theme-text-primary)" },
-  "& .MuiSelect-icon": { color: "var(--theme-text-primary)" },
-};
-
-const selectProps = {
-  MenuProps: {
-    PaperProps: {
-      sx: {
-        backgroundColor: "var(--theme-primary)",
-        color: "var(--theme-text-primary)",
-        boxShadow: "0 8px 16px rgba(0, 0, 0, 0.3)",
-      },
-    },
-  },
-};
 
 type Source = { label: string; url: string };
 
@@ -578,7 +562,7 @@ function CanyonDialog({
                   size="small"
                   fullWidth
                   sx={selectSx}
-                  SelectProps={selectProps}
+                  SelectProps={{ MenuProps: menuPaperProps }}
                 >
                   <MenuItem value="">None</MenuItem>
                   {V_GRADES.map((v) => (
@@ -616,7 +600,7 @@ function CanyonDialog({
                   size="small"
                   fullWidth
                   sx={selectSx}
-                  SelectProps={selectProps}
+                  SelectProps={{ MenuProps: menuPaperProps }}
                 >
                   <MenuItem value="">None</MenuItem>
                   {A_GRADES.map((a) => (
@@ -655,7 +639,7 @@ function CanyonDialog({
                   size="small"
                   fullWidth
                   sx={selectSx}
-                  SelectProps={selectProps}
+                  SelectProps={{ MenuProps: menuPaperProps }}
                 >
                   <MenuItem value="">None</MenuItem>
                   {COMMITMENTS.map((c) => (

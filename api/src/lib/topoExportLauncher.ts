@@ -2,6 +2,7 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getEnv } from "./env";
 import { launchFargateTask } from "./ecsRunTask";
+import { logger } from "./logger";
 import type { ExportFormat, ExportBundling, TopoLayerKey } from "@logjam/shared";
 
 // Cap to prevent users from flooding ECS with queued exports. Shared by the
@@ -74,12 +75,9 @@ export async function createAndLaunchTopoExport(
         data: { ecsTaskArn: taskArn },
       });
     } catch (launchErr) {
-      console.error(
-        JSON.stringify({
-          event: "topo_export_runtask_failed",
-          exportJobId: exportJob.id,
-          reason: String(launchErr),
-        }),
+      logger.error(
+        { exportJobId: exportJob.id, reason: String(launchErr) },
+        "topo_export_runtask_failed",
       );
       await prisma.topoExportJob.update({
         where: { id: exportJob.id },

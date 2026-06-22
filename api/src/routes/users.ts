@@ -18,6 +18,7 @@ import { getWeeklyTileUsage } from "../lib/tileQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
+import { logger } from "../lib/logger";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const TOPO_BUCKET = getEnv().S3_BUCKET_TOPO ?? "";
@@ -127,11 +128,10 @@ router.get(
             );
           }
 
-          console.warn(JSON.stringify({
-            event: "cognito_rebind",
-            oldSubHash: shortHash(oldSub),
-            newSubHash: shortHash(sub),
-          }));
+          logger.warn(
+            { oldSubHash: shortHash(oldSub), newSubHash: shortHash(sub) },
+            "cognito_rebind",
+          );
           user = await prisma.user.update({
             where: { email },
             data: { cognitoId: sub },
@@ -408,13 +408,14 @@ router.delete(
     // rows are deleted the keys are unrecoverable, so cleanup must run S3-first:
     // if an S3 delete throws, the DB rows still exist and a retried DELETE /me
     // can re-derive the keys (ARCH-004 — no orphaned objects, no lost keys).
-    const [topoJobs, topoExportJobs, media, ownedCanyons, friendships] =
+    const [topoJobs, topoExportJobs, geoPdfJobs, media, ownedCanyons, friendships] =
       await Promise.all([
         prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
         prisma.topoExportJob.findMany({
           where: { userId: user.id },
           select: { id: true, resultKey: true },
         }),
+        prisma.geoPdfJob.findMany({ where: { userId: user.id }, select: { id: true } }),
         prisma.media.findMany({
           where: { ownerId: user.id },
           select: { s3KeyDisplay: true, s3KeyThumbnail: true },
@@ -457,6 +458,13 @@ router.delete(
       ]),
       ...topoExportJobs.map(({ id }) =>
         deleteS3Prefix(TOPO_BUCKET, `exports/${id}/`),
+      ),
+      // GeoPDF outputs live under exports/geo-pdf/{jobId}/ (geoPdfWorker
+      // resultKeyFor). Delete the whole per-job prefix, not just the recorded
+      // resultKey, so an object uploaded by a running/failed job before its row
+      // was recorded is still purged (ARCH-001).
+      ...geoPdfJobs.map(({ id }) =>
+        deleteS3Prefix(TOPO_BUCKET, `exports/geo-pdf/${id}/`),
       ),
     ]);
 
@@ -505,6 +513,7 @@ router.delete(
       }),
       prisma.topoJob.deleteMany({ where: { userId: user.id } }),
       prisma.topoExportJob.deleteMany({ where: { userId: user.id } }),
+      prisma.geoPdfJob.deleteMany({ where: { userId: user.id } }),
       prisma.media.deleteMany({ where: { ownerId: user.id } }),
       prisma.tripLog.deleteMany({ where: { userId: user.id } }),
       prisma.canyon.deleteMany({ where: { ownerId: user.id } }),

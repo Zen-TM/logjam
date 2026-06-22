@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { logger } from "../lib/logger";
+import { logger, safeErrorForLog } from "../lib/logger";
 
 // Safe, explicitly-typed shape for fields echoed to the client alongside an
 // error. Constrained to non-sensitive quota figures so a future caller cannot
@@ -36,7 +36,13 @@ export function errorHandler(
     (req as Request & { log?: typeof logger }).log ?? logger;
 
   if (err instanceof AppError) {
-    reqLog.warn({ err, statusCode: err.statusCode, reqId }, "request_failed");
+    // Never log the raw Error — its message/stack can embed user-supplied canyon
+    // names/coords (e.g. a wrapped Prisma error). safeErrorForLog scrubs them;
+    // pino's redact paths can't reach free text inside err.message/err.stack.
+    reqLog.warn(
+      { err: safeErrorForLog(err), statusCode: err.statusCode, reqId },
+      "request_failed",
+    );
     // Echo only whitelisted detail keys — never blind-spread err.details.
     const body: Record<string, unknown> = {
       error: err.message,
@@ -51,7 +57,7 @@ export function errorHandler(
     return;
   }
 
-  reqLog.error({ err, reqId }, "unhandled_error");
+  reqLog.error({ err: safeErrorForLog(err), reqId }, "unhandled_error");
   res
     .status(500)
     .json({ error: "Internal server error", requestId: reqId });
