@@ -152,4 +152,5 @@ Integration tests in `__tests__/` run against live local API. `make dev` must ru
 
 ## Conventions log (additive)
 
-_(none yet)_
+- **Bulk collection endpoints must cap array length explicitly (both ends).** Any POST that does per-element work over a request array (import/delete) must reject empty AND oversized inputs: `length === 0` → `AppError(400)`, `length > LIMIT` → `AppError(413)`. Mirror the sibling limit in the file (`BULK_DELETE_LIMIT` / `BULK_IMPORT_LIMIT`). The 1 MB body cap + 300/min limiter are not a substitute. (SEC-001, 2026-06-22)
+- **Never log a raw thrown error; scrub it with `safeErrorForLog` (`lib/logger.ts`).** Pino's `redact.paths` only censor structured keys — they cannot reach free text inside `err.message`/`err.stack`, and Prisma renders user-supplied canyon name/coords into validation-error messages. The global `errorHandler` logs `safeErrorForLog(err)`; any new direct `logger.*({ err })` site must do the same. (SEC-001 DoD, 2026-06-22)

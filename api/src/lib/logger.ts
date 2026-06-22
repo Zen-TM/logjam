@@ -44,6 +44,47 @@ export function redactTilePathPatterns(message: string): string {
     .replace(/\b\d+\/\d+\/\d+\b/g, "[redacted-tile]");
 }
 
+/**
+ * Build a privacy-safe projection of a thrown error for logging.
+ *
+ * Pino's `redact.paths` only censor STRUCTURED keys (e.g. `req.body.name`); they
+ * cannot scrub free text embedded inside an Error's `message`/`stack`. Prisma is
+ * the concrete leak vector: a `PrismaClientValidationError` (e.g. a bulk-import
+ * row with a wrong-typed field that our hand validators don't cover) renders the
+ * FULL query arguments — including canyon `name`, `latitude`, `longitude`,
+ * `notes` — into `err.message` AND `err.stack`. Logging the raw `{ err }` (pino's
+ * default Error serializer emits message + stack) would put canyon names/coords
+ * in plaintext logs, violating the root CLAUDE.md privacy rule.
+ *
+ * So: never log the raw Error. Log only the class name plus a scrubbed message
+ * with any rendered argument block removed and URLs/tiles redacted. The stack is
+ * dropped entirely (it re-embeds the args); the class name + reqId are enough to
+ * locate the throw site. Non-Prisma, coordinate-free errors keep their message
+ * intact (matched verbatim by the unit tests).
+ */
+export function safeErrorForLog(err: unknown): {
+  name: string;
+  message: string;
+} {
+  if (!(err instanceof Error)) {
+    return { name: "NonError", message: redactTilePathPatterns(String(err)) };
+  }
+  let message = err.message;
+  // Strip Prisma's rendered invocation-argument block. Prisma formats validation
+  // /known-request errors as:
+  //   Invalid `prisma.canyon.createMany()` invocation\n\n<reason>\n{ ...args }
+  // The trailing `{ ... }` (often multi-line) is the user-supplied data — drop
+  // everything from the first brace that starts an args/object render onward.
+  const argsBlockIndex = message.search(/\n\s*[{[]/);
+  if (argsBlockIndex !== -1) {
+    message = `${message.slice(0, argsBlockIndex)}\n[redacted-args]`;
+  }
+  return {
+    name: err.name || "Error",
+    message: redactTilePathPatterns(message),
+  };
+}
+
 export const logger = pino({
   level: env.LOG_LEVEL,
   redact: {

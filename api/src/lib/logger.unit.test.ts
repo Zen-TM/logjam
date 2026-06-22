@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import pino from "pino";
-import { redactPaths, redactTilePathPatterns } from "./logger";
+import { redactPaths, redactTilePathPatterns, safeErrorForLog } from "./logger";
 
 // Build a pino logger using the SAME redact paths the app logger uses, but
 // writing to an in-memory buffer so we can assert what actually gets censored.
@@ -85,5 +85,50 @@ describe("redactTilePathPatterns", () => {
     expect(redactTilePathPatterns("Error: socket hang up")).toBe(
       "Error: socket hang up",
     );
+  });
+});
+
+// Guards the SEC-001 (DoD) boundary: pino redact paths cannot scrub free text
+// inside err.message/err.stack, and Prisma renders user-supplied canyon
+// name/coords into a validation error's message. safeErrorForLog must drop the
+// rendered argument block before it can reach logs.
+describe("safeErrorForLog", () => {
+  it("strips a Prisma rendered-args block carrying canyon name/coords", () => {
+    const err = new Error(
+      "Invalid `prisma.canyon.createMany()` invocation\n\n" +
+        "Argument `notes`: Invalid value provided. Expected String or Null, provided Int.\n" +
+        '{ name: "Secret Slot Canyon", latitude: -33.7, longitude: 150.3, notes: 12345 }',
+    );
+    err.name = "PrismaClientValidationError";
+    const safe = safeErrorForLog(err);
+    expect(safe.name).toBe("PrismaClientValidationError");
+    expect(safe.message).not.toMatch(/Secret Slot Canyon/);
+    expect(safe.message).not.toMatch(/-33\.7|150\.3/);
+    expect(safe.message).toContain("[redacted-args]");
+    // The reason line survives so the throw site is still diagnosable.
+    expect(safe.message).toContain("Expected String or Null");
+  });
+
+  it("never carries the stack (which re-embeds the args)", () => {
+    const err = new Error("boom { name: \"X\" }");
+    const safe = safeErrorForLog(err) as Record<string, unknown>;
+    expect(safe).not.toHaveProperty("stack");
+  });
+
+  it("leaves a plain coordinate-free error message intact", () => {
+    const safe = safeErrorForLog(new Error("connection refused"));
+    expect(safe.message).toBe("connection refused");
+    expect(safe.name).toBe("Error");
+  });
+
+  it("redacts tile/url fragments embedded in an error message", () => {
+    const safe = safeErrorForLog(new Error("fetch failed https://tiles.example/17/120/78.png"));
+    expect(safe.message).not.toMatch(/tiles\.example/);
+    expect(safe.message).toContain("[redacted-url]");
+  });
+
+  it("handles non-Error throwables", () => {
+    expect(safeErrorForLog("just a string").name).toBe("NonError");
+    expect(safeErrorForLog("just a string").message).toBe("just a string");
   });
 });

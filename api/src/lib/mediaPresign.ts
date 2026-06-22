@@ -35,7 +35,12 @@ async function presignGet(
       Bucket: MEDIA_BUCKET,
       Key: key,
       ...(opts?.downloadFilename && {
-        ResponseContentDisposition: `attachment; filename="${opts.downloadFilename.replace(/"/g, "")}"`,
+        // Strip quotes (close the filename token) and control chars incl. CR/LF.
+        // No proven injection path: this value is a SIGNED query param on a
+        // presigned URL (the AWS SDK url-encodes it, so raw CR/LF become %0D%0A
+        // and S3 — not this API — emits the eventual header). The control-char
+        // strip is belt-and-braces hardening, not a fix for a reachable bug.
+        ResponseContentDisposition: `attachment; filename="${opts.downloadFilename.replace(/["\x00-\x1f]/g, "")}"`,
       }),
     }),
     { expiresIn: MEDIA_PRESIGN_TTL_SECONDS },

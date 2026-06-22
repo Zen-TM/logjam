@@ -8,6 +8,11 @@ import { assignTripImportKeys } from "../lib/importKeys";
 import { deleteTripsCascade } from "../lib/bulkDelete";
 
 const BULK_DELETE_LIMIT = 500;
+// Cap import rows per request so a single authenticated call can't force an
+// unbounded IN-list lookup + multi-chunk write transaction (the import path does
+// per-element work proportional to length). Mirrors BULK_DELETE_LIMIT; the 1 MB
+// body cap and 300/min limiter are the other ceilings. See SEC-001.
+const BULK_IMPORT_LIMIT = 2000;
 const CHUNK_SIZE = 200;
 
 const router = Router();
@@ -40,6 +45,9 @@ router.post(
     }
     if (!Array.isArray(body.trips) || body.trips.length === 0) {
       throw new AppError(400, "trips array is required");
+    }
+    if (body.trips.length > BULK_IMPORT_LIMIT) {
+      throw new AppError(413, `Cannot import more than ${BULK_IMPORT_LIMIT} trip logs at once`);
     }
 
     // ---- Phase 1: Validate ALL rows before ANY write ----
