@@ -6,7 +6,7 @@
  * change; the api rejects any other version and the frontend blocks behind
  * ConsentGate until the recorded version matches.
  */
-export const CURRENT_CONSENT_VERSION = "2026-06-21";
+export const CURRENT_CONSENT_VERSION = "2026-06-22";
 
 /**
  * True when the user must (re-)consent before using the app: they have never

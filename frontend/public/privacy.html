@@ -15,7 +15,7 @@
   </head>
   <body>
     <h1>Logjam — Privacy Policy</h1>
-    <p class="updated">Last updated: 2026-06-21</p>
+    <p class="updated">Last updated: 2026-06-22</p>
 
     <p>
       Logjam is built as a <strong>private</strong> tool. Privacy is a design
@@ -23,13 +23,12 @@
       environmental harm and can compromise rescue and access agreements. This
       policy explains what we store, why, and what we deliberately do not do.
     </p>
-    <!-- DRAFT — solicitor review required: "intended for Australian users"
-         (LOW-2 / GDPR non-targeting), breach-notification commitment, and the
-         OAIC complaint path below should be confirmed by an Australian solicitor. -->
     <p>
-      Logjam is intended for users in Australia. We handle personal information
-      in line with the Australian Privacy Principles under the Privacy Act 1988
-      (Cth).
+      Logjam is intended for users in Australia. It is a personal,
+      non-commercial project operated by an individual and is not currently
+      required to comply with the Privacy Act 1988 (Cth). We nonetheless handle
+      personal information in accordance with the Australian Privacy Principles
+      as a voluntary standard.
     </p>
 
     <h2>What we store</h2>
@@ -80,8 +79,28 @@
     <p>
       Logjam runs on AWS in the <code>ap-southeast-2</code> (Sydney) region.
       Photos, topo input, and rendered tiles are stored in S3. The database is
-      RDS PostgreSQL. Transactional email is sent via Resend. Authentication is
-      Amazon Cognito.
+      RDS PostgreSQL. Authentication, and the account verification and
+      password-reset emails it sends, are handled by Amazon Cognito within the
+      same Australian region — these are not disclosed overseas.
+    </p>
+
+    <h2>Overseas disclosure</h2>
+    <p>
+      One category of data leaves Australia. Notification emails telling you a
+      topo job, export, or GeoPDF you started has finished are sent via
+      <strong>Resend</strong>, whose email is processed in the United States.
+      These emails contain your email address and a job reference; they do not
+      contain canyon names or coordinates. This is a cross-border disclosure of
+      your email address. We take reasonable steps to ensure overseas recipients
+      handle your information consistently with the Australian Privacy
+      Principles.
+    </p>
+    <p>
+      The service is delivered through Amazon CloudFront, a global
+      content-delivery network. Authenticated requests may transit CloudFront
+      edge locations outside Australia while in transit, but they are not cached
+      there, and all of your data is stored and processed in Australia
+      (<code>ap-southeast-2</code>).
     </p>
 
     <h2>Operator access</h2>
@@ -181,21 +200,18 @@
     </ul>
 
     <h2>Data breaches</h2>
-    <!-- DRAFT — solicitor review required. Commitment aligned to the Notifiable
-         Data Breaches (NDB) scheme. See internal runbook docs/incident-response.md. -->
     <p>
       If a data breach occurs that is likely to result in serious harm, we will
-      assess it and notify both the affected users and the Office of the
-      Australian Information Commissioner (OAIC) as required under the
+      assess it and notify affected users and, where appropriate, the Office of
+      the Australian Information Commissioner (OAIC), consistent with the
       Notifiable Data Breaches scheme.
     </p>
 
     <h2>Complaints</h2>
-    <!-- DRAFT — solicitor review required. -->
     <p>
       If you have a privacy concern, contact us first at the address below and
-      we will respond. If you are not satisfied with our response, you can lodge
-      a complaint with the Office of the Australian Information Commissioner
+      we will respond. If you are not satisfied with our response, you may also
+      seek guidance from the Office of the Australian Information Commissioner
       (OAIC) at <a href="https://www.oaic.gov.au/">oaic.gov.au</a>.
     </p>
 
@@ -211,8 +227,8 @@
 
     <h2>Children</h2>
     <p>
-      Logjam is not directed at children under 16. Do not create an account
-      for a minor.
+      Logjam is not directed at anyone under 18, and you must not create an
+      account for a person under 18.
     </p>
 
     <h2>Changes to this policy</h2>
@@ -221,9 +237,18 @@
       change and you will be asked to re-consent on next sign-in.
     </p>
 
+    <h2>Open source and self-hosting</h2>
+    <p>
+      Logjam is open-source software licensed under AGPL-3.0. This policy applies
+      only to the official hosted service at <code>logjamnsw.com</code> operated
+      by Zen Marcos. Anyone who self-hosts or runs a modified version is an
+      independent operator responsible for their own privacy practices — see the
+      open-source clause in the <a href="/tos.html">Terms of Use</a>.
+    </p>
+
     <h2>Contact</h2>
     <p>
-      Privacy questions:
+      Logjam is operated by Zen Marcos. Privacy questions:
       <a href="mailto:zentmarcos@gmail.com?subject=Logjam%20privacy">zentmarcos@gmail.com</a>.
     </p>
 
