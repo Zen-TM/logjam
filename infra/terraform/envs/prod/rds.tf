@@ -7,28 +7,35 @@
 # guards AWS-side too. backup_retention_period = 7 enables daily snapshots +
 # point-in-time recovery (the live instance shipped with 0 = no backups).
 resource "aws_db_instance" "main" {
-  allocated_storage                   = 20
-  apply_immediately                   = true
-  auto_minor_version_upgrade          = false
-  availability_zone                   = "ap-southeast-2a"
-  backup_retention_period             = 7
-  backup_target                       = "region"
-  backup_window                       = "16:32-17:02"
-  ca_cert_identifier                  = "rds-ca-rsa2048-g1"
-  copy_tags_to_snapshot               = true
-  customer_owned_ip_enabled           = false
-  database_insights_mode              = "standard"
-  db_name                             = "logjam"
-  db_subnet_group_name                = "logjam-db-subnet-group"
-  dedicated_log_volume                = false
-  delete_automated_backups            = true
-  deletion_protection                 = true
-  enabled_cloudwatch_logs_exports     = ["postgresql"]
-  engine                              = "postgres"
-  engine_lifecycle_support            = "open-source-rds-extended-support-disabled"
+  allocated_storage               = 20
+  apply_immediately               = true
+  auto_minor_version_upgrade      = false
+  availability_zone               = "ap-southeast-2a"
+  backup_retention_period         = 7
+  backup_target                   = "region"
+  backup_window                   = "16:32-17:02"
+  ca_cert_identifier              = "rds-ca-rsa2048-g1"
+  copy_tags_to_snapshot           = true
+  customer_owned_ip_enabled       = false
+  database_insights_mode          = "standard"
+  db_name                         = "logjam"
+  db_subnet_group_name            = "logjam-db-subnet-group"
+  dedicated_log_volume            = false
+  delete_automated_backups        = true
+  deletion_protection             = true
+  enabled_cloudwatch_logs_exports = ["postgresql"]
+  engine                          = "postgres"
+  # Enrolled in RDS Extended Support. The original logjam-db had this DISABLED
+  # (set at its creation), but engine_lifecycle_support is a create/restore-time
+  # setting — restore-db-instance-from-db-snapshot defaulted logjam-db-enc to
+  # enrolled and AWS rejects flipping it via ModifyDBInstance. No charge while
+  # Postgres 16 is in standard support; Extended Support billing would only start
+  # at PG16 EOL (~Nov 2027). Revisit before then (a fresh restore with the flag
+  # disabled is the only way to opt out) rather than re-migrate now.
+  engine_lifecycle_support            = "open-source-rds-extended-support"
   engine_version                      = "16.13"
   iam_database_authentication_enabled = true
-  identifier                          = "logjam-db"
+  identifier                          = "logjam-db-enc"
   instance_class                      = "db.t3.micro"
   license_model                       = "postgresql-license"
   maintenance_window                  = "thu:17:37-thu:18:07"
@@ -43,7 +50,8 @@ resource "aws_db_instance" "main" {
   port                                = 5432
   publicly_accessible                 = false
   skip_final_snapshot                 = true
-  storage_encrypted                   = false
+  storage_encrypted                   = true
+  kms_key_id                          = "arn:aws:kms:ap-southeast-2:620853681701:key/abe78b2a-98e6-40a6-bafc-b8b4c2e7d577"
   storage_type                        = "gp2"
   username                            = "logjam_admin"
   vpc_security_group_ids              = ["sg-06cc0aaa310968aa4"]
