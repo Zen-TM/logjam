@@ -14,11 +14,11 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
-import { randomUUID } from "crypto";
+import { randomUUID, timingSafeEqual } from "crypto";
 import { getEnv } from "./lib/env";
 import { logger } from "./lib/logger";
 import prisma from "./services/prisma";
-import { errorHandler } from "./middleware/errorHandler";
+import { AppError, errorHandler } from "./middleware/errorHandler";
 import { globalLimiter } from "./middleware/rateLimit";
 import { startTopoJobReaper } from "./lib/topoJobReaper";
 import usersRouter from "./routes/users";
@@ -44,6 +44,14 @@ import importsRouter from "./routes/imports";
 const env = getEnv();
 
 const app = express();
+
+// Behind CloudFront -> EB nginx (2 hops). Trust exactly those so `req.ip` is the
+// real client for the IP-fallback rate-limit key (middleware/rateLimit.ts) and
+// request logs — NOT `true`, which would let clients spoof X-Forwarded-For and
+// forge their rate-limit bucket. Hop count must match the live proxy chain; if
+// the topology changes (e.g. an ALB is added), bump this. express-rate-limit's
+// validator fails loud on a wrong count.
+app.set("trust proxy", 2);
 
 let shuttingDown = false;
 
@@ -135,6 +143,40 @@ app.get("/ready", async (_req, res) => {
     res.status(503).json({ status: "db_unavailable" });
   }
 });
+
+// CloudFront origin-verify (WAF-bypass guard). The EB environment CNAME is
+// reachable on the public internet, so a client that knows it can hit the API
+// while skipping the CloudFront edge WAF. CloudFront injects a secret
+// X-Origin-Verify header on every origin fetch (infra/.../origin_verify.tf); a
+// request whose header doesn't match reached EB directly. /health + /ready are
+// exempt — EB health checks hit the instance directly and carry no header.
+// Inert unless a secret is configured. ORIGIN_VERIFY_ENFORCE=false (default)
+// LOGS the anomaly without blocking so the CloudFront header rollout is
+// confirmable before enforcement; =true returns 403. Mounted before the rate
+// limiter so direct-to-EB floods are rejected without consuming a limiter slot.
+if (env.ORIGIN_VERIFY_SECRET) {
+  const originVerifySecret = Buffer.from(env.ORIGIN_VERIFY_SECRET);
+  app.use((req, _res, next) => {
+    if (req.path === "/health" || req.path === "/ready") return next();
+    const header = req.get("X-Origin-Verify");
+    // Constant-time compare; length-mismatch short-circuits (timingSafeEqual
+    // throws on unequal lengths, and the length itself is not the secret).
+    const provided = header ? Buffer.from(header) : null;
+    const matches =
+      provided !== null &&
+      provided.length === originVerifySecret.length &&
+      timingSafeEqual(provided, originVerifySecret);
+    if (matches) return next();
+    if (env.ORIGIN_VERIFY_ENFORCE) {
+      throw new AppError(403, "Forbidden");
+    }
+    logger.warn(
+      { path: req.path, hasHeader: Boolean(header) },
+      "origin_verify_mismatch",
+    );
+    next();
+  });
+}
 
 // Global rate limit applied to API routes (not /health, /ready). Keyed by
 // authenticated user sub when available (per-route auth runs inside routers),
