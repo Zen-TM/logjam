@@ -32,6 +32,23 @@ const baseSchema = z.object({
 
   CORS_ORIGIN: z.string().optional(),
 
+  // CloudFront origin-verify (WAF-bypass guard, SEC). CloudFront injects a
+  // secret X-Origin-Verify header on every origin fetch; a request lacking the
+  // matching value reached Elastic Beanstalk directly, bypassing the edge WAF.
+  // The app compares that header to ORIGIN_VERIFY_SECRET, which is resolved at
+  // boot from Secrets Manager (ORIGIN_VERIFY_SECRET_ID) like the DB creds. Both
+  // optional: a deployment with neither configured disables the check (no-op).
+  // ORIGIN_VERIFY_ENFORCE flips block-vs-log — false (default) LOGS mismatches
+  // without blocking so the CloudFront header rollout is confirmable before
+  // enforcement; true returns 403. ENFORCE=true with no secret is refused at
+  // boot (validateEnv) so enforcement can never be on with nothing to compare.
+  ORIGIN_VERIFY_SECRET: z.string().optional(),
+  ORIGIN_VERIFY_SECRET_ID: z.string().optional(),
+  ORIGIN_VERIFY_ENFORCE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+
   S3_BUCKET_TOPO: z.string().optional(),
   S3_BUCKET_MEDIA: z.string().optional(),
   ECS_CLUSTER: z.string().default("logjam-cluster"),
@@ -118,6 +135,16 @@ export function validateEnv(): Env {
 
   if (env.AUTH_MODE === "fake" && env.NODE_ENV === "production") {
     console.error("AUTH_MODE=fake is forbidden in production.");
+    process.exit(1);
+  }
+
+  // Fail closed: never enforce origin-verify with no secret to compare against
+  // (would 403 every request). boot.ts resolves ORIGIN_VERIFY_SECRET from
+  // Secrets Manager before this runs, so a true value here means it stayed unset.
+  if (env.ORIGIN_VERIFY_ENFORCE && !env.ORIGIN_VERIFY_SECRET) {
+    console.error(
+      "ORIGIN_VERIFY_ENFORCE=true requires ORIGIN_VERIFY_SECRET (resolved at boot from ORIGIN_VERIFY_SECRET_ID) — refusing to start with enforcement on and no secret.",
+    );
     process.exit(1);
   }
 

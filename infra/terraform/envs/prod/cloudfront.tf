@@ -135,6 +135,15 @@ resource "aws_cloudfront_distribution" "api" {
     connection_timeout  = 10
     domain_name         = "logjam-api-prod.eba-iwmwkydz.ap-southeast-2.elasticbeanstalk.com"
     origin_id           = "logjam-api-prod.eba-iwmwkydz.ap-southeast-2.elasticbeanstalk.com-mn1lh8nq4kl"
+    # Origin-verify (WAF-bypass guard). Only CloudFront knows this token; the API
+    # rejects origin fetches whose X-Origin-Verify doesn't match, so a client
+    # hitting the EB CNAME directly (skipping this distribution + its WAF) is
+    # refused. Value is the managed random_password in origin_verify.tf. Never
+    # exposed to viewers — CloudFront adds it server-side on the origin request.
+    custom_header {
+      name  = "X-Origin-Verify"
+      value = random_password.origin_verify.result
+    }
     custom_origin_config {
       http_port                = 80
       https_port               = 443

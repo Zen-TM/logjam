@@ -132,10 +132,16 @@ resource "aws_iam_role_policy_attachment" "gha_ecr" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
 }
 
-resource "aws_iam_role_policy_attachment" "gha_s3" {
-  role       = aws_iam_role.github_actions.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-}
+# NOTE: the broad AmazonS3FullAccess attachment was REMOVED (least-privilege).
+# The two S3 surfaces CI actually touches are scoped explicitly instead:
+#   - frontend SPA bucket   -> aws_iam_role_policy.gha_frontend_deploy (below)
+#   - EB app-version bucket -> aws_iam_role_policy.gha_eb_appversions (below); the
+#     beanstalk-deploy action uploads the deploy.zip there. (gha_eb's
+#     AdministratorAccess-AWSElasticBeanstalk also covers elasticbeanstalk-*
+#     buckets; this explicit grant removes the dependency on that breadth.)
+# VERIFY BEFORE APPLY: scan CloudTrail for any github-actions-role S3 call
+# outside these two buckets; if found, widen the scoped grant, never re-add
+# the managed full-access policy.
 
 resource "aws_iam_role_policy_attachment" "gha_eb" {
   role       = aws_iam_role.github_actions.name
@@ -164,5 +170,24 @@ resource "aws_iam_role_policy" "gha_frontend_deploy" {
         Resource = "arn:aws:cloudfront::620853681701:distribution/E22J79PHZM2K"
       },
     ]
+  })
+}
+
+# EB app-version uploads (beanstalk-deploy pushes deploy.zip here). Explicit
+# replacement for the removed AmazonS3FullAccess. If the live bucket name
+# differs, fix it here — do NOT re-add the managed full-access policy.
+resource "aws_iam_role_policy" "gha_eb_appversions" {
+  name = "logjam-eb-appversions-deploy"
+  role = aws_iam_role.github_actions.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = ["s3:PutObject", "s3:GetObject", "s3:ListBucket"]
+      Resource = [
+        "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701",
+        "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
+      ]
+    }]
   })
 }

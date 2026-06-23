@@ -88,8 +88,13 @@ resource "aws_wafv2_web_acl" "api" {
   rule {
     name     = "AWS-RateBasedRule-IP-300-CreatedByCloudFront"
     priority = 0
+    # block (was count): 300 req / 5 min / client IP. WAF sees the true viewer IP
+    # at the edge. API traffic is XHR-only (topo tiles serve off the web
+    # distribution under /master/*, not here), so 300/5min is generous. Before
+    # applying, confirm via the CloudWatch metric below that no legitimate IP
+    # (watch shared-NAT/corporate egress) is already tripping the count.
     action {
-      count {}
+      block {}
     }
     statement {
       rate_based_statement {
