@@ -31,7 +31,7 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       value = "https://logjamnsw.com,https://www.logjamnsw.com"
       }, {
       name  = "DB_HOST"
-      value = "logjam-db.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
+      value = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
       }, {
       name  = "DB_NAME"
       value = "logjam"
@@ -107,7 +107,7 @@ resource "aws_ecs_task_definition" "topo_worker" {
       value = "ap-southeast-2"
       }, {
       name  = "DB_HOST"
-      value = "logjam-db.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
+      value = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
       }, {
       name  = "DB_NAME"
       value = "logjam"
@@ -186,7 +186,7 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       value = "ap-southeast-2"
       }, {
       name  = "DB_HOST"
-      value = "logjam-db.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
+      value = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
       }, {
       name  = "DB_NAME"
       value = "logjam"
