@@ -101,4 +101,34 @@ describe("validateEnv — failure paths exit the process", () => {
     process.env.AUTH_MODE = "cognito";
     expect(() => validateEnv()).toThrow(/process\.exit/);
   });
+
+  it("exits when ORIGIN_VERIFY_ENFORCE=true with no secret (fail closed)", () => {
+    process.env.ORIGIN_VERIFY_ENFORCE = "true";
+    // No ORIGIN_VERIFY_SECRET set — enforcing with nothing to compare would
+    // 403 every request, so validateEnv must refuse to start.
+    expect(() => validateEnv()).toThrow(/process\.exit/);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+});
+
+describe("validateEnv — origin-verify", () => {
+  it("defaults ORIGIN_VERIFY_ENFORCE to false and leaves the secret unset", () => {
+    const env = validateEnv();
+    expect(env.ORIGIN_VERIFY_ENFORCE).toBe(false);
+    expect(env.ORIGIN_VERIFY_SECRET).toBeUndefined();
+  });
+
+  it("coerces ORIGIN_VERIFY_ENFORCE='true' to a real boolean", () => {
+    process.env.ORIGIN_VERIFY_ENFORCE = "true";
+    process.env.ORIGIN_VERIFY_SECRET = "token";
+    const env = validateEnv();
+    expect(env.ORIGIN_VERIFY_ENFORCE).toBe(true);
+  });
+
+  it("permits enforce=false with a secret present (permissive/log-only mode)", () => {
+    process.env.ORIGIN_VERIFY_SECRET = "token";
+    const env = validateEnv();
+    expect(env.ORIGIN_VERIFY_ENFORCE).toBe(false);
+    expect(env.ORIGIN_VERIFY_SECRET).toBe("token");
+  });
 });

@@ -13,14 +13,16 @@
 
 import { spawnSync } from "node:child_process";
 import { resolveDbCredentials } from "./lib/resolveDbCredentials";
+import { resolveOriginVerifySecret } from "./lib/resolveOriginVerifySecret";
 
 async function main(): Promise<void> {
   try {
     await resolveDbCredentials();
+    await resolveOriginVerifySecret();
   } catch (err) {
     const e = err as Error;
     console.error(
-      `boot: failed to resolve DB credentials (${e.constructor.name}: ${e.message})`,
+      `boot: failed to resolve startup secrets (${e.constructor.name}: ${e.message})`,
     );
     process.exit(1);
   }
