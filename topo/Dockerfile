@@ -88,6 +88,7 @@ WORKDIR /app
 COPY worker.py /app/worker.py
 COPY topo_mbtiles.py /app/topo_mbtiles.py
 COPY export_worker.py /app/export_worker.py
+COPY email_send.py /app/email_send.py
 COPY renderers/ /app/renderers/
 COPY icons/ /app/icons/
 
