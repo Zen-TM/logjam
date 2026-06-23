@@ -38,8 +38,11 @@ resource "aws_default_security_group" "default" {
 }
 
 # Dedicated RDS security group (logjam-db-sg). Allows Postgres (5432) from the
-# EB instance SG (sg-016b93b75c584bd70, EB-managed, referenced by id) and from
-# within the VPC CIDR. This is the SG attached to aws_db_instance.main.
+# EB instance SG (sg-016b93b75c584bd70, EB-managed) and from the Fargate worker
+# SG (sg-0543d2bbce86b5d2a, the default VPC SG used for worker ENIs — see
+# ECS_SECURITY_GROUPS_LIST). Both referenced by id. Least-privilege: only the
+# API + worker compute, NOT the whole VPC CIDR (CP-005). This is the SG attached
+# to aws_db_instance.main.
 resource "aws_security_group" "rds" {
   name        = "logjam-db-sg"
   description = "Created by RDS management console"
@@ -54,11 +57,11 @@ resource "aws_security_group" "rds" {
   }
 
   ingress {
-    description = "Allow PostgreSQL from within VPC"
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]
+    description     = "Allow PostgreSQL from Fargate workers (topo/export/geo-pdf ENIs)"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = ["sg-0543d2bbce86b5d2a"]
   }
 
   egress {
