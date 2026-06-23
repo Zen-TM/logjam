@@ -7,24 +7,24 @@
 # guards AWS-side too. backup_retention_period = 7 enables daily snapshots +
 # point-in-time recovery (the live instance shipped with 0 = no backups).
 resource "aws_db_instance" "main" {
-  allocated_storage                   = 20
-  apply_immediately                   = true
-  auto_minor_version_upgrade          = false
-  availability_zone                   = "ap-southeast-2a"
-  backup_retention_period             = 7
-  backup_target                       = "region"
-  backup_window                       = "16:32-17:02"
-  ca_cert_identifier                  = "rds-ca-rsa2048-g1"
-  copy_tags_to_snapshot               = true
-  customer_owned_ip_enabled           = false
-  database_insights_mode              = "standard"
-  db_name                             = "logjam"
-  db_subnet_group_name                = "logjam-db-subnet-group"
-  dedicated_log_volume                = false
-  delete_automated_backups            = true
-  deletion_protection                 = true
-  enabled_cloudwatch_logs_exports     = ["postgresql"]
-  engine                              = "postgres"
+  allocated_storage               = 20
+  apply_immediately               = true
+  auto_minor_version_upgrade      = false
+  availability_zone               = "ap-southeast-2a"
+  backup_retention_period         = 7
+  backup_target                   = "region"
+  backup_window                   = "16:32-17:02"
+  ca_cert_identifier              = "rds-ca-rsa2048-g1"
+  copy_tags_to_snapshot           = true
+  customer_owned_ip_enabled       = false
+  database_insights_mode          = "standard"
+  db_name                         = "logjam"
+  db_subnet_group_name            = "logjam-db-subnet-group"
+  dedicated_log_volume            = false
+  delete_automated_backups        = true
+  deletion_protection             = true
+  enabled_cloudwatch_logs_exports = ["postgresql"]
+  engine                          = "postgres"
   # Enrolled in RDS Extended Support. The original logjam-db had this DISABLED
   # (set at its creation), but engine_lifecycle_support is a create/restore-time
   # setting — restore-db-instance-from-db-snapshot defaulted logjam-db-enc to
