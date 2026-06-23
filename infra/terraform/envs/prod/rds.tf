@@ -25,10 +25,17 @@ resource "aws_db_instance" "main" {
   deletion_protection                 = true
   enabled_cloudwatch_logs_exports     = ["postgresql"]
   engine                              = "postgres"
-  engine_lifecycle_support            = "open-source-rds-extended-support-disabled"
+  # Enrolled in RDS Extended Support. The original logjam-db had this DISABLED
+  # (set at its creation), but engine_lifecycle_support is a create/restore-time
+  # setting — restore-db-instance-from-db-snapshot defaulted logjam-db-enc to
+  # enrolled and AWS rejects flipping it via ModifyDBInstance. No charge while
+  # Postgres 16 is in standard support; Extended Support billing would only start
+  # at PG16 EOL (~Nov 2027). Revisit before then (a fresh restore with the flag
+  # disabled is the only way to opt out) rather than re-migrate now.
+  engine_lifecycle_support            = "open-source-rds-extended-support"
   engine_version                      = "16.13"
   iam_database_authentication_enabled = true
-  identifier                          = "logjam-db"
+  identifier                          = "logjam-db-enc"
   instance_class                      = "db.t3.micro"
   license_model                       = "postgresql-license"
   maintenance_window                  = "thu:17:37-thu:18:07"
@@ -43,7 +50,8 @@ resource "aws_db_instance" "main" {
   port                                = 5432
   publicly_accessible                 = false
   skip_final_snapshot                 = true
-  storage_encrypted                   = false
+  storage_encrypted                   = true
+  kms_key_id                          = "arn:aws:kms:ap-southeast-2:620853681701:key/abe78b2a-98e6-40a6-bafc-b8b4c2e7d577"
   storage_type                        = "gp2"
   username                            = "logjam_admin"
   vpc_security_group_ids              = ["sg-06cc0aaa310968aa4"]
