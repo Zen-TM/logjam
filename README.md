@@ -15,6 +15,7 @@ Canyoning in the Blue Mountains is driven by exploration and discovery in remote
 - **Canyon logbook** — store canyon data including coordinates, grade, abseil counts, notes, and custom attributes
 - **Trip logs** — record trips with custom fields, photos, and GPX tracks
 - **Topo map generation** — generate offline-ready MBTiles topo maps from NSW Spatial Services LiDAR data for import into Gaia GPS
+- **GeoPDF export** — generate geo-referenced topo PDFs (GPS-aware, for field map apps)
 - **Friends & sharing** — connect with friends and share selected canyons with them
 - **Private by design** — all data is private to each user by default
 
@@ -49,7 +50,7 @@ Canyoning in the Blue Mountains is driven by exploration and discovery in remote
 
 - Cognito (auth) · S3 (media + topo artifacts) · CloudFront (SPA + tile/API CDN, +WAF)
 - ECS Fargate (topo/export/geo-pdf workers) · Elastic Beanstalk (API) · ECR (images)
-- RDS (Postgres) · Secrets Manager (DB creds) · SES (email)
+- RDS (Postgres) · Secrets Manager (DB creds + Resend API key) · Resend (transactional email)
 
 ### Infrastructure as Code & local dev
 
@@ -173,29 +174,30 @@ cd api && FAKE_USER_SUB=fake-bob-sub npm run dev   # switch to bob
 
 **Real Cognito (`make dev-snapshot`)**
 
-Used with the snapshot workflow. `make dev-snapshot` sets `AUTH_MODE=cognito` for you, and the Cognito pool/client IDs are already populated in the generated `.env.local` (they're public identifiers baked into the Terraform template). Requires a real test account in the Cognito dev pool. See the `make dev-snapshot` row above.
+Used with the snapshot workflow. `make dev-snapshot` loads the sanitized snapshot and then **prints** the commands to start the servers — you run the API and frontend yourself with the override (`AUTH_MODE=cognito` for the API, `VITE_AUTH_MODE=cognito` for the frontend). The Cognito pool/client IDs are already populated in the generated `.env.local` (they're public identifiers baked into the Terraform template). Requires a real test account in the Cognito dev pool. See the `make dev-snapshot` row above.
 
 ### Seeded test data
 
 The `make dev` seed creates three users with deterministic IDs:
 
-| User | cognitoId | Email | Owns |
-|---|---|---|---|
-| alice | `fake-alice-sub` | alice@local | 5 canyons, 5 trip logs |
-| bob | `fake-bob-sub` | bob@local | — |
-| carol | `fake-carol-sub` | carol@local | — |
+| User | cognitoId | Email |
+|---|---|---|
+| alice | `fake-alice-sub` | alice@local |
+| bob | `fake-bob-sub` | bob@local |
+| carol | `fake-carol-sub` | carol@local |
 
-Relationships:
-- alice and bob are **friends** (accepted)
-- carol has a **pending** friend request to alice
-- alice has **shared** Grand Canyon and Claustral Canyon with bob
+The dataset is a rich synthetic fixture (realistic volume + edge cases so prod data
+is never needed for development): **alice** owns ~28 canyons — mostly well-published
+NSW classics, plus a couple of deliberately fabricated ones — and ~100 fabricated
+trip logs (3–4 per canyon plus a few named no-canyon trips). **bob** and **carol**
+each own a handful of their own. Exact records (names, coordinates, grades) live in
+`api/prisma/seed.ts`; treat that file as the source of truth rather than this summary.
 
-Canyons (all owned by alice, all in the Blue Mountains):
-1. Grand Canyon — −33.6392, 150.2656 — shared with bob
-2. Claustral Canyon — −33.5123, 150.5432 — shared with bob
-3. Empress Falls — −33.7345, 150.4123
-4. Slot Canyon — −33.6789, 150.3456
-5. Deep Pass — −33.7123, 150.2890
+Stable invariants the integration suite relies on (see the header comment in
+`api/prisma/seed.ts` and `api/src/__tests__/_actors.ts`) — these never change:
+- alice and bob are **friends** (accepted); carol has a **pending** friend request to alice.
+- alice has **shared** Grand Canyon and Claustral Canyon (her two anchor canyons) with bob.
+- carol is shared **nothing** and is not alice's friend (the "stranger" perspective).
 
 ### Snapshot workflow
 
@@ -239,7 +241,20 @@ LiDAR ZIP uploaded plus the SVTM formation GeoTIFF seeded at
 To debug a GeoPDF job in-process instead of in a container, use
 `make geo-pdf-run JOB=<geoPdfJobId>`.
 
-### Running integration tests
+### Running tests
+
+#### Unit tests (no infra needed)
+
+These run with Prisma/AWS mocked — no `make dev`, no database, no server:
+
+| Suite | Command |
+|---|---|
+| api unit | `cd api && npm run test:unit` |
+| shared | `cd shared && npm test` |
+| frontend | `cd frontend && npm test` |
+| topo | `cd topo && python -m unittest discover -s tests` |
+
+#### Integration tests
 
 Tests require the API to be running locally (do `make dev` + `cd api && npm run dev` first):
 
