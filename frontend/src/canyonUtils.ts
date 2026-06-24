@@ -751,20 +751,37 @@ type PresignMediaResponse = {
   thumbnailUploadUrl: string | null;
 };
 
-// Direct PUT to a presigned S3 URL. Intentionally a raw fetch (not apiFetch):
-// the target is S3, not our API, and it must NOT carry the Authorization header.
-// The Content-Type must match what the presign signed, or S3 rejects it.
-async function putToPresignedUrl(
+// Direct PUT to a presigned S3 URL. Intentionally raw (not apiFetch): the target
+// is S3, not our API, and it must NOT carry the Authorization header. The
+// Content-Type must match what the presign signed, or S3 rejects it.
+//
+// Uses XMLHttpRequest rather than fetch so an optional onProgress callback can
+// report upload progress — fetch cannot observe request-body upload progress.
+// onProgress fires with bytes (loaded, total) as the body streams to S3.
+export function putToPresignedUrl(
   url: string,
   body: Blob,
   contentType: string,
+  onProgress?: (loaded: number, total: number) => void,
 ): Promise<void> {
-  const res = await fetch(url, {
-    method: "PUT",
-    headers: { "Content-Type": contentType },
-    body,
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", contentType);
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(e.loaded, e.total);
+      };
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Upload failed (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("Upload failed (network error)"));
+    xhr.ontimeout = () => reject(new Error("Upload failed (timeout)"));
+    xhr.onabort = () => reject(new Error("Upload cancelled"));
+    xhr.send(body);
   });
-  if (!res.ok) throw new Error(`Upload failed (${res.status})`);
 }
 
 // Orchestrates the two-phase upload: presign → PUT display (+ thumbnail) → confirm.

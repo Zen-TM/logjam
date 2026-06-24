@@ -9,6 +9,7 @@ import {
   Typography,
   Box,
   CircularProgress,
+  LinearProgress,
   Chip,
   IconButton,
   Tooltip,
@@ -25,7 +26,8 @@ import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
-import { apiFetch, fetchCurrentUser } from "../../canyonUtils";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import { apiFetch, fetchCurrentUser, putToPresignedUrl } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import type { TBbox } from "../map/Map";
@@ -52,6 +54,8 @@ export type TopoTemplate = {
   createdAt: string | null;
   updatedAt: string | null;
 };
+
+type Phase = "form" | "uploading" | "finalizing" | "done";
 
 const DEFAULT_TEMPLATE_ID = "default";
 
@@ -368,7 +372,12 @@ export default function TopoDialog({
 }) {
   const isMobile = useIsMobile();
   const [file, setFile] = useState<File | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  // Submission lifecycle: form → uploading (determinate PUT) → finalizing
+  // (server validate + ECS launch) → done (in-dialog success).
+  const [phase, setPhase] = useState<Phase>("form");
+  const [uploadedBytes, setUploadedBytes] = useState(0);
+  const [totalBytes, setTotalBytes] = useState(0);
+  const [submittedJob, setSubmittedJob] = useState<TopoJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [showInstructions, setShowInstructions] = useState(
@@ -397,6 +406,10 @@ export default function TopoDialog({
   useEffect(() => {
     if (open) return;
     setFile(null);
+    setPhase("form");
+    setUploadedBytes(0);
+    setTotalBytes(0);
+    setSubmittedJob(null);
     setError(null);
     setDragging(false);
     setValidating(false);
@@ -571,7 +584,9 @@ export default function TopoDialog({
       }
     }
 
-    setSubmitting(true);
+    setUploadedBytes(0);
+    setTotalBytes(file.size);
+    setPhase("uploading");
     try {
       const { jobId, uploadUrl } = await apiFetch<{
         jobId: string;
@@ -587,32 +602,34 @@ export default function TopoDialog({
         },
       });
 
-      const uploadRes = await fetch(uploadUrl, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": "application/zip" },
+      await putToPresignedUrl(uploadUrl, file, "application/zip", (loaded, total) => {
+        setUploadedBytes(loaded);
+        setTotalBytes(total);
       });
-      if (!uploadRes.ok) throw new Error("ZIP upload failed");
 
+      setPhase("finalizing");
       await apiFetch(`/topo-jobs/${jobId}/start`, { method: "POST" });
 
       const newJob = await apiFetch<TopoJob>(`/topo-jobs/${jobId}`);
       onJobCreated(newJob);
-      setFile(null);
+      setSubmittedJob(newJob);
+      setPhase("done");
     } catch (e: unknown) {
       console.error(e);
       setError(messageFromError(e, "Submission failed. Please try again."));
-    } finally {
-      setSubmitting(false);
+      // File preserved so the ErrorBanner's Retry can resubmit.
+      setPhase("form");
     }
   }
 
   function handleClose() {
-    if (submitting) return;
+    // Block closing mid-upload — there's no resumable state to return to.
+    if (phase === "uploading" || phase === "finalizing") return;
     onClose();
   }
 
   const area = pendingBbox ? bboxAreaKm2(pendingBbox) : null;
+  const uploadPct = totalBytes > 0 ? Math.min(100, Math.round((uploadedBytes / totalBytes) * 100)) : 0;
 
   return (
     <Dialog
@@ -636,18 +653,70 @@ export default function TopoDialog({
           justifyContent: "space-between",
         }}
       >
-        Generate Topo Map
-        <IconButton
-          aria-label="Close dialog"
-          onClick={handleClose}
-          size="small"
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
-          <CloseIcon />
-        </IconButton>
+        {phase === "uploading"
+          ? "Uploading…"
+          : phase === "finalizing"
+            ? "Finalizing…"
+            : phase === "done"
+              ? "Submitted"
+              : "Generate Topo Map"}
+        {phase !== "uploading" && phase !== "finalizing" && (
+          <IconButton
+            aria-label="Close dialog"
+            onClick={handleClose}
+            size="small"
+            sx={{ color: "var(--theme-text-primary)" }}
+          >
+            <CloseIcon />
+          </IconButton>
+        )}
       </DialogTitle>
 
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
+        {phase === "uploading" || phase === "finalizing" ? (
+          <Box sx={{ py: 3 }}>
+            <Typography variant="body2" sx={{ mb: 1.5 }}>
+              {phase === "uploading"
+                ? "Uploading LiDAR data… keep this dialog open."
+                : "Upload complete. Validating and starting your topo job…"}
+            </Typography>
+            <LinearProgress
+              variant={phase === "uploading" ? "determinate" : "indeterminate"}
+              value={phase === "uploading" ? uploadPct : undefined}
+              sx={{
+                height: 8,
+                borderRadius: "var(--radius-sm)",
+                backgroundColor: "rgba(255,255,255,0.08)",
+                "& .MuiLinearProgress-bar": { backgroundColor: "var(--theme-accent)" },
+              }}
+            />
+            {phase === "uploading" && (
+              <Typography
+                variant="caption"
+                sx={{ display: "block", mt: 1, color: "var(--theme-text-muted)" }}
+              >
+                {(uploadedBytes / 1e6).toFixed(1)} / {(totalBytes / 1e6).toFixed(1)} MB
+                {totalBytes > 0 ? ` (${uploadPct}%)` : ""}
+              </Typography>
+            )}
+          </Box>
+        ) : phase === "done" ? (
+          <Box sx={{ py: 3, textAlign: "center" }}>
+            <CheckCircleIcon sx={{ fontSize: 48, color: "var(--theme-accent)", mb: 1 }} />
+            <Typography variant="h6" sx={{ mb: 0.5 }}>
+              {submittedJob?.name ?? "Topo job"} submitted
+            </Typography>
+            {stats?.tileCount ? (
+              <Typography variant="body2" sx={{ color: "var(--theme-text-muted)", mb: 0.5 }}>
+                {stats.tileCount} tile{stats.tileCount > 1 ? "s" : ""} queued
+              </Typography>
+            ) : null}
+            <Typography variant="body2" sx={{ color: "var(--theme-text-muted)" }}>
+              Processing has started — you'll be notified when your topo is ready.
+            </Typography>
+          </Box>
+        ) : (
+        <>
         {isMobile && (
           <Typography
             variant="caption"
@@ -1081,32 +1150,44 @@ export default function TopoDialog({
             />
           </AccordionDetails>
         </Accordion>
+        </>
+        )}
       </DialogContent>
 
       <DialogActions>
-        <Button
-          onClick={handleClose}
-          disabled={submitting}
-          sx={{ color: "var(--theme-text-primary)" }}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          color="secondary"
-          onClick={handleSubmit}
-          disabled={
-            !file ||
-            submitting ||
-            validating ||
-            !stats ||
-            !!validationError ||
-            slopeBandsError(settings.slope.bands) != null ||
-            (tileUsed !== null && tileQuota !== null && !!stats?.tileCount && tileUsed + stats.tileCount > tileQuota)
-          }
-        >
-          {submitting ? <CircularProgress size={18} /> : "Submit"}
-        </Button>
+        {phase === "done" ? (
+          <Button variant="contained" color="secondary" onClick={onClose}>
+            Done
+          </Button>
+        ) : phase === "uploading" || phase === "finalizing" ? (
+          <Button disabled sx={{ color: "var(--theme-text-primary)" }}>
+            <CircularProgress size={18} />
+          </Button>
+        ) : (
+          <>
+            <Button
+              onClick={handleClose}
+              sx={{ color: "var(--theme-text-primary)" }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              color="secondary"
+              onClick={handleSubmit}
+              disabled={
+                !file ||
+                validating ||
+                !stats ||
+                !!validationError ||
+                slopeBandsError(settings.slope.bands) != null ||
+                (tileUsed !== null && tileQuota !== null && !!stats?.tileCount && tileUsed + stats.tileCount > tileQuota)
+              }
+            >
+              Submit
+            </Button>
+          </>
+        )}
       </DialogActions>
     </Dialog>
   );
