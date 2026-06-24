@@ -36,6 +36,7 @@ import {
   RASTER_TEMPLATE_DEFAULTS,
   AUTO_EXPORT_DEFAULTS,
   cloneRasterTemplateSettings,
+  slopeBandsError,
   type ElvisStats,
   type RasterTemplateSettings,
   type AutoExportSettings,
@@ -1042,7 +1043,7 @@ export default function TopoDialog({
               size="small"
               variant="contained"
               color="secondary"
-              disabled={!saveAsName.trim()}
+              disabled={!saveAsName.trim() || slopeBandsError(settings.slope.bands) != null}
               onClick={handleSaveAsTemplate}
             >
               Save
@@ -1100,6 +1101,7 @@ export default function TopoDialog({
             validating ||
             !stats ||
             !!validationError ||
+            slopeBandsError(settings.slope.bands) != null ||
             (tileUsed !== null && tileQuota !== null && !!stats?.tileCount && tileUsed + stats.tileCount > tileQuota)
           }
         >

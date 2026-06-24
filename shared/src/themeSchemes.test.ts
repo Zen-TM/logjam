@@ -66,17 +66,30 @@ describe("normalizeUserUiPreferences", () => {
     expect(result.themeSchemeId).toBe("basalt");
   });
 
-  it("filters out malformed custom field entries", () => {
+  it("repairs the legacy type:\"text\" alias to \"string\"", () => {
+    const result = normalizeUserUiPreferences({
+      tripLogCustomFields: [{ key: "water_level", label: "Water Level", type: "text" }],
+    });
+    // Legacy "text" is repaired to the canonical "string" so the def passes the
+    // strict write-side guard and can round-trip without a 400.
+    expect(result.tripLogCustomFields).toEqual([
+      { key: "water_level", label: "Water Level", type: "string" },
+    ]);
+  });
+
+  it("drops defs the strict guard rejects, repairs the rest", () => {
     const result = normalizeUserUiPreferences({
       tripLogCustomFields: [
-        { key: "k1", label: "L1", type: "text" },
+        { key: "k1", label: "L1", type: "text" }, // repaired -> "string"
         { key: "k2", label: "missing type" }, // dropped
         "not an object", // dropped
-        { key: 3, label: "bad key", type: "text" }, // dropped
+        { key: 3, label: "bad key", type: "text" }, // dropped (non-string key)
+        { key: "k5", label: "", type: "string" }, // dropped (empty label)
+        { key: "k6", label: "bad type", type: "frobnicate" }, // dropped (invalid type)
       ],
     });
     expect(result.tripLogCustomFields).toEqual([
-      { key: "k1", label: "L1", type: "text" },
+      { key: "k1", label: "L1", type: "string" },
     ]);
   });
 

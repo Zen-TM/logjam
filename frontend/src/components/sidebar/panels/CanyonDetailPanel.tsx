@@ -16,7 +16,7 @@ import ShareCanyonDialog from "../../dialogs/ShareCanyonDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
-import type { TCanyon, TFriend, TTripLog } from "../../../canyonUtils";
+import type { TCanyon, TFriend, TTripLog, TCanyonShare } from "../../../canyonUtils";
 import { mediaCategory, type TripLogCustomFieldDef, type MediaItem } from "@logjam/shared";
 import {
   formatCanyonGrade,
@@ -26,6 +26,7 @@ import {
   unshareCanyonWith,
   getTripLogs,
   getCanyonDetail,
+  getCanyonShares,
 } from "../../../canyonUtils";
 import CanyonSlideshow from "../../media/CanyonSlideshow";
 import TrackIcon from "../../media/TrackIcon";
@@ -51,6 +52,13 @@ function formatCustomFieldValue(
   return String(value);
 }
 
+// Grammatical list: "a", "a and b", "a, b, and c".
+function joinWithAnd(names: string[]): string {
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
 function CanyonDetailPanel({
   canyon,
   canyons,
@@ -67,6 +75,7 @@ function CanyonDetailPanel({
   canyonCustomFieldDefs,
   onCanyonCustomFieldDefsChange,
   onQuotaChanged,
+  onRefetchTripLogs,
 }: {
   canyon: TCanyon | undefined;
   canyons: TCanyon[];
@@ -83,6 +92,9 @@ function CanyonDetailPanel({
   canyonCustomFieldDefs: TripLogCustomFieldDef[];
   onCanyonCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
   onQuotaChanged: () => void;
+  // Retrigger the global Trip Logs list/search after a trip is created or
+  // deleted here — the canyon-scoped refetch below only updates this panel.
+  onRefetchTripLogs: () => void;
 }) {
   const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
@@ -104,6 +116,21 @@ function CanyonDetailPanel({
   const [editingTripLog, setEditingTripLog] = useState<TTripLog | undefined>(undefined);
 
   const [copying, setCopying] = useState(false);
+  const [canyonShares, setCanyonShares] = useState<TCanyonShare[]>([]);
+
+  // Owner-only "shared with" list. Refetches when the share dialog closes so a
+  // just-made share/unshare reflects immediately.
+  useEffect(() => {
+    if (!canyon || !isOwnedCanyon) {
+      setCanyonShares([]);
+      return;
+    }
+    getCanyonShares(canyon.id)
+      .then(setCanyonShares)
+      // Best-effort: this line is informational; on failure just omit it.
+      .catch(console.error);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canyon?.id, isOwnedCanyon, showShareDialog]);
 
   useEffect(() => {
     if (!canyon) {
@@ -129,6 +156,26 @@ function CanyonDetailPanel({
   if (!canyon) {
     return <span className={classes.caption}>No canyon selected.</span>;
   }
+
+  // Owner-only "shared with" line: list up to 3 names, else 2 + "N more" link.
+  const sharedNames = canyonShares.map((s) => s.sharedWith.username);
+  const sharedWithNode =
+    isOwnedCanyon && sharedNames.length > 0 ? (
+      sharedNames.length <= 3 ? (
+        joinWithAnd(sharedNames)
+      ) : (
+        <>
+          {sharedNames[0]}, {sharedNames[1]}, and{" "}
+          <button
+            type="button"
+            className={classes.sharedMoreLink}
+            onClick={() => setShowShareDialog(true)}
+          >
+            {sharedNames.length - 2} more
+          </button>
+        </>
+      )
+    ) : null;
 
   async function handleDelete() {
     if (!canyon) return;
@@ -275,7 +322,9 @@ function CanyonDetailPanel({
             </button>
           </div>
         )}
-        {(canyon.ropeWikiId != null || canyon.altNames.length > 0) && (
+        {(canyon.ropeWikiId != null ||
+          canyon.altNames.length > 0 ||
+          sharedWithNode != null) && (
           <div className={classes.headerMeta}>
             {canyon.ropeWikiId != null && (
               <p className={classes.disclaimer}>
@@ -293,6 +342,9 @@ function CanyonDetailPanel({
             )}
             {canyon.altNames.length > 0 && (
               <p className={classes.altNames}>Also known as: {canyon.altNames.join(", ")}</p>
+            )}
+            {sharedWithNode != null && (
+              <p className={classes.altNames}>Shared with: {sharedWithNode}</p>
             )}
           </div>
         )}
@@ -378,6 +430,12 @@ function CanyonDetailPanel({
               </p>
             );
           })}
+          {canyon.notes && canyon.notes.trim().length > 0 && (
+            <div className={classes.notesBlock}>
+              <b>Notes:</b>
+              <p className={classes.notesText}>{canyon.notes}</p>
+            </div>
+          )}
         </div>
 
         <div className={classes.tripLogsRegion}>
@@ -577,6 +635,8 @@ function CanyonDetailPanel({
               console.error(err);
               toast.error(messageFromError(err, "Couldn't refresh trip logs."));
             });
+          // Also refresh the global Trip Logs list/search (separate query).
+          onRefetchTripLogs();
         }}
         canyons={canyons}
         defaultCanyonId={canyon.id}
@@ -610,6 +670,8 @@ function CanyonDetailPanel({
               toast.error(messageFromError(err, "Couldn't refresh trip logs."));
             });
           onQuotaChanged();
+          // Also refresh the global Trip Logs list/search (separate query).
+          onRefetchTripLogs();
         }}
       />
     </>

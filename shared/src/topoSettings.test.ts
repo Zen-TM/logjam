@@ -13,7 +13,43 @@ import {
   iconTargetPx,
   validateRasterTemplateSettings,
   validateVectorStyleSettings,
+  slopeBandsError,
 } from "./topoSettings";
+import type { SlopeBand } from "./topoSettings";
+
+describe("slopeBandsError", () => {
+  const band = (fromDeg: number, toDeg: number): SlopeBand => ({
+    fromDeg,
+    toDeg,
+    colour: "#ff000080",
+  });
+
+  it("accepts contiguous ascending integer bands", () => {
+    expect(slopeBandsError([band(25, 35), band(35, 50), band(50, 90)])).toBeNull();
+  });
+
+  it("rejects an empty list", () => {
+    expect(slopeBandsError([])).toMatch(/at least one/i);
+  });
+
+  it("rejects from >= to within a band", () => {
+    expect(slopeBandsError([band(40, 40)])).toMatch(/from.*less than.*to/i);
+  });
+
+  it("rejects a gap between bands", () => {
+    expect(slopeBandsError([band(25, 35), band(40, 50)])).toMatch(/must start where band 1 ends/i);
+  });
+
+  it("rejects an overlap between bands", () => {
+    expect(slopeBandsError([band(25, 40), band(35, 50)])).toMatch(/must start where band 1 ends/i);
+  });
+
+  it("rejects out-of-range and non-integer angles", () => {
+    expect(slopeBandsError([band(-1, 30)])).toMatch(/between 0 and 90/i);
+    expect(slopeBandsError([band(0, 91)])).toMatch(/between 0 and 90/i);
+    expect(slopeBandsError([band(0, 30.5)])).toMatch(/whole numbers/i);
+  });
+});
 
 describe("RasterTemplateSettings", () => {
   it("defaults round-trip through validator", () => {

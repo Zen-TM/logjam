@@ -1,3 +1,8 @@
+import {
+  isTripLogCustomFieldDef,
+  type TripLogCustomFieldDef,
+} from "./tripLogFields.js";
+
 export type ThemeSchemeId = "sandstone" | "basalt" | "scribblyGum" | "ironbark";
 
 export type ThemeTokens = {
@@ -163,21 +168,25 @@ export function isThemeSchemeId(value: unknown): value is ThemeSchemeId {
   );
 }
 
-function normalizeCustomFieldDefs(
-  value: unknown,
-): import("./tripLogFields.js").TripLogCustomFieldDef[] {
+// Legacy alias: an early seed/data shape stored free-text fields as type "text",
+// which is not a valid TripLogCustomFieldType ("string"). Repair it on read so
+// the def passes the strict write-side guard (isTripLogCustomFieldDef) and can
+// round-trip through PATCH /users/me without rejecting the whole array.
+function repairLegacyFieldType(value: object): object {
+  const c = value as Record<string, unknown>;
+  if (c.type === "text") return { ...c, type: "string" };
+  return value;
+}
+
+function normalizeCustomFieldDefs(value: unknown): TripLogCustomFieldDef[] {
   if (!Array.isArray(value)) return [];
-  return (value as unknown[]).filter(
-    (f): f is import("./tripLogFields.js").TripLogCustomFieldDef => {
-      if (typeof f !== "object" || f === null) return false;
-      const c = f as Record<string, unknown>;
-      return (
-        typeof c.key === "string" &&
-        typeof c.label === "string" &&
-        typeof c.type === "string"
-      );
-    },
-  );
+  // Repair known legacy shapes, then gate every def through the same strict
+  // guard the server enforces — so loaded prefs are always write-valid and a
+  // single bad def can never block all custom-field saves. Invalid defs that
+  // can't be repaired are dropped (they were unusable anyway).
+  return (value as unknown[])
+    .map((f) => (typeof f === "object" && f !== null ? repairLegacyFieldType(f) : f))
+    .filter(isTripLogCustomFieldDef);
 }
 
 const IMPORT_MERGE_POLICY_FIELDS = [

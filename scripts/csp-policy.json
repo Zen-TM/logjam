@@ -41,6 +41,9 @@
       "https://demotiles.maplibre.org",
       "https://maps.six.nsw.gov.au",
       "https://elevation.fsdf.org.au"
+    ],
+    "geocoderHosts": [
+      "https://nominatim.openstreetmap.org"
     ]
   },
   "verification": [
@@ -52,6 +55,7 @@
     "Dev server (vite dev) intentionally has NO CSP — HMR uses inline scripts + eval which 'self' would block.",
     "'unsafe-inline' for style-src is required by MUI/emotion runtime style injection. Never relax script-src.",
     "If new tile providers / image hosts are added, update CSP_PROD in frontend/vite.config.ts AND the allowlist in this file.",
-    "media-src allows blob: plus awsAssetHosts so uploaded videos (presigned S3 URLs) play inline via <video>; img-src/connect-src already cover photo display + presigned PUT uploads."
+    "media-src allows blob: plus awsAssetHosts so uploaded videos (presigned S3 URLs) play inline via <video>; img-src/connect-src already cover photo display + presigned PUT uploads.",
+    "geocoderHosts (Nominatim) are connect-src only — used by the map-pick place search (frontend/src/geocode.ts). Only the user-typed place string is sent; no canyon data."
   ]
 }

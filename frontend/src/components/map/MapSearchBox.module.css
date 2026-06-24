@@ -1,0 +1,102 @@
+.root {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  width: min(320px, calc(100% - 24px));
+  margin-left: 0;
+  transition: margin-left var(--transition-med) ease-out;
+}
+
+/* Slide clear of an open sidebar panel, like the attribution control. */
+.shifted {
+  margin-left: var(--panel-width);
+}
+
+/* Mobile: panel is a bottom sheet, not a left flyout — don't shift. */
+@media (max-width: 768px) {
+  .shifted {
+    margin-left: 0;
+  }
+  .root {
+    width: calc(100% - 24px);
+  }
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--theme-primary);
+  color: var(--theme-text-primary);
+  padding: 0.4em 0.6em;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-float);
+}
+
+.icon {
+  color: var(--theme-text-muted);
+  flex-shrink: 0;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--theme-text-primary);
+  font-size: var(--text-sm);
+}
+
+.clear {
+  display: flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  color: var(--theme-text-muted);
+  cursor: pointer;
+  padding: 2px;
+}
+
+.clear:hover {
+  color: var(--theme-text-primary);
+}
+
+.results {
+  margin-top: 4px;
+  background: var(--theme-secondary);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.status {
+  padding: 0.5em 0.7em;
+  color: var(--theme-text-muted);
+  font-size: var(--text-sm);
+}
+
+.resultItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--theme-text-primary);
+  padding: 0.5em 0.7em;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+}
+
+.resultItem:last-child {
+  border-bottom: none;
+}
+
+.resultItem:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+}

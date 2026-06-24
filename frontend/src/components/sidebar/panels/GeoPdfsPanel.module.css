@@ -166,9 +166,24 @@
 .jobLabel {
   font-size: var(--text-sm);
   color: var(--theme-text-primary);
+  display: flex;
+  gap: 0.3em;
+  align-items: baseline;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Title truncates with an ellipsis; the date never shrinks so it stays visible. */
+.jobTitle {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+
+.jobDate {
+  flex-shrink: 0;
+  color: var(--theme-text-muted);
 }
 
 .jobMeta {

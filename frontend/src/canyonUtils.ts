@@ -30,6 +30,9 @@ export type TCanyon = {
   updatedAt: string;
   // Populated only by the canyon-detail endpoint (GET /canyons/:id), not the list.
   media?: MediaItem[];
+  // Populated only by the list endpoints (GET /canyons[/shared]). `shares` powers
+  // the "shared by me" filter + the card badge on owned canyons.
+  _count?: { tripLogs: number; shares: number };
 };
 
 export type TUser = {
@@ -123,6 +126,8 @@ export type TFilters = {
   longest_pitch: ["Any" | "Less than" | "More than" | "Exactly", number] | null;
   hours: ["Any" | "Less than" | "More than" | "Exactly", number] | null;
   ownership: "all" | "owned" | "shared";
+  // When true, keep only canyons the user has shared with at least one friend.
+  shared_by_me: boolean;
   created_at: TDateRange | null;
   updated_at: TDateRange | null;
   ropewiki: "any" | "linked" | "unlinked";
@@ -987,6 +992,7 @@ export const emptyFilters: TFilters = {
   longest_pitch: null,
   hours: null,
   ownership: "all",
+  shared_by_me: false,
   created_at: null,
   updated_at: null,
   ropewiki: "any",
@@ -1015,6 +1021,7 @@ const DATE_FILTER_KEYS: (keyof TFilters)[] = ["created_at", "updated_at"];
 function isFilterActive(filters: TFilters, key: keyof TFilters): boolean {
   if (key === "name") return !!filters.name && filters.name.trim() !== "";
   if (key === "ownership") return filters.ownership !== "all";
+  if (key === "shared_by_me") return filters.shared_by_me;
   if (key === "ropewiki") return filters.ropewiki !== "any";
   if (key === "include_unknowns") return false; // a modifier, not a filter
   const rangeDefault = RANGE_FILTER_DEFAULTS.find(([k]) => k === key);
@@ -1043,6 +1050,7 @@ const COUNTED_FILTER_KEYS: (keyof TFilters)[] = [
   ...THRESHOLD_FILTER_KEYS,
   ...DATE_FILTER_KEYS,
   "ownership",
+  "shared_by_me",
   "ropewiki",
 ];
 
@@ -1153,6 +1161,8 @@ export function passesFilters(
 
   if (filters.ownership === "owned" && !isOwned) return false;
   if (filters.ownership === "shared" && isOwned) return false;
+
+  if (filters.shared_by_me && (canyon._count?.shares ?? 0) === 0) return false;
 
   if (filters.ropewiki === "linked" && canyon.ropeWikiId == null) return false;
   if (filters.ropewiki === "unlinked" && canyon.ropeWikiId != null) return false;
