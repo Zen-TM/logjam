@@ -1,4 +1,4 @@
-"""Tests for the render-settings loader in topo_mbtiles.py.
+"""Tests for the render-settings loader in pipeline.py.
 
 Guards the constants refactor: defaults must match the values that were
 previously hard-coded inside the render and gdaldem call sites.
@@ -13,12 +13,12 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-# This test only exercises pure-Python settings code, but topo_mbtiles.py
+# This test only exercises pure-Python settings code, but pipeline.py
 # imports GDAL/PDAL/shapely at module top. When those aren't installed
 # (running pytest on the host instead of inside the worker Docker image),
 # skip the suite cleanly rather than erroring at import time.
 try:
-    from topo_mbtiles import (
+    from pipeline import (
         _default_render_settings,
         _parse_rgba_hex,
         active_layers_from_settings,
@@ -30,7 +30,7 @@ except Exception as _exc:  # noqa: BLE001
     _IMPORT_ERR = _exc
 
 
-@unittest.skipUnless(_IMPORT_OK, f"topo_mbtiles import failed (missing native deps): {globals().get('_IMPORT_ERR', '?')}")
+@unittest.skipUnless(_IMPORT_OK, f"pipeline import failed (missing native deps): {globals().get('_IMPORT_ERR', '?')}")
 class TestRenderSettings(unittest.TestCase):
     def setUp(self):
         self.default = _default_render_settings

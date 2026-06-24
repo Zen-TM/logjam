@@ -3,26 +3,27 @@
 Stage 2 plan calls for headless MapLibre Native here, but that pipeline has
 significant risk (see plan §Risks). This module ships a working Python
 implementation using GDAL + PIL that reuses the existing tile compositor in
-topo_mbtiles.py. Headless MapLibre Native can replace this implementation
+pipeline.py. Headless MapLibre Native can replace this implementation
 later behind the same render_composite_to_* function signatures.
 
 MBTiles composite (`render_composite_to_mbtiles`):
   1. Load source COGs for selected raster layers (already styled).
   2. Load raw vector GeoJSONs for selected vector layers.
   3. Compose the snapshotted VectorStyleSettings into the legacy TopoSettings
-     shape that topo_mbtiles renderers expect.
+     shape that pipeline renderers expect.
   4. For each (z, x, y) tile in the bbox:
      - For each raster layer: gdal.Warp the COG into a 256x256 RGBA PNG window.
-     - For each vector layer: call topo_mbtiles.render_contours_tile / render_features_tile.
+     - For each vector layer: call pipeline.render_contours_tile / render_features_tile.
      - Alpha-composite in order: hillshade → vegetation → slope → contours → features
-       (topo_mbtiles.COMPOSITE_LAYER_ORDER).
+       (pipeline.COMPOSITE_LAYER_ORDER).
 
 GeoTIFF composite (`render_composite_to_geotiff`):
   Raster-only — vectors are excluded by `EXPORT_FORMAT_RULES.geotiff.allowVector
-  = false`. Alpha-aware `gdal.Warp` chain over the source COGs: create an empty
-  RGBA destination matching the first COG's grid, then warp each layer in
-  bottom→top order with `srcAlpha=True, dstAlpha=True` so GDAL performs
-  source-over compositing against existing destination pixels. Re-encode as COG.
+  = false`. Warp each source COG onto the template grid as its own RGBA array
+  (`srcAlpha=True, dstAlpha=True`), then alpha-composite bottom→top with
+  explicit numpy source-over. (Warping sequentially into one shared destination
+  no longer composites under GDAL 3.11 — see render_composite_to_geotiff.)
+  Re-encode as COG.
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-# Make topo_mbtiles importable as a sibling module.
+# Make pipeline importable as a sibling module.
 _TOPO_DIR = Path(__file__).resolve().parent.parent
 if str(_TOPO_DIR) not in sys.path:
     sys.path.insert(0, str(_TOPO_DIR))
@@ -45,8 +46,8 @@ import numpy as np
 from osgeo import gdal
 from PIL import Image
 
-import topo_mbtiles as tm  # noqa: E402
-from topo_mbtiles import (  # noqa: E402
+import pipeline as tm  # noqa: E402
+from pipeline import (  # noqa: E402
     TILE_SIZE, ZOOM_MIN, ZOOM_MAX, WGS84_EPSG,
     create_mbtiles, finalise_bounds, insert_tile,
     tiles_for_bbox, tile_to_bbox,
@@ -60,7 +61,7 @@ log = logging.getLogger("export_worker.tile_compose")
 
 def _vector_style_to_render_settings(vector_style: Dict[str, Any]) -> Dict[str, Any]:
     """Convert the user-snapshotted VectorStyleSettings into the legacy
-    TopoSettings shape topo_mbtiles renderers consume. Raster-bake template
+    TopoSettings shape pipeline renderers consume. Raster-bake template
     fields (slope bands, hillshade params, etc.) are unused here because the
     COGs are already styled — only the vector-side settings matter for
     re-rendering contours and features."""
@@ -148,7 +149,7 @@ def _composite_tile(
     """Render one composite tile. Returns PNG bytes or None if fully transparent."""
     composite = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
 
-    # Order matches topo_mbtiles.render_tile_job composite order. OSM features
+    # Order matches pipeline.render_tile_job composite order. OSM features
     # are topmost so roads/water/labels read over contours, matching the web map.
     order = tm.COMPOSITE_LAYER_ORDER
     bbox_wgs84 = tile_to_bbox(x, y, z)
@@ -269,17 +270,28 @@ def render_composite_to_geotiff(ctx: RenderContext, raster_layers: List[str]) ->
     Raster-only — vector layers are NOT included (Stage 2 GeoTIFF format is
     raster-only, see EXPORT_FORMAT_RULES.geotiff.allowVector = false).
 
-    Strategy: create an empty RGBA destination matching the first COG's grid,
-    then warp each source COG (bottom→top) into it with srcAlpha/dstAlpha so
-    GDAL performs source-over alpha compositing against the existing pixels.
-    BuildVRT is deliberately NOT used — it mosaics rather than alpha-blends, and
-    a nodata mask corrupts the RGBA alpha band and drops valid colour-0 pixels.
+    Strategy: warp each source COG onto the template grid as its own RGBA array,
+    then alpha-composite them bottom→top with explicit numpy source-over.
+
+    GDAL < 3.11 source-over-composited when warping sequentially into one shared
+    destination (no INIT_DEST). That stopped working in GDAL 3.11: each
+    gdal.Warp re-initialises the destination across its full output window, so a
+    later layer's transparent pixels overwrite an earlier layer's opaque pixels
+    with (0,0,0,0) — only the last COG survived. We composite in numpy instead,
+    matching the source-over semantics the MBTiles tile path uses. BuildVRT is
+    deliberately NOT used — it mosaics rather than alpha-blends, and a nodata
+    mask corrupts the RGBA alpha band and drops valid colour-0 pixels.
+
+    Layers are stacked in COMPOSITE_LAYER_ORDER (hillshade base → vegetation →
+    slope), not selection order, so the visual stack matches the web map.
     """
     if not raster_layers:
         raise RenderError("GeoTIFF composite requires at least one raster layer")
 
+    # Bottom→top stacking order (raster subset of the canonical composite order).
+    ordered = [l for l in tm.COMPOSITE_LAYER_ORDER if l in raster_layers]
     job_id = ctx.primary_job["id"]
-    cogs = [ctx.cog_path(job_id, l) for l in raster_layers]
+    cogs = [ctx.cog_path(job_id, l) for l in ordered]
 
     # Use the first COG as the spatial template (extent + resolution + SRS).
     # Single-job composites share the source MBTiles grid, so cogs[0] covers
@@ -292,6 +304,50 @@ def render_composite_to_geotiff(ctx: RenderContext, raster_layers: List[str]) ->
     xsize, ysize = template.RasterXSize, template.RasterYSize
     template = None
 
+    # Output bounds derived from the template geotransform (north-up grid).
+    x0 = geotransform[0]
+    y0 = geotransform[3]
+    x1 = x0 + geotransform[1] * xsize
+    y1 = y0 + geotransform[5] * ysize
+    output_bounds = (x0, min(y0, y1), x1, max(y0, y1))
+
+    out_rgb = np.zeros((3, ysize, xsize), dtype=np.float64)
+    out_alpha = np.zeros((ysize, xsize), dtype=np.float64)
+
+    for cog in cogs:
+        warped = gdal.Warp(
+            "",
+            str(cog),
+            format="MEM",
+            dstSRS=projection,
+            outputBounds=output_bounds,
+            width=xsize,
+            height=ysize,
+            resampleAlg="bilinear",
+            srcAlpha=True,
+            dstAlpha=True,
+        )
+        if warped is None:
+            raise RenderError(f"Failed to warp source COG {cog} onto composite grid")
+        arr = warped.ReadAsArray().astype(np.float64)
+        warped = None
+        src_rgb = arr[:3]
+        src_alpha = arr[3] / 255.0
+
+        # source-over: out = src·a_s + out·a_d·(1 − a_s); a = a_s + a_d·(1 − a_s)
+        new_alpha = src_alpha + out_alpha * (1.0 - src_alpha)
+        safe = np.where(new_alpha > 0, new_alpha, 1.0)
+        for channel in range(3):
+            out_rgb[channel] = (
+                src_rgb[channel] * src_alpha
+                + out_rgb[channel] * out_alpha * (1.0 - src_alpha)
+            ) / safe
+        out_alpha = new_alpha
+
+    composite = np.concatenate(
+        [out_rgb, (out_alpha * 255.0)[None]], axis=0
+    ).round().clip(0, 255).astype(np.uint8)
+
     intermediate = ctx.work_dir / "composite_intermediate.tif"
     driver = gdal.GetDriverByName("GTiff")
     dst_ds = driver.Create(
@@ -301,23 +357,9 @@ def render_composite_to_geotiff(ctx: RenderContext, raster_layers: List[str]) ->
     dst_ds.SetGeoTransform(geotransform)
     dst_ds.SetProjection(projection)
     dst_ds.GetRasterBand(4).SetColorInterpretation(gdal.GCI_AlphaBand)
-    for band_index in range(1, 5):
-        dst_ds.GetRasterBand(band_index).Fill(0)
+    dst_ds.WriteArray(composite)
     dst_ds.FlushCache()
     dst_ds = None
-
-    # Warp each COG onto the destination. Warping into an existing dataset does
-    # not re-initialise it (no INIT_DEST), so each layer composites over the
-    # previous one using source alpha.
-    for cog in cogs:
-        gdal.Warp(
-            str(intermediate),
-            str(cog),
-            format="GTiff",
-            srcAlpha=True,
-            dstAlpha=True,
-            resampleAlg="bilinear",
-        )
 
     dst = ctx.work_dir / "composite.tif"
     gdal.Translate(

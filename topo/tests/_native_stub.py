@@ -1,6 +1,6 @@
 """Shared test helper: stub native libraries that aren't installed on the host.
 
-``topo_mbtiles.py`` imports ``osgeo`` (GDAL) at module top and calls
+``pipeline.py`` imports ``osgeo`` (GDAL) at module top and calls
 ``gdal.UseExceptions()`` / ``ogr.UseExceptions()`` at import time. Those native
 bindings are only present inside the worker Docker image, not on a typical dev
 host. The pure-Python functions under test (tile maths, label placement, OSM
@@ -10,7 +10,7 @@ PIL/numpy tile rendering) don't actually touch GDAL, so we replace the missing
 host AND unchanged inside Docker (where the real module imports fine and the
 stub is never applied).
 
-Import this module BEFORE importing ``topo_mbtiles``.
+Import this module BEFORE importing ``pipeline``.
 """
 import sys
 from unittest import mock

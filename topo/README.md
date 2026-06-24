@@ -1,4 +1,4 @@
-# topo_mbtiles
+# Topo Pipeline
 
 Convert an **ELVIS (NSW Spatial Services) LiDAR ZIP** into a set of raster
 **MBTiles** files ready to import into **Gaia GPS**.
@@ -52,8 +52,8 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 
 ```bash
 # 1. Clone / copy this project
-git clone <this-repo> topo_mbtiles
-cd topo_mbtiles
+git clone <this-repo> logjam-topo
+cd logjam-topo
 
 # 2. Create input/output directories
 mkdir -p input output
@@ -116,7 +116,7 @@ pip install -r requirements.txt
 ### Run
 
 ```bash
-python3 topo_mbtiles.py /path/to/elvis.zip --output ./output --workers 4
+python3 pipeline.py /path/to/elvis.zip --output ./output --workers 4
 ```
 
 ---

@@ -7,8 +7,8 @@ Python + GDAL + PDAL pipeline. Converts NSW ELVIS LiDAR ZIPs to raster MBTiles (
 ## Key files
 
 ```
-topo_mbtiles.py          main entry — CLI + processing pipeline (~77K, monolithic by design)
-worker.py                ECS-launched worker wrapper around topo_mbtiles (job-time)
+pipeline.py              main entry — CLI + processing pipeline (~77K, monolithic by design)
+worker.py                ECS-launched worker wrapper around pipeline (job-time)
 export_worker.py         ECS-launched worker for on-demand TopoExportJob (export-time)
 renderers/               per-format export renderers + shared tile compositor
 inspect_mbtiles.py       debug tool

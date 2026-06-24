@@ -74,8 +74,8 @@ class TestSafeErrorMessage(unittest.TestCase):
     def test_tippecanoe_runtime_error(self):
         self.assertIn("vector tiles", safe_error_message(RuntimeError("tippecanoe blew up")))
 
-    def test_topo_mbtiles_runtime_error(self):
-        self.assertIn("topo pipeline", safe_error_message(RuntimeError("topo_mbtiles crashed")))
+    def test_pipeline_runtime_error(self):
+        self.assertIn("topo pipeline", safe_error_message(RuntimeError("pipeline.py exited with code 1")))
 
     def test_os_error_points_at_input(self):
         self.assertIn("input LiDAR", safe_error_message(OSError("bad zip")))

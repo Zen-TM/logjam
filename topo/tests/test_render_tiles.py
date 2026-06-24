@@ -9,7 +9,7 @@ import _native_stub  # noqa: F401,E402
 
 try:
     import numpy as np  # noqa: E402
-    from topo_mbtiles import (  # noqa: E402
+    from pipeline import (  # noqa: E402
         TILE_SIZE,
         render_hillshade_tile,
         render_slope_tile,

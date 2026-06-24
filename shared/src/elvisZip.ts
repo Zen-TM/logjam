@@ -7,7 +7,7 @@ export type ElvisZipErrorCode =
 
 /**
  * Rejects ZIP entry names that would escape the extraction directory
- * (zip-slip). Mirrors the worker-side guard in topo/topo_mbtiles.py
+ * (zip-slip). Mirrors the worker-side guard in topo/pipeline.py
  * (_safe_extract_zip) so the API pre-check blocks a malicious upload before
  * ECS spin-up. Returns true if the name is unsafe.
  */
@@ -47,7 +47,7 @@ export interface ElvisStats {
   compressedBytes: number;
 }
 
-// Matches topo/topo_mbtiles.py derivative filter (case-insensitive stem contains any of these)
+// Matches topo/pipeline.py derivative filter (case-insensitive stem contains any of these)
 export const DERIVATIVE_STEM_TOKENS = [
   "hillshade",
   "slope",
@@ -140,7 +140,7 @@ export function parseZipCentralDirectory(
 /**
  * Validates ZIP entries against worker requirements and returns stats.
  * Throws ElvisZipError with the same wording the topo worker would surface.
- * Worker source: topo/topo_mbtiles.py:401-457
+ * Worker source: topo/pipeline.py:401-457
  */
 export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
   if (entries.length === 0) {

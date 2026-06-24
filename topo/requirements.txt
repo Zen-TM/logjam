@@ -1,4 +1,4 @@
-# topo_mbtiles – Python dependencies
+# pipeline – Python dependencies
 # GDAL is installed separately in the Dockerfile to match the system version.
 # All other deps are pinned to a compatible range.
 

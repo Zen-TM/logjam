@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402  (installs native stubs before import)
 
 try:
-    from topo_mbtiles import (  # noqa: E402
+    from pipeline import (  # noqa: E402
         TILE_SIZE,
         ground_metres_per_pixel,
         lon_lat_to_tile,
@@ -27,7 +27,7 @@ except Exception as _exc:  # noqa: BLE001
     _IMPORT_ERR = _exc
 
 
-@unittest.skipUnless(_IMPORT_OK, f"topo_mbtiles import failed: {globals().get('_IMPORT_ERR', '?')}")
+@unittest.skipUnless(_IMPORT_OK, f"pipeline import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestTileMath(unittest.TestCase):
     def test_lon_lat_to_tile_origin(self):
         # lon=-180, lat≈85.05 (top-left of the web-mercator world) → tile (0,0).

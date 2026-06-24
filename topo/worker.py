@@ -62,7 +62,7 @@ def safe_error_message(e: Exception) -> str:
     if isinstance(e, RuntimeError):
         if "tippecanoe" in msg:
             return "Failed to build vector tiles. Contact support with job ID {}.".format(JOB_ID)
-        if "topo_mbtiles" in msg:
+        if "pipeline.py" in msg:
             return "The topo pipeline exited with an error. Contact support with job ID {}.".format(JOB_ID)
     if isinstance(e, (OSError, IOError)):
         return "Could not read input LiDAR data. Verify the ZIP contains Elvis DTM files."
@@ -160,7 +160,7 @@ def merge_settings(layer_options: Optional[dict], vector_style: Optional[dict]) 
     """
     Merge the per-job RasterTemplateSettings (layer_options) with the
     user-level VectorStyleSettings snapshot into the legacy TopoSettings
-    shape that topo_mbtiles.py consumes.
+    shape that pipeline.py consumes.
 
     Output keys:
       hillshade, slope, vegetation       - from layer_options (or empty/missing)
@@ -454,7 +454,7 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
     # Merge per-job raster template settings (TopoJob.layer_options) with the
     # vector style snapshot taken at job-submit time
     # (TopoJob.vector_style_snapshot) into the legacy TopoSettings shape that
-    # topo_mbtiles.py expects. The pipeline uses the merged dict to drive both
+    # pipeline.py expects. The pipeline uses the merged dict to drive both
     # raster compositing colours and OSM/contour selection.
     output_dir = Path(tmp) / "output"
     output_dir.mkdir()
@@ -466,7 +466,7 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
     pipeline_work_dir.mkdir()
     cmd = [
         "python3",
-        str(Path(__file__).parent / "topo_mbtiles.py"),
+        str(Path(__file__).parent / "pipeline.py"),
         str(zip_path),
         "--output",  str(output_dir),
         "--work-dir", str(pipeline_work_dir),
@@ -488,7 +488,7 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
     result = subprocess.run(cmd)
     if result.returncode != 0:
         raise RuntimeError(
-            f"topo_mbtiles.py exited with code {result.returncode} "
+            f"pipeline.py exited with code {result.returncode} "
             f"({'OOM kill' if result.returncode == -9 else 'non-zero exit'})"
         )
 
@@ -497,7 +497,7 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
         log.warning("OSM features GeoJSON missing — Overpass fetch failed in pipeline.")
 
     # ── Vector tiles for contours + OSM features ────────────────────────
-    # topo_mbtiles.py writes raster contours.mbtiles / features.mbtiles
+    # pipeline.py writes raster contours.mbtiles / features.mbtiles
     # (used for the composite + Gaia downloads). The web app needs the
     # vector versions — run tippecanoe on the GeoJSON exports and put the
     # resulting MBTiles in vector_dir; the upload loop picks them up for

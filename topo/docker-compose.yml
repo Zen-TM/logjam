@@ -3,8 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: topo_mbtiles:latest
-    container_name: topo_mbtiles
+    image: pipeline:latest
+    container_name: pipeline
 
     # ── Volume mounts ────────────────────────────────────────
     # Place your ELVIS ZIP at ./input/elvis.zip before running.

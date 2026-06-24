@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402
 
 try:
-    from topo_mbtiles import classify_osm_element  # noqa: E402
+    from pipeline import classify_osm_element  # noqa: E402
     _IMPORT_OK = True
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
