@@ -191,6 +191,23 @@ SCRUB_DENSITY_MIN_PULSES      = 12    # min windowed (scrub+below) pulse count f
 SCRUB_DENSITY_MIN_RATIO       = 0.05  # below this → transparent (NRD runs lower than old ratio)
 SCRUB_DENSITY_MAX_RATIO       = 0.45  # at/above → fully opaque dark green
 
+# Data-footprint construction (compute_data_footprint). The footprint trims the
+# false outward fringe that fill_nodata extrapolates (up to FILL_NODATA_MAX_DIST_M
+# beyond true extent) WITHOUT clipping real data. The DTM's 1 m ground mask is
+# naturally sparse (~40% of cells carry a ground return), so the coarse mask must
+# be built by COVERAGE (any 1 m ground pixel in a coarse cell → valid), never by
+# nearest-neighbour sampling which erodes the sparse perimeter inward.
+FOOTPRINT_DOWNSAMPLE_SCALE      = 10    # coarse-mask cell size in metres (1 m grid → 10 m)
+# Morphological-close radius in coarse cells. Bridges groundless voids (water,
+# dense canopy) up to 2*radius wide so the footprint matches what fill_nodata
+# reconstructs as interior data; close does not net-expand the outer edge.
+# 10 cells × 10 m = ~100 m → bridges ~200 m, matching fill_nodata's 100 px reach.
+FOOTPRINT_CLOSE_RADIUS_CELLS    = 10
+# Keep every connected component whose area is ≥ this fraction of the largest
+# component's area (drops stray-point noise without deleting valid data lobes).
+FOOTPRINT_MIN_COMPONENT_AREA_FRAC = 0.02
+FOOTPRINT_SIMPLIFY_TOL_M        = 20    # ring simplify tolerance (Web Mercator metres)
+
 # PDAL noise/overlap classification codes per ASPRS LAS spec (dropped during count):
 #   7  = Low noise
 #   12 = Overlap (flight-line redundancy)
@@ -869,6 +886,14 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
     A noise/overlap-class filter and a ±20° scan-angle gate apply to both
     count rasters (but NOT the DTM, which still needs all ground returns
     regardless of scan angle).
+
+    Rasters are produced in the LAZ's NATIVE CRS (no filters.reprojection):
+    ELVIS tiles are axis-aligned squares in MGA/UTM, so rasterizing natively
+    yields a clean axis-aligned grid with no rotation wedge. The whole stack is
+    warped to Web Mercator once, as a raster, after fill/footprint (see
+    reproject_raster_to_web_mercator). Reprojecting points first instead would
+    rasterize a rotated quad into an axis-aligned 3857 grid, leaving triangular
+    nodata wedges that fill_nodata then fabricates ("spaghetti") data into.
     """
     # Note on classification: filters.assign below wipes incoming Classification
     # to 0 so smrf has a clean slate to assign 1 (unclassified) / 2 (ground).
@@ -890,7 +915,8 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
     readers = [{"type": "readers.las", "filename": f} for f in las_files]
     return {
         "pipeline": readers + [
-            {"type": "filters.reprojection", "out_srs": f"EPSG:{WEB_MERCATOR_EPSG}"},
+            # No filters.reprojection — rasterize in the LAZ's native CRS; the
+            # raster is warped to Web Mercator later (see module/function docs).
             # Drop ASPRS noise (7, 18) and overlap (12) points before smrf
             # touches Classification.
             {"type": "filters.range",
@@ -943,6 +969,10 @@ def build_pipeline_density_only(las_files: List[str], dtm_path: str,
 
     Drops ASPRS noise (7, 18) and overlap (12) classifications, and gates
     points to scan angles ≤ ±20° to remove swath-edge attenuation bias.
+
+    Rasters are produced in the LAZ's NATIVE CRS (no filters.reprojection), so
+    `dtm_path` (the external DEM read by filters.hag_dem) must be in that same
+    native CRS — the count rasters are warped to Web Mercator later, as rasters.
     """
     # PDAL filter expression parser has no function support (no abs()), so
     # the scan-angle gate is written as an explicit range comparison.
@@ -959,7 +989,7 @@ def build_pipeline_density_only(las_files: List[str], dtm_path: str,
     readers = [{"type": "readers.las", "filename": f} for f in las_files]
     return {
         "pipeline": readers + [
-            {"type": "filters.reprojection", "out_srs": f"EPSG:{WEB_MERCATOR_EPSG}"},
+            # No filters.reprojection — native CRS (dtm_path must match).
             # Mode B preserves original Classification (no assign/smrf), so
             # noise/overlap codes survive — drop them outright.
             {"type": "filters.range",
@@ -989,11 +1019,60 @@ def build_pipeline_density_only(las_files: List[str], dtm_path: str,
     }
 
 
-def _merge_raster_tiles(tile_paths: List[str], out_path: str):
-    """Mosaic per-tile PDAL GeoTIFFs into one. All inputs share the same CRS."""
+def _distinct_raster_crs(paths: List[str]) -> set:
+    """Set of distinct projection WKTs across the given rasters."""
+    wkts = set()
+    for p in paths:
+        ds = gdal.Open(p)
+        wkts.add(ds.GetProjection())
+        ds = None
+    return wkts
+
+
+def reproject_raster_to_web_mercator(src_path: str, dst_path: str,
+                                     nodata: float, resample: str = "cubic"):
+    """Warp a raster to EPSG:3857, turning out-of-footprint cells into clean nodata.
+
+    INIT_DEST=NO_DATA stops resampling from averaging valid + nodata at the
+    rotated edge, so the triangular gaps left by rotating an axis-aligned native
+    grid into Web Mercator stay nodata (transparent) instead of being fabricated
+    into "spaghetti". srcNodata/dstNodata propagate the hole value. Idempotent on
+    already-3857 input (a same-CRS resample). Mirrors the warp `merge_dem_tiles`
+    used to do inline.
+    """
+    gdal.Warp(
+        dst_path, src_path,
+        dstSRS=f"EPSG:{WEB_MERCATOR_EPSG}",
+        srcNodata=nodata, dstNodata=nodata,
+        resampleAlg=resample,
+        warpOptions=["INIT_DEST=NO_DATA"],
+        creationOptions=["COMPRESS=LZW"],
+    )
+
+
+def _merge_raster_tiles(tile_paths: List[str], out_path: str,
+                        nodata: float = -9999, resample: str = "cubic"):
+    """Mosaic per-tile PDAL GeoTIFFs into one, preserving native CRS when possible.
+
+    Tiles come out of PDAL in the LAZ's native CRS. When they all share one CRS
+    (the normal case — a job is a single MGA/UTM zone), the mosaic stays native
+    and axis-aligned (no rotation wedge); it is warped to Web Mercator later as a
+    raster. When tiles span multiple CRSs (rare: a job crossing a zone boundary),
+    fall back to reprojecting each tile to Web Mercator first — that reintroduces
+    per-tile edge wedges but yields a single consistent grid.
+    """
     if len(tile_paths) == 1:
         shutil.copy2(tile_paths[0], out_path)
         return
+    if len(_distinct_raster_crs(tile_paths)) > 1:
+        log.warning("Input tiles span multiple CRSs — reprojecting each to Web "
+                    "Mercator before mosaic (edge wedges may appear).")
+        merc_tiles = []
+        for i, t in enumerate(tile_paths):
+            m = out_path.replace(".tif", f"_merc_{i}.tif")
+            reproject_raster_to_web_mercator(t, m, nodata, resample)
+            merc_tiles.append(m)
+        tile_paths = merc_tiles
     vrt_path = out_path.replace(".tif", "_merge.vrt")
     gdal.BuildVRT(vrt_path, tile_paths)
     gdal.Warp(out_path, vrt_path, creationOptions=["COMPRESS=LZW"])
@@ -1032,11 +1111,11 @@ def run_pdal_sequential_full(las_files: List[str], out_dtm: str,
         below_tiles.append(tile_below)
 
     log.info(f"Merging {len(dtm_tiles)} DTM tiles …")
-    _merge_raster_tiles(dtm_tiles, out_dtm)
+    _merge_raster_tiles(dtm_tiles, out_dtm, nodata=-9999)
     log.info(f"Merging {len(scrub_tiles)} scrub-count tiles …")
-    _merge_raster_tiles(scrub_tiles, out_scrub_count)
+    _merge_raster_tiles(scrub_tiles, out_scrub_count, nodata=0, resample="bilinear")
     log.info(f"Merging {len(below_tiles)} below-count tiles …")
-    _merge_raster_tiles(below_tiles, out_below_count)
+    _merge_raster_tiles(below_tiles, out_below_count, nodata=0, resample="bilinear")
 
     for p in dtm_tiles + scrub_tiles + below_tiles:
         os.remove(p)
@@ -1058,9 +1137,9 @@ def run_pdal_sequential_density(las_files: List[str], dtm_path: str,
         below_tiles.append(tile_below)
 
     log.info(f"Merging {len(scrub_tiles)} scrub-count tiles …")
-    _merge_raster_tiles(scrub_tiles, out_scrub_count)
+    _merge_raster_tiles(scrub_tiles, out_scrub_count, nodata=0, resample="bilinear")
     log.info(f"Merging {len(below_tiles)} below-count tiles …")
-    _merge_raster_tiles(below_tiles, out_below_count)
+    _merge_raster_tiles(below_tiles, out_below_count, nodata=0, resample="bilinear")
 
     for p in scrub_tiles + below_tiles:
         os.remove(p)
@@ -1155,21 +1234,31 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
     mask_ds.SetProjection(ds.GetProjection())
     mask_ds.GetRasterBand(1).WriteArray(mask_arr)
 
-    # Downsample 10× for faster polygonization (~10 m resolution is plenty)
-    scale = 10
+    # Downsample for faster polygonization, by COVERAGE not nearest-neighbour:
+    # warp the 0/1 mask as Float32 with averaging, then treat any cell with a
+    # nonzero fraction as valid. This keeps a coarse cell whenever *any* 1 m
+    # ground return falls in it — essential because the ground mask is sparse
+    # (~40% valid), so NN sampling would erode the perimeter inward and drop the
+    # very edges that fill_nodata legitimately reconstructs.
+    scale = FOOTPRINT_DOWNSAMPLE_SCALE
     new_x = max(1, ds.RasterXSize // scale)
     new_y = max(1, ds.RasterYSize // scale)
     gt = ds.GetGeoTransform()
+    frac_ds = mem_drv.Create("", new_x, new_y, 1, gdal.GDT_Float32)
+    frac_ds.SetGeoTransform((gt[0], gt[1] * scale, 0, gt[3], 0, gt[5] * scale))
+    frac_ds.SetProjection(ds.GetProjection())
+    gdal.Warp(frac_ds, mask_ds, resampleAlg=gdal.GRA_Average)
+    small_arr = (frac_ds.GetRasterBand(1).ReadAsArray() > 0).astype(np.uint8)
+    frac_ds = None
+
+    # Morphological close: dilate then erode by FOOTPRINT_CLOSE_RADIUS_CELLS.
+    # Bridges groundless voids (water, dense canopy) up to 2*radius wide so the
+    # footprint covers what fill_nodata reconstructs, without net-expanding the
+    # outer edge into the false fill fringe.
+    closed_arr = _binary_close(small_arr, radius=FOOTPRINT_CLOSE_RADIUS_CELLS)
     small_ds = mem_drv.Create("", new_x, new_y, 1, gdal.GDT_Byte)
     small_ds.SetGeoTransform((gt[0], gt[1] * scale, 0, gt[3], 0, gt[5] * scale))
     small_ds.SetProjection(ds.GetProjection())
-    gdal.Warp(small_ds, mask_ds, resampleAlg=gdal.GRA_NearestNeighbour)
-
-    # Morphological close on the downsampled mask: dilate then erode with a
-    # 2-cell (~20 m) radius. Bridges narrow residual nodata strips without
-    # noticeably dilating the outer edge of the data.
-    small_arr = small_ds.GetRasterBand(1).ReadAsArray()
-    closed_arr = _binary_close(small_arr, radius=2)
     small_ds.GetRasterBand(1).WriteArray(closed_arr)
 
     # Polygonize
@@ -1206,21 +1295,26 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
         footprint_merc = shapely_box(xmin, ymin, xmax, ymax)
     else:
         merged = unary_union(polys)
-        # Keep only the largest connected component — outliers from stray
-        # tiles or noise pixels shouldn't shape the footprint.
-        if merged.geom_type == "MultiPolygon":
-            merged = max(merged.geoms, key=lambda g: g.area)
-        # Drop any residual interior rings by rebuilding from the exterior ring.
-        if merged.geom_type == "Polygon":
-            footprint_merc = Polygon(merged.exterior)
-        else:
-            # Defensive: union may rarely return a non-Polygon (e.g. empty)
+        # Keep every component large enough to be real data; drop only stray-point
+        # noise (components below a fraction of the largest). Deleting all but the
+        # largest used to erase entire valid lobes where ground returns were
+        # locally sparse. Rebuild each kept component from its exterior ring to
+        # drop interior holes.
+        components = list(merged.geoms) if merged.geom_type == "MultiPolygon" else [merged]
+        components = [g for g in components if g.geom_type == "Polygon" and g.area > 0]
+        if not components:
             xmin = gt[0]; xmax = gt[0] + gt[1] * ds.RasterXSize
             ymax = gt[3]; ymin = gt[3] + gt[5] * ds.RasterYSize
             footprint_merc = shapely_box(xmin, ymin, xmax, ymax)
+        else:
+            max_area = max(g.area for g in components)
+            kept = [Polygon(g.exterior) for g in components
+                    if g.area >= FOOTPRINT_MIN_COMPONENT_AREA_FRAC * max_area]
+            footprint_merc = unary_union(kept)
 
-    # Simplify with ~50 m tolerance (Web Mercator metres)
-    footprint_merc = footprint_merc.simplify(50.0, preserve_topology=True)
+    # Simplify (Web Mercator metres). Kept tight so the ring doesn't pull inward
+    # across convex corners and re-clip real data.
+    footprint_merc = footprint_merc.simplify(FOOTPRINT_SIMPLIFY_TOL_M, preserve_topology=True)
 
     # Reproject to WGS84 via OGR
     tgt_srs = osr.SpatialReference()
@@ -2556,29 +2650,41 @@ def get_raster_bbox_wgs84(raster_path: str) -> Tuple[float, float, float, float]
 # ---------------------------------------------------------------------------
 
 def merge_dem_tiles(dem_files: List[Path], out_path: str):
-    """Mosaic multiple DEM GeoTIFFs into one and reproject to Web Mercator.
+    """Mosaic multiple DEM GeoTIFFs into one, preserving their NATIVE CRS.
 
-    Reads source nodata from the first DEM's band metadata and propagates it
-    through the warp so the rotated edge cells become nodata instead of
-    bilinear-blended attenuated values. INIT_DEST=NO_DATA stops cubic
-    resampling from averaging valid + nodata at the boundary.
+    Stays native (axis-aligned, no rotation wedge) so the footprint can be
+    computed cleanly; the result is warped to Web Mercator later as a raster
+    (reproject_raster_to_web_mercator). Source nodata is normalised to -9999 so
+    downstream steps see a consistent hole value. If the DEM tiles span multiple
+    CRSs (rare zone-crossing job), each is reprojected to Web Mercator first.
     """
-    log.info(f"Merging {len(dem_files)} DEM tile(s) into Web Mercator …")
-    vrt_path = out_path.replace(".tif", "_input.vrt")
-    gdal.BuildVRT(vrt_path, [str(f) for f in dem_files])
+    log.info(f"Merging {len(dem_files)} DEM tile(s) …")
+    paths = [str(f) for f in dem_files]
 
-    src_ds = gdal.Open(str(dem_files[0]))
+    src_ds = gdal.Open(paths[0])
     src_nodata = src_ds.GetRasterBand(1).GetNoDataValue()
     src_ds = None
     if src_nodata is None:
         src_nodata = -9999
 
+    if len(_distinct_raster_crs(paths)) > 1:
+        log.warning("DEM tiles span multiple CRSs — reprojecting each to Web "
+                    "Mercator before mosaic (edge wedges may appear).")
+        merc = []
+        for i, p in enumerate(paths):
+            m = out_path.replace(".tif", f"_merc_{i}.tif")
+            reproject_raster_to_web_mercator(p, m, src_nodata, "cubic")
+            merc.append(m)
+        paths = merc
+
+    vrt_path = out_path.replace(".tif", "_input.vrt")
+    gdal.BuildVRT(vrt_path, paths, VRTNodata=src_nodata)
+    # Identity mosaic (no reprojection); normalise nodata to -9999.
     gdal.Warp(
         out_path, vrt_path,
-        dstSRS=f"EPSG:{WEB_MERCATOR_EPSG}",
-        resampleAlg="cubic",
         srcNodata=src_nodata,
         dstNodata=-9999,
+        resampleAlg="cubic",
         warpOptions=["INIT_DEST=NO_DATA"],
         creationOptions=["COMPRESS=LZW"],
     )
@@ -2658,42 +2764,61 @@ def main():
             contents = extract_elvis_zip(args.elvis_zip, work_dir)
 
         las_strs = [str(f) for f in contents.las_files]
+        # Final Web-Mercator rasters fed to the derived-raster / tiling stage.
         dtm_filled      = os.path.join(work_dir, "dtm_filled.tif")
         scrub_count_raw = os.path.join(work_dir, "scrub_count_raw.tif")
         below_count_raw = os.path.join(work_dir, "below_count_raw.tif")
+        # Native-CRS intermediates. Rasters are built and the footprint computed
+        # in the data's native MGA/UTM grid (axis-aligned → no rotation wedge),
+        # then warped to Web Mercator as a raster (see
+        # reproject_raster_to_web_mercator). This is what prevents fill_nodata
+        # from fabricating "spaghetti" into the rotated edge gaps.
+        dtm_native         = os.path.join(work_dir, "dtm_native.tif")
+        scrub_count_native = os.path.join(work_dir, "scrub_count_native.tif")
+        below_count_native = os.path.join(work_dir, "below_count_native.tif")
 
         footprint_path = os.path.join(work_dir, "footprint.geojson")
 
-        # ── Step 2a: Obtain DTM ──────────────────────────────────────────────
+        # ── Step 2a: Obtain DTM (native) → footprint → warp to Web Mercator ──
         if contents.mode == MODE_DEM_ONLY or contents.mode == MODE_DEM_LAZ:
-            with bench.step("Merge & reproject pre-built DEM (DTM)"):
-                merge_dem_tiles(contents.dem_files, dtm_filled)
+            with bench.step("Merge pre-built DEM (DTM, native)"):
+                merge_dem_tiles(contents.dem_files, dtm_native)
             with bench.step("Compute data footprint"):
-                compute_data_footprint(dtm_filled, footprint_path)
+                compute_data_footprint(dtm_native, footprint_path)
+            with bench.step("Reproject DTM to Web Mercator"):
+                reproject_raster_to_web_mercator(dtm_native, dtm_filled, -9999, "cubic")
         else:
-            # MODE_LAZ_ONLY – build DTM + NRD counts from point cloud
+            # MODE_LAZ_ONLY – build DTM + NRD counts from point cloud (native).
             dtm_raw = os.path.join(work_dir, "dtm_raw.tif")
+            dtm_native_filled = os.path.join(work_dir, "dtm_native_filled.tif")
             with bench.step("PDAL: LAZ → DTM + NRD counts (ground classification)"):
                 run_pdal_sequential_full(
-                    las_strs, dtm_raw, scrub_count_raw, below_count_raw,
+                    las_strs, dtm_raw, scrub_count_native, below_count_native,
                     work_dir, resolution=1.0,
                 )
             with bench.step("Fill DTM nodata holes"):
-                fill_nodata(dtm_raw, dtm_filled)
-            # Footprint is computed from dtm_raw (pre-fill) so fill_nodata's
-            # 100 m extrapolation into outer nodata regions doesn't dilate the
-            # outer boundary into a wedge artifact. Interior holes still get
-            # bridged by the morphological close inside compute_data_footprint.
+                fill_nodata(dtm_raw, dtm_native_filled)
+            # Footprint is computed from dtm_raw (pre-fill) in the NATIVE grid,
+            # which is axis-aligned with no rotation wedge, so it hugs the true
+            # data extent. (compute_data_footprint reprojects to WGS84.)
             with bench.step("Compute data footprint"):
                 compute_data_footprint(dtm_raw, footprint_path)
+            with bench.step("Reproject DTM to Web Mercator"):
+                reproject_raster_to_web_mercator(dtm_native_filled, dtm_filled, -9999, "cubic")
 
         # ── Step 2b: Obtain NRD counts (only if vegetation layer needed) ────
         if contents.mode == MODE_DEM_LAZ:
-            with bench.step("PDAL: LAZ → NRD counts (hag_dem)"):
+            with bench.step("PDAL: LAZ → NRD counts (hag_dem, native DEM)"):
                 run_pdal_sequential_density(
-                    las_strs, dtm_filled, scrub_count_raw, below_count_raw,
+                    las_strs, dtm_native, scrub_count_native, below_count_native,
                     work_dir, resolution=1.0,
                 )
+        # Counts are produced in the native grid (Mode B & C); warp them to Web
+        # Mercator so they align with the 3857 DTM the derived rasters expect.
+        if contents.has_vegetation:
+            with bench.step("Reproject NRD counts to Web Mercator"):
+                reproject_raster_to_web_mercator(scrub_count_native, scrub_count_raw, 0, "bilinear")
+                reproject_raster_to_web_mercator(below_count_native, below_count_raw, 0, "bilinear")
 
         # ── Step 3: Derive rasters ───────────────────────────────────────────
         with bench.step("Compute hillshade, slope" + (", scrub density (vegetation)" if contents.has_vegetation else "")):
