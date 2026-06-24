@@ -27,9 +27,12 @@ module "media" {
   }]
 }
 
-# Topo job inputs/outputs + CDN-served master tiles. block_public_policy /
-# restrict_public_buckets are left false so the CloudFront OAC bucket policy
-# can grant read on master/*.
+# Topo job inputs/outputs + CDN-served master tiles. All four PAB flags true
+# (CP-004): the CloudFront OAC bucket policy grants read to the
+# cloudfront.amazonaws.com SERVICE principal under an AWS:SourceArn condition —
+# S3 does not classify that as "public", so block_public_policy /
+# restrict_public_buckets do not affect OAC tile serving (verify with a
+# CloudFront tile fetch after apply).
 module "topo_jobs" {
   source                 = "../../modules/storage"
   bucket_name            = "logjam-topo-jobs"
@@ -38,9 +41,9 @@ module "topo_jobs" {
 
   public_access_block = {
     block_public_acls       = true
-    block_public_policy     = false
+    block_public_policy     = true
     ignore_public_acls      = true
-    restrict_public_buckets = false
+    restrict_public_buckets = true
   }
 
   cors_rules = [{
@@ -71,4 +74,19 @@ module "frontend" {
     ignore_public_acls      = true
     restrict_public_buckets = true
   }
+}
+
+# Account-level S3 Block Public Access backstop (CP-003). Per-bucket PAB above
+# only covers buckets Terraform manages; this catches every bucket in the
+# account — including the AWS-managed Elastic Beanstalk deploy bucket
+# (elasticbeanstalk-ap-southeast-2-620853681701, created without PAB by default)
+# and any future/orphan bucket. All logjam buckets are already private (OAC
+# service-principal policies, not Principal:"*"), so this adds no access
+# regression — it is a defence-in-depth floor against an accidental public ACL
+# or policy.
+resource "aws_s3_account_public_access_block" "account" {
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
