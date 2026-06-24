@@ -594,6 +594,7 @@ function CanyonsPanel({
       longest_pitch: null,
       hours: null,
       ownership: "all",
+      shared_by_me: false,
       created_at: null,
       updated_at: null,
       ropewiki: "any",
@@ -709,6 +710,20 @@ function CanyonsPanel({
                   {choiceCell("ownership", "Ownership", OWNERSHIP_OPTIONS, "all")}
                   {choiceCell("ropewiki", "RopeWiki link", ROPEWIKI_OPTIONS, "any")}
                 </div>
+                <div
+                  className={classes.toggleRow}
+                  title="When on, show only canyons you've shared with at least one friend."
+                >
+                  <span>Shared by me</span>
+                  <Switch
+                    size="small"
+                    checked={filters.shared_by_me}
+                    onChange={(_, v) =>
+                      onChangeFilters({ ...filters, shared_by_me: v })
+                    }
+                    color="secondary"
+                  />
+                </div>
               </div>
               <div className={classes.section}>
                 <div className={classes.sectionHeader}>Dates</div>
@@ -772,7 +787,15 @@ function CanyonsPanel({
         ) : (
           <div className={classes.resultsList}>
             {filteredCanyons.map(({ canyon, owned }) => {
-              const meta = [gradeSummary(canyon), owned ? "" : "Shared"]
+              const shareCount = canyon._count?.shares ?? 0;
+              const meta = [
+                gradeSummary(canyon),
+                owned
+                  ? shareCount > 0
+                    ? `Shared with ${shareCount}`
+                    : ""
+                  : "Shared",
+              ]
                 .filter(Boolean)
                 .join(" · ");
               return (

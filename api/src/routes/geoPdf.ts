@@ -51,11 +51,52 @@ const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
 const MAX_IN_FLIGHT_PER_USER = 2;
 const PRESIGN_TTL_SECONDS = 86400; // 24h
 
-async function presignResult(resultKey: string | null): Promise<{ url: string; expiresAt: string } | null> {
+// The map title from a job's config (config.elements.title), trimmed, or null.
+function geoPdfTitle(config: unknown): string | null {
+  if (config && typeof config === "object" && "elements" in config) {
+    const elements = (config as { elements?: unknown }).elements;
+    if (elements && typeof elements === "object" && "title" in elements) {
+      const title = (elements as { title?: unknown }).title;
+      if (typeof title === "string" && title.trim().length > 0) return title.trim();
+    }
+  }
+  return null;
+}
+
+// Derive a human download filename from the job's title, falling back to a
+// date-stamped name. The stored S3 key stays the generic logjam-export.pdf
+// (worker contract); only the presented download name is overridden, via the
+// presigned URL's ResponseContentDisposition. Sanitised to a conservative
+// ASCII-safe set so no RFC 5987 encoding is needed.
+function geoPdfDownloadFilename(config: unknown, createdAt: Date): string {
+  const title = geoPdfTitle(config);
+  const base =
+    title !== null
+      ? title
+      : `logjam-geopdf-${createdAt.toISOString().slice(0, 10)}`;
+  const safe =
+    base
+      .replace(/[^a-zA-Z0-9 _-]+/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80) || "logjam-geopdf";
+  return `${safe}.pdf`;
+}
+
+async function presignResult(
+  resultKey: string | null,
+  filename?: string,
+): Promise<{ url: string; expiresAt: string } | null> {
   if (!resultKey) return null;
   const url = await getSignedUrl(
     s3,
-    new GetObjectCommand({ Bucket: TOPO_BUCKET, Key: resultKey }),
+    new GetObjectCommand({
+      Bucket: TOPO_BUCKET,
+      Key: resultKey,
+      ...(filename
+        ? { ResponseContentDisposition: `attachment; filename="${filename}"` }
+        : {}),
+    }),
     { expiresIn: PRESIGN_TTL_SECONDS },
   );
   const expiresAt = new Date(Date.now() + PRESIGN_TTL_SECONDS * 1000).toISOString();
@@ -66,6 +107,7 @@ function rowToView(
   row: {
     id: string;
     status: string;
+    config: unknown;
     resultBytes: bigint | null;
     errorMessage: string | null;
     createdAt: Date;
@@ -76,6 +118,7 @@ function rowToView(
   return {
     id: row.id,
     status: row.status as GeoPdfJobStatus,
+    title: geoPdfTitle(row.config),
     resultBytes: row.resultBytes !== null ? Number(row.resultBytes) : null,
     errorMessage: row.errorMessage,
     createdAt: row.createdAt.toISOString(),
@@ -172,6 +215,7 @@ router.post(
         {
           id: job.id,
           status: "queued",
+          config: job.config,
           resultBytes: null,
           errorMessage: null,
           createdAt: job.createdAt,
@@ -195,7 +239,14 @@ router.get(
       take: 50,
     });
     const views = await Promise.all(
-      rows.map(async (r) => rowToView(r, r.status === "completed" ? await presignResult(r.resultKey) : null)),
+      rows.map(async (r) =>
+        rowToView(
+          r,
+          r.status === "completed"
+            ? await presignResult(r.resultKey, geoPdfDownloadFilename(r.config, r.createdAt))
+            : null,
+        ),
+      ),
     );
     res.json({ jobs: views });
   },
@@ -212,7 +263,10 @@ router.get(
     });
     if (!row) throw new AppError(404, "GeoPDF job not found");
     if (row.userId !== user.id) throw new AppError(404, "GeoPDF job not found");
-    const download = row.status === "completed" ? await presignResult(row.resultKey) : null;
+    const download =
+      row.status === "completed"
+        ? await presignResult(row.resultKey, geoPdfDownloadFilename(row.config, row.createdAt))
+        : null;
     res.json(rowToView(row, download));
   },
 );

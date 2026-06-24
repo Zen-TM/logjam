@@ -28,7 +28,9 @@ async function fetchCanyons(where: object) {
     orderBy: { createdAt: "desc" },
     take: LIST_TAKE,
     include: {
-      _count: { select: { tripLogs: true } },
+      // shares powers the "shared by me" filter + card badge on the owned list
+      // (UAT UX gap); tripLogs is the existing per-canyon count.
+      _count: { select: { tripLogs: true, shares: true } },
     },
   });
 }

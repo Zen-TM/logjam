@@ -55,39 +55,52 @@ export const VALID_GEOPDF_OVERLAY_NAMES = new Set<string>(
 );
 
 /**
- * Validates the security-relevant fields of a GeoPdfConfig against the
+ * Core validator for the security-relevant fields of a GeoPdfConfig against the
  * allowlists above. Returns the first error message, or null if valid.
  *
- * Mirrors the inline checks formerly duplicated in routes/geoPdf.ts so both the
- * live-render path and the template-storage path enforce the same boundary.
+ * `requireExtent` distinguishes the two callers: a live render request must pin
+ * an extent (validateGeoPdfConfig), while a stored GeoPdfTemplate.config
+ * intentionally omits it (validateGeoPdfTemplateConfig) — a template captures
+ * layout/layer prefs without binding to a map region. An extent, when present,
+ * is validated either way so a template can never become a stored-injection
+ * vector for the server-side renderer.
  */
-export function validateGeoPdfConfig(input: unknown): string | null {
+function validateGeoPdfConfigCore(
+  input: unknown,
+  requireExtent: boolean,
+): string | null {
   if (!input || typeof input !== "object") {
     return "config must be an object";
   }
   const config = input as Partial<GeoPdfConfig>;
 
-  if (!config.extent || !config.baseLayer || !config.paperSize) {
-    return "Missing required fields: extent, baseLayer, paperSize";
+  const missing: string[] = [];
+  if (requireExtent && !config.extent) missing.push("extent");
+  if (!config.baseLayer) missing.push("baseLayer");
+  if (!config.paperSize) missing.push("paperSize");
+  if (missing.length > 0) {
+    return `Missing required fields: ${missing.join(", ")}`;
   }
-  if (!VALID_GEOPDF_PAPER_SIZES.has(config.paperSize)) {
+  if (!VALID_GEOPDF_PAPER_SIZES.has(config.paperSize!)) {
     return `Invalid paper size: ${config.paperSize}`;
   }
-  if (!VALID_GEOPDF_BASE_LAYERS.has(config.baseLayer)) {
+  if (!VALID_GEOPDF_BASE_LAYERS.has(config.baseLayer!)) {
     return `Invalid base layer: ${config.baseLayer}`;
   }
 
-  const { north, south, east, west } = config.extent;
-  if (
-    typeof north !== "number" ||
-    typeof south !== "number" ||
-    typeof east !== "number" ||
-    typeof west !== "number"
-  ) {
-    return "Invalid extent: north, south, east, west must be numbers";
-  }
-  if (north <= south || east <= west) {
-    return "Invalid extent: north must be > south and east must be > west";
+  if (config.extent !== undefined) {
+    const { north, south, east, west } = config.extent;
+    if (
+      typeof north !== "number" ||
+      typeof south !== "number" ||
+      typeof east !== "number" ||
+      typeof west !== "number"
+    ) {
+      return "Invalid extent: north, south, east, west must be numbers";
+    }
+    if (north <= south || east <= west) {
+      return "Invalid extent: north must be > south and east must be > west";
+    }
   }
 
   if (typeof config.scale !== "number" || config.scale <= 0) {
@@ -125,6 +138,22 @@ export function validateGeoPdfConfig(input: unknown): string | null {
   return null;
 }
 
+/**
+ * Validate a live GeoPDF render request — `extent` is mandatory.
+ */
+export function validateGeoPdfConfig(input: unknown): string | null {
+  return validateGeoPdfConfigCore(input, true);
+}
+
+/**
+ * Validate a stored GeoPdfTemplate.config — `extent` is optional (a template
+ * captures layout/layers without pinning a region), but every other field is
+ * enforced identically to a live render request.
+ */
+export function validateGeoPdfTemplateConfig(input: unknown): string | null {
+  return validateGeoPdfConfigCore(input, false);
+}
+
 // Status lifecycle for an async GeoPDF render job. Mirrors ExportStatus on
 // TopoExportJob — kept as its own type so the two pipelines can diverge.
 export type GeoPdfJobStatus = "queued" | "running" | "completed" | "failed";
@@ -134,6 +163,9 @@ export type GeoPdfJobStatus = "queued" | "running" | "completed" | "failed";
 export interface GeoPdfJobView {
   id: string;
   status: GeoPdfJobStatus;
+  // The map title from the job config, if one was set — shown (truncated) in
+  // the generated-PDFs list. Null when the job had no title.
+  title: string | null;
   resultBytes: number | null;
   errorMessage: string | null;
   createdAt: string;

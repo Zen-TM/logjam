@@ -146,6 +146,46 @@
   cursor: not-allowed;
 }
 
+/* Full-width "insert a band here" control between/around band rows. */
+.insertRow {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: center;
+}
+
+.insertButton {
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--theme-accent) 45%, transparent);
+  color: var(--theme-accent);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  line-height: 1.5;
+  cursor: pointer;
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+.insertButton:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.insertButton:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+/* Inline validation message for an invalid From/To entry, spanning the row. */
+.bandError {
+  grid-column: 1 / -1;
+  color: var(--theme-warning);
+  font-size: 0.78em;
+  margin-top: -2px;
+}
+
+.numberInputInvalid {
+  border-color: var(--theme-warning) !important;
+}
+
 .featureRow {
   display: flex;
   flex-direction: column;

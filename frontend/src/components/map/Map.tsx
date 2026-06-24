@@ -13,6 +13,7 @@ import { Protocol } from "pmtiles";
 const pmtilesProtocol = new Protocol();
 maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
 import classes from "./Map.module.css";
+import MapSearchBox from "./MapSearchBox";
 import type { TCanyon, TFilters, CanyonTrack } from "../../canyonUtils";
 import { passesFilters } from "../../canyonUtils";
 import { fetchTrackGeoJSON } from "../media/trackGeo";
@@ -1694,6 +1695,15 @@ function Map({
   return (
     <div id="map" className={classes.map} data-sidebar-open={sidebarOpen ? "true" : "false"}>
       <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
+      {/* Persistent place search — always available; stays usable during pick
+          modes for a quick fly-to. Slides right with the sidebar like the
+          attribution control. */}
+      <MapSearchBox
+        shifted={!!sidebarOpen}
+        onSelect={(lat, lon) =>
+          mapRef.current?.flyTo({ center: [lon, lat], zoom: 13, duration: 1200 })
+        }
+      />
       {pickingCoords && (
         <>
           <div className={classes.pickBanner}>

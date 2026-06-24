@@ -46,6 +46,9 @@ function ShareCanyonDialog({
 
   async function handleShareCanyon() {
     if (selectedFriendIds.length === 0) return;
+    const sharedNames = selectedFriendIds
+      .map((id) => friends.find((f) => f.id === id)?.username)
+      .filter((name): name is string => Boolean(name));
     setSharing(true);
     try {
       for (const friendId of selectedFriendIds) {
@@ -58,6 +61,12 @@ function ShareCanyonDialog({
         .catch((err) => {
           console.error(err);
         });
+      toast.success(
+        sharedNames.length === 1
+          ? `Shared with ${sharedNames[0]}.`
+          : `Shared with ${sharedNames.length} friends.`,
+      );
+      onClose();
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't share canyon. Please try again."));
@@ -165,8 +174,10 @@ function ShareCanyonDialog({
         )}
         {friends.length > 0 && (
           <p className={classes.caption}>
-            Recipients can copy or export shared canyons while the share is
-            active. Unsharing won&rsquo;t remove copies they&rsquo;ve already
+            Recipients see this canyon&rsquo;s details, canyon-level notes and
+            canyon-level media, and can copy or export it while the share is
+            active. They do <b>not</b> see your trip logs or any per-trip notes
+            or media. Unsharing won&rsquo;t remove copies they&rsquo;ve already
             made.
           </p>
         )}

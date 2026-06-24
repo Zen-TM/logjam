@@ -433,6 +433,34 @@ function validateSlope(v: unknown, errors: string[]): void {
   });
 }
 
+/**
+ * User-facing validity check for the slope-band editor. Stricter than the
+ * stored-settings validator: bands must be contiguous integer ranges within
+ * 0..90 (each band starts exactly where the previous ends). Returns the first
+ * problem as a short message, or null when valid. Used by SlopeSettings to
+ * render a notice and to gate the template Save / topo Generate buttons.
+ */
+export function slopeBandsError(bands: SlopeBand[]): string | null {
+  if (bands.length === 0) return "Add at least one slope band.";
+  if (bands.length > MAX_SLOPE_BANDS) return `At most ${MAX_SLOPE_BANDS} bands allowed.`;
+  for (let i = 0; i < bands.length; i++) {
+    const b = bands[i];
+    if (!Number.isInteger(b.fromDeg) || !Number.isInteger(b.toDeg)) {
+      return `Band ${i + 1}: angles must be whole numbers.`;
+    }
+    if (b.fromDeg < 0 || b.toDeg > 90) {
+      return `Band ${i + 1}: angles must be between 0 and 90.`;
+    }
+    if (b.fromDeg >= b.toDeg) {
+      return `Band ${i + 1}: "from" must be less than "to".`;
+    }
+    if (i > 0 && bands[i - 1].toDeg !== b.fromDeg) {
+      return `Band ${i + 1}: must start where band ${i} ends.`;
+    }
+  }
+  return null;
+}
+
 function validateVegetation(v: unknown, errors: string[]): void {
   if (!isObject(v)) { errors.push("vegetation must be an object"); return; }
   pushIf(errors, typeof v.enabled === "boolean", "vegetation.enabled must be boolean");

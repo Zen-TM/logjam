@@ -4,7 +4,7 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser as getUser } from "../lib/resolveUser";
-import { validateGeoPdfConfig } from "@logjam/shared";
+import { validateGeoPdfTemplateConfig } from "@logjam/shared";
 
 const router = Router();
 
@@ -51,7 +51,7 @@ router.post(
     if (!config || typeof config !== "object") {
       throw new AppError(400, "config is required and must be an object");
     }
-    const configError = validateGeoPdfConfig(config);
+    const configError = validateGeoPdfTemplateConfig(config);
     if (configError) {
       throw new AppError(400, configError);
     }
@@ -91,7 +91,7 @@ router.patch(
       if (typeof config !== "object") {
         throw new AppError(400, "config must be an object");
       }
-      const configError = validateGeoPdfConfig(config);
+      const configError = validateGeoPdfTemplateConfig(config);
       if (configError) {
         throw new AppError(400, configError);
       }

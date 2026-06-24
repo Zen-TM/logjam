@@ -235,7 +235,16 @@ function GeoPdfsPanel({
               return (
                 <div key={job.id} className={classes.jobItem}>
                   <div className={classes.jobMain}>
-                    <span className={classes.jobLabel}>GeoPDF · {dateStr}</span>
+                    <span className={classes.jobLabel}>
+                      {job.title ? (
+                        <>
+                          <span className={classes.jobTitle}>{job.title}</span>
+                          <span className={classes.jobDate}>· {dateStr}</span>
+                        </>
+                      ) : (
+                        <>GeoPDF · {dateStr}</>
+                      )}
+                    </span>
                     <span
                       className={isFailed ? classes.jobMetaFailed : classes.jobMeta}
                       title={isFailed && job.errorMessage ? job.errorMessage : undefined}

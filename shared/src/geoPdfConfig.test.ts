@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { validateGeoPdfConfig, type GeoPdfConfig } from "./geoPdfConfig.js";
+import {
+  validateGeoPdfConfig,
+  validateGeoPdfTemplateConfig,
+  type GeoPdfConfig,
+} from "./geoPdfConfig.js";
 
 // A minimal valid config; tests clone + mutate this.
 function validConfig(): GeoPdfConfig {
@@ -98,6 +102,39 @@ describe("validateGeoPdfConfig", () => {
     // @ts-expect-error deliberately wrong type
     expect(validateGeoPdfConfig({ ...validConfig(), canyonMarkers: {} })).toBe(
       "Invalid canyonMarkers: must be an array",
+    );
+  });
+});
+
+describe("validateGeoPdfTemplateConfig", () => {
+  it("accepts a config with no extent (a template omits it)", () => {
+    const c = validConfig() as Partial<GeoPdfConfig>;
+    delete c.extent;
+    expect(validateGeoPdfTemplateConfig(c)).toBeNull();
+  });
+
+  it("accepts a fully valid config that does include an extent", () => {
+    expect(validateGeoPdfTemplateConfig(validConfig())).toBeNull();
+  });
+
+  it("still requires baseLayer and paperSize", () => {
+    const c = validConfig() as Partial<GeoPdfConfig>;
+    delete c.extent;
+    delete c.baseLayer;
+    expect(validateGeoPdfTemplateConfig(c)).toMatch(/Missing required fields: baseLayer/);
+  });
+
+  it("still validates an extent when one is present", () => {
+    const c = validConfig();
+    c.extent.north = -33.7; // below south
+    expect(validateGeoPdfTemplateConfig(c)).toMatch(/north must be > south/);
+  });
+
+  it("still enforces the base-layer allowlist", () => {
+    const c = validConfig() as Partial<GeoPdfConfig>;
+    delete c.extent;
+    expect(validateGeoPdfTemplateConfig({ ...c, baseLayer: "evil-tiles" })).toBe(
+      "Invalid base layer: evil-tiles",
     );
   });
 });

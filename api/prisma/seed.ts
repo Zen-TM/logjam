@@ -45,7 +45,7 @@ const CANYON_IDS = [
 // Custom-field definitions live on the user's uiPreferences; trip customFields
 // JSON is keyed by these `key`s.
 const ALICE_TRIP_FIELD_DEFS = [
-  { key: "water_level", label: "Water Level", type: "text" },
+  { key: "water_level", label: "Water Level", type: "string" },
   { key: "rope_length_m", label: "Rope Length (m)", type: "integer" },
   { key: "wetsuit", label: "Wetsuit", type: "boolean" },
 ];

@@ -532,6 +532,7 @@ function GeoPdfDialog({
   const handleSaveTemplate = useCallback(async () => {
     if (!templateName.trim()) return;
     const config = buildTemplateConfig();
+    setError(null);
     try {
       await apiFetch("/geo-pdf-templates", {
         method: "POST",
@@ -541,14 +542,17 @@ function GeoPdfDialog({
       setTemplateName("");
       const updated = await apiFetch<GeoPdfTemplate[]>("/geo-pdf-templates");
       setTemplates(updated);
-    } catch {
-      // ignore
+      toast.success("Template saved.");
+    } catch (err) {
+      console.error(err);
+      setError(messageFromError(err, "Couldn't save template. Please try again."));
     }
-  }, [templateName, buildTemplateConfig]);
+  }, [templateName, buildTemplateConfig, toast]);
 
   const handleSaveTemplateMode = useCallback(async () => {
     if (!editTemplateName.trim()) return;
     const config = buildTemplateConfig();
+    setError(null);
     try {
       if (editingTemplate) {
         await apiFetch(`/geo-pdf-templates/${editingTemplate.id}`, {
@@ -561,11 +565,13 @@ function GeoPdfDialog({
           body: { name: editTemplateName.trim(), config },
         });
       }
+      toast.success("Template saved.");
       onTemplateSaved?.();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error(err);
+      setError(messageFromError(err, "Couldn't save template. Please try again."));
     }
-  }, [editTemplateName, editingTemplate, buildTemplateConfig, onTemplateSaved]);
+  }, [editTemplateName, editingTemplate, buildTemplateConfig, onTemplateSaved, toast]);
 
   const handleGenerate = useCallback(async () => {
     setGenerating(true);
@@ -840,6 +846,7 @@ function GeoPdfDialog({
             {PAPER_SIZES.map((size) => (
               <button
                 key={size}
+                aria-pressed={extentState.paperSize === size}
                 className={
                   extentState.paperSize === size
                     ? classes.smallButtonActive
@@ -864,6 +871,7 @@ function GeoPdfDialog({
             {(["portrait", "landscape"] as Orientation[]).map((o) => (
               <button
                 key={o}
+                aria-pressed={extentState.orientation === o}
                 className={
                   extentState.orientation === o
                     ? classes.smallButtonActive
@@ -916,6 +924,7 @@ function GeoPdfDialog({
           <div className={classes.toggleRow}>
             <Tooltip title="Keeps the map scale constant when you move the extent box — the box resizes instead of stretching." placement="top" arrow>
               <button
+                aria-pressed={extentState.lockMode === "scale"}
                 className={
                   extentState.lockMode === "scale"
                     ? classes.smallButtonActive
@@ -930,6 +939,7 @@ function GeoPdfDialog({
             </Tooltip>
             <Tooltip title="Keeps the map centre fixed when you change the scale — the box expands or contracts around the centre." placement="top" arrow>
               <button
+                aria-pressed={extentState.lockMode === "position"}
                 className={
                   extentState.lockMode === "position"
                     ? classes.smallButtonActive
@@ -946,6 +956,7 @@ function GeoPdfDialog({
           <div className={classes.toggleRow}>
             <Tooltip title="Decimal degrees — global standard GPS format (e.g. -33.8912, 150.1234)." placement="top" arrow>
               <button
+                aria-pressed={extentState.coordMode === "latlon"}
                 className={
                   extentState.coordMode === "latlon"
                     ? classes.smallButtonActive
@@ -960,6 +971,7 @@ function GeoPdfDialog({
             </Tooltip>
             <Tooltip title="Easting/Northing in MGA2020 (GDA2020) — the standard for NSW topo maps and field navigation with a grid reference." placement="top" arrow>
               <button
+                aria-pressed={extentState.coordMode === "enNorthing"}
                 className={
                   extentState.coordMode === "enNorthing"
                     ? classes.smallButtonActive
@@ -1276,6 +1288,7 @@ function GeoPdfDialog({
                 ).map(([mode, label]) => (
                   <button
                     key={mode}
+                    aria-pressed={gridLinesMode === mode}
                     className={
                       gridLinesMode === mode
                         ? classes.smallButtonActive

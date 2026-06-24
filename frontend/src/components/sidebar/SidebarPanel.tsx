@@ -389,6 +389,7 @@ function SidebarPanel({
             canyonCustomFieldDefs={canyonCustomFieldDefs}
             onCanyonCustomFieldDefsChange={onCanyonCustomFieldDefsChange}
             onQuotaChanged={onQuotaChanged}
+            onRefetchTripLogs={onRefetchTripLogs}
           />
         )}
       </div>

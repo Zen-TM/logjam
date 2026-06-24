@@ -60,6 +60,25 @@ describe("passesFilters — ownership", () => {
   });
 });
 
+describe("passesFilters — shared by me", () => {
+  it("keeps canyons with at least one share, drops the rest", () => {
+    const f = filters({ shared_by_me: true });
+    expect(passesFilters(canyon({ _count: { tripLogs: 0, shares: 2 } }), f, true)).toBe(true);
+    expect(passesFilters(canyon({ _count: { tripLogs: 0, shares: 0 } }), f, true)).toBe(false);
+    expect(passesFilters(canyon(), f, true)).toBe(false); // _count absent
+  });
+
+  it("is inactive by default (keeps everything)", () => {
+    const f = filters();
+    expect(passesFilters(canyon(), f, true)).toBe(true);
+    expect(hasActiveFilters(f)).toBe(false);
+  });
+
+  it("counts as an active filter when on", () => {
+    expect(activeFilterCount(filters({ shared_by_me: true }))).toBe(1);
+  });
+});
+
 describe("passesFilters — ropewiki link", () => {
   it("linked keeps only canyons with a ropeWikiId", () => {
     const f = filters({ ropewiki: "linked" });

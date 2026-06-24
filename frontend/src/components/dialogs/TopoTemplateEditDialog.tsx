@@ -17,6 +17,7 @@ import {
   RASTER_TEMPLATE_DEFAULTS,
   AUTO_EXPORT_DEFAULTS,
   cloneRasterTemplateSettings,
+  slopeBandsError,
   type RasterTemplateSettings,
   type AutoExportSettings,
 } from "@logjam/shared";
@@ -162,7 +163,7 @@ function TopoTemplateEditDialog({
         <Button
           variant="contained"
           color="secondary"
-          disabled={saving || !name.trim()}
+          disabled={saving || !name.trim() || slopeBandsError(settings.slope.bands) != null}
           onClick={handleSave}
         >
           {saving ? "Saving…" : "Save"}
