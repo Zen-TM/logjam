@@ -84,7 +84,7 @@ logjam/
 │   └── src/                # built to shared/dist (api + frontend import from there)
 ├── topo/                   # Python/GDAL/PDAL MBTiles pipeline (ECS workers)
 │   ├── renderers/ · SVTM/ · icons/
-│   ├── worker.py · export_worker.py · topo_mbtiles.py
+│   ├── worker.py · export_worker.py · pipeline.py
 │   └── Dockerfile
 ├── infra/terraform/        # IaC — single source of truth (see its README)
 │   ├── bootstrap/          # creates the S3 state bucket

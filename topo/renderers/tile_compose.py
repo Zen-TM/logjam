@@ -3,19 +3,19 @@
 Stage 2 plan calls for headless MapLibre Native here, but that pipeline has
 significant risk (see plan §Risks). This module ships a working Python
 implementation using GDAL + PIL that reuses the existing tile compositor in
-topo_mbtiles.py. Headless MapLibre Native can replace this implementation
+pipeline.py. Headless MapLibre Native can replace this implementation
 later behind the same render_composite_to_* function signatures.
 
 MBTiles composite (`render_composite_to_mbtiles`):
   1. Load source COGs for selected raster layers (already styled).
   2. Load raw vector GeoJSONs for selected vector layers.
   3. Compose the snapshotted VectorStyleSettings into the legacy TopoSettings
-     shape that topo_mbtiles renderers expect.
+     shape that pipeline renderers expect.
   4. For each (z, x, y) tile in the bbox:
      - For each raster layer: gdal.Warp the COG into a 256x256 RGBA PNG window.
-     - For each vector layer: call topo_mbtiles.render_contours_tile / render_features_tile.
+     - For each vector layer: call pipeline.render_contours_tile / render_features_tile.
      - Alpha-composite in order: hillshade → vegetation → slope → contours → features
-       (topo_mbtiles.COMPOSITE_LAYER_ORDER).
+       (pipeline.COMPOSITE_LAYER_ORDER).
 
 GeoTIFF composite (`render_composite_to_geotiff`):
   Raster-only — vectors are excluded by `EXPORT_FORMAT_RULES.geotiff.allowVector
@@ -37,7 +37,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-# Make topo_mbtiles importable as a sibling module.
+# Make pipeline importable as a sibling module.
 _TOPO_DIR = Path(__file__).resolve().parent.parent
 if str(_TOPO_DIR) not in sys.path:
     sys.path.insert(0, str(_TOPO_DIR))
@@ -46,8 +46,8 @@ import numpy as np
 from osgeo import gdal
 from PIL import Image
 
-import topo_mbtiles as tm  # noqa: E402
-from topo_mbtiles import (  # noqa: E402
+import pipeline as tm  # noqa: E402
+from pipeline import (  # noqa: E402
     TILE_SIZE, ZOOM_MIN, ZOOM_MAX, WGS84_EPSG,
     create_mbtiles, finalise_bounds, insert_tile,
     tiles_for_bbox, tile_to_bbox,
@@ -61,7 +61,7 @@ log = logging.getLogger("export_worker.tile_compose")
 
 def _vector_style_to_render_settings(vector_style: Dict[str, Any]) -> Dict[str, Any]:
     """Convert the user-snapshotted VectorStyleSettings into the legacy
-    TopoSettings shape topo_mbtiles renderers consume. Raster-bake template
+    TopoSettings shape pipeline renderers consume. Raster-bake template
     fields (slope bands, hillshade params, etc.) are unused here because the
     COGs are already styled — only the vector-side settings matter for
     re-rendering contours and features."""
@@ -149,7 +149,7 @@ def _composite_tile(
     """Render one composite tile. Returns PNG bytes or None if fully transparent."""
     composite = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
 
-    # Order matches topo_mbtiles.render_tile_job composite order. OSM features
+    # Order matches pipeline.render_tile_job composite order. OSM features
     # are topmost so roads/water/labels read over contours, matching the web map.
     order = tm.COMPOSITE_LAYER_ORDER
     bbox_wgs84 = tile_to_bbox(x, y, z)

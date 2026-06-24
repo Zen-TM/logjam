@@ -562,7 +562,7 @@ export function lerpZoom(zoom: number, z12: number, z18: number): number {
 
 // ---------------------------------------------------------------------------
 // Point-feature icons. Source of truth for filename + size is the Python
-// pipeline (topo/topo_mbtiles.py OSM_STYLE_META); mirrored here so the web map
+// pipeline (topo/pipeline.py OSM_STYLE_META); mirrored here so the web map
 // and GeoPDF render the same icons at the same size as the MBTiles export.
 // Icons are non-recolourable PNGs (24×24 native), so point categories carry no
 // user colour/width override for the glyph itself.

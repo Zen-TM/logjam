@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import _native_stub  # noqa: F401,E402
 
 try:
-    from topo_mbtiles import (  # noqa: E402
+    from pipeline import (  # noqa: E402
         PDAL_SCAN_ANGLE_MAX,
         build_pipeline_density_only,
         build_pipeline_full,

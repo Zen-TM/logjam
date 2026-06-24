@@ -30,7 +30,7 @@ _REAL_GDAL = not _native_stub.is_stubbed("osgeo")
 if _REAL_GDAL:
     from osgeo import gdal, osr  # noqa: E402
     gdal.UseExceptions()
-    from topo_mbtiles import reproject_raster_to_web_mercator  # noqa: E402
+    from pipeline import reproject_raster_to_web_mercator  # noqa: E402
 
 _MGA56_EPSG = 28356
 _NODATA = -9999.0

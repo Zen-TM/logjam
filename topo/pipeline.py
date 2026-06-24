@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-topo_mbtiles.py
+pipeline.py
 ---------------
 Converts an ELVIS (NSW Spatial Services) LiDAR ZIP into a set of raster MBTiles
 files suitable for import into Gaia GPS.
@@ -27,8 +27,8 @@ Outputs (in ./output/):
   builds it on demand against the user's current vector style.
 
 Usage:
-  python topo_mbtiles.py /path/to/elvis_download.zip [--workers N] [--output ./output]
-  python topo_mbtiles.py /path/to/elvis_download.zip --benchmark
+  python pipeline.py /path/to/elvis_download.zip [--workers N] [--output ./output]
+  python pipeline.py /path/to/elvis_download.zip --benchmark
 """
 
 import argparse

@@ -1,10 +1,10 @@
 # ============================================================
-# Dockerfile – topo_mbtiles
+# Dockerfile – pipeline
 # Base: Ubuntu 24.04 LTS
 # ============================================================
 FROM ubuntu:24.04
 
-LABEL maintainer="topo_mbtiles"
+LABEL maintainer="pipeline"
 LABEL description="ELVIS LiDAR → Topo MBTiles for Gaia GPS"
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -86,7 +86,7 @@ RUN pip install --upgrade pip && \
 # ------------------------------------------------------------
 WORKDIR /app
 COPY worker.py /app/worker.py
-COPY topo_mbtiles.py /app/topo_mbtiles.py
+COPY pipeline.py /app/pipeline.py
 COPY export_worker.py /app/export_worker.py
 COPY email_send.py /app/email_send.py
 COPY renderers/ /app/renderers/
@@ -106,7 +106,7 @@ COPY icons/ /app/icons/
 #  no-op if RESEND_API_KEY/EMAIL_FROM unset — see email_send.py)
 #
 # Stage 2 plan called for headless MapLibre Native here. The current export
-# worker reuses topo_mbtiles' Python tile compositor instead, which avoids
+# worker reuses pipeline' Python tile compositor instead, which avoids
 # the Mesa + node20 + libmaplibre-gl-native stack entirely. If we move to
 # MapLibre Native later, add the GL deps before this line and keep the same
 # entrypoint contract — export_worker.py orchestration stays unchanged.

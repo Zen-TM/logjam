@@ -32,7 +32,7 @@ _REAL_GDAL = not _native_stub.is_stubbed("osgeo")
 if _REAL_GDAL:
     from osgeo import gdal, ogr, osr  # noqa: E402
     gdal.UseExceptions()
-    from topo_mbtiles import compute_data_footprint  # noqa: E402
+    from pipeline import compute_data_footprint  # noqa: E402
 
 # Synthetic grid: 1 m Web Mercator, origin somewhere over Australia.
 # Grid is sized so the disk has > (close radius) of empty margin to every array

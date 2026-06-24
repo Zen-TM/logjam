@@ -10,7 +10,7 @@ import _native_stub  # noqa: F401,E402
 
 try:
     from PIL import Image, ImageDraw, ImageFont  # noqa: E402
-    from topo_mbtiles import (  # noqa: E402
+    from pipeline import (  # noqa: E402
         LABEL_MIN_GAP_PX,
         TILE_SIZE,
         _point_at_distance,
