@@ -10,7 +10,6 @@ import _native_stub  # noqa: F401,E402
 try:
     from topo_mbtiles import (  # noqa: E402
         PDAL_SCAN_ANGLE_MAX,
-        WEB_MERCATOR_EPSG,
         build_pipeline_density_only,
         build_pipeline_full,
     )
@@ -35,9 +34,12 @@ class TestBuildPipelineFull(unittest.TestCase):
         readers = _stages_of_type(self.p, "readers.las")
         self.assertEqual([r["filename"] for r in readers], ["a.laz", "b.laz"])
 
-    def test_reprojects_to_web_mercator(self):
-        reproj = _stages_of_type(self.p, "filters.reprojection")
-        self.assertEqual(reproj[0]["out_srs"], f"EPSG:{WEB_MERCATOR_EPSG}")
+    def test_no_point_reprojection_rasterizes_native(self):
+        # Rasters are produced in the LAZ's native CRS; reprojection happens
+        # later as a raster warp (reproject_raster_to_web_mercator). Reprojecting
+        # points here would rasterize a rotated quad into an axis-aligned grid →
+        # edge wedges that fill_nodata fabricates data into.
+        self.assertEqual(_stages_of_type(self.p, "filters.reprojection"), [])
 
     def test_drops_asprs_noise_and_overlap_before_smrf(self):
         rng = _stages_of_type(self.p, "filters.range")[0]
@@ -97,6 +99,10 @@ class TestBuildPipelineDensityOnly(unittest.TestCase):
     def test_still_drops_noise_and_overlap(self):
         rng = _stages_of_type(self.p, "filters.range")[0]
         self.assertIn("Classification![7:7]", rng["limits"])
+
+    def test_no_point_reprojection_rasterizes_native(self):
+        # Native CRS — the external DEM (filters.hag_dem raster) is also native.
+        self.assertEqual(_stages_of_type(self.p, "filters.reprojection"), [])
 
 
 if __name__ == "__main__":
