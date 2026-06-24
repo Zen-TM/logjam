@@ -547,6 +547,37 @@ export function rgbaToHex(r: number, g: number, b: number, a: number): RgbaHex {
   return `#${clip(r)}${clip(g)}${clip(b)}${clip(a)}`;
 }
 
+/**
+ * Recolour slope bands along a two-stop linear-RGBA scale. Each band is anchored
+ * by its midpoint angle, normalised across [firstMidpoint, lastMidpoint] so the
+ * first band gets exactly `startHex` and the last exactly `endHex`. All four
+ * channels (incl. alpha) interpolate linearly, matching the vegetation renderer
+ * (topo/pipeline.py). Pure — returns new band objects, never mutates input.
+ */
+export function applySlopeGradient(
+  bands: SlopeBand[],
+  startHex: RgbaHex,
+  endHex: RgbaHex,
+): SlopeBand[] {
+  if (bands.length === 0) return [];
+  const start = parseRgbaHex(startHex);
+  const end = parseRgbaHex(endHex);
+  const mid = (b: SlopeBand) => (b.fromDeg + b.toDeg) / 2;
+  const firstMid = mid(bands[0]);
+  const lastMid = mid(bands[bands.length - 1]);
+  const span = lastMid - firstMid;
+  return bands.map((band) => {
+    const t = span > 0 ? (mid(band) - firstMid) / span : 0;
+    const colour = rgbaToHex(
+      start[0] + t * (end[0] - start[0]),
+      start[1] + t * (end[1] - start[1]),
+      start[2] + t * (end[2] - start[2]),
+      start[3] + t * (end[3] - start[3]),
+    );
+    return { ...band, colour };
+  });
+}
+
 export function cloneRasterTemplateSettings(s: RasterTemplateSettings): RasterTemplateSettings {
   return JSON.parse(JSON.stringify(s)) as RasterTemplateSettings;
 }
