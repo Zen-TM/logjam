@@ -1,5 +1,8 @@
 import { Fragment, useEffect, useState } from "react";
 import {
+  applySlopeGradient,
+  rgbaCssFromHex,
+  RASTER_TEMPLATE_DEFAULTS,
   slopeBandsError,
   type SlopeSettings as SlopeSettingsValue,
   type SlopeBand,
@@ -17,6 +20,12 @@ interface Props {
 const MAX_BANDS = 8;
 const DEFAULT_INSERT_WIDTH = 10;
 const NEW_BAND_COLOUR = "#ff000080";
+
+// Shipped default scale endpoints — the lowest/highest band colours of the
+// canonical default slope ramp (yellow → dark red). Used by the Reset button.
+const DEFAULT_BANDS = RASTER_TEMPLATE_DEFAULTS.slope.bands;
+const DEFAULT_SCALE_START = DEFAULT_BANDS[0].colour;
+const DEFAULT_SCALE_END = DEFAULT_BANDS[DEFAULT_BANDS.length - 1].colour;
 
 /**
  * Insert a band at `position` (0..bands.length), keeping the band set a
@@ -93,23 +102,39 @@ function computeInsert(bands: SlopeBand[], position: number): SlopeBand[] | null
 export default function SlopeSettings({ value, onChange }: Props) {
   const bands = value.bands;
 
+  // Band colours are driven by a two-stop scale rather than picked per band.
+  // `applySlopeGradient` always paints the first band exactly the start colour
+  // and the last band exactly the end colour, so the endpoints round-trip
+  // losslessly through `bands` — derive them here instead of holding parallel
+  // state that could drift from the persisted value.
+  const scaleStart = bands[0].colour;
+  const scaleEnd = bands[bands.length - 1].colour;
+
+  // Recolour a restructured band set along the current scale so inserts,
+  // removals and boundary edits keep a clean fade (and new bands never keep the
+  // NEW_BAND_COLOUR placeholder).
+  const commitBands = (nextBands: SlopeBand[]) => {
+    onChange({ ...value, bands: applySlopeGradient(nextBands, scaleStart, scaleEnd) });
+  };
+
+  const setScale = (start: string, end: string) => {
+    onChange({ ...value, bands: applySlopeGradient(bands, start, end) });
+  };
+  const resetScale = () => setScale(DEFAULT_SCALE_START, DEFAULT_SCALE_END);
+
   // Editing model: every editable number is a unique boundary, owned by exactly
   // one input — the transparency threshold (band[0].fromDeg) and each band's
   // upper angle (band[i].toDeg). A band's lower angle is read-only (it mirrors
   // the band below's upper). This makes gaps/overlaps structurally impossible.
   const setThreshold = (deg: number) => {
-    onChange({ ...value, bands: bands.map((b, i) => (i === 0 ? { ...b, fromDeg: deg } : b)) });
+    commitBands(bands.map((b, i) => (i === 0 ? { ...b, fromDeg: deg } : b)));
   };
 
   const setUpper = (idx: number, deg: number) => {
     const nextBands = bands.map((b) => ({ ...b }));
     nextBands[idx].toDeg = deg;
     if (idx < nextBands.length - 1) nextBands[idx + 1].fromDeg = deg;
-    onChange({ ...value, bands: nextBands });
-  };
-
-  const setColour = (idx: number, colour: string) => {
-    onChange({ ...value, bands: bands.map((b, i) => (i === idx ? { ...b, colour } : b)) });
+    commitBands(nextBands);
   };
 
   const removeBand = (idx: number) => {
@@ -119,12 +144,12 @@ export default function SlopeSettings({ value, onChange }: Props) {
     if (idx > 0 && idx < nextBands.length) {
       nextBands[idx - 1].toDeg = nextBands[idx].fromDeg;
     }
-    onChange({ ...value, bands: nextBands });
+    commitBands(nextBands);
   };
 
   const insertAt = (position: number) => {
     const nextBands = computeInsert(bands, position);
-    if (nextBands) onChange({ ...value, bands: nextBands });
+    if (nextBands) commitBands(nextBands);
   };
   const canInsertAt = (position: number) => computeInsert(bands, position) !== null;
 
@@ -163,8 +188,35 @@ export default function SlopeSettings({ value, onChange }: Props) {
         threshold are transparent. Each band&rsquo;s lower angle is fixed to the
         band below it — edit a band&rsquo;s upper angle (or the threshold) and
         the neighbour follows. Use the <strong>+</strong> between rows to insert
-        a band ({bands.length}/{MAX_BANDS}).
+        a band ({bands.length}/{MAX_BANDS}). Band colours are computed along the
+        scale below — pick a start and end colour and each band fades between
+        them by its steepness.
       </p>
+
+      <div className={styles.scaleRow}>
+        <span className={styles.scaleEndpoint}>
+          <span className={styles.scaleLabel}>Scale start</span>
+          <ColourPicker
+            value={scaleStart}
+            onChange={(c) => setScale(c, scaleEnd)}
+            ariaLabel="Scale start colour (lowest band)"
+          />
+        </span>
+        <span className={styles.scaleArrow} aria-hidden="true">→</span>
+        <span className={styles.scaleEndpoint}>
+          <span className={styles.scaleLabel}>Scale end</span>
+          <ColourPicker
+            value={scaleEnd}
+            onChange={(c) => setScale(scaleStart, c)}
+            ariaLabel="Scale end colour (highest band)"
+          />
+        </span>
+        <Tooltip title="Reset the scale to the default yellow → dark-red ramp" placement="top" arrow>
+          <button type="button" className={styles.scaleReset} onClick={resetScale}>
+            Reset
+          </button>
+        </Tooltip>
+      </div>
 
       <div className={styles.bandTable}>
         <span className={styles.bandHeaderCell}>
@@ -205,7 +257,16 @@ export default function SlopeSettings({ value, onChange }: Props) {
               onCommit={(deg) => setUpper(idx, deg)}
               label={`Band ${idx + 1} upper angle (degrees)`}
             />
-            <ColourPicker value={band.colour} onChange={(c) => setColour(idx, c)} />
+            <span
+              className={styles.readonlySwatch}
+              role="img"
+              aria-label={`Band ${idx + 1} colour (from the scale)`}
+            >
+              <span
+                className={styles.readonlySwatchFill}
+                style={{ background: rgbaCssFromHex(band.colour) }}
+              />
+            </span>
             {bands.length > 1 ? (
               <button type="button" className={styles.removeButton} onClick={() => removeBand(idx)}>
                 Remove

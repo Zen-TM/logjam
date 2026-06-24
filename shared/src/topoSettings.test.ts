@@ -6,6 +6,7 @@ import {
   cloneVectorStyleSettings,
   parseRgbaHex,
   rgbaToHex,
+  applySlopeGradient,
   rgbaCssFromHex,
   contourWidthStops,
   featureLineWidthStops,
@@ -48,6 +49,58 @@ describe("slopeBandsError", () => {
     expect(slopeBandsError([band(-1, 30)])).toMatch(/between 0 and 90/i);
     expect(slopeBandsError([band(0, 91)])).toMatch(/between 0 and 90/i);
     expect(slopeBandsError([band(0, 30.5)])).toMatch(/whole numbers/i);
+  });
+});
+
+describe("applySlopeGradient", () => {
+  const band = (fromDeg: number, toDeg: number, colour = "#00000000"): SlopeBand => ({
+    fromDeg,
+    toDeg,
+    colour,
+  });
+
+  it("lands endpoints exactly on the first and last band", () => {
+    const out = applySlopeGradient(
+      [band(40, 50), band(50, 60), band(60, 70), band(70, 90)],
+      "#ffff008c",
+      "#780000c8",
+    );
+    expect(out[0].colour).toBe("#ffff008c");
+    expect(out[out.length - 1].colour).toBe("#780000c8");
+  });
+
+  it("interpolates a midpoint band halfway in every channel incl. alpha", () => {
+    // Three equal bands → middle midpoint sits exactly at t=0.5.
+    const out = applySlopeGradient(
+      [band(0, 10), band(10, 20), band(20, 30)],
+      "#00000000",
+      "#ffffffff",
+    );
+    expect(out[1].colour).toBe("#80808080");
+    expect(out[1].colour).toBe(rgbaToHex(127.5, 127.5, 127.5, 127.5));
+  });
+
+  it("maps unequal-width bands proportionally by angle midpoint", () => {
+    // Midpoints: 5, 25, 50 → span 45. Middle t = 20/45 ≈ 0.444.
+    const out = applySlopeGradient(
+      [band(0, 10), band(10, 40), band(40, 60)],
+      "#00000000",
+      "#ff000000",
+    );
+    const [r] = parseRgbaHex(out[1].colour);
+    expect(r).toBe(Math.round((20 / 45) * 255));
+  });
+
+  it("preserves band ranges and does not mutate the input", () => {
+    const input = [band(40, 50), band(50, 90)];
+    const out = applySlopeGradient(input, "#11223344", "#55667788");
+    expect(out.map((b) => [b.fromDeg, b.toDeg])).toEqual([[40, 50], [50, 90]]);
+    expect(input[0].colour).toBe("#00000000");
+  });
+
+  it("gives a single band the start colour", () => {
+    const out = applySlopeGradient([band(40, 90)], "#abcdef12", "#00000000");
+    expect(out[0].colour).toBe("#abcdef12");
   });
 });
 
