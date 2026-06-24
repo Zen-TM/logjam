@@ -94,6 +94,32 @@ class TestCompositeGeoTiff(unittest.TestCase):
             self.assertTrue((r[:, 50:] == 0).all())
             self.assertTrue((a[:, 50:] == 255).all())
 
+    def test_layer_stack_order_follows_composite_order(self):
+        # Two fully-opaque layers: hillshade (red) is the base, slope (blue) sits
+        # above it in COMPOSITE_LAYER_ORDER. Even when the request lists slope
+        # first, the output must be blue (slope over hillshade), not selection
+        # order. Guards the bottom→top reorder.
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            alpha_full = np.full((100, 100), 255, np.uint8)
+            _make_rgba_cog(work / "hillshade.tif", (255, 0, 0), alpha_full)
+            _make_rgba_cog(work / "slope.tif", (0, 0, 255), alpha_full)
+
+            ctx = _make_ctx(work, {
+                "hillshade": work / "hillshade.tif",
+                "slope": work / "slope.tif",
+            })
+            # Request order deliberately reversed (slope before hillshade).
+            out = render_composite_to_geotiff(ctx, ["slope", "hillshade"])
+
+            ds = gdal.Open(str(out))
+            r, g, b, a = [ds.GetRasterBand(i).ReadAsArray() for i in (1, 2, 3, 4)]
+            ds = None
+            # slope (blue) is topmost → wins everywhere.
+            self.assertTrue((b == 255).all())
+            self.assertTrue((r == 0).all())
+            self.assertTrue((a == 255).all())
+
     def test_opaque_black_pixels_preserved(self):
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)
