@@ -599,10 +599,10 @@ function App() {
   }, [activeTopoJobs, refetchNotifications, refetchCompletedTopoJobs]);
 
   const handleTopoJobCreated = useCallback((job: TopoJob) => {
+    // Register for active-job polling. The dialog owns the success surface
+    // (in-dialog "Submitted" view) and its own close, so no toast/close here.
     setActiveTopoJobs((prev) => [job, ...prev]);
-    setShowTopo(false);
-    toast.success(`Topo job submitted: "${job.name ?? "Unnamed"}"`);
-  }, [toast]);
+  }, []);
 
   const handleGeoPdfJobQueued = useCallback((job: GeoPdfJobView) => {
     setGeoPdfJobsRefetch((n) => n + 1);
