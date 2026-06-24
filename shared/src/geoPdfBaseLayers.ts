@@ -8,13 +8,15 @@ export const GEOPDF_BASE_LAYER_CONFIG: Record<
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
     maxNativeZoom: 16,
-    attribution: "Base map © Department of Customer Service (NSW) — SIX Maps, 2026",
+    attribution:
+      "Base map © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.",
   },
   "six-imagery": {
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
     maxNativeZoom: 20,
-    attribution: "Imagery © Department of Customer Service (NSW) — SIX Maps, 2026",
+    attribution:
+      "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.",
   },
   osm: {
     urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -48,9 +50,9 @@ export type OverlaySource = "elevation" | "vegetation" | "features";
 
 export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
   elevation:
-    "Elevation data © Geoscience Australia / NSW Spatial Services (CC BY 4.0)",
+    "Elevation derived from LiDAR via ELVIS (elevation.fsdf.org.au) © State of NSW (Spatial Services) / Commonwealth of Australia (Geoscience Australia), CC BY 4.0. See dataset metadata for the specific custodian.",
   vegetation:
-    "Vegetation data © State of NSW (DCCEEW) — State Vegetation Type Map (CC BY 4.0)",
+    "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0)",
   features: "Features © OpenStreetMap contributors",
 };
 

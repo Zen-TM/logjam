@@ -99,7 +99,7 @@ function SignIn({
       return;
     }
     if (!ageConfirmed) {
-      setLocalError("You must confirm you are 16 or older");
+      setLocalError("You must confirm you are 18 or older");
       return;
     }
     setSubmitting(true);
@@ -353,7 +353,7 @@ function SignIn({
               onChange={(e) => setAgeConfirmed(e.target.checked)}
               required
             />
-            <span>I confirm I am 16 years of age or older.</span>
+            <span>I confirm I am 18 years of age or older.</span>
           </label>
           {displayError && <ErrorBanner message={displayError} />}
           <Button

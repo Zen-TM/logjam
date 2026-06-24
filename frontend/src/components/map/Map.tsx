@@ -99,7 +99,7 @@ export const BASE_LAYERS = [
     ],
     maxzoom: 16,
     attribution:
-      '&copy; Department of Customer Service (NSW) — <a href="https://maps.six.nsw.gov.au/">SIX Maps</a>, 2026',
+      '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.',
   },
   {
     id: "six-base",
@@ -109,7 +109,7 @@ export const BASE_LAYERS = [
     ],
     maxzoom: 18,
     attribution:
-      '&copy; Department of Customer Service (NSW) — <a href="https://maps.six.nsw.gov.au/">SIX Maps</a>, 2026',
+      '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.',
   },
   {
     id: "six-imagery",
@@ -119,7 +119,7 @@ export const BASE_LAYERS = [
     ],
     maxzoom: 18,
     attribution:
-      '&copy; Department of Customer Service (NSW) — <a href="https://maps.six.nsw.gov.au/">SIX Maps</a>, 2026',
+      '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.',
   },
 ];
 
@@ -415,7 +415,10 @@ function Map({
     });
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");
-    map.addControl(new maplibregl.AttributionControl(), "bottom-left");
+    map.addControl(
+      new maplibregl.AttributionControl({ compact: true }),
+      "bottom-left",
+    );
     map.addControl(
       new maplibregl.ScaleControl({ unit: "metric", maxWidth: 200 }),
       "bottom-right",
