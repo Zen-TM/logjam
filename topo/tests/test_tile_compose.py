@@ -136,5 +136,80 @@ class TestCompositeGeoTiff(unittest.TestCase):
             self.assertTrue((a == 255).all())
 
 
+_REAL_SHAPELY = not _native_stub.is_stubbed("shapely")
+
+import renderers.tile_compose as tc  # noqa: E402
+from renderers.context import RenderError  # noqa: E402
+
+
+def _square_footprint(lon0: float, lat0: float, side: float = 0.02) -> dict:
+    """A small axis-aligned square footprint as a GeoJSON Polygon geometry."""
+    return {
+        "type": "Polygon",
+        "coordinates": [[
+            [lon0, lat0],
+            [lon0 + side, lat0],
+            [lon0 + side, lat0 + side],
+            [lon0, lat0 + side],
+            [lon0, lat0],
+        ]],
+    }
+
+
+@unittest.skipUnless(_REAL_SHAPELY, "real shapely required (host stubs it)")
+class TestCompositeTileCoords(unittest.TestCase):
+    """Guards the non-adjacent-footprint fix: tile enumeration must follow the
+    actual footprint geometry per connected component, never the union bbox that
+    spans the empty gap between captures (the wallewerang 5h33m blowup)."""
+
+    # Two ~2 km squares ~1° (~93 km) apart — a non-adjacent capture.
+    JOB_A = {"id": "a", "footprint": _square_footprint(150.00, -33.02)}
+    JOB_B = {"id": "b", "footprint": _square_footprint(151.00, -33.02)}
+
+    def test_scattered_footprint_skips_the_gap(self):
+        geom = tc._footprint_geometry([self.JOB_A, self.JOB_B])
+        self.assertEqual(geom.geom_type, "MultiPolygon")  # disjoint → multi
+
+        coords = set(tc._composite_tile_coords(geom, tc._max_composite_tiles()))
+        self.assertTrue(coords)
+
+        # Kept tiles equal exactly the per-component tiles — no gap tiles leak in.
+        coords_a = set(tc._composite_tile_coords(
+            tc._footprint_geometry([self.JOB_A]), tc._max_composite_tiles()))
+        coords_b = set(tc._composite_tile_coords(
+            tc._footprint_geometry([self.JOB_B]), tc._max_composite_tiles()))
+        self.assertEqual(coords, coords_a | coords_b)
+
+        # And dramatically fewer than naive full-bbox enumeration (which would
+        # iterate every tile across the 1° gap).
+        lon_min, lat_min, lon_max, lat_max = geom.bounds
+        naive = sum(
+            1
+            for z in range(tc.ZOOM_MIN, tc.ZOOM_MAX + 1)
+            for _ in tc.tiles_for_bbox(lon_min, lat_min, lon_max, lat_max, z)
+        )
+        self.assertLess(len(coords), naive / 5)
+
+    def test_contiguous_footprint_unchanged(self):
+        # Adjacent squares union to one Polygon; every bbox tile is kept (no gap).
+        adjacent_b = {"id": "b", "footprint": _square_footprint(150.02, -33.02)}
+        geom = tc._footprint_geometry([self.JOB_A, adjacent_b])
+        coords = set(tc._composite_tile_coords(geom, tc._max_composite_tiles()))
+        lon_min, lat_min, lon_max, lat_max = geom.bounds
+        naive = {
+            (z, x, y)
+            for z in range(tc.ZOOM_MIN, tc.ZOOM_MAX + 1)
+            for x, y in tc.tiles_for_bbox(lon_min, lat_min, lon_max, lat_max, z)
+        }
+        # Contiguous coverage: kept set is the full bbox set (intersect-test keeps
+        # every tile), so the fix is a no-op for normal jobs.
+        self.assertEqual(coords, naive)
+
+    def test_cap_fails_fast(self):
+        geom = tc._footprint_geometry([self.JOB_A, self.JOB_B])
+        with self.assertRaises(RenderError):
+            tc._composite_tile_coords(geom, max_tiles=1)
+
+
 if __name__ == "__main__":
     unittest.main()
