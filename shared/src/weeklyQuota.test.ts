@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { DateTime } from "luxon";
-import { currentWeekStart, nextWeekReset, SYDNEY_TZ } from "./weeklyQuota.js";
+import {
+  currentWeekStart,
+  nextWeekReset,
+  SYDNEY_TZ,
+  estimateElvisTileCount,
+} from "./weeklyQuota.js";
 
 // Helper: build a JS Date for a given Sydney wall-clock instant.
 function sydney(iso: string): Date {
@@ -52,5 +57,26 @@ describe("nextWeekReset", () => {
   it("returns the next Sunday for a Sunday input", () => {
     const reset = nextWeekReset(sydney("2026-05-31T10:00:00"));
     expect(reset.getTime()).toBe(sydney("2026-06-07T00:00:00").getTime());
+  });
+});
+
+describe("estimateElvisTileCount", () => {
+  it("returns 0 for zero, negative, or non-finite area", () => {
+    expect(estimateElvisTileCount(0)).toBe(0);
+    expect(estimateElvisTileCount(-5)).toBe(0);
+    expect(estimateElvisTileCount(NaN)).toBe(0);
+    expect(estimateElvisTileCount(Infinity)).toBe(0);
+  });
+
+  it("counts a sub-tile area as one tile", () => {
+    expect(estimateElvisTileCount(1)).toBe(1);
+  });
+
+  it("divides by the 4 km² tile size on an exact multiple", () => {
+    expect(estimateElvisTileCount(8)).toBe(2);
+  });
+
+  it("rounds up partial tiles", () => {
+    expect(estimateElvisTileCount(9)).toBe(3);
   });
 });
