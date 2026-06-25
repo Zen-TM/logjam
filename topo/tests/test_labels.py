@@ -79,8 +79,9 @@ class TestLineLabelAnchors(unittest.TestCase):
 @unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
 class TestLabelFontSize(unittest.TestCase):
     def test_known_endpoints(self):
-        self.assertEqual(label_font_size(14), 9)
-        self.assertEqual(label_font_size(18), 12)
+        # Baked tiles bump the 9→12px web ramp by EXPORT_LABEL_BASE_SCALE (3×).
+        self.assertEqual(label_font_size(14), 27)
+        self.assertEqual(label_font_size(18), 36)
 
     def test_monotonic_increase(self):
         sizes = [label_font_size(z) for z in range(14, 19)]
@@ -91,10 +92,11 @@ class TestLabelFontSize(unittest.TestCase):
             self.assertEqual(label_font_size(z), label_font_size(z, 1.0))
 
     def test_scale_multiplies_size(self):
-        # 9px @ z14 → 18px at 2×; 4px at 0.5× (round(4.5)→4, banker's rounding).
-        self.assertEqual(label_font_size(14, 2.0), 18)
-        self.assertEqual(label_font_size(14, 0.5), 4)
-        self.assertEqual(label_font_size(18, 2.0), 24)
+        # labelScale multiplies on top of the 3× export base: 9px @ z14 → 54px at
+        # 2× (9·2·3), 14px at 0.5× (9·0.5·3=13.5, round(13.5)→14 banker's).
+        self.assertEqual(label_font_size(14, 2.0), 54)
+        self.assertEqual(label_font_size(14, 0.5), 14)
+        self.assertEqual(label_font_size(18, 2.0), 72)
 
     def test_never_below_one_px(self):
         self.assertGreaterEqual(label_font_size(14, 0.01), 1)

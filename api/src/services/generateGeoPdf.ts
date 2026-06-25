@@ -827,9 +827,11 @@ function interpZoom(
   return v1 + t * (v2 - v1);
 }
 
-// Label font size in canvas px: the same 9px@z14→12px@z18 ramp as the live map
-// and the Python tile baker, scaled by the user's global labelScale (default 1)
-// and the device-pixel scale. Single source so GeoPDF labels match the overlay.
+// Label font size in canvas px: the 9px@z14→12px@z18 ramp scaled by the user's
+// global labelScale (default 1) and the device-pixel scale. GeoPDF keeps the
+// bare ramp — the print pxScale already enlarges it — and so deliberately
+// diverges from the live map (1.75× base) and the MBTiles baker (3× base), which
+// bump the base independently of labelScale. No longer a shared-size invariant.
 function labelFontSize(styleZoom: number, pxScale: number, labelScale: number): number {
   return interpZoom(styleZoom, 14, 9, 18, 12) * labelScale * pxScale;
 }

@@ -301,6 +301,26 @@ CONTOUR_DEFAULTS = {
     "minorWidthM": 8,
 }
 
+# Contour smoothing. Raw gdal_contour output on a LiDAR DTM is extremely knobbly
+# — every cell-level wiggle becomes a vertex. That noise has two costs: the lines
+# render jagged, and MapLibre can't place line-following elevation labels until
+# you zoom right in (text-max-angle rejects the high local curvature), so labels
+# stay hidden then flood in at once around z18.
+#
+# We smooth the *surface*, not the lines: a normalized Gaussian low-pass on the
+# DTM, then contour the smoothed raster. Contours are level sets of the surface,
+# and level sets of a continuous function cannot cross — so this is guaranteed
+# crossing-free even where contours pack tight on cliffs, unlike per-line
+# simplification (RDP/Chaikin/Visvalingam), which moves each line independently
+# and can push neighbours through each other. It also drops tiny noise-induced
+# contour loops and naturally smooths the curves. Done once, on the shared DTM,
+# so the web vector tiles and the raster/export bake both benefit.
+#
+# Sigma is in ground metres (converted to cells via the DTM pixel size), so the
+# knob is resolution-independent. Tunable — raise for smoother contours, lower to
+# keep more terrain detail.
+CONTOUR_SMOOTH_SIGMA_M = 3.0   # Gaussian smoothing sigma, ground metres
+
 # OSM Overpass query tags for topo-relevant features.
 # Catalogue is fixed (user-supplied queries would be an injection vector).
 OSM_FEATURE_QUERIES = {
@@ -605,11 +625,20 @@ def line_label_anchors(coords, zoom: int, spacing_px: float) -> List[Tuple[float
     return anchors
 
 
+# Baked MBTiles tiles are viewed at native resolution in external GIS, where the
+# on-screen ramp looks tiny — bump the base 3x. Independent of the user's
+# labelScale, and intentionally larger than the live map's WEB_LABEL_BASE_SCALE
+# (1.75, see frontend Map.tsx), so baked labels are bigger than the overlay.
+EXPORT_LABEL_BASE_SCALE = 3.0
+
+
 def label_font_size(zoom: int, scale: float = 1.0) -> int:
-    """On-screen label px, matching the web map's text-size ramp
-    (interpolate linear zoom 14→9px, 18→12px), multiplied by the user's
-    global labelScale (default 1) so baked tile labels match the overlay."""
-    return max(1, int(round((9 + (12 - 9) * (zoom - 14) / (18 - 14)) * scale)))
+    """Baked label px from the web map's text-size ramp (interpolate linear zoom
+    14→9px, 18→12px) × the user's global labelScale (default 1) × the export base
+    bump. The 3× base makes baked tiles deliberately larger than the live overlay."""
+    return max(1, int(round(
+        (9 + (12 - 9) * (zoom - 14) / (18 - 14)) * scale * EXPORT_LABEL_BASE_SCALE
+    )))
 
 
 def draw_dashed_line(draw, pts, fill, width: int, dash) -> None:
@@ -1937,6 +1966,96 @@ def _merc_srs():
     return srs
 
 
+def _blur_1d(a: np.ndarray, kernel: np.ndarray, axis: int) -> np.ndarray:
+    """Convolve a 2-D array with a 1-D kernel along one axis (reflect-padded), by
+    shift-and-accumulate. This keeps memory at O(array) — only a handful of
+    full-size temporaries — instead of materialising an (N × kernel) window, which
+    matters for large LiDAR DTMs."""
+    radius = len(kernel) // 2
+    pad_width = [(0, 0), (0, 0)]
+    pad_width[axis] = (radius, radius)
+    padded = np.pad(a, pad_width, mode="reflect")
+    out = np.zeros_like(a)
+    n = a.shape[axis]
+    for i, weight in enumerate(kernel):
+        index = [slice(None), slice(None)]
+        index[axis] = slice(i, i + n)
+        out += weight * padded[tuple(index)]
+    return out
+
+
+def _gaussian_blur_2d(arr: np.ndarray, sigma_cells: float) -> np.ndarray:
+    """Separable Gaussian blur of a 2-D array (reflect-padded edges). Pure numpy
+    — no scipy (which the pipeline deliberately avoids) — so it unit-tests on the
+    dev host. `sigma_cells` is the Gaussian sigma in grid cells."""
+    a = np.asarray(arr, dtype=np.float64)
+    if sigma_cells <= 0:
+        return a.copy()
+    radius = max(1, int(round(3.0 * sigma_cells)))
+    x = np.arange(-radius, radius + 1)
+    kernel = np.exp(-(x ** 2) / (2.0 * sigma_cells ** 2))
+    kernel /= kernel.sum()
+    return _blur_1d(_blur_1d(a, kernel, axis=1), kernel, axis=0)
+
+
+def _normalized_gaussian(values: np.ndarray, valid: np.ndarray, sigma_cells: float) -> np.ndarray:
+    """Nodata-aware Gaussian smoothing. Treats `valid==False` cells as missing and
+    renormalises by the blurred validity mask, so nodata never bleeds its sentinel
+    value into neighbouring terrain (a plain blur across a -9999 edge would carve
+    a false cliff). Returns the smoothed values only where `valid`; invalid cells
+    are left for the caller to set back to nodata. Pure numpy → host-testable."""
+    v = np.where(valid, values, 0.0).astype(np.float64)
+    w = valid.astype(np.float64)
+    blurred_v = _gaussian_blur_2d(v, sigma_cells)
+    blurred_w = _gaussian_blur_2d(w, sigma_cells)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out = np.where(blurred_w > 1e-6, blurred_v / blurred_w, values)
+    return out
+
+
+def smooth_dem_for_contours(
+    in_path: str,
+    out_path: str,
+    sigma_m: float = CONTOUR_SMOOTH_SIGMA_M,
+) -> str:
+    """Write a Gaussian-smoothed copy of a DTM for contouring. Smoothing the
+    surface (not the lines) guarantees the resulting contours never cross — they
+    are level sets of a continuous field. Sigma is given in ground metres and
+    converted to cells via the raster's pixel size, so the knob is independent of
+    DTM resolution. Nodata is preserved (normalized convolution, see
+    `_normalized_gaussian`)."""
+    ds = gdal.Open(in_path)
+    if ds is None:
+        raise RuntimeError(f"could not open DTM for smoothing: {in_path}")
+    band = ds.GetRasterBand(1)
+    nodata = band.GetNoDataValue()
+    arr = band.ReadAsArray().astype(np.float64)
+    pixel_size = abs(ds.GetGeoTransform()[1]) or 1.0
+    sigma_cells = max(0.5, float(sigma_m) / pixel_size)
+
+    valid = np.isfinite(arr)
+    if nodata is not None:
+        valid &= arr != nodata
+    smoothed = _normalized_gaussian(arr, valid, sigma_cells)
+    fill = nodata if nodata is not None else -9999.0
+    smoothed = np.where(valid, smoothed, fill)
+
+    driver = gdal.GetDriverByName("GTiff")
+    out_ds = driver.Create(
+        out_path, ds.RasterXSize, ds.RasterYSize, 1, gdal.GDT_Float32,
+        options=["COMPRESS=LZW"],
+    )
+    out_ds.SetGeoTransform(ds.GetGeoTransform())
+    out_ds.SetProjection(ds.GetProjection())
+    out_band = out_ds.GetRasterBand(1)
+    out_band.SetNoDataValue(float(fill))
+    out_band.WriteArray(smoothed.astype(np.float32))
+    out_band.FlushCache()
+    out_ds = None
+    ds = None
+    return out_path
+
+
 def generate_contours_gdal(
     dtm_filled: str,
     work_dir: str,
@@ -1949,7 +2068,16 @@ def generate_contours_gdal(
     gdal_contour outputs coordinates in the DTM's CRS (Web Mercator).
     We then reproject each GeoJSON to WGS84 (EPSG:4326) and clip to the
     data footprint so contours don't extend into nodata-filled edges.
+
+    The DTM is Gaussian-smoothed once up front (see CONTOUR_SMOOTH_SIGMA_M): raw
+    LiDAR contours are knobbly, hiding labels until high zoom. Smoothing the
+    surface — rather than the lines — keeps the contours crossing-free even on
+    cliffs, because they stay level sets of a continuous field.
     """
+    # Smooth the surface once, then contour every interval off the smoothed DTM.
+    smoothed_dtm = os.path.join(work_dir, "dtm_contour_smoothed.tif")
+    smooth_dem_for_contours(dtm_filled, smoothed_dtm)
+
     paths = {}
     for interval in sorted({float(i) for i in intervals}):
         # Format the interval for filenames — strip trailing ".0" so integer
@@ -1959,13 +2087,13 @@ def generate_contours_gdal(
         reproj_path = os.path.join(work_dir, f"contours_{suffix}m_reproj.geojson")
         out_path  = os.path.join(work_dir, f"contours_{suffix}m.geojson")
 
-        # Step 1: generate contours in Web Mercator
+        # Step 1: generate contours in Web Mercator from the smoothed surface.
         cmd = [
             "gdal_contour",
             "-a", "elev",
             "-i", str(interval),
             "-f", "GeoJSON",
-            dtm_filled,
+            smoothed_dtm,
             merc_path,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
