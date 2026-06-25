@@ -57,6 +57,11 @@ terraform output
 - **Apply gating (operator workflow):** import-only / zero-change applies are
   safe (no AWS modification). Any apply that creates/modifies/destroys real
   resources is reviewed before running.
+- **Cognito email Lambda build step:** `envs/prod/lambda_cognito_email.tf` zips
+  the prebuilt `infra/lambda/cognito-email-sender/dist/`. Build it before
+  `plan`/`apply` or the bundle is stale/missing:
+  `cd infra/lambda/cognito-email-sender && npm ci && npm run build`. The
+  `source_code_hash` diff reflects code changes.
 
 ## Coverage
 

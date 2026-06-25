@@ -28,8 +28,23 @@ resource "aws_cognito_user_pool" "main" {
     allow_admin_create_user_only = false
   }
 
+  # email_configuration is bypassed for the flows CustomEmailSender handles —
+  # Cognito invokes the Lambda (lambda_config below) instead of sending mail
+  # itself. Left as COGNITO_DEFAULT as the inert fallback.
   email_configuration {
     email_sending_account = "COGNITO_DEFAULT"
+  }
+
+  # Route all verification/code emails through Resend (see lambda_cognito_email.tf)
+  # so they pass DKIM/DMARC on notifications.logjamnsw.com and reach the inbox.
+  # kms_key_id is the CMK Cognito uses to encrypt the code before invoking the
+  # Lambda, which decrypts and sends.
+  lambda_config {
+    kms_key_id = aws_kms_key.cognito_email.arn
+    custom_email_sender {
+      lambda_arn     = aws_lambda_function.cognito_email_sender.arn
+      lambda_version = "V1_0"
+    }
   }
 
   password_policy {
