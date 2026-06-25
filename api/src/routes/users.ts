@@ -139,13 +139,33 @@ router.get(
         } else if (target.includes("username")) {
           // The preferred_username chosen at sign-up is already taken. Retry
           // with a short suffix so signup never hard-fails on this.
-          user = await prisma.user.create({
-            data: {
-              cognitoId: sub,
-              email,
-              username: `${initialUsername}-${sub.slice(0, 6)}`,
-            },
-          });
+          try {
+            user = await prisma.user.create({
+              data: {
+                cognitoId: sub,
+                email,
+                username: `${initialUsername}-${sub.slice(0, 6)}`,
+              },
+            });
+          } catch (retryErr) {
+            if (
+              !(retryErr instanceof Prisma.PrismaClientKnownRequestError) ||
+              retryErr.code !== "P2002"
+            ) {
+              throw retryErr;
+            }
+            // Concurrent first-login requests for this same sub compute the
+            // identical suffix, so once one wins the others collide again (on
+            // username or cognitoId). The authoritative recovery is the row
+            // that now exists for this sub — same as the cognitoId-race branch
+            // below. Without this, a first-login burst 500s and the client
+            // retries into a request flood.
+            const existing = await prisma.user.findUnique({
+              where: { cognitoId: sub },
+            });
+            if (!existing) throw retryErr;
+            user = existing;
+          }
         } else {
           // cognitoId collision: a concurrent /users/me request just created
           // this record. Recover by fetching the record that won the race.
