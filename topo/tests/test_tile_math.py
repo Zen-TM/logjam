@@ -14,6 +14,9 @@ import _native_stub  # noqa: F401,E402  (installs native stubs before import)
 try:
     from pipeline import (  # noqa: E402
         TILE_SIZE,
+        ZOOM_MIN,
+        ZOOM_MAX,
+        footprint_tile_coords,
         ground_metres_per_pixel,
         lon_lat_to_tile,
         lonlat_to_world_px,
@@ -25,6 +28,8 @@ try:
 except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
     _IMPORT_ERR = _exc
+
+_REAL_SHAPELY = not _native_stub.is_stubbed("shapely")
 
 
 @unittest.skipUnless(_IMPORT_OK, f"pipeline import failed: {globals().get('_IMPORT_ERR', '?')}")
@@ -94,6 +99,55 @@ class TestTileMath(unittest.TestCase):
                 (int(wx // TILE_SIZE), int(wy // TILE_SIZE)),
                 lon_lat_to_tile(150.31, -33.49, z),
             )
+
+
+def _square(lon0, lat0, side=0.02):
+    from shapely.geometry import box
+    return box(lon0, lat0, lon0 + side, lat0 + side)
+
+
+@unittest.skipUnless(_IMPORT_OK and _REAL_SHAPELY, "needs real shapely (host stubs it)")
+class TestFootprintTileCoords(unittest.TestCase):
+    """Processing-side prune: render only tiles intersecting the footprint, per
+    connected component, never the union bbox that spans the gap between a
+    non-adjacent capture's tiles (the wasted-render fix in generate_all_tiles)."""
+
+    def test_scattered_footprint_skips_the_gap(self):
+        from shapely.ops import unary_union
+        a = _square(150.00, -33.02)
+        b = _square(151.00, -33.02)          # ~1° (~93 km) gap
+        geom = unary_union([a, b])
+        self.assertEqual(geom.geom_type, "MultiPolygon")
+
+        coords = set(footprint_tile_coords(geom, ZOOM_MIN, ZOOM_MAX))
+        coords_a = set(footprint_tile_coords(a, ZOOM_MIN, ZOOM_MAX))
+        coords_b = set(footprint_tile_coords(b, ZOOM_MIN, ZOOM_MAX))
+        # No gap tiles leak in — kept set is exactly the per-component union.
+        self.assertEqual(coords, coords_a | coords_b)
+
+        # Far fewer than naive full-bbox enumeration over the 1° gap.
+        lon_min, lat_min, lon_max, lat_max = geom.bounds
+        naive = sum(
+            1
+            for z in range(ZOOM_MIN, ZOOM_MAX + 1)
+            for _ in tiles_for_bbox(lon_min, lat_min, lon_max, lat_max, z)
+        )
+        self.assertLess(len(coords), naive / 5)
+
+    def test_contiguous_footprint_matches_full_bbox(self):
+        a = _square(150.00, -33.02)
+        b = _square(150.02, -33.02)          # adjacent → single polygon, no gap
+        from shapely.ops import unary_union
+        geom = unary_union([a, b])
+        coords = set(footprint_tile_coords(geom, ZOOM_MIN, ZOOM_MAX))
+        lon_min, lat_min, lon_max, lat_max = geom.bounds
+        naive = {
+            (z, x, y)
+            for z in range(ZOOM_MIN, ZOOM_MAX + 1)
+            for x, y in tiles_for_bbox(lon_min, lat_min, lon_max, lat_max, z)
+        }
+        # Contiguous coverage: every bbox tile intersects → prune is a no-op.
+        self.assertEqual(coords, naive)
 
 
 if __name__ == "__main__":

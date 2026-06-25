@@ -2061,6 +2061,35 @@ def _load_footprint_shape(footprint_path: str):
     return _footprint_shape_cache[footprint_path]
 
 
+def footprint_tile_coords(fp_geom, zoom_min: int, zoom_max: int) -> List[Tuple[int, int, int]]:
+    """(z, x, y) tiles intersecting the footprint geometry across the zoom range.
+
+    Enumerates candidate tiles per connected component (not over the union
+    bounding box) and intersect-tests each against the prepared geometry, so a
+    non-adjacent LiDAR capture never iterates the empty gap between captures.
+    Without this, generate_all_tiles renders every bbox tile and discards the
+    gap ones in _apply_footprint_mask — wasted compute that scales with the gap
+    area. Mirrors the export-side prune in renderers/tile_compose.py
+    (_composite_tile_coords); keep the two in sync."""
+    from shapely.prepared import prep
+    prepared = prep(fp_geom)
+    parts = list(fp_geom.geoms) if hasattr(fp_geom, "geoms") else [fp_geom]
+    parts = [p for p in parts if not p.is_empty]
+    coords: List[Tuple[int, int, int]] = []
+    seen = set()
+    for z in range(zoom_min, zoom_max + 1):
+        for part in parts:
+            minx, miny, maxx, maxy = part.bounds
+            for x, y in tiles_for_bbox(minx, miny, maxx, maxy, z):
+                key = (z, x, y)
+                if key in seen:
+                    continue
+                if prepared.intersects(shapely_box(*tile_to_bbox(x, y, z))):
+                    seen.add(key)
+                    coords.append(key)
+    return coords
+
+
 def _apply_footprint_mask(img: Image.Image, footprint_path: str,
                           bbox_wgs84: Tuple) -> Image.Image:
     """Zero alpha where the footprint polygon is absent.
@@ -2579,10 +2608,29 @@ def generate_all_tiles(cfg: RenderConfig, workers: int):
         conns[name] = create_mbtiles(path, name.capitalize(), f"Topo layer: {name}")
 
     cfg_dict = cfg.__dict__.copy()
-    jobs = []
-    for z in range(ZOOM_MIN, ZOOM_MAX + 1):
-        for x, y in tiles_for_bbox(cfg.lon_min, cfg.lat_min, cfg.lon_max, cfg.lat_max, z):
-            jobs.append((z, x, y, cfg_dict))
+
+    # Prune the render set to tiles intersecting the data footprint (per
+    # connected component), NOT the whole bbox. For a non-adjacent capture the
+    # bbox spans the empty gap between tiles; rendering those gap tiles only to
+    # zero them in _apply_footprint_mask is wasted compute (the same blowup the
+    # export path had). Falls back to full-bbox enumeration when no footprint is
+    # available (cfg.footprint_path optional, or load failure).
+    fp_geom = None
+    if cfg.footprint_path:
+        try:
+            fp_geom = _load_footprint_shape(cfg.footprint_path)
+        except Exception as e:
+            log.warning(f"Footprint load failed; rendering full bbox without prune: {e}")
+            fp_geom = None
+
+    if fp_geom is not None and not fp_geom.is_empty:
+        jobs = [(z, x, y, cfg_dict) for (z, x, y) in footprint_tile_coords(fp_geom, ZOOM_MIN, ZOOM_MAX)]
+    else:
+        jobs = [
+            (z, x, y, cfg_dict)
+            for z in range(ZOOM_MIN, ZOOM_MAX + 1)
+            for x, y in tiles_for_bbox(cfg.lon_min, cfg.lat_min, cfg.lon_max, cfg.lat_max, z)
+        ]
 
     total = len(jobs)
     log.info(f"Rendering {total} tiles across zoom levels {ZOOM_MIN}–{ZOOM_MAX} "
