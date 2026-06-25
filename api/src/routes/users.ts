@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { createHash } from "crypto";
-import { Prisma } from "@prisma/client";
+import { Prisma, User } from "@prisma/client";
 import { z } from "zod";
 import {
   isThemeSchemeId,
@@ -39,6 +39,84 @@ async function cognitoUserExists(sub: string): Promise<boolean> {
     // IAM not granted or network error — fail safe: treat as existing
     return true;
   }
+}
+
+// Create the first-login User row for a sub that has no row yet AND whose email
+// is not already owned (the caller resolves the email-owned/rebind case first).
+// Tolerates two collisions without depending on which unique Postgres reports:
+//   - username already taken by a DIFFERENT user → retry with progressively
+//     more-unique suffixes derived from the sub;
+//   - a concurrent first-login request for THIS same sub winning the race →
+//     recover the row it created (matched on cognitoId).
+// An email that becomes owned between the caller's pre-check and the insert is a
+// genuine concurrent conflict → AppError(409). Persistent collisions propagate
+// rather than looping.
+export async function createUserForSignup(params: {
+  sub: string;
+  email: string;
+  initialUsername: string;
+}): Promise<User> {
+  const { sub, email, initialUsername } = params;
+  // Substring match so it works whether Postgres reports the field name
+  // ("username") or the constraint name ("User_username_key").
+  const targetHas = (e: Prisma.PrismaClientKnownRequestError, name: string) =>
+    ((e.meta?.target as string[] | undefined) ?? []).some((t) =>
+      t.includes(name),
+    );
+  const recoverRacingRow = async (): Promise<User | null> =>
+    prisma.user.findUnique({ where: { cognitoId: sub } });
+
+  const candidateUsernames = [
+    initialUsername,
+    `${initialUsername}-${sub.slice(0, 6)}`,
+    `${initialUsername}-${sub.slice(0, 12)}`,
+  ];
+
+  for (let attempt = 0; attempt < candidateUsernames.length; attempt++) {
+    try {
+      return await prisma.user.create({
+        data: { cognitoId: sub, email, username: candidateUsernames[attempt] },
+      });
+    } catch (e) {
+      if (
+        !(e instanceof Prisma.PrismaClientKnownRequestError) ||
+        e.code !== "P2002"
+      ) {
+        throw e;
+      }
+
+      if (targetHas(e, "email")) {
+        // Email got owned between the pre-check and now. If a concurrent
+        // request for this same sub created it, use that row; otherwise a
+        // genuinely different account owns the email.
+        const racing = await recoverRacingRow();
+        if (racing) return racing;
+        throw new AppError(
+          409,
+          "An account exists for this email address. Contact support if you believe this is an error.",
+        );
+      }
+
+      if (targetHas(e, "username")) {
+        // Taken by a different user — try the next, more-unique suffix.
+        if (attempt < candidateUsernames.length - 1) continue;
+        // Exhausted suffixes (astronomically unlikely): recover a racing row or
+        // surface loudly rather than spin.
+        const racing = await recoverRacingRow();
+        if (racing) return racing;
+        throw e;
+      }
+
+      // Otherwise the cognitoId unique tripped: a concurrent first-login for
+      // this sub won the race. Use its row.
+      const racing = await recoverRacingRow();
+      if (racing) return racing;
+      throw e;
+    }
+  }
+
+  // Unreachable: each loop iteration returns or throws.
+  throw new AppError(500, "Failed to provision user");
 }
 
 const usernameSchema = z
@@ -89,92 +167,47 @@ router.get(
       username && !isUUID(username) ? username : email.split("@")[0];
 
     if (!user) {
-      try {
-        user = await prisma.user.create({
-          data: {
-            cognitoId: sub,
-            email,
-            username: initialUsername,
-          },
-        });
-      } catch (e) {
-        if (
-          !(e instanceof Prisma.PrismaClientKnownRequestError) ||
-          e.code !== "P2002"
-        ) {
-          throw e;
-        }
-        const target = (e.meta?.target as string[] | undefined) ?? [];
+      // Resolve provisioning deterministically rather than depending on which
+      // unique constraint Postgres reports first. An orphaned row owned by this
+      // email (the previous Cognito user was deleted but its DB row left behind)
+      // MUST be detected before attempting a create: otherwise a colliding
+      // username is reported first, the create retries with a suffix, then hits
+      // the email unique and hard-fails — never reaching the rebind path this
+      // case exists for.
+      const emailOwner = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true, cognitoId: true },
+      });
 
-        if (target.includes("email")) {
-          // A DB record exists for this email under a different Cognito sub.
-          // Only allow rebind when the inbound JWT is email-verified AND the
-          // previous Cognito user no longer exists (account was deleted+recreated).
-          // Any other case returns 409 to prevent account takeover.
-          const existingRow = await prisma.user.findUnique({
-            where: { email },
-            select: { cognitoId: true },
-          });
-          const oldSub = existingRow?.cognitoId ?? "";
-          const canRebind =
-            req.user!.emailVerified &&
-            oldSub !== sub &&
-            !(await cognitoUserExists(oldSub));
+      if (emailOwner && emailOwner.cognitoId !== sub) {
+        // A row exists for this email under a different Cognito sub. Rebind it
+        // to the new sub only when the inbound JWT is email-verified AND the
+        // previous Cognito user no longer exists (account deleted + recreated).
+        // Any other case returns 409 to prevent account takeover.
+        const oldSub = emailOwner.cognitoId;
+        const canRebind =
+          req.user!.emailVerified && !(await cognitoUserExists(oldSub));
 
-          if (!canRebind) {
-            throw new AppError(
-              409,
-              "An account exists for this email address. Contact support if you believe this is an error.",
-            );
-          }
-
-          logger.warn(
-            { oldSubHash: shortHash(oldSub), newSubHash: shortHash(sub) },
-            "cognito_rebind",
+        if (!canRebind) {
+          throw new AppError(
+            409,
+            "An account exists for this email address. Contact support if you believe this is an error.",
           );
-          user = await prisma.user.update({
-            where: { email },
-            data: { cognitoId: sub },
-          });
-        } else if (target.includes("username")) {
-          // The preferred_username chosen at sign-up is already taken. Retry
-          // with a short suffix so signup never hard-fails on this.
-          try {
-            user = await prisma.user.create({
-              data: {
-                cognitoId: sub,
-                email,
-                username: `${initialUsername}-${sub.slice(0, 6)}`,
-              },
-            });
-          } catch (retryErr) {
-            if (
-              !(retryErr instanceof Prisma.PrismaClientKnownRequestError) ||
-              retryErr.code !== "P2002"
-            ) {
-              throw retryErr;
-            }
-            // Concurrent first-login requests for this same sub compute the
-            // identical suffix, so once one wins the others collide again (on
-            // username or cognitoId). The authoritative recovery is the row
-            // that now exists for this sub — same as the cognitoId-race branch
-            // below. Without this, a first-login burst 500s and the client
-            // retries into a request flood.
-            const existing = await prisma.user.findUnique({
-              where: { cognitoId: sub },
-            });
-            if (!existing) throw retryErr;
-            user = existing;
-          }
-        } else {
-          // cognitoId collision: a concurrent /users/me request just created
-          // this record. Recover by fetching the record that won the race.
-          const existing = await prisma.user.findUnique({
-            where: { cognitoId: sub },
-          });
-          if (!existing) throw e;
-          user = existing;
         }
+
+        logger.warn(
+          { oldSubHash: shortHash(oldSub), newSubHash: shortHash(sub) },
+          "cognito_rebind",
+        );
+        user = await prisma.user.update({
+          where: { id: emailOwner.id },
+          data: { cognitoId: sub },
+        });
+      } else {
+        // No row owns this email (or a concurrent request for this same sub is
+        // mid-create). Create ours, tolerating a username taken by a different
+        // user and the concurrent-first-login race.
+        user = await createUserForSignup({ sub, email, initialUsername });
       }
     } else if (user.email !== email) {
       // Only sync email from Cognito — username is managed by the user via PATCH /users/me
