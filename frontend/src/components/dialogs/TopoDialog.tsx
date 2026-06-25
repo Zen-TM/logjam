@@ -39,6 +39,7 @@ import {
   AUTO_EXPORT_DEFAULTS,
   cloneRasterTemplateSettings,
   slopeBandsError,
+  estimateElvisTileCount,
   type ElvisStats,
   type RasterTemplateSettings,
   type AutoExportSettings,
@@ -629,6 +630,11 @@ export default function TopoDialog({
   }
 
   const area = pendingBbox ? bboxAreaKm2(pendingBbox) : null;
+  const estimatedTiles = area != null ? estimateElvisTileCount(area) : null;
+  const remainingTiles =
+    tileUsed !== null && tileQuota !== null ? Math.max(0, tileQuota - tileUsed) : null;
+  const estimateOverQuota =
+    estimatedTiles !== null && remainingTiles !== null && estimatedTiles > remainingTiles;
   const uploadPct = totalBytes > 0 ? Math.min(100, Math.round((uploadedBytes / totalBytes) * 100)) : 0;
 
   return (
@@ -817,6 +823,20 @@ export default function TopoDialog({
                 </Typography>
               )}
             </Box>
+
+            {estimateOverQuota && (
+              <Typography
+                variant="body2"
+                sx={{
+                  fontStyle: "italic",
+                  color: "var(--theme-warning)",
+                  pl: 3.5,
+                  mt: -0.5,
+                }}
+              >
+                This area may exceed your weekly tile quota — try a smaller area.
+              </Typography>
+            )}
 
             {/* Step 2: Open ELVIS portal */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
