@@ -368,11 +368,9 @@ function GeoPdfDialog({
       const walkRings = (rings: number[][][]) =>
         rings.forEach((r) => r.forEach(visit));
       if (fp.type === "Polygon") {
-        walkRings(fp.coordinates as number[][][]);
-      } else if (fp.type === "MultiPolygon") {
-        (fp.coordinates as number[][][][]).forEach(walkRings);
+        walkRings(fp.coordinates);
       } else {
-        return true; // unknown geometry — defensively include
+        fp.coordinates.forEach(walkRings);
       }
       if (!Number.isFinite(minX)) return true;
       return (

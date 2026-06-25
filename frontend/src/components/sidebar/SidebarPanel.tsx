@@ -15,7 +15,7 @@ import type {
   TUser,
 } from "../../canyonUtils";
 import type { TripLogCustomFieldDef, VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
-import type { TopoJob, GeoJsonPolygon } from "../dialogs/TopoDialog";
+import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
 import classes from "./SidebarPanel.module.css";
@@ -135,7 +135,7 @@ function SidebarPanel({
 }: {
   activePanel: PanelId | null;
   onClose: () => void;
-  onTopoFlyTarget: (footprint: GeoJsonPolygon) => void;
+  onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
   // Layers
   showOwnedCanyons: boolean;
   setShowOwnedCanyons: (v: boolean) => void;

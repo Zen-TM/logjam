@@ -6,7 +6,7 @@ import SignIn from "./SignIn";
 import TopoDialog from "./dialogs/TopoDialog";
 import type {
   TopoJob,
-  GeoJsonPolygon,
+  GeoJsonPolygonal,
   DownloadUrl,
 } from "./dialogs/TopoDialog";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
@@ -125,7 +125,7 @@ function App() {
   const [pendingTopoBbox, setPendingTopoBbox] = useState<TBbox | null>(null);
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
-  const [topoFlyTarget, setTopoFlyTarget] = useState<GeoJsonPolygon | null>(
+  const [topoFlyTarget, setTopoFlyTarget] = useState<GeoJsonPolygonal | null>(
     null,
   );
   // All of the user's completed topo jobs (with presigned PMTiles URLs per

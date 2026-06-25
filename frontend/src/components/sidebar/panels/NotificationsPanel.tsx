@@ -4,7 +4,7 @@ import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import type { TNotification } from "../../../canyonUtils";
 import type { PanelId } from "../panels";
-import type { GeoJsonPolygon } from "../../dialogs/TopoDialog";
+import type { GeoJsonPolygonal } from "../../dialogs/TopoDialog";
 import {
   markNotificationRead,
   markAllNotificationsRead,
@@ -29,7 +29,7 @@ function NotificationsPanel({
   onRefetchFriends: () => void;
   setSelectedCanyonID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
-  onTopoFlyTarget: (footprint: GeoJsonPolygon) => void;
+  onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
 }) {
   const [actionedIds, setActionedIds] = useState<Set<string>>(new Set());
   const toast = useToast();
@@ -247,7 +247,7 @@ function NotificationsPanel({
                     className={classes.acceptButton}
                     onClick={async (e) => {
                       e.stopPropagation();
-                      onTopoFlyTarget(n.payload.footprint as GeoJsonPolygon);
+                      onTopoFlyTarget(n.payload.footprint as GeoJsonPolygonal);
                       if (!n.read) {
                         await markNotificationRead(n.id);
                         onRefetchNotifications();

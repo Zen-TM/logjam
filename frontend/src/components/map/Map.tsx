@@ -15,6 +15,7 @@ maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
 import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
 import type { TCanyon, TFilters, CanyonTrack } from "../../canyonUtils";
+import type { GeoJsonPolygonal } from "../../topoLayerTypes";
 import { passesFilters } from "../../canyonUtils";
 import { fetchTrackGeoJSON } from "../media/trackGeo";
 import {
@@ -369,9 +370,9 @@ function Map({
     bearing: number;
     pitch: number;
   } | null;
-  // coordinates is `unknown` because a footprint may be a Polygon OR a
-  // MultiPolygon (disconnected capture) — collectLngLatPairs walks either.
-  topoFlyTarget?: { type: string; coordinates: unknown } | null;
+  // A footprint may be a Polygon OR a MultiPolygon (disconnected capture);
+  // collectLngLatPairs walks either to its [lng,lat] leaf positions.
+  topoFlyTarget?: GeoJsonPolygonal | null;
   onTopoFlyConsumed?: () => void;
   flyToCanyon?: { lat: number; lng: number } | null;
   onFlyToCanyonConsumed?: () => void;
