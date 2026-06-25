@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { Alert, Snackbar, Stack } from "@mui/material";
 
 type Severity = "error" | "success" | "info" | "warning";
@@ -35,11 +35,21 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const value: ToastContextValue = {
-    error: useCallback((m) => push(m, "error"), [push]),
-    success: useCallback((m) => push(m, "success"), [push]),
-    info: useCallback((m) => push(m, "info"), [push]),
-  };
+  // Memoize the context value: a fresh object literal each render gives every
+  // useToast() consumer a new `toast` identity on every render. Effects that
+  // list `toast` in their deps (e.g. App.tsx's error toasts + the user
+  // hydration fetch) then re-run on each render — and since pushing a toast
+  // re-renders this provider, a single failing fetch + toast becomes an
+  // infinite fetch/render loop (React #185 + a request flood). `push` is
+  // stable, so the memo only ever recomputes once.
+  const value = useMemo<ToastContextValue>(
+    () => ({
+      error: (m) => push(m, "error"),
+      success: (m) => push(m, "success"),
+      info: (m) => push(m, "info"),
+    }),
+    [push],
+  );
 
   return (
     <ToastContext.Provider value={value}>
