@@ -10,6 +10,7 @@ import {
   useThemePreferences,
 } from "./themePreferences";
 import { ToastProvider } from "./components/feedback/ToastProvider";
+import { RootErrorBoundary } from "./components/feedback/RootErrorBoundary";
 
 if (import.meta.env.VITE_AUTH_MODE !== "fake") {
   Amplify.configure({
@@ -35,10 +36,12 @@ function ThemedApp() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ThemePreferencesProvider>
-      <ToastProvider>
-        <ThemedApp />
-      </ToastProvider>
-    </ThemePreferencesProvider>
+    <RootErrorBoundary>
+      <ThemePreferencesProvider>
+        <ToastProvider>
+          <ThemedApp />
+        </ToastProvider>
+      </ThemePreferencesProvider>
+    </RootErrorBoundary>
   </StrictMode>,
 );

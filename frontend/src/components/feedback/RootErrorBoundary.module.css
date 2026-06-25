@@ -1,0 +1,45 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--theme-primary);
+}
+
+.card {
+  max-width: 420px;
+  padding: 32px 28px;
+  text-align: center;
+  background: var(--theme-secondary);
+  border-radius: var(--radius-lg);
+}
+
+.heading {
+  margin: 0 0 12px;
+  font-size: 1.25em;
+  color: var(--theme-text-primary);
+}
+
+.message {
+  margin: 0 0 24px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--theme-text-muted);
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.reloadButton {
+  composes: btn btnFilledAccent btnMd from "../../styles/shared.module.css";
+}
+
+.signOutButton {
+  composes: btn btnGhost btnMd from "../../styles/shared.module.css";
+}
