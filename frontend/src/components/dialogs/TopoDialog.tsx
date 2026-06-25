@@ -77,16 +77,16 @@ export type TopoJobStatus =
   | "complete"
   | "failed";
 
-export type GeoJsonPolygon = {
-  type: string;
-  coordinates: number[][][];
-};
+// Footprint geometry types are canonical in topoLayerTypes; re-exported here so
+// existing `from "../dialogs/TopoDialog"` imports keep working.
+export type { GeoJsonPolygonal } from "../../topoLayerTypes";
+import type { GeoJsonPolygonal } from "../../topoLayerTypes";
 
 export type TopoJob = {
   id: string;
   status: TopoJobStatus;
   name: string | null;
-  footprint: GeoJsonPolygon | null;
+  footprint: GeoJsonPolygonal | null;
   tileCount: number | null;
   estimatedSeconds: number | null;
   layerOptions: string[] | null;

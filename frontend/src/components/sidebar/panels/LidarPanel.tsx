@@ -6,7 +6,7 @@ import classes from "./LidarPanel.module.css";
 import { apiFetch, deleteTopoExport } from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
-import type { TopoJob, TopoTemplate, GeoJsonPolygon } from "../../dialogs/TopoDialog";
+import type { TopoJob, TopoTemplate, GeoJsonPolygonal } from "../../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import TopoTemplateEditDialog from "../../dialogs/TopoTemplateEditDialog";
 import TopoExportDialog from "../../dialogs/TopoExportDialog";
@@ -87,7 +87,7 @@ function LidarPanel({
     v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>),
   ) => void;
   onOpenTopo: () => void;
-  onTopoFlyTarget: (footprint: GeoJsonPolygon) => void;
+  onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
   onRefetchCompletedTopoJobs: () => void;
   onDismissActiveJob: (jobId: string) => void;
   onOpenTopoWithTemplate: (templateId: string) => void;
@@ -439,7 +439,7 @@ function LidarPanel({
                   <button
                     className={classes.jobName}
                     onClick={() => {
-                      if (job.footprint) onTopoFlyTarget(job.footprint as GeoJsonPolygon);
+                      if (job.footprint) onTopoFlyTarget(job.footprint);
                     }}
                     title="Fly to this topo on map"
                   >
