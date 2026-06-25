@@ -44,6 +44,23 @@ function readCssVar(name: string, fallback: string): string {
   return value || fallback;
 }
 
+/**
+ * Collect every [lng, lat] position out of a GeoJSON geometry's `coordinates`,
+ * regardless of nesting depth. A topo footprint is a Polygon for a contiguous
+ * capture but a MultiPolygon for a disconnected one — the extra nesting level
+ * meant a plain `.flat()` left rings (not positions), so Math.min(...) of arrays
+ * produced NaN and fitBounds threw "Invalid LngLat object: (NaN, NaN)". Walking
+ * to the numeric leaf pairs handles Polygon, MultiPolygon, and GeometryCollection
+ * coordinate shapes alike.
+ */
+function collectLngLatPairs(node: unknown): [number, number][] {
+  if (!Array.isArray(node)) return [];
+  if (typeof node[0] === "number" && typeof node[1] === "number") {
+    return [[node[0], node[1]]];
+  }
+  return node.flatMap(collectLngLatPairs);
+}
+
 function applyCanyonThemePaint(map: maplibregl.Map) {
   const owned = readCssVar("--owned-canyon-color", "#f97316");
   const shared = readCssVar("--shared-canyon-color", "#629bf8");
@@ -352,7 +369,9 @@ function Map({
     bearing: number;
     pitch: number;
   } | null;
-  topoFlyTarget?: { type: string; coordinates: number[][][] } | null;
+  // coordinates is `unknown` because a footprint may be a Polygon OR a
+  // MultiPolygon (disconnected capture) — collectLngLatPairs walks either.
+  topoFlyTarget?: { type: string; coordinates: unknown } | null;
   onTopoFlyConsumed?: () => void;
   flyToCanyon?: { lat: number; lng: number } | null;
   onFlyToCanyonConsumed?: () => void;
@@ -1458,7 +1477,16 @@ function Map({
 
   useEffect(() => {
     if (!topoFlyTarget || !mapLoaded || !mapRef.current) return;
-    const pairs = topoFlyTarget.coordinates.flat() as [number, number][];
+    const pairs = collectLngLatPairs(topoFlyTarget.coordinates).filter(
+      ([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat),
+    );
+    if (pairs.length === 0) {
+      // No usable coordinates (empty/malformed footprint) — consume the request
+      // so it doesn't get retried, but don't fly into a NaN bounds.
+      console.warn("topoFlyTarget had no valid coordinates", topoFlyTarget.type);
+      onTopoFlyConsumedRef.current?.();
+      return;
+    }
     const lngs = pairs.map((p) => p[0]);
     const lats = pairs.map((p) => p[1]);
     mapRef.current.fitBounds(
