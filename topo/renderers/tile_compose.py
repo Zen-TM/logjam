@@ -91,8 +91,32 @@ def _vector_style_to_render_settings(vector_style: Dict[str, Any]) -> Dict[str, 
     return defaults
 
 
-def _bbox_union(jobs: List[dict]) -> Tuple[float, float, float, float]:
-    """Union of every source job's footprint geometry, in WGS84 lon/lat."""
+# Backstop cap on composite output-tile count. A legitimate full 100-tile
+# (≈400 km²) job lands near ~33k tiles, so this only fires on a runaway
+# footprint (e.g. a corrupt geometry spanning the state). Per-component
+# enumeration (below) already bounds real work to actual coverage area, so this
+# rarely trips for genuine jobs — it exists so a pathological footprint fails
+# fast with a clear message instead of churning until the reaper kills it.
+# Override via TOPO_MAX_EXPORT_TILES.
+DEFAULT_MAX_COMPOSITE_TILES = 200_000
+
+
+def _max_composite_tiles() -> int:
+    env = os.environ.get("TOPO_MAX_EXPORT_TILES")
+    if env:
+        return max(1, int(env))
+    return DEFAULT_MAX_COMPOSITE_TILES
+
+
+def _footprint_geometry(jobs: List[dict]):
+    """Union of every source job's footprint geometry, in WGS84 lon/lat.
+
+    Returns the shapely geometry (Polygon / MultiPolygon). A non-adjacent LiDAR
+    capture polygonises to a MultiPolygon whose bounding box spans the empty gap
+    between captures — callers must enumerate tiles per component (see
+    _composite_tile_coords), never over the union bbox, or an export over
+    scattered tiles iterates every tile in the gap (the wallewerang failure:
+    5h33m for 4147 kept tiles before the 3h reaper force-failed it)."""
     from shapely.geometry import shape
     from shapely.ops import unary_union
     polys = []
@@ -103,8 +127,57 @@ def _bbox_union(jobs: List[dict]) -> Tuple[float, float, float, float]:
         polys.append(shape(fp))
     if not polys:
         raise RenderError("No source-job footprints available — cannot compute export bounds")
-    geom = unary_union(polys)
-    return tuple(geom.bounds)   # (minx, miny, maxx, maxy)
+    return unary_union(polys)
+
+
+def _geometry_parts(geom) -> List:
+    """Connected components of a footprint geometry. Enumerating tiles per part
+    rather than over the union bbox bounds work to actual coverage area, so a
+    footprint scattered across the state costs the same as a compact one of
+    equal area."""
+    if hasattr(geom, "geoms"):
+        return [g for g in geom.geoms if not g.is_empty]
+    return [geom]
+
+
+def _composite_tile_coords(geom, max_tiles: int) -> List[Tuple[int, int, int]]:
+    """Every (z, x, y) tile intersecting the footprint across the export zoom
+    range. Enumerates candidate tiles per connected component and intersect-tests
+    each against the full (prepared) geometry, so a non-adjacent footprint never
+    iterates the empty gap between captures.
+
+    Raises RenderError if the kept-tile count would exceed max_tiles, or if the
+    candidate enumeration itself runs away (a corrupt single polygon spanning a
+    huge bbox) — both fail fast with a path-free, user-facing message."""
+    from shapely.geometry import box
+    from shapely.prepared import prep
+
+    prepared = prep(geom)
+    parts = _geometry_parts(geom)
+    coords: set = set()
+    examined = 0
+    candidate_limit = max_tiles * 20  # bound enumeration even for a corrupt bbox
+    for z in range(ZOOM_MIN, ZOOM_MAX + 1):
+        for part in parts:
+            minx, miny, maxx, maxy = part.bounds
+            for x, y in tiles_for_bbox(minx, miny, maxx, maxy, z):
+                examined += 1
+                if examined > candidate_limit:
+                    raise RenderError(
+                        "Export area is too large: the footprint spans too wide an "
+                        "extent. Reduce the area or split it into smaller exports."
+                    )
+                key = (z, x, y)
+                if key in coords:
+                    continue
+                if prepared.intersects(box(*tile_to_bbox(x, y, z))):
+                    coords.add(key)
+        if len(coords) > max_tiles:
+            raise RenderError(
+                f"Export area is too large: it would generate over {max_tiles:,} "
+                "map tiles. Reduce the area or split it into smaller exports."
+            )
+    return list(coords)
 
 
 def _warp_cog_to_tile(cog_path: Path, z: int, x: int, y: int) -> Image.Image:
@@ -225,17 +298,23 @@ def _composite_workers() -> int:
 
 def render_composite_to_mbtiles(ctx: RenderContext, layers: List[str]) -> Path:
     raster_cogs, contour_paths, features_geojson, settings = _prepare_sources(ctx, layers)
-    lon_min, lat_min, lon_max, lat_max = _bbox_union(ctx.source_jobs)
+    geom = _footprint_geometry(ctx.source_jobs)
+    lon_min, lat_min, lon_max, lat_max = geom.bounds
 
     dst = ctx.work_dir / "composite.mbtiles"
     if dst.exists():
         dst.unlink()
     conn = create_mbtiles(str(dst), "composite", "Topo composite export")
 
+    # Enumerate only tiles intersecting the actual footprint (per connected
+    # component) — NOT every tile in the union bbox. For a non-adjacent capture
+    # the bbox spans the empty gap; iterating it warps every gap tile to a
+    # discarded transparent PNG. Bounding to coverage is what stops the
+    # wallewerang-class blowup and makes a scattered 100-tile job cost the same
+    # as a compact one.
     tile_jobs = [
         (z, x, y, raster_cogs, contour_paths, features_geojson, settings)
-        for z in range(ZOOM_MIN, ZOOM_MAX + 1)
-        for x, y in tiles_for_bbox(lon_min, lat_min, lon_max, lat_max, z)
+        for (z, x, y) in _composite_tile_coords(geom, _max_composite_tiles())
     ]
 
     # Render tiles in parallel; sqlite is single-writer so inserts stay in the

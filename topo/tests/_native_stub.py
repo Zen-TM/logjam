@@ -48,6 +48,7 @@ for _name in (
     "shapely",
     "shapely.geometry",
     "shapely.ops",
+    "shapely.prepared",
     "PIL",
     "boto3",
     "psycopg2",
