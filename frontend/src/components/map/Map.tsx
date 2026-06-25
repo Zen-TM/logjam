@@ -223,11 +223,18 @@ function feat(vs: VectorStyleSettings, key: OsmFeatureKey): OsmFeatureStyle {
   return vs.features[key];
 }
 
+// Base label-size bump for the live map, independent of the user's labelScale
+// slider. Topo labels read too small at the bare 9→12px ramp; 1.75 lifts them to
+// ~16→21px. The export bakers deliberately diverge with their own larger base
+// (the MBTiles baker uses 3×, see topo/pipeline.py `label_font_size`), so baked
+// exports are intentionally bigger than the live overlay — no longer a match.
+const WEB_LABEL_BASE_SCALE = 1.75;
+
 // The label text-size zoom ramp (9px@z14→12px@z18) scaled by the user's global
-// labelScale. Single source for every topo label layer; the GeoPDF service and
-// the Python tile baker apply the same ramp×scale so exports match the map.
+// labelScale and the web base bump. Single source for every topo label layer.
 function labelTextSizeExpr(scale: number): maplibregl.ExpressionSpecification {
-  return ["interpolate", ["linear"], ["zoom"], 14, 9 * scale, 18, 12 * scale];
+  const s = scale * WEB_LABEL_BASE_SCALE;
+  return ["interpolate", ["linear"], ["zoom"], 14, 9 * s, 18, 12 * s];
 }
 
 // Apply every user-controllable colour/width to one topo entry's vector layers
@@ -527,12 +534,12 @@ function Map({
         },
       });
 
-      // Owned canyon name labels visible at zoom 11+
+      // Owned canyon name labels visible at zoom 9+
       map.addLayer({
         id: "canyon-labels",
         type: "symbol",
         source: "canyons",
-        minzoom: 11,
+        minzoom: 9,
         layout: {
           "text-field": ["get", "name"],
           "text-font": ["Open Sans Semibold"],
@@ -547,12 +554,12 @@ function Map({
         },
       });
 
-      // Shared canyon name labels visible at zoom 11+
+      // Shared canyon name labels visible at zoom 9+
       map.addLayer({
         id: "shared-canyon-labels",
         type: "symbol",
         source: "shared-canyons",
-        minzoom: 11,
+        minzoom: 9,
         layout: {
           "text-field": ["get", "name"],
           "text-font": ["Open Sans Semibold"],
@@ -1208,13 +1215,19 @@ function Map({
               source: srcId,
               "source-layer": "contours",
               filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
-              minzoom: 14,
+              minzoom: 12,
               layout: {
                 "text-field": ["concat", ["to-string", ["get", "elev"]], "m"],
                 "text-font": ["Open Sans Semibold"],
                 "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
                 "symbol-placement": "line",
-                "text-max-angle": 60,
+                // LAZ-derived contours are VERY knobbly — even 90° left few
+                // placement spots until z18, then labels flooded in at once. The
+                // real fix is smoothing the geometry in the topo pipeline; until
+                // then 150° lets labels place along the wiggly runs at low zoom
+                // (they follow the curve, so they read a little jagged). Bump the
+                // pipeline-side smoothing if this looks too messy.
+                "text-max-angle": 150,
               },
               paint: {
                 "text-halo-color": "rgba(255, 255, 255, 0.8)",
@@ -1336,7 +1349,7 @@ function Map({
                 source: srcId,
                 "source-layer": "features",
                 filter,
-                minzoom: 14,
+                minzoom: 12,
                 layout: {
                   "text-field": [
                     "coalesce",
@@ -1347,7 +1360,9 @@ function Map({
                   "text-font": ["Open Sans Semibold"],
                   "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
                   "symbol-placement": "line",
-                  "text-max-angle": 30,
+                  // Looser bend tolerance (was 30) so curvy creeks/tracks still
+                  // get a label instead of only their straight stretches.
+                  "text-max-angle": 60,
                 },
                 paint: {
                   "text-halo-color": "rgba(255,255,255,0.8)",
@@ -1371,7 +1386,7 @@ function Map({
               source: srcId,
               "source-layer": "features",
               filter: ["==", ["get", "_category"], key],
-              minzoom: key === "gate" ? 14 : 12,
+              minzoom: key === "gate" ? 12 : 10,
               layout: {
                 "icon-image": `topo-icon-${key}`,
                 "icon-size": iconSizeInterp(OSM_POINT_ICON[key].sizeZ18),
@@ -1380,7 +1395,7 @@ function Map({
             });
           }
 
-          // Name labels for point features at z14+. Peaks also show elevation.
+          // Name labels for point features at z12+. Peaks also show elevation.
           // Label colour follows the category colour from VectorStyleSettings.
           for (const key of OSM_POINT_FEATURE_KEYS) {
             if (!feat(vs, key).enabled) continue;
@@ -1405,7 +1420,7 @@ function Map({
               source: srcId,
               "source-layer": "features",
               filter: ["==", ["get", "_category"], key],
-              minzoom: 14,
+              minzoom: 12,
               layout: {
                 "text-field": textField,
                 "text-font": ["Open Sans Semibold"],
