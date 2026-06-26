@@ -69,6 +69,7 @@ def _load_icon(name: str) -> Image.Image:
     return _ICON_CACHE[name]
 from shapely.geometry import shape, mapping, Polygon, MultiPolygon, box as shapely_box
 from shapely.ops import unary_union
+from shapely.strtree import STRtree
 
 gdal.UseExceptions()
 ogr.UseExceptions()
@@ -2121,6 +2122,7 @@ def read_raster_window(raster_path: str, bbox_merc: Tuple, out_size: int = TILE_
 
 _geojson_cache: Dict[str, dict] = {}
 _footprint_shape_cache: Dict[str, object] = {}
+_contour_index_cache: Dict[str, tuple] = {}
 
 def _load_geojson(path: str) -> dict:
     """Load and cache parsed GeoJSON. Each ProcessPoolExecutor worker gets its
@@ -2130,6 +2132,44 @@ def _load_geojson(path: str) -> dict:
         with open(path) as f:
             _geojson_cache[path] = json.load(f)
     return _geojson_cache[path]
+
+
+def _load_contour_index(path: str) -> tuple:
+    """Parse a contour GeoJSON once and build an STRtree over per-feature
+    bounding boxes, so each tile queries only the lines near it instead of
+    rescanning every feature in the whole job.
+
+    Without this, render_contours_tile iterated all features per tile → the
+    render phase was O(tiles × features), and since both grow with coverage
+    area it scaled ~O(area²) (the source of the multi-hour large-job renders).
+
+    Returns (feature_records, tree) where feature_records[i] is
+    (feature, coords) aligned with the i-th box inserted into the tree. The
+    tree's envelope query reproduces the previous bbox-vs-tile±pad reject
+    exactly (both keep features whose bounding box intersects the query box).
+    Cached per-process, like _load_geojson.
+    """
+    cached = _contour_index_cache.get(path)
+    if cached is not None:
+        return cached
+    gj = _load_geojson(path)
+    records = []
+    boxes = []
+    for feat in gj.get("features", []):
+        geom = feat.get("geometry", {})
+        if geom.get("type") != "LineString":
+            continue
+        coords = geom.get("coordinates", [])
+        if not coords:
+            continue
+        lons = [c[0] for c in coords]
+        lats = [c[1] for c in coords]
+        boxes.append(shapely_box(min(lons), min(lats), max(lons), max(lats)))
+        records.append((feat, coords))
+    tree = STRtree(boxes) if boxes else None
+    result = (records, tree)
+    _contour_index_cache[path] = result
+    return result
 
 
 def _load_footprint_shape(footprint_path: str):
@@ -2499,9 +2539,11 @@ def render_contours_tile(
         if not path or not os.path.exists(path):
             continue
         try:
-            gj = _load_geojson(path)
+            records, tree = _load_contour_index(path)
         except Exception as e:
             log.warning(f"Contour geojson load failed for interval {interval} ({path}): {e}")
+            continue
+        if tree is None:
             continue
 
         # When this interval is coarser than the active interval (e.g. drawing
@@ -2511,23 +2553,14 @@ def render_contours_tile(
 
         # Use 1 full tile-width of padding so cross-edge lines are always kept.
         # At z14 one tile ≈ 0.022° wide; at z18 ≈ 0.0014°. 0.05° covers all zooms.
+        # The STRtree envelope query reproduces the old per-feature bbox reject
+        # (keep features whose bbox intersects tile ± pad), at O(log n + hits)
+        # per tile instead of scanning every feature in the job.
         pad = 0.05
-        for feat in gj.get("features", []):
-            geom = feat.get("geometry", {})
-            if geom.get("type") != "LineString":
-                continue
-            coords = geom.get("coordinates", [])
-            if not coords:
-                continue
-
-            # Reject if clearly outside tile + padding
-            feat_lon_min = min(c[0] for c in coords)
-            feat_lon_max = max(c[0] for c in coords)
-            feat_lat_min = min(c[1] for c in coords)
-            feat_lat_max = max(c[1] for c in coords)
-            if (feat_lon_max < lon_min - pad or feat_lon_min > lon_max + pad or
-                feat_lat_max < lat_min - pad or feat_lat_min > lat_max + pad):
-                continue
+        query_box = shapely_box(lon_min - pad, lat_min - pad,
+                                lon_max + pad, lat_max + pad)
+        for idx in tree.query(query_box):
+            feat, coords = records[int(idx)]
 
             pts = [lonlat_to_px(c[0], c[1]) for c in coords]
             if len(pts) < 2:
