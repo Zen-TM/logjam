@@ -4,6 +4,7 @@ import {
   classifyElvisEntries,
   ElvisZipError,
   isUnsafeZipEntryName,
+  regionNameFromSurvey,
 } from "./elvisZip";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -298,5 +299,20 @@ describe("classifyElvisEntries", () => {
     const stats = classifyElvisEntries(parse(zip));
     // tile IDs: 1111_56_0001_0001 (from LAZ + DEM, deduplicated), 1112_56_0001_0002, 1113_56_0001_0003
     expect(stats.tileCount).toBe(3);
+  });
+});
+
+describe("regionNameFromSurvey", () => {
+  it("strips the trailing numeric survey code", () => {
+    expect(regionNameFromSurvey("Katoomba201804")).toBe("Katoomba");
+  });
+
+  it("returns the name unchanged when there is no numeric code", () => {
+    expect(regionNameFromSurvey("Katoomba")).toBe("Katoomba");
+  });
+
+  it("falls back to the full survey name when there is no alphabetic prefix", () => {
+    expect(regionNameFromSurvey("216028")).toBe("216028");
+    expect(regionNameFromSurvey("")).toBe("");
   });
 });

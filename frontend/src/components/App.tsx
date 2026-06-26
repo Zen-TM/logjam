@@ -813,6 +813,9 @@ function App() {
         pendingBbox={pendingTopoBbox}
         onJobCreated={handleTopoJobCreated}
         initialTemplateId={initialTopoTemplateId}
+        existingTopoNames={[...activeTopoJobs, ...completedTopoJobs]
+          .map((j) => j.name)
+          .filter((n): n is string => !!n)}
       />
       <GeoPdfDialog
         open={showGeoPdf}

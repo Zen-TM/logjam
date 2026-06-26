@@ -40,11 +40,14 @@ import {
   cloneRasterTemplateSettings,
   slopeBandsError,
   estimateElvisTileCount,
+  regionNameFromSurvey,
   type ElvisStats,
   type RasterTemplateSettings,
   type AutoExportSettings,
 } from "@logjam/shared";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
+import { nextTopoName } from "./jobName";
+import { fieldSx } from "../../csvImport/dialogStyles";
 
 export type TopoTemplate = {
   id: string;
@@ -363,6 +366,7 @@ export default function TopoDialog({
   pendingBbox,
   onJobCreated,
   initialTemplateId,
+  existingTopoNames,
 }: {
   open: boolean;
   onClose: () => void;
@@ -370,6 +374,7 @@ export default function TopoDialog({
   pendingBbox: TBbox | null;
   onJobCreated: (job: TopoJob) => void;
   initialTemplateId?: string | null;
+  existingTopoNames: string[];
 }) {
   const isMobile = useIsMobile();
   const [file, setFile] = useState<File | null>(null);
@@ -386,6 +391,10 @@ export default function TopoDialog({
   );
   const [validating, setValidating] = useState(false);
   const [stats, setStats] = useState<ElvisStats | null>(null);
+  // Topo name: prefilled from the survey region after upload, but a name the
+  // user types (topoNameTouched) is never overwritten by autofill.
+  const [topoName, setTopoName] = useState("");
+  const [topoNameTouched, setTopoNameTouched] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [tileUsed, setTileUsed] = useState<number | null>(null);
   const [tileQuota, setTileQuota] = useState<number | null>(null);
@@ -415,6 +424,8 @@ export default function TopoDialog({
     setDragging(false);
     setValidating(false);
     setStats(null);
+    setTopoName("");
+    setTopoNameTouched(false);
     setValidationError(null);
     setSettings(cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS));
     setAutoExport({ ...AUTO_EXPORT_DEFAULTS });
@@ -529,6 +540,15 @@ export default function TopoDialog({
     };
   }, [file]);
 
+  // Prefill the topo name from the survey region once a ZIP is parsed, unless
+  // the user has already typed one. Re-fills on a new upload only while
+  // untouched.
+  useEffect(() => {
+    if (!stats || topoNameTouched) return;
+    const region = regionNameFromSurvey(stats.surveyNames[0] ?? "");
+    if (region) setTopoName(nextTopoName(region, existingTopoNames));
+  }, [stats, topoNameTouched, existingTopoNames]);
+
   function onFilePicked(picked: File) {
     if (!picked.name.toLowerCase().endsWith(".zip")) {
       setValidationError("Please select a .zip file.");
@@ -596,7 +616,7 @@ export default function TopoDialog({
         method: "POST",
         body: {
           tileCount: stats.tileCount || null,
-          jobName: stats.surveyNames[0] || null,
+          jobName: topoName.trim() || stats.surveyNames[0] || null,
           filename: file.name,
           settings,
           autoExport,
@@ -1076,6 +1096,20 @@ export default function TopoDialog({
           <ErrorBanner message={validationError ?? error!} />
         )}
 
+        {/* ── Topo name ── */}
+        <TextField
+          size="small"
+          fullWidth
+          label="Topo name"
+          placeholder="Name this topo"
+          value={topoName}
+          onChange={(e) => {
+            setTopoName(e.target.value);
+            setTopoNameTouched(true);
+          }}
+          sx={{ ...fieldSx, mt: 2 }}
+        />
+
         {/* ── Template selector + Save as / Manage ── */}
         <Box sx={{ mt: 2, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
           <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>
@@ -1105,52 +1139,18 @@ export default function TopoDialog({
               </MenuItem>
             ))}
           </Select>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => setShowSaveAs((v) => !v)}
-            sx={outlinedAccentSx}
-          >
-            Save as template
-          </Button>
         </Box>
-
-        {showSaveAs && (
-          <Box sx={{ mt: 1, display: "flex", gap: 1, alignItems: "center" }}>
-            <TextField
-              size="small"
-              placeholder="Template name"
-              value={saveAsName}
-              onChange={(e) => setSaveAsName(e.target.value)}
-              sx={{
-                flex: 1,
-                "& .MuiInputBase-input": { color: "var(--theme-text-primary)" },
-                "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
-              }}
-            />
-            <Button
-              size="small"
-              variant="contained"
-              color="secondary"
-              disabled={!saveAsName.trim() || slopeBandsError(settings.slope.bands) != null}
-              onClick={handleSaveAsTemplate}
-            >
-              Save
-            </Button>
-            <Button
-              size="small"
-              onClick={() => { setShowSaveAs(false); setSaveAsName(""); }}
-              sx={{ color: "var(--theme-text-primary)" }}
-            >
-              Cancel
-            </Button>
-          </Box>
-        )}
 
         {/* ── Advanced settings accordion ── */}
         <Accordion
           expanded={advancedOpen}
-          onChange={(_, expanded) => setAdvancedOpen(expanded)}
+          onChange={(_, expanded) => {
+            setAdvancedOpen(expanded);
+            if (!expanded) {
+              setShowSaveAs(false);
+              setSaveAsName("");
+            }
+          }}
           sx={{
             mt: 2,
             backgroundColor: "rgba(255,255,255,0.04)",
@@ -1158,10 +1158,64 @@ export default function TopoDialog({
             "& .MuiAccordionSummary-root": { minHeight: 40 },
           }}
         >
-          <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: "var(--theme-text-primary)" }} />}>
+          <AccordionSummary
+            expandIcon={<ExpandMoreIcon sx={{ color: "var(--theme-text-primary)" }} />}
+            sx={{
+              "& .MuiAccordionSummary-content": {
+                alignItems: "center",
+                justifyContent: "space-between",
+                mr: 1,
+              },
+            }}
+          >
             <Typography variant="body2">Advanced settings</Typography>
+            {advancedOpen && (
+              <Button
+                size="small"
+                variant="outlined"
+                sx={outlinedAccentSx}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSaveAs((v) => !v);
+                }}
+                onFocus={(e) => e.stopPropagation()}
+              >
+                Save as template
+              </Button>
+            )}
           </AccordionSummary>
           <AccordionDetails sx={{ pt: 0 }}>
+            {showSaveAs && (
+              <Box sx={{ mb: 1.5, display: "flex", gap: 1, alignItems: "center" }}>
+                <TextField
+                  size="small"
+                  placeholder="Template name"
+                  value={saveAsName}
+                  onChange={(e) => setSaveAsName(e.target.value)}
+                  sx={{
+                    flex: 1,
+                    "& .MuiInputBase-input": { color: "var(--theme-text-primary)" },
+                    "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
+                  }}
+                />
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="secondary"
+                  disabled={!saveAsName.trim() || slopeBandsError(settings.slope.bands) != null}
+                  onClick={handleSaveAsTemplate}
+                >
+                  Save
+                </Button>
+                <Button
+                  size="small"
+                  onClick={() => { setShowSaveAs(false); setSaveAsName(""); }}
+                  sx={{ color: "var(--theme-text-primary)" }}
+                >
+                  Cancel
+                </Button>
+              </Box>
+            )}
             <AdvancedSettings
               value={settings}
               onChange={setSettings}
