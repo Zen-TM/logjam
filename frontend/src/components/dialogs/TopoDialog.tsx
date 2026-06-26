@@ -895,14 +895,15 @@ export default function TopoDialog({
               <Tooltip
                 title={
                   <>
-                    <strong>Faster processing:</strong> You can also include
-                    ELVIS DEM (Digital Elevation Model) files alongside the
-                    point cloud. DEM files must cover the entire selected area.
+                    <strong>Point cloud = full output.</strong> A LiDAR point
+                    cloud generates every layer (terrain, vegetation, contours).
+                    Any ELVIS DEM (Digital Elevation Model) bundled alongside it
+                    is ignored, so there's no need to add one.
                     <br />
                     <br />
-                    <strong>Fastest (no vegetation layer):</strong> Select{" "}
-                    <em>only</em> DEM files — no point cloud needed. The
-                    vegetation density layer will not be generated.
+                    <strong>No point cloud available?</strong> Select{" "}
+                    <em>only</em> DEM files — terrain and contours are generated,
+                    but the vegetation density layer is not.
                   </>
                 }
                 arrow
