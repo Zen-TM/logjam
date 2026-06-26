@@ -129,7 +129,7 @@ describe("isUnsafeZipEntryName", () => {
 });
 
 describe("classifyElvisEntries", () => {
-  it("Mode B: DEM + LAZ — ELVIS example layout", () => {
+  it("DEM + LAZ — LAZ wins (bundled DEM ignored, runs as LiDAR-only)", () => {
     const zip = buildZip([
       {
         name: "NSW Government - Spatial Services/DEM/2 Metre/Katoomba201804-LID2-AHD_2566284_56_0002_0002_2m.tif",
@@ -167,8 +167,8 @@ describe("classifyElvisEntries", () => {
     const entries = parse(zip);
     const stats = classifyElvisEntries(entries);
 
-    expect(stats.mode).toBe("DEM_LAZ");
-    expect(stats.modeLabel).toBe("DEM + LiDAR (full output)");
+    expect(stats.mode).toBe("LAZ_ONLY");
+    expect(stats.modeLabel).toBe("LiDAR (bundled DEM ignored)");
     expect(stats.lazCount).toBe(2);
     expect(stats.demCount).toBe(2);
     expect(stats.derivativeTifCount).toBe(0);

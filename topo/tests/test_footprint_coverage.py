@@ -32,7 +32,7 @@ _REAL_GDAL = not _native_stub.is_stubbed("osgeo")
 if _REAL_GDAL:
     from osgeo import gdal, ogr, osr  # noqa: E402
     gdal.UseExceptions()
-    from pipeline import compute_data_footprint  # noqa: E402
+    from pipeline import compute_data_footprint, raster_has_valid_pixels  # noqa: E402
 
 # Synthetic grid: 1 m Web Mercator, origin somewhere over Australia.
 # Grid is sized so the disk has > (close radius) of empty margin to every array
@@ -127,6 +127,53 @@ class TestFootprintCoverage(unittest.TestCase):
         self.assertLessEqual(
             ratio, 1.15,
             f"footprint area is {ratio:.2f}× the true extent — over-extending",
+        )
+
+
+def _write_raster(path, arr, nodata=_NODATA, set_nodata=True):
+    """Write a small single-band Float32 GTiff for validity checks."""
+    n_y, n_x = arr.shape
+    ds = gdal.GetDriverByName("GTiff").Create(path, n_x, n_y, 1, gdal.GDT_Float32)
+    ds.SetGeoTransform((_ORIGIN_X, 1.0, 0, _ORIGIN_Y, 0, -1.0))
+    srs = osr.SpatialReference(); srs.ImportFromEPSG(3857)
+    ds.SetProjection(srs.ExportToWkt())
+    band = ds.GetRasterBand(1)
+    if set_nodata:
+        band.SetNoDataValue(nodata)
+    band.WriteArray(arr.astype(np.float32))
+    ds.FlushCache()
+    ds = None
+
+
+@unittest.skipUnless(_REAL_GDAL, "needs real GDAL (skipped under host stub)")
+class TestRasterHasValidPixels(unittest.TestCase):
+    """raster_has_valid_pixels gates the Mode A hard-fail on an all-nodata DEM
+    (ELVIS occasionally bundles empty DEM tiles)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def test_all_nodata_is_invalid(self):
+        path = os.path.join(self.tmp, "empty.tif")
+        _write_raster(path, np.full((10, 10), _NODATA))
+        self.assertFalse(raster_has_valid_pixels(path))
+
+    def test_some_valid_pixels_is_valid(self):
+        path = os.path.join(self.tmp, "partial.tif")
+        arr = np.full((10, 10), _NODATA)
+        arr[3, 3] = 100.0  # a single real elevation is enough
+        _write_raster(path, arr)
+        self.assertTrue(raster_has_valid_pixels(path))
+
+    def test_all_nan_is_invalid(self):
+        # No nodata value set, but every pixel is NaN → still invalid (finite check).
+        path = os.path.join(self.tmp, "nan.tif")
+        _write_raster(path, np.full((10, 10), np.nan), set_nodata=False)
+        self.assertFalse(raster_has_valid_pixels(path))
+
+    def test_missing_file_is_invalid(self):
+        self.assertFalse(
+            raster_has_valid_pixels(os.path.join(self.tmp, "does_not_exist.tif"))
         )
 
 

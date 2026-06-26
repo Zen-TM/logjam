@@ -5,21 +5,19 @@ pipeline.py
 Converts an ELVIS (NSW Spatial Services) LiDAR ZIP into a set of raster MBTiles
 files suitable for import into Gaia GPS.
 
-Auto-detects ZIP contents and selects the fastest available pipeline:
+Auto-detects ZIP contents and selects the pipeline ("LAZ wins"):
+
+  Mode C – point cloud present (.laz/.las)
+    → Full PDAL DTM+DSM pipeline. All layers. Any bundled DEM (.tif) is ignored —
+      the LiDAR-derived DTM is equivalent for NSW 1 m data, and honouring the DEM
+      would silently change behaviour on a file the user didn't request.
 
   Mode A – DEM only    (.tif found, no .laz/.las)
-    → Skips all PDAL processing. Fastest. No vegetation layer.
-
-  Mode B – DEM + LAZ   (.tif AND .laz/.las found)
-    → Uses pre-built DEM for DTM. Runs PDAL density pass (hag_dem) for vegetation.
-    → ~30–40% faster than LAZ-only. All layers available.
-
-  Mode C – LAZ only    (.laz/.las found, no .tif)
-    → Full PDAL DTM+DSM pipeline. Slowest. All layers available.
+    → Skips all PDAL processing. Terrain + contours only, no vegetation layer.
 
 Outputs (in ./output/):
   - hillshade.mbtiles
-  - vegetation.mbtiles   (Modes B and C only)
+  - vegetation.mbtiles   (Mode C only)
   - features.mbtiles
   - slope.mbtiles
   - contours.mbtiles
@@ -71,6 +69,7 @@ def _load_icon(name: str) -> Image.Image:
     return _ICON_CACHE[name]
 from shapely.geometry import shape, mapping, Polygon, MultiPolygon, box as shapely_box
 from shapely.ops import unary_union
+from shapely.strtree import STRtree
 
 gdal.UseExceptions()
 ogr.UseExceptions()
@@ -781,10 +780,10 @@ def finalise_bounds(conn: sqlite3.Connection, lon_min, lat_min, lon_max, lat_max
 # Step 1 – Extract and inspect the ELVIS ZIP
 # ---------------------------------------------------------------------------
 
-# Pipeline mode constants
-MODE_LAZ_ONLY  = "C"   # Full PDAL DTM + DSM
-MODE_DEM_LAZ   = "B"   # Pre-built DEM + PDAL DSM only
-MODE_DEM_ONLY  = "A"   # Pre-built DEM only – no vegetation layer
+# Pipeline mode constants. Mode B (DEM + LAZ) was removed: when a point cloud is
+# present we always run Mode C and ignore any bundled DEM ("LAZ wins").
+MODE_LAZ_ONLY  = "C"   # Full PDAL DTM + DSM (point cloud present — preferred)
+MODE_DEM_ONLY  = "A"   # Pre-built DEM only, no point cloud – no vegetation layer
 
 @dataclass
 class ElvisContents:
@@ -860,15 +859,26 @@ def extract_elvis_zip(zip_path: str, work_dir: str) -> ElvisContents:
             "and/or .tif DEM rasters."
         )
 
-    if dem_files and las_files:
-        mode = MODE_DEM_LAZ
+    if las_files:
+        # LAZ wins. A point cloud yields full quality (LiDAR-derived DTM +
+        # vegetation) via the PDAL pipeline. Any DEM ELVIS bundles alongside is
+        # ignored: for NSW 1 m data the supplied DEM is itself LiDAR-derived, so
+        # it adds nothing, and honouring it would silently switch the run to a
+        # different mode on a DEM the user never asked for.
+        mode = MODE_LAZ_ONLY
         has_veg = True
+        if dem_files:
+            log.info(
+                f"Ignoring {len(dem_files)} bundled DEM tile(s) — using "
+                "LiDAR-derived terrain from the point cloud."
+            )
     elif dem_files:
+        # DEM only, no point cloud: terrain + contours, but no vegetation layer.
         mode = MODE_DEM_ONLY
         has_veg = False
     else:
-        mode = MODE_LAZ_ONLY
-        has_veg = True
+        # Unreachable — the empty-input case raised above; kept for clarity.
+        raise RuntimeError("No usable LiDAR or DEM input found in ZIP.")
 
     contents = ElvisContents(
         mode=mode,
@@ -878,9 +888,8 @@ def extract_elvis_zip(zip_path: str, work_dir: str) -> ElvisContents:
     )
 
     mode_labels = {
-        MODE_LAZ_ONLY: "C – LAZ only  (full PDAL DTM + DSM pipeline)",
-        MODE_DEM_LAZ:  "B – DEM + LAZ (pre-built DEM; PDAL DSM-only for vegetation)",
-        MODE_DEM_ONLY: "A – DEM only  (fastest; vegetation layer unavailable)",
+        MODE_LAZ_ONLY: "C – LAZ (full PDAL DTM + DSM pipeline)",
+        MODE_DEM_ONLY: "A – DEM only  (no point cloud; vegetation layer unavailable)",
     }
     log.info(f"ELVIS contents detected:\n{contents.describe()}")
     log.info(f"Selected pipeline mode {mode_labels[mode]}")
@@ -963,67 +972,6 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
                 "nodata": -9999,
                 "gdalopts": "COMPRESS=LZW",
             },
-            # Scrub band return count (0.25–2.0 m above ground).
-            {
-                "type": "writers.gdal",
-                "filename": out_scrub_count,
-                "resolution": resolution,
-                "output_type": "count",
-                "where": count_where,
-                "nodata": 0,
-                "gdalopts": "COMPRESS=LZW",
-            },
-            # Below-band return count (HAG < 0.25 m: ground + low litter).
-            {
-                "type": "writers.gdal",
-                "filename": out_below_count,
-                "resolution": resolution,
-                "output_type": "count",
-                "where": below_where,
-                "nodata": 0,
-                "gdalopts": "COMPRESS=LZW",
-            },
-        ]
-    }
-
-
-def build_pipeline_density_only(las_files: List[str], dtm_path: str,
-                                 out_scrub_count: str, out_below_count: str,
-                                 resolution: float = 1.0) -> dict:
-    """PDAL pipeline: LAZ → NRD count rasters using an external DEM. Mode B.
-
-    Uses filters.hag_dem to compute HeightAboveGround from a pre-built DEM raster,
-    avoiding the need to re-run ground classification (smrf) when a DEM already exists.
-    Requires PDAL ≥ 2.4 (available via UbuntuGIS unstable on Ubuntu 24.04).
-
-    Drops ASPRS noise (7, 18) and overlap (12) classifications, and gates
-    points to scan angles ≤ ±20° to remove swath-edge attenuation bias.
-
-    Rasters are produced in the LAZ's NATIVE CRS (no filters.reprojection), so
-    `dtm_path` (the external DEM read by filters.hag_dem) must be in that same
-    native CRS — the count rasters are warped to Web Mercator later, as rasters.
-    """
-    # PDAL filter expression parser has no function support (no abs()), so
-    # the scan-angle gate is written as an explicit range comparison.
-    count_where = (
-        f"HeightAboveGround >= 0.25 && HeightAboveGround <= 2.0 "
-        f"&& ScanAngleRank >= -{PDAL_SCAN_ANGLE_MAX} "
-        f"&& ScanAngleRank <= {PDAL_SCAN_ANGLE_MAX}"
-    )
-    below_where = (
-        f"HeightAboveGround < 0.25 "
-        f"&& ScanAngleRank >= -{PDAL_SCAN_ANGLE_MAX} "
-        f"&& ScanAngleRank <= {PDAL_SCAN_ANGLE_MAX}"
-    )
-    readers = [{"type": "readers.las", "filename": f} for f in las_files]
-    return {
-        "pipeline": readers + [
-            # No filters.reprojection — native CRS (dtm_path must match).
-            # Mode B preserves original Classification (no assign/smrf), so
-            # noise/overlap codes survive — drop them outright.
-            {"type": "filters.range",
-             "limits": "Classification![7:7],Classification![12:12],Classification![18:18]"},
-            {"type": "filters.hag_dem", "raster": dtm_path},
             # Scrub band return count (0.25–2.0 m above ground).
             {
                 "type": "writers.gdal",
@@ -1150,30 +1098,6 @@ def run_pdal_sequential_full(las_files: List[str], out_dtm: str,
         os.remove(p)
 
 
-def run_pdal_sequential_density(las_files: List[str], dtm_path: str,
-                                 out_scrub_count: str, out_below_count: str,
-                                 work_dir: str, resolution: float = 1.0):
-    """Process LAZ files one at a time (NRD counts only) using hag_dem. Mode B."""
-    scrub_tiles = []
-    below_tiles = []
-    for i, laz in enumerate(las_files):
-        log.info(f"PDAL tile {i+1}/{len(las_files)}: {os.path.basename(laz)}")
-        tile_scrub = os.path.join(work_dir, f"scrub_tile_{i}.tif")
-        tile_below = os.path.join(work_dir, f"below_tile_{i}.tif")
-        pipeline = build_pipeline_density_only([laz], dtm_path, tile_scrub, tile_below, resolution)
-        run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_density_{i}")
-        scrub_tiles.append(tile_scrub)
-        below_tiles.append(tile_below)
-
-    log.info(f"Merging {len(scrub_tiles)} scrub-count tiles …")
-    _merge_raster_tiles(scrub_tiles, out_scrub_count, nodata=0, resample="bilinear")
-    log.info(f"Merging {len(below_tiles)} below-count tiles …")
-    _merge_raster_tiles(below_tiles, out_below_count, nodata=0, resample="bilinear")
-
-    for p in scrub_tiles + below_tiles:
-        os.remove(p)
-
-
 def fill_nodata(src_path: str, dst_path: str, max_distance: int = 100):
     """Fill nodata holes (e.g. under dense canopy, water, LAZ-tile seams) using GDAL.
 
@@ -1227,6 +1151,36 @@ def _binary_close(mask: np.ndarray, radius: int = 5) -> np.ndarray:
     for _ in range(radius):
         m = erode_once(m)
     return m
+
+
+def raster_has_valid_pixels(raster_path: str) -> bool:
+    """True if the raster's first band has at least one valid (non-nodata,
+    finite) pixel.
+
+    Used to detect an all-nodata pre-built DEM — ELVIS occasionally bundles
+    empty DEM tiles with a LiDAR request. Matches the validity definition in
+    compute_data_footprint (nodata value + finite), so a DEM this rejects is
+    exactly one that would polygonize to an empty footprint downstream.
+    """
+    try:
+        ds = gdal.Open(raster_path)
+    except RuntimeError:
+        # GDAL raises here only when UseExceptions() is enabled (e.g. under the
+        # test harness); without it a bad path returns None. Treat both as
+        # "no valid data".
+        return False
+    if ds is None:
+        return False
+    band = ds.GetRasterBand(1)
+    nodata = band.GetNoDataValue()
+    arr = band.ReadAsArray()
+    if arr is None:
+        return False
+    arr = arr.astype(np.float32)
+    valid = np.isfinite(arr)
+    if nodata is not None:
+        valid &= arr != float(nodata)
+    return bool(valid.any())
 
 
 def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
@@ -1402,9 +1356,9 @@ def align_raster_to_reference(src_path: str, ref_path: str, dst_path: str):
     Warp src_path to exactly match the projection, extent, and pixel grid
     of ref_path, writing the result to dst_path.
 
-    This is required when the DTM and DSM come from different sources
-    (e.g. Mode B: pre-built DEM for DTM, PDAL output for DSM) and may
-    have different CRS, resolution, or pixel alignment.
+    This is required when rasters come from different processing paths and may
+    have different CRS, resolution, or pixel alignment (e.g. aligning the PDAL
+    NRD-count rasters onto the DTM pixel grid before computing density).
     """
     ref_ds = gdal.Open(ref_path)
     gt = ref_ds.GetGeoTransform()
@@ -1631,8 +1585,8 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, below_count_path: str,
     From DTM + NRD-count rasters produce hillshade.tif, slope.tif, scrub_density.tif.
 
     The count rasters are first warped onto the DTM pixel grid so array shapes
-    are guaranteed to match — essential in Mode B where the DTM comes from a
-    pre-built DEM and the counts come from PDAL.
+    are guaranteed to match, even if the DTM and counts were produced on
+    slightly different grids.
 
     Scrub density is computed as Normalized Relative Density (NRD):
         NRD = scrub_count / (scrub_count + below_count)
@@ -2168,6 +2122,7 @@ def read_raster_window(raster_path: str, bbox_merc: Tuple, out_size: int = TILE_
 
 _geojson_cache: Dict[str, dict] = {}
 _footprint_shape_cache: Dict[str, object] = {}
+_contour_index_cache: Dict[str, tuple] = {}
 
 def _load_geojson(path: str) -> dict:
     """Load and cache parsed GeoJSON. Each ProcessPoolExecutor worker gets its
@@ -2177,6 +2132,44 @@ def _load_geojson(path: str) -> dict:
         with open(path) as f:
             _geojson_cache[path] = json.load(f)
     return _geojson_cache[path]
+
+
+def _load_contour_index(path: str) -> tuple:
+    """Parse a contour GeoJSON once and build an STRtree over per-feature
+    bounding boxes, so each tile queries only the lines near it instead of
+    rescanning every feature in the whole job.
+
+    Without this, render_contours_tile iterated all features per tile → the
+    render phase was O(tiles × features), and since both grow with coverage
+    area it scaled ~O(area²) (the source of the multi-hour large-job renders).
+
+    Returns (feature_records, tree) where feature_records[i] is
+    (feature, coords) aligned with the i-th box inserted into the tree. The
+    tree's envelope query reproduces the previous bbox-vs-tile±pad reject
+    exactly (both keep features whose bounding box intersects the query box).
+    Cached per-process, like _load_geojson.
+    """
+    cached = _contour_index_cache.get(path)
+    if cached is not None:
+        return cached
+    gj = _load_geojson(path)
+    records = []
+    boxes = []
+    for feat in gj.get("features", []):
+        geom = feat.get("geometry", {})
+        if geom.get("type") != "LineString":
+            continue
+        coords = geom.get("coordinates", [])
+        if not coords:
+            continue
+        lons = [c[0] for c in coords]
+        lats = [c[1] for c in coords]
+        boxes.append(shapely_box(min(lons), min(lats), max(lons), max(lats)))
+        records.append((feat, coords))
+    tree = STRtree(boxes) if boxes else None
+    result = (records, tree)
+    _contour_index_cache[path] = result
+    return result
 
 
 def _load_footprint_shape(footprint_path: str):
@@ -2546,9 +2539,11 @@ def render_contours_tile(
         if not path or not os.path.exists(path):
             continue
         try:
-            gj = _load_geojson(path)
+            records, tree = _load_contour_index(path)
         except Exception as e:
             log.warning(f"Contour geojson load failed for interval {interval} ({path}): {e}")
+            continue
+        if tree is None:
             continue
 
         # When this interval is coarser than the active interval (e.g. drawing
@@ -2558,23 +2553,14 @@ def render_contours_tile(
 
         # Use 1 full tile-width of padding so cross-edge lines are always kept.
         # At z14 one tile ≈ 0.022° wide; at z18 ≈ 0.0014°. 0.05° covers all zooms.
+        # The STRtree envelope query reproduces the old per-feature bbox reject
+        # (keep features whose bbox intersects tile ± pad), at O(log n + hits)
+        # per tile instead of scanning every feature in the job.
         pad = 0.05
-        for feat in gj.get("features", []):
-            geom = feat.get("geometry", {})
-            if geom.get("type") != "LineString":
-                continue
-            coords = geom.get("coordinates", [])
-            if not coords:
-                continue
-
-            # Reject if clearly outside tile + padding
-            feat_lon_min = min(c[0] for c in coords)
-            feat_lon_max = max(c[0] for c in coords)
-            feat_lat_min = min(c[1] for c in coords)
-            feat_lat_max = max(c[1] for c in coords)
-            if (feat_lon_max < lon_min - pad or feat_lon_min > lon_max + pad or
-                feat_lat_max < lat_min - pad or feat_lat_min > lat_max + pad):
-                continue
+        query_box = shapely_box(lon_min - pad, lat_min - pad,
+                                lon_max + pad, lat_max + pad)
+        for idx in tree.query(query_box):
+            feat, coords = records[int(idx)]
 
             pts = [lonlat_to_px(c[0], c[1]) for c in coords]
             if len(pts) < 2:
@@ -2662,8 +2648,15 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
     hs_img = render_hillshade_tile(hs_arr, cfg.settings)
 
     # --- Vegetation ---
-    density_arr = read_raster_window(cfg.density_path, bbox_merc)
-    veg_img = render_vegetation_tile(density_arr, cfg.settings)
+    # Only when the layer is active. Mode A (DEM-only) produces no density
+    # raster, so cfg.density_path is "" — reading it would raise "No such file
+    # or directory" and fail the WHOLE tile (taking hillshade + slope down with
+    # it). cfg.layers is the authoritative active set (drops vegetation when
+    # there's no point cloud, or when the user disabled it).
+    veg_img = None
+    if "vegetation" in cfg.layers:
+        density_arr = read_raster_window(cfg.density_path, bbox_merc)
+        veg_img = render_vegetation_tile(density_arr, cfg.settings)
 
     # --- Features ---
     feat_img = render_features_tile(cfg.osm_geojson, bbox_wgs84, z, cfg.settings)
@@ -2677,7 +2670,8 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
     if cfg.footprint_path:
         try:
             hs_img = _apply_footprint_mask(hs_img, cfg.footprint_path, bbox_wgs84)
-            veg_img = _apply_footprint_mask(veg_img, cfg.footprint_path, bbox_wgs84)
+            if veg_img is not None:
+                veg_img = _apply_footprint_mask(veg_img, cfg.footprint_path, bbox_wgs84)
             slope_img = _apply_footprint_mask(slope_img, cfg.footprint_path, bbox_wgs84)
         except Exception as _e:
             log.warning(f"Footprint mask failed for tile {z}/{x}/{y}: {_e}")
@@ -2765,6 +2759,8 @@ def generate_all_tiles(cfg: RenderConfig, workers: int):
              f"using {workers} worker(s) …")
 
     done = 0
+    failed = 0
+    last_error = None
     with ProcessPoolExecutor(max_workers=workers) as exe:
         futures = {exe.submit(render_tile_job, j): j for j in jobs}
         for fut in as_completed(futures):
@@ -2776,7 +2772,20 @@ def generate_all_tiles(cfg: RenderConfig, workers: int):
                 if done % 100 == 0 or done == total:
                     log.info(f"  Progress: {done}/{total} tiles ({100*done//total}%)")
             except Exception as e:
+                failed += 1
+                last_error = e
                 log.error(f"Tile render error: {e}")
+
+    # Fail loudly when every tile errored: otherwise the job "succeeds" with
+    # empty raster layers (the silent Mode-A failure mode). A partial failure is
+    # tolerated (warned) — a few bad tiles shouldn't sink an otherwise good run.
+    if total > 0 and done == 0:
+        raise RuntimeError(
+            f"All {total} tiles failed to render — no raster layers produced. "
+            f"Last error: {last_error}"
+        )
+    if failed:
+        log.warning(f"{failed}/{total} tiles failed to render (continuing).")
 
     # Commit all and write bounds
     for name, conn in conns.items():
@@ -2871,10 +2880,9 @@ def main():
     parser = argparse.ArgumentParser(
         description=(
             "Convert an ELVIS LiDAR ZIP into topo MBTiles for Gaia GPS.\n\n"
-            "Auto-detects ZIP contents and selects the fastest available pipeline:\n"
-            "  Mode A (DEM only)  – fastest, no vegetation layer\n"
-            "  Mode B (DEM + LAZ) – all layers, moderate speed\n"
-            "  Mode C (LAZ only)  – all layers, slowest"
+            "Auto-detects ZIP contents (\"LAZ wins\"):\n"
+            "  Mode C (point cloud present) – all layers; any bundled DEM ignored\n"
+            "  Mode A (DEM only, no LAZ)    – terrain + contours, no vegetation"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -2956,9 +2964,18 @@ def main():
         footprint_path = os.path.join(work_dir, "footprint.geojson")
 
         # ── Step 2a: Obtain DTM (native) → footprint → warp to Web Mercator ──
-        if contents.mode == MODE_DEM_ONLY or contents.mode == MODE_DEM_LAZ:
+        if contents.mode == MODE_DEM_ONLY:
             with bench.step("Merge pre-built DEM (DTM, native)"):
                 merge_dem_tiles(contents.dem_files, dtm_native)
+            # ELVIS sometimes bundles all-nodata DEM tiles. A DEM-only job has no
+            # point cloud to fall back to, so an empty DEM means the run can't
+            # build terrain — fail loudly here rather than rendering empty
+            # rasters that silently drop the hillshade/slope layers.
+            if not raster_has_valid_pixels(dtm_native):
+                raise RuntimeError(
+                    "DEM-only job: the supplied DEM has no valid elevation data. "
+                    "Cannot build terrain — check the input GeoTIFFs."
+                )
             with bench.step("Compute data footprint"):
                 compute_data_footprint(dtm_native, footprint_path)
             with bench.step("Reproject DTM to Web Mercator"):
@@ -2982,15 +2999,9 @@ def main():
             with bench.step("Reproject DTM to Web Mercator"):
                 reproject_raster_to_web_mercator(dtm_native_filled, dtm_filled, -9999, "cubic")
 
-        # ── Step 2b: Obtain NRD counts (only if vegetation layer needed) ────
-        if contents.mode == MODE_DEM_LAZ:
-            with bench.step("PDAL: LAZ → NRD counts (hag_dem, native DEM)"):
-                run_pdal_sequential_density(
-                    las_strs, dtm_native, scrub_count_native, below_count_native,
-                    work_dir, resolution=1.0,
-                )
-        # Counts are produced in the native grid (Mode B & C); warp them to Web
-        # Mercator so they align with the 3857 DTM the derived rasters expect.
+        # ── Step 2b: Warp NRD counts to Web Mercator (vegetation layer) ─────
+        # Counts are produced in the native grid by the Mode C full PDAL pass;
+        # warp them so they align with the 3857 DTM the derived rasters expect.
         if contents.has_vegetation:
             with bench.step("Reproject NRD counts to Web Mercator"):
                 reproject_raster_to_web_mercator(scrub_count_native, scrub_count_raw, 0, "bilinear")
