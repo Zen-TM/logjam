@@ -19,6 +19,16 @@ export function isUnsafeZipEntryName(filename: string): boolean {
   return parts.includes("..");
 }
 
+/**
+ * Human-friendly region name from an ELVIS survey name: the leading
+ * alphabetic prefix, dropping the trailing numeric survey code.
+ * e.g. "Katoomba201804" → "Katoomba". Falls back to the full survey name
+ * when there is no alphabetic prefix.
+ */
+export function regionNameFromSurvey(survey: string): string {
+  return survey.match(/^[A-Za-z]+/)?.[0] ?? survey;
+}
+
 export class ElvisZipError extends Error {
   code: ElvisZipErrorCode;
   constructor(code: ElvisZipErrorCode, message: string) {
