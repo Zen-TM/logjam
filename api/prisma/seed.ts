@@ -331,33 +331,13 @@ async function main() {
     ],
   });
 
-  // Topo jobs: one complete, one failed (exercises job-list + reaper UI; no S3
-  // tiles back them).
-  await prisma.topoJob.createMany({
-    data: [
-      {
-        userId: ALICE_ID,
-        status: "complete",
-        name: "Grose Valley LiDAR",
-        footprint: { type: "Polygon", coordinates: [[[150.30, -33.66], [150.35, -33.66], [150.35, -33.62], [150.30, -33.62], [150.30, -33.66]]] },
-        tileCount: 1240,
-        outputBytes: BigInt(524_288_000),
-        startedAt: new Date("2026-02-10T01:00:00.000Z"),
-        attemptCount: 1,
-      },
-      {
-        userId: ALICE_ID,
-        status: "failed",
-        name: "Kanangra test render",
-        errorMessage: "Worker placement failed (no Fargate capacity).",
-        attemptCount: 1,
-      },
-    ],
-  });
+  // Topo jobs are intentionally not seeded: a "complete" job with no S3 tiles
+  // behind it renders nothing / breaks the map UI. Submit a real LiDAR ZIP in
+  // dev to exercise the topo flow end-to-end instead.
 
   const canyonCount = ALL_CANYONS.length;
   console.log(
-    `Seed complete: 3 users, ${canyonCount} canyons (1 fork), 4 shares, ${trips.length} trip logs, 2 media, 3 notifications, 2 topo jobs`,
+    `Seed complete: 3 users, ${canyonCount} canyons (1 fork), 4 shares, ${trips.length} trip logs, 2 media, 3 notifications, 0 topo jobs`,
   );
 }
 
