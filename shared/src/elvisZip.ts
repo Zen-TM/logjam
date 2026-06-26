@@ -46,7 +46,7 @@ export interface ZipEntry {
 
 export interface ElvisStats {
   surveyNames: string[];
-  mode: "DEM_LAZ" | "DEM_ONLY" | "LAZ_ONLY";
+  mode: "DEM_ONLY" | "LAZ_ONLY";
   modeLabel: string;
   tileCount: number;
   lazCount: number;
@@ -150,7 +150,7 @@ export function parseZipCentralDirectory(
 /**
  * Validates ZIP entries against worker requirements and returns stats.
  * Throws ElvisZipError with the same wording the topo worker would surface.
- * Worker source: topo/pipeline.py:401-457
+ * Worker source: topo/pipeline.py extract_elvis_zip ("LAZ wins" mode selection).
  */
 export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
   if (entries.length === 0) {
@@ -213,15 +213,17 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
 
   let mode: ElvisStats["mode"];
   let modeLabel: string;
-  if (lazCount > 0 && demCount > 0) {
-    mode = "DEM_LAZ";
-    modeLabel = "DEM + LiDAR (full output)";
-  } else if (demCount > 0) {
+  if (lazCount > 0) {
+    // "LAZ wins": the worker derives terrain from the point cloud and ignores
+    // any bundled DEM (topo/pipeline.py extract_elvis_zip). Mirror that here so
+    // the submit-time mode/label match what actually runs.
+    mode = "LAZ_ONLY";
+    modeLabel =
+      demCount > 0 ? "LiDAR (bundled DEM ignored)" : "LiDAR only";
+  } else {
+    // demCount > 0 — the empty-input case already threw above.
     mode = "DEM_ONLY";
     modeLabel = "DEM only (no vegetation layer)";
-  } else {
-    mode = "LAZ_ONLY";
-    modeLabel = "LiDAR only";
   }
 
   // Fall back to file count if no tile IDs parsed

@@ -16,7 +16,6 @@ import _native_stub  # noqa: F401,E402
 
 try:
     from pipeline import (  # noqa: E402
-        MODE_DEM_LAZ,
         MODE_DEM_ONLY,
         MODE_LAZ_ONLY,
         _safe_extract_zip,
@@ -93,10 +92,13 @@ class TestExtractElvisZip(unittest.TestCase):
         self.assertTrue(contents.has_vegetation)
         self.assertEqual(len(contents.las_files), 1)
 
-    def test_dem_plus_laz_mode(self):
+    def test_dem_plus_laz_prefers_laz(self):
+        # "LAZ wins": a bundled DEM is detected but ignored — the point cloud
+        # drives a full Mode C run (the DEM never switches the pipeline).
         contents = self._extract([("dem.tif", b"d"), ("cloud.laz", b"p")])
-        self.assertEqual(contents.mode, MODE_DEM_LAZ)
+        self.assertEqual(contents.mode, MODE_LAZ_ONLY)
         self.assertTrue(contents.has_vegetation)
+        self.assertEqual(len(contents.las_files), 1)
 
     def test_derivative_tifs_excluded_from_dem(self):
         # A hillshade-derivative .tif must not count as a usable DEM.

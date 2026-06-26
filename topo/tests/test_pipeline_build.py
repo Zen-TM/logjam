@@ -10,7 +10,6 @@ import _native_stub  # noqa: F401,E402
 try:
     from pipeline import (  # noqa: E402
         PDAL_SCAN_ANGLE_MAX,
-        build_pipeline_density_only,
         build_pipeline_full,
     )
     _IMPORT_OK = True
@@ -78,31 +77,6 @@ class TestBuildPipelineFull(unittest.TestCase):
         gate = f"ScanAngleRank >= -{PDAL_SCAN_ANGLE_MAX}"
         self.assertIn(gate, scrub["where"])
         self.assertIn(gate, below["where"])
-
-
-@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
-class TestBuildPipelineDensityOnly(unittest.TestCase):
-    def setUp(self):
-        self.p = build_pipeline_density_only(
-            ["c.laz"], "external_dem.tif", "scrub.tif", "below.tif"
-        )["pipeline"]
-
-    def test_uses_hag_dem_not_smrf(self):
-        self.assertEqual(len(_stages_of_type(self.p, "filters.hag_dem")), 1)
-        self.assertEqual(_stages_of_type(self.p, "filters.smrf"), [])
-        self.assertEqual(_stages_of_type(self.p, "filters.assign"), [])
-
-    def test_hag_dem_points_at_external_raster(self):
-        hag = _stages_of_type(self.p, "filters.hag_dem")[0]
-        self.assertEqual(hag["raster"], "external_dem.tif")
-
-    def test_still_drops_noise_and_overlap(self):
-        rng = _stages_of_type(self.p, "filters.range")[0]
-        self.assertIn("Classification![7:7]", rng["limits"])
-
-    def test_no_point_reprojection_rasterizes_native(self):
-        # Native CRS — the external DEM (filters.hag_dem raster) is also native.
-        self.assertEqual(_stages_of_type(self.p, "filters.reprojection"), [])
 
 
 if __name__ == "__main__":
