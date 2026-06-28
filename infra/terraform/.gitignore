@@ -9,4 +9,10 @@ crash.*.log
 # Generated, env-specific config doc (never committed — may carry resource ids)
 envs/prod/.env.prod.generated
 
+# Build output (terraform archive_file zips, e.g. .build/cognito-email-sender.zip)
+**/.build/
+
+# AWS RDS CA trust bundle (regenerable download from truststore.pki.rds.amazonaws.com, not repo-managed)
+global-bundle.pem
+
 # Keep .terraform.lock.hcl IN git (pins provider versions) — do NOT ignore it
