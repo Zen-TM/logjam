@@ -90,30 +90,92 @@ log = logging.getLogger("topo")
 COMPOSITE_LAYER_ORDER = ["hillshade", "vegetation", "slope", "contours", "features"]
 
 # ---------------------------------------------------------------------------
+# Progress heartbeat
+# ---------------------------------------------------------------------------
+# Set once in main() from --progress-file. When set, long phases (PDAL, render)
+# call _write_progress, which the worker's heartbeat thread polls to refresh
+# TopoJob.last_progress_at — so the reaper kills only stalled jobs, never a
+# slow-but-advancing one. None (the default / CLI runs) makes it a no-op.
+_PROGRESS_PATH: Optional[str] = None
+
+
+def _write_progress(done: int, total: int, phase: str) -> None:
+    """Atomically write {done,total,phase,ts} to the progress file. Best-effort:
+    a progress write must never sink the phase it is reporting on."""
+    if not _PROGRESS_PATH:
+        return
+    try:
+        tmp = f"{_PROGRESS_PATH}.tmp"
+        with open(tmp, "w") as f:
+            json.dump({"done": done, "total": total, "phase": phase,
+                       "ts": time.time()}, f)
+        os.replace(tmp, _PROGRESS_PATH)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Benchmark timer
 # ---------------------------------------------------------------------------
 
 class Benchmark:
-    """Accumulates per-step wall-clock timings and prints a summary."""
+    """Accumulates per-step wall-clock timings.
+
+    Timing capture is ALWAYS on (it feeds the per-job metrics file consumed by
+    the adaptive runtime estimator); only the verbose `[BENCH]` logging and the
+    printed summary are gated on `enabled` (the --benchmark flag). The overhead
+    of capture is one time.monotonic() per phase, so it is free to leave on.
+    """
 
     def __init__(self, enabled: bool = False):
         self.enabled = enabled
         self._steps: List[Tuple[str, float]] = []   # (label, elapsed_seconds)
+        self._phases: Dict[str, float] = {}         # stable key → cumulative seconds
         self._wall_start: float = time.monotonic()
+        self._input_tile_count: Optional[int] = None
+        self._output_tile_count: Optional[int] = None
+        self._zoom_min: Optional[int] = None
+        self._zoom_max: Optional[int] = None
 
     @contextmanager
-    def step(self, label: str):
-        if not self.enabled:
-            yield
-            return
+    def step(self, label: str, key: Optional[str] = None):
         t0 = time.monotonic()
-        log.info(f"[BENCH] ▶  {label} …")
+        if self.enabled:
+            log.info(f"[BENCH] ▶  {label} …")
         try:
             yield
         finally:
             elapsed = time.monotonic() - t0
             self._steps.append((label, elapsed))
-            log.info(f"[BENCH] ✓  {label} — {_fmt_duration(elapsed)}")
+            if key:
+                self._phases[key] = self._phases.get(key, 0.0) + elapsed
+            if self.enabled:
+                log.info(f"[BENCH] ✓  {label} — {_fmt_duration(elapsed)}")
+
+    def set_tile_counts(self, input_count: Optional[int], output_count: Optional[int]):
+        self._input_tile_count = input_count
+        self._output_tile_count = output_count
+
+    def set_zoom(self, zoom_min: int, zoom_max: int):
+        self._zoom_min = zoom_min
+        self._zoom_max = zoom_max
+
+    def write_metrics(self, path: str):
+        """Atomically write the per-job runtime metrics JSON consumed by the
+        worker (which persists it to TopoJob.pipeline_metrics)."""
+        payload = {
+            "schemaVersion": 1,
+            "wallSeconds": time.monotonic() - self._wall_start,
+            "phases": dict(self._phases),
+            "inputTileCount": self._input_tile_count,
+            "outputTileCount": self._output_tile_count,
+            "zoomMin": self._zoom_min,
+            "zoomMax": self._zoom_max,
+        }
+        tmp = f"{path}.tmp"
+        with open(tmp, "w") as f:
+            json.dump(payload, f)
+        os.replace(tmp, path)
 
     def report(self):
         if not self.enabled or not self._steps:
@@ -1078,6 +1140,10 @@ def run_pdal_sequential_full(las_files: List[str], out_dtm: str,
     below_tiles = []
     for i, laz in enumerate(las_files):
         log.info(f"PDAL tile {i+1}/{len(las_files)}: {os.path.basename(laz)}")
+        # Heartbeat: PDAL is the other long phase (≈48s/tile). Reporting before
+        # each tile keeps last_progress_at fresh through the whole PDAL pass so
+        # the stall-reaper doesn't false-kill a big job before render starts.
+        _write_progress(i, len(las_files), "pdal")
         tile_dtm   = os.path.join(work_dir, f"dtm_tile_{i}.tif")
         tile_scrub = os.path.join(work_dir, f"scrub_tile_{i}.tif")
         tile_below = os.path.join(work_dir, f"below_tile_{i}.tif")
@@ -2771,6 +2837,7 @@ def generate_all_tiles(cfg: RenderConfig, workers: int):
                 done += 1
                 if done % 100 == 0 or done == total:
                     log.info(f"  Progress: {done}/{total} tiles ({100*done//total}%)")
+                    _write_progress(done, total, "render")
             except Exception as e:
                 failed += 1
                 last_error = e
@@ -2794,6 +2861,7 @@ def generate_all_tiles(cfg: RenderConfig, workers: int):
         conn.close()
 
     log.info("All tiles written.")
+    return total
 
 # ---------------------------------------------------------------------------
 # Bounding box utility
@@ -2927,7 +2995,25 @@ def main():
                             "match shared/src/topoSettings.ts TopoSettings. "
                             "Omit to use the Default preset."
                         ))
+    parser.add_argument("--metrics-json", default=None, metavar="PATH",
+                        help=(
+                            "Write a per-job runtime metrics JSON to PATH "
+                            "(phase timings + input/output tile counts). Consumed "
+                            "by the worker to persist TopoJob.pipeline_metrics. "
+                            "Omit for a no-op (CLI/host runs)."
+                        ))
+    parser.add_argument("--progress-file", default=None, metavar="PATH",
+                        help=(
+                            "Atomically write {done,total,ts} render/PDAL progress "
+                            "to PATH so the worker's heartbeat can report liveness. "
+                            "Omit for a no-op (CLI/host runs)."
+                        ))
     args = parser.parse_args()
+
+    # Module-global progress sink (worker heartbeat reads this file). Set once;
+    # long phases (PDAL, render) call _write_progress so the reaper sees liveness.
+    global _PROGRESS_PATH
+    _PROGRESS_PATH = args.progress_file
 
     if not os.path.exists(args.elvis_zip):
         log.error(f"File not found: {args.elvis_zip}")
@@ -2944,7 +3030,7 @@ def main():
 
     try:
         # ── Step 1: Detect inputs ────────────────────────────────────────────
-        with bench.step("Extract & detect inputs"):
+        with bench.step("Extract & detect inputs", key="extract"):
             contents = extract_elvis_zip(args.elvis_zip, work_dir)
 
         las_strs = [str(f) for f in contents.las_files]
@@ -2965,7 +3051,7 @@ def main():
 
         # ── Step 2a: Obtain DTM (native) → footprint → warp to Web Mercator ──
         if contents.mode == MODE_DEM_ONLY:
-            with bench.step("Merge pre-built DEM (DTM, native)"):
+            with bench.step("Merge pre-built DEM (DTM, native)", key="merge_dem"):
                 merge_dem_tiles(contents.dem_files, dtm_native)
             # ELVIS sometimes bundles all-nodata DEM tiles. A DEM-only job has no
             # point cloud to fall back to, so an empty DEM means the run can't
@@ -2976,39 +3062,39 @@ def main():
                     "DEM-only job: the supplied DEM has no valid elevation data. "
                     "Cannot build terrain — check the input GeoTIFFs."
                 )
-            with bench.step("Compute data footprint"):
+            with bench.step("Compute data footprint", key="footprint"):
                 compute_data_footprint(dtm_native, footprint_path)
-            with bench.step("Reproject DTM to Web Mercator"):
+            with bench.step("Reproject DTM to Web Mercator", key="reproject"):
                 reproject_raster_to_web_mercator(dtm_native, dtm_filled, -9999, "cubic")
         else:
             # MODE_LAZ_ONLY – build DTM + NRD counts from point cloud (native).
             dtm_raw = os.path.join(work_dir, "dtm_raw.tif")
             dtm_native_filled = os.path.join(work_dir, "dtm_native_filled.tif")
-            with bench.step("PDAL: LAZ → DTM + NRD counts (ground classification)"):
+            with bench.step("PDAL: LAZ → DTM + NRD counts (ground classification)", key="pdal"):
                 run_pdal_sequential_full(
                     las_strs, dtm_raw, scrub_count_native, below_count_native,
                     work_dir, resolution=1.0,
                 )
-            with bench.step("Fill DTM nodata holes"):
+            with bench.step("Fill DTM nodata holes", key="fill"):
                 fill_nodata(dtm_raw, dtm_native_filled)
             # Footprint is computed from dtm_raw (pre-fill) in the NATIVE grid,
             # which is axis-aligned with no rotation wedge, so it hugs the true
             # data extent. (compute_data_footprint reprojects to WGS84.)
-            with bench.step("Compute data footprint"):
+            with bench.step("Compute data footprint", key="footprint"):
                 compute_data_footprint(dtm_raw, footprint_path)
-            with bench.step("Reproject DTM to Web Mercator"):
+            with bench.step("Reproject DTM to Web Mercator", key="reproject"):
                 reproject_raster_to_web_mercator(dtm_native_filled, dtm_filled, -9999, "cubic")
 
         # ── Step 2b: Warp NRD counts to Web Mercator (vegetation layer) ─────
         # Counts are produced in the native grid by the Mode C full PDAL pass;
         # warp them so they align with the 3857 DTM the derived rasters expect.
         if contents.has_vegetation:
-            with bench.step("Reproject NRD counts to Web Mercator"):
+            with bench.step("Reproject NRD counts to Web Mercator", key="reproject_counts"):
                 reproject_raster_to_web_mercator(scrub_count_native, scrub_count_raw, 0, "bilinear")
                 reproject_raster_to_web_mercator(below_count_native, below_count_raw, 0, "bilinear")
 
         # ── Step 3: Derive rasters ───────────────────────────────────────────
-        with bench.step("Compute hillshade, slope" + (", scrub density (vegetation)" if contents.has_vegetation else "")):
+        with bench.step("Compute hillshade, slope" + (", scrub density (vegetation)" if contents.has_vegetation else ""), key="derivatives"):
             if contents.has_vegetation:
                 raster_paths = compute_rasters(dtm_filled, scrub_count_raw, below_count_raw,
                                                work_dir, settings)
@@ -3026,7 +3112,7 @@ def main():
         fp = footprint_path if os.path.exists(footprint_path) else None
         osm_geojson = None
         if not args.skip_osm:
-            with bench.step("Fetch OSM features (Overpass API)"):
+            with bench.step("Fetch OSM features (Overpass API)", key="osm"):
                 osm_geojson = fetch_osm_features(lon_min, lat_min, lon_max, lat_max, work_dir,
                                                   footprint_path=fp, settings=settings)
 
@@ -3040,7 +3126,7 @@ def main():
         contours_enabled = settings.get("contours", {}).get("enabled", True) and bool(contour_intervals)
         contour_paths: Dict[float, str] = {}
         if contours_enabled:
-            with bench.step(f"Generate contours ({', '.join(str(i) + 'm' for i in contour_intervals)})"):
+            with bench.step(f"Generate contours ({', '.join(str(i) + 'm' for i in contour_intervals)})", key="contours"):
                 contour_paths = generate_contours_gdal(dtm_filled, work_dir,
                                                        intervals=contour_intervals,
                                                        footprint_path=fp)
@@ -3091,8 +3177,13 @@ def main():
             footprint_path=fp,
         )
 
-        with bench.step(f"Render tiles z{ZOOM_MIN}–z{ZOOM_MAX} ({args.workers} workers)"):
-            generate_all_tiles(cfg, workers=args.workers)
+        with bench.step(f"Render tiles z{ZOOM_MIN}–z{ZOOM_MAX} ({args.workers} workers)", key="render"):
+            output_tile_count = generate_all_tiles(cfg, workers=args.workers)
+
+        # Record the size signals for the per-job metrics file (consumed by the
+        # worker → TopoJob → adaptive runtime estimator).
+        bench.set_tile_counts(len(contents.las_files), output_tile_count)
+        bench.set_zoom(ZOOM_MIN, ZOOM_MAX)
 
         # ── Summary ──────────────────────────────────────────────────────────
         log.info(f"\n✓ Done! MBTiles written to: {args.output}")
@@ -3108,6 +3199,14 @@ def main():
             log.info(f"Intermediate files kept at: {work_dir}")
 
     bench.report()
+
+    # Best-effort: write the runtime metrics file the worker reads. Never fatal
+    # (a missing/partial metrics file just means no instrumentation for this job).
+    if args.metrics_json:
+        try:
+            bench.write_metrics(args.metrics_json)
+        except Exception as e:
+            log.warning(f"Failed to write metrics JSON: {e}")
 
 
 if __name__ == "__main__":
