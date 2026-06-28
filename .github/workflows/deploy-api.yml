@@ -71,4 +71,7 @@ jobs:
           version_label: ${{ github.sha }}
           region: ${{ secrets.AWS_REGION }}
           deployment_package: api/deploy.zip
+          # Re-running a failed deploy on the same commit must reuse the already
+          # uploaded version instead of erroring on the duplicate label.
+          use_existing_version_if_available: true
           wait_for_deployment: true
