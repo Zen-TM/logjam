@@ -16,6 +16,8 @@ import {
   validateRasterTemplateSettings,
   validateAutoExportSettings,
   VECTOR_STYLE_DEFAULTS,
+  estimateRuntimeSeconds,
+  type JobActual,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
@@ -44,6 +46,60 @@ const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 // subnets (.env.local) so MiniStack spawns the worker container; an empty list
 // disables the launch and leaves the job pending.
 const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
+
+/**
+ * Adaptive processing-time estimate (seconds) for a job of `inputTileCount`
+ * ELVIS tiles. Fits a per-input-tile rate from recent completed jobs' real
+ * runtimes (TopoJob.pipeline_metrics / startedAt→updatedAt), falling back to a
+ * configurable cold-start default below TOPO_ESTIMATE_MIN_SAMPLES so the
+ * estimate self-corrects as the pipeline's performance changes.
+ *
+ * Privacy: reads only aggregate timing + tile counts across jobs — never canyon
+ * names, coordinates, or footprints.
+ */
+async function computeEstimatedSeconds(
+  inputTileCount: number | null,
+): Promise<number | null> {
+  if (!inputTileCount) return null;
+  const recent = await prisma.topoJob.findMany({
+    where: {
+      status: "complete",
+      outputTileCount: { not: null },
+      tileCount: { not: null },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: {
+      tileCount: true,
+      outputTileCount: true,
+      pipelineMetrics: true,
+      startedAt: true,
+      updatedAt: true,
+    },
+  });
+  const actuals: JobActual[] = [];
+  for (const job of recent) {
+    if (!job.tileCount) continue;
+    const metrics = job.pipelineMetrics as { wallSeconds?: number } | null;
+    const wallSeconds =
+      typeof metrics?.wallSeconds === "number"
+        ? metrics.wallSeconds
+        : job.startedAt
+          ? (job.updatedAt.getTime() - job.startedAt.getTime()) / 1000
+          : null;
+    if (wallSeconds && wallSeconds > 0) {
+      actuals.push({
+        inputTileCount: job.tileCount,
+        outputTileCount: job.outputTileCount ?? undefined,
+        wallSeconds,
+      });
+    }
+  }
+  return estimateRuntimeSeconds(actuals, inputTileCount, {
+    defaultSecondsPerInputTile: env.TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE,
+    minSamples: env.TOPO_ESTIMATE_MIN_SAMPLES,
+  });
+}
 
 // POST /topo-jobs — create job + return presigned S3 upload URL
 router.post(
@@ -84,7 +140,7 @@ router.post(
     // independently. Falls back to defaults if the column is null.
     const vectorStyleSnapshot = (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
 
-    const estimatedSeconds = tileCount ? Math.round(tileCount * 8.5) * 60 : null;
+    const estimatedSeconds = await computeEstimatedSeconds(tileCount ?? null);
 
     const job = await prisma.topoJob.create({
       data: {
@@ -190,6 +246,9 @@ router.post(
     // both passing. The job is still "uploading" so it won't appear in the
     // aggregate. RunTask stays outside the transaction (no AWS calls inside
     // DB transactions); the earlier checks above remain advisory pre-checks.
+    // Adaptive estimate from server-verified tile count. Computed before the
+    // transaction — it's a DB read, kept out of the FOR UPDATE critical section.
+    const verifiedEstimate = await computeEstimatedSeconds(verifiedTileCount);
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
       await assertCanSubmit(user, verifiedTileCount, tx);
@@ -204,7 +263,7 @@ router.post(
           ...(verifiedTileCount !== null
             ? {
                 tileCount: verifiedTileCount,
-                estimatedSeconds: Math.round(verifiedTileCount * 8.5) * 60,
+                estimatedSeconds: verifiedEstimate,
               }
             : {}),
         },

@@ -25,7 +25,9 @@ import {
   reapStuckTopoJobs,
   expireCompletedExports,
   expireCompletedGeoPdfJobs,
-  processingDeadline,
+  progressStallDeadline,
+  absoluteProcessingDeadline,
+  isProcessingDead,
   queueAutoExports,
   exportableLayers,
   ESTIMATE_SAFETY_FACTOR,
@@ -93,60 +95,110 @@ beforeEach(() => {
     );
 });
 
-// ── processingDeadline (pure per-job deadline, ARCH-001) ────────────────────
+// ── stall + ceiling deadlines (pure, ARCH-001) ──────────────────────────────
 
-describe("processingDeadline", () => {
-  const timeoutMs = env.TOPO_REAPER_PROCESSING_TIMEOUT_MS; // 3 h default
+describe("progressStallDeadline", () => {
+  const stallMs = env.TOPO_REAPER_PROGRESS_STALL_MS;
+  const startedAt = new Date("2026-06-05T00:00:00.000Z");
+  const updatedAt = new Date("2026-06-05T01:00:00.000Z");
+  const lastProgressAt = new Date("2026-06-05T11:55:00.000Z");
+
+  it("anchors on lastProgressAt when present", () => {
+    expect(
+      progressStallDeadline({ startedAt, updatedAt, lastProgressAt }, stallMs),
+    ).toEqual(new Date(lastProgressAt.getTime() + stallMs));
+  });
+
+  it("falls back to startedAt before the first heartbeat", () => {
+    expect(
+      progressStallDeadline({ startedAt, updatedAt, lastProgressAt: null }, stallMs),
+    ).toEqual(new Date(startedAt.getTime() + stallMs));
+  });
+
+  it("falls back to updatedAt when startedAt is also null", () => {
+    expect(
+      progressStallDeadline(
+        { startedAt: null, updatedAt, lastProgressAt: null },
+        stallMs,
+      ),
+    ).toEqual(new Date(updatedAt.getTime() + stallMs));
+  });
+});
+
+describe("absoluteProcessingDeadline", () => {
+  const ceilingMs = env.TOPO_REAPER_PROCESSING_TIMEOUT_MS; // 6 h default
   const startedAt = new Date("2026-06-05T00:00:00.000Z");
   const updatedAt = new Date("2026-06-05T01:00:00.000Z");
 
-  it("uses the flat timeout when estimatedSeconds is null", () => {
-    const deadline = processingDeadline(
-      { startedAt, updatedAt, estimatedSeconds: null },
-      timeoutMs,
-    );
-    expect(deadline).toEqual(new Date(startedAt.getTime() + timeoutMs));
+  it("uses the ceiling when estimatedSeconds is null", () => {
+    expect(
+      absoluteProcessingDeadline(
+        { startedAt, updatedAt, estimatedSeconds: null },
+        ceilingMs,
+      ),
+    ).toEqual(new Date(startedAt.getTime() + ceilingMs));
   });
 
-  it("uses the flat timeout as a floor for small jobs", () => {
-    // 10-tile job: ~85 min estimate → 2× = 170 min < 3 h floor.
-    const estimatedSeconds = Math.round(10 * 8.5) * 60;
-    const deadline = processingDeadline(
+  it("extends past the ceiling when 2× estimate is larger", () => {
+    const estimatedSeconds = Math.round(2000 * 8.5) * 60; // huge → 2× ≫ 6 h
+    const deadline = absoluteProcessingDeadline(
       { startedAt, updatedAt, estimatedSeconds },
-      timeoutMs,
-    );
-    expect(deadline).toEqual(new Date(startedAt.getTime() + timeoutMs));
-  });
-
-  it("extends the deadline past the flat timeout for large jobs", () => {
-    // 100-tile job: 51 000 s estimate (~14.2 h) → 2× ≈ 28.3 h budget.
-    const estimatedSeconds = Math.round(100 * 8.5) * 60;
-    const deadline = processingDeadline(
-      { startedAt, updatedAt, estimatedSeconds },
-      timeoutMs,
+      ceilingMs,
     );
     expect(deadline).toEqual(
       new Date(startedAt.getTime() + ESTIMATE_SAFETY_FACTOR * estimatedSeconds * 1000),
     );
-    expect(deadline.getTime()).toBeGreaterThan(startedAt.getTime() + timeoutMs);
+    expect(deadline.getTime()).toBeGreaterThan(startedAt.getTime() + ceilingMs);
+  });
+});
+
+describe("isProcessingDead", () => {
+  const stallMs = env.TOPO_REAPER_PROGRESS_STALL_MS;
+  const ceilingMs = env.TOPO_REAPER_PROCESSING_TIMEOUT_MS;
+  const now = new Date("2026-06-05T12:00:00.000Z");
+
+  it("Sunnyside: a 4 h render with fresh progress survives", () => {
+    const startedAt = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+    const job = {
+      startedAt,
+      updatedAt: startedAt,
+      lastProgressAt: new Date(now.getTime() - 60_000), // 1 min ago
+      estimatedSeconds: Math.round(12 * 8.5) * 60,
+    };
+    expect(isProcessingDead(job, now, stallMs, ceilingMs)).toBe(false);
   });
 
-  it("a 21-tile job already exceeds the flat 3h cutoff (the ARCH-001 case)", () => {
-    const estimatedSeconds = Math.round(21 * 8.5) * 60; // 10 740 s ≈ 2.98 h
-    const deadline = processingDeadline(
-      { startedAt, updatedAt, estimatedSeconds },
-      timeoutMs,
-    );
-    // 2× estimate ≈ 5.97 h > 3 h floor.
-    expect(deadline.getTime()).toBeGreaterThan(startedAt.getTime() + timeoutMs);
+  it("a hung job (no progress for 25 min) is dead", () => {
+    const startedAt = new Date(now.getTime() - 60 * 60 * 1000);
+    const job = {
+      startedAt,
+      updatedAt: startedAt,
+      lastProgressAt: new Date(now.getTime() - 25 * 60 * 1000),
+      estimatedSeconds: null,
+    };
+    expect(isProcessingDead(job, now, stallMs, ceilingMs)).toBe(true);
   });
 
-  it("falls back to updatedAt when startedAt is null", () => {
-    const deadline = processingDeadline(
-      { startedAt: null, updatedAt, estimatedSeconds: null },
-      timeoutMs,
-    );
-    expect(deadline).toEqual(new Date(updatedAt.getTime() + timeoutMs));
+  it("a job stuck pre-render past the stall window (no heartbeat yet) is dead", () => {
+    const startedAt = new Date(now.getTime() - 30 * 60 * 1000); // 30 min, no progress
+    const job = {
+      startedAt,
+      updatedAt: startedAt,
+      lastProgressAt: null,
+      estimatedSeconds: null,
+    };
+    expect(isProcessingDead(job, now, stallMs, ceilingMs)).toBe(true);
+  });
+
+  it("eternal progress past the absolute ceiling is dead", () => {
+    const startedAt = new Date(now.getTime() - 7 * 60 * 60 * 1000); // 7 h > 6 h ceiling
+    const job = {
+      startedAt,
+      updatedAt: startedAt,
+      lastProgressAt: new Date(now.getTime() - 60_000), // fresh, but ceiling wins
+      estimatedSeconds: null,
+    };
+    expect(isProcessingDead(job, now, stallMs, ceilingMs)).toBe(true);
   });
 });
 
@@ -175,20 +227,23 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
     );
   });
 
-  it("reaps only processing jobs past their per-job deadline, status-guarded", async () => {
-    const flatMs = env.TOPO_REAPER_PROCESSING_TIMEOUT_MS;
+  it("reaps stalled processing jobs but spares ones still advancing, status-guarded", async () => {
+    const stallMs = env.TOPO_REAPER_PROGRESS_STALL_MS;
+    // No heartbeat for well past the stall window → stalled → reaped.
     const overdue = {
       id: "job-overdue",
-      startedAt: new Date(NOW.getTime() - flatMs - 60_000),
-      updatedAt: new Date(NOW.getTime() - flatMs - 60_000),
+      startedAt: new Date(NOW.getTime() - stallMs - 60_000),
+      updatedAt: new Date(NOW.getTime() - stallMs - 60_000),
+      lastProgressAt: new Date(NOW.getTime() - stallMs - 60_000),
       estimatedSeconds: null,
       ecsTaskArn: null,
     };
-    // Past the flat timeout but inside 2× its 100-tile estimate → must survive.
+    // Running for hours but progress one minute ago → alive → must survive.
     const longButAlive = {
       id: "job-large",
-      startedAt: new Date(NOW.getTime() - flatMs - 60_000),
-      updatedAt: new Date(NOW.getTime() - flatMs - 60_000),
+      startedAt: new Date(NOW.getTime() - 4 * 60 * 60 * 1000),
+      updatedAt: new Date(NOW.getTime() - 60_000),
+      lastProgressAt: new Date(NOW.getTime() - 60_000),
       estimatedSeconds: Math.round(100 * 8.5) * 60,
       ecsTaskArn: "arn:task/large",
     };
