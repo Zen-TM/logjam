@@ -188,6 +188,19 @@ model TopoJob {
   // Vector layers (contours/features): cogKey null, pmtilesKey set.
   // Composite + downloadable formats are produced on-demand by the export worker.
   outputBytes   BigInt?  @map("output_bytes")
+  // Runtime instrumentation (set by the worker on completion from the
+  // pipeline's metrics file). Feeds the adaptive runtime estimator — aggregate
+  // timing/tile counts only, never canyon data.
+  outputTileCount Int?   @map("output_tile_count")
+  pipelineMetrics Json?  @map("pipeline_metrics")
+  // pipelineMetrics shape: { schemaVersion, wallSeconds, phases: { key: seconds }, inputTileCount, outputTileCount, zoomMin, zoomMax }
+  // Render progress heartbeat (written by the worker's heartbeat thread while
+  // processing). lastProgressAt is the reaper's staleness anchor: a job is
+  // reaped only when progress stalls (or an absolute ceiling is hit), so a
+  // slow-but-healthy job that keeps advancing is never force-failed.
+  renderTilesDone  Int?     @map("render_tiles_done")
+  renderTilesTotal Int?     @map("render_tiles_total")
+  lastProgressAt   DateTime? @map("last_progress_at")
   errorMessage  String?  @map("error_message")
   // Set when the worker transitions the job to "processing". Distinguishes a
   // stale-stuck job from one that simply hasn't been picked up yet, so the
