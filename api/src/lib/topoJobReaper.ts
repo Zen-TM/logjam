@@ -33,11 +33,12 @@ import { logger } from "./logger";
 //
 // Sweeps:
 //   topo_jobs · pending          — flat timeout, anchored on updatedAt.
-//   topo_jobs · processing       — per-job deadline (processingDeadline below):
-//       the flat timeout is only a floor; jobs with an estimate get
-//       ESTIMATE_SAFETY_FACTOR × estimatedSeconds, so a legitimately long
-//       render (the API estimates ~8.5 min/tile — ~14 h at the default
-//       100-tile quota) is never reaped mid-run (ARCH-001).
+//   topo_jobs · processing       — stalled OR past ceiling (isProcessingDead
+//       below): the worker heartbeats lastProgressAt through the long PDAL +
+//       render phases, so a job is reaped only when progress stalls for
+//       TOPO_REAPER_PROGRESS_STALL_MS, or it blows the absolute ceiling
+//       (max(timeout, 2× estimate)). A slow-but-advancing render — the
+//       multi-hour large-job case — is never reaped mid-run (ARCH-001).
 //   topo_export_jobs · queued    — flat timeout, anchored on createdAt.
 //   topo_export_jobs · running   — flat timeout, anchored on startedAt
 //       (createdAt fallback for rows that predate the startedAt column).
@@ -68,29 +69,70 @@ const REAPER_GEO_PDF_MESSAGE =
 // at its source (routes/topoJobs.ts), not here.
 export const ESTIMATE_SAFETY_FACTOR = 2;
 
+// A `processing` topo job is reaped when it STALLS (no render/PDAL progress for
+// a while) OR blows an absolute ceiling. The stall check is the primary signal:
+// the worker heartbeats `lastProgressAt` through the long PDAL + render phases,
+// so a slow-but-advancing job (e.g. a multi-hour large render) is never killed,
+// while a genuinely hung job dies promptly. The ceiling is a backstop for a job
+// that keeps emitting progress but never finishes.
+
 /**
- * Deadline after which a `processing` topo job is considered dead (pure —
- * prime unit-test target). Anchored on startedAt (written by the worker when
- * it begins), falling back to updatedAt for rows that predate the column.
- * The per-job budget is the flat processing timeout or twice the API's own
- * estimate, whichever is larger.
+ * Stall deadline (pure — prime unit-test target): the job is stale if no
+ * progress has been reported for `stallMs`. Anchored on lastProgressAt (the
+ * heartbeat), falling back to startedAt before the first heartbeat tick, then
+ * updatedAt for rows that predate the columns.
  */
-export function processingDeadline(
+export function progressStallDeadline(
+  job: {
+    startedAt: Date | null;
+    updatedAt: Date;
+    lastProgressAt: Date | null;
+  },
+  stallMs: number,
+): Date {
+  const anchor = job.lastProgressAt ?? job.startedAt ?? job.updatedAt;
+  return new Date(anchor.getTime() + stallMs);
+}
+
+/**
+ * Absolute ceiling (pure): catches a job that keeps emitting progress but never
+ * finishes (pathological hang/loop). Anchored on startedAt. The budget is the
+ * ceiling timeout or twice the API's own estimate, whichever is larger.
+ */
+export function absoluteProcessingDeadline(
   job: {
     startedAt: Date | null;
     updatedAt: Date;
     estimatedSeconds: number | null;
   },
-  processingTimeoutMs: number,
+  ceilingMs: number,
 ): Date {
   const anchor = job.startedAt ?? job.updatedAt;
   const budgetMs = Math.max(
-    processingTimeoutMs,
+    ceilingMs,
     job.estimatedSeconds !== null
       ? ESTIMATE_SAFETY_FACTOR * job.estimatedSeconds * 1000
       : 0,
   );
   return new Date(anchor.getTime() + budgetMs);
+}
+
+/** True when a `processing` job should be force-failed: stalled OR past ceiling. */
+export function isProcessingDead(
+  job: {
+    startedAt: Date | null;
+    updatedAt: Date;
+    lastProgressAt: Date | null;
+    estimatedSeconds: number | null;
+  },
+  now: Date,
+  stallMs: number,
+  ceilingMs: number,
+): boolean {
+  return (
+    progressStallDeadline(job, stallMs).getTime() < now.getTime() ||
+    absoluteProcessingDeadline(job, ceilingMs).getTime() < now.getTime()
+  );
 }
 
 /**
@@ -137,19 +179,27 @@ export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number>
   });
   reaped += pendingResult.count;
 
-  // topo_jobs · processing: per-job deadline (see processingDeadline).
+  // topo_jobs · processing: reaped only when stalled or past the absolute
+  // ceiling (see isProcessingDead). lastProgressAt is the heartbeat anchor, so a
+  // slow-but-advancing job is never force-failed.
   const processingJobs = await prisma.topoJob.findMany({
     where: { status: "processing" },
     select: {
       id: true,
       startedAt: true,
       updatedAt: true,
+      lastProgressAt: true,
       estimatedSeconds: true,
       ecsTaskArn: true,
     },
   });
-  const overdueJobs = processingJobs.filter(
-    (job) => processingDeadline(job, env.TOPO_REAPER_PROCESSING_TIMEOUT_MS) < now,
+  const overdueJobs = processingJobs.filter((job) =>
+    isProcessingDead(
+      job,
+      now,
+      env.TOPO_REAPER_PROGRESS_STALL_MS,
+      env.TOPO_REAPER_PROCESSING_TIMEOUT_MS,
+    ),
   );
   if (overdueJobs.length > 0) {
     const result = await prisma.topoJob.updateMany({

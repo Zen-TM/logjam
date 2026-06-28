@@ -33,6 +33,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -250,6 +251,62 @@ def update_status(conn, job_id: str, status: str, storage_delta_bytes: int = 0,
     return updated
 
 
+def _heartbeat_loop(job_id: str, progress_path: Path, stop_event: "threading.Event",
+                    interval: float = 30.0):
+    """Poll the pipeline's progress file and refresh the job's render-progress
+    columns while it runs, so the reaper can tell a slow-but-alive job from a
+    truly stalled one.
+
+    Runs in a daemon thread with its OWN psycopg2 connection (connections are
+    not safe to share across threads). Every write is status-guarded
+    (expected_status="processing"): it's a no-op self-write that touches only
+    the progress columns, and matches 0 rows once the job is reaped/completed —
+    so it can never resurrect a terminal job (ARCH-001). Fully best-effort: any
+    DB/file error is logged and swallowed; the thread never raises into the job,
+    whose success/failure stays owned by the main thread's subprocess result.
+    """
+    conn = None
+    try:
+        conn = db_connect()
+    except Exception as e:
+        log.warning(f"Heartbeat disabled (no DB connection): {e}")
+        return
+    last_done = None
+    # stop_event.wait returns True when set → exit promptly on subprocess end.
+    while not stop_event.wait(interval):
+        try:
+            if not progress_path.exists():
+                continue
+            payload = json.loads(progress_path.read_text())
+            done = payload.get("done")
+            total = payload.get("total")
+            if done is None or done == last_done:
+                continue
+            last_done = done
+            update_status(
+                conn, job_id, "processing",
+                expected_status="processing",
+                render_tiles_done=done,
+                render_tiles_total=total,
+                last_progress_at=datetime.now(timezone.utc),
+            )
+        except Exception as e:
+            log.warning(f"Heartbeat tick failed (non-fatal): {e}")
+            try:
+                conn.rollback()  # psycopg2 aborts the txn on error; reset it.
+            except Exception:
+                conn = None
+                try:
+                    conn = db_connect()
+                except Exception:
+                    return  # give up heartbeating; the job continues unaffected
+    try:
+        if conn is not None:
+            conn.close()
+    except Exception:
+        pass
+
+
 def delete_s3_prefix_best_effort(prefix: str):
     """Best-effort delete of every object under prefix (reaped-job self-clean).
     Never raises — the objects are unreferenced either way and the account-
@@ -436,12 +493,14 @@ def run_tippecanoe_features(geojson_dir: str, out_dir: str) -> Path | None:
 
 # ── Core processing ───────────────────────────────────────────────────────────
 
-def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
+def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int, Optional[dict]]:
     """
     Download ZIP, run topo pipeline, convert to PMTiles, upload all to S3.
-    Returns (output_keys, footprint_local, osm_failed).
+    Returns (output_keys, footprint_local, osm_failed, total_output_bytes,
+    pipeline_metrics).
     osm_failed is True when the Overpass fetch did not produce a GeoJSON
-    (so the features layer will be empty/missing).
+    (so the features layer will be empty/missing). pipeline_metrics is the
+    parsed runtime metrics dict (or None if absent/unreadable).
     """
     s3_input_key = job["s3_input_key"]
     job_id       = job["id"]
@@ -482,15 +541,45 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
     settings_path = Path(tmp) / "settings.json"
     with open(settings_path, "w", encoding="utf-8") as f:
         json.dump(merged_settings, f)
-    cmd.extend(["--settings-json", str(settings_path)])
+    metrics_path = Path(tmp) / "metrics.json"
+    progress_path = Path(tmp) / "progress.json"
+    cmd.extend([
+        "--settings-json", str(settings_path),
+        "--metrics-json", str(metrics_path),
+        "--progress-file", str(progress_path),
+    ])
     log.info(f"Merged render settings written to {settings_path}")
     log.info("Running pipeline …")
-    result = subprocess.run(cmd)
+
+    # Heartbeat thread refreshes the job's progress columns from progress.json
+    # while the pipeline runs (see _heartbeat_loop). The main thread keeps the
+    # blocking subprocess.run; the thread is signalled to stop when it returns.
+    stop_heartbeat = threading.Event()
+    heartbeat = threading.Thread(
+        target=_heartbeat_loop,
+        args=(job["id"], progress_path, stop_heartbeat),
+        daemon=True,
+    )
+    heartbeat.start()
+    try:
+        result = subprocess.run(cmd)
+    finally:
+        stop_heartbeat.set()
+        heartbeat.join(timeout=5)
     if result.returncode != 0:
         raise RuntimeError(
             f"pipeline.py exited with code {result.returncode} "
             f"({'OOM kill' if result.returncode == -9 else 'non-zero exit'})"
         )
+
+    # Best-effort: read the pipeline's runtime metrics file. A missing/partial
+    # file just means no instrumentation for this job — never fail the job.
+    pipeline_metrics = None
+    try:
+        if metrics_path.exists():
+            pipeline_metrics = json.loads(metrics_path.read_text())
+    except Exception as e:
+        log.warning(f"Failed to read metrics JSON (non-fatal): {e}")
 
     footprint_local = geojson_dir / "footprint.geojson"
     if not (geojson_dir / "osm_features.geojson").exists():
@@ -626,7 +715,7 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int]:
             "pmtilesKey": pmtiles_key,
         })
 
-    return output_keys, footprint_local, osm_failed, total_output_bytes
+    return output_keys, footprint_local, osm_failed, total_output_bytes, pipeline_metrics
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -652,7 +741,7 @@ def main():
 
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            output_keys, footprint_local, osm_failed, total_output_bytes = process_job(job, tmp)
+            output_keys, footprint_local, osm_failed, total_output_bytes, pipeline_metrics = process_job(job, tmp)
 
             extra: dict = {"s3_output_keys": output_keys, "output_bytes": total_output_bytes}
             if footprint_local and footprint_local.exists():
@@ -661,6 +750,12 @@ def main():
                 features = fp_fc.get("features", [])
                 if features:
                     extra["footprint"] = features[0]["geometry"]
+            # Persist runtime instrumentation (dict → JSONB by update_status).
+            if pipeline_metrics:
+                extra["pipeline_metrics"] = pipeline_metrics
+                output_tile_count = pipeline_metrics.get("outputTileCount")
+                if isinstance(output_tile_count, int):
+                    extra["output_tile_count"] = output_tile_count
 
         try:
             s3.delete_object(Bucket=BUCKET, Key=job["s3_input_key"])

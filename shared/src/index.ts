@@ -14,3 +14,5 @@ export * from "./topoExport.js";
 export * from "./ozUltimate.js";
 export * from "./media.js";
 export * from "./consent.js";
+export * from "./stats.js";
+export * from "./topoRuntimeEstimate.js";

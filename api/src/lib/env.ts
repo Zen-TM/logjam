@@ -75,11 +75,20 @@ const baseSchema = z.object({
   // TOPO_REAPER_INTERVAL_MS to 0 to disable the sweep entirely.
   TOPO_REAPER_INTERVAL_MS: z.coerce.number().int().nonnegative().default(300_000), // 5 min
   TOPO_REAPER_PENDING_TIMEOUT_MS: z.coerce.number().int().positive().default(900_000), // 15 min
-  // Floor for the per-job processing deadline: the reaper allows
-  // max(this, ESTIMATE_SAFETY_FACTOR × estimatedSeconds) per job, so a
-  // legitimately long render (the API estimates ~8.5 min/tile) is never
-  // reaped mid-run (ARCH-001).
-  TOPO_REAPER_PROCESSING_TIMEOUT_MS: z.coerce.number().int().positive().default(10_800_000), // 3 h
+  // A processing job is reaped when its render/PDAL progress STALLS for this
+  // long (the worker heartbeats lastProgressAt through the long phases), so a
+  // slow-but-advancing job is never force-failed (ARCH-001).
+  TOPO_REAPER_PROGRESS_STALL_MS: z.coerce.number().int().positive().default(1_200_000), // 20 min
+  // Absolute ceiling backstop for the per-job processing deadline: the reaper
+  // allows max(this, ESTIMATE_SAFETY_FACTOR × estimatedSeconds) per job even if
+  // it keeps emitting progress, to catch a pathological never-finishing job.
+  TOPO_REAPER_PROCESSING_TIMEOUT_MS: z.coerce.number().int().positive().default(21_600_000), // 6 h
+  // Adaptive runtime estimator (routes/topoJobs.ts): the per-input-tile rate is
+  // fitted from recent completed jobs once at least MIN_SAMPLES exist; until
+  // then it falls back to DEFAULT_SECONDS_PER_TILE (= the old 8.5 min/tile
+  // constant — conservative, self-corrects down as real jobs accumulate).
+  TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE: z.coerce.number().positive().default(510),
+  TOPO_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
   // TopoExportJob sweeps (ARCH-002): queued rows older than the QUEUED timeout
   // (task never placed/started) and running rows older than the RUNNING
   // timeout (worker SIGKILLed before its except path ran) are force-failed.
