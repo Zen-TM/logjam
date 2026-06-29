@@ -61,15 +61,17 @@ describe("canyons routes (fake auth = alice)", () => {
     expect(res.status).toBe(404);
   });
 
-  it("DELETE /canyons/:id cascades trip logs then removes the canyon", async () => {
-    const id = await createCanyon("CH-003 cascade test");
+  it("DELETE /canyons/:id detaches trip logs (keeps them) then removes the canyon", async () => {
+    const canyonName = "CH-003 detach test";
+    const id = await createCanyon(canyonName);
 
-    // Attach a trip log so we exercise the cascade delete path.
+    // Attach a trip log so we exercise the detach path.
     const tripRes = await request(API_URL)
       .post(`/canyons/${id}/trips`)
       .set(AUTH)
-      .send({ date: "2024-05-01", notes: "cascade trip" });
+      .send({ date: "2024-05-01", notes: "detach trip" });
     expect(tripRes.status).toBe(201);
+    const tripId = tripRes.body.id as string;
 
     const delRes = await request(API_URL).delete(`/canyons/${id}`).set(AUTH);
     expect(delRes.status).toBe(204);
@@ -78,11 +80,27 @@ describe("canyons routes (fake auth = alice)", () => {
     const afterRes = await request(API_URL).get(`/canyons/${id}`).set(AUTH);
     expect(afterRes.status).toBe(404);
 
-    // Its trip logs are gone too (cascade) — the trips list 404s on the canyon.
+    // The canyon-scoped trips list 404s because the canyon no longer exists.
     const tripsAfter = await request(API_URL)
       .get(`/canyons/${id}/trips`)
       .set(AUTH);
     expect([403, 404]).toContain(tripsAfter.status);
+
+    // But the trip itself SURVIVES, detached: it appears in the global trip
+    // list with canyonId null and the deleted canyon's name preserved on
+    // displayName so it still carries a label.
+    const globalRes = await request(API_URL).get("/trips").set(AUTH);
+    expect(globalRes.status).toBe(200);
+    const survivor = (globalRes.body as Array<Record<string, unknown>>).find(
+      (t) => t.id === tripId,
+    );
+    expect(survivor).toBeDefined();
+    expect(survivor!.canyonId).toBeNull();
+    expect(survivor!.canyon).toBeNull();
+    expect(survivor!.displayName).toBe(canyonName);
+
+    // Clean up the orphaned trip (no canyon to cascade it away).
+    await request(API_URL).delete(`/trips/${tripId}`).set(AUTH);
   });
 
   it("POST /canyons/:id/copy forks an accessible canyon under the caller", async () => {
