@@ -14,7 +14,7 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { userPatchLimiter } from "../middleware/rateLimit";
 import { cognitoIdp } from "../services/awsClients";
-import { getWeeklyTileUsage } from "../lib/tileQuota";
+import { getMonthlyTileUsage } from "../lib/tileQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
@@ -230,12 +230,12 @@ router.get(
       }
     }
 
-    const tileUsage = await getWeeklyTileUsage(user.id, user.weeklyTileQuota);
+    const tileUsage = await getMonthlyTileUsage(user.id, user.monthlyTileQuota);
     res.json({
       ...serializeUserForResponse(user),
-      weeklyTileQuota: tileUsage.quota,
-      weeklyTileUsage: tileUsage.used,
-      weeklyTileResetAt: tileUsage.resetAt,
+      monthlyTileQuota: tileUsage.quota,
+      monthlyTileUsage: tileUsage.used,
+      monthlyTileResetAt: tileUsage.resetAt,
     });
   },
 );

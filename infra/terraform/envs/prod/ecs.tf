@@ -163,11 +163,11 @@ resource "aws_ecs_task_definition" "topo_worker" {
     systemControls = []
     volumesFrom    = []
   }])
-  cpu                      = "4096"
+  cpu                      = "8192"
   enable_fault_injection   = false
   execution_role_arn       = "arn:aws:iam::620853681701:role/ecsTaskExecutionRole"
   family                   = "logjam-topo-worker"
-  memory                   = "8192"
+  memory                   = "16384"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   task_role_arn            = "arn:aws:iam::620853681701:role/logjam-topo-worker-role"

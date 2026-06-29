@@ -34,7 +34,7 @@ const env = getEnv();
 const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
 
 // Input-ZIP size caps (zip-bomb / disk-DoS guard for the Fargate worker).
-// A legitimate ELVIS export is bounded by the weekly tile quota (default 100
+// A legitimate ELVIS export is bounded by the monthly tile quota (default 40
 // tiles, ~17 MB compressed LAZ + ~5 MB DEM each). These caps sit well above
 // any realistic export while rejecting pathological archives before the worker
 // is launched. The uncompressed cap is the real bomb guard; the compressed cap
@@ -242,7 +242,7 @@ router.post(
 
     // Authoritative quota check against server-counted tiles from the actual
     // ZIP, serialised per user (ARCH-009): the user-row lock prevents two
-    // concurrent /start calls from both reading the same weekly aggregate and
+    // concurrent /start calls from both reading the same monthly aggregate and
     // both passing. The job is still "uploading" so it won't appear in the
     // aggregate. RunTask stays outside the transaction (no AWS calls inside
     // DB transactions); the earlier checks above remain advisory pre-checks.
