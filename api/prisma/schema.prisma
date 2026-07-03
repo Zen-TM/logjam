@@ -97,7 +97,7 @@ model TripLog {
   createdAt    DateTime @default(now()) @map("created_at")
   importKey     String?  @map("import_key")
   importBatchId String?  @map("import_batch_id")
-  canyon       Canyon?  @relation(fields: [canyonId], references: [id], onDelete: Cascade)
+  canyon       Canyon?  @relation(fields: [canyonId], references: [id], onDelete: SetNull)
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([canyonId])

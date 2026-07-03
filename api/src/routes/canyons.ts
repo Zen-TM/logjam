@@ -363,20 +363,8 @@ router.delete(
 
     const id = getParam(req.params.id);
 
-    const tripIds = (
-      await prisma.tripLog.findMany({
-        where: { canyonId: id },
-        select: { id: true },
-      })
-    ).map((t) => t.id);
-
     const media = await prisma.media.findMany({
-      where: {
-        OR: [
-          { linkedType: "tripLog", linkedId: { in: tripIds } },
-          { linkedType: "canyon", linkedId: id },
-        ],
-      },
+      where: { linkedType: "canyon", linkedId: id },
       select: { s3KeyDisplay: true, s3KeyThumbnail: true, fileSizeBytes: true },
     });
 
@@ -390,19 +378,24 @@ router.delete(
     const totalBytes = media.reduce((sum, m) => sum + (m.fileSizeBytes ?? 0n), 0n);
     await deleteS3Keys(MEDIA_BUCKET, s3Keys);
 
-    // Trip logs, canyon shares and (since the cascade migration) canyon-linked
-    // children all FK-cascade on canyon delete, but media has no DB FK on its
-    // polymorphic linkedId — keep its deleteMany explicit. The quota decrement
-    // shares the transaction (ARCH-004) so a crash after the row deletes can't
-    // leave the quota over-counted.
+    // Trip logs DETACH on canyon delete (canyonId → null via the SetNull FK), not
+    // cascade — a user removing a canyon keeps their personal logbook entries and
+    // their per-trip media. Canyon shares and any other canyon-linked children still
+    // FK-cascade; canyon-level media has no DB FK on its polymorphic linkedId, so its
+    // deleteMany stays explicit. The quota decrement shares the transaction (ARCH-004)
+    // so a crash after the row deletes can't leave the quota over-counted (only
+    // canyon media frees quota now — per-trip media survives with its trip).
     await prisma.$transaction(async (tx) => {
-      await tx.media.deleteMany({
-        where: { linkedType: "tripLog", linkedId: { in: tripIds } },
-      });
       await tx.media.deleteMany({
         where: { linkedType: "canyon", linkedId: id },
       });
-      await tx.tripLog.deleteMany({ where: { canyonId: id } });
+      // Preserve the (about-to-be-deleted) canyon's name on its orphaned trips so
+      // they still carry a label after canyonId is nulled by the SetNull FK. Only
+      // fill blanks so an explicit trip displayName is never overwritten.
+      await tx.tripLog.updateMany({
+        where: { canyonId: id, displayName: null },
+        data: { displayName: canyon.name },
+      });
       await tx.canyonShare.deleteMany({ where: { canyonId: id } });
       // Purge canyon_shared notifications held by OTHER users (the share
       // recipients) that reference this canyon — not just the owner's own rows
