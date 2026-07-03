@@ -1,11 +1,11 @@
 import prisma from "../services/prisma";
-import { currentWeekStart, nextWeekReset } from "@logjam/shared";
+import { currentMonthStart, nextMonthReset } from "@logjam/shared";
 import { AppError } from "../middleware/errorHandler";
 import type { DbClient } from "./storageQuota";
 
-export async function getWeeklyTileUsage(
+export async function getMonthlyTileUsage(
   userId: string,
-  weeklyTileQuota: number,
+  monthlyTileQuota: number,
   db: DbClient = prisma,
 ) {
   const result = await db.topoJob.aggregate({
@@ -13,18 +13,18 @@ export async function getWeeklyTileUsage(
     where: {
       userId,
       status: { notIn: ["uploading", "failed"] },
-      createdAt: { gte: currentWeekStart() },
+      createdAt: { gte: currentMonthStart() },
     },
   });
   return {
     used: result._sum.tileCount ?? 0,
-    quota: weeklyTileQuota,
-    resetAt: nextWeekReset().toISOString(),
+    quota: monthlyTileQuota,
+    resetAt: nextMonthReset().toISOString(),
   };
 }
 
 /**
- * Throws 429 when submitting `tileCount` would exceed the weekly quota.
+ * Throws 429 when submitting `tileCount` would exceed the monthly quota.
  *
  * Read-then-throw is racy on its own: the authoritative call in /start runs
  * inside a transaction that locks the user row (`SELECT … FOR UPDATE`) and
@@ -33,13 +33,13 @@ export async function getWeeklyTileUsage(
  * semantics, which is all they need.
  */
 export async function assertCanSubmit(
-  user: { id: string; weeklyTileQuota: number },
+  user: { id: string; monthlyTileQuota: number },
   tileCount: number | null | undefined,
   db: DbClient = prisma,
 ) {
   if (!tileCount) return;
-  const { used, quota, resetAt } = await getWeeklyTileUsage(user.id, user.weeklyTileQuota, db);
+  const { used, quota, resetAt } = await getMonthlyTileUsage(user.id, user.monthlyTileQuota, db);
   if (used + tileCount > quota) {
-    throw new AppError(429, "Weekly tile quota exceeded", { used, quota, resetAt });
+    throw new AppError(429, "Monthly tile quota exceeded", { used, quota, resetAt });
   }
 }

@@ -492,9 +492,9 @@ export default function TopoDialog({
     if (!open) return;
     fetchCurrentUser()
       .then((u) => {
-        setTileUsed(u.weeklyTileUsage);
-        setTileQuota(u.weeklyTileQuota);
-        setTileResetAt(u.weeklyTileResetAt);
+        setTileUsed(u.monthlyTileUsage);
+        setTileQuota(u.monthlyTileQuota);
+        setTileResetAt(u.monthlyTileResetAt);
         setStorageUsed(u.storageUsedBytes);
         setStorageQuota(u.storageQuotaBytes);
       })
@@ -596,10 +596,10 @@ export default function TopoDialog({
       if (tileUsed + stats.tileCount > tileQuota) {
         const remaining = Math.max(0, tileQuota - tileUsed);
         const resetStr = tileResetAt
-          ? ` Quota resets ${new Date(new Date(tileResetAt).getTime() + 86400000).toLocaleDateString("en-AU", { weekday: "short"})}.`
+          ? ` Quota resets ${new Date(tileResetAt).toLocaleDateString("en-AU", { month: "short", day: "numeric" })}.`
           : "";
         setError(
-          `Weekly tile quota exceeded. This job needs ${stats.tileCount} tiles but only ${remaining} remain.${resetStr}`,
+          `Monthly tile quota exceeded. This job needs ${stats.tileCount} tiles but only ${remaining} remain.${resetStr}`,
         );
         return;
       }
@@ -854,7 +854,7 @@ export default function TopoDialog({
                   mt: -0.5,
                 }}
               >
-                This area may exceed your weekly tile quota — try a smaller area.
+                This area may exceed your monthly tile quota — try a smaller area.
               </Typography>
             )}
 
@@ -1059,7 +1059,7 @@ export default function TopoDialog({
                   : null,
                 ["Size", formatBytes(stats.uncompressedBytes)],
                 tileUsed !== null && tileQuota !== null
-                  ? ["Weekly quota", `${tileUsed + (stats.tileCount || 0)} / ${tileQuota} after this job`]
+                  ? ["Monthly quota", `${tileUsed + (stats.tileCount || 0)} / ${tileQuota} after this job`]
                   : null,
               ] as ([string, string] | null)[]
             )

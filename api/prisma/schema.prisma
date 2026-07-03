@@ -16,7 +16,7 @@ model User {
   vectorStyle         Json?          @map("vector_style")
   storageUsedBytes    BigInt         @default(0) @map("storage_used_bytes")
   storageQuotaBytes   BigInt         @default(5368709120) @map("storage_quota_bytes")
-  weeklyTileQuota     Int            @default(100) @map("weekly_tile_quota")
+  monthlyTileQuota    Int            @default(40) @map("monthly_tile_quota")
   consentedAt         DateTime?      @map("consented_at")
   consentVersion      String?        @map("consent_version")
   createdAt           DateTime       @default(now()) @map("created_at")

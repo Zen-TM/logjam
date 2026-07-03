@@ -225,7 +225,7 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
         </>
       )}
 
-      <span className={classes.sectionLabel} title="Weekly quota for LiDAR map tiles served to the browser. Resets on the date shown.">LiDAR Processing</span>
+      <span className={classes.sectionLabel} title="Monthly quota for LiDAR map tiles served to the browser. Resets on the date shown.">LiDAR Processing</span>
       <div className={classes.divider} />
       {!currentUser ? (
         <p className={classes.state}>Loading...</p>
@@ -233,12 +233,12 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
         <>
           <progress
             className={classes.storageBar}
-            value={currentUser.weeklyTileUsage}
-            max={currentUser.weeklyTileQuota}
+            value={currentUser.monthlyTileUsage}
+            max={currentUser.monthlyTileQuota}
           />
           <span className={classes.storageLabel}>
-            {currentUser.weeklyTileUsage} / {currentUser.weeklyTileQuota} tiles this week
-            {currentUser.weeklyTileResetAt ? ` · resets ${new Date(currentUser.weeklyTileResetAt).toLocaleDateString("en-AU", { weekday: "short", month: "short", day: "numeric" })}` : ""}
+            {currentUser.monthlyTileUsage} / {currentUser.monthlyTileQuota} tiles this month
+            {currentUser.monthlyTileResetAt ? ` · resets ${new Date(currentUser.monthlyTileResetAt).toLocaleDateString("en-AU", { month: "short", day: "numeric" })}` : ""}
           </span>
         </>
       )}
