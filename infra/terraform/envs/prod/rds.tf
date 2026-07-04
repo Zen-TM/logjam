@@ -40,21 +40,25 @@ resource "aws_db_instance" "main" {
   license_model                       = "postgresql-license"
   maintenance_window                  = "thu:17:37-thu:18:07"
   manage_master_user_password         = true
-  max_allocated_storage               = 0
-  monitoring_interval                 = 0
-  multi_az                            = false
-  network_type                        = "IPV4"
-  option_group_name                   = "default:postgres-16"
-  parameter_group_name                = aws_db_parameter_group.pgaudit.name
-  performance_insights_enabled        = false
-  port                                = 5432
-  publicly_accessible                 = false
-  skip_final_snapshot                 = true
-  storage_encrypted                   = true
-  kms_key_id                          = "arn:aws:kms:ap-southeast-2:620853681701:key/abe78b2a-98e6-40a6-bafc-b8b4c2e7d577"
-  storage_type                        = "gp2"
-  username                            = "logjam_admin"
-  vpc_security_group_ids              = ["sg-06cc0aaa310968aa4"]
+  # Storage autoscaling: grow allocated_storage (20 GB) up to 100 GB on demand.
+  # Costs nothing until it actually grows — billed on provisioned GB, not the cap
+  # — and removes the only hard-outage risk in the DB tier (gp2, no cushion).
+  # RDS autoscaling only grows, never shrinks.
+  max_allocated_storage        = 100
+  monitoring_interval          = 0
+  multi_az                     = false
+  network_type                 = "IPV4"
+  option_group_name            = "default:postgres-16"
+  parameter_group_name         = aws_db_parameter_group.pgaudit.name
+  performance_insights_enabled = false
+  port                         = 5432
+  publicly_accessible          = false
+  skip_final_snapshot          = true
+  storage_encrypted            = true
+  kms_key_id                   = "arn:aws:kms:ap-southeast-2:620853681701:key/abe78b2a-98e6-40a6-bafc-b8b4c2e7d577"
+  storage_type                 = "gp2"
+  username                     = "logjam_admin"
+  vpc_security_group_ids       = ["sg-06cc0aaa310968aa4"]
 
   lifecycle {
     prevent_destroy = true
