@@ -174,14 +174,17 @@ router.post(
       validRows.push({ rowIndex: i, data: row.data, importKey, resolution: row.resolution });
     }
 
-    // Ownership-check all merge target canyons before writes.
+    // Look up merge target canyons, scoped to the caller's own canyons. A target
+    // owned by someone else simply isn't found — indistinguishable from a
+    // nonexistent id — so the response can't confirm a canyon ID exists to a
+    // non-owner (no 403-vs-not-found existence oracle).
     const mergeTargetIds = validRows
       .filter((r) => r.resolution.kind === "merge")
       .map((r) => (r.resolution as { kind: "merge"; canyonId: string }).canyonId);
 
     const mergeTargetLookup = mergeTargetIds.length > 0
       ? await prisma.canyon.findMany({
-          where: { id: { in: mergeTargetIds } },
+          where: { id: { in: mergeTargetIds }, ownerId: user.id },
           select: {
             id: true, ownerId: true, importKey: true,
             name: true, latitude: true, longitude: true, altNames: true,
@@ -193,7 +196,9 @@ router.post(
       : [];
     const mergeTargetById = new Map(mergeTargetLookup.map((c) => [c.id, c]));
 
-    // Validate merge targets.
+    // Validate merge targets. A target that doesn't exist OR isn't owned by the
+    // caller is absent from the owner-scoped lookup above and rejected here as a
+    // per-row error — the two cases are deliberately indistinguishable.
     const rowsAfterTargetCheck: ValidatedRow[] = [];
     for (const row of validRows) {
       if (row.resolution.kind === "merge") {
@@ -202,9 +207,6 @@ router.post(
         if (!target) {
           errors.push({ rowIndex: row.rowIndex, message: `Row ${row.rowIndex}: target canyon not found` });
           continue;
-        }
-        if (target.ownerId !== user.id) {
-          throw new AppError(403, "Forbidden");
         }
       }
       rowsAfterTargetCheck.push(row);

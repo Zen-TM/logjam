@@ -19,6 +19,7 @@ import {
 import { deleteS3Keys, deleteS3KeysBestEffort } from "../lib/s3Cleanup";
 import { validateUploadSizes } from "../lib/mediaUploadValidation";
 import { toMediaItem } from "../lib/mediaPresign";
+import { requireCanyonOwnerAccess } from "../lib/canyonAccess";
 import {
   mediaCategory,
   categoryHasThumbnail,
@@ -45,19 +46,25 @@ async function assertOwnsTarget(
   if (linkedType === "canyon") {
     const canyon = await prisma.canyon.findUnique({
       where: { id: linkedId },
-      select: { ownerId: true },
+      select: { id: true, ownerId: true },
     });
     if (!canyon) throw new AppError(404, "Canyon not found");
-    if (canyon.ownerId !== userId)
-      throw new AppError(403, "Only the owner can attach media");
+    // none → 404 (no existence oracle for canyons the caller can't see);
+    // sharee → 403 (legitimately sees the canyon, just can't attach media).
+    await requireCanyonOwnerAccess(
+      userId,
+      canyon,
+      "Only the owner can attach media",
+    );
   } else if (linkedType === "tripLog") {
     const trip = await prisma.tripLog.findUnique({
       where: { id: linkedId },
       select: { userId: true },
     });
-    if (!trip) throw new AppError(404, "Trip log not found");
-    if (trip.userId !== userId)
-      throw new AppError(403, "Only the owner can attach media");
+    // Trip logs are owner-private (no sharing): a non-owner gets the same 404 as
+    // a missing trip so the status is not an existence oracle for trip-log IDs.
+    if (!trip || trip.userId !== userId)
+      throw new AppError(404, "Trip log not found");
   } else {
     throw new AppError(400, "Invalid linkedType");
   }
