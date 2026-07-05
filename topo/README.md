@@ -31,6 +31,7 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 |--------|----------|---------|-----------------|
 | **ELVIS LiDAR** (Geoscience Australia + NSW Spatial Services) | hillshade, slope, contours | CC BY 4.0 | "Elevation data © Geoscience Australia / NSW Spatial Services (CC BY 4.0)" |
 | **NSW State Vegetation Type Map (SVTM)** | vegetation | CC BY 4.0 *(to confirm via SEED portal — see note)* | "Vegetation data © State of NSW (DCCEEW) — State Vegetation Type Map (CC BY 4.0)" |
+| **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness hatch, see `apply_fire_history` in `pipeline.py`) | CC BY 4.0 | "© State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010" |
 | **OpenStreetMap** | features | ODbL | "Features © OpenStreetMap contributors" |
 | **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
 
@@ -39,6 +40,14 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 > SVTM licence and the precise required attribution string have not yet been
 > verified. Confirm before any public release and update the credit strings if
 > the licence differs.
+
+> **NPWS Fire History — full citation:** © State Government of NSW and NSW
+> Department of Climate Change, Energy, the Environment and Water 2010, NPWS
+> Fire History - Wildfires and Prescribed Burns, accessed from The Sharing and
+> Enabling Environmental Data Portal
+> (<https://datasets.seed.nsw.gov.au/dataset/fire-history-wildfires-and-prescribed-burns-1e8b6>),
+> date accessed 2026-07-05. Licensed CC BY 4.0
+> (<https://creativecommons.org/licenses/by/4.0/>).
 
 ---
 

@@ -13,6 +13,18 @@ Input  : NPWS Fire History ESRI shapefile (.shp + sidecars), NOT committed —
 Outputs: topo/fire/fire_history_year.tif        (uint16, EPSG:3577, 25 m)
          topo/fire/fire_history_year_legend.json (provenance + year range)
 
+Source & licence: NPWS Fire History - Wildfires and Prescribed Burns, from
+         The Sharing and Enabling Environmental Data (SEED) Portal
+         (https://datasets.seed.nsw.gov.au/dataset/fire-history-wildfires-and-prescribed-burns-1e8b6).
+         Licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
+         Required attribution: "© State Government of NSW and NSW Department
+         of Climate Change, Energy, the Environment and Water 2010". This
+         credit must accompany any derived output (this raster, and the
+         fire-staleness hatch it drives in the vegetation layer) wherever
+         shared — see topo/README.md "Data sources & licences" and
+         shared/src/geoPdfBaseLayers.ts (GEOPDF_OVERLAY_ATTRIBUTION.vegetation)
+         for where it is surfaced in-app and in exported GeoPDFs.
+
 Run this once whenever the raw NPWS Fire History shapefile is updated. The
 topo job pipeline loads the derived year raster — never the raw shapefile —
 at job time. Re-upload to S3 and wire into pipeline.py are handled separately
