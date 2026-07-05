@@ -312,15 +312,20 @@ PDAL_SCAN_ANGLE_MAX = 20
 # ECS task environment to suppress the S3 directory listing GDAL would
 # otherwise attempt when opening a /vsis3/ path.
 #
-# Override via env var SVTM_FORMATION_S3_PATH (s3://bucket/key form).
-# Set to an empty string to skip SVTM weighting entirely.
+# Override via env var SVTM_FORMATION_S3_PATH. Accepts three forms:
+#   - "s3://bucket/key" → warped through GDAL's /vsis3/ virtual filesystem
+#   - ""                → disabled (skip SVTM weighting entirely)
+#   - anything else     → used verbatim (e.g. a plain local path for testing)
 _svtm_s3_raw = os.environ.get(
     "SVTM_FORMATION_S3_PATH",
     "s3://logjam-topo-jobs/svtm/svtm_formation.tif",
 )
-SVTM_FORMATION_RASTER: str = (
-    "/vsis3/" + _svtm_s3_raw.removeprefix("s3://") if _svtm_s3_raw else ""
-)
+if _svtm_s3_raw.startswith("s3://"):
+    SVTM_FORMATION_RASTER: str = "/vsis3/" + _svtm_s3_raw.removeprefix("s3://")
+elif _svtm_s3_raw == "":
+    SVTM_FORMATION_RASTER = ""
+else:
+    SVTM_FORMATION_RASTER = _svtm_s3_raw
 
 # Fire history raster: per-cell most-recent-fire year, preprocessed once by
 # build_fire_history.py (see topo/fire/fire_history_year.tif). Consumed at job
@@ -333,8 +338,6 @@ SVTM_FORMATION_RASTER: str = (
 #   - "s3://bucket/key" → warped through GDAL's /vsis3/ virtual filesystem
 #   - ""                → disabled (no fire-history staleness check)
 #   - anything else     → used verbatim (e.g. a plain local path for testing)
-# TODO: SVTM_FORMATION_S3_PATH above only handles the s3:// (or empty) form —
-# it should adopt this same three-way handling so a local path works there too.
 _fire_history_s3_raw = os.environ.get(
     "FIRE_HISTORY_S3_PATH",
     "s3://logjam-topo-jobs/fire/fire_history_year.tif",
