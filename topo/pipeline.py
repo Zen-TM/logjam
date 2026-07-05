@@ -136,6 +136,8 @@ class Benchmark:
         self._output_tile_count: Optional[int] = None
         self._zoom_min: Optional[int] = None
         self._zoom_max: Optional[int] = None
+        self._fire_stale_fraction: Optional[float] = None
+        self._fire_capture_year: Optional[int] = None
 
     @contextmanager
     def step(self, label: str, key: Optional[str] = None):
@@ -160,6 +162,15 @@ class Benchmark:
         self._zoom_min = zoom_min
         self._zoom_max = zoom_max
 
+    def set_fire_staleness(self, stale_fraction: Optional[float], capture_year: Optional[int]):
+        """Fold apply_fire_history's fire_stale_summary.json into the per-job
+        metrics file, so the worker can surface "N% of this AOI burned since
+        capture" on the job. No-op-shaped: both args stay None (and so do the
+        payload keys) when fire-staleness detection was disabled/unavailable
+        for this job — see apply_fire_history's no-op paths."""
+        self._fire_stale_fraction = stale_fraction
+        self._fire_capture_year = capture_year
+
     def write_metrics(self, path: str):
         """Atomically write the per-job runtime metrics JSON consumed by the
         worker (which persists it to TopoJob.pipeline_metrics)."""
@@ -171,6 +182,10 @@ class Benchmark:
             "outputTileCount": self._output_tile_count,
             "zoomMin": self._zoom_min,
             "zoomMax": self._zoom_max,
+            # Stale-fire caution overlay metrics (see set_fire_staleness) — both
+            # None when fire-staleness detection was disabled/unavailable.
+            "fireStaleFraction": self._fire_stale_fraction,
+            "fireCaptureYear": self._fire_capture_year,
         }
         tmp = f"{path}.tmp"
         with open(tmp, "w") as f:
@@ -391,6 +406,17 @@ VEGETATION_DEFAULTS = {
     "alphaMin": 60,
     "alphaMax": 255,
 }
+
+# Stale-fire caution overlay, drawn INTO the vegetation layer (no new MBTiles
+# layer) over cells where fire_stale.tif flags LiDAR-predates-most-recent-fire
+# (see apply_fire_history). Not settings-driven — fixed caution styling so the
+# hatch reads consistently across jobs/presets. Applied independent of scrub
+# density: a stale, currently-open-looking cell still gets flagged, since it
+# may have regrown since capture.
+FIRE_STALE_HATCH_COLOUR = (217, 119, 6)  # caution amber (RGB)
+FIRE_STALE_HATCH_ALPHA = 150             # semi-transparent — underlying veg colour still shows
+FIRE_STALE_HATCH_PERIOD_PX = 8           # diagonal stripe repeats every N px
+FIRE_STALE_HATCH_STRIPE_PX = 2           # stripe width (px) within each period
 
 # Slope thresholds (degrees) → RGBA colour. Defaults for the Default preset.
 SLOPE_DEFAULT_BANDS = [
@@ -2129,6 +2155,17 @@ def compute_rasters(dtm_path: str, scrub_low_path: str, scrub_high_path: str,
     # staleness detection is disabled or no capture year could be parsed.
     density = apply_fire_history(density, dtm_path, work_dir, capture_year)
 
+    # fire_stale.tif is written by apply_fire_history only when fire-staleness
+    # detection is enabled (fire raster configured + a parseable capture
+    # year) — absent otherwise, so only surface it when present. It shares
+    # this function's DTM grid (apply_fire_history opens dtm_path for its
+    # geotransform/projection, same as this function's dtm_path argument), so
+    # the render path can read it with the exact same read_raster_window()
+    # call as scrub_density.tif — no separate warp needed.
+    fire_stale_path = os.path.join(work_dir, "fire_stale.tif")
+    if os.path.exists(fire_stale_path):
+        paths["fire_stale"] = fire_stale_path
+
     # Write scrub_density.tif (values 0–1, nodata = -9999)
     density_path = os.path.join(work_dir, "scrub_density.tif")
     density_out = np.where(np.isfinite(density), density, -9999).astype(np.float32)
@@ -2730,14 +2767,28 @@ def render_hillshade_tile(hs_arr: Optional[np.ndarray], settings: Dict[str, Any]
     return Image.fromarray(rgba)
 
 
-def render_vegetation_tile(density_arr: Optional[np.ndarray], settings: Dict[str, Any]) -> Image.Image:
-    """Render scrub density (0–1 ratio) as a sparse→dense colour ramp.
+def render_vegetation_tile(
+    density_arr: Optional[np.ndarray],
+    settings: Dict[str, Any],
+    stale_arr: Optional[np.ndarray] = None,
+) -> Image.Image:
+    """Render scrub density (0–1 ratio) as a sparse→dense colour ramp, with an
+    optional stale-fire caution hatch drawn into the same layer.
 
     density_arr contains the normalised point ratio (scrub-band returns / total
     returns per cell). Values below minRatio are transparent. A sqrt curve
     spreads low-density values for better perceptual differentiation.
 
     Sparse/dense colours and alpha endpoints come from `settings.vegetation`.
+
+    stale_arr, when given, is a fire_stale.tif window on the SAME grid as
+    density_arr (1 = LiDAR capture predates that cell's most-recent fire, see
+    apply_fire_history's docstring). Every stale cell gets a diagonal
+    caution-amber hatch, applied REGARDLESS of whether that cell has any scrub
+    density — a stale, currently-open-looking cell still needs the caution,
+    since it may have regrown since the scan. Passing None (fire-staleness
+    detection disabled/unavailable for this job) is a pure no-op: output is
+    identical to calling this function without the parameter at all.
     """
     img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
     if density_arr is None:
@@ -2752,7 +2803,23 @@ def render_vegetation_tile(density_arr: Optional[np.ndarray], settings: Dict[str
     alpha_max = float(veg.get("alphaMax", VEGETATION_DEFAULTS["alphaMax"]))
 
     mask = np.isfinite(density_arr) & (density_arr >= min_ratio)
-    if not mask.any():
+
+    # Whether the hatch overlay has any work to do this tile — computed before
+    # the density-mask early return so a stale-but-otherwise-fully-transparent
+    # tile (no cell meets minRatio) still gets its caution hatch.
+    stale_mask = None
+    if stale_arr is not None:
+        if stale_arr.shape != density_arr.shape:
+            log.warning(
+                f"fire_stale array shape {stale_arr.shape} != density array shape "
+                f"{density_arr.shape} — skipping stale-fire hatch overlay for this tile."
+            )
+        else:
+            stale_mask = stale_arr > 0
+
+    has_stale = stale_mask is not None and stale_mask.any()
+
+    if not mask.any() and not has_stale:
         return img
 
     span = max(max_ratio - min_ratio, 1e-6)
@@ -2763,6 +2830,15 @@ def render_vegetation_tile(density_arr: Optional[np.ndarray], settings: Dict[str
     rgba[..., 1] = np.where(mask, (sparse_g + t * (dense_g - sparse_g)).astype(np.uint8), 0)
     rgba[..., 2] = np.where(mask, (sparse_b + t * (dense_b - sparse_b)).astype(np.uint8), 0)
     rgba[..., 3] = np.where(mask, (alpha_min + t * (alpha_max - alpha_min)).astype(np.uint8), 0)
+
+    if has_stale:
+        row_idx, col_idx = np.indices((TILE_SIZE, TILE_SIZE))
+        hatch = ((row_idx + col_idx) % FIRE_STALE_HATCH_PERIOD_PX < FIRE_STALE_HATCH_STRIPE_PX) & stale_mask
+        rgba[hatch, 0] = FIRE_STALE_HATCH_COLOUR[0]
+        rgba[hatch, 1] = FIRE_STALE_HATCH_COLOUR[1]
+        rgba[hatch, 2] = FIRE_STALE_HATCH_COLOUR[2]
+        rgba[hatch, 3] = FIRE_STALE_HATCH_ALPHA
+
     return Image.fromarray(rgba)
 
 
@@ -3077,6 +3153,7 @@ class RenderConfig:
     lat_max: float
     settings: Dict[str, Any] = field(default_factory=_default_render_settings)
     footprint_path: Optional[str] = None
+    stale_path: str = ""  # fire_stale.tif window path; "" when fire-staleness detection is disabled (mirrors density_path)
 
 
 def render_tile_job(args) -> Tuple[int, int, int, dict]:
@@ -3105,7 +3182,11 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
     veg_img = None
     if "vegetation" in cfg.layers:
         density_arr = read_raster_window(cfg.density_path, bbox_merc)
-        veg_img = render_vegetation_tile(density_arr, cfg.settings)
+        # cfg.stale_path is "" whenever fire-staleness detection was disabled/
+        # unavailable for this job (see compute_rasters) — same optional-path
+        # convention as cfg.density_path/footprint_path.
+        stale_arr = read_raster_window(cfg.stale_path, bbox_merc) if cfg.stale_path else None
+        veg_img = render_vegetation_tile(density_arr, cfg.settings, stale_arr)
 
     # --- Features ---
     feat_img = render_features_tile(cfg.osm_geojson, bbox_wgs84, z, cfg.settings)
@@ -3493,6 +3574,20 @@ def main():
             else:
                 raster_paths = compute_rasters_no_veg(dtm_filled, work_dir, settings)
 
+        # Fold fire_stale_summary.json (written by apply_fire_history, inside
+        # compute_rasters, only when fire-staleness detection is enabled) into
+        # the per-job metrics — lets the worker surface "N% of this AOI burned
+        # since capture" on the job. Absent file (fire disabled/unavailable) is
+        # a no-op: set_fire_staleness(None, None) leaves the metrics keys null.
+        fire_stale_summary_path = os.path.join(work_dir, "fire_stale_summary.json")
+        if os.path.exists(fire_stale_summary_path):
+            with open(fire_stale_summary_path) as f:
+                fire_stale_summary = json.load(f)
+            bench.set_fire_staleness(
+                fire_stale_summary["stale_fraction"],
+                fire_stale_summary["capture_year"],
+            )
+
         # ── Step 4: Bounding box ─────────────────────────────────────────────
         lon_min, lat_min, lon_max, lat_max = get_raster_bbox_wgs84(dtm_filled)
         log.info(f"Coverage: lon {lon_min:.4f}–{lon_max:.4f}, lat {lat_min:.4f}–{lat_max:.4f}")
@@ -3556,6 +3651,7 @@ def main():
         cfg = RenderConfig(
             hillshade_path=raster_paths["hillshade"],
             density_path=raster_paths.get("scrub_density", ""),
+            stale_path=raster_paths.get("fire_stale", ""),
             slope_path=raster_paths["slope"],
             osm_geojson=osm_geojson,
             contour_paths=contour_paths,
