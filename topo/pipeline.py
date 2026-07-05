@@ -295,6 +295,30 @@ SVTM_FORMATION_RASTER: str = (
     "/vsis3/" + _svtm_s3_raw.removeprefix("s3://") if _svtm_s3_raw else ""
 )
 
+# Fire history raster: per-cell most-recent-fire year, preprocessed once by
+# build_fire_history.py (see topo/fire/fire_history_year.tif). Consumed at job
+# time only to flag cells where the fire happened AFTER the LiDAR capture —
+# see apply_fire_history. Density itself is never adjusted: baseline testing
+# showed the LiDAR captures post-fire regrowth directly, so a regrowth
+# multiplier here would double-count.
+#
+# Override via env var FIRE_HISTORY_S3_PATH. Accepts three forms:
+#   - "s3://bucket/key" → warped through GDAL's /vsis3/ virtual filesystem
+#   - ""                → disabled (no fire-history staleness check)
+#   - anything else     → used verbatim (e.g. a plain local path for testing)
+# TODO: SVTM_FORMATION_S3_PATH above only handles the s3:// (or empty) form —
+# it should adopt this same three-way handling so a local path works there too.
+_fire_history_s3_raw = os.environ.get(
+    "FIRE_HISTORY_S3_PATH",
+    "s3://logjam-topo-jobs/fire/fire_history_year.tif",
+)
+if _fire_history_s3_raw.startswith("s3://"):
+    FIRE_HISTORY_RASTER: str = "/vsis3/" + _fire_history_s3_raw.removeprefix("s3://")
+elif _fire_history_s3_raw == "":
+    FIRE_HISTORY_RASTER = ""
+else:
+    FIRE_HISTORY_RASTER = _fire_history_s3_raw
+
 # Formation → navigational-resistance multiplier μ.
 # Multiplies the structural NRD so hard/thorny vegetation (Heathlands,
 # Dry Sclerophyll) reads as harder going than clear-floored vegetation
@@ -1569,6 +1593,170 @@ def apply_svtm_weighting(
     return out
 
 
+# ELVIS point-cloud filenames encode the capture year-month immediately before
+# the "-LID{1,2}" swath marker, e.g. "Katoomba202107-LID1-C3-AHD_...laz".
+_ELVIS_CAPTURE_DATE_RE = re.compile(r"(\d{6})-LID\d")
+
+
+def _capture_year_from_las_files(las_files: List[str]) -> Optional[int]:
+    """Extract the LiDAR capture year from ELVIS filenames; return the minimum.
+
+    The minimum (not maximum) across all contributing files is deliberately
+    conservative for staleness detection: a cell should be flagged stale if
+    ANY contributing capture predates the fire, so the earliest capture year
+    is the one a later fire needs to beat.
+
+    Returns None if no filename in the list matches the ELVIS naming
+    convention — apply_fire_history then treats fire-history staleness
+    detection as a no-op rather than guessing.
+    """
+    capture_years: List[int] = []
+    for las_file in las_files:
+        match = _ELVIS_CAPTURE_DATE_RE.search(os.path.basename(las_file))
+        if match:
+            capture_years.append(int(match.group(1)[:4]))
+    if not capture_years:
+        return None
+    return min(capture_years)
+
+
+def _compute_stale_mask(
+    fire_year_arr: np.ndarray,
+    capture_year: int,
+    valid_mask: np.ndarray,
+) -> Tuple[np.ndarray, float]:
+    """Per-cell stale mask: the most recent fire happened after LiDAR capture.
+
+    `fire_year_arr` uses 0 as nodata (never-burned or no usable date on
+    record — see build_fire_history.NODATA_VALUE), so a 0 cell is excluded
+    from "stale" rather than compared as if it were a real year. `valid_mask`
+    should mark cells with finite (non-nodata) density.
+
+    Returns (stale_mask, stale_fraction), where stale_fraction is the share
+    of valid cells that are stale.
+    """
+    stale_mask = valid_mask & (fire_year_arr != 0) & (fire_year_arr > capture_year)
+    stale_fraction = float(stale_mask.sum()) / max(int(valid_mask.sum()), 1)
+    return stale_mask, stale_fraction
+
+
+def apply_fire_history(
+    density_arr: np.ndarray,
+    dtm_path: str,
+    work_dir: str,
+    capture_year: Optional[int],
+) -> np.ndarray:
+    """Flag vegetation-density cells made stale by fire since LiDAR capture.
+
+    This does NOT modify density_arr. Baseline testing showed the LiDAR
+    captures post-fire regrowth directly, so re-weighting density by fire
+    recency here would double-count regrowth the point cloud already shows —
+    the only output is a stale mask/fraction for a future consumer (render
+    overlay, job metadata) to act on; this function adds no overlay itself.
+
+    The fire-history raster (per-cell most-recent-fire year) is warped from
+    S3 (/vsis3/ path, or a local path override) onto the DTM grid — same
+    approach as apply_svtm_weighting, so GDAL only fetches the AOI tiles.
+
+    Writes work_dir/fire_stale.tif (uint8, 1=stale/0=not, aligned to the DTM
+    grid/projection) and work_dir/fire_stale_summary.json (capture_year,
+    stale_fraction, fire_years_min, fire_years_max) as a side effect.
+
+    Returns density_arr unchanged in all cases, including every no-op path:
+      - FIRE_HISTORY_RASTER is unset/empty (staleness check disabled), or
+      - capture_year is None (no ELVIS filename encoded a capture date), or
+      - the fire-history raster can't be opened (e.g. offline dev without
+        LocalStack) — the pipeline always degrades cleanly.
+    """
+    if not FIRE_HISTORY_RASTER:
+        log.info("FIRE_HISTORY_S3_PATH not set — skipping fire-history staleness check.")
+        return density_arr
+    if capture_year is None:
+        log.info(
+            "No LiDAR capture year parsed from input filenames — "
+            "skipping fire-history staleness check."
+        )
+        return density_arr
+
+    log.info(f"Warping fire-history raster onto DTM grid (source: {FIRE_HISTORY_RASTER}) …")
+    fire_year_aligned = os.path.join(work_dir, "fire_history_aligned.tif")
+
+    try:
+        ref_ds = gdal.Open(dtm_path)
+        gt = ref_ds.GetGeoTransform()
+        proj = ref_ds.GetProjection()
+        cols = ref_ds.RasterXSize
+        rows = ref_ds.RasterYSize
+        xmin = gt[0]
+        xmax = gt[0] + gt[1] * cols
+        ymax = gt[3]
+        ymin = gt[3] + gt[5] * rows
+        gdal.Warp(
+            fire_year_aligned,
+            FIRE_HISTORY_RASTER,
+            dstSRS=proj,
+            outputBounds=(xmin, ymin, xmax, ymax),
+            width=cols,
+            height=rows,
+            resampleAlg="near",
+            dstNodata=0,
+            outputType=gdal.GDT_UInt16,
+            creationOptions=["COMPRESS=LZW", "TILED=YES"],
+        )
+        ref_ds = None
+    except Exception as e:
+        log.warning(f"Fire-history raster unavailable ({e}) — skipping fire-history staleness check.")
+        return density_arr
+
+    fire_ds = gdal.Open(fire_year_aligned)
+    fire_year_arr = fire_ds.GetRasterBand(1).ReadAsArray().astype(np.uint16)
+    fire_ds = None
+
+    valid_mask = np.isfinite(density_arr)
+    stale_mask, stale_fraction = _compute_stale_mask(fire_year_arr, capture_year, valid_mask)
+
+    burned_years_in_aoi = fire_year_arr[fire_year_arr != 0]
+    fire_years_min = int(burned_years_in_aoi.min()) if burned_years_in_aoi.size else None
+    fire_years_max = int(burned_years_in_aoi.max()) if burned_years_in_aoi.size else None
+
+    # Write fire_stale.tif — aligned to the DTM grid, for a future render overlay.
+    dtm_ds = gdal.Open(dtm_path)
+    stale_path = os.path.join(work_dir, "fire_stale.tif")
+    driver = gdal.GetDriverByName("GTiff")
+    out_ds = driver.Create(
+        stale_path,
+        dtm_ds.RasterXSize,
+        dtm_ds.RasterYSize,
+        1,
+        gdal.GDT_Byte,
+        options=["COMPRESS=LZW"],
+    )
+    out_ds.SetGeoTransform(dtm_ds.GetGeoTransform())
+    out_ds.SetProjection(dtm_ds.GetProjection())
+    band = out_ds.GetRasterBand(1)
+    band.WriteArray(stale_mask.astype(np.uint8))
+    band.SetNoDataValue(0)
+    out_ds.FlushCache()
+    out_ds = None
+    dtm_ds = None
+
+    summary_path = os.path.join(work_dir, "fire_stale_summary.json")
+    with open(summary_path, "w") as f:
+        json.dump({
+            "capture_year": capture_year,
+            "stale_fraction": stale_fraction,
+            "fire_years_min": fire_years_min,
+            "fire_years_max": fire_years_max,
+        }, f)
+
+    log.info(
+        f"Fire-history: {stale_fraction * 100:.1f}% of AOI burned after LiDAR "
+        f"capture ({capture_year}) — veg layer may be stale there."
+    )
+
+    return density_arr
+
+
 def _bilateral_filter_weighted(
     value_arr: np.ndarray,
     confidence_arr: np.ndarray,
@@ -1646,7 +1834,8 @@ def _run_gdaldem_hillshade(out_path: str, dtm_path: str, settings: Dict[str, Any
 
 
 def compute_rasters(dtm_path: str, scrub_count_path: str, below_count_path: str,
-                    work_dir: str, settings: Dict[str, Any]) -> dict:
+                    work_dir: str, settings: Dict[str, Any],
+                    capture_year: Optional[int] = None) -> dict:
     """
     From DTM + NRD-count rasters produce hillshade.tif, slope.tif, scrub_density.tif.
 
@@ -1745,6 +1934,12 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, below_count_path: str,
         weights_enabled=bool(veg_settings.get("weightsEnabled", True)),
         formation_weights=veg_settings.get("formationWeights"),
     )
+
+    # Detect (never correct) vegetation-density cells made stale by fire since
+    # LiDAR capture. Density is not modified — see apply_fire_history docstring
+    # for why a regrowth multiplier would double-count. No-op if fire-history
+    # staleness detection is disabled or no capture year could be parsed.
+    density = apply_fire_history(density, dtm_path, work_dir, capture_year)
 
     # Write scrub_density.tif (values 0–1, nodata = -9999)
     density_path = os.path.join(work_dir, "scrub_density.tif")
@@ -3034,6 +3229,7 @@ def main():
             contents = extract_elvis_zip(args.elvis_zip, work_dir)
 
         las_strs = [str(f) for f in contents.las_files]
+        capture_year = _capture_year_from_las_files(las_strs)
         # Final Web-Mercator rasters fed to the derived-raster / tiling stage.
         dtm_filled      = os.path.join(work_dir, "dtm_filled.tif")
         scrub_count_raw = os.path.join(work_dir, "scrub_count_raw.tif")
@@ -3097,7 +3293,7 @@ def main():
         with bench.step("Compute hillshade, slope" + (", scrub density (vegetation)" if contents.has_vegetation else ""), key="derivatives"):
             if contents.has_vegetation:
                 raster_paths = compute_rasters(dtm_filled, scrub_count_raw, below_count_raw,
-                                               work_dir, settings)
+                                               work_dir, settings, capture_year)
             else:
                 raster_paths = compute_rasters_no_veg(dtm_filled, work_dir, settings)
 
