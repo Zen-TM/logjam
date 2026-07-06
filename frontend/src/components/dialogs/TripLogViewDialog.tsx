@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  Chip,
   IconButton,
   Typography,
   Box,
@@ -16,8 +17,9 @@ import type { TripLogCustomFieldDef, MediaItem } from "@logjam/shared";
 import type { TTripLog } from "../../canyonUtils";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
-import { deleteTripLog, getTripLog } from "../../canyonUtils";
+import { deleteTripLog, getTripLog, tripTitle } from "../../canyonUtils";
 import MediaGallery from "../media/MediaGallery";
+import { typeChipSx } from "../../csvImport/dialogStyles";
 import classes from "./TripLogViewDialog.module.css";
 
 function formatDate(iso: string): string {
@@ -45,7 +47,6 @@ function TripLogViewDialog({
   open,
   onClose,
   tripLog,
-  canyonName,
   customFieldDefs,
   onEdit,
   onDeleted,
@@ -55,7 +56,6 @@ function TripLogViewDialog({
   open: boolean;
   onClose: () => void;
   tripLog: TTripLog | null;
-  canyonName: string;
   customFieldDefs: TripLogCustomFieldDef[];
   onEdit: () => void;
   onDeleted: () => void;
@@ -128,7 +128,7 @@ function TripLogViewDialog({
         >
           <Box>
             <Typography variant="h6" component="div">
-              {canyonName}
+              {tripTitle(tripLog)}
             </Typography>
             <Typography variant="body2" sx={{ color: "var(--theme-text-muted)" }}>
               {formatDate(tripLog.date)}
@@ -145,6 +145,21 @@ function TripLogViewDialog({
         </DialogTitle>
 
         <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
+          {/* Linked canyons + types. Type chips use the shared accent-fill
+              styling (typeChipSx) — filled and readable in every theme, and
+              visually distinct from the default-grey canyon chips (the old
+              outlined-secondary chip was too dim). */}
+          {(tripLog.canyons.length > 0 || tripLog.types.length > 0) && (
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, alignItems: "center" }}>
+              {tripLog.canyons.map((c) => (
+                <Chip key={c.id} label={c.name} size="small" />
+              ))}
+              {tripLog.types.map((t) => (
+                <Chip key={t} label={t} size="small" sx={typeChipSx} />
+              ))}
+            </Box>
+          )}
+
           {/* Custom field values */}
           {customFieldDefs.length > 0 && (
             <>

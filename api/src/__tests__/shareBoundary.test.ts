@@ -51,8 +51,10 @@ describe("share boundary — recipient view (hybrid model)", () => {
     expect(res.body).toEqual([]);
   });
 
-  it("recipient cannot read an individual trip log — 404, not 403 (SEC-001: no ID oracle)", async () => {
-    // Resolve a real trip ID from the owner's side first.
+  it("recipient cannot read an individual trip log via the global GET /trips/:id — 404, not 403 (SEC-001: no ID oracle)", async () => {
+    // The nested single-trip GET was removed with the m2m cutover — single
+    // trip fetch now lives entirely on GET /trips/:id (owner-only). Resolve a
+    // real trip ID from the owner's side first.
     const ownerTrips = await request(API_URL)
       .get(`/canyons/${SHARED_CANYON_ID}/trips`)
       .set(as(ALICE_SUB));
@@ -61,9 +63,57 @@ describe("share boundary — recipient view (hybrid model)", () => {
     const tripId = ownerTrips.body[0].id as string;
 
     const res = await request(API_URL)
-      .get(`/canyons/${SHARED_CANYON_ID}/trips/${tripId}`)
+      .get(`/trips/${tripId}`)
       .set(as(BOB_SUB));
     expect(res.status).toBe(404);
+  });
+
+  it("alice's trips linked to the shared canyon stay invisible to bob everywhere: nested list, global list, and single GET", async () => {
+    const canyonId = await createCanyon(ALICE_SUB, "share boundary trip invisibility");
+    try {
+      const shareRes = await request(API_URL)
+        .post(`/canyons/${canyonId}/share`)
+        .set(as(ALICE_SUB))
+        .send({ sharedWithUserId: BOB_ID });
+      expect(shareRes.status).toBe(201);
+
+      const uniqueTag = `share-invis-${Date.now()}`;
+      const tripRes = await request(API_URL)
+        .post("/trips")
+        .set(as(ALICE_SUB))
+        .send({ canyonIds: [canyonId], date: "2026-06-01", displayName: uniqueTag });
+      expect(tripRes.status).toBe(201);
+      const tripId = tripRes.body.id as string;
+
+      try {
+        // Nested list on the shared canyon: bob sees [] (owner-private trips).
+        const nested = await request(API_URL)
+          .get(`/canyons/${canyonId}/trips`)
+          .set(as(BOB_SUB));
+        expect(nested.status).toBe(200);
+        expect(nested.body).toEqual([]);
+
+        // Global list: bob's own /trips never surfaces alice's trip, even when
+        // searching by the exact shared canyon's name.
+        const global = await request(API_URL)
+          .get("/trips")
+          .query({ search: uniqueTag })
+          .set(as(BOB_SUB));
+        expect(global.status).toBe(200);
+        expect(global.body).toEqual([]);
+
+        // Single GET: owner-private resource, 404 to a non-owner regardless of
+        // the share.
+        const single = await request(API_URL)
+          .get(`/trips/${tripId}`)
+          .set(as(BOB_SUB));
+        expect(single.status).toBe(404);
+      } finally {
+        await request(API_URL).delete(`/trips/${tripId}`).set(as(ALICE_SUB));
+      }
+    } finally {
+      await request(API_URL).delete(`/canyons/${canyonId}`).set(as(ALICE_SUB));
+    }
   });
 
   it("recipient may copy a shared canyon under their own account", async () => {
@@ -100,8 +150,10 @@ describe("share boundary — stranger view", () => {
       .set(as(ALICE_SUB));
     const tripId = ownerTrips.body[0].id as string;
 
+    // Single-trip fetch now lives on the global /trips/:id (owner-only) —
+    // the nested single-GET route was removed with the m2m cutover.
     const single = await request(API_URL)
-      .get(`/canyons/${SHARED_CANYON_ID}/trips/${tripId}`)
+      .get(`/trips/${tripId}`)
       .set(as(CAROL_SUB));
     expect(single.status).toBe(404);
   });

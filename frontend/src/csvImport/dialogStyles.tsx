@@ -20,6 +20,20 @@ export const menuPaperProps = {
   },
 };
 
+// High-contrast filled chip for trip-type tags — same accent-fill/dark-label
+// system as .btnFilledAccent in styles/shared.module.css (accent is tuned
+// light enough that the dark primary is the AA-readable label on it, in every
+// theme scheme). Visually distinct from default-grey canyon chips. Used by
+// TripLogDialog (selected-type chips) and TripLogViewDialog; the trip cards
+// in TripLogsPanel mirror it in CSS (.typeChip).
+export const typeChipSx = {
+  backgroundColor: "var(--theme-accent)",
+  color: "var(--theme-primary)",
+  fontWeight: 600,
+  "& .MuiChip-deleteIcon": { color: "var(--theme-primary)", opacity: 0.6 },
+  "& .MuiChip-deleteIcon:hover": { color: "var(--theme-primary)", opacity: 1 },
+} as const;
+
 export function SectionLabel({ text }: { text: string }) {
   return (
     <Typography

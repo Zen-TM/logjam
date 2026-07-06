@@ -64,7 +64,7 @@ model Canyon {
   forkedFrom       Canyon?       @relation("CanyonForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
   forks            Canyon[]      @relation("CanyonForks")
   owner            User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  tripLogs         TripLog[]
+  tripLogLinks     TripLogCanyon[]
 
   @@unique([ownerId, ropeWikiId])
   @@unique([ownerId, importKey])
@@ -88,23 +88,37 @@ model Notification {
 
 model TripLog {
   id           String   @id @default(uuid())
-  canyonId     String?  @map("canyon_id")
   userId       String   @map("user_id")
   date         DateTime
   displayName  String?  @map("display_name")
+  types        String[] @default([])
   notes        String?
   customFields Json     @default("{}") @map("custom_fields")
   createdAt    DateTime @default(now()) @map("created_at")
   importKey     String?  @map("import_key")
   importBatchId String?  @map("import_batch_id")
-  canyon       Canyon?  @relation(fields: [canyonId], references: [id], onDelete: SetNull)
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  canyons      TripLogCanyon[]
 
-  @@index([canyonId])
   @@index([userId])
   @@unique([userId, importKey])
   @@index([userId, importBatchId])
   @@map("trip_logs")
+}
+
+// Trip ↔ canyon many-to-many. `position` preserves the order the canyons were
+// linked in; the derived trip title joins names in this order. Deleting a
+// canyon or a trip removes only the link rows — trips outlive their canyons.
+model TripLogCanyon {
+  tripLogId String  @map("trip_log_id")
+  canyonId  String  @map("canyon_id")
+  position  Int
+  tripLog   TripLog @relation(fields: [tripLogId], references: [id], onDelete: Cascade)
+  canyon    Canyon  @relation(fields: [canyonId], references: [id], onDelete: Cascade)
+
+  @@id([tripLogId, canyonId])
+  @@index([canyonId])
+  @@map("trip_log_canyons")
 }
 
 model Media {

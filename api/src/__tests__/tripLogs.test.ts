@@ -1,13 +1,14 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 
-// Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
-//
-// SEC-001 regression coverage for GET /canyons/:canyonId/trips/:id. Fake auth
-// is single-user (alice), so the sharee/stranger perspectives cannot be
-// exercised here — the share boundary itself ("shared"/"none" never reach
-// owner-private trip data) is encoded in lib/canyonAccess.unit.test.ts. These
-// tests pin the owner-perspective contract and the canyonId-path-match 404.
+// Coverage for routes/tripLogs.ts — the nested /canyons/:canyonId/trips
+// router. The trip↔canyon m2m cutover removed every nested route except the
+// list GET (a filtered convenience view over the global /trips list); nested
+// POST/PATCH/DELETE and the nested single-trip GET no longer exist — a
+// request to any of them now 404s (Express's default no-route-matched
+// handler, since the router only registers `GET /`). Single-trip
+// fetch/create/update/delete now lives entirely on the global /trips surface
+// — see tripLogsGlobal.test.ts.
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
@@ -22,98 +23,108 @@ async function createCanyon(name: string): Promise<string> {
   return res.body.id as string;
 }
 
-describe("trip log single GET (fake auth = alice)", () => {
-  it("owner GET returns the trip with notes and media", async () => {
-    const canyonId = await createCanyon("SEC-001 owner single GET");
+async function createTrip(canyonIds: string[], date: string): Promise<string> {
+  const res = await request(API_URL)
+    .post("/trips")
+    .set(AUTH)
+    .send({ canyonIds, date });
+  expect(res.status).toBe(201);
+  return res.body.id as string;
+}
+
+async function cleanup(canyonId: string, tripId?: string): Promise<void> {
+  if (tripId) await request(API_URL).delete(`/trips/${tripId}`).set(AUTH);
+  await request(API_URL).delete(`/canyons/${canyonId}`).set(AUTH);
+}
+
+describe("GET /canyons/:canyonId/trips (nested list, fake auth = alice)", () => {
+  it("owner sees own trips linked to the canyon, with canyons[] populated in join order", async () => {
+    const canyonId = await createCanyon("tripLogs nested list owner");
+    let tripId: string | undefined;
     try {
-      const createRes = await request(API_URL)
+      tripId = await createTrip([canyonId], "2026-06-01");
+
+      const res = await request(API_URL)
+        .get(`/canyons/${canyonId}/trips`)
+        .set(AUTH);
+      expect(res.status).toBe(200);
+      const trip = (res.body as Array<Record<string, unknown>>).find(
+        (t) => t.id === tripId,
+      );
+      expect(trip).toBeDefined();
+      expect(trip!.canyons).toEqual([
+        { id: canyonId, name: "tripLogs nested list owner" },
+      ]);
+      // Old single-canyon shape is fully gone from the wire.
+      expect(trip!.canyon).toBeUndefined();
+      expect(trip!.canyonId).toBeUndefined();
+    } finally {
+      await cleanup(canyonId, tripId);
+    }
+  });
+
+  it("404s for a non-existent canyon id", async () => {
+    const res = await request(API_URL)
+      .get(`/canyons/${NONEXISTENT_ID}/trips`)
+      .set(AUTH);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("removed nested mutation + single-GET routes now 404", () => {
+  it("POST /canyons/:canyonId/trips 404s (creation moved to global POST /trips)", async () => {
+    const canyonId = await createCanyon("tripLogs nested POST removed");
+    try {
+      const res = await request(API_URL)
         .post(`/canyons/${canyonId}/trips`)
         .set(AUTH)
-        .send({ date: "2026-06-01", notes: "owner-private beta" });
-      expect(createRes.status).toBe(201);
-      const tripId = createRes.body.id as string;
+        .send({ date: "2026-06-01" });
+      expect(res.status).toBe(404);
+    } finally {
+      await cleanup(canyonId);
+    }
+  });
 
-      const getRes = await request(API_URL)
+  it("PATCH /canyons/:canyonId/trips/:id 404s (updates moved to global PATCH /trips/:id)", async () => {
+    const canyonId = await createCanyon("tripLogs nested PATCH removed");
+    let tripId: string | undefined;
+    try {
+      tripId = await createTrip([canyonId], "2026-06-01");
+      const res = await request(API_URL)
+        .patch(`/canyons/${canyonId}/trips/${tripId}`)
+        .set(AUTH)
+        .send({ notes: "x" });
+      expect(res.status).toBe(404);
+    } finally {
+      await cleanup(canyonId, tripId);
+    }
+  });
+
+  it("DELETE /canyons/:canyonId/trips/:id 404s (deletes moved to global DELETE /trips/:id)", async () => {
+    const canyonId = await createCanyon("tripLogs nested DELETE removed");
+    let tripId: string | undefined;
+    try {
+      tripId = await createTrip([canyonId], "2026-06-01");
+      const res = await request(API_URL)
+        .delete(`/canyons/${canyonId}/trips/${tripId}`)
+        .set(AUTH);
+      expect(res.status).toBe(404);
+    } finally {
+      await cleanup(canyonId, tripId);
+    }
+  });
+
+  it("GET /canyons/:canyonId/trips/:id (single, nested) 404s — superseded by GET /trips/:id", async () => {
+    const canyonId = await createCanyon("tripLogs nested single-GET removed");
+    let tripId: string | undefined;
+    try {
+      tripId = await createTrip([canyonId], "2026-06-01");
+      const res = await request(API_URL)
         .get(`/canyons/${canyonId}/trips/${tripId}`)
         .set(AUTH);
-      expect(getRes.status).toBe(200);
-      expect(getRes.body.notes).toBe("owner-private beta");
-      expect(Array.isArray(getRes.body.media)).toBe(true);
-    } finally {
-      await request(API_URL).delete(`/canyons/${canyonId}`).set(AUTH);
-    }
-  });
-
-  it("404s when the trip exists but the :canyonId in the path mismatches", async () => {
-    const canyonA = await createCanyon("SEC-001 path mismatch A");
-    const canyonB = await createCanyon("SEC-001 path mismatch B");
-    try {
-      const createRes = await request(API_URL)
-        .post(`/canyons/${canyonA}/trips`)
-        .set(AUTH)
-        .send({ date: "2026-06-01", notes: "trip on canyon A" });
-      expect(createRes.status).toBe(201);
-      const tripId = createRes.body.id as string;
-
-      const res = await request(API_URL)
-        .get(`/canyons/${canyonB}/trips/${tripId}`)
-        .set(AUTH);
-      expect(res.status).toBe(404);
-      expect(res.body.notes).toBeUndefined();
-    } finally {
-      await request(API_URL).delete(`/canyons/${canyonA}`).set(AUTH);
-      await request(API_URL).delete(`/canyons/${canyonB}`).set(AUTH);
-    }
-  });
-
-  // PRIV-001 promise anchor — privacy.html ("How sharing works"): "Per-trip
-  // notes, per-trip media, and your trip-log history remain private to you."
-  // Fake auth is single-user, so the path-mismatch 404 below is the same
-  // requireCanyonOwner deny path a share recipient hits; assert the WHOLE
-  // body, not just the status, so no owner-private field can ride along.
-  it("denial body contains no per-trip notes, custom fields, or presigned-URL markers (privacy.html: 'remain private to you')", async () => {
-    const canyonA = await createCanyon("PRIV-001 denial body A");
-    const canyonB = await createCanyon("PRIV-001 denial body B");
-    try {
-      const createRes = await request(API_URL)
-        .post(`/canyons/${canyonA}/trips`)
-        .set(AUTH)
-        .send({
-          date: "2026-06-02",
-          notes: "owner-private beta PRIV-001",
-          customFields: { anchors: "owner-private rigging detail" },
-        });
-      expect(createRes.status).toBe(201);
-      const tripId = createRes.body.id as string;
-
-      const res = await request(API_URL)
-        .get(`/canyons/${canyonB}/trips/${tripId}`)
-        .set(AUTH);
-      expect(res.status).toBe(404);
-
-      const wire = JSON.stringify(res.body);
-      expect(wire).not.toContain("owner-private beta PRIV-001");
-      expect(wire).not.toContain("owner-private rigging detail");
-      expect(wire).not.toContain("notes");
-      expect(wire).not.toContain("customFields");
-      expect(wire).not.toContain("media");
-      // Presigned S3 URL marker — a denial must never carry media URLs.
-      expect(wire).not.toContain("X-Amz-");
-    } finally {
-      await request(API_URL).delete(`/canyons/${canyonA}`).set(AUTH);
-      await request(API_URL).delete(`/canyons/${canyonB}`).set(AUTH);
-    }
-  });
-
-  it("404s for a non-existent trip id", async () => {
-    const canyonId = await createCanyon("SEC-001 missing trip");
-    try {
-      const res = await request(API_URL)
-        .get(`/canyons/${canyonId}/trips/${NONEXISTENT_ID}`)
-        .set(AUTH);
       expect(res.status).toBe(404);
     } finally {
-      await request(API_URL).delete(`/canyons/${canyonId}`).set(AUTH);
+      await cleanup(canyonId, tripId);
     }
   });
 });

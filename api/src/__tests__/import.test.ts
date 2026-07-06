@@ -157,9 +157,10 @@ describe("POST /trips/bulk — idempotent import (fake auth = alice)", () => {
 
     const beforeRows = await prisma.tripLog.findMany({
       where: { userId: ALICE_ID, displayName: sourceCanyonName },
+      include: { canyons: true },
     });
     expect(beforeRows).toHaveLength(1);
-    expect(beforeRows[0].canyonId).toBeNull();
+    expect(beforeRows[0].canyons).toEqual([]);
 
     // 2) The matching canyon now exists.
     const canyon = await request(API_URL)
@@ -185,8 +186,11 @@ describe("POST /trips/bulk — idempotent import (fake auth = alice)", () => {
       where: { userId: ALICE_ID },
       // match the original occurrence regardless of displayName change
       orderBy: { createdAt: "asc" },
+      include: { canyons: true },
     });
-    const linked = afterRows.filter((t) => t.canyonId === canyonId);
+    const linked = afterRows.filter((t) =>
+      t.canyons.some((link) => link.canyonId === canyonId),
+    );
     expect(linked).toHaveLength(1); // exactly one row, now linked — not duplicated
 
     await request(API_URL).delete(`/canyons/${canyonId}`).set(AUTH);

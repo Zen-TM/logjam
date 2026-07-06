@@ -105,11 +105,14 @@ type PreparedCanyonRow = {
 };
 
 // Per-trip-row prepared content. `sourceCanyonName` is the raw file string.
+// `types` is free text split on ";" (each trimmed, empties dropped, deduped
+// case-insensitively) — no enum validation.
 type PreparedTripRow = {
   rowIndex: number;
   sourceCanyonName: string;
   date: string;
   notes: string | null;
+  types: string[];
   customFields: Record<string, unknown>;
 };
 
@@ -144,6 +147,23 @@ type ImportOutcome =
 
 function genBatchId(): string {
   return crypto.randomUUID();
+}
+
+// Split a CSV `type` cell into multiple trip types: ";"-separated, each part
+// trimmed, empties dropped, deduped case-insensitively (first casing wins).
+// A single value without ";" yields a one-element array.
+function splitTripTypes(raw: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const part of raw.split(";")) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
 }
 
 function toMatchCandidate(c: TCanyon): MatchCandidate {
@@ -525,6 +545,7 @@ function UnifiedImportDialog({
     const nameCol = headers.find((h) => tripAssignments[h] === "name");
     const dateCol = headers.find((h) => tripAssignments[h] === "date");
     const notesCol = headers.find((h) => tripAssignments[h] === "notes");
+    const typeCol = headers.find((h) => tripAssignments[h] === "type");
     if (!nameCol || !dateCol) return [];
 
     // Custom-field columns: existing cf:<key> plus any new fields the user named.
@@ -556,6 +577,7 @@ function UnifiedImportDialog({
         sourceCanyonName,
         date: isoDate,
         notes: notesCol ? row[notesCol] || null : null,
+        types: typeCol ? splitTripTypes(row[typeCol] ?? "") : [],
         customFields,
       });
     });
@@ -927,6 +949,7 @@ function UnifiedImportDialog({
           canyonId,
           sourceCanyonName: row.sourceCanyonName,
           displayName,
+          types: row.types,
           date: row.date,
           notes: row.notes,
           customFields: row.customFields,
@@ -1145,6 +1168,7 @@ function UnifiedImportDialog({
                         <MenuItem value="name">Canyon Name</MenuItem>
                         <MenuItem value="date">Date</MenuItem>
                         <MenuItem value="notes">Notes</MenuItem>
+                        <MenuItem value="type">Type</MenuItem>
                         {customFieldDefs.map((d) => (
                           <MenuItem key={d.key} value={`cf:${d.key}`}>Field: {d.label}</MenuItem>
                         ))}

@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, ArrowLeft, Info } from "lucide-react";
 import type { TAnalytics, TTripLog } from "../../../canyonUtils";
+import { tripTitle } from "../../../canyonUtils";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import classes from "./AnalyticsPanel.module.css";
@@ -110,6 +111,7 @@ function CompletionRing({ total, completed }: { total: number; completed: number
 function DrilldownHeatmap({
   tripDates,
   tripLogs,
+  typeFilter,
   customFieldDefs,
   onRefetchTripLogs,
   onRefetchAnalytics,
@@ -117,6 +119,9 @@ function DrilldownHeatmap({
 }: {
   tripDates: Record<string, number>;
   tripLogs: TTripLog[];
+  // Active analytics type filter — tripDates is already server-filtered by it,
+  // so the day-trips drilldown list must apply the same filter client-side.
+  typeFilter: string | null;
   customFieldDefs: TripLogCustomFieldDef[];
   onRefetchTripLogs: () => void;
   onRefetchAnalytics: () => void;
@@ -224,8 +229,10 @@ function DrilldownHeatmap({
     if (drilldown.level !== "trips") return [];
     const { year, month, day } = drilldown;
     const padded = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    return tripLogs.filter((t) => t.date.startsWith(padded));
-  }, [drilldown, tripLogs]);
+    return tripLogs.filter(
+      (t) => t.date.startsWith(padded) && (typeFilter == null || t.types.includes(typeFilter)),
+    );
+  }, [drilldown, tripLogs, typeFilter]);
 
   return (
     <div className={classes.heatmapSection}>
@@ -358,9 +365,7 @@ function DrilldownHeatmap({
                 className={classes.tripCard}
                 onClick={() => setViewingTripLog(trip)}
               >
-                <span className={classes.tripCanyonName}>
-                  {trip.canyon?.name ?? trip.displayName ?? "Unknown Canyon"}
-                </span>
+                <span className={classes.tripCanyonName}>{tripTitle(trip)}</span>
                 {trip.notes && (
                   <span className={classes.tripNotes}>
                     {trip.notes.length > 80 ? trip.notes.slice(0, 80) + "…" : trip.notes}
@@ -377,7 +382,6 @@ function DrilldownHeatmap({
         open={viewingTripLog !== null}
         onClose={() => setViewingTripLog(null)}
         tripLog={viewingTripLog}
-        canyonName={viewingTripLog?.canyon?.name ?? viewingTripLog?.displayName ?? ""}
         customFieldDefs={customFieldDefs}
         onMediaChanged={onQuotaChanged}
         onEdit={() => setViewingTripLog(null)}
@@ -397,6 +401,8 @@ function DrilldownHeatmap({
 function AnalyticsPanel({
   analytics,
   loading,
+  typeFilter,
+  onTypeFilterChange,
   tripLogs,
   customFieldDefs,
   onRefetchTripLogs,
@@ -405,13 +411,18 @@ function AnalyticsPanel({
 }: {
   analytics: TAnalytics | null;
   loading: boolean;
+  typeFilter: string | null;
+  onTypeFilterChange: (type: string | null) => void;
   tripLogs: TTripLog[];
   customFieldDefs: TripLogCustomFieldDef[];
   onRefetchTripLogs: () => void;
   onRefetchAnalytics: () => void;
   onQuotaChanged: () => void;
 }) {
-  if (loading || !analytics) {
+  // Only bail entirely before the first fetch lands — while a filter-change
+  // refetch is in flight we keep showing the previous data (and the dropdown),
+  // so switching types doesn't blank the panel.
+  if (!analytics) {
     return (
       <div className={classes.panel}>
         <span className={classes.emptyText}>{loading ? "Loading..." : "No data"}</span>
@@ -419,15 +430,32 @@ function AnalyticsPanel({
     );
   }
 
-  const { heroStats, completion, tripDates } = analytics;
+  const { heroStats, completion, tripDates, types } = analytics;
 
   return (
     <div className={classes.panel}>
+      {/* Type filter — options are the distinct types across ALL trips
+          (unaffected by the current selection). */}
+      <select
+        className={classes.typeSelect}
+        value={typeFilter ?? ""}
+        onChange={(e) => onTypeFilterChange(e.target.value || null)}
+        aria-label="Filter analytics by trip type"
+      >
+        <option value="">All types</option>
+        {types.map((t) => (
+          <option key={t} value={t}>{t}</option>
+        ))}
+      </select>
+
       {/* Hero stats */}
       <div className={classes.statGrid}>
         <StatTile label="Total Trips" value={formatNumber(heroStats.totalTrips)} />
         <StatTile label="Unique Canyons" value={formatNumber(heroStats.uniqueCanyons)} />
-        <StatTile label="Days Canyoning" value={formatNumber(heroStats.daysCanyoning)} />
+        <StatTile
+          label={typeFilter?.toLowerCase() === "canyoning" ? "Days Canyoning" : "Days Out"}
+          value={formatNumber(heroStats.daysCanyoning)}
+        />
         <StatTile
           label="Total Abseils"
           value={formatNumber(heroStats.totalAbseils)}
@@ -445,6 +473,7 @@ function AnalyticsPanel({
       <DrilldownHeatmap
         tripDates={tripDates}
         tripLogs={tripLogs}
+        typeFilter={typeFilter}
         customFieldDefs={customFieldDefs}
         onRefetchTripLogs={onRefetchTripLogs}
         onRefetchAnalytics={onRefetchAnalytics}

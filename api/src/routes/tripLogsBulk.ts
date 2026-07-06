@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { resolveUser } from "../lib/resolveUser";
 import { assignTripImportKeys } from "../lib/importKeys";
 import { deleteTripsCascade } from "../lib/bulkDelete";
+import { parseTripTypes } from "./tripLogsGlobal";
 
 const BULK_DELETE_LIMIT = 500;
 // Cap import rows per request so a single authenticated call can't force an
@@ -24,6 +25,7 @@ type BulkTripInput = {
   date: string;
   notes?: string | null;
   customFields?: Record<string, unknown>;
+  types?: string[] | null;
 };
 
 type ImportRequest = {
@@ -77,6 +79,7 @@ router.post(
       notes: string | null;
       customFields: Record<string, unknown>;
       sourceCanyonName: string;
+      types: string[];
     };
 
     const validTrips: ValidatedTrip[] = [];
@@ -113,6 +116,20 @@ router.post(
         canyonId = t.canyonId;
       }
 
+      // types is an optional free-text list (trip categories) — reuse the same
+      // validator as the single-trip routes rather than re-deriving the rules
+      // here. Row-level so a bad `types` value doesn't abort the whole batch.
+      let types: string[];
+      try {
+        types = parseTripTypes(t.types) ?? [];
+      } catch (e) {
+        if (e instanceof AppError) {
+          errors.push({ index: i, error: e.message });
+          continue;
+        }
+        throw e;
+      }
+
       validTrips.push({
         index: i,
         canyonId,
@@ -121,6 +138,7 @@ router.post(
         notes: t.notes ?? null,
         customFields: t.customFields ?? {},
         sourceCanyonName: t.sourceCanyonName,
+        types,
       });
     }
 
@@ -129,6 +147,10 @@ router.post(
     // but only valid trips will be processed. We need occurrence to be stable
     // relative to all rows that share the same contentHash in file order.
     // Since we filtered invalid rows, we assign keys only among the valid set.
+    // NOTE: the hash inputs below (sourceCanyonName/date/notes/customFields)
+    // must stay exactly as-is — adding `types` (or canyonId) here would change
+    // every previously-computed importKey and break idempotency for anyone
+    // re-importing a batch from before this field existed.
     const keyAssignments = assignTripImportKeys(
       validTrips.map((t) => ({
         sourceCanyonName: t.sourceCanyonName,
@@ -152,8 +174,11 @@ router.post(
     }
 
     // ---- Phase 3: Build create/update operations ----
-    type CreateOp = Prisma.TripLogCreateManyInput;
-    type UpdateOp = { id: string; data: Prisma.TripLogUncheckedUpdateInput };
+    // Creates use `.create()` (not `createMany`) because attaching the canyon
+    // join row is a nested write, which `createMany` cannot do — one canyon
+    // per CSV row, linked via TripLogCanyon at position 0.
+    type CreateOp = { data: Prisma.TripLogCreateInput };
+    type UpdateOp = { id: string; data: Prisma.TripLogUpdateInput };
 
     const creates: CreateOp[] = [];
     const updates: UpdateOp[] = [];
@@ -163,29 +188,39 @@ router.post(
       const { importKey } = keyAssignments[i];
       const existing = existingByKey.get(importKey);
 
+      const canyonLink = trip.canyonId
+        ? { create: [{ canyonId: trip.canyonId, position: 0 }] }
+        : {};
+
       if (existing) {
-        // Update in place — re-apply resolution outputs (canyonId, displayName).
+        // Update in place — re-apply resolution outputs (canyon link,
+        // displayName, types) and fully replace the canyon join (single row,
+        // or none).
         updates.push({
           id: existing.id,
           data: {
-            canyonId: trip.canyonId,
             displayName: trip.displayName,
+            types: trip.types,
             date: trip.date,
             notes: trip.notes,
             customFields: trip.customFields as Prisma.InputJsonValue,
+            canyons: { deleteMany: {}, ...canyonLink },
           },
         });
       } else {
         // Create with importBatchId.
         creates.push({
-          userId: user.id,
-          canyonId: trip.canyonId,
-          displayName: trip.displayName,
-          date: trip.date,
-          notes: trip.notes,
-          customFields: trip.customFields as Prisma.InputJsonValue,
-          importKey,
-          importBatchId: body.importBatchId,
+          data: {
+            user: { connect: { id: user.id } },
+            displayName: trip.displayName,
+            types: trip.types,
+            date: trip.date,
+            notes: trip.notes,
+            customFields: trip.customFields as Prisma.InputJsonValue,
+            importKey,
+            importBatchId: body.importBatchId,
+            canyons: canyonLink,
+          },
         });
       }
     }
@@ -193,7 +228,9 @@ router.post(
     // ---- Phase 4: Execute in chunked transactions (size 200) ----
     for (let i = 0; i < creates.length; i += CHUNK_SIZE) {
       const chunk = creates.slice(i, i + CHUNK_SIZE);
-      await prisma.tripLog.createMany({ data: chunk });
+      await prisma.$transaction(
+        chunk.map((op) => prisma.tripLog.create({ data: op.data })),
+      );
     }
 
     for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
