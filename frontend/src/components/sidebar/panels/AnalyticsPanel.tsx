@@ -230,7 +230,7 @@ function DrilldownHeatmap({
     const { year, month, day } = drilldown;
     const padded = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     return tripLogs.filter(
-      (t) => t.date.startsWith(padded) && (typeFilter == null || t.type === typeFilter),
+      (t) => t.date.startsWith(padded) && (typeFilter == null || t.types.includes(typeFilter)),
     );
   }, [drilldown, tripLogs, typeFilter]);
 

@@ -24,6 +24,7 @@ import {
   formatTripCanyonNames,
   TRIP_TYPE_SUGGESTIONS,
   MAX_CANYONS_PER_TRIP,
+  MAX_TRIP_TYPES_PER_TRIP,
 } from "@logjam/shared";
 import type { TCanyon, TTripLog } from "../../canyonUtils";
 import {
@@ -35,7 +36,7 @@ import {
   updateUserPreferences,
 } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { fieldSx } from "../../csvImport/dialogStyles";
+import { fieldSx, typeChipSx } from "../../csvImport/dialogStyles";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
 import AddCustomFieldForm from "./AddCustomFieldForm";
@@ -68,6 +69,19 @@ function getOptionLabel(opt: CanyonOption | string): string {
 const canyonFilter = createFilterOptions<CanyonOption>();
 
 type CreateForm = { name: string; latitude: string; longitude: string };
+
+// ── Type option union ────────────────────────────────────────
+// Mirrors the Canyons picker: existing suggestions plus a synthetic
+// `Add "<input>"` row when the typed text matches nothing.
+type TypeOption =
+  | { kind: "existing"; label: string }
+  | { kind: "new"; label: string };
+
+const typeFilter = createFilterOptions<TypeOption>();
+
+function getTypeOptionLabel(opt: TypeOption | string): string {
+  return typeof opt === "string" ? opt : opt.label;
+}
 
 // Case-insensitive dedupe that preserves the casing of the first occurrence —
 // used to union the built-in TRIP_TYPE_SUGGESTIONS with whatever casing the
@@ -105,9 +119,9 @@ function TripLogDialog({
   tripLog?: TTripLog;
   customFieldDefs: TripLogCustomFieldDef[];
   onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
-  // Raw (non-deduped, non-null) trip.type values from whichever trip list the
-  // caller has on hand — unioned with TRIP_TYPE_SUGGESTIONS for the type field's
-  // autocomplete options.
+  // Raw (non-deduped) trip.types values flattened from whichever trip list the
+  // caller has on hand — unioned with TRIP_TYPE_SUGGESTIONS for the types
+  // field's autocomplete options.
   existingTripTypes: string[];
   onPickCoords?: (onPicked: (lat: number, lng: number) => void) => void;
   // Fired when an inline "Create new canyon" makes a real canyon, so the parent
@@ -124,7 +138,9 @@ function TripLogDialog({
   // User's trip-name override. "" means unset (falls back to the derived
   // placeholder); independent of canyon selection.
   const [displayNameInput, setDisplayNameInput] = useState("");
-  const [typeInput, setTypeInput] = useState("");
+  // Ordered selected trip types (user vocab, case preserved as typed) —
+  // capped at MAX_TRIP_TYPES_PER_TRIP, deduped case-insensitively on add.
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   // At most one pending inline "create new canyon" at a time (mirrors the old
   // single-canyon dialog's one-create-at-a-time behaviour).
   const [creating, setCreating] = useState<CreateForm | null>(null);
@@ -132,9 +148,26 @@ function TripLogDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const typeOptions = useMemo(
+  // The full known-type vocabulary: built-in suggestions ∪ the user's own
+  // history, deduped case-insensitively (first casing wins).
+  const knownTypes = useMemo(
     () => dedupeTypesPreserveCase([...TRIP_TYPE_SUGGESTIONS, ...existingTripTypes]),
     [existingTripTypes],
+  );
+
+  // Dropdown options — known types minus the already-selected ones, so a
+  // chipped type doesn't linger (duplicated) in the list.
+  const typeOptions: TypeOption[] = useMemo(() => {
+    const selected = new Set(selectedTypes.map((t) => t.toLowerCase()));
+    return knownTypes
+      .filter((t) => !selected.has(t.toLowerCase()))
+      .map((label) => ({ kind: "existing" as const, label }));
+  }, [knownTypes, selectedTypes]);
+
+  // The current selection rendered as Autocomplete chips, in selection order.
+  const typeValue: TypeOption[] = useMemo(
+    () => selectedTypes.map((label) => ({ kind: "existing" as const, label })),
+    [selectedTypes],
   );
 
   // Media. In edit mode the trip already exists; in create mode we lazily
@@ -205,7 +238,7 @@ function TripLogDialog({
       setNotes(tripLog.notes ?? "");
       setSelectedCanyonIds(tripLog.canyons.map((c) => c.id));
       setDisplayNameInput(tripLog.displayName ?? "");
-      setTypeInput(tripLog.type ?? "");
+      setSelectedTypes(tripLog.types);
       setCreating(null);
       // Populate existing custom field values as strings
       const vals: Record<string, string> = {};
@@ -219,7 +252,7 @@ function TripLogDialog({
       setNotes("");
       setSelectedCanyonIds(defaultCanyonId ? [defaultCanyonId] : []);
       setDisplayNameInput("");
-      setTypeInput("");
+      setSelectedTypes([]);
       setCreating(null);
       setFieldValues({});
     }
@@ -285,7 +318,7 @@ function TripLogDialog({
       customFields,
       canyonIds: selectedCanyonIds,
       displayName: displayNameInput.trim() || null,
-      type: typeInput.trim() || null,
+      types: selectedTypes,
     })
       .then((trip) => {
         setDraftTripId(trip.id);
@@ -354,7 +387,7 @@ function TripLogDialog({
       // Resolve canyon selection (may create a canyon inline)
       const canyonIds = await resolveCanyonIds();
       const displayName = displayNameInput.trim() || null;
-      const type = typeInput.trim() || null;
+      const types = selectedTypes;
 
       // Build custom fields object — only include defined fields
       const customFields: Record<string, unknown> = {};
@@ -370,7 +403,7 @@ function TripLogDialog({
           customFields,
           canyonIds,
           displayName,
-          type,
+          types,
         });
       } else if (draftTripId) {
         // A draft was already created to hold uploaded files — persist the form.
@@ -380,7 +413,7 @@ function TripLogDialog({
           customFields,
           canyonIds,
           displayName,
-          type,
+          types,
         });
       } else {
         await createTripLog({
@@ -389,7 +422,7 @@ function TripLogDialog({
           customFields,
           canyonIds,
           displayName,
-          type,
+          types,
         });
       }
       committedRef.current = true;
@@ -623,19 +656,99 @@ function TripLogDialog({
             sx={fieldSx}
           />
 
-          {/* Type — free text, seeded with built-in suggestions plus whatever
-              the user has already typed across their trip history. */}
-          <Autocomplete
+          {/* Types — free text, multiple, seeded with built-in suggestions plus
+              whatever the user has already typed across their trip history.
+              Mirrors the Canyons picker: chips in the field, an `Add "<input>"`
+              row for unseen text, case-insensitive dedupe, capped. */}
+          <Autocomplete<TypeOption, true, false, true>
+            multiple
             freeSolo
             options={typeOptions}
-            value={typeInput}
-            onInputChange={(_, newValue) => setTypeInput(newValue)}
+            getOptionLabel={getTypeOptionLabel}
+            getOptionKey={(option) =>
+              typeof option === "string"
+                ? option
+                : `${option.kind}:${option.label.toLowerCase()}`
+            }
+            value={typeValue}
+            onChange={(_, vals) => {
+              // freeSolo delivers plain strings for Enter-on-free-text; option
+              // objects otherwise. Normalize, trim, and dedupe
+              // case-insensitively (adding "Canyoning" over "canyoning" is a
+              // no-op that keeps the first casing).
+              const next: string[] = [];
+              const seen = new Set<string>();
+              for (const val of vals) {
+                const label = getTypeOptionLabel(val).trim();
+                if (!label) continue;
+                const key = label.toLowerCase();
+                if (seen.has(key)) continue;
+                seen.add(key);
+                next.push(label);
+              }
+              // Cap at MAX_TRIP_TYPES_PER_TRIP (mirrors the canyon cap).
+              if (next.length > MAX_TRIP_TYPES_PER_TRIP) return;
+              setSelectedTypes(next);
+            }}
+            filterOptions={(options, params) => {
+              const filtered = typeFilter(options, params);
+              const input = params.inputValue.trim();
+              const atCap = selectedTypes.length >= MAX_TRIP_TYPES_PER_TRIP;
+              // Only offer "Add" when the text matches no known or selected
+              // type case-insensitively and the cap hasn't been reached.
+              const matchesKnown =
+                knownTypes.some((t) => t.toLowerCase() === input.toLowerCase()) ||
+                selectedTypes.some((t) => t.toLowerCase() === input.toLowerCase());
+              if (input && !matchesKnown && !atCap) {
+                filtered.push({ kind: "new", label: input });
+              }
+              return filtered;
+            }}
+            isOptionEqualToValue={(opt, val) =>
+              getTypeOptionLabel(opt).toLowerCase() ===
+              getTypeOptionLabel(val).toLowerCase()
+            }
+            renderOption={(props, option) => {
+              const { key, ...rest } = props as React.HTMLAttributes<HTMLLIElement> & { key: string };
+              return (
+                <li key={key} {...rest}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, width: "100%" }}>
+                    <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {typeof option !== "string" && option.kind === "new"
+                        ? `Add "${option.label}"`
+                        : getTypeOptionLabel(option)}
+                    </span>
+                    {typeof option !== "string" && option.kind === "new" && (
+                      <Chip label="New type" size="small" color="primary" sx={{ fontSize: "0.7em", height: 20 }} />
+                    )}
+                  </Box>
+                </li>
+              );
+            }}
+            renderTags={(value, getTagProps) =>
+              value.map((option, index) => {
+                const { key, ...tagProps } = getTagProps({ index });
+                return (
+                  <Chip
+                    key={key}
+                    label={getTypeOptionLabel(option)}
+                    size="small"
+                    sx={typeChipSx}
+                    {...tagProps}
+                  />
+                );
+              })
+            }
             size="small"
             renderInput={(params) => (
               <TextField
                 {...params}
-                label="Type"
-                placeholder="e.g. canyoning, bushwalking"
+                label="Types"
+                placeholder={
+                  selectedTypes.length >= MAX_TRIP_TYPES_PER_TRIP
+                    ? undefined
+                    : "e.g. canyoning, bushwalking"
+                }
                 size="small"
                 sx={fieldSx}
               />

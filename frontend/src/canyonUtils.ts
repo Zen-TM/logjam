@@ -64,7 +64,7 @@ export type TTripLog = {
   userId: string;
   date: string;
   displayName: string | null;
-  type: string | null;
+  types: string[];
   notes: string | null;
   customFields: Record<string, unknown>;
   createdAt: string;
@@ -608,7 +608,7 @@ export function createTripLog(data: {
   // set, either may be omitted.
   canyonIds?: string[];
   displayName?: string | null;
-  type?: string | null;
+  types?: string[] | null;
 }): Promise<TTripLog> {
   return apiFetch<TTripLog>("/trips", {
     method: "POST",
@@ -625,7 +625,7 @@ export function updateTripLog(
     // Replaces the full linked-canyon set when present.
     canyonIds?: string[];
     displayName?: string | null;
-    type?: string | null;
+    types?: string[] | null;
   },
 ): Promise<TTripLog> {
   return apiFetch<TTripLog>(`/trips/${id}`, {
@@ -687,7 +687,7 @@ export type BulkTripLogInput = {
   canyonId: string | null;
   sourceCanyonName: string;
   displayName?: string | null;
-  type?: string | null;
+  types?: string[] | null;
   date: string;
   notes?: string | null;
   customFields?: Record<string, unknown>;

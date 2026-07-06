@@ -113,10 +113,10 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
     }
   });
 
-  it("a row with type creates a trip with that type; re-importing the same importKey with a different type updates it (type is not part of the hash)", async () => {
+  it("a row with types creates a trip with those types; re-importing the same importKey with different types updates it (types is not part of the hash)", async () => {
     const name = `${TAG}-type`;
     const trips = [
-      { sourceCanyonName: name, date: "2024-07-01", displayName: name, type: "canyoning" },
+      { sourceCanyonName: name, date: "2024-07-01", displayName: name, types: ["canyoning"] },
     ];
     try {
       const first = await request(API_URL)
@@ -128,17 +128,17 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
 
       const list1 = await request(API_URL).get("/trips").query({ search: name }).set(AUTH);
       expect(list1.body.length).toBe(1);
-      expect(list1.body[0].type).toBe("canyoning");
+      expect(list1.body[0].types).toEqual(["canyoning"]);
 
       // Same sourceCanyonName/date/notes/customFields → same importKey — the
-      // contract requires `type` NOT be part of the hash, so this changes only
-      // the type field via an update, never a duplicate row.
+      // contract requires `types` NOT be part of the hash, so this changes
+      // only the types field via an update, never a duplicate row.
       const second = await request(API_URL)
         .post("/trips/bulk")
         .set(AUTH)
         .send({
           importBatchId: `${name}-batch2`,
-          trips: [{ ...trips[0], type: "bushwalking" }],
+          trips: [{ ...trips[0], types: ["bushwalking", "packrafting"] }],
         });
       expect(second.status).toBe(200);
       expect(second.body.imported).toBe(0);
@@ -146,13 +146,13 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
 
       const list2 = await request(API_URL).get("/trips").query({ search: name }).set(AUTH);
       expect(list2.body.length).toBe(1);
-      expect(list2.body[0].type).toBe("bushwalking");
+      expect(list2.body[0].types).toEqual(["bushwalking", "packrafting"]);
     } finally {
       await deleteTripsBySearch(name);
     }
   });
 
-  it("a row-level type validation error (>40 chars) does not abort the batch", async () => {
+  it("a row-level types validation error (>40 chars) does not abort the batch", async () => {
     const name = `${TAG}-type-invalid`;
     const goodName = `${TAG}-type-invalid-good`;
     try {
@@ -162,14 +162,14 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
         .send({
           importBatchId: `${name}-batch`,
           trips: [
-            { sourceCanyonName: name, date: "2024-07-05", displayName: name, type: "x".repeat(41) },
+            { sourceCanyonName: name, date: "2024-07-05", displayName: name, types: ["x".repeat(41)] },
             { sourceCanyonName: goodName, date: "2024-07-06", displayName: goodName },
           ],
         });
       expect(res.status).toBe(200);
       expect(res.body.imported).toBe(1);
       expect(res.body.errors).toHaveLength(1);
-      expect(res.body.errors[0].error).toMatch(/type must be at most 40 characters/);
+      expect(res.body.errors[0].error).toMatch(/types entries must be at most 40 characters/);
     } finally {
       await deleteTripsBySearch(name);
       await deleteTripsBySearch(goodName);

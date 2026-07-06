@@ -7,7 +7,7 @@ const CAROL = as(CAROL_SUB);
 // Integration coverage for routes/tripLogsGlobal.ts — GET /trips (list),
 // GET /trips/:id, POST /trips, PATCH /trips/:id, DELETE /trips/:id. Covers
 // the trip↔canyon m2m contract: canyons: {id,name}[] (join-order), the
-// independent optional displayName/type fields, canyonIds validation
+// independent optional displayName/types fields, canyonIds validation
 // (ownership/dupes/cap), and search-by-linked-canyon-name. Requires
 // `make dev` (AUTH_MODE=fake; no header = alice).
 //
@@ -44,7 +44,7 @@ async function createTrip(body: Record<string, any>, auth = AUTH) {
     id: string;
     canyons: { id: string; name: string }[];
     displayName: string | null;
-    type: string | null;
+    types: string[];
   };
 }
 
@@ -157,7 +157,7 @@ describe("POST /trips (acting as carol — spreads the per-user rate-limit budge
     try {
       expect(trip.canyons).toEqual([]);
       expect(trip.displayName).toBeNull();
-      expect(trip.type).toBeNull();
+      expect(trip.types).toEqual([]);
     } finally {
       await deleteTrip(trip.id, CAROL);
     }
@@ -189,11 +189,11 @@ describe("POST /trips (acting as carol — spreads the per-user rate-limit budge
       canyonIds: [canyonId],
       date: "2026-06-07",
       displayName: "custom title",
-      type: "canyoning",
+      types: ["canyoning"],
     }, CAROL);
     try {
       expect(trip.displayName).toBe("custom title");
-      expect(trip.type).toBe("canyoning");
+      expect(trip.types).toEqual(["canyoning"]);
       expect(trip.canyons).toEqual([{ id: canyonId, name: `${TAG}-coexist` }]);
     } finally {
       await deleteTrip(trip.id, CAROL);
@@ -239,11 +239,11 @@ describe("POST /trips (acting as carol — spreads the per-user rate-limit budge
     });
   });
 
-  describe("type validation", () => {
-    it("sets type on create", async () => {
-      const trip = await createTrip({ date: "2026-06-11", type: "bushwalking" }, CAROL);
+  describe("types validation", () => {
+    it("sets types on create", async () => {
+      const trip = await createTrip({ date: "2026-06-11", types: ["bushwalking"] }, CAROL);
       try {
-        expect(trip.type).toBe("bushwalking");
+        expect(trip.types).toEqual(["bushwalking"]);
       } finally {
         await deleteTrip(trip.id, CAROL);
       }
@@ -253,7 +253,36 @@ describe("POST /trips (acting as carol — spreads the per-user rate-limit budge
       const res = await request(API_URL)
         .post("/trips")
         .set(CAROL)
-        .send({ date: "2026-06-12", type: "x".repeat(41) });
+        .send({ date: "2026-06-12", types: ["x".repeat(41)] });
+      expect(res.status).toBe(400);
+    });
+
+    it("multi-type create round-trips ordered", async () => {
+      const trip = await createTrip(
+        { date: "2026-06-21", types: ["canyoning", "bushwalking", "packrafting"] },
+        CAROL,
+      );
+      try {
+        expect(trip.types).toEqual(["canyoning", "bushwalking", "packrafting"]);
+      } finally {
+        await deleteTrip(trip.id, CAROL);
+      }
+    });
+
+    it("case-insensitive duplicate types are rejected with 400", async () => {
+      const res = await request(API_URL)
+        .post("/trips")
+        .set(CAROL)
+        .send({ date: "2026-06-22", types: ["Canyoning", "canyoning"] });
+      expect(res.status).toBe(400);
+    });
+
+    it("more than 10 types are rejected with 400", async () => {
+      const types = Array.from({ length: 11 }, (_, i) => `type-${i}`);
+      const res = await request(API_URL)
+        .post("/trips")
+        .set(CAROL)
+        .send({ date: "2026-06-23", types });
       expect(res.status).toBe(400);
     });
   });
@@ -327,15 +356,15 @@ describe("PATCH /trips/:id (acting as carol — spreads the per-user rate-limit 
     }
   });
 
-  it("explicit type: null clears a previously-set type", async () => {
-    const trip = await createTrip({ date: "2026-06-17", type: "canyoning" }, CAROL);
+  it("explicit types: null clears a previously-set types list", async () => {
+    const trip = await createTrip({ date: "2026-06-17", types: ["canyoning"] }, CAROL);
     try {
       const patchRes = await request(API_URL)
         .patch(`/trips/${trip.id}`)
         .set(CAROL)
-        .send({ type: null });
+        .send({ types: null });
       expect(patchRes.status).toBe(200);
-      expect(patchRes.body.type).toBeNull();
+      expect(patchRes.body.types).toEqual([]);
     } finally {
       await deleteTrip(trip.id, CAROL);
     }

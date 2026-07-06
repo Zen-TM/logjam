@@ -135,13 +135,23 @@
   margin-top: 0.1rem;
 }
 
+.typeChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+  align-self: flex-start;
+  margin-top: 0.1rem;
+}
+
+/* Accent-fill chip with the dark primary as the label — same contrast system
+   as .btnFilledAccent in shared.module.css (the old 16%-alpha accent wash
+   with muted text was too dim to read). */
 .typeChip {
   display: inline-block;
-  align-self: flex-start;
   font-size: var(--text-xs);
-  color: var(--theme-text-muted);
-  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
+  font-weight: 600;
+  color: var(--theme-primary);
+  background: var(--theme-accent);
   border-radius: var(--radius-sm);
   padding: 0.1em 0.5em;
-  margin-top: 0.1rem;
 }

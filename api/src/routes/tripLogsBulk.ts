@@ -6,7 +6,7 @@ import { Prisma } from "@prisma/client";
 import { resolveUser } from "../lib/resolveUser";
 import { assignTripImportKeys } from "../lib/importKeys";
 import { deleteTripsCascade } from "../lib/bulkDelete";
-import { parseTripType } from "./tripLogsGlobal";
+import { parseTripTypes } from "./tripLogsGlobal";
 
 const BULK_DELETE_LIMIT = 500;
 // Cap import rows per request so a single authenticated call can't force an
@@ -25,7 +25,7 @@ type BulkTripInput = {
   date: string;
   notes?: string | null;
   customFields?: Record<string, unknown>;
-  type?: string | null;
+  types?: string[] | null;
 };
 
 type ImportRequest = {
@@ -79,7 +79,7 @@ router.post(
       notes: string | null;
       customFields: Record<string, unknown>;
       sourceCanyonName: string;
-      type: string | null;
+      types: string[];
     };
 
     const validTrips: ValidatedTrip[] = [];
@@ -116,12 +116,12 @@ router.post(
         canyonId = t.canyonId;
       }
 
-      // type is optional free text (trip category) — reuse the same validator
-      // as the single-trip routes rather than re-deriving the rules here.
-      // Row-level so one bad `type` doesn't abort the whole batch.
-      let type: string | null;
+      // types is an optional free-text list (trip categories) — reuse the same
+      // validator as the single-trip routes rather than re-deriving the rules
+      // here. Row-level so a bad `types` value doesn't abort the whole batch.
+      let types: string[];
       try {
-        type = parseTripType(t.type) ?? null;
+        types = parseTripTypes(t.types) ?? [];
       } catch (e) {
         if (e instanceof AppError) {
           errors.push({ index: i, error: e.message });
@@ -138,7 +138,7 @@ router.post(
         notes: t.notes ?? null,
         customFields: t.customFields ?? {},
         sourceCanyonName: t.sourceCanyonName,
-        type,
+        types,
       });
     }
 
@@ -148,7 +148,7 @@ router.post(
     // relative to all rows that share the same contentHash in file order.
     // Since we filtered invalid rows, we assign keys only among the valid set.
     // NOTE: the hash inputs below (sourceCanyonName/date/notes/customFields)
-    // must stay exactly as-is — adding `type` (or canyonId) here would change
+    // must stay exactly as-is — adding `types` (or canyonId) here would change
     // every previously-computed importKey and break idempotency for anyone
     // re-importing a batch from before this field existed.
     const keyAssignments = assignTripImportKeys(
@@ -194,13 +194,13 @@ router.post(
 
       if (existing) {
         // Update in place — re-apply resolution outputs (canyon link,
-        // displayName, type) and fully replace the canyon join (single row,
+        // displayName, types) and fully replace the canyon join (single row,
         // or none).
         updates.push({
           id: existing.id,
           data: {
             displayName: trip.displayName,
-            type: trip.type,
+            types: trip.types,
             date: trip.date,
             notes: trip.notes,
             customFields: trip.customFields as Prisma.InputJsonValue,
@@ -213,7 +213,7 @@ router.post(
           data: {
             user: { connect: { id: user.id } },
             displayName: trip.displayName,
-            type: trip.type,
+            types: trip.types,
             date: trip.date,
             notes: trip.notes,
             customFields: trip.customFields as Prisma.InputJsonValue,

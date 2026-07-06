@@ -6,6 +6,7 @@
 export const TRIP_NAME_MAX_LENGTH = 200;
 export const TRIP_TYPE_MAX_LENGTH = 40;
 export const MAX_CANYONS_PER_TRIP = 20;
+export const MAX_TRIP_TYPES_PER_TRIP = 10;
 
 /**
  * Built-in trip-type suggestions. The UI unions these with the distinct types

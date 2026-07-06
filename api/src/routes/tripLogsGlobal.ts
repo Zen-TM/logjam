@@ -5,6 +5,7 @@ import { AppError } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
 import {
   MAX_CANYONS_PER_TRIP,
+  MAX_TRIP_TYPES_PER_TRIP,
   TRIP_NAME_MAX_LENGTH,
   TRIP_TYPE_MAX_LENGTH,
 } from "@logjam/shared";
@@ -67,21 +68,40 @@ export async function resolveTripCanyonIds(
   return canyonIds;
 }
 
-// Normalizes an optional free-text trip type: trimmed, empty → null.
-// Returns undefined when the field was absent (PATCH: leave unchanged).
-export function parseTripType(value: unknown): string | null | undefined {
+// Normalizes an optional free-text trip-type list: an array of strings, each
+// trimmed and nonempty, deduped case-insensitively, order preserved, capped.
+// undefined → undefined (PATCH: leave unchanged); null → [] (clears the list).
+export function parseTripTypes(value: unknown): string[] | undefined {
   if (value === undefined) return undefined;
-  if (value === null) return null;
-  if (typeof value !== "string")
-    throw new AppError(400, "type must be a string or null");
-  const trimmed = value.trim();
-  if (trimmed.length === 0) return null;
-  if (trimmed.length > TRIP_TYPE_MAX_LENGTH)
+  if (value === null) return [];
+  if (!Array.isArray(value))
+    throw new AppError(400, "types must be an array of strings or null");
+
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== "string")
+      throw new AppError(400, "types must be an array of strings");
+    const trimmed = item.trim();
+    if (trimmed.length === 0)
+      throw new AppError(400, "types entries must not be empty");
+    if (trimmed.length > TRIP_TYPE_MAX_LENGTH)
+      throw new AppError(
+        400,
+        `types entries must be at most ${TRIP_TYPE_MAX_LENGTH} characters`,
+      );
+    const key = trimmed.toLowerCase();
+    if (seen.has(key))
+      throw new AppError(400, "types contains case-insensitive duplicates");
+    seen.add(key);
+    result.push(trimmed);
+  }
+  if (result.length > MAX_TRIP_TYPES_PER_TRIP)
     throw new AppError(
       400,
-      `type must be at most ${TRIP_TYPE_MAX_LENGTH} characters`,
+      `At most ${MAX_TRIP_TYPES_PER_TRIP} types per trip`,
     );
-  return trimmed;
+  return result;
 }
 
 // Normalizes an optional trip display name: trimmed, empty → null.
@@ -193,7 +213,7 @@ router.get(
 
 // ── POST /trips ───────────────────────────────────────────────
 // Creates a trip log, optionally linked to any number of owned canyons
-// (canyonIds omitted or [] = unassigned). displayName and type are
+// (canyonIds omitted or [] = unassigned). displayName and types are
 // independent optional fields; a bare trip needs only a date. The default
 // title (joined canyon names) is derived at render time, never stored.
 router.post(
@@ -202,20 +222,20 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
 
-    const { date, notes, customFields, canyonIds, displayName, type } =
+    const { date, notes, customFields, canyonIds, displayName, types } =
       req.body;
     if (!date) throw new AppError(400, "date is required");
 
     const resolvedCanyonIds = await resolveTripCanyonIds(user.id, canyonIds);
     const trimmedDisplayName = parseDisplayName(displayName) ?? null;
-    const parsedType = parseTripType(type) ?? null;
+    const parsedTypes = parseTripTypes(types) ?? [];
 
     const trip = await prisma.tripLog.create({
       data: {
         userId: user.id,
         date: new Date(date),
         displayName: trimmedDisplayName,
-        type: parsedType,
+        types: parsedTypes,
         notes,
         customFields: customFields ?? {},
         canyons: {
@@ -234,7 +254,9 @@ router.post(
 
 // ── PATCH /trips/:id ──────────────────────────────────────────
 // Updates a trip log. canyonIds, when present, replaces the full linked set
-// (order included). displayName/type accept explicit null to clear.
+// (order included). displayName accepts explicit null to clear; types
+// accepts explicit null or [] to clear (types: [] and null both mean "no
+// types"); either replaces the full array when present.
 router.patch(
   "/:id",
   requireAuth,
@@ -247,7 +269,7 @@ router.patch(
     if (!trip || trip.userId !== user.id)
       throw new AppError(404, "Trip log not found");
 
-    const { date, notes, customFields, canyonIds, displayName, type } =
+    const { date, notes, customFields, canyonIds, displayName, types } =
       req.body;
 
     const resolvedCanyonIds =
@@ -255,7 +277,7 @@ router.patch(
         ? await resolveTripCanyonIds(user.id, canyonIds)
         : undefined;
     const trimmedDisplayName = parseDisplayName(displayName);
-    const parsedType = parseTripType(type);
+    const parsedTypes = parseTripTypes(types);
 
     const updated = await prisma.tripLog.update({
       where: { id },
@@ -268,7 +290,7 @@ router.patch(
         ...(trimmedDisplayName !== undefined && {
           displayName: trimmedDisplayName,
         }),
-        ...(parsedType !== undefined && { type: parsedType }),
+        ...(parsedTypes !== undefined && { types: parsedTypes }),
         ...(resolvedCanyonIds !== undefined && {
           canyons: {
             deleteMany: {},

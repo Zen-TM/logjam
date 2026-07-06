@@ -7,7 +7,7 @@ import TripLogDialog from "../../dialogs/TripLogDialog";
 import classes from "./TripLogsPanel.module.css";
 
 // The type-filter dropdown's "no type set" bucket. Distinct from "" (All),
-// which never matches an actual trip.type value.
+// which never matches an actual trip.types entry.
 const NO_TYPE_FILTER_VALUE = "__no_type__";
 
 function TripLogsPanel({
@@ -50,10 +50,10 @@ function TripLogsPanel({
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
-  // Distinct trip types across the loaded trips — feeds both the type-filter
-  // dropdown here and the type field's suggestions in the create/edit dialogs.
+  // Trip types flattened across the loaded trips — feeds both the type-filter
+  // dropdown here and the types field's suggestions in the create/edit dialogs.
   const existingTripTypes = useMemo(
-    () => tripLogs.map((t) => t.type).filter((t): t is string => t != null),
+    () => tripLogs.flatMap((t) => t.types),
     [tripLogs],
   );
   const distinctTypes = useMemo(
@@ -77,9 +77,9 @@ function TripLogsPanel({
         if (new Date(t.date) > new Date(dateTo)) return false;
       }
       if (typeFilter === NO_TYPE_FILTER_VALUE) {
-        if (t.type != null) return false;
+        if (t.types.length > 0) return false;
       } else if (typeFilter) {
-        if (t.type !== typeFilter) return false;
+        if (!t.types.includes(typeFilter)) return false;
       }
       return true;
     });
@@ -165,7 +165,13 @@ function TripLogsPanel({
                   timeZone: "UTC",
                 })}
               </span>
-              {trip.type && <span className={classes.typeChip}>{trip.type}</span>}
+              {trip.types.length > 0 && (
+                <span className={classes.typeChips}>
+                  {trip.types.map((t) => (
+                    <span key={t} className={classes.typeChip}>{t}</span>
+                  ))}
+                </span>
+              )}
               {trip.notes && (
                 <span className={classes.tripNotes}>
                   {trip.notes.length > 80 ? trip.notes.slice(0, 80) + "…" : trip.notes}

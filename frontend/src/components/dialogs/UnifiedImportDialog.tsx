@@ -105,13 +105,14 @@ type PreparedCanyonRow = {
 };
 
 // Per-trip-row prepared content. `sourceCanyonName` is the raw file string.
-// `type` is free text (trimmed, empty → null) — no enum validation.
+// `types` is free text split on ";" (each trimmed, empties dropped, deduped
+// case-insensitively) — no enum validation.
 type PreparedTripRow = {
   rowIndex: number;
   sourceCanyonName: string;
   date: string;
   notes: string | null;
-  type: string | null;
+  types: string[];
   customFields: Record<string, unknown>;
 };
 
@@ -146,6 +147,23 @@ type ImportOutcome =
 
 function genBatchId(): string {
   return crypto.randomUUID();
+}
+
+// Split a CSV `type` cell into multiple trip types: ";"-separated, each part
+// trimmed, empties dropped, deduped case-insensitively (first casing wins).
+// A single value without ";" yields a one-element array.
+function splitTripTypes(raw: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const part of raw.split(";")) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
 }
 
 function toMatchCandidate(c: TCanyon): MatchCandidate {
@@ -559,7 +577,7 @@ function UnifiedImportDialog({
         sourceCanyonName,
         date: isoDate,
         notes: notesCol ? row[notesCol] || null : null,
-        type: typeCol ? (row[typeCol] ?? "").trim() || null : null,
+        types: typeCol ? splitTripTypes(row[typeCol] ?? "") : [],
         customFields,
       });
     });
@@ -931,7 +949,7 @@ function UnifiedImportDialog({
           canyonId,
           sourceCanyonName: row.sourceCanyonName,
           displayName,
-          type: row.type,
+          types: row.types,
           date: row.date,
           notes: row.notes,
           customFields: row.customFields,

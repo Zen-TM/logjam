@@ -8,8 +8,9 @@ const router = Router();
 
 // ── GET /analytics ─────────────────────────────────────────────
 // Returns aggregate statistics for the current user's canyoning activity.
-// Optional ?type= filters the trip-derived stats (heroStats, tripDates) to an
-// exact TripLog.type match; `types` is always computed unfiltered so the UI
+// Optional ?type= filters the trip-derived stats (heroStats, tripDates) to
+// trips whose `types` array contains that value; `types` in the response is
+// always computed unfiltered (flattened across every trip's array) so the UI
 // dropdown can offer every type the user has ever used.
 router.get(
   "/",
@@ -22,10 +23,10 @@ router.get(
       throw new AppError(400, "type must be a string");
     }
 
-    const [trips, totalCanyons, canyonsWithTrips, distinctTypeRows] =
+    const [trips, totalCanyons, canyonsWithTrips, typesRows] =
       await Promise.all([
         prisma.tripLog.findMany({
-          where: { userId: user.id, ...(type ? { type } : {}) },
+          where: { userId: user.id, ...(type ? { types: { has: type } } : {}) },
           select: {
             date: true,
             displayName: true,
@@ -41,10 +42,11 @@ router.get(
         prisma.canyon.count({
           where: { ownerId: user.id, tripLogLinks: { some: {} } },
         }),
+        // `distinct` can't dedupe on an array column the way it can on a
+        // scalar — fetch every non-empty types[] and flatten/dedupe in JS.
         prisma.tripLog.findMany({
-          where: { userId: user.id, type: { not: null } },
-          select: { type: true },
-          distinct: ["type"],
+          where: { userId: user.id, types: { isEmpty: false } },
+          select: { types: true },
         }),
       ]);
 
@@ -76,10 +78,7 @@ router.get(
       }
     }
 
-    const types = distinctTypeRows
-      .map((t) => t.type)
-      .filter((t): t is string => t != null)
-      .sort();
+    const types = Array.from(new Set(typesRows.flatMap((t) => t.types))).sort();
 
     res.json({
       heroStats: {

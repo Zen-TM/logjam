@@ -98,11 +98,11 @@ describe("GET /analytics (fake auth = alice)", () => {
     }
   });
 
-  it("?type= filters heroStats/tripDates to an exact TripLog.type match; types[] always lists every distinct type unfiltered; totalAbseils sums every linked canyon of each counted trip", async () => {
+  it("?type= filters heroStats/tripDates to trips whose types[] contains that value; types[] always lists every distinct flattened type unfiltered; totalAbseils sums every linked canyon of each counted trip", async () => {
     // Acts as bob (no seeded trips) — keeps these exact-count assertions
     // independent of alice's ~131 migrated seed trips and spreads the suite
     // across per-user rate-limit buckets.
-    // TripLog.type caps at 40 chars — keep these run-unique tags short.
+    // TripLog types entries cap at 40 chars — keep these run-unique tags short.
     const canyoningType = `cyn-${Date.now()}`;
     const bushwalkingType = `bsh-${Date.now()}`;
 
@@ -125,17 +125,17 @@ describe("GET /analytics (fake auth = alice)", () => {
     const tripMulti = await request(API_URL)
       .post("/trips")
       .set(BOB)
-      .send({ canyonIds: [canyonAId, canyonBId], date: "2099-03-01", type: canyoningType });
+      .send({ canyonIds: [canyonAId, canyonBId], date: "2099-03-01", types: [canyoningType] });
     expect(tripMulti.status).toBe(201);
     const tripSingle = await request(API_URL)
       .post("/trips")
       .set(BOB)
-      .send({ canyonIds: [canyonAId], date: "2099-03-02", type: canyoningType });
+      .send({ canyonIds: [canyonAId], date: "2099-03-02", types: [canyoningType] });
     expect(tripSingle.status).toBe(201);
     const tripBushwalk = await request(API_URL)
       .post("/trips")
       .set(BOB)
-      .send({ canyonIds: [canyonBId], date: "2099-03-03", type: bushwalkingType });
+      .send({ canyonIds: [canyonBId], date: "2099-03-03", types: [bushwalkingType] });
     expect(tripBushwalk.status).toBe(201);
 
     const tripIds = [tripMulti.body.id, tripSingle.body.id, tripBushwalk.body.id] as string[];
@@ -166,6 +166,29 @@ describe("GET /analytics (fake auth = alice)", () => {
       }
       await request(API_URL).delete(`/canyons/${canyonAId}`).set(BOB);
       await request(API_URL).delete(`/canyons/${canyonBId}`).set(BOB);
+    }
+  });
+
+  it("?type= matches a trip whose types[] array contains the value anywhere, not just as the sole entry", async () => {
+    const primaryType = `pri-${Date.now()}`;
+    const secondaryType = `sec-${Date.now()}`;
+    const trip = await request(API_URL)
+      .post("/trips")
+      .set(BOB)
+      .send({ date: "2099-04-01", types: [primaryType, secondaryType] });
+    expect(trip.status).toBe(201);
+    const tripId = trip.body.id as string;
+    try {
+      // Filtering by either type (regardless of its position in the array)
+      // must surface this trip — `types: { has }`, not an exact-array match.
+      const bySecondary = await getAnalytics(BOB, secondaryType);
+      expect(bySecondary.heroStats.totalTrips).toBe(1);
+      const byPrimary = await getAnalytics(BOB, primaryType);
+      expect(byPrimary.heroStats.totalTrips).toBe(1);
+      expect(byPrimary.types).toContain(primaryType);
+      expect(byPrimary.types).toContain(secondaryType);
+    } finally {
+      await request(API_URL).delete(`/trips/${tripId}`).set(BOB);
     }
   });
 });

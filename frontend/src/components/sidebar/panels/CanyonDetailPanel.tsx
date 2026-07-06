@@ -118,10 +118,10 @@ function CanyonDetailPanel({
   const [copying, setCopying] = useState(false);
   const [canyonShares, setCanyonShares] = useState<TCanyonShare[]>([]);
 
-  // Type suggestions for the trip dialog, drawn from this canyon's own trips
-  // (the only trip list this panel loads).
+  // Type suggestions for the trip dialog, flattened from this canyon's own
+  // trips (the only trip list this panel loads).
   const existingTripTypes = useMemo(
-    () => tripLogs.map((t) => t.type).filter((t): t is string => t != null),
+    () => tripLogs.flatMap((t) => t.types),
     [tripLogs],
   );
 

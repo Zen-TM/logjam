@@ -19,6 +19,7 @@ import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import { deleteTripLog, getTripLog, tripTitle } from "../../canyonUtils";
 import MediaGallery from "../media/MediaGallery";
+import { typeChipSx } from "../../csvImport/dialogStyles";
 import classes from "./TripLogViewDialog.module.css";
 
 function formatDate(iso: string): string {
@@ -144,15 +145,18 @@ function TripLogViewDialog({
         </DialogTitle>
 
         <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
-          {/* Linked canyons + type */}
-          {(tripLog.canyons.length > 0 || tripLog.type) && (
+          {/* Linked canyons + types. Type chips use the shared accent-fill
+              styling (typeChipSx) — filled and readable in every theme, and
+              visually distinct from the default-grey canyon chips (the old
+              outlined-secondary chip was too dim). */}
+          {(tripLog.canyons.length > 0 || tripLog.types.length > 0) && (
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, alignItems: "center" }}>
               {tripLog.canyons.map((c) => (
                 <Chip key={c.id} label={c.name} size="small" />
               ))}
-              {tripLog.type && (
-                <Chip label={tripLog.type} size="small" variant="outlined" color="secondary" />
-              )}
+              {tripLog.types.map((t) => (
+                <Chip key={t} label={t} size="small" sx={typeChipSx} />
+              ))}
             </Box>
           )}
 
