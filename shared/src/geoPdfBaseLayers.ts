@@ -39,10 +39,13 @@ export const GEOPDF_BASE_LAYER_CONFIG: Record<
 };
 
 // ── Overlay attribution ───────────────────────────────────────────────────────
-// Logjam's topo overlays derive from three open-data sources, each requiring its
-// own credit wherever the derived material is shared (map UI + exported GeoPDF):
+// Logjam's topo overlays derive from open-data sources, each requiring its own
+// credit wherever the derived material is shared (map UI + exported GeoPDF):
 //   - hillshade / slope / contours → ELVIS LiDAR (Geoscience Australia + NSW), CC BY 4.0
-//   - vegetation                   → NSW State Vegetation Type Map (SVTM), CC BY 4.0
+//   - vegetation                   → NSW State Vegetation Type Map (SVTM), CC BY 4.0,
+//                                     plus NSW NPWS Fire History (fire-staleness hatch
+//                                     baked into the same layer — see apply_fire_history
+//                                     in topo/pipeline.py), CC BY 4.0
 //   - features                     → OpenStreetMap, ODbL
 // Single source of truth so the frontend AttributionControl and the PDF agree.
 
@@ -52,7 +55,7 @@ export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
   elevation:
     "Elevation derived from LiDAR via ELVIS (elevation.fsdf.org.au) © State of NSW (Spatial Services) / Commonwealth of Australia (Geoscience Australia), CC BY 4.0. See dataset metadata for the specific custodian.",
   vegetation:
-    "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0)",
+    "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)",
   features: "Features © OpenStreetMap contributors",
 };
 

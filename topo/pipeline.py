@@ -136,6 +136,8 @@ class Benchmark:
         self._output_tile_count: Optional[int] = None
         self._zoom_min: Optional[int] = None
         self._zoom_max: Optional[int] = None
+        self._fire_stale_fraction: Optional[float] = None
+        self._fire_capture_year: Optional[int] = None
 
     @contextmanager
     def step(self, label: str, key: Optional[str] = None):
@@ -160,6 +162,15 @@ class Benchmark:
         self._zoom_min = zoom_min
         self._zoom_max = zoom_max
 
+    def set_fire_staleness(self, stale_fraction: Optional[float], capture_year: Optional[int]):
+        """Fold apply_fire_history's fire_stale_summary.json into the per-job
+        metrics file, so the worker can surface "N% of this AOI burned since
+        capture" on the job. No-op-shaped: both args stay None (and so do the
+        payload keys) when fire-staleness detection was disabled/unavailable
+        for this job — see apply_fire_history's no-op paths."""
+        self._fire_stale_fraction = stale_fraction
+        self._fire_capture_year = capture_year
+
     def write_metrics(self, path: str):
         """Atomically write the per-job runtime metrics JSON consumed by the
         worker (which persists it to TopoJob.pipeline_metrics)."""
@@ -171,6 +182,10 @@ class Benchmark:
             "outputTileCount": self._output_tile_count,
             "zoomMin": self._zoom_min,
             "zoomMax": self._zoom_max,
+            # Stale-fire caution overlay metrics (see set_fire_staleness) — both
+            # None when fire-staleness detection was disabled/unavailable.
+            "fireStaleFraction": self._fire_stale_fraction,
+            "fireCaptureYear": self._fire_capture_year,
         }
         tmp = f"{path}.tmp"
         with open(tmp, "w") as f:
@@ -237,20 +252,47 @@ LABEL_MIN_GAP_PX = 44
 LABEL_MIN_ZOOM = 14
 
 # Vegetation (scrub density) layer — for bushbashing avoidance.
-# Normalized Relative Density (NRD): walking-height returns (0.25–2.0 m HAG)
-# divided by walking-height + everything-below (HAG ≤ 2.0 m including ground).
-# Including ground in the denominator corrects for canopy occlusion: where the
-# canopy absorbs most pulses, the few that reach the ground floor still
-# normalize the scrub-band count instead of producing wild ratios from tiny
-# denominators.
+# Normalized Relative Density (NRD): walking-height returns (0.25–SCRUB_BAND_MAX_M
+# m HAG) divided by walking-height + everything-below (HAG <= SCRUB_BAND_MAX_M
+# including ground). Including ground in the denominator corrects for canopy
+# occlusion: where the canopy absorbs most pulses, the few that reach the
+# ground floor still normalize the scrub-band count instead of producing wild
+# ratios from tiny denominators.
+#
+# The scrub band is split into two vertical strata weighted for push-through
+# difficulty (low vs high — see SCRUB_STRATUM_* below). The shared confidence
+# denominator (all near-ground returns: both strata + below) stays UNSPLIT so
+# the bilateral/mask confidence weighting isn't diluted per-stratum — splitting
+# an already sparse per-cell count would lower its SNR.
+#
 # After per-cell NRD is computed, a count-weighted bilateral filter smooths it
-# while preserving scrub-patch edges.
+# while preserving scrub-patch edges. The min-pulses confidence-mask threshold
+# is then density-normalized against an all-return count raster (see
+# SCRUB_DENSITY_REFERENCE_ALL_RETURNS) so the mask's selectivity stays roughly
+# constant across sparse (LID2) vs dense (LID1) LiDAR captures.
 SCRUB_DENSITY_FILTER_WINDOW_M = 9     # 9×9 m bilateral window (≈4.5 m radius)
 SCRUB_DENSITY_SIGMA_SPATIAL_M = 3.0   # spatial Gaussian σ (metres / cells, 1m grid)
 SCRUB_DENSITY_SIGMA_RANGE     = 0.15  # intensity Gaussian σ in NRD units
-SCRUB_DENSITY_MIN_PULSES      = 12    # min windowed (scrub+below) pulse count for a valid cell
+SCRUB_DENSITY_MIN_PULSES      = 12    # min windowed near-ground pulse count for a valid cell, at reference density (see SCRUB_DENSITY_REFERENCE_ALL_RETURNS)
 SCRUB_DENSITY_MIN_RATIO       = 0.05  # below this → transparent (NRD runs lower than old ratio)
 SCRUB_DENSITY_MAX_RATIO       = 0.45  # at/above → fully opaque dark green
+
+# Scrub strata (push-through-weighted split of the old single scrub band).
+# HEURISTIC (uncalibrated, ordinal) — calibrate against ground truth (e.g.
+# trip-log pace through mapped scrub) when available.
+SCRUB_STRATUM_LOW_MAX_M   = 1.0  # grass/sedge/low-scrub ≤1 m HAG — more passable
+SCRUB_BAND_MAX_M          = 2.5  # raised from 2.0 m to catch head-high woody regrowth
+SCRUB_STRATUM_WEIGHT_LOW  = 0.5  # low stratum counts at half weight in the density combine
+SCRUB_STRATUM_WEIGHT_HIGH = 1.0  # high stratum (harder push-through) counts at full weight
+
+# Density normalization reference (all-return count). LID1/LID2 ELVIS captures
+# differ substantially in point density, so a fixed SCRUB_DENSITY_MIN_PULSES
+# threshold masks a much larger fraction of a sparse capture than a dense one.
+# The effective threshold scales by how a job's nominal all-return density
+# compares to this reference (clamped to 0.5x–2.0x — see compute_rasters).
+# HEURISTIC (uncalibrated, ordinal) — calibrate against observed ELVIS density
+# distributions when available.
+SCRUB_DENSITY_REFERENCE_ALL_RETURNS = 4.0
 
 # Data-footprint construction (compute_data_footprint). The footprint trims the
 # false outward fringe that fill_nodata extrapolates (up to FILL_NODATA_MAX_DIST_M
@@ -285,15 +327,42 @@ PDAL_SCAN_ANGLE_MAX = 20
 # ECS task environment to suppress the S3 directory listing GDAL would
 # otherwise attempt when opening a /vsis3/ path.
 #
-# Override via env var SVTM_FORMATION_S3_PATH (s3://bucket/key form).
-# Set to an empty string to skip SVTM weighting entirely.
+# Override via env var SVTM_FORMATION_S3_PATH. Accepts three forms:
+#   - "s3://bucket/key" → warped through GDAL's /vsis3/ virtual filesystem
+#   - ""                → disabled (skip SVTM weighting entirely)
+#   - anything else     → used verbatim (e.g. a plain local path for testing)
 _svtm_s3_raw = os.environ.get(
     "SVTM_FORMATION_S3_PATH",
     "s3://logjam-topo-jobs/svtm/svtm_formation.tif",
 )
-SVTM_FORMATION_RASTER: str = (
-    "/vsis3/" + _svtm_s3_raw.removeprefix("s3://") if _svtm_s3_raw else ""
+if _svtm_s3_raw.startswith("s3://"):
+    SVTM_FORMATION_RASTER: str = "/vsis3/" + _svtm_s3_raw.removeprefix("s3://")
+elif _svtm_s3_raw == "":
+    SVTM_FORMATION_RASTER = ""
+else:
+    SVTM_FORMATION_RASTER = _svtm_s3_raw
+
+# Fire history raster: per-cell most-recent-fire year, preprocessed once by
+# build_fire_history.py (see topo/fire/fire_history_year.tif). Consumed at job
+# time only to flag cells where the fire happened AFTER the LiDAR capture —
+# see apply_fire_history. Density itself is never adjusted: baseline testing
+# showed the LiDAR captures post-fire regrowth directly, so a regrowth
+# multiplier here would double-count.
+#
+# Override via env var FIRE_HISTORY_S3_PATH. Accepts three forms:
+#   - "s3://bucket/key" → warped through GDAL's /vsis3/ virtual filesystem
+#   - ""                → disabled (no fire-history staleness check)
+#   - anything else     → used verbatim (e.g. a plain local path for testing)
+_fire_history_s3_raw = os.environ.get(
+    "FIRE_HISTORY_S3_PATH",
+    "s3://logjam-topo-jobs/fire/fire_history_year.tif",
 )
+if _fire_history_s3_raw.startswith("s3://"):
+    FIRE_HISTORY_RASTER: str = "/vsis3/" + _fire_history_s3_raw.removeprefix("s3://")
+elif _fire_history_s3_raw == "":
+    FIRE_HISTORY_RASTER = ""
+else:
+    FIRE_HISTORY_RASTER = _fire_history_s3_raw
 
 # Formation → navigational-resistance multiplier μ.
 # Multiplies the structural NRD so hard/thorny vegetation (Heathlands,
@@ -337,6 +406,17 @@ VEGETATION_DEFAULTS = {
     "alphaMin": 60,
     "alphaMax": 255,
 }
+
+# Stale-fire caution overlay, drawn INTO the vegetation layer (no new MBTiles
+# layer) over cells where fire_stale.tif flags LiDAR-predates-most-recent-fire
+# (see apply_fire_history). Not settings-driven — fixed caution styling so the
+# hatch reads consistently across jobs/presets. Applied independent of scrub
+# density: a stale, currently-open-looking cell still gets flagged, since it
+# may have regrown since capture.
+FIRE_STALE_HATCH_COLOUR = (217, 119, 6)  # caution amber (RGB)
+FIRE_STALE_HATCH_ALPHA = 150             # semi-transparent — underlying veg colour still shows
+FIRE_STALE_HATCH_PERIOD_PX = 8           # diagonal stripe repeats every N px
+FIRE_STALE_HATCH_STRIPE_PX = 2           # stripe width (px) within each period
 
 # Slope thresholds (degrees) → RGBA colour. Defaults for the Default preset.
 SLOPE_DEFAULT_BANDS = [
@@ -969,21 +1049,33 @@ def extract_elvis_zip(zip_path: str, work_dir: str) -> ElvisContents:
 # ---------------------------------------------------------------------------
 
 def build_pipeline_full(las_files: List[str], out_dtm: str,
-                        out_scrub_count: str, out_below_count: str,
+                        out_scrub_low: str, out_scrub_high: str,
+                        out_below_count: str, out_all_count: str,
                         resolution: float = 1.0) -> dict:
-    """PDAL pipeline: LAZ → DTM (ground) + NRD count rasters. Mode C.
+    """PDAL pipeline: LAZ → DTM (ground) + strata/below/all-return count rasters. Mode C.
 
     Uses filters.smrf for ground classification and filters.hag_nn to assign
-    HeightAboveGround to every point. Two count rasters drive NRD:
-      - scrub_count: points with 0.25 ≤ HAG ≤ 2.0 m (walking-height scrub)
-      - below_count: points with HAG < 0.25 m (ground + low litter)
+    HeightAboveGround to every point. The scrub band (0.25–SCRUB_BAND_MAX_M m
+    HAG) is split into two vertical strata weighted for push-through
+    difficulty, plus a below-band count and an unfiltered all-return count:
+      - scrub_low:  0.25 ≤ HAG < SCRUB_STRATUM_LOW_MAX_M m (grass/sedge/low
+        scrub — more passable)
+      - scrub_high: SCRUB_STRATUM_LOW_MAX_M ≤ HAG ≤ SCRUB_BAND_MAX_M m
+        (head-high woody regrowth — harder push-through)
+      - below_count: HAG < 0.25 m (ground + low litter)
+      - all_count: every return regardless of HAG (per-cell capture density —
+        used downstream to density-normalize the confidence mask; see
+        SCRUB_DENSITY_REFERENCE_ALL_RETURNS)
 
-    NRD = scrub_count / (scrub_count + below_count) — the proportion of pulses
-    reaching ≤2.0 m that were intercepted by the walking-height layer rather
-    than passing through to the ground. Including ground returns in the
-    denominator compensates for canopy occlusion.
+    NRD = weighted_scrub / (scrub_low + scrub_high + below_count), where
+    weighted_scrub = SCRUB_STRATUM_WEIGHT_LOW * scrub_low +
+    SCRUB_STRATUM_WEIGHT_HIGH * scrub_high — the proportion of near-ground
+    pulses intercepted by walking-height vegetation, weighted for how hard
+    that vegetation is to push through, rather than passing through to the
+    ground. Including ground returns in the denominator compensates for
+    canopy occlusion.
 
-    A noise/overlap-class filter and a ±20° scan-angle gate apply to both
+    A noise/overlap-class filter and a ±20° scan-angle gate apply to all four
     count rasters (but NOT the DTM, which still needs all ground returns
     regardless of scan angle).
 
@@ -1002,14 +1094,25 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
     # filters.range — it removes points outright rather than reclassifying.
     # PDAL filter expression parser has no function support (no abs()), so
     # the scan-angle gate is written as an explicit range comparison.
-    count_where = (
-        f"HeightAboveGround >= 0.25 && HeightAboveGround <= 2.0 "
+    scrub_low_where = (
+        f"HeightAboveGround >= 0.25 && HeightAboveGround < {SCRUB_STRATUM_LOW_MAX_M} "
+        f"&& ScanAngleRank >= -{PDAL_SCAN_ANGLE_MAX} "
+        f"&& ScanAngleRank <= {PDAL_SCAN_ANGLE_MAX}"
+    )
+    scrub_high_where = (
+        f"HeightAboveGround >= {SCRUB_STRATUM_LOW_MAX_M} && HeightAboveGround <= {SCRUB_BAND_MAX_M} "
         f"&& ScanAngleRank >= -{PDAL_SCAN_ANGLE_MAX} "
         f"&& ScanAngleRank <= {PDAL_SCAN_ANGLE_MAX}"
     )
     below_where = (
         f"HeightAboveGround < 0.25 "
         f"&& ScanAngleRank >= -{PDAL_SCAN_ANGLE_MAX} "
+        f"&& ScanAngleRank <= {PDAL_SCAN_ANGLE_MAX}"
+    )
+    # All-return count: only the scan-angle gate, no HAG filter — per-cell
+    # capture density used to density-normalize the confidence mask.
+    all_where = (
+        f"ScanAngleRank >= -{PDAL_SCAN_ANGLE_MAX} "
         f"&& ScanAngleRank <= {PDAL_SCAN_ANGLE_MAX}"
     )
     readers = [{"type": "readers.las", "filename": f} for f in las_files]
@@ -1034,13 +1137,23 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
                 "nodata": -9999,
                 "gdalopts": "COMPRESS=LZW",
             },
-            # Scrub band return count (0.25–2.0 m above ground).
+            # Low scrub stratum return count (grass/sedge/low-scrub — more passable).
             {
                 "type": "writers.gdal",
-                "filename": out_scrub_count,
+                "filename": out_scrub_low,
                 "resolution": resolution,
                 "output_type": "count",
-                "where": count_where,
+                "where": scrub_low_where,
+                "nodata": 0,
+                "gdalopts": "COMPRESS=LZW",
+            },
+            # High scrub stratum return count (head-high woody regrowth — harder push-through).
+            {
+                "type": "writers.gdal",
+                "filename": out_scrub_high,
+                "resolution": resolution,
+                "output_type": "count",
+                "where": scrub_high_where,
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
@@ -1051,6 +1164,17 @@ def build_pipeline_full(las_files: List[str], out_dtm: str,
                 "resolution": resolution,
                 "output_type": "count",
                 "where": below_where,
+                "nodata": 0,
+                "gdalopts": "COMPRESS=LZW",
+            },
+            # All-return count (no HAG filter) — per-cell capture density,
+            # used to density-normalize the confidence mask downstream.
+            {
+                "type": "writers.gdal",
+                "filename": out_all_count,
+                "resolution": resolution,
+                "output_type": "count",
+                "where": all_where,
                 "nodata": 0,
                 "gdalopts": "COMPRESS=LZW",
             },
@@ -1132,35 +1256,49 @@ def run_pdal_pipeline(pipeline: dict, work_dir: str, label: str = "pipeline"):
 
 
 def run_pdal_sequential_full(las_files: List[str], out_dtm: str,
-                              out_scrub_count: str, out_below_count: str,
+                              out_scrub_low: str, out_scrub_high: str,
+                              out_below_count: str, out_all_count: str,
                               work_dir: str, resolution: float = 1.0):
-    """Process LAZ files one at a time (DTM + NRD counts), then merge. Mode C."""
+    """Process LAZ files one at a time (DTM + strata/below/all counts), then merge. Mode C."""
     dtm_tiles = []
-    scrub_tiles = []
+    scrub_low_tiles = []
+    scrub_high_tiles = []
     below_tiles = []
+    all_tiles = []
     for i, laz in enumerate(las_files):
         log.info(f"PDAL tile {i+1}/{len(las_files)}: {os.path.basename(laz)}")
         # Heartbeat: PDAL is the other long phase (≈48s/tile). Reporting before
         # each tile keeps last_progress_at fresh through the whole PDAL pass so
         # the stall-reaper doesn't false-kill a big job before render starts.
         _write_progress(i, len(las_files), "pdal")
-        tile_dtm   = os.path.join(work_dir, f"dtm_tile_{i}.tif")
-        tile_scrub = os.path.join(work_dir, f"scrub_tile_{i}.tif")
-        tile_below = os.path.join(work_dir, f"below_tile_{i}.tif")
-        pipeline = build_pipeline_full([laz], tile_dtm, tile_scrub, tile_below, resolution)
+        tile_dtm        = os.path.join(work_dir, f"dtm_tile_{i}.tif")
+        tile_scrub_low  = os.path.join(work_dir, f"scrub_low_tile_{i}.tif")
+        tile_scrub_high = os.path.join(work_dir, f"scrub_high_tile_{i}.tif")
+        tile_below      = os.path.join(work_dir, f"below_tile_{i}.tif")
+        tile_all        = os.path.join(work_dir, f"all_tile_{i}.tif")
+        pipeline = build_pipeline_full(
+            [laz], tile_dtm, tile_scrub_low, tile_scrub_high, tile_below, tile_all,
+            resolution,
+        )
         run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_full_{i}")
         dtm_tiles.append(tile_dtm)
-        scrub_tiles.append(tile_scrub)
+        scrub_low_tiles.append(tile_scrub_low)
+        scrub_high_tiles.append(tile_scrub_high)
         below_tiles.append(tile_below)
+        all_tiles.append(tile_all)
 
     log.info(f"Merging {len(dtm_tiles)} DTM tiles …")
     _merge_raster_tiles(dtm_tiles, out_dtm, nodata=-9999)
-    log.info(f"Merging {len(scrub_tiles)} scrub-count tiles …")
-    _merge_raster_tiles(scrub_tiles, out_scrub_count, nodata=0, resample="bilinear")
+    log.info(f"Merging {len(scrub_low_tiles)} scrub-low-count tiles …")
+    _merge_raster_tiles(scrub_low_tiles, out_scrub_low, nodata=0, resample="bilinear")
+    log.info(f"Merging {len(scrub_high_tiles)} scrub-high-count tiles …")
+    _merge_raster_tiles(scrub_high_tiles, out_scrub_high, nodata=0, resample="bilinear")
     log.info(f"Merging {len(below_tiles)} below-count tiles …")
     _merge_raster_tiles(below_tiles, out_below_count, nodata=0, resample="bilinear")
+    log.info(f"Merging {len(all_tiles)} all-return-count tiles …")
+    _merge_raster_tiles(all_tiles, out_all_count, nodata=0, resample="bilinear")
 
-    for p in dtm_tiles + scrub_tiles + below_tiles:
+    for p in dtm_tiles + scrub_low_tiles + scrub_high_tiles + below_tiles + all_tiles:
         os.remove(p)
 
 
@@ -1569,6 +1707,170 @@ def apply_svtm_weighting(
     return out
 
 
+# ELVIS point-cloud filenames encode the capture year-month immediately before
+# the "-LID{1,2}" swath marker, e.g. "Katoomba202107-LID1-C3-AHD_...laz".
+_ELVIS_CAPTURE_DATE_RE = re.compile(r"(\d{6})-LID\d")
+
+
+def _capture_year_from_las_files(las_files: List[str]) -> Optional[int]:
+    """Extract the LiDAR capture year from ELVIS filenames; return the minimum.
+
+    The minimum (not maximum) across all contributing files is deliberately
+    conservative for staleness detection: a cell should be flagged stale if
+    ANY contributing capture predates the fire, so the earliest capture year
+    is the one a later fire needs to beat.
+
+    Returns None if no filename in the list matches the ELVIS naming
+    convention — apply_fire_history then treats fire-history staleness
+    detection as a no-op rather than guessing.
+    """
+    capture_years: List[int] = []
+    for las_file in las_files:
+        match = _ELVIS_CAPTURE_DATE_RE.search(os.path.basename(las_file))
+        if match:
+            capture_years.append(int(match.group(1)[:4]))
+    if not capture_years:
+        return None
+    return min(capture_years)
+
+
+def _compute_stale_mask(
+    fire_year_arr: np.ndarray,
+    capture_year: int,
+    valid_mask: np.ndarray,
+) -> Tuple[np.ndarray, float]:
+    """Per-cell stale mask: the most recent fire happened after LiDAR capture.
+
+    `fire_year_arr` uses 0 as nodata (never-burned or no usable date on
+    record — see build_fire_history.NODATA_VALUE), so a 0 cell is excluded
+    from "stale" rather than compared as if it were a real year. `valid_mask`
+    should mark cells with finite (non-nodata) density.
+
+    Returns (stale_mask, stale_fraction), where stale_fraction is the share
+    of valid cells that are stale.
+    """
+    stale_mask = valid_mask & (fire_year_arr != 0) & (fire_year_arr > capture_year)
+    stale_fraction = float(stale_mask.sum()) / max(int(valid_mask.sum()), 1)
+    return stale_mask, stale_fraction
+
+
+def apply_fire_history(
+    density_arr: np.ndarray,
+    dtm_path: str,
+    work_dir: str,
+    capture_year: Optional[int],
+) -> np.ndarray:
+    """Flag vegetation-density cells made stale by fire since LiDAR capture.
+
+    This does NOT modify density_arr. Baseline testing showed the LiDAR
+    captures post-fire regrowth directly, so re-weighting density by fire
+    recency here would double-count regrowth the point cloud already shows —
+    the only output is a stale mask/fraction for a future consumer (render
+    overlay, job metadata) to act on; this function adds no overlay itself.
+
+    The fire-history raster (per-cell most-recent-fire year) is warped from
+    S3 (/vsis3/ path, or a local path override) onto the DTM grid — same
+    approach as apply_svtm_weighting, so GDAL only fetches the AOI tiles.
+
+    Writes work_dir/fire_stale.tif (uint8, 1=stale/0=not, aligned to the DTM
+    grid/projection) and work_dir/fire_stale_summary.json (capture_year,
+    stale_fraction, fire_years_min, fire_years_max) as a side effect.
+
+    Returns density_arr unchanged in all cases, including every no-op path:
+      - FIRE_HISTORY_RASTER is unset/empty (staleness check disabled), or
+      - capture_year is None (no ELVIS filename encoded a capture date), or
+      - the fire-history raster can't be opened (e.g. offline dev without
+        LocalStack) — the pipeline always degrades cleanly.
+    """
+    if not FIRE_HISTORY_RASTER:
+        log.info("FIRE_HISTORY_S3_PATH not set — skipping fire-history staleness check.")
+        return density_arr
+    if capture_year is None:
+        log.info(
+            "No LiDAR capture year parsed from input filenames — "
+            "skipping fire-history staleness check."
+        )
+        return density_arr
+
+    log.info(f"Warping fire-history raster onto DTM grid (source: {FIRE_HISTORY_RASTER}) …")
+    fire_year_aligned = os.path.join(work_dir, "fire_history_aligned.tif")
+
+    try:
+        ref_ds = gdal.Open(dtm_path)
+        gt = ref_ds.GetGeoTransform()
+        proj = ref_ds.GetProjection()
+        cols = ref_ds.RasterXSize
+        rows = ref_ds.RasterYSize
+        xmin = gt[0]
+        xmax = gt[0] + gt[1] * cols
+        ymax = gt[3]
+        ymin = gt[3] + gt[5] * rows
+        gdal.Warp(
+            fire_year_aligned,
+            FIRE_HISTORY_RASTER,
+            dstSRS=proj,
+            outputBounds=(xmin, ymin, xmax, ymax),
+            width=cols,
+            height=rows,
+            resampleAlg="near",
+            dstNodata=0,
+            outputType=gdal.GDT_UInt16,
+            creationOptions=["COMPRESS=LZW", "TILED=YES"],
+        )
+        ref_ds = None
+    except Exception as e:
+        log.warning(f"Fire-history raster unavailable ({e}) — skipping fire-history staleness check.")
+        return density_arr
+
+    fire_ds = gdal.Open(fire_year_aligned)
+    fire_year_arr = fire_ds.GetRasterBand(1).ReadAsArray().astype(np.uint16)
+    fire_ds = None
+
+    valid_mask = np.isfinite(density_arr)
+    stale_mask, stale_fraction = _compute_stale_mask(fire_year_arr, capture_year, valid_mask)
+
+    burned_years_in_aoi = fire_year_arr[fire_year_arr != 0]
+    fire_years_min = int(burned_years_in_aoi.min()) if burned_years_in_aoi.size else None
+    fire_years_max = int(burned_years_in_aoi.max()) if burned_years_in_aoi.size else None
+
+    # Write fire_stale.tif — aligned to the DTM grid, for a future render overlay.
+    dtm_ds = gdal.Open(dtm_path)
+    stale_path = os.path.join(work_dir, "fire_stale.tif")
+    driver = gdal.GetDriverByName("GTiff")
+    out_ds = driver.Create(
+        stale_path,
+        dtm_ds.RasterXSize,
+        dtm_ds.RasterYSize,
+        1,
+        gdal.GDT_Byte,
+        options=["COMPRESS=LZW"],
+    )
+    out_ds.SetGeoTransform(dtm_ds.GetGeoTransform())
+    out_ds.SetProjection(dtm_ds.GetProjection())
+    band = out_ds.GetRasterBand(1)
+    band.WriteArray(stale_mask.astype(np.uint8))
+    band.SetNoDataValue(0)
+    out_ds.FlushCache()
+    out_ds = None
+    dtm_ds = None
+
+    summary_path = os.path.join(work_dir, "fire_stale_summary.json")
+    with open(summary_path, "w") as f:
+        json.dump({
+            "capture_year": capture_year,
+            "stale_fraction": stale_fraction,
+            "fire_years_min": fire_years_min,
+            "fire_years_max": fire_years_max,
+        }, f)
+
+    log.info(
+        f"Fire-history: {stale_fraction * 100:.1f}% of AOI burned after LiDAR "
+        f"capture ({capture_year}) — veg layer may be stale there."
+    )
+
+    return density_arr
+
+
 def _bilateral_filter_weighted(
     value_arr: np.ndarray,
     confidence_arr: np.ndarray,
@@ -1645,27 +1947,100 @@ def _run_gdaldem_hillshade(out_path: str, dtm_path: str, settings: Dict[str, Any
     gdal.DEMProcessing(out_path, dtm_path, "hillshade", **kwargs)
 
 
-def compute_rasters(dtm_path: str, scrub_count_path: str, below_count_path: str,
-                    work_dir: str, settings: Dict[str, Any]) -> dict:
+def _combine_scrub_strata(
+    low_arr: np.ndarray, high_arr: np.ndarray, below_arr: np.ndarray,
+    weight_low: float, weight_high: float,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Pure arithmetic core of the weighted-strata NRD combine (B.3).
+
+    Returns (total_near, raw_nrd):
+      - total_near = low + high + below — the shared, UNSPLIT confidence
+        denominator (every near-ground pulse). Kept unsplit so the bilateral/
+        mask confidence weighting isn't diluted per-stratum.
+      - raw_nrd = (weight_low*low + weight_high*high) / max(total_near, 1),
+        or 0 where total_near is 0. Stays in [0, 1] whenever both weights are
+        ≤ 1, since weighted_scrub ≤ low + high ≤ total_near in that case.
+
+    Extracted from compute_rasters so this combine is unit-testable without
+    touching GDAL (compute_rasters itself opens/warps real rasters).
     """
-    From DTM + NRD-count rasters produce hillshade.tif, slope.tif, scrub_density.tif.
+    total_near = low_arr + high_arr + below_arr
+    weighted_scrub = weight_low * low_arr + weight_high * high_arr
+    raw_nrd = np.where(
+        total_near > 0, weighted_scrub / np.maximum(total_near, 1.0), 0.0
+    ).astype(np.float32)
+    return total_near, raw_nrd
+
+
+def _density_normalized_min_pulses(
+    all_arr: np.ndarray, reference_all_returns: float, base_min_pulses: float,
+) -> Tuple[float, float, float]:
+    """Pure arithmetic core of the B.2 density-normalized confidence-mask threshold.
+
+    `nominal_all` is the median of the positive (>0) cells of the all-return
+    count raster — falls back to `reference_all_returns` when there are no
+    positive cells (e.g. a degenerate all-nodata tile) rather than dividing by
+    zero. `scale` is nominal_all/reference_all_returns clamped to [0.5, 2.0]
+    so an unusually sparse/dense capture can't blow the threshold out
+    entirely. `min_pulses_eff` is base_min_pulses * scale.
+
+    Returns (nominal_all, scale, min_pulses_eff). Extracted from
+    compute_rasters so the scaling math is unit-testable without GDAL.
+    """
+    positive_all = all_arr[all_arr > 0]
+    if positive_all.size > 0:
+        nominal_all = float(np.median(positive_all))
+    else:
+        nominal_all = reference_all_returns
+    scale = float(np.clip(nominal_all / reference_all_returns, 0.5, 2.0))
+    min_pulses_eff = base_min_pulses * scale
+    return nominal_all, scale, min_pulses_eff
+
+
+def compute_rasters(dtm_path: str, scrub_low_path: str, scrub_high_path: str,
+                    below_count_path: str, all_count_path: str,
+                    work_dir: str, settings: Dict[str, Any],
+                    capture_year: Optional[int] = None) -> dict:
+    """
+    From DTM + strata/below/all-return count rasters produce hillshade.tif,
+    slope.tif, scrub_density.tif.
 
     The count rasters are first warped onto the DTM pixel grid so array shapes
     are guaranteed to match, even if the DTM and counts were produced on
     slightly different grids.
 
-    Scrub density is computed as Normalized Relative Density (NRD):
-        NRD = scrub_count / (scrub_count + below_count)
-    where the denominator counts every pulse that reached ≤ 2.0 m HAG (scrub
-    band plus everything below it, ground returns included). This compensates
-    for canopy occlusion at the source — a heavy overstory absorbs most pulses,
-    but the few that make it through still normalize the scrub-band count
-    rather than producing a wild ratio off a tiny denominator.
+    The scrub band (0.25–SCRUB_BAND_MAX_M m HAG) is split into two vertical
+    strata weighted for push-through difficulty — low (grass/sedge/low-scrub,
+    more passable) and high (head-high woody regrowth, harder push-through).
+    Scrub density is a weighted Normalized Relative Density (NRD):
 
-    A confidence-weighted bilateral filter is then applied, where the per-cell
-    confidence is the total pulse count (scrub + below). This preserves sharp
-    edges between scrub patches while smoothing the speckle in low-confidence
-    interior pixels.
+        weighted_scrub = SCRUB_STRATUM_WEIGHT_LOW  * scrub_low
+                        + SCRUB_STRATUM_WEIGHT_HIGH * scrub_high
+        NRD = weighted_scrub / (scrub_low + scrub_high + below_count)
+
+    where the denominator (`total_near`) counts every pulse that reached
+    ≤ SCRUB_BAND_MAX_M HAG (both scrub strata plus everything below, ground
+    returns included) — kept UNSPLIT so the confidence weighting below isn't
+    diluted per-stratum (splitting an already sparse per-cell count would
+    lower its SNR). This compensates for canopy occlusion at the source — a
+    heavy overstory absorbs most pulses, but the few that make it through
+    still normalize the scrub-band count rather than producing a wild ratio
+    off a tiny denominator. Because both weights are ≤ 1, weighted_scrub ≤
+    scrub_low + scrub_high ≤ total_near, so NRD stays in [0, 1].
+
+    A confidence-weighted bilateral filter is then applied, where the
+    per-cell confidence is `total_near`. This preserves sharp edges between
+    scrub patches while smoothing the speckle in low-confidence interior
+    pixels.
+
+    The minimum-pulses confidence-mask threshold is density-normalized
+    against the all-return count raster: a sparse LiDAR capture (e.g. LID2)
+    has a lower nominal per-cell all-return count than a dense one (LID1), so
+    a fixed pulse-count threshold would mask a much larger fraction of a
+    sparse capture. The effective threshold scales with how this job's
+    nominal all-return density compares to a fixed reference
+    (SCRUB_DENSITY_REFERENCE_ALL_RETURNS), clamped to [0.5, 2.0]x so an
+    unusually sparse/dense capture can't blow the threshold out entirely.
     """
     paths = {}
 
@@ -1685,22 +2060,28 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, below_count_path: str,
     )
     paths["slope"] = sl_path
 
-    # Scrub density: NRD + count-weighted bilateral filter.
+    # Scrub density: weighted-strata NRD + count-weighted bilateral filter.
     # Step 1: align count rasters onto the DTM grid
-    scrub_aligned = os.path.join(work_dir, "scrub_count_aligned.tif")
-    below_aligned = os.path.join(work_dir, "below_count_aligned.tif")
+    scrub_low_aligned  = os.path.join(work_dir, "scrub_low_count_aligned.tif")
+    scrub_high_aligned = os.path.join(work_dir, "scrub_high_count_aligned.tif")
+    below_aligned      = os.path.join(work_dir, "below_count_aligned.tif")
+    all_aligned        = os.path.join(work_dir, "all_count_aligned.tif")
     log.info("Aligning count rasters to DTM grid …")
-    align_raster_to_reference(scrub_count_path, dtm_path, scrub_aligned)
+    align_raster_to_reference(scrub_low_path, dtm_path, scrub_low_aligned)
+    align_raster_to_reference(scrub_high_path, dtm_path, scrub_high_aligned)
     align_raster_to_reference(below_count_path, dtm_path, below_aligned)
+    align_raster_to_reference(all_count_path, dtm_path, all_aligned)
 
     log.info(
-        f"Computing NRD + bilateral filter "
+        f"Computing weighted-strata NRD + bilateral filter "
         f"({SCRUB_DENSITY_FILTER_WINDOW_M}×{SCRUB_DENSITY_FILTER_WINDOW_M} m, "
         f"σ_s={SCRUB_DENSITY_SIGMA_SPATIAL_M} m, σ_r={SCRUB_DENSITY_SIGMA_RANGE}) …"
     )
-    dtm_ds   = gdal.Open(dtm_path)
-    scrub_ds = gdal.Open(scrub_aligned)
-    below_ds = gdal.Open(below_aligned)
+    dtm_ds        = gdal.Open(dtm_path)
+    scrub_low_ds  = gdal.Open(scrub_low_aligned)
+    scrub_high_ds = gdal.Open(scrub_high_aligned)
+    below_ds      = gdal.Open(below_aligned)
+    all_ds        = gdal.Open(all_aligned)
 
     # PDAL writes count rasters with nodata=0; warp then injects -9999 sentinels
     # at non-overlap edges. For NRD purposes "no points" is a count of 0, not
@@ -1712,28 +2093,50 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, below_count_path: str,
         a[a < 0] = 0.0
         return a
 
-    scrub_arr = _read_count(scrub_ds)
+    low_arr   = _read_count(scrub_low_ds)
+    high_arr  = _read_count(scrub_high_ds)
     below_arr = _read_count(below_ds)
-    total_arr = scrub_arr + below_arr
+    all_arr   = _read_count(all_ds)
 
-    # Per-cell raw NRD; cells with zero total contribute 0 (smoothed away by
-    # the bilateral filter via their zero confidence weight).
-    raw_nrd = np.where(total_arr > 0, scrub_arr / np.maximum(total_arr, 1.0), 0.0).astype(np.float32)
+    # Shared, UNSPLIT confidence denominator (total_near) + weighted-strata
+    # NRD combine — see _combine_scrub_strata for why confidence isn't split
+    # per stratum and why raw_nrd stays in [0, 1]. Cells with zero total
+    # contribute 0 (smoothed away by the bilateral filter via their zero
+    # confidence weight).
+    total_near, raw_nrd = _combine_scrub_strata(
+        low_arr, high_arr, below_arr,
+        SCRUB_STRATUM_WEIGHT_LOW, SCRUB_STRATUM_WEIGHT_HIGH,
+    )
 
-    # Bilateral filter, weighted by per-cell pulse count.
+    # Bilateral filter, weighted by per-cell total-near-ground pulse count.
     nrd_smoothed = _bilateral_filter_weighted(
         raw_nrd,
-        total_arr,
+        total_near,
         window=SCRUB_DENSITY_FILTER_WINDOW_M,
         sigma_spatial=SCRUB_DENSITY_SIGMA_SPATIAL_M,
         sigma_range=SCRUB_DENSITY_SIGMA_RANGE,
     )
 
-    # Mask cells whose windowed pulse sum is below the confidence threshold —
-    # a box sum is faster than re-walking the bilateral neighbourhood and is
-    # exactly the right quantity for "are there enough total pulses nearby?".
-    windowed_pulses = _box_sum_2d(total_arr, SCRUB_DENSITY_FILTER_WINDOW_M)
-    valid = (windowed_pulses >= SCRUB_DENSITY_MIN_PULSES) & np.isfinite(nrd_smoothed)
+    # Density-normalize the confidence-mask threshold: a sparse capture
+    # (LID2) has a lower nominal per-cell all-return count than a dense one
+    # (LID1). Scale SCRUB_DENSITY_MIN_PULSES by how this job's nominal
+    # all-return density compares to a fixed reference, clamped so an extreme
+    # capture can't blow the threshold out entirely.
+    nominal_all, scale, min_pulses_eff = _density_normalized_min_pulses(
+        all_arr, SCRUB_DENSITY_REFERENCE_ALL_RETURNS, SCRUB_DENSITY_MIN_PULSES,
+    )
+    log.info(
+        f"All-return density normalization: nominal_all={nominal_all:.2f}, "
+        f"scale={scale:.2f}, min_pulses_eff={min_pulses_eff:.2f} "
+        f"(reference={SCRUB_DENSITY_REFERENCE_ALL_RETURNS})"
+    )
+
+    # Mask cells whose windowed near-ground pulse sum is below the effective
+    # confidence threshold — a box sum is faster than re-walking the
+    # bilateral neighbourhood and is exactly the right quantity for "are
+    # there enough total pulses nearby?".
+    windowed_pulses = _box_sum_2d(total_near, SCRUB_DENSITY_FILTER_WINDOW_M)
+    valid = (windowed_pulses >= min_pulses_eff) & np.isfinite(nrd_smoothed)
     density = np.where(valid, nrd_smoothed, np.nan).astype(np.float32)
 
     # Apply SVTM formation μ — distinguishes soft (rainforest) from hard
@@ -1745,6 +2148,23 @@ def compute_rasters(dtm_path: str, scrub_count_path: str, below_count_path: str,
         weights_enabled=bool(veg_settings.get("weightsEnabled", True)),
         formation_weights=veg_settings.get("formationWeights"),
     )
+
+    # Detect (never correct) vegetation-density cells made stale by fire since
+    # LiDAR capture. Density is not modified — see apply_fire_history docstring
+    # for why a regrowth multiplier would double-count. No-op if fire-history
+    # staleness detection is disabled or no capture year could be parsed.
+    density = apply_fire_history(density, dtm_path, work_dir, capture_year)
+
+    # fire_stale.tif is written by apply_fire_history only when fire-staleness
+    # detection is enabled (fire raster configured + a parseable capture
+    # year) — absent otherwise, so only surface it when present. It shares
+    # this function's DTM grid (apply_fire_history opens dtm_path for its
+    # geotransform/projection, same as this function's dtm_path argument), so
+    # the render path can read it with the exact same read_raster_window()
+    # call as scrub_density.tif — no separate warp needed.
+    fire_stale_path = os.path.join(work_dir, "fire_stale.tif")
+    if os.path.exists(fire_stale_path):
+        paths["fire_stale"] = fire_stale_path
 
     # Write scrub_density.tif (values 0–1, nodata = -9999)
     density_path = os.path.join(work_dir, "scrub_density.tif")
@@ -2347,14 +2767,28 @@ def render_hillshade_tile(hs_arr: Optional[np.ndarray], settings: Dict[str, Any]
     return Image.fromarray(rgba)
 
 
-def render_vegetation_tile(density_arr: Optional[np.ndarray], settings: Dict[str, Any]) -> Image.Image:
-    """Render scrub density (0–1 ratio) as a sparse→dense colour ramp.
+def render_vegetation_tile(
+    density_arr: Optional[np.ndarray],
+    settings: Dict[str, Any],
+    stale_arr: Optional[np.ndarray] = None,
+) -> Image.Image:
+    """Render scrub density (0–1 ratio) as a sparse→dense colour ramp, with an
+    optional stale-fire caution hatch drawn into the same layer.
 
     density_arr contains the normalised point ratio (scrub-band returns / total
     returns per cell). Values below minRatio are transparent. A sqrt curve
     spreads low-density values for better perceptual differentiation.
 
     Sparse/dense colours and alpha endpoints come from `settings.vegetation`.
+
+    stale_arr, when given, is a fire_stale.tif window on the SAME grid as
+    density_arr (1 = LiDAR capture predates that cell's most-recent fire, see
+    apply_fire_history's docstring). Every stale cell gets a diagonal
+    caution-amber hatch, applied REGARDLESS of whether that cell has any scrub
+    density — a stale, currently-open-looking cell still needs the caution,
+    since it may have regrown since the scan. Passing None (fire-staleness
+    detection disabled/unavailable for this job) is a pure no-op: output is
+    identical to calling this function without the parameter at all.
     """
     img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
     if density_arr is None:
@@ -2369,7 +2803,23 @@ def render_vegetation_tile(density_arr: Optional[np.ndarray], settings: Dict[str
     alpha_max = float(veg.get("alphaMax", VEGETATION_DEFAULTS["alphaMax"]))
 
     mask = np.isfinite(density_arr) & (density_arr >= min_ratio)
-    if not mask.any():
+
+    # Whether the hatch overlay has any work to do this tile — computed before
+    # the density-mask early return so a stale-but-otherwise-fully-transparent
+    # tile (no cell meets minRatio) still gets its caution hatch.
+    stale_mask = None
+    if stale_arr is not None:
+        if stale_arr.shape != density_arr.shape:
+            log.warning(
+                f"fire_stale array shape {stale_arr.shape} != density array shape "
+                f"{density_arr.shape} — skipping stale-fire hatch overlay for this tile."
+            )
+        else:
+            stale_mask = stale_arr > 0
+
+    has_stale = stale_mask is not None and stale_mask.any()
+
+    if not mask.any() and not has_stale:
         return img
 
     span = max(max_ratio - min_ratio, 1e-6)
@@ -2380,6 +2830,15 @@ def render_vegetation_tile(density_arr: Optional[np.ndarray], settings: Dict[str
     rgba[..., 1] = np.where(mask, (sparse_g + t * (dense_g - sparse_g)).astype(np.uint8), 0)
     rgba[..., 2] = np.where(mask, (sparse_b + t * (dense_b - sparse_b)).astype(np.uint8), 0)
     rgba[..., 3] = np.where(mask, (alpha_min + t * (alpha_max - alpha_min)).astype(np.uint8), 0)
+
+    if has_stale:
+        row_idx, col_idx = np.indices((TILE_SIZE, TILE_SIZE))
+        hatch = ((row_idx + col_idx) % FIRE_STALE_HATCH_PERIOD_PX < FIRE_STALE_HATCH_STRIPE_PX) & stale_mask
+        rgba[hatch, 0] = FIRE_STALE_HATCH_COLOUR[0]
+        rgba[hatch, 1] = FIRE_STALE_HATCH_COLOUR[1]
+        rgba[hatch, 2] = FIRE_STALE_HATCH_COLOUR[2]
+        rgba[hatch, 3] = FIRE_STALE_HATCH_ALPHA
+
     return Image.fromarray(rgba)
 
 
@@ -2694,6 +3153,7 @@ class RenderConfig:
     lat_max: float
     settings: Dict[str, Any] = field(default_factory=_default_render_settings)
     footprint_path: Optional[str] = None
+    stale_path: str = ""  # fire_stale.tif window path; "" when fire-staleness detection is disabled (mirrors density_path)
 
 
 def render_tile_job(args) -> Tuple[int, int, int, dict]:
@@ -2722,7 +3182,11 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
     veg_img = None
     if "vegetation" in cfg.layers:
         density_arr = read_raster_window(cfg.density_path, bbox_merc)
-        veg_img = render_vegetation_tile(density_arr, cfg.settings)
+        # cfg.stale_path is "" whenever fire-staleness detection was disabled/
+        # unavailable for this job (see compute_rasters) — same optional-path
+        # convention as cfg.density_path/footprint_path.
+        stale_arr = read_raster_window(cfg.stale_path, bbox_merc) if cfg.stale_path else None
+        veg_img = render_vegetation_tile(density_arr, cfg.settings, stale_arr)
 
     # --- Features ---
     feat_img = render_features_tile(cfg.osm_geojson, bbox_wgs84, z, cfg.settings)
@@ -3034,18 +3498,23 @@ def main():
             contents = extract_elvis_zip(args.elvis_zip, work_dir)
 
         las_strs = [str(f) for f in contents.las_files]
+        capture_year = _capture_year_from_las_files(las_strs)
         # Final Web-Mercator rasters fed to the derived-raster / tiling stage.
-        dtm_filled      = os.path.join(work_dir, "dtm_filled.tif")
-        scrub_count_raw = os.path.join(work_dir, "scrub_count_raw.tif")
-        below_count_raw = os.path.join(work_dir, "below_count_raw.tif")
+        dtm_filled       = os.path.join(work_dir, "dtm_filled.tif")
+        scrub_low_raw    = os.path.join(work_dir, "scrub_low_count_raw.tif")
+        scrub_high_raw   = os.path.join(work_dir, "scrub_high_count_raw.tif")
+        below_count_raw  = os.path.join(work_dir, "below_count_raw.tif")
+        all_count_raw    = os.path.join(work_dir, "all_count_raw.tif")
         # Native-CRS intermediates. Rasters are built and the footprint computed
         # in the data's native MGA/UTM grid (axis-aligned → no rotation wedge),
         # then warped to Web Mercator as a raster (see
         # reproject_raster_to_web_mercator). This is what prevents fill_nodata
         # from fabricating "spaghetti" into the rotated edge gaps.
-        dtm_native         = os.path.join(work_dir, "dtm_native.tif")
-        scrub_count_native = os.path.join(work_dir, "scrub_count_native.tif")
-        below_count_native = os.path.join(work_dir, "below_count_native.tif")
+        dtm_native          = os.path.join(work_dir, "dtm_native.tif")
+        scrub_low_native    = os.path.join(work_dir, "scrub_low_count_native.tif")
+        scrub_high_native   = os.path.join(work_dir, "scrub_high_count_native.tif")
+        below_count_native  = os.path.join(work_dir, "below_count_native.tif")
+        all_count_native    = os.path.join(work_dir, "all_count_native.tif")
 
         footprint_path = os.path.join(work_dir, "footprint.geojson")
 
@@ -3072,7 +3541,8 @@ def main():
             dtm_native_filled = os.path.join(work_dir, "dtm_native_filled.tif")
             with bench.step("PDAL: LAZ → DTM + NRD counts (ground classification)", key="pdal"):
                 run_pdal_sequential_full(
-                    las_strs, dtm_raw, scrub_count_native, below_count_native,
+                    las_strs, dtm_raw, scrub_low_native, scrub_high_native,
+                    below_count_native, all_count_native,
                     work_dir, resolution=1.0,
                 )
             with bench.step("Fill DTM nodata holes", key="fill"):
@@ -3090,16 +3560,33 @@ def main():
         # warp them so they align with the 3857 DTM the derived rasters expect.
         if contents.has_vegetation:
             with bench.step("Reproject NRD counts to Web Mercator", key="reproject_counts"):
-                reproject_raster_to_web_mercator(scrub_count_native, scrub_count_raw, 0, "bilinear")
+                reproject_raster_to_web_mercator(scrub_low_native, scrub_low_raw, 0, "bilinear")
+                reproject_raster_to_web_mercator(scrub_high_native, scrub_high_raw, 0, "bilinear")
                 reproject_raster_to_web_mercator(below_count_native, below_count_raw, 0, "bilinear")
+                reproject_raster_to_web_mercator(all_count_native, all_count_raw, 0, "bilinear")
 
         # ── Step 3: Derive rasters ───────────────────────────────────────────
         with bench.step("Compute hillshade, slope" + (", scrub density (vegetation)" if contents.has_vegetation else ""), key="derivatives"):
             if contents.has_vegetation:
-                raster_paths = compute_rasters(dtm_filled, scrub_count_raw, below_count_raw,
-                                               work_dir, settings)
+                raster_paths = compute_rasters(dtm_filled, scrub_low_raw, scrub_high_raw,
+                                               below_count_raw, all_count_raw,
+                                               work_dir, settings, capture_year)
             else:
                 raster_paths = compute_rasters_no_veg(dtm_filled, work_dir, settings)
+
+        # Fold fire_stale_summary.json (written by apply_fire_history, inside
+        # compute_rasters, only when fire-staleness detection is enabled) into
+        # the per-job metrics — lets the worker surface "N% of this AOI burned
+        # since capture" on the job. Absent file (fire disabled/unavailable) is
+        # a no-op: set_fire_staleness(None, None) leaves the metrics keys null.
+        fire_stale_summary_path = os.path.join(work_dir, "fire_stale_summary.json")
+        if os.path.exists(fire_stale_summary_path):
+            with open(fire_stale_summary_path) as f:
+                fire_stale_summary = json.load(f)
+            bench.set_fire_staleness(
+                fire_stale_summary["stale_fraction"],
+                fire_stale_summary["capture_year"],
+            )
 
         # ── Step 4: Bounding box ─────────────────────────────────────────────
         lon_min, lat_min, lon_max, lat_max = get_raster_bbox_wgs84(dtm_filled)
@@ -3164,6 +3651,7 @@ def main():
         cfg = RenderConfig(
             hillshade_path=raster_paths["hillshade"],
             density_path=raster_paths.get("scrub_density", ""),
+            stale_path=raster_paths.get("fire_stale", ""),
             slope_path=raster_paths["slope"],
             osm_geojson=osm_geojson,
             contour_paths=contour_paths,

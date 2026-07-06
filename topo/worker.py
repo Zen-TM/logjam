@@ -622,7 +622,8 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int, Optio
         debug_prefix = f"jobs/{job_id}/debug"
         debug_files = [
             "dtm_raw.tif", "dtm_filled.tif",
-            "scrub_count_raw.tif", "understorey_count_raw.tif",
+            "scrub_low_count_raw.tif", "scrub_high_count_raw.tif",
+            "below_count_raw.tif", "all_count_raw.tif",
             "footprint.geojson",
         ]
         for fname in debug_files:
