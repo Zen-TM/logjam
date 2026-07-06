@@ -11,6 +11,7 @@ import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
 import { requireCanyonAccess, requireCanyonOwnerAccess } from "../lib/canyonAccess";
 import { resolveUser } from "../lib/resolveUser";
 import { TRACK_MIME_TYPES } from "@logjam/shared";
+import { serializeTrip, tripCanyonsInclude } from "./tripLogsGlobal";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -29,8 +30,9 @@ async function fetchCanyons(where: object) {
     take: LIST_TAKE,
     include: {
       // shares powers the "shared by me" filter + card badge on the owned list
-      // (UAT UX gap); tripLogs is the existing per-canyon count.
-      _count: { select: { tripLogs: true, shares: true } },
+      // (UAT UX gap); tripLogLinks is the per-canyon trip count (one join row
+      // per linked trip, so the count is equivalent to the old direct-FK count).
+      _count: { select: { tripLogLinks: true, shares: true } },
     },
   });
 }
@@ -242,13 +244,19 @@ router.get(
     // (linkedType, linkedId) and presigned here. Owners also get trip logs and
     // their media; share recipients receive canyon-level media only.
     if (isOwner) {
-      const canyon = await prisma.canyon.findUnique({
-        where: { id: canyonId },
-        include: { tripLogs: { orderBy: { date: "desc" } } },
-      });
+      const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
       if (!canyon) throw new AppError(404, "Canyon not found");
 
-      const tripIds = canyon.tripLogs.map((trip) => trip.id);
+      // Join-based lookup (Canyon no longer has a direct tripLogs relation —
+      // trips link via TripLogCanyon, possibly to several canyons). Mirrors
+      // GET /canyons/:canyonId/trips (routes/tripLogs.ts).
+      const trips = await prisma.tripLog.findMany({
+        where: { userId: user.id, canyons: { some: { canyonId } } },
+        orderBy: { date: "desc" },
+        include: tripCanyonsInclude,
+      });
+
+      const tripIds = trips.map((trip) => trip.id);
       const [canyonMedia, tripMediaRows] = await Promise.all([
         prisma.media.findMany({
           where: { linkedType: "canyon", linkedId: canyonId },
@@ -263,8 +271,8 @@ router.get(
       ]);
 
       const mediaByTrip = await mediaItemsByLinkedId(tripMediaRows);
-      const tripLogs = canyon.tripLogs.map((trip) => ({
-        ...trip,
+      const tripLogs = trips.map((trip) => ({
+        ...serializeTrip(trip),
         media: mediaByTrip.get(trip.id) ?? [],
       }));
       res.json({ ...canyon, media: await toMediaItems(canyonMedia), tripLogs });
@@ -378,24 +386,37 @@ router.delete(
     const totalBytes = media.reduce((sum, m) => sum + (m.fileSizeBytes ?? 0n), 0n);
     await deleteS3Keys(MEDIA_BUCKET, s3Keys);
 
-    // Trip logs DETACH on canyon delete (canyonId → null via the SetNull FK), not
-    // cascade — a user removing a canyon keeps their personal logbook entries and
-    // their per-trip media. Canyon shares and any other canyon-linked children still
-    // FK-cascade; canyon-level media has no DB FK on its polymorphic linkedId, so its
-    // deleteMany stays explicit. The quota decrement shares the transaction (ARCH-004)
-    // so a crash after the row deletes can't leave the quota over-counted (only
-    // canyon media frees quota now — per-trip media survives with its trip).
+    // Trip logs DETACH on canyon delete (the TripLogCanyon join row cascades
+    // away, not the trip), so a user removing a canyon keeps their personal
+    // logbook entries and their per-trip media. Canyon shares and any other
+    // canyon-linked children still FK-cascade; canyon-level media has no DB FK
+    // on its polymorphic linkedId, so its deleteMany stays explicit. The quota
+    // decrement shares the transaction (ARCH-004) so a crash after the row
+    // deletes can't leave the quota over-counted (only canyon media frees
+    // quota now — per-trip media survives with its trip).
     await prisma.$transaction(async (tx) => {
       await tx.media.deleteMany({
         where: { linkedType: "canyon", linkedId: id },
       });
-      // Preserve the (about-to-be-deleted) canyon's name on its orphaned trips so
-      // they still carry a label after canyonId is nulled by the SetNull FK. Only
+      // Preserve the (about-to-be-deleted) canyon's name on trips for which
+      // this was their ONLY linked canyon, so they still carry a label once
+      // the join row cascades away. Trips that keep another linked canyon
+      // need no backfill (their title still derives from the survivor). Only
       // fill blanks so an explicit trip displayName is never overwritten.
-      await tx.tripLog.updateMany({
-        where: { canyonId: id, displayName: null },
-        data: { displayName: canyon.name },
+      // Queried before canyon.delete below, while the join row still exists.
+      const soleLinkTrips = await tx.tripLog.findMany({
+        where: { displayName: null, canyons: { some: { canyonId: id } } },
+        select: { id: true, _count: { select: { canyons: true } } },
       });
+      const orphanedTripIds = soleLinkTrips
+        .filter((trip) => trip._count.canyons === 1)
+        .map((trip) => trip.id);
+      if (orphanedTripIds.length > 0) {
+        await tx.tripLog.updateMany({
+          where: { id: { in: orphanedTripIds } },
+          data: { displayName: canyon.name },
+        });
+      }
       await tx.canyonShare.deleteMany({ where: { canyonId: id } });
       // Purge canyon_shared notifications held by OTHER users (the share
       // recipients) that reference this canyon — not just the owner's own rows

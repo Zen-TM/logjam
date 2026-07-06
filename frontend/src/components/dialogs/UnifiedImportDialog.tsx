@@ -105,11 +105,13 @@ type PreparedCanyonRow = {
 };
 
 // Per-trip-row prepared content. `sourceCanyonName` is the raw file string.
+// `type` is free text (trimmed, empty → null) — no enum validation.
 type PreparedTripRow = {
   rowIndex: number;
   sourceCanyonName: string;
   date: string;
   notes: string | null;
+  type: string | null;
   customFields: Record<string, unknown>;
 };
 
@@ -525,6 +527,7 @@ function UnifiedImportDialog({
     const nameCol = headers.find((h) => tripAssignments[h] === "name");
     const dateCol = headers.find((h) => tripAssignments[h] === "date");
     const notesCol = headers.find((h) => tripAssignments[h] === "notes");
+    const typeCol = headers.find((h) => tripAssignments[h] === "type");
     if (!nameCol || !dateCol) return [];
 
     // Custom-field columns: existing cf:<key> plus any new fields the user named.
@@ -556,6 +559,7 @@ function UnifiedImportDialog({
         sourceCanyonName,
         date: isoDate,
         notes: notesCol ? row[notesCol] || null : null,
+        type: typeCol ? (row[typeCol] ?? "").trim() || null : null,
         customFields,
       });
     });
@@ -927,6 +931,7 @@ function UnifiedImportDialog({
           canyonId,
           sourceCanyonName: row.sourceCanyonName,
           displayName,
+          type: row.type,
           date: row.date,
           notes: row.notes,
           customFields: row.customFields,
@@ -1145,6 +1150,7 @@ function UnifiedImportDialog({
                         <MenuItem value="name">Canyon Name</MenuItem>
                         <MenuItem value="date">Date</MenuItem>
                         <MenuItem value="notes">Notes</MenuItem>
+                        <MenuItem value="type">Type</MenuItem>
                         {customFieldDefs.map((d) => (
                           <MenuItem key={d.key} value={`cf:${d.key}`}>Field: {d.label}</MenuItem>
                         ))}

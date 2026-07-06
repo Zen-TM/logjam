@@ -4,6 +4,7 @@ export type ColumnRole =
   | "name"
   | "date"
   | "notes"
+  | "type"
   | `cf:${string}`
   | "new-cf"
   | "appendNotes"
@@ -12,6 +13,7 @@ export type ColumnRole =
 const NAME_ALIASES = new Set(["name", "canyon", "canyon name", "location", "place", "site"]);
 const DATE_ALIASES = new Set(["date", "trip date", "trip date", "visited", "when", "visit date", "trip"]);
 const NOTES_ALIASES = new Set(["notes", "comments", "comment", "description", "note", "details", "remarks"]);
+const TYPE_ALIASES = new Set(["type", "activity", "trip type"]);
 
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[\s_-]+/g, " ").trim();
@@ -30,6 +32,8 @@ export function detectColumns(
       result[header] = "date";
     } else if (NOTES_ALIASES.has(n)) {
       result[header] = "notes";
+    } else if (TYPE_ALIASES.has(n)) {
+      result[header] = "type";
     } else {
       const matchDef = customFieldDefs.find(
         (d) => normalize(d.label) === n || d.key === n.replace(/ /g, "_"),

@@ -14,6 +14,13 @@ describe("detectColumns", () => {
     expect(result["  COMMENTS "]).toBe("notes");
   });
 
+  it("maps type aliases", () => {
+    const result = detectColumns(["Type", "ACTIVITY", "Trip_Type"], []);
+    expect(result["Type"]).toBe("type");
+    expect(result["ACTIVITY"]).toBe("type");
+    expect(result["Trip_Type"]).toBe("type");
+  });
+
   it("matches a custom field by its normalized label", () => {
     const result = detectColumns(["water level"], customFields);
     expect(result["water level"]).toBe("cf:water_level");

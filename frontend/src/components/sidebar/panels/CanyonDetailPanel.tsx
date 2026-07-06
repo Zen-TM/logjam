@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -117,6 +117,13 @@ function CanyonDetailPanel({
 
   const [copying, setCopying] = useState(false);
   const [canyonShares, setCanyonShares] = useState<TCanyonShare[]>([]);
+
+  // Type suggestions for the trip dialog, drawn from this canyon's own trips
+  // (the only trip list this panel loads).
+  const existingTripTypes = useMemo(
+    () => tripLogs.map((t) => t.type).filter((t): t is string => t != null),
+    [tripLogs],
+  );
 
   // Owner-only "shared with" list. Refetches when the share dialog closes so a
   // just-made share/unshare reflects immediately.
@@ -643,6 +650,7 @@ function CanyonDetailPanel({
         tripLog={editingTripLog}
         customFieldDefs={customFieldDefs}
         onCustomFieldDefsChange={onCustomFieldDefsChange}
+        existingTripTypes={existingTripTypes}
       />
 
       <TripLogViewDialog
@@ -652,7 +660,6 @@ function CanyonDetailPanel({
           setViewingTripLog(null);
         }}
         tripLog={viewingTripLog}
-        canyonName={canyon.name}
         customFieldDefs={customFieldDefs}
         canManageMedia={isOwnedCanyon}
         onMediaChanged={onQuotaChanged}

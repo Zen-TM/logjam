@@ -106,7 +106,11 @@ describe("POST /canyons/bulk — import contract (fake auth = alice)", () => {
     expect(res.body.errors[0].rowIndex).toBe(0);
   });
 
-  it("rejects merging into a foreign-owned canyonId with 403 (no rows changed)", async () => {
+  it("rejects merging into a foreign-owned canyonId as a per-row not-found error indistinguishable from a nonexistent id (no 403 oracle, no rows changed)", async () => {
+    // Since 024f410 the merge-target lookup is owner-scoped: a target owned by
+    // someone else is absent from the lookup and reported with the SAME per-row
+    // "target canyon not found" error as a nonexistent id — a 403 here would
+    // confirm to a non-owner that the canyon ID exists (existence oracle).
     const foreign = await prisma.canyon.create({
       data: {
         ownerId: BOB_ID,
@@ -128,7 +132,13 @@ describe("POST /canyons/bulk — import contract (fake auth = alice)", () => {
             },
           ],
         });
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(200);
+      expect(res.body.merged).toBe(0);
+      expect(res.body.created).toBe(0);
+      expect(res.body.errors).toHaveLength(1);
+      expect(res.body.errors[0].rowIndex).toBe(0);
+      // Same message shape as the nonexistent-id case — must not leak ownership.
+      expect(res.body.errors[0].message).toContain("target canyon not found");
 
       const after = await prisma.canyon.findUnique({ where: { id: foreign.id } });
       expect(after?.notes).toBeNull();
@@ -206,6 +216,37 @@ describe("POST /canyons/bulk/delete (fake auth = alice)", () => {
       .set(AUTH)
       .send({ ids });
     expect(res.status).toBe(400);
+  });
+
+  it("bulk-deleting BOTH canyons of a 2-canyon trip keeps the trip and backfills displayName with the joined names", async () => {
+    const nameA = "CH-002 bulk backfill A";
+    const nameB = "CH-002 bulk backfill B";
+    const canyonAId = await createCanyon(nameA);
+    const canyonBId = await createCanyon(nameB);
+
+    const tripRes = await request(API_URL)
+      .post("/trips")
+      .set(AUTH)
+      .send({ canyonIds: [canyonAId, canyonBId], date: "2024-05-03" });
+    expect(tripRes.status).toBe(201);
+    const tripId = tripRes.body.id as string;
+
+    try {
+      const res = await request(API_URL)
+        .post("/canyons/bulk/delete")
+        .set(AUTH)
+        .send({ ids: [canyonAId, canyonBId] });
+      expect(res.status).toBe(200);
+      expect(res.body.deletedIds.sort()).toEqual([canyonAId, canyonBId].sort());
+
+      const survivorRes = await request(API_URL).get(`/trips/${tripId}`).set(AUTH);
+      expect(survivorRes.status).toBe(200);
+      expect(survivorRes.body.canyons).toEqual([]);
+      // formatTripCanyonNames join, in the original join-position order.
+      expect(survivorRes.body.displayName).toBe(`${nameA} and ${nameB}`);
+    } finally {
+      await request(API_URL).delete(`/trips/${tripId}`).set(AUTH);
+    }
   });
 });
 

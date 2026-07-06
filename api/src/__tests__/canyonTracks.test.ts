@@ -88,13 +88,16 @@ describe("canyon tracks (fake auth)", () => {
 
   it("allows multiple tracks on a trip log", async () => {
     const canyonId = await createCanyon(as(ALICE_SUB));
+    let tripId: string | undefined;
     try {
+      // Trip creation moved to the global POST /trips — the nested POST was
+      // removed with the trip↔canyon m2m cutover.
       const tripRes = await request(API_URL)
-        .post(`/canyons/${canyonId}/trips`)
+        .post("/trips")
         .set(as(ALICE_SUB))
-        .send({ date: "2026-06-01" });
+        .send({ canyonIds: [canyonId], date: "2026-06-01" });
       expect(tripRes.status).toBe(201);
-      const tripId = tripRes.body.id as string;
+      tripId = tripRes.body.id as string;
 
       for (const filename of ["a.gpx", "b.gpx"]) {
         const presign = await request(API_URL)
@@ -116,6 +119,7 @@ describe("canyon tracks (fake auth)", () => {
         expect(confirm.status).toBe(201);
       }
     } finally {
+      if (tripId) await request(API_URL).delete(`/trips/${tripId}`).set(as(ALICE_SUB));
       await request(API_URL).delete(`/canyons/${canyonId}`).set(as(ALICE_SUB));
     }
   });

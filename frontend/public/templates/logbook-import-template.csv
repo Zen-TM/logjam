@@ -1,2 +1,3 @@
-name,date,notes,Party
-Example Canyon,15/06/2023,Great day out,Alice & Bob
+name,date,type,notes,Party
+Example Canyon,15/06/2023,canyoning,Great day out,Alice & Bob
+Mount Example Summit Track,22/07/2023,bushwalking,Cold but clear views,Alice

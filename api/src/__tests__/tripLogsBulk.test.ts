@@ -112,4 +112,98 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
       await request(API_URL).delete(`/canyons/${carolCanyonId}`).set(as(CAROL_SUB));
     }
   });
+
+  it("a row with type creates a trip with that type; re-importing the same importKey with a different type updates it (type is not part of the hash)", async () => {
+    const name = `${TAG}-type`;
+    const trips = [
+      { sourceCanyonName: name, date: "2024-07-01", displayName: name, type: "canyoning" },
+    ];
+    try {
+      const first = await request(API_URL)
+        .post("/trips/bulk")
+        .set(AUTH)
+        .send({ importBatchId: `${name}-batch`, trips });
+      expect(first.status).toBe(200);
+      expect(first.body.imported).toBe(1);
+
+      const list1 = await request(API_URL).get("/trips").query({ search: name }).set(AUTH);
+      expect(list1.body.length).toBe(1);
+      expect(list1.body[0].type).toBe("canyoning");
+
+      // Same sourceCanyonName/date/notes/customFields → same importKey — the
+      // contract requires `type` NOT be part of the hash, so this changes only
+      // the type field via an update, never a duplicate row.
+      const second = await request(API_URL)
+        .post("/trips/bulk")
+        .set(AUTH)
+        .send({
+          importBatchId: `${name}-batch2`,
+          trips: [{ ...trips[0], type: "bushwalking" }],
+        });
+      expect(second.status).toBe(200);
+      expect(second.body.imported).toBe(0);
+      expect(second.body.updated).toBe(1);
+
+      const list2 = await request(API_URL).get("/trips").query({ search: name }).set(AUTH);
+      expect(list2.body.length).toBe(1);
+      expect(list2.body[0].type).toBe("bushwalking");
+    } finally {
+      await deleteTripsBySearch(name);
+    }
+  });
+
+  it("a row-level type validation error (>40 chars) does not abort the batch", async () => {
+    const name = `${TAG}-type-invalid`;
+    const goodName = `${TAG}-type-invalid-good`;
+    try {
+      const res = await request(API_URL)
+        .post("/trips/bulk")
+        .set(AUTH)
+        .send({
+          importBatchId: `${name}-batch`,
+          trips: [
+            { sourceCanyonName: name, date: "2024-07-05", displayName: name, type: "x".repeat(41) },
+            { sourceCanyonName: goodName, date: "2024-07-06", displayName: goodName },
+          ],
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.imported).toBe(1);
+      expect(res.body.errors).toHaveLength(1);
+      expect(res.body.errors[0].error).toMatch(/type must be at most 40 characters/);
+    } finally {
+      await deleteTripsBySearch(name);
+      await deleteTripsBySearch(goodName);
+    }
+  });
+
+  it("a row with canyonId links a join row visible in canyons[]", async () => {
+    const canyonName = `${TAG}-linked-canyon`;
+    const canyonRes = await request(API_URL)
+      .post("/canyons")
+      .set(AUTH)
+      .send({ name: canyonName, latitude: -33.7, longitude: 150.3 });
+    expect(canyonRes.status).toBe(201);
+    const canyonId = canyonRes.body.id as string;
+    const name = `${TAG}-linked-trip`;
+    try {
+      const res = await request(API_URL)
+        .post("/trips/bulk")
+        .set(AUTH)
+        .send({
+          importBatchId: `${name}-batch`,
+          trips: [
+            { canyonId, sourceCanyonName: canyonName, date: "2024-07-02", displayName: name },
+          ],
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.imported).toBe(1);
+
+      const list = await request(API_URL).get("/trips").query({ search: name }).set(AUTH);
+      expect(list.body.length).toBe(1);
+      expect(list.body[0].canyons).toEqual([{ id: canyonId, name: canyonName }]);
+    } finally {
+      await deleteTripsBySearch(name);
+      await request(API_URL).delete(`/canyons/${canyonId}`).set(AUTH);
+    }
+  });
 });

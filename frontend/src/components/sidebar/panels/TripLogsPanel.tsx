@@ -1,9 +1,14 @@
 import { useState, useMemo } from "react";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import type { TCanyon, TTripLog } from "../../../canyonUtils";
+import { tripTitle } from "../../../canyonUtils";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import classes from "./TripLogsPanel.module.css";
+
+// The type-filter dropdown's "no type set" bucket. Distinct from "" (All),
+// which never matches an actual trip.type value.
+const NO_TYPE_FILTER_VALUE = "__no_type__";
 
 function TripLogsPanel({
   tripLogs,
@@ -38,18 +43,30 @@ function TripLogsPanel({
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
   const [viewingTripLog, setViewingTripLog] = useState<TTripLog | null>(null);
   const [editingTripLog, setEditingTripLog] = useState<TTripLog | undefined>(undefined);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
+  // Distinct trip types across the loaded trips — feeds both the type-filter
+  // dropdown here and the type field's suggestions in the create/edit dialogs.
+  const existingTripTypes = useMemo(
+    () => tripLogs.map((t) => t.type).filter((t): t is string => t != null),
+    [tripLogs],
+  );
+  const distinctTypes = useMemo(
+    () => Array.from(new Set(existingTripTypes)).sort((a, b) => a.localeCompare(b)),
+    [existingTripTypes],
+  );
+
   const filtered = useMemo(() => {
     return tripLogs.filter((t) => {
       if (search.trim()) {
         const q = search.toLowerCase();
         const nameMatch =
-          t.canyon?.name.toLowerCase().includes(q) ||
+          t.canyons.some((c) => c.name.toLowerCase().includes(q)) ||
           t.displayName?.toLowerCase().includes(q);
         if (!nameMatch) return false;
       }
@@ -59,9 +76,14 @@ function TripLogsPanel({
       if (dateTo) {
         if (new Date(t.date) > new Date(dateTo)) return false;
       }
+      if (typeFilter === NO_TYPE_FILTER_VALUE) {
+        if (t.type != null) return false;
+      } else if (typeFilter) {
+        if (t.type !== typeFilter) return false;
+      }
       return true;
     });
-  }, [tripLogs, search, dateFrom, dateTo]);
+  }, [tripLogs, search, dateFrom, dateTo, typeFilter]);
 
   return (
     <div className={classes.panel}>
@@ -101,6 +123,18 @@ function TripLogsPanel({
             />
           </label>
         </div>
+        <select
+          className={classes.typeSelect}
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          aria-label="Filter trip logs by type"
+        >
+          <option value="">All types</option>
+          {distinctTypes.map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+          <option value={NO_TYPE_FILTER_VALUE}>No type</option>
+        </select>
       </div>
 
       {loading ? (
@@ -120,9 +154,7 @@ function TripLogsPanel({
                 setShowViewDialog(true);
               }}
             >
-              <span className={classes.canyonName}>
-                {trip.canyon?.name ?? trip.displayName ?? "No canyon"}
-              </span>
+              <span className={classes.canyonName}>{tripTitle(trip)}</span>
               <span className={classes.tripDate}>
                 {new Date(trip.date).toLocaleDateString("en-AU", {
                   year: "numeric",
@@ -133,6 +165,7 @@ function TripLogsPanel({
                   timeZone: "UTC",
                 })}
               </span>
+              {trip.type && <span className={classes.typeChip}>{trip.type}</span>}
               {trip.notes && (
                 <span className={classes.tripNotes}>
                   {trip.notes.length > 80 ? trip.notes.slice(0, 80) + "…" : trip.notes}
@@ -169,7 +202,6 @@ function TripLogsPanel({
           setViewingTripLog(null);
         }}
         tripLog={viewingTripLog}
-        canyonName={viewingTripLog?.canyon?.name ?? viewingTripLog?.displayName ?? "No canyon"}
         customFieldDefs={customFieldDefs}
         onMediaChanged={onQuotaChanged}
         onEdit={() => {
@@ -203,6 +235,7 @@ function TripLogsPanel({
           tripLog={editingTripLog}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={onCustomFieldDefsChange}
+          existingTripTypes={existingTripTypes}
           onPickCoords={onPickCoords}
           onCanyonCreated={onRefetchCanyons}
         />
@@ -221,6 +254,7 @@ function TripLogsPanel({
         canyons={canyons}
         customFieldDefs={customFieldDefs}
         onCustomFieldDefsChange={onCustomFieldDefsChange}
+        existingTripTypes={existingTripTypes}
         onPickCoords={onPickCoords}
         onCanyonCreated={onRefetchCanyons}
       />

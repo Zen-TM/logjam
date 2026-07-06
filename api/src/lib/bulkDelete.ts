@@ -10,13 +10,21 @@ import prisma from "../services/prisma";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
+import { formatTripCanyonNames } from "@logjam/shared";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
 /**
- * Delete canyons by ID for a given user, cascading through trips, media (S3
- * first), shares, and notifications. Only deletes canyons owned by `userId`.
- * Returns the list of canyon IDs actually deleted.
+ * Delete canyons by ID for a given user, cascading through canyon-level media
+ * (S3 first), shares, and notifications. Only deletes canyons owned by
+ * `userId`. Returns the list of canyon IDs actually deleted.
+ *
+ * Trip logs are NOT deleted or otherwise touched here: TripLogCanyon join
+ * rows cascade away at the DB level (ON DELETE CASCADE on
+ * TripLogCanyon.canyonId) when the canyon row is deleted, but the trip itself
+ * survives — it just loses this one linked canyon (or ends up unlinked, if it
+ * had no others). Per-trip media is therefore never deleted by this path and
+ * never contributes to the quota decrement below.
  */
 export async function deleteCanyonsCascade(
   userId: string,
@@ -31,20 +39,8 @@ export async function deleteCanyonsCascade(
   const ownedIds = owned.map((c) => c.id);
   if (ownedIds.length === 0) return [];
 
-  const tripIds = (
-    await prisma.tripLog.findMany({
-      where: { canyonId: { in: ownedIds } },
-      select: { id: true },
-    })
-  ).map((t) => t.id);
-
   const media = await prisma.media.findMany({
-    where: {
-      OR: [
-        { linkedType: "tripLog", linkedId: { in: tripIds } },
-        { linkedType: "canyon", linkedId: { in: ownedIds } },
-      ],
-    },
+    where: { linkedType: "canyon", linkedId: { in: ownedIds } },
     select: { s3KeyDisplay: true, s3KeyThumbnail: true, fileSizeBytes: true },
   });
 
@@ -57,12 +53,42 @@ export async function deleteCanyonsCascade(
 
   await prisma.$transaction(async (tx) => {
     await tx.media.deleteMany({
-      where: { linkedType: "tripLog", linkedId: { in: tripIds } },
-    });
-    await tx.media.deleteMany({
       where: { linkedType: "canyon", linkedId: { in: ownedIds } },
     });
-    await tx.tripLog.deleteMany({ where: { canyonId: { in: ownedIds } } });
+    // Preserve the (about-to-be-deleted) canyons' names on trips for which
+    // these were their ONLY linked canyons, so they still carry a label once
+    // the join rows cascade away. Trips that keep another linked canyon need
+    // no backfill (their title still derives from the survivor). Only fill
+    // blanks so an explicit trip displayName is never overwritten. Queried
+    // before canyon.deleteMany below, while the join rows still exist.
+    const candidateTrips = await tx.tripLog.findMany({
+      where: {
+        displayName: null,
+        canyons: { some: { canyonId: { in: ownedIds } } },
+      },
+      select: {
+        id: true,
+        canyons: {
+          orderBy: { position: "asc" },
+          select: { canyonId: true, canyon: { select: { name: true } } },
+        },
+      },
+    });
+    const orphanedTrips = candidateTrips.filter((trip) =>
+      trip.canyons.every((link) => ownedIds.includes(link.canyonId)),
+    );
+    await Promise.all(
+      orphanedTrips.map((trip) =>
+        tx.tripLog.update({
+          where: { id: trip.id },
+          data: {
+            displayName: formatTripCanyonNames(
+              trip.canyons.map((link) => link.canyon.name),
+            ),
+          },
+        }),
+      ),
+    );
     await tx.canyonShare.deleteMany({ where: { canyonId: { in: ownedIds } } });
     // Purge canyon_shared notifications held by OTHER users (the share
     // recipients) that reference the deleted canyons (PRIV-003).

@@ -63,8 +63,8 @@ describe("passesFilters — ownership", () => {
 describe("passesFilters — shared by me", () => {
   it("keeps canyons with at least one share, drops the rest", () => {
     const f = filters({ shared_by_me: true });
-    expect(passesFilters(canyon({ _count: { tripLogs: 0, shares: 2 } }), f, true)).toBe(true);
-    expect(passesFilters(canyon({ _count: { tripLogs: 0, shares: 0 } }), f, true)).toBe(false);
+    expect(passesFilters(canyon({ _count: { tripLogLinks: 0, shares: 2 } }), f, true)).toBe(true);
+    expect(passesFilters(canyon({ _count: { tripLogLinks: 0, shares: 0 } }), f, true)).toBe(false);
     expect(passesFilters(canyon(), f, true)).toBe(false); // _count absent
   });
 

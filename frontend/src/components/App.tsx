@@ -364,7 +364,10 @@ function App() {
     error: tripLogsError,
     refetch: refetchTripLogs,
   } = useTripLogs(authenticated);
-  const { analytics, loading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(authenticated);
+  // Analytics type filter (null = all trips). Changing it refetches /analytics
+  // server-side; the dropdown options come from analytics.types (unfiltered).
+  const [analyticsTypeFilter, setAnalyticsTypeFilter] = useState<string | null>(null);
+  const { analytics, loading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(authenticated, analyticsTypeFilter);
   const { currentUser, refetchCurrentUser, applyCurrentUser } = useCurrentUser(authenticated);
   const {
     vectorStyle,
@@ -958,6 +961,8 @@ function App() {
           onCanyonCustomFieldDefsChange={setCanyonCustomFieldDefs}
           analytics={analytics}
           analyticsLoading={analyticsLoading}
+          analyticsTypeFilter={analyticsTypeFilter}
+          onAnalyticsTypeFilterChange={setAnalyticsTypeFilter}
           vectorStyle={vectorStyle}
           onVectorStyleChange={setLiveVectorStyle}
           collapseToPeek={mapInteractionActive}

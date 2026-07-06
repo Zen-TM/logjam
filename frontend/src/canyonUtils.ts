@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
 import type { ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, CanyonMergePolicy } from "@logjam/shared";
+import { formatTripCanyonNames } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
 
@@ -32,7 +33,7 @@ export type TCanyon = {
   media?: MediaItem[];
   // Populated only by the list endpoints (GET /canyons[/shared]). `shares` powers
   // the "shared by me" filter + the card badge on owned canyons.
-  _count?: { tripLogs: number; shares: number };
+  _count?: { tripLogLinks: number; shares: number };
 };
 
 export type TUser = {
@@ -58,17 +59,30 @@ export type TUser = {
 
 export type TTripLog = {
   id: string;
-  canyonId: string | null;
+  // Ordered — order is meaningful, drives the derived title (see tripTitle).
+  canyons: { id: string; name: string }[];
   userId: string;
   date: string;
   displayName: string | null;
+  type: string | null;
   notes: string | null;
   customFields: Record<string, unknown>;
   createdAt: string;
-  canyon?: { id: string; name: string };
   // Populated by the per-canyon trip endpoints (GET /canyons/:id/trips[/:id]).
   media?: MediaItem[];
 };
+
+// A trip's title: an explicit displayName always wins; otherwise it's the
+// joined names of its linked canyons; otherwise a generic fallback. Every
+// display site must use this — never inline the canyon?.name ?? displayName
+// fallback chain, which predates multi-canyon trips.
+export function tripTitle(trip: TTripLog): string {
+  return (
+    trip.displayName ??
+    formatTripCanyonNames(trip.canyons.map((c) => c.name)) ??
+    "Untitled trip"
+  );
+}
 
 export type TFriend = {
   id: string;
@@ -590,8 +604,11 @@ export function createTripLog(data: {
   date: string;
   notes?: string | null;
   customFields?: Record<string, unknown>;
-  canyonId?: string | null;
+  // Ordered, max MAX_CANYONS_PER_TRIP. Independent of displayName — both may be
+  // set, either may be omitted.
+  canyonIds?: string[];
   displayName?: string | null;
+  type?: string | null;
 }): Promise<TTripLog> {
   return apiFetch<TTripLog>("/trips", {
     method: "POST",
@@ -605,8 +622,10 @@ export function updateTripLog(
     date?: string;
     notes?: string | null;
     customFields?: Record<string, unknown>;
-    canyonId?: string | null;
+    // Replaces the full linked-canyon set when present.
+    canyonIds?: string[];
     displayName?: string | null;
+    type?: string | null;
   },
 ): Promise<TTripLog> {
   return apiFetch<TTripLog>(`/trips/${id}`, {
@@ -668,6 +687,7 @@ export type BulkTripLogInput = {
   canyonId: string | null;
   sourceCanyonName: string;
   displayName?: string | null;
+  type?: string | null;
   date: string;
   notes?: string | null;
   customFields?: Record<string, unknown>;
@@ -837,13 +857,17 @@ export type TAnalytics = {
     canyonsWithTrips: number;
   };
   tripDates: Record<string, number>;
+  // Distinct types across ALL the user's trips (for the filter dropdown) —
+  // unaffected by the `type` filter itself.
+  types: string[];
 };
 
-export function getAnalytics(): Promise<TAnalytics> {
-  return apiFetch<TAnalytics>("/analytics");
+export function getAnalytics(type?: string | null): Promise<TAnalytics> {
+  const qs = type ? `?type=${encodeURIComponent(type)}` : "";
+  return apiFetch<TAnalytics>(`/analytics${qs}`);
 }
 
-export function useAnalytics(enabled: boolean) {
+export function useAnalytics(enabled: boolean, type: string | null = null) {
   const [analytics, setAnalytics] = useState<TAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -852,11 +876,11 @@ export function useAnalytics(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     setLoading(true);
-    getAnalytics()
+    getAnalytics(type)
       .then(setAnalytics)
       .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load analytics.")); })
       .finally(() => setLoading(false));
-  }, [enabled, fetchCount]);
+  }, [enabled, type, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 

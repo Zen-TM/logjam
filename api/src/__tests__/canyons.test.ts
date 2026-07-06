@@ -61,17 +61,19 @@ describe("canyons routes (fake auth = alice)", () => {
     expect(res.status).toBe(404);
   });
 
-  it("DELETE /canyons/:id detaches trip logs (keeps them) then removes the canyon", async () => {
+  it("DELETE /canyons/:id detaches its sole-linked trip log (keeps it, backfills displayName) then removes the canyon", async () => {
     const canyonName = "CH-003 detach test";
     const id = await createCanyon(canyonName);
 
-    // Attach a trip log so we exercise the detach path.
+    // Attach a trip log so we exercise the detach path (creation moved to the
+    // global POST /trips surface — the nested POST was removed).
     const tripRes = await request(API_URL)
-      .post(`/canyons/${id}/trips`)
+      .post("/trips")
       .set(AUTH)
-      .send({ date: "2024-05-01", notes: "detach trip" });
+      .send({ canyonIds: [id], date: "2024-05-01", notes: "detach trip" });
     expect(tripRes.status).toBe(201);
     const tripId = tripRes.body.id as string;
+    expect(tripRes.body.displayName).toBeNull();
 
     const delRes = await request(API_URL).delete(`/canyons/${id}`).set(AUTH);
     expect(delRes.status).toBe(204);
@@ -87,20 +89,45 @@ describe("canyons routes (fake auth = alice)", () => {
     expect([403, 404]).toContain(tripsAfter.status);
 
     // But the trip itself SURVIVES, detached: it appears in the global trip
-    // list with canyonId null and the deleted canyon's name preserved on
-    // displayName so it still carries a label.
-    const globalRes = await request(API_URL).get("/trips").set(AUTH);
-    expect(globalRes.status).toBe(200);
-    const survivor = (globalRes.body as Array<Record<string, unknown>>).find(
-      (t) => t.id === tripId,
-    );
-    expect(survivor).toBeDefined();
-    expect(survivor!.canyonId).toBeNull();
-    expect(survivor!.canyon).toBeNull();
-    expect(survivor!.displayName).toBe(canyonName);
+    // list with no linked canyons and the deleted canyon's name backfilled
+    // onto displayName (it was null and this was its only linked canyon) so
+    // it still carries a label.
+    const survivorRes = await request(API_URL).get(`/trips/${tripId}`).set(AUTH);
+    expect(survivorRes.status).toBe(200);
+    expect(survivorRes.body.canyons).toEqual([]);
+    expect(survivorRes.body.displayName).toBe(canyonName);
 
-    // Clean up the orphaned trip (no canyon to cascade it away).
+    // Clean up the orphaned trip (no canyon left to cascade it away).
     await request(API_URL).delete(`/trips/${tripId}`).set(AUTH);
+  });
+
+  it("DELETE /canyons/:id on one of a trip's TWO linked canyons keeps the trip AND the survivor; displayName stays null", async () => {
+    const canyonAName = "CH-003 detach-partial A";
+    const canyonBName = "CH-003 detach-partial B";
+    const canyonAId = await createCanyon(canyonAName);
+    const canyonBId = await createCanyon(canyonBName);
+
+    const tripRes = await request(API_URL)
+      .post("/trips")
+      .set(AUTH)
+      .send({ canyonIds: [canyonAId, canyonBId], date: "2024-05-02" });
+    expect(tripRes.status).toBe(201);
+    const tripId = tripRes.body.id as string;
+
+    try {
+      const delRes = await request(API_URL).delete(`/canyons/${canyonAId}`).set(AUTH);
+      expect(delRes.status).toBe(204);
+
+      const survivorRes = await request(API_URL).get(`/trips/${tripId}`).set(AUTH);
+      expect(survivorRes.status).toBe(200);
+      // Only the surviving canyon remains linked; no backfill since the trip
+      // still derives its title from the survivor.
+      expect(survivorRes.body.canyons).toEqual([{ id: canyonBId, name: canyonBName }]);
+      expect(survivorRes.body.displayName).toBeNull();
+    } finally {
+      await request(API_URL).delete(`/trips/${tripId}`).set(AUTH);
+      await request(API_URL).delete(`/canyons/${canyonBId}`).set(AUTH);
+    }
   });
 
   it("POST /canyons/:id/copy forks an accessible canyon under the caller", async () => {

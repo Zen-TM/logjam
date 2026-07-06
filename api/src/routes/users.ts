@@ -568,6 +568,12 @@ router.delete(
       prisma.topoExportJob.deleteMany({ where: { userId: user.id } }),
       prisma.geoPdfJob.deleteMany({ where: { userId: user.id } }),
       prisma.media.deleteMany({ where: { ownerId: user.id } }),
+      // Explicit even though TripLogCanyon.tripLogId cascades on TripLog
+      // delete — ARCH-001 convention: never rely solely on an implicit
+      // cascade for the account-delete purge list.
+      prisma.tripLogCanyon.deleteMany({
+        where: { tripLog: { userId: user.id } },
+      }),
       prisma.tripLog.deleteMany({ where: { userId: user.id } }),
       prisma.canyon.deleteMany({ where: { ownerId: user.id } }),
       prisma.geoPdfTemplate.deleteMany({ where: { userId: user.id } }),
