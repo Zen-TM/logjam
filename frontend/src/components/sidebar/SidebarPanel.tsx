@@ -127,8 +127,6 @@ function SidebarPanel({
   // Analytics
   analytics,
   analyticsLoading,
-  analyticsTypeFilter,
-  onAnalyticsTypeFilterChange,
   // Vector styles
   vectorStyle,
   onVectorStyleChange,
@@ -218,8 +216,6 @@ function SidebarPanel({
   // Analytics
   analytics: TAnalytics | null;
   analyticsLoading: boolean;
-  analyticsTypeFilter: string | null;
-  onAnalyticsTypeFilterChange: (type: string | null) => void;
   // Vector styles
   vectorStyle: VectorStyleSettings | null;
   onVectorStyleChange: (next: VectorStyleSettings) => void;
@@ -351,8 +347,6 @@ function SidebarPanel({
           <AnalyticsPanel
             analytics={analytics}
             loading={analyticsLoading}
-            typeFilter={analyticsTypeFilter}
-            onTypeFilterChange={onAnalyticsTypeFilterChange}
             tripLogs={tripLogs}
             customFieldDefs={customFieldDefs}
             onRefetchTripLogs={onRefetchTripLogs}
