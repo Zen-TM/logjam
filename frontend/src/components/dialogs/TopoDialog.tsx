@@ -1049,7 +1049,12 @@ export default function TopoDialog({
                 ["Mode", stats.modeLabel],
                 ["Tiles", String(stats.tileCount)],
                 stats.lazCount > 0
-                  ? ["Point clouds", `${stats.lazCount}× .laz`]
+                  ? [
+                      "Point clouds",
+                      stats.overlappingSurveys
+                        ? `${stats.lazCount}× .laz over ${stats.tileCount} area${stats.tileCount > 1 ? "s" : ""}`
+                        : `${stats.lazCount}× .laz`,
+                    ]
                   : null,
                 stats.demCount > 0
                   ? [
@@ -1088,6 +1093,21 @@ export default function TopoDialog({
                 {stats.derivativeTifCount} derivative raster
                 {stats.derivativeTifCount > 1 ? "s" : ""} (hillshade etc.) will
                 be ignored
+              </Typography>
+            )}
+            {stats.overlappingSurveys && (
+              <Typography
+                variant="caption"
+                sx={{
+                  gridColumn: "1 / -1",
+                  mt: 0.5,
+                  fontStyle: "italic",
+                  color: "var(--theme-text-muted)",
+                }}
+              >
+                Overlapping surveys detected — the best survey is picked per
+                layer (densest for terrain, most recent for vegetation). Uses no
+                extra tile quota.
               </Typography>
             )}
           </Box>

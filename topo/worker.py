@@ -125,6 +125,20 @@ ALL_LAYERS: frozenset[str] = frozenset({
 RASTER_LAYERS: frozenset[str] = frozenset({"hillshade", "vegetation", "slope"})
 VECTOR_LAYERS: frozenset[str] = frozenset({"contours", "features"})
 
+# Per-layer survey-pick policy — hand-synced mirror of the `surveyPick` field on
+# shared/src/topoSettings.ts → TOPO_LAYERS (ARCH-010; guarded by
+# tests/test_layer_sync.py). "density" = prefer densest survey (terrain/bedrock,
+# fire-irrelevant); "recency" = prefer most-recent capture (vegetation, post-fire
+# state matters); "none" = not LiDAR-derived (OSM features). Consumed by
+# pipeline.py select_surveys_by_layer to split overlapping surveys per footprint.
+LAYER_SURVEY_PICK: dict[str, str] = {
+    "hillshade": "density",
+    "vegetation": "recency",
+    "slope": "density",
+    "contours": "density",
+    "features": "none",
+}
+
 # Hardcoded fallback when User.vector_style is NULL. Must match
 # VECTOR_STYLE_DEFAULTS in shared/src/topoSettings.ts. Used only as a safety
 # net — the migration backfills every user row, so this should rarely fire.

@@ -55,6 +55,13 @@ export interface ElvisStats {
   demResolutionMeters: number | null;
   uncompressedBytes: number;
   compressedBytes: number;
+  // True when the ZIP carries more than one point-cloud survey for the same
+  // ground footprint (LAZ mode only — the mode where the worker resolves
+  // overlap). The worker then auto-picks per layer: the densest survey for
+  // terrain (hillshade/slope/contours), the most-recent for vegetation — see
+  // topo/pipeline.py select_surveys_by_layer. tileCount already counts distinct
+  // footprints, so overlap does NOT consume extra tile quota.
+  overlappingSurveys: boolean;
 }
 
 // Matches topo/pipeline.py derivative filter (case-insensitive stem contains any of these)
@@ -165,6 +172,9 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
   const surveyNamesSet = new Set<string>();
   const tileIds = new Set<string>();
   const demResolutions = new Set<number>();
+  // Point-cloud files per footprint id — >1 means overlapping surveys the
+  // worker will have to choose between (LAZ mode).
+  const lazTileFileCounts = new Map<string, number>();
 
   for (const entry of entries) {
     if (isUnsafeZipEntryName(entry.filename)) {
@@ -185,7 +195,10 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
     if (lower.endsWith(".laz") || lower.endsWith(".las")) {
       lazCount++;
       const stemOrig = basenameOrig.replace(/\.[^.]+$/, "");
-      extractMeta(stemOrig, entry.filename, surveyNamesSet, tileIds, null, null);
+      const tileId = extractMeta(stemOrig, entry.filename, surveyNamesSet, tileIds, null, null);
+      if (tileId) {
+        lazTileFileCounts.set(tileId, (lazTileFileCounts.get(tileId) ?? 0) + 1);
+      }
     } else if (lower.endsWith(".tif") || lower.endsWith(".tiff")) {
       const isDerivative = DERIVATIVE_STEM_TOKENS.some((t) =>
         stemLower.includes(t),
@@ -231,6 +244,13 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
   const demResolutionMeters =
     demResolutions.size === 1 ? [...demResolutions][0] : null;
 
+  // Overlap only matters in LAZ mode — the worker's survey selection runs on the
+  // point cloud (a bundled DEM is ignored). Any footprint with >1 point-cloud
+  // file means two surveys cover the same ground.
+  const overlappingSurveys =
+    mode === "LAZ_ONLY" &&
+    [...lazTileFileCounts.values()].some((count) => count > 1);
+
   return {
     surveyNames: [...surveyNamesSet],
     mode,
@@ -242,9 +262,11 @@ export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
     demResolutionMeters,
     uncompressedBytes,
     compressedBytes,
+    overlappingSurveys,
   };
 }
 
+/** Returns the parsed footprint tile id (or null if the name doesn't match). */
 function extractMeta(
   stemOrig: string,
   fullPath: string,
@@ -252,7 +274,7 @@ function extractMeta(
   tileIds: Set<string>,
   demResolutions: Set<number> | null,
   stemForRes: string | null,
-): void {
+): string | null {
   // ELVIS survey name: alphanumeric prefix before first non-alphanumeric char
   // e.g. "Katoomba201804-LID2-C3-AHD_..." → "Katoomba201804"
   const surveyMatch = stemOrig.match(/^([A-Za-z][A-Za-z0-9]+)/);
@@ -269,4 +291,6 @@ function extractMeta(
     const res = resFromStem || resFromPath;
     if (res) demResolutions.add(parseFloat(res[1]));
   }
+
+  return tileMatch ? tileMatch[1] : null;
 }

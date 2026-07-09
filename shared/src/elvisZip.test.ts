@@ -300,6 +300,37 @@ describe("classifyElvisEntries", () => {
     // tile IDs: 1111_56_0001_0001 (from LAZ + DEM, deduplicated), 1112_56_0001_0002, 1113_56_0001_0003
     expect(stats.tileCount).toBe(3);
   });
+
+  it("flags overlapping surveys: two LAZ surveys over one footprint", () => {
+    const zip = buildZip([
+      { name: "Mudgee201408-LID1-C3-AHD_7766366_55_0002_0002.laz", size: 100 },
+      { name: "Mudgee201612-LID2-C3-AHD_7766366_55_0002_0002.laz", size: 100 },
+    ]);
+    const stats = classifyElvisEntries(parse(zip));
+    expect(stats.lazCount).toBe(2);
+    expect(stats.tileCount).toBe(1); // one footprint
+    expect(stats.overlappingSurveys).toBe(true);
+  });
+
+  it("no overlap flag when each LAZ covers a distinct footprint", () => {
+    const zip = buildZip([
+      { name: "Mudgee201408-LID1-C3-AHD_7766366_55_0002_0002.laz", size: 100 },
+      { name: "Mudgee201408-LID1-C3-AHD_7766368_55_0002_0002.laz", size: 100 },
+    ]);
+    const stats = classifyElvisEntries(parse(zip));
+    expect(stats.tileCount).toBe(2);
+    expect(stats.overlappingSurveys).toBe(false);
+  });
+
+  it("does not flag overlap in DEM-only mode (survey selection is LAZ-only)", () => {
+    const zip = buildZip([
+      { name: "SurveyA-AHD_1111_56_0001_0001_2m.tif", size: 100 },
+      { name: "SurveyB-AHD_1111_56_0001_0001_2m.tif", size: 100 }, // same footprint, 2 DEMs
+    ]);
+    const stats = classifyElvisEntries(parse(zip));
+    expect(stats.mode).toBe("DEM_ONLY");
+    expect(stats.overlappingSurveys).toBe(false);
+  });
 });
 
 describe("regionNameFromSurvey", () => {
