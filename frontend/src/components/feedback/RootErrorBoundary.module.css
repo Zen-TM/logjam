@@ -17,6 +17,14 @@
   border-radius: var(--radius-lg);
 }
 
+.brandMark {
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 16px;
+  color: var(--theme-text-primary);
+}
+
 .heading {
   margin: 0 0 12px;
   font-size: 1.25em;

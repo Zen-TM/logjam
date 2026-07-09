@@ -5,6 +5,24 @@
   overflow: hidden;
 }
 
+/* Shown while the initial session check resolves, to avoid a blank flash
+   before the sign-in form or map appears. */
+.splash {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--theme-primary);
+}
+
+.splashMark {
+  width: 64px;
+  height: 64px;
+  color: var(--theme-text-primary);
+  opacity: 0.85;
+}
+
 /* <main> landmark wrapper for the map. The map fills .app via position:absolute,
    so this block collapses to zero height and doesn't disturb layout — but unlike
    display:contents it is reliably exposed as a landmark to assistive tech. */

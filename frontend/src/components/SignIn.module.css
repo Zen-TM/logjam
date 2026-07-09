@@ -43,10 +43,23 @@
   box-shadow: 0 4px 12px color-mix(in srgb, black 30%, transparent);
 }
 
-.title {
-  margin: 0;
-  text-align: center;
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
   color: var(--theme-text-primary);
+}
+
+.brandMark {
+  width: 48px;
+  height: 48px;
+}
+
+.brandWordmark {
+  width: 140px;
+  height: auto;
 }
 
 .subtitle {

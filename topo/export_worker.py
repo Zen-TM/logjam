@@ -219,6 +219,10 @@ def send_completion_email(to_email: str, export_job_id: str, format_: str, ok: b
     if not FRONTEND_URL:
         return
     base = FRONTEND_URL.rstrip("/")
+    logo_html = (
+        f'<p><img src="{base}/email-logo.png" alt="Logjam" width="160" '
+        'style="display:block;margin-bottom:16px" /></p>'
+    )
     if ok:
         subject = f"Topo export ready — {format_.upper()}"
         text = (
@@ -228,6 +232,7 @@ def send_completion_email(to_email: str, export_job_id: str, format_: str, ok: b
             "re-presign if needed."
         )
         html = (
+            f"{logo_html}"
             f"<p>Your topo export is ready.</p>"
             f'<p><a href="{base}/?export={export_job_id}">Open Logjam to download</a></p>'
             f"<p>Downloads expire after 24 hours; re-open the export dialog to "
@@ -238,6 +243,7 @@ def send_completion_email(to_email: str, export_job_id: str, format_: str, ok: b
         safe_error = error or "Unknown error"
         text = f"Your topo export failed.\n\n{safe_error}\n\nOpen Logjam to retry: {base}"
         html = (
+            f"{logo_html}"
             f"<p>Your topo export failed.</p>"
             f"<p><strong>{safe_error}</strong></p>"
             f'<p><a href="{base}">Open Logjam to retry</a></p>'

@@ -208,13 +208,18 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
     const openLinkHtml = openUrl
       ? `<p><a href="${openUrl}">Open Logjam</a></p>`
       : "";
+    // Logo header is served by the frontend SPA bucket, so it only resolves
+    // when FRONTEND_URL is configured (unset in local dev).
+    const logoHtml = base
+      ? `<p><img src="${base}/email-logo.png" alt="Logjam" width="160" style="display:block;margin-bottom:16px" /></p>`
+      : "";
     const subject = ok ? "GeoPDF ready — Logjam" : "GeoPDF failed — Logjam";
     const text = ok
       ? `Your GeoPDF is ready to download.${openLink}`
       : `Your GeoPDF could not be generated.\n\n${errorMessage ?? GENERIC_FAILURE_MESSAGE}${openLink}`;
     const html = ok
-      ? `<p>Your GeoPDF is ready to download.</p>${openLinkHtml}`
-      : `<p>Your GeoPDF could not be generated.</p><p><strong>${errorMessage ?? GENERIC_FAILURE_MESSAGE}</strong></p>${openLinkHtml}`;
+      ? `${logoHtml}<p>Your GeoPDF is ready to download.</p>${openLinkHtml}`
+      : `${logoHtml}<p>Your GeoPDF could not be generated.</p><p><strong>${errorMessage ?? GENERIC_FAILURE_MESSAGE}</strong></p>${openLinkHtml}`;
     await sendEmail({ to: recipient.email, subject, text, html });
   }
 

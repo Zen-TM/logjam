@@ -7,6 +7,7 @@ import {
 import { recordConsent, type TUser } from "../canyonUtils";
 import { messageFromError } from "../errors/messageFromError";
 import { ErrorBanner } from "./feedback/ErrorBanner";
+import BrandMark from "./brand/BrandMark";
 import classes from "./ConsentGate.module.css";
 
 /**
@@ -48,6 +49,7 @@ function ConsentGate({
   return (
     <div className={classes.container}>
       <div className={classes.card}>
+        <BrandMark className={classes.brandMark} />
         <h1 className={classes.title}>Updated terms</h1>
         <p className={classes.body}>
           The Logjam{" "}

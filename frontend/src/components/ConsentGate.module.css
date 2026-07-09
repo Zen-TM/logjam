@@ -17,6 +17,14 @@
   color: var(--theme-text-primary);
 }
 
+.brandMark {
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 0.5rem;
+  color: var(--theme-text-primary);
+}
+
 .title {
   margin: 0;
   font-size: 1.25rem;
