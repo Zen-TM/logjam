@@ -4,7 +4,18 @@ import classes from "./SignIn.module.css";
 import type { AuthState } from "../useAuth";
 import { ErrorBanner } from "./feedback/ErrorBanner";
 import Footer from "./Footer";
+import BrandMark from "./brand/BrandMark";
+import BrandWordmark from "./brand/BrandWordmark";
 import { CURRENT_CONSENT_VERSION, PENDING_CONSENT_STORAGE_KEY } from "../consent";
+
+function Brand() {
+  return (
+    <div className={classes.brand}>
+      <BrandMark className={classes.brandMark} />
+      <BrandWordmark className={classes.brandWordmark} />
+    </div>
+  );
+}
 
 function SignIn({
   authState,
@@ -148,7 +159,7 @@ function SignIn({
     return (
       <div className={classes.container}>
         <form className={classes.form} onSubmit={handleConfirm}>
-          <h1 className={classes.title}>Logjam</h1>
+          <Brand />
           <p className={classes.subtitle}>
             Check your email for a verification code (check spam)
           </p>
@@ -192,7 +203,7 @@ function SignIn({
     return (
       <div className={classes.container}>
         <form className={classes.form} onSubmit={handleForgotPassword}>
-          <h1 className={classes.title}>Logjam</h1>
+          <Brand />
           <p className={classes.subtitle}>
             Enter your email and we&apos;ll send you a reset code
           </p>
@@ -230,7 +241,7 @@ function SignIn({
     return (
       <div className={classes.container}>
         <form className={classes.form} onSubmit={handleConfirmForgotPassword}>
-          <h1 className={classes.title}>Logjam</h1>
+          <Brand />
           <p className={classes.subtitle}>
             Check your email for a reset code, then choose a new password
           </p>
@@ -286,7 +297,7 @@ function SignIn({
     return (
       <div className={classes.container}>
         <form className={classes.form} onSubmit={handleSignUp}>
-          <h1 className={classes.title}>Logjam</h1>
+          <Brand />
           <TextField
             label="Name"
             value={name}
@@ -380,7 +391,7 @@ function SignIn({
   return (
     <div className={classes.container}>
       <form className={classes.form} onSubmit={handleSignIn}>
-        <h1 className={classes.title}>Logjam</h1>
+        <Brand />
         {resetSuccess && (
           <p className={classes.successBanner}>Password reset — please sign in.</p>
         )}

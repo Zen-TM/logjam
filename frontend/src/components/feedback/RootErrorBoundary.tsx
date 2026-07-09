@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { signOut } from "aws-amplify/auth";
+import BrandMark from "../brand/BrandMark";
 import classes from "./RootErrorBoundary.module.css";
 
 interface Props {
@@ -51,6 +52,7 @@ export class RootErrorBoundary extends Component<Props, State> {
     return (
       <div className={classes.overlay} role="alert">
         <div className={classes.card}>
+          <BrandMark className={classes.brandMark} />
           <h1 className={classes.heading}>Something went wrong</h1>
           <p className={classes.message}>
             The app hit an unexpected error. Reloading usually fixes it. If it

@@ -3,6 +3,7 @@ import NavRail from "./sidebar/NavRail";
 import SidebarPanel from "./sidebar/SidebarPanel";
 import Map, { BASE_LAYERS } from "./map/Map";
 import SignIn from "./SignIn";
+import BrandMark from "./brand/BrandMark";
 import TopoDialog from "./dialogs/TopoDialog";
 import type {
   TopoJob,
@@ -754,9 +755,15 @@ function App() {
     .map((id) => allCanyons.find((c) => c.id === id))
     .filter((c): c is TCanyon => c != null);
 
-  // While checking for an existing session, render nothing to avoid
-  // a brief flash of the sign-in form before the session loads.
-  if (auth.state === "loading") return null;
+  // While checking for an existing session, show a branded splash instead of
+  // a blank flash before the sign-in form or map appears.
+  if (auth.state === "loading") {
+    return (
+      <div className={classes.splash}>
+        <BrandMark className={classes.splashMark} />
+      </div>
+    );
+  }
 
   if (!authenticated) {
     return (
