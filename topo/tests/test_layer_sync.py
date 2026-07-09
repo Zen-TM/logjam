@@ -21,11 +21,13 @@ _TOPO_SETTINGS = os.path.join(
 )
 _WORKER = os.path.join(_HERE, "..", "worker.py")
 
-# One TOPO_LAYERS entry: { name: "x", label: "...", format: "raster" }
+# One TOPO_LAYERS entry:
+#   { name: "x", label: "...", format: "raster", surveyPick: "density" }
 _TS_ENTRY = re.compile(
     r'\{\s*name:\s*"(?P<name>[^"]+)"\s*,\s*'
     r'label:\s*"[^"]+"\s*,\s*'
-    r'format:\s*"(?P<format>[^"]+)"\s*\}'
+    r'format:\s*"(?P<format>[^"]+)"\s*,\s*'
+    r'surveyPick:\s*"(?P<surveyPick>[^"]+)"\s*\}'
 )
 
 
@@ -60,6 +62,30 @@ def _parse_ts_layers():
     return layers
 
 
+def _parse_ts_survey_pick():
+    """Return {name: surveyPick} parsed from the TOPO_LAYERS literal."""
+    src = _read(_TOPO_SETTINGS)
+    match = re.search(
+        r"export const TOPO_LAYERS\s*=\s*\[(?P<body>.*?)\]\s*as const",
+        src,
+        re.DOTALL,
+    )
+    if not match:
+        raise AssertionError(
+            "Could not locate the TOPO_LAYERS array in topoSettings.ts."
+        )
+    picks = {
+        m.group("name"): m.group("surveyPick")
+        for m in _TS_ENTRY.finditer(match.group("body"))
+    }
+    if not picks:
+        raise AssertionError(
+            "Parsed zero surveyPick values from TOPO_LAYERS — entry shape "
+            "changed; update _TS_ENTRY in test_layer_sync.py."
+        )
+    return picks
+
+
 def _parse_py_frozenset(name):
     """Return the set of quoted string members of `name = frozenset({...})`."""
     src = _read(_WORKER)
@@ -74,6 +100,22 @@ def _parse_py_frozenset(name):
             "update test_layer_sync.py to match the current declaration."
         )
     return set(re.findall(r'"([^"]+)"', match.group("body")))
+
+
+def _parse_py_survey_pick():
+    """Return {name: surveyPick} parsed from worker.py LAYER_SURVEY_PICK dict."""
+    src = _read(_WORKER)
+    match = re.search(
+        r"LAYER_SURVEY_PICK\s*:\s*dict\[str,\s*str\]\s*=\s*\{(?P<body>.*?)\}",
+        src,
+        re.DOTALL,
+    )
+    if not match:
+        raise AssertionError(
+            "Could not locate LAYER_SURVEY_PICK dict in worker.py — "
+            "update test_layer_sync.py to match the current declaration."
+        )
+    return dict(re.findall(r'"([^"]+)"\s*:\s*"([^"]+)"', match.group("body")))
 
 
 class TestTopoLayerSync(unittest.TestCase):
@@ -111,6 +153,20 @@ class TestTopoLayerSync(unittest.TestCase):
         # Guards against a TS format value other than raster/vector slipping in
         # without a matching Python bucket.
         self.assertEqual(self.ts_raster | self.ts_vector, self.ts_names)
+
+    def test_survey_pick_matches(self):
+        self.assertEqual(
+            _parse_py_survey_pick(),
+            _parse_ts_survey_pick(),
+            "worker.py LAYER_SURVEY_PICK drifted from TOPO_LAYERS surveyPick",
+        )
+
+    def test_survey_pick_values_are_known(self):
+        # Every surveyPick must be one the pipeline knows how to act on.
+        self.assertLessEqual(
+            set(_parse_ts_survey_pick().values()),
+            {"density", "recency", "none"},
+        )
 
 
 if __name__ == "__main__":

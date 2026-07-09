@@ -138,6 +138,7 @@ class Benchmark:
         self._zoom_max: Optional[int] = None
         self._fire_stale_fraction: Optional[float] = None
         self._fire_capture_year: Optional[int] = None
+        self._survey_decisions: Optional[List[dict]] = None
 
     @contextmanager
     def step(self, label: str, key: Optional[str] = None):
@@ -171,6 +172,14 @@ class Benchmark:
         self._fire_stale_fraction = stale_fraction
         self._fire_capture_year = capture_year
 
+    def set_survey_selection(self, decisions: Optional[List[dict]]):
+        """Record the per-footprint overlapping-survey resolution (see
+        select_surveys_by_layer). None/empty when no footprint had more than one
+        survey (the common single-survey job) or for DEM-only jobs. Privacy-safe:
+        numeric tile ids + area/date survey labels only, never canyon
+        names/coords."""
+        self._survey_decisions = decisions
+
     def write_metrics(self, path: str):
         """Atomically write the per-job runtime metrics JSON consumed by the
         worker (which persists it to TopoJob.pipeline_metrics)."""
@@ -186,6 +195,9 @@ class Benchmark:
             # None when fire-staleness detection was disabled/unavailable.
             "fireStaleFraction": self._fire_stale_fraction,
             "fireCaptureYear": self._fire_capture_year,
+            # Per-footprint overlapping-survey resolution (null when no footprint
+            # had >1 survey). See Benchmark.set_survey_selection.
+            "surveySelection": self._survey_decisions,
         }
         tmp = f"{path}.tmp"
         with open(tmp, "w") as f:
@@ -1255,37 +1267,50 @@ def run_pdal_pipeline(pipeline: dict, work_dir: str, label: str = "pipeline"):
     log.info("PDAL pipeline complete.")
 
 
-def run_pdal_sequential_full(las_files: List[str], out_dtm: str,
+def run_pdal_sequential_full(terrain_tiles: List[str], veg_tiles: List[str],
+                              out_dtm: str,
                               out_scrub_low: str, out_scrub_high: str,
                               out_below_count: str, out_all_count: str,
                               work_dir: str, resolution: float = 1.0):
-    """Process LAZ files one at a time (DTM + strata/below/all counts), then merge. Mode C."""
-    dtm_tiles = []
-    scrub_low_tiles = []
-    scrub_high_tiles = []
-    below_tiles = []
-    all_tiles = []
-    for i, laz in enumerate(las_files):
-        log.info(f"PDAL tile {i+1}/{len(las_files)}: {os.path.basename(laz)}")
+    """Process LAZ files one at a time (DTM + strata/below/all counts), then merge. Mode C.
+
+    `terrain_tiles` and `veg_tiles` are the per-footprint survey selections
+    (see select_surveys_by_layer): the DTM mosaic is built ONLY from the
+    density-picked terrain tiles, and the vegetation-return count mosaics ONLY
+    from the recency-picked veg tiles. Feeding each mosaic its selected subset
+    (rather than every tile) is what removes the old order-dependent
+    "last-raster-in-VRT-wins" ambiguity when surveys overlap. The union of the
+    two selections is gridded exactly once — a tile chosen by both policies is
+    not re-run.
+    """
+    union = list(dict.fromkeys(terrain_tiles + veg_tiles))  # ordered-unique
+    # laz path → its five per-tile GeoTIFF paths.
+    grids: Dict[str, Dict[str, str]] = {}
+    for i, laz in enumerate(union):
+        log.info(f"PDAL tile {i+1}/{len(union)}: {os.path.basename(laz)}")
         # Heartbeat: PDAL is the other long phase (≈48s/tile). Reporting before
         # each tile keeps last_progress_at fresh through the whole PDAL pass so
         # the stall-reaper doesn't false-kill a big job before render starts.
-        _write_progress(i, len(las_files), "pdal")
-        tile_dtm        = os.path.join(work_dir, f"dtm_tile_{i}.tif")
-        tile_scrub_low  = os.path.join(work_dir, f"scrub_low_tile_{i}.tif")
-        tile_scrub_high = os.path.join(work_dir, f"scrub_high_tile_{i}.tif")
-        tile_below      = os.path.join(work_dir, f"below_tile_{i}.tif")
-        tile_all        = os.path.join(work_dir, f"all_tile_{i}.tif")
+        _write_progress(i, len(union), "pdal")
+        tile = {
+            "dtm":        os.path.join(work_dir, f"dtm_tile_{i}.tif"),
+            "scrub_low":  os.path.join(work_dir, f"scrub_low_tile_{i}.tif"),
+            "scrub_high": os.path.join(work_dir, f"scrub_high_tile_{i}.tif"),
+            "below":      os.path.join(work_dir, f"below_tile_{i}.tif"),
+            "all":        os.path.join(work_dir, f"all_tile_{i}.tif"),
+        }
         pipeline = build_pipeline_full(
-            [laz], tile_dtm, tile_scrub_low, tile_scrub_high, tile_below, tile_all,
-            resolution,
+            [laz], tile["dtm"], tile["scrub_low"], tile["scrub_high"],
+            tile["below"], tile["all"], resolution,
         )
         run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_full_{i}")
-        dtm_tiles.append(tile_dtm)
-        scrub_low_tiles.append(tile_scrub_low)
-        scrub_high_tiles.append(tile_scrub_high)
-        below_tiles.append(tile_below)
-        all_tiles.append(tile_all)
+        grids[laz] = tile
+
+    dtm_tiles        = [grids[t]["dtm"]        for t in terrain_tiles]
+    scrub_low_tiles  = [grids[t]["scrub_low"]  for t in veg_tiles]
+    scrub_high_tiles = [grids[t]["scrub_high"] for t in veg_tiles]
+    below_tiles      = [grids[t]["below"]      for t in veg_tiles]
+    all_tiles        = [grids[t]["all"]        for t in veg_tiles]
 
     log.info(f"Merging {len(dtm_tiles)} DTM tiles …")
     _merge_raster_tiles(dtm_tiles, out_dtm, nodata=-9999)
@@ -1298,8 +1323,9 @@ def run_pdal_sequential_full(las_files: List[str], out_dtm: str,
     log.info(f"Merging {len(all_tiles)} all-return-count tiles …")
     _merge_raster_tiles(all_tiles, out_all_count, nodata=0, resample="bilinear")
 
-    for p in dtm_tiles + scrub_low_tiles + scrub_high_tiles + below_tiles + all_tiles:
-        os.remove(p)
+    for tile in grids.values():
+        for p in tile.values():
+            os.remove(p)
 
 
 def fill_nodata(src_path: str, dst_path: str, max_distance: int = 100):
@@ -1732,6 +1758,182 @@ def _capture_year_from_las_files(las_files: List[str]) -> Optional[int]:
     if not capture_years:
         return None
     return min(capture_years)
+
+
+# ---------------------------------------------------------------------------
+# Per-survey tile selection
+# ---------------------------------------------------------------------------
+# ELVIS lets users "select all" for an area, so one ZIP can carry MULTIPLE
+# overlapping surveys of the same ground footprint (e.g. a dense 2014 LID1 flight
+# and a sparse 2016 LID2 flight over the same tile). Newer is NOT always better:
+# NSW LID1 (Category 1) is flown low/dense (~1.5 pts/m²); LID2 (Category 2) high/
+# sparse (~0.35 pts/m²). The right survey also differs PER LAYER — terrain layers
+# (bedrock geometry; fire-irrelevant) want maximum density regardless of age,
+# while the vegetation layer wants the most-recent (post-fire) capture. So this
+# resolves "which survey" once per footprint, per policy. The two physical raster
+# groups downstream map onto the two policies: the DTM (→ hillshade/slope/
+# contours) consumes the density-picked tiles; the veg-return counts (→
+# vegetation) consume the recency-picked tiles. This mirrors LAYER_SURVEY_PICK in
+# worker.py / the canonical surveyPick field in shared/src/topoSettings.ts.
+#
+# Full ELVIS filename shape: "<Area><YYYYMM>-LID<n>-C<c>-AHD_<tileid>_<zone>_<sub>_<sub>.laz"
+# (the "-C<c>-" classification segment is sometimes absent). The footprint key is
+# everything after "-AHD_": identical across surveys of the same tile.
+_ELVIS_TILE_RE = re.compile(
+    r"(?P<survey>.+?(?P<yyyymm>\d{6})-LID(?P<lid>\d))-(?:.*?-)?AHD_(?P<footprint>.+?)\.la[sz]$",
+    re.IGNORECASE,
+)
+_ELVIS_LID_MARKER_RE = re.compile(r"-LID\d", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class TileInfo:
+    """Parsed identity of one input point-cloud tile."""
+    path: str
+    footprint: Optional[str]       # tile identity after "-AHD_"; None if non-ELVIS
+    capture_yyyymm: Optional[int]  # capture year-month as int, e.g. 201408
+    lid_category: Optional[int]    # LID<n> (1 = Category 1 dense, 2 = Category 2 sparse)
+    survey_label: Optional[str]    # "<Area><YYYYMM>-LID<n>", e.g. "Mudgee201408-LID1"
+
+
+def parse_elvis_filename(path: str) -> TileInfo:
+    """Parse an ELVIS tile filename into its footprint / survey / date fields.
+
+    Non-ELVIS filenames (no "-LID<n>" marker) return footprint=None and are
+    treated as unique tiles that bypass survey selection entirely — a
+    non-ELVIS input is never dropped. An ELVIS-LOOKING name (carries the
+    "-LID<n>" marker) that does not fully parse is a fail-loud error rather
+    than a silent skip: silently ungrouping such a tile would resurrect the
+    order-dependent mosaic ambiguity this selection exists to remove.
+    """
+    name = os.path.basename(path)
+    match = _ELVIS_TILE_RE.search(name)
+    if not match:
+        if _ELVIS_LID_MARKER_RE.search(name):
+            raise ValueError(
+                f"ELVIS-looking filename could not be parsed for survey "
+                f"selection: {name!r}. Expected "
+                f"'<Area><YYYYMM>-LID<n>[-C<c>]-AHD_<tile>.laz'."
+            )
+        return TileInfo(path, None, None, None, None)
+    return TileInfo(
+        path=path,
+        footprint=match.group("footprint"),
+        capture_yyyymm=int(match.group("yyyymm")),
+        lid_category=int(match.group("lid")),
+        survey_label=match.group("survey"),
+    )
+
+
+def _measure_tile_density(laz_path: str) -> float:
+    """Points per square metre from PDAL's summary (header/stats only — no full
+    point read, so this is seconds, not minutes). Used to rank overlapping
+    surveys by real captured density rather than the LID-category floor."""
+    result = subprocess.run(
+        ["pdal", "info", "--summary", laz_path],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"`pdal info --summary` failed for {os.path.basename(laz_path)}:\n"
+            f"{result.stderr}"
+        )
+    summary = json.loads(result.stdout)["summary"]
+    num_points = int(summary["num_points"])
+    bounds = summary["bounds"]
+    area = (bounds["maxx"] - bounds["minx"]) * (bounds["maxy"] - bounds["miny"])
+    if area <= 0:
+        raise RuntimeError(
+            f"Non-positive XY bounds area for {os.path.basename(laz_path)} — "
+            f"cannot compute point density."
+        )
+    return num_points / area
+
+
+@dataclass(frozen=True)
+class SurveySelection:
+    """Result of resolving overlapping surveys, one tile per footprint per policy.
+
+    terrain_tiles feeds the DTM (hillshade/slope/contours); veg_tiles feeds the
+    vegetation-return counts. A footprint with a single survey contributes the
+    same tile to both. `decisions` is a privacy-safe per-footprint audit
+    (numeric tile ids + area/date survey labels only, never canyon names/coords)
+    folded into the job metrics.
+    """
+    terrain_tiles: List[str]
+    veg_tiles: List[str]
+    decisions: List[dict]
+
+    @property
+    def gridded_paths(self) -> List[str]:
+        """Ordered-unique union actually gridded (a tile chosen by both policies
+        is gridded once)."""
+        return list(dict.fromkeys(self.terrain_tiles + self.veg_tiles))
+
+
+def select_surveys_by_layer(las_files: List[str]) -> SurveySelection:
+    """Group input tiles by footprint and pick one survey per policy.
+
+    Density probing (`pdal info`) runs ONLY for footprints that actually have
+    more than one survey — the common single-survey job pays no probe cost.
+    """
+    infos = [parse_elvis_filename(str(f)) for f in las_files]
+
+    groups: Dict[str, List[TileInfo]] = {}
+    unique: List[TileInfo] = []  # non-ELVIS names: keep as-is, both policies
+    for info in infos:
+        if info.footprint is None:
+            unique.append(info)
+        else:
+            groups.setdefault(info.footprint, []).append(info)
+
+    terrain: List[str] = []
+    veg: List[str] = []
+    decisions: List[dict] = []
+
+    for info in unique:
+        terrain.append(info.path)
+        veg.append(info.path)
+
+    for footprint, tiles in groups.items():
+        if len(tiles) == 1:
+            only = tiles[0]
+            terrain.append(only.path)
+            veg.append(only.path)
+            continue
+
+        measured = [(t, _measure_tile_density(t.path)) for t in tiles]
+        # Terrain: densest survey (bedrock geometry); tiebreak → newer capture.
+        terrain_win, terrain_density = max(
+            measured, key=lambda m: (m[1], m[0].capture_yyyymm or 0)
+        )
+        # Vegetation: most-recent capture (post-fire state); tiebreak → denser.
+        veg_win, veg_density = max(
+            measured, key=lambda m: (m[0].capture_yyyymm or 0, m[1])
+        )
+        terrain.append(terrain_win.path)
+        veg.append(veg_win.path)
+        decisions.append({
+            "footprint": footprint,
+            "terrainSurvey": terrain_win.survey_label,
+            "terrainDensity": round(terrain_density, 3),
+            "vegSurvey": veg_win.survey_label,
+            "vegCapture": veg_win.capture_yyyymm,
+            # True when the density-winner and recency-winner are different
+            # surveys — the case where keeping BOTH matters (e.g. a dense older
+            # flight for terrain plus a newer post-fire flight for vegetation).
+            # Actual fire impact on the AOI is reported separately via
+            # fireStaleFraction (see apply_fire_history).
+            "divergentSurveys": terrain_win.path != veg_win.path,
+            "surveyCount": len(tiles),
+        })
+        log.info(
+            f"Footprint {footprint}: {len(tiles)} surveys → "
+            f"terrain={terrain_win.survey_label} ({terrain_density:.2f} pts/m²), "
+            f"veg={veg_win.survey_label} ({veg_win.capture_yyyymm})"
+        )
+
+    return SurveySelection(terrain, veg, decisions)
 
 
 def _compute_stale_mask(
@@ -3498,7 +3700,13 @@ def main():
             contents = extract_elvis_zip(args.elvis_zip, work_dir)
 
         las_strs = [str(f) for f in contents.las_files]
-        capture_year = _capture_year_from_las_files(las_strs)
+        # Populated in the MODE_LAZ_ONLY branch below (needs PDAL for density
+        # probing). capture_year is derived from the recency-picked veg tiles so
+        # the vegetation fire-staleness baseline reflects the surveys that
+        # actually fed the veg rasters. DEM-only jobs have no point cloud → both
+        # stay at their no-op defaults.
+        capture_year: Optional[int] = None
+        survey_selection: Optional[SurveySelection] = None
         # Final Web-Mercator rasters fed to the derived-raster / tiling stage.
         dtm_filled       = os.path.join(work_dir, "dtm_filled.tif")
         scrub_low_raw    = os.path.join(work_dir, "scrub_low_count_raw.tif")
@@ -3539,9 +3747,15 @@ def main():
             # MODE_LAZ_ONLY – build DTM + NRD counts from point cloud (native).
             dtm_raw = os.path.join(work_dir, "dtm_raw.tif")
             dtm_native_filled = os.path.join(work_dir, "dtm_native_filled.tif")
+            # Resolve overlapping surveys per footprint: densest survey → terrain
+            # (DTM/hillshade/slope/contours), most-recent survey → vegetation.
+            with bench.step("Select surveys per footprint (density vs recency)", key="survey_select"):
+                survey_selection = select_surveys_by_layer(contents.las_files)
+            capture_year = _capture_year_from_las_files(survey_selection.veg_tiles)
             with bench.step("PDAL: LAZ → DTM + NRD counts (ground classification)", key="pdal"):
                 run_pdal_sequential_full(
-                    las_strs, dtm_raw, scrub_low_native, scrub_high_native,
+                    survey_selection.terrain_tiles, survey_selection.veg_tiles,
+                    dtm_raw, scrub_low_native, scrub_high_native,
                     below_count_native, all_count_native,
                     work_dir, resolution=1.0,
                 )
@@ -3669,9 +3883,17 @@ def main():
             output_tile_count = generate_all_tiles(cfg, workers=args.workers)
 
         # Record the size signals for the per-job metrics file (consumed by the
-        # worker → TopoJob → adaptive runtime estimator).
-        bench.set_tile_counts(len(contents.las_files), output_tile_count)
+        # worker → TopoJob → adaptive runtime estimator). Input count is the
+        # number of tiles actually GRIDDED (post survey-dedup union), since that
+        # is what drives PDAL runtime — not the raw upload count.
+        gridded_count = (len(survey_selection.gridded_paths)
+                         if survey_selection is not None
+                         else len(contents.las_files))
+        bench.set_tile_counts(gridded_count, output_tile_count)
         bench.set_zoom(ZOOM_MIN, ZOOM_MAX)
+        bench.set_survey_selection(
+            survey_selection.decisions if survey_selection is not None else None
+        )
 
         # ── Summary ──────────────────────────────────────────────────────────
         log.info(f"\n✓ Done! MBTiles written to: {args.output}")

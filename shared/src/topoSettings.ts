@@ -26,17 +26,27 @@
 // frontend/src/topoLayerTypes.ts are thin re-exports. The only structurally
 // unavoidable mirror is topo/worker.py → ALL_LAYERS (Python).
 
+// `surveyPick` declares, per layer, which survey to prefer when an ELVIS ZIP
+// contains multiple overlapping surveys for the same ground footprint:
+//   "density" — the densest survey (terrain/bedrock geometry; fire-irrelevant).
+//               A denser but older capture beats a sparser newer one.
+//   "recency" — the most-recent capture (post-fire vegetation state matters more
+//               than raw point density for the scrub/bushbash layer).
+//   "none"    — layer is not LiDAR-derived (OSM features); selection N/A.
+// Consumed by the topo worker's per-footprint survey selection (topo/pipeline.py
+// select_surveys_by_layer). LAYER_SURVEY_PICK in topo/worker.py mirrors this.
 export const TOPO_LAYERS = [
-  { name: "hillshade", label: "Hillshade", format: "raster" },
-  { name: "vegetation", label: "Vegetation", format: "raster" },
-  { name: "slope", label: "Slope", format: "raster" },
-  { name: "contours", label: "Contours", format: "vector" },
-  { name: "features", label: "Features", format: "vector" },
+  { name: "hillshade", label: "Hillshade", format: "raster", surveyPick: "density" },
+  { name: "vegetation", label: "Vegetation", format: "raster", surveyPick: "recency" },
+  { name: "slope", label: "Slope", format: "raster", surveyPick: "density" },
+  { name: "contours", label: "Contours", format: "vector", surveyPick: "density" },
+  { name: "features", label: "Features", format: "vector", surveyPick: "none" },
 ] as const;
 
 export type TopoLayerMeta = (typeof TOPO_LAYERS)[number];
 // Derived from the list so the union and the list cannot diverge.
 export type TopoLayerKey = TopoLayerMeta["name"];
+export type TopoSurveyPick = TopoLayerMeta["surveyPick"];
 // Alias kept for call sites that grew up on the api/frontend constant files.
 export type TopoLayerName = TopoLayerKey;
 export type TopoLayerFormat = TopoLayerMeta["format"];
