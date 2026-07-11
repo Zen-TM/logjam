@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Play, ImageOff } from "lucide-react";
 import { mediaCategory, type MediaItem } from "@logjam/shared";
 import Lightbox from "./Lightbox";
 import { slideshowDots } from "./slideshowDots";
@@ -14,6 +14,10 @@ const MAX_DOTS = 7;
 export default function CanyonSlideshow({ media }: { media: MediaItem[] }) {
   const [index, setIndex] = useState(0);
   const [lightbox, setLightbox] = useState<MediaItem | null>(null);
+  // Slides that failed to load (e.g. a 404'd S3 object) — MOBILE-5. Tracked by
+  // id so a broken slide shows a labelled fallback instead of the browser's
+  // broken-image glyph on the black letterbox.
+  const [failedSlideIds, setFailedSlideIds] = useState<Set<string>>(new Set());
 
   if (media.length === 0) return null;
 
@@ -21,6 +25,7 @@ export default function CanyonSlideshow({ media }: { media: MediaItem[] }) {
   const current = media[safeIndex];
   const isVideo = mediaCategory(current.mediaType) === "video";
   const slideSrc = isVideo ? current.thumbnailUrl : current.displayUrl;
+  const slideFailed = failedSlideIds.has(current.id);
   const dots = slideshowDots(media.length, safeIndex, MAX_DOTS);
 
   function step(delta: number) {
@@ -39,10 +44,20 @@ export default function CanyonSlideshow({ media }: { media: MediaItem[] }) {
           onClick={() => setLightbox(current)}
           aria-label={`View ${current.filename}`}
         >
-          {slideSrc ? (
-            <img className={classes.image} src={slideSrc} alt={current.filename} />
+          {slideSrc && !slideFailed ? (
+            <img
+              className={classes.image}
+              src={slideSrc}
+              alt={current.filename}
+              onError={() =>
+                setFailedSlideIds((prev) => new Set(prev).add(current.id))
+              }
+            />
           ) : (
-            <div className={classes.fallback}>{current.filename}</div>
+            <div className={classes.fallback}>
+              <ImageOff size={22} />
+              <span>{current.filename}</span>
+            </div>
           )}
           {isVideo && (
             <span className={classes.playBadge}>

@@ -77,6 +77,22 @@
     -webkit-overflow-scrolling: touch;
     /* Top shadow instead of the desktop right-edge shadow. */
     box-shadow: 0 -8px 8px -4px rgba(0, 0, 0, 0.2);
+    /* Scroll affordance (MOBILE-7): 9 items overflow the 390px strip with no
+       hint that Alerts/Account are off-screen. Classic CSS "scroll shadows" —
+       two gradients painted with background-attachment:local scroll together
+       with the content and mask the two background-attachment:scroll shadow
+       gradients underneath, so a fade/shadow only shows at an edge while
+       there's actually more content to scroll toward. Pure CSS, no JS, no
+       extra markup. */
+    background-image:
+      linear-gradient(to right, var(--theme-primary) 30%, transparent),
+      linear-gradient(to left, var(--theme-primary) 30%, transparent),
+      linear-gradient(to right, rgba(0, 0, 0, 0.4), transparent),
+      linear-gradient(to left, rgba(0, 0, 0, 0.4), transparent);
+    background-repeat: no-repeat;
+    background-size: 24px 100%, 24px 100%, 10px 100%, 10px 100%;
+    background-position: 0 0, 100% 0, 0 0, 100% 0;
+    background-attachment: local, local, scroll, scroll;
   }
 
   /* Vertical spacer between groups is meaningless in a horizontal scroll strip. */

@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { X, ImageOff } from "lucide-react";
 import { mediaCategory, type MediaItem } from "@logjam/shared";
 import classes from "./Lightbox.module.css";
 
@@ -16,6 +16,9 @@ export default function Lightbox({
   const containerRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const triggerBeforeRef = useRef<HTMLElement | null>(null);
+  // Failed to load (e.g. a 404'd S3 object) — MOBILE-5. Without this the
+  // browser's broken-image glyph sits alone on the black backdrop.
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     triggerBeforeRef.current =
@@ -79,10 +82,26 @@ export default function Lightbox({
         <X size={22} />
       </button>
       <div className={classes.lightboxContent}>
-        {mediaCategory(item.mediaType) === "video" ? (
-          <video className={classes.lightboxMedia} src={item.displayUrl} controls autoPlay />
+        {failed ? (
+          <div className={classes.lightboxFallback}>
+            <ImageOff size={32} />
+            <span>Couldn&rsquo;t load {item.filename}.</span>
+          </div>
+        ) : mediaCategory(item.mediaType) === "video" ? (
+          <video
+            className={classes.lightboxMedia}
+            src={item.displayUrl}
+            controls
+            autoPlay
+            onError={() => setFailed(true)}
+          />
         ) : (
-          <img className={classes.lightboxMedia} src={item.displayUrl} alt={item.filename} />
+          <img
+            className={classes.lightboxMedia}
+            src={item.displayUrl}
+            alt={item.filename}
+            onError={() => setFailed(true)}
+          />
         )}
       </div>
     </div>

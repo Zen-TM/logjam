@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useIsMobile } from "../../useIsMobile";
 import {
   Dialog,
   DialogTitle,
@@ -26,7 +25,6 @@ function ShareCanyonDialog({
   onClose: () => void;
 }) {
   const toast = useToast();
-  const isMobile = useIsMobile();
   const [canyonShares, setCanyonShares] = useState<TCanyonShare[]>([]);
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
   const [shareSearch, setShareSearch] = useState("");
@@ -91,7 +89,6 @@ function ShareCanyonDialog({
 
   return (
     <Dialog
-      fullScreen={isMobile}
       open={open}
       onClose={sharing ? undefined : onClose}
       maxWidth="xs"

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Trash2, FileDown, Play } from "lucide-react";
+import { Trash2, FileDown, Play, ImageOff } from "lucide-react";
 import { mediaCategory, type MediaItem } from "@logjam/shared";
 import { deleteMedia } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
@@ -28,6 +28,10 @@ export default function MediaGallery({
   const [lightbox, setLightbox] = useState<MediaItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Thumbnails that failed to load (e.g. a 404'd S3 object) — MOBILE-5. Tracked
+  // by id so a broken thumb shows a labelled fallback instead of the browser's
+  // broken-image glyph.
+  const [failedThumbIds, setFailedThumbIds] = useState<Set<string>>(new Set());
 
   const tracks = media.filter((m) => mediaCategory(m.mediaType) === "track");
   const visual = media.filter((m) => mediaCategory(m.mediaType) !== "track");
@@ -68,15 +72,21 @@ export default function MediaGallery({
                   onClick={() => setLightbox(m)}
                   aria-label={`View ${m.filename}`}
                 >
-                  {m.thumbnailUrl ? (
+                  {m.thumbnailUrl && !failedThumbIds.has(m.id) ? (
                     <img
                       className={classes.thumb}
                       src={m.thumbnailUrl}
                       alt={m.filename}
                       loading="lazy"
+                      onError={() =>
+                        setFailedThumbIds((prev) => new Set(prev).add(m.id))
+                      }
                     />
                   ) : (
-                    <div className={classes.thumbFallback}>{m.filename}</div>
+                    <div className={classes.thumbFallback}>
+                      <ImageOff size={18} />
+                      <span>{m.filename}</span>
+                    </div>
                   )}
                   {isVideo && (
                     <span className={classes.playBadge}>

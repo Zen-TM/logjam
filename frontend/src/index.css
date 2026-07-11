@@ -66,4 +66,15 @@ body {
   :root {
     --nav-rail-width: 0px;
   }
+
+  /* fullScreen MUI dialogs must fully cover the viewport (MOBILE-12). Several
+     dialogs cap their paper with a desktop-oriented `sx: { maxHeight: "85vh" }`;
+     on a fullScreen paper that cap beats MUI's own `max-height: 100%` and the
+     Dialog container centers the shortened paper — leaving ~7.5vh strips at the
+     top/bottom through which the underlying bottom sheet shows. !important
+     because the cap arrives via `sx`, which ties this selector on specificity
+     and wins on source order. */
+  .MuiDialog-paperFullScreen {
+    max-height: 100% !important;
+  }
 }

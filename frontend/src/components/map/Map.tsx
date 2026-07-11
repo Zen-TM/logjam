@@ -12,8 +12,10 @@ import { Protocol } from "pmtiles";
 // Register PMTiles protocol for serving topo overlay layers from S3
 const pmtilesProtocol = new Protocol();
 maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
+import { useMediaQuery } from "@mui/material";
 import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
+import { MOBILE_MAX_WIDTH_PX } from "../../useIsMobile";
 import type { TCanyon, TFilters, CanyonTrack } from "../../canyonUtils";
 import type { GeoJsonPolygonal } from "../../topoLayerTypes";
 import { passesFilters } from "../../canyonUtils";
@@ -390,6 +392,11 @@ function Map({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  // Touch/stylus input (coarse pointer) vs mouse — drives "Tap" vs "Click"
+  // copy in the map-pick banners (MOBILE-12a). Pointer capability, not
+  // viewport width: a touch laptop at desktop width still gets "Tap".
+  const isTouchInput = useMediaQuery("(pointer: coarse)");
+  const pickVerb = isTouchInput ? "Tap" : "Click";
   const prevTopoKeyRef = useRef<string>("");
   const prevEnabledKeyRef = useRef<string>("");
 
@@ -449,7 +456,13 @@ function Map({
       "bottom-left",
     );
     map.addControl(
-      new maplibregl.ScaleControl({ unit: "metric", maxWidth: 200 }),
+      // Narrower on phone-sized viewports (MOBILE-10) so the scale bar can't
+      // grow wide enough to collide with the bottom-left attribution control,
+      // which starts in its expanded (non-icon) state until first dragged.
+      new maplibregl.ScaleControl({
+        unit: "metric",
+        maxWidth: window.innerWidth <= MOBILE_MAX_WIDTH_PX ? 100 : 200,
+      }),
       "bottom-right",
     );
 
@@ -1776,7 +1789,7 @@ function Map({
       {pickingCoords && (
         <>
           <div className={classes.pickBanner}>
-            Click the map to select a location
+            {pickVerb} the map to select a location
           </div>
           <div className={classes.geoPdfConfirmBar}>
             <button
@@ -1790,12 +1803,12 @@ function Map({
       )}
       {selectingArea && (
         <div className={classes.pickBanner}>
-          Click to set a corner, then click again to select the area
+          {pickVerb} to set a corner, then {pickVerb.toLowerCase()} again to select the area
         </div>
       )}
       {selectingBbox && (
         <div className={classes.pickBanner}>
-          Click to set a corner, then click again to define the topo area
+          {pickVerb} to set a corner, then {pickVerb.toLowerCase()} again to define the topo area
         </div>
       )}
       {selectingGeoPdfExtent && (

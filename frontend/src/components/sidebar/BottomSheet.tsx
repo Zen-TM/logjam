@@ -8,6 +8,13 @@ const PEEK_REVEAL_PX = 96;
 // Bottom nav strip height; the sheet sits above it. Keep in sync with
 // --bottom-nav-height in index.css.
 const NAV_HEIGHT_PX = 56;
+// Fraction of viewport height revealed at the "half" snap. Panels with pinned
+// top-of-list chrome (search box, action buttons, a collapsed filter
+// accordion) were eating most of a plain 50% reveal, leaving as little as
+// ~85px (~1.5 rows) for the scrollable list underneath — MOBILE-8. Raised so
+// the list gets meaningfully more room while "half" still reads as
+// mid-height (leaves the map reachable, unlike "full").
+const HALF_REVEAL_FRACTION = 0.68;
 
 /** The sheet's own height — it fills the viewport above the bottom nav strip. */
 function sheetHeightPx(viewportHeight: number): number {
@@ -21,7 +28,7 @@ function snapTranslate(snap: SheetSnap, viewportHeight: number): number {
     case "full":
       return 0;
     case "half":
-      return sheetHeight - viewportHeight * 0.5;
+      return sheetHeight - viewportHeight * HALF_REVEAL_FRACTION;
     case "peek":
       return sheetHeight - PEEK_REVEAL_PX;
   }

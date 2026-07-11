@@ -58,6 +58,17 @@
   background-color: color-mix(in srgb, var(--theme-text-primary) 10%, transparent);
 }
 
+/* Mobile (≤768px): the close button was a 26×26px hit target (18px icon +
+   4px padding), under the 44px touch-target guideline (MOBILE-11). Grow the
+   box, not the icon — flex-centering keeps it visually the same size. Scoped
+   to mobile so the mouse-driven desktop panel header doesn't grow. */
+@media (max-width: 768px) {
+  .closeButton {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 .panelBody {
   flex: 1;
   overflow-y: auto;
