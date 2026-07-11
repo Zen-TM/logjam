@@ -2,8 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   makeCustomFieldKey,
   coerceFieldValue,
+  coerceFieldValueStrict,
   isTripLogCustomFieldDef,
   buildCustomFieldDef,
+  tripLogHasCustomFieldValue,
+  countTripLogsWithCustomField,
+  renameCustomFieldLabel,
 } from "./tripLogFields.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
@@ -190,5 +194,90 @@ describe("buildCustomFieldDef", () => {
       [],
     );
     expect(result).toEqual({ def: { key: "count", label: "Count", type: "integer" } });
+  });
+});
+
+describe("coerceFieldValueStrict", () => {
+  it("treats empty/whitespace as an unset null success", () => {
+    expect(coerceFieldValueStrict("", "integer")).toEqual({ ok: true, value: null });
+    expect(coerceFieldValueStrict("   ", "float")).toEqual({ ok: true, value: null });
+  });
+
+  it("parses valid integers and rejects decimals/garbage", () => {
+    expect(coerceFieldValueStrict("42", "integer")).toEqual({ ok: true, value: 42 });
+    expect(coerceFieldValueStrict("-7", "integer")).toEqual({ ok: true, value: -7 });
+    expect(coerceFieldValueStrict("5.5", "integer")).toEqual({ ok: false });
+    expect(coerceFieldValueStrict("abc", "integer")).toEqual({ ok: false });
+  });
+
+  it("parses valid floats and rejects non-finite input", () => {
+    expect(coerceFieldValueStrict("5.5", "float")).toEqual({ ok: true, value: 5.5 });
+    expect(coerceFieldValueStrict("banana", "float")).toEqual({ ok: false });
+    expect(coerceFieldValueStrict("Infinity", "float")).toEqual({ ok: false });
+  });
+
+  it("coerces booleans and passes strings through", () => {
+    expect(coerceFieldValueStrict("true", "boolean")).toEqual({ ok: true, value: true });
+    expect(coerceFieldValueStrict("false", "boolean")).toEqual({ ok: true, value: false });
+    expect(coerceFieldValueStrict("hello", "string")).toEqual({ ok: true, value: "hello" });
+  });
+});
+
+describe("tripLogHasCustomFieldValue", () => {
+  it("is true only when the key is present and non-empty", () => {
+    expect(tripLogHasCustomFieldValue({ a: "x" }, "a")).toBe(true);
+    expect(tripLogHasCustomFieldValue({ a: 0 }, "a")).toBe(true);
+    expect(tripLogHasCustomFieldValue({ a: false }, "a")).toBe(true);
+    expect(tripLogHasCustomFieldValue({ a: "" }, "a")).toBe(false);
+    expect(tripLogHasCustomFieldValue({ a: null }, "a")).toBe(false);
+    expect(tripLogHasCustomFieldValue({}, "a")).toBe(false);
+    expect(tripLogHasCustomFieldValue(null, "a")).toBe(false);
+  });
+});
+
+describe("countTripLogsWithCustomField", () => {
+  it("counts only trips carrying a value for the key", () => {
+    const trips = [
+      { customFields: { rope: 30 } },
+      { customFields: { rope: "" } },
+      { customFields: { wetsuit: true } },
+      { customFields: { rope: null } },
+      { customFields: {} },
+    ];
+    expect(countTripLogsWithCustomField(trips, "rope")).toBe(1);
+    expect(countTripLogsWithCustomField(trips, "wetsuit")).toBe(1);
+    expect(countTripLogsWithCustomField([], "rope")).toBe(0);
+  });
+});
+
+describe("renameCustomFieldLabel", () => {
+  const defs: TripLogCustomFieldDef[] = [
+    { key: "water_level", label: "Water Level", type: "string" },
+    { key: "rope", label: "Rope Length", type: "integer" },
+  ];
+
+  it("renames the label but preserves the key (never orphans values)", () => {
+    const result = renameCustomFieldLabel(defs, "water_level", "Water Depth");
+    expect(result).toEqual({
+      defs: [
+        { key: "water_level", label: "Water Depth", type: "string" },
+        { key: "rope", label: "Rope Length", type: "integer" },
+      ],
+    });
+  });
+
+  it("rejects an empty label", () => {
+    expect(renameCustomFieldLabel(defs, "rope", "  ")).toEqual({ error: "Label is required." });
+  });
+
+  it("rejects an unknown key", () => {
+    expect(renameCustomFieldLabel(defs, "nope", "X")).toEqual({
+      error: "That field no longer exists.",
+    });
+  });
+
+  it("is a no-op when the label is unchanged", () => {
+    const result = renameCustomFieldLabel(defs, "rope", "Rope Length");
+    expect(result).toEqual({ defs });
   });
 });

@@ -65,6 +65,7 @@ function SidebarPanel({
   setLidarLayerToggles,
   lidarLayerOrder,
   setLidarLayerOrder,
+  unavailableTopoLayerNames,
   baseLayers,
   activeLayerId,
   onActiveLayerChange,
@@ -154,6 +155,8 @@ function SidebarPanel({
   setLidarLayerToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
   lidarLayerOrder: string[];
   setLidarLayerOrder: (v: string[] | ((prev: string[]) => string[])) => void;
+  // Layer names whose PMTiles source failed to load (LAYERS-1 badge).
+  unavailableTopoLayerNames: Set<string>;
   baseLayers: readonly { id: string; name: string; tiles: string[]; maxzoom: number }[];
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
@@ -292,6 +295,7 @@ function SidebarPanel({
             setLidarLayerToggles={setLidarLayerToggles}
             lidarLayerOrder={lidarLayerOrder}
             setLidarLayerOrder={setLidarLayerOrder}
+            unavailableTopoLayerNames={unavailableTopoLayerNames}
             layers={baseLayers}
             activeLayerId={activeLayerId}
             onActiveLayerChange={onActiveLayerChange}
@@ -393,7 +397,13 @@ function SidebarPanel({
             onOpenUnifiedImport={onOpenUnifiedImport}
           />
         )}
-        {activePanel === "account" && <AccountPanel currentUser={currentUser} />}
+        {activePanel === "account" && (
+          <AccountPanel
+            currentUser={currentUser}
+            customFieldDefs={customFieldDefs}
+            onCustomFieldDefsChange={onCustomFieldDefsChange}
+          />
+        )}
         {activePanel === "canyon-detail" && (
           <CanyonDetailPanel
             canyon={canyon}
@@ -412,6 +422,7 @@ function SidebarPanel({
             onCanyonCustomFieldDefsChange={onCanyonCustomFieldDefsChange}
             onQuotaChanged={onQuotaChanged}
             onRefetchTripLogs={onRefetchTripLogs}
+            onAfterDelete={() => setActivePanel("canyons")}
           />
         )}
       </div>

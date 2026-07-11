@@ -16,6 +16,7 @@ import {
   createFilterOptions,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
 import {
@@ -43,6 +44,7 @@ import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
+import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
 import { getFieldValue as getFieldValueFor } from "./customFieldValues";
 import classes from "./TripLogDialog.module.css";
 
@@ -203,6 +205,9 @@ function TripLogDialog({
   const [newFieldMax, setNewFieldMax] = useState("");
   const [addingField, setAddingField] = useState(false);
   const [addFieldError, setAddFieldError] = useState<string | null>(null);
+  // Field pending deletion via the shared impact-aware confirm (also used by
+  // the Account panel's field manager).
+  const [fieldToDelete, setFieldToDelete] = useState<TripLogCustomFieldDef | null>(null);
 
   // Selectable canyons — already-selected ones are excluded so they don't
   // linger (duplicated) in the dropdown once chipped.
@@ -493,6 +498,7 @@ function TripLogDialog({
   }
 
   return (
+    <>
     <Dialog
       fullScreen={isMobile}
       open={open}
@@ -838,13 +844,31 @@ function TripLogDialog({
                 Custom Fields
               </Typography>
               {customFieldDefs.map((def) => (
-                <CustomFieldInput
+                <Box
                   key={def.key}
-                  def={def}
-                  value={getFieldValue(def.key)}
-                  onChange={(v) => setFieldValue(def.key, v)}
-                  showError={showFieldErrors}
-                />
+                  sx={{ display: "flex", gap: 1, alignItems: "center" }}
+                >
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <CustomFieldInput
+                      def={def}
+                      value={getFieldValue(def.key)}
+                      onChange={(v) => setFieldValue(def.key, v)}
+                      showError={showFieldErrors}
+                    />
+                  </Box>
+                  <IconButton
+                    aria-label={`Delete custom field ${def.label}`}
+                    size="small"
+                    onClick={() => setFieldToDelete(def)}
+                    sx={{
+                      color: "var(--theme-text-muted)",
+                      flexShrink: 0,
+                      "&:hover": { color: "var(--theme-warning)" },
+                    }}
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Box>
               ))}
             </Box>
           )}
@@ -971,6 +995,26 @@ function TripLogDialog({
         </Button>
       </DialogActions>
     </Dialog>
+
+    {/* Impact-aware delete confirm (shared with the Account panel). On delete
+        the server strips the field's values from all trips; mirror that
+        locally by dropping the form value. */}
+    <DeleteCustomFieldDialog
+      def={fieldToDelete}
+      onClose={() => setFieldToDelete(null)}
+      onDeleted={(remaining) => {
+        onCustomFieldDefsChange(remaining);
+        if (fieldToDelete) {
+          const { key } = fieldToDelete;
+          setFieldValues((prev) => {
+            const next = { ...prev };
+            delete next[key];
+            return next;
+          });
+        }
+      }}
+    />
+    </>
   );
 }
 

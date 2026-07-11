@@ -15,6 +15,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import { updateUserAttribute, confirmUserAttribute } from "aws-amplify/auth";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import { FieldError } from "../feedback/FieldError";
+import { isValidEmailFormat } from "../../emailValidation";
 
 const inputSx = {
   "& .MuiInputBase-input": { color: "var(--theme-text-primary)" },
@@ -48,6 +50,9 @@ function ChangeEmailDialog({
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Inline per-field validation for the email input (empty / bad format /
+  // same-as-current), shown under the field before we call Cognito.
+  const [emailError, setEmailError] = useState<string | null>(null);
   // Captured at send-code time so the verify screen can display it
   const [pendingEmail, setPendingEmail] = useState("");
 
@@ -57,16 +62,25 @@ function ChangeEmailDialog({
     setNewEmail("");
     setCode("");
     setError(null);
+    setEmailError(null);
     onClose();
   }
 
   async function handleSendCode() {
     const trimmed = newEmail.trim();
-    if (!trimmed) return;
-    if (currentEmail && trimmed.toLowerCase() === currentEmail.toLowerCase()) {
-      setError("That's already your current email address.");
+    if (!trimmed) {
+      setEmailError("Enter your new email address.");
       return;
     }
+    if (!isValidEmailFormat(trimmed)) {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
+    if (currentEmail && trimmed.toLowerCase() === currentEmail.toLowerCase()) {
+      setEmailError("That's already your current email address.");
+      return;
+    }
+    setEmailError(null);
     setLoading(true);
     setError(null);
     try {
@@ -166,12 +180,14 @@ function ChangeEmailDialog({
               size="small"
               fullWidth
               value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
+              onChange={(e) => { setNewEmail(e.target.value); if (emailError) setEmailError(null); }}
               onKeyDown={(e) => { if (e.key === "Enter") handleSendCode(); }}
               disabled={loading}
               autoFocus
+              error={emailError != null}
               sx={inputSx}
             />
+            <FieldError message={emailError} />
           </>
         )}
         {stage === "verify" && (

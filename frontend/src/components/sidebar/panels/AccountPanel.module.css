@@ -204,6 +204,54 @@
   line-height: 1.3;
 }
 
+.fieldRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fieldInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fieldName {
+  font-size: var(--text-sm);
+  color: var(--theme-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fieldType {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+}
+
+.renameFieldBtn {
+  composes: btn btnOutlineAccent btnSm from '@styles/shared.module.css';
+  flex-shrink: 0;
+}
+
+.deleteFieldBtn {
+  composes: btn btnOutlineWarning btnSm from '@styles/shared.module.css';
+  flex-shrink: 0;
+}
+
+.fieldEdit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldHint {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  margin: 0;
+}
+
 .exportBtn {
   composes: btn btnOutlineAccent btnSm btnFull from '@styles/shared.module.css';
 }

@@ -8,12 +8,19 @@ import {
 } from "../../../canyonUtils";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
+  CUSTOM_FIELD_TYPES,
+  customFieldDisplayLabel,
+  renameCustomFieldLabel,
   type NotificationPreferences,
+  type TripLogCustomFieldDef,
 } from "@logjam/shared";
 import { useAuth } from "../../../useAuth";
 import { useThemePreferences } from "../../../themePreferences";
 import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
 import ChangeEmailDialog from "../../dialogs/ChangeEmailDialog";
+import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import DeleteCustomFieldDialog from "../../dialogs/DeleteCustomFieldDialog";
+import { useCustomFieldImpact } from "../../dialogs/useCustomFieldImpact";
 import classes from "./AccountPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -26,7 +33,21 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
+function customFieldTypeName(type: TripLogCustomFieldDef["type"]): string {
+  return CUSTOM_FIELD_TYPES.find((t) => t.value === type)?.label ?? type;
+}
+
+function AccountPanel({
+  currentUser,
+  customFieldDefs,
+  onCustomFieldDefsChange,
+}: {
+  currentUser: TUser | null;
+  // Custom trip-log field definitions (App-level state, shared with the trip
+  // dialogs so a rename/delete here is immediately visible there).
+  customFieldDefs: TripLogCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+}) {
   const { signOut } = useAuth();
   const toast = useToast();
   const { schemeId, schemes, isHydrating, isSaving, error: themeError, setThemeScheme } =
@@ -45,6 +66,75 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
   const [autoDownloadGeoPdfs, setAutoDownloadGeoPdfs] = useState<boolean | null>(null);
   const [autoDownloadSaving, setAutoDownloadSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // Custom trip-field management. Rename edits inline, then confirms with an
+  // impact count; delete goes through the shared DeleteCustomFieldDialog.
+  const [renamingFieldKey, setRenamingFieldKey] = useState<string | null>(null);
+  const [renameInput, setRenameInput] = useState("");
+  const [renameFieldError, setRenameFieldError] = useState<string | null>(null);
+  // Set when the rename passes validation; holds the already-renamed defs
+  // awaiting the user's confirm.
+  const [pendingRename, setPendingRename] = useState<{
+    key: string;
+    oldLabel: string;
+    newLabel: string;
+    nextDefs: TripLogCustomFieldDef[];
+  } | null>(null);
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [deletingFieldDef, setDeletingFieldDef] = useState<TripLogCustomFieldDef | null>(null);
+  const { count: renameImpactCount, error: renameImpactError } = useCustomFieldImpact(
+    pendingRename?.key ?? null,
+  );
+
+  function startRenameField(def: TripLogCustomFieldDef) {
+    setRenamingFieldKey(def.key);
+    setRenameInput(def.label);
+    setRenameFieldError(null);
+  }
+
+  function cancelRenameField() {
+    setRenamingFieldKey(null);
+    setRenameInput("");
+    setRenameFieldError(null);
+  }
+
+  function handleRenameFieldSubmit(def: TripLogCustomFieldDef) {
+    const result = renameCustomFieldLabel(customFieldDefs, def.key, renameInput);
+    if ("error" in result) {
+      setRenameFieldError(result.error);
+      return;
+    }
+    if (result.defs === customFieldDefs || renameInput.trim() === def.label) {
+      // Unchanged — nothing to save.
+      cancelRenameField();
+      return;
+    }
+    setPendingRename({
+      key: def.key,
+      oldLabel: def.label,
+      newLabel: renameInput.trim(),
+      nextDefs: result.defs,
+    });
+  }
+
+  async function handleConfirmRename() {
+    if (!pendingRename) return;
+    setRenameSaving(true);
+    try {
+      await updateUserPreferences({ tripLogCustomFields: pendingRename.nextDefs });
+      onCustomFieldDefsChange(pendingRename.nextDefs);
+      setPendingRename(null);
+      cancelRenameField();
+    } catch (err) {
+      console.error(err);
+      setPendingRename(null);
+      setRenameFieldError(
+        messageFromError(err, "Couldn't rename the custom field. Please try again."),
+      );
+    } finally {
+      setRenameSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!currentUser) return;
@@ -353,6 +443,77 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
         </div>
       )}
 
+      <span
+        className={classes.sectionLabel}
+        title="Extra fields you've added to trip logs (e.g. Water Level). Renaming keeps existing values; deleting removes the field and its values from all trips."
+      >
+        Custom trip fields
+      </span>
+      <div className={classes.divider} />
+      {!currentUser ? (
+        <p className={classes.state}>Loading...</p>
+      ) : customFieldDefs.length === 0 ? (
+        <p className={classes.state}>
+          No custom trip fields yet. Add one from the trip log dialog.
+        </p>
+      ) : (
+        customFieldDefs.map((def) =>
+          renamingFieldKey === def.key ? (
+            <div key={def.key} className={classes.fieldEdit}>
+              <input
+                className={classes.usernameInput}
+                aria-label={`Rename field ${def.label}`}
+                value={renameInput}
+                onChange={(e) => setRenameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleRenameFieldSubmit(def);
+                  if (e.key === "Escape") cancelRenameField();
+                }}
+                autoFocus
+                maxLength={64}
+                disabled={renameSaving}
+              />
+              <div className={classes.usernameActions}>
+                <button
+                  className={classes.saveUsernameBtn}
+                  onClick={() => handleRenameFieldSubmit(def)}
+                  disabled={renameSaving}
+                >
+                  {renameSaving ? "Saving…" : "Save"}
+                </button>
+                <button
+                  className={classes.cancelUsernameBtn}
+                  onClick={cancelRenameField}
+                  disabled={renameSaving}
+                >
+                  Cancel
+                </button>
+              </div>
+              {renameFieldError && <ErrorBanner message={renameFieldError} />}
+            </div>
+          ) : (
+            <div key={def.key} className={classes.fieldRow}>
+              <div className={classes.fieldInfo}>
+                <span className={classes.fieldName}>{customFieldDisplayLabel(def)}</span>
+                <span className={classes.fieldType}>{customFieldTypeName(def.type)}</span>
+              </div>
+              <button
+                className={classes.renameFieldBtn}
+                onClick={() => startRenameField(def)}
+              >
+                Rename
+              </button>
+              <button
+                className={classes.deleteFieldBtn}
+                onClick={() => setDeletingFieldDef(def)}
+              >
+                Delete
+              </button>
+            </div>
+          ),
+        )
+      )}
+
       <span className={classes.sectionLabel}>Your data</span>
       <div className={classes.divider} />
       <button
@@ -383,6 +544,41 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
         onClose={() => setChangeEmailOpen(false)}
         onSuccess={(newEmail) => setEmail(newEmail)}
         currentEmail={email ?? ""}
+      />
+
+      {/* Rename impact confirm — values stay linked (the field's key is stable),
+          so this is informational, not destructive. */}
+      <ConfirmDialog
+        open={pendingRename !== null}
+        title={`Rename "${pendingRename?.oldLabel ?? ""}"?`}
+        message={
+          <>
+            The field will be renamed to "{pendingRename?.newLabel ?? ""}".{" "}
+            {renameImpactError
+              ? "Couldn't check how many trips use this field, but renaming is safe — "
+              : renameImpactCount === null
+                ? "Checking how many trips use it… "
+                : renameImpactCount === 0
+                  ? "No trip logs currently have a value for this field. "
+                  : `${renameImpactCount} trip log${renameImpactCount === 1 ? " has" : "s have"} a value for this field — `}
+            {(renameImpactError || (renameImpactCount !== null && renameImpactCount > 0)) &&
+              "existing values are kept and will appear under the new name."}
+          </>
+        }
+        confirmLabel="Rename"
+        confirmColor="secondary"
+        busy={renameSaving}
+        onConfirm={handleConfirmRename}
+        onClose={() => {
+          if (!renameSaving) setPendingRename(null);
+        }}
+      />
+
+      {/* Delete impact confirm + delete (shared with TripLogDialog). */}
+      <DeleteCustomFieldDialog
+        def={deletingFieldDef}
+        onClose={() => setDeletingFieldDef(null)}
+        onDeleted={(remaining) => onCustomFieldDefsChange(remaining)}
       />
 
       <Footer />

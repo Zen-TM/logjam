@@ -39,6 +39,7 @@ import topoTemplatesRouter from "./routes/topoTemplates";
 import vectorStyleRouter from "./routes/vectorStyle";
 import geoPdfRouter from "./routes/geoPdf";
 import analyticsRouter from "./routes/analytics";
+import customFieldsRouter from "./routes/customFields";
 import importsRouter from "./routes/imports";
 
 const env = getEnv();
@@ -202,6 +203,7 @@ app.use("/topo-templates", topoTemplatesRouter);
 app.use("/vector-style", vectorStyleRouter);
 app.use("/geo-pdf", geoPdfRouter);
 app.use("/analytics", analyticsRouter);
+app.use("/custom-fields", customFieldsRouter);
 
 app.use(errorHandler);
 
