@@ -22,6 +22,8 @@ import {
   coerceFieldValue,
   buildCustomFieldDef,
   formatTripCanyonNames,
+  isValidLatitude,
+  isValidLongitude,
   TRIP_TYPE_SUGGESTIONS,
   MAX_CANYONS_PER_TRIP,
   MAX_TRIP_TYPES_PER_TRIP,
@@ -40,12 +42,19 @@ import { fieldSx, typeChipSx } from "../../csvImport/dialogStyles";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
 import AddCustomFieldForm from "./AddCustomFieldForm";
-import CustomFieldInput from "./CustomFieldInput";
+import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
 import { getFieldValue as getFieldValueFor } from "./customFieldValues";
 import classes from "./TripLogDialog.module.css";
 
 function todayDateString(): string {
   return new Date().toISOString().split("T")[0];
+}
+
+// True when a date-only string (YYYY-MM-DD) is after today. Both sides compare
+// as UTC-midnight date strings, so this is a plain lexicographic comparison —
+// no timezone off-by-one (the trip date is stored/compared as UTC midnight).
+function isFutureDate(dateString: string): boolean {
+  return dateString > todayDateString();
 }
 
 // ── Canyon option union ──────────────────────────────────────
@@ -147,6 +156,9 @@ function TripLogDialog({
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set on a Save attempt so every invalid custom field shows its inline error
+  // at once (before that, errors only show after a field is blurred).
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
 
   // The full known-type vocabulary: built-in suggestions ∪ the user's own
   // history, deduped case-insensitively (first casing wins).
@@ -257,6 +269,7 @@ function TripLogDialog({
       setFieldValues({});
     }
     setError(null);
+    setShowFieldErrors(false);
     setShowAddField(false);
     setNewFieldLabel("");
     setNewFieldType("string");
@@ -290,6 +303,10 @@ function TripLogDialog({
     const lng = parseFloat(creating.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng))
       throw new Error("Valid latitude and longitude are required.");
+    if (!isValidLatitude(lat) || !isValidLongitude(lng))
+      throw new Error(
+        "Latitude must be between -90 and 90, and longitude between -180 and 180.",
+      );
     const c = await createCanyon({
       name: creating.name.trim(),
       latitude: lat,
@@ -379,6 +396,16 @@ function TripLogDialog({
   async function handleSave() {
     if (!date) {
       setError("Date is required.");
+      return;
+    }
+    // Block save if any custom numeric field is invalid (e.g. "5.5" in an
+    // integer field) so it can't be silently mangled on save (TRIP-1/TRIP-2).
+    const customFieldInvalid = customFieldDefs.some(
+      (def) => customFieldValueError(def, getFieldValue(def.key)) != null,
+    );
+    if (customFieldInvalid) {
+      setShowFieldErrors(true);
+      setError("Please fix the highlighted fields.");
       return;
     }
     setSaving(true);
@@ -762,18 +789,34 @@ function TripLogDialog({
           />
 
           {/* Date */}
-          <TextField
-            label="Date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            size="small"
-            fullWidth
-            required
-            error={!date && error === "Date is required."}
-            InputLabelProps={{ shrink: true }}
-            sx={fieldSx}
-          />
+          <Box>
+            <TextField
+              label="Date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              size="small"
+              fullWidth
+              required
+              error={!date && error === "Date is required."}
+              InputLabelProps={{ shrink: true }}
+              sx={fieldSx}
+            />
+            {/* Non-blocking hint — a future date is allowed (trip planning), we
+                just flag it so an accidental typo doesn't pass unnoticed. */}
+            {isFutureDate(date) && (
+              <Typography
+                variant="caption"
+                sx={{
+                  display: "block",
+                  mt: 0.5,
+                  color: "var(--theme-text-muted)",
+                }}
+              >
+                This date is in the future.
+              </Typography>
+            )}
+          </Box>
 
           {/* Notes */}
           <TextField
@@ -800,6 +843,7 @@ function TripLogDialog({
                   def={def}
                   value={getFieldValue(def.key)}
                   onChange={(v) => setFieldValue(def.key, v)}
+                  showError={showFieldErrors}
                 />
               ))}
             </Box>

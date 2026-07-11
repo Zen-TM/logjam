@@ -10,7 +10,7 @@ import { decrementStorageUsed } from "../lib/storageQuota";
 import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
 import { requireCanyonAccess, requireCanyonOwnerAccess } from "../lib/canyonAccess";
 import { resolveUser } from "../lib/resolveUser";
-import { TRACK_MIME_TYPES } from "@logjam/shared";
+import { TRACK_MIME_TYPES, validateCanyonPayload } from "@logjam/shared";
 import { serializeTrip, tripCanyonsInclude } from "./tripLogsGlobal";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
@@ -142,6 +142,13 @@ router.post(
     if (!name || latitude === undefined || longitude === undefined) {
       throw new AppError(400, "name, latitude, and longitude are required");
     }
+
+    // Validate coordinate + numeric-field ranges (CANYON-1/CANYON-2). Same
+    // ranges as the CSV bulk-import path, sourced from @logjam/shared.
+    const validationError = validateCanyonPayload(req.body, {
+      requireCoords: true,
+    });
+    if (validationError) throw new AppError(400, validationError);
 
     const canyon = await prisma.canyon.create({
       data: {
@@ -324,6 +331,13 @@ router.patch(
       notes,
       attributes,
     } = req.body;
+
+    // Validate any supplied coordinate/numeric field (CANYON-1/CANYON-2).
+    // requireCoords:false — PATCH may omit fields; only validate what's present.
+    const validationError = validateCanyonPayload(req.body, {
+      requireCoords: false,
+    });
+    if (validationError) throw new AppError(400, validationError);
 
     const updated = await prisma.canyon.update({
       where: { id: getParam(req.params.id) },

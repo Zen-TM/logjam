@@ -28,6 +28,8 @@ import {
   rgbaCssFromHex,
   contourWidthStops,
   featureLineWidthStops,
+  isValidLatitude,
+  isValidLongitude,
   type OsmFeatureKey,
   type OsmPointFeatureKey,
   type OsmFeatureStyle,
@@ -585,9 +587,13 @@ function Map({
         if (feature.geometry.type !== "Point") return;
         const [lng, lat] = feature.geometry.coordinates as [number, number];
         selectCanyonRef.current(id);
-        setTimeout(() => {
-          map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
-        }, SIDEBAR_TRANSITION_MS);
+        // Guard flyTo against an out-of-range legacy marker (CANYON-1) so a
+        // click still selects it instead of throwing "Invalid LngLat".
+        if (isValidLatitude(lat) && isValidLongitude(lng)) {
+          setTimeout(() => {
+            map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
+          }, SIDEBAR_TRANSITION_MS);
+        }
       });
 
       map.on("click", "shared-canyon-circles", (e) => {
@@ -598,9 +604,12 @@ function Map({
         if (feature.geometry.type !== "Point") return;
         const [lng, lat] = feature.geometry.coordinates as [number, number];
         selectCanyonRef.current(id);
-        setTimeout(() => {
-          map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
-        }, SIDEBAR_TRANSITION_MS);
+        // Guard flyTo against an out-of-range legacy marker (CANYON-1).
+        if (isValidLatitude(lat) && isValidLongitude(lng)) {
+          setTimeout(() => {
+            map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
+          }, SIDEBAR_TRANSITION_MS);
+        }
       });
 
       map.on("mouseenter", "canyon-circles", () => {
@@ -1524,11 +1533,24 @@ function Map({
 
   useEffect(() => {
     if (!flyToCanyon || !mapLoaded || !mapRef.current) return;
-    mapRef.current.flyTo({
-      center: [flyToCanyon.lng, flyToCanyon.lat],
-      zoom: 16,
-      duration: 1500,
-    });
+    // Defensive guard (CANYON-1): an out-of-range record must not crash the app.
+    // MapLibre's flyTo throws "Invalid LngLat" for lat outside [-90,90] (or
+    // lng outside [-180,180]), which previously escaped to the RootErrorBoundary
+    // and made the record unmanageable — you couldn't even open it to fix or
+    // delete it. Skip the fly-to (still selecting the canyon) so the detail
+    // panel opens and the record can be edited/deleted. Validation now blocks
+    // such records at creation; this covers any that already exist.
+    if (isValidLatitude(flyToCanyon.lat) && isValidLongitude(flyToCanyon.lng)) {
+      mapRef.current.flyTo({
+        center: [flyToCanyon.lng, flyToCanyon.lat],
+        zoom: 16,
+        duration: 1500,
+      });
+    } else {
+      // Don't log the coordinates themselves (privacy rule: no canyon coords in
+      // logs/errors) — just note the fly-to was skipped.
+      console.warn("Skipping fly-to: canyon coordinates out of range");
+    }
     onFlyToCanyonConsumedRef.current?.();
   }, [flyToCanyon, mapLoaded]);
 

@@ -13,14 +13,23 @@ import {
   IconButton,
   Typography,
   Tooltip,
-  InputAdornment,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
-import { coerceFieldValue, mediaCategory, buildCustomFieldDef } from "@logjam/shared";
-import { sanitizeIntegerInput, sanitizeDecimalInput } from "../../numberInput";
+import {
+  coerceFieldValue,
+  mediaCategory,
+  buildCustomFieldDef,
+  CANYON_NUMERIC_CONSTRAINTS,
+  LATITUDE_RANGE,
+  LONGITUDE_RANGE,
+  isValidLatitude,
+  isValidLongitude,
+  type CanyonNumericFieldName,
+} from "@logjam/shared";
+import { numericFieldError, type NumericFieldConstraints } from "../../numberInput";
+import ValidatedNumberField from "./ValidatedNumberField";
 import type { TCanyon } from "../../canyonUtils";
 import {
   updateCanyon,
@@ -32,7 +41,7 @@ import {
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import AddCustomFieldForm from "./AddCustomFieldForm";
-import CustomFieldInput from "./CustomFieldInput";
+import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
 import ConfirmDialog from "./ConfirmDialog";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
@@ -51,6 +60,22 @@ const COMMITMENTS = [
 ] as const;
 
 type Source = { label: string; url: string };
+
+// Adapt a shared canyon constraint (max: number | null) to the frontend field
+// shape (max?: number). Keeps the numeric ranges sourced from @logjam/shared.
+function fieldConstraints(name: CanyonNumericFieldName): NumericFieldConstraints {
+  const c = CANYON_NUMERIC_CONSTRAINTS[name];
+  return { integer: c.integer, min: c.min, max: c.max ?? undefined };
+}
+
+const LAT_CONSTRAINTS: NumericFieldConstraints = {
+  min: LATITUDE_RANGE.min,
+  max: LATITUDE_RANGE.max,
+};
+const LNG_CONSTRAINTS: NumericFieldConstraints = {
+  min: LONGITUDE_RANGE.min,
+  max: LONGITUDE_RANGE.max,
+};
 
 function CanyonDialog({
   canyon,
@@ -97,6 +122,9 @@ function CanyonDialog({
   const [error, setError] = useState<string | null>(null);
   // Which field failed validation, so the input can show error state + aria-invalid.
   const [invalidField, setInvalidField] = useState<"name" | "coords" | null>(null);
+  // Set on a Save attempt so every out-of-range numeric field shows its inline
+  // error at once (before that, errors only show after a field is blurred).
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
 
   // Add custom field form state
   const [showAddField, setShowAddField] = useState(false);
@@ -174,6 +202,8 @@ function CanyonDialog({
       setFieldValues({});
     }
     setError(null);
+    setInvalidField(null);
+    setShowFieldErrors(false);
     setShowAddField(false);
     setNewFieldLabel("");
     setNewFieldType("string");
@@ -213,6 +243,11 @@ function CanyonDialog({
     const parsedLng = parseFloat(longitude);
     if (!name.trim() || !latitude || !longitude || isNaN(parsedLat) || isNaN(parsedLng)) {
       return Promise.reject(new Error("Enter a name and location before adding media."));
+    }
+    if (!isValidLatitude(parsedLat) || !isValidLongitude(parsedLng)) {
+      return Promise.reject(
+        new Error("Enter a valid location (latitude -90 to 90, longitude -180 to 180) before adding media."),
+      );
     }
     const promise = createCanyon({
       name: name.trim(),
@@ -283,6 +318,35 @@ function CanyonDialog({
       if (!latitude || !longitude || isNaN(parsedLat) || isNaN(parsedLng)) {
         setError("Valid coordinates are required");
         setInvalidField("coords");
+        setSaving(false);
+        return;
+      }
+
+      // Range/format validation for every numeric field (CANYON-1/CANYON-2).
+      // Same short messages the inline FieldErrors render; the top banner just
+      // points the user at the highlighted fields.
+      const numericInvalid =
+        numericFieldError(latitude, LAT_CONSTRAINTS) ??
+        numericFieldError(longitude, LNG_CONSTRAINTS) ??
+        numericFieldError(quality, fieldConstraints("quality")) ??
+        numericFieldError(hours, fieldConstraints("hours")) ??
+        numericFieldError(numAbseils, fieldConstraints("numAbseils")) ??
+        numericFieldError(longestAbseil, fieldConstraints("longestAbseil"));
+      if (numericInvalid) {
+        setShowFieldErrors(true);
+        setError("Please fix the highlighted fields.");
+        setSaving(false);
+        return;
+      }
+
+      // Custom numeric fields (integer/float) get the same treatment so an
+      // invalid value can't reach coerceFieldValue and be silently mangled.
+      const customFieldInvalid = customFieldDefs.some(
+        (def) => customFieldValueError(def, getFieldValue(def.key)) != null,
+      );
+      if (customFieldInvalid) {
+        setShowFieldErrors(true);
+        setError("Please fix the highlighted fields.");
         setSaving(false);
         return;
       }
@@ -464,63 +528,27 @@ function CanyonDialog({
             onChange={(e) => setAltNames(e.target.value)}
             size="small"
           />
-          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: isMobile ? "stretch" : "center" }}>
-            <TextField
-              label="Latitude"
-              value={latitude}
-              onChange={(e) => setLatitude(e.target.value)}
-              type="number"
-              error={invalidField === "coords"}
-              size="small"
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip
-                      title="WGS84 decimal degrees (standard GPS format)."
-                      placement="top"
-                      arrow
-                    >
-                      <InfoOutlinedIcon
-                        sx={{
-                          fontSize: "1rem",
-                          color: "var(--theme-text-muted)",
-                          cursor: "help",
-                        }}
-                      />
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <TextField
-              label="Longitude"
-              value={longitude}
-              onChange={(e) => setLongitude(e.target.value)}
-              type="number"
-              error={invalidField === "coords"}
-              size="small"
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip
-                      title="WGS84 decimal degrees (standard GPS format)."
-                      placement="top"
-                      arrow
-                    >
-                      <InfoOutlinedIcon
-                        sx={{
-                          fontSize: "1rem",
-                          color: "var(--theme-text-muted)",
-                          cursor: "help",
-                        }}
-                      />
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              }}
-            />
+          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: isMobile ? "stretch" : "flex-start" }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <ValidatedNumberField
+                label="Latitude"
+                value={latitude}
+                onChange={setLatitude}
+                constraints={LAT_CONSTRAINTS}
+                showError={showFieldErrors || invalidField === "coords"}
+                tooltip="WGS84 decimal degrees (standard GPS format). Between -90 and 90."
+              />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <ValidatedNumberField
+                label="Longitude"
+                value={longitude}
+                onChange={setLongitude}
+                constraints={LNG_CONSTRAINTS}
+                showError={showFieldErrors || invalidField === "coords"}
+                tooltip="WGS84 decimal degrees (standard GPS format). Between -180 and 180."
+              />
+            </Box>
             <Button
               variant="contained"
               color="secondary"
@@ -651,117 +679,49 @@ function CanyonDialog({
               </Box>
             </Tooltip>
           </Box>
-          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2 }}>
-            <TextField
-              label="Quality (1-5)"
-              value={quality}
-              onChange={(e) => setQuality(sanitizeDecimalInput(e.target.value))}
-              type="text"
-              inputMode="decimal"
-              size="small"
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip
-                      title="Subjective overall quality. 1 = unremarkable; 5 = exceptional. Decimals allowed."
-                      placement="top"
-                      arrow
-                    >
-                      <InfoOutlinedIcon
-                        sx={{
-                          fontSize: "1rem",
-                          color: "var(--theme-text-muted)",
-                          cursor: "help",
-                        }}
-                      />
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <TextField
-              label="Hours"
-              value={hours}
-              onChange={(e) => setHours(sanitizeDecimalInput(e.target.value))}
-              type="text"
-              inputMode="decimal"
-              size="small"
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip
-                      title="Estimated total trip duration for an average group, car-to-car."
-                      placement="top"
-                      arrow
-                    >
-                      <InfoOutlinedIcon
-                        sx={{
-                          fontSize: "1rem",
-                          color: "var(--theme-text-muted)",
-                          cursor: "help",
-                        }}
-                      />
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              }}
-            />
+          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: "flex-start" }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <ValidatedNumberField
+                label="Quality (1-5)"
+                value={quality}
+                onChange={setQuality}
+                constraints={fieldConstraints("quality")}
+                showError={showFieldErrors}
+                tooltip="Subjective overall quality. 1 = unremarkable; 5 = exceptional. Decimals allowed."
+              />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <ValidatedNumberField
+                label="Hours"
+                value={hours}
+                onChange={setHours}
+                constraints={fieldConstraints("hours")}
+                showError={showFieldErrors}
+                tooltip="Estimated total trip duration for an average group, car-to-car."
+              />
+            </Box>
           </Box>
-          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2 }}>
-            <TextField
-              label="Pitches"
-              value={numAbseils}
-              onChange={(e) => setNumAbseils(sanitizeIntegerInput(e.target.value))}
-              type="text"
-              inputMode="numeric"
-              size="small"
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip title="Number of abseils." placement="top" arrow>
-                      <InfoOutlinedIcon
-                        sx={{
-                          fontSize: "1rem",
-                          color: "var(--theme-text-muted)",
-                          cursor: "help",
-                        }}
-                      />
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <TextField
-              label="Longest Pitch (m)"
-              value={longestAbseil}
-              onChange={(e) => setLongestAbseil(sanitizeDecimalInput(e.target.value))}
-              type="text"
-              inputMode="decimal"
-              size="small"
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip
-                      title="Length of the longest single abseil in metres, measured along the rope."
-                      placement="top"
-                      arrow
-                    >
-                      <InfoOutlinedIcon
-                        sx={{
-                          fontSize: "1rem",
-                          color: "var(--theme-text-muted)",
-                          cursor: "help",
-                        }}
-                      />
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              }}
-            />
+          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: "flex-start" }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <ValidatedNumberField
+                label="Pitches"
+                value={numAbseils}
+                onChange={setNumAbseils}
+                constraints={fieldConstraints("numAbseils")}
+                showError={showFieldErrors}
+                tooltip="Number of abseils."
+              />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <ValidatedNumberField
+                label="Longest Pitch (m)"
+                value={longestAbseil}
+                onChange={setLongestAbseil}
+                constraints={fieldConstraints("longestAbseil")}
+                showError={showFieldErrors}
+                tooltip="Length of the longest single abseil in metres, measured along the rope."
+              />
+            </Box>
           </Box>
           <TextField
             label="Notes"
@@ -788,6 +748,7 @@ function CanyonDialog({
                       def={def}
                       value={getFieldValue(def.key)}
                       onChange={(v) => setFieldValue(def.key, v)}
+                      showError={showFieldErrors}
                     />
                   </Box>
                   <IconButton

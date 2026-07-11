@@ -37,3 +37,49 @@ export function sanitizeNumericInput(
     ? sanitizeIntegerInput(raw)
     : sanitizeDecimalInput(raw);
 }
+
+/** Inclusive numeric constraints for a validated field. All optional. */
+export type NumericFieldConstraints = {
+  /** Value must be a whole number when true. */
+  integer?: boolean;
+  /** Inclusive lower bound. */
+  min?: number;
+  /** Inclusive upper bound. */
+  max?: number;
+};
+
+/**
+ * Validate a numeric field's raw string value against its constraints, for
+ * inline field errors. Returns a short user-facing message or null when valid.
+ *
+ * An empty string (or a lone "-") is treated as "unset" and returns null — the
+ * caller decides whether the field is required. Unlike the keystroke
+ * sanitizers, this never mutates the value: a decimal typed into an integer
+ * field is reported ("Whole numbers only"), not silently truncated
+ * (TRIP-1/TRIP-2). Pure — no side effects.
+ */
+export function numericFieldError(
+  raw: string,
+  constraints: NumericFieldConstraints,
+): string | null {
+  const trimmed = raw.trim();
+  if (trimmed === "" || trimmed === "-") return null;
+  const value = Number(trimmed);
+  if (!Number.isFinite(value)) return "Enter a valid number";
+  if (constraints.integer && !Number.isInteger(value)) {
+    return "Whole numbers only";
+  }
+  const { min, max } = constraints;
+  if (min != null && value < min) {
+    if (min === 0) return "Cannot be negative";
+    return max != null
+      ? `Must be between ${min} and ${max}`
+      : `Must be at least ${min}`;
+  }
+  if (max != null && value > max) {
+    return min != null
+      ? `Must be between ${min} and ${max}`
+      : `Must be at most ${max}`;
+  }
+  return null;
+}
