@@ -40,10 +40,12 @@ describe("POST /canyons/bulk — import contract (fake auth = alice)", () => {
       });
     expect(res.status).toBe(200);
     expect(res.body.created).toBe(1);
+    // Messages carry NO "Row N:" prefix — the caller labels the row from the
+    // returned rowIndex so it can use the original CSV line (IMPORT-7).
     expect(res.body.errors).toEqual([
-      { rowIndex: 1, message: "Row 1: name is required" },
-      { rowIndex: 2, message: "Row 2: invalid latitude" },
-      { rowIndex: 3, message: "Row 3: vGrade must be an integer between 1 and 7" },
+      { rowIndex: 1, message: "name is required" },
+      { rowIndex: 2, message: "invalid latitude" },
+      { rowIndex: 3, message: "vGrade must be an integer between 1 and 7" },
     ]);
 
     const listRes = await request(API_URL).get("/canyons").set(AUTH);
@@ -51,6 +53,26 @@ describe("POST /canyons/bulk — import contract (fake auth = alice)", () => {
     expect(created).toBeDefined();
 
     await request(API_URL).delete(`/canyons/${created.id}`).set(AUTH);
+  });
+
+  it("folds two identical create rows into one instead of 500ing on the unique constraint (IMPORT-1)", async () => {
+    const name = `IMPORT-1 dup ${Date.now()}`;
+    const dupRow = {
+      data: { name, latitude: -33.7, longitude: 150.3 },
+      resolution: { kind: "create" as const },
+    };
+    const res = await request(API_URL)
+      .post("/canyons/bulk")
+      .set(AUTH)
+      .send({ importBatchId: randomUUID(), rows: [dupRow, dupRow] });
+    expect(res.status).toBe(200);
+    expect(res.body.created).toBe(1);
+    expect(res.body.errors).toEqual([]);
+
+    const listRes = await request(API_URL).get("/canyons").set(AUTH);
+    const matches = listRes.body.filter((c: { name: string }) => c.name === name);
+    expect(matches).toHaveLength(1);
+    await request(API_URL).delete(`/canyons/${matches[0].id}`).set(AUTH);
   });
 
   it("rejects an empty rows array with 400", async () => {

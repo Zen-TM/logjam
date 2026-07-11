@@ -14,6 +14,7 @@ import type { PanelId } from "../panels";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { customFieldDisplayLabel } from "@logjam/shared";
 import RopeWikiReviewDialog from "../../dialogs/RopeWikiReviewDialog";
+import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 
@@ -608,8 +609,13 @@ function CanyonsPanel({
   const [refreshing, setRefreshing] = useState(false);
   const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  // Confirm before firing POST /ropewiki/refresh — the request scrapes the public
+  // RopeWiki database and can add many canyons, so it shouldn't fire on a single
+  // click with no preface (IMPORT-11).
+  const [confirmRefreshOpen, setConfirmRefreshOpen] = useState(false);
 
   const handleRefresh = useCallback(async () => {
+    setConfirmRefreshOpen(false);
     setRefreshing(true);
     setRefreshResult(null);
     try {
@@ -617,9 +623,20 @@ function CanyonsPanel({
       setRefreshResult(result);
       onRefetch();
       if (result.review.length > 0) setReviewOpen(true);
-      toast.success(
-        `Imported successfully! ${result.added} added, ${result.updated} updated`,
-      );
+      // Summarise everything the refresh did automatically, and flag the count
+      // still needing review, so the auto-import isn't silent (IMPORT-3).
+      const autoParts = [
+        result.added > 0 ? `${result.added} added` : null,
+        result.autoLinked > 0 ? `${result.autoLinked} linked` : null,
+        result.updated > 0 ? `${result.updated} updated` : null,
+      ].filter(Boolean);
+      const summary =
+        autoParts.length > 0 ? autoParts.join(", ") : "no new canyons";
+      const reviewSuffix =
+        result.review.length > 0
+          ? ` · ${result.review.length} possible duplicate${result.review.length === 1 ? "" : "s"} to review`
+          : "";
+      toast.success(`RopeWiki import: ${summary}${reviewSuffix}`);
     } catch (err) {
       console.error(err);
       setRefreshResult(null);
@@ -828,17 +845,35 @@ function CanyonsPanel({
         </button>
         <button
           className={classes.ghostButton}
-          onClick={handleRefresh}
+          onClick={() => setConfirmRefreshOpen(true)}
           disabled={refreshing}
         >
           {refreshing ? "Importing..." : "Import from RopeWiki"}
         </button>
       </div>
 
+      <ConfirmDialog
+        open={confirmRefreshOpen}
+        title="Import from RopeWiki?"
+        message={
+          "This fetches the public NSW canyon list from ropewiki.com and adds any canyons you don't already have, updating RopeWiki-sourced ones you haven't edited. Canyons that look like ones you already have are set aside for you to review before they're imported. Nothing you've edited is overwritten."
+        }
+        confirmLabel="Fetch from RopeWiki"
+        confirmColor="secondary"
+        busy={refreshing}
+        onConfirm={handleRefresh}
+        onClose={() => setConfirmRefreshOpen(false)}
+      />
+
       {refreshResult && (
         <RopeWikiReviewDialog
           open={reviewOpen}
           review={refreshResult.review}
+          autoImported={{
+            added: refreshResult.added,
+            autoLinked: refreshResult.autoLinked,
+            updated: refreshResult.updated,
+          }}
           onClose={() => setReviewOpen(false)}
           onApplied={() => {
             setRefreshResult({ ...refreshResult, review: [] });

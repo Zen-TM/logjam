@@ -32,6 +32,13 @@ export type ImportResultSummaryProps = {
   /** Errors that occurred during import (always shown, not behind disclosure). */
   errors?: string[];
 
+  /**
+   * Non-fatal per-row/per-field coercion notices (e.g. a non-numeric value that
+   * was left empty). Shown, but styled as advisories rather than errors — the
+   * rows they refer to were still imported (IMPORT-5).
+   */
+  warnings?: string[];
+
   /** When provided, renders an "Undo this import" button and calls back on click. */
   onUndo?: () => void;
 
@@ -55,17 +62,33 @@ function ImportResultSummary({
   headline,
   details,
   errors,
+  warnings,
   onUndo,
   undoing,
 }: ImportResultSummaryProps): React.JSX.Element {
   const hasDetails = details !== undefined && details.some((s) => s.items.length > 0);
   const hasErrors = errors !== undefined && errors.length > 0;
+  const hasWarnings = warnings !== undefined && warnings.length > 0;
+  // Nothing was created/updated → no import to undo. Hide the button so an
+  // "Undo this import" doesn't render on a "No changes made." result (IMPORT-7).
+  const nothingChanged = headline.every((h) => h.count <= 0);
 
   return (
     <div className={classes.container}>
       <Typography className={classes.headline}>
         {buildHeadlineText(headline)}
       </Typography>
+
+      {hasWarnings && (
+        <ul className={`${classes.detailList} ${classes.warningList}`}>
+          {warnings!.map((warningMessage, i) => (
+            <li key={i} className={classes.detailItem}>
+              <span className={classes.detailBullet} />
+              <span>{warningMessage}</span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {hasErrors && (
         <ul className={`${classes.detailList} ${classes.errorList}`}>
@@ -124,7 +147,7 @@ function ImportResultSummary({
         </Accordion>
       )}
 
-      {onUndo && (
+      {onUndo && !nothingChanged && (
         <Button
           variant="outlined"
           color="error"

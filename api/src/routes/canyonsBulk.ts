@@ -46,8 +46,12 @@ function validateInput(
   rowIndex: number,
   errors: BulkError[],
 ): boolean {
+  // Messages carry no "Row N:" prefix: `rowIndex` is returned alongside so the
+  // caller can label the error with the ORIGINAL CSV line (the request-body index
+  // isn't the CSV line once unparseable rows are filtered client-side). A prefix
+  // here produced the double "Row 1: Row 0: ..." index seen in the UI (IMPORT-7).
   if (!input.name || typeof input.name !== "string" || !input.name.trim()) {
-    errors.push({ rowIndex, message: `Row ${rowIndex}: name is required` });
+    errors.push({ rowIndex, message: "name is required" });
     return false;
   }
   if (
@@ -56,7 +60,7 @@ function validateInput(
     input.latitude < -90 ||
     input.latitude > 90
   ) {
-    errors.push({ rowIndex, message: `Row ${rowIndex}: invalid latitude` });
+    errors.push({ rowIndex, message: "invalid latitude" });
     return false;
   }
   if (
@@ -65,7 +69,7 @@ function validateInput(
     input.longitude < -180 ||
     input.longitude > 180
   ) {
-    errors.push({ rowIndex, message: `Row ${rowIndex}: invalid longitude` });
+    errors.push({ rowIndex, message: "invalid longitude" });
     return false;
   }
   const gradeChecks: [string, number | null | undefined, number, number][] = [
@@ -75,7 +79,7 @@ function validateInput(
   ];
   for (const [field, val, min, max] of gradeChecks) {
     if (val != null && (!Number.isInteger(val) || val < min || val > max)) {
-      errors.push({ rowIndex, message: `Row ${rowIndex}: ${field} must be an integer between ${min} and ${max}` });
+      errors.push({ rowIndex, message: `${field} must be an integer between ${min} and ${max}` });
       return false;
     }
   }
@@ -84,7 +88,7 @@ function validateInput(
     input.quality != null &&
     (!isFinite(input.quality) || input.quality < 1 || input.quality > 5)
   ) {
-    errors.push({ rowIndex, message: `Row ${rowIndex}: quality must be a number between 1 and 5` });
+    errors.push({ rowIndex, message: "quality must be a number between 1 and 5" });
     return false;
   }
   return true;
@@ -157,15 +161,15 @@ router.post(
     for (let i = 0; i < body.rows.length; i++) {
       const row = body.rows[i];
       if (!row.data || !row.resolution) {
-        errors.push({ rowIndex: i, message: `Row ${i}: data and resolution are required` });
+        errors.push({ rowIndex: i, message: "data and resolution are required" });
         continue;
       }
       if (row.resolution.kind !== "create" && row.resolution.kind !== "merge") {
-        errors.push({ rowIndex: i, message: `Row ${i}: resolution.kind must be "create" or "merge"` });
+        errors.push({ rowIndex: i, message: 'resolution.kind must be "create" or "merge"' });
         continue;
       }
       if (row.resolution.kind === "merge" && !row.resolution.canyonId) {
-        errors.push({ rowIndex: i, message: `Row ${i}: resolution.canyonId is required for merge` });
+        errors.push({ rowIndex: i, message: "resolution.canyonId is required for merge" });
         continue;
       }
       if (!validateInput(row.data, i, errors)) continue;
@@ -205,7 +209,7 @@ router.post(
         const targetId = (row.resolution as { kind: "merge"; canyonId: string }).canyonId;
         const target = mergeTargetById.get(targetId);
         if (!target) {
-          errors.push({ rowIndex: row.rowIndex, message: `Row ${row.rowIndex}: target canyon not found` });
+          errors.push({ rowIndex: row.rowIndex, message: "target canyon not found" });
           continue;
         }
       }
@@ -245,6 +249,11 @@ router.post(
 
     const creates: CreateOp[] = [];
     const merges: MergeOp[] = [];
+    // Tracks the create op already queued for a given importKey so a second
+    // create row with the SAME importKey (identical/near-identical rows — common
+    // in real spreadsheets) folds into the first instead of hitting the
+    // (ownerId, importKey) unique constraint at write time (was a raw 500) — IMPORT-1.
+    const createOpByKey = new Map<string, CreateOp>();
     let created = 0;
     let merged = 0;
 
@@ -312,8 +321,45 @@ router.post(
         });
         merged++;
       } else {
+        // Fold a duplicate create (same importKey within this request) into the
+        // first one — fill nulls under the merge policy, keep name/lat/lng — so a
+        // repeated row never collides on the unique constraint (IMPORT-1).
+        const priorOp = createOpByKey.get(importKey);
+        if (priorOp) {
+          const folded = mergeCanyon(
+            {
+              name: priorOp.data.name,
+              latitude: priorOp.data.latitude,
+              longitude: priorOp.data.longitude,
+              altNames: priorOp.data.altNames as string[] | undefined,
+              attributes: priorOp.data.attributes as unknown as Record<string, unknown> | null,
+              vGrade: priorOp.data.vGrade,
+              aGrade: priorOp.data.aGrade,
+              commitment: priorOp.data.commitment,
+              quality: priorOp.data.quality,
+              numAbseils: priorOp.data.numAbseils,
+              longestAbseil: priorOp.data.longestAbseil,
+              hours: priorOp.data.hours,
+              notes: priorOp.data.notes,
+            },
+            data,
+            policy,
+          );
+          priorOp.data.altNames = folded.altNames;
+          priorOp.data.vGrade = (folded.vGrade ?? null) as number | null;
+          priorOp.data.aGrade = (folded.aGrade ?? null) as number | null;
+          priorOp.data.commitment = (folded.commitment ?? null) as number | null;
+          priorOp.data.quality = (folded.quality ?? null) as number | null;
+          priorOp.data.numAbseils = (folded.numAbseils ?? null) as number | null;
+          priorOp.data.longestAbseil = (folded.longestAbseil ?? null) as number | null;
+          priorOp.data.hours = (folded.hours ?? null) as number | null;
+          priorOp.data.notes = (folded.notes ?? null) as string | null;
+          priorOp.data.attributes = folded.attributes as Prisma.InputJsonValue;
+          continue; // duplicate folded — not a separate create
+        }
+
         // Create new canyon with importKey AND importBatchId.
-        creates.push({
+        const createOp: CreateOp = {
           kind: "create",
           data: {
             ownerId: user.id,
@@ -333,34 +379,54 @@ router.post(
             importKey,
             importBatchId: body.importBatchId,
           },
-        });
+        };
+        creates.push(createOp);
+        createOpByKey.set(importKey, createOp);
         created++;
       }
     }
 
     // ---- Phase 3: Execute in chunked transactions (size 200) ----
-    // Creates via createMany in chunks.
-    for (let i = 0; i < creates.length; i += CHUNK_SIZE) {
-      const chunk = creates.slice(i, i + CHUNK_SIZE);
-      await prisma.canyon.createMany({
-        data: chunk.map((op) => op.data),
-      });
-    }
+    // Within-request duplicates are already folded above; a residual unique-
+    // constraint clash can still happen if a concurrent import created the same
+    // importKey between our idempotency lookup and this write (TOCTOU). Surface it
+    // as a structured 409 instead of a raw 500 (IMPORT-1). No canyon name/coords
+    // in the message (privacy rule).
+    try {
+      // Creates via createMany in chunks.
+      for (let i = 0; i < creates.length; i += CHUNK_SIZE) {
+        const chunk = creates.slice(i, i + CHUNK_SIZE);
+        await prisma.canyon.createMany({
+          data: chunk.map((op) => op.data),
+        });
+      }
 
-    // Merges (updates) via batched $transaction.
-    for (let i = 0; i < merges.length; i += CHUNK_SIZE) {
-      const chunk = merges.slice(i, i + CHUNK_SIZE);
-      await prisma.$transaction(
-        chunk.map((op) =>
-          prisma.canyon.update({
-            where: { id: op.canyonId },
-            data: {
-              ...op.mergedData,
-              ...(op.setImportKey ? { importKey: op.setImportKey } : {}),
-            },
-          }),
-        ),
-      );
+      // Merges (updates) via batched $transaction.
+      for (let i = 0; i < merges.length; i += CHUNK_SIZE) {
+        const chunk = merges.slice(i, i + CHUNK_SIZE);
+        await prisma.$transaction(
+          chunk.map((op) =>
+            prisma.canyon.update({
+              where: { id: op.canyonId },
+              data: {
+                ...op.mergedData,
+                ...(op.setImportKey ? { importKey: op.setImportKey } : {}),
+              },
+            }),
+          ),
+        );
+      }
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        throw new AppError(
+          409,
+          "Some of these canyons already exist or were just added. Reload your canyons and try the import again.",
+        );
+      }
+      throw err;
     }
 
     res.json({

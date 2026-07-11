@@ -18,6 +18,7 @@ import type {
 } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import { useToast } from "../feedback/ToastProvider";
 import MatchReview from "./MatchReview";
 import type { ReviewItem, ReviewDecision } from "./MatchReview";
 import classes from "./RopeWikiReviewDialog.module.css";
@@ -78,18 +79,29 @@ function toApplyDecision(
 function RopeWikiReviewDialog({
   open,
   review,
+  autoImported,
   onClose,
   onApplied,
 }: {
   open: boolean;
   review: RopeWikiCandidatePayload[];
+  // Counts of what the refresh already imported automatically (confident
+  // non-duplicates), surfaced here so the auto-import is transparent (IMPORT-3).
+  autoImported?: { added: number; autoLinked: number; updated: number };
   onClose: () => void;
   onApplied: () => void;
 }): React.JSX.Element {
   const isMobile = useIsMobile();
+  const toast = useToast();
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const autoParts = [
+    autoImported && autoImported.added > 0 ? `${autoImported.added} added` : null,
+    autoImported && autoImported.autoLinked > 0 ? `${autoImported.autoLinked} linked to existing` : null,
+    autoImported && autoImported.updated > 0 ? `${autoImported.updated} updated` : null,
+  ].filter(Boolean);
 
   useEffect(() => {
     if (!open) return;
@@ -115,7 +127,17 @@ function RopeWikiReviewDialog({
       const payload: RopeWikiApplyDecision[] = review.map((row, i) =>
         toApplyDecision(row, items[i]),
       );
-      await applyRopeWikiImport(payload);
+      const result = await applyRopeWikiImport(payload);
+      const parts = [
+        result.created > 0 ? `${result.created} created` : null,
+        result.linked > 0 ? `${result.linked} linked` : null,
+        result.skipped > 0 ? `${result.skipped} skipped` : null,
+      ].filter(Boolean);
+      toast.success(
+        parts.length > 0
+          ? `Review applied: ${parts.join(", ")}.`
+          : "Review applied.",
+      );
       onApplied();
       onClose();
     } catch (err) {
@@ -162,6 +184,13 @@ function RopeWikiReviewDialog({
         </IconButton>
       </DialogTitle>
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
+        {autoParts.length > 0 && (
+          <Typography className={classes.intro} sx={{ color: "var(--theme-text-muted)" }}>
+            Already imported automatically: {autoParts.join(", ")}. The{" "}
+            {review.length} below looked like canyons you may already have —
+            they were NOT imported yet.
+          </Typography>
+        )}
         <Typography className={classes.intro}>
           These RopeWiki canyons may already exist in your collection. For each
           one, pick whether to link it to an existing canyon, create it as new,

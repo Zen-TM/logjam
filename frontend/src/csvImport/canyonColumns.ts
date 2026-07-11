@@ -40,7 +40,14 @@ function registerAliases(role: CanyonFieldRole, aliases: string[]) {
 }
 
 function normalize(s: string): string {
-  return s.toLowerCase().replace(/[\s_-]+/g, " ").trim();
+  // Split camelCase / letter-digit runs before lowercasing so the app's own
+  // template headers (altNames, numAbseils, longestAbseil, vGrade…) collapse to
+  // the same spaced tokens as the human-readable aliases below (IMPORT-4).
+  return s
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/[\s_-]+/g, " ")
+    .trim();
 }
 
 registerAliases("name", ["name", "canyon", "canyon name", "location", "place", "site"]);
