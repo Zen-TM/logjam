@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -40,7 +40,7 @@ function FriendsPanel({
 }) {
   const [friendSearch, setFriendSearch] = useState("");
   const [searchResults, setSearchResults] = useState<TSearchUser[]>([]);
-  const [searchFeedback, setSearchFeedback] = useState<{ message: string; isSuccess: boolean } | null>(null);
+  const [sendingUserIds, setSendingUserIds] = useState<Set<string>>(new Set());
   const [removingFriendId, setRemovingFriendId] = useState<string | null>(null);
   const [loadingRequestId, setLoadingRequestId] = useState<string | null>(null);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState<{
@@ -66,19 +66,34 @@ function FriendsPanel({
     };
   }, [friendSearch, toast]);
 
-  const clearFeedback = useCallback(() => setSearchFeedback(null), []);
+  // Refetch on every panel open — friends/requests are otherwise only ever
+  // fetched once at app boot (FRIEND-3), so a request received mid-session
+  // stays invisible until a full reload.
+  useEffect(() => {
+    onRefetchFriends();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  async function handleSendFriendRequest(addresseeId: string) {
+  async function handleSendFriendRequest(user: TSearchUser) {
+    // Guard against a double-click firing two POSTs for the same user: the
+    // second would 409 ("Friend request already pending") and, without this
+    // guard, could race the first's success and clobber its feedback (FRIEND-1).
+    setSendingUserIds((prev) => new Set(prev).add(user.id));
     try {
-      await sendFriendRequest(addresseeId);
-      setSearchFeedback({ message: "Friend request sent.", isSuccess: true });
-      setSearchResults([]);
-      setFriendSearch("");
-      setTimeout(clearFeedback, 3000);
+      await sendFriendRequest(user.id);
+      toast.success(`Friend request sent to ${user.username}.`);
+      // Remove just this row rather than the whole result set, so a search
+      // with multiple matches can keep going.
+      setSearchResults((prev) => prev.filter((u) => u.id !== user.id));
     } catch (err) {
       console.error(err);
-      setSearchFeedback({ message: messageFromError(err, "Couldn't send friend request."), isSuccess: false });
-      setTimeout(clearFeedback, 3000);
+      toast.error(messageFromError(err, "Couldn't send friend request."));
+    } finally {
+      setSendingUserIds((prev) => {
+        const next = new Set(prev);
+        next.delete(user.id);
+        return next;
+      });
     }
   }
 
@@ -143,21 +158,14 @@ function FriendsPanel({
                   <span>{user.username}</span>
                   <button
                     className={classes.addFriendButton}
-                    onClick={() => handleSendFriendRequest(user.id)}
+                    onClick={() => handleSendFriendRequest(user)}
+                    disabled={sendingUserIds.has(user.id)}
                   >
-                    Add Friend
+                    {sendingUserIds.has(user.id) ? "Sending…" : "Add Friend"}
                   </button>
                 </div>
               ))}
             </div>
-          )}
-          {searchFeedback && (
-            <span
-              className={classes.caption}
-              style={{ color: searchFeedback.isSuccess ? "var(--theme-text-muted)" : "var(--theme-warning)" }}
-            >
-              {searchFeedback.message}
-            </span>
           )}
         </div>
 

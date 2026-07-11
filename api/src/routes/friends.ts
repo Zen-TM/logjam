@@ -174,6 +174,16 @@ router.patch(
         where: { id },
         data: { status: "accepted" },
       });
+      // Purge this user's own friend_request notification, mirroring decline
+      // (PRIV-003) — otherwise a stale actionable notification survives the
+      // accept and later 400s from the Notifications panel.
+      await tx.notification.deleteMany({
+        where: {
+          userId: user.id,
+          type: "friend_request",
+          payload: { path: ["friendshipId"], equals: id },
+        },
+      });
       if (notifyRequester) {
         // Reference IDs only — username is resolved at read time (PRIV-005).
         await tx.notification.create({

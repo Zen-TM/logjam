@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import classes from "./NotificationsPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
+import { isResolvedElsewhereError } from "./notificationActionError";
 import type { TNotification } from "../../../canyonUtils";
 import type { PanelId } from "../panels";
 import type { GeoJsonPolygonal } from "../../dialogs/TopoDialog";
@@ -34,6 +35,14 @@ function NotificationsPanel({
   const [actionedIds, setActionedIds] = useState<Set<string>>(new Set());
   const toast = useToast();
 
+  // Refetch on every panel open — notifications are otherwise only ever
+  // fetched once at app boot, so ones received mid-session (or resolved
+  // elsewhere, per NOTIF-1) stay stale until a full reload.
+  useEffect(() => {
+    onRefetchNotifications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handleAccept(notificationId: string, friendshipId: string) {
     setActionedIds((prev) => new Set([...prev, notificationId]));
     try {
@@ -47,6 +56,17 @@ function NotificationsPanel({
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't accept friend request."));
+      if (isResolvedElsewhereError(err)) {
+        // The request was already resolved elsewhere — Accept/Decline here
+        // are dead, not retryable. Clear this notification like a
+        // successful action would, rather than resurrecting the live
+        // buttons (NOTIF-1).
+        markNotificationRead(notificationId).catch((e) => { console.error(e); });
+        deleteNotification(notificationId).catch((e) => { console.error(e); });
+        onRefetchFriends();
+        onRefetchNotifications();
+        return;
+      }
       setActionedIds((prev) => {
         const next = new Set(prev);
         next.delete(notificationId);
@@ -67,6 +87,14 @@ function NotificationsPanel({
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't decline friend request."));
+      if (isResolvedElsewhereError(err)) {
+        // See handleAccept: already-resolved requests are dead, not
+        // retryable — clear rather than resurrect (NOTIF-1).
+        markNotificationRead(notificationId).catch((e) => { console.error(e); });
+        deleteNotification(notificationId).catch((e) => { console.error(e); });
+        onRefetchNotifications();
+        return;
+      }
       setActionedIds((prev) => {
         const next = new Set(prev);
         next.delete(notificationId);
@@ -119,8 +147,15 @@ function NotificationsPanel({
 
   async function handleNotificationActivate(n: TNotification) {
     if (!n.read) {
-      await markNotificationRead(n.id);
-      onRefetchNotifications();
+      try {
+        await markNotificationRead(n.id);
+        onRefetchNotifications();
+      } catch (err) {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't mark notification read."));
+        // Fall through — still navigate on canyon_shared even if the
+        // read-marking call failed.
+      }
     }
     if (n.type === "canyon_shared" && n.payload.canyonId) {
       setSelectedCanyonID(n.payload.canyonId as string);
@@ -142,100 +177,98 @@ function NotificationsPanel({
             <div
               key={n.id}
               className={`${classes.notificationItem} ${!n.read ? classes.notificationUnread : ""}`}
-              role="button"
-              tabIndex={0}
-              onClick={() => handleNotificationActivate(n)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  handleNotificationActivate(n);
-                }
-              }}
             >
-              <div className={classes.notificationText}>
-                {n.type === "friend_request" &&
-                  `${n.payload.requesterUsername} sent you a friend request`}
-                {n.type === "friend_request_accepted" &&
-                  `${n.payload.acceptedByUsername} accepted your friend request`}
-                {n.type === "canyon_shared" &&
-                  `${n.payload.sharedByUsername} shared ${n.payload.canyonName} with you`}
-                {n.type === "topo_complete" && (
-                  <>
-                    {n.payload.jobName
-                      ? `${n.payload.jobName} topo complete`
-                      : "LiDAR topo processing complete"}
-                    {n.payload.osmFailed === true && (
-                      <div className={classes.notificationWarning}>
-                        OSM features unavailable — Overpass API failed. Retry to fetch them.
-                      </div>
-                    )}
-                  </>
-                )}
-                {n.type === "topo_failed" &&
-                  (n.payload.jobName
-                    ? `${n.payload.jobName} topo failed`
-                    : "LiDAR topo processing failed")}
-                {n.type === "topo_export_complete" && (
-                  n.payload.status === "failed" ? (
+              {/* A real <button>, not a role="button" div, so it can't ever
+                  nest another <button> (NOTIF-2a) — the Accept/Decline/Zoom/
+                  Download actions below are siblings, not descendants. */}
+              <button
+                type="button"
+                className={classes.notificationActivateArea}
+                onClick={() => handleNotificationActivate(n)}
+              >
+                <div className={classes.notificationText}>
+                  {n.type === "friend_request" &&
+                    `${n.payload.requesterUsername} sent you a friend request`}
+                  {n.type === "friend_request_accepted" &&
+                    `${n.payload.acceptedByUsername} accepted your friend request`}
+                  {n.type === "canyon_shared" &&
+                    `${n.payload.sharedByUsername} shared ${n.payload.canyonName} with you`}
+                  {n.type === "topo_complete" && (
                     <>
-                      {`${String(n.payload.format ?? "Topo").toUpperCase()} export failed`}
-                      {typeof n.payload.errorMessage === "string" && (
+                      {n.payload.jobName
+                        ? `${n.payload.jobName} topo complete`
+                        : "LiDAR topo processing complete"}
+                      {n.payload.osmFailed === true && (
                         <div className={classes.notificationWarning}>
-                          {n.payload.errorMessage}
+                          OSM features unavailable — Overpass API failed. Retry to fetch them.
                         </div>
                       )}
                     </>
-                  ) : (
-                    `${String(n.payload.format ?? "Topo").toUpperCase()} export${
-                      n.payload.jobName ? ` for ${n.payload.jobName}` : ""
-                    } ready — view exports in the LiDAR panel`
-                  )
-                )}
-                {n.type === "topo_export_skipped" && (
-                  <>
-                    Auto-export didn&apos;t run
-                    {typeof n.payload.reason === "string" && (
-                      <div className={classes.notificationWarning}>
-                        {n.payload.reason}
-                      </div>
-                    )}
-                  </>
-                )}
-                {n.type === "geo_pdf_complete" && (
-                  n.payload.status === "failed" ? (
+                  )}
+                  {n.type === "topo_failed" &&
+                    (n.payload.jobName
+                      ? `${n.payload.jobName} topo failed`
+                      : "LiDAR topo processing failed")}
+                  {n.type === "topo_export_complete" && (
+                    n.payload.status === "failed" ? (
+                      <>
+                        {`${String(n.payload.format ?? "Topo").toUpperCase()} export failed`}
+                        {typeof n.payload.errorMessage === "string" && (
+                          <div className={classes.notificationWarning}>
+                            {n.payload.errorMessage}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      `${String(n.payload.format ?? "Topo").toUpperCase()} export${
+                        n.payload.jobName ? ` for ${n.payload.jobName}` : ""
+                      } ready — view exports in the LiDAR panel`
+                    )
+                  )}
+                  {n.type === "topo_export_skipped" && (
                     <>
-                      GeoPDF generation failed
-                      {typeof n.payload.errorMessage === "string" && (
+                      Auto-export didn&apos;t run
+                      {typeof n.payload.reason === "string" && (
                         <div className={classes.notificationWarning}>
-                          {n.payload.errorMessage}
+                          {n.payload.reason}
                         </div>
                       )}
                     </>
-                  ) : (
-                    "GeoPDF ready — view in the GeoPDF panel"
-                  )
-                )}
-              </div>
-              <div className={classes.notificationTime}>
-                {new Date(n.createdAt).toLocaleDateString()}
-              </div>
+                  )}
+                  {n.type === "geo_pdf_complete" && (
+                    n.payload.status === "failed" ? (
+                      <>
+                        GeoPDF generation failed
+                        {typeof n.payload.errorMessage === "string" && (
+                          <div className={classes.notificationWarning}>
+                            {n.payload.errorMessage}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      "GeoPDF ready — view in the GeoPDF panel"
+                    )
+                  )}
+                </div>
+                <div className={classes.notificationTime}>
+                  {new Date(n.createdAt).toLocaleDateString("en-AU", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </div>
+              </button>
               {n.type === "friend_request" && (
                 <div className={classes.notificationActions}>
                   <button
                     className={classes.acceptButton}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAccept(n.id, n.payload.friendshipId as string);
-                    }}
+                    onClick={() => handleAccept(n.id, n.payload.friendshipId as string)}
                   >
                     Accept
                   </button>
                   <button
                     className={classes.declineButton}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDecline(n.id, n.payload.friendshipId as string);
-                    }}
+                    onClick={() => handleDecline(n.id, n.payload.friendshipId as string)}
                   >
                     Decline
                   </button>
@@ -245,12 +278,16 @@ function NotificationsPanel({
                 <div className={classes.notificationActions}>
                   <button
                     className={classes.acceptButton}
-                    onClick={async (e) => {
-                      e.stopPropagation();
+                    onClick={async () => {
                       onTopoFlyTarget(n.payload.footprint as GeoJsonPolygonal);
                       if (!n.read) {
-                        await markNotificationRead(n.id);
-                        onRefetchNotifications();
+                        try {
+                          await markNotificationRead(n.id);
+                          onRefetchNotifications();
+                        } catch (err) {
+                          console.error(err);
+                          toast.error(messageFromError(err, "Couldn't mark notification read."));
+                        }
                       }
                     }}
                   >
@@ -262,10 +299,7 @@ function NotificationsPanel({
                 <div className={classes.notificationActions}>
                   <button
                     className={classes.acceptButton}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDownloadExport(n);
-                    }}
+                    onClick={() => handleDownloadExport(n)}
                   >
                     Download
                   </button>
@@ -275,10 +309,7 @@ function NotificationsPanel({
                 <div className={classes.notificationActions}>
                   <button
                     className={classes.acceptButton}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDownloadGeoPdf(n);
-                    }}
+                    onClick={() => handleDownloadGeoPdf(n)}
                   >
                     Download
                   </button>
@@ -294,9 +325,15 @@ function NotificationsPanel({
         <div className={classes.divider} />
         <button
           className={classes.markAllReadButton}
+          disabled={!visibleNotifications.some((n) => !n.read)}
           onClick={async () => {
-            await markAllNotificationsRead();
-            onRefetchNotifications();
+            try {
+              await markAllNotificationsRead();
+              onRefetchNotifications();
+            } catch (err) {
+              console.error(err);
+              toast.error(messageFromError(err, "Couldn't mark notifications read."));
+            }
           }}
         >
           Mark all read
@@ -305,8 +342,13 @@ function NotificationsPanel({
           <button
             className={classes.clearAllButton}
             onClick={async () => {
-              await clearReadNotifications();
-              onRefetchNotifications();
+              try {
+                await clearReadNotifications();
+                onRefetchNotifications();
+              } catch (err) {
+                console.error(err);
+                toast.error(messageFromError(err, "Couldn't clear read notifications."));
+              }
             }}
           >
             Clear read notifications
