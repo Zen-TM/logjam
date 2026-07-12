@@ -52,12 +52,20 @@ import { getFieldValue as getFieldValueFor } from "./customFieldValues";
 import classes from "./TripLogDialog.module.css";
 
 function todayDateString(): string {
-  return new Date().toISOString().split("T")[0];
+  // Today's LOCAL calendar date as YYYY-MM-DD. The trip date comes from a native
+  // <input type="date">, which yields a local calendar date, so "today" must be
+  // local too — `toISOString()` (UTC) marked the current day as "future" every
+  // morning in AEST (UTC+10/+11).
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-// True when a date-only string (YYYY-MM-DD) is after today. Both sides compare
-// as UTC-midnight date strings, so this is a plain lexicographic comparison —
-// no timezone off-by-one (the trip date is stored/compared as UTC midnight).
+// True when a date-only string (YYYY-MM-DD) is after today. Both sides are
+// local-calendar YYYY-MM-DD strings, so this is a plain lexicographic
+// comparison with no timezone off-by-one.
 function isFutureDate(dateString: string): boolean {
   return dateString > todayDateString();
 }

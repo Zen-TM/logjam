@@ -40,7 +40,11 @@ router.get(
         }),
         // All the user's trips regardless of type. Lets the client show how many
         // trips the type-filtered Activity chart is NOT showing (ANALYTICS-1).
-        prisma.tripLog.count({ where: { userId: user.id } }),
+        // Only needed when a type filter is active — skip the query otherwise
+        // (its result feeds `excludedTrips`, which is 0 with no filter).
+        type
+          ? prisma.tripLog.count({ where: { userId: user.id } })
+          : Promise.resolve(0),
         prisma.canyon.count({ where: { ownerId: user.id } }),
         prisma.canyon.count({
           where: { ownerId: user.id, tripLogLinks: { some: {} } },

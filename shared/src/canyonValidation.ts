@@ -1,7 +1,7 @@
 // Single source of truth for canyon coordinate + numeric-field ranges, shared
-// by the API (POST/PATCH /canyons) and the frontend dialogs so both reject the
-// same out-of-range values. Coordinate limits also mirror the per-row check in
-// the CSV bulk-import path (api/src/routes/canyonsBulk.ts) — keep them in sync.
+// by the API (POST/PATCH /canyons), the CSV bulk-import path
+// (api/src/routes/canyonsBulk.ts), and the frontend dialogs so every surface
+// rejects the same out-of-range values.
 
 export const LATITUDE_RANGE = { min: -90, max: 90 } as const;
 export const LONGITUDE_RANGE = { min: -180, max: 180 } as const;
@@ -45,7 +45,7 @@ export type NumericConstraint = {
   label: string;
 };
 
-// Grades/quality/commitment carry known scales (mirrors canyonsBulk validateInput).
+// Grades/quality/commitment carry known scales.
 // numAbseils/longestAbseil/hours have no natural upper bound — only reject
 // negatives (a count/length/duration can't be below zero).
 export const CANYON_NUMERIC_CONSTRAINTS: Record<

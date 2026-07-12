@@ -40,7 +40,7 @@ import {
 import {
   CUSTOM_FIELD_TYPES,
   makeCustomFieldKey,
-  coerceFieldValue,
+  coerceFieldValueStrict,
 } from "@logjam/shared";
 import type { TCanyon, TUser, BulkCanyonInput } from "../../canyonUtils";
 import {
@@ -144,7 +144,7 @@ type ReviewState = {
 
 type ImportOutcome =
   | { kind: "canyon"; batchId: string; created: number; merged: number; skipped: number; errors: string[]; warnings: string[] }
-  | { kind: "triplog"; batchId: string; imported: number; updated: number; createdCanyons: number; noCanyon: number; linked: number; discarded: number; errors: string[] };
+  | { kind: "triplog"; batchId: string; imported: number; updated: number; createdCanyons: number; noCanyon: number; linked: number; discarded: number; errors: string[]; warnings: string[] };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -334,6 +334,8 @@ function UnifiedImportDialog({
   // Per-field coercion warnings collected while preparing canyon rows (IMPORT-5).
   const [canyonWarnings, setCanyonWarnings] = useState<string[]>([]);
   const [preparedTripRows, setPreparedTripRows] = useState<PreparedTripRow[]>([]);
+  // Per-row coercion warnings collected while preparing trip rows (IMPORT-5).
+  const [tripWarnings, setTripWarnings] = useState<string[]>([]);
   const [reviewState, setReviewState] = useState<ReviewState>({
     decisions: {},
     createForms: {},
@@ -390,6 +392,7 @@ function UnifiedImportDialog({
     setPreparedCanyonRows([]);
     setCanyonWarnings([]);
     setPreparedTripRows([]);
+    setTripWarnings([]);
     setReviewState({ decisions: {}, createForms: {}, options: {}, distances: {}, bestGuessId: {}, displayName: {}, autoMergeId: {} });
     setMergePolicy(
       currentUser?.uiPreferences?.importMergePolicy ?? DEFAULT_CANYON_MERGE_POLICY,
@@ -558,38 +561,62 @@ function UnifiedImportDialog({
     return { rows: out, warnings };
   }
 
-  function buildTripRows(): PreparedTripRow[] {
-    if (!tripFile) return [];
+  function buildTripRows(): { rows: PreparedTripRow[]; warnings: string[] } {
+    if (!tripFile) return { rows: [], warnings: [] };
     const { headers, rows } = tripFile;
     const nameCol = headers.find((h) => tripAssignments[h] === "name");
     const dateCol = headers.find((h) => tripAssignments[h] === "date");
     const notesCol = headers.find((h) => tripAssignments[h] === "notes");
     const typeCol = headers.find((h) => tripAssignments[h] === "type");
-    if (!nameCol || !dateCol) return [];
+    if (!nameCol || !dateCol) return { rows: [], warnings: [] };
 
     // Custom-field columns: existing cf:<key> plus any new fields the user named.
-    const cfCols: { header: string; key: string; type: TripLogCustomFieldType }[] = [];
+    const cfCols: {
+      header: string;
+      key: string;
+      type: TripLogCustomFieldType;
+      label: string;
+    }[] = [];
     for (const h of headers) {
       const role = tripAssignments[h];
       if (typeof role === "string" && role.startsWith("cf:")) {
         const def = customFieldDefs.find((d) => d.key === role.slice(3));
-        if (def) cfCols.push({ header: h, key: def.key, type: def.type });
+        if (def) cfCols.push({ header: h, key: def.key, type: def.type, label: def.label });
       } else if (role === "new-cf") {
         const form = tripNewCfForms[h];
         if (form?.label.trim()) {
-          cfCols.push({ header: h, key: makeCustomFieldKey(form.label), type: form.type });
+          cfCols.push({
+            header: h,
+            key: makeCustomFieldKey(form.label),
+            type: form.type,
+            label: form.label.trim(),
+          });
         }
       }
     }
 
     const out: PreparedTripRow[] = [];
+    // Per-row/per-field coercion notices: a non-empty cell that can't parse into
+    // its numeric field is left unset and reported (mirrors the canyon path's
+    // IMPORT-5 warnings) — a lenient coerce would silently store "5.5" as 5 or
+    // "abc" as null.
+    const warnings: string[] = [];
     rows.forEach((row, rowIndex) => {
       const sourceCanyonName = (row[nameCol] ?? "").trim();
       const isoDate = toIsoDate(row[dateCol] ?? "", dateFormat);
       if (!isoDate) return;
       const customFields: Record<string, unknown> = {};
       for (const cf of cfCols) {
-        customFields[cf.key] = coerceFieldValue(row[cf.header] ?? "", cf.type);
+        const rawCell = row[cf.header] ?? "";
+        const coerced = coerceFieldValueStrict(rawCell, cf.type);
+        if (coerced.ok) {
+          customFields[cf.key] = coerced.value;
+        } else {
+          const typeWord = cf.type === "integer" ? "whole number" : "number";
+          warnings.push(
+            `Row ${rowIndex + 2}: ${cf.label} "${rawCell.trim()}" isn't a valid ${typeWord} — left empty`,
+          );
+        }
       }
       out.push({
         rowIndex,
@@ -600,14 +627,14 @@ function UnifiedImportDialog({
         customFields,
       });
     });
-    return out;
+    return { rows: out, warnings };
   }
 
   // Build the trip-stage review state and advance the dialog. Runs both from the
   // initial map step (logbook-only or logbook-first) and after the canyon stage
   // of a combined import, where `candidates` are the freshly imported canyons.
   function startTripStage(candidates: MatchCandidate[]): boolean {
-    const rows = buildTripRows();
+    const { rows, warnings: tripRowWarnings } = buildTripRows();
     if (rows.length === 0) {
       setError(
         "No valid trip rows found — each row needs a canyon name and a date we could read. " +
@@ -648,6 +675,7 @@ function UnifiedImportDialog({
     }
     setActiveKind("triplog");
     setPreparedTripRows(rows);
+    setTripWarnings(tripRowWarnings);
     setReviewState({ decisions, createForms, options, distances, bestGuessId, displayName, autoMergeId: {} });
     setStep(surfaced.size > 0 ? "review" : "confirm");
     return true;
@@ -955,10 +983,24 @@ function UnifiedImportDialog({
             mergePolicy,
           });
           createdCanyons = result.created;
+          // Surface server-rejected create rows with their REAL per-row message
+          // (the meaningful label here is the canyon name, not a CSV line) and
+          // skip the pointless id-match for them — a rejected row created no
+          // canyon to link. result.errors[].rowIndex indexes the POST body,
+          // which is createRows.map(...) in order.
+          const rejectedRowIndexes = new Set<number>();
+          for (const e of result.errors) {
+            rejectedRowIndexes.add(e.rowIndex);
+            const rejected = createRows[e.rowIndex];
+            const label =
+              rejected?.form.name.trim() || rejected?.key || `row ${e.rowIndex + 1}`;
+            errors.push(`Couldn't create canyon "${label}": ${e.message}`);
+          }
           // Resolve ids from the freshly-fetched canyon list.
           const all = await apiFetch<TCanyon[]>("/canyons");
           const candidates = all.map(toMatchCandidate);
-          for (const e of createRows) {
+          createRows.forEach((e, rowIndex) => {
+            if (rejectedRowIndexes.has(rowIndex)) return;
             const m = matchCanyon(
               {
                 name: e.form.name.trim(),
@@ -969,7 +1011,7 @@ function UnifiedImportDialog({
             );
             if (m.best) createdCanyonIdByKey[e.key] = m.best.candidate.id;
             else errors.push(`Couldn't link the created canyon for "${e.key}".`);
-          }
+          });
         } catch (err) {
           console.error(err);
           errors.push("Couldn't create one or more new canyons.");
@@ -1037,6 +1079,7 @@ function UnifiedImportDialog({
             (e) => `Row ${sentRowCsvLines[e.index] ?? e.index + 1}: ${e.error}`,
           ),
         ],
+        warnings: tripWarnings,
       });
     } catch (err) {
       console.error(err);
@@ -1414,9 +1457,7 @@ function UnifiedImportDialog({
             ];
       const details: DetailSection[] = [];
       const warnings =
-        outcome.kind === "canyon" && outcome.warnings.length > 0
-          ? outcome.warnings
-          : undefined;
+        outcome.warnings.length > 0 ? outcome.warnings : undefined;
       return (
         <ImportResultSummary
           headline={headline}

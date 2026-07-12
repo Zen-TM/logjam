@@ -47,10 +47,10 @@ function NotificationsPanel({
     setActionedIds((prev) => new Set([...prev, notificationId]));
     try {
       await acceptFriendRequest(friendshipId);
-      // Best-effort: the friend request itself succeeded; failing to mark/clear
-      // this notification just leaves it visible until the next refetch.
-      markNotificationRead(notificationId).catch((err) => { console.error(err); });
-      deleteNotification(notificationId).catch((err) => { console.error(err); });
+      // The accept transaction purges this friend_request notification
+      // server-side (friends.ts, mirroring decline), so a client
+      // markRead/delete here would just 404 — the refetch drops the row, and
+      // actionedIds hides it immediately in the meantime.
       onRefetchFriends();
       onRefetchNotifications();
     } catch (err) {
@@ -79,10 +79,10 @@ function NotificationsPanel({
     setActionedIds((prev) => new Set([...prev, notificationId]));
     try {
       await declineFriendRequest(friendshipId);
-      // Best-effort: the decline itself succeeded; failing to mark/clear this
-      // notification just leaves it visible until the next refetch.
-      markNotificationRead(notificationId).catch((err) => { console.error(err); });
-      deleteNotification(notificationId).catch((err) => { console.error(err); });
+      // The decline transaction deletes the friendship and purges this
+      // friend_request notification server-side (friends.ts), so a client
+      // markRead/delete here would just 404 — the refetch drops the row, and
+      // actionedIds hides it immediately in the meantime.
       onRefetchNotifications();
     } catch (err) {
       console.error(err);

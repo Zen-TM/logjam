@@ -42,10 +42,13 @@ describe("POST /canyons/bulk — import contract (fake auth = alice)", () => {
     expect(res.body.created).toBe(1);
     // Messages carry NO "Row N:" prefix — the caller labels the row from the
     // returned rowIndex so it can use the original CSV line (IMPORT-7).
+    // Numeric/coordinate messages now derive from the shared
+    // CANYON_NUMERIC_CONSTRAINTS / range constants (single source of truth with
+    // POST/PATCH /canyons) — labels are the shared field labels.
     expect(res.body.errors).toEqual([
       { rowIndex: 1, message: "name is required" },
-      { rowIndex: 2, message: "invalid latitude" },
-      { rowIndex: 3, message: "vGrade must be an integer between 1 and 7" },
+      { rowIndex: 2, message: "latitude must be a number between -90 and 90" },
+      { rowIndex: 3, message: "V grade must be between 1 and 7" },
     ]);
 
     const listRes = await request(API_URL).get("/canyons").set(AUTH);
@@ -166,6 +169,45 @@ describe("POST /canyons/bulk — import contract (fake auth = alice)", () => {
       expect(after?.notes).toBeNull();
     } finally {
       await prisma.canyon.delete({ where: { id: foreign.id } });
+    }
+  });
+
+  it("does not 409 when a create row and a merge row compute the same importKey (IMPORT-1 partial-commit)", async () => {
+    // A create row and a merge-into-existing row with identical name+coords
+    // produce the same importKey. Creates commit first (un-transacted), so the
+    // merge stamping the same (ownerId, importKey) would 409 AFTER the create
+    // landed. The fix drops the merge's best-effort importKey stamp instead.
+    const run = Date.now();
+    const shared = `IMPORT-1 collide ${run}`;
+    const mergeTargetId = await createCanyon(`IMPORT-1 merge target ${run}`);
+    try {
+      const res = await request(API_URL)
+        .post("/canyons/bulk")
+        .set(AUTH)
+        .send({
+          importBatchId: randomUUID(),
+          rows: [
+            { data: { name: shared, latitude: -33.7, longitude: 150.3 }, resolution: { kind: "create" } },
+            { data: { name: shared, latitude: -33.7, longitude: 150.3, notes: "merged" }, resolution: { kind: "merge", canyonId: mergeTargetId } },
+          ],
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.created).toBe(1);
+      expect(res.body.merged).toBe(1);
+      expect(res.body.errors).toEqual([]);
+
+      // The merge applied (null field filled) but did NOT steal the create's
+      // importKey.
+      const merged = await prisma.canyon.findUnique({ where: { id: mergeTargetId } });
+      expect(merged?.notes).toBe("merged");
+      expect(merged?.importKey).toBeNull();
+
+      const listRes = await request(API_URL).get("/canyons").set(AUTH);
+      const createdRow = listRes.body.find((c: { name: string }) => c.name === shared);
+      expect(createdRow).toBeDefined();
+      await request(API_URL).delete(`/canyons/${createdRow.id}`).set(AUTH);
+    } finally {
+      await request(API_URL).delete(`/canyons/${mergeTargetId}`).set(AUTH);
     }
   });
 });

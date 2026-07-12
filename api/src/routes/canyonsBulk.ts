@@ -6,8 +6,15 @@ import { Prisma } from "@prisma/client";
 import {
   mergeCanyon,
   DEFAULT_CANYON_MERGE_POLICY,
+  isValidLatitude,
+  isValidLongitude,
+  LATITUDE_RANGE,
+  LONGITUDE_RANGE,
+  CANYON_NUMERIC_CONSTRAINTS,
+  numericConstraintError,
   type CanyonMergePolicy,
   type MergeableField,
+  type CanyonNumericFieldName,
 } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
 import { canyonImportKey } from "../lib/importKeys";
@@ -54,42 +61,47 @@ function validateInput(
     errors.push({ rowIndex, message: "name is required" });
     return false;
   }
-  if (
-    typeof input.latitude !== "number" ||
-    !isFinite(input.latitude) ||
-    input.latitude < -90 ||
-    input.latitude > 90
-  ) {
-    errors.push({ rowIndex, message: "invalid latitude" });
+  if (!isValidLatitude(input.latitude)) {
+    errors.push({
+      rowIndex,
+      message: `latitude must be a number between ${LATITUDE_RANGE.min} and ${LATITUDE_RANGE.max}`,
+    });
     return false;
   }
-  if (
-    typeof input.longitude !== "number" ||
-    !isFinite(input.longitude) ||
-    input.longitude < -180 ||
-    input.longitude > 180
-  ) {
-    errors.push({ rowIndex, message: "invalid longitude" });
+  if (!isValidLongitude(input.longitude)) {
+    errors.push({
+      rowIndex,
+      message: `longitude must be a number between ${LONGITUDE_RANGE.min} and ${LONGITUDE_RANGE.max}`,
+    });
     return false;
   }
-  const gradeChecks: [string, number | null | undefined, number, number][] = [
-    ["vGrade", input.vGrade, 1, 7],
-    ["aGrade", input.aGrade, 1, 7],
-    ["commitment", input.commitment, 1, 6],
+  // Numeric fields (grades, quality, pitches, longest pitch, hours) derive their
+  // range + integer rule from the shared CANYON_NUMERIC_CONSTRAINTS so this
+  // import path can never drift from POST/PATCH /canyons. Previously this block
+  // re-implemented the grade/quality ranges inline and omitted
+  // numAbseils/longestAbseil/hours entirely, letting negatives through here.
+  const numericFields: CanyonNumericFieldName[] = [
+    "vGrade",
+    "aGrade",
+    "commitment",
+    "quality",
+    "numAbseils",
+    "longestAbseil",
+    "hours",
   ];
-  for (const [field, val, min, max] of gradeChecks) {
-    if (val != null && (!Number.isInteger(val) || val < min || val > max)) {
-      errors.push({ rowIndex, message: `${field} must be an integer between ${min} and ${max}` });
+  for (const field of numericFields) {
+    const value = input[field];
+    if (value == null) continue;
+    const constraint = CANYON_NUMERIC_CONSTRAINTS[field];
+    if (typeof value !== "number") {
+      errors.push({ rowIndex, message: `${constraint.label} must be a number` });
       return false;
     }
-  }
-  // quality is a decimal (1-5); allow non-integer values.
-  if (
-    input.quality != null &&
-    (!isFinite(input.quality) || input.quality < 1 || input.quality > 5)
-  ) {
-    errors.push({ rowIndex, message: "quality must be a number between 1 and 5" });
-    return false;
+    const message = numericConstraintError(value, constraint);
+    if (message) {
+      errors.push({ rowIndex, message });
+      return false;
+    }
   }
   return true;
 }
@@ -235,6 +247,26 @@ router.post(
       }
     }
 
+    // importKeys that a create row in THIS request will stamp. A create-
+    // resolution row only becomes an actual create when its importKey isn't
+    // already an existing canyon (those fold into a merge below); duplicate
+    // create rows share one key. A merge op must NOT also stamp one of these
+    // keys: creates run first as un-transacted createMany chunks that commit
+    // immediately, so a later merge stamping the same (ownerId, importKey) hits
+    // the unique constraint → P2002 → 409 with the creates already persisted.
+    // Since importKey is best-effort idempotency metadata (it only enables a
+    // future re-import to dedupe), dropping it on a merge is harmless versus a
+    // half-applied 409. IMPORT-1.
+    const createClaimedImportKeys = new Set<string>();
+    for (const row of rowsAfterTargetCheck) {
+      if (row.resolution.kind !== "merge" && !existingByKey.has(row.importKey)) {
+        createClaimedImportKeys.add(row.importKey);
+      }
+    }
+    // importKeys already stamped by an earlier merge op this request, so two
+    // merges into different canyons can't both claim the same key either.
+    const mergeClaimedImportKeys = new Set<string>();
+
     // ---- Phase 2: Build operations ----
     type CreateOp = {
       kind: "create";
@@ -300,6 +332,21 @@ router.post(
           data,
           policy,
         );
+        // Set importKey if currently null (so future re-imports are idempotent)
+        // — but only if no create row and no earlier merge in this request
+        // already claims it, otherwise the write races to the same
+        // (ownerId, importKey) unique constraint (IMPORT-1). importKey is
+        // best-effort metadata, so dropping it here is harmless.
+        // Do NOT set importBatchId (pre-existing row — must survive undo).
+        let setImportKey: string | null = target.importKey ? null : importKey;
+        if (
+          setImportKey &&
+          (createClaimedImportKeys.has(setImportKey) ||
+            mergeClaimedImportKeys.has(setImportKey))
+        ) {
+          setImportKey = null;
+        }
+        if (setImportKey) mergeClaimedImportKeys.add(setImportKey);
         merges.push({
           kind: "merge",
           canyonId: targetId,
@@ -315,9 +362,7 @@ router.post(
             notes: mergedResult.notes ?? null,
             attributes: mergedResult.attributes as Prisma.InputJsonValue,
           },
-          // Set importKey if currently null (so future re-imports are idempotent).
-          // Do NOT set importBatchId (pre-existing row — must survive undo).
-          setImportKey: target.importKey ? null : importKey,
+          setImportKey,
         });
         merged++;
       } else {

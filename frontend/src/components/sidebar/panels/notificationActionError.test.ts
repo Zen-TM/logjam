@@ -11,8 +11,8 @@ describe("isResolvedElsewhereError", () => {
     expect(isResolvedElsewhereError(new ApiError(409, "/friends/1/accept", "PATCH"))).toBe(true);
   });
 
-  it("does not treat a 404 as resolved elsewhere", () => {
-    expect(isResolvedElsewhereError(new ApiError(404, "/friends/1/accept", "PATCH"))).toBe(false);
+  it("treats a 404 (friendship row deleted by a decline elsewhere) as resolved elsewhere", () => {
+    expect(isResolvedElsewhereError(new ApiError(404, "/friends/1/accept", "PATCH"))).toBe(true);
   });
 
   it("does not treat a 403 as resolved elsewhere", () => {

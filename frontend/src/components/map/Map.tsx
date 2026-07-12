@@ -12,6 +12,35 @@ import { Protocol } from "pmtiles";
 // Register PMTiles protocol for serving topo overlay layers from S3
 const pmtilesProtocol = new Protocol();
 maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
+
+// Decide whether a MapLibre source error means the PMTiles archive is
+// DEFINITIVELY gone (tear the overlay down + blacklist it) versus a transient
+// blip we should let MapLibre retry (LAYERS-1). MapLibre fires "error" for ANY
+// per-tile/source load failure — including one-off network drops — so treating
+// the first error as terminal would kill a healthy overlay for the session.
+//
+// Terminal signals, deliberately conservative:
+//   - MapLibre AJAXError carries a numeric `.status`: the real HTTP code for an
+//     error response, or 0 for a network/CORS/DNS failure. Only 404 (object
+//     gone) and 403 (forbidden — expired/removed) are terminal; 0 and 5xx are
+//     transient.
+//   - The pmtiles Protocol throws a plain Error whose message embeds the
+//     archive's response code, e.g. "Bad response code: 404".
+// A per-tile "Tile not found." (sparse coverage inside a healthy archive) is
+// NOT terminal and is intentionally excluded.
+function isTerminalTopoSourceError(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null | undefined)?.status;
+  if (typeof status === "number") {
+    return status === 404 || status === 403;
+  }
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  return /bad response code:\s*(403|404)\b/i.test(message);
+}
 import { useMediaQuery } from "@mui/material";
 import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
@@ -452,6 +481,9 @@ function Map({
   // effect (never re-add a known-missing source — stops the per-load retry
   // spam of LAYERS-1).
   const failedTopoSourcesRef = useRef<Set<string>>(new Set());
+  // Topo entries whose transient (non-terminal) load error was already logged
+  // this session — one console line per source, not one per flaky tile.
+  const transientTopoSourcesRef = useRef<Set<string>>(new Set());
   const onTopoSourceUnavailableRef = useRef(onTopoSourceUnavailable);
   useEffect(() => {
     onTopoSourceUnavailableRef.current = onTopoSourceUnavailable;
@@ -498,9 +530,12 @@ function Map({
 
     // A completed topo job whose S3 outputs are gone otherwise 404s on every
     // tile request, silently renders nothing, and retries each load (LAYERS-1).
-    // Source errors propagated through MapLibre's Style carry the sourceId; on
-    // the first error for a topo source, tear its layers/source down (stops the
-    // retries) and notify App so the Layers panel can flag it.
+    // Source errors propagated through MapLibre's Style carry the sourceId. Only
+    // a DEFINITIVELY-missing archive (404/403) is terminal — tear its
+    // layers/source down (stops the retries) and notify App so the Layers panel
+    // can flag it. A transient error (network blip, 5xx, per-tile miss) is left
+    // in place so MapLibre retries; one blip must not blacklist a healthy
+    // overlay for the whole session.
     map.on("error", (event) => {
       const { sourceId } = event as { sourceId?: unknown };
       if (typeof sourceId !== "string" || !sourceId.startsWith("topo-src-")) {
@@ -511,6 +546,20 @@ function Map({
       }
       const entryId = sourceId.slice("topo-src-".length);
       if (failedTopoSourcesRef.current.has(entryId)) return;
+
+      if (!isTerminalTopoSourceError(event.error)) {
+        // Non-terminal: do NOT tear down or blacklist — retrying is correct.
+        // Log once per source (no URLs — only the source id) so a flaky
+        // connection can't spam the console.
+        if (!transientTopoSourcesRef.current.has(entryId)) {
+          transientTopoSourcesRef.current.add(entryId);
+          console.error(
+            `Topo overlay source hit a transient error (will retry): ${sourceId}`,
+          );
+        }
+        return;
+      }
+
       failedTopoSourcesRef.current.add(entryId);
       // Log only the source id (job id + layer name) — no URLs.
       console.error(`Topo overlay source failed to load: ${sourceId}`);
@@ -798,8 +847,18 @@ function Map({
   // instead of each firing its own fetch (LAYERS-2 duplicate fetch). Failures
   // resolve to null and stay cached, so a missing track file is fetched once
   // per session instead of retried on every load/toggle.
+  //
+  // The cached `url` is stored alongside each promise: `track.displayUrl` is a
+  // PRESIGNED URL that rotates on refetch (e.g. after the old one expires and
+  // the canyon media reloads). Keying only by mediaId would pin a stale/expired
+  // URL forever, so one 403 would never retry even once a fresh working URL
+  // arrives. On lookup we discard the entry when the URL has rotated; same-URL
+  // failures stay cached (no retry spam).
   const trackGeoCacheRef = useRef<
-    Record<string, Promise<GeoJSON.FeatureCollection | null>>
+    Record<
+      string,
+      { url: string; promise: Promise<GeoJSON.FeatureCollection | null> }
+    >
   >({});
   // Media ids whose load failure was already surfaced — one toast per track
   // per session, not one per re-render (LAYERS-2 silent-404 fix).
@@ -811,9 +870,11 @@ function Map({
       const cache = trackGeoCacheRef.current;
       const collections = await Promise.all(
         canyonTracks.map((track) => {
-          let promise = cache[track.mediaId];
-          if (!promise) {
-            promise = fetchTrackGeoJSON(
+          let entry = cache[track.mediaId];
+          // Discard a cached entry whose presigned URL has rotated so the fresh
+          // URL retries; same-URL failures stay cached (LAYERS-2).
+          if (!entry || entry.url !== track.displayUrl) {
+            const promise = fetchTrackGeoJSON(
               track.displayUrl,
               track.color,
               track.canyonId,
@@ -831,9 +892,10 @@ function Map({
               }
               return null;
             });
-            cache[track.mediaId] = promise;
+            entry = { url: track.displayUrl, promise };
+            cache[track.mediaId] = entry;
           }
-          return promise;
+          return entry.promise;
         }),
       );
       if (cancelled) return;
@@ -1207,6 +1269,20 @@ function Map({
 
     // Map each entry id → the set of MapLibre layer ids it owns
     const activeIds = new Set(layers.map((l) => l.id));
+
+    // Recoverable blacklist: when a failed entry's toggle turns off it leaves
+    // `layers`, so drop it from the failed/transient sets. Re-enabling it should
+    // RETRY the source (a genuinely-missing archive will just fail terminally
+    // again) rather than stay permanently blacklisted from a past error
+    // (LAYERS-1).
+    for (const failedId of [...failedTopoSourcesRef.current]) {
+      if (!activeIds.has(failedId)) failedTopoSourcesRef.current.delete(failedId);
+    }
+    for (const transientId of [...transientTopoSourcesRef.current]) {
+      if (!activeIds.has(transientId)) {
+        transientTopoSourcesRef.current.delete(transientId);
+      }
+    }
 
     // Helper: get all MapLibre layer ids owned by a topo entry id
     const ownedLayerIds = (entryId: string): string[] =>

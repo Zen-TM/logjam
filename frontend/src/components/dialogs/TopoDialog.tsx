@@ -662,9 +662,13 @@ export default function TopoDialog({
   }
 
   // Dirty once a ZIP has been picked and not yet submitted — losing a queued
-  // multi-GB upload (or re-typed advanced settings) to a stray Esc is real
-  // lost work. Once submission starts (uploading/finalizing) close is already
-  // blocked above; once done there's nothing left to lose.
+  // multi-GB upload to a stray Esc is real lost work. Deliberately keyed to the
+  // file only: settings/name have an async baseline (a template can apply after
+  // open via initialTemplateId, and picking a template mutates settings), so a
+  // settings snapshot would false-positive; the confirm copy is narrowed to
+  // match exactly what this guards. Once submission starts (uploading/
+  // finalizing) close is already blocked above; once done there's nothing left
+  // to lose.
   const isDirty = phase === "form" && file != null;
   const guard = useUnsavedChangesGuard(isDirty, performClose);
 
@@ -1320,7 +1324,7 @@ export default function TopoDialog({
     <ConfirmDialog
       open={guard.guardOpen}
       title="Discard unsaved changes?"
-      message="Your loaded file and any settings changes will be lost."
+      message="Your loaded file will be lost."
       confirmLabel="Discard"
       confirmColor="error"
       onConfirm={guard.confirmDiscard}
