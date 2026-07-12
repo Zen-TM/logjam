@@ -687,7 +687,7 @@ function GeoPdfDialog({
         sx: {
           backgroundColor: "var(--theme-primary)",
           color: "var(--theme-text-primary)",
-          maxHeight: "85vh",
+          maxHeight: isMobile ? "100%" : "85vh",
         },
       }}
     >

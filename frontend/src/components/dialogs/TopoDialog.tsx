@@ -30,6 +30,8 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { apiFetch, fetchCurrentUser, putToPresignedUrl } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
+import ConfirmDialog from "./ConfirmDialog";
 import type { TBbox } from "../map/Map";
 import {
   parseZipCentralDirectory,
@@ -653,11 +655,18 @@ export default function TopoDialog({
     }
   }
 
-  function handleClose() {
+  function performClose() {
     // Block closing mid-upload — there's no resumable state to return to.
     if (phase === "uploading" || phase === "finalizing") return;
     onClose();
   }
+
+  // Dirty once a ZIP has been picked and not yet submitted — losing a queued
+  // multi-GB upload (or re-typed advanced settings) to a stray Esc is real
+  // lost work. Once submission starts (uploading/finalizing) close is already
+  // blocked above; once done there's nothing left to lose.
+  const isDirty = phase === "form" && file != null;
+  const guard = useUnsavedChangesGuard(isDirty, performClose);
 
   const area = pendingBbox ? bboxAreaKm2(pendingBbox) : null;
   const estimatedTiles = area != null ? estimateElvisTileCount(area) : null;
@@ -668,17 +677,18 @@ export default function TopoDialog({
   const uploadPct = totalBytes > 0 ? Math.min(100, Math.round((uploadedBytes / totalBytes) * 100)) : 0;
 
   return (
+    <>
     <Dialog
       fullScreen={isMobile}
       open={open}
-      onClose={handleClose}
+      onClose={guard.requestClose}
       maxWidth="sm"
       fullWidth
       PaperProps={{
         sx: {
           backgroundColor: "var(--theme-primary)",
           color: "var(--theme-text-primary)",
-          maxHeight: "85vh",
+          maxHeight: isMobile ? "100%" : "85vh",
         },
       }}
     >
@@ -699,7 +709,7 @@ export default function TopoDialog({
         {phase !== "uploading" && phase !== "finalizing" && (
           <IconButton
             aria-label="Close dialog"
-            onClick={handleClose}
+            onClick={guard.requestClose}
             size="small"
             sx={{ color: "var(--theme-text-primary)" }}
           >
@@ -1281,7 +1291,7 @@ export default function TopoDialog({
         ) : (
           <>
             <Button
-              onClick={handleClose}
+              onClick={guard.requestClose}
               sx={{ color: "var(--theme-text-primary)" }}
             >
               Cancel
@@ -1306,5 +1316,16 @@ export default function TopoDialog({
         )}
       </DialogActions>
     </Dialog>
+
+    <ConfirmDialog
+      open={guard.guardOpen}
+      title="Discard unsaved changes?"
+      message="Your loaded file and any settings changes will be lost."
+      confirmLabel="Discard"
+      confirmColor="error"
+      onConfirm={guard.confirmDiscard}
+      onClose={guard.cancelDiscard}
+    />
+    </>
   );
 }

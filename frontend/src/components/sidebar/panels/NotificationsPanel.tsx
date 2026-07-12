@@ -171,7 +171,7 @@ function NotificationsPanel({
     <div className={classes.root}>
       <div className={classes.notificationList}>
         {visibleNotifications.length === 0 ? (
-          <span className={classes.emptyText}>No notifications.</span>
+          <span className={classes.emptyText}>No alerts.</span>
         ) : (
           visibleNotifications.map((n) => (
             <div

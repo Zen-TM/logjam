@@ -74,6 +74,9 @@ import {
 } from "../../csvImport/dialogStyles";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import { useToast } from "../feedback/ToastProvider";
+import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
+import ConfirmDialog from "./ConfirmDialog";
 import MatchReview, {
   type ReviewItem,
   type ReviewDecision,
@@ -307,6 +310,7 @@ function UnifiedImportDialog({
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
 }) {
   const isMobile = useIsMobile();
+  const toast = useToast();
 
   const [step, setStep] = useState<Step>("map");
   const [importing, setImporting] = useState(false);
@@ -1046,10 +1050,21 @@ function UnifiedImportDialog({
     if (!outcome) return;
     setUndoing(true);
     try {
-      await undoImport(outcome.batchId);
+      const result = await undoImport(outcome.batchId);
       onRefetchCanyons();
       onRefetchTripLogs();
       onRefetchAnalytics();
+      const parts = [
+        result.deletedCanyons > 0
+          ? `${result.deletedCanyons} canyon${result.deletedCanyons === 1 ? "" : "s"}`
+          : null,
+        result.deletedTrips > 0
+          ? `${result.deletedTrips} trip${result.deletedTrips === 1 ? "" : "s"}`
+          : null,
+      ].filter((p): p is string => p != null);
+      toast.success(
+        parts.length > 0 ? `Import undone — ${parts.join(" and ")} removed.` : "Import undone.",
+      );
       onClose();
     } catch (err) {
       console.error(err);
@@ -1473,6 +1488,13 @@ function UnifiedImportDialog({
   // once an import has completed, or outside onboarding, it just closes.
   const handleDismiss = outcome ? onClose : (onBack ?? onClose);
 
+  // Dirty once a file has been dropped and the import hasn't finished — losing
+  // a loaded file/mapping/review is real, non-trivial work (IMPORT-8). Once an
+  // outcome exists there's nothing left to lose, so handleDismiss (= onClose)
+  // runs unguarded.
+  const isDirty = !outcome && (canyonFile != null || tripFile != null);
+  const guard = useUnsavedChangesGuard(isDirty, handleDismiss);
+
   function renderContent() {
     if (importing) {
       return (
@@ -1500,7 +1522,7 @@ function UnifiedImportDialog({
     if (step === "map") {
       return (
         <>
-          <Button onClick={handleDismiss} sx={{ color: "var(--theme-text-primary)" }}>
+          <Button onClick={guard.requestClose} sx={{ color: "var(--theme-text-primary)" }}>
             {onBack ? "Back" : "Cancel"}
           </Button>
           <Button variant="contained" color="secondary" onClick={handleMapNext} disabled={!canProceedFromMap}>
@@ -1537,6 +1559,7 @@ function UnifiedImportDialog({
   }
 
   return (
+    <>
     <Dialog
       fullScreen={isMobile}
       open={open}
@@ -1544,7 +1567,7 @@ function UnifiedImportDialog({
       // merge/review. The title-bar ✕ and the Back button are the explicit exits.
       onClose={(_e, reason) => {
         if (importing || reason === "backdropClick") return;
-        handleDismiss();
+        guard.requestClose();
       }}
       maxWidth="sm"
       fullWidth
@@ -1552,7 +1575,7 @@ function UnifiedImportDialog({
         sx: {
           backgroundColor: "var(--theme-primary)",
           color: "var(--theme-text-primary)",
-          maxHeight: "85vh",
+          maxHeight: isMobile ? "100%" : "85vh",
         },
       }}
     >
@@ -1561,7 +1584,7 @@ function UnifiedImportDialog({
         <IconButton
           aria-label="Close dialog"
           size="small"
-          onClick={handleDismiss}
+          onClick={guard.requestClose}
           disabled={importing}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -1573,6 +1596,17 @@ function UnifiedImportDialog({
       </DialogContent>
       <DialogActions>{renderActions()}</DialogActions>
     </Dialog>
+
+    <ConfirmDialog
+      open={guard.guardOpen}
+      title="Discard unsaved changes?"
+      message="Your loaded file and any mapping changes will be lost."
+      confirmLabel="Discard"
+      confirmColor="error"
+      onConfirm={guard.confirmDiscard}
+      onClose={guard.cancelDiscard}
+    />
+    </>
   );
 }
 

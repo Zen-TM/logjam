@@ -154,7 +154,7 @@ function SelectedCanyonsDialog({
     color: "var(--theme-text-primary)",
     display: "flex",
     flexDirection: "column" as const,
-    maxHeight: "85vh",
+    maxHeight: isMobile ? "100%" : "85vh",
   };
 
   return (

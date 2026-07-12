@@ -40,6 +40,8 @@ import {
 } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import { useToast } from "../feedback/ToastProvider";
+import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
 import ConfirmDialog from "./ConfirmDialog";
@@ -103,6 +105,7 @@ function CanyonDialog({
   const isEdit = canyon != null;
 
   const isMobile = useIsMobile();
+  const toast = useToast();
   const [name, setName] = useState("");
   const [altNames, setAltNames] = useState("");
   const [latitude, setLatitude] = useState("");
@@ -151,56 +154,103 @@ function CanyonDialog({
 
   const pickingRef = useRef(false);
 
+  // Snapshot of the form fields as populated below, taken in the same effect
+  // that sets them — used by the unsaved-changes guard to tell a real edit
+  // apart from "the dialog is open" (CANYON-3). Sources/fieldValues are
+  // compared by JSON value, not identity.
+  const initialFormSnapshotRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!open) return;
     if (pickingRef.current) {
       pickingRef.current = false;
       return;
     }
+    let initialName: string;
+    let initialAltNames: string;
+    let initialLatitude: string;
+    let initialLongitude: string;
+    let initialNumAbseils: string;
+    let initialLongestAbseil: string;
+    let initialNotes: string;
+    let initialVGrade: number | "";
+    let initialAGrade: number | "";
+    let initialCommitment: number | "";
+    let initialQuality: string;
+    let initialHours: string;
+    let initialSources: Source[];
+    let initialFieldValues: Record<string, string>;
     if (canyon) {
-      setName(canyon.name);
-      setAltNames(canyon.altNames.join(", "));
-      setLatitude(String(canyon.latitude));
-      setLongitude(String(canyon.longitude));
-      setNumAbseils(canyon.numAbseils != null ? String(canyon.numAbseils) : "");
-      setLongestAbseil(
-        canyon.longestAbseil != null ? String(canyon.longestAbseil) : "",
-      );
-      setNotes(canyon.notes ?? "");
-      setVGrade(canyon.vGrade ?? "");
-      setAGrade(canyon.aGrade ?? "");
-      setCommitment(canyon.commitment ?? "");
-      setQuality(canyon.quality != null ? String(canyon.quality) : "");
-      setHours(canyon.hours != null ? String(canyon.hours) : "");
-      setSources(
-        (canyon.attributes.sources ?? []).map(([label, url]) => ({
-          label,
-          url,
-        })),
-      );
+      initialName = canyon.name;
+      initialAltNames = canyon.altNames.join(", ");
+      initialLatitude = String(canyon.latitude);
+      initialLongitude = String(canyon.longitude);
+      initialNumAbseils = canyon.numAbseils != null ? String(canyon.numAbseils) : "";
+      initialLongestAbseil =
+        canyon.longestAbseil != null ? String(canyon.longestAbseil) : "";
+      initialNotes = canyon.notes ?? "";
+      initialVGrade = canyon.vGrade ?? "";
+      initialAGrade = canyon.aGrade ?? "";
+      initialCommitment = canyon.commitment ?? "";
+      initialQuality = canyon.quality != null ? String(canyon.quality) : "";
+      initialHours = canyon.hours != null ? String(canyon.hours) : "";
+      initialSources = (canyon.attributes.sources ?? []).map(([label, url]) => ({
+        label,
+        url,
+      }));
       // Populate existing custom field values as strings
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
         const raw = canyon.attributes.customFields?.[def.key];
         vals[def.key] = raw != null ? String(raw) : "";
       }
-      setFieldValues(vals);
+      initialFieldValues = vals;
     } else {
-      setName("");
-      setAltNames("");
-      setLatitude("");
-      setLongitude("");
-      setNumAbseils("");
-      setLongestAbseil("");
-      setNotes("");
-      setVGrade("");
-      setAGrade("");
-      setCommitment("");
-      setQuality("");
-      setHours("");
-      setSources([]);
-      setFieldValues({});
+      initialName = "";
+      initialAltNames = "";
+      initialLatitude = "";
+      initialLongitude = "";
+      initialNumAbseils = "";
+      initialLongestAbseil = "";
+      initialNotes = "";
+      initialVGrade = "";
+      initialAGrade = "";
+      initialCommitment = "";
+      initialQuality = "";
+      initialHours = "";
+      initialSources = [];
+      initialFieldValues = {};
     }
+    setName(initialName);
+    setAltNames(initialAltNames);
+    setLatitude(initialLatitude);
+    setLongitude(initialLongitude);
+    setNumAbseils(initialNumAbseils);
+    setLongestAbseil(initialLongestAbseil);
+    setNotes(initialNotes);
+    setVGrade(initialVGrade);
+    setAGrade(initialAGrade);
+    setCommitment(initialCommitment);
+    setQuality(initialQuality);
+    setHours(initialHours);
+    setSources(initialSources);
+    setFieldValues(initialFieldValues);
+    initialFormSnapshotRef.current = JSON.stringify({
+      name: initialName,
+      altNames: initialAltNames,
+      latitude: initialLatitude,
+      longitude: initialLongitude,
+      numAbseils: initialNumAbseils,
+      longestAbseil: initialLongestAbseil,
+      notes: initialNotes,
+      vGrade: initialVGrade,
+      aGrade: initialAGrade,
+      commitment: initialCommitment,
+      quality: initialQuality,
+      hours: initialHours,
+      sources: initialSources,
+      fieldValues: initialFieldValues,
+    });
     setError(null);
     setInvalidField(null);
     setShowFieldErrors(false);
@@ -217,6 +267,33 @@ function CanyonDialog({
     committedRef.current = false;
     draftPromiseRef.current = null;
   }, [open, canyon]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Real dirty-check: current form fields vs. the snapshot taken when the
+  // dialog was (re)populated — not just "the dialog is open" (CANYON-3).
+  // Media/custom-field-def edits are excluded: both persist immediately
+  // (media uploads, and add/delete-field via updateUserPreferences), so
+  // they're never "unsaved" by the time a close is attempted.
+  const isDirty =
+    open &&
+    initialFormSnapshotRef.current !== null &&
+    JSON.stringify({
+      name,
+      altNames,
+      latitude,
+      longitude,
+      numAbseils,
+      longestAbseil,
+      notes,
+      vGrade,
+      aGrade,
+      commitment,
+      quality,
+      hours,
+      sources,
+      fieldValues,
+    }) !== initialFormSnapshotRef.current;
+
+  const guard = useUnsavedChangesGuard(isDirty, () => void handleRequestClose());
 
   // In edit mode, fetch the canyon's existing media (fresh presigned URLs).
   useEffect(() => {
@@ -393,6 +470,7 @@ function CanyonDialog({
       }
       committedRef.current = true;
       onSaved();
+      toast.success("Canyon saved.");
       onClose();
     } catch (err) {
       console.error(err);
@@ -469,7 +547,7 @@ function CanyonDialog({
     <Dialog
       fullScreen={isMobile}
       open={open}
-      onClose={saving ? undefined : () => void handleRequestClose()}
+      onClose={saving ? undefined : guard.requestClose}
       maxWidth="sm"
       fullWidth
       PaperProps={{
@@ -505,7 +583,7 @@ function CanyonDialog({
         <IconButton
           aria-label="Close dialog"
           size="small"
-          onClick={saving ? undefined : () => void handleRequestClose()}
+          onClick={saving ? undefined : guard.requestClose}
           disabled={saving}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -940,7 +1018,7 @@ function CanyonDialog({
       </DialogContent>
       <DialogActions>
         <Button
-          onClick={() => void handleRequestClose()}
+          onClick={guard.requestClose}
           disabled={saving}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -969,6 +1047,16 @@ function CanyonDialog({
       busy={deletingField}
       onConfirm={handleConfirmDeleteField}
       onClose={() => setFieldToDelete(null)}
+    />
+
+    <ConfirmDialog
+      open={guard.guardOpen}
+      title="Discard unsaved changes?"
+      message="Your changes will be lost."
+      confirmLabel="Discard"
+      confirmColor="error"
+      onConfirm={guard.confirmDiscard}
+      onClose={guard.cancelDiscard}
     />
     </>
   );

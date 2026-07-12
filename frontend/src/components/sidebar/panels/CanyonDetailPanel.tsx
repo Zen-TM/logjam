@@ -213,6 +213,7 @@ function CanyonDetailPanel({
       setSelectedCanyonID(null);
       onRefetch();
       onQuotaChanged();
+      toast.success("Canyon deleted.");
       // Return to the canyons list — the detail panel has nothing to show now.
       onAfterDelete();
     } catch (err) {
