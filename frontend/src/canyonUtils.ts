@@ -569,6 +569,25 @@ export function updateNotificationPreferences(
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: { notifications } });
 }
 
+// How many of the user's trip logs carry a value for a custom trip field.
+// Shown as an impact warning before renaming or deleting the field.
+export function getCustomFieldImpact(key: string): Promise<{ tripLogCount: number }> {
+  return apiFetch<{ tripLogCount: number }>(
+    `/custom-fields/trip-log/${encodeURIComponent(key)}/impact`,
+  );
+}
+
+// Delete a custom trip field: drops its definition and strips its value from
+// every trip that carried one. Returns the surviving definitions and how many
+// trips had a value removed.
+export function deleteCustomField(
+  key: string,
+): Promise<{ tripLogCustomFields: TripLogCustomFieldDef[]; removedFromTripCount: number }> {
+  return apiFetch(`/custom-fields/trip-log/${encodeURIComponent(key)}`, {
+    method: "DELETE",
+  });
+}
+
 export function exportUserData(): Promise<Blob> {
   return apiFetchBlob("/users/me/export");
 }
@@ -848,6 +867,9 @@ export function deleteMedia(id: string): Promise<void> {
 export type TAnalytics = {
   heroStats: {
     totalTrips: number;
+    // Trips of another type (or untyped) not shown by the type-scoped Activity
+    // chart. 0 when the analytics call carries no type filter.
+    excludedTrips: number;
     uniqueCanyons: number;
     daysCanyoning: number;
     totalAbseils: number | null;

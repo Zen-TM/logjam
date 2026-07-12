@@ -135,6 +135,14 @@ function App() {
   const [completedTopoJobs, setCompletedTopoJobs] = useState<
     CompletedTopoJob[]
   >([]);
+  // Topo overlay entries (`${jobId}-${layerName}`) whose PMTiles source failed
+  // to load this session (e.g. output files gone from S3). Drives the
+  // "unavailable" badge in the Layers panel (LAYERS-1).
+  const [unavailableTopoEntryIds, setUnavailableTopoEntryIds] = useState<
+    Set<string>
+  >(new Set());
+  // One toast for the whole session, however many sources fail.
+  const topoUnavailableToastShownRef = useRef(false);
 
   // GeoPDF dialog
   const [showGeoPdf, setShowGeoPdf] = useState(false);
@@ -266,6 +274,41 @@ function App() {
     completedTopoJobs,
   ]);
 
+  // A topo overlay's PMTiles source failed to load (Map already tore it down
+  // to stop the retry spam). Record it for the Layers-panel badge and tell the
+  // user once — silently missing layers were the LAYERS-1 finding.
+  const handleTopoSourceUnavailable = useCallback(
+    (entryId: string) => {
+      setUnavailableTopoEntryIds((prev) => {
+        if (prev.has(entryId)) return prev;
+        const next = new Set(prev);
+        next.add(entryId);
+        return next;
+      });
+      if (!topoUnavailableToastShownRef.current) {
+        topoUnavailableToastShownRef.current = true;
+        toast.error(
+          "Some LiDAR topo layers couldn't be loaded — their map files are missing. Affected layers are marked in the Layers panel.",
+        );
+      }
+    },
+    [toast],
+  );
+
+  // Layer names with at least one failed source, for the Layers-panel badge.
+  const unavailableTopoLayerNames = useMemo(() => {
+    const names = new Set<string>();
+    if (unavailableTopoEntryIds.size === 0) return names;
+    for (const job of completedTopoJobs) {
+      for (const layer of job.layers) {
+        if (unavailableTopoEntryIds.has(`${job.jobId}-${layer.name}`)) {
+          names.add(layer.name);
+        }
+      }
+    }
+    return names;
+  }, [completedTopoJobs, unavailableTopoEntryIds]);
+
   const startPickingCoords = useCallback(
     (onPicked: (lat: number, lng: number) => void) => {
       coordsCallbackRef.current = onPicked;
@@ -310,7 +353,7 @@ function App() {
       "trip-logs": "Trip Logs",
       analytics: "Analytics",
       friends: "Friends",
-      notifications: "Notifications",
+      notifications: "Alerts",
       account: "Account",
       "canyon-detail": "Canyon",
     };
@@ -882,6 +925,7 @@ function App() {
           setLidarLayerToggles={setLidarLayerToggles}
           lidarLayerOrder={lidarLayerOrder}
           setLidarLayerOrder={setLidarLayerOrder}
+          unavailableTopoLayerNames={unavailableTopoLayerNames}
           baseLayers={BASE_LAYERS}
           activeLayerId={activeLayerId}
           onActiveLayerChange={setActiveLayerId}
@@ -1020,6 +1064,7 @@ function App() {
         flyToCanyon={flyToCanyon}
         onFlyToCanyonConsumed={() => setFlyToCanyon(null)}
         sidebarOpen={activePanel !== null}
+        onTopoSourceUnavailable={handleTopoSourceUnavailable}
       />
       </main>
 

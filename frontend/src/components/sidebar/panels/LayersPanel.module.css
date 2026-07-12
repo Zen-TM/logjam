@@ -83,6 +83,17 @@
   gap: 0.3em;
 }
 
+/* LAYERS-1: layer has at least one topo job whose map files failed to load. */
+.layerUnavailableBadge {
+  font-size: var(--text-xs);
+  color: var(--theme-warning);
+  border: 1px solid color-mix(in srgb, var(--theme-warning) 60%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 0 0.35em;
+  line-height: 1.4;
+  cursor: help;
+}
+
 /* Grip is the drag handle AND the keyboard reorder control: focus it and use
    ↑/↓ to move the layer (WCAG 2.1.1 alternative to pointer drag). */
 .dragHandle {

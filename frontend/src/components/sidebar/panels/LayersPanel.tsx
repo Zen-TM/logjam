@@ -22,6 +22,7 @@ function LayersPanel({
   setLidarLayerToggles,
   lidarLayerOrder,
   setLidarLayerOrder,
+  unavailableTopoLayerNames,
   // Basemap
   layers,
   activeLayerId,
@@ -42,6 +43,9 @@ function LayersPanel({
   ) => void;
   lidarLayerOrder: string[];
   setLidarLayerOrder: (v: string[] | ((prev: string[]) => string[])) => void;
+  // Layer names with at least one topo job whose PMTiles source failed to
+  // load this session (files missing from storage) — badged below (LAYERS-1).
+  unavailableTopoLayerNames: Set<string>;
   layers: readonly BaseLayer[];
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
@@ -187,6 +191,14 @@ function LayersPanel({
                     <GripVertical size={12} />
                   </button>
                   <span>{label}</span>
+                  {unavailableTopoLayerNames.has(name) && (
+                    <span
+                      className={classes.layerUnavailableBadge}
+                      title="This layer's map files couldn't be loaded for one or more topo jobs (files missing). It may not display. Re-run the topo job to regenerate them."
+                    >
+                      unavailable
+                    </span>
+                  )}
                 </div>
                 <Switch
                   size="small"

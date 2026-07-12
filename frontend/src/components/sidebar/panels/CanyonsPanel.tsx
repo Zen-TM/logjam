@@ -10,6 +10,7 @@ import type {
 } from "../../../canyonUtils";
 import { refreshFromRopeWiki, passesFilters, activeFilterCount } from "../../../canyonUtils";
 import type { RefreshResult } from "../../../canyonUtils";
+import { useLocalStorage } from "../../../useLocalStorage";
 import type { PanelId } from "../panels";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { customFieldDisplayLabel } from "@logjam/shared";
@@ -20,6 +21,14 @@ import { messageFromError } from "../../../errors/messageFromError";
 
 type SliderKey = "v_grade" | "a_grade" | "commitment" | "quality";
 type ThresholdKey = "pitches" | "longest_pitch" | "hours";
+
+type SortKey = "name" | "recent" | "grade";
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "name", label: "Name (A–Z)" },
+  { value: "recent", label: "Recently added" },
+  { value: "grade", label: "Grade (V/A)" },
+];
 
 const SLIDER_RANGES: Record<SliderKey, [number, number]> = {
   v_grade: [1, 7],
@@ -84,8 +93,15 @@ function CanyonsPanel({
   canyonCustomFieldDefs: TripLogCustomFieldDef[];
 }) {
   // Search: a substring query that filters the canyon cards below (matches the
-  // primary name or any alternative name). ANDs with the filters.
-  const [query, setQuery] = useState("");
+  // primary name or any alternative name). ANDs with the filters. Persisted so
+  // it survives the panel's unmount-on-close (CANYON-12) — the filters state
+  // (owned by App) already persists the same way.
+  const [query, setQuery] = useLocalStorage("logjam.canyonSearch", "");
+  // Sort order for the results list, persisted across remounts (CANYON-4).
+  const [sortKey, setSortKey] = useLocalStorage<SortKey>(
+    "logjam.canyonSort",
+    "name",
+  );
 
   // Filters accordion
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -103,7 +119,7 @@ function CanyonsPanel({
       q === "" ||
       c.name.toLowerCase().includes(q) ||
       c.altNames.some((a) => a.toLowerCase().includes(q));
-    return [
+    const rows = [
       ...canyons
         .filter((c) => matchesSearch(c) && passesFilters(c, filters, true))
         .map((c) => ({ canyon: c, owned: true })),
@@ -111,7 +127,28 @@ function CanyonsPanel({
         .filter((c) => matchesSearch(c) && passesFilters(c, filters, false))
         .map((c) => ({ canyon: c, owned: false })),
     ];
-  }, [canyons, sharedCanyons, filters, query]);
+    // Nulls sort last for every key so canyons missing the sort field don't
+    // crowd the top. `recent` = newest first; `grade` = easiest first (V then A).
+    const compare = (a: TCanyon, b: TCanyon): number => {
+      switch (sortKey) {
+        case "recent":
+          return b.createdAt.localeCompare(a.createdAt);
+        case "grade": {
+          const av = a.vGrade ?? Infinity;
+          const bv = b.vGrade ?? Infinity;
+          if (av !== bv) return av - bv;
+          const aa = a.aGrade ?? Infinity;
+          const ba = b.aGrade ?? Infinity;
+          if (aa !== ba) return aa - ba;
+          return a.name.localeCompare(b.name);
+        }
+        case "name":
+        default:
+          return a.name.localeCompare(b.name);
+      }
+    };
+    return rows.sort((x, y) => compare(x.canyon, y.canyon));
+  }, [canyons, sharedCanyons, filters, query, sortKey]);
 
   // ── Live filtering ─────────────────────────────────────────────
   // Sliders keep a local draft so the thumb tracks the drag smoothly; the
@@ -784,7 +821,24 @@ function CanyonsPanel({
       {/* Live filtered results */}
       <div className={classes.results}>
         <div className={classes.resultsHeader}>
-          {filteredCanyons.length} canyon{filteredCanyons.length === 1 ? "" : "s"}
+          <span>
+            {filteredCanyons.length} canyon{filteredCanyons.length === 1 ? "" : "s"}
+          </span>
+          <label className={classes.sortControl}>
+            <span className={classes.visuallyHidden}>Sort canyons by</span>
+            <select
+              className={classes.select}
+              aria-label="Sort canyons"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         {/* The server caps the owned-canyon list; warn when the loaded set is a
             truncated view of the true total so the oldest canyons aren't

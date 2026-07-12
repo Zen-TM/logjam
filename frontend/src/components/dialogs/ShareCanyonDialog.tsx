@@ -117,33 +117,38 @@ function ShareCanyonDialog({
               fullWidth
               sx={{ "& .MuiInputBase-input": { fontSize: "0.85em" } }}
             />
-            {shareSearch.length > 0 && (
-              <div className={classes.searchResults}>
-                {friends
-                  .filter(
-                    (f) =>
-                      f.username
-                        .toLowerCase()
-                        .includes(shareSearch.toLowerCase()) &&
-                      !selectedFriendIds.includes(f.id) &&
-                      !canyonShares.some((s) => s.sharedWith.id === f.id),
-                  )
-                  .map((friend) => (
-                    <div key={friend.id} className={classes.searchResultItem}>
-                      <span>{friend.username}</span>
-                      <button
-                        className={classes.addToShareButton}
-                        onClick={() => {
-                          setSelectedFriendIds([...selectedFriendIds, friend.id]);
-                          setShareSearch("");
-                        }}
-                      >
-                        Add
-                      </button>
-                    </div>
-                  ))}
-              </div>
-            )}
+            {shareSearch.length > 0 && (() => {
+              const matches = friends.filter(
+                (f) =>
+                  f.username
+                    .toLowerCase()
+                    .includes(shareSearch.toLowerCase()) &&
+                  !selectedFriendIds.includes(f.id) &&
+                  !canyonShares.some((s) => s.sharedWith.id === f.id),
+              );
+              return (
+                <div className={classes.searchResults}>
+                  {matches.length === 0 ? (
+                    <span className={classes.caption}>No matching friends.</span>
+                  ) : (
+                    matches.map((friend) => (
+                      <div key={friend.id} className={classes.searchResultItem}>
+                        <span>{friend.username}</span>
+                        <button
+                          className={classes.addToShareButton}
+                          onClick={() => {
+                            setSelectedFriendIds([...selectedFriendIds, friend.id]);
+                            setShareSearch("");
+                          }}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              );
+            })()}
             {selectedFriendIds.length > 0 && (
               <div className={classes.selectedFriends}>
                 {selectedFriendIds.map((id) => {

@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildCanyonExport } from "./canyonExport";
+import { parseCsv } from "./csvImport/parseCsv";
+import { parseAltNames, parseFloatStrict, parseIntStrict, parseLatLng } from "./csvImport/canyonValueParsers";
 import type { TCanyon } from "./canyonUtils";
 
 function canyon(overrides: Partial<TCanyon> = {}): TCanyon {
@@ -69,11 +71,135 @@ describe("buildCanyonExport — KML", () => {
   });
 });
 
+// A canyon record carrying every internal field the API can attach — these
+// must NEVER appear in an exported file (EXPORT-2).
+const INTERNAL_FIELD_OVERRIDES = {
+  ownerId: "user-secret-owner-id",
+  importBatchId: "batch-secret-id",
+  importKey: "import-key-secret",
+  forkedFromId: "forked-from-secret",
+  ropeWikiId: 12345,
+  ropeWikiSnapshot: { huge: "blob-of-scraped-data" },
+  _count: { tripLogLinks: 3, shares: 2 },
+  createdAt: "2026-05-01T00:00:00.000Z",
+} as Partial<TCanyon>;
+
+const EXPECTED_PROPERTY_KEYS = [
+  "name",
+  "altNames",
+  "vGrade",
+  "aGrade",
+  "commitment",
+  "quality",
+  "numAbseils",
+  "longestAbseil",
+  "hours",
+  "notes",
+];
+
 describe("buildCanyonExport — GeoJSON", () => {
   it("emits a FeatureCollection with a Point geometry", async () => {
     const { blob } = buildCanyonExport([canyon()], "geojson");
     const parsed = JSON.parse(await text(blob));
     expect(parsed.type).toBe("FeatureCollection");
     expect(parsed.features[0].geometry).toEqual({ type: "Point", coordinates: [150.3, -33.5] });
+  });
+
+  it("emits exactly the whitelisted properties — no internal fields (EXPORT-2)", async () => {
+    const { blob } = buildCanyonExport([canyon(INTERNAL_FIELD_OVERRIDES)], "geojson");
+    const parsed = JSON.parse(await text(blob));
+    const properties = parsed.features[0].properties as Record<string, unknown>;
+    expect(Object.keys(properties).sort()).toEqual([...EXPECTED_PROPERTY_KEYS].sort());
+  });
+});
+
+describe("buildCanyonExport — internal fields leak nowhere", () => {
+  it.each(["gpx", "kml", "geojson", "csv"] as const)(
+    "%s output contains no internal identifiers",
+    async (format) => {
+      const { blob } = buildCanyonExport([canyon(INTERNAL_FIELD_OVERRIDES)], format);
+      const output = await text(blob);
+      expect(output).not.toContain("user-secret-owner-id");
+      expect(output).not.toContain("batch-secret-id");
+      expect(output).not.toContain("import-key-secret");
+      expect(output).not.toContain("forked-from-secret");
+      expect(output).not.toContain("blob-of-scraped-data");
+      expect(output).not.toContain("ropeWikiSnapshot");
+      expect(output).not.toContain("_count");
+    },
+  );
+});
+
+describe("buildCanyonExport — CSV (EXPORT-1)", () => {
+  function csvFile(content: string): File {
+    return new File([content], "export.csv", { type: "text/csv" });
+  }
+
+  it("emits the import template's columns in order", async () => {
+    const { blob, filename } = buildCanyonExport([canyon()], "csv");
+    const { headers } = await parseCsv(csvFile(await text(blob)));
+    expect(headers).toEqual([
+      "name",
+      "latitude",
+      "longitude",
+      "altNames",
+      "vGrade",
+      "aGrade",
+      "commitment",
+      "quality",
+      "numAbseils",
+      "longestAbseil",
+      "hours",
+      "notes",
+    ]);
+    expect(filename).toBe("logjam-empress-canyon.csv");
+    expect(blob.type).toBe("text/csv");
+  });
+
+  it("round-trips through the app's own CSV parser, including gnarly notes", async () => {
+    const gnarly = canyon({
+      id: "c-gnarly",
+      name: 'Say "G\'day", mate',
+      latitude: -33.123456,
+      longitude: 150.654321,
+      altNames: ["Gobsmacker", "Bubble Bath"],
+      vGrade: 5,
+      aGrade: 2,
+      commitment: 4,
+      quality: 4.5,
+      numAbseils: 12,
+      longestAbseil: 55.5,
+      hours: 7.25,
+      notes: 'Line one, with comma\nLine two has "quotes" and a ; semicolon',
+    });
+    const plain = canyon({ id: "c-plain" });
+
+    const { blob } = buildCanyonExport([gnarly, plain], "csv");
+    const { rows } = await parseCsv(csvFile(await text(blob)));
+    expect(rows).toHaveLength(2);
+
+    const [r1, r2] = rows;
+    expect(r1.name).toBe('Say "G\'day", mate');
+    expect(parseLatLng(r1.latitude)).toEqual({ ok: true, value: -33.123456 });
+    expect(parseLatLng(r1.longitude)).toEqual({ ok: true, value: 150.654321 });
+    expect(parseAltNames(r1.altNames)).toEqual({
+      ok: true,
+      value: ["Gobsmacker", "Bubble Bath"],
+    });
+    expect(parseIntStrict(r1.vGrade, "vGrade")).toEqual({ ok: true, value: 5 });
+    expect(parseIntStrict(r1.aGrade, "aGrade")).toEqual({ ok: true, value: 2 });
+    expect(parseIntStrict(r1.commitment, "commitment")).toEqual({ ok: true, value: 4 });
+    expect(parseFloatStrict(r1.quality, "quality")).toEqual({ ok: true, value: 4.5 });
+    expect(parseIntStrict(r1.numAbseils, "numAbseils")).toEqual({ ok: true, value: 12 });
+    expect(parseFloatStrict(r1.longestAbseil, "longestAbseil")).toEqual({ ok: true, value: 55.5 });
+    expect(parseFloatStrict(r1.hours, "hours")).toEqual({ ok: true, value: 7.25 });
+    expect(r1.notes).toBe('Line one, with comma\nLine two has "quotes" and a ; semicolon');
+
+    // Nulls round-trip as empty cells (parsers return NaN-as-"no value" for "").
+    expect(r2.aGrade).toBe("");
+    expect(r2.commitment).toBe("");
+    expect(r2.quality).toBe("");
+    expect(r2.notes).toBe("");
+    expect(r2.altNames).toBe("");
   });
 });
