@@ -66,6 +66,15 @@ export interface HillshadeSettings {
   multidirectional: boolean;
 }
 
+// Numeric bounds for the hillshade fields — single source shared by the
+// stored-settings validator (validateHillshade) and the frontend's inline
+// field validation (TOPO-2), so the two can't drift.
+export const HILLSHADE_LIMITS = {
+  azimuth: { min: 0, max: 360 },
+  altitude: { min: 0, max: 90 },
+  zFactor: { min: 0.1, max: 10 },
+} as const;
+
 export interface SlopeBand {
   fromDeg: number;     // inclusive
   toDeg: number;       // exclusive
@@ -414,9 +423,9 @@ function validateHillshade(v: unknown, errors: string[]): void {
   if (!isObject(v)) { errors.push("hillshade must be an object"); return; }
   pushIf(errors, typeof v.enabled === "boolean", "hillshade.enabled must be boolean");
   pushIf(errors, typeof v.colour === "string" && HEX_RGBA_RE.test(v.colour as string), "hillshade.colour must be #RRGGBBAA");
-  pushIf(errors, inRange(v.azimuth, 0, 360), "hillshade.azimuth must be 0..360");
-  pushIf(errors, inRange(v.altitude, 0, 90), "hillshade.altitude must be 0..90");
-  pushIf(errors, inRange(v.zFactor, 0.1, 10), "hillshade.zFactor must be 0.1..10");
+  pushIf(errors, inRange(v.azimuth, HILLSHADE_LIMITS.azimuth.min, HILLSHADE_LIMITS.azimuth.max), "hillshade.azimuth must be 0..360");
+  pushIf(errors, inRange(v.altitude, HILLSHADE_LIMITS.altitude.min, HILLSHADE_LIMITS.altitude.max), "hillshade.altitude must be 0..90");
+  pushIf(errors, inRange(v.zFactor, HILLSHADE_LIMITS.zFactor.min, HILLSHADE_LIMITS.zFactor.max), "hillshade.zFactor must be 0.1..10");
   pushIf(errors, typeof v.multidirectional === "boolean", "hillshade.multidirectional must be boolean");
 }
 
@@ -467,6 +476,28 @@ export function slopeBandsError(bands: SlopeBand[]): string | null {
     if (i > 0 && bands[i - 1].toDeg !== b.fromDeg) {
       return `Band ${i + 1}: must start where band ${i} ends.`;
     }
+  }
+  return null;
+}
+
+/**
+ * User-facing validity check for the hillshade settings tab (TOPO-2). Same
+ * role as slopeBandsError: the tab lets an out-of-range number into state so
+ * the inline field error can point at it, and this gates the template Save /
+ * topo Generate buttons until it's fixed. Returns the first problem as a
+ * short message, or null when valid. Bounds come from HILLSHADE_LIMITS — the
+ * same ranges validateHillshade enforces at submit.
+ */
+export function hillshadeSettingsError(h: HillshadeSettings): string | null {
+  const { azimuth, altitude, zFactor } = HILLSHADE_LIMITS;
+  if (!Number.isFinite(h.azimuth) || h.azimuth < azimuth.min || h.azimuth > azimuth.max) {
+    return `Azimuth must be between ${azimuth.min} and ${azimuth.max}.`;
+  }
+  if (!Number.isFinite(h.altitude) || h.altitude < altitude.min || h.altitude > altitude.max) {
+    return `Altitude must be between ${altitude.min} and ${altitude.max}.`;
+  }
+  if (!Number.isFinite(h.zFactor) || h.zFactor < zFactor.min || h.zFactor > zFactor.max) {
+    return `Vertical exaggeration must be between ${zFactor.min} and ${zFactor.max}.`;
   }
   return null;
 }

@@ -90,6 +90,7 @@ function SidebarPanel({
   onEditGeoPdfTemplate,
   onCreateGeoPdfTemplate,
   geoPdfTemplateRefetch,
+  topoTemplateRefetch,
   geoPdfJobsRefetch,
   // LiDAR
   activeTopoJobs,
@@ -181,6 +182,7 @@ function SidebarPanel({
   onEditGeoPdfTemplate: (t: GeoPdfTemplate) => void;
   onCreateGeoPdfTemplate: () => void;
   geoPdfTemplateRefetch: number;
+  topoTemplateRefetch: number;
   geoPdfJobsRefetch: number;
   // LiDAR
   activeTopoJobs: TopoJob[];
@@ -348,6 +350,7 @@ function SidebarPanel({
             onQuotaChanged={onQuotaChanged}
             vectorStyle={vectorStyle}
             onVectorStyleChange={onVectorStyleChange}
+            templateRefetchTrigger={topoTemplateRefetch}
           />
         )}
         {activePanel === "friends" && (

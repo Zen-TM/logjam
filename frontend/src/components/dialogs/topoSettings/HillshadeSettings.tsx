@@ -1,12 +1,78 @@
+import { useEffect, useState } from "react";
 import { Switch } from "@mui/material";
+import { HILLSHADE_LIMITS } from "@logjam/shared";
 import type { HillshadeSettings as HillshadeSettingsValue } from "@logjam/shared";
 import ColourPicker from "../../common/ColourPicker";
 import SettingsRow from "./SettingsRow";
+import ValidatedNumberField from "../ValidatedNumberField";
+import { numericFieldError, type NumericFieldConstraints } from "../../../numberInput";
 import styles from "./topoSettings.module.css";
 
 interface Props {
   value: HillshadeSettingsValue;
   onChange: (next: HillshadeSettingsValue) => void;
+}
+
+// Ranges come from the shared validator's HILLSHADE_LIMITS — never re-derive.
+const AZIMUTH_CONSTRAINTS: NumericFieldConstraints = { ...HILLSHADE_LIMITS.azimuth };
+const ALTITUDE_CONSTRAINTS: NumericFieldConstraints = { ...HILLSHADE_LIMITS.altitude };
+const Z_FACTOR_CONSTRAINTS: NumericFieldConstraints = { ...HILLSHADE_LIMITS.zFactor };
+
+/**
+ * One numeric hillshade field (TOPO-2). Keeps a raw string so partial input
+ * ("", "-", "45.") isn't mangled mid-keystroke; commits every parseable number
+ * (even out of range) into settings so the inline error and the disabled
+ * Save/Generate buttons (gated on the shared hillshadeSettingsError) both
+ * point at the same value — no silent clamping or divergence. An unparseable
+ * leftover snaps back to the last committed value on blur.
+ */
+function HillshadeNumberField({
+  committed,
+  onCommit,
+  constraints,
+  disabled,
+}: {
+  committed: number;
+  onCommit: (v: number) => void;
+  constraints: NumericFieldConstraints;
+  disabled?: boolean;
+}) {
+  const [raw, setRaw] = useState(String(committed));
+
+  // External changes (template switch, reset) resync the raw string. A raw
+  // value that already means the committed number is left alone so typing
+  // "45." isn't rewritten to "45" under the cursor.
+  useEffect(() => {
+    setRaw((prev) => (Number(prev) === committed && prev.trim() !== "" ? prev : String(committed)));
+  }, [committed]);
+
+  const isParseable = (s: string): boolean =>
+    s.trim() !== "" && s.trim() !== "-" && Number.isFinite(Number(s));
+
+  return (
+    <div
+      onBlur={() => {
+        // Leftover unparseable input ("", "-") reverts to the committed
+        // value; anything parseable was already committed on change.
+        setRaw((prev) => (isParseable(prev) ? prev : String(committed)));
+      }}
+    >
+      <ValidatedNumberField
+        label=""
+        value={raw}
+        onChange={(next) => {
+          setRaw(next);
+          if (isParseable(next) && numericFieldError(next, { integer: constraints.integer }) === null) {
+            onCommit(Number(next));
+          }
+        }}
+        constraints={constraints}
+        disabled={disabled}
+        fullWidth={false}
+        sx={{ width: 110 }}
+      />
+    </div>
+  );
 }
 
 export default function HillshadeSettings({ value, onChange }: Props) {
@@ -27,50 +93,38 @@ export default function HillshadeSettings({ value, onChange }: Props) {
 
       <SettingsRow
         label="Azimuth (°)"
-        tooltip="Sun direction in degrees clockwise from north. 315° = NW, the standard cartographic light."
+        tooltip="Sun direction in degrees clockwise from north, 0–360. 315° = NW, the standard cartographic light."
         disabled={value.multidirectional}
       >
-        <input
-          type="number"
-          className={styles.numberInput}
-          min={0}
-          max={360}
-          step={1}
-          value={value.azimuth}
-          onChange={(e) => patch({ azimuth: Number(e.target.value) })}
+        <HillshadeNumberField
+          committed={value.azimuth}
+          onCommit={(v) => patch({ azimuth: v })}
+          constraints={AZIMUTH_CONSTRAINTS}
           disabled={value.multidirectional}
         />
       </SettingsRow>
 
       <SettingsRow
         label="Altitude (°)"
-        tooltip="Sun elevation above the horizon. Lower values cast longer shadows."
+        tooltip="Sun elevation above the horizon, 0–90. Lower values cast longer shadows."
         disabled={value.multidirectional}
       >
-        <input
-          type="number"
-          className={styles.numberInput}
-          min={0}
-          max={90}
-          step={1}
-          value={value.altitude}
-          onChange={(e) => patch({ altitude: Number(e.target.value) })}
+        <HillshadeNumberField
+          committed={value.altitude}
+          onCommit={(v) => patch({ altitude: v })}
+          constraints={ALTITUDE_CONSTRAINTS}
           disabled={value.multidirectional}
         />
       </SettingsRow>
 
       <SettingsRow
         label="Vertical exaggeration"
-        tooltip="Multiplies the terrain z-values before computing the hillshade. >1 amplifies relief; <1 flattens it."
+        tooltip="Multiplies the terrain z-values before computing the hillshade, 0.1–10. >1 amplifies relief; <1 flattens it."
       >
-        <input
-          type="number"
-          className={styles.numberInput}
-          min={0.1}
-          max={10}
-          step={0.1}
-          value={value.zFactor}
-          onChange={(e) => patch({ zFactor: Number(e.target.value) })}
+        <HillshadeNumberField
+          committed={value.zFactor}
+          onCommit={(v) => patch({ zFactor: v })}
+          constraints={Z_FACTOR_CONSTRAINTS}
         />
       </SettingsRow>
 

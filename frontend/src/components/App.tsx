@@ -189,6 +189,10 @@ function App() {
   // Topo template: ID to pre-select when opening TopoDialog
   const [initialTopoTemplateId, setInitialTopoTemplateId] = useState<string | null>(null);
 
+  // Bumped when TopoDialog saves a template inline, so LidarPanel's template
+  // list refreshes without waiting for an accordion re-open (TOPO-1)
+  const [topoTemplateRefetch, setTopoTemplateRefetch] = useState(0);
+
   // Canyon fly-to target
   const [flyToCanyon, setFlyToCanyon] = useState<{ lat: number; lng: number } | null>(null);
 
@@ -862,6 +866,7 @@ function App() {
         }}
         pendingBbox={pendingTopoBbox}
         onJobCreated={handleTopoJobCreated}
+        onTemplateSaved={() => setTopoTemplateRefetch((n) => n + 1)}
         initialTemplateId={initialTopoTemplateId}
         existingTopoNames={[...activeTopoJobs, ...completedTopoJobs]
           .map((j) => j.name)
@@ -964,6 +969,7 @@ function App() {
             setShowGeoPdf(true);
           }}
           geoPdfTemplateRefetch={geoPdfTemplateRefetch}
+          topoTemplateRefetch={topoTemplateRefetch}
           geoPdfJobsRefetch={geoPdfJobsRefetch}
           activeTopoJobs={activeTopoJobs}
           completedTopoJobs={completedTopoJobs}

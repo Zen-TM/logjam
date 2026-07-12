@@ -7,6 +7,7 @@ import { apiFetch, deleteTopoExport } from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import type { TopoJob, TopoTemplate, GeoJsonPolygonal } from "../../dialogs/TopoDialog";
+import { fetchTopoTemplates } from "../../dialogs/topoTemplatesFetch";
 import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import TopoTemplateEditDialog from "../../dialogs/TopoTemplateEditDialog";
 import TopoExportDialog from "../../dialogs/TopoExportDialog";
@@ -77,6 +78,7 @@ function LidarPanel({
   onQuotaChanged,
   vectorStyle,
   onVectorStyleChange,
+  templateRefetchTrigger,
 }: {
   activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
@@ -94,6 +96,7 @@ function LidarPanel({
   onQuotaChanged: () => void;
   vectorStyle: VectorStyleSettings | null;
   onVectorStyleChange: (next: VectorStyleSettings) => void;
+  templateRefetchTrigger: number;
 }) {
   const toast = useToast();
 
@@ -143,7 +146,8 @@ function LidarPanel({
 
   const loadTemplates = useCallback(async () => {
     try {
-      const list = await apiFetch<TopoTemplate[]>("/topo-templates");
+      // Concurrent-duplicate-safe fetch shared with TopoDialog (TOPO-6).
+      const list = await fetchTopoTemplates();
       setTemplates(list);
     } catch (err) {
       console.error(err);
@@ -153,7 +157,14 @@ function LidarPanel({
 
   useEffect(() => {
     void loadTemplates();
-  }, [loadTemplates, templateFetchCount]);
+  }, [loadTemplates, templateFetchCount, templateRefetchTrigger]);
+
+  // Templates can be created outside this panel (TopoDialog's inline "Save as
+  // template") — refresh whenever the accordion is opened so the list is never
+  // a reload behind (TOPO-1).
+  useEffect(() => {
+    if (templatesOpen) void loadTemplates();
+  }, [templatesOpen, loadTemplates]);
 
   const handleDeleteTemplate = useCallback(
     async (id: string) => {
@@ -287,7 +298,9 @@ function LidarPanel({
           onClick={() => setTemplatesOpen((v) => !v)}
           aria-expanded={templatesOpen}
         >
-          <span>Templates ({templates.filter((t) => !t.isSystem).length})</span>
+          {/* Count everything the list renders, including the system Default
+              row, so the header can't say "(0)" above a non-empty list (TOPO-5). */}
+          <span>Templates ({templates.length})</span>
           <ChevronDown
             size={14}
             className={`${classes.chevron} ${templatesOpen ? classes.chevronOpen : ""}`}

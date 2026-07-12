@@ -4,6 +4,7 @@ import {
   RASTER_LAYERS,
   VECTOR_LAYERS,
   AUTO_EXPORT_DEFAULTS,
+  isLayerEligibleForFormat,
   producedLayers,
   reconcileExportSelection,
   validateAutoExportSettings,
@@ -135,6 +136,33 @@ describe("validateExportRequest", () => {
       }),
     ).toEqual({ ok: true });
   });
+
+  // TOPOEXP-1: GPX is features-only — the worker has no contour path.
+  it("rejects contours for gpx (features-only allowlist)", () => {
+    expect(
+      validateExportRequest({
+        format: "gpx",
+        bundling: "per-layer",
+        layers: ["features", "contours"],
+      }),
+    ).toEqual({ ok: false, error: "GPX does not support the Contours layer" });
+  });
+});
+
+describe("isLayerEligibleForFormat", () => {
+  it("gpx allows only the features layer", () => {
+    expect(isLayerEligibleForFormat("gpx", "features")).toBe(true);
+    expect(isLayerEligibleForFormat("gpx", "contours")).toBe(false);
+    expect(isLayerEligibleForFormat("gpx", "hillshade")).toBe(false);
+  });
+
+  it("mirrors the raster/vector gates for unrestricted formats", () => {
+    expect(isLayerEligibleForFormat("geotiff", "hillshade")).toBe(true);
+    expect(isLayerEligibleForFormat("geotiff", "contours")).toBe(false);
+    expect(isLayerEligibleForFormat("geojson", "contours")).toBe(true);
+    expect(isLayerEligibleForFormat("geojson", "slope")).toBe(false);
+    expect(isLayerEligibleForFormat("mbtiles", "contours")).toBe(true);
+  });
 });
 
 describe("producedLayers", () => {
@@ -182,6 +210,20 @@ describe("reconcileExportSelection", () => {
       all,
     );
     expect(out.layers).toEqual(["contours"]);
+  });
+
+  it("drops contours for gpx (features-only allowlist)", () => {
+    const out = reconcileExportSelection(
+      { format: "gpx", bundling: "per-layer", layers: ["contours", "features"] },
+      all,
+    );
+    expect(out.layers).toEqual(["features"]);
+    // Fallback when the selection empties out picks only the allowlist.
+    const fallback = reconcileExportSelection(
+      { format: "gpx", bundling: "per-layer", layers: ["contours"] },
+      all,
+    );
+    expect(fallback.layers).toEqual(["features"]);
   });
 
   it("falls back to all available+eligible layers when the selection empties out", () => {

@@ -145,6 +145,16 @@ router.post(
     if (configError) {
       throw new AppError(400, configError);
     }
+    // GEOPDF-1: the shared validator enforces numbers + N>S/E>W but not
+    // coordinate ranges — reject out-of-range extents here so a worker task
+    // can never be burned rendering a nonsense region.
+    const { north, south, east, west } = config.extent;
+    if (north > 90 || south < -90 || east > 180 || west < -180) {
+      throw new AppError(
+        400,
+        "Invalid extent: latitudes must be within -90..90 and longitudes within -180..180",
+      );
+    }
 
     // null = new user with no saved style → defaults (same as GET /vector-style
     // and the overlay fallback). Invalid stored JSON → warn + defaults.

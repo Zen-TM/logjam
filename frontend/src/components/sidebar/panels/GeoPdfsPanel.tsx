@@ -227,10 +227,16 @@ function GeoPdfsPanel({
                 ...(job.resultBytes !== null ? [formatBytes(job.resultBytes)] : []),
                 timeAgo(job.createdAt),
               ];
-              const dateStr = new Date(job.createdAt).toLocaleDateString(undefined, {
+              // Include the time of day: the API view exposes no extent/paper/
+              // scale metadata, so untitled same-day rows were otherwise
+              // indistinguishable "GeoPDF · 9 Jul 2026" repeats (GEOPDF-2).
+              // createdAt is a true timestamp — local-TZ display is correct.
+              const dateStr = new Date(job.createdAt).toLocaleString(undefined, {
                 day: "numeric",
                 month: "short",
                 year: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
               });
               return (
                 <div key={job.id} className={classes.jobItem}>
