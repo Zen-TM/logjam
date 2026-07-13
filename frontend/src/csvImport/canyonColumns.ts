@@ -64,11 +64,30 @@ registerAliases("commitment", ["commitment", "commit"]);
 registerAliases("quality", ["quality", "stars", "rating", "qual"]);
 registerAliases("sources", ["sources", "source", "refs", "references", "links", "urls"]);
 
+// An `attr:<key>` header is the convention the CSV exporter emits for a
+// canyon's custom-attribute values. Recognising it here lets an exported file
+// re-import its custom fields with no manual mapping. The key after the prefix
+// is preserved verbatim (case included) because it IS the attribute storage
+// key — buildCanyonInput does `attrs[role.slice(5)] = value`. Deliberately
+// strict (literal `attr:` prefix) so an ordinary column like "attribute" or
+// "attributes" is NOT swept up.
+function parseAttrHeader(header: string): string | null {
+  const match = header.match(/^attr:(.+)$/i);
+  if (!match) return null;
+  const key = match[1].trim();
+  return key.length > 0 ? key : null;
+}
+
 export function detectCanyonColumns(
   headers: string[],
 ): Record<string, CanyonFieldRole> {
   const result: Record<string, CanyonFieldRole> = {};
   for (const header of headers) {
+    const attrKey = parseAttrHeader(header);
+    if (attrKey) {
+      result[header] = `attr:${attrKey}`;
+      continue;
+    }
     const n = normalize(header);
     result[header] = ROLE_ALIASES[n] ?? "discard";
   }

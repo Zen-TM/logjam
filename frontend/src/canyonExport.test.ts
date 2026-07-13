@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { buildCanyonExport } from "./canyonExport";
 import { parseCsv } from "./csvImport/parseCsv";
-import { parseAltNames, parseFloatStrict, parseIntStrict, parseLatLng } from "./csvImport/canyonValueParsers";
+import { parseAltNames, parseFloatStrict, parseIntStrict, parseLatLng, parseSources } from "./csvImport/canyonValueParsers";
+import { detectCanyonColumns } from "./csvImport/canyonColumns";
 import type { TCanyon } from "./canyonUtils";
 
 function canyon(overrides: Partial<TCanyon> = {}): TCanyon {
@@ -95,6 +96,9 @@ const EXPECTED_PROPERTY_KEYS = [
   "longestAbseil",
   "hours",
   "notes",
+  // User-authored attributes now round-trip (EXPORT round-trip-complete).
+  "sources",
+  "customFields",
 ];
 
 describe("buildCanyonExport — GeoJSON", () => {
@@ -110,6 +114,37 @@ describe("buildCanyonExport — GeoJSON", () => {
     const parsed = JSON.parse(await text(blob));
     const properties = parsed.features[0].properties as Record<string, unknown>;
     expect(Object.keys(properties).sort()).toEqual([...EXPECTED_PROPERTY_KEYS].sort());
+  });
+
+  it("emits sources as {label, url} objects and custom fields under customFields", async () => {
+    const c = canyon({
+      attributes: {
+        sources: [
+          ["RopeWiki", "https://ropewiki.com/Empress_Falls"],
+          ["Guidebook p.42", ""],
+        ],
+        customFields: { rockType: "sandstone", firstDescentYear: 1974 },
+      },
+    });
+    const { blob } = buildCanyonExport([c], "geojson");
+    const parsed = JSON.parse(await text(blob));
+    const properties = parsed.features[0].properties as Record<string, unknown>;
+    expect(properties.sources).toEqual([
+      { label: "RopeWiki", url: "https://ropewiki.com/Empress_Falls" },
+      { label: "Guidebook p.42", url: "" },
+    ]);
+    expect(properties.customFields).toEqual({
+      rockType: "sandstone",
+      firstDescentYear: 1974,
+    });
+  });
+
+  it("emits empty sources/customFields for a canyon with no attributes", async () => {
+    const { blob } = buildCanyonExport([canyon()], "geojson");
+    const parsed = JSON.parse(await text(blob));
+    const properties = parsed.features[0].properties as Record<string, unknown>;
+    expect(properties.sources).toEqual([]);
+    expect(properties.customFields).toEqual({});
   });
 });
 
@@ -151,9 +186,33 @@ describe("buildCanyonExport — CSV (EXPORT-1)", () => {
       "longestAbseil",
       "hours",
       "notes",
+      // `sources` is always present; custom-field (`attr:<key>`) columns appear
+      // only when some canyon carries them (see the round-trip test below).
+      "sources",
     ]);
     expect(filename).toBe("logjam-empress-canyon.csv");
     expect(blob.type).toBe("text/csv");
+  });
+
+  it("appends one attr:<key> column per custom-field key across the set, sorted, auto-mapping on re-import", async () => {
+    const withFields = canyon({
+      id: "c-fields",
+      attributes: { customFields: { rockType: "granite", grade: "R2" } },
+    });
+    const other = canyon({
+      id: "c-other",
+      attributes: { customFields: { rockType: "basalt", waterTemp: "cold" } },
+    });
+    const { blob } = buildCanyonExport([withFields, other], "csv");
+    const { headers } = await parseCsv(csvFile(await text(blob)));
+    // Union of keys, sorted, each prefixed — after the fixed columns.
+    expect(headers.slice(-3)).toEqual(["attr:grade", "attr:rockType", "attr:waterTemp"]);
+    // Every attr column auto-maps straight back to its custom-field role.
+    const roles = detectCanyonColumns(headers);
+    expect(roles["attr:grade"]).toBe("attr:grade");
+    expect(roles["attr:rockType"]).toBe("attr:rockType");
+    expect(roles["attr:waterTemp"]).toBe("attr:waterTemp");
+    expect(roles["sources"]).toBe("sources");
   });
 
   it("round-trips through the app's own CSV parser, including gnarly notes", async () => {
@@ -201,5 +260,50 @@ describe("buildCanyonExport — CSV (EXPORT-1)", () => {
     expect(r2.quality).toBe("");
     expect(r2.notes).toBe("");
     expect(r2.altNames).toBe("");
+  });
+
+  it("round-trips sources and custom fields through parseCsv + the role parsers, with empty cells", async () => {
+    const rich = canyon({
+      id: "c-rich",
+      attributes: {
+        sources: [
+          ["RopeWiki", "https://ropewiki.com/Empress_Falls"],
+          ["Guidebook, 2nd ed.", ""],
+        ],
+        // A string value and a numeric value.
+        customFields: { rockType: "sandstone", firstDescentYear: 1974 },
+      },
+    });
+    // No sources; only ONE of the two custom-field keys present.
+    const sparse = canyon({
+      id: "c-sparse",
+      attributes: { customFields: { rockType: "granite" } },
+    });
+
+    const { blob } = buildCanyonExport([rich, sparse], "csv");
+    const { headers, rows } = await parseCsv(csvFile(await text(blob)));
+    // Union of keys across the set, sorted.
+    expect(headers.slice(-3)).toEqual(["sources", "attr:firstDescentYear", "attr:rockType"]);
+    const [r1, r2] = rows;
+
+    // Sources parse back label-for-label, URL-for-URL (JSON tuple form).
+    expect(parseSources(r1.sources)).toEqual({
+      ok: true,
+      value: [
+        ["RopeWiki", "https://ropewiki.com/Empress_Falls"],
+        ["Guidebook, 2nd ed.", ""],
+      ],
+    });
+    // No sources → empty cell → empty list.
+    expect(r2.sources).toBe("");
+    expect(parseSources(r2.sources)).toEqual({ ok: true, value: [] });
+
+    // Custom-field cells re-ingest verbatim (the `attr:<key>` role stores the
+    // raw string). Numeric values serialise/parse as their string form.
+    expect(r1["attr:rockType"]).toBe("sandstone");
+    expect(r1["attr:firstDescentYear"]).toBe("1974");
+    // A canyon lacking a field gets an empty cell for that column.
+    expect(r2["attr:rockType"]).toBe("granite");
+    expect(r2["attr:firstDescentYear"]).toBe("");
   });
 });

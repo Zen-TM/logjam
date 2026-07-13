@@ -48,4 +48,22 @@ describe("detectCanyonColumns", () => {
   it("defaults an unrecognised header to discard", () => {
     expect(detectCanyonColumns(["Mystery Column"])["Mystery Column"]).toBe("discard");
   });
+
+  it("auto-maps an exported sources column", () => {
+    expect(detectCanyonColumns(["sources"])["sources"]).toBe("sources");
+  });
+
+  it("auto-maps an `attr:<key>` header to the matching custom-field role, preserving the key", () => {
+    const result = detectCanyonColumns(["attr:rockType", "attr:first_descent"]);
+    expect(result["attr:rockType"]).toBe("attr:rockType");
+    expect(result["attr:first_descent"]).toBe("attr:first_descent");
+  });
+
+  it("is strict about the `attr:` prefix — a plain 'attribute' column still discards", () => {
+    const result = detectCanyonColumns(["attribute", "attributes", "attr:"]);
+    expect(result["attribute"]).toBe("discard");
+    expect(result["attributes"]).toBe("discard");
+    // Empty key after the prefix is not a valid custom field.
+    expect(result["attr:"]).toBe("discard");
+  });
 });

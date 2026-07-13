@@ -1231,27 +1231,37 @@ function UnifiedImportDialog({
             {renderFileChip(canyonFile, "canyon")}
             <SectionLabel text="Canyon columns" />
             {renderColumnMapHeader()}
-            {canyonFile.headers.map((header) => (
-              <Box key={header} sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
-                <Typography variant="body2" sx={{ flex: 1, color: "var(--theme-text-primary)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {header}
-                </Typography>
-                <FormControl size="small" sx={{ flex: 2, minWidth: 160 }}>
-                  <Select
-                    value={canyonAssignments[header] ?? "discard"}
-                    onChange={(e) =>
-                      setCanyonAssignments((prev) => ({ ...prev, [header]: e.target.value as CanyonFieldRole }))
-                    }
-                    sx={selectSx}
-                    MenuProps={menuPaperProps}
-                  >
-                    {ALL_ASSIGNABLE_ROLES.map((r) => (
-                      <MenuItem key={r} value={r}>{ROLE_LABELS[r] ?? r}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Box>
-            ))}
+            {canyonFile.headers.map((header) => {
+              const role = canyonAssignments[header] ?? "discard";
+              // An auto-detected `attr:<key>` role (from an `attr:<key>` export
+              // header) isn't one of ALL_ASSIGNABLE_ROLES, so render a matching
+              // option for it — otherwise the Select value is out of range.
+              const isCustomAttr = typeof role === "string" && role.startsWith("attr:");
+              return (
+                <Box key={header} sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+                  <Typography variant="body2" sx={{ flex: 1, color: "var(--theme-text-primary)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {header}
+                  </Typography>
+                  <FormControl size="small" sx={{ flex: 2, minWidth: 160 }}>
+                    <Select
+                      value={role}
+                      onChange={(e) =>
+                        setCanyonAssignments((prev) => ({ ...prev, [header]: e.target.value as CanyonFieldRole }))
+                      }
+                      sx={selectSx}
+                      MenuProps={menuPaperProps}
+                    >
+                      {isCustomAttr && (
+                        <MenuItem value={role}>Custom field: {role.slice(5)}</MenuItem>
+                      )}
+                      {ALL_ASSIGNABLE_ROLES.map((r) => (
+                        <MenuItem key={r} value={r}>{ROLE_LABELS[r] ?? r}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
+              );
+            })}
             <Typography className={classes.mappingFeedback}>
               {canyonMapValid
                 ? "Name, latitude and longitude found — canyons will be matched by name and coordinates."
