@@ -1058,6 +1058,7 @@ function TripLogDialog({
         the server strips the field's values from all trips; mirror that
         locally by dropping the form value. */}
     <DeleteCustomFieldDialog
+      entity="trip-log"
       def={fieldToDelete}
       onClose={() => setFieldToDelete(null)}
       onDeleted={(remaining) => {

@@ -252,6 +252,10 @@
   margin: 0;
 }
 
+.addFieldBtn {
+  composes: btn btnOutlineAccent btnSm btnFull from '@styles/shared.module.css';
+}
+
 .exportBtn {
   composes: btn btnOutlineAccent btnSm btnFull from '@styles/shared.module.css';
 }

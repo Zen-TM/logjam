@@ -405,6 +405,8 @@ function SidebarPanel({
             currentUser={currentUser}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
+            canyonCustomFieldDefs={canyonCustomFieldDefs}
+            onCanyonCustomFieldDefsChange={onCanyonCustomFieldDefsChange}
           />
         )}
         {activePanel === "canyon-detail" && (

@@ -45,6 +45,7 @@ import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
 import ConfirmDialog from "./ConfirmDialog";
+import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
 import { getFieldValue as getFieldValueFor } from "./customFieldValues";
@@ -141,7 +142,6 @@ function CanyonDialog({
 
   // Custom-field deletion confirmation
   const [fieldToDelete, setFieldToDelete] = useState<TripLogCustomFieldDef | null>(null);
-  const [deletingField, setDeletingField] = useState(false);
 
   // Media. In edit mode the canyon exists; in create mode a draft canyon is
   // lazily materialised on first upload so files have something to link to
@@ -519,26 +519,18 @@ function CanyonDialog({
     }
   }
 
-  async function handleConfirmDeleteField() {
-    if (!fieldToDelete) return;
-    const key = fieldToDelete.key;
-    setDeletingField(true);
-    setError(null);
-    try {
-      const updatedDefs = customFieldDefs.filter((d) => d.key !== key);
-      await updateUserPreferences({ canyonCustomFields: updatedDefs });
-      onCustomFieldDefsChange(updatedDefs);
+  // The unified delete (server strips the field's values from every canyon +
+  // updates the def list) is handled by DeleteCustomFieldDialog; here we only
+  // mirror the removal in local state after it succeeds.
+  function handleFieldDeleted(remainingDefs: TripLogCustomFieldDef[]) {
+    const key = fieldToDelete?.key;
+    onCustomFieldDefsChange(remainingDefs);
+    if (key) {
       setFieldValues((prev) => {
         const next = { ...prev };
         delete next[key];
         return next;
       });
-      setFieldToDelete(null);
-    } catch (err) {
-      console.error(err);
-      setError(messageFromError(err, "Couldn't delete custom field. Please try again."));
-    } finally {
-      setDeletingField(false);
     }
   }
 
@@ -1035,18 +1027,11 @@ function CanyonDialog({
       </DialogActions>
     </Dialog>
 
-    <ConfirmDialog
-      open={fieldToDelete != null}
-      title={<>Delete custom field “{fieldToDelete?.label}”?</>}
-      message={
-        <>
-          This removes the field from <b>all</b> your canyons, not just this
-          one. Any values already stored for it will no longer be shown.
-        </>
-      }
-      busy={deletingField}
-      onConfirm={handleConfirmDeleteField}
+    <DeleteCustomFieldDialog
+      entity="canyon"
+      def={fieldToDelete}
       onClose={() => setFieldToDelete(null)}
+      onDeleted={handleFieldDeleted}
     />
 
     <ConfirmDialog

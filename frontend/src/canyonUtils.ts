@@ -569,23 +569,54 @@ export function updateNotificationPreferences(
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: { notifications } });
 }
 
-// How many of the user's trip logs carry a value for a custom trip field.
-// Shown as an impact warning before renaming or deleting the field.
-export function getCustomFieldImpact(key: string): Promise<{ tripLogCount: number }> {
-  return apiFetch<{ tripLogCount: number }>(
-    `/custom-fields/trip-log/${encodeURIComponent(key)}/impact`,
-  );
+// Which custom-field family a management call targets. Maps 1:1 to the API's
+// `/custom-fields/:entity/...` route segment and to the User.uiPreferences key
+// the definitions live under (trip-log → tripLogCustomFields, canyon →
+// canyonCustomFields).
+export type CustomFieldEntityKind = "trip-log" | "canyon";
+
+// How many of the user's rows (trip logs or canyons) carry a value for a custom
+// field. Shown as an impact warning before renaming or deleting the field. The
+// server names the count per-entity (tripLogCount / canyonCount); this
+// normalizes it to a plain `count`.
+export function getCustomFieldImpact(
+  entity: CustomFieldEntityKind,
+  key: string,
+): Promise<{ count: number }> {
+  return apiFetch<{ tripLogCount?: number; canyonCount?: number }>(
+    `/custom-fields/${entity}/${encodeURIComponent(key)}/impact`,
+  ).then((res) => ({
+    count: entity === "canyon" ? (res.canyonCount ?? 0) : (res.tripLogCount ?? 0),
+  }));
 }
 
-// Delete a custom trip field: drops its definition and strips its value from
-// every trip that carried one. Returns the surviving definitions and how many
-// trips had a value removed.
+// Delete a custom field: drops its definition and strips its value from every
+// row (trip log or canyon) that carried one. Returns the surviving definitions
+// and how many rows had a value removed. The server response is per-entity
+// (tripLogCustomFields/removedFromTripCount vs canyonCustomFields/
+// removedFromCanyonCount); this normalizes it.
 export function deleteCustomField(
+  entity: CustomFieldEntityKind,
   key: string,
-): Promise<{ tripLogCustomFields: TripLogCustomFieldDef[]; removedFromTripCount: number }> {
-  return apiFetch(`/custom-fields/trip-log/${encodeURIComponent(key)}`, {
+): Promise<{ remainingDefs: TripLogCustomFieldDef[]; removedCount: number }> {
+  return apiFetch<{
+    tripLogCustomFields?: TripLogCustomFieldDef[];
+    canyonCustomFields?: TripLogCustomFieldDef[];
+    removedFromTripCount?: number;
+    removedFromCanyonCount?: number;
+  }>(`/custom-fields/${entity}/${encodeURIComponent(key)}`, {
     method: "DELETE",
-  });
+  }).then((res) =>
+    entity === "canyon"
+      ? {
+          remainingDefs: res.canyonCustomFields ?? [],
+          removedCount: res.removedFromCanyonCount ?? 0,
+        }
+      : {
+          remainingDefs: res.tripLogCustomFields ?? [],
+          removedCount: res.removedFromTripCount ?? 0,
+        },
+  );
 }
 
 export function exportUserData(): Promise<Blob> {
