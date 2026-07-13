@@ -10,6 +10,25 @@ const DEG_TO_RAD = Math.PI / 180;
 /** Web-Mercator tile size in pixels. */
 export const TILE_SIZE = 256;
 
+// Reference DPI for zoom selection — this sets how many source pixels per mm
+// we aim for, which determines the tile zoom level. Used both by the renderer
+// (generateGeoPdf.ts) and by the runtime-size estimator (geoPdfNativeMegapixels).
+export const TARGET_DPI = 300;
+
+const MIN_ZOOM = 8;
+
+/** Compute the tile zoom level that provides at least 1 source pixel per output pixel */
+export function computeZoom(
+  scale: number,
+  latDeg: number,
+  dpi: number,
+  maxNativeZoom: number,
+): number {
+  const cosLat = Math.cos(Math.abs(latDeg) * DEG_TO_RAD);
+  const z = Math.log2((156543.03 * cosLat * dpi) / (scale * 0.0254));
+  return Math.max(MIN_ZOOM, Math.min(maxNativeZoom, Math.ceil(z)));
+}
+
 export type TileCoord = { x: number; y: number; z: number };
 
 /** Transform mapping tile-grid pixel space to output mapCanvas pixel space. */
@@ -118,4 +137,18 @@ export function computeTileToMapTransform(
     srcW,
     srcH,
   };
+}
+
+/** Native render-canvas size in megapixels for a GeoPDF config — the size
+ * signal for the adaptive runtime estimator. Paper-independent: depends only
+ * on extent, scale and the base layer's max native zoom. */
+export function geoPdfNativeMegapixels(
+  extent: { north: number; south: number; east: number; west: number },
+  scale: number,
+  maxNativeZoom: number,
+): number {
+  const { north, south, east, west } = extent;
+  const zoom = computeZoom(scale, (north + south) / 2, TARGET_DPI, maxNativeZoom);
+  const t = computeTileToMapTransform(zoom, north, south, east, west, 1, 1);
+  return (t.srcW * t.srcH) / 1e6;
 }

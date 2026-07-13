@@ -166,6 +166,10 @@ export interface GeoPdfJobView {
   // The map title from the job config, if one was set — shown (truncated) in
   // the generated-PDFs list. Null when the job had no title.
   title: string | null;
+  // Adaptive processing-time estimate (seconds) computed at create. Null on
+  // rows created before the estimator existed — display falls back to a
+  // static "Generating…" label.
+  estimatedSeconds: number | null;
   resultBytes: number | null;
   errorMessage: string | null;
   createdAt: string;

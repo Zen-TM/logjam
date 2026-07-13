@@ -64,6 +64,7 @@ function rowToView(
     format: string;
     bundling: string;
     status: string;
+    estimatedSeconds: number | null;
     resultBytes: bigint | null;
     errorMessage: string | null;
     createdAt: Date;
@@ -78,6 +79,7 @@ function rowToView(
     format: row.format as ExportFormat,
     bundling: row.bundling as ExportBundling,
     status: row.status as TopoExportJobView["status"],
+    estimatedSeconds: row.estimatedSeconds,
     resultBytes: row.resultBytes !== null ? Number(row.resultBytes) : null,
     errorMessage: row.errorMessage,
     createdAt: row.createdAt.toISOString(),
@@ -158,6 +160,9 @@ router.post(
       format,
       bundling,
       vectorStyleSnapshot,
+      // zod pins sourceJobIds to length 1 (exportRequestSchema above) — if that
+      // ever loosens to multiple source jobs, sum their tileCounts here instead.
+      sourceTileCount: jobs[0].tileCount ?? null,
     });
 
     res.status(201).json({ id: exportJobId });

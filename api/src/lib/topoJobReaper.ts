@@ -436,6 +436,7 @@ export async function queueAutoExports(now: Date = new Date()): Promise<number> 
       s3OutputKeys: true,
       vectorStyleSnapshot: true,
       footprint: true,
+      tileCount: true,
     },
   });
 
@@ -487,6 +488,7 @@ export async function queueAutoExports(now: Date = new Date()): Promise<number> 
           format: selection.format,
           bundling: selection.bundling,
           vectorStyleSnapshot: (job.vectorStyleSnapshot as object | null) ?? VECTOR_STYLE_DEFAULTS,
+          sourceTileCount: job.tileCount ?? null,
         });
         queued += 1;
       } catch (err) {

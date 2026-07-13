@@ -3,6 +3,7 @@ import { AppError } from "../middleware/errorHandler";
 import { getEnv } from "./env";
 import { launchFargateTask } from "./ecsRunTask";
 import { logger } from "./logger";
+import { estimateExportSeconds } from "./runtimeEstimates";
 import type { ExportFormat, ExportBundling, TopoLayerKey } from "@logjam/shared";
 
 // Cap to prevent users from flooding ECS with queued exports. Shared by the
@@ -17,6 +18,7 @@ export interface CreateAndLaunchExportInput {
   format: ExportFormat;
   bundling: ExportBundling;
   vectorStyleSnapshot: object;
+  sourceTileCount: number | null;
 }
 
 /**
@@ -41,6 +43,14 @@ export async function createAndLaunchTopoExport(
 ): Promise<string> {
   const env = getEnv();
 
+  // Computed before the transaction — it's a read-only history query and must
+  // not hold the user-row lock below.
+  const estimatedSeconds = await estimateExportSeconds(
+    input.format,
+    input.bundling,
+    input.sourceTileCount,
+  );
+
   const exportJob = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT id FROM users WHERE id = ${input.userId} FOR UPDATE`;
     const queued = await tx.topoExportJob.count({
@@ -57,6 +67,8 @@ export async function createAndLaunchTopoExport(
         format: input.format,
         bundling: input.bundling,
         vectorStyleSnapshot: input.vectorStyleSnapshot,
+        sourceTileCount: input.sourceTileCount,
+        estimatedSeconds,
         status: "queued",
       },
     });

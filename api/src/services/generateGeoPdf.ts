@@ -39,7 +39,9 @@ import { VectorTileFeature } from "@mapbox/vector-tile";
 import { decodeVectorTileLayer } from "./geoPdfVectorTile";
 import {
   TILE_SIZE,
+  TARGET_DPI,
   latToMercY,
+  computeZoom,
   computeTileToMapTransform,
   type TileCoord,
   type TileToMapTransform,
@@ -165,19 +167,9 @@ function mmToPt(mm: number): number {
   return (mm * 72) / MM_PER_INCH;
 }
 
-const MIN_ZOOM = 8;
-
-/** Compute the tile zoom level that provides at least 1 source pixel per output pixel */
-function computeZoom(
-  scale: number,
-  latDeg: number,
-  dpi: number,
-  maxNativeZoom: number,
-): number {
-  const cosLat = Math.cos(Math.abs(latDeg) * DEG_TO_RAD);
-  const z = Math.log2((156543.03 * cosLat * dpi) / (scale * 0.0254));
-  return Math.max(MIN_ZOOM, Math.min(maxNativeZoom, Math.ceil(z)));
-}
+// MIN_ZOOM, computeZoom and TARGET_DPI now live in the pure, unit-tested
+// ./geoPdfTileMath module (imported above) — also used by the GeoPDF runtime
+// estimator (lib/runtimeEstimates.ts) via geoPdfNativeMegapixels.
 
 /**
  * The display zoom MapLibre would render this print scale at on a 96-DPI screen.
@@ -296,9 +288,8 @@ export async function generateGeoPdf(
   const baseLayerCfg = GEOPDF_BASE_LAYER_CONFIG[config.baseLayer];
   const maxNativeZoom = baseLayerCfg?.maxNativeZoom ?? 18;
 
-  // Use 300 DPI as the reference for zoom selection — this sets how many
+  // TARGET_DPI (300) is the reference for zoom selection — this sets how many
   // source pixels per mm we aim for, which determines the tile zoom level.
-  const TARGET_DPI = 300;
   const zoom = computeZoom(config.scale, centreLat, TARGET_DPI, maxNativeZoom);
 
   // Display zoom equivalent of the print scale — drives vector overlay style

@@ -299,6 +299,10 @@ export interface TopoExportJobView {
   format: ExportFormat;
   bundling: ExportBundling;
   status: ExportStatus;
+  // Adaptive processing-time estimate (seconds) computed at create. Null on
+  // rows created before the estimator existed or when the source tile count
+  // was unknown — display falls back to a static "Exporting…" label.
+  estimatedSeconds: number | null;
   resultBytes: number | null;
   errorMessage: string | null;
   createdAt: string;

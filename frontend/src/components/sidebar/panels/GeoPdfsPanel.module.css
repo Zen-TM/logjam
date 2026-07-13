@@ -195,12 +195,6 @@
   white-space: nowrap;
 }
 
-.jobMetaFailed {
-  composes: jobMeta;
-  color: var(--theme-warning);
-  opacity: 1;
-}
-
 .iconDownloadButton {
   composes: iconButton;
   color: var(--theme-accent);
