@@ -16,12 +16,17 @@ import {
   createFilterOptions,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import { useToast } from "../feedback/ToastProvider";
+import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
 import {
   coerceFieldValue,
   buildCustomFieldDef,
   formatTripCanyonNames,
+  isValidLatitude,
+  isValidLongitude,
   TRIP_TYPE_SUGGESTIONS,
   MAX_CANYONS_PER_TRIP,
   MAX_TRIP_TYPES_PER_TRIP,
@@ -40,12 +45,29 @@ import { fieldSx, typeChipSx } from "../../csvImport/dialogStyles";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
 import AddCustomFieldForm from "./AddCustomFieldForm";
-import CustomFieldInput from "./CustomFieldInput";
+import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
+import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
+import ConfirmDialog from "./ConfirmDialog";
 import { getFieldValue as getFieldValueFor } from "./customFieldValues";
 import classes from "./TripLogDialog.module.css";
 
 function todayDateString(): string {
-  return new Date().toISOString().split("T")[0];
+  // Today's LOCAL calendar date as YYYY-MM-DD. The trip date comes from a native
+  // <input type="date">, which yields a local calendar date, so "today" must be
+  // local too — `toISOString()` (UTC) marked the current day as "future" every
+  // morning in AEST (UTC+10/+11).
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// True when a date-only string (YYYY-MM-DD) is after today. Both sides are
+// local-calendar YYYY-MM-DD strings, so this is a plain lexicographic
+// comparison with no timezone off-by-one.
+function isFutureDate(dateString: string): boolean {
+  return dateString > todayDateString();
 }
 
 // ── Canyon option union ──────────────────────────────────────
@@ -130,6 +152,7 @@ function TripLogDialog({
   onCanyonCreated?: () => void;
 }) {
   const isMobile = useIsMobile();
+  const toast = useToast();
   const [date, setDate] = useState(todayDateString());
   const [notes, setNotes] = useState("");
   // Ordered ids of selected existing canyons — order is meaningful (drives the
@@ -147,6 +170,9 @@ function TripLogDialog({
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set on a Save attempt so every invalid custom field shows its inline error
+  // at once (before that, errors only show after a field is blurred).
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
 
   // The full known-type vocabulary: built-in suggestions ∪ the user's own
   // history, deduped case-insensitively (first casing wins).
@@ -191,6 +217,9 @@ function TripLogDialog({
   const [newFieldMax, setNewFieldMax] = useState("");
   const [addingField, setAddingField] = useState(false);
   const [addFieldError, setAddFieldError] = useState<string | null>(null);
+  // Field pending deletion via the shared impact-aware confirm (also used by
+  // the Account panel's field manager).
+  const [fieldToDelete, setFieldToDelete] = useState<TripLogCustomFieldDef | null>(null);
 
   // Selectable canyons — already-selected ones are excluded so they don't
   // linger (duplicated) in the dropdown once chipped.
@@ -223,6 +252,11 @@ function TripLogDialog({
     return names;
   }, [selectedCanyonIds, canyons, creating]);
 
+  // Snapshot of the form fields as populated below, taken in the same effect
+  // that sets them — used by the unsaved-changes guard to tell a real edit
+  // apart from "the dialog is open" (TRIP-3).
+  const initialFormSnapshotRef = useRef<string | null>(null);
+
   // Populate form when opening for edit (or reset on create).
   // We intentionally exclude customFieldDefs from deps — field defs shouldn't
   // reset the form values just because a new field was added mid-session.
@@ -233,30 +267,51 @@ function TripLogDialog({
       pickingRef.current = false;
       return;
     }
+    let initialDate: string;
+    let initialNotes: string;
+    let initialSelectedCanyonIds: string[];
+    let initialDisplayNameInput: string;
+    let initialSelectedTypes: string[];
+    let initialFieldValues: Record<string, string>;
     if (tripLog) {
-      setDate(tripLog.date.split("T")[0]);
-      setNotes(tripLog.notes ?? "");
-      setSelectedCanyonIds(tripLog.canyons.map((c) => c.id));
-      setDisplayNameInput(tripLog.displayName ?? "");
-      setSelectedTypes(tripLog.types);
-      setCreating(null);
+      initialDate = tripLog.date.split("T")[0];
+      initialNotes = tripLog.notes ?? "";
+      initialSelectedCanyonIds = tripLog.canyons.map((c) => c.id);
+      initialDisplayNameInput = tripLog.displayName ?? "";
+      initialSelectedTypes = tripLog.types;
       // Populate existing custom field values as strings
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
         const raw = tripLog.customFields[def.key];
         vals[def.key] = raw != null ? String(raw) : "";
       }
-      setFieldValues(vals);
+      initialFieldValues = vals;
     } else {
-      setDate(todayDateString());
-      setNotes("");
-      setSelectedCanyonIds(defaultCanyonId ? [defaultCanyonId] : []);
-      setDisplayNameInput("");
-      setSelectedTypes([]);
-      setCreating(null);
-      setFieldValues({});
+      initialDate = todayDateString();
+      initialNotes = "";
+      initialSelectedCanyonIds = defaultCanyonId ? [defaultCanyonId] : [];
+      initialDisplayNameInput = "";
+      initialSelectedTypes = [];
+      initialFieldValues = {};
     }
+    setDate(initialDate);
+    setNotes(initialNotes);
+    setSelectedCanyonIds(initialSelectedCanyonIds);
+    setDisplayNameInput(initialDisplayNameInput);
+    setSelectedTypes(initialSelectedTypes);
+    setCreating(null);
+    setFieldValues(initialFieldValues);
+    initialFormSnapshotRef.current = JSON.stringify({
+      date: initialDate,
+      notes: initialNotes,
+      selectedCanyonIds: initialSelectedCanyonIds,
+      displayNameInput: initialDisplayNameInput,
+      selectedTypes: initialSelectedTypes,
+      fieldValues: initialFieldValues,
+      creating: null as CreateForm | null,
+    });
     setError(null);
+    setShowFieldErrors(false);
     setShowAddField(false);
     setNewFieldLabel("");
     setNewFieldType("string");
@@ -266,6 +321,26 @@ function TripLogDialog({
     committedRef.current = false;
     draftPromiseRef.current = null;
   }, [open, tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Real dirty-check: current form fields vs. the snapshot taken when the
+  // dialog was (re)populated — not just "the dialog is open" (TRIP-3). Media
+  // is excluded: uploads persist immediately (or via the self-cleaning draft
+  // trip in create mode), so they're never "unsaved" by the time a close is
+  // attempted.
+  const isDirty =
+    open &&
+    initialFormSnapshotRef.current !== null &&
+    JSON.stringify({
+      date,
+      notes,
+      selectedCanyonIds,
+      displayNameInput,
+      selectedTypes,
+      fieldValues,
+      creating,
+    }) !== initialFormSnapshotRef.current;
+
+  const guard = useUnsavedChangesGuard(isDirty, () => void handleRequestClose());
 
   // In edit mode, fetch the trip's existing media (with fresh presigned URLs).
   useEffect(() => {
@@ -290,6 +365,10 @@ function TripLogDialog({
     const lng = parseFloat(creating.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng))
       throw new Error("Valid latitude and longitude are required.");
+    if (!isValidLatitude(lat) || !isValidLongitude(lng))
+      throw new Error(
+        "Latitude must be between -90 and 90, and longitude between -180 and 180.",
+      );
     const c = await createCanyon({
       name: creating.name.trim(),
       latitude: lat,
@@ -381,6 +460,16 @@ function TripLogDialog({
       setError("Date is required.");
       return;
     }
+    // Block save if any custom numeric field is invalid (e.g. "5.5" in an
+    // integer field) so it can't be silently mangled on save (TRIP-1/TRIP-2).
+    const customFieldInvalid = customFieldDefs.some(
+      (def) => customFieldValueError(def, getFieldValue(def.key)) != null,
+    );
+    if (customFieldInvalid) {
+      setShowFieldErrors(true);
+      setError("Please fix the highlighted fields.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -427,6 +516,7 @@ function TripLogDialog({
       }
       committedRef.current = true;
       onSaved();
+      toast.success("Trip log saved.");
       onClose();
     } catch (err) {
       console.error(err);
@@ -466,17 +556,18 @@ function TripLogDialog({
   }
 
   return (
+    <>
     <Dialog
       fullScreen={isMobile}
       open={open}
-      onClose={saving ? undefined : () => void handleRequestClose()}
+      onClose={saving ? undefined : guard.requestClose}
       maxWidth="sm"
       fullWidth
       PaperProps={{
         sx: {
           backgroundColor: "var(--theme-primary)",
           color: "var(--theme-text-primary)",
-          maxHeight: "85vh",
+          maxHeight: isMobile ? "100%" : "85vh",
         },
       }}
     >
@@ -489,7 +580,7 @@ function TripLogDialog({
         <IconButton
           aria-label="Close dialog"
           size="small"
-          onClick={() => void handleRequestClose()}
+          onClick={guard.requestClose}
           disabled={saving}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -762,18 +853,34 @@ function TripLogDialog({
           />
 
           {/* Date */}
-          <TextField
-            label="Date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            size="small"
-            fullWidth
-            required
-            error={!date && error === "Date is required."}
-            InputLabelProps={{ shrink: true }}
-            sx={fieldSx}
-          />
+          <Box>
+            <TextField
+              label="Date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              size="small"
+              fullWidth
+              required
+              error={!date && error === "Date is required."}
+              InputLabelProps={{ shrink: true }}
+              sx={fieldSx}
+            />
+            {/* Non-blocking hint — a future date is allowed (trip planning), we
+                just flag it so an accidental typo doesn't pass unnoticed. */}
+            {isFutureDate(date) && (
+              <Typography
+                variant="caption"
+                sx={{
+                  display: "block",
+                  mt: 0.5,
+                  color: "var(--theme-text-muted)",
+                }}
+              >
+                This date is in the future.
+              </Typography>
+            )}
+          </Box>
 
           {/* Notes */}
           <TextField
@@ -795,12 +902,31 @@ function TripLogDialog({
                 Custom Fields
               </Typography>
               {customFieldDefs.map((def) => (
-                <CustomFieldInput
+                <Box
                   key={def.key}
-                  def={def}
-                  value={getFieldValue(def.key)}
-                  onChange={(v) => setFieldValue(def.key, v)}
-                />
+                  sx={{ display: "flex", gap: 1, alignItems: "center" }}
+                >
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <CustomFieldInput
+                      def={def}
+                      value={getFieldValue(def.key)}
+                      onChange={(v) => setFieldValue(def.key, v)}
+                      showError={showFieldErrors}
+                    />
+                  </Box>
+                  <IconButton
+                    aria-label={`Delete custom field ${def.label}`}
+                    size="small"
+                    onClick={() => setFieldToDelete(def)}
+                    sx={{
+                      color: "var(--theme-text-muted)",
+                      flexShrink: 0,
+                      "&:hover": { color: "var(--theme-warning)" },
+                    }}
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Box>
               ))}
             </Box>
           )}
@@ -911,7 +1037,7 @@ function TripLogDialog({
 
       <DialogActions>
         <Button
-          onClick={() => void handleRequestClose()}
+          onClick={guard.requestClose}
           disabled={saving}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -927,6 +1053,37 @@ function TripLogDialog({
         </Button>
       </DialogActions>
     </Dialog>
+
+    {/* Impact-aware delete confirm (shared with the Account panel). On delete
+        the server strips the field's values from all trips; mirror that
+        locally by dropping the form value. */}
+    <DeleteCustomFieldDialog
+      entity="trip-log"
+      def={fieldToDelete}
+      onClose={() => setFieldToDelete(null)}
+      onDeleted={(remaining) => {
+        onCustomFieldDefsChange(remaining);
+        if (fieldToDelete) {
+          const { key } = fieldToDelete;
+          setFieldValues((prev) => {
+            const next = { ...prev };
+            delete next[key];
+            return next;
+          });
+        }
+      }}
+    />
+
+    <ConfirmDialog
+      open={guard.guardOpen}
+      title="Discard unsaved changes?"
+      message="Your changes will be lost."
+      confirmLabel="Discard"
+      confirmColor="error"
+      onConfirm={guard.confirmDiscard}
+      onClose={guard.cancelDiscard}
+    />
+    </>
   );
 }
 

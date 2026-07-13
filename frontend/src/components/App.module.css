@@ -78,6 +78,11 @@
   display: flex;
   gap: 0.75rem;
   z-index: 10;
+  /* Keep the bar inside the viewport — with three buttons it otherwise
+     overflows and clips at the screen edges on narrow widths (CANYON-11). */
+  max-width: calc(100vw - 2rem);
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 /* Mobile: lift above the peeked bottom sheet (~96px) during area selection. */

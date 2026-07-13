@@ -11,6 +11,7 @@ import {
 } from "@mui/material";
 import {
   EXPORT_FORMAT_RULES,
+  isLayerEligibleForFormat,
   reconcileExportSelection,
   validateExportRequest,
   type ExportFormat,
@@ -128,9 +129,9 @@ export default function TopoExportControls({ value, onChange, availableLayers }:
           <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>Layers</Typography>
           <FormGroup>
             {TOPO_LAYERS.filter((l) => availableLayers.has(l.name)).map((l) => {
-              const eligible =
-                (l.format === "raster" && rule.allowRaster) ||
-                (l.format === "vector" && rule.allowVector);
+              // Single legality source (TOPOEXP-1) — never re-derive
+              // format/layer rules inline.
+              const eligible = isLayerEligibleForFormat(value.format, l.name);
               return (
                 <FormControlLabel
                   key={l.name}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -76,6 +76,7 @@ function CanyonDetailPanel({
   onCanyonCustomFieldDefsChange,
   onQuotaChanged,
   onRefetchTripLogs,
+  onAfterDelete,
 }: {
   canyon: TCanyon | undefined;
   canyons: TCanyon[];
@@ -95,6 +96,9 @@ function CanyonDetailPanel({
   // Retrigger the global Trip Logs list/search after a trip is created or
   // deleted here — the canyon-scoped refetch below only updates this panel.
   onRefetchTripLogs: () => void;
+  // Leave the (now-empty) canyon-detail panel after a delete so it doesn't
+  // dead-end in "No canyon selected" (CANYON-8 / MOBILE-4).
+  onAfterDelete: () => void;
 }) {
   const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
@@ -125,13 +129,25 @@ function CanyonDetailPanel({
     [tripLogs],
   );
 
+  // Both fetch effects below guard on a request key held in a ref: StrictMode
+  // (dev) runs each effect twice with identical deps, which fired
+  // GET /canyons/:id and GET /canyons/:id/shares twice per canyon selection
+  // (CANYON-13). The refs survive the double-invoke, so the second identical
+  // run skips. Each key includes every dep that should trigger a refetch.
+  const sharesFetchKeyRef = useRef<string | null>(null);
+  const detailFetchKeyRef = useRef<string | null>(null);
+
   // Owner-only "shared with" list. Refetches when the share dialog closes so a
   // just-made share/unshare reflects immediately.
   useEffect(() => {
     if (!canyon || !isOwnedCanyon) {
+      sharesFetchKeyRef.current = null;
       setCanyonShares([]);
       return;
     }
+    const fetchKey = `${canyon.id}:${showShareDialog}`;
+    if (sharesFetchKeyRef.current === fetchKey) return;
+    sharesFetchKeyRef.current = fetchKey;
     getCanyonShares(canyon.id)
       .then(setCanyonShares)
       // Best-effort: this line is informational; on failure just omit it.
@@ -141,10 +157,13 @@ function CanyonDetailPanel({
 
   useEffect(() => {
     if (!canyon) {
+      detailFetchKeyRef.current = null;
       setTripLogs([]);
       setCanyonMedia([]);
       return;
     }
+    if (detailFetchKeyRef.current === canyon.id) return;
+    detailFetchKeyRef.current = canyon.id;
     setLoadingTrips(true);
     // One fetch yields canyon-level media plus (for owners) the trip logs.
     getCanyonDetail(canyon.id)
@@ -194,6 +213,9 @@ function CanyonDetailPanel({
       setSelectedCanyonID(null);
       onRefetch();
       onQuotaChanged();
+      toast.success("Canyon deleted.");
+      // Return to the canyons list — the detail panel has nothing to show now.
+      onAfterDelete();
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't delete canyon. Please try again."));
@@ -604,8 +626,10 @@ function CanyonDetailPanel({
         </DialogTitle>
         <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
           <DialogContentText sx={{ color: "var(--theme-text-muted)" }}>
-            Are you sure you want to delete {canyon.name}? Trip logs and other
-            associated data will also be deleted. This cannot be undone.
+            Are you sure you want to delete {canyon.name}? Its photos, tracks, and
+            shares are permanently deleted. Your trip logs are kept — they&rsquo;ll
+            be unlinked from this canyon but stay in your logbook. This cannot be
+            undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>

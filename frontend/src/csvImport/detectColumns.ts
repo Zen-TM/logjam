@@ -16,7 +16,13 @@ const NOTES_ALIASES = new Set(["notes", "comments", "comment", "description", "n
 const TYPE_ALIASES = new Set(["type", "activity", "trip type"]);
 
 function normalize(s: string): string {
-  return s.toLowerCase().replace(/[\s_-]+/g, " ").trim();
+  // Split camelCase / letter-digit runs before lowercasing so camelCase headers
+  // and custom-field labels collapse to the same spaced tokens (IMPORT-4).
+  return s
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/[\s_-]+/g, " ")
+    .trim();
 }
 
 export function detectColumns(

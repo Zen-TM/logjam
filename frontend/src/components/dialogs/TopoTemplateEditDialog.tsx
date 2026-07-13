@@ -18,6 +18,7 @@ import {
   AUTO_EXPORT_DEFAULTS,
   cloneRasterTemplateSettings,
   slopeBandsError,
+  hillshadeSettingsError,
   type RasterTemplateSettings,
   type AutoExportSettings,
 } from "@logjam/shared";
@@ -110,7 +111,7 @@ function TopoTemplateEditDialog({
         sx: {
           backgroundColor: "var(--theme-primary)",
           color: "var(--theme-text-primary)",
-          maxHeight: "85vh",
+          maxHeight: isMobile ? "100%" : "85vh",
         },
       }}
     >
@@ -163,7 +164,12 @@ function TopoTemplateEditDialog({
         <Button
           variant="contained"
           color="secondary"
-          disabled={saving || !name.trim() || slopeBandsError(settings.slope.bands) != null}
+          disabled={
+            saving ||
+            !name.trim() ||
+            slopeBandsError(settings.slope.bands) != null ||
+            hillshadeSettingsError(settings.hillshade) != null
+          }
           onClick={handleSave}
         >
           {saving ? "Saving…" : "Save"}

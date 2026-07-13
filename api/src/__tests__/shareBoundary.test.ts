@@ -18,8 +18,24 @@ import {
 // the perspectives the old single-user fake auth could not reach. Seed baseline:
 // alice owns SHARED_CANYON_ID and shares it with bob; carol is shared nothing.
 // Tests that mutate state create + tear down their own rows so the baseline seed
-// is left intact (and the carol↔bob pair, which the seed leaves empty, is
-// restored to empty).
+// is left intact. The rich seed (2026-06-21) ships an accepted bob↔carol
+// friendship; the lifecycle tests below need that pair EMPTY, so they clear it
+// first via clearBobCarolFriendship() (they already restored it to empty on
+// exit, so reruns are unaffected).
+
+// Remove any accepted bob↔carol friendship so lifecycle tests start from an
+// empty pair. Pending requests are handled by each test's own teardown.
+async function clearBobCarolFriendship(): Promise<void> {
+  const friends = await request(API_URL).get("/friends").set(as(BOB_SUB));
+  expect(friends.status).toBe(200);
+  const carol = friends.body.find((f: { id: string }) => f.id === CAROL_ID);
+  if (carol) {
+    const del = await request(API_URL)
+      .delete(`/friends/${carol.friendshipId as string}`)
+      .set(as(BOB_SUB));
+    expect(del.status).toBe(204);
+  }
+}
 
 async function createCanyon(sub: string, name: string): Promise<string> {
   const res = await request(API_URL)
@@ -210,8 +226,9 @@ describe("friend-request lifecycle from the recipient side", () => {
   });
 
   it("full accept then unfriend cycle on the otherwise-empty carol↔bob pair", async () => {
-    // bob → carol request (this pair has no seed friendship, so it restores
-    // cleanly to empty at the end).
+    await clearBobCarolFriendship();
+    // bob → carol request (pair cleared above, so it restores cleanly to
+    // empty at the end).
     const reqRes = await request(API_URL)
       .post("/friends/request")
       .set(as(BOB_SUB))
@@ -253,6 +270,7 @@ describe("friend-request lifecycle from the recipient side", () => {
   });
 
   it("only the recipient may accept a friend request", async () => {
+    await clearBobCarolFriendship();
     const reqRes = await request(API_URL)
       .post("/friends/request")
       .set(as(BOB_SUB))
@@ -276,6 +294,7 @@ describe("friend-request lifecycle from the recipient side", () => {
 
 describe("cross-user notification isolation", () => {
   it("a friend-request notification is delivered to the recipient, never the sender", async () => {
+    await clearBobCarolFriendship();
     const reqRes = await request(API_URL)
       .post("/friends/request")
       .set(as(BOB_SUB))

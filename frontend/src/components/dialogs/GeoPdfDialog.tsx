@@ -22,7 +22,17 @@ import { apiFetch, type TCanyon, type GeoPdfJobView } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import { FieldError } from "../feedback/FieldError";
 import { useToast } from "../feedback/ToastProvider";
+import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
+import ConfirmDialog from "./ConfirmDialog";
+import { sanitizeDecimalInput } from "../../numberInput";
+import {
+  extentFieldErrors,
+  hasExtentFieldError,
+  parseExtentField,
+  scaleFieldError,
+} from "./geoPdfExtentFields";
 import type {
   ExtentState,
   PaperSize,
@@ -179,6 +189,15 @@ function GeoPdfDialog({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Unsaved-changes tracking. Explicit dirty flag (not snapshot-diffing) —
+  // state here is seeded by three programmatic writers at unpredictable
+  // times (open-time map-view seed, async launch-template apply, the map
+  // round-trip reopen), so a diff-against-baseline approach would false-
+  // positive on every seed. Only handlers that represent a direct user
+  // interaction with the form set this; programmatic seeds/resets never do.
+  const [dirty, setDirty] = useState(false);
+  const markDirty = useCallback(() => setDirty(true), []);
+
   // Template mode name
   const [editTemplateName, setEditTemplateName] = useState("");
 
@@ -233,6 +252,7 @@ function GeoPdfDialog({
     setError(null);
     setEditTemplateName("");
     setRawN(""); setRawS(""); setRawE(""); setRawW(""); setRawScale("");
+    setDirty(false);
   }, [open]);
 
   // Seed layers + extent from the current map view, once per genuine open.
@@ -382,7 +402,11 @@ function GeoPdfDialog({
     });
   }, [completedTopoJobs, extentState, templateMode]);
 
-  // Populate extent from map selection — always receives both extent and scale
+  // Populate extent from map selection — always receives both extent and scale.
+  // This fires only when the user actually confirms a pick on the map (App
+  // only sets these props from onGeoPdfExtentConfirmed), so — unlike the
+  // open-time seed and template-apply effects — it represents real user work
+  // and must mark the form dirty.
   useEffect(() => {
     if (pendingExtent && pendingScale) {
       setExtentState((prev: ExtentState) => ({
@@ -393,6 +417,7 @@ function GeoPdfDialog({
         west: pendingExtent.west,
         scale: pendingScale,
       }));
+      setDirty(true);
     }
   }, [pendingExtent, pendingScale]);
 
@@ -458,6 +483,10 @@ function GeoPdfDialog({
       setSelectedTemplateId(id);
       const tmpl = templates.find((t) => t.id === id);
       if (!tmpl) return;
+      // Selecting a template is itself a deliberate choice worth guarding,
+      // distinct from the launch-template auto-apply effect which must not
+      // set this (that one fires once per genuine open, unprompted).
+      setDirty(true);
       const c = tmpl.config;
       setExtentState((prev: ExtentState) => {
         let updated = {
@@ -649,6 +678,7 @@ function GeoPdfDialog({
       else next.add(name);
       return next;
     });
+    setDirty(true);
   }, []);
 
   const extentValid =
@@ -656,20 +686,38 @@ function GeoPdfDialog({
     extentState.east > extentState.west &&
     extentState.scale > 0;
 
+  // Inline validation of the raw extent/scale inputs (GEOPDF-1). A field left
+  // in an invalid state (non-numeric, out of range, North not above South,
+  // East not right of West) shows a FieldError and blocks Generate — the old
+  // behaviour silently discarded the input while still displaying it.
+  const extentInputErrors = extentFieldErrors(
+    { n: rawN, s: rawS, e: rawE, w: rawW },
+    extentState,
+  );
+  const scaleInputError = scaleFieldError(rawScale);
+
+  // Esc / backdrop / X / Cancel route through this so a dirty form prompts
+  // before discarding. "Select on map" bypasses it entirely (it calls
+  // onSelectOnMap, never onClose/requestClose — App flips `open` to false
+  // itself for that round trip). A successful Generate/Save-Template also
+  // bypasses it by calling the raw onClose/onTemplateSaved directly.
+  const guard = useUnsavedChangesGuard(dirty, onClose);
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
+    <>
     <Dialog
       fullScreen={isMobile}
       open={open}
-      onClose={generating ? undefined : onClose}
+      onClose={generating ? undefined : guard.requestClose}
       maxWidth="sm"
       fullWidth
       PaperProps={{
         sx: {
           backgroundColor: "var(--theme-primary)",
           color: "var(--theme-text-primary)",
-          maxHeight: "85vh",
+          maxHeight: isMobile ? "100%" : "85vh",
         },
       }}
     >
@@ -689,7 +737,7 @@ function GeoPdfDialog({
         <IconButton
           aria-label="Close dialog"
           size="small"
-          onClick={onClose}
+          onClick={guard.requestClose}
           disabled={generating}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -721,7 +769,10 @@ function GeoPdfDialog({
             <TextField
               placeholder="Template name"
               value={editTemplateName}
-              onChange={(e) => setEditTemplateName(e.target.value)}
+              onChange={(e) => {
+                setEditTemplateName(e.target.value);
+                markDirty();
+              }}
               size="small"
               color="secondary"
               sx={{
@@ -803,7 +854,10 @@ function GeoPdfDialog({
                 <TextField
                   placeholder="Template name"
                   value={templateName}
-                  onChange={(e) => setTemplateName(e.target.value)}
+                  onChange={(e) => {
+                    setTemplateName(e.target.value);
+                    markDirty();
+                  }}
                   size="small"
                   color="secondary"
                   sx={{
@@ -850,9 +904,10 @@ function GeoPdfDialog({
                     ? classes.smallButtonActive
                     : classes.smallButton
                 }
-                onClick={() =>
-                  setExtentState(applyPaperChange(extentState, size))
-                }
+                onClick={() => {
+                  setExtentState(applyPaperChange(extentState, size));
+                  markDirty();
+                }}
               >
                 {size}
               </button>
@@ -875,9 +930,10 @@ function GeoPdfDialog({
                     ? classes.smallButtonActive
                     : classes.smallButton
                 }
-                onClick={() =>
-                  setExtentState(applyOrientationChange(extentState, o))
-                }
+                onClick={() => {
+                  setExtentState(applyOrientationChange(extentState, o));
+                  markDirty();
+                }}
               >
                 {o.charAt(0).toUpperCase() + o.slice(1)}
               </button>
@@ -895,6 +951,7 @@ function GeoPdfDialog({
                   setExtentState(
                     applyPaperChange(extentState, "custom", { w, h }),
                   );
+                  markDirty();
                 }}
               />
               <span>:</span>
@@ -908,6 +965,7 @@ function GeoPdfDialog({
                   setExtentState(
                     applyPaperChange(extentState, "custom", { w, h }),
                   );
+                  markDirty();
                 }}
               />
             </div>
@@ -996,46 +1054,58 @@ function GeoPdfDialog({
                 {extentState.coordMode === "latlon" ? "North" : "N (northing)"}
               </div>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 className={classes.extentInput}
                 value={rawN}
                 onFocus={() => {
                   focusedField.current = "n";
                 }}
-                onChange={(e) => setRawN(e.target.value)}
+                onChange={(e) => {
+                  setRawN(sanitizeDecimalInput(e.target.value));
+                  markDirty();
+                }}
                 onBlur={() => {
                   focusedField.current = null;
-                  const v = parseFloat(rawN);
-                  if (!isNaN(v))
-                    setExtentState((s: ExtentState) => applyNorthChange(s, v));
+                  // Apply only a valid value; invalid input stays visible with
+                  // its FieldError instead of being silently discarded.
+                  const deg = parseExtentField("n", rawN, extentState);
+                  if (deg !== null && extentInputErrors.n === null)
+                    setExtentState((s: ExtentState) => applyNorthChange(s, deg));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
                 }}
               />
+              {!templateMode && <FieldError message={extentInputErrors.n} />}
             </div>
             <div className={classes.extentWest}>
               <div className={classes.extentLabel}>
                 {extentState.coordMode === "latlon" ? "West" : "W (easting)"}
               </div>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 className={classes.extentInput}
                 value={rawW}
                 onFocus={() => {
                   focusedField.current = "w";
                 }}
-                onChange={(e) => setRawW(e.target.value)}
+                onChange={(e) => {
+                  setRawW(sanitizeDecimalInput(e.target.value));
+                  markDirty();
+                }}
                 onBlur={() => {
                   focusedField.current = null;
-                  const v = parseFloat(rawW);
-                  if (!isNaN(v))
-                    setExtentState((s: ExtentState) => applyWestChange(s, v));
+                  const deg = parseExtentField("w", rawW, extentState);
+                  if (deg !== null && extentInputErrors.w === null)
+                    setExtentState((s: ExtentState) => applyWestChange(s, deg));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
                 }}
               />
+              {!templateMode && <FieldError message={extentInputErrors.w} />}
             </div>
             <div className={classes.extentCenter}>
               {/* Pivot picker */}
@@ -1063,73 +1133,89 @@ function GeoPdfDialog({
                 {extentState.coordMode === "latlon" ? "East" : "E (easting)"}
               </div>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 className={classes.extentInput}
                 value={rawE}
                 onFocus={() => {
                   focusedField.current = "e";
                 }}
-                onChange={(e) => setRawE(e.target.value)}
+                onChange={(e) => {
+                  setRawE(sanitizeDecimalInput(e.target.value));
+                  markDirty();
+                }}
                 onBlur={() => {
                   focusedField.current = null;
-                  const v = parseFloat(rawE);
-                  if (!isNaN(v))
-                    setExtentState((s: ExtentState) => applyEastChange(s, v));
+                  const deg = parseExtentField("e", rawE, extentState);
+                  if (deg !== null && extentInputErrors.e === null)
+                    setExtentState((s: ExtentState) => applyEastChange(s, deg));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
                 }}
               />
+              {!templateMode && <FieldError message={extentInputErrors.e} />}
             </div>
             <div className={classes.extentSouth}>
               <div className={classes.extentLabel}>
                 {extentState.coordMode === "latlon" ? "South" : "S (northing)"}
               </div>
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 className={classes.extentInput}
                 value={rawS}
                 onFocus={() => {
                   focusedField.current = "s";
                 }}
-                onChange={(e) => setRawS(e.target.value)}
+                onChange={(e) => {
+                  setRawS(sanitizeDecimalInput(e.target.value));
+                  markDirty();
+                }}
                 onBlur={() => {
                   focusedField.current = null;
-                  const v = parseFloat(rawS);
-                  if (!isNaN(v))
-                    setExtentState((s: ExtentState) => applySouthChange(s, v));
+                  const deg = parseExtentField("s", rawS, extentState);
+                  if (deg !== null && extentInputErrors.s === null)
+                    setExtentState((s: ExtentState) => applySouthChange(s, deg));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
                 }}
               />
+              {!templateMode && <FieldError message={extentInputErrors.s} />}
             </div>
           </div>
 
-          {/* Scale */}
-          <Tooltip title="Map scale ratio. 25000 means 1 cm on the PDF = 250 m on the ground. Standard topo maps: 1:25 000 or 1:50 000." placement="top" arrow>
-            <div className={classes.scaleRow}>
-              <span className={classes.scalePrefix}>1 :</span>
+          {/* Scale. The tooltip wraps only the input so it centres on the
+              field, not the full-width row (GEOPDF-1). */}
+          <div className={classes.scaleRow}>
+            <span className={classes.scalePrefix}>1 :</span>
+            <Tooltip title="Map scale ratio. 25000 means 1 cm on the PDF = 250 m on the ground. Standard topo maps: 1:25 000 or 1:50 000." placement="top" arrow>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 className={classes.scaleInput}
                 value={rawScale}
                 onFocus={() => {
                   focusedField.current = "scale";
                 }}
-                onChange={(e) => setRawScale(e.target.value)}
+                onChange={(e) => {
+                  setRawScale(sanitizeDecimalInput(e.target.value));
+                  markDirty();
+                }}
                 onBlur={() => {
                   focusedField.current = null;
-                  const v = parseFloat(rawScale);
-                  if (!isNaN(v) && v > 0)
+                  const v = Number(rawScale);
+                  if (scaleInputError === null && Number.isFinite(v))
                     setExtentState((s: ExtentState) => applyScaleChange(s, v));
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") e.currentTarget.blur();
                 }}
               />
-            </div>
-          </Tooltip>
+            </Tooltip>
+          </div>
+          <FieldError message={scaleInputError} />
 
           {/* Select on map (hidden in template mode) */}
           {!templateMode && (
@@ -1154,7 +1240,10 @@ function GeoPdfDialog({
                     type="radio"
                     name="geopdf-base-layer"
                     checked={selectedBaseLayer === layer.id}
-                    onChange={() => setSelectedBaseLayer(layer.id)}
+                    onChange={() => {
+                      setSelectedBaseLayer(layer.id);
+                      markDirty();
+                    }}
                     style={{
                       accentColor: "var(--theme-accent)",
                     }}
@@ -1209,7 +1298,10 @@ function GeoPdfDialog({
             <input
               type="checkbox"
               checked={titleEnabled}
-              onChange={(e) => setTitleEnabled(e.target.checked)}
+              onChange={(e) => {
+                setTitleEnabled(e.target.checked);
+                markDirty();
+              }}
               style={{
                 accentColor: "var(--theme-accent)",
               }}
@@ -1220,7 +1312,10 @@ function GeoPdfDialog({
                 className={classes.elementInput}
                 placeholder="Map title"
                 value={titleText}
-                onChange={(e) => setTitleText(e.target.value)}
+                onChange={(e) => {
+                  setTitleText(e.target.value);
+                  markDirty();
+                }}
               />
             )}
           </div>
@@ -1229,7 +1324,10 @@ function GeoPdfDialog({
             <input
               type="checkbox"
               checked={compassEnabled}
-              onChange={(e) => setCompassEnabled(e.target.checked)}
+              onChange={(e) => {
+                setCompassEnabled(e.target.checked);
+                markDirty();
+              }}
               style={{
                 accentColor: "var(--theme-accent)",
               }}
@@ -1241,7 +1339,10 @@ function GeoPdfDialog({
             <input
               type="checkbox"
               checked={scaleTextEnabled}
-              onChange={(e) => setScaleTextEnabled(e.target.checked)}
+              onChange={(e) => {
+                setScaleTextEnabled(e.target.checked);
+                markDirty();
+              }}
               style={{
                 accentColor: "var(--theme-accent)",
               }}
@@ -1258,7 +1359,10 @@ function GeoPdfDialog({
             <input
               type="checkbox"
               checked={scaleBarEnabled}
-              onChange={(e) => setScaleBarEnabled(e.target.checked)}
+              onChange={(e) => {
+                setScaleBarEnabled(e.target.checked);
+                markDirty();
+              }}
               style={{
                 accentColor: "var(--theme-accent)",
               }}
@@ -1270,7 +1374,10 @@ function GeoPdfDialog({
             <input
               type="checkbox"
               checked={gridLinesEnabled}
-              onChange={(e) => setGridLinesEnabled(e.target.checked)}
+              onChange={(e) => {
+                setGridLinesEnabled(e.target.checked);
+                markDirty();
+              }}
               style={{
                 accentColor: "var(--theme-accent)",
               }}
@@ -1292,7 +1399,10 @@ function GeoPdfDialog({
                         ? classes.smallButtonActive
                         : classes.smallButton
                     }
-                    onClick={() => setGridLinesMode(mode)}
+                    onClick={() => {
+                      setGridLinesMode(mode);
+                      markDirty();
+                    }}
                     style={{ padding: "0.15em 0.5em", fontSize: "0.8em" }}
                   >
                     {label}
@@ -1308,7 +1418,7 @@ function GeoPdfDialog({
 
       <DialogActions>
         <Button
-          onClick={onClose}
+          onClick={guard.requestClose}
           disabled={generating}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -1327,7 +1437,12 @@ function GeoPdfDialog({
           <Button
             variant="contained"
             onClick={handleGenerate}
-            disabled={generating || !extentValid}
+            disabled={
+              generating ||
+              !extentValid ||
+              hasExtentFieldError(extentInputErrors) ||
+              scaleInputError !== null
+            }
             color="secondary"
           >
             {generating ? (
@@ -1342,6 +1457,17 @@ function GeoPdfDialog({
         )}
       </DialogActions>
     </Dialog>
+
+    <ConfirmDialog
+      open={guard.guardOpen}
+      title="Discard unsaved changes?"
+      message="Your changes will be lost."
+      confirmLabel="Discard"
+      confirmColor="error"
+      onConfirm={guard.confirmDiscard}
+      onClose={guard.cancelDiscard}
+    />
+    </>
   );
 }
 

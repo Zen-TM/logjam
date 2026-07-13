@@ -3,6 +3,7 @@ import {
   sanitizeIntegerInput,
   sanitizeDecimalInput,
   sanitizeNumericInput,
+  numericFieldError,
 } from "./numberInput";
 
 describe("sanitizeIntegerInput", () => {
@@ -51,5 +52,50 @@ describe("sanitizeNumericInput", () => {
   it("dispatches by type", () => {
     expect(sanitizeNumericInput("1.5", "integer")).toBe("15");
     expect(sanitizeNumericInput("1.5", "float")).toBe("1.5");
+  });
+});
+
+describe("numericFieldError", () => {
+  it("treats empty / lone-minus as unset (valid)", () => {
+    expect(numericFieldError("", { min: 0 })).toBeNull();
+    expect(numericFieldError("   ", { min: 0 })).toBeNull();
+    expect(numericFieldError("-", { min: 0 })).toBeNull();
+  });
+  it("flags a decimal in an integer field instead of truncating (TRIP-1)", () => {
+    expect(numericFieldError("5.5", { integer: true })).toBe("Whole numbers only");
+    expect(numericFieldError("5", { integer: true })).toBeNull();
+  });
+  it("flags negatives on a non-negative field (CANYON-2/TRIP-2)", () => {
+    expect(numericFieldError("-5", { min: 0 })).toBe("Cannot be negative");
+    expect(numericFieldError("-5.5", { integer: true, min: 0 })).toBe(
+      "Whole numbers only",
+    );
+    expect(numericFieldError("0", { min: 0 })).toBeNull();
+  });
+  it("enforces a bounded range (quality 1-5)", () => {
+    expect(numericFieldError("0.5", { min: 1, max: 5 })).toBe(
+      "Must be between 1 and 5",
+    );
+    expect(numericFieldError("6", { min: 1, max: 5 })).toBe(
+      "Must be between 1 and 5",
+    );
+    expect(numericFieldError("3.5", { min: 1, max: 5 })).toBeNull();
+  });
+  it("enforces coordinate ranges (CANYON-1)", () => {
+    expect(numericFieldError("95", { min: -90, max: 90 })).toBe(
+      "Must be between -90 and 90",
+    );
+    expect(numericFieldError("200", { min: -180, max: 180 })).toBe(
+      "Must be between -180 and 180",
+    );
+    expect(numericFieldError("-33.71", { min: -90, max: 90 })).toBeNull();
+  });
+  it("allows negatives when no min is set (e.g. unbounded temperature field)", () => {
+    expect(numericFieldError("-5", { integer: true })).toBeNull();
+  });
+  it("rejects a value that isn't a number", () => {
+    // sanitizeDecimalInput normally prevents this reaching the validator, but a
+    // lone stray like "." should still be caught rather than passed through.
+    expect(numericFieldError(".", {})).toBe("Enter a valid number");
   });
 });

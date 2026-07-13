@@ -30,6 +30,8 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { apiFetch, fetchCurrentUser, putToPresignedUrl } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
+import ConfirmDialog from "./ConfirmDialog";
 import type { TBbox } from "../map/Map";
 import {
   parseZipCentralDirectory,
@@ -39,6 +41,7 @@ import {
   AUTO_EXPORT_DEFAULTS,
   cloneRasterTemplateSettings,
   slopeBandsError,
+  hillshadeSettingsError,
   estimateElvisTileCount,
   regionNameFromSurvey,
   type ElvisStats,
@@ -47,6 +50,8 @@ import {
 } from "@logjam/shared";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
 import { nextTopoName } from "./jobName";
+import { fetchTopoTemplates } from "./topoTemplatesFetch";
+import { formatAreaKm2 } from "./formatArea";
 import { fieldSx } from "../../csvImport/dialogStyles";
 
 export type TopoTemplate = {
@@ -367,6 +372,7 @@ export default function TopoDialog({
   onJobCreated,
   initialTemplateId,
   existingTopoNames,
+  onTemplateSaved,
 }: {
   open: boolean;
   onClose: () => void;
@@ -375,6 +381,9 @@ export default function TopoDialog({
   onJobCreated: (job: TopoJob) => void;
   initialTemplateId?: string | null;
   existingTopoNames: string[];
+  /** Notifies the owner that the inline "Save as template" created a template,
+   *  so panel-side template lists can refetch (TOPO-1). */
+  onTemplateSaved?: () => void;
 }) {
   const isMobile = useIsMobile();
   const [file, setFile] = useState<File | null>(null);
@@ -438,7 +447,7 @@ export default function TopoDialog({
 
   const refreshTemplates = useCallback(async () => {
     try {
-      const list = await apiFetch<TopoTemplate[]>("/topo-templates");
+      const list = await fetchTopoTemplates();
       setTemplates(list);
       return list;
     } catch (e) {
@@ -482,6 +491,9 @@ export default function TopoDialog({
       setShowSaveAs(false);
       await refreshTemplates();
       setSelectedTemplateId(created.id);
+      // Panel-side template lists render from their own state — tell the owner
+      // so they refresh without a page reload (TOPO-1).
+      onTemplateSaved?.();
     } catch (e) {
       console.error(e);
       setError(messageFromError(e, "Couldn't save template."));
@@ -643,11 +655,22 @@ export default function TopoDialog({
     }
   }
 
-  function handleClose() {
+  function performClose() {
     // Block closing mid-upload — there's no resumable state to return to.
     if (phase === "uploading" || phase === "finalizing") return;
     onClose();
   }
+
+  // Dirty once a ZIP has been picked and not yet submitted — losing a queued
+  // multi-GB upload to a stray Esc is real lost work. Deliberately keyed to the
+  // file only: settings/name have an async baseline (a template can apply after
+  // open via initialTemplateId, and picking a template mutates settings), so a
+  // settings snapshot would false-positive; the confirm copy is narrowed to
+  // match exactly what this guards. Once submission starts (uploading/
+  // finalizing) close is already blocked above; once done there's nothing left
+  // to lose.
+  const isDirty = phase === "form" && file != null;
+  const guard = useUnsavedChangesGuard(isDirty, performClose);
 
   const area = pendingBbox ? bboxAreaKm2(pendingBbox) : null;
   const estimatedTiles = area != null ? estimateElvisTileCount(area) : null;
@@ -658,17 +681,18 @@ export default function TopoDialog({
   const uploadPct = totalBytes > 0 ? Math.min(100, Math.round((uploadedBytes / totalBytes) * 100)) : 0;
 
   return (
+    <>
     <Dialog
       fullScreen={isMobile}
       open={open}
-      onClose={handleClose}
+      onClose={guard.requestClose}
       maxWidth="sm"
       fullWidth
       PaperProps={{
         sx: {
           backgroundColor: "var(--theme-primary)",
           color: "var(--theme-text-primary)",
-          maxHeight: "85vh",
+          maxHeight: isMobile ? "100%" : "85vh",
         },
       }}
     >
@@ -689,7 +713,7 @@ export default function TopoDialog({
         {phase !== "uploading" && phase !== "finalizing" && (
           <IconButton
             aria-label="Close dialog"
-            onClick={handleClose}
+            onClick={guard.requestClose}
             size="small"
             sx={{ color: "var(--theme-text-primary)" }}
           >
@@ -817,7 +841,7 @@ export default function TopoDialog({
                 <>
                   <Chip
                     size="small"
-                    label={`${area?.toFixed(0)} km²`}
+                    label={area != null ? formatAreaKm2(area) : ""}
                     variant="outlined"
                     sx={{
                       color: "var(--theme-text-muted)",
@@ -1063,8 +1087,15 @@ export default function TopoDialog({
                     ]
                   : null,
                 ["Size", formatBytes(stats.uncompressedBytes)],
+                // Unambiguous quota copy (TOPO-8): tileUsed already includes
+                // any queued/running jobs (the server sums non-failed jobs
+                // this month), so show the current figure and the projection
+                // side by side instead of a bare "N / Q after this job".
                 tileUsed !== null && tileQuota !== null
-                  ? ["Monthly quota", `${tileUsed + (stats.tileCount || 0)} / ${tileQuota} after this job`]
+                  ? [
+                      "Monthly tiles",
+                      `${tileUsed} of ${tileQuota} used · ${tileUsed + (stats.tileCount || 0)} after this job`,
+                    ]
                   : null,
               ] as ([string, string] | null)[]
             )
@@ -1154,11 +1185,18 @@ export default function TopoDialog({
               "& .MuiOutlinedInput-notchedOutline": { borderColor: "var(--theme-accent)" },
             }}
           >
-            {templates.map((t) => (
-              <MenuItem key={t.id} value={t.id}>
-                {t.name}{t.isSystem ? " (system)" : ""}
-              </MenuItem>
-            ))}
+            {/* Until /topo-templates resolves, render the synthetic system
+                Default entry (always first in the server list) so the Select's
+                initial value "default" is never out of range (TOPO-3). */}
+            {templates.length === 0 ? (
+              <MenuItem value={DEFAULT_TEMPLATE_ID}>Default (system)</MenuItem>
+            ) : (
+              templates.map((t) => (
+                <MenuItem key={t.id} value={t.id}>
+                  {t.name}{t.isSystem ? " (system)" : ""}
+                </MenuItem>
+              ))
+            )}
           </Select>
         </Box>
 
@@ -1179,33 +1217,25 @@ export default function TopoDialog({
             "& .MuiAccordionSummary-root": { minHeight: 40 },
           }}
         >
+          {/* No interactive children in the summary: AccordionSummary renders
+              as a <button>, so a nested Button is invalid DOM (TOPO-1). The
+              "Save as template" action lives in the details instead. */}
           <AccordionSummary
             expandIcon={<ExpandMoreIcon sx={{ color: "var(--theme-text-primary)" }} />}
-            sx={{
-              "& .MuiAccordionSummary-content": {
-                alignItems: "center",
-                justifyContent: "space-between",
-                mr: 1,
-              },
-            }}
           >
             <Typography variant="body2">Advanced settings</Typography>
-            {advancedOpen && (
+          </AccordionSummary>
+          <AccordionDetails sx={{ pt: 0 }}>
+            <Box sx={{ mb: 1.5, display: "flex", justifyContent: "flex-end" }}>
               <Button
                 size="small"
                 variant="outlined"
                 sx={outlinedAccentSx}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowSaveAs((v) => !v);
-                }}
-                onFocus={(e) => e.stopPropagation()}
+                onClick={() => setShowSaveAs((v) => !v)}
               >
                 Save as template
               </Button>
-            )}
-          </AccordionSummary>
-          <AccordionDetails sx={{ pt: 0 }}>
+            </Box>
             {showSaveAs && (
               <Box sx={{ mb: 1.5, display: "flex", gap: 1, alignItems: "center" }}>
                 <TextField
@@ -1223,7 +1253,11 @@ export default function TopoDialog({
                   size="small"
                   variant="contained"
                   color="secondary"
-                  disabled={!saveAsName.trim() || slopeBandsError(settings.slope.bands) != null}
+                  disabled={
+                    !saveAsName.trim() ||
+                    slopeBandsError(settings.slope.bands) != null ||
+                    hillshadeSettingsError(settings.hillshade) != null
+                  }
                   onClick={handleSaveAsTemplate}
                 >
                   Save
@@ -1261,7 +1295,7 @@ export default function TopoDialog({
         ) : (
           <>
             <Button
-              onClick={handleClose}
+              onClick={guard.requestClose}
               sx={{ color: "var(--theme-text-primary)" }}
             >
               Cancel
@@ -1276,6 +1310,7 @@ export default function TopoDialog({
                 !stats ||
                 !!validationError ||
                 slopeBandsError(settings.slope.bands) != null ||
+                hillshadeSettingsError(settings.hillshade) != null ||
                 (tileUsed !== null && tileQuota !== null && !!stats?.tileCount && tileUsed + stats.tileCount > tileQuota)
               }
             >
@@ -1285,5 +1320,16 @@ export default function TopoDialog({
         )}
       </DialogActions>
     </Dialog>
+
+    <ConfirmDialog
+      open={guard.guardOpen}
+      title="Discard unsaved changes?"
+      message="Your loaded file will be lost."
+      confirmLabel="Discard"
+      confirmColor="error"
+      onConfirm={guard.confirmDiscard}
+      onClose={guard.cancelDiscard}
+    />
+    </>
   );
 }

@@ -21,21 +21,36 @@
   padding: 0.6em 0;
   border-bottom: 1px solid color-mix(in srgb, var(--theme-text-primary) 14%, transparent);
   font-size: var(--text-sm);
-  cursor: pointer;
 }
 
 .notificationItem:last-child {
   border-bottom: none;
 }
 
-.notificationItem:focus-visible {
-  outline: 2px solid var(--theme-accent);
-  outline-offset: -2px;
-}
-
 .notificationUnread {
   border-left: 3px solid var(--theme-accent);
   padding-left: 0.5em;
+}
+
+/* Button-reset: the clickable read/navigate area of a row. A real <button>
+   (not a role="button" div) so it can never end up with another <button>
+   nested inside it — see NotificationsPanel.tsx. */
+.notificationActivateArea {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notificationActivateArea:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: -2px;
 }
 
 .notificationText {

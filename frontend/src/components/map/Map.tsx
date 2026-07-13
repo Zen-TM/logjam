@@ -12,12 +12,45 @@ import { Protocol } from "pmtiles";
 // Register PMTiles protocol for serving topo overlay layers from S3
 const pmtilesProtocol = new Protocol();
 maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile.bind(pmtilesProtocol));
+
+// Decide whether a MapLibre source error means the PMTiles archive is
+// DEFINITIVELY gone (tear the overlay down + blacklist it) versus a transient
+// blip we should let MapLibre retry (LAYERS-1). MapLibre fires "error" for ANY
+// per-tile/source load failure — including one-off network drops — so treating
+// the first error as terminal would kill a healthy overlay for the session.
+//
+// Terminal signals, deliberately conservative:
+//   - MapLibre AJAXError carries a numeric `.status`: the real HTTP code for an
+//     error response, or 0 for a network/CORS/DNS failure. Only 404 (object
+//     gone) and 403 (forbidden — expired/removed) are terminal; 0 and 5xx are
+//     transient.
+//   - The pmtiles Protocol throws a plain Error whose message embeds the
+//     archive's response code, e.g. "Bad response code: 404".
+// A per-tile "Tile not found." (sparse coverage inside a healthy archive) is
+// NOT terminal and is intentionally excluded.
+function isTerminalTopoSourceError(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null | undefined)?.status;
+  if (typeof status === "number") {
+    return status === 404 || status === 403;
+  }
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  return /bad response code:\s*(403|404)\b/i.test(message);
+}
+import { useMediaQuery } from "@mui/material";
 import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
+import { MOBILE_MAX_WIDTH_PX } from "../../useIsMobile";
 import type { TCanyon, TFilters, CanyonTrack } from "../../canyonUtils";
 import type { GeoJsonPolygonal } from "../../topoLayerTypes";
 import { passesFilters } from "../../canyonUtils";
 import { fetchTrackGeoJSON } from "../media/trackGeo";
+import { useToast } from "../feedback/ToastProvider";
+import { messageFromError } from "../../errors/messageFromError";
 import {
   extentFromCentreAndSize,
   OSM_LINE_FEATURE_KEYS,
@@ -28,6 +61,8 @@ import {
   rgbaCssFromHex,
   contourWidthStops,
   featureLineWidthStops,
+  isValidLatitude,
+  isValidLongitude,
   type OsmFeatureKey,
   type OsmPointFeatureKey,
   type OsmFeatureStyle,
@@ -187,6 +222,18 @@ function iconSizeInterp(sizeZ18: number): maplibregl.ExpressionSpecification {
   ];
 }
 
+// Canyon map labels: ellipsize a name past this length so a pathological
+// long name (e.g. a 250-char single token that can't line-wrap) can't render
+// as one full-map-width label (CANYON-7). The detail-panel header truncates
+// separately via CSS.
+const MAX_LABEL_CHARS = 40;
+const CANYON_LABEL_FIELD: maplibregl.ExpressionSpecification = [
+  "case",
+  [">", ["length", ["get", "name"]], MAX_LABEL_CHARS],
+  ["concat", ["slice", ["get", "name"], 0, MAX_LABEL_CHARS], "…"],
+  ["get", "name"],
+];
+
 // Fallback when vectorStyle has not yet loaded — keeps the legacy default look
 // rather than rendering invisible layers.
 const VECTOR_STYLE_FALLBACK: VectorStyleSettings = {
@@ -332,6 +379,7 @@ function Map({
   flyToCanyon,
   onFlyToCanyonConsumed,
   sidebarOpen,
+  onTopoSourceUnavailable,
 }: {
   filters: TFilters;
   canyons: TCanyon[];
@@ -384,10 +432,20 @@ function Map({
   flyToCanyon?: { lat: number; lng: number } | null;
   onFlyToCanyonConsumed?: () => void;
   sidebarOpen?: boolean;
+  // Fired once per topo overlay entry (jobId-layerName) whose PMTiles source
+  // failed to load (e.g. the S3 object is gone). The entry's layers/source are
+  // removed so MapLibre stops retrying; App surfaces the failure (LAYERS-1).
+  onTopoSourceUnavailable?: (entryId: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const toast = useToast();
+  // Touch/stylus input (coarse pointer) vs mouse — drives "Tap" vs "Click"
+  // copy in the map-pick banners (MOBILE-12a). Pointer capability, not
+  // viewport width: a touch laptop at desktop width still gets "Tap".
+  const isTouchInput = useMediaQuery("(pointer: coarse)");
+  const pickVerb = isTouchInput ? "Tap" : "Click";
   const prevTopoKeyRef = useRef<string>("");
   const prevEnabledKeyRef = useRef<string>("");
 
@@ -418,6 +476,19 @@ function Map({
     onMapViewChangeRef.current = onMapViewChange;
   }, [onMapViewChange]);
 
+  // Topo overlay entries whose PMTiles source already failed this session.
+  // Read by the once-on-load error handler (dedupe) and by the structural topo
+  // effect (never re-add a known-missing source — stops the per-load retry
+  // spam of LAYERS-1).
+  const failedTopoSourcesRef = useRef<Set<string>>(new Set());
+  // Topo entries whose transient (non-terminal) load error was already logged
+  // this session — one console line per source, not one per flaky tile.
+  const transientTopoSourcesRef = useRef<Set<string>>(new Set());
+  const onTopoSourceUnavailableRef = useRef(onTopoSourceUnavailable);
+  useEffect(() => {
+    onTopoSourceUnavailableRef.current = onTopoSourceUnavailable;
+  }, [onTopoSourceUnavailable]);
+
   useEffect(() => {
     vectorStyleRef.current = vectorStyle;
   }, [vectorStyle]);
@@ -447,9 +518,61 @@ function Map({
       "bottom-left",
     );
     map.addControl(
-      new maplibregl.ScaleControl({ unit: "metric", maxWidth: 200 }),
+      // Narrower on phone-sized viewports (MOBILE-10) so the scale bar can't
+      // grow wide enough to collide with the bottom-left attribution control,
+      // which starts in its expanded (non-icon) state until first dragged.
+      new maplibregl.ScaleControl({
+        unit: "metric",
+        maxWidth: window.innerWidth <= MOBILE_MAX_WIDTH_PX ? 100 : 200,
+      }),
       "bottom-right",
     );
+
+    // A completed topo job whose S3 outputs are gone otherwise 404s on every
+    // tile request, silently renders nothing, and retries each load (LAYERS-1).
+    // Source errors propagated through MapLibre's Style carry the sourceId. Only
+    // a DEFINITIVELY-missing archive (404/403) is terminal — tear its
+    // layers/source down (stops the retries) and notify App so the Layers panel
+    // can flag it. A transient error (network blip, 5xx, per-tile miss) is left
+    // in place so MapLibre retries; one blip must not blacklist a healthy
+    // overlay for the whole session.
+    map.on("error", (event) => {
+      const { sourceId } = event as { sourceId?: unknown };
+      if (typeof sourceId !== "string" || !sourceId.startsWith("topo-src-")) {
+        // Not ours — keep MapLibre's default behaviour of printing the error
+        // (binding any "error" listener suppresses it otherwise).
+        console.error(event.error);
+        return;
+      }
+      const entryId = sourceId.slice("topo-src-".length);
+      if (failedTopoSourcesRef.current.has(entryId)) return;
+
+      if (!isTerminalTopoSourceError(event.error)) {
+        // Non-terminal: do NOT tear down or blacklist — retrying is correct.
+        // Log once per source (no URLs — only the source id) so a flaky
+        // connection can't spam the console.
+        if (!transientTopoSourcesRef.current.has(entryId)) {
+          transientTopoSourcesRef.current.add(entryId);
+          console.error(
+            `Topo overlay source hit a transient error (will retry): ${sourceId}`,
+          );
+        }
+        return;
+      }
+
+      failedTopoSourcesRef.current.add(entryId);
+      // Log only the source id (job id + layer name) — no URLs.
+      console.error(`Topo overlay source failed to load: ${sourceId}`);
+      const ownedLayerIds = map
+        .getStyle()
+        .layers.map((l) => l.id)
+        .filter((lid) => lid.startsWith(`topo-${entryId}-`));
+      for (const lid of ownedLayerIds) {
+        if (map.getLayer(lid)) map.removeLayer(lid);
+      }
+      if (map.getSource(sourceId)) map.removeSource(sourceId);
+      onTopoSourceUnavailableRef.current?.(entryId);
+    });
 
     map.on("load", () => {
       // Add all raster base layers
@@ -541,7 +664,7 @@ function Map({
         source: "canyons",
         minzoom: 9,
         layout: {
-          "text-field": ["get", "name"],
+          "text-field": CANYON_LABEL_FIELD,
           "text-font": ["Open Sans Semibold"],
           "text-size": 12,
           "text-offset": [0, 1.2],
@@ -561,7 +684,7 @@ function Map({
         source: "shared-canyons",
         minzoom: 9,
         layout: {
-          "text-field": ["get", "name"],
+          "text-field": CANYON_LABEL_FIELD,
           "text-font": ["Open Sans Semibold"],
           "text-size": 12,
           "text-offset": [0, 1.2],
@@ -585,9 +708,13 @@ function Map({
         if (feature.geometry.type !== "Point") return;
         const [lng, lat] = feature.geometry.coordinates as [number, number];
         selectCanyonRef.current(id);
-        setTimeout(() => {
-          map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
-        }, SIDEBAR_TRANSITION_MS);
+        // Guard flyTo against an out-of-range legacy marker (CANYON-1) so a
+        // click still selects it instead of throwing "Invalid LngLat".
+        if (isValidLatitude(lat) && isValidLongitude(lng)) {
+          setTimeout(() => {
+            map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
+          }, SIDEBAR_TRANSITION_MS);
+        }
       });
 
       map.on("click", "shared-canyon-circles", (e) => {
@@ -598,9 +725,12 @@ function Map({
         if (feature.geometry.type !== "Point") return;
         const [lng, lat] = feature.geometry.coordinates as [number, number];
         selectCanyonRef.current(id);
-        setTimeout(() => {
-          map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
-        }, SIDEBAR_TRANSITION_MS);
+        // Guard flyTo against an out-of-range legacy marker (CANYON-1).
+        if (isValidLatitude(lat) && isValidLongitude(lng)) {
+          setTimeout(() => {
+            map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
+          }, SIDEBAR_TRANSITION_MS);
+        }
       });
 
       map.on("mouseenter", "canyon-circles", () => {
@@ -712,25 +842,60 @@ function Map({
   // is client-side (the API never echoes track contents — privacy rule); parsed
   // GeoJSON is cached by mediaId so toggling/re-renders don't refetch.
   // Keyed by mediaId. Plain object (not a JS Map) — `Map` is this component's name.
-  const trackGeoCacheRef = useRef<Record<string, GeoJSON.FeatureCollection>>({});
+  // The cache holds PROMISES, not resolved values, so overlapping effect runs
+  // (StrictMode double-invoke, rapid toggles) share one in-flight request
+  // instead of each firing its own fetch (LAYERS-2 duplicate fetch). Failures
+  // resolve to null and stay cached, so a missing track file is fetched once
+  // per session instead of retried on every load/toggle.
+  //
+  // The cached `url` is stored alongside each promise: `track.displayUrl` is a
+  // PRESIGNED URL that rotates on refetch (e.g. after the old one expires and
+  // the canyon media reloads). Keying only by mediaId would pin a stale/expired
+  // URL forever, so one 403 would never retry even once a fresh working URL
+  // arrives. On lookup we discard the entry when the URL has rotated; same-URL
+  // failures stay cached (no retry spam).
+  const trackGeoCacheRef = useRef<
+    Record<
+      string,
+      { url: string; promise: Promise<GeoJSON.FeatureCollection | null> }
+    >
+  >({});
+  // Media ids whose load failure was already surfaced — one toast per track
+  // per session, not one per re-render (LAYERS-2 silent-404 fix).
+  const failedTrackToastedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!mapLoaded || !mapRef.current || !showCanyonTracks) return;
     let cancelled = false;
     void (async () => {
       const cache = trackGeoCacheRef.current;
       const collections = await Promise.all(
-        canyonTracks.map(async (track) => {
-          const cached = cache[track.mediaId];
-          if (cached) return cached;
-          try {
-            const fc = await fetchTrackGeoJSON(track.displayUrl, track.color, track.canyonId);
-            cache[track.mediaId] = fc;
-            return fc;
-          } catch (err) {
-            // Best-effort: one bad track must not blank the whole layer.
-            console.error(err);
-            return null;
+        canyonTracks.map((track) => {
+          let entry = cache[track.mediaId];
+          // Discard a cached entry whose presigned URL has rotated so the fresh
+          // URL retries; same-URL failures stay cached (LAYERS-2).
+          if (!entry || entry.url !== track.displayUrl) {
+            const promise = fetchTrackGeoJSON(
+              track.displayUrl,
+              track.color,
+              track.canyonId,
+            ).catch((err: unknown) => {
+              // One bad track must not blank the whole layer. The thrown error
+              // carries only the HTTP status — never log the presigned URL,
+              // whose canyon-name-derived filename must stay out of logs
+              // (privacy rule).
+              console.error(err);
+              if (!failedTrackToastedRef.current.has(track.mediaId)) {
+                failedTrackToastedRef.current.add(track.mediaId);
+                toast.error(
+                  messageFromError(err, "Couldn't load a canyon track file."),
+                );
+              }
+              return null;
+            });
+            entry = { url: track.displayUrl, promise };
+            cache[track.mediaId] = entry;
           }
+          return entry.promise;
         }),
       );
       if (cancelled) return;
@@ -743,7 +908,7 @@ function Map({
     return () => {
       cancelled = true;
     };
-  }, [showCanyonTracks, canyonTracks, mapLoaded]);
+  }, [showCanyonTracks, canyonTracks, mapLoaded, toast]);
 
   // Coordinate picking mode
   const onCoordsPickedRef = useRef(onCoordsPicked);
@@ -1105,6 +1270,20 @@ function Map({
     // Map each entry id → the set of MapLibre layer ids it owns
     const activeIds = new Set(layers.map((l) => l.id));
 
+    // Recoverable blacklist: when a failed entry's toggle turns off it leaves
+    // `layers`, so drop it from the failed/transient sets. Re-enabling it should
+    // RETRY the source (a genuinely-missing archive will just fail terminally
+    // again) rather than stay permanently blacklisted from a past error
+    // (LAYERS-1).
+    for (const failedId of [...failedTopoSourcesRef.current]) {
+      if (!activeIds.has(failedId)) failedTopoSourcesRef.current.delete(failedId);
+    }
+    for (const transientId of [...transientTopoSourcesRef.current]) {
+      if (!activeIds.has(transientId)) {
+        transientTopoSourcesRef.current.delete(transientId);
+      }
+    }
+
     // Helper: get all MapLibre layer ids owned by a topo entry id
     const ownedLayerIds = (entryId: string): string[] =>
       map
@@ -1149,6 +1328,9 @@ function Map({
 
     // Add sources + layers for new entries
     layers.forEach(({ id, pmtilesUrl, format, attribution }) => {
+      // Known-missing source (PMTiles load already failed this session) — do
+      // not re-add it on layer toggles, or the 404 retry spam returns (LAYERS-1).
+      if (failedTopoSourcesRef.current.has(id)) return;
       const srcId = `topo-src-${id}`;
       const fmt = format ?? "raster";
 
@@ -1524,11 +1706,24 @@ function Map({
 
   useEffect(() => {
     if (!flyToCanyon || !mapLoaded || !mapRef.current) return;
-    mapRef.current.flyTo({
-      center: [flyToCanyon.lng, flyToCanyon.lat],
-      zoom: 16,
-      duration: 1500,
-    });
+    // Defensive guard (CANYON-1): an out-of-range record must not crash the app.
+    // MapLibre's flyTo throws "Invalid LngLat" for lat outside [-90,90] (or
+    // lng outside [-180,180]), which previously escaped to the RootErrorBoundary
+    // and made the record unmanageable — you couldn't even open it to fix or
+    // delete it. Skip the fly-to (still selecting the canyon) so the detail
+    // panel opens and the record can be edited/deleted. Validation now blocks
+    // such records at creation; this covers any that already exist.
+    if (isValidLatitude(flyToCanyon.lat) && isValidLongitude(flyToCanyon.lng)) {
+      mapRef.current.flyTo({
+        center: [flyToCanyon.lng, flyToCanyon.lat],
+        zoom: 16,
+        duration: 1500,
+      });
+    } else {
+      // Don't log the coordinates themselves (privacy rule: no canyon coords in
+      // logs/errors) — just note the fly-to was skipped.
+      console.warn("Skipping fly-to: canyon coordinates out of range");
+    }
     onFlyToCanyonConsumedRef.current?.();
   }, [flyToCanyon, mapLoaded]);
 
@@ -1754,7 +1949,7 @@ function Map({
       {pickingCoords && (
         <>
           <div className={classes.pickBanner}>
-            Click the map to select a location
+            {pickVerb} the map to select a location
           </div>
           <div className={classes.geoPdfConfirmBar}>
             <button
@@ -1768,12 +1963,12 @@ function Map({
       )}
       {selectingArea && (
         <div className={classes.pickBanner}>
-          Click to set a corner, then click again to select the area
+          {pickVerb} to set a corner, then {pickVerb.toLowerCase()} again to select the area
         </div>
       )}
       {selectingBbox && (
         <div className={classes.pickBanner}>
-          Click to set a corner, then click again to define the topo area
+          {pickVerb} to set a corner, then {pickVerb.toLowerCase()} again to define the topo area
         </div>
       )}
       {selectingGeoPdfExtent && (

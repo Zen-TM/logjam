@@ -303,12 +303,14 @@ async function main() {
   for (const t of trips) {
     await prisma.tripLog.create({
       data: {
-        canyonId: t.canyonId,
         userId: t.userId,
         date: t.date,
         displayName: t.displayName,
         notes: t.notes,
         ...(t.customFields ? { customFields: t.customFields } : {}),
+        ...(t.canyonId
+          ? { canyons: { create: [{ canyonId: t.canyonId, position: 0 }] } }
+          : {}),
       },
     });
   }

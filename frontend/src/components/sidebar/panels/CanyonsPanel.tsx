@@ -10,15 +10,25 @@ import type {
 } from "../../../canyonUtils";
 import { refreshFromRopeWiki, passesFilters, activeFilterCount } from "../../../canyonUtils";
 import type { RefreshResult } from "../../../canyonUtils";
+import { useLocalStorage } from "../../../useLocalStorage";
 import type { PanelId } from "../panels";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { customFieldDisplayLabel } from "@logjam/shared";
 import RopeWikiReviewDialog from "../../dialogs/RopeWikiReviewDialog";
+import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 
 type SliderKey = "v_grade" | "a_grade" | "commitment" | "quality";
 type ThresholdKey = "pitches" | "longest_pitch" | "hours";
+
+type SortKey = "name" | "recent" | "grade";
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "name", label: "Name (A–Z)" },
+  { value: "recent", label: "Recently added" },
+  { value: "grade", label: "Grade (V/A)" },
+];
 
 const SLIDER_RANGES: Record<SliderKey, [number, number]> = {
   v_grade: [1, 7],
@@ -83,8 +93,15 @@ function CanyonsPanel({
   canyonCustomFieldDefs: TripLogCustomFieldDef[];
 }) {
   // Search: a substring query that filters the canyon cards below (matches the
-  // primary name or any alternative name). ANDs with the filters.
-  const [query, setQuery] = useState("");
+  // primary name or any alternative name). ANDs with the filters. Persisted so
+  // it survives the panel's unmount-on-close (CANYON-12) — the filters state
+  // (owned by App) already persists the same way.
+  const [query, setQuery] = useLocalStorage("logjam.canyonSearch", "");
+  // Sort order for the results list, persisted across remounts (CANYON-4).
+  const [sortKey, setSortKey] = useLocalStorage<SortKey>(
+    "logjam.canyonSort",
+    "name",
+  );
 
   // Filters accordion
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -102,7 +119,7 @@ function CanyonsPanel({
       q === "" ||
       c.name.toLowerCase().includes(q) ||
       c.altNames.some((a) => a.toLowerCase().includes(q));
-    return [
+    const rows = [
       ...canyons
         .filter((c) => matchesSearch(c) && passesFilters(c, filters, true))
         .map((c) => ({ canyon: c, owned: true })),
@@ -110,7 +127,28 @@ function CanyonsPanel({
         .filter((c) => matchesSearch(c) && passesFilters(c, filters, false))
         .map((c) => ({ canyon: c, owned: false })),
     ];
-  }, [canyons, sharedCanyons, filters, query]);
+    // Nulls sort last for every key so canyons missing the sort field don't
+    // crowd the top. `recent` = newest first; `grade` = easiest first (V then A).
+    const compare = (a: TCanyon, b: TCanyon): number => {
+      switch (sortKey) {
+        case "recent":
+          return b.createdAt.localeCompare(a.createdAt);
+        case "grade": {
+          const av = a.vGrade ?? Infinity;
+          const bv = b.vGrade ?? Infinity;
+          if (av !== bv) return av - bv;
+          const aa = a.aGrade ?? Infinity;
+          const ba = b.aGrade ?? Infinity;
+          if (aa !== ba) return aa - ba;
+          return a.name.localeCompare(b.name);
+        }
+        case "name":
+        default:
+          return a.name.localeCompare(b.name);
+      }
+    };
+    return rows.sort((x, y) => compare(x.canyon, y.canyon));
+  }, [canyons, sharedCanyons, filters, query, sortKey]);
 
   // ── Live filtering ─────────────────────────────────────────────
   // Sliders keep a local draft so the thumb tracks the drag smoothly; the
@@ -608,8 +646,13 @@ function CanyonsPanel({
   const [refreshing, setRefreshing] = useState(false);
   const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
+  // Confirm before firing POST /ropewiki/refresh — the request scrapes the public
+  // RopeWiki database and can add many canyons, so it shouldn't fire on a single
+  // click with no preface (IMPORT-11).
+  const [confirmRefreshOpen, setConfirmRefreshOpen] = useState(false);
 
   const handleRefresh = useCallback(async () => {
+    setConfirmRefreshOpen(false);
     setRefreshing(true);
     setRefreshResult(null);
     try {
@@ -617,9 +660,20 @@ function CanyonsPanel({
       setRefreshResult(result);
       onRefetch();
       if (result.review.length > 0) setReviewOpen(true);
-      toast.success(
-        `Imported successfully! ${result.added} added, ${result.updated} updated`,
-      );
+      // Summarise everything the refresh did automatically, and flag the count
+      // still needing review, so the auto-import isn't silent (IMPORT-3).
+      const autoParts = [
+        result.added > 0 ? `${result.added} added` : null,
+        result.autoLinked > 0 ? `${result.autoLinked} linked` : null,
+        result.updated > 0 ? `${result.updated} updated` : null,
+      ].filter(Boolean);
+      const summary =
+        autoParts.length > 0 ? autoParts.join(", ") : "no new canyons";
+      const reviewSuffix =
+        result.review.length > 0
+          ? ` · ${result.review.length} possible duplicate${result.review.length === 1 ? "" : "s"} to review`
+          : "";
+      toast.success(`RopeWiki import: ${summary}${reviewSuffix}`);
     } catch (err) {
       console.error(err);
       setRefreshResult(null);
@@ -767,7 +821,24 @@ function CanyonsPanel({
       {/* Live filtered results */}
       <div className={classes.results}>
         <div className={classes.resultsHeader}>
-          {filteredCanyons.length} canyon{filteredCanyons.length === 1 ? "" : "s"}
+          <span>
+            {filteredCanyons.length} canyon{filteredCanyons.length === 1 ? "" : "s"}
+          </span>
+          <label className={classes.sortControl}>
+            <span className={classes.visuallyHidden}>Sort canyons by</span>
+            <select
+              className={classes.select}
+              aria-label="Sort canyons"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
         {/* The server caps the owned-canyon list; warn when the loaded set is a
             truncated view of the true total so the oldest canyons aren't
@@ -828,17 +899,35 @@ function CanyonsPanel({
         </button>
         <button
           className={classes.ghostButton}
-          onClick={handleRefresh}
+          onClick={() => setConfirmRefreshOpen(true)}
           disabled={refreshing}
         >
           {refreshing ? "Importing..." : "Import from RopeWiki"}
         </button>
       </div>
 
+      <ConfirmDialog
+        open={confirmRefreshOpen}
+        title="Import from RopeWiki?"
+        message={
+          "This fetches the public NSW canyon list from ropewiki.com and adds any canyons you don't already have, updating RopeWiki-sourced ones you haven't edited. Canyons that look like ones you already have are set aside for you to review before they're imported. Nothing you've edited is overwritten."
+        }
+        confirmLabel="Fetch from RopeWiki"
+        confirmColor="secondary"
+        busy={refreshing}
+        onConfirm={handleRefresh}
+        onClose={() => setConfirmRefreshOpen(false)}
+      />
+
       {refreshResult && (
         <RopeWikiReviewDialog
           open={reviewOpen}
           review={refreshResult.review}
+          autoImported={{
+            added: refreshResult.added,
+            autoLinked: refreshResult.autoLinked,
+            updated: refreshResult.updated,
+          }}
           onClose={() => setReviewOpen(false)}
           onApplied={() => {
             setRefreshResult({ ...refreshResult, review: [] });

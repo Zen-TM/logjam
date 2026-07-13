@@ -13,14 +13,23 @@ import {
   IconButton,
   Typography,
   Tooltip,
-  InputAdornment,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import type { TripLogCustomFieldDef, TripLogCustomFieldType, MediaItem } from "@logjam/shared";
-import { coerceFieldValue, mediaCategory, buildCustomFieldDef } from "@logjam/shared";
-import { sanitizeIntegerInput, sanitizeDecimalInput } from "../../numberInput";
+import {
+  coerceFieldValue,
+  mediaCategory,
+  buildCustomFieldDef,
+  CANYON_NUMERIC_CONSTRAINTS,
+  LATITUDE_RANGE,
+  LONGITUDE_RANGE,
+  isValidLatitude,
+  isValidLongitude,
+  type CanyonNumericFieldName,
+} from "@logjam/shared";
+import { numericFieldError, type NumericFieldConstraints } from "../../numberInput";
+import ValidatedNumberField from "./ValidatedNumberField";
 import type { TCanyon } from "../../canyonUtils";
 import {
   updateCanyon,
@@ -31,9 +40,12 @@ import {
 } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import { useToast } from "../feedback/ToastProvider";
+import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import AddCustomFieldForm from "./AddCustomFieldForm";
-import CustomFieldInput from "./CustomFieldInput";
+import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
 import ConfirmDialog from "./ConfirmDialog";
+import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
 import { getFieldValue as getFieldValueFor } from "./customFieldValues";
@@ -51,6 +63,22 @@ const COMMITMENTS = [
 ] as const;
 
 type Source = { label: string; url: string };
+
+// Adapt a shared canyon constraint (max: number | null) to the frontend field
+// shape (max?: number). Keeps the numeric ranges sourced from @logjam/shared.
+function fieldConstraints(name: CanyonNumericFieldName): NumericFieldConstraints {
+  const c = CANYON_NUMERIC_CONSTRAINTS[name];
+  return { integer: c.integer, min: c.min, max: c.max ?? undefined };
+}
+
+const LAT_CONSTRAINTS: NumericFieldConstraints = {
+  min: LATITUDE_RANGE.min,
+  max: LATITUDE_RANGE.max,
+};
+const LNG_CONSTRAINTS: NumericFieldConstraints = {
+  min: LONGITUDE_RANGE.min,
+  max: LONGITUDE_RANGE.max,
+};
 
 function CanyonDialog({
   canyon,
@@ -78,6 +106,7 @@ function CanyonDialog({
   const isEdit = canyon != null;
 
   const isMobile = useIsMobile();
+  const toast = useToast();
   const [name, setName] = useState("");
   const [altNames, setAltNames] = useState("");
   const [latitude, setLatitude] = useState("");
@@ -97,6 +126,9 @@ function CanyonDialog({
   const [error, setError] = useState<string | null>(null);
   // Which field failed validation, so the input can show error state + aria-invalid.
   const [invalidField, setInvalidField] = useState<"name" | "coords" | null>(null);
+  // Set on a Save attempt so every out-of-range numeric field shows its inline
+  // error at once (before that, errors only show after a field is blurred).
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
 
   // Add custom field form state
   const [showAddField, setShowAddField] = useState(false);
@@ -110,7 +142,6 @@ function CanyonDialog({
 
   // Custom-field deletion confirmation
   const [fieldToDelete, setFieldToDelete] = useState<TripLogCustomFieldDef | null>(null);
-  const [deletingField, setDeletingField] = useState(false);
 
   // Media. In edit mode the canyon exists; in create mode a draft canyon is
   // lazily materialised on first upload so files have something to link to
@@ -123,57 +154,106 @@ function CanyonDialog({
 
   const pickingRef = useRef(false);
 
+  // Snapshot of the form fields as populated below, taken in the same effect
+  // that sets them — used by the unsaved-changes guard to tell a real edit
+  // apart from "the dialog is open" (CANYON-3). Sources/fieldValues are
+  // compared by JSON value, not identity.
+  const initialFormSnapshotRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!open) return;
     if (pickingRef.current) {
       pickingRef.current = false;
       return;
     }
+    let initialName: string;
+    let initialAltNames: string;
+    let initialLatitude: string;
+    let initialLongitude: string;
+    let initialNumAbseils: string;
+    let initialLongestAbseil: string;
+    let initialNotes: string;
+    let initialVGrade: number | "";
+    let initialAGrade: number | "";
+    let initialCommitment: number | "";
+    let initialQuality: string;
+    let initialHours: string;
+    let initialSources: Source[];
+    let initialFieldValues: Record<string, string>;
     if (canyon) {
-      setName(canyon.name);
-      setAltNames(canyon.altNames.join(", "));
-      setLatitude(String(canyon.latitude));
-      setLongitude(String(canyon.longitude));
-      setNumAbseils(canyon.numAbseils != null ? String(canyon.numAbseils) : "");
-      setLongestAbseil(
-        canyon.longestAbseil != null ? String(canyon.longestAbseil) : "",
-      );
-      setNotes(canyon.notes ?? "");
-      setVGrade(canyon.vGrade ?? "");
-      setAGrade(canyon.aGrade ?? "");
-      setCommitment(canyon.commitment ?? "");
-      setQuality(canyon.quality != null ? String(canyon.quality) : "");
-      setHours(canyon.hours != null ? String(canyon.hours) : "");
-      setSources(
-        (canyon.attributes.sources ?? []).map(([label, url]) => ({
-          label,
-          url,
-        })),
-      );
+      initialName = canyon.name;
+      initialAltNames = canyon.altNames.join(", ");
+      initialLatitude = String(canyon.latitude);
+      initialLongitude = String(canyon.longitude);
+      initialNumAbseils = canyon.numAbseils != null ? String(canyon.numAbseils) : "";
+      initialLongestAbseil =
+        canyon.longestAbseil != null ? String(canyon.longestAbseil) : "";
+      initialNotes = canyon.notes ?? "";
+      initialVGrade = canyon.vGrade ?? "";
+      initialAGrade = canyon.aGrade ?? "";
+      initialCommitment = canyon.commitment ?? "";
+      initialQuality = canyon.quality != null ? String(canyon.quality) : "";
+      initialHours = canyon.hours != null ? String(canyon.hours) : "";
+      initialSources = (canyon.attributes.sources ?? []).map(([label, url]) => ({
+        label,
+        url,
+      }));
       // Populate existing custom field values as strings
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
         const raw = canyon.attributes.customFields?.[def.key];
         vals[def.key] = raw != null ? String(raw) : "";
       }
-      setFieldValues(vals);
+      initialFieldValues = vals;
     } else {
-      setName("");
-      setAltNames("");
-      setLatitude("");
-      setLongitude("");
-      setNumAbseils("");
-      setLongestAbseil("");
-      setNotes("");
-      setVGrade("");
-      setAGrade("");
-      setCommitment("");
-      setQuality("");
-      setHours("");
-      setSources([]);
-      setFieldValues({});
+      initialName = "";
+      initialAltNames = "";
+      initialLatitude = "";
+      initialLongitude = "";
+      initialNumAbseils = "";
+      initialLongestAbseil = "";
+      initialNotes = "";
+      initialVGrade = "";
+      initialAGrade = "";
+      initialCommitment = "";
+      initialQuality = "";
+      initialHours = "";
+      initialSources = [];
+      initialFieldValues = {};
     }
+    setName(initialName);
+    setAltNames(initialAltNames);
+    setLatitude(initialLatitude);
+    setLongitude(initialLongitude);
+    setNumAbseils(initialNumAbseils);
+    setLongestAbseil(initialLongestAbseil);
+    setNotes(initialNotes);
+    setVGrade(initialVGrade);
+    setAGrade(initialAGrade);
+    setCommitment(initialCommitment);
+    setQuality(initialQuality);
+    setHours(initialHours);
+    setSources(initialSources);
+    setFieldValues(initialFieldValues);
+    initialFormSnapshotRef.current = JSON.stringify({
+      name: initialName,
+      altNames: initialAltNames,
+      latitude: initialLatitude,
+      longitude: initialLongitude,
+      numAbseils: initialNumAbseils,
+      longestAbseil: initialLongestAbseil,
+      notes: initialNotes,
+      vGrade: initialVGrade,
+      aGrade: initialAGrade,
+      commitment: initialCommitment,
+      quality: initialQuality,
+      hours: initialHours,
+      sources: initialSources,
+      fieldValues: initialFieldValues,
+    });
     setError(null);
+    setInvalidField(null);
+    setShowFieldErrors(false);
     setShowAddField(false);
     setNewFieldLabel("");
     setNewFieldType("string");
@@ -187,6 +267,33 @@ function CanyonDialog({
     committedRef.current = false;
     draftPromiseRef.current = null;
   }, [open, canyon]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Real dirty-check: current form fields vs. the snapshot taken when the
+  // dialog was (re)populated — not just "the dialog is open" (CANYON-3).
+  // Media/custom-field-def edits are excluded: both persist immediately
+  // (media uploads, and add/delete-field via updateUserPreferences), so
+  // they're never "unsaved" by the time a close is attempted.
+  const isDirty =
+    open &&
+    initialFormSnapshotRef.current !== null &&
+    JSON.stringify({
+      name,
+      altNames,
+      latitude,
+      longitude,
+      numAbseils,
+      longestAbseil,
+      notes,
+      vGrade,
+      aGrade,
+      commitment,
+      quality,
+      hours,
+      sources,
+      fieldValues,
+    }) !== initialFormSnapshotRef.current;
+
+  const guard = useUnsavedChangesGuard(isDirty, () => void handleRequestClose());
 
   // In edit mode, fetch the canyon's existing media (fresh presigned URLs).
   useEffect(() => {
@@ -213,6 +320,11 @@ function CanyonDialog({
     const parsedLng = parseFloat(longitude);
     if (!name.trim() || !latitude || !longitude || isNaN(parsedLat) || isNaN(parsedLng)) {
       return Promise.reject(new Error("Enter a name and location before adding media."));
+    }
+    if (!isValidLatitude(parsedLat) || !isValidLongitude(parsedLng)) {
+      return Promise.reject(
+        new Error("Enter a valid location (latitude -90 to 90, longitude -180 to 180) before adding media."),
+      );
     }
     const promise = createCanyon({
       name: name.trim(),
@@ -287,6 +399,35 @@ function CanyonDialog({
         return;
       }
 
+      // Range/format validation for every numeric field (CANYON-1/CANYON-2).
+      // Same short messages the inline FieldErrors render; the top banner just
+      // points the user at the highlighted fields.
+      const numericInvalid =
+        numericFieldError(latitude, LAT_CONSTRAINTS) ??
+        numericFieldError(longitude, LNG_CONSTRAINTS) ??
+        numericFieldError(quality, fieldConstraints("quality")) ??
+        numericFieldError(hours, fieldConstraints("hours")) ??
+        numericFieldError(numAbseils, fieldConstraints("numAbseils")) ??
+        numericFieldError(longestAbseil, fieldConstraints("longestAbseil"));
+      if (numericInvalid) {
+        setShowFieldErrors(true);
+        setError("Please fix the highlighted fields.");
+        setSaving(false);
+        return;
+      }
+
+      // Custom numeric fields (integer/float) get the same treatment so an
+      // invalid value can't reach coerceFieldValue and be silently mangled.
+      const customFieldInvalid = customFieldDefs.some(
+        (def) => customFieldValueError(def, getFieldValue(def.key)) != null,
+      );
+      if (customFieldInvalid) {
+        setShowFieldErrors(true);
+        setError("Please fix the highlighted fields.");
+        setSaving(false);
+        return;
+      }
+
       const cleanSources: [string, string][] = sources
         .filter((s) => s.label.trim())
         .map((s) => [s.label.trim(), s.url.trim()]);
@@ -329,6 +470,7 @@ function CanyonDialog({
       }
       committedRef.current = true;
       onSaved();
+      toast.success("Canyon saved.");
       onClose();
     } catch (err) {
       console.error(err);
@@ -377,26 +519,18 @@ function CanyonDialog({
     }
   }
 
-  async function handleConfirmDeleteField() {
-    if (!fieldToDelete) return;
-    const key = fieldToDelete.key;
-    setDeletingField(true);
-    setError(null);
-    try {
-      const updatedDefs = customFieldDefs.filter((d) => d.key !== key);
-      await updateUserPreferences({ canyonCustomFields: updatedDefs });
-      onCustomFieldDefsChange(updatedDefs);
+  // The unified delete (server strips the field's values from every canyon +
+  // updates the def list) is handled by DeleteCustomFieldDialog; here we only
+  // mirror the removal in local state after it succeeds.
+  function handleFieldDeleted(remainingDefs: TripLogCustomFieldDef[]) {
+    const key = fieldToDelete?.key;
+    onCustomFieldDefsChange(remainingDefs);
+    if (key) {
       setFieldValues((prev) => {
         const next = { ...prev };
         delete next[key];
         return next;
       });
-      setFieldToDelete(null);
-    } catch (err) {
-      console.error(err);
-      setError(messageFromError(err, "Couldn't delete custom field. Please try again."));
-    } finally {
-      setDeletingField(false);
     }
   }
 
@@ -405,7 +539,7 @@ function CanyonDialog({
     <Dialog
       fullScreen={isMobile}
       open={open}
-      onClose={saving ? undefined : () => void handleRequestClose()}
+      onClose={saving ? undefined : guard.requestClose}
       maxWidth="sm"
       fullWidth
       PaperProps={{
@@ -441,7 +575,7 @@ function CanyonDialog({
         <IconButton
           aria-label="Close dialog"
           size="small"
-          onClick={saving ? undefined : () => void handleRequestClose()}
+          onClick={saving ? undefined : guard.requestClose}
           disabled={saving}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -464,63 +598,27 @@ function CanyonDialog({
             onChange={(e) => setAltNames(e.target.value)}
             size="small"
           />
-          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: isMobile ? "stretch" : "center" }}>
-            <TextField
-              label="Latitude"
-              value={latitude}
-              onChange={(e) => setLatitude(e.target.value)}
-              type="number"
-              error={invalidField === "coords"}
-              size="small"
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip
-                      title="WGS84 decimal degrees (standard GPS format)."
-                      placement="top"
-                      arrow
-                    >
-                      <InfoOutlinedIcon
-                        sx={{
-                          fontSize: "1rem",
-                          color: "var(--theme-text-muted)",
-                          cursor: "help",
-                        }}
-                      />
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <TextField
-              label="Longitude"
-              value={longitude}
-              onChange={(e) => setLongitude(e.target.value)}
-              type="number"
-              error={invalidField === "coords"}
-              size="small"
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip
-                      title="WGS84 decimal degrees (standard GPS format)."
-                      placement="top"
-                      arrow
-                    >
-                      <InfoOutlinedIcon
-                        sx={{
-                          fontSize: "1rem",
-                          color: "var(--theme-text-muted)",
-                          cursor: "help",
-                        }}
-                      />
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              }}
-            />
+          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: isMobile ? "stretch" : "flex-start" }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <ValidatedNumberField
+                label="Latitude"
+                value={latitude}
+                onChange={setLatitude}
+                constraints={LAT_CONSTRAINTS}
+                showError={showFieldErrors || invalidField === "coords"}
+                tooltip="WGS84 decimal degrees (standard GPS format). Between -90 and 90."
+              />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <ValidatedNumberField
+                label="Longitude"
+                value={longitude}
+                onChange={setLongitude}
+                constraints={LNG_CONSTRAINTS}
+                showError={showFieldErrors || invalidField === "coords"}
+                tooltip="WGS84 decimal degrees (standard GPS format). Between -180 and 180."
+              />
+            </Box>
             <Button
               variant="contained"
               color="secondary"
@@ -651,117 +749,49 @@ function CanyonDialog({
               </Box>
             </Tooltip>
           </Box>
-          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2 }}>
-            <TextField
-              label="Quality (1-5)"
-              value={quality}
-              onChange={(e) => setQuality(sanitizeDecimalInput(e.target.value))}
-              type="text"
-              inputMode="decimal"
-              size="small"
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip
-                      title="Subjective overall quality. 1 = unremarkable; 5 = exceptional. Decimals allowed."
-                      placement="top"
-                      arrow
-                    >
-                      <InfoOutlinedIcon
-                        sx={{
-                          fontSize: "1rem",
-                          color: "var(--theme-text-muted)",
-                          cursor: "help",
-                        }}
-                      />
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <TextField
-              label="Hours"
-              value={hours}
-              onChange={(e) => setHours(sanitizeDecimalInput(e.target.value))}
-              type="text"
-              inputMode="decimal"
-              size="small"
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip
-                      title="Estimated total trip duration for an average group, car-to-car."
-                      placement="top"
-                      arrow
-                    >
-                      <InfoOutlinedIcon
-                        sx={{
-                          fontSize: "1rem",
-                          color: "var(--theme-text-muted)",
-                          cursor: "help",
-                        }}
-                      />
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              }}
-            />
+          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: "flex-start" }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <ValidatedNumberField
+                label="Quality (1-5)"
+                value={quality}
+                onChange={setQuality}
+                constraints={fieldConstraints("quality")}
+                showError={showFieldErrors}
+                tooltip="Subjective overall quality. 1 = unremarkable; 5 = exceptional. Decimals allowed."
+              />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <ValidatedNumberField
+                label="Hours"
+                value={hours}
+                onChange={setHours}
+                constraints={fieldConstraints("hours")}
+                showError={showFieldErrors}
+                tooltip="Estimated total trip duration for an average group, car-to-car."
+              />
+            </Box>
           </Box>
-          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2 }}>
-            <TextField
-              label="Pitches"
-              value={numAbseils}
-              onChange={(e) => setNumAbseils(sanitizeIntegerInput(e.target.value))}
-              type="text"
-              inputMode="numeric"
-              size="small"
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip title="Number of abseils." placement="top" arrow>
-                      <InfoOutlinedIcon
-                        sx={{
-                          fontSize: "1rem",
-                          color: "var(--theme-text-muted)",
-                          cursor: "help",
-                        }}
-                      />
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <TextField
-              label="Longest Pitch (m)"
-              value={longestAbseil}
-              onChange={(e) => setLongestAbseil(sanitizeDecimalInput(e.target.value))}
-              type="text"
-              inputMode="decimal"
-              size="small"
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <Tooltip
-                      title="Length of the longest single abseil in metres, measured along the rope."
-                      placement="top"
-                      arrow
-                    >
-                      <InfoOutlinedIcon
-                        sx={{
-                          fontSize: "1rem",
-                          color: "var(--theme-text-muted)",
-                          cursor: "help",
-                        }}
-                      />
-                    </Tooltip>
-                  </InputAdornment>
-                ),
-              }}
-            />
+          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: "flex-start" }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <ValidatedNumberField
+                label="Pitches"
+                value={numAbseils}
+                onChange={setNumAbseils}
+                constraints={fieldConstraints("numAbseils")}
+                showError={showFieldErrors}
+                tooltip="Number of abseils."
+              />
+            </Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <ValidatedNumberField
+                label="Longest Pitch (m)"
+                value={longestAbseil}
+                onChange={setLongestAbseil}
+                constraints={fieldConstraints("longestAbseil")}
+                showError={showFieldErrors}
+                tooltip="Length of the longest single abseil in metres, measured along the rope."
+              />
+            </Box>
           </Box>
           <TextField
             label="Notes"
@@ -788,6 +818,7 @@ function CanyonDialog({
                       def={def}
                       value={getFieldValue(def.key)}
                       onChange={(v) => setFieldValue(def.key, v)}
+                      showError={showFieldErrors}
                     />
                   </Box>
                   <IconButton
@@ -979,7 +1010,7 @@ function CanyonDialog({
       </DialogContent>
       <DialogActions>
         <Button
-          onClick={() => void handleRequestClose()}
+          onClick={guard.requestClose}
           disabled={saving}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -996,18 +1027,21 @@ function CanyonDialog({
       </DialogActions>
     </Dialog>
 
-    <ConfirmDialog
-      open={fieldToDelete != null}
-      title={<>Delete custom field “{fieldToDelete?.label}”?</>}
-      message={
-        <>
-          This removes the field from <b>all</b> your canyons, not just this
-          one. Any values already stored for it will no longer be shown.
-        </>
-      }
-      busy={deletingField}
-      onConfirm={handleConfirmDeleteField}
+    <DeleteCustomFieldDialog
+      entity="canyon"
+      def={fieldToDelete}
       onClose={() => setFieldToDelete(null)}
+      onDeleted={handleFieldDeleted}
+    />
+
+    <ConfirmDialog
+      open={guard.guardOpen}
+      title="Discard unsaved changes?"
+      message="Your changes will be lost."
+      confirmLabel="Discard"
+      confirmColor="error"
+      onConfirm={guard.confirmDiscard}
+      onClose={guard.cancelDiscard}
     />
     </>
   );

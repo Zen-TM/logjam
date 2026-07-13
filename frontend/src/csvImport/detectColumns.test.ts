@@ -31,6 +31,18 @@ describe("detectColumns", () => {
     expect(result["water_level"]).toBe("cf:water_level");
   });
 
+  it("maps the app's own logbook template headers (name/date/type/notes)", () => {
+    // frontend/public/templates/logbook-import-template.csv headers.
+    const result = detectColumns(["name", "date", "type", "notes", "Party"], []);
+    expect(result["name"]).toBe("name");
+    expect(result["date"]).toBe("date");
+    expect(result["type"]).toBe("type");
+    expect(result["notes"]).toBe("notes");
+    // "Party" has no built-in trip field (TripLog has no participants column),
+    // so it is left for the user to map or ignore. Documented in the fix report.
+    expect(result["Party"]).toBe("discard");
+  });
+
   it("defaults unrecognised headers to discard", () => {
     const result = detectColumns(["Mystery"], customFields);
     expect(result["Mystery"]).toBe("discard");

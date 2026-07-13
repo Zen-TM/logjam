@@ -28,6 +28,20 @@
     margin-bottom: var(--bottom-nav-height);
   }
 
+  /* The attribution control starts in its expanded "compact-show" state (full
+     credit text, not just the (i) icon) until the map is first dragged. On a
+     390px-wide viewport that expanded pill can grow wide enough to run under
+     the bottom-right scale control — cap it and ellipsize (MOBILE-10). */
+  :global(#map .maplibregl-ctrl-attrib.maplibregl-compact-show) {
+    max-width: calc(100vw - 130px);
+  }
+
+  :global(#map .maplibregl-ctrl-attrib-inner) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .geoPdfConfirmBar {
     bottom: calc(40px + var(--bottom-nav-height));
   }

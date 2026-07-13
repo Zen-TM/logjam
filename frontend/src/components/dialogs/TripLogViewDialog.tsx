@@ -96,6 +96,7 @@ function TripLogViewDialog({
       await deleteTripLog(tripLog.id);
       setShowDeleteConfirm(false);
       onDeleted();
+      toast.success("Trip log deleted.");
       onClose();
     } catch (err) {
       console.error(err);
@@ -119,7 +120,7 @@ function TripLogViewDialog({
           sx: {
             backgroundColor: "var(--theme-primary)",
             color: "var(--theme-text-primary)",
-            maxHeight: "85vh",
+            maxHeight: isMobile ? "100%" : "85vh",
           },
         }}
       >

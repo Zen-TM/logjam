@@ -15,8 +15,54 @@ import {
   validateRasterTemplateSettings,
   validateVectorStyleSettings,
   slopeBandsError,
+  hillshadeSettingsError,
+  HILLSHADE_LIMITS,
 } from "./topoSettings";
 import type { SlopeBand } from "./topoSettings";
+
+describe("hillshadeSettingsError", () => {
+  const base = { ...RASTER_TEMPLATE_DEFAULTS.hillshade };
+
+  it("accepts the defaults", () => {
+    expect(hillshadeSettingsError(base)).toBeNull();
+  });
+
+  it("accepts the exact bounds", () => {
+    expect(
+      hillshadeSettingsError({
+        ...base,
+        azimuth: HILLSHADE_LIMITS.azimuth.max,
+        altitude: HILLSHADE_LIMITS.altitude.min,
+        zFactor: HILLSHADE_LIMITS.zFactor.min,
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects out-of-range azimuth (the UAT -50 case)", () => {
+    expect(hillshadeSettingsError({ ...base, azimuth: -50 })).toMatch(/Azimuth/);
+    expect(hillshadeSettingsError({ ...base, azimuth: 361 })).toMatch(/Azimuth/);
+  });
+
+  it("rejects out-of-range altitude (the UAT 500 case)", () => {
+    expect(hillshadeSettingsError({ ...base, altitude: 500 })).toMatch(/Altitude/);
+  });
+
+  it("rejects zero and negative exaggeration (the UAT 0 / -3 cases)", () => {
+    expect(hillshadeSettingsError({ ...base, zFactor: 0 })).toMatch(/exaggeration/);
+    expect(hillshadeSettingsError({ ...base, zFactor: -3 })).toMatch(/exaggeration/);
+  });
+
+  it("rejects non-finite values", () => {
+    expect(hillshadeSettingsError({ ...base, azimuth: NaN })).not.toBeNull();
+  });
+
+  it("stays in lockstep with validateRasterTemplateSettings", () => {
+    const s = cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS);
+    s.hillshade.altitude = 500;
+    expect(hillshadeSettingsError(s.hillshade)).not.toBeNull();
+    expect(validateRasterTemplateSettings(s).ok).toBe(false);
+  });
+});
 
 describe("slopeBandsError", () => {
   const band = (fromDeg: number, toDeg: number): SlopeBand => ({

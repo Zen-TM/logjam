@@ -35,6 +35,11 @@ export interface ExportFormatRule {
   allowPerLayer: boolean;
   // GPKG is inherently bundled; reject per-layer.
   // GeoJSON/GPX cannot composite (no raster pyramid concept).
+  // When set, only these layers are exportable in this format, further
+  // narrowing the raster/vector gates. GPX is features-only: the worker
+  // (topo/renderers/gpx.py) renders points→waypoints/lines→routes from the
+  // features GeoJSON and has no contour path (TOPOEXP-1).
+  layerAllowlist?: TopoLayerKey[];
   label: string;
   description: string;
 }
@@ -82,10 +87,31 @@ export const EXPORT_FORMAT_RULES: Record<ExportFormat, ExportFormatRule> = {
     allowVector: true,
     allowComposite: false,
     allowPerLayer: true,
+    layerAllowlist: ["features"],
     label: "GPX",
     description: "Features layer only (lines + points). For Garmin / Basecamp.",
   },
 };
+
+/**
+ * Whether a layer may appear in an export of the given format. The single
+ * eligibility predicate behind validateExportRequest, reconcileExportSelection
+ * and the export dialog's checkbox enable/disable — keep every surface on this
+ * so per-format layer rules can't drift (TOPOEXP-1).
+ */
+export function isLayerEligibleForFormat(
+  format: ExportFormat,
+  layer: TopoLayerKey,
+): boolean {
+  const rule = EXPORT_FORMAT_RULES[format];
+  const meta = TOPO_LAYERS.find((m) => m.name === layer);
+  if (!rule || !meta) return false;
+  if (rule.layerAllowlist && !rule.layerAllowlist.includes(layer)) return false;
+  return (
+    (meta.format === "raster" && rule.allowRaster) ||
+    (meta.format === "vector" && rule.allowVector)
+  );
+}
 
 export interface ExportValidationInput {
   format: ExportFormat;
@@ -117,6 +143,16 @@ export function validateExportRequest(input: ExportValidationInput): ExportValid
   }
   if (hasVector && !rule.allowVector) {
     return { ok: false, error: `${rule.label} does not support vector layers` };
+  }
+  if (rule.layerAllowlist) {
+    const disallowed = input.layers.find((l) => !rule.layerAllowlist!.includes(l));
+    if (disallowed) {
+      const meta = TOPO_LAYERS.find((m) => m.name === disallowed);
+      return {
+        ok: false,
+        error: `${rule.label} does not support the ${meta?.label ?? disallowed} layer`,
+      };
+    }
   }
 
   if (input.bundling === "composite" && !rule.allowComposite) {
@@ -188,15 +224,8 @@ export function reconcileExportSelection(
   available: Set<TopoLayerKey>,
 ): ExportSelection {
   const rule = EXPORT_FORMAT_RULES[value.format];
-  const eligibleAndPresent = (name: TopoLayerKey): boolean => {
-    if (!available.has(name)) return false;
-    const meta = TOPO_LAYERS.find((m) => m.name === name);
-    if (!meta) return false;
-    return (
-      (meta.format === "raster" && rule.allowRaster) ||
-      (meta.format === "vector" && rule.allowVector)
-    );
-  };
+  const eligibleAndPresent = (name: TopoLayerKey): boolean =>
+    available.has(name) && isLayerEligibleForFormat(value.format, name);
 
   let layers = value.layers.filter(eligibleAndPresent);
   if (layers.length === 0) {

@@ -38,7 +38,12 @@ const PANEL_TITLES: Record<PanelId, string> = {
   "trip-logs": "Trip Logs",
   analytics: "Analytics",
   friends: "Friends",
-  notifications: "Notifications",
+  // Matches the NavRail label "Alerts" (MOBILE-11) — the nav item can't take
+  // the longer "Notifications" without overflowing its fixed-width slot in
+  // the already-crowded bottom nav strip (see MOBILE-7), so this header
+  // aligns to the nav instead. NotificationsPanel.tsx's own internal copy is
+  // a separate surface, out of scope here.
+  notifications: "Alerts",
   account: "Account",
   "canyon-detail": "Canyon Detail",
 };
@@ -60,6 +65,7 @@ function SidebarPanel({
   setLidarLayerToggles,
   lidarLayerOrder,
   setLidarLayerOrder,
+  unavailableTopoLayerNames,
   baseLayers,
   activeLayerId,
   onActiveLayerChange,
@@ -84,6 +90,7 @@ function SidebarPanel({
   onEditGeoPdfTemplate,
   onCreateGeoPdfTemplate,
   geoPdfTemplateRefetch,
+  topoTemplateRefetch,
   geoPdfJobsRefetch,
   // LiDAR
   activeTopoJobs,
@@ -149,6 +156,8 @@ function SidebarPanel({
   setLidarLayerToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
   lidarLayerOrder: string[];
   setLidarLayerOrder: (v: string[] | ((prev: string[]) => string[])) => void;
+  // Layer names whose PMTiles source failed to load (LAYERS-1 badge).
+  unavailableTopoLayerNames: Set<string>;
   baseLayers: readonly { id: string; name: string; tiles: string[]; maxzoom: number }[];
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
@@ -173,6 +182,7 @@ function SidebarPanel({
   onEditGeoPdfTemplate: (t: GeoPdfTemplate) => void;
   onCreateGeoPdfTemplate: () => void;
   geoPdfTemplateRefetch: number;
+  topoTemplateRefetch: number;
   geoPdfJobsRefetch: number;
   // LiDAR
   activeTopoJobs: TopoJob[];
@@ -228,6 +238,8 @@ function SidebarPanel({
   const snapBeforePeek = useRef<SheetSnap>("half");
   const snapRef = useRef<SheetSnap>(sheetSnap);
   snapRef.current = sheetSnap;
+  const collapseToPeekRef = useRef(collapseToPeek);
+  collapseToPeekRef.current = collapseToPeek;
 
   useEffect(() => {
     if (collapseToPeek) {
@@ -239,6 +251,21 @@ function SidebarPanel({
     // Intentionally only reacts to collapseToPeek; snap is read via ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collapseToPeek]);
+
+  // Switching panels (NavRail tap) while the sheet is at peek would otherwise
+  // swap the panel content behind an almost-fully-collapsed sheet — the new
+  // panel is effectively invisible (MOBILE-9). Raise to "half" on any panel
+  // change, unless a map-pick flow is the one driving the sheet to peek (that
+  // collapse is intentional — leave it alone).
+  const prevActivePanelRef = useRef(activePanel);
+  useEffect(() => {
+    if (activePanel !== prevActivePanelRef.current) {
+      prevActivePanelRef.current = activePanel;
+      if (!collapseToPeekRef.current) {
+        setSheetSnap((current) => (current === "peek" ? "half" : current));
+      }
+    }
+  }, [activePanel]);
 
   if (!activePanel) return null;
 
@@ -270,6 +297,7 @@ function SidebarPanel({
             setLidarLayerToggles={setLidarLayerToggles}
             lidarLayerOrder={lidarLayerOrder}
             setLidarLayerOrder={setLidarLayerOrder}
+            unavailableTopoLayerNames={unavailableTopoLayerNames}
             layers={baseLayers}
             activeLayerId={activeLayerId}
             onActiveLayerChange={onActiveLayerChange}
@@ -322,6 +350,7 @@ function SidebarPanel({
             onQuotaChanged={onQuotaChanged}
             vectorStyle={vectorStyle}
             onVectorStyleChange={onVectorStyleChange}
+            templateRefetchTrigger={topoTemplateRefetch}
           />
         )}
         {activePanel === "friends" && (
@@ -371,7 +400,15 @@ function SidebarPanel({
             onOpenUnifiedImport={onOpenUnifiedImport}
           />
         )}
-        {activePanel === "account" && <AccountPanel currentUser={currentUser} />}
+        {activePanel === "account" && (
+          <AccountPanel
+            currentUser={currentUser}
+            customFieldDefs={customFieldDefs}
+            onCustomFieldDefsChange={onCustomFieldDefsChange}
+            canyonCustomFieldDefs={canyonCustomFieldDefs}
+            onCanyonCustomFieldDefsChange={onCanyonCustomFieldDefsChange}
+          />
+        )}
         {activePanel === "canyon-detail" && (
           <CanyonDetailPanel
             canyon={canyon}
@@ -390,6 +427,7 @@ function SidebarPanel({
             onCanyonCustomFieldDefsChange={onCanyonCustomFieldDefsChange}
             onQuotaChanged={onQuotaChanged}
             onRefetchTripLogs={onRefetchTripLogs}
+            onAfterDelete={() => setActivePanel("canyons")}
           />
         )}
       </div>

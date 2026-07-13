@@ -154,7 +154,7 @@ function SelectedCanyonsDialog({
     color: "var(--theme-text-primary)",
     display: "flex",
     flexDirection: "column" as const,
-    maxHeight: "85vh",
+    maxHeight: isMobile ? "100%" : "85vh",
   };
 
   return (
@@ -292,6 +292,7 @@ function SelectedCanyonsDialog({
                 <MenuItem value="gpx">GPX</MenuItem>
                 <MenuItem value="kml">KML</MenuItem>
                 <MenuItem value="geojson">GeoJSON</MenuItem>
+                <MenuItem value="csv">CSV</MenuItem>
               </Select>
               <Box className={classes.cardRowRight}>
                 <Button
@@ -437,7 +438,7 @@ function SelectedCanyonsDialog({
         </DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ color: "var(--theme-text-primary)" }}>
-            This will permanently delete {ownedCanyons.length} canyon{ownedCanyons.length !== 1 ? "s" : ""} and all associated trip logs. This cannot be undone.
+            This permanently deletes {ownedCanyons.length} canyon{ownedCanyons.length !== 1 ? "s" : ""}, along with their photos, tracks, and shares. Your trip logs are kept — they&rsquo;ll be unlinked from these canyons but stay in your logbook. This cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>

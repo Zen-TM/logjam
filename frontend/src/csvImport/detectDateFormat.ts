@@ -1,6 +1,12 @@
-export type DateFormat = "DD/MM/YYYY" | "DD-MM-YYYY" | "DD/MM/YY" | "DD-MM-YY";
+export type DateFormat =
+  | "YYYY-MM-DD"
+  | "DD/MM/YYYY"
+  | "DD-MM-YYYY"
+  | "DD/MM/YY"
+  | "DD-MM-YY";
 
 export const DATE_FORMAT_LABELS: Record<DateFormat, string> = {
+  "YYYY-MM-DD": "YYYY-MM-DD / ISO 8601 (e.g. 2023-06-15)",
   "DD/MM/YYYY": "DD/MM/YYYY (e.g. 15/06/2023)",
   "DD-MM-YYYY": "DD-MM-YYYY (e.g. 15-06-2023)",
   "DD/MM/YY":   "DD/MM/YY (e.g. 15/06/23)",
@@ -14,6 +20,12 @@ function twoDigitYear(yy: number): number {
 
 export function parseWithFormat(s: string, format: DateFormat): Date | null {
   switch (format) {
+    case "YYYY-MM-DD": {
+      const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (!m) return null;
+      const d = new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+      return isNaN(d.getTime()) ? null : d;
+    }
     case "DD/MM/YYYY": {
       const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
       if (!m) return null;
@@ -56,7 +68,7 @@ export function detectDateFormat(samples: string[]): { format: DateFormat; ambig
   const nonEmpty = samples.filter((s) => s.trim() !== "");
   if (nonEmpty.length === 0) return { format: "DD/MM/YYYY", ambiguous: false };
 
-  const all: DateFormat[] = ["DD/MM/YYYY", "DD-MM-YYYY", "DD/MM/YY", "DD-MM-YY"];
+  const all: DateFormat[] = ["YYYY-MM-DD", "DD/MM/YYYY", "DD-MM-YYYY", "DD/MM/YY", "DD-MM-YY"];
   const matching = all.filter((f) => nonEmpty.every((s) => parseWithFormat(s, f) !== null));
 
   if (matching.length === 0) return { format: "DD/MM/YYYY", ambiguous: true };

@@ -39,3 +39,9 @@
 .errorList {
   color: var(--theme-warning);
 }
+
+/* Non-fatal coercion notices — advisory, so muted rather than warning-red. */
+.warningList {
+  color: var(--theme-text-muted);
+  font-style: italic;
+}

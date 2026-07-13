@@ -40,7 +40,7 @@ import {
 import {
   CUSTOM_FIELD_TYPES,
   makeCustomFieldKey,
-  coerceFieldValue,
+  coerceFieldValueStrict,
 } from "@logjam/shared";
 import type { TCanyon, TUser, BulkCanyonInput } from "../../canyonUtils";
 import {
@@ -74,6 +74,9 @@ import {
 } from "../../csvImport/dialogStyles";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import { useToast } from "../feedback/ToastProvider";
+import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
+import ConfirmDialog from "./ConfirmDialog";
 import MatchReview, {
   type ReviewItem,
   type ReviewDecision,
@@ -140,8 +143,8 @@ type ReviewState = {
 };
 
 type ImportOutcome =
-  | { kind: "canyon"; batchId: string; created: number; merged: number; skipped: number; errors: string[] }
-  | { kind: "triplog"; batchId: string; imported: number; updated: number; createdCanyons: number; noCanyon: number; linked: number; discarded: number; errors: string[] };
+  | { kind: "canyon"; batchId: string; created: number; merged: number; skipped: number; errors: string[]; warnings: string[] }
+  | { kind: "triplog"; batchId: string; imported: number; updated: number; createdCanyons: number; noCanyon: number; linked: number; discarded: number; errors: string[]; warnings: string[] };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -176,22 +179,37 @@ function toMatchCandidate(c: TCanyon): MatchCandidate {
   };
 }
 
+// Numeric canyon fields that are silently left empty when a cell can't be
+// parsed. A non-empty-but-unparseable cell in one of these produces a per-field
+// coercion warning surfaced in the import result (IMPORT-5).
+const NUMERIC_WARN_ROLES = new Set<CanyonFieldRole>([
+  "vGrade", "aGrade", "commitment", "quality", "numAbseils", "longestAbseil", "hours",
+]);
+
 // Build a BulkCanyonInput from a mapped canyon row. Mirrors the field mapping in
 // the (now removed) CanyonCsvImportDialog, but without the per-cell mismatch UI:
 // values that don't parse are dropped (left null) — the importer is additive and
-// merge fills nulls, so a bad cell never blocks the row.
+// merge fills nulls, so a bad cell never blocks the row. Non-empty cells that
+// fail to parse into a numeric field are collected as `warnings` so the result
+// summary can tell the user which values were left empty (IMPORT-5).
 function buildCanyonInput(
   row: Record<string, string>,
   assignments: Record<string, CanyonFieldRole>,
-): BulkCanyonInput {
+): { input: BulkCanyonInput; warnings: string[] } {
   const input: BulkCanyonInput = { name: "", latitude: NaN, longitude: NaN };
   const attrs: Record<string, unknown> = {};
+  const warnings: string[] = [];
 
   for (const [header, role] of Object.entries(assignments)) {
     if (role === "discard") continue;
     const raw = row[header] ?? "";
     const parsed = parseByRole(raw, role);
     const value: unknown = parsed.ok ? parsed.value : null;
+    if (!parsed.ok && raw.trim() !== "" && NUMERIC_WARN_ROLES.has(role)) {
+      warnings.push(
+        `${ROLE_LABELS[role] ?? role} "${raw.trim()}" isn't a number — left empty`,
+      );
+    }
 
     switch (role) {
       case "name":
@@ -247,7 +265,7 @@ function buildCanyonInput(
   }
 
   if (Object.keys(attrs).length > 0) input.attributes = attrs;
-  return input;
+  return { input, warnings };
 }
 
 const MERGEABLE_FIELD_LABELS: Record<MergeableField, string> = {
@@ -292,6 +310,7 @@ function UnifiedImportDialog({
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
 }) {
   const isMobile = useIsMobile();
+  const toast = useToast();
 
   const [step, setStep] = useState<Step>("map");
   const [importing, setImporting] = useState(false);
@@ -312,7 +331,11 @@ function UnifiedImportDialog({
   // Step 2 (review) state — only one kind of file is active per import run.
   const [activeKind, setActiveKind] = useState<"canyon" | "triplog" | null>(null);
   const [preparedCanyonRows, setPreparedCanyonRows] = useState<PreparedCanyonRow[]>([]);
+  // Per-field coercion warnings collected while preparing canyon rows (IMPORT-5).
+  const [canyonWarnings, setCanyonWarnings] = useState<string[]>([]);
   const [preparedTripRows, setPreparedTripRows] = useState<PreparedTripRow[]>([]);
+  // Per-row coercion warnings collected while preparing trip rows (IMPORT-5).
+  const [tripWarnings, setTripWarnings] = useState<string[]>([]);
   const [reviewState, setReviewState] = useState<ReviewState>({
     decisions: {},
     createForms: {},
@@ -367,7 +390,9 @@ function UnifiedImportDialog({
     setDateFormat("DD/MM/YYYY");
     setActiveKind(null);
     setPreparedCanyonRows([]);
+    setCanyonWarnings([]);
     setPreparedTripRows([]);
+    setTripWarnings([]);
     setReviewState({ decisions: {}, createForms: {}, options: {}, distances: {}, bestGuessId: {}, displayName: {}, autoMergeId: {} });
     setMergePolicy(
       currentUser?.uiPreferences?.importMergePolicy ?? DEFAULT_CANYON_MERGE_POLICY,
@@ -432,17 +457,11 @@ function UnifiedImportDialog({
       return;
     }
 
-    // Only one file of each kind at a time. A second canyon list / logbook would
-    // silently overwrite the first, so reject it instead.
-    if (kind === "canyon" && canyonFile) {
-      setError("You can import one canyon list at a time. Remove the current one first.");
-      return;
-    }
-    if (kind === "triplog" && tripFile) {
-      setError("You can import one logbook at a time. Remove the current one first.");
-      return;
-    }
-
+    // One file of each kind at a time. Picking a second file of a kind that's
+    // already loaded REPLACES it (with its column mapping reset below) — the user
+    // is almost always correcting a wrong-file pick, so silently keeping the old
+    // one (and ignoring the new) is the surprising behaviour (IMPORT-2). The
+    // filename chip updates to the new name, which is the visible confirmation.
     const loaded: LoadedFile = {
       fileName: file.name,
       headers: parsed.headers,
@@ -528,49 +547,76 @@ function UnifiedImportDialog({
     [tripFile, tripAssignments],
   );
 
-  function buildCanyonRows(): PreparedCanyonRow[] {
-    if (!canyonFile) return [];
+  function buildCanyonRows(): { rows: PreparedCanyonRow[]; warnings: string[] } {
+    if (!canyonFile) return { rows: [], warnings: [] };
     const out: PreparedCanyonRow[] = [];
+    const warnings: string[] = [];
     canyonFile.rows.forEach((row, rowIndex) => {
-      const input = buildCanyonInput(row, canyonAssignments);
+      const { input, warnings: rowWarnings } = buildCanyonInput(row, canyonAssignments);
       if (!input.name || isNaN(input.latitude) || isNaN(input.longitude)) return;
+      // CSV line number: header is line 1, so the first data row is line 2 (IMPORT-7).
+      for (const warning of rowWarnings) warnings.push(`Row ${rowIndex + 2}: ${warning}`);
       out.push({ rowIndex, sourceName: input.name, input });
     });
-    return out;
+    return { rows: out, warnings };
   }
 
-  function buildTripRows(): PreparedTripRow[] {
-    if (!tripFile) return [];
+  function buildTripRows(): { rows: PreparedTripRow[]; warnings: string[] } {
+    if (!tripFile) return { rows: [], warnings: [] };
     const { headers, rows } = tripFile;
     const nameCol = headers.find((h) => tripAssignments[h] === "name");
     const dateCol = headers.find((h) => tripAssignments[h] === "date");
     const notesCol = headers.find((h) => tripAssignments[h] === "notes");
     const typeCol = headers.find((h) => tripAssignments[h] === "type");
-    if (!nameCol || !dateCol) return [];
+    if (!nameCol || !dateCol) return { rows: [], warnings: [] };
 
     // Custom-field columns: existing cf:<key> plus any new fields the user named.
-    const cfCols: { header: string; key: string; type: TripLogCustomFieldType }[] = [];
+    const cfCols: {
+      header: string;
+      key: string;
+      type: TripLogCustomFieldType;
+      label: string;
+    }[] = [];
     for (const h of headers) {
       const role = tripAssignments[h];
       if (typeof role === "string" && role.startsWith("cf:")) {
         const def = customFieldDefs.find((d) => d.key === role.slice(3));
-        if (def) cfCols.push({ header: h, key: def.key, type: def.type });
+        if (def) cfCols.push({ header: h, key: def.key, type: def.type, label: def.label });
       } else if (role === "new-cf") {
         const form = tripNewCfForms[h];
         if (form?.label.trim()) {
-          cfCols.push({ header: h, key: makeCustomFieldKey(form.label), type: form.type });
+          cfCols.push({
+            header: h,
+            key: makeCustomFieldKey(form.label),
+            type: form.type,
+            label: form.label.trim(),
+          });
         }
       }
     }
 
     const out: PreparedTripRow[] = [];
+    // Per-row/per-field coercion notices: a non-empty cell that can't parse into
+    // its numeric field is left unset and reported (mirrors the canyon path's
+    // IMPORT-5 warnings) — a lenient coerce would silently store "5.5" as 5 or
+    // "abc" as null.
+    const warnings: string[] = [];
     rows.forEach((row, rowIndex) => {
       const sourceCanyonName = (row[nameCol] ?? "").trim();
       const isoDate = toIsoDate(row[dateCol] ?? "", dateFormat);
       if (!isoDate) return;
       const customFields: Record<string, unknown> = {};
       for (const cf of cfCols) {
-        customFields[cf.key] = coerceFieldValue(row[cf.header] ?? "", cf.type);
+        const rawCell = row[cf.header] ?? "";
+        const coerced = coerceFieldValueStrict(rawCell, cf.type);
+        if (coerced.ok) {
+          customFields[cf.key] = coerced.value;
+        } else {
+          const typeWord = cf.type === "integer" ? "whole number" : "number";
+          warnings.push(
+            `Row ${rowIndex + 2}: ${cf.label} "${rawCell.trim()}" isn't a valid ${typeWord} — left empty`,
+          );
+        }
       }
       out.push({
         rowIndex,
@@ -581,16 +627,19 @@ function UnifiedImportDialog({
         customFields,
       });
     });
-    return out;
+    return { rows: out, warnings };
   }
 
   // Build the trip-stage review state and advance the dialog. Runs both from the
   // initial map step (logbook-only or logbook-first) and after the canyon stage
   // of a combined import, where `candidates` are the freshly imported canyons.
   function startTripStage(candidates: MatchCandidate[]): boolean {
-    const rows = buildTripRows();
+    const { rows, warnings: tripRowWarnings } = buildTripRows();
     if (rows.length === 0) {
-      setError("No valid trip rows found (each needs a canyon name and a parseable date).");
+      setError(
+        "No valid trip rows found — each row needs a canyon name and a date we could read. " +
+          "If your dates look right, check the “Date format” selector on the previous step matches your file (ISO 8601 like 2023-06-15, or day-first like 15/06/2023).",
+      );
       return false;
     }
     const decisions: Record<string, ReviewDecision> = {};
@@ -626,6 +675,7 @@ function UnifiedImportDialog({
     }
     setActiveKind("triplog");
     setPreparedTripRows(rows);
+    setTripWarnings(tripRowWarnings);
     setReviewState({ decisions, createForms, options, distances, bestGuessId, displayName, autoMergeId: {} });
     setStep(surfaced.size > 0 ? "review" : "confirm");
     return true;
@@ -637,11 +687,12 @@ function UnifiedImportDialog({
 
     // Process the canyon file first so trips can match the just-imported canyons.
     if (canyonFile && canyonMapValid) {
-      const rows = buildCanyonRows();
+      const { rows, warnings } = buildCanyonRows();
       if (rows.length === 0) {
         setError("No valid canyon rows found (each needs a name, latitude and longitude).");
         return;
       }
+      setCanyonWarnings(warnings);
       // Canyon files: auto-create on `none`; surface only the ambiguous middle.
       const decisions: Record<string, ReviewDecision> = {};
       const options: Record<string, MatchCandidate[]> = {};
@@ -707,6 +758,21 @@ function UnifiedImportDialog({
   const surfacedKeys = useMemo(() => {
     return Object.keys(reviewState.options);
   }, [reviewState.options]);
+
+  // Rows whose canyon matched confidently (or is clearly new / canyon-less) and
+  // therefore never appear in the review list — they'll be imported automatically
+  // on Apply. Surfaced here for transparency so the review step can say how many
+  // (IMPORT-3: the auto-import is intended; the silence about it was the problem).
+  const autoResolvedCount = useMemo(() => {
+    const surfaced = new Set(surfacedKeys);
+    if (activeKind === "canyon") {
+      return preparedCanyonRows.filter((r) => !surfaced.has(r.sourceName.toLowerCase())).length;
+    }
+    if (activeKind === "triplog") {
+      return preparedTripRows.filter((r) => !surfaced.has(r.sourceCanyonName.toLowerCase())).length;
+    }
+    return 0;
+  }, [activeKind, surfacedKeys, preparedCanyonRows, preparedTripRows]);
 
   const reviewItems = useMemo<ReviewItem[]>(() => {
     return surfacedKeys.map((key) => {
@@ -806,6 +872,20 @@ function UnifiedImportDialog({
     return { importBatchId: batchId, rows, mergePolicy };
   }
 
+  // Server per-row errors carry a `rowIndex` into the POST body (== index into
+  // preparedCanyonRows, since resolvedCanyonBody maps them in order). Turn that
+  // back into the original CSV line number (header = line 1) so the message
+  // matches the user's file — a single, consistent index (IMPORT-7).
+  function formatCanyonRowErrors(
+    errs: { rowIndex: number; message: string }[],
+  ): string[] {
+    return errs.map((e) => {
+      const prepared = preparedCanyonRows[e.rowIndex];
+      const line = prepared ? prepared.rowIndex + 2 : e.rowIndex + 1;
+      return `Row ${line}: ${e.message}`;
+    });
+  }
+
   async function handleImportCanyons() {
     const batchId = sessionBatchId();
     setImporting(true);
@@ -829,7 +909,8 @@ function UnifiedImportDialog({
             created: result.created,
             merged: result.merged,
             skipped: result.skipped,
-            errors: result.errors.map((e) => `Row ${e.rowIndex + 1}: ${e.message}`),
+            errors: formatCanyonRowErrors(result.errors),
+            warnings: canyonWarnings,
           });
         }
         return;
@@ -842,7 +923,8 @@ function UnifiedImportDialog({
         created: result.created,
         merged: result.merged,
         skipped: result.skipped,
-        errors: result.errors.map((e) => `Row ${e.rowIndex + 1}: ${e.message}`),
+        errors: formatCanyonRowErrors(result.errors),
+        warnings: canyonWarnings,
       });
     } catch (err) {
       console.error(err);
@@ -901,10 +983,24 @@ function UnifiedImportDialog({
             mergePolicy,
           });
           createdCanyons = result.created;
+          // Surface server-rejected create rows with their REAL per-row message
+          // (the meaningful label here is the canyon name, not a CSV line) and
+          // skip the pointless id-match for them — a rejected row created no
+          // canyon to link. result.errors[].rowIndex indexes the POST body,
+          // which is createRows.map(...) in order.
+          const rejectedRowIndexes = new Set<number>();
+          for (const e of result.errors) {
+            rejectedRowIndexes.add(e.rowIndex);
+            const rejected = createRows[e.rowIndex];
+            const label =
+              rejected?.form.name.trim() || rejected?.key || `row ${e.rowIndex + 1}`;
+            errors.push(`Couldn't create canyon "${label}": ${e.message}`);
+          }
           // Resolve ids from the freshly-fetched canyon list.
           const all = await apiFetch<TCanyon[]>("/canyons");
           const candidates = all.map(toMatchCandidate);
-          for (const e of createRows) {
+          createRows.forEach((e, rowIndex) => {
+            if (rejectedRowIndexes.has(rowIndex)) return;
             const m = matchCanyon(
               {
                 name: e.form.name.trim(),
@@ -915,7 +1011,7 @@ function UnifiedImportDialog({
             );
             if (m.best) createdCanyonIdByKey[e.key] = m.best.candidate.id;
             else errors.push(`Couldn't link the created canyon for "${e.key}".`);
-          }
+          });
         } catch (err) {
           console.error(err);
           errors.push("Couldn't create one or more new canyons.");
@@ -923,7 +1019,11 @@ function UnifiedImportDialog({
       }
 
       // Rows the user chose to discard are dropped entirely (not imported).
+      // sentRowCsvLines[i] = original CSV line of trips[i] (header = line 1), so
+      // server per-row errors can be labelled with the line in the user's file
+      // rather than the post-filter body index (IMPORT-7).
       let discarded = 0;
+      const sentRowCsvLines: number[] = [];
       const trips = preparedTripRows.flatMap((row) => {
         const key = row.sourceCanyonName.toLowerCase();
         const decision = reviewState.decisions[key];
@@ -931,6 +1031,7 @@ function UnifiedImportDialog({
           discarded += 1;
           return [];
         }
+        sentRowCsvLines.push(row.rowIndex + 2);
         let canyonId: string | null = null;
         let displayName: string | null | undefined = undefined;
         if (decision?.kind === "link") {
@@ -972,7 +1073,13 @@ function UnifiedImportDialog({
         noCanyon,
         linked,
         discarded,
-        errors: [...errors, ...result.errors.map((e) => `Row ${e.index + 1}: ${e.error}`)],
+        errors: [
+          ...errors,
+          ...result.errors.map(
+            (e) => `Row ${sentRowCsvLines[e.index] ?? e.index + 1}: ${e.error}`,
+          ),
+        ],
+        warnings: tripWarnings,
       });
     } catch (err) {
       console.error(err);
@@ -986,10 +1093,21 @@ function UnifiedImportDialog({
     if (!outcome) return;
     setUndoing(true);
     try {
-      await undoImport(outcome.batchId);
+      const result = await undoImport(outcome.batchId);
       onRefetchCanyons();
       onRefetchTripLogs();
       onRefetchAnalytics();
+      const parts = [
+        result.deletedCanyons > 0
+          ? `${result.deletedCanyons} canyon${result.deletedCanyons === 1 ? "" : "s"}`
+          : null,
+        result.deletedTrips > 0
+          ? `${result.deletedTrips} trip${result.deletedTrips === 1 ? "" : "s"}`
+          : null,
+      ].filter((p): p is string => p != null);
+      toast.success(
+        parts.length > 0 ? `Import undone — ${parts.join(" and ")} removed.` : "Import undone.",
+      );
       onClose();
     } catch (err) {
       console.error(err);
@@ -1072,6 +1190,11 @@ function UnifiedImportDialog({
   function renderMapStep() {
     return (
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {isMobile && (
+          <Typography variant="caption" sx={{ display: "block", color: "var(--theme-text-muted)" }}>
+            This tool is best used on a larger screen.
+          </Typography>
+        )}
         {noCanyonsYet && (
           <ErrorBanner message="You have no canyons yet. Importing a logbook works best after you load the RopeWiki canyon database — your trips can then match against it. You can still import now and link trips later." />
         )}
@@ -1108,27 +1231,37 @@ function UnifiedImportDialog({
             {renderFileChip(canyonFile, "canyon")}
             <SectionLabel text="Canyon columns" />
             {renderColumnMapHeader()}
-            {canyonFile.headers.map((header) => (
-              <Box key={header} sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
-                <Typography variant="body2" sx={{ flex: 1, color: "var(--theme-text-primary)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {header}
-                </Typography>
-                <FormControl size="small" sx={{ flex: 2, minWidth: 160 }}>
-                  <Select
-                    value={canyonAssignments[header] ?? "discard"}
-                    onChange={(e) =>
-                      setCanyonAssignments((prev) => ({ ...prev, [header]: e.target.value as CanyonFieldRole }))
-                    }
-                    sx={selectSx}
-                    MenuProps={menuPaperProps}
-                  >
-                    {ALL_ASSIGNABLE_ROLES.map((r) => (
-                      <MenuItem key={r} value={r}>{ROLE_LABELS[r] ?? r}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Box>
-            ))}
+            {canyonFile.headers.map((header) => {
+              const role = canyonAssignments[header] ?? "discard";
+              // An auto-detected `attr:<key>` role (from an `attr:<key>` export
+              // header) isn't one of ALL_ASSIGNABLE_ROLES, so render a matching
+              // option for it — otherwise the Select value is out of range.
+              const isCustomAttr = typeof role === "string" && role.startsWith("attr:");
+              return (
+                <Box key={header} sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+                  <Typography variant="body2" sx={{ flex: 1, color: "var(--theme-text-primary)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {header}
+                  </Typography>
+                  <FormControl size="small" sx={{ flex: 2, minWidth: 160 }}>
+                    <Select
+                      value={role}
+                      onChange={(e) =>
+                        setCanyonAssignments((prev) => ({ ...prev, [header]: e.target.value as CanyonFieldRole }))
+                      }
+                      sx={selectSx}
+                      MenuProps={menuPaperProps}
+                    >
+                      {isCustomAttr && (
+                        <MenuItem value={role}>Custom field: {role.slice(5)}</MenuItem>
+                      )}
+                      {ALL_ASSIGNABLE_ROLES.map((r) => (
+                        <MenuItem key={r} value={r}>{ROLE_LABELS[r] ?? r}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
+              );
+            })}
             <Typography className={classes.mappingFeedback}>
               {canyonMapValid
                 ? "Name, latitude and longitude found — canyons will be matched by name and coordinates."
@@ -1295,6 +1428,13 @@ function UnifiedImportDialog({
             ? "These canyon names matched more than one option, or matched something far away. Choose what to do with each."
             : "These canyon names couldn't be matched confidently. Link them, create a new canyon, import the trip without a canyon, or discard it."}
         </Typography>
+        {autoResolvedCount > 0 && (
+          <Typography variant="caption" sx={{ color: "var(--theme-text-muted)" }}>
+            {activeKind === "canyon"
+              ? `Plus ${autoResolvedCount} more ${autoResolvedCount === 1 ? "canyon" : "canyons"} matched confidently (new or existing) and will be imported automatically when you apply — only the ${surfacedKeys.length} above need a decision.`
+              : `Plus ${autoResolvedCount} more ${autoResolvedCount === 1 ? "trip" : "trips"} matched a canyon confidently (or have no canyon) and will be imported automatically when you apply — only the ${surfacedKeys.length} above need a decision.`}
+          </Typography>
+        )}
         <MatchReview
           items={reviewItems}
           onChange={handleReviewChange}
@@ -1326,10 +1466,13 @@ function UnifiedImportDialog({
               { count: outcome.discarded, label: "discarded" },
             ];
       const details: DetailSection[] = [];
+      const warnings =
+        outcome.warnings.length > 0 ? outcome.warnings : undefined;
       return (
         <ImportResultSummary
           headline={headline}
           details={details.length > 0 ? details : undefined}
+          warnings={warnings}
           errors={outcome.errors.length > 0 ? outcome.errors : undefined}
           onUndo={handleUndo}
           undoing={undoing}
@@ -1396,6 +1539,13 @@ function UnifiedImportDialog({
   // once an import has completed, or outside onboarding, it just closes.
   const handleDismiss = outcome ? onClose : (onBack ?? onClose);
 
+  // Dirty once a file has been dropped and the import hasn't finished — losing
+  // a loaded file/mapping/review is real, non-trivial work (IMPORT-8). Once an
+  // outcome exists there's nothing left to lose, so handleDismiss (= onClose)
+  // runs unguarded.
+  const isDirty = !outcome && (canyonFile != null || tripFile != null);
+  const guard = useUnsavedChangesGuard(isDirty, handleDismiss);
+
   function renderContent() {
     if (importing) {
       return (
@@ -1423,7 +1573,7 @@ function UnifiedImportDialog({
     if (step === "map") {
       return (
         <>
-          <Button onClick={handleDismiss} sx={{ color: "var(--theme-text-primary)" }}>
+          <Button onClick={guard.requestClose} sx={{ color: "var(--theme-text-primary)" }}>
             {onBack ? "Back" : "Cancel"}
           </Button>
           <Button variant="contained" color="secondary" onClick={handleMapNext} disabled={!canProceedFromMap}>
@@ -1460,6 +1610,7 @@ function UnifiedImportDialog({
   }
 
   return (
+    <>
     <Dialog
       fullScreen={isMobile}
       open={open}
@@ -1467,7 +1618,7 @@ function UnifiedImportDialog({
       // merge/review. The title-bar ✕ and the Back button are the explicit exits.
       onClose={(_e, reason) => {
         if (importing || reason === "backdropClick") return;
-        handleDismiss();
+        guard.requestClose();
       }}
       maxWidth="sm"
       fullWidth
@@ -1475,7 +1626,7 @@ function UnifiedImportDialog({
         sx: {
           backgroundColor: "var(--theme-primary)",
           color: "var(--theme-text-primary)",
-          maxHeight: "85vh",
+          maxHeight: isMobile ? "100%" : "85vh",
         },
       }}
     >
@@ -1484,7 +1635,7 @@ function UnifiedImportDialog({
         <IconButton
           aria-label="Close dialog"
           size="small"
-          onClick={handleDismiss}
+          onClick={guard.requestClose}
           disabled={importing}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -1496,6 +1647,17 @@ function UnifiedImportDialog({
       </DialogContent>
       <DialogActions>{renderActions()}</DialogActions>
     </Dialog>
+
+    <ConfirmDialog
+      open={guard.guardOpen}
+      title="Discard unsaved changes?"
+      message="Your loaded file and any mapping changes will be lost."
+      confirmLabel="Discard"
+      confirmColor="error"
+      onConfirm={guard.confirmDiscard}
+      onClose={guard.cancelDiscard}
+    />
+    </>
   );
 }
 

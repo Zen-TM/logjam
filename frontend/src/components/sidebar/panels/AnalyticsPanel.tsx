@@ -80,7 +80,20 @@ function CompletionRing({ total, completed }: { total: number; completed: number
 
   return (
     <div className={classes.completionSection}>
-      <span className={classes.sectionLabel}>Canyon Completion</span>
+      <span className={classes.sectionLabel}>
+        Canyon Completion
+        <span
+          className={classes.tooltipAnchor}
+          aria-label="Canyons in your library that have at least one logged trip of any type, out of your total canyons. Counts all trip types, so it can exceed Unique Canyons above (which is canyoning-only)."
+        >
+          <Info size={11} />
+          <span className={classes.tooltip}>
+            Canyons in your library that have at least one logged trip of any
+            type, out of your total canyons. Counts all trip types, so it can
+            exceed Unique Canyons above (which is canyoning-only).
+          </span>
+        </span>
+      </span>
       <div className={classes.ringWrapper}>
         <svg viewBox="0 0 100 100" width={135} height={135} className={classes.ringSvg}>
           <circle
@@ -115,6 +128,7 @@ function CompletionRing({ total, completed }: { total: number; completed: number
 function DrilldownHeatmap({
   tripDates,
   tripLogs,
+  excludedTrips,
   customFieldDefs,
   onRefetchTripLogs,
   onRefetchAnalytics,
@@ -122,6 +136,7 @@ function DrilldownHeatmap({
 }: {
   tripDates: Record<string, number>;
   tripLogs: TTripLog[];
+  excludedTrips: number;
   customFieldDefs: TripLogCustomFieldDef[];
   onRefetchTripLogs: () => void;
   onRefetchAnalytics: () => void;
@@ -236,7 +251,12 @@ function DrilldownHeatmap({
 
   return (
     <div className={classes.heatmapSection}>
-      <span className={classes.sectionLabel}>Activity</span>
+      <span className={classes.sectionLabel}>Canyoning activity</span>
+      {excludedTrips > 0 && (
+        <span className={classes.heatmapCaption}>
+          {excludedTrips} trip{excludedTrips !== 1 ? "s" : ""} of other types not shown.
+        </span>
+      )}
 
       {/* Navigation header */}
       <div className={classes.heatmapNav}>
@@ -429,8 +449,16 @@ function AnalyticsPanel({
     <div className={classes.panel}>
       {/* Hero stats */}
       <div className={classes.statGrid}>
-        <StatTile label="Canyon Trips" value={formatNumber(heroStats.totalTrips)} />
-        <StatTile label="Unique Canyons" value={formatNumber(heroStats.uniqueCanyons)} />
+        <StatTile
+          label="Canyon Trips"
+          value={formatNumber(heroStats.totalTrips)}
+          tooltip="Trips tagged with the canyoning type. Trips of other types aren't counted here."
+        />
+        <StatTile
+          label="Unique Canyons"
+          value={formatNumber(heroStats.uniqueCanyons)}
+          tooltip="Distinct canyons you've logged a canyoning trip on. A named trip with no linked canyon counts once by its name."
+        />
         <StatTile label="Days Canyoning" value={formatNumber(heroStats.daysCanyoning)} />
         <StatTile
           label="Total Abseils"
@@ -449,6 +477,7 @@ function AnalyticsPanel({
       <DrilldownHeatmap
         tripDates={tripDates}
         tripLogs={tripLogs}
+        excludedTrips={heroStats.excludedTrips}
         customFieldDefs={customFieldDefs}
         onRefetchTripLogs={onRefetchTripLogs}
         onRefetchAnalytics={onRefetchAnalytics}

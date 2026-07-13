@@ -23,7 +23,7 @@ router.get(
       throw new AppError(400, "type must be a string");
     }
 
-    const [trips, totalCanyons, canyonsWithTrips, typesRows] =
+    const [trips, totalTripsAllTypes, totalCanyons, canyonsWithTrips, typesRows] =
       await Promise.all([
         prisma.tripLog.findMany({
           where: { userId: user.id, ...(type ? { types: { has: type } } : {}) },
@@ -38,6 +38,13 @@ router.get(
             },
           },
         }),
+        // All the user's trips regardless of type. Lets the client show how many
+        // trips the type-filtered Activity chart is NOT showing (ANALYTICS-1).
+        // Only needed when a type filter is active — skip the query otherwise
+        // (its result feeds `excludedTrips`, which is 0 with no filter).
+        type
+          ? prisma.tripLog.count({ where: { userId: user.id } })
+          : Promise.resolve(0),
         prisma.canyon.count({ where: { ownerId: user.id } }),
         prisma.canyon.count({
           where: { ownerId: user.id, tripLogLinks: { some: {} } },
@@ -83,6 +90,9 @@ router.get(
     res.json({
       heroStats: {
         totalTrips: trips.length,
+        // Trips of a different type (or untyped) than the active filter — the
+        // count the type-scoped Activity chart omits. 0 when no type filter.
+        excludedTrips: type ? totalTripsAllTypes - trips.length : 0,
         uniqueCanyons: distinctCanyons.size,
         daysCanyoning: distinctDays.size,
         totalAbseils,

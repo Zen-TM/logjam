@@ -67,3 +67,10 @@ body {
     --nav-rail-width: 0px;
   }
 }
+
+/* fullScreen MUI dialogs must fully cover the viewport (MOBILE-12). Dialogs
+   that cap their paper with a desktop-oriented `sx: { maxHeight: "85vh" }`
+   now condition that cap on `useIsMobile()` (`maxHeight: isMobile ? "100%" : "85vh"`)
+   instead of relying on a global override here — see TripLogDialog,
+   TripLogViewDialog, TopoDialog, GeoPdfDialog, UnifiedImportDialog,
+   SelectedCanyonsDialog, TopoTemplateEditDialog. */

@@ -60,6 +60,91 @@ export function coerceFieldValue(value: string, type: TripLogCustomFieldType): u
 }
 
 /**
+ * Strict sibling of `coerceFieldValue`. Instead of silently producing `NaN`
+ * for a malformed numeric string (which `parseInt`/`parseFloat` do), it reports
+ * success/failure so callers can fail loudly. An empty string is a legitimate
+ * "unset" and succeeds with `value: null`. Integer fields reject any input that
+ * isn't a whole number (e.g. "5.5"); float fields reject non-finite input.
+ *
+ * `coerceFieldValue` is retained for the existing edit paths (which pre-validate
+ * via `customFieldValueError` before saving); this variant exists for import /
+ * programmatic paths that have no separate validation gate.
+ */
+export function coerceFieldValueStrict(
+  value: string,
+  type: TripLogCustomFieldType,
+): { ok: true; value: unknown } | { ok: false } {
+  const trimmed = value.trim();
+  if (trimmed === "") return { ok: true, value: null };
+  if (type === "integer") {
+    if (!/^[+-]?\d+$/.test(trimmed)) return { ok: false };
+    const parsed = parseInt(trimmed, 10);
+    if (!Number.isSafeInteger(parsed)) return { ok: false };
+    return { ok: true, value: parsed };
+  }
+  if (type === "float") {
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) return { ok: false };
+    return { ok: true, value: parsed };
+  }
+  if (type === "boolean") return { ok: true, value: trimmed === "true" };
+  return { ok: true, value };
+}
+
+/**
+ * True when a trip log's stored `customFields` blob carries a meaningful value
+ * for `key` — i.e. the key is present and not null/empty-string. Used for the
+ * "N trips carry a value for this field" impact warnings shown before a custom
+ * field is renamed or deleted, and to decide which trip rows to rewrite on
+ * delete. Pure.
+ */
+export function tripLogHasCustomFieldValue(
+  customFields: Record<string, unknown> | null | undefined,
+  key: string,
+): boolean {
+  if (customFields == null) return false;
+  const value = customFields[key];
+  return value !== undefined && value !== null && value !== "";
+}
+
+/**
+ * Count how many of `trips` carry a value for the custom field `key`. Drives
+ * the impact warning on rename/delete. Pure.
+ */
+export function countTripLogsWithCustomField(
+  trips: { customFields: Record<string, unknown> | null | undefined }[],
+  key: string,
+): number {
+  let count = 0;
+  for (const trip of trips) {
+    if (tripLogHasCustomFieldValue(trip.customFields, key)) count += 1;
+  }
+  return count;
+}
+
+/**
+ * Rename a custom field's display label while keeping its `key` stable, so the
+ * values already stored on trip logs (keyed by `key`) stay linked — a rename
+ * must never orphan existing values. Pure: returns the new defs array or a
+ * user-facing error string. The key is deliberately NOT re-derived from the new
+ * label (doing so would orphan every stored value).
+ */
+export function renameCustomFieldLabel(
+  defs: TripLogCustomFieldDef[],
+  key: string,
+  newLabel: string,
+): { defs: TripLogCustomFieldDef[] } | { error: string } {
+  const label = newLabel.trim();
+  if (!label) return { error: "Label is required." };
+  const target = defs.find((d) => d.key === key);
+  if (!target) return { error: "That field no longer exists." };
+  if (target.label === label) return { defs };
+  return {
+    defs: defs.map((d) => (d.key === key ? { ...d, label } : d)),
+  };
+}
+
+/**
  * Raw form state for the "Add Custom Field" sub-form. Both CanyonDialog and
  * TripLogDialog feed this into `buildCustomFieldDef` to get a validated
  * `TripLogCustomFieldDef` or a user-facing error string.

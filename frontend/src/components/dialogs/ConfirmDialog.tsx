@@ -49,7 +49,10 @@ function ConfirmDialog({
     >
       <DialogTitle>{title}</DialogTitle>
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
-        <DialogContentText sx={{ color: "var(--theme-text-primary)" }}>
+        {/* component="div": `message` is a ReactNode and may contain block
+            elements (e.g. an ErrorBanner) — the default <p> would nest them
+            invalidly. */}
+        <DialogContentText component="div" sx={{ color: "var(--theme-text-primary)" }}>
           {message}
         </DialogContentText>
       </DialogContent>

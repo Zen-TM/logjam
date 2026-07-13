@@ -9,11 +9,13 @@ import {
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   type NotificationPreferences,
+  type TripLogCustomFieldDef,
 } from "@logjam/shared";
 import { useAuth } from "../../../useAuth";
 import { useThemePreferences } from "../../../themePreferences";
 import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
 import ChangeEmailDialog from "../../dialogs/ChangeEmailDialog";
+import CustomFieldSection from "./CustomFieldSection";
 import classes from "./AccountPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -26,7 +28,22 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
+function AccountPanel({
+  currentUser,
+  customFieldDefs,
+  onCustomFieldDefsChange,
+  canyonCustomFieldDefs,
+  onCanyonCustomFieldDefsChange,
+}: {
+  currentUser: TUser | null;
+  // Custom trip-log field definitions (App-level state, shared with the trip
+  // dialogs so a create/rename/delete here is immediately visible there).
+  customFieldDefs: TripLogCustomFieldDef[];
+  onCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+  // Custom canyon field definitions (App-level state, shared with CanyonDialog).
+  canyonCustomFieldDefs: TripLogCustomFieldDef[];
+  onCanyonCustomFieldDefsChange: (defs: TripLogCustomFieldDef[]) => void;
+}) {
   const { signOut } = useAuth();
   const toast = useToast();
   const { schemeId, schemes, isHydrating, isSaving, error: themeError, setThemeScheme } =
@@ -352,6 +369,26 @@ function AccountPanel({ currentUser }: { currentUser: TUser | null }) {
           </label>
         </div>
       )}
+
+      <CustomFieldSection
+        entity="trip-log"
+        sectionLabel="Custom trip fields"
+        tooltip="Extra fields you've added to trip logs (e.g. Water Level). Renaming keeps existing values; deleting removes the field and its values from all trips."
+        emptyText="No custom trip fields yet. Add one below or from a trip log."
+        loading={!currentUser}
+        defs={customFieldDefs}
+        onDefsChange={onCustomFieldDefsChange}
+      />
+
+      <CustomFieldSection
+        entity="canyon"
+        sectionLabel="Custom canyon fields"
+        tooltip="Extra fields you've added to canyons (e.g. Water Level). Renaming keeps existing values; deleting removes the field and its values from all canyons."
+        emptyText="No custom canyon fields yet. Add one below or from a canyon."
+        loading={!currentUser}
+        defs={canyonCustomFieldDefs}
+        onDefsChange={onCanyonCustomFieldDefsChange}
+      />
 
       <span className={classes.sectionLabel}>Your data</span>
       <div className={classes.divider} />

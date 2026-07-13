@@ -19,7 +19,11 @@
     margin-left: 0;
   }
   .root {
-    width: calc(100% - 24px);
+    /* Stop short of the map's top-right zoom/compass control (MapLibre
+       NavigationControl: 29px button + 10px margin ≈ 39px) so the full-width
+       search bar can't sit on top of it and steal zoom taps (MOBILE-1). */
+    right: 50px;
+    width: auto;
   }
 }
 
