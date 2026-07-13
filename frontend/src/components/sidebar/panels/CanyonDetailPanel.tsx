@@ -296,221 +296,223 @@ function CanyonDetailPanel({
   return (
     <>
       <div className={classes.root}>
-        {visualMedia.length > 0 && <CanyonSlideshow media={visualMedia} />}
+        <div className={classes.scrollArea}>
+          {visualMedia.length > 0 && <CanyonSlideshow media={visualMedia} />}
 
-        {track && (
-          <div className={classes.trackSection}>
-            <div className={classes.sectionLabel}>Track</div>
-            <div className={classes.trackCard}>
-              <a
-                className={classes.trackCardLink}
-                href={track.displayUrl}
-                download={track.filename}
-              >
-                <TrackIcon color={track.color} size={18} />
-                <span className={classes.trackCardName}>{track.filename}</span>
-              </a>
-              {isOwnedCanyon && (
-                <button
-                  className={classes.trackDeleteBtn}
-                  onClick={() => setTrackToDelete(track)}
-                  aria-label={`Delete track ${track.filename}`}
+          {track && (
+            <div className={classes.trackSection}>
+              <div className={classes.sectionLabel}>Track</div>
+              <div className={classes.trackCard}>
+                <a
+                  className={classes.trackCardLink}
+                  href={track.displayUrl}
+                  download={track.filename}
                 >
-                  <Trash2 size={14} />
-                </button>
+                  <TrackIcon color={track.color} size={18} />
+                  <span className={classes.trackCardName}>{track.filename}</span>
+                </a>
+                {isOwnedCanyon && (
+                  <button
+                    className={classes.trackDeleteBtn}
+                    onClick={() => setTrackToDelete(track)}
+                    aria-label={`Delete track ${track.filename}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {isOwnedCanyon && (
+            <button className={classes.uploadBtn} onClick={() => setShowEdit(true)}>
+              Upload media
+            </button>
+          )}
+
+          {showMediaTop && <div className={classes.divider} />}
+
+          {!safetyDismissed && (
+            <div className={classes.safetyWarning} role="note">
+              <TriangleAlert size={16} className={classes.safetyIcon} />
+              <span className={classes.safetyText}>
+                Data is user-generated and may be inaccurate or outdated. Not a
+                substitute for your own navigation, judgement, or rescue planning.
+              </span>
+              <button
+                type="button"
+                className={classes.safetyDismiss}
+                aria-label="Dismiss safety warning"
+                onClick={() => {
+                  localStorage.setItem('logjam.safetyDismissed', '1');
+                  setSafetyDismissed(true);
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+          {(canyon.ropeWikiId != null ||
+            canyon.altNames.length > 0 ||
+            sharedWithNode != null) && (
+            <div className={classes.headerMeta}>
+              {canyon.ropeWikiId != null && (
+                <p className={classes.disclaimer}>
+                  Canyon data imported from RopeWiki (facts only; descriptions not
+                  imported), &copy; RopeWiki contributors, licensed{" "}
+                  <a
+                    href="https://creativecommons.org/licenses/by-nc-sa/4.0/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    CC BY-NC-SA 4.0
+                  </a>
+                  .
+                </p>
+              )}
+              {canyon.altNames.length > 0 && (
+                <p className={classes.altNames}>Also known as: {canyon.altNames.join(", ")}</p>
+              )}
+              {sharedWithNode != null && (
+                <p className={classes.altNames}>Shared with: {sharedWithNode}</p>
               )}
             </div>
-          </div>
-        )}
+          )}
 
-        {isOwnedCanyon && (
-          <button className={classes.uploadBtn} onClick={() => setShowEdit(true)}>
-            Upload media
-          </button>
-        )}
-
-        {showMediaTop && <div className={classes.divider} />}
-
-        {!safetyDismissed && (
-          <div className={classes.safetyWarning} role="note">
-            <TriangleAlert size={16} className={classes.safetyIcon} />
-            <span className={classes.safetyText}>
-              Data is user-generated and may be inaccurate or outdated. Not a
-              substitute for your own navigation, judgement, or rescue planning.
-            </span>
-            <button
-              type="button"
-              className={classes.safetyDismiss}
-              aria-label="Dismiss safety warning"
-              onClick={() => {
-                localStorage.setItem('logjam.safetyDismissed', '1');
-                setSafetyDismissed(true);
-              }}
-            >
-              <X size={14} />
-            </button>
-          </div>
-        )}
-        {(canyon.ropeWikiId != null ||
-          canyon.altNames.length > 0 ||
-          sharedWithNode != null) && (
-          <div className={classes.headerMeta}>
-            {canyon.ropeWikiId != null && (
-              <p className={classes.disclaimer}>
-                Canyon data imported from RopeWiki (facts only; descriptions not
-                imported), &copy; RopeWiki contributors, licensed{" "}
-                <a
-                  href="https://creativecommons.org/licenses/by-nc-sa/4.0/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  CC BY-NC-SA 4.0
-                </a>
-                .
-              </p>
-            )}
-            {canyon.altNames.length > 0 && (
-              <p className={classes.altNames}>Also known as: {canyon.altNames.join(", ")}</p>
-            )}
-            {sharedWithNode != null && (
-              <p className={classes.altNames}>Shared with: {sharedWithNode}</p>
-            )}
-          </div>
-        )}
-
-        <div
-          className={classes.attributesBox}
-          role="button"
-          onClick={(e) => {
-            if ((e.target as HTMLElement).closest("a")) return;
-            setShowEdit(true);
-          }}
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") setShowEdit(true);
-          }}
-          aria-label="Canyon attributes — click to edit"
-        >
-          <button
-            className={classes.editIcon}
+          <div
+            className={classes.attributesBox}
+            role="button"
             onClick={(e) => {
-              e.stopPropagation();
+              if ((e.target as HTMLElement).closest("a")) return;
               setShowEdit(true);
             }}
-            aria-label="Edit canyon"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") setShowEdit(true);
+            }}
+            aria-label="Canyon attributes — click to edit"
           >
-            <Pencil size={14} />
-          </button>
-          {canyonGrade && (
-            <p>
-              <b>Grade:</b> {canyonGrade}
-            </p>
-          )}
-          <p>
-            <b>Location:</b> {canyon.latitude.toFixed(4)}, {canyon.longitude.toFixed(4)}
-          </p>
-          {canyon.quality != null && (
-            <p>
-              <b>Quality:</b> {canyon.quality}/5
-            </p>
-          )}
-          {canyon.numAbseils != null && (
-            <p>
-              <b>Pitches:</b> {canyon.numAbseils}
-            </p>
-          )}
-          {canyon.longestAbseil != null && (
-            <p>
-              <b>Longest Pitch:</b> {canyon.longestAbseil}m
-            </p>
-          )}
-          {canyon.hours != null && (
-            <p>
-              <b>Hours:</b> {canyon.hours}
-            </p>
-          )}
-          {canyon.attributes.sources && canyon.attributes.sources.length > 0 && (
-            <div>
-              <b>Sources:</b>
-              <ul className={classes.sourcesList}>
-                {canyon.attributes.sources.map(([label, url], i) => (
-                  <li key={i}>
-                    {url ? (
-                      <a href={url} target="_blank" rel="noopener noreferrer">
-                        {label}
-                      </a>
-                    ) : (
-                      label
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {canyonCustomFieldDefs.map((def) => {
-            const display = formatCustomFieldValue(
-              canyon.attributes.customFields?.[def.key],
-              def.type,
-            );
-            if (display == null) return null;
-            return (
-              <p key={def.key}>
-                <b>{def.label}:</b> {display}
+            <button
+              className={classes.editIcon}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowEdit(true);
+              }}
+              aria-label="Edit canyon"
+            >
+              <Pencil size={14} />
+            </button>
+            {canyonGrade && (
+              <p>
+                <b>Grade:</b> {canyonGrade}
               </p>
-            );
-          })}
-          {canyon.notes && canyon.notes.trim().length > 0 && (
-            <div className={classes.notesBlock}>
-              <b>Notes:</b>
-              <p className={classes.notesText}>{canyon.notes}</p>
-            </div>
-          )}
-        </div>
-
-        <div className={classes.tripLogsRegion}>
-          <div className={classes.tripLogsHeader}>
-            Trip Logs {tripLogs.length > 0 && `(${tripLogs.length})`}
+            )}
+            <p>
+              <b>Location:</b> {canyon.latitude.toFixed(4)}, {canyon.longitude.toFixed(4)}
+            </p>
+            {canyon.quality != null && (
+              <p>
+                <b>Quality:</b> {canyon.quality}/5
+              </p>
+            )}
+            {canyon.numAbseils != null && (
+              <p>
+                <b>Pitches:</b> {canyon.numAbseils}
+              </p>
+            )}
+            {canyon.longestAbseil != null && (
+              <p>
+                <b>Longest Pitch:</b> {canyon.longestAbseil}m
+              </p>
+            )}
+            {canyon.hours != null && (
+              <p>
+                <b>Hours:</b> {canyon.hours}
+              </p>
+            )}
+            {canyon.attributes.sources && canyon.attributes.sources.length > 0 && (
+              <div>
+                <b>Sources:</b>
+                <ul className={classes.sourcesList}>
+                  {canyon.attributes.sources.map(([label, url], i) => (
+                    <li key={i}>
+                      {url ? (
+                        <a href={url} target="_blank" rel="noopener noreferrer">
+                          {label}
+                        </a>
+                      ) : (
+                        label
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {canyonCustomFieldDefs.map((def) => {
+              const display = formatCustomFieldValue(
+                canyon.attributes.customFields?.[def.key],
+                def.type,
+              );
+              if (display == null) return null;
+              return (
+                <p key={def.key}>
+                  <b>{def.label}:</b> {display}
+                </p>
+              );
+            })}
+            {canyon.notes && canyon.notes.trim().length > 0 && (
+              <div className={classes.notesBlock}>
+                <b>Notes:</b>
+                <p className={classes.notesText}>{canyon.notes}</p>
+              </div>
+            )}
           </div>
-          {loadingTrips ? (
-            <span className={classes.caption}>Loading...</span>
-          ) : tripLogs.length === 0 ? (
-            <span className={classes.caption}>
-              {isOwnedCanyon
-                ? "No trips logged yet."
-                : "Trip logs are private to the canyon owner."}
-            </span>
-          ) : (
-            <div className={classes.tripLogList}>
-              {tripLogs.map((trip) => (
-                <button
-                  key={trip.id}
-                  className={classes.tripLogCard}
-                  onClick={() => {
-                    setViewingTripLog(trip);
-                    setShowTripLogView(true);
-                  }}
-                >
-                  <span className={classes.tripLogDate}>
-                    {new Date(trip.date).toLocaleDateString("en-AU", {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                      // Trip dates are stored as UTC-midnight (date-only); format
-                      // in UTC so AEST (UTC+10/+11) doesn't render the prior day.
-                      timeZone: "UTC",
-                    })}
-                  </span>
-                  {trip.notes && (
-                    <span className={classes.tripLogNotes}>
-                      {trip.notes.length > 60
-                        ? trip.notes.slice(0, 60) + "…"
-                        : trip.notes}
-                    </span>
-                  )}
-                </button>
-              ))}
+
+          <div className={classes.tripLogsRegion}>
+            <div className={classes.tripLogsHeader}>
+              Trip Logs {tripLogs.length > 0 && `(${tripLogs.length})`}
             </div>
-          )}
+            {loadingTrips ? (
+              <span className={classes.caption}>Loading...</span>
+            ) : tripLogs.length === 0 ? (
+              <span className={classes.caption}>
+                {isOwnedCanyon
+                  ? "No trips logged yet."
+                  : "Trip logs are private to the canyon owner."}
+              </span>
+            ) : (
+              <div className={classes.tripLogList}>
+                {tripLogs.map((trip) => (
+                  <button
+                    key={trip.id}
+                    className={classes.tripLogCard}
+                    onClick={() => {
+                      setViewingTripLog(trip);
+                      setShowTripLogView(true);
+                    }}
+                  >
+                    <span className={classes.tripLogDate}>
+                      {new Date(trip.date).toLocaleDateString("en-AU", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                        // Trip dates are stored as UTC-midnight (date-only); format
+                        // in UTC so AEST (UTC+10/+11) doesn't render the prior day.
+                        timeZone: "UTC",
+                      })}
+                    </span>
+                    {trip.notes && (
+                      <span className={classes.tripLogNotes}>
+                        {trip.notes.length > 60
+                          ? trip.notes.slice(0, 60) + "…"
+                          : trip.notes}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className={classes.footer}>
