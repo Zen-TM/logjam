@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
-import { Switch, LinearProgress } from "@mui/material";
-import { ChevronDown, Lock, X, Download, Trash2 } from "lucide-react";
+import { Switch } from "@mui/material";
+import { ChevronDown, Lock, Download, Trash2 } from "lucide-react";
 import classes from "./LidarPanel.module.css";
 import { apiFetch, deleteTopoExport } from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
+import { JobRibbonStack, JobRibbon, minutesEta } from "../../feedback/JobRibbon";
 import type { TopoJob, TopoTemplate, GeoJsonPolygonal } from "../../dialogs/TopoDialog";
 import { fetchTopoTemplates } from "../../dialogs/topoTemplatesFetch";
 import type { CompletedTopoJob } from "../../../topoLayerTypes";
@@ -144,6 +145,13 @@ function LidarPanel({
     return byId;
   }, [completedTopoJobs]);
 
+  // Exports accordion shows completed rows only — in-progress/failed ones
+  // render as ribbons above.
+  const completedExports = useMemo(
+    () => topoExports.filter((ex) => ex.status === "completed"),
+    [topoExports],
+  );
+
   const loadTemplates = useCallback(async () => {
     try {
       // Concurrent-duplicate-safe fetch shared with TopoDialog (TOPO-6).
@@ -212,6 +220,22 @@ function LidarPanel({
     [onRefetchTopoExports, onQuotaChanged, toast],
   );
 
+  // Ribbon dismiss for a failed export — deletes the row outright (no
+  // confirm) since a failed export holds no result bytes, so unlike
+  // handleDeleteExport there's no quota to refresh.
+  const handleDismissExport = useCallback(
+    async (id: string) => {
+      try {
+        await deleteTopoExport(id);
+        onRefetchTopoExports();
+      } catch (err) {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't dismiss export."));
+      }
+    },
+    [onRefetchTopoExports, toast],
+  );
+
   // Runs the pending delete's action with the dialog in a busy state, then
   // closes the dialog. The handlers above swallow their own errors (toast), so
   // we always close on settle.
@@ -226,55 +250,69 @@ function LidarPanel({
     }
   }, [pendingDelete]);
 
-  // Active jobs with cap-and-disclose
-  const activeVisible = showAllActive ? activeTopoJobs : activeTopoJobs.slice(0, 3);
-  const hasMoreActive = !showAllActive && activeTopoJobs.length > 3;
+  // Merged ribbon list: in-progress/failed topo jobs + in-progress/failed
+  // exports (completed exports live only in the Exports accordion below),
+  // newest first — matches the previous topo-only prepend ordering.
+  const jobRibbons = useMemo(() => {
+    const topoEntries = activeTopoJobs.map((job) => {
+      const failed = job.status === "failed";
+      return {
+        key: `topo-${job.id}`,
+        createdAt: job.createdAt,
+        props: {
+          name: job.name ?? "Unnamed",
+          chip: "TOPO",
+          etaLabel: jobEtaLabel(job),
+          failed,
+          onDismiss: failed ? () => onDismissActiveJob(job.id) : undefined,
+        },
+      };
+    });
+    const exportEntries = topoExports
+      .filter((ex) => ex.status !== "completed")
+      .map((ex) => {
+        const failed = ex.status === "failed";
+        const etaLabel =
+          ex.status === "queued"
+            ? "Queued"
+            : ex.status === "running"
+              ? minutesEta(ex.estimatedSeconds, "Exporting…")
+              : "Failed";
+        return {
+          key: `export-${ex.id}`,
+          createdAt: ex.createdAt,
+          props: {
+            name: jobNameById.get(ex.sourceJobIds[0]) ?? "Deleted job",
+            chip: `EXPORT · ${ex.format.toUpperCase()}`,
+            etaLabel,
+            failed,
+            errorMessage: ex.errorMessage,
+            onDismiss: failed ? () => void handleDismissExport(ex.id) : undefined,
+          },
+        };
+      });
+    return [...topoEntries, ...exportEntries].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }, [activeTopoJobs, topoExports, jobNameById, onDismissActiveJob, handleDismissExport]);
+
+  // Ribbons with cap-and-disclose
+  const ribbonsVisible = showAllActive ? jobRibbons : jobRibbons.slice(0, 3);
+  const hasMoreRibbons = !showAllActive && jobRibbons.length > 3;
 
   return (
     <div className={classes.root}>
-      {/* Active jobs — full-width ribbon(s) flush with panel header */}
-      {activeTopoJobs.length > 0 && (
-        <div className={classes.ribbonStack}>
-          {activeVisible.map((job) => {
-            const isFailed = job.status === "failed";
-            return (
-              <div key={job.id} className={classes.ribbon}>
-                <div className={classes.ribbonHead}>
-                  <span className={classes.ribbonName}>{job.name ?? "Unnamed"}</span>
-                  {isFailed && (
-                    <button
-                      className={classes.ribbonDismiss}
-                      onClick={() => onDismissActiveJob(job.id)}
-                      title="Dismiss"
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                  <span className={isFailed ? classes.ribbonEtaFailed : classes.ribbonEta}>
-                    {jobEtaLabel(job)}
-                  </span>
-                </div>
-                {isFailed ? (
-                  <LinearProgress
-                    variant="determinate"
-                    value={100}
-                    sx={{ "& .MuiLinearProgress-bar": { backgroundColor: "var(--theme-warning)" } }}
-                  />
-                ) : (
-                  <LinearProgress />
-                )}
-              </div>
-            );
-          })}
-          {hasMoreActive && (
-            <button
-              className={classes.showAllButton}
-              onClick={() => setShowAllActive(true)}
-            >
-              Show all ({activeTopoJobs.length})
-            </button>
-          )}
-        </div>
+      {/* In-progress/failed topo jobs + exports — full-width ribbon(s) flush
+          with panel header */}
+      {jobRibbons.length > 0 && (
+        <JobRibbonStack
+          showAllCount={hasMoreRibbons ? jobRibbons.length : undefined}
+          onShowAll={() => setShowAllActive(true)}
+        >
+          {ribbonsVisible.map((entry) => (
+            <JobRibbon key={entry.key} {...entry.props} />
+          ))}
+        </JobRibbonStack>
       )}
 
       {/* Primary actions */}
@@ -489,14 +527,15 @@ function LidarPanel({
         )}
       </div>
 
-      {/* Exports accordion */}
+      {/* Exports accordion — completed only; in-progress/failed exports
+          render as ribbons above instead. */}
       <div className={classes.accordion}>
         <button
           className={classes.accordionHeader}
           onClick={() => setExportsOpen((v) => !v)}
           aria-expanded={exportsOpen}
         >
-          <span>Exports ({topoExports.length})</span>
+          <span>Exports ({completedExports.length})</span>
           <ChevronDown
             size={14}
             className={`${classes.chevron} ${exportsOpen ? classes.chevronOpen : ""}`}
@@ -506,17 +545,13 @@ function LidarPanel({
           <div className={classes.accordionBody}>
             {/* Matches the server-side TOPO_EXPORT_TTL_MS sweep (7 days). */}
             <div className={classes.emptyHint}>Exports are kept for 7 days.</div>
-            {topoExports.length === 0 && (
+            {completedExports.length === 0 && (
               <div className={classes.emptyHint}>No exports yet.</div>
             )}
-            {topoExports.map((ex) => {
-              const isComplete = ex.status === "completed" && !!ex.downloadUrl;
-              const isFailed = ex.status === "failed";
-              const isInProgress = ex.status === "queued" || ex.status === "running";
+            {completedExports.map((ex) => {
               const jobLabel = jobNameById.get(ex.sourceJobIds[0]) ?? "Deleted job";
               const metaParts = [
                 ex.format.toUpperCase(),
-                ex.status,
                 ...(ex.resultBytes !== null ? [formatBytes(ex.resultBytes)] : []),
                 timeAgo(ex.createdAt),
               ];
@@ -524,39 +559,32 @@ function LidarPanel({
                 <div key={ex.id} className={classes.exportItem}>
                   <div className={classes.exportMain}>
                     <span className={classes.exportLabel}>{jobLabel}</span>
-                    <span
-                      className={isFailed ? classes.exportMetaFailed : classes.exportMeta}
-                      title={isFailed && ex.errorMessage ? ex.errorMessage : undefined}
-                    >
-                      {metaParts.join(" · ")}
-                    </span>
+                    <span className={classes.exportMeta}>{metaParts.join(" · ")}</span>
                   </div>
-                  {isComplete && (
+                  {ex.downloadUrl && (
                     <a
                       className={classes.iconDownloadButton}
-                      href={ex.downloadUrl!}
+                      href={ex.downloadUrl}
                       download
                       title="Download"
                     >
                       <Download size={14} />
                     </a>
                   )}
-                  {!isInProgress && (
-                    <button
-                      className={classes.iconDeleteButton}
-                      onClick={() =>
-                        setPendingDelete({
-                          title: `Delete export “${jobLabel}”?`,
-                          message:
-                            "This export will be permanently deleted. This cannot be undone.",
-                          onConfirm: () => handleDeleteExport(ex.id),
-                        })
-                      }
-                      title="Delete export"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
+                  <button
+                    className={classes.iconDeleteButton}
+                    onClick={() =>
+                      setPendingDelete({
+                        title: `Delete export “${jobLabel}”?`,
+                        message:
+                          "This export will be permanently deleted. This cannot be undone.",
+                        onConfirm: () => handleDeleteExport(ex.id),
+                      })
+                    }
+                    title="Delete export"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               );
             })}

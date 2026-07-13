@@ -652,6 +652,23 @@ function App() {
     setActiveTopoJobs((prev) => [job, ...prev]);
   }, []);
 
+  // Durable delete replaces the old hide-only dismiss so failed rows can't
+  // linger invisibly (DELETE /topo-jobs/:id handles failed rows + S3 cleanup
+  // + quota). On failure the row stays visible so the user can retry.
+  const handleDismissActiveTopoJob = useCallback(
+    async (jobId: string) => {
+      try {
+        await apiFetch(`/topo-jobs/${jobId}`, { method: "DELETE" });
+        setActiveTopoJobs((prev) => prev.filter((j) => j.id !== jobId));
+        refetchCurrentUser();
+      } catch (err) {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't dismiss job."));
+      }
+    },
+    [refetchCurrentUser, toast],
+  );
+
   const handleGeoPdfJobQueued = useCallback((job: GeoPdfJobView) => {
     setGeoPdfJobsRefetch((n) => n + 1);
     // Arm for auto-download if the user hasn't disabled it (default on).
@@ -982,9 +999,7 @@ function App() {
             setShowTopo(true);
           }}
           onRefetchCompletedTopoJobs={refetchCompletedTopoJobs}
-          onDismissActiveJob={(jobId) =>
-            setActiveTopoJobs((prev) => prev.filter((j) => j.id !== jobId))
-          }
+          onDismissActiveJob={handleDismissActiveTopoJob}
           onQuotaChanged={refetchCurrentUser}
           currentUser={currentUser}
           onOpenTopoWithTemplate={(templateId) => {

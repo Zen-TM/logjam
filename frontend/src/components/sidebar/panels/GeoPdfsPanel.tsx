@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
 import { ChevronDown, Download, Trash2 } from "lucide-react";
 import classes from "./GeoPdfsPanel.module.css";
 import { apiFetch, useGeoPdfJobs, deleteGeoPdfJob } from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
+import { JobRibbonStack, JobRibbon, minutesEta } from "../../feedback/JobRibbon";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import type { GeoPdfTemplate } from "../../dialogs/GeoPdfDialog";
 
@@ -32,6 +33,19 @@ function timeAgo(iso: string): string {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
+// Timestamped fallback label for an untitled GeoPDF job — e.g.
+// "GeoPDF · 9 Jul 2026, 3:41 pm". createdAt is a true timestamp (not a
+// date-only value) so local-TZ display is correct without "timeZone: UTC".
+function geoPdfDateStr(createdAt: string): string {
+  return new Date(createdAt).toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function GeoPdfsPanel({
   onOpenGeoPdf,
   onOpenGeoPdfWithTemplate,
@@ -55,6 +69,9 @@ function GeoPdfsPanel({
   // Accordion state
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [jobsOpen, setJobsOpen] = useState(false);
+
+  // In-progress/failed job ribbons: show first 3, rest behind disclosure.
+  const [showAllActive, setShowAllActive] = useState(false);
 
   // Single shared delete-confirmation dialog, reused for templates and
   // generated GeoPDFs. `confirmBusy` disables the dialog while the action runs.
@@ -81,6 +98,46 @@ function GeoPdfsPanel({
       }
     },
     [refetchJobs, toast],
+  );
+
+  // Ribbons for in-progress/failed jobs — completed jobs live only in the
+  // Generated PDFs accordion below. `jobs` already comes createdAt desc from
+  // GET /geo-pdf (orderBy: { createdAt: "desc" }), and filtering preserves
+  // that order, so no re-sort is needed here.
+  const activeJobRibbons = useMemo(
+    () =>
+      jobs
+        .filter((job) => job.status !== "completed")
+        .map((job) => {
+          const failed = job.status === "failed";
+          const etaLabel =
+            job.status === "queued"
+              ? "Queued"
+              : job.status === "running"
+                ? minutesEta(job.estimatedSeconds, "Generating…")
+                : "Failed";
+          return {
+            key: job.id,
+            props: {
+              name: job.title ?? `GeoPDF · ${geoPdfDateStr(job.createdAt)}`,
+              chip: "GEOPDF",
+              etaLabel,
+              failed,
+              errorMessage: job.errorMessage,
+              onDismiss: failed ? () => void handleDeleteJob(job.id) : undefined,
+            },
+          };
+        }),
+    [jobs, handleDeleteJob],
+  );
+  const activeRibbonsVisible = showAllActive ? activeJobRibbons : activeJobRibbons.slice(0, 3);
+  const hasMoreActiveRibbons = !showAllActive && activeJobRibbons.length > 3;
+
+  // Generated PDFs accordion shows completed rows only — in-progress/failed
+  // ones render as ribbons above.
+  const completedJobs = useMemo(
+    () => jobs.filter((job) => job.status === "completed"),
+    [jobs],
   );
 
   const loadTemplates = useCallback(async () => {
@@ -129,6 +186,19 @@ function GeoPdfsPanel({
 
   return (
     <div className={classes.root}>
+      {/* In-progress/failed GeoPDF jobs — full-width ribbon(s) flush with
+          panel header */}
+      {activeJobRibbons.length > 0 && (
+        <JobRibbonStack
+          showAllCount={hasMoreActiveRibbons ? activeJobRibbons.length : undefined}
+          onShowAll={() => setShowAllActive(true)}
+        >
+          {activeRibbonsVisible.map((entry) => (
+            <JobRibbon key={entry.key} {...entry.props} />
+          ))}
+        </JobRibbonStack>
+      )}
+
       <button className={classes.primaryButton} onClick={onOpenGeoPdf}>
         Download Area as GeoPDF
       </button>
@@ -199,7 +269,7 @@ function GeoPdfsPanel({
           onClick={() => setJobsOpen((v) => !v)}
           aria-expanded={jobsOpen}
         >
-          <span>Generated PDFs ({jobs.length})</span>
+          <span>Generated PDFs ({completedJobs.length})</span>
           <ChevronDown
             size={14}
             className={`${classes.chevron} ${jobsOpen ? classes.chevronOpen : ""}`}
@@ -207,37 +277,21 @@ function GeoPdfsPanel({
         </button>
         {jobsOpen && (
           <div className={classes.accordionBody}>
-            {jobsLoading && jobs.length === 0 && (
+            {jobsLoading && completedJobs.length === 0 && (
               <div className={classes.emptyHint}>Loading…</div>
             )}
-            {!jobsLoading && jobs.length === 0 && (
+            {!jobsLoading && completedJobs.length === 0 && (
               <div className={classes.emptyHint}>No GeoPDFs generated yet.</div>
             )}
-            {jobs.map((job) => {
-              const isComplete = job.status === "completed" && !!job.downloadUrl;
-              const isFailed = job.status === "failed";
-              const isInProgress = job.status === "queued" || job.status === "running";
-              const statusLabel =
-                job.status === "queued" ? "Queued"
-                : job.status === "running" ? "Generating…"
-                : job.status === "failed" ? "Failed"
-                : "Ready";
+            {completedJobs.map((job) => {
               const metaParts = [
-                statusLabel,
                 ...(job.resultBytes !== null ? [formatBytes(job.resultBytes)] : []),
                 timeAgo(job.createdAt),
               ];
               // Include the time of day: the API view exposes no extent/paper/
               // scale metadata, so untitled same-day rows were otherwise
               // indistinguishable "GeoPDF · 9 Jul 2026" repeats (GEOPDF-2).
-              // createdAt is a true timestamp — local-TZ display is correct.
-              const dateStr = new Date(job.createdAt).toLocaleString(undefined, {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-              });
+              const dateStr = geoPdfDateStr(job.createdAt);
               return (
                 <div key={job.id} className={classes.jobItem}>
                   <div className={classes.jobMain}>
@@ -251,39 +305,32 @@ function GeoPdfsPanel({
                         <>GeoPDF · {dateStr}</>
                       )}
                     </span>
-                    <span
-                      className={isFailed ? classes.jobMetaFailed : classes.jobMeta}
-                      title={isFailed && job.errorMessage ? job.errorMessage : undefined}
-                    >
-                      {metaParts.join(" · ")}
-                    </span>
+                    <span className={classes.jobMeta}>{metaParts.join(" · ")}</span>
                   </div>
-                  {isComplete && (
+                  {job.downloadUrl && (
                     <a
                       className={classes.iconDownloadButton}
-                      href={job.downloadUrl!}
+                      href={job.downloadUrl}
                       download
                       title="Download"
                     >
                       <Download size={14} />
                     </a>
                   )}
-                  {!isInProgress && (
-                    <button
-                      className={classes.iconDeleteButton}
-                      onClick={() =>
-                        setPendingDelete({
-                          title: `Delete GeoPDF · ${dateStr}?`,
-                          message:
-                            "This generated GeoPDF will be permanently deleted. This cannot be undone.",
-                          onConfirm: () => handleDeleteJob(job.id),
-                        })
-                      }
-                      title="Delete"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
+                  <button
+                    className={classes.iconDeleteButton}
+                    onClick={() =>
+                      setPendingDelete({
+                        title: `Delete GeoPDF · ${dateStr}?`,
+                        message:
+                          "This generated GeoPDF will be permanently deleted. This cannot be undone.",
+                        onConfirm: () => handleDeleteJob(job.id),
+                      })
+                    }
+                    title="Delete"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               );
             })}

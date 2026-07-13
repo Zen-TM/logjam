@@ -34,6 +34,7 @@ import { getParam } from "../lib/getParam";
 import { launchFargateTask } from "../lib/ecsRunTask";
 import { assertHasStorageQuota } from "../lib/storageQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
+import { estimateGeoPdfSeconds } from "../lib/runtimeEstimates";
 
 const router = Router();
 
@@ -108,6 +109,7 @@ function rowToView(
     id: string;
     status: string;
     config: unknown;
+    estimatedSeconds: number | null;
     resultBytes: bigint | null;
     errorMessage: string | null;
     createdAt: Date;
@@ -119,6 +121,7 @@ function rowToView(
     id: row.id,
     status: row.status as GeoPdfJobStatus,
     title: geoPdfTitle(row.config),
+    estimatedSeconds: row.estimatedSeconds,
     resultBytes: row.resultBytes !== null ? Number(row.resultBytes) : null,
     errorMessage: row.errorMessage,
     createdAt: row.createdAt.toISOString(),
@@ -171,6 +174,15 @@ router.post(
       }
     }
 
+    // Estimator failure must never block submission — best-effort, and never
+    // logs the config itself (coords/canyon markers).
+    let estimatedSeconds: number | null = null;
+    try {
+      estimatedSeconds = await estimateGeoPdfSeconds(config);
+    } catch (err) {
+      logger.warn({ reason: String(err) }, "geo_pdf_estimate_failed");
+    }
+
     // Count + create in one transaction so concurrent submissions can't both
     // pass the per-user cap. The user-row lock closes the read-committed
     // double-read window the same way topo-exports does (ARCH-009).
@@ -187,6 +199,7 @@ router.post(
           userId: user.id,
           config: config as object,
           vectorStyleSnapshot: vectorStyle as object,
+          estimatedSeconds,
           status: "queued",
         },
       });
@@ -226,6 +239,7 @@ router.post(
           id: job.id,
           status: "queued",
           config: job.config,
+          estimatedSeconds: job.estimatedSeconds,
           resultBytes: null,
           errorMessage: null,
           createdAt: job.createdAt,

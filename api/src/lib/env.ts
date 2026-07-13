@@ -89,6 +89,17 @@ const baseSchema = z.object({
   // constant — conservative, self-corrects down as real jobs accumulate).
   TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE: z.coerce.number().positive().default(510),
   TOPO_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
+  // Adaptive runtime estimator for topo exports (lib/runtimeEstimates.ts):
+  // fitted per-(format, bundling) bucket from recent completed exports' actual
+  // runtimes, keyed on the source job's input tile count. Falls back to this
+  // cold-start rate below MIN_SAMPLES.
+  TOPO_EXPORT_ESTIMATE_DEFAULT_SECONDS_PER_TILE: z.coerce.number().positive().default(20),
+  TOPO_EXPORT_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
+  // Adaptive runtime estimator for GeoPDF jobs (lib/runtimeEstimates.ts): fitted
+  // per-megapixel rate (native render-canvas size) from recent completed jobs.
+  // Falls back to this cold-start rate below MIN_SAMPLES.
+  GEO_PDF_ESTIMATE_DEFAULT_SECONDS_PER_MEGAPIXEL: z.coerce.number().positive().default(6),
+  GEO_PDF_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
   // TopoExportJob sweeps (ARCH-002): queued rows older than the QUEUED timeout
   // (task never placed/started) and running rows older than the RUNNING
   // timeout (worker SIGKILLed before its except path ran) are force-failed.

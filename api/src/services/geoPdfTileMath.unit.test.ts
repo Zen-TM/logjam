@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   computeTileToMapTransform,
+  computeZoom,
+  geoPdfNativeMegapixels,
   lon2tileX,
   lat2tileY,
   tileX2lon,
@@ -93,5 +95,55 @@ describe("computeTileToMapTransform", () => {
     expect(t.srcH).toBeGreaterThan(0);
     expect(Number.isFinite(t.srcH)).toBe(true);
     expect(Number.isFinite(t.offsetY)).toBe(true);
+  });
+});
+
+describe("computeZoom", () => {
+  it("floors at MIN_ZOOM (8) for a very small print scale", () => {
+    // A huge denominator (small-scale, wide-area map) drives the raw zoom
+    // calculation deeply negative — the result must still floor at 8.
+    expect(computeZoom(10_000_000, -33.7, 300, 18)).toBe(8);
+  });
+
+  it("caps at maxNativeZoom for a very large print scale", () => {
+    // A tiny denominator (large-scale, zoomed-in map) drives the raw zoom
+    // calculation well past any realistic maxNativeZoom.
+    expect(computeZoom(100, -33.7, 300, 18)).toBe(18);
+    expect(computeZoom(100, -33.7, 300, 16)).toBe(16);
+  });
+
+  it("stays within [MIN_ZOOM, maxNativeZoom] for a mid-range scale", () => {
+    const z = computeZoom(25000, -33.7, 300, 18);
+    expect(z).toBeGreaterThanOrEqual(8);
+    expect(z).toBeLessThanOrEqual(18);
+  });
+});
+
+describe("geoPdfNativeMegapixels", () => {
+  const baseExtent = { north: -33.65, south: -33.7, east: 150.3, west: 150.25 };
+
+  it("is monotonically increasing in extent area at fixed scale/zoom", () => {
+    const small = geoPdfNativeMegapixels(baseExtent, 25000, 18);
+    const doubledLon = geoPdfNativeMegapixels(
+      { ...baseExtent, east: baseExtent.west + (baseExtent.east - baseExtent.west) * 2 },
+      25000,
+      18,
+    );
+    expect(doubledLon).toBeGreaterThan(small);
+  });
+
+  it("returns fewer megapixels for a larger scale denominator (zoomed-out print)", () => {
+    const fine = geoPdfNativeMegapixels(baseExtent, 10000, 18);
+    const coarse = geoPdfNativeMegapixels(baseExtent, 100000, 18);
+    expect(coarse).toBeLessThan(fine);
+  });
+
+  it("returns a sane finite positive value for a realistic extent", () => {
+    const mp = geoPdfNativeMegapixels(baseExtent, 25000, 18);
+    expect(Number.isFinite(mp)).toBe(true);
+    expect(mp).toBeGreaterThan(0);
+    // Sanity bound — a ~0.05° square at scale 25000/z18 shouldn't blow out to
+    // an absurd canvas size.
+    expect(mp).toBeLessThan(10000);
   });
 });

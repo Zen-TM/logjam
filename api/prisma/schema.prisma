@@ -254,6 +254,14 @@ model TopoExportJob {
   bundling            String
   // "composite" | "per-layer"
   vectorStyleSnapshot Json      @map("vector_style_snapshot")
+  // Snapshot of the source job's input tileCount at export creation. The
+  // source TopoJob is deletable, so this can't be re-derived by join later —
+  // it feeds the adaptive runtime estimator (aggregate size only, no canyon
+  // data). Null on rows created before the column existed.
+  sourceTileCount     Int?      @map("source_tile_count")
+  // Adaptive processing-time estimate computed at create from past completed
+  // exports of the same (format, bundling) — mirrors topo_jobs.estimated_seconds.
+  estimatedSeconds    Int?      @map("estimated_seconds")
   status              String    @default("queued")
   // queued | running | completed | failed
   resultKey           String?   @map("result_key")
@@ -282,6 +290,10 @@ model GeoPdfJob {
   userId              String    @map("user_id")
   config              Json
   vectorStyleSnapshot Json      @map("vector_style_snapshot")
+  // Adaptive processing-time estimate computed at create from past completed
+  // GeoPDFs (size scalar recomputed from each row's retained config) —
+  // mirrors topo_jobs.estimated_seconds.
+  estimatedSeconds    Int?      @map("estimated_seconds")
   status              String    @default("queued")
   // queued | running | completed | failed
   resultKey           String?   @map("result_key")
