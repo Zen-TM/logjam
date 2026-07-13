@@ -15,9 +15,20 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 12px 16px;
-  gap: 0.5em;
   min-height: 0;
+}
+
+/* The single scroll region: media + attributes + trip logs all live here, so
+ * there's exactly one scrollbar (no scroll-in-scroll) and a long description or
+ * many trips just extends this. The footer is a sibling below, pinned. */
+.scrollArea {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  padding: 12px 16px;
 }
 
 /* ─── Header meta ─────────────────────────────────────────────────────────── */
@@ -89,8 +100,6 @@
 .attributesBox {
   position: relative;
   flex-shrink: 0;
-  height: 180px;
-  overflow-y: auto;
   padding: 0.75em 0.9em;
   border-radius: var(--radius-md);
   background-color: color-mix(in srgb, var(--theme-text-primary) 4%, transparent);
@@ -154,8 +163,10 @@
 
 /* ─── Trip logs region ────────────────────────────────────────────────────── */
 
+/* Grows to absorb leftover space in the scroll region so short content doesn't
+ * leave an obvious gap above the pinned footer. */
 .tripLogsRegion {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 0.4em;
@@ -171,8 +182,6 @@
 }
 
 .tripLogList {
-  height: 160px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -280,12 +289,13 @@
 
 /* ─── Footer actions ──────────────────────────────────────────────────────── */
 
+/* Pinned below the scroll region — always visible, never scrolls away. */
 .footer {
   flex-shrink: 0;
-  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 0.4em;
+  padding: 0 16px 12px;
 }
 
 .divider {
@@ -322,25 +332,6 @@
   opacity: 0.6;
 }
 
-/* ─── Mobile ───────────────────────────────────────────────────────────────── */
-
-/* On mobile the panelBody scrolls (see SidebarPanel.module.css), so the panel
- * flows naturally instead of pinning to a fixed-height parent. min-height keeps
- * the margin-top:auto footer at the bottom when content is short; the inner
- * scroll boxes become caps (max-height) so they don't create a nested scroll. */
-@media (max-width: 768px) {
-  .root {
-    height: auto;
-    min-height: 100%;
-  }
-
-  .attributesBox {
-    height: auto;
-    max-height: 180px;
-  }
-
-  .tripLogList {
-    height: auto;
-    max-height: 160px;
-  }
-}
+/* No mobile overrides needed: the base rules above (min-height:100% root,
+ * max-height attributes box, flex-grow trip-log region + scrolling panel body)
+ * already flow correctly in the bottom sheet at any snap point. */

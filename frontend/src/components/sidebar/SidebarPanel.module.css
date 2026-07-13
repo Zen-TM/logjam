@@ -75,15 +75,10 @@
   padding: 12px 16px;
 }
 
+/* canyon-detail owns its inner layout: a single scrolling region (.scrollArea)
+ * plus a pinned footer. The body itself never scrolls (root is height:100%),
+ * so the footer stays fixed at the bottom on both desktop and the mobile sheet. */
 .panelBody[data-active-panel="canyon-detail"] {
   overflow: hidden;
   padding: 0;
-}
-
-/* On mobile the bottom sheet can sit at the half snap, so canyon-detail must
- * scroll as one column (the panel manages its own internal scroll on desktop). */
-@media (max-width: 768px) {
-  .panelBody[data-active-panel="canyon-detail"] {
-    overflow-y: auto;
-  }
 }
