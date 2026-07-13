@@ -24,6 +24,8 @@ import { ApiError } from "../../errors/ApiError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { FieldError } from "../feedback/FieldError";
 import { useToast } from "../feedback/ToastProvider";
+import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
+import ConfirmDialog from "./ConfirmDialog";
 import { sanitizeDecimalInput } from "../../numberInput";
 import {
   extentFieldErrors,
@@ -187,6 +189,15 @@ function GeoPdfDialog({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Unsaved-changes tracking. Explicit dirty flag (not snapshot-diffing) —
+  // state here is seeded by three programmatic writers at unpredictable
+  // times (open-time map-view seed, async launch-template apply, the map
+  // round-trip reopen), so a diff-against-baseline approach would false-
+  // positive on every seed. Only handlers that represent a direct user
+  // interaction with the form set this; programmatic seeds/resets never do.
+  const [dirty, setDirty] = useState(false);
+  const markDirty = useCallback(() => setDirty(true), []);
+
   // Template mode name
   const [editTemplateName, setEditTemplateName] = useState("");
 
@@ -241,6 +252,7 @@ function GeoPdfDialog({
     setError(null);
     setEditTemplateName("");
     setRawN(""); setRawS(""); setRawE(""); setRawW(""); setRawScale("");
+    setDirty(false);
   }, [open]);
 
   // Seed layers + extent from the current map view, once per genuine open.
@@ -390,7 +402,11 @@ function GeoPdfDialog({
     });
   }, [completedTopoJobs, extentState, templateMode]);
 
-  // Populate extent from map selection — always receives both extent and scale
+  // Populate extent from map selection — always receives both extent and scale.
+  // This fires only when the user actually confirms a pick on the map (App
+  // only sets these props from onGeoPdfExtentConfirmed), so — unlike the
+  // open-time seed and template-apply effects — it represents real user work
+  // and must mark the form dirty.
   useEffect(() => {
     if (pendingExtent && pendingScale) {
       setExtentState((prev: ExtentState) => ({
@@ -401,6 +417,7 @@ function GeoPdfDialog({
         west: pendingExtent.west,
         scale: pendingScale,
       }));
+      setDirty(true);
     }
   }, [pendingExtent, pendingScale]);
 
@@ -466,6 +483,10 @@ function GeoPdfDialog({
       setSelectedTemplateId(id);
       const tmpl = templates.find((t) => t.id === id);
       if (!tmpl) return;
+      // Selecting a template is itself a deliberate choice worth guarding,
+      // distinct from the launch-template auto-apply effect which must not
+      // set this (that one fires once per genuine open, unprompted).
+      setDirty(true);
       const c = tmpl.config;
       setExtentState((prev: ExtentState) => {
         let updated = {
@@ -657,6 +678,7 @@ function GeoPdfDialog({
       else next.add(name);
       return next;
     });
+    setDirty(true);
   }, []);
 
   const extentValid =
@@ -674,13 +696,21 @@ function GeoPdfDialog({
   );
   const scaleInputError = scaleFieldError(rawScale);
 
+  // Esc / backdrop / X / Cancel route through this so a dirty form prompts
+  // before discarding. "Select on map" bypasses it entirely (it calls
+  // onSelectOnMap, never onClose/requestClose — App flips `open` to false
+  // itself for that round trip). A successful Generate/Save-Template also
+  // bypasses it by calling the raw onClose/onTemplateSaved directly.
+  const guard = useUnsavedChangesGuard(dirty, onClose);
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
+    <>
     <Dialog
       fullScreen={isMobile}
       open={open}
-      onClose={generating ? undefined : onClose}
+      onClose={generating ? undefined : guard.requestClose}
       maxWidth="sm"
       fullWidth
       PaperProps={{
@@ -707,7 +737,7 @@ function GeoPdfDialog({
         <IconButton
           aria-label="Close dialog"
           size="small"
-          onClick={onClose}
+          onClick={guard.requestClose}
           disabled={generating}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -739,7 +769,10 @@ function GeoPdfDialog({
             <TextField
               placeholder="Template name"
               value={editTemplateName}
-              onChange={(e) => setEditTemplateName(e.target.value)}
+              onChange={(e) => {
+                setEditTemplateName(e.target.value);
+                markDirty();
+              }}
               size="small"
               color="secondary"
               sx={{
@@ -821,7 +854,10 @@ function GeoPdfDialog({
                 <TextField
                   placeholder="Template name"
                   value={templateName}
-                  onChange={(e) => setTemplateName(e.target.value)}
+                  onChange={(e) => {
+                    setTemplateName(e.target.value);
+                    markDirty();
+                  }}
                   size="small"
                   color="secondary"
                   sx={{
@@ -868,9 +904,10 @@ function GeoPdfDialog({
                     ? classes.smallButtonActive
                     : classes.smallButton
                 }
-                onClick={() =>
-                  setExtentState(applyPaperChange(extentState, size))
-                }
+                onClick={() => {
+                  setExtentState(applyPaperChange(extentState, size));
+                  markDirty();
+                }}
               >
                 {size}
               </button>
@@ -893,9 +930,10 @@ function GeoPdfDialog({
                     ? classes.smallButtonActive
                     : classes.smallButton
                 }
-                onClick={() =>
-                  setExtentState(applyOrientationChange(extentState, o))
-                }
+                onClick={() => {
+                  setExtentState(applyOrientationChange(extentState, o));
+                  markDirty();
+                }}
               >
                 {o.charAt(0).toUpperCase() + o.slice(1)}
               </button>
@@ -913,6 +951,7 @@ function GeoPdfDialog({
                   setExtentState(
                     applyPaperChange(extentState, "custom", { w, h }),
                   );
+                  markDirty();
                 }}
               />
               <span>:</span>
@@ -926,6 +965,7 @@ function GeoPdfDialog({
                   setExtentState(
                     applyPaperChange(extentState, "custom", { w, h }),
                   );
+                  markDirty();
                 }}
               />
             </div>
@@ -1021,7 +1061,10 @@ function GeoPdfDialog({
                 onFocus={() => {
                   focusedField.current = "n";
                 }}
-                onChange={(e) => setRawN(sanitizeDecimalInput(e.target.value))}
+                onChange={(e) => {
+                  setRawN(sanitizeDecimalInput(e.target.value));
+                  markDirty();
+                }}
                 onBlur={() => {
                   focusedField.current = null;
                   // Apply only a valid value; invalid input stays visible with
@@ -1048,7 +1091,10 @@ function GeoPdfDialog({
                 onFocus={() => {
                   focusedField.current = "w";
                 }}
-                onChange={(e) => setRawW(sanitizeDecimalInput(e.target.value))}
+                onChange={(e) => {
+                  setRawW(sanitizeDecimalInput(e.target.value));
+                  markDirty();
+                }}
                 onBlur={() => {
                   focusedField.current = null;
                   const deg = parseExtentField("w", rawW, extentState);
@@ -1094,7 +1140,10 @@ function GeoPdfDialog({
                 onFocus={() => {
                   focusedField.current = "e";
                 }}
-                onChange={(e) => setRawE(sanitizeDecimalInput(e.target.value))}
+                onChange={(e) => {
+                  setRawE(sanitizeDecimalInput(e.target.value));
+                  markDirty();
+                }}
                 onBlur={() => {
                   focusedField.current = null;
                   const deg = parseExtentField("e", rawE, extentState);
@@ -1119,7 +1168,10 @@ function GeoPdfDialog({
                 onFocus={() => {
                   focusedField.current = "s";
                 }}
-                onChange={(e) => setRawS(sanitizeDecimalInput(e.target.value))}
+                onChange={(e) => {
+                  setRawS(sanitizeDecimalInput(e.target.value));
+                  markDirty();
+                }}
                 onBlur={() => {
                   focusedField.current = null;
                   const deg = parseExtentField("s", rawS, extentState);
@@ -1147,7 +1199,10 @@ function GeoPdfDialog({
                 onFocus={() => {
                   focusedField.current = "scale";
                 }}
-                onChange={(e) => setRawScale(sanitizeDecimalInput(e.target.value))}
+                onChange={(e) => {
+                  setRawScale(sanitizeDecimalInput(e.target.value));
+                  markDirty();
+                }}
                 onBlur={() => {
                   focusedField.current = null;
                   const v = Number(rawScale);
@@ -1185,7 +1240,10 @@ function GeoPdfDialog({
                     type="radio"
                     name="geopdf-base-layer"
                     checked={selectedBaseLayer === layer.id}
-                    onChange={() => setSelectedBaseLayer(layer.id)}
+                    onChange={() => {
+                      setSelectedBaseLayer(layer.id);
+                      markDirty();
+                    }}
                     style={{
                       accentColor: "var(--theme-accent)",
                     }}
@@ -1240,7 +1298,10 @@ function GeoPdfDialog({
             <input
               type="checkbox"
               checked={titleEnabled}
-              onChange={(e) => setTitleEnabled(e.target.checked)}
+              onChange={(e) => {
+                setTitleEnabled(e.target.checked);
+                markDirty();
+              }}
               style={{
                 accentColor: "var(--theme-accent)",
               }}
@@ -1251,7 +1312,10 @@ function GeoPdfDialog({
                 className={classes.elementInput}
                 placeholder="Map title"
                 value={titleText}
-                onChange={(e) => setTitleText(e.target.value)}
+                onChange={(e) => {
+                  setTitleText(e.target.value);
+                  markDirty();
+                }}
               />
             )}
           </div>
@@ -1260,7 +1324,10 @@ function GeoPdfDialog({
             <input
               type="checkbox"
               checked={compassEnabled}
-              onChange={(e) => setCompassEnabled(e.target.checked)}
+              onChange={(e) => {
+                setCompassEnabled(e.target.checked);
+                markDirty();
+              }}
               style={{
                 accentColor: "var(--theme-accent)",
               }}
@@ -1272,7 +1339,10 @@ function GeoPdfDialog({
             <input
               type="checkbox"
               checked={scaleTextEnabled}
-              onChange={(e) => setScaleTextEnabled(e.target.checked)}
+              onChange={(e) => {
+                setScaleTextEnabled(e.target.checked);
+                markDirty();
+              }}
               style={{
                 accentColor: "var(--theme-accent)",
               }}
@@ -1289,7 +1359,10 @@ function GeoPdfDialog({
             <input
               type="checkbox"
               checked={scaleBarEnabled}
-              onChange={(e) => setScaleBarEnabled(e.target.checked)}
+              onChange={(e) => {
+                setScaleBarEnabled(e.target.checked);
+                markDirty();
+              }}
               style={{
                 accentColor: "var(--theme-accent)",
               }}
@@ -1301,7 +1374,10 @@ function GeoPdfDialog({
             <input
               type="checkbox"
               checked={gridLinesEnabled}
-              onChange={(e) => setGridLinesEnabled(e.target.checked)}
+              onChange={(e) => {
+                setGridLinesEnabled(e.target.checked);
+                markDirty();
+              }}
               style={{
                 accentColor: "var(--theme-accent)",
               }}
@@ -1323,7 +1399,10 @@ function GeoPdfDialog({
                         ? classes.smallButtonActive
                         : classes.smallButton
                     }
-                    onClick={() => setGridLinesMode(mode)}
+                    onClick={() => {
+                      setGridLinesMode(mode);
+                      markDirty();
+                    }}
                     style={{ padding: "0.15em 0.5em", fontSize: "0.8em" }}
                   >
                     {label}
@@ -1339,7 +1418,7 @@ function GeoPdfDialog({
 
       <DialogActions>
         <Button
-          onClick={onClose}
+          onClick={guard.requestClose}
           disabled={generating}
           sx={{ color: "var(--theme-text-primary)" }}
         >
@@ -1378,6 +1457,17 @@ function GeoPdfDialog({
         )}
       </DialogActions>
     </Dialog>
+
+    <ConfirmDialog
+      open={guard.guardOpen}
+      title="Discard unsaved changes?"
+      message="Your changes will be lost."
+      confirmLabel="Discard"
+      confirmColor="error"
+      onConfirm={guard.confirmDiscard}
+      onClose={guard.cancelDiscard}
+    />
+    </>
   );
 }
 
