@@ -220,8 +220,12 @@ def send_completion_email(to_email: str, export_job_id: str, format_: str, ok: b
         return
     base = FRONTEND_URL.rstrip("/")
     logo_html = (
-        f'<p><img src="{base}/email-logo.png" alt="Logjam" width="160" '
-        'style="display:block;margin-bottom:16px" /></p>'
+        '<p style="margin:0 0 16px">'
+        '<span style="display:inline-block;background-color:#deb188;border-radius:8px;padding:12px 16px">'
+        f'<img src="{base}/email-logo-icon.png" alt="" width="41" height="38" '
+        'style="display:inline-block;vertical-align:middle;margin-right:10px" />'
+        f'<img src="{base}/email-logo.png" alt="Logjam" width="160" '
+        'style="display:inline-block;vertical-align:middle" /></span></p>'
     )
     if ok:
         subject = f"Topo export ready — {format_.upper()}"
