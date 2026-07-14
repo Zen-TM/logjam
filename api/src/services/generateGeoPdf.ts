@@ -87,7 +87,7 @@ const MM_PER_INCH = 25.4;
 // to scale CSS-pixel style values (font/line/dash) up to the print canvas.
 const STYLE_DPI = 96;
 const CONCURRENCY = 8;
-const LINE_LABEL_MIN_DISTANCE = 150; // px — min spacing between named line-feature labels (tracks, rivers, ...)
+const LINE_LABEL_MIN_DISTANCE = 450; // px — min spacing between named line-feature labels (tracks, rivers, ...)
 const CONTOUR_LABEL_MIN_DISTANCE = 450; // px — 3x sparser than before; contour-only
 
 const SCALE_BAR_DISTANCES = [100, 250, 500, 1000, 2000, 5000, 10000];
