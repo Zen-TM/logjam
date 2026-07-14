@@ -403,9 +403,9 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
         "  <body>",
         '    <p style="margin:0 0 16px">'
         '<span style="display:inline-block;background-color:#deb188;border-radius:8px;padding:12px 16px">'
-        f'<img src="{base}/email-logo-icon.png" alt="" width="41" height="38" '
+        f'<img src="{base}/email-logo-icon-v2.png" alt="" width="41" height="38" '
         'style="display:inline-block;vertical-align:middle;margin-right:10px" />'
-        f'<img src="{base}/email-logo.png" alt="Logjam" width="160" '
+        f'<img src="{base}/email-logo-v2.png" alt="Logjam" width="160" '
         'style="display:inline-block;vertical-align:middle" /></span></p>',
         "    <p>Your topo map job is complete.</p>",
         f'    <p><a href="{open_url}">Open it in Logjam</a></p>',
