@@ -211,7 +211,7 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
     // Logo header is served by the frontend SPA bucket, so it only resolves
     // when FRONTEND_URL is configured (unset in local dev).
     const logoHtml = base
-      ? `<p style="margin:0 0 16px"><span style="display:inline-block;background-color:#deb188;border-radius:8px;padding:12px 16px"><img src="${base}/email-logo-icon-v2.png" alt="" width="41" height="38" style="display:inline-block;vertical-align:middle;margin-right:10px" /><img src="${base}/email-logo-v2.png" alt="Logjam" width="160" style="display:inline-block;vertical-align:middle" /></span></p>`
+      ? `<p style="margin:0 0 16px"><img src="${base}/email-logo-lockup.png" alt="Logjam" width="212" style="display:block" /></p>`
       : "";
     const subject = ok ? "GeoPDF ready — Logjam" : "GeoPDF failed — Logjam";
     const text = ok
