@@ -87,7 +87,8 @@ const MM_PER_INCH = 25.4;
 // to scale CSS-pixel style values (font/line/dash) up to the print canvas.
 const STYLE_DPI = 96;
 const CONCURRENCY = 8;
-const MIN_CONTOUR_LABEL_DISTANCE = 150; // px — ~4x sparser label density
+const LINE_LABEL_MIN_DISTANCE = 150; // px — min spacing between named line-feature labels (tracks, rivers, ...)
+const CONTOUR_LABEL_MIN_DISTANCE = 450; // px — 3x sparser than before; contour-only
 
 const SCALE_BAR_DISTANCES = [100, 250, 500, 1000, 2000, 5000, 10000];
 const DEG_TO_RAD = Math.PI / 180;
@@ -940,7 +941,7 @@ function renderContourFeature(
       const my = dy + ring[mid].y * scaleY;
 
       // Skip if too close to an already-placed label
-      if (placedLabels.some((p) => Math.hypot(p.x - mx, p.y - my) < MIN_CONTOUR_LABEL_DISTANCE)) continue;
+      if (placedLabels.some((p) => Math.hypot(p.x - mx, p.y - my) < CONTOUR_LABEL_MIN_DISTANCE)) continue;
       placedLabels.push({ x: mx, y: my });
 
       // Calculate angle from adjacent points for text rotation
@@ -990,7 +991,7 @@ function bufferLineLabel(
   const mid = Math.floor(ring.length / 2);
   const mx = dx + ring[mid].x * scaleX;
   const my = dy + ring[mid].y * scaleY;
-  if (placedLabels.some((p) => Math.hypot(p.x - mx, p.y - my) < MIN_CONTOUR_LABEL_DISTANCE)) return;
+  if (placedLabels.some((p) => Math.hypot(p.x - mx, p.y - my) < LINE_LABEL_MIN_DISTANCE)) return;
   placedLabels.push({ x: mx, y: my });
   const prev = mid > 0 ? mid - 1 : 0;
   const next = mid < ring.length - 1 ? mid + 1 : ring.length - 1;
