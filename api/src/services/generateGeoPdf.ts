@@ -1815,7 +1815,7 @@ function drawAttribution(
 
 // ── PDF assembly with GeoPDF metadata ────────────────────────────────────────
 
-async function buildPdf(
+export async function buildPdf(
   mapCanvas: Canvas,
   widthPt: number,
   heightPt: number,
@@ -1860,24 +1860,27 @@ async function buildPdf(
         'PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]]';
 
       const gcsRef = (doc as any).ref({
-        Type: "PROJCS",
-        WKT: wgs84Wkt,
+        Type: "GEOGCS",
+        // WKT MUST be a String object: pdfkit serializes a primitive JS string as a PDF
+        // name (/GEOGCS…), and the `[ ] "` delimiters in WKT make that an invalid name
+        // that GDAL cannot parse ("Dictionary key must be a name object" → CRS dropped).
+        // A String object forces a literal string value: (GEOGCS…).
+        WKT: new String(wgs84Wkt),
+        // Redundant with WKT, but gives any reader an unambiguous CRS even if WKT parsing
+        // differs (GDAL reads GCS.EPSG too).
+        EPSG: 4326,
       });
       gcsRef.end();
-
-      // Normalised page coordinates of the map area (PDF y=0 is bottom of page)
-      const lx0 = paddingPt / widthPt;
-      const lx1 = (widthPt - paddingPt) / widthPt;
-      const ly0 = paddingPt / heightPt;
-      const ly1 = (heightPt - paddingPt) / heightPt;
 
       const measureRef = (doc as any).ref({
         Type: "Measure",
         Subtype: "GEO",
         // GPTS: four corners in lat/lon order — BL, BR, TR, TL
         GPTS: [south, west, south, east, north, east, north, west],
-        // LPTS: corresponding normalised page coordinates (0,0 = bottom-left)
-        LPTS: [lx0, ly0, lx1, ly0, lx1, ly1, lx0, ly1],
+        // LPTS: corners in the unit square of the viewport BBox (ISO 32000-2 §12.9),
+        // same BL,BR,TR,TL order as GPTS. NOT page fractions — the BBox is already the
+        // map area, so a conformant reader maps these straight onto the extent corners.
+        LPTS: [0, 0, 1, 0, 1, 1, 0, 1],
         GCS: gcsRef,
       });
       measureRef.end();
