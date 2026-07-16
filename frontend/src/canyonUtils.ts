@@ -31,8 +31,17 @@ export type TCanyon = {
   updatedAt: string;
   // Populated only by the canyon-detail endpoint (GET /canyons/:id), not the list.
   media?: MediaItem[];
-  // Populated only by the list endpoints (GET /canyons[/shared]). `shares` powers
-  // the "shared by me" filter + the card badge on owned canyons.
+  // Populated only by the OWNED list (GET /canyons) — never by GET /canyons/shared
+  // and never by the detail endpoint. `shares` powers the "shared by me" filter +
+  // the card badge; `tripLogLinks` the completion filter + per-row trip count.
+  //
+  // Optional because on a canyon shared WITH you these counts are absent by
+  // design, not zero: the trip tally is the owner's private trip-list
+  // cardinality and `shares` is their fan-out to other people, so the API
+  // withholds both (see canyonListInclude in api/src/routes/canyons.ts). Absent
+  // means "not yours to know" — so never coalesce it to 0 and present that as an
+  // answer about a shared canyon. Gate every read on ownership, as passesFilters
+  // and the CanyonsPanel row both do.
   _count?: { tripLogLinks: number; shares: number };
 };
 
