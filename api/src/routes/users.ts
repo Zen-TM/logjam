@@ -12,6 +12,7 @@ import {
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
+import { resolveUser } from "../lib/resolveUser";
 import { userPatchLimiter } from "../middleware/rateLimit";
 import { cognitoIdp } from "../services/awsClients";
 import { getMonthlyTileUsage } from "../lib/tileQuota";
@@ -258,8 +259,7 @@ router.patch(
       consentVersion?: unknown;
     };
 
-    const user = await prisma.user.findUnique({ where: { cognitoId: sub } });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(sub);
 
     const updates: {
       username?: string;
@@ -379,8 +379,7 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
-    const user = await prisma.user.findUnique({ where: { cognitoId: sub } });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(sub);
 
     const [
       canyons,
@@ -454,8 +453,7 @@ router.delete(
   async (req: AuthenticatedRequest, res: Response) => {
     const { sub } = req.user!;
 
-    const user = await prisma.user.findUnique({ where: { cognitoId: sub } });
-    if (!user) throw new AppError(404, "User not found");
+    const user = await resolveUser(sub);
 
     // Pre-fetch every S3 pointer the user owns BEFORE touching the DB. Once the
     // rows are deleted the keys are unrecoverable, so cleanup must run S3-first:
