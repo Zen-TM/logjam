@@ -73,7 +73,19 @@ function triggerDownload(url: string) {
 
 function App() {
   const toast = useToast();
-  const [storedFilters, setFilters] = useStoredState<TFilters>("logjam.filters", emptyFilters);
+  // Session-scoped, like the search box beside it: every member of TFilters
+  // hides canyons, and a filter the user set last month greets them as "my
+  // canyons are missing" rather than as a favour (UX finding 5). The search box
+  // moved for that reason while this — grades, ownership, completion, dates,
+  // custom fields, the larger hider — was left on localStorage. Same principle,
+  // same polarity. Sort order is the counter-example and stays in localStorage:
+  // it reorders, it never hides. Survives the panel's unmount-on-close
+  // (CANYON-12) without surviving the week.
+  const [storedFilters, setFilters] = useStoredState<TFilters>(
+    "logjam.filters",
+    emptyFilters,
+    sessionStorage,
+  );
   // Declared here (not with the other field-def state below) because the filters
   // memo needs it to prune custom filters whose definition no longer exists.
   const [canyonCustomFieldDefs, setCanyonCustomFieldDefs] = useState<

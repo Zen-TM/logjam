@@ -142,6 +142,9 @@ export type TFilters = {
   ownership: "all" | "owned" | "shared";
   // When true, keep only canyons the user has shared with at least one friend.
   shared_by_me: boolean;
+  // "Have I done it?" — a canyon is done once it has at least one linked trip,
+  // the same rule AnalyticsPanel's completion ring counts (canyonsWithTrips).
+  completion: "any" | "done" | "not_done";
   created_at: TDateRange | null;
   updated_at: TDateRange | null;
   ropewiki: "any" | "linked" | "unlinked";
@@ -1098,6 +1101,7 @@ export const emptyFilters: TFilters = {
   hours: null,
   ownership: "all",
   shared_by_me: false,
+  completion: "any",
   created_at: null,
   updated_at: null,
   ropewiki: "any",
@@ -1127,6 +1131,7 @@ function isFilterActive(filters: TFilters, key: keyof TFilters): boolean {
   if (key === "name") return !!filters.name && filters.name.trim() !== "";
   if (key === "ownership") return filters.ownership !== "all";
   if (key === "shared_by_me") return filters.shared_by_me;
+  if (key === "completion") return filters.completion !== "any";
   if (key === "ropewiki") return filters.ropewiki !== "any";
   if (key === "include_unknowns") return false; // a modifier, not a filter
   const rangeDefault = RANGE_FILTER_DEFAULTS.find(([k]) => k === key);
@@ -1156,6 +1161,7 @@ const COUNTED_FILTER_KEYS: (keyof TFilters)[] = [
   ...DATE_FILTER_KEYS,
   "ownership",
   "shared_by_me",
+  "completion",
   "ropewiki",
 ];
 
@@ -1268,6 +1274,21 @@ export function passesFilters(
   if (filters.ownership === "shared" && isOwned) return false;
 
   if (filters.shared_by_me && (canyon._count?.shares ?? 0) === 0) return false;
+
+  // Completion asks "have *I* done it", so the trip count is only read for
+  // canyons the viewer owns. A trip can only link to its own owner's canyons
+  // (resolveTripCanyonIds enforces ownerId), so on a canyon shared *with* the
+  // viewer `_count.tripLogLinks` is the OWNER's tally, not theirs — reading it
+  // would answer the wrong question (marking a canyon done because a friend ran
+  // it) and surface how often that friend runs it. The viewer structurally
+  // cannot have a linked trip there, so a shared canyon is never "done".
+  // Deliberately ignores include_unknowns: a missing `_count` is a payload
+  // shape, not a data gap — zero trips is a real answer, not an unknown one.
+  if (filters.completion !== "any") {
+    const doneByViewer = isOwned && (canyon._count?.tripLogLinks ?? 0) > 0;
+    if (filters.completion === "done" && !doneByViewer) return false;
+    if (filters.completion === "not_done" && doneByViewer) return false;
+  }
 
   if (filters.ropewiki === "linked" && canyon.ropeWikiId == null) return false;
   if (filters.ropewiki === "unlinked" && canyon.ropeWikiId != null) return false;

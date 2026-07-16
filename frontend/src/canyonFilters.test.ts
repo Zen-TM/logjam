@@ -79,6 +79,75 @@ describe("passesFilters — shared by me", () => {
   });
 });
 
+describe("passesFilters — completion", () => {
+  const done = canyon({ _count: { tripLogLinks: 3, shares: 0 } });
+  const notDone = canyon({ _count: { tripLogLinks: 0, shares: 0 } });
+
+  it("done keeps owned canyons with at least one linked trip", () => {
+    const f = filters({ completion: "done" });
+    expect(passesFilters(done, f, true)).toBe(true);
+    expect(passesFilters(notDone, f, true)).toBe(false);
+  });
+
+  it("not_done keeps owned canyons with no linked trips", () => {
+    const f = filters({ completion: "not_done" });
+    expect(passesFilters(notDone, f, true)).toBe(true);
+    expect(passesFilters(done, f, true)).toBe(false);
+  });
+
+  it("treats a canyon with one trip as done (boundary)", () => {
+    const one = canyon({ _count: { tripLogLinks: 1, shares: 0 } });
+    expect(passesFilters(one, filters({ completion: "done" }), true)).toBe(true);
+    expect(passesFilters(one, filters({ completion: "not_done" }), true)).toBe(
+      false,
+    );
+  });
+
+  // A trip can only link to its own owner's canyons (the API enforces
+  // ownerId in resolveTripCanyonIds), so tripLogLinks on a canyon shared WITH
+  // the viewer counts the OWNER's trips. The viewer has never done it.
+  it("never marks a shared canyon done, whatever the owner's count says", () => {
+    expect(passesFilters(done, filters({ completion: "done" }), false)).toBe(
+      false,
+    );
+    expect(passesFilters(done, filters({ completion: "not_done" }), false)).toBe(
+      true,
+    );
+  });
+
+  it("treats an absent _count as not done", () => {
+    expect(passesFilters(canyon(), filters({ completion: "done" }), true)).toBe(
+      false,
+    );
+    expect(
+      passesFilters(canyon(), filters({ completion: "not_done" }), true),
+    ).toBe(true);
+  });
+
+  it("ignores include_unknowns — zero trips is an answer, not a gap", () => {
+    const f = filters({ completion: "done", include_unknowns: true });
+    expect(passesFilters(notDone, f, true)).toBe(false);
+    expect(passesFilters(canyon(), f, true)).toBe(false);
+  });
+
+  it("is inactive by default and counts as one active filter when set", () => {
+    expect(passesFilters(done, filters(), true)).toBe(true);
+    expect(passesFilters(notDone, filters(), true)).toBe(true);
+    expect(hasActiveFilters(filters())).toBe(false);
+    expect(activeFilterCount(filters({ completion: "done" }))).toBe(1);
+    expect(activeFilterCount(filters({ completion: "any" }))).toBe(0);
+  });
+
+  it("ANDs with other filters rather than replacing them", () => {
+    const f = filters({ completion: "not_done", v_grade: [1, 3] });
+    expect(passesFilters(canyon({ vGrade: 2, _count: { tripLogLinks: 0, shares: 0 } }), f, true)).toBe(true);
+    // right grade, but already done
+    expect(passesFilters(canyon({ vGrade: 2, _count: { tripLogLinks: 1, shares: 0 } }), f, true)).toBe(false);
+    // not done, but out of grade range
+    expect(passesFilters(canyon({ vGrade: 6, _count: { tripLogLinks: 0, shares: 0 } }), f, true)).toBe(false);
+  });
+});
+
 describe("passesFilters — ropewiki link", () => {
   it("linked keeps only canyons with a ropeWikiId", () => {
     const f = filters({ ropewiki: "linked" });

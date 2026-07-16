@@ -49,6 +49,15 @@ const ROPEWIKI_OPTIONS: { value: TFilters["ropewiki"]; label: string }[] = [
   { value: "unlinked", label: "Not linked" },
 ];
 
+// "Done" is the word the question gets asked in ("have I done Claustral?");
+// "Completion" is the label because that's what the analytics panel already
+// calls this exact measure (its ring counts canyons with >= 1 logged trip).
+const COMPLETION_OPTIONS: { value: TFilters["completion"]; label: string }[] = [
+  { value: "any", label: "Any" },
+  { value: "done", label: "Done" },
+  { value: "not_done", label: "Not done" },
+];
+
 function gradeSummary(c: TCanyon): string {
   const parts: string[] = [];
   if (c.vGrade != null) parts.push(`V${c.vGrade}`);
@@ -316,7 +325,7 @@ function CanyonsPanel({
     );
   }
 
-  function choiceCell<K extends "ownership" | "ropewiki">(
+  function choiceCell<K extends "ownership" | "ropewiki" | "completion">(
     key: K,
     displayName: string,
     options: { value: TFilters[K]; label: string }[],
@@ -638,6 +647,7 @@ function CanyonsPanel({
       hours: null,
       ownership: "all",
       shared_by_me: false,
+      completion: "any",
       created_at: null,
       updated_at: null,
       ropewiki: "any",
@@ -746,6 +756,19 @@ function CanyonsPanel({
         {filtersOpen && (
           <div className={classes.accordionBody}>
             <div className={classes.accordionScroll}>
+              {/* First section: "have I done it?" is the question this panel
+                  gets asked most, so it's the first thing in the accordion. */}
+              <div className={classes.section}>
+                <div className={classes.sectionHeader}>Trips</div>
+                <div className={classes.selectGrid}>
+                  {choiceCell(
+                    "completion",
+                    "Completion",
+                    COMPLETION_OPTIONS,
+                    "any",
+                  )}
+                </div>
+              </div>
               <div className={classes.section}>
                 <div className={classes.sectionHeader}>Grades</div>
                 <div className={classes.sliderGrid}>
@@ -864,8 +887,19 @@ function CanyonsPanel({
           <div className={classes.resultsList}>
             {filteredCanyons.map(({ canyon, owned }) => {
               const shareCount = canyon._count?.shares ?? 0;
+              // The filter answers "have I done it" for the list; this answers
+              // it per row, which is the half a filter can't — the complaint was
+              // having to open a canyon to see whether it had trips. Stated only
+              // when non-zero (matching the share badge beside it): a count is
+              // worth a word, an absence isn't worth one on 270 of 298 rows.
+              // Owned-only for the same reason the completion filter is — on a
+              // shared canyon this tally is the owner's, not the viewer's.
+              const tripCount = owned ? (canyon._count?.tripLogLinks ?? 0) : 0;
               const meta = [
                 gradeSummary(canyon),
+                tripCount > 0
+                  ? `${tripCount} trip${tripCount === 1 ? "" : "s"}`
+                  : "",
                 owned
                   ? shareCount > 0
                     ? `Shared with ${shareCount}`
