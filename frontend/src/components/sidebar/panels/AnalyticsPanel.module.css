@@ -1,9 +1,14 @@
+/* No height lock and no inner overflow: the panel grows with its content and
+   the whole thing scrolls in the SidebarPanel body (one scrollbar, per the
+   sidebar convention). padding-bottom is the buffer so the last element —
+   calendar or day-trips list — clears the mobile bottom nav / panel edge and
+   can be scrolled fully into view. */
 .panel {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  height: 100%;
   padding-right: 2px;
+  padding-bottom: 1.5rem;
 }
 
 /* ── Section labels ─────────────────────────────── */
@@ -137,8 +142,6 @@
 .heatmapSection {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
 }
 
 .heatmapCaption {
@@ -341,12 +344,13 @@
 
 /* ── Day trips list ─────────────────────────────── */
 
+/* No own scroll container: the day-trip list flows into the panel and scrolls
+   with it, so the user scrolls the whole analytics panel to read the list
+   rather than a nested scrollbar under the calendar. */
 .dayTripsList {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  overflow-y: auto;
-  flex: 1;
 }
 
 .tripCard {

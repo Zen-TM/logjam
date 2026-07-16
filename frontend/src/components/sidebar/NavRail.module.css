@@ -71,6 +71,7 @@
     z-index: 5;
     flex-direction: row;
     align-items: center;
+    gap: 2px;
     padding: 0 4px;
     overflow-x: auto;
     overflow-y: hidden;
@@ -103,10 +104,15 @@
     flex: 0 0 8px;
   }
 
+  /* Spread the items across the full strip width rather than packing them to
+     the left. flex: 1 0 0 gives every item an equal share and grows to fill;
+     flex-shrink 0 means a future overflow (more items than fit) falls back to
+     the overflow-x scroll above instead of crushing them. */
   .navItem {
-    flex: 0 0 auto;
+    flex: 1 0 0;
+    min-width: 0;
     margin-bottom: 0;
-    margin-right: 4px;
+    margin-right: 0;
   }
 }
 

@@ -9,6 +9,7 @@ import {
   IconButton,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import { ChevronRight } from "lucide-react";
 import classes from "./FriendsPanel.module.css";
 import FriendSharingSection from "./FriendSharingSection";
 import { useToast } from "../../feedback/ToastProvider";
@@ -229,13 +230,21 @@ function FriendsPanel({
               <div key={friend.id} className={classes.friendRow}>
                 {/* The name is the affordance into the sharing audit — "what
                     does Bob see?" is a question you ask about a person, so it
-                    lives on the person (fix 24). */}
+                    lives on the person (fix 24). Styled as a tappable row with a
+                    drill-in chevron so the affordance is obvious. */}
                 <button
                   className={classes.friendNameButton}
                   onClick={() => setOpenFriend(friend)}
                   title={`Sharing with ${friend.username}`}
                 >
-                  {friend.username}
+                  <span className={classes.friendNameText}>
+                    {friend.username}
+                  </span>
+                  <ChevronRight
+                    size={16}
+                    className={classes.friendChevron}
+                    aria-hidden="true"
+                  />
                 </button>
                 <button
                   className={classes.removeButton}

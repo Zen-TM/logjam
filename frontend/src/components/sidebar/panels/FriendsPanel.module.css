@@ -70,6 +70,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.4em;
   padding: 0.3em 0;
   font-size: var(--text-sm);
 }
@@ -82,23 +83,53 @@
   min-width: 0;
 }
 
-/* The friend name doubles as the entry point to the sharing audit. Styled to
-   read as the name it replaces, not as a button — the row already has a real
-   button (Remove) and two competing buttons would muddy it. */
+/* The friend name doubles as the entry point to the sharing audit. Styled as a
+   tappable row — a subtle card with a drill-in chevron — so it's obvious it's
+   clickable, while staying visually distinct from the warning-outlined Remove
+   button beside it. */
 .friendNameButton {
-  composes: friendName;
-  background: none;
-  border: none;
-  padding: 0;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.35em 0.5em;
+  background: color-mix(in srgb, var(--theme-text-primary) 4%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 12%, transparent);
+  border-radius: var(--radius-sm);
   text-align: left;
   font: inherit;
   color: inherit;
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.friendNameText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.friendChevron {
+  flex-shrink: 0;
+  color: var(--theme-text-muted);
+  transition: transform var(--transition-fast), color var(--transition-fast);
 }
 
 .friendNameButton:hover {
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  border-color: var(--theme-accent);
   color: var(--theme-accent);
+}
+
+.friendNameButton:hover .friendChevron {
+  color: var(--theme-accent);
+  transform: translateX(2px);
 }
 
 .friendNameButton:focus-visible {
