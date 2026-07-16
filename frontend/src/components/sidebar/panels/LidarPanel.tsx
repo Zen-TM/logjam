@@ -68,6 +68,7 @@ function LidarPanel({
   activeTopoJobs,
   completedTopoJobs,
   topoExports,
+  topoExportsTotal,
   onRefetchTopoExports,
   lidarJobToggles,
   setLidarJobToggles,
@@ -84,6 +85,7 @@ function LidarPanel({
   activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
   topoExports: TopoExportJobView[];
+  topoExportsTotal: number | null;
   onRefetchTopoExports: () => void;
   lidarJobToggles: Record<string, boolean>;
   setLidarJobToggles: (
@@ -545,6 +547,14 @@ function LidarPanel({
           <div className={classes.accordionBody}>
             {/* Matches the server-side TOPO_EXPORT_TTL_MS sweep (7 days). */}
             <div className={classes.emptyHint}>Exports are kept for 7 days.</div>
+            {/* The server caps the exports list; warn when it's a truncated view
+                of the true total so older exports aren't silently hidden (UX-002). */}
+            {topoExportsTotal != null && topoExportsTotal > topoExports.length && (
+              <div className={classes.truncationNote}>
+                Showing your {topoExports.length} most recent exports of{" "}
+                {topoExportsTotal}. Older ones aren&rsquo;t loaded.
+              </div>
+            )}
             {completedExports.length === 0 && (
               <div className={classes.emptyHint}>No exports yet.</div>
             )}

@@ -1,12 +1,4 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
-  Button,
-} from "@mui/material";
 import { Pencil, TriangleAlert, X, Trash2 } from "lucide-react";
 import classes from "./CanyonDetailPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
@@ -611,47 +603,21 @@ function CanyonDetailPanel({
         />
       )}
 
-      <Dialog
+      <ConfirmDialog
         open={showDeleteConfirm}
-        onClose={deleting ? undefined : () => setShowDeleteConfirm(false)}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            backgroundColor: "var(--theme-primary)",
-            color: "var(--theme-text-primary)",
-          },
-        }}
-      >
-        <DialogTitle sx={{ color: "var(--theme-text-primary)" }}>
-          Delete Canyon
-        </DialogTitle>
-        <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
-          <DialogContentText sx={{ color: "var(--theme-text-muted)" }}>
+        title="Delete Canyon"
+        message={
+          <>
             Are you sure you want to delete {canyon.name}? Its photos, tracks, and
             shares are permanently deleted. Your trip logs are kept — they&rsquo;ll
             be unlinked from this canyon but stay in your logbook. This cannot be
             undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => setShowDeleteConfirm(false)}
-            disabled={deleting}
-            sx={{ color: "var(--theme-text-primary)" }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleDelete}
-            color="error"
-            variant="contained"
-            disabled={deleting}
-          >
-            {deleting ? "Deleting..." : "Delete"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+          </>
+        }
+        busy={deleting}
+        onConfirm={handleDelete}
+        onClose={() => setShowDeleteConfirm(false)}
+      />
 
       <TripLogDialog
         open={showTripLogDialog && !pickingCoords}

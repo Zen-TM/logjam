@@ -10,6 +10,15 @@
   composes: btn btnFilledAccent btnMd btnFull from '@styles/shared.module.css';
 }
 
+/* Matches the .truncationNote in CanyonsPanel/TripLogsPanel (UX-001/002). */
+.truncationNote {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--theme-warning);
+  opacity: 0.85;
+  padding: 0 2px;
+}
+
 .outlineButton {
   composes: btn btnOutlineAccent btnFull from '@styles/shared.module.css';
   padding: 0.5em 1em;

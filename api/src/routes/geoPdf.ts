@@ -52,6 +52,10 @@ const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
 const MAX_IN_FLIGHT_PER_USER = 2;
 const PRESIGN_TTL_SECONDS = 86400; // 24h
 
+// Server-side cap on the GeoPDF list. X-Total-Count carries the true total so
+// the client can show a truncation caption when this cap bites (UX-002).
+const GEO_PDF_LIST_CAP = 50;
+
 // The map title from a job's config (config.elements.title), trimmed, or null.
 function geoPdfTitle(config: unknown): string | null {
   if (config && typeof config === "object" && "elements" in config) {
@@ -257,11 +261,15 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const rows = await prisma.geoPdfJob.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
+    const where = { userId: user.id };
+    const [rows, total] = await Promise.all([
+      prisma.geoPdfJob.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: GEO_PDF_LIST_CAP,
+      }),
+      prisma.geoPdfJob.count({ where }),
+    ]);
     const views = await Promise.all(
       rows.map(async (r) =>
         rowToView(
@@ -272,6 +280,8 @@ router.get(
         ),
       ),
     );
+    // True total (pre-cap) so the client can flag a truncated view (UX-002).
+    res.set("X-Total-Count", String(total));
     res.json({ jobs: views });
   },
 );

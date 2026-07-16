@@ -97,6 +97,7 @@ function SidebarPanel({
   activeTopoJobs,
   completedTopoJobs,
   topoExports,
+  topoExportsTotal,
   onRefetchTopoExports,
   lidarJobToggles,
   setLidarJobToggles,
@@ -113,6 +114,7 @@ function SidebarPanel({
   onRefetchShared,
   // Notifications
   notifications,
+  notificationsTotal,
   onRefetchNotifications,
   setSelectedCanyonID,
   setActivePanel,
@@ -190,6 +192,7 @@ function SidebarPanel({
   activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
   topoExports: TopoExportJobView[];
+  topoExportsTotal: number | null;
   onRefetchTopoExports: () => void;
   lidarJobToggles: Record<string, boolean>;
   setLidarJobToggles: (v: Record<string, boolean> | ((prev: Record<string, boolean>) => Record<string, boolean>)) => void;
@@ -206,6 +209,7 @@ function SidebarPanel({
   onRefetchShared: () => void;
   // Notifications
   notifications: TNotification[];
+  notificationsTotal: number | null;
   onRefetchNotifications: () => void;
   setSelectedCanyonID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
@@ -342,6 +346,7 @@ function SidebarPanel({
             activeTopoJobs={activeTopoJobs}
             completedTopoJobs={completedTopoJobs}
             topoExports={topoExports}
+            topoExportsTotal={topoExportsTotal}
             onRefetchTopoExports={onRefetchTopoExports}
             lidarJobToggles={lidarJobToggles}
             setLidarJobToggles={setLidarJobToggles}
@@ -368,6 +373,7 @@ function SidebarPanel({
         {activePanel === "notifications" && (
           <NotificationsPanel
             notifications={notifications}
+            notificationsTotal={notificationsTotal}
             onRefetchNotifications={onRefetchNotifications}
             onRefetchFriends={onRefetchFriends}
             setSelectedCanyonID={setSelectedCanyonID}

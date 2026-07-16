@@ -19,6 +19,7 @@ import {
 
 function NotificationsPanel({
   notifications,
+  notificationsTotal,
   onRefetchNotifications,
   onRefetchFriends,
   setSelectedCanyonID,
@@ -26,6 +27,7 @@ function NotificationsPanel({
   onTopoFlyTarget,
 }: {
   notifications: TNotification[];
+  notificationsTotal: number | null;
   onRefetchNotifications: () => void;
   onRefetchFriends: () => void;
   setSelectedCanyonID: (id: string | null) => void;
@@ -169,6 +171,15 @@ function NotificationsPanel({
 
   return (
     <div className={classes.root}>
+      {/* The server caps the notifications list; warn when the loaded set is a
+          truncated view of the true total so older alerts aren't silently
+          hidden (UX-002). */}
+      {notificationsTotal != null && notificationsTotal > notifications.length && (
+        <div className={classes.truncationNote}>
+          Showing {notifications.length} of {notificationsTotal} alerts. Older
+          ones aren&rsquo;t loaded.
+        </div>
+      )}
       <div className={classes.notificationList}>
         {visibleNotifications.length === 0 ? (
           <span className={classes.emptyText}>No alerts.</span>

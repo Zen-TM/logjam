@@ -1084,10 +1084,6 @@ export function copyCanyon(canyonId: string): Promise<TCanyon> {
 
 // ── Notifications ─────────────────────────────────────────────
 
-export function getNotifications(): Promise<TNotification[]> {
-  return apiFetch<TNotification[]>("/notifications");
-}
-
 export function getUnreadCount(): Promise<{ count: number }> {
   return apiFetch<{ count: number }>("/notifications/unread-count");
 }
@@ -1110,14 +1106,16 @@ export function clearReadNotifications(): Promise<void> {
 
 export function useNotifications(enabled: boolean) {
   const [notifications, setNotifications] = useState<TNotification[]>([]);
+  // True total (pre server-side list cap); null until known.
+  const [total, setTotal] = useState<number | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
-    getNotifications()
-      .then(setNotifications)
+    apiFetchWithTotal<TNotification[]>("/notifications")
+      .then(({ data, total }) => { setNotifications(data); setTotal(total); })
       .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load notifications.")); });
     getUnreadCount()
       .then((r) => setUnreadCount(r.count))
@@ -1126,7 +1124,7 @@ export function useNotifications(enabled: boolean) {
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { notifications, unreadCount, error, refetch };
+  return { notifications, total, unreadCount, error, refetch };
 }
 
 // ── Filters ───────────────────────────────────────────────────
@@ -1407,6 +1405,8 @@ import type { VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
 // polling. Falls back to a single fetch once everything is terminal.
 export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
   const [exports, setExports] = useState<TopoExportJobView[]>([]);
+  // True total (pre server-side list cap); null until known.
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
@@ -1415,8 +1415,8 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
     if (!enabled) return;
     let cancelled = false;
     setLoading(true);
-    apiFetch<{ exports: TopoExportJobView[] }>("/topo-exports")
-      .then((res) => { if (!cancelled) { setExports(res.exports); setError(null); } })
+    apiFetchWithTotal<{ exports: TopoExportJobView[] }>("/topo-exports")
+      .then(({ data, total }) => { if (!cancelled) { setExports(data.exports); setTotal(total); setError(null); } })
       .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load exports.")); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -1432,7 +1432,7 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
   }, [enabled, pollMs, hasInProgress]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-  return { exports, loading, error, refetch };
+  return { exports, total, loading, error, refetch };
 }
 
 export function deleteTopoExport(id: string): Promise<void> {
@@ -1452,6 +1452,8 @@ import type { GeoPdfJobView } from "@logjam/shared";
 // (queued/running), mirroring useTopoExports.
 export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
   const [jobs, setJobs] = useState<GeoPdfJobView[]>([]);
+  // True total (pre server-side list cap); null until known.
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
@@ -1460,8 +1462,8 @@ export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
     if (!enabled) return;
     let cancelled = false;
     setLoading(true);
-    apiFetch<{ jobs: GeoPdfJobView[] }>("/geo-pdf")
-      .then((res) => { if (!cancelled) { setJobs(res.jobs); setError(null); } })
+    apiFetchWithTotal<{ jobs: GeoPdfJobView[] }>("/geo-pdf")
+      .then(({ data, total }) => { if (!cancelled) { setJobs(data.jobs); setTotal(total); setError(null); } })
       .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load GeoPDF jobs.")); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -1477,7 +1479,7 @@ export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
   }, [enabled, pollMs, hasInProgress]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-  return { jobs, loading, error, refetch };
+  return { jobs, total, loading, error, refetch };
 }
 
 export function getGeoPdfJob(id: string): Promise<GeoPdfJobView> {

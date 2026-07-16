@@ -413,6 +413,7 @@ function App() {
   } = useFriends(authenticated);
   const {
     notifications,
+    total: notificationsTotal,
     unreadCount,
     error: notificationsError,
     refetch: refetchNotifications,
@@ -548,6 +549,7 @@ function App() {
   // progress.
   const {
     exports: topoExports,
+    total: topoExportsTotal,
     loading: topoExportsLoading,
     refetch: refetchTopoExports,
   } = useTopoExports(authenticated);
@@ -1006,6 +1008,7 @@ function App() {
           activeTopoJobs={activeTopoJobs}
           completedTopoJobs={completedTopoJobs}
           topoExports={topoExports}
+          topoExportsTotal={topoExportsTotal}
           onRefetchTopoExports={refetchTopoExports}
           lidarJobToggles={lidarJobToggles}
           setLidarJobToggles={setLidarJobToggles}
@@ -1026,6 +1029,7 @@ function App() {
           onRefetchFriends={refetchFriends}
           onRefetchShared={refetchShared}
           notifications={notifications}
+          notificationsTotal={notificationsTotal}
           onRefetchNotifications={refetchNotifications}
           setSelectedCanyonID={setSelectedCanyonID}
           setActivePanel={setActivePanel}

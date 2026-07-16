@@ -1,16 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
-  Button,
-  IconButton,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
 import { ChevronRight } from "lucide-react";
 import classes from "./FriendsPanel.module.css";
+import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import FriendSharingSection from "./FriendSharingSection";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -263,53 +254,22 @@ function FriendsPanel({
         )}
       </div>
 
-      {showRemoveConfirm && (
-        <Dialog
-          open
-          maxWidth="sm"
-          fullWidth
-          onClose={removingFriendId ? undefined : () => setShowRemoveConfirm(null)}
-          PaperProps={{
-            sx: { backgroundColor: "var(--theme-primary)", color: "var(--theme-text-primary)" },
-          }}
-        >
-          <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
-            Remove Friend
-            <IconButton
-              aria-label="Close dialog"
-              size="small"
-              onClick={() => setShowRemoveConfirm(null)}
-              disabled={removingFriendId != null}
-              sx={{ color: "var(--theme-text-primary)" }}
-            >
-              <CloseIcon fontSize="small" />
-            </IconButton>
-          </DialogTitle>
-          <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
-            <DialogContentText sx={{ color: "var(--theme-text-primary)" }}>
-              Remove {showRemoveConfirm.username}? Shared canyons between you
-              will be unshared.
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions>
-            <Button
-              onClick={() => setShowRemoveConfirm(null)}
-              disabled={removingFriendId != null}
-              sx={{ color: "var(--theme-text-primary)" }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => handleRemoveFriend(showRemoveConfirm.id)}
-              color="error"
-              variant="contained"
-              disabled={removingFriendId != null}
-            >
-              {removingFriendId ? "Removing..." : "Remove"}
-            </Button>
-          </DialogActions>
-        </Dialog>
-      )}
+      <ConfirmDialog
+        open={showRemoveConfirm != null}
+        title="Remove Friend"
+        message={
+          <>
+            Remove {showRemoveConfirm?.username}? Shared canyons between you will
+            be unshared.
+          </>
+        }
+        confirmLabel="Remove"
+        busy={removingFriendId != null}
+        onConfirm={() => {
+          if (showRemoveConfirm) handleRemoveFriend(showRemoveConfirm.id);
+        }}
+        onClose={() => setShowRemoveConfirm(null)}
+      />
     </>
   );
 }

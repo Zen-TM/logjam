@@ -8,6 +8,15 @@
   gap: 0.5em;
 }
 
+/* Matches the .truncationNote in CanyonsPanel/TripLogsPanel (UX-001/002). */
+.truncationNote {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--theme-warning);
+  opacity: 0.85;
+  padding: 0 2px;
+}
+
 .markAllReadButton {
   composes: btn btnOutlineAccent btnSm btnFull from '@styles/shared.module.css';
 }
