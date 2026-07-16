@@ -148,6 +148,18 @@ resource "aws_iam_role_policy_attachment" "gha_eb" {
   policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess-AWSElasticBeanstalk"
 }
 
+# Plan-on-PR (terraform-plan.yml): terraform plan against envs/prod needs
+# broad Describe/Get/List across every managed service plus GetObject on the
+# state bucket. Hand-listing those actions is brittle (every new resource type
+# breaks the plan with AccessDenied), so use the AWS-managed ReadOnlyAccess and
+# carve the sensitive surfaces back out with an explicit Deny below. Write
+# perms for TF apply stay off this role until Phase 3 (see
+# .claude/cicd-staging-plan.md guardrails).
+resource "aws_iam_role_policy_attachment" "gha_readonly" {
+  role       = aws_iam_role.github_actions.name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
+
 # ── Inline policy ──────────────────────────────────────────────────────────────
 
 resource "aws_iam_role_policy" "gha_frontend_deploy" {
@@ -168,6 +180,55 @@ resource "aws_iam_role_policy" "gha_frontend_deploy" {
         Effect   = "Allow"
         Action   = "cloudfront:CreateInvalidation"
         Resource = "arn:aws:cloudfront::620853681701:distribution/E22J79PHZM2K"
+      },
+    ]
+  })
+}
+
+# Privacy carve-out from ReadOnlyAccess (which grants s3:GetObject on every
+# bucket): CI must never be able to read user canyon data (media photos,
+# LiDAR/tile outputs) or pull secret values. Explicit Deny beats the managed
+# Allow. Bucket-level GetBucket* config reads stay allowed — terraform
+# refresh of the storage module needs those; it never reads objects. The
+# state bucket (logjam-tfstate-*) is intentionally NOT denied: init needs
+# GetObject on the state file. Plans run -lock=false, so no write is needed.
+resource "aws_iam_role_policy" "gha_readonly_privacy_deny" {
+  name = "logjam-ci-readonly-privacy-deny"
+  role = aws_iam_role.github_actions.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DenyUserDataObjects"
+        Effect = "Deny"
+        Action = ["s3:GetObject", "s3:GetObjectVersion", "s3:ListBucket"]
+        Resource = [
+          "arn:aws:s3:::logjam-media",
+          "arn:aws:s3:::logjam-media/*",
+          "arn:aws:s3:::logjam-topo-jobs",
+          "arn:aws:s3:::logjam-topo-jobs/*",
+          # WORM audit sink: pgaudit query text can embed canyon names/coords.
+          "arn:aws:s3:::logjam-audit-620853681701",
+          "arn:aws:s3:::logjam-audit-620853681701/*",
+        ]
+      },
+      {
+        Sid      = "DenySecretValues"
+        Effect   = "Deny"
+        Action   = ["secretsmanager:GetSecretValue", "kms:Decrypt"]
+        Resource = "*"
+      },
+      # Postgres log export carries pgaudit query text (same sensitivity as
+      # the audit bucket). Deny reading log *events*; DescribeLogGroups stays
+      # allowed so terraform can refresh log-group resources.
+      {
+        Sid    = "DenyDbLogEvents"
+        Effect = "Deny"
+        Action = ["logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery", "logs:GetQueryResults"]
+        Resource = [
+          "arn:aws:logs:ap-southeast-2:620853681701:log-group:/aws/rds/*",
+          "arn:aws:logs:ap-southeast-2:620853681701:log-group:/aws/rds/*:*",
+        ]
       },
     ]
   })

@@ -1,0 +1,102 @@
+name: terraform-plan
+
+# Plan-on-PR for envs/prod: shows the real infra diff as a PR comment so infra
+# changes are reviewed before merge. Read-only against AWS — the CI role has
+# ReadOnlyAccess (minus the user-data buckets, explicit deny) and the plan runs
+# with -lock=false so it never writes state or the lockfile. Apply stays
+# manual (operator) until Phase 3 of .claude/cicd-staging-plan.md.
+#
+# Only runs on PRs from this repo (not forks): the OIDC role trusts
+# repo:Zen-TM/logjam:* and fork PRs get no id-token anyway.
+
+on:
+  pull_request:
+    paths:
+      - "infra/terraform/**"
+      - ".github/workflows/terraform-plan.yml"
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: terraform-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  plan-prod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-role
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.13"
+
+      - name: terraform init
+        run: terraform -chdir=infra/terraform/envs/prod init -input=false
+
+      # -lock=false: read-only plan must not take the state lock (the CI role
+      # has no write access to the state bucket, and a CI plan must never
+      # block an operator apply).
+      - name: terraform plan
+        id: plan
+        run: |
+          set -o pipefail
+          terraform -chdir=infra/terraform/envs/prod plan \
+            -input=false -lock=false -no-color -out=/dev/null \
+            2>&1 | tee /tmp/plan.txt
+        continue-on-error: true
+
+      - name: Comment plan on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const outcome = "${{ steps.plan.outcome }}";
+            let plan = fs.readFileSync("/tmp/plan.txt", "utf8");
+            // GitHub comment hard limit is 65536 chars; keep the tail (the
+            // summary line lives at the end).
+            const MAX = 60000;
+            if (plan.length > MAX) plan = "…(truncated)…\n" + plan.slice(-MAX);
+            const marker = "<!-- terraform-plan-prod -->";
+            const body = [
+              marker,
+              `### Terraform plan — \`envs/prod\` (${outcome === "success" ? "✅" : "❌ failed"})`,
+              "",
+              "```",
+              plan,
+              "```",
+            ].join("\n");
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((c) => c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Fail job if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1

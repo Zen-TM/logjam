@@ -1,0 +1,98 @@
+name: CI
+
+# Test/lint/typecheck gate. Runs on every PR and on pushes to main. This is
+# the workflow branch protection should require (jobs: shared, api, frontend,
+# topo). Integration tests (api/src/__tests__) are NOT run here — they need a
+# live API + MiniStack (`make dev`); see CLAUDE.md "Testing".
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  shared:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: shared/package-lock.json
+      - name: Install
+        working-directory: shared
+        run: npm ci
+      - name: Build
+        working-directory: shared
+        run: npm run build
+      - name: Unit tests
+        working-directory: shared
+        run: npm test
+
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      # api depends on shared via file:../shared and imports from shared/dist
+      - name: Build shared
+        working-directory: shared
+        run: npm ci && npm run build
+      - name: Install
+        working-directory: api
+        run: npm ci
+      - name: Prisma generate
+        working-directory: api
+        run: npx prisma generate
+      - name: Typecheck/build
+        working-directory: api
+        run: npm run build
+      - name: Unit tests (no infra)
+        working-directory: api
+        run: npm run test:unit
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build shared
+        working-directory: shared
+        run: npm ci && npm run build
+      - name: Install
+        working-directory: frontend
+        run: npm ci
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+      # Type gate only — the full vite build (which needs VITE_* secrets)
+      # already runs in deploy-frontend.yml.
+      - name: Typecheck
+        working-directory: frontend
+        run: npx tsc -b
+      - name: Unit tests
+        working-directory: frontend
+        run: npm test
+
+  topo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Pure-logic tests; tests/_native_stub.py stubs osgeo/psycopg2 etc when
+      # absent, so no GDAL/PDAL install is needed here. Native paths run in
+      # the worker Docker image (see topo/tests/INTEGRATION.md).
+      - name: Unit tests
+        working-directory: topo
+        run: python -m unittest discover -s tests
