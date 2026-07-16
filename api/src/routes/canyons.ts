@@ -23,17 +23,43 @@ const router = Router();
 // without a response-shape change (UX-001).
 const LIST_TAKE = 500;
 
-async function fetchCanyons(where: object) {
+// Which list a fetch is serving. This is an ACCESS decision, not a formatting
+// one — see canyonListInclude.
+export type CanyonListScope = "owned" | "shared";
+
+// Per-canyon `_count` is OWNER-PRIVATE and rides the OWNED list only.
+//
+// Under the hybrid share model a recipient sees the canyon RECORD (plus
+// canyon-level notes/media); the trip-log list is owner-private. `tripLogLinks`
+// is precisely that list's cardinality, and `shares` is the owner's share
+// fan-out — how many other people they showed the canyon to. Neither is part of
+// the record a sharee is entitled to, so neither may be serialised onto the
+// shared list.
+//
+// This must be enforced HERE rather than by the client declining to render it:
+// the counts previously rode both lists and were merely ignored by the panel,
+// which is not a boundary — it's a client that happens to look away. Anyone with
+// devtools, or any future client, saw them (the SEC-001 shape).
+//
+// On the owned list the counts are the owner's own data: `shares` powers the
+// "shared by me" filter + card badge, `tripLogLinks` the completion filter +
+// per-row trip count.
+export function canyonListInclude(
+  scope: CanyonListScope,
+): Prisma.CanyonInclude | undefined {
+  if (scope === "shared") return undefined;
+  return { _count: { select: { tripLogLinks: true, shares: true } } };
+}
+
+async function fetchCanyons(
+  where: Prisma.CanyonWhereInput,
+  scope: CanyonListScope,
+) {
   return prisma.canyon.findMany({
     where,
     orderBy: { createdAt: "desc" },
     take: LIST_TAKE,
-    include: {
-      // shares powers the "shared by me" filter + card badge on the owned list
-      // (UAT UX gap); tripLogLinks is the per-canyon trip count (one join row
-      // per linked trip, so the count is equivalent to the old direct-FK count).
-      _count: { select: { tripLogLinks: true, shares: true } },
-    },
+    include: canyonListInclude(scope),
   });
 }
 
@@ -45,7 +71,7 @@ router.get(
     const user = await resolveUser(req.user!.sub);
     const where = { ownerId: user.id };
     const [rows, total] = await Promise.all([
-      fetchCanyons(where),
+      fetchCanyons(where, "owned"),
       prisma.canyon.count({ where }),
     ]);
     res.set("X-Total-Count", String(total));
@@ -53,7 +79,9 @@ router.get(
   },
 );
 
-// GET /canyons/shared — canyons shared with me
+// GET /canyons/shared — canyons shared with me.
+// Scope "shared" drops the owner-private `_count` (trip tally + share fan-out)
+// — see canyonListInclude.
 router.get(
   "/shared",
   requireAuth,
@@ -61,7 +89,7 @@ router.get(
     const user = await resolveUser(req.user!.sub);
     const where = { shares: { some: { sharedWithId: user.id } } };
     const [rows, total] = await Promise.all([
-      fetchCanyons(where),
+      fetchCanyons(where, "shared"),
       prisma.canyon.count({ where }),
     ]);
     res.set("X-Total-Count", String(total));

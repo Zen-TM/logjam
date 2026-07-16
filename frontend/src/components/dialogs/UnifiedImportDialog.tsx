@@ -30,7 +30,9 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
   matchCanyon,
   haversineMeters,
+  defaultsToMergeOnImport,
   DEFAULT_CANYON_MERGE_POLICY,
+  MERGEABLE_FIELDS,
   type MatchCandidate,
   type CanyonMergePolicy,
   type MergeableField,
@@ -42,7 +44,7 @@ import {
   makeCustomFieldKey,
   coerceFieldValueStrict,
 } from "@logjam/shared";
-import type { TCanyon, TUser, BulkCanyonInput } from "../../canyonUtils";
+import type { TCanyon, TUser, BulkCanyonInput, CanyonMergePair } from "../../canyonUtils";
 import {
   apiFetch,
   bulkCanyonImport,
@@ -56,6 +58,7 @@ import {
   detectCanyonColumns,
   ROLE_LABELS,
   ALL_ASSIGNABLE_ROLES,
+  GRADE_RANGES,
   type CanyonFieldRole,
 } from "../../csvImport/canyonColumns";
 import { detectColumns, type ColumnRole } from "../../csvImport/detectColumns";
@@ -65,13 +68,16 @@ import {
   DATE_FORMAT_LABELS,
   type DateFormat,
 } from "../../csvImport/detectDateFormat";
-import { parseByRole } from "../../csvImport/canyonValueParsers";
+import {
+  parseByRole,
+  type MismatchKind,
+} from "../../csvImport/canyonValueParsers";
 import {
   fieldSx,
   selectSx,
   menuPaperProps,
-  SectionLabel,
 } from "../../csvImport/dialogStyles";
+import { SectionLabel } from "../../csvImport/SectionLabel";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useToast } from "../feedback/ToastProvider";
@@ -143,7 +149,7 @@ type ReviewState = {
 };
 
 type ImportOutcome =
-  | { kind: "canyon"; batchId: string; created: number; merged: number; skipped: number; errors: string[]; warnings: string[] }
+  | { kind: "canyon"; batchId: string; created: number; merged: number; merges: CanyonMergePair[]; skipped: number; errors: string[]; warnings: string[] }
   | { kind: "triplog"; batchId: string; imported: number; updated: number; createdCanyons: number; noCanyon: number; linked: number; discarded: number; errors: string[]; warnings: string[] };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -186,6 +192,45 @@ const NUMERIC_WARN_ROLES = new Set<CanyonFieldRole>([
   "vGrade", "aGrade", "commitment", "quality", "numAbseils", "longestAbseil", "hours",
 ]);
 
+// Why the cell was dropped, phrased so the user can act on it. Declared as a
+// total Record over MismatchKind so adding a reason fails the build here rather
+// than inheriting some other reason's wording — this warning used to hardcode
+// "isn't a number" for every failure, which lied about e.g. a quality of 0.5
+// (a number, but outside the 1-5 range). Reasons the numeric parsers can't
+// currently produce still get honest text: NUMERIC_WARN_ROLES is the only
+// caller today, but the reason is the parser's to choose, not this map's.
+const MISMATCH_EXPLANATIONS: Record<
+  MismatchKind,
+  (range: [number, number] | undefined) => string
+> = {
+  nonNumeric: () => "isn't a number",
+  booleanish: () => "is a yes/no value, not a number",
+  decimalInInt: () => "isn't a whole number",
+  outOfRange: (range) =>
+    range
+      ? `is outside the accepted range ${range[0]}–${range[1]}`
+      : "is outside the accepted range",
+  scaleMismatch: (range) =>
+    range
+      ? `is above the accepted range ${range[0]}–${range[1]} — the file may use a different scale`
+      : "is above the accepted range — the file may use a different scale",
+  unparsableJson: () => "isn't valid JSON",
+  unparsableArray: () => "isn't a valid list",
+  coordFormat: () => "isn't in decimal degrees (e.g. -33.6042)",
+  mixedTypes: () => "doesn't match the other values in this column",
+  emptyDominant: () => "couldn't be read",
+};
+
+function coercionWarning(
+  role: CanyonFieldRole,
+  raw: string,
+  reason: MismatchKind,
+): string {
+  const label = ROLE_LABELS[role] ?? role;
+  const explanation = MISMATCH_EXPLANATIONS[reason](GRADE_RANGES[role]);
+  return `${label} "${raw}" ${explanation} — left empty`;
+}
+
 // Build a BulkCanyonInput from a mapped canyon row. Mirrors the field mapping in
 // the (now removed) CanyonCsvImportDialog, but without the per-cell mismatch UI:
 // values that don't parse are dropped (left null) — the importer is additive and
@@ -206,9 +251,7 @@ function buildCanyonInput(
     const parsed = parseByRole(raw, role);
     const value: unknown = parsed.ok ? parsed.value : null;
     if (!parsed.ok && raw.trim() !== "" && NUMERIC_WARN_ROLES.has(role)) {
-      warnings.push(
-        `${ROLE_LABELS[role] ?? role} "${raw.trim()}" isn't a number — left empty`,
-      );
+      warnings.push(coercionWarning(role, raw.trim(), parsed.reason));
     }
 
     switch (role) {
@@ -256,9 +299,14 @@ function buildCanyonInput(
         attrs["sources"] = Array.isArray(value) ? value : [];
         break;
       default:
-        // attr:* / new-attr — store as a custom attribute keyed by the header.
+        // attr:* / new-attr — store as a custom attribute. An `attr:<key>`
+        // column carries its storage key in the role (the exporter's
+        // convention); a brand-new attribute has no key yet, so the CSV header
+        // is the key.
         if (typeof role === "string" && role.startsWith("attr:")) {
           attrs[role.slice(5)] = value ?? null;
+        } else if (role === "new-attr") {
+          attrs[header] = value ?? null;
         }
         break;
     }
@@ -268,6 +316,10 @@ function buildCanyonInput(
   return { input, warnings };
 }
 
+// Switch labels for the merge-settings accordion. A total Record over
+// MergeableField, so a new policy entry in shared fails the build here rather
+// than shipping an unlabelled (or missing) switch. Order comes from the shared
+// MERGEABLE_FIELDS, not from this map's key order.
 const MERGEABLE_FIELD_LABELS: Record<MergeableField, string> = {
   vGrade: "V grade",
   aGrade: "A grade",
@@ -277,6 +329,7 @@ const MERGEABLE_FIELD_LABELS: Record<MergeableField, string> = {
   longestAbseil: "Longest pitch",
   hours: "Hours",
   notes: "Notes",
+  attributes: "Custom attributes",
 };
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -394,9 +447,15 @@ function UnifiedImportDialog({
     setPreparedTripRows([]);
     setTripWarnings([]);
     setReviewState({ decisions: {}, createForms: {}, options: {}, distances: {}, bestGuessId: {}, displayName: {}, autoMergeId: {} });
-    setMergePolicy(
-      currentUser?.uiPreferences?.importMergePolicy ?? DEFAULT_CANYON_MERGE_POLICY,
-    );
+    // Layer the stored policy over the defaults rather than replacing them: a
+    // policy saved before a field joined MERGEABLE_FIELDS has no entry for it,
+    // and an incomplete policy is rejected wholesale by the server's
+    // re-validation — which would silently drop every OTHER choice the user had
+    // saved. Missing entry -> that field's default; stored entries still win.
+    setMergePolicy({
+      ...DEFAULT_CANYON_MERGE_POLICY,
+      ...(currentUser?.uiPreferences?.importMergePolicy ?? {}),
+    });
   }, [open, currentUser]);
 
   const noCanyonsYet = canyons.length === 0;
@@ -734,9 +793,14 @@ function UnifiedImportDialog({
             ),
           );
           bestGuessId[key] = result.best?.candidate.id ?? null;
-          decisions[key] = result.best
-            ? { kind: "link", id: result.best.candidate.id }
-            : { kind: "create" };
+          // The guess is still offered (and still badged "best guess"), but only
+          // a match the coords corroborate arrives pre-selected — merging is the
+          // destructive direction, so a distant guess must not be accepted by
+          // default. See defaultsToMergeOnImport / MERGE_DEFAULT_DIST_M.
+          decisions[key] =
+            result.best && defaultsToMergeOnImport(result.best)
+              ? { kind: "link", id: result.best.candidate.id }
+              : { kind: "create" };
         }
       }
       setActiveKind("canyon");
@@ -908,6 +972,7 @@ function UnifiedImportDialog({
             batchId,
             created: result.created,
             merged: result.merged,
+            merges: result.merges,
             skipped: result.skipped,
             errors: formatCanyonRowErrors(result.errors),
             warnings: canyonWarnings,
@@ -922,6 +987,7 @@ function UnifiedImportDialog({
         batchId,
         created: result.created,
         merged: result.merged,
+        merges: result.merges,
         skipped: result.skipped,
         errors: formatCanyonRowErrors(result.errors),
         warnings: canyonWarnings,
@@ -1465,13 +1531,27 @@ function UnifiedImportDialog({
               { count: outcome.noCanyon, label: "without a canyon" },
               { count: outcome.discarded, label: "discarded" },
             ];
+      // A merge folds an imported row into a canyon that already existed, which
+      // is the one outcome the headline count alone can't be checked against
+      // ("26 merged" — into what?). List them, but stay out of the way: no
+      // accordion at all when nothing merged, collapsed when something did.
       const details: DetailSection[] = [];
+      let detailsLabel: string | undefined;
+      if (outcome.kind === "canyon" && outcome.merges.length > 0) {
+        details.push({
+          items: outcome.merges.map((m) => `${m.sourceName} → ${m.targetName}`),
+        });
+        detailsLabel = `${outcome.merges.length} ${
+          outcome.merges.length === 1 ? "canyon" : "canyons"
+        } merged into existing entries`;
+      }
       const warnings =
         outcome.warnings.length > 0 ? outcome.warnings : undefined;
       return (
         <ImportResultSummary
           headline={headline}
           details={details.length > 0 ? details : undefined}
+          detailsLabel={detailsLabel}
           warnings={warnings}
           errors={outcome.errors.length > 0 ? outcome.errors : undefined}
           onUndo={handleUndo}
@@ -1504,9 +1584,11 @@ function UnifiedImportDialog({
             <AccordionDetails sx={{ pt: 0 }}>
               <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", display: "block", mb: 1 }}>
                 When a row matches an existing canyon, keep the existing value or use the value from your file.
-                Empty fields always fill in (no data is lost); names and coordinates never change.
+                These settings only apply where both sides have a value: an empty field always fills in from your
+                file, and an empty cell in your file never clears what's already there. Names and coordinates
+                never change.
               </Typography>
-              {(Object.keys(MERGEABLE_FIELD_LABELS) as MergeableField[]).map((field) => (
+              {MERGEABLE_FIELDS.map((field) => (
                 <FormControlLabel
                   key={field}
                   control={

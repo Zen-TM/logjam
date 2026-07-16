@@ -1,0 +1,73 @@
+/* Styles for FriendSharingSection — the per-friend sharing audit ("what does
+   Bob see?"), rendered inside FriendsPanel when a friend row is opened. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+}
+
+.backButton {
+  composes: btn btnSm btnGhost from '@styles/shared.module.css';
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  padding-left: 0;
+}
+
+.friendHeading {
+  font-size: var(--text-base);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.divider {
+  composes: divider from '@styles/shared.module.css';
+}
+
+.sectionLabel {
+  composes: sectionLabel from '@styles/shared.module.css';
+}
+
+.caption {
+  font-size: var(--text-xs);
+  color: var(--theme-text-muted);
+  opacity: 0.6;
+}
+
+/* No nested overflow-y — SidebarPanel's body owns the scroll (panels/CLAUDE.md). */
+.shareList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+
+.shareRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.3em 0;
+  font-size: var(--text-sm);
+}
+
+.canyonName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.unshareButton {
+  composes: btn btnSm btnOutlineWarning from '@styles/shared.module.css';
+  flex-shrink: 0;
+}
+
+.unshareAllButton {
+  composes: btn btnMd btnOutlineWarning btnFull from '@styles/shared.module.css';
+  margin-top: 0.2em;
+}

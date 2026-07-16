@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { signOut } from "aws-amplify/auth";
+import { clearTripDraft } from "../../tripDraft";
 import BrandMark from "../brand/BrandMark";
 import classes from "./RootErrorBoundary.module.css";
 
@@ -39,6 +40,9 @@ export class RootErrorBoundary extends Component<Props, State> {
     // Best-effort: clear the session in case a corrupt auth state caused the
     // crash, then reload to a clean sign-in. Reload regardless of outcome
     // (signOut throws in fake-auth dev, where Amplify isn't configured).
+    // This is a second sign-out path that bypasses useAuth, so it repeats the
+    // draft clear — a draft must not outlive the session down *any* exit.
+    clearTripDraft();
     try {
       await signOut();
     } catch (err) {

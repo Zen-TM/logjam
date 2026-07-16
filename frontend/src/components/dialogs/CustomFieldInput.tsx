@@ -1,7 +1,7 @@
 import { Checkbox, FormControlLabel, TextField } from "@mui/material";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { customFieldDisplayLabel } from "@logjam/shared";
-import { fieldSx } from "../../csvImport/dialogStyles";
+import { fieldSx, touchTargetSx } from "../../csvImport/dialogStyles";
 import { numericFieldError, type NumericFieldConstraints } from "../../numberInput";
 import ValidatedNumberField from "./ValidatedNumberField";
 
@@ -59,7 +59,7 @@ function CustomFieldInput({
           <Checkbox
             checked={value === "true"}
             onChange={(e) => onChange(String(e.target.checked))}
-            sx={{ color: "var(--theme-text-muted)" }}
+            sx={{ ...touchTargetSx, color: "var(--theme-text-muted)" }}
           />
         }
         label={customFieldDisplayLabel(def)}

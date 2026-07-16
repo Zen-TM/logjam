@@ -59,6 +59,39 @@ describe("share boundary — recipient view (hybrid model)", () => {
     expect(res.body.tripLogs).toBeUndefined();
   });
 
+  // The trip-list assertion above has a sibling the count slipped past: the
+  // LIST endpoint used to attach `_count: { tripLogLinks, shares }` to every
+  // row on BOTH /canyons and /canyons/shared. Withholding the trip list while
+  // shipping its cardinality is not a boundary — bob learned how many trips
+  // alice had logged on her canyon, and how many other people she'd shared it
+  // with. The frontend ignored the number; the API still sent it.
+  it("recipient's shared list carries NO owner-private counts (trip tally, share fan-out)", async () => {
+    const res = await request(API_URL)
+      .get("/canyons/shared")
+      .set(as(BOB_SUB));
+    expect(res.status).toBe(200);
+    const shared = res.body.find(
+      (c: { id: string }) => c.id === SHARED_CANYON_ID,
+    );
+    // Seed baseline: alice shares SHARED_CANYON_ID with bob, so this must be
+    // present — otherwise the assertions below pass vacuously.
+    expect(shared).toBeDefined();
+    expect(shared._count).toBeUndefined();
+  });
+
+  it("owner's own list still carries its counts (the fix must not blank the owned list)", async () => {
+    const res = await request(API_URL).get("/canyons").set(as(ALICE_SUB));
+    expect(res.status).toBe(200);
+    const owned = res.body.find(
+      (c: { id: string }) => c.id === SHARED_CANYON_ID,
+    );
+    expect(owned).toBeDefined();
+    // Powers the "shared by me" filter/badge and the completion filter +
+    // per-row trip count.
+    expect(typeof owned._count.tripLogLinks).toBe("number");
+    expect(typeof owned._count.shares).toBe("number");
+  });
+
   it("recipient's trip list for a shared canyon is empty (trips are owner-private)", async () => {
     const res = await request(API_URL)
       .get(`/canyons/${SHARED_CANYON_ID}/trips`)

@@ -49,7 +49,13 @@ import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
 import { getFieldValue as getFieldValueFor } from "./customFieldValues";
-import { selectSx, menuPaperProps } from "../../csvImport/dialogStyles";
+import {
+  selectSx,
+  menuPaperProps,
+  touchTargetSx,
+  dialogActionButtonSx,
+  NOTES_MAX_ROWS,
+} from "../../csvImport/dialogStyles";
 
 const V_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
 const A_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -153,6 +159,8 @@ function CanyonDialog({
   const draftPromiseRef = useRef<Promise<string> | null>(null);
 
   const pickingRef = useRef(false);
+  // First field, focused on a fresh open by the reset effect below.
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   // Snapshot of the form fields as populated below, taken in the same effect
   // that sets them — used by the unsaved-changes guard to tell a real edit
@@ -266,6 +274,15 @@ function CanyonDialog({
     setDraftCanyonId(null);
     committedRef.current = false;
     draftPromiseRef.current = null;
+
+    // Open ready to type, focusing the first field. Driven from the effect
+    // rather than an `autoFocus` prop so it keys off the same pick-on-map guard
+    // as the form reset: the return leg of a pick returns early above, so focus
+    // is never yanked off the coordinates the user just picked back up to Name
+    // (the dialog remounts on that leg — App holds `open` false while picking).
+    // Skipped on mobile, where focusing pops the on-screen keyboard over the
+    // form before the user has decided to type.
+    if (!isMobile) nameInputRef.current?.focus();
   }, [open, canyon]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Real dirty-check: current form fields vs. the snapshot taken when the
@@ -377,6 +394,18 @@ function CanyonDialog({
       setLatitude(String(lat));
       setLongitude(String(lng));
     });
+  }
+
+  // Enter-to-submit. Mirrors the Save button's `disabled` condition, because a
+  // form still submits on Enter while its submit button is disabled — without
+  // this, Enter would be a route around it (a second save mid-flight). The Save
+  // button is `type="submit"` with no onClick, so pointer and keyboard share
+  // this one path. Field-level validation stays inside handleSave, which
+  // already reports name/coords problems through `invalidField`.
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    void handleSave();
   }
 
   async function handleSave() {
@@ -577,11 +606,25 @@ function CanyonDialog({
           size="small"
           onClick={saving ? undefined : guard.requestClose}
           disabled={saving}
-          sx={{ color: "var(--theme-text-primary)" }}
+          sx={{ ...touchTargetSx, color: "var(--theme-text-primary)" }}
         >
           <CloseIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
+      {/* Spans content and actions so Enter reaches the submit button in
+          DialogActions. Carries the Paper's flex column through itself so
+          DialogContent keeps scrolling inside the dialog (see TripLogDialog). */}
+      <Box
+        component="form"
+        noValidate
+        onSubmit={handleSubmit}
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          flex: "1 1 auto",
+          minHeight: 0,
+        }}
+      >
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
           <TextField
@@ -590,6 +633,9 @@ function CanyonDialog({
             onChange={(e) => setName(e.target.value)}
             required
             error={invalidField === "name"}
+            // Focused imperatively by the form-reset effect above, which shares
+            // the pick-on-map guard.
+            inputRef={nameInputRef}
             size="small"
           />
           <TextField
@@ -798,7 +844,10 @@ function CanyonDialog({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             multiline
+            // Already auto-grew, but without a bound — a long canyon note grew
+            // the box forever. Same cap as the trip dialog's notes.
             minRows={2}
+            maxRows={NOTES_MAX_ROWS}
             size="small"
           />
 
@@ -826,6 +875,7 @@ function CanyonDialog({
                     size="small"
                     onClick={() => setFieldToDelete(def)}
                     sx={{
+                      ...touchTargetSx,
                       color: "var(--theme-text-muted)",
                       flexShrink: 0,
                       "&:hover": { color: "var(--theme-warning)" },
@@ -874,6 +924,7 @@ function CanyonDialog({
                 setShowAddField(true);
               }}
               sx={{
+                ...touchTargetSx,
                 color: "var(--theme-accent)",
                 textTransform: "none",
                 alignSelf: "flex-start",
@@ -1009,22 +1060,28 @@ function CanyonDialog({
         </Box>
       </DialogContent>
       <DialogActions>
+        {/* Same collision as TripLogDialog: AddCustomFieldForm renders its own
+            "Cancel" that only backs out of the sub-form. Name the object. */}
         <Button
           onClick={guard.requestClose}
           disabled={saving}
-          sx={{ color: "var(--theme-text-primary)" }}
+          sx={{ ...dialogActionButtonSx, color: "var(--theme-text-primary)" }}
         >
-          Cancel
+          {isEdit ? "Discard changes" : "Discard canyon"}
         </Button>
+        {/* type="submit" with no onClick — handleSubmit is the only save path,
+            so a click can't fire alongside the form's submit. */}
         <Button
+          type="submit"
           variant="contained"
           color="secondary"
-          onClick={handleSave}
           disabled={saving}
+          sx={dialogActionButtonSx}
         >
           {saving ? <CircularProgress size={20} /> : "Save"}
         </Button>
       </DialogActions>
+      </Box>
     </Dialog>
 
     <DeleteCustomFieldDialog

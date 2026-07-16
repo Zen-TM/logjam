@@ -24,6 +24,16 @@ export const AUTO_LINK_DIST_M = 250; // typo-tier auto-link radius (coords must 
 // reconcile against a foreign DB. Widen the radius only for exact names.
 export const EXACT_NAME_AUTO_DIST_M = 2000;
 export const REVIEW_DIST_M = 1000;
+// Governs a DEFAULT, not a possibility. Read that distinction before changing it:
+// every constant above decides whether a candidate may be matched at all; this
+// one decides only which radio button starts selected once a match is already
+// being offered. Beyond this radius the suggested canyon is still listed, still
+// badged "best guess", and still one click away — the row just starts on
+// "create as new" instead. Merging is the destructive direction (it folds a
+// distinct canyon into another one and the source row is gone), so a guess the
+// coordinates don't corroborate must not be pre-accepted on the user's behalf.
+// See defaultsToMergeOnImport.
+export const MERGE_DEFAULT_DIST_M = 500;
 export const NAME_MATCH_DIST_M = 5000; // strong name match still wins beyond review radius
 export const BBOX_DEG = 0.05; // ~5 km coarse prefilter; must exceed NAME_MATCH_DIST_M
 
@@ -159,12 +169,19 @@ export function normalizeCanyonName(raw: string): NormalizedName {
   return { base, baseDespaced, tokens, qualifiers, locationHint };
 }
 
-function qualifierSetsEqual(a: Set<string>, b: Set<string>): boolean {
+function setsEqual(a: Set<string>, b: Set<string>): boolean {
   if (a.size !== b.size) return false;
   for (const value of a) {
     if (!b.has(value)) return false;
   }
   return true;
+}
+
+// Purely numeric tokens of a base, after step 7 has folded number-words onto
+// digits ("Wollangambe Two" -> {"2"}). A name with no number yields an empty
+// set, which deliberately does not equal {"2"} — see nameTier.
+function numberTokens(name: NormalizedName): Set<string> {
+  return new Set(name.tokens.filter((token) => /^\d+$/.test(token)));
 }
 
 // Damerau-Levenshtein edit distance (optimal string alignment variant), which
@@ -212,7 +229,7 @@ export type NameTier = "exact" | "typo" | "qualifier-mismatch" | "none";
 
 // Pairwise name comparison between two already-normalized names.
 export function nameTier(a: NormalizedName, b: NormalizedName): NameTier {
-  const qualifiersEqual = qualifierSetsEqual(a.qualifiers, b.qualifiers);
+  const qualifiersEqual = setsEqual(a.qualifiers, b.qualifiers);
 
   // Empty bases never match — fail loudly rather than treating "" === "".
   if (!a.baseDespaced || !b.baseDespaced) return "none";
@@ -220,6 +237,17 @@ export function nameTier(a: NormalizedName, b: NormalizedName): NameTier {
   if (a.baseDespaced === b.baseDespaced) {
     return qualifiersEqual ? "exact" : "qualifier-mismatch";
   }
+
+  // A number in a canyon name is identity, not spelling: "Wollangambe One" and
+  // "Wollangambe Two" are different canyons, but their bases ("wollangambe 1" /
+  // "wollangambe 2") sit one edit apart and would otherwise read as a typo.
+  // Disagreeing digits are a deliberate non-match, the same call the qualifier
+  // rule below makes for Bowens Creek North vs South. One-sided numbers count as
+  // disagreement ("Wollangambe" vs "Wollangambe Two"): the bare name cannot
+  // identify which of the numbered canyons is meant, so it must not merge into
+  // one of them by edit distance. Bases that despace-match are returned above,
+  // so this only ever gates the fuzzy path.
+  if (!setsEqual(numberTokens(a), numberTokens(b))) return "none";
 
   // Typo tolerance: bases close under edit distance and qualifiers agree.
   // Threshold scales with the (shorter) base length: short names get 1 edit,
@@ -357,6 +385,32 @@ export function matchCanyon(
 
   const confidence = decideConfidence(best, ranked, inputHasCoords);
   return { confidence, best, candidates: ranked };
+}
+
+// Should a surfaced (confidence "review") canyon-import row start on "merge into
+// this match", or on "create as new"?
+//
+// Only the canyon-import path asks this question: there, the two answers are
+// "fold this row into that canyon" vs "add a new canyon", and the first one is
+// destructive. Trip-log matching has no destructive direction (linking a trip to
+// a canyon is reversible and creates nothing), so it does not use this and keeps
+// pre-selecting its best guess.
+//
+// The rule: pre-select the merge only when the coordinates positively corroborate
+// it inside MERGE_DEFAULT_DIST_M. A null distance means the row carried no coords
+// to corroborate with, which is not corroboration — it defaults to create-as-new
+// too. (Canyon-import rows always have coords, so null cannot occur on today's
+// only caller; the rule is stated here so it stays right if that changes.)
+//
+// Rows that auto-link (confidence "auto") never reach this function: they are
+// merged without being surfaced at all, on the strength of AUTO_LINK_DIST_M or
+// EXACT_NAME_AUTO_DIST_M. Those radii are a separate, deliberately calibrated
+// decision and this constant does not narrow them.
+export function defaultsToMergeOnImport(best: ScoredCandidate | null): boolean {
+  if (!best) return false;
+  const distance = best.distanceMeters;
+  if (distance === null) return false;
+  return distance <= MERGE_DEFAULT_DIST_M;
 }
 
 function decideConfidence(

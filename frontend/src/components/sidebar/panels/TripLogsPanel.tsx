@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useStoredState } from "../../../useStoredState";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import type { TCanyon, TTripLog } from "../../../canyonUtils";
 import { tripTitle } from "../../../canyonUtils";
@@ -40,10 +41,14 @@ function TripLogsPanel({
   onRefetchCanyons: () => void;
   onOpenUnifiedImport: () => void;
 }) {
-  const [search, setSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
+  // Ephemeral filters — session-scoped, matching the canyon search. They survive
+  // the panel's unmount-on-close (and a tab switch) so a mid-task filter isn't
+  // retyped, but they're gone next session: a date range remembered for a month
+  // hides trips the user never asked to hide (UX finding 5).
+  const [search, setSearch] = useStoredState("logjam.tripSearch", "", sessionStorage);
+  const [dateFrom, setDateFrom] = useStoredState("logjam.tripDateFrom", "", sessionStorage);
+  const [dateTo, setDateTo] = useStoredState("logjam.tripDateTo", "", sessionStorage);
+  const [typeFilter, setTypeFilter] = useStoredState("logjam.tripTypeFilter", "", sessionStorage);
   const [viewingTripLog, setViewingTripLog] = useState<TTripLog | null>(null);
   const [editingTripLog, setEditingTripLog] = useState<TTripLog | undefined>(undefined);
   const [showViewDialog, setShowViewDialog] = useState(false);

@@ -63,6 +63,18 @@ sx={{
 Select paper: `backgroundColor: "var(--theme-primary)"`, `color: "var(--theme-text-primary)"`.
 Can be set once at `Dialog PaperProps` level (cascades) or per-field.
 
+## Touch targets
+
+Compact controls (icon buttons, the delete bins, small text buttons, checkboxes) spread `touchTargetSx` from `csvImport/dialogStyles.tsx`. It grows the **hit area** to 44×44 via a centred pseudo-element while leaving the rendered box alone, so the target meets HIG/Material/WCAG without changing the form's vertical rhythm.
+
+Don't "fix" this by forcing a visual 44px onto every control instead: measured on the Log Trip form at 390×844, that adds **77px** of scroll and pushes the whole custom-field stack under the soft keyboard, for controls whose mis-tap cost is zero (a 342px-wide text field). The pseudo-element expands into the row's dead gap only — it never overlaps the neighbouring input's target.
+
+Real `minHeight: 44` (via `dialogActionButtonSx`) is right for `DialogActions` buttons: they're the primary actions and sit outside the scrolling body, so the pixels are free.
+
+## Multiline notes
+
+Notes fields are `multiline` + `minRows` + `maxRows={NOTES_MAX_ROWS}` — never `rows` (fixed height nests a scrollbar inside an already-scrolling dialog). `minRows` is a per-dialog choice; the cap is shared and lives in `dialogStyles.tsx`.
+
 ## Conventions log (additive)
 
 - **Attaching media before an entity exists (TripLogDialog):** lazy-draft pattern — first upload creates a draft row to link files to; Save PATCHes it; Cancel/close DELETEs it (cascade removes media). Avoids orphan rows when user cancels without uploading.

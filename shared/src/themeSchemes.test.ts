@@ -3,10 +3,12 @@ import {
   isThemeSchemeId,
   isNotificationPreferences,
   normalizeUserUiPreferences,
+  normalizeImportMergePolicy,
   DEFAULT_THEME_SCHEME_ID,
   DEFAULT_NOTIFICATION_PREFERENCES,
   THEME_SCHEME_ORDER,
 } from "./themeSchemes.js";
+import { DEFAULT_CANYON_MERGE_POLICY } from "./mergeCanyon.js";
 
 describe("isThemeSchemeId", () => {
   it("accepts every known scheme id", () => {
@@ -114,5 +116,42 @@ describe("normalizeUserUiPreferences", () => {
   it("uses all notification defaults when notifications missing", () => {
     const result = normalizeUserUiPreferences({ themeSchemeId: "ironbark" });
     expect(result.notifications).toEqual(DEFAULT_NOTIFICATION_PREFERENCES);
+  });
+});
+
+describe("normalizeImportMergePolicy", () => {
+  it("round-trips a complete policy, attributes included", () => {
+    const policy = { ...DEFAULT_CANYON_MERGE_POLICY, attributes: "useIncoming" as const };
+    expect(normalizeImportMergePolicy(policy)).toEqual(policy);
+  });
+
+  // The normalizer rebuilds the policy from the shared field list, so a field
+  // missing from that list is silently dropped on save — which is how the user's
+  // "Custom attributes: use file" choice would fail to persist.
+  it("preserves the attributes entry rather than dropping it", () => {
+    const result = normalizeImportMergePolicy({
+      ...DEFAULT_CANYON_MERGE_POLICY,
+      attributes: "useIncoming",
+    });
+    expect(result?.attributes).toBe("useIncoming");
+  });
+
+  it("rejects a policy missing the attributes entry", () => {
+    const { attributes: _omitted, ...incomplete } = DEFAULT_CANYON_MERGE_POLICY;
+    expect(normalizeImportMergePolicy(incomplete)).toBeUndefined();
+  });
+
+  it("rejects an unknown value", () => {
+    expect(
+      normalizeImportMergePolicy({ ...DEFAULT_CANYON_MERGE_POLICY, notes: "useFile" }),
+    ).toBeUndefined();
+  });
+
+  it("drops unknown keys", () => {
+    const result = normalizeImportMergePolicy({
+      ...DEFAULT_CANYON_MERGE_POLICY,
+      somethingElse: "useIncoming",
+    });
+    expect(result).toEqual(DEFAULT_CANYON_MERGE_POLICY);
   });
 });

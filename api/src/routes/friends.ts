@@ -6,6 +6,7 @@ import { friendsSearchLimiter } from "../middleware/rateLimit";
 import { getParam } from "../lib/getParam";
 import { normalizeUserUiPreferences } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
+import { logger } from "../lib/logger";
 
 async function wantsInAppNotification(
   userId: string,
@@ -313,6 +314,164 @@ router.delete(
     ]);
 
     res.status(204).send();
+  },
+);
+
+// ── Sharing audit (fix 24) ────────────────────────────────────
+//
+// "What does Bob see, and how do I take it all back?" Sharing is authored
+// per-canyon, so the per-person view had no surface; these two routes are it.
+//
+// `:id` is a FRIENDSHIP id, matching every other `/friends/:id/*` route
+// (accept / decline / DELETE). That is also the authorization anchor: shares
+// only ever exist between friends (POST /canyons/:id/share enforces it), so
+// resolving the friendship and asserting membership is the whole check.
+//
+// ACCESS DECISION — why these do NOT call lib/canyonAccess.ts:
+// those helpers answer "what is my role on THIS canyon" and exist to vet an
+// arbitrary caller-supplied canyon id. These routes accept no canyon id: the
+// set is derived from the caller's own ownership via `canyon: { ownerId }`,
+// so a canyon the caller can't see is simply absent and there is no id to
+// vet. Same pattern (and same rationale) as GET /canyons/tracks and GET
+// /canyons. Filtering on the canyon's `ownerId` rather than the share's
+// `sharedById` is deliberate: it derives from ownership directly instead of
+// trusting that `sharedById` still equals the owner.
+//
+// EMAIL: these responses join no User rows at all — the friend's identity is
+// already known from the friendship, and canyon rows carry no user fields. The
+// username-only rule for /friends is therefore structural here, not a `select`
+// that could drift (see the `select` below: id/name/createdAt only).
+
+/**
+ * Canyons I OWN that are shared with `friendId`. Deriving the set from the
+ * canyon's `ownerId` (not the share's `sharedById`) is what makes it
+ * impossible to list or revoke a share on a canyon the caller doesn't own.
+ */
+export function ownedSharesToFriendWhere(userId: string, friendId: string) {
+  return { sharedWithId: friendId, canyon: { ownerId: userId } };
+}
+
+/** Canyons `friendId` owns that are shared with me. The mirror image. */
+export function receivedSharesFromFriendWhere(userId: string, friendId: string) {
+  return { sharedWithId: userId, canyon: { ownerId: friendId } };
+}
+
+// Resolve a friendship the caller is a member of, and return the other party's
+// id. 403 (not 404) for a non-member mirrors DELETE /friends/:id and
+// /:id/accept — the anti-oracle 404 rule is scoped to canyon ids, and no canyon
+// id is accepted here.
+export async function resolveFriendCounterpart(
+  friendshipId: string,
+  userId: string,
+): Promise<string> {
+  const friendship = await prisma.friendship.findUnique({
+    where: { id: friendshipId },
+  });
+  if (!friendship) throw new AppError(404, "Friendship not found");
+  if (friendship.status !== "accepted")
+    throw new AppError(400, "No accepted friendship found");
+  const isMember =
+    friendship.requesterId === userId || friendship.addresseeId === userId;
+  if (!isMember) throw new AppError(403, "Access denied");
+  return friendship.requesterId === userId
+    ? friendship.addresseeId
+    : friendship.requesterId;
+}
+
+// ── GET /friends/:id/shares ───────────────────────────────────
+// Both directions of the sharing relationship with one friend, in one trip.
+router.get(
+  "/:id/shares",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const friendId = await resolveFriendCounterpart(
+      getParam(req.params.id),
+      user.id,
+    );
+
+    // Minimal projection: no coords, no notes — an audit list needs a label.
+    const select = {
+      id: true,
+      canyon: { select: { id: true, name: true } },
+      createdAt: true,
+    };
+
+    const [theirs, mine] = await Promise.all([
+      // Canyons I own that this friend can see.
+      prisma.canyonShare.findMany({
+        where: ownedSharesToFriendWhere(user.id, friendId),
+        select,
+        orderBy: { createdAt: "desc" },
+      }),
+      // Canyons this friend owns that I can see.
+      prisma.canyonShare.findMany({
+        where: receivedSharesFromFriendWhere(user.id, friendId),
+        select,
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+
+    const shape = (rows: typeof theirs) =>
+      rows.map((r) => ({
+        canyonId: r.canyon.id,
+        name: r.canyon.name,
+        sharedAt: r.createdAt,
+      }));
+
+    res.json({ sharedWithThem: shape(theirs), sharedWithYou: shape(mine) });
+  },
+);
+
+// ── DELETE /friends/:id/shares ────────────────────────────────
+// "Unshare all" — revoke every canyon I OWN that is shared with this friend.
+// One direction only, by design: it never touches what the friend shares with
+// me (that is their grant to withdraw, or mine to drop one row at a time via
+// DELETE /canyons/:id/share/me). The friendship itself survives — that is the
+// difference from DELETE /friends/:id, which revokes both directions and is
+// the existing bulk lever if you want the person gone entirely.
+router.delete(
+  "/:id/shares",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const friendId = await resolveFriendCounterpart(
+      getParam(req.params.id),
+      user.id,
+    );
+
+    // Collect before deleting so each revoked canyon's residual
+    // canyon_shared notification can be purged too (PRIV-001), exactly as
+    // DELETE /friends/:id does.
+    const revoked = await prisma.canyonShare.findMany({
+      where: ownedSharesToFriendWhere(user.id, friendId),
+      select: { id: true, canyonId: true },
+    });
+
+    if (revoked.length > 0) {
+      await prisma.$transaction([
+        prisma.canyonShare.deleteMany({
+          where: { id: { in: revoked.map((r) => r.id) } },
+        }),
+        ...revoked.map((r) =>
+          prisma.notification.deleteMany({
+            where: {
+              userId: friendId,
+              type: "canyon_shared",
+              payload: { path: ["canyonId"], equals: r.canyonId },
+            },
+          }),
+        ),
+      ]);
+    }
+
+    // Count only — never the canyon names/coords that were revoked (PRIV-005).
+    logger.info(
+      { userId: user.id, revokedCount: revoked.length },
+      "shares_bulk_revoked",
+    );
+
+    res.json({ revokedCount: revoked.length });
   },
 );
 

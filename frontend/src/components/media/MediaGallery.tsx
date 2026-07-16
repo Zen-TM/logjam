@@ -68,6 +68,7 @@ export default function MediaGallery({
             return (
               <div key={m.id} className={classes.tile}>
                 <button
+                  type="button"
                   className={classes.tileButton}
                   onClick={() => setLightbox(m)}
                   aria-label={`View ${m.filename}`}
@@ -96,6 +97,7 @@ export default function MediaGallery({
                 </button>
                 {canDelete && (
                   <button
+                    type="button"
                     className={classes.deleteBtn}
                     onClick={() => void handleDelete(m.id)}
                     disabled={deletingId === m.id}
@@ -120,6 +122,7 @@ export default function MediaGallery({
               </a>
               {canDelete && (
                 <button
+                  type="button"
                   className={classes.deleteBtnInline}
                   onClick={() => void handleDelete(m.id)}
                   disabled={deletingId === m.id}

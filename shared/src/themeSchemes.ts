@@ -2,6 +2,7 @@ import {
   isTripLogCustomFieldDef,
   type TripLogCustomFieldDef,
 } from "./tripLogFields.js";
+import { MERGEABLE_FIELDS } from "./mergeCanyon.js";
 
 export type ThemeSchemeId = "sandstone" | "basalt" | "scribblyGum" | "ironbark";
 
@@ -189,10 +190,6 @@ function normalizeCustomFieldDefs(value: unknown): TripLogCustomFieldDef[] {
     .filter(isTripLogCustomFieldDef);
 }
 
-const IMPORT_MERGE_POLICY_FIELDS = [
-  "vGrade", "aGrade", "commitment", "quality", "numAbseils", "longestAbseil", "hours", "notes",
-] as const;
-
 const VALID_MERGE_VALUES = new Set(["keepExisting", "useIncoming"]);
 
 /**
@@ -207,7 +204,7 @@ export function normalizeImportMergePolicy(
   if (typeof value !== "object" || value === null) return undefined;
   const candidate = value as Record<string, unknown>;
   const result: Record<string, string> = {};
-  for (const field of IMPORT_MERGE_POLICY_FIELDS) {
+  for (const field of MERGEABLE_FIELDS) {
     const v = candidate[field];
     if (typeof v !== "string" || !VALID_MERGE_VALUES.has(v)) return undefined;
     result[field] = v;

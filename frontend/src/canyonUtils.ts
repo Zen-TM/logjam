@@ -31,8 +31,17 @@ export type TCanyon = {
   updatedAt: string;
   // Populated only by the canyon-detail endpoint (GET /canyons/:id), not the list.
   media?: MediaItem[];
-  // Populated only by the list endpoints (GET /canyons[/shared]). `shares` powers
-  // the "shared by me" filter + the card badge on owned canyons.
+  // Populated only by the OWNED list (GET /canyons) — never by GET /canyons/shared
+  // and never by the detail endpoint. `shares` powers the "shared by me" filter +
+  // the card badge; `tripLogLinks` the completion filter + per-row trip count.
+  //
+  // Optional because on a canyon shared WITH you these counts are absent by
+  // design, not zero: the trip tally is the owner's private trip-list
+  // cardinality and `shares` is their fan-out to other people, so the API
+  // withholds both (see canyonListInclude in api/src/routes/canyons.ts). Absent
+  // means "not yours to know" — so never coalesce it to 0 and present that as an
+  // answer about a shared canyon. Gate every read on ownership, as passesFilters
+  // and the CanyonsPanel row both do.
   _count?: { tripLogLinks: number; shares: number };
 };
 
@@ -142,6 +151,9 @@ export type TFilters = {
   ownership: "all" | "owned" | "shared";
   // When true, keep only canyons the user has shared with at least one friend.
   shared_by_me: boolean;
+  // "Have I done it?" — a canyon is done once it has at least one linked trip,
+  // the same rule AnalyticsPanel's completion ring counts (canyonsWithTrips).
+  completion: "any" | "done" | "not_done";
   created_at: TDateRange | null;
   updated_at: TDateRange | null;
   ropewiki: "any" | "linked" | "unlinked";
@@ -719,10 +731,19 @@ export type BulkCanyonRequest = {
   mergePolicy?: CanyonMergePolicy;
 };
 
+// One row that folded into an existing canyon: the name as it appeared in the
+// user's file, and the canyon it merged into. Reported per merge so the import
+// can say which canyons it changed, not just how many.
+export type CanyonMergePair = {
+  sourceName: string;
+  targetName: string;
+};
+
 export type BulkCanyonResult = {
   batchId: string;
   created: number;
   merged: number;
+  merges: CanyonMergePair[];
   skipped: number;
   errors: { rowIndex: number; message: string }[];
 };
@@ -895,12 +916,13 @@ export function deleteMedia(id: string): Promise<void> {
 
 // ── Analytics ─────────────────────────────────────────────────
 
+// /analytics is the canyoning surface: the server scopes every trip-derived
+// stat to trips that are canyon-linked OR tagged canyoning (a canyon link means
+// "I completed that canyon on that trip"). There is no type filter — it took no
+// argument but "canyoning" from its only caller, and there is no dropdown.
 export type TAnalytics = {
   heroStats: {
     totalTrips: number;
-    // Trips of another type (or untyped) not shown by the type-scoped Activity
-    // chart. 0 when the analytics call carries no type filter.
-    excludedTrips: number;
     uniqueCanyons: number;
     daysCanyoning: number;
     totalAbseils: number | null;
@@ -909,18 +931,17 @@ export type TAnalytics = {
     totalCanyons: number;
     canyonsWithTrips: number;
   };
+  // Per-day trip counts across ALL trip types — drives the Activity calendar.
   tripDates: Record<string, number>;
-  // Distinct types across ALL the user's trips (for the filter dropdown) —
-  // unaffected by the `type` filter itself.
+  // Distinct types across ALL the user's trips, canyoning or not.
   types: string[];
 };
 
-export function getAnalytics(type?: string | null): Promise<TAnalytics> {
-  const qs = type ? `?type=${encodeURIComponent(type)}` : "";
-  return apiFetch<TAnalytics>(`/analytics${qs}`);
+export function getAnalytics(): Promise<TAnalytics> {
+  return apiFetch<TAnalytics>("/analytics");
 }
 
-export function useAnalytics(enabled: boolean, type: string | null = null) {
+export function useAnalytics(enabled: boolean) {
   const [analytics, setAnalytics] = useState<TAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -929,11 +950,11 @@ export function useAnalytics(enabled: boolean, type: string | null = null) {
   useEffect(() => {
     if (!enabled) return;
     setLoading(true);
-    getAnalytics(type)
+    getAnalytics()
       .then(setAnalytics)
       .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load analytics.")); })
       .finally(() => setLoading(false));
-  }, [enabled, type, fetchCount]);
+  }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
@@ -1023,6 +1044,40 @@ export function getCanyonShares(canyonId: string): Promise<TCanyonShare[]> {
   return apiFetch<TCanyonShare[]>(`/canyons/${canyonId}/shares`);
 }
 
+// ── Sharing audit, per friend (fix 24) ────────────────────────
+// Answers "what does Bob see?" from the Friends panel. Deliberately a dedicated
+// endpoint rather than share rows on the /canyons list payload: the list is
+// capped at 500 (so client-side grouping would silently under-count), and the
+// list helper also serves /canyons/shared, where recipient rows would expose the
+// owner's other recipients to a sharee.
+
+export type TFriendShareRow = {
+  canyonId: string;
+  name: string;
+  sharedAt: string;
+};
+
+export type TFriendShares = {
+  // Canyons I own that this friend can see.
+  sharedWithThem: TFriendShareRow[];
+  // Canyons this friend owns that I can see. Read-only in bulk — see
+  // FriendSharingSection.
+  sharedWithYou: TFriendShareRow[];
+};
+
+export function getFriendShares(friendshipId: string): Promise<TFriendShares> {
+  return apiFetch<TFriendShares>(`/friends/${friendshipId}/shares`);
+}
+
+/** Revoke every canyon I own that is shared with this friend. Friendship survives. */
+export function unshareAllWithFriend(
+  friendshipId: string,
+): Promise<{ revokedCount: number }> {
+  return apiFetch<{ revokedCount: number }>(`/friends/${friendshipId}/shares`, {
+    method: "DELETE",
+  });
+}
+
 export function copyCanyon(canyonId: string): Promise<TCanyon> {
   return apiFetch<TCanyon>(`/canyons/${canyonId}/copy`, { method: "POST" });
 }
@@ -1087,6 +1142,7 @@ export const emptyFilters: TFilters = {
   hours: null,
   ownership: "all",
   shared_by_me: false,
+  completion: "any",
   created_at: null,
   updated_at: null,
   ropewiki: "any",
@@ -1116,6 +1172,7 @@ function isFilterActive(filters: TFilters, key: keyof TFilters): boolean {
   if (key === "name") return !!filters.name && filters.name.trim() !== "";
   if (key === "ownership") return filters.ownership !== "all";
   if (key === "shared_by_me") return filters.shared_by_me;
+  if (key === "completion") return filters.completion !== "any";
   if (key === "ropewiki") return filters.ropewiki !== "any";
   if (key === "include_unknowns") return false; // a modifier, not a filter
   const rangeDefault = RANGE_FILTER_DEFAULTS.find(([k]) => k === key);
@@ -1145,6 +1202,7 @@ const COUNTED_FILTER_KEYS: (keyof TFilters)[] = [
   ...DATE_FILTER_KEYS,
   "ownership",
   "shared_by_me",
+  "completion",
   "ropewiki",
 ];
 
@@ -1257,6 +1315,21 @@ export function passesFilters(
   if (filters.ownership === "shared" && isOwned) return false;
 
   if (filters.shared_by_me && (canyon._count?.shares ?? 0) === 0) return false;
+
+  // Completion asks "have *I* done it", so the trip count is only read for
+  // canyons the viewer owns. A trip can only link to its own owner's canyons
+  // (resolveTripCanyonIds enforces ownerId), so on a canyon shared *with* the
+  // viewer `_count.tripLogLinks` is the OWNER's tally, not theirs — reading it
+  // would answer the wrong question (marking a canyon done because a friend ran
+  // it) and surface how often that friend runs it. The viewer structurally
+  // cannot have a linked trip there, so a shared canyon is never "done".
+  // Deliberately ignores include_unknowns: a missing `_count` is a payload
+  // shape, not a data gap — zero trips is a real answer, not an unknown one.
+  if (filters.completion !== "any") {
+    const doneByViewer = isOwned && (canyon._count?.tripLogLinks ?? 0) > 0;
+    if (filters.completion === "done" && !doneByViewer) return false;
+    if (filters.completion === "not_done" && doneByViewer) return false;
+  }
 
   if (filters.ropewiki === "linked" && canyon.ropeWikiId == null) return false;
   if (filters.ropewiki === "unlinked" && canyon.ropeWikiId != null) return false;
@@ -1489,13 +1562,28 @@ export function useLiveVectorStyle(enabled: boolean): {
   return { vectorStyle: liveStyle, setVectorStyle, loadError, saveError };
 }
 
+const COMMITMENT_NUMERALS = ["I", "II", "III", "IV", "V", "VI"];
+
+/**
+ * Render a canyon's grade as `v3a4 III`, omitting any segment that isn't set.
+ *
+ * Unset segments are dropped rather than filled with a placeholder: a literal
+ * `v2a?` reads as corrupt data, when it only means "no A grade recorded"
+ * (UX fix 4). `v` and `a` stay glued together (`v2a3`) because that's how the
+ * grade is written; the commitment numeral is space-separated.
+ *
+ * Returns null when nothing is set, so callers can drop the "Grade:" label
+ * entirely instead of printing an empty one.
+ */
 export function formatCanyonGrade(canyon: TCanyon): string | null {
   const { vGrade, aGrade, commitment } = canyon;
-  if (!vGrade && !aGrade && !commitment) return null;
-  const v = vGrade ? `v${vGrade}` : "v?";
-  const a = aGrade ? `a${aGrade}` : "a?";
-  const c = commitment
-    ? " " + ["I", "II", "III", "IV", "V", "VI"][commitment - 1]
+  const vaGrade = `${vGrade ? `v${vGrade}` : ""}${aGrade ? `a${aGrade}` : ""}`;
+  // Commitment is validated to 1-6 (shared/src/canyonValidation.ts), but index
+  // defensively: a display formatter must never render "undefined" to the user.
+  const commitmentNumeral = commitment
+    ? (COMMITMENT_NUMERALS[commitment - 1] ?? "")
     : "";
-  return `${v}${a}${c}`;
+  const segments = [vaGrade, commitmentNumeral].filter((s) => s !== "");
+  if (segments.length === 0) return null;
+  return segments.join(" ");
 }

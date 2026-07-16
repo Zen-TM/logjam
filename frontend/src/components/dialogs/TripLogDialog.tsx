@@ -30,6 +30,8 @@ import {
   TRIP_TYPE_SUGGESTIONS,
   MAX_CANYONS_PER_TRIP,
   MAX_TRIP_TYPES_PER_TRIP,
+  CANYONING_TRIP_TYPE,
+  enforceCanyoningTag,
 } from "@logjam/shared";
 import type { TCanyon, TTripLog } from "../../canyonUtils";
 import {
@@ -41,7 +43,21 @@ import {
   updateUserPreferences,
 } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
-import { fieldSx, typeChipSx } from "../../csvImport/dialogStyles";
+import {
+  clearTripDraft,
+  readTripDraft,
+  tripFormFingerprint,
+  writeTripDraft,
+  type TripDraft,
+  type TripDraftForm,
+} from "../../tripDraft";
+import {
+  fieldSx,
+  typeChipSx,
+  touchTargetSx,
+  dialogActionButtonSx,
+  NOTES_MAX_ROWS,
+} from "../../csvImport/dialogStyles";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
 import AddCustomFieldForm from "./AddCustomFieldForm";
@@ -90,7 +106,26 @@ function getOptionLabel(opt: CanyonOption | string): string {
 
 const canyonFilter = createFilterOptions<CanyonOption>();
 
-type CreateForm = { name: string; latitude: string; longitude: string };
+// The pending inline-create is part of the persisted draft, so its shape is
+// declared once in tripDraft.ts and derived here rather than repeated.
+type CreateForm = NonNullable<TripDraftForm["creating"]>;
+
+// Autosave trails typing by this much: long enough that a sentence is one write
+// rather than forty, short enough that a phone call mid-word still loses at
+// most half a second of text.
+const DRAFT_AUTOSAVE_DEBOUNCE_MS = 500;
+
+// The draft's savedAt is a true timestamp, so it formats in local time — the
+// `timeZone: "UTC"` rule covers date-only values (trip dates), not this. Inside
+// the 7-day expiry window a weekday + time is unambiguous and reads the way the
+// user remembers the trip ("Tuesday evening").
+function formatDraftSavedAt(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: "long",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 // ── Type option union ────────────────────────────────────────
 // Mirrors the Canyons picker: existing suggestions plus a synthetic
@@ -174,6 +209,17 @@ function TripLogDialog({
   // at once (before that, errors only show after a field is blurred).
   const [showFieldErrors, setShowFieldErrors] = useState(false);
 
+  // Linking a canyon means "I did that canyon on this trip", so the API
+  // force-tags `canyoning` on save. Mirror that in the selection itself (rather
+  // than only in the rendered chips) so the tag is visible before the user hits
+  // Save instead of appearing afterwards, and so the cap checks below count it
+  // exactly as storage does. enforceCanyoningTag returns its input unchanged
+  // when there's nothing to add, so this settles immediately.
+  const hasLinkedCanyon = selectedCanyonIds.length > 0;
+  useEffect(() => {
+    setSelectedTypes((prev) => enforceCanyoningTag(prev, hasLinkedCanyon));
+  }, [hasLinkedCanyon]);
+
   // The full known-type vocabulary: built-in suggestions ∪ the user's own
   // history, deduped case-insensitively (first casing wins).
   const knownTypes = useMemo(
@@ -207,6 +253,8 @@ function TripLogDialog({
   const draftPromiseRef = useRef<Promise<string> | null>(null);
   // Tracks pick-on-map cycle so the reset useEffect skips when returning.
   const pickingRef = useRef(false);
+  // First field, focused on a fresh open by the reset effect below.
+  const canyonInputRef = useRef<HTMLInputElement>(null);
 
   // Add custom field form state
   const [showAddField, setShowAddField] = useState(false);
@@ -254,8 +302,31 @@ function TripLogDialog({
 
   // Snapshot of the form fields as populated below, taken in the same effect
   // that sets them — used by the unsaved-changes guard to tell a real edit
-  // apart from "the dialog is open" (TRIP-3).
+  // apart from "the dialog is open" (TRIP-3). Moves when the form is
+  // re-populated, which includes restoring a draft.
   const initialFormSnapshotRef = useRef<string | null>(null);
+  // Snapshot of a *fresh* form, taken only on open and never re-taken. The two
+  // baselines answer different questions and must not be merged:
+  //   initialFormSnapshot → "would closing lose work done since the form was
+  //     populated?" (the guard's question — a just-restored draft answers no)
+  //   pristineFormSnapshot → "is there anything here worth persisting?"
+  //     (the draft's question — a just-restored draft answers yes)
+  const pristineFormSnapshotRef = useRef<string | null>(null);
+  // A restorable draft found on open, awaiting the user's restore/discard
+  // answer. Non-null suppresses autosave, so ignoring the offer and typing
+  // can't overwrite the very draft being offered. Create mode only.
+  const [restorableDraft, setRestorableDraft] = useState<TripDraft | null>(null);
+  // The same fact as `restorableDraft`, in a ref, because the autosave effect
+  // needs it *synchronously*. Both effects run in one commit and this one is
+  // declared second, so on the pass that opens the dialog it would still read
+  // `restorableDraft === null` from state and arm a timer against last
+  // session's un-flushed form values — which could clear the draft it is about
+  // to offer. The re-render normally cancels that timer long before it fires,
+  // but "normally" is a race, and losing the draft is the failure this whole
+  // module exists to prevent. The ref is set before the timer is ever armed.
+  const draftOfferPendingRef = useRef(false);
+  // One autosave-failure toast per open, not one per keystroke.
+  const draftWarnedRef = useRef(false);
 
   // Populate form when opening for edit (or reset on create).
   // We intentionally exclude customFieldDefs from deps — field defs shouldn't
@@ -278,7 +349,14 @@ function TripLogDialog({
       initialNotes = tripLog.notes ?? "";
       initialSelectedCanyonIds = tripLog.canyons.map((c) => c.id);
       initialDisplayNameInput = tripLog.displayName ?? "";
-      initialSelectedTypes = tripLog.types;
+      // Enforce here rather than letting the effect below do it, so the
+      // unsaved-changes snapshot taken next already includes the tag — a trip
+      // that predates enforcement would otherwise read as dirty the instant it
+      // opened, and prompt on close without the user touching anything.
+      initialSelectedTypes = enforceCanyoningTag(
+        tripLog.types,
+        initialSelectedCanyonIds.length > 0,
+      );
       // Populate existing custom field values as strings
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
@@ -291,7 +369,10 @@ function TripLogDialog({
       initialNotes = "";
       initialSelectedCanyonIds = defaultCanyonId ? [defaultCanyonId] : [];
       initialDisplayNameInput = "";
-      initialSelectedTypes = [];
+      initialSelectedTypes = enforceCanyoningTag(
+        [],
+        initialSelectedCanyonIds.length > 0,
+      );
       initialFieldValues = {};
     }
     setDate(initialDate);
@@ -301,15 +382,26 @@ function TripLogDialog({
     setSelectedTypes(initialSelectedTypes);
     setCreating(null);
     setFieldValues(initialFieldValues);
-    initialFormSnapshotRef.current = JSON.stringify({
+    const initialFingerprint = tripFormFingerprint({
       date: initialDate,
       notes: initialNotes,
       selectedCanyonIds: initialSelectedCanyonIds,
       displayNameInput: initialDisplayNameInput,
       selectedTypes: initialSelectedTypes,
       fieldValues: initialFieldValues,
-      creating: null as CreateForm | null,
+      creating: null,
     });
+    initialFormSnapshotRef.current = initialFingerprint;
+    pristineFormSnapshotRef.current = initialFingerprint;
+    // Offer any autosaved draft rather than restoring it silently: someone who
+    // opened this to log today's trip would otherwise find last Tuesday's text
+    // already typed and have to work out where it came from. Edit mode never
+    // reads the draft — it holds a create form, and pouring it into an existing
+    // trip would overwrite a saved one (tripDraft.ts re-checks `mode` too).
+    const foundDraft = tripLog ? null : readTripDraft(new Date());
+    draftOfferPendingRef.current = foundDraft !== null;
+    setRestorableDraft(foundDraft);
+    draftWarnedRef.current = false;
     setError(null);
     setShowFieldErrors(false);
     setShowAddField(false);
@@ -320,7 +412,41 @@ function TripLogDialog({
     setDraftTripId(null);
     committedRef.current = false;
     draftPromiseRef.current = null;
+
+    // Open ready to type, focusing the first field. Driven from here rather
+    // than an `autoFocus` prop because the decision depends on `foundDraft`,
+    // which only exists on this line: `restorableDraft` is state, so during the
+    // render that mounts the field it is still null and an `autoFocus={!draft}`
+    // prop would focus the canyon input before the offer banner ever rendered —
+    // the same one-commit lag documented on `draftOfferPendingRef` above.
+    //
+    // Two deliberate opt-outs:
+    //  - a draft is being offered: the banner asks a question, and pulling focus
+    //    into the form invites typing into fields that Restore is about to
+    //    overwrite.
+    //  - mobile: focusing pops the on-screen keyboard over the form before the
+    //    user has decided to type, hiding the fields they came to fill in.
+    // The pick-on-map return leg is already excluded — that path returns early
+    // above, so it never reaches this line and can't yank focus off the
+    // coordinates the user just picked.
+    if (!isMobile && foundDraft === null) canyonInputRef.current?.focus();
   }, [open, tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The form as the draft stores it — one object feeding both the dirty-check
+  // and the autosave, so the two can't disagree about what "the form" is.
+  const currentForm: TripDraftForm = useMemo(
+    () => ({
+      date,
+      notes,
+      selectedCanyonIds,
+      displayNameInput,
+      selectedTypes,
+      fieldValues,
+      creating,
+    }),
+    [date, notes, selectedCanyonIds, displayNameInput, selectedTypes, fieldValues, creating],
+  );
+  const currentFingerprint = useMemo(() => tripFormFingerprint(currentForm), [currentForm]);
 
   // Real dirty-check: current form fields vs. the snapshot taken when the
   // dialog was (re)populated — not just "the dialog is open" (TRIP-3). Media
@@ -330,17 +456,81 @@ function TripLogDialog({
   const isDirty =
     open &&
     initialFormSnapshotRef.current !== null &&
-    JSON.stringify({
-      date,
-      notes,
-      selectedCanyonIds,
-      displayNameInput,
-      selectedTypes,
-      fieldValues,
-      creating,
-    }) !== initialFormSnapshotRef.current;
+    currentFingerprint !== initialFormSnapshotRef.current;
+
+  // Whether there's anything in the form worth keeping. Measured against the
+  // pristine baseline, so a restored draft still counts as worth keeping even
+  // though the guard considers it clean.
+  const draftWorthKeeping =
+    open &&
+    !tripLog &&
+    pristineFormSnapshotRef.current !== null &&
+    currentFingerprint !== pristineFormSnapshotRef.current;
 
   const guard = useUnsavedChangesGuard(isDirty, () => void handleRequestClose());
+
+  // Autosave the create form so a phone call, a tab eviction or a flat battery
+  // doesn't take it — the exits `useUnsavedChangesGuard` structurally cannot
+  // cover, because nobody is there to answer its prompt.
+  useEffect(() => {
+    if (!open || tripLog) return;
+    // Don't overwrite the draft we're currently offering to restore.
+    if (restorableDraft) return;
+    const timer = setTimeout(() => {
+      // Both checked at fire time, not effect time: a save that resolves while
+      // this timer is pending would otherwise be followed by the timer
+      // re-writing a draft for the trip that was just saved, and an offer made
+      // on this same commit isn't visible in state yet.
+      if (committedRef.current) return;
+      if (draftOfferPendingRef.current) return;
+      if (!draftWorthKeeping) {
+        // Back to a fresh form — the user emptied it, so the draft goes too.
+        clearTripDraft();
+        return;
+      }
+      const result = writeTripDraft(currentForm, new Date());
+      if (result.status === "saved") return;
+      // A draft the user assumes exists but doesn't is the exact failure this
+      // feature exists to prevent, so say so instead of failing quietly. Once
+      // per open — this runs on every keystroke.
+      if (draftWarnedRef.current) return;
+      draftWarnedRef.current = true;
+      if (result.status === "too-large") {
+        toast.error("These notes are too long to save a local draft. Save the trip so it isn't lost.");
+      } else {
+        console.error(result.error);
+        toast.error("Couldn't save a local draft of this trip. Save it so it isn't lost.");
+      }
+    }, DRAFT_AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [open, tripLog, restorableDraft, draftWorthKeeping, currentForm, toast]);
+
+  function handleRestoreDraft() {
+    if (!restorableDraft) return;
+    const { form } = restorableDraft;
+    setDate(form.date);
+    setNotes(form.notes);
+    setSelectedCanyonIds(form.selectedCanyonIds);
+    setDisplayNameInput(form.displayNameInput);
+    setSelectedTypes(form.selectedTypes);
+    setFieldValues(form.fieldValues);
+    setCreating(form.creating);
+    // The guard's baseline moves with the restore: the form was just populated
+    // from the draft, so "dirty" means changed *since* the restore. Closing
+    // straight after restoring shouldn't prompt to discard changes the user
+    // just asked to keep — and the draft stays on disk regardless.
+    initialFormSnapshotRef.current = tripFormFingerprint(form);
+    // pristineFormSnapshotRef deliberately does NOT move — the restored form is
+    // still worth autosaving, so it survives a second eviction.
+    draftOfferPendingRef.current = false;
+    setRestorableDraft(null);
+  }
+
+  function handleDiscardDraft() {
+    clearTripDraft();
+    draftOfferPendingRef.current = false;
+    setRestorableDraft(null);
+  }
 
   // In edit mode, fetch the trip's existing media (with fresh presigned URLs).
   useEffect(() => {
@@ -455,6 +645,18 @@ function TripLogDialog({
     });
   }
 
+  // Enter-to-submit. This repeats the Save button's `disabled` condition on
+  // purpose: a form still submits on Enter while its submit button is disabled,
+  // so the precondition has to be enforced here too or Enter becomes a way
+  // around it (notably a second save while one is already in flight). The Save
+  // button is `type="submit"` with no onClick, so pointer and keyboard share
+  // this single path and cannot both fire for one interaction.
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving || !date) return;
+    void handleSave();
+  }
+
   async function handleSave() {
     if (!date) {
       setError("Date is required.");
@@ -515,6 +717,10 @@ function TripLogDialog({
         });
       }
       committedRef.current = true;
+      // The trip is persisted server-side; the local draft has done its job.
+      // Only in create mode — in edit mode the slot holds an unrelated create
+      // draft that this save says nothing about.
+      if (!tripLog) clearTripDraft();
       onSaved();
       toast.success("Trip log saved.");
       onClose();
@@ -582,20 +788,86 @@ function TripLogDialog({
           size="small"
           onClick={guard.requestClose}
           disabled={saving}
-          sx={{ color: "var(--theme-text-primary)" }}
+          sx={{ ...touchTargetSx, color: "var(--theme-text-primary)" }}
         >
           <CloseIcon fontSize="small" />
         </IconButton>
       </DialogTitle>
 
+      {/* The form wrapper is what makes Enter submit. It has to span both the
+          content and the actions, since the submit button lives in
+          DialogActions. Dialog's Paper is a flex column and DialogContent
+          relies on being a flex child of it to scroll (flex: 1 1 auto +
+          overflow-y: auto), so the form has to carry the flex chain through
+          itself or the content stops scrolling inside the dialog. */}
+      <Box
+        component="form"
+        noValidate
+        onSubmit={handleSubmit}
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          flex: "1 1 auto",
+          minHeight: 0,
+        }}
+      >
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {/* Autosaved-draft offer. An offer rather than a silent repopulate:
+              the form stays fresh until the user asks for the draft back, so
+              nobody has to work out why last Tuesday's text is in today's
+              trip. Carries only a timestamp — no canyon names, no notes — so
+              the prompt itself can't leak the payload. */}
+          {restorableDraft && (
+            <Box
+              role="status"
+              sx={{
+                display: "flex",
+                flexDirection: isMobile ? "column" : "row",
+                alignItems: isMobile ? "stretch" : "center",
+                gap: 1,
+                p: 1.5,
+                borderRadius: "var(--radius-md)",
+                border: "1px solid var(--theme-accent)",
+                backgroundColor: "color-mix(in srgb, var(--theme-accent) 10%, transparent)",
+              }}
+            >
+              <Typography variant="body2" sx={{ flex: 1, color: "var(--theme-text-primary)" }}>
+                You have an unsaved trip from {formatDraftSavedAt(restorableDraft.savedAt)}.
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1, flexShrink: 0, justifyContent: "flex-end" }}>
+                <Button
+                  size="small"
+                  onClick={handleDiscardDraft}
+                  sx={{ color: "var(--theme-text-muted)" }}
+                >
+                  Discard
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={handleRestoreDraft}
+                  sx={{ borderColor: "var(--theme-accent)", color: "var(--theme-accent)" }}
+                >
+                  Restore
+                </Button>
+              </Box>
+            </Box>
+          )}
+
           {/* Canyon(s) — search existing markers (ordered, chip-per-canyon) or
              create a new canyon inline. Order is meaningful: it drives the
              derived-title placeholder below. Empty selection is valid — the
              trip name field covers the no-canyon case. */}
           <Autocomplete<CanyonOption, true, false, false>
             multiple
+            // Without this, typing "Claustral" and pressing Enter selects
+            // nothing — there's no highlighted option to select, so the
+            // keystroke falls through and the text is silently dropped.
+            // Highlighting the first match makes Enter mean "take the obvious
+            // one". MUI calls preventDefault() when Enter selects a highlighted
+            // option, so this Enter cannot also submit the surrounding form.
+            autoHighlight
             options={canyonOptions}
             getOptionLabel={getOptionLabel}
             getOptionKey={(option) =>
@@ -681,6 +953,9 @@ function TripLogDialog({
                     ? undefined
                     : "Search canyons, or type to create one"
                 }
+                // Focused imperatively by the form-reset effect above, which is
+                // the only place that knows whether a draft is being offered.
+                inputRef={canyonInputRef}
                 size="small"
                 sx={fieldSx}
               />
@@ -754,6 +1029,13 @@ function TripLogDialog({
           <Autocomplete<TypeOption, true, false, true>
             multiple
             freeSolo
+            // Highlights the first suggestion so Enter takes it. freeSolo keeps
+            // typed text winning over a merely-programmatic highlight (MUI only
+            // selects the highlighted option here once the user has deliberately
+            // arrowed or hovered onto it), so this can't hijack a genuinely new
+            // type. Either branch calls preventDefault(), so Enter adds the type
+            // without also submitting the form.
+            autoHighlight
             options={typeOptions}
             getOptionLabel={getTypeOptionLabel}
             getOptionKey={(option) =>
@@ -779,7 +1061,11 @@ function TripLogDialog({
               }
               // Cap at MAX_TRIP_TYPES_PER_TRIP (mirrors the canyon cap).
               if (next.length > MAX_TRIP_TYPES_PER_TRIP) return;
-              setSelectedTypes(next);
+              // Re-enforce: the locked chip has no delete button, but Backspace
+              // in the input still pops the last tag, so the tag has to be put
+              // back here too. enforceCanyoningTag skips at the cap, so this
+              // can never push `next` past the check above.
+              setSelectedTypes(enforceCanyoningTag(next, hasLinkedCanyon));
             }}
             filterOptions={(options, params) => {
               const filtered = typeFilter(options, params);
@@ -819,13 +1105,24 @@ function TripLogDialog({
             renderTags={(value, getTagProps) =>
               value.map((option, index) => {
                 const { key, ...tagProps } = getTagProps({ index });
+                const label = getTypeOptionLabel(option);
+                // The canyoning tag is locked (visible, not removable) while a
+                // canyon is linked — the API re-adds it on save, so offering a
+                // delete that silently undoes itself would be a lie. Unlink the
+                // canyons and it becomes an ordinary, removable tag.
+                const locked =
+                  hasLinkedCanyon && label.toLowerCase() === CANYONING_TRIP_TYPE;
                 return (
                   <Chip
                     key={key}
-                    label={getTypeOptionLabel(option)}
+                    label={label}
                     size="small"
                     sx={typeChipSx}
                     {...tagProps}
+                    {...(locked && {
+                      onDelete: undefined,
+                      title: "Trips with a linked canyon are always tagged canyoning.",
+                    })}
                   />
                 );
               })
@@ -888,7 +1185,11 @@ function TripLogDialog({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             multiline
-            rows={4}
+            // Auto-grow: rests at the same 4 rows it always has, then follows
+            // the text instead of scrolling inside itself. Capped at
+            // NOTES_MAX_ROWS so it can't swallow the dialog.
+            minRows={4}
+            maxRows={NOTES_MAX_ROWS}
             size="small"
             fullWidth
             placeholder="Trip notes, conditions, observations..."
@@ -919,6 +1220,7 @@ function TripLogDialog({
                     size="small"
                     onClick={() => setFieldToDelete(def)}
                     sx={{
+                      ...touchTargetSx,
                       color: "var(--theme-text-muted)",
                       flexShrink: 0,
                       "&:hover": { color: "var(--theme-warning)" },
@@ -964,6 +1266,7 @@ function TripLogDialog({
               size="small"
               onClick={() => setShowAddField(true)}
               sx={{
+                ...touchTargetSx,
                 color: "var(--theme-accent)",
                 textTransform: "none",
                 alignSelf: "flex-start",
@@ -1036,22 +1339,32 @@ function TripLogDialog({
       </DialogContent>
 
       <DialogActions>
+        {/* Not "Cancel": the add-custom-field sub-form below renders its own
+            "Cancel" that only backs out of that sub-form, and on mobile both
+            are on screen at once — two identical words, opposite scopes. Naming
+            the object makes the scope unambiguous. In edit mode the object is
+            the *changes*, not the trip: "Discard trip" on a saved trip would
+            read as "delete it from my logbook". */}
         <Button
           onClick={guard.requestClose}
           disabled={saving}
-          sx={{ color: "var(--theme-text-primary)" }}
+          sx={{ ...dialogActionButtonSx, color: "var(--theme-text-primary)" }}
         >
-          Cancel
+          {tripLog ? "Discard changes" : "Discard trip"}
         </Button>
+        {/* type="submit" with no onClick — handleSubmit is the only save path,
+            so a click can't fire alongside the form's submit. */}
         <Button
+          type="submit"
           variant="contained"
           color="secondary"
-          onClick={handleSave}
           disabled={saving || !date}
+          sx={dialogActionButtonSx}
         >
           {saving ? <CircularProgress size={20} /> : tripLog ? "Save Changes" : "Log Trip"}
         </Button>
       </DialogActions>
+      </Box>
     </Dialog>
 
     {/* Impact-aware delete confirm (shared with the Account panel). On delete
@@ -1080,7 +1393,14 @@ function TripLogDialog({
       message="Your changes will be lost."
       confirmLabel="Discard"
       confirmColor="error"
-      onConfirm={guard.confirmDiscard}
+      onConfirm={() => {
+        // "Discard" is the deliberate answer the autosaved draft can't
+        // second-guess — the whole point of the prompt is that the user means
+        // it. Create mode only: discarding *edits* to a saved trip must not
+        // take an unrelated create draft with it.
+        if (!tripLog) clearTripDraft();
+        guard.confirmDiscard();
+      }}
       onClose={guard.cancelDiscard}
     />
     </>

@@ -12,6 +12,7 @@ import {
 import { apiFetch, setSessionExpiredHandler } from "./canyonUtils";
 import { messageFromError } from "./errors/messageFromError";
 import { mapAuthNextStep } from "./errors/authErrorMap";
+import { clearTripDraft } from "./tripDraft";
 
 // Calls GET /users/me after sign-in. The API creates a new user record
 // if one doesn't exist yet (keyed on the Cognito sub), so this is safe
@@ -176,6 +177,12 @@ export function useAuth() {
   );
 
   const handleSignOut = useCallback(async () => {
+    // A trip draft is canyon names and notes in localStorage, readable by
+    // anything on the origin and unaffected by the reload below. It must not
+    // outlive the session that wrote it — sign-out is the line (privacy rules,
+    // root CLAUDE.md). Cleared before the network call so a signOut failure
+    // can't strand it.
+    clearTripDraft();
     await amplifySignOut();
     window.location.reload();
   }, []);

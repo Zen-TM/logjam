@@ -56,7 +56,7 @@ import {
   extentFromCentreAndSize,
 } from "@logjam/shared";
 import type { GeoPdfConfig } from "@logjam/shared";
-import { useLocalStorage } from "../../useLocalStorage";
+import { useStoredState } from "../../useStoredState";
 import { buildCanyonMarkers } from "./geoPdfCanyonMarkers";
 import classes from "./GeoPdfDialog.module.css";
 
@@ -176,11 +176,11 @@ function GeoPdfDialog({
   // Canyon overlays. Persisted so a deliberate opt-in survives reopen.
   // Shared canyons default OFF (PRIV-006): a friend consented to in-app
   // viewing, not to being named on a printable artifact — opt-in only.
-  const [showOwnedCanyonsOnPdf, setShowOwnedCanyonsOnPdf] = useLocalStorage(
+  const [showOwnedCanyonsOnPdf, setShowOwnedCanyonsOnPdf] = useStoredState(
     "logjam.geoPdf.showOwnedCanyons",
     true,
   );
-  const [showSharedCanyonsOnPdf, setShowSharedCanyonsOnPdf] = useLocalStorage(
+  const [showSharedCanyonsOnPdf, setShowSharedCanyonsOnPdf] = useStoredState(
     "logjam.geoPdf.showSharedCanyons",
     false,
   );

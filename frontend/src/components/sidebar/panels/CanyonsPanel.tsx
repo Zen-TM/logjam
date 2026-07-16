@@ -10,7 +10,7 @@ import type {
 } from "../../../canyonUtils";
 import { refreshFromRopeWiki, passesFilters, activeFilterCount } from "../../../canyonUtils";
 import type { RefreshResult } from "../../../canyonUtils";
-import { useLocalStorage } from "../../../useLocalStorage";
+import { useStoredState } from "../../../useStoredState";
 import type { PanelId } from "../panels";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { customFieldDisplayLabel } from "@logjam/shared";
@@ -49,6 +49,15 @@ const ROPEWIKI_OPTIONS: { value: TFilters["ropewiki"]; label: string }[] = [
   { value: "unlinked", label: "Not linked" },
 ];
 
+// "Done" is the word the question gets asked in ("have I done Claustral?");
+// "Completion" is the label because that's what the analytics panel already
+// calls this exact measure (its ring counts canyons with >= 1 logged trip).
+const COMPLETION_OPTIONS: { value: TFilters["completion"]; label: string }[] = [
+  { value: "any", label: "Any" },
+  { value: "done", label: "Done" },
+  { value: "not_done", label: "Not done" },
+];
+
 function gradeSummary(c: TCanyon): string {
   const parts: string[] = [];
   if (c.vGrade != null) parts.push(`V${c.vGrade}`);
@@ -62,6 +71,7 @@ function CanyonsPanel({
   sharedCanyons,
   onAddCanyon,
   onOpenUnifiedImport,
+  onExportCanyons,
   onStartAreaSelection,
   onCancelAreaSelection,
   selectingArea,
@@ -80,6 +90,8 @@ function CanyonsPanel({
   sharedCanyons: TCanyon[];
   onAddCanyon: () => void;
   onOpenUnifiedImport: () => void;
+  // Hands the ids to the existing Selected Canyons dialog, which owns export.
+  onExportCanyons: (canyonIds: string[]) => void;
   onStartAreaSelection: () => void;
   onCancelAreaSelection: () => void;
   selectingArea: boolean;
@@ -93,12 +105,14 @@ function CanyonsPanel({
   canyonCustomFieldDefs: TripLogCustomFieldDef[];
 }) {
   // Search: a substring query that filters the canyon cards below (matches the
-  // primary name or any alternative name). ANDs with the filters. Persisted so
-  // it survives the panel's unmount-on-close (CANYON-12) — the filters state
-  // (owned by App) already persists the same way.
-  const [query, setQuery] = useLocalStorage("logjam.canyonSearch", "");
-  // Sort order for the results list, persisted across remounts (CANYON-4).
-  const [sortKey, setSortKey] = useLocalStorage<SortKey>(
+  // primary name or any alternative name). ANDs with the filters. Session-scoped
+  // so it survives the panel's unmount-on-close (CANYON-12) but not the session:
+  // a search remembered for a month means the user returns to a filtered list
+  // and reads it as "my canyons are missing" (UX finding 5).
+  const [query, setQuery] = useStoredState("logjam.canyonSearch", "", sessionStorage);
+  // Sort order is a preference, not a filter — it hides nothing, so it stays in
+  // localStorage and is expected back next month (CANYON-4).
+  const [sortKey, setSortKey] = useStoredState<SortKey>(
     "logjam.canyonSort",
     "name",
   );
@@ -311,7 +325,7 @@ function CanyonsPanel({
     );
   }
 
-  function choiceCell<K extends "ownership" | "ropewiki">(
+  function choiceCell<K extends "ownership" | "ropewiki" | "completion">(
     key: K,
     displayName: string,
     options: { value: TFilters[K]; label: string }[],
@@ -633,6 +647,7 @@ function CanyonsPanel({
       hours: null,
       ownership: "all",
       shared_by_me: false,
+      completion: "any",
       created_at: null,
       updated_at: null,
       ropewiki: "any",
@@ -741,6 +756,19 @@ function CanyonsPanel({
         {filtersOpen && (
           <div className={classes.accordionBody}>
             <div className={classes.accordionScroll}>
+              {/* First section: "have I done it?" is the question this panel
+                  gets asked most, so it's the first thing in the accordion. */}
+              <div className={classes.section}>
+                <div className={classes.sectionHeader}>Trips</div>
+                <div className={classes.selectGrid}>
+                  {choiceCell(
+                    "completion",
+                    "Completion",
+                    COMPLETION_OPTIONS,
+                    "any",
+                  )}
+                </div>
+              </div>
               <div className={classes.section}>
                 <div className={classes.sectionHeader}>Grades</div>
                 <div className={classes.sliderGrid}>
@@ -859,8 +887,19 @@ function CanyonsPanel({
           <div className={classes.resultsList}>
             {filteredCanyons.map(({ canyon, owned }) => {
               const shareCount = canyon._count?.shares ?? 0;
+              // The filter answers "have I done it" for the list; this answers
+              // it per row, which is the half a filter can't — the complaint was
+              // having to open a canyon to see whether it had trips. Stated only
+              // when non-zero (matching the share badge beside it): a count is
+              // worth a word, an absence isn't worth one on 270 of 298 rows.
+              // Owned-only for the same reason the completion filter is — on a
+              // shared canyon this tally is the owner's, not the viewer's.
+              const tripCount = owned ? (canyon._count?.tripLogLinks ?? 0) : 0;
               const meta = [
                 gradeSummary(canyon),
+                tripCount > 0
+                  ? `${tripCount} trip${tripCount === 1 ? "" : "s"}`
+                  : "",
                 owned
                   ? shareCount > 0
                     ? `Shared with ${shareCount}`
@@ -891,6 +930,19 @@ function CanyonsPanel({
       {/* Low-frequency actions */}
       <div className={classes.footerActions}>
         <div className={classes.divider} />
+        {/* Export sat behind "select an area on the map" — undiscoverable
+            unless you already knew it was there. It exports exactly the list
+            shown above (search + filters applied), so the count is stated on
+            the button and matches the header count. Opens the existing
+            Selected Canyons dialog; no separate export surface. */}
+        <button
+          className={classes.ghostButton}
+          onClick={() => onExportCanyons(filteredCanyons.map((r) => r.canyon.id))}
+          disabled={filteredCanyons.length === 0}
+        >
+          Export {filteredCanyons.length} canyon
+          {filteredCanyons.length === 1 ? "" : "s"}
+        </button>
         <button
           className={classes.ghostButton}
           onClick={onOpenUnifiedImport}

@@ -71,19 +71,23 @@
     z-index: 5;
     flex-direction: row;
     align-items: center;
+    gap: 2px;
     padding: 0 4px;
     overflow-x: auto;
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     /* Top shadow instead of the desktop right-edge shadow. */
     box-shadow: 0 -8px 8px -4px rgba(0, 0, 0, 0.2);
-    /* Scroll affordance (MOBILE-7): 9 items overflow the 390px strip with no
-       hint that Alerts/Account are off-screen. Classic CSS "scroll shadows" —
-       two gradients painted with background-attachment:local scroll together
-       with the content and mask the two background-attachment:scroll shadow
-       gradients underneath, so a fade/shadow only shows at an edge while
-       there's actually more content to scroll toward. Pure CSS, no JS, no
-       extra markup. */
+    /* Scroll affordance (MOBILE-7). The strip no longer overflows — the four
+       mobile items measure 216px against a 390px viewport (fix 19 moved the
+       other six into the More sheet) — so these gradients are inert at every
+       supported width. Kept as a backstop for a future item or a very narrow
+       viewport: the technique self-disables when there's nothing to scroll to.
+       Classic CSS "scroll shadows" — two gradients painted with
+       background-attachment:local scroll together with the content and mask
+       the two background-attachment:scroll shadow gradients underneath, so a
+       fade/shadow only shows at an edge while there's actually more content to
+       scroll toward. Pure CSS, no JS, no extra markup. */
     background-image:
       linear-gradient(to right, var(--theme-primary) 30%, transparent),
       linear-gradient(to left, var(--theme-primary) 30%, transparent),
@@ -100,11 +104,38 @@
     flex: 0 0 8px;
   }
 
+  /* Spread the items across the full strip width rather than packing them to
+     the left. flex: 1 0 0 gives every item an equal share and grows to fill;
+     flex-shrink 0 means a future overflow (more items than fit) falls back to
+     the overflow-x scroll above instead of crushing them. */
   .navItem {
-    flex: 0 0 auto;
+    flex: 1 0 0;
+    min-width: 0;
     margin-bottom: 0;
-    margin-right: 4px;
+    margin-right: 0;
   }
+}
+
+/* More-sheet rows: MUI MenuItem children, so they lay out in a row rather than
+   the rail's stacked icon-over-label. */
+.moreLabel {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.moreBadge {
+  background-color: color-mix(in srgb, var(--theme-warning) 55%, transparent);
+  color: color-mix(in srgb, var(--theme-text-primary) 55%, transparent);
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
 }
 
 .badge {
