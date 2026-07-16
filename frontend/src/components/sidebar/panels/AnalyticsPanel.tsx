@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight, ArrowLeft, Info } from "lucide-react";
 import type { TAnalytics, TTripLog } from "../../../canyonUtils";
 import { tripTitle } from "../../../canyonUtils";
-import { CANYONING_TRIP_TYPE, type TripLogCustomFieldDef } from "@logjam/shared";
+import { type TripLogCustomFieldDef } from "@logjam/shared";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import classes from "./AnalyticsPanel.module.css";
 
@@ -12,14 +12,10 @@ const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAY_ABBR = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
-// Analytics is scoped to canyoning trips only. The drilldown's day-trip list is
-// filtered client-side from the loaded trips, so it MUST mirror the server's
-// predicate (CANYONING_TRIP_WHERE in api/src/routes/analytics.ts) exactly:
-// canyon-linked OR tagged canyoning. Filtering on the tag alone would leave the
-// heatmap counting a day the day-list then renders as empty.
-function isCanyoningTrip(trip: TTripLog): boolean {
-  return trip.canyons.length > 0 || trip.types.includes(CANYONING_TRIP_TYPE);
-}
+// The Activity calendar counts trips of every type, matching the server's
+// tripDates (which no longer filters to canyoning). The drilldown day-list is
+// derived from the same all-types trip set, so heatmap counts and the list
+// stay consistent by construction.
 
 function heatClass(count: number, maxCount: number): string {
   if (count === 0 || maxCount === 0) return classes.heat0;
@@ -133,7 +129,6 @@ function CompletionRing({ total, completed }: { total: number; completed: number
 function DrilldownHeatmap({
   tripDates,
   tripLogs,
-  excludedTrips,
   customFieldDefs,
   onRefetchTripLogs,
   onRefetchAnalytics,
@@ -141,7 +136,6 @@ function DrilldownHeatmap({
 }: {
   tripDates: Record<string, number>;
   tripLogs: TTripLog[];
-  excludedTrips: number;
   customFieldDefs: TripLogCustomFieldDef[];
   onRefetchTripLogs: () => void;
   onRefetchAnalytics: () => void;
@@ -249,17 +243,12 @@ function DrilldownHeatmap({
     if (drilldown.level !== "trips") return [];
     const { year, month, day } = drilldown;
     const padded = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    return tripLogs.filter((t) => t.date.startsWith(padded) && isCanyoningTrip(t));
+    return tripLogs.filter((t) => t.date.startsWith(padded));
   }, [drilldown, tripLogs]);
 
   return (
     <div className={classes.heatmapSection}>
-      <span className={classes.sectionLabel}>Canyoning activity</span>
-      {excludedTrips > 0 && (
-        <span className={classes.heatmapCaption}>
-          {excludedTrips} trip{excludedTrips !== 1 ? "s" : ""} of other types not shown.
-        </span>
-      )}
+      <span className={classes.sectionLabel}>Activity</span>
 
       {/* Navigation header */}
       <div className={classes.heatmapNav}>
@@ -480,7 +469,6 @@ function AnalyticsPanel({
       <DrilldownHeatmap
         tripDates={tripDates}
         tripLogs={tripLogs}
-        excludedTrips={heroStats.excludedTrips}
         customFieldDefs={customFieldDefs}
         onRefetchTripLogs={onRefetchTripLogs}
         onRefetchAnalytics={onRefetchAnalytics}

@@ -27,7 +27,6 @@ async function getAnalytics(auth = AUTH) {
   return res.body as {
     heroStats: {
       totalTrips: number;
-      excludedTrips: number;
       uniqueCanyons: number;
       daysCanyoning: number;
       totalAbseils: number | null;
@@ -141,8 +140,9 @@ describe("GET /analytics (fake auth = alice)", () => {
       .send({ canyonIds: [canyonAId], date: "2099-03-02" });
     expect(tripSingle.status).toBe(201);
 
-    // A canyon-less, non-canyoning trip: excluded from the hero stats, and
-    // never force-tagged (no link).
+    // A canyon-less, non-canyoning trip: excluded from the hero stats, but it
+    // DOES appear in the all-types Activity calendar (tripDates). Never
+    // force-tagged (no link).
     const tripBushwalk = await request(API_URL)
       .post("/trips")
       .set(BOB)
@@ -154,9 +154,9 @@ describe("GET /analytics (fake auth = alice)", () => {
     try {
       const after = await getAnalytics(BOB);
 
-      // The two linked trips count; the bushwalking one doesn't.
+      // Hero stats are canyoning-scoped: the two linked trips count, the
+      // bushwalking one doesn't.
       expect(after.heroStats.totalTrips - before.heroStats.totalTrips).toBe(2);
-      expect(after.heroStats.excludedTrips - before.heroStats.excludedTrips).toBe(1);
       // totalAbseils sums numAbseils over every linked canyon of each counted
       // trip: tripMulti contributes 3+5, tripSingle contributes 3.
       expect(
@@ -165,11 +165,12 @@ describe("GET /analytics (fake auth = alice)", () => {
       // uniqueCanyons counts every distinct linked canyon id: A and B.
       expect(after.heroStats.uniqueCanyons - before.heroStats.uniqueCanyons).toBe(2);
 
-      // tripDates is keyed by date; these far-future dates isolate the buckets
-      // from concurrent writes elsewhere.
+      // tripDates counts ALL trips (the Activity calendar), so the bushwalking
+      // trip lands in its bucket too — unlike the hero stats above. Far-future
+      // dates isolate the buckets from concurrent writes elsewhere.
       expect(after.tripDates["2099-03-01"]).toBe(1);
       expect(after.tripDates["2099-03-02"]).toBe(1);
-      expect(after.tripDates["2099-03-03"]).toBeUndefined();
+      expect(after.tripDates["2099-03-03"]).toBe(1);
 
       // types[] lists every distinct type across ALL trips, canyoning or not.
       expect(after.types).toContain("canyoning");
@@ -196,7 +197,6 @@ describe("GET /analytics (fake auth = alice)", () => {
     try {
       const after = await getAnalytics(BOB);
       expect(after.heroStats.totalTrips - before.heroStats.totalTrips).toBe(1);
-      expect(after.heroStats.excludedTrips - before.heroStats.excludedTrips).toBe(0);
       expect(after.heroStats.uniqueCanyons - before.heroStats.uniqueCanyons).toBe(1);
       expect(after.tripDates["2099-04-01"]).toBe(1);
     } finally {

@@ -923,9 +923,6 @@ export function deleteMedia(id: string): Promise<void> {
 export type TAnalytics = {
   heroStats: {
     totalTrips: number;
-    // The user's trips that are neither canyon-linked nor tagged canyoning —
-    // what the Activity chart isn't showing.
-    excludedTrips: number;
     uniqueCanyons: number;
     daysCanyoning: number;
     totalAbseils: number | null;
@@ -934,6 +931,7 @@ export type TAnalytics = {
     totalCanyons: number;
     canyonsWithTrips: number;
   };
+  // Per-day trip counts across ALL trip types — drives the Activity calendar.
   tripDates: Record<string, number>;
   // Distinct types across ALL the user's trips, canyoning or not.
   types: string[];

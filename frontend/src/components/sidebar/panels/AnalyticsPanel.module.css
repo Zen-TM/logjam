@@ -1,14 +1,12 @@
 /* No height lock and no inner overflow: the panel grows with its content and
    the whole thing scrolls in the SidebarPanel body (one scrollbar, per the
-   sidebar convention). padding-bottom is the buffer so the last element —
-   calendar or day-trips list — clears the mobile bottom nav / panel edge and
-   can be scrolled fully into view. */
+   sidebar convention). The bottom buffer is the SidebarPanel body's own
+   padding — no extra here, so it matches the other panels (e.g. Layers). */
 .panel {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
   padding-right: 2px;
-  padding-bottom: 1.5rem;
 }
 
 /* ── Section labels ─────────────────────────────── */
@@ -142,12 +140,6 @@
 .heatmapSection {
   display: flex;
   flex-direction: column;
-}
-
-.heatmapCaption {
-  font-size: var(--text-xs);
-  color: var(--theme-text-muted);
-  margin: 0.15rem 0 0.5rem;
 }
 
 /* Navigation header */
