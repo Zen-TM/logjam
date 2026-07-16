@@ -212,11 +212,24 @@ resource "aws_iam_role_policy" "gha_readonly_privacy_deny" {
           "arn:aws:s3:::logjam-audit-620853681701/*",
         ]
       },
+      # origin_verify is carved out: terraform refresh of its
+      # aws_secretsmanager_secret_version reads the value, and that value
+      # already lives in the TF state the CI role must read — denying the
+      # API call protects nothing and breaks the plan.
       {
-        Sid      = "DenySecretValues"
+        Sid         = "DenySecretValues"
+        Effect      = "Deny"
+        Action      = "secretsmanager:GetSecretValue"
+        NotResource = aws_secretsmanager_secret.origin_verify.arn
+      },
+      # Scoped to the Cognito email CMK (the only customer-managed key):
+      # a blanket kms:Decrypt deny would also hit the AWS-managed
+      # aws/secretsmanager key used by the origin_verify read above.
+      {
+        Sid      = "DenyCmkDecrypt"
         Effect   = "Deny"
-        Action   = ["secretsmanager:GetSecretValue", "kms:Decrypt"]
-        Resource = "*"
+        Action   = "kms:Decrypt"
+        Resource = aws_kms_key.cognito_email.arn
       },
       # Postgres log export carries pgaudit query text (same sensitivity as
       # the audit bucket). Deny reading log *events*; DescribeLogGroups stays

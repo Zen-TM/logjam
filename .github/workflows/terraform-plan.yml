@@ -40,6 +40,17 @@ jobs:
         with:
           terraform_version: "~> 1.13"
 
+      # The prod root's archive_file zips this Lambda's dist/ (gitignored,
+      # built pre-apply by the operator) — without it the plan errors with
+      # "Archive creation error". Building it in CI also makes a
+      # source_code_hash diff visible in the PR comment.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build cognito-email-sender Lambda
+        working-directory: infra/lambda/cognito-email-sender
+        run: npm ci && npm run build
+
       - name: terraform init
         run: terraform -chdir=infra/terraform/envs/prod init -input=false
 
