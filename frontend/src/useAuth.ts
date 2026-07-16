@@ -78,8 +78,13 @@ export function useAuth() {
           setError(mapAuthNextStep(result.nextStep.signInStep));
           return;
         }
-        // Best-effort: don't block sign-in if the API is unreachable
-        ensureUserExists().catch(console.error);
+        // Await provisioning before flipping to authenticated: GET /users/me
+        // creates the User row on first login, and every other endpoint 404s
+        // ("User not found") until that row exists. Flipping state first let
+        // the boot-time data hooks race the insert and surface a burst of
+        // error toasts on fresh accounts. Still best-effort — if the API is
+        // unreachable we sign in anyway rather than blocking the user.
+        await ensureUserExists().catch(console.error);
         setState("authenticated");
       } catch (err) {
         console.error(err);
