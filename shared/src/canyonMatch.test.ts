@@ -123,6 +123,66 @@ describe("nameTier", () => {
       ),
     ).toBe("none");
   });
+
+  // Numbers are identity, not spelling. Without the number-token rule these
+  // bases ("wollangambe 1" / "wollangambe 2") are one edit apart and read as a
+  // typo, silently merging two different canyons.
+  it("none when number tokens differ", () => {
+    expect(
+      nameTier(
+        normalizeCanyonName("Wollangambe Two"),
+        normalizeCanyonName("Wollangambe One"),
+      ),
+    ).toBe("none");
+  });
+  it("none when a number word and a digit disagree", () => {
+    expect(
+      nameTier(
+        normalizeCanyonName("Wollangambe Two"),
+        normalizeCanyonName("Wollangambe 1"),
+      ),
+    ).toBe("none");
+  });
+  it("none when only one side carries a number", () => {
+    expect(
+      nameTier(
+        normalizeCanyonName("Wollangambe Complete"),
+        normalizeCanyonName("Wollangambe One"),
+      ),
+    ).toBe("none");
+  });
+  it("none for a bare name against a numbered one", () => {
+    expect(
+      nameTier(
+        normalizeCanyonName("Wollangambe"),
+        normalizeCanyonName("Wollangambe Two"),
+      ),
+    ).toBe("none");
+  });
+  it("exact when a number word and its digit agree", () => {
+    expect(
+      nameTier(
+        normalizeCanyonName("Wollangambe One"),
+        normalizeCanyonName("Wollangambe 1"),
+      ),
+    ).toBe("exact");
+  });
+  it("still tolerates a genuine typo alongside matching numbers", () => {
+    expect(
+      nameTier(
+        normalizeCanyonName("Wollangambe Two"),
+        normalizeCanyonName("Wollangambee Two"),
+      ),
+    ).toBe("typo");
+  });
+  it("still tolerates a genuine typo when neither name has a number", () => {
+    expect(
+      nameTier(
+        normalizeCanyonName("Clasutral"),
+        normalizeCanyonName("Claustral Canyon"),
+      ),
+    ).toBe("typo");
+  });
 });
 
 // The 19 positive corpus pairs (plan §5a). CSV/canyon imports carry coords, so

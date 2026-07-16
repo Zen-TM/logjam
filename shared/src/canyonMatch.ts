@@ -159,12 +159,19 @@ export function normalizeCanyonName(raw: string): NormalizedName {
   return { base, baseDespaced, tokens, qualifiers, locationHint };
 }
 
-function qualifierSetsEqual(a: Set<string>, b: Set<string>): boolean {
+function setsEqual(a: Set<string>, b: Set<string>): boolean {
   if (a.size !== b.size) return false;
   for (const value of a) {
     if (!b.has(value)) return false;
   }
   return true;
+}
+
+// Purely numeric tokens of a base, after step 7 has folded number-words onto
+// digits ("Wollangambe Two" -> {"2"}). A name with no number yields an empty
+// set, which deliberately does not equal {"2"} — see nameTier.
+function numberTokens(name: NormalizedName): Set<string> {
+  return new Set(name.tokens.filter((token) => /^\d+$/.test(token)));
 }
 
 // Damerau-Levenshtein edit distance (optimal string alignment variant), which
@@ -212,7 +219,7 @@ export type NameTier = "exact" | "typo" | "qualifier-mismatch" | "none";
 
 // Pairwise name comparison between two already-normalized names.
 export function nameTier(a: NormalizedName, b: NormalizedName): NameTier {
-  const qualifiersEqual = qualifierSetsEqual(a.qualifiers, b.qualifiers);
+  const qualifiersEqual = setsEqual(a.qualifiers, b.qualifiers);
 
   // Empty bases never match — fail loudly rather than treating "" === "".
   if (!a.baseDespaced || !b.baseDespaced) return "none";
@@ -220,6 +227,17 @@ export function nameTier(a: NormalizedName, b: NormalizedName): NameTier {
   if (a.baseDespaced === b.baseDespaced) {
     return qualifiersEqual ? "exact" : "qualifier-mismatch";
   }
+
+  // A number in a canyon name is identity, not spelling: "Wollangambe One" and
+  // "Wollangambe Two" are different canyons, but their bases ("wollangambe 1" /
+  // "wollangambe 2") sit one edit apart and would otherwise read as a typo.
+  // Disagreeing digits are a deliberate non-match, the same call the qualifier
+  // rule below makes for Bowens Creek North vs South. One-sided numbers count as
+  // disagreement ("Wollangambe" vs "Wollangambe Two"): the bare name cannot
+  // identify which of the numbered canyons is meant, so it must not merge into
+  // one of them by edit distance. Bases that despace-match are returned above,
+  // so this only ever gates the fuzzy path.
+  if (!setsEqual(numberTokens(a), numberTokens(b))) return "none";
 
   // Typo tolerance: bases close under edit distance and qualifiers agree.
   // Threshold scales with the (shorter) base length: short names get 1 edit,

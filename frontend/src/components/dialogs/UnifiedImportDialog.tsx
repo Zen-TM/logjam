@@ -56,6 +56,7 @@ import {
   detectCanyonColumns,
   ROLE_LABELS,
   ALL_ASSIGNABLE_ROLES,
+  GRADE_RANGES,
   type CanyonFieldRole,
 } from "../../csvImport/canyonColumns";
 import { detectColumns, type ColumnRole } from "../../csvImport/detectColumns";
@@ -65,7 +66,10 @@ import {
   DATE_FORMAT_LABELS,
   type DateFormat,
 } from "../../csvImport/detectDateFormat";
-import { parseByRole } from "../../csvImport/canyonValueParsers";
+import {
+  parseByRole,
+  type MismatchKind,
+} from "../../csvImport/canyonValueParsers";
 import {
   fieldSx,
   selectSx,
@@ -186,6 +190,45 @@ const NUMERIC_WARN_ROLES = new Set<CanyonFieldRole>([
   "vGrade", "aGrade", "commitment", "quality", "numAbseils", "longestAbseil", "hours",
 ]);
 
+// Why the cell was dropped, phrased so the user can act on it. Declared as a
+// total Record over MismatchKind so adding a reason fails the build here rather
+// than inheriting some other reason's wording — this warning used to hardcode
+// "isn't a number" for every failure, which lied about e.g. a quality of 0.5
+// (a number, but outside the 1-5 range). Reasons the numeric parsers can't
+// currently produce still get honest text: NUMERIC_WARN_ROLES is the only
+// caller today, but the reason is the parser's to choose, not this map's.
+const MISMATCH_EXPLANATIONS: Record<
+  MismatchKind,
+  (range: [number, number] | undefined) => string
+> = {
+  nonNumeric: () => "isn't a number",
+  booleanish: () => "is a yes/no value, not a number",
+  decimalInInt: () => "isn't a whole number",
+  outOfRange: (range) =>
+    range
+      ? `is outside the accepted range ${range[0]}–${range[1]}`
+      : "is outside the accepted range",
+  scaleMismatch: (range) =>
+    range
+      ? `is above the accepted range ${range[0]}–${range[1]} — the file may use a different scale`
+      : "is above the accepted range — the file may use a different scale",
+  unparsableJson: () => "isn't valid JSON",
+  unparsableArray: () => "isn't a valid list",
+  coordFormat: () => "isn't in decimal degrees (e.g. -33.6042)",
+  mixedTypes: () => "doesn't match the other values in this column",
+  emptyDominant: () => "couldn't be read",
+};
+
+function coercionWarning(
+  role: CanyonFieldRole,
+  raw: string,
+  reason: MismatchKind,
+): string {
+  const label = ROLE_LABELS[role] ?? role;
+  const explanation = MISMATCH_EXPLANATIONS[reason](GRADE_RANGES[role]);
+  return `${label} "${raw}" ${explanation} — left empty`;
+}
+
 // Build a BulkCanyonInput from a mapped canyon row. Mirrors the field mapping in
 // the (now removed) CanyonCsvImportDialog, but without the per-cell mismatch UI:
 // values that don't parse are dropped (left null) — the importer is additive and
@@ -206,9 +249,7 @@ function buildCanyonInput(
     const parsed = parseByRole(raw, role);
     const value: unknown = parsed.ok ? parsed.value : null;
     if (!parsed.ok && raw.trim() !== "" && NUMERIC_WARN_ROLES.has(role)) {
-      warnings.push(
-        `${ROLE_LABELS[role] ?? role} "${raw.trim()}" isn't a number — left empty`,
-      );
+      warnings.push(coercionWarning(role, raw.trim(), parsed.reason));
     }
 
     switch (role) {
@@ -256,9 +297,14 @@ function buildCanyonInput(
         attrs["sources"] = Array.isArray(value) ? value : [];
         break;
       default:
-        // attr:* / new-attr — store as a custom attribute keyed by the header.
+        // attr:* / new-attr — store as a custom attribute. An `attr:<key>`
+        // column carries its storage key in the role (the exporter's
+        // convention); a brand-new attribute has no key yet, so the CSV header
+        // is the key.
         if (typeof role === "string" && role.startsWith("attr:")) {
           attrs[role.slice(5)] = value ?? null;
+        } else if (role === "new-attr") {
+          attrs[header] = value ?? null;
         }
         break;
     }
