@@ -938,7 +938,7 @@ function App() {
         <NavRail
           activePanel={activePanel}
           onPanelChange={handlePanelChange}
-          unreadCount={unreadCount}
+          badgeCounts={{ notifications: unreadCount }}
         />
         <SidebarPanel
           activePanel={activePanel}
