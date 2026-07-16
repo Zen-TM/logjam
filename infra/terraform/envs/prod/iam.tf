@@ -222,6 +222,15 @@ resource "aws_iam_role_policy" "gha_readonly_privacy_deny" {
         Action      = "secretsmanager:GetSecretValue"
         NotResource = aws_secretsmanager_secret.origin_verify.arn
       },
+      # ...and explicitly allowed: ReadOnlyAccess doesn't include
+      # GetSecretValue, so the carve-out alone still fails with "no
+      # identity-based policy allows".
+      {
+        Sid      = "AllowOriginVerifyRead"
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = aws_secretsmanager_secret.origin_verify.arn
+      },
       # Scoped to the Cognito email CMK (the only customer-managed key):
       # a blanket kms:Decrypt deny would also hit the AWS-managed
       # aws/secretsmanager key used by the origin_verify read above.
