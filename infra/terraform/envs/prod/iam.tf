@@ -259,6 +259,74 @@ resource "aws_iam_role_policy" "gha_readonly_privacy_deny" {
   })
 }
 
+# ── EB instance role (logjam-eb-role) least-privilege replacements (CP-001) ────
+# The EB API instance role is EB-managed (created with the environment), so —
+# like the other eb-role grants (db_app_role.tf, origin_verify.tf) — it is
+# referenced by literal name, not managed as a resource. Live, it carries three
+# over-broad AWS-managed policies. A compromised API (single public origin)
+# would otherwise inherit s3:* account-wide (incl. the WORM audit bucket +
+# tfstate). This block adds SCOPED replacements mirroring the CI-role treatment
+# above (gha_eb_appversions / gha_frontend_deploy):
+#   AmazonS3FullAccess     -> aws_iam_role_policy.eb_instance_s3_scoped (below)
+#   AmazonCognitoPowerUser -> aws_iam_role_policy.eb_cognito_admin_getuser (below)
+#   AmazonSESFullAccess    -> DEAD grant (SES replaced by Resend); no replacement.
+# Terraform cannot detach a policy attached OUTSIDE its state, so the three
+# `aws iam detach-role-policy` calls are operator-gated (see the cloud-posture
+# fix report). Apply THIS block BEFORE the operator detaches the broad managed
+# policies so the instance never loses the S3/Cognito access it legitimately
+# needs (presigned media/topo URLs; Cognito AdminGetUser).
+# VERIFY BEFORE DETACH: scan CloudTrail for any logjam-eb-role S3 call outside
+# logjam-media / logjam-topo-jobs; if found, widen this scoped grant, never
+# re-add AmazonS3FullAccess.
+resource "aws_iam_role_policy" "eb_instance_s3_scoped" {
+  name = "logjam-eb-s3-scoped"
+  role = "logjam-eb-role"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "MediaAndTopoObjects"
+        Effect = "Allow"
+        # DeleteObjects (batch) and HeadObject are covered by DeleteObject /
+        # GetObject respectively — the API's full S3 verb set on these buckets.
+        Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = [
+          "arn:aws:s3:::logjam-media/*",
+          "arn:aws:s3:::logjam-topo-jobs/*",
+        ]
+      },
+      {
+        Sid    = "MediaAndTopoList"
+        Effect = "Allow"
+        Action = "s3:ListBucket"
+        Resource = [
+          "arn:aws:s3:::logjam-media",
+          "arn:aws:s3:::logjam-topo-jobs",
+        ]
+      },
+    ]
+  })
+}
+
+# Scoped Cognito grant. Already present live as inline policy
+# `LogjamCognitoAdminUser`; codified here (same name + document) so it is
+# repo-visible and survives the AmazonCognitoPowerUser detach. Because the name
+# and body match the live inline policy exactly, apply is a content-identical
+# PutRolePolicy upsert (no functional change), it only brings the grant into
+# Terraform state.
+resource "aws_iam_role_policy" "eb_cognito_admin_getuser" {
+  name = "LogjamCognitoAdminUser"
+  role = "logjam-eb-role"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "cognito-idp:AdminGetUser"
+      Resource = "arn:aws:cognito-idp:ap-southeast-2:620853681701:userpool/ap-southeast-2_x5zPhJXMk"
+    }]
+  })
+}
+
 # EB app-version uploads (beanstalk-deploy pushes deploy.zip here). Explicit
 # replacement for the removed AmazonS3FullAccess. If the live bucket name
 # differs, fix it here — do NOT re-add the managed full-access policy.

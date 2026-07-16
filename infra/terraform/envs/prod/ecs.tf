@@ -42,8 +42,12 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       name  = "EMAIL_FROM"
       value = "noreply@notifications.logjamnsw.com"
       }, {
-      name  = "ECS_SECURITY_GROUPS"
-      value = "sg-0543d2bbce86b5d2a"
+      name = "ECS_SECURITY_GROUPS"
+      # CP-003: dedicated worker SG (was the VPC default sg-0543d2bbce86b5d2a).
+      # Vestigial here (geoPdfWorker is a leaf, never calls RunTask) but kept in
+      # sync so no stale default-SG id lingers in a committed task def. The
+      # operative value is the EB env property of the same name (operator-owned).
+      value = aws_security_group.worker.id
       }, {
       name  = "ECS_SUBNETS"
       value = "subnet-0f59b0845905891be,subnet-0c10e1438a8fd0231"
