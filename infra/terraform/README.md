@@ -36,7 +36,7 @@ cd infra/terraform/envs/prod && terraform plan
 # Prod canonical values (cross-check against .ebextensions + task-def env)
 terraform output
 
-# Local: provisioned automatically by `make dev` / `make reset` (LocalStack only)
+# Local: provisioned automatically by `make dev` / `make reset` (MiniStack S3 + ECS task defs)
 ```
 
 ## Conventions
@@ -49,6 +49,13 @@ terraform output
   versions (`.ebextensions` DB env), and syncs/invalidates the frontend. So the
   EB environment ignores `setting`, and task defs reference `:latest`. Terraform
   must never fight CI over those fields.
+- **Plan-on-PR.** PRs touching `infra/terraform/**` run `fmt`/`validate`
+  (`terraform-ci.yml`, no AWS access) and a read-only prod `terraform plan`
+  posted as a PR comment (`terraform-plan.yml`). The CI role has
+  `ReadOnlyAccess` plus an explicit privacy Deny (user-data/audit object
+  reads, secret values except origin-verify, Cognito CMK decrypt, pgaudit
+  log events) — see `envs/prod/iam.tf`. The CI plan runs `-lock=false` and
+  never applies; applies remain operator-run per the gating rule above.
 - **Env single-source rule:** the authoritative variable LIST is
   `api/src/lib/env.ts` (zod). The local dev VALUES live in
   `envs/local/env-files.tf` + `templates/env.local.tftpl`. Add a var in **both**

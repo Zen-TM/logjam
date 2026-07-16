@@ -51,7 +51,7 @@ Prisma: `npx prisma generate` after schema change · `npx prisma migrate dev` fo
 
 ## AWS architecture
 
-- **IaC = Terraform** (`infra/terraform/`, see its README). Single source of truth for prod AWS; the `envs/local` root reuses the same `storage` module for MiniStack S3 and adds `ecs.tf` (cluster + worker task defs) so MiniStack RunTask launches workers locally. All resources below were imported, not recreated. Prod root `envs/prod` (S3 backend); `terraform output` gives canonical values. RDS/Cognito/CloudFront/EB carry `prevent_destroy`. CI still owns deploys (EB env ignores `setting`; task defs ride `:latest`).
+- **IaC = Terraform** (`infra/terraform/`, see its README). Single source of truth for prod AWS; the `envs/local` root reuses the same `storage` module for MiniStack S3 and adds `ecs.tf` (cluster + worker task defs) so MiniStack RunTask launches workers locally. All resources below were imported, not recreated. Prod root `envs/prod` (S3 backend); `terraform output` gives canonical values. RDS/Cognito/CloudFront/EB carry `prevent_destroy`. CI still owns deploys (EB env ignores `setting`; task defs ride `:latest`). Infra PRs get `fmt`/`validate` (`terraform-ci.yml`) plus a read-only prod `terraform plan` posted as a PR comment (`terraform-plan.yml` — CI role is ReadOnlyAccess with a privacy Deny on user-data object reads/secret values); `terraform apply` stays manual, operator-gated.
 - **VPC-bound:** data-plane access needs SSM Session Manager, not SSH.
 - **Elastic Beanstalk** runs API (single Docker container via `api/Dockerrun.aws.json`; image from ECR `logjam-api`).
 - **ECS Fargate** runs the on-demand workers — three task defs: `logjam-topo-worker` and `logjam-topo-export-worker` (one Python image with a command override, see `topo/Dockerfile`), plus `logjam-geo-pdf-worker` (the `logjam-api` Node image with command override `node dist/worker/geoPdfWorker.js`; template `scripts/geo-pdf-worker-task-def.json`). Launched on-demand by API via the shared `api/src/lib/ecsRunTask.ts` helper (`RunTaskCommand` + placement-failure check) with a job-ID env var (`JOB_ID` / `EXPORT_JOB_ID` / `GEO_PDF_JOB_ID`). Lifecycle owned by ECS; retry semantics owned by the `TopoJob`/`TopoExportJob`/`GeoPdfJob` status columns (no SQS). Stuck jobs/exports are swept by the in-API reaper (`api/src/lib/topoJobReaper.ts`); the API stops orphaned Fargate tasks via StopTask using the persisted task ARN.
@@ -99,7 +99,7 @@ Additive only. Never silently delete existing conventions — flag stale entries
 
 ## Testing
 
-Tests exist but not gating. Recommend, don't require. Run before committing structural changes.
+CI (`.github/workflows/ci.yml`) runs the unit suites + lint + typecheck for all four packages on every PR and push to `main` — a red PR doesn't merge. Integration suites (`api` `npm test`, topo Docker runbooks) are NOT in CI; run them locally before committing changes they cover.
 
 ### How to run
 

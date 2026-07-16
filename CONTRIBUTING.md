@@ -57,11 +57,17 @@ Stack-specific rules live in the per-package guides: `frontend/CLAUDE.md`,
 
 - Keep changes focused; one concern per PR.
 - Match existing conventions (the `CLAUDE.md` files document them).
-- Run the relevant checks:
+- CI runs automatically on every PR (`.github/workflows/ci.yml`): unit tests,
+  lint, and typecheck for all four packages. PRs must be green to merge.
+- Run the same checks locally first:
   - `cd shared && npm test`
   - `cd api && npm run test:unit`
   - `cd frontend && npm test && npm run lint`
-  - `cd api && npm test` (integration — needs `make dev` running)
+  - `cd api && npm test` (integration — needs `make dev` running; **not** run
+    in CI, so don't skip it for API changes)
+- PRs touching `infra/terraform/**` also get `fmt`/`validate` checks and a
+  read-only `terraform plan` posted as a PR comment. Applies are manual,
+  maintainer-only.
 - Don't commit secrets, real user data, or `.env*` files.
 
 ## Security
