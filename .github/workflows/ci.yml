@@ -91,8 +91,13 @@ jobs:
         with:
           python-version: "3.12"
       # Pure-logic tests; tests/_native_stub.py stubs osgeo/psycopg2 etc when
-      # absent, so no GDAL/PDAL install is needed here. Native paths run in
-      # the worker Docker image (see topo/tests/INTEGRATION.md).
+      # absent, so no GDAL/PDAL install is needed here. numpy/Pillow/requests
+      # are NOT stub-safe (the math tests need real numpy) — install just
+      # those, with the same version bounds as requirements.txt (whose GDAL
+      # comments assume the Docker image, so it isn't installed wholesale).
+      - name: Install pure-Python deps
+        working-directory: topo
+        run: pip install $(grep -iE '^(numpy|Pillow|requests)' requirements.txt)
       - name: Unit tests
         working-directory: topo
         run: python -m unittest discover -s tests
