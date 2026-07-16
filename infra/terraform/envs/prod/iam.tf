@@ -148,6 +148,18 @@ resource "aws_iam_role_policy_attachment" "gha_eb" {
   policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess-AWSElasticBeanstalk"
 }
 
+# Plan-on-PR (terraform-plan.yml): terraform plan against envs/prod needs
+# broad Describe/Get/List across every managed service plus GetObject on the
+# state bucket. Hand-listing those actions is brittle (every new resource type
+# breaks the plan with AccessDenied), so use the AWS-managed ReadOnlyAccess and
+# carve the sensitive surfaces back out with an explicit Deny below. Write
+# perms for TF apply stay off this role until Phase 3 (see
+# .claude/cicd-staging-plan.md guardrails).
+resource "aws_iam_role_policy_attachment" "gha_readonly" {
+  role       = aws_iam_role.github_actions.name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
+
 # ── Inline policy ──────────────────────────────────────────────────────────────
 
 resource "aws_iam_role_policy" "gha_frontend_deploy" {
@@ -168,6 +180,80 @@ resource "aws_iam_role_policy" "gha_frontend_deploy" {
         Effect   = "Allow"
         Action   = "cloudfront:CreateInvalidation"
         Resource = "arn:aws:cloudfront::620853681701:distribution/E22J79PHZM2K"
+      },
+    ]
+  })
+}
+
+# Privacy carve-out from ReadOnlyAccess (which grants s3:GetObject on every
+# bucket): CI must never be able to read user canyon data (media photos,
+# LiDAR/tile outputs) or pull secret values. Explicit Deny beats the managed
+# Allow. Bucket-level GetBucket* config reads stay allowed — terraform
+# refresh of the storage module needs those; it never reads objects. The
+# state bucket (logjam-tfstate-*) is intentionally NOT denied: init needs
+# GetObject on the state file. Plans run -lock=false, so no write is needed.
+#
+# s3:ListBucket is deliberately NOT denied: HeadBucket (terraform's bucket
+# existence check) requires it, and denying it made CI plans propose
+# recreating all three buckets + their attached configs. Exposure is key
+# enumeration only — keys are opaque UUIDs/job ids, never canyon names —
+# while object content stays denied.
+resource "aws_iam_role_policy" "gha_readonly_privacy_deny" {
+  name = "logjam-ci-readonly-privacy-deny"
+  role = aws_iam_role.github_actions.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "DenyUserDataObjects"
+        Effect = "Deny"
+        Action = ["s3:GetObject", "s3:GetObjectVersion"]
+        Resource = [
+          "arn:aws:s3:::logjam-media/*",
+          "arn:aws:s3:::logjam-topo-jobs/*",
+          # WORM audit sink: pgaudit query text can embed canyon names/coords.
+          "arn:aws:s3:::logjam-audit-620853681701/*",
+        ]
+      },
+      # origin_verify is carved out: terraform refresh of its
+      # aws_secretsmanager_secret_version reads the value, and that value
+      # already lives in the TF state the CI role must read — denying the
+      # API call protects nothing and breaks the plan.
+      {
+        Sid         = "DenySecretValues"
+        Effect      = "Deny"
+        Action      = "secretsmanager:GetSecretValue"
+        NotResource = aws_secretsmanager_secret.origin_verify.arn
+      },
+      # ...and explicitly allowed: ReadOnlyAccess doesn't include
+      # GetSecretValue, so the carve-out alone still fails with "no
+      # identity-based policy allows".
+      {
+        Sid      = "AllowOriginVerifyRead"
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = aws_secretsmanager_secret.origin_verify.arn
+      },
+      # Scoped to the Cognito email CMK (the only customer-managed key):
+      # a blanket kms:Decrypt deny would also hit the AWS-managed
+      # aws/secretsmanager key used by the origin_verify read above.
+      {
+        Sid      = "DenyCmkDecrypt"
+        Effect   = "Deny"
+        Action   = "kms:Decrypt"
+        Resource = aws_kms_key.cognito_email.arn
+      },
+      # Postgres log export carries pgaudit query text (same sensitivity as
+      # the audit bucket). Deny reading log *events*; DescribeLogGroups stays
+      # allowed so terraform can refresh log-group resources.
+      {
+        Sid    = "DenyDbLogEvents"
+        Effect = "Deny"
+        Action = ["logs:GetLogEvents", "logs:FilterLogEvents", "logs:StartQuery", "logs:GetQueryResults"]
+        Resource = [
+          "arn:aws:logs:ap-southeast-2:620853681701:log-group:/aws/rds/*",
+          "arn:aws:logs:ap-southeast-2:620853681701:log-group:/aws/rds/*:*",
+        ]
       },
     ]
   })

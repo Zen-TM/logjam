@@ -28,6 +28,9 @@ import _native_stub  # noqa: F401,E402  (stubs osgeo when absent on the host)
 import numpy as np  # noqa: E402
 
 _REAL_GDAL = not _native_stub.is_stubbed("osgeo")
+# compute_data_footprint also runs shapely (mapping/unary_union); a host with
+# real GDAL but stubbed shapely would feed MagicMocks into json.dumps.
+_REAL_FOOTPRINT_STACK = _REAL_GDAL and not _native_stub.is_stubbed("shapely")
 
 if _REAL_GDAL:
     from osgeo import gdal, ogr, osr  # noqa: E402
@@ -94,7 +97,7 @@ def _rasterize_footprint_to_grid(geojson_path):
     return ras.GetRasterBand(1).ReadAsArray().astype(bool)
 
 
-@unittest.skipUnless(_REAL_GDAL, "needs real GDAL/OGR (skipped under host stub)")
+@unittest.skipUnless(_REAL_FOOTPRINT_STACK, "needs real GDAL/OGR + shapely (skipped under host stub)")
 class TestFootprintCoverage(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()

@@ -272,6 +272,17 @@ curl -H 'Authorization: Bearer x' -H 'x-fake-sub: fake-bob-sub' localhost:8080/c
 
 Integration tests use the `as(SUB)` helper in `api/src/__tests__/_actors.ts` for this. The suite hits an in-process rate limit (300 req/user/min) — let it drain or restart the API between rapid re-runs.
 
+### CI/CD
+
+GitHub Actions (`.github/workflows/`):
+
+| Workflow | Trigger | Does |
+|---|---|---|
+| `ci.yml` | every PR + push to `main` | unit tests, lint, typecheck for `shared`/`api`/`frontend`/`topo` (integration tests stay local — they need `make dev`) |
+| `terraform-ci.yml` | PRs touching `infra/terraform/**` | `terraform fmt -check` + `validate` (no AWS access) |
+| `terraform-plan.yml` | PRs touching `infra/terraform/**` | read-only `terraform plan` against prod, posted as a PR comment; applies stay manual |
+| `deploy-api.yml` / `deploy-frontend.yml` / `deploy-topo-worker.yml` | push to `main` (path-filtered) | build + deploy to ECR/EB, S3+CloudFront, ECR respectively |
+
 ### Troubleshooting
 
 **Port conflicts** — default ports: Postgres `5432`, MiniStack `4566`, API `8080`, frontend `5173`. If another process holds a port, stop it or change the port in `.env.local` + `docker-compose.yml`.
