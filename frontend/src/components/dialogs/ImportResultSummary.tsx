@@ -16,9 +16,12 @@ export type HeadlineCount = {
   label: string;
 };
 
-/** A named section of detail lines behind the disclosure. */
+/**
+ * A section of detail lines behind the disclosure. `title` is optional: a single
+ * section under a self-describing `detailsLabel` needs no heading repeating it.
+ */
 export type DetailSection = {
-  title: string;
+  title?: string;
   items: string[];
 };
 
@@ -28,6 +31,13 @@ export type ImportResultSummaryProps = {
 
   /** Optional detail sections shown inside the MUI Accordion disclosure. */
   details?: DetailSection[];
+
+  /**
+   * Collapsed-accordion summary text for `details`. Defaults to "Details".
+   * Set it to say what is behind the disclosure (e.g. "26 canyons merged into
+   * existing entries") so the summary line is informative while shut.
+   */
+  detailsLabel?: string;
 
   /** Errors that occurred during import (always shown, not behind disclosure). */
   errors?: string[];
@@ -61,6 +71,7 @@ function buildHeadlineText(headline: HeadlineCount[]): string {
 function ImportResultSummary({
   headline,
   details,
+  detailsLabel = "Details",
   errors,
   warnings,
   onUndo,
@@ -114,24 +125,26 @@ function ImportResultSummary({
               <ExpandMoreIcon sx={{ color: "var(--theme-text-primary)" }} />
             }
           >
-            <Typography variant="body2">Details</Typography>
+            <Typography variant="body2">{detailsLabel}</Typography>
           </AccordionSummary>
           <AccordionDetails sx={{ pt: 0 }}>
-            {details!.map((section) => {
+            {details!.map((section, sectionIndex) => {
               if (section.items.length === 0) return null;
               return (
-                <div key={section.title} style={{ marginBottom: 12 }}>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      color: "var(--theme-text-muted)",
-                      fontWeight: 600,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.08em",
-                    }}
-                  >
-                    {section.title}
-                  </Typography>
+                <div key={sectionIndex} style={{ marginBottom: 12 }}>
+                  {section.title !== undefined && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: "var(--theme-text-muted)",
+                        fontWeight: 600,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                      }}
+                    >
+                      {section.title}
+                    </Typography>
+                  )}
                   <ul className={classes.detailList}>
                     {section.items.map((item, i) => (
                       <li key={i} className={classes.detailItem}>

@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import {
   mergeCanyon,
   DEFAULT_CANYON_MERGE_POLICY,
+  MERGEABLE_FIELDS,
   isValidLatitude,
   isValidLongitude,
   LATITUDE_RANGE,
@@ -13,7 +14,6 @@ import {
   CANYON_NUMERIC_CONSTRAINTS,
   numericConstraintError,
   type CanyonMergePolicy,
-  type MergeableField,
   type CanyonNumericFieldName,
 } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
@@ -106,20 +106,20 @@ function validateInput(
   return true;
 }
 
-const MERGEABLE_FIELD_NAMES: MergeableField[] = [
-  "vGrade", "aGrade", "commitment", "quality", "numAbseils", "longestAbseil", "hours", "notes",
-];
-
+// Re-validate the client-supplied policy against the shared MERGEABLE_FIELDS —
+// the same list mergeCanyon enforces and the frontend renders switches for. This
+// used to redeclare the field names, so adding a policy entry in shared left the
+// server silently rejecting it as an unknown key.
 function validateMergePolicy(policy: unknown): CanyonMergePolicy | null {
   if (typeof policy !== "object" || policy === null) return null;
   const candidate = policy as Record<string, unknown>;
-  for (const field of MERGEABLE_FIELD_NAMES) {
+  for (const field of MERGEABLE_FIELDS) {
     const value = candidate[field];
     if (value !== "keepExisting" && value !== "useIncoming") return null;
   }
   // Drop unknown keys — reconstruct from known fields only.
   const result = {} as CanyonMergePolicy;
-  for (const field of MERGEABLE_FIELD_NAMES) {
+  for (const field of MERGEABLE_FIELDS) {
     result[field] = candidate[field] as "keepExisting" | "useIncoming";
   }
   return result;
@@ -277,6 +277,12 @@ router.post(
       canyonId: string;
       mergedData: Record<string, unknown>;
       setImportKey: string | null; // Set importKey if canyon didn't have one.
+      // Reported back so the completion screen can say WHICH canyons were folded
+      // into which, rather than only how many. sourceName is the incoming row's
+      // name (the label the user recognises from their file); targetName is the
+      // existing canyon it merged into. Both are the caller's own canyons.
+      sourceName: string;
+      targetName: string;
     };
 
     const creates: CreateOp[] = [];
@@ -287,7 +293,6 @@ router.post(
     // (ownerId, importKey) unique constraint at write time (was a raw 500) — IMPORT-1.
     const createOpByKey = new Map<string, CreateOp>();
     let created = 0;
-    let merged = 0;
 
     for (const row of rowsAfterTargetCheck) {
       const { data, importKey, resolution } = row;
@@ -318,8 +323,9 @@ router.post(
             attributes: mergedResult.attributes as Prisma.InputJsonValue,
           },
           setImportKey: null, // Already has an importKey.
+          sourceName: data.name,
+          targetName: existingCanyon.name,
         });
-        merged++;
         continue;
       }
 
@@ -363,8 +369,9 @@ router.post(
             attributes: mergedResult.attributes as Prisma.InputJsonValue,
           },
           setImportKey,
+          sourceName: data.name,
+          targetName: target.name,
         });
-        merged++;
       } else {
         // Fold a duplicate create (same importKey within this request) into the
         // first one — fill nulls under the merge policy, keep name/lat/lng — so a
@@ -474,10 +481,16 @@ router.post(
       throw err;
     }
 
+    // `merged` and `merges` are one derivation: every merge op is one merged row,
+    // so the completion screen's count can never disagree with the list behind it.
     res.json({
       batchId: body.importBatchId,
       created,
-      merged,
+      merged: merges.length,
+      merges: merges.map((op) => ({
+        sourceName: op.sourceName,
+        targetName: op.targetName,
+      })),
       skipped: 0,
       errors,
     });

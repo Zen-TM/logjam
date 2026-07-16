@@ -12,6 +12,12 @@
 
 // Fields the policy can govern. name/lat/lng are intentionally excluded — they
 // are immutable on merge.
+//
+// "attributes" is the one non-scalar entry: it is merged per key rather than
+// wholesale (a key only one side has always lands, whatever the policy says), and
+// policy.attributes decides only the per-key conflicts. Before it was a policy
+// entry, those conflicts were hardcoded to keepExisting with no way out, so a
+// corrected spreadsheet could not repair an attribute it had already imported.
 export type MergeableField =
   | "vGrade"
   | "aGrade"
@@ -20,9 +26,14 @@ export type MergeableField =
   | "numAbseils"
   | "longestAbseil"
   | "hours"
-  | "notes";
+  | "notes"
+  | "attributes";
 
-const MERGEABLE_FIELDS: MergeableField[] = [
+// The single source of the field list. Exported because every other surface that
+// needs to enumerate the policy — the API's request re-validation, the stored-
+// preference normalizer, the frontend's switch labels — used to redeclare it, and
+// a redeclared list is a list that drifts.
+export const MERGEABLE_FIELDS: MergeableField[] = [
   "vGrade",
   "aGrade",
   "commitment",
@@ -31,6 +42,7 @@ const MERGEABLE_FIELDS: MergeableField[] = [
   "longestAbseil",
   "hours",
   "notes",
+  "attributes",
 ];
 
 export type CanyonMergePolicy = Record<
@@ -50,6 +62,7 @@ export const DEFAULT_CANYON_MERGE_POLICY: CanyonMergePolicy = {
   longestAbseil: "keepExisting",
   hours: "keepExisting",
   notes: "keepExisting",
+  attributes: "keepExisting",
 };
 
 // Minimal structural shapes so this module stays free of app-specific types.
@@ -131,6 +144,10 @@ export function mergeCanyon(
 
   // Scalar mergeable fields.
   for (const field of MERGEABLE_FIELDS) {
+    // attributes is in the policy map but is not a scalar: replacing the whole
+    // object here would drop every key the incoming side didn't carry. It is
+    // merged per key below, under the same policy entry.
+    if (field === "attributes") continue;
     const existingValue = existing[field];
     const incomingValue = incoming[field];
     const hasExisting = isPresent(existingValue);
@@ -149,8 +166,10 @@ export function mergeCanyon(
   // altNames: always union with dedup.
   merged.altNames = unionStrings(existing.altNames, incoming.altNames);
 
-  // attributes: shallow per-key merge under policy default (keepExisting for
-  // an unmapped attribute key); attributes.sources always unioned.
+  // attributes: shallow per-key merge under policy.attributes, which governs
+  // conflicts only — a key present on one side alone always lands, so switching
+  // to useIncoming can overwrite a custom attribute but never wipe the set.
+  // attributes.sources is always unioned, outside the policy.
   const existingAttributes = (existing.attributes ?? {}) as Record<
     string,
     unknown
@@ -172,9 +191,13 @@ export function mergeCanyon(
     const hasIncoming =
       key in incomingAttributes && isPresent(incomingAttributes[key]);
     if (hasExisting && hasIncoming) {
-      // Attribute keys aren't in the typed policy map; default to keepExisting,
-      // matching DEFAULT_CANYON_MERGE_POLICY's conservative bias.
-      mergedAttributes[key] = existingAttributes[key];
+      // One switch governs every attribute key. Per-key policy would mean a UI
+      // over an open-ended key set the user invents at import time; the whole
+      // custom-attribute column family moves together instead.
+      mergedAttributes[key] =
+        policy.attributes === "keepExisting"
+          ? existingAttributes[key]
+          : incomingAttributes[key];
     } else if (hasIncoming) {
       mergedAttributes[key] = incomingAttributes[key];
     } else {

@@ -719,10 +719,19 @@ export type BulkCanyonRequest = {
   mergePolicy?: CanyonMergePolicy;
 };
 
+// One row that folded into an existing canyon: the name as it appeared in the
+// user's file, and the canyon it merged into. Reported per merge so the import
+// can say which canyons it changed, not just how many.
+export type CanyonMergePair = {
+  sourceName: string;
+  targetName: string;
+};
+
 export type BulkCanyonResult = {
   batchId: string;
   created: number;
   merged: number;
+  merges: CanyonMergePair[];
   skipped: number;
   errors: { rowIndex: number; message: string }[];
 };

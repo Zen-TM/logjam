@@ -24,6 +24,16 @@ export const AUTO_LINK_DIST_M = 250; // typo-tier auto-link radius (coords must 
 // reconcile against a foreign DB. Widen the radius only for exact names.
 export const EXACT_NAME_AUTO_DIST_M = 2000;
 export const REVIEW_DIST_M = 1000;
+// Governs a DEFAULT, not a possibility. Read that distinction before changing it:
+// every constant above decides whether a candidate may be matched at all; this
+// one decides only which radio button starts selected once a match is already
+// being offered. Beyond this radius the suggested canyon is still listed, still
+// badged "best guess", and still one click away — the row just starts on
+// "create as new" instead. Merging is the destructive direction (it folds a
+// distinct canyon into another one and the source row is gone), so a guess the
+// coordinates don't corroborate must not be pre-accepted on the user's behalf.
+// See defaultsToMergeOnImport.
+export const MERGE_DEFAULT_DIST_M = 500;
 export const NAME_MATCH_DIST_M = 5000; // strong name match still wins beyond review radius
 export const BBOX_DEG = 0.05; // ~5 km coarse prefilter; must exceed NAME_MATCH_DIST_M
 
@@ -375,6 +385,32 @@ export function matchCanyon(
 
   const confidence = decideConfidence(best, ranked, inputHasCoords);
   return { confidence, best, candidates: ranked };
+}
+
+// Should a surfaced (confidence "review") canyon-import row start on "merge into
+// this match", or on "create as new"?
+//
+// Only the canyon-import path asks this question: there, the two answers are
+// "fold this row into that canyon" vs "add a new canyon", and the first one is
+// destructive. Trip-log matching has no destructive direction (linking a trip to
+// a canyon is reversible and creates nothing), so it does not use this and keeps
+// pre-selecting its best guess.
+//
+// The rule: pre-select the merge only when the coordinates positively corroborate
+// it inside MERGE_DEFAULT_DIST_M. A null distance means the row carried no coords
+// to corroborate with, which is not corroboration — it defaults to create-as-new
+// too. (Canyon-import rows always have coords, so null cannot occur on today's
+// only caller; the rule is stated here so it stays right if that changes.)
+//
+// Rows that auto-link (confidence "auto") never reach this function: they are
+// merged without being surfaced at all, on the strength of AUTO_LINK_DIST_M or
+// EXACT_NAME_AUTO_DIST_M. Those radii are a separate, deliberately calibrated
+// decision and this constant does not narrow them.
+export function defaultsToMergeOnImport(best: ScoredCandidate | null): boolean {
+  if (!best) return false;
+  const distance = best.distanceMeters;
+  if (distance === null) return false;
+  return distance <= MERGE_DEFAULT_DIST_M;
 }
 
 function decideConfidence(

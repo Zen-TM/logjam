@@ -30,7 +30,9 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
   matchCanyon,
   haversineMeters,
+  defaultsToMergeOnImport,
   DEFAULT_CANYON_MERGE_POLICY,
+  MERGEABLE_FIELDS,
   type MatchCandidate,
   type CanyonMergePolicy,
   type MergeableField,
@@ -42,7 +44,7 @@ import {
   makeCustomFieldKey,
   coerceFieldValueStrict,
 } from "@logjam/shared";
-import type { TCanyon, TUser, BulkCanyonInput } from "../../canyonUtils";
+import type { TCanyon, TUser, BulkCanyonInput, CanyonMergePair } from "../../canyonUtils";
 import {
   apiFetch,
   bulkCanyonImport,
@@ -147,7 +149,7 @@ type ReviewState = {
 };
 
 type ImportOutcome =
-  | { kind: "canyon"; batchId: string; created: number; merged: number; skipped: number; errors: string[]; warnings: string[] }
+  | { kind: "canyon"; batchId: string; created: number; merged: number; merges: CanyonMergePair[]; skipped: number; errors: string[]; warnings: string[] }
   | { kind: "triplog"; batchId: string; imported: number; updated: number; createdCanyons: number; noCanyon: number; linked: number; discarded: number; errors: string[]; warnings: string[] };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -314,6 +316,10 @@ function buildCanyonInput(
   return { input, warnings };
 }
 
+// Switch labels for the merge-settings accordion. A total Record over
+// MergeableField, so a new policy entry in shared fails the build here rather
+// than shipping an unlabelled (or missing) switch. Order comes from the shared
+// MERGEABLE_FIELDS, not from this map's key order.
 const MERGEABLE_FIELD_LABELS: Record<MergeableField, string> = {
   vGrade: "V grade",
   aGrade: "A grade",
@@ -323,6 +329,7 @@ const MERGEABLE_FIELD_LABELS: Record<MergeableField, string> = {
   longestAbseil: "Longest pitch",
   hours: "Hours",
   notes: "Notes",
+  attributes: "Custom attributes",
 };
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -440,9 +447,15 @@ function UnifiedImportDialog({
     setPreparedTripRows([]);
     setTripWarnings([]);
     setReviewState({ decisions: {}, createForms: {}, options: {}, distances: {}, bestGuessId: {}, displayName: {}, autoMergeId: {} });
-    setMergePolicy(
-      currentUser?.uiPreferences?.importMergePolicy ?? DEFAULT_CANYON_MERGE_POLICY,
-    );
+    // Layer the stored policy over the defaults rather than replacing them: a
+    // policy saved before a field joined MERGEABLE_FIELDS has no entry for it,
+    // and an incomplete policy is rejected wholesale by the server's
+    // re-validation — which would silently drop every OTHER choice the user had
+    // saved. Missing entry -> that field's default; stored entries still win.
+    setMergePolicy({
+      ...DEFAULT_CANYON_MERGE_POLICY,
+      ...(currentUser?.uiPreferences?.importMergePolicy ?? {}),
+    });
   }, [open, currentUser]);
 
   const noCanyonsYet = canyons.length === 0;
@@ -780,9 +793,14 @@ function UnifiedImportDialog({
             ),
           );
           bestGuessId[key] = result.best?.candidate.id ?? null;
-          decisions[key] = result.best
-            ? { kind: "link", id: result.best.candidate.id }
-            : { kind: "create" };
+          // The guess is still offered (and still badged "best guess"), but only
+          // a match the coords corroborate arrives pre-selected — merging is the
+          // destructive direction, so a distant guess must not be accepted by
+          // default. See defaultsToMergeOnImport / MERGE_DEFAULT_DIST_M.
+          decisions[key] =
+            result.best && defaultsToMergeOnImport(result.best)
+              ? { kind: "link", id: result.best.candidate.id }
+              : { kind: "create" };
         }
       }
       setActiveKind("canyon");
@@ -954,6 +972,7 @@ function UnifiedImportDialog({
             batchId,
             created: result.created,
             merged: result.merged,
+            merges: result.merges,
             skipped: result.skipped,
             errors: formatCanyonRowErrors(result.errors),
             warnings: canyonWarnings,
@@ -968,6 +987,7 @@ function UnifiedImportDialog({
         batchId,
         created: result.created,
         merged: result.merged,
+        merges: result.merges,
         skipped: result.skipped,
         errors: formatCanyonRowErrors(result.errors),
         warnings: canyonWarnings,
@@ -1511,13 +1531,27 @@ function UnifiedImportDialog({
               { count: outcome.noCanyon, label: "without a canyon" },
               { count: outcome.discarded, label: "discarded" },
             ];
+      // A merge folds an imported row into a canyon that already existed, which
+      // is the one outcome the headline count alone can't be checked against
+      // ("26 merged" — into what?). List them, but stay out of the way: no
+      // accordion at all when nothing merged, collapsed when something did.
       const details: DetailSection[] = [];
+      let detailsLabel: string | undefined;
+      if (outcome.kind === "canyon" && outcome.merges.length > 0) {
+        details.push({
+          items: outcome.merges.map((m) => `${m.sourceName} → ${m.targetName}`),
+        });
+        detailsLabel = `${outcome.merges.length} ${
+          outcome.merges.length === 1 ? "canyon" : "canyons"
+        } merged into existing entries`;
+      }
       const warnings =
         outcome.warnings.length > 0 ? outcome.warnings : undefined;
       return (
         <ImportResultSummary
           headline={headline}
           details={details.length > 0 ? details : undefined}
+          detailsLabel={detailsLabel}
           warnings={warnings}
           errors={outcome.errors.length > 0 ? outcome.errors : undefined}
           onUndo={handleUndo}
@@ -1550,9 +1584,11 @@ function UnifiedImportDialog({
             <AccordionDetails sx={{ pt: 0 }}>
               <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", display: "block", mb: 1 }}>
                 When a row matches an existing canyon, keep the existing value or use the value from your file.
-                Empty fields always fill in (no data is lost); names and coordinates never change.
+                These settings only apply where both sides have a value: an empty field always fills in from your
+                file, and an empty cell in your file never clears what's already there. Names and coordinates
+                never change.
               </Typography>
-              {(Object.keys(MERGEABLE_FIELD_LABELS) as MergeableField[]).map((field) => (
+              {MERGEABLE_FIELDS.map((field) => (
                 <FormControlLabel
                   key={field}
                   control={

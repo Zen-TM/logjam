@@ -4,7 +4,10 @@ import {
   damerauLevenshtein,
   nameTier,
   matchCanyon,
+  defaultsToMergeOnImport,
+  MERGE_DEFAULT_DIST_M,
   type MatchCandidate,
+  type ScoredCandidate,
 } from "./canyonMatch.js";
 
 // A reference point in the Blue Mountains; offsets keep candidates either very
@@ -348,5 +351,77 @@ describe("matchCanyon — negative and ambiguity cases", () => {
       [candidate("c", "Sassafras", MID_LAT, MID_LNG)],
     );
     expect(result.confidence).toBe("review");
+  });
+});
+
+describe("defaultsToMergeOnImport", () => {
+  function scored(
+    distanceMeters: number | null,
+    tier: "exact" | "typo" = "typo",
+  ): ScoredCandidate {
+    return { candidate: candidate("c", "Whatever"), tier, distanceMeters };
+  }
+
+  it("defaults to merge just inside the threshold", () => {
+    expect(defaultsToMergeOnImport(scored(MERGE_DEFAULT_DIST_M - 1))).toBe(true);
+  });
+
+  it("defaults to merge exactly at the threshold (inclusive)", () => {
+    expect(defaultsToMergeOnImport(scored(MERGE_DEFAULT_DIST_M))).toBe(true);
+  });
+
+  it("defaults to create-as-new just beyond the threshold", () => {
+    expect(defaultsToMergeOnImport(scored(MERGE_DEFAULT_DIST_M + 1))).toBe(false);
+  });
+
+  // The reported harm: a name-similar canyon 1.8 km away arrived pre-checked to
+  // merge. It stays on the review list as a tickable option; it just no longer
+  // starts selected.
+  it("defaults to create-as-new for a name-similar match 1.8 km away", () => {
+    expect(defaultsToMergeOnImport(scored(1800))).toBe(false);
+  });
+
+  it("defaults to create-as-new when the candidate is beyond the coarse bbox", () => {
+    expect(defaultsToMergeOnImport(scored(Number.POSITIVE_INFINITY))).toBe(false);
+  });
+
+  // No coords is not corroboration. Distance is never null on the canyon-import
+  // path (rows require lat/lng), but the rule must not read "unknown" as "near".
+  it("defaults to create-as-new when there is no distance to corroborate with", () => {
+    expect(defaultsToMergeOnImport(scored(null))).toBe(false);
+  });
+
+  it("defaults to create-as-new when there is no match at all", () => {
+    expect(defaultsToMergeOnImport(null)).toBe(false);
+  });
+
+  it("applies to exact-tier matches too, not just typo-tier", () => {
+    expect(defaultsToMergeOnImport(scored(1800, "exact"))).toBe(false);
+    expect(defaultsToMergeOnImport(scored(100, "exact"))).toBe(true);
+  });
+
+  // End-to-end through the matcher: a surfaced (review) row far from its only
+  // name match must not arrive pre-selected to merge.
+  it("a review-tier match ~500 m out defaults to create-as-new", () => {
+    const result = matchCanyon(
+      { name: "Sassafrass", latitude: BASE_LAT, longitude: BASE_LNG },
+      [candidate("c", "Sassafras", MID_LAT, MID_LNG)],
+    );
+    expect(result.confidence).toBe("review");
+    expect(defaultsToMergeOnImport(result.best)).toBe(false);
+  });
+
+  it("a review-tier match ~50 m out still defaults to merge", () => {
+    // Two typo candidates: one near, one far -> review (no auto), but the best
+    // is close enough that pre-selecting the merge is still the right default.
+    const result = matchCanyon(
+      { name: "Sassafrass", latitude: BASE_LAT, longitude: BASE_LNG },
+      [
+        candidate("near", "Sassafras", NEAR_LAT, NEAR_LNG),
+        candidate("far", "Sassafras", FAR_LAT, FAR_LNG),
+      ],
+    );
+    expect(result.best?.candidate.id).toBe("near");
+    expect(defaultsToMergeOnImport(result.best)).toBe(true);
   });
 });
