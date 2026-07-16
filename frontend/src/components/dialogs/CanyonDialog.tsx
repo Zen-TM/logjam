@@ -49,7 +49,13 @@ import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
 import { getFieldValue as getFieldValueFor } from "./customFieldValues";
-import { selectSx, menuPaperProps } from "../../csvImport/dialogStyles";
+import {
+  selectSx,
+  menuPaperProps,
+  touchTargetSx,
+  dialogActionButtonSx,
+  NOTES_MAX_ROWS,
+} from "../../csvImport/dialogStyles";
 
 const V_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
 const A_GRADES = [1, 2, 3, 4, 5, 6, 7] as const;
@@ -600,7 +606,7 @@ function CanyonDialog({
           size="small"
           onClick={saving ? undefined : guard.requestClose}
           disabled={saving}
-          sx={{ color: "var(--theme-text-primary)" }}
+          sx={{ ...touchTargetSx, color: "var(--theme-text-primary)" }}
         >
           <CloseIcon fontSize="small" />
         </IconButton>
@@ -838,7 +844,10 @@ function CanyonDialog({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             multiline
+            // Already auto-grew, but without a bound — a long canyon note grew
+            // the box forever. Same cap as the trip dialog's notes.
             minRows={2}
+            maxRows={NOTES_MAX_ROWS}
             size="small"
           />
 
@@ -866,6 +875,7 @@ function CanyonDialog({
                     size="small"
                     onClick={() => setFieldToDelete(def)}
                     sx={{
+                      ...touchTargetSx,
                       color: "var(--theme-text-muted)",
                       flexShrink: 0,
                       "&:hover": { color: "var(--theme-warning)" },
@@ -914,6 +924,7 @@ function CanyonDialog({
                 setShowAddField(true);
               }}
               sx={{
+                ...touchTargetSx,
                 color: "var(--theme-accent)",
                 textTransform: "none",
                 alignSelf: "flex-start",
@@ -1054,7 +1065,7 @@ function CanyonDialog({
         <Button
           onClick={guard.requestClose}
           disabled={saving}
-          sx={{ color: "var(--theme-text-primary)" }}
+          sx={{ ...dialogActionButtonSx, color: "var(--theme-text-primary)" }}
         >
           {isEdit ? "Discard changes" : "Discard canyon"}
         </Button>
@@ -1065,6 +1076,7 @@ function CanyonDialog({
           variant="contained"
           color="secondary"
           disabled={saving}
+          sx={dialogActionButtonSx}
         >
           {saving ? <CircularProgress size={20} /> : "Save"}
         </Button>

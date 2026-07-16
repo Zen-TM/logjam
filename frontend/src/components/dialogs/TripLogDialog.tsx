@@ -51,7 +51,13 @@ import {
   type TripDraft,
   type TripDraftForm,
 } from "../../tripDraft";
-import { fieldSx, typeChipSx } from "../../csvImport/dialogStyles";
+import {
+  fieldSx,
+  typeChipSx,
+  touchTargetSx,
+  dialogActionButtonSx,
+  NOTES_MAX_ROWS,
+} from "../../csvImport/dialogStyles";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
 import AddCustomFieldForm from "./AddCustomFieldForm";
@@ -782,7 +788,7 @@ function TripLogDialog({
           size="small"
           onClick={guard.requestClose}
           disabled={saving}
-          sx={{ color: "var(--theme-text-primary)" }}
+          sx={{ ...touchTargetSx, color: "var(--theme-text-primary)" }}
         >
           <CloseIcon fontSize="small" />
         </IconButton>
@@ -1179,7 +1185,11 @@ function TripLogDialog({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             multiline
-            rows={4}
+            // Auto-grow: rests at the same 4 rows it always has, then follows
+            // the text instead of scrolling inside itself. Capped at
+            // NOTES_MAX_ROWS so it can't swallow the dialog.
+            minRows={4}
+            maxRows={NOTES_MAX_ROWS}
             size="small"
             fullWidth
             placeholder="Trip notes, conditions, observations..."
@@ -1210,6 +1220,7 @@ function TripLogDialog({
                     size="small"
                     onClick={() => setFieldToDelete(def)}
                     sx={{
+                      ...touchTargetSx,
                       color: "var(--theme-text-muted)",
                       flexShrink: 0,
                       "&:hover": { color: "var(--theme-warning)" },
@@ -1255,6 +1266,7 @@ function TripLogDialog({
               size="small"
               onClick={() => setShowAddField(true)}
               sx={{
+                ...touchTargetSx,
                 color: "var(--theme-accent)",
                 textTransform: "none",
                 alignSelf: "flex-start",
@@ -1336,7 +1348,7 @@ function TripLogDialog({
         <Button
           onClick={guard.requestClose}
           disabled={saving}
-          sx={{ color: "var(--theme-text-primary)" }}
+          sx={{ ...dialogActionButtonSx, color: "var(--theme-text-primary)" }}
         >
           {tripLog ? "Discard changes" : "Discard trip"}
         </Button>
@@ -1347,6 +1359,7 @@ function TripLogDialog({
           variant="contained"
           color="secondary"
           disabled={saving || !date}
+          sx={dialogActionButtonSx}
         >
           {saving ? <CircularProgress size={20} /> : tripLog ? "Save Changes" : "Log Trip"}
         </Button>

@@ -11,7 +11,7 @@ import {
 } from "@mui/material";
 import type { TripLogCustomFieldType } from "@logjam/shared";
 import { CUSTOM_FIELD_TYPES } from "@logjam/shared";
-import { fieldSx, selectSx, menuPaperProps } from "../../csvImport/dialogStyles";
+import { fieldSx, selectSx, menuPaperProps, touchTargetSx } from "../../csvImport/dialogStyles";
 import { sanitizeNumericInput } from "../../numberInput";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import classes from "./AddCustomFieldForm.module.css";
@@ -159,7 +159,7 @@ function AddCustomFieldForm({
           size="small"
           onClick={onCancel}
           disabled={adding}
-          sx={{ color: "var(--theme-text-primary)" }}
+          sx={{ ...touchTargetSx, color: "var(--theme-text-primary)" }}
         >
           Cancel
         </Button>
@@ -169,6 +169,7 @@ function AddCustomFieldForm({
           size="small"
           onClick={onAdd}
           disabled={adding || !label.trim()}
+          sx={touchTargetSx}
         >
           {adding ? <CircularProgress size={16} /> : "Add Field"}
         </Button>

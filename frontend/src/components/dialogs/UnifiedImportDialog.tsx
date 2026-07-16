@@ -76,8 +76,8 @@ import {
   fieldSx,
   selectSx,
   menuPaperProps,
-  SectionLabel,
 } from "../../csvImport/dialogStyles";
+import { SectionLabel } from "../../csvImport/SectionLabel";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useToast } from "../feedback/ToastProvider";
