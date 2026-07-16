@@ -904,11 +904,15 @@ export function deleteMedia(id: string): Promise<void> {
 
 // ── Analytics ─────────────────────────────────────────────────
 
+// /analytics is the canyoning surface: the server scopes every trip-derived
+// stat to trips that are canyon-linked OR tagged canyoning (a canyon link means
+// "I completed that canyon on that trip"). There is no type filter — it took no
+// argument but "canyoning" from its only caller, and there is no dropdown.
 export type TAnalytics = {
   heroStats: {
     totalTrips: number;
-    // Trips of another type (or untyped) not shown by the type-scoped Activity
-    // chart. 0 when the analytics call carries no type filter.
+    // The user's trips that are neither canyon-linked nor tagged canyoning —
+    // what the Activity chart isn't showing.
     excludedTrips: number;
     uniqueCanyons: number;
     daysCanyoning: number;
@@ -919,17 +923,15 @@ export type TAnalytics = {
     canyonsWithTrips: number;
   };
   tripDates: Record<string, number>;
-  // Distinct types across ALL the user's trips (for the filter dropdown) —
-  // unaffected by the `type` filter itself.
+  // Distinct types across ALL the user's trips, canyoning or not.
   types: string[];
 };
 
-export function getAnalytics(type?: string | null): Promise<TAnalytics> {
-  const qs = type ? `?type=${encodeURIComponent(type)}` : "";
-  return apiFetch<TAnalytics>(`/analytics${qs}`);
+export function getAnalytics(): Promise<TAnalytics> {
+  return apiFetch<TAnalytics>("/analytics");
 }
 
-export function useAnalytics(enabled: boolean, type: string | null = null) {
+export function useAnalytics(enabled: boolean) {
   const [analytics, setAnalytics] = useState<TAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -938,11 +940,11 @@ export function useAnalytics(enabled: boolean, type: string | null = null) {
   useEffect(() => {
     if (!enabled) return;
     setLoading(true);
-    getAnalytics(type)
+    getAnalytics()
       .then(setAnalytics)
       .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load analytics.")); })
       .finally(() => setLoading(false));
-  }, [enabled, type, fetchCount]);
+  }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 

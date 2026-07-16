@@ -30,6 +30,8 @@ import {
   TRIP_TYPE_SUGGESTIONS,
   MAX_CANYONS_PER_TRIP,
   MAX_TRIP_TYPES_PER_TRIP,
+  CANYONING_TRIP_TYPE,
+  enforceCanyoningTag,
 } from "@logjam/shared";
 import type { TCanyon, TTripLog } from "../../canyonUtils";
 import {
@@ -174,6 +176,17 @@ function TripLogDialog({
   // at once (before that, errors only show after a field is blurred).
   const [showFieldErrors, setShowFieldErrors] = useState(false);
 
+  // Linking a canyon means "I did that canyon on this trip", so the API
+  // force-tags `canyoning` on save. Mirror that in the selection itself (rather
+  // than only in the rendered chips) so the tag is visible before the user hits
+  // Save instead of appearing afterwards, and so the cap checks below count it
+  // exactly as storage does. enforceCanyoningTag returns its input unchanged
+  // when there's nothing to add, so this settles immediately.
+  const hasLinkedCanyon = selectedCanyonIds.length > 0;
+  useEffect(() => {
+    setSelectedTypes((prev) => enforceCanyoningTag(prev, hasLinkedCanyon));
+  }, [hasLinkedCanyon]);
+
   // The full known-type vocabulary: built-in suggestions ∪ the user's own
   // history, deduped case-insensitively (first casing wins).
   const knownTypes = useMemo(
@@ -278,7 +291,14 @@ function TripLogDialog({
       initialNotes = tripLog.notes ?? "";
       initialSelectedCanyonIds = tripLog.canyons.map((c) => c.id);
       initialDisplayNameInput = tripLog.displayName ?? "";
-      initialSelectedTypes = tripLog.types;
+      // Enforce here rather than letting the effect below do it, so the
+      // unsaved-changes snapshot taken next already includes the tag — a trip
+      // that predates enforcement would otherwise read as dirty the instant it
+      // opened, and prompt on close without the user touching anything.
+      initialSelectedTypes = enforceCanyoningTag(
+        tripLog.types,
+        initialSelectedCanyonIds.length > 0,
+      );
       // Populate existing custom field values as strings
       const vals: Record<string, string> = {};
       for (const def of customFieldDefs) {
@@ -291,7 +311,10 @@ function TripLogDialog({
       initialNotes = "";
       initialSelectedCanyonIds = defaultCanyonId ? [defaultCanyonId] : [];
       initialDisplayNameInput = "";
-      initialSelectedTypes = [];
+      initialSelectedTypes = enforceCanyoningTag(
+        [],
+        initialSelectedCanyonIds.length > 0,
+      );
       initialFieldValues = {};
     }
     setDate(initialDate);
@@ -779,7 +802,11 @@ function TripLogDialog({
               }
               // Cap at MAX_TRIP_TYPES_PER_TRIP (mirrors the canyon cap).
               if (next.length > MAX_TRIP_TYPES_PER_TRIP) return;
-              setSelectedTypes(next);
+              // Re-enforce: the locked chip has no delete button, but Backspace
+              // in the input still pops the last tag, so the tag has to be put
+              // back here too. enforceCanyoningTag skips at the cap, so this
+              // can never push `next` past the check above.
+              setSelectedTypes(enforceCanyoningTag(next, hasLinkedCanyon));
             }}
             filterOptions={(options, params) => {
               const filtered = typeFilter(options, params);
@@ -819,13 +846,24 @@ function TripLogDialog({
             renderTags={(value, getTagProps) =>
               value.map((option, index) => {
                 const { key, ...tagProps } = getTagProps({ index });
+                const label = getTypeOptionLabel(option);
+                // The canyoning tag is locked (visible, not removable) while a
+                // canyon is linked — the API re-adds it on save, so offering a
+                // delete that silently undoes itself would be a lie. Unlink the
+                // canyons and it becomes an ordinary, removable tag.
+                const locked =
+                  hasLinkedCanyon && label.toLowerCase() === CANYONING_TRIP_TYPE;
                 return (
                   <Chip
                     key={key}
-                    label={getTypeOptionLabel(option)}
+                    label={label}
                     size="small"
                     sx={typeChipSx}
                     {...tagProps}
+                    {...(locked && {
+                      onDelete: undefined,
+                      title: "Trips with a linked canyon are always tagged canyoning.",
+                    })}
                   />
                 );
               })

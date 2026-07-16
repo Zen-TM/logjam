@@ -4,6 +4,7 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { Prisma } from "@prisma/client";
 import {
+  enforceCanyoningTag,
   MAX_CANYONS_PER_TRIP,
   MAX_TRIP_TYPES_PER_TRIP,
   TRIP_NAME_MAX_LENGTH,
@@ -102,6 +103,42 @@ export function parseTripTypes(value: unknown): string[] | undefined {
       `At most ${MAX_TRIP_TYPES_PER_TRIP} types per trip`,
     );
   return result;
+}
+
+// Resolves the `types` array a PATCH should persist, enforcing the canyoning
+// tag across all four combinations of its two independently-optional fields.
+//
+//   types | canyonIds | tag decided from
+//   ------+-----------+---------------------------------------------------
+//   set   | set       | incoming types, incoming link state
+//   set   | absent    | incoming types, STORED link state  ← the trap: without
+//         |           |   the stored links, `types: []` on a canyon-linked
+//         |           |   trip silently strips the tag
+//   absent| set       | stored types, incoming link state (linking a canyon
+//         |           |   to an untagged trip tags it)
+//   absent| absent    | stored types, stored link state (no-op unless the trip
+//         |           |   predates enforcement, which this write then repairs)
+//
+// `changed` is false when nothing needs writing, so a PATCH that never mentions
+// `types` doesn't rewrite the column for nothing.
+export function resolvePatchedTripTypes(args: {
+  parsedTypes: string[] | undefined;
+  storedTypes: string[];
+  resolvedCanyonIds: string[] | undefined;
+  storedHasLinkedCanyon: boolean;
+}): { types: string[]; changed: boolean } {
+  const { parsedTypes, storedTypes, resolvedCanyonIds, storedHasLinkedCanyon } =
+    args;
+  const hasLinkedCanyon =
+    resolvedCanyonIds !== undefined
+      ? resolvedCanyonIds.length > 0
+      : storedHasLinkedCanyon;
+  const types = enforceCanyoningTag(parsedTypes ?? storedTypes, hasLinkedCanyon);
+  // enforceCanyoningTag only ever appends, so against the stored array a length
+  // change is the only way it can differ.
+  const changed =
+    parsedTypes !== undefined || types.length !== storedTypes.length;
+  return { types, changed };
 }
 
 // Normalizes an optional trip display name: trimmed, empty → null.
@@ -216,6 +253,7 @@ router.get(
 // (canyonIds omitted or [] = unassigned). displayName and types are
 // independent optional fields; a bare trip needs only a date. The default
 // title (joined canyon names) is derived at render time, never stored.
+// A canyon-linked trip is force-tagged `canyoning` (enforceCanyoningTag).
 router.post(
   "/",
   requireAuth,
@@ -228,7 +266,10 @@ router.post(
 
     const resolvedCanyonIds = await resolveTripCanyonIds(user.id, canyonIds);
     const trimmedDisplayName = parseDisplayName(displayName) ?? null;
-    const parsedTypes = parseTripTypes(types) ?? [];
+    const parsedTypes = enforceCanyoningTag(
+      parseTripTypes(types) ?? [],
+      resolvedCanyonIds.length > 0,
+    );
 
     const trip = await prisma.tripLog.create({
       data: {
@@ -257,6 +298,9 @@ router.post(
 // (order included). displayName accepts explicit null to clear; types
 // accepts explicit null or [] to clear (types: [] and null both mean "no
 // types"); either replaces the full array when present.
+//
+// The `canyoning` tag is enforced on every PATCH, not just those that mention
+// `types` — see the four-combination note below.
 router.patch(
   "/:id",
   requireAuth,
@@ -264,7 +308,15 @@ router.patch(
     const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
-    const trip = await prisma.tripLog.findUnique({ where: { id } });
+    const trip = await prisma.tripLog.findUnique({
+      where: { id },
+      // The canyon links are fetched, not just the row: `canyonIds` and `types`
+      // are independently optional, so enforcement needs the trip's CURRENT
+      // link state whenever the request omits canyonIds. Without this, a PATCH
+      // of `types: []` on a canyon-linked trip would silently strip the tag.
+      // take: 1 — only existence is needed, never the ids.
+      include: { canyons: { select: { canyonId: true }, take: 1 } },
+    });
     // Owner-private resource — 404 (not 403) for non-owners (SEC-001).
     if (!trip || trip.userId !== user.id)
       throw new AppError(404, "Trip log not found");
@@ -279,6 +331,16 @@ router.patch(
     const trimmedDisplayName = parseDisplayName(displayName);
     const parsedTypes = parseTripTypes(types);
 
+    // "A canyon-linked trip carries the canyoning tag" is maintained on every
+    // write, not only on writes that mention `types` — see the helper.
+    const { types: effectiveTypes, changed: typesChanged } =
+      resolvePatchedTripTypes({
+        parsedTypes,
+        storedTypes: trip.types,
+        resolvedCanyonIds,
+        storedHasLinkedCanyon: trip.canyons.length > 0,
+      });
+
     const updated = await prisma.tripLog.update({
       where: { id },
       data: {
@@ -290,7 +352,7 @@ router.patch(
         ...(trimmedDisplayName !== undefined && {
           displayName: trimmedDisplayName,
         }),
-        ...(parsedTypes !== undefined && { types: parsedTypes }),
+        ...(typesChanged && { types: effectiveTypes }),
         ...(resolvedCanyonIds !== undefined && {
           canyons: {
             deleteMany: {},

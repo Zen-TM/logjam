@@ -21,14 +21,17 @@ const TAG = `CH003-analytics-${Date.now()}`;
 const DELTA_DATE = "2099-01-15";
 const ISOLATION_DATE = "2099-02-20";
 
-async function getAnalytics(auth = AUTH, type?: string) {
-  const res = await request(API_URL)
-    .get("/analytics")
-    .query(type !== undefined ? { type } : {})
-    .set(auth);
+async function getAnalytics(auth = AUTH) {
+  const res = await request(API_URL).get("/analytics").set(auth);
   expect(res.status).toBe(200);
   return res.body as {
-    heroStats: { totalTrips: number; uniqueCanyons: number; daysCanyoning: number; totalAbseils: number | null };
+    heroStats: {
+      totalTrips: number;
+      excludedTrips: number;
+      uniqueCanyons: number;
+      daysCanyoning: number;
+      totalAbseils: number | null;
+    };
     completion: { totalCanyons: number; canyonsWithTrips: number };
     tripDates: Record<string, number>;
     types: string[];
@@ -98,12 +101,12 @@ describe("GET /analytics (fake auth = alice)", () => {
     }
   });
 
-  it("?type= filters heroStats/tripDates to trips whose types[] contains that value; types[] always lists every distinct flattened type unfiltered; totalAbseils sums every linked canyon of each counted trip", async () => {
-    // Acts as bob (no seeded trips) — keeps these exact-count assertions
-    // independent of alice's ~131 migrated seed trips and spreads the suite
-    // across per-user rate-limit buckets.
-    // TripLog types entries cap at 40 chars — keep these run-unique tags short.
-    const canyoningType = `cyn-${Date.now()}`;
+  it("counts a trip by its canyon LINK regardless of tag; totalAbseils sums every linked canyon of each counted trip", async () => {
+    // Acts as bob (no seeded trips) — spreads the suite across per-user
+    // rate-limit buckets. Assertions are deltas around this test's own writes:
+    // hero stats are now link-driven, so there is no per-run type tag left to
+    // isolate them with (the old ?type= trick).
+    // TripLog types entries cap at 40 chars — keep run-unique tags short.
     const bushwalkingType = `bsh-${Date.now()}`;
 
     const canyonA = await request(API_URL)
@@ -120,46 +123,57 @@ describe("GET /analytics (fake auth = alice)", () => {
     expect(canyonB.status).toBe(201);
     const canyonBId = canyonB.body.id as string;
 
-    // Two "canyoning" trips: one multi-canyon (both A and B linked), one
-    // single-canyon (A only). One "bushwalking" trip linked to B only.
+    const before = await getAnalytics(BOB);
+
+    // Two canyon-linked trips, NEITHER tagged by the client — the case the
+    // whole fix exists for. One multi-canyon (A and B), one single (A only).
     const tripMulti = await request(API_URL)
       .post("/trips")
       .set(BOB)
-      .send({ canyonIds: [canyonAId, canyonBId], date: "2099-03-01", types: [canyoningType] });
+      .send({ canyonIds: [canyonAId, canyonBId], date: "2099-03-01" });
     expect(tripMulti.status).toBe(201);
+    // POST force-tags a canyon-linked trip (enforceCanyoningTag).
+    expect(tripMulti.body.types).toEqual(["canyoning"]);
+
     const tripSingle = await request(API_URL)
       .post("/trips")
       .set(BOB)
-      .send({ canyonIds: [canyonAId], date: "2099-03-02", types: [canyoningType] });
+      .send({ canyonIds: [canyonAId], date: "2099-03-02" });
     expect(tripSingle.status).toBe(201);
+
+    // A canyon-less, non-canyoning trip: excluded from the hero stats, and
+    // never force-tagged (no link).
     const tripBushwalk = await request(API_URL)
       .post("/trips")
       .set(BOB)
-      .send({ canyonIds: [canyonBId], date: "2099-03-03", types: [bushwalkingType] });
+      .send({ date: "2099-03-03", types: [bushwalkingType] });
     expect(tripBushwalk.status).toBe(201);
+    expect(tripBushwalk.body.types).toEqual([bushwalkingType]);
 
     const tripIds = [tripMulti.body.id, tripSingle.body.id, tripBushwalk.body.id] as string[];
     try {
-      // Unfiltered types[] contains both tagged types regardless of ?type=.
-      const unfiltered = await getAnalytics(BOB);
-      expect(unfiltered.types).toContain(canyoningType);
-      expect(unfiltered.types).toContain(bushwalkingType);
+      const after = await getAnalytics(BOB);
 
-      // ?type= isolates the tagged type from the rest of the account (tag is
-      // unique per test run, so no other trip anywhere matches it).
-      const canyoningRes = await getAnalytics(BOB, canyoningType);
-      expect(canyoningRes.heroStats.totalTrips).toBe(2);
+      // The two linked trips count; the bushwalking one doesn't.
+      expect(after.heroStats.totalTrips - before.heroStats.totalTrips).toBe(2);
+      expect(after.heroStats.excludedTrips - before.heroStats.excludedTrips).toBe(1);
       // totalAbseils sums numAbseils over every linked canyon of each counted
       // trip: tripMulti contributes 3+5, tripSingle contributes 3.
-      expect(canyoningRes.heroStats.totalAbseils).toBe(3 + 5 + 3);
-      // uniqueCanyons counts every distinct linked canyon id across the
-      // filtered set: A and B.
-      expect(canyoningRes.heroStats.uniqueCanyons).toBe(2);
+      expect(
+        (after.heroStats.totalAbseils ?? 0) - (before.heroStats.totalAbseils ?? 0),
+      ).toBe(3 + 5 + 3);
+      // uniqueCanyons counts every distinct linked canyon id: A and B.
+      expect(after.heroStats.uniqueCanyons - before.heroStats.uniqueCanyons).toBe(2);
 
-      const bushwalkingRes = await getAnalytics(BOB, bushwalkingType);
-      expect(bushwalkingRes.heroStats.totalTrips).toBe(1);
-      expect(bushwalkingRes.heroStats.totalAbseils).toBe(5);
-      expect(bushwalkingRes.heroStats.uniqueCanyons).toBe(1);
+      // tripDates is keyed by date; these far-future dates isolate the buckets
+      // from concurrent writes elsewhere.
+      expect(after.tripDates["2099-03-01"]).toBe(1);
+      expect(after.tripDates["2099-03-02"]).toBe(1);
+      expect(after.tripDates["2099-03-03"]).toBeUndefined();
+
+      // types[] lists every distinct type across ALL trips, canyoning or not.
+      expect(after.types).toContain("canyoning");
+      expect(after.types).toContain(bushwalkingType);
     } finally {
       for (const id of tripIds) {
         await request(API_URL).delete(`/trips/${id}`).set(BOB);
@@ -169,24 +183,22 @@ describe("GET /analytics (fake auth = alice)", () => {
     }
   });
 
-  it("?type= matches a trip whose types[] array contains the value anywhere, not just as the sole entry", async () => {
-    const primaryType = `pri-${Date.now()}`;
-    const secondaryType = `sec-${Date.now()}`;
+  it("counts a canyon-less trip tagged canyoning — the 'canyon that isn't in my library' escape hatch", async () => {
+    const before = await getAnalytics(BOB);
+    // No canyonIds: the link branch can't match, so only the tag branch counts
+    // this trip. uniqueCanyons picks it up by displayName.
     const trip = await request(API_URL)
       .post("/trips")
       .set(BOB)
-      .send({ date: "2099-04-01", types: [primaryType, secondaryType] });
+      .send({ date: "2099-04-01", types: ["canyoning"], displayName: `${TAG}-unlisted` });
     expect(trip.status).toBe(201);
     const tripId = trip.body.id as string;
     try {
-      // Filtering by either type (regardless of its position in the array)
-      // must surface this trip — `types: { has }`, not an exact-array match.
-      const bySecondary = await getAnalytics(BOB, secondaryType);
-      expect(bySecondary.heroStats.totalTrips).toBe(1);
-      const byPrimary = await getAnalytics(BOB, primaryType);
-      expect(byPrimary.heroStats.totalTrips).toBe(1);
-      expect(byPrimary.types).toContain(primaryType);
-      expect(byPrimary.types).toContain(secondaryType);
+      const after = await getAnalytics(BOB);
+      expect(after.heroStats.totalTrips - before.heroStats.totalTrips).toBe(1);
+      expect(after.heroStats.excludedTrips - before.heroStats.excludedTrips).toBe(0);
+      expect(after.heroStats.uniqueCanyons - before.heroStats.uniqueCanyons).toBe(1);
+      expect(after.tripDates["2099-04-01"]).toBe(1);
     } finally {
       await request(API_URL).delete(`/trips/${tripId}`).set(BOB);
     }

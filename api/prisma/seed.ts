@@ -2,7 +2,7 @@ import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { databaseUrlFromEnv } from "../src/lib/databaseUrl";
 import { CURRENT_CONSENT_VERSION } from "../src/constants/consent";
-import { TRACK_COLORS } from "@logjam/shared";
+import { enforceCanyoningTag, TRACK_COLORS } from "@logjam/shared";
 
 const adapter = new PrismaPg({ connectionString: databaseUrlFromEnv() });
 const prisma = new PrismaClient({ adapter });
@@ -298,7 +298,11 @@ async function main() {
     })),
   });
 
-  // Trip logs.
+  // Trip logs. `types` goes through enforceCanyoningTag, the same derivation
+  // POST /trips applies — the seed writes via Prisma directly and so bypasses
+  // the route's enforcement, which would otherwise leave every seeded trip
+  // untagged and make dev the one environment where the trip-type filter has
+  // an empty vocabulary.
   const trips = buildTrips();
   for (const t of trips) {
     await prisma.tripLog.create({
@@ -307,6 +311,7 @@ async function main() {
         date: t.date,
         displayName: t.displayName,
         notes: t.notes,
+        types: enforceCanyoningTag([], Boolean(t.canyonId)),
         ...(t.customFields ? { customFields: t.customFields } : {}),
         ...(t.canyonId
           ? { canyons: { create: [{ canyonId: t.canyonId, position: 0 }] } }

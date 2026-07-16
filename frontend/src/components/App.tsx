@@ -412,7 +412,7 @@ function App() {
     error: tripLogsError,
     refetch: refetchTripLogs,
   } = useTripLogs(authenticated);
-  const { analytics, loading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(authenticated, "canyoning");
+  const { analytics, loading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(authenticated);
   const { currentUser, refetchCurrentUser, applyCurrentUser } = useCurrentUser(authenticated);
   const {
     vectorStyle,

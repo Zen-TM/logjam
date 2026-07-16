@@ -1,32 +1,38 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { AppError } from "../middleware/errorHandler";
+import { CANYONING_TRIP_TYPE } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
 
 const router = Router();
 
 // ── GET /analytics ─────────────────────────────────────────────
 // Returns aggregate statistics for the current user's canyoning activity.
-// Optional ?type= filters the trip-derived stats (heroStats, tripDates) to
-// trips whose `types` array contains that value; `types` in the response is
-// always computed unfiltered (flattened across every trip's array) so the UI
-// dropdown can offer every type the user has ever used.
+//
+// "A canyoning trip" is identified by CANYON LINK first, tag second: linking a
+// canyon to a trip means "I completed that canyon on that trip", so the link is
+// the fact and the `canyoning` tag is a denormalized convenience. Filtering on
+// the link makes these stats correct retroactively — trips logged before the
+// tag was enforced (POST/PATCH /trips, via enforceCanyoningTag) still count,
+// with no backfill.
+//
+// The tag branch is NOT vestigial: it counts the canyon-less canyoning trip —
+// "I did a canyon that isn't in my library" — which has no link to match on and
+// is otherwise counted only by displayName below.
+const CANYONING_TRIP_WHERE = {
+  OR: [{ canyons: { some: {} } }, { types: { has: CANYONING_TRIP_TYPE } }],
+};
+
 router.get(
   "/",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
 
-    const { type } = req.query as { type?: string };
-    if (type !== undefined && typeof type !== "string") {
-      throw new AppError(400, "type must be a string");
-    }
-
     const [trips, totalTripsAllTypes, totalCanyons, canyonsWithTrips, typesRows] =
       await Promise.all([
         prisma.tripLog.findMany({
-          where: { userId: user.id, ...(type ? { types: { has: type } } : {}) },
+          where: { userId: user.id, ...CANYONING_TRIP_WHERE },
           select: {
             date: true,
             displayName: true,
@@ -38,14 +44,17 @@ router.get(
             },
           },
         }),
-        // All the user's trips regardless of type. Lets the client show how many
-        // trips the type-filtered Activity chart is NOT showing (ANALYTICS-1).
-        // Only needed when a type filter is active — skip the query otherwise
-        // (its result feeds `excludedTrips`, which is 0 with no filter).
-        type
-          ? prisma.tripLog.count({ where: { userId: user.id } })
-          : Promise.resolve(0),
+        // All the user's trips, canyoning or not. Lets the client show how many
+        // trips the canyoning-scoped Activity chart is NOT showing (ANALYTICS-1).
+        prisma.tripLog.count({ where: { userId: user.id } }),
         prisma.canyon.count({ where: { ownerId: user.id } }),
+        // No user filter on tripLogLinks, deliberately — `ownerId` already
+        // scopes this to the user's own canyons, and a link can only ever be to
+        // one of them: resolveTripCanyonIds (routes/tripLogsGlobal.ts) rejects
+        // any canyonId the requester doesn't own, so a sharee cannot link their
+        // trip to your canyon. Correct today, but the invariant is enforced in
+        // that other file — if trip↔canyon linking ever accepts a canyon the
+        // trip's owner doesn't own, this count must grow a user filter.
         prisma.canyon.count({
           where: { ownerId: user.id, tripLogLinks: { some: {} } },
         }),
@@ -90,9 +99,9 @@ router.get(
     res.json({
       heroStats: {
         totalTrips: trips.length,
-        // Trips of a different type (or untyped) than the active filter — the
-        // count the type-scoped Activity chart omits. 0 when no type filter.
-        excludedTrips: type ? totalTripsAllTypes - trips.length : 0,
+        // Trips that are neither canyon-linked nor tagged canyoning — the count
+        // the canyoning-scoped Activity chart omits.
+        excludedTrips: totalTripsAllTypes - trips.length,
         uniqueCanyons: distinctCanyons.size,
         daysCanyoning: distinctDays.size,
         totalAbseils,
