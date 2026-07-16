@@ -15,7 +15,7 @@
   </head>
   <body>
     <h1>Logjam — Privacy Policy</h1>
-    <p class="updated">Last updated: 2026-06-22</p>
+    <p class="updated">Last updated: 2026-07-17</p>
 
     <p>
       Logjam is built as a <strong>private</strong> tool. Privacy is a design
@@ -79,21 +79,37 @@
     <p>
       Logjam runs on AWS in the <code>ap-southeast-2</code> (Sydney) region.
       Photos, topo input, and rendered tiles are stored in S3. The database is
-      RDS PostgreSQL. Authentication, and the account verification and
-      password-reset emails it sends, are handled by Amazon Cognito within the
-      same Australian region — these are not disclosed overseas.
+      RDS PostgreSQL. Authentication is handled by Amazon Cognito within the
+      same Australian region. The account verification, password-reset, and
+      email-change messages are delivered through Resend in the United States
+      (see &ldquo;Overseas disclosure&rdquo; below).
     </p>
 
     <h2>Overseas disclosure</h2>
     <p>
-      One category of data leaves Australia. Notification emails telling you a
-      topo job, export, or GeoPDF you started has finished are sent via
-      <strong>Resend</strong>, whose email is processed in the United States.
-      These emails contain your email address and a job reference; they do not
-      contain canyon names or coordinates. This is a cross-border disclosure of
-      your email address. We take reasonable steps to ensure overseas recipients
-      handle your information consistently with the Australian Privacy
-      Principles.
+      Some data leaves Australia. All of Logjam's outbound email is delivered
+      through <strong>Resend</strong>, whose email is processed in the United
+      States. This covers two kinds of message:
+    </p>
+    <ul>
+      <li>
+        <strong>Account emails:</strong> the codes that verify your email
+        address, reset your password, or confirm an email change (and, for
+        accounts created by invitation, a temporary password). Each contains
+        your email address and a single time-limited code.
+      </li>
+      <li>
+        <strong>Notification emails:</strong> telling you a topo job, export, or
+        GeoPDF you started has finished. Each contains your email address and a
+        job reference.
+      </li>
+    </ul>
+    <p>
+      Neither kind of email contains canyon names or coordinates. Sending them
+      is a cross-border disclosure of your email address, and — for account
+      emails — of a short-lived authentication code. We take reasonable steps to
+      ensure overseas recipients handle your information consistently with the
+      Australian Privacy Principles.
     </p>
     <p>
       The service is delivered through Amazon CloudFront, a global
