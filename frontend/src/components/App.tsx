@@ -55,7 +55,7 @@ import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { TOPO_OVERLAY_SOURCE, GEOPDF_OVERLAY_ATTRIBUTION } from "@logjam/shared";
 import type { OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
-import { useLocalStorage } from "../useLocalStorage";
+import { useStoredState } from "../useStoredState";
 import { Button } from "@mui/material";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
@@ -73,7 +73,7 @@ function triggerDownload(url: string) {
 
 function App() {
   const toast = useToast();
-  const [storedFilters, setFilters] = useLocalStorage<TFilters>("logjam.filters", emptyFilters);
+  const [storedFilters, setFilters] = useStoredState<TFilters>("logjam.filters", emptyFilters);
   // Declared here (not with the other field-def state below) because the filters
   // memo needs it to prune custom filters whose definition no longer exists.
   const [canyonCustomFieldDefs, setCanyonCustomFieldDefs] = useState<
@@ -93,7 +93,7 @@ function App() {
   const [filtersAccordionSignal, setFiltersAccordionSignal] = useState(0);
   const [selectedCanyonID, setSelectedCanyonID] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
-  const [activeLayerId, setActiveLayerId] = useLocalStorage("logjam.activeLayerId", BASE_LAYERS[0].id);
+  const [activeLayerId, setActiveLayerId] = useStoredState("logjam.activeLayerId", BASE_LAYERS[0].id);
 
   const [showAdd, setShowAdd] = useState(false);
   const [showUnifiedImport, setShowUnifiedImport] = useState(false);
@@ -104,9 +104,9 @@ function App() {
   const importChecked = useRef(false);
 
   // Layer visibility toggles
-  const [showOwnedCanyons, setShowOwnedCanyons] = useLocalStorage("logjam.showOwnedCanyons", true);
-  const [showSharedCanyons, setShowSharedCanyons] = useLocalStorage("logjam.showSharedCanyons", true);
-  const [showCanyonTracks, setShowCanyonTracks] = useLocalStorage("logjam.showCanyonTracks", false);
+  const [showOwnedCanyons, setShowOwnedCanyons] = useStoredState("logjam.showOwnedCanyons", true);
+  const [showSharedCanyons, setShowSharedCanyons] = useStoredState("logjam.showSharedCanyons", true);
+  const [showCanyonTracks, setShowCanyonTracks] = useStoredState("logjam.showCanyonTracks", false);
 
   // Coordinate picking mode for CanyonDialog
   const [pickingCoords, setPickingCoords] = useState(false);
@@ -166,7 +166,7 @@ function App() {
   );
 
   // Map view state — persisted for session restore and used for GeoPDF initialisation
-  const [mapCenter, setMapCenter] = useLocalStorage<{
+  const [mapCenter, setMapCenter] = useStoredState<{
     lat: number;
     lng: number;
     zoom: number;
@@ -197,11 +197,11 @@ function App() {
   const [flyToCanyon, setFlyToCanyon] = useState<{ lat: number; lng: number } | null>(null);
 
   // LiDAR topo panel state — lifted so it persists across panel open/close
-  const [lidarEnabled, setLidarEnabled] = useLocalStorage("logjam.lidarEnabled", false);
+  const [lidarEnabled, setLidarEnabled] = useStoredState("logjam.lidarEnabled", false);
 
   const currentLayerNames: string[] = TOPO_LAYERS.map((l) => l.name);
   const defaultLayerToggles = Object.fromEntries(currentLayerNames.map((n) => [n, true]));
-  const [rawLidarLayerToggles, setLidarLayerToggles] = useLocalStorage<Record<string, boolean>>(
+  const [rawLidarLayerToggles, setLidarLayerToggles] = useStoredState<Record<string, boolean>>(
     "logjam.lidarLayerToggles",
     defaultLayerToggles,
   );
@@ -213,7 +213,7 @@ function App() {
     ),
   };
 
-  const [rawLidarLayerOrder, setLidarLayerOrder] = useLocalStorage<string[]>(
+  const [rawLidarLayerOrder, setLidarLayerOrder] = useStoredState<string[]>(
     "logjam.lidarLayerOrder",
     currentLayerNames,
   );
@@ -224,7 +224,7 @@ function App() {
   ];
 
   // Per-completed-job visibility. Newly fetched jobs default to true (visible).
-  const [lidarJobToggles, setLidarJobToggles] = useLocalStorage<Record<string, boolean>>(
+  const [lidarJobToggles, setLidarJobToggles] = useStoredState<Record<string, boolean>>(
     "logjam.lidarJobToggles",
     {},
   );

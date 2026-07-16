@@ -10,7 +10,7 @@ import type {
 } from "../../../canyonUtils";
 import { refreshFromRopeWiki, passesFilters, activeFilterCount } from "../../../canyonUtils";
 import type { RefreshResult } from "../../../canyonUtils";
-import { useLocalStorage } from "../../../useLocalStorage";
+import { useStoredState } from "../../../useStoredState";
 import type { PanelId } from "../panels";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { customFieldDisplayLabel } from "@logjam/shared";
@@ -93,12 +93,14 @@ function CanyonsPanel({
   canyonCustomFieldDefs: TripLogCustomFieldDef[];
 }) {
   // Search: a substring query that filters the canyon cards below (matches the
-  // primary name or any alternative name). ANDs with the filters. Persisted so
-  // it survives the panel's unmount-on-close (CANYON-12) — the filters state
-  // (owned by App) already persists the same way.
-  const [query, setQuery] = useLocalStorage("logjam.canyonSearch", "");
-  // Sort order for the results list, persisted across remounts (CANYON-4).
-  const [sortKey, setSortKey] = useLocalStorage<SortKey>(
+  // primary name or any alternative name). ANDs with the filters. Session-scoped
+  // so it survives the panel's unmount-on-close (CANYON-12) but not the session:
+  // a search remembered for a month means the user returns to a filtered list
+  // and reads it as "my canyons are missing" (UX finding 5).
+  const [query, setQuery] = useStoredState("logjam.canyonSearch", "", sessionStorage);
+  // Sort order is a preference, not a filter — it hides nothing, so it stays in
+  // localStorage and is expected back next month (CANYON-4).
+  const [sortKey, setSortKey] = useStoredState<SortKey>(
     "logjam.canyonSort",
     "name",
   );
