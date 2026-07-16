@@ -10,6 +10,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import classes from "./FriendsPanel.module.css";
+import FriendSharingSection from "./FriendSharingSection";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import type {
@@ -47,6 +48,8 @@ function FriendsPanel({
     id: string;
     username: string;
   } | null>(null);
+  // Non-null = the sharing audit for that friend replaces the list (fix 24).
+  const [openFriend, setOpenFriend] = useState<TFriend | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = useToast();
 
@@ -139,6 +142,21 @@ function FriendsPanel({
     }
   }
 
+  // The sharing audit takes over the whole panel rather than nesting under the
+  // list: at 280px there is no room for both, and the audit is a "go and read
+  // this" surface, not a glance.
+  if (openFriend) {
+    return (
+      <div className={classes.optionsContent}>
+        <FriendSharingSection
+          friend={openFriend}
+          onBack={() => setOpenFriend(null)}
+          onSharesChanged={onRefetchShared}
+        />
+      </div>
+    );
+  }
+
   return (
     <>
       <div className={classes.optionsContent}>
@@ -209,7 +227,16 @@ function FriendsPanel({
           <div className={classes.friendsScrollList}>
             {friends.map((friend) => (
               <div key={friend.id} className={classes.friendRow}>
-                <span className={classes.friendName}>{friend.username}</span>
+                {/* The name is the affordance into the sharing audit — "what
+                    does Bob see?" is a question you ask about a person, so it
+                    lives on the person (fix 24). */}
+                <button
+                  className={classes.friendNameButton}
+                  onClick={() => setOpenFriend(friend)}
+                  title={`Sharing with ${friend.username}`}
+                >
+                  {friend.username}
+                </button>
                 <button
                   className={classes.removeButton}
                   onClick={() =>

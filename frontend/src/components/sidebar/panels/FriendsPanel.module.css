@@ -82,6 +82,30 @@
   min-width: 0;
 }
 
+/* The friend name doubles as the entry point to the sharing audit. Styled to
+   read as the name it replaces, not as a button — the row already has a real
+   button (Remove) and two competing buttons would muddy it. */
+.friendNameButton {
+  composes: friendName;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.friendNameButton:hover {
+  color: var(--theme-accent);
+}
+
+.friendNameButton:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+}
+
 .friendActions {
   display: flex;
   gap: 0.3em;

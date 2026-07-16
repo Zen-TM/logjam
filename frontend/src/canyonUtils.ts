@@ -1037,6 +1037,40 @@ export function getCanyonShares(canyonId: string): Promise<TCanyonShare[]> {
   return apiFetch<TCanyonShare[]>(`/canyons/${canyonId}/shares`);
 }
 
+// ── Sharing audit, per friend (fix 24) ────────────────────────
+// Answers "what does Bob see?" from the Friends panel. Deliberately a dedicated
+// endpoint rather than share rows on the /canyons list payload: the list is
+// capped at 500 (so client-side grouping would silently under-count), and the
+// list helper also serves /canyons/shared, where recipient rows would expose the
+// owner's other recipients to a sharee.
+
+export type TFriendShareRow = {
+  canyonId: string;
+  name: string;
+  sharedAt: string;
+};
+
+export type TFriendShares = {
+  // Canyons I own that this friend can see.
+  sharedWithThem: TFriendShareRow[];
+  // Canyons this friend owns that I can see. Read-only in bulk — see
+  // FriendSharingSection.
+  sharedWithYou: TFriendShareRow[];
+};
+
+export function getFriendShares(friendshipId: string): Promise<TFriendShares> {
+  return apiFetch<TFriendShares>(`/friends/${friendshipId}/shares`);
+}
+
+/** Revoke every canyon I own that is shared with this friend. Friendship survives. */
+export function unshareAllWithFriend(
+  friendshipId: string,
+): Promise<{ revokedCount: number }> {
+  return apiFetch<{ revokedCount: number }>(`/friends/${friendshipId}/shares`, {
+    method: "DELETE",
+  });
+}
+
 export function copyCanyon(canyonId: string): Promise<TCanyon> {
   return apiFetch<TCanyon>(`/canyons/${canyonId}/copy`, { method: "POST" });
 }
