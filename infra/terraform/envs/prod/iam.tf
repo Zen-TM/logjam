@@ -192,6 +192,12 @@ resource "aws_iam_role_policy" "gha_frontend_deploy" {
 # refresh of the storage module needs those; it never reads objects. The
 # state bucket (logjam-tfstate-*) is intentionally NOT denied: init needs
 # GetObject on the state file. Plans run -lock=false, so no write is needed.
+#
+# s3:ListBucket is deliberately NOT denied: HeadBucket (terraform's bucket
+# existence check) requires it, and denying it made CI plans propose
+# recreating all three buckets + their attached configs. Exposure is key
+# enumeration only — keys are opaque UUIDs/job ids, never canyon names —
+# while object content stays denied.
 resource "aws_iam_role_policy" "gha_readonly_privacy_deny" {
   name = "logjam-ci-readonly-privacy-deny"
   role = aws_iam_role.github_actions.id
@@ -201,14 +207,11 @@ resource "aws_iam_role_policy" "gha_readonly_privacy_deny" {
       {
         Sid    = "DenyUserDataObjects"
         Effect = "Deny"
-        Action = ["s3:GetObject", "s3:GetObjectVersion", "s3:ListBucket"]
+        Action = ["s3:GetObject", "s3:GetObjectVersion"]
         Resource = [
-          "arn:aws:s3:::logjam-media",
           "arn:aws:s3:::logjam-media/*",
-          "arn:aws:s3:::logjam-topo-jobs",
           "arn:aws:s3:::logjam-topo-jobs/*",
           # WORM audit sink: pgaudit query text can embed canyon names/coords.
-          "arn:aws:s3:::logjam-audit-620853681701",
           "arn:aws:s3:::logjam-audit-620853681701/*",
         ]
       },

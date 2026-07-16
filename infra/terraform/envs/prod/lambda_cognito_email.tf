@@ -16,6 +16,10 @@ data "archive_file" "cognito_email_sender" {
   type        = "zip"
   source_dir  = "${local.cognito_email_lambda_src}/dist"
   output_path = "${path.module}/.build/cognito-email-sender.zip"
+  # Normalize file modes in the zip: source_code_hash must not depend on the
+  # building machine's umask (local 664 vs CI-runner 644 produced different
+  # hashes for byte-identical bundles → phantom lambda diff in plan-on-PR).
+  output_file_mode = "0644"
 }
 
 # ── KMS key Cognito uses to encrypt the code before invoking the Lambda ─────────
