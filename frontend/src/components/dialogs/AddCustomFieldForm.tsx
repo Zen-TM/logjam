@@ -57,6 +57,24 @@ function AddCustomFieldForm({
 }) {
   const isNumeric = type === "integer" || type === "float";
   const showBounds = bounds != null && isNumeric;
+
+  // This sub-form renders inside the host dialog's <form>, so a bare Enter in
+  // any of its single-line inputs would submit the *dialog* — saving the trip
+  // or canyon the user is still filling in, which is not what "Enter" means
+  // while you're typing a field label. Swallow it and run the sub-form's own
+  // primary action instead, guarded by the same condition as the Add button so
+  // Enter can't add a field the button wouldn't.
+  //
+  // Bound to the text inputs rather than the wrapper: the type Select does its
+  // own Enter handling (open menu / choose item), and a container-level handler
+  // would fire on top of it and add the field while the user was picking a type.
+  function handleFieldKeyDown(event: React.KeyboardEvent) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    if (adding || !label.trim()) return;
+    onAdd();
+  }
+
   return (
     <Box className={classes.addFieldForm}>
       <Typography variant="caption" sx={{ color: "var(--theme-text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
@@ -70,6 +88,7 @@ function AddCustomFieldForm({
           label="Field Label"
           value={label}
           onChange={(e) => onLabelChange(e.target.value)}
+          onKeyDown={handleFieldKeyDown}
           size="small"
           fullWidth
           placeholder="e.g. Group Size"
@@ -110,6 +129,7 @@ function AddCustomFieldForm({
                 sanitizeNumericInput(e.target.value, type as "integer" | "float"),
               )
             }
+            onKeyDown={handleFieldKeyDown}
             disabled={!bounds.bounded}
             size="small"
             fullWidth
@@ -124,6 +144,7 @@ function AddCustomFieldForm({
                 sanitizeNumericInput(e.target.value, type as "integer" | "float"),
               )
             }
+            onKeyDown={handleFieldKeyDown}
             disabled={!bounds.bounded}
             size="small"
             fullWidth

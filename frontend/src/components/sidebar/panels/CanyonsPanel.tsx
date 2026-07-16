@@ -62,6 +62,7 @@ function CanyonsPanel({
   sharedCanyons,
   onAddCanyon,
   onOpenUnifiedImport,
+  onExportCanyons,
   onStartAreaSelection,
   onCancelAreaSelection,
   selectingArea,
@@ -80,6 +81,8 @@ function CanyonsPanel({
   sharedCanyons: TCanyon[];
   onAddCanyon: () => void;
   onOpenUnifiedImport: () => void;
+  // Hands the ids to the existing Selected Canyons dialog, which owns export.
+  onExportCanyons: (canyonIds: string[]) => void;
   onStartAreaSelection: () => void;
   onCancelAreaSelection: () => void;
   selectingArea: boolean;
@@ -893,6 +896,19 @@ function CanyonsPanel({
       {/* Low-frequency actions */}
       <div className={classes.footerActions}>
         <div className={classes.divider} />
+        {/* Export sat behind "select an area on the map" — undiscoverable
+            unless you already knew it was there. It exports exactly the list
+            shown above (search + filters applied), so the count is stated on
+            the button and matches the header count. Opens the existing
+            Selected Canyons dialog; no separate export surface. */}
+        <button
+          className={classes.ghostButton}
+          onClick={() => onExportCanyons(filteredCanyons.map((r) => r.canyon.id))}
+          disabled={filteredCanyons.length === 0}
+        >
+          Export {filteredCanyons.length} canyon
+          {filteredCanyons.length === 1 ? "" : "s"}
+        </button>
         <button
           className={classes.ghostButton}
           onClick={onOpenUnifiedImport}

@@ -957,6 +957,9 @@ function App() {
           sharedCanyons={sharedCanyons}
           onAddCanyon={() => setShowAdd(true)}
           onOpenUnifiedImport={() => setShowUnifiedImport(true)}
+          // Reuses the area-selection state, which is what SelectedCanyonsDialog
+          // (the existing export surface) already renders from.
+          onExportCanyons={setSelectedAreaCanyonIds}
           onStartAreaSelection={startAreaSelection}
           selectingArea={selectingArea}
           onCancelAreaSelection={cancelAreaSelection}

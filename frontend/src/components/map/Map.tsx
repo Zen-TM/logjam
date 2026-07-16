@@ -513,6 +513,32 @@ function Map({
     });
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");
+    // "Where am I" is a primary question in the field, so the geolocate control
+    // sits with the navigation control rather than in a panel.
+    //
+    // Privacy: this is entirely browser-native. MapLibre reads the position via
+    // navigator.geolocation and renders it as a map marker in this page — the
+    // position is never sent to the API, and no analytics/telemetry observes it.
+    // Keep it that way: do not wire the `geolocate` event to anything that
+    // persists or transmits the coordinates.
+    map.addControl(
+      new maplibregl.GeolocateControl({
+        // High accuracy: the difference between the right side of a creek and
+        // the wrong one. Costs battery, which is the correct trade for a
+        // control the user taps deliberately rather than a background watch.
+        positionOptions: { enableHighAccuracy: true, timeout: 10_000 },
+        // Follow the user as they walk. Panning away drops the camera lock into
+        // MapLibre's background state — the dot keeps updating but stops
+        // recentring, so the control can't fight the user for the viewport
+        // while they read the map ahead. Tapping it again re-locks.
+        trackUserLocation: true,
+        // Under canopy or in a slot, a confident-looking dot with 40 m of error
+        // is worse than no dot. The accuracy circle makes the error legible.
+        showAccuracyCircle: true,
+        showUserLocation: true,
+      }),
+      "top-right",
+    );
     map.addControl(
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-left",

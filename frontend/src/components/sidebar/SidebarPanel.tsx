@@ -76,6 +76,7 @@ function SidebarPanel({
   sharedCanyons,
   onAddCanyon,
   onOpenUnifiedImport,
+  onExportCanyons,
   onStartAreaSelection,
   selectingArea,
   onCancelAreaSelection,
@@ -168,6 +169,7 @@ function SidebarPanel({
   sharedCanyons: TCanyon[];
   onAddCanyon: () => void;
   onOpenUnifiedImport: () => void;
+  onExportCanyons: (canyonIds: string[]) => void;
   onStartAreaSelection: () => void;
   selectingArea: boolean;
   onCancelAreaSelection: () => void;
@@ -311,6 +313,7 @@ function SidebarPanel({
             sharedCanyons={sharedCanyons}
             onAddCanyon={onAddCanyon}
             onOpenUnifiedImport={onOpenUnifiedImport}
+            onExportCanyons={onExportCanyons}
             onStartAreaSelection={onStartAreaSelection}
             onCancelAreaSelection={onCancelAreaSelection}
             selectingArea={selectingArea}

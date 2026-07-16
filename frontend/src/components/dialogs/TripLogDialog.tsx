@@ -247,6 +247,8 @@ function TripLogDialog({
   const draftPromiseRef = useRef<Promise<string> | null>(null);
   // Tracks pick-on-map cycle so the reset useEffect skips when returning.
   const pickingRef = useRef(false);
+  // First field, focused on a fresh open by the reset effect below.
+  const canyonInputRef = useRef<HTMLInputElement>(null);
 
   // Add custom field form state
   const [showAddField, setShowAddField] = useState(false);
@@ -404,6 +406,24 @@ function TripLogDialog({
     setDraftTripId(null);
     committedRef.current = false;
     draftPromiseRef.current = null;
+
+    // Open ready to type, focusing the first field. Driven from here rather
+    // than an `autoFocus` prop because the decision depends on `foundDraft`,
+    // which only exists on this line: `restorableDraft` is state, so during the
+    // render that mounts the field it is still null and an `autoFocus={!draft}`
+    // prop would focus the canyon input before the offer banner ever rendered —
+    // the same one-commit lag documented on `draftOfferPendingRef` above.
+    //
+    // Two deliberate opt-outs:
+    //  - a draft is being offered: the banner asks a question, and pulling focus
+    //    into the form invites typing into fields that Restore is about to
+    //    overwrite.
+    //  - mobile: focusing pops the on-screen keyboard over the form before the
+    //    user has decided to type, hiding the fields they came to fill in.
+    // The pick-on-map return leg is already excluded — that path returns early
+    // above, so it never reaches this line and can't yank focus off the
+    // coordinates the user just picked.
+    if (!isMobile && foundDraft === null) canyonInputRef.current?.focus();
   }, [open, tripLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The form as the draft stores it — one object feeding both the dirty-check
@@ -619,6 +639,18 @@ function TripLogDialog({
     });
   }
 
+  // Enter-to-submit. This repeats the Save button's `disabled` condition on
+  // purpose: a form still submits on Enter while its submit button is disabled,
+  // so the precondition has to be enforced here too or Enter becomes a way
+  // around it (notably a second save while one is already in flight). The Save
+  // button is `type="submit"` with no onClick, so pointer and keyboard share
+  // this single path and cannot both fire for one interaction.
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving || !date) return;
+    void handleSave();
+  }
+
   async function handleSave() {
     if (!date) {
       setError("Date is required.");
@@ -756,6 +788,23 @@ function TripLogDialog({
         </IconButton>
       </DialogTitle>
 
+      {/* The form wrapper is what makes Enter submit. It has to span both the
+          content and the actions, since the submit button lives in
+          DialogActions. Dialog's Paper is a flex column and DialogContent
+          relies on being a flex child of it to scroll (flex: 1 1 auto +
+          overflow-y: auto), so the form has to carry the flex chain through
+          itself or the content stops scrolling inside the dialog. */}
+      <Box
+        component="form"
+        noValidate
+        onSubmit={handleSubmit}
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          flex: "1 1 auto",
+          minHeight: 0,
+        }}
+      >
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {/* Autosaved-draft offer. An offer rather than a silent repopulate:
@@ -806,6 +855,13 @@ function TripLogDialog({
              trip name field covers the no-canyon case. */}
           <Autocomplete<CanyonOption, true, false, false>
             multiple
+            // Without this, typing "Claustral" and pressing Enter selects
+            // nothing — there's no highlighted option to select, so the
+            // keystroke falls through and the text is silently dropped.
+            // Highlighting the first match makes Enter mean "take the obvious
+            // one". MUI calls preventDefault() when Enter selects a highlighted
+            // option, so this Enter cannot also submit the surrounding form.
+            autoHighlight
             options={canyonOptions}
             getOptionLabel={getOptionLabel}
             getOptionKey={(option) =>
@@ -891,6 +947,9 @@ function TripLogDialog({
                     ? undefined
                     : "Search canyons, or type to create one"
                 }
+                // Focused imperatively by the form-reset effect above, which is
+                // the only place that knows whether a draft is being offered.
+                inputRef={canyonInputRef}
                 size="small"
                 sx={fieldSx}
               />
@@ -964,6 +1023,13 @@ function TripLogDialog({
           <Autocomplete<TypeOption, true, false, true>
             multiple
             freeSolo
+            // Highlights the first suggestion so Enter takes it. freeSolo keeps
+            // typed text winning over a merely-programmatic highlight (MUI only
+            // selects the highlighted option here once the user has deliberately
+            // arrowed or hovered onto it), so this can't hijack a genuinely new
+            // type. Either branch calls preventDefault(), so Enter adds the type
+            // without also submitting the form.
+            autoHighlight
             options={typeOptions}
             getOptionLabel={getTypeOptionLabel}
             getOptionKey={(option) =>
@@ -1261,22 +1327,31 @@ function TripLogDialog({
       </DialogContent>
 
       <DialogActions>
+        {/* Not "Cancel": the add-custom-field sub-form below renders its own
+            "Cancel" that only backs out of that sub-form, and on mobile both
+            are on screen at once — two identical words, opposite scopes. Naming
+            the object makes the scope unambiguous. In edit mode the object is
+            the *changes*, not the trip: "Discard trip" on a saved trip would
+            read as "delete it from my logbook". */}
         <Button
           onClick={guard.requestClose}
           disabled={saving}
           sx={{ color: "var(--theme-text-primary)" }}
         >
-          Cancel
+          {tripLog ? "Discard changes" : "Discard trip"}
         </Button>
+        {/* type="submit" with no onClick — handleSubmit is the only save path,
+            so a click can't fire alongside the form's submit. */}
         <Button
+          type="submit"
           variant="contained"
           color="secondary"
-          onClick={handleSave}
           disabled={saving || !date}
         >
           {saving ? <CircularProgress size={20} /> : tripLog ? "Save Changes" : "Log Trip"}
         </Button>
       </DialogActions>
+      </Box>
     </Dialog>
 
     {/* Impact-aware delete confirm (shared with the Account panel). On delete

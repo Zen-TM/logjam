@@ -1500,13 +1500,28 @@ export function useLiveVectorStyle(enabled: boolean): {
   return { vectorStyle: liveStyle, setVectorStyle, loadError, saveError };
 }
 
+const COMMITMENT_NUMERALS = ["I", "II", "III", "IV", "V", "VI"];
+
+/**
+ * Render a canyon's grade as `v3a4 III`, omitting any segment that isn't set.
+ *
+ * Unset segments are dropped rather than filled with a placeholder: a literal
+ * `v2a?` reads as corrupt data, when it only means "no A grade recorded"
+ * (UX fix 4). `v` and `a` stay glued together (`v2a3`) because that's how the
+ * grade is written; the commitment numeral is space-separated.
+ *
+ * Returns null when nothing is set, so callers can drop the "Grade:" label
+ * entirely instead of printing an empty one.
+ */
 export function formatCanyonGrade(canyon: TCanyon): string | null {
   const { vGrade, aGrade, commitment } = canyon;
-  if (!vGrade && !aGrade && !commitment) return null;
-  const v = vGrade ? `v${vGrade}` : "v?";
-  const a = aGrade ? `a${aGrade}` : "a?";
-  const c = commitment
-    ? " " + ["I", "II", "III", "IV", "V", "VI"][commitment - 1]
+  const vaGrade = `${vGrade ? `v${vGrade}` : ""}${aGrade ? `a${aGrade}` : ""}`;
+  // Commitment is validated to 1-6 (shared/src/canyonValidation.ts), but index
+  // defensively: a display formatter must never render "undefined" to the user.
+  const commitmentNumeral = commitment
+    ? (COMMITMENT_NUMERALS[commitment - 1] ?? "")
     : "";
-  return `${v}${a}${c}`;
+  const segments = [vaGrade, commitmentNumeral].filter((s) => s !== "");
+  if (segments.length === 0) return null;
+  return segments.join(" ");
 }
