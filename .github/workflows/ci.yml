@@ -83,6 +83,54 @@ jobs:
         working-directory: frontend
         run: npm test
 
+  migrations:
+    # Apply every committed migration to a fresh ephemeral Postgres, so a
+    # malformed / mis-ordered / non-idempotent migration fails CI at PR time
+    # instead of at prod container boot (`boot.ts` runs `prisma migrate deploy`
+    # in the request-serving process — a bad migration there is an outage, not
+    # a blocked merge). NOTE: runs as the Postgres superuser, so it does NOT
+    # catch failures specific to the least-priv `logjam_app` role (a missing
+    # grant) — that half remains a prod-boot risk (see ARCH-001 half B).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: logjam
+          POSTGRES_PASSWORD: logjam
+          POSTGRES_DB: logjam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logjam"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      # api depends on shared via file:../shared; npm ci resolves it.
+      - name: Build shared
+        working-directory: shared
+        run: npm ci && npm run build
+      - name: Install
+        working-directory: api
+        run: npm ci
+      # prisma.config.ts composes the datasource URL from these DB_* vars.
+      - name: Validate migrations (migrate deploy on ephemeral Postgres)
+        working-directory: api
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: logjam
+          DB_USER: logjam
+          DB_PASSWORD: logjam
+        run: npx prisma migrate deploy
+
   topo:
     runs-on: ubuntu-latest
     steps:
