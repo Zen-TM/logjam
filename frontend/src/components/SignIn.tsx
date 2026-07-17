@@ -179,7 +179,7 @@ function SignIn({
   if (authState === "confirmSignUp") {
     return (
       <div className={classes.container}>
-        <form className={classes.form} onSubmit={handleConfirm}>
+        <form className={classes.form} noValidate onSubmit={handleConfirm}>
           <Brand />
           <p className={classes.subtitle}>
             Check your email for a verification code (check spam)
@@ -223,7 +223,7 @@ function SignIn({
   if (authState === "forgotPassword") {
     return (
       <div className={classes.container}>
-        <form className={classes.form} onSubmit={handleForgotPassword}>
+        <form className={classes.form} noValidate onSubmit={handleForgotPassword}>
           <Brand />
           <p className={classes.subtitle}>
             Enter your email and we&apos;ll send you a reset code
@@ -262,7 +262,7 @@ function SignIn({
   if (authState === "confirmForgotPassword") {
     return (
       <div className={classes.container}>
-        <form className={classes.form} onSubmit={handleConfirmForgotPassword}>
+        <form className={classes.form} noValidate onSubmit={handleConfirmForgotPassword}>
           <Brand />
           <p className={classes.subtitle}>
             Check your email for a reset code, then choose a new password
@@ -318,7 +318,7 @@ function SignIn({
   if (authState === "signUp") {
     return (
       <div className={classes.container}>
-        <form className={classes.form} onSubmit={handleSignUp}>
+        <form className={classes.form} noValidate onSubmit={handleSignUp}>
           <Brand />
           <TextField
             label="Name"
@@ -413,7 +413,7 @@ function SignIn({
   // Default: signIn
   return (
     <div className={classes.container}>
-      <form className={classes.form} onSubmit={handleSignIn}>
+      <form className={classes.form} noValidate onSubmit={handleSignIn}>
         <Brand />
         {resetSuccess && (
           <p className={classes.successBanner}>Password reset — please sign in.</p>
