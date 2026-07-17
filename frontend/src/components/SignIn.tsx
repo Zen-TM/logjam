@@ -39,7 +39,7 @@ function SignIn({
     email: string,
     name: string,
   ) => Promise<void>;
-  onConfirmSignUp: (code: string) => Promise<void>;
+  onConfirmSignUp: (code: string) => Promise<boolean>;
   onResendCode: () => Promise<{ ok: boolean; error?: string }>;
   onForgotPassword: (email: string) => Promise<void>;
   onConfirmForgotPassword: (code: string, newPassword: string) => Promise<boolean>;
@@ -126,7 +126,14 @@ function SignIn({
     e.preventDefault();
     setLocalError(null);
     setSubmitting(true);
-    await onConfirmSignUp(code);
+    const confirmed = await onConfirmSignUp(code);
+    if (confirmed) {
+      // Account just verified — the user proved ownership, so log them straight
+      // in with the credentials still held from the signUp form (this component
+      // never unmounts across signUp → confirmSignUp → signIn). onSignIn uses
+      // email as the Cognito username, matching how signUp registered them.
+      await onSignIn(email, password);
+    }
     setSubmitting(false);
   }
 
