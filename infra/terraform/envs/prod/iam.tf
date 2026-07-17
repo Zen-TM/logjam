@@ -361,3 +361,42 @@ resource "aws_iam_role_policy" "gha_eb_appversions" {
     }]
   })
 }
+
+# ARCH-001 half B: let the deploy workflow launch the pre-deploy migrate
+# one-shot (aws_ecs_task_definition.api_migrate) and poll its result before the
+# EB version swap. Scoped to that task def + the one cluster; PassRole limited
+# to the exact execution role the task uses (no task role is passed), gated to
+# ECS tasks so the deploy identity can't repurpose it elsewhere.
+resource "aws_iam_role_policy" "gha_migrate_runtask" {
+  name = "logjam-gha-migrate-runtask"
+  role = aws_iam_role.github_actions.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "RunMigrateTask"
+        Effect   = "Allow"
+        Action   = "ecs:RunTask"
+        Resource = "arn:aws:ecs:ap-southeast-2:620853681701:task-definition/logjam-api-migrate:*"
+        Condition = {
+          ArnEquals = { "ecs:cluster" = "arn:aws:ecs:ap-southeast-2:620853681701:cluster/logjam-cluster" }
+        }
+      },
+      {
+        Sid      = "ObserveMigrateTask"
+        Effect   = "Allow"
+        Action   = "ecs:DescribeTasks"
+        Resource = "arn:aws:ecs:ap-southeast-2:620853681701:task/logjam-cluster/*"
+      },
+      {
+        Sid      = "PassMigrateExecRole"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = "arn:aws:iam::620853681701:role/ecsTaskExecutionRole"
+        Condition = {
+          StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
+        }
+      },
+    ]
+  })
+}

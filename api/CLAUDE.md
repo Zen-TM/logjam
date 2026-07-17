@@ -140,6 +140,10 @@ Register in `src/index.ts`. Mount paths can overlap (e.g. `/canyons` + `/canyons
 - Never edit committed migration. Add new one.
 - After schema change, `npx prisma generate` runs as part of `migrate dev`, but rerun manually if Prisma types feel stale.
 
+**Prod migrations run in a gated pre-deploy one-shot, NOT at container boot.** `deploy-api.yml` RunTasks `aws_ecs_task_definition.api_migrate` (`prisma migrate deploy`, image just pushed to `:latest`, as the least-priv `logjam_app` role) and gates the EB version swap on its exit code — a failing migration aborts the deploy with the old version still serving, instead of crash-looping the new container at boot. `boot.ts` no longer migrates. CI additionally validates every migration against an ephemeral Postgres (`ci.yml` `migrations` job) so bad SQL is caught at PR time.
+
+**Migrations MUST be backward-compatible with the currently-running image (expand/contract).** The pre-deploy migrate applies the new schema *before* the new image serves, so the old image runs against the new schema during the swap window. Never drop/rename a column or narrow a constraint the currently-deployed code still reads/writes in the same migration that the new code needs — split it: (1) expand (add the new shape, both codes tolerate it), deploy; (2) later, once no running code uses the old shape, contract (remove it). A destructive single-step migration will error mid-swap or break the old image.
+
 **Prisma 7 specifics** (since the 5→7 upgrade):
 - `prisma.config.ts` owns the datasource URL and seed command — `schema.prisma` has no `datasource.url`, `package.json` has no `prisma.seed`.
 - `npm ci`/`npm install` no longer auto-generates the client: run `npx prisma generate` after a fresh install or `tsc` fails on missing types. The Dockerfile runs generate right after `npm ci` for this reason — keep that ordering.

@@ -182,6 +182,66 @@ resource "aws_ecs_task_definition" "topo_worker" {
   }
 }
 
+# One-shot task that runs `prisma migrate deploy` against RDS as the least-priv
+# logjam_app role (same logjam/app-db-password secret + logjam-api image the EB
+# container used at boot). The deploy workflow (.github/workflows/deploy-api.yml)
+# RunTasks this BEFORE the EB version swap and gates the deploy on its exit code
+# (ARCH-001 half B): a failing migration aborts the deploy and the old version
+# keeps serving, instead of crash-looping the new container at boot. No task
+# role — migrate makes no AWS API calls; secret injection is the execution
+# role's job. Runs on the dedicated worker SG so RDS ingress (CP-003) admits it.
+resource "aws_ecs_task_definition" "api_migrate" {
+  container_definitions = jsonencode([{
+    command = ["npx", "prisma", "migrate", "deploy"]
+    environment = [{
+      name  = "AWS_REGION"
+      value = "ap-southeast-2"
+      }, {
+      name  = "DB_HOST"
+      value = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
+      }, {
+      name  = "DB_NAME"
+      value = "logjam"
+      }, {
+      name  = "DB_PORT"
+      value = "5432"
+      }, {
+      name  = "NODE_ENV"
+      value = "production"
+    }]
+    essential = true
+    image     = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest"
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-create-group  = "true"
+        awslogs-group         = "/ecs/logjam-api-migrate"
+        awslogs-region        = "ap-southeast-2"
+        awslogs-stream-prefix = "ecs"
+      }
+    }
+    mountPoints  = []
+    name         = "api-migrate"
+    portMappings = []
+    secrets = [{
+      name      = "DB_PASSWORD"
+      valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:password::"
+      }, {
+      name      = "DB_USER"
+      valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:username::"
+    }]
+    systemControls = []
+    volumesFrom    = []
+  }])
+  cpu                      = "512"
+  enable_fault_injection   = false
+  execution_role_arn       = "arn:aws:iam::620853681701:role/ecsTaskExecutionRole"
+  family                   = "logjam-api-migrate"
+  memory                   = "1024"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+}
+
 resource "aws_ecs_task_definition" "topo_export_worker" {
   container_definitions = jsonencode([{
     entryPoint = ["python3", "/app/export_worker.py"]

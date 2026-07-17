@@ -6,12 +6,19 @@
 //    The Elastic Beanstalk container can't use ECS secrets injection, so this
 //    is how it gets DB credentials. ECS workers get DB_USER/DB_PASSWORD
 //    injected directly and never need DB_SECRET_ID.
-// 2. Run `npx prisma migrate deploy` against the resolved DB credentials.
-// 3. Start the API (dist/index.js) in the same process.
+// 2. Start the API (dist/index.js) in the same process.
+//
+// Database migrations are NOT run here. They run in a gated one-shot Fargate
+// task (aws_ecs_task_definition.api_migrate) BEFORE the EB version swap, driven
+// by .github/workflows/deploy-api.yml, so a failing migration aborts the deploy
+// instead of crash-looping this container at boot (ARCH-001 half B). Instance
+// replacement reuses an already-migrated image, so no pending migrations exist
+// at plain container start. New schema is applied before the new image serves;
+// migrations MUST stay backward-compatible with the currently-running image for
+// the swap window (expand/contract — see api/CLAUDE.md).
 //
 // Fails loud (exit 1) on any error. Never logs secret values.
 
-import { spawnSync } from "node:child_process";
 import { resolveDbCredentials } from "./lib/resolveDbCredentials";
 import { resolveOriginVerifySecret } from "./lib/resolveOriginVerifySecret";
 
@@ -25,14 +32,6 @@ async function main(): Promise<void> {
       `boot: failed to resolve startup secrets (${e.constructor.name}: ${e.message})`,
     );
     process.exit(1);
-  }
-
-  const migrate = spawnSync("npx", ["prisma", "migrate", "deploy"], {
-    stdio: "inherit",
-    env: process.env,
-  });
-  if (migrate.status !== 0) {
-    process.exit(migrate.status ?? 1);
   }
 
   await import("./index");
