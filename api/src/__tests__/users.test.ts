@@ -26,6 +26,27 @@ describe("users routes (fake auth = alice)", () => {
     expect(res.body.uiPreferences).toBeTruthy();
     expect(typeof res.body.uiPreferences.themeSchemeId).toBe("string");
     expect(res.body.uiPreferences.notifications).toBeTruthy();
+    // Derived monthly-tile-usage fields are augmented onto the response.
+    expect(typeof res.body.monthlyTileUsage).toBe("number");
+    expect(typeof res.body.monthlyTileQuota).toBe("number");
+    expect(typeof res.body.monthlyTileResetAt).toBe("string");
+  });
+
+  // Regression: PATCH /me previously returned the raw Prisma row, dropping the
+  // derived monthlyTileUsage/monthlyTileResetAt (not columns). The frontend
+  // replaces its cached user with this response, so the dropped fields made the
+  // Account panel render " / 40" and a full progress bar after any profile
+  // update (fresh-signup consent flow being the reliable trigger).
+  it("PATCH /users/me returns the derived monthly-tile-usage fields", async () => {
+    const before = await request(API_URL).get("/users/me").set(AUTH);
+    const res = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ themeSchemeId: before.body.uiPreferences.themeSchemeId });
+    expect(res.status).toBe(200);
+    expect(typeof res.body.monthlyTileUsage).toBe("number");
+    expect(typeof res.body.monthlyTileQuota).toBe("number");
+    expect(typeof res.body.monthlyTileResetAt).toBe("string");
   });
 
   it("PATCH /users/me rejects an empty update body", async () => {

@@ -147,6 +147,25 @@ function serializeUserForResponse(
   };
 }
 
+// serializeUserForResponse + the derived monthly-tile-usage fields
+// (monthlyTileUsage/monthlyTileResetAt are NOT columns — they're a live _sum
+// over TopoJob.tileCount). Both GET and PATCH /me return this so the cached
+// user the frontend keeps never loses tile usage after a profile update.
+async function serializeUserWithTileUsage(
+  user: Parameters<typeof serializeUserForResponse>[0] & {
+    id: string;
+    monthlyTileQuota: number;
+  },
+) {
+  const tileUsage = await getMonthlyTileUsage(user.id, user.monthlyTileQuota);
+  return {
+    ...serializeUserForResponse(user),
+    monthlyTileQuota: tileUsage.quota,
+    monthlyTileUsage: tileUsage.used,
+    monthlyTileResetAt: tileUsage.resetAt,
+  };
+}
+
 // GET /users/me — get current user's profile
 // Creates the user in DB if it's their first request (post-Cognito signup)
 router.get(
@@ -231,13 +250,7 @@ router.get(
       }
     }
 
-    const tileUsage = await getMonthlyTileUsage(user.id, user.monthlyTileQuota);
-    res.json({
-      ...serializeUserForResponse(user),
-      monthlyTileQuota: tileUsage.quota,
-      monthlyTileUsage: tileUsage.used,
-      monthlyTileResetAt: tileUsage.resetAt,
-    });
+    res.json(await serializeUserWithTileUsage(user));
   },
 );
 
@@ -368,7 +381,7 @@ router.patch(
       throw e;
     }
 
-    res.json(serializeUserForResponse(updated));
+    res.json(await serializeUserWithTileUsage(updated));
   },
 );
 
