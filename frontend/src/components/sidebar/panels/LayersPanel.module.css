@@ -83,6 +83,14 @@
   gap: 0.3em;
 }
 
+/* Info tooltip descriptor for a layer row (native-title on hover). */
+.layerInfo {
+  display: inline-flex;
+  align-items: center;
+  color: var(--theme-text-muted);
+  cursor: help;
+}
+
 /* LAYERS-1: layer has at least one topo job whose map files failed to load. */
 .layerUnavailableBadge {
   font-size: var(--text-xs);

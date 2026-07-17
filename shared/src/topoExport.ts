@@ -52,7 +52,7 @@ export const EXPORT_FORMAT_RULES: Record<ExportFormat, ExportFormatRule> = {
     allowComposite: true,
     allowPerLayer: true,
     label: "MBTiles",
-    description: "Raster tile pyramid. Gaia GPS / Avenza-compatible. Vectors are rasterized into the pyramid.",
+    description: "Raster tile pyramid. Gaia GPS-compatible. Vectors are rasterized into the pyramid.",
   },
   geotiff: {
     format: "geotiff",

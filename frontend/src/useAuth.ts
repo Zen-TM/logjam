@@ -121,17 +121,21 @@ export function useAuth() {
   );
 
   const handleConfirmSignUp = useCallback(
-    async (code: string) => {
+    async (code: string): Promise<boolean> => {
       setError(null);
       try {
         await amplifyConfirmSignUp({
           username: pendingUsername,
           confirmationCode: code,
         });
+        // Fallback if the caller's auto-login doesn't fire or fails: land on
+        // the pre-filled sign-in form rather than a dead confirm screen.
         setState("signIn");
+        return true;
       } catch (err) {
         console.error(err);
         setError(messageFromError(err, "Confirmation failed. Please try again."));
+        return false;
       }
     },
     [pendingUsername],

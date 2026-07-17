@@ -1,12 +1,23 @@
 import { useRef, useState } from "react";
 import { Switch } from "@mui/material";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Info } from "lucide-react";
 import classes from "./LayersPanel.module.css";
 import { previewUrlFor } from "./tilePreview";
 import type { TileLayer } from "./tilePreview";
 import { TOPO_LAYERS } from "../../../topoLayerTypes";
 
 type BaseLayer = TileLayer & { id: string; name: string };
+
+// Layer-row descriptors (display only; keyed by TOPO_LAYERS name). Rendered as a
+// native-title info tooltip. Only vegetation needs one today — its orange
+// crosshatch (fire more recent than the LiDAR survey) is the least-intuitive
+// symbol and carries no other label.
+const LAYER_DESCRIPTIONS: Partial<Record<string, string>> = {
+  vegetation:
+    "Estimated vegetation density for bushbashing — denser scrub renders darker. " +
+    "Orange crosshatching marks areas burnt by fire more recently than the LiDAR survey, " +
+    "so the density estimate there may be out of date.",
+};
 
 function LayersPanel({
   // Overlays
@@ -191,6 +202,15 @@ function LayersPanel({
                     <GripVertical size={12} />
                   </button>
                   <span>{label}</span>
+                  {LAYER_DESCRIPTIONS[name] && (
+                    <span
+                      className={classes.layerInfo}
+                      title={LAYER_DESCRIPTIONS[name]}
+                      aria-label={LAYER_DESCRIPTIONS[name]}
+                    >
+                      <Info size={12} />
+                    </span>
+                  )}
                   {unavailableTopoLayerNames.has(name) && (
                     <span
                       className={classes.layerUnavailableBadge}
