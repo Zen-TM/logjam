@@ -7,6 +7,10 @@ import { resolveUser } from "../lib/resolveUser";
 
 const router = Router();
 
+// Server-side cap on the notifications list. The true total (see X-Total-Count
+// below) lets the client show a truncation caption when this cap bites (UX-002).
+const NOTIFICATIONS_LIST_CAP = 500;
+
 // Notification payloads store ONLY reference IDs — no denormalised plaintext
 // canyon names or usernames (PRIV-005). Display strings are resolved from the
 // live rows at read time below:
@@ -35,14 +39,17 @@ router.get(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
 
-    const notifications = await prisma.notification.findMany({
-      where: { userId: user.id },
-      orderBy: [
-        { read: "asc" }, // unread first
-        { createdAt: "desc" }, // newest first within each group
-      ],
-      take: 500,
-    });
+    const [notifications, total] = await Promise.all([
+      prisma.notification.findMany({
+        where: { userId: user.id },
+        orderBy: [
+          { read: "asc" }, // unread first
+          { createdAt: "desc" }, // newest first within each group
+        ],
+        take: NOTIFICATIONS_LIST_CAP,
+      }),
+      prisma.notification.count({ where: { userId: user.id } }),
+    ]);
 
     const friendshipIds = new Set<string>();
     const canyonIds = new Set<string>();
@@ -144,6 +151,8 @@ router.get(
       return [n];
     });
 
+    // True total (pre-cap) so the client can flag a truncated view (UX-002).
+    res.set("X-Total-Count", String(total));
     res.json(visible);
   },
 );

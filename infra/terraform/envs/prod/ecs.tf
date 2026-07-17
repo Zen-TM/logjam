@@ -42,8 +42,12 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       name  = "EMAIL_FROM"
       value = "noreply@notifications.logjamnsw.com"
       }, {
-      name  = "ECS_SECURITY_GROUPS"
-      value = "sg-0543d2bbce86b5d2a"
+      name = "ECS_SECURITY_GROUPS"
+      # CP-003: dedicated worker SG (was the VPC default sg-0543d2bbce86b5d2a).
+      # Vestigial here (geoPdfWorker is a leaf, never calls RunTask) but kept in
+      # sync so no stale default-SG id lingers in a committed task def. The
+      # operative value is the EB env property of the same name (operator-owned).
+      value = aws_security_group.worker.id
       }, {
       name  = "ECS_SUBNETS"
       value = "subnet-0f59b0845905891be,subnet-0c10e1438a8fd0231"
@@ -176,6 +180,69 @@ resource "aws_ecs_task_definition" "topo_worker" {
     cpu_architecture        = "X86_64"
     operating_system_family = "LINUX"
   }
+}
+
+# One-shot task that runs `prisma migrate deploy` against RDS as the least-priv
+# logjam_app role (same logjam/app-db-password secret + logjam-api image the EB
+# container used at boot). The deploy workflow (.github/workflows/deploy-api.yml)
+# RunTasks this BEFORE the EB version swap and gates the deploy on its exit code
+# (ARCH-001 half B): a failing migration aborts the deploy and the old version
+# keeps serving, instead of crash-looping the new container at boot. No task
+# role — migrate makes no AWS API calls; secret injection is the execution
+# role's job. Runs on the dedicated worker SG so RDS ingress (CP-003) admits it.
+resource "aws_ecs_task_definition" "api_migrate" {
+  container_definitions = jsonencode([{
+    command = ["npx", "prisma", "migrate", "deploy"]
+    environment = [{
+      name  = "AWS_REGION"
+      value = "ap-southeast-2"
+      }, {
+      name  = "DB_HOST"
+      value = "logjam-db-enc.chwko8w4iz9p.ap-southeast-2.rds.amazonaws.com"
+      }, {
+      name  = "DB_NAME"
+      value = "logjam"
+      }, {
+      name  = "DB_PORT"
+      value = "5432"
+      }, {
+      name  = "NODE_ENV"
+      value = "production"
+    }]
+    essential = true
+    image     = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest"
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        # awslogs-create-group is OMITTED (ECS rejects "false" — it may only be
+        # "true" or absent). The group is pre-created in logging.tf
+        # (aws_cloudwatch_log_group.api_migrate) because ecsTaskExecutionRole
+        # lacks logs:CreateLogGroup; the driver just writes to the existing group.
+        awslogs-group         = "/ecs/logjam-api-migrate"
+        awslogs-region        = "ap-southeast-2"
+        awslogs-stream-prefix = "ecs"
+      }
+    }
+    mountPoints  = []
+    name         = "api-migrate"
+    portMappings = []
+    secrets = [{
+      name      = "DB_PASSWORD"
+      valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:password::"
+      }, {
+      name      = "DB_USER"
+      valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:username::"
+    }]
+    systemControls = []
+    volumesFrom    = []
+  }])
+  cpu                      = "512"
+  enable_fault_injection   = false
+  execution_role_arn       = "arn:aws:iam::620853681701:role/ecsTaskExecutionRole"
+  family                   = "logjam-api-migrate"
+  memory                   = "1024"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
 }
 
 resource "aws_ecs_task_definition" "topo_export_worker" {

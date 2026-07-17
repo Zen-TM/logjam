@@ -2,6 +2,7 @@ import {
   SecretsManagerClient,
   GetSecretValueCommand,
 } from "@aws-sdk/client-secrets-manager";
+import { logger } from "./logger";
 
 // Per-connection DB password resolution (rotation-proof).
 //
@@ -77,8 +78,9 @@ export async function currentDbPassword(): Promise<string> {
     // fall back to the last known password (likely still valid — rotation is
     // rare). With no cache at all, fail loud.
     if (cachedPassword !== null) {
-      console.error(
-        `dbPassword: refresh failed, using cached password (${(err as Error).constructor.name})`,
+      logger.warn(
+        { errClass: (err as Error).constructor.name },
+        "db_password_refresh_failed_using_cache",
       );
       return cachedPassword;
     }

@@ -5,7 +5,7 @@ import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { normalizeUserUiPreferences } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
-import { requireCanyonOwnerAccess } from "../lib/canyonAccess";
+import { getCanyonRole, requireCanyonOwnerAccess } from "../lib/canyonAccess";
 
 const router = Router();
 
@@ -104,16 +104,24 @@ router.delete(
     const rawUserId = getParam(req.params.userId);
     const targetUserId = rawUserId === "me" ? user.id : rawUserId;
 
+    // Authorize BEFORE any share lookup so the response can't become an
+    // existence oracle for a (canyonId, targetUserId) share pair (SEC-001).
+    // Revoke is permitted for the canyon owner (sharer) or the named sharee
+    // removing their own share. A caller who is neither gets 404 — identical
+    // to the no-canyon / no-share path — so a third party cannot distinguish
+    // "canyon X is shared with user Y" from "it is not". The owner decision
+    // derives from canyonAccess (getCanyonRole), never an inline owner check.
+    const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
+    if (!canyon) throw new AppError(404, "Canyon not found");
+
+    const isSharer = (await getCanyonRole(user.id, canyon)) === "owner";
+    const isSharee = targetUserId === user.id;
+    if (!isSharer && !isSharee) throw new AppError(404, "Canyon not found");
+
     const share = await prisma.canyonShare.findFirst({
       where: { canyonId, sharedWithId: targetUserId },
     });
     if (!share) throw new AppError(404, "Share not found");
-
-    // Allow the sharer or the sharee to remove the share
-    const canyon = await prisma.canyon.findUnique({ where: { id: canyonId } });
-    const isSharer = canyon?.ownerId === user.id;
-    const isSharee = targetUserId === user.id;
-    if (!isSharer && !isSharee) throw new AppError(403, "Access denied");
 
     // Revoke the share AND remove the recipient's canyon_shared notification
     // for this canyon in one transaction (PRIV-001). The read-time filter would

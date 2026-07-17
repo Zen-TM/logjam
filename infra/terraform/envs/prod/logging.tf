@@ -21,3 +21,12 @@ resource "aws_cloudwatch_log_group" "geo_pdf_worker" {
   name              = "/ecs/logjam-geo-pdf-worker"
   retention_in_days = 90
 }
+
+# Pre-deploy migrate one-shot (ARCH-001 half B). Pre-created here because
+# ecsTaskExecutionRole has no logs:CreateLogGroup (standard task-exec policy) —
+# the task def sets awslogs-create-group=false and relies on this group
+# existing. Migrate logs carry only migration names, no user data.
+resource "aws_cloudwatch_log_group" "api_migrate" {
+  name              = "/ecs/logjam-api-migrate"
+  retention_in_days = 90
+}

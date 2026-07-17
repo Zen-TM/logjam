@@ -45,6 +45,10 @@ const env = getEnv();
 const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
 const PRESIGN_TTL_SECONDS = 86400; // 24h
 
+// Server-side cap on the exports list. X-Total-Count carries the true total so
+// the client can show a truncation caption when this cap bites (UX-002).
+const EXPORT_LIST_CAP = 50;
+
 async function presignResult(resultKey: string | null): Promise<{ url: string; expiresAt: string } | null> {
   if (!resultKey) return null;
   const url = await getSignedUrl(
@@ -175,14 +179,20 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const rows = await prisma.topoExportJob.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
+    const where = { userId: user.id };
+    const [rows, total] = await Promise.all([
+      prisma.topoExportJob.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: EXPORT_LIST_CAP,
+      }),
+      prisma.topoExportJob.count({ where }),
+    ]);
     const views = await Promise.all(
       rows.map(async (r) => rowToView(r, r.status === "completed" ? await presignResult(r.resultKey) : null)),
     );
+    // True total (pre-cap) so the client can flag a truncated view (UX-002).
+    res.set("X-Total-Count", String(total));
     res.json({ exports: views });
   },
 );

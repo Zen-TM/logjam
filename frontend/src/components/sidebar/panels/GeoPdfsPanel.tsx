@@ -77,7 +77,7 @@ function GeoPdfsPanel({
   // generated GeoPDFs. `confirmBusy` disables the dialog while the action runs.
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
-  const { jobs, loading: jobsLoading, error: jobsError, refetch: refetchJobs } = useGeoPdfJobs(true);
+  const { jobs, total: jobsTotal, loading: jobsLoading, error: jobsError, refetch: refetchJobs } = useGeoPdfJobs(true);
 
   useEffect(() => {
     if (geoPdfJobsRefetch > 0) refetchJobs();
@@ -277,6 +277,14 @@ function GeoPdfsPanel({
         </button>
         {jobsOpen && (
           <div className={classes.accordionBody}>
+            {/* The server caps the GeoPDF list; warn when it's a truncated view
+                of the true total so older PDFs aren't silently hidden (UX-002). */}
+            {jobsTotal != null && jobsTotal > jobs.length && (
+              <div className={classes.truncationNote}>
+                Showing your {jobs.length} most recent GeoPDFs of {jobsTotal}.
+                Older ones aren&rsquo;t loaded.
+              </div>
+            )}
             {jobsLoading && completedJobs.length === 0 && (
               <div className={classes.emptyHint}>Loading…</div>
             )}
