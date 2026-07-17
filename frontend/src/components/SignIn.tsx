@@ -3,6 +3,8 @@ import { TextField, Button } from "@mui/material";
 import classes from "./SignIn.module.css";
 import type { AuthState } from "../useAuth";
 import { ErrorBanner } from "./feedback/ErrorBanner";
+import { FieldError } from "./feedback/FieldError";
+import { isValidEmailFormat } from "../emailValidation";
 import Footer from "./Footer";
 import BrandMark from "./brand/BrandMark";
 import BrandWordmark from "./brand/BrandWordmark";
@@ -57,6 +59,7 @@ function SignIn({
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendSuccess, setResendSuccess] = useState(false);
@@ -89,6 +92,11 @@ function SignIn({
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setLocalError(null);
+    if (!isValidEmailFormat(email)) {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
+    setEmailError(null);
     setSubmitting(true);
     await onSignIn(email, password);
     setSubmitting(false);
@@ -97,6 +105,11 @@ function SignIn({
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
     setLocalError(null);
+    if (!isValidEmailFormat(email)) {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
+    setEmailError(null);
     if (password !== confirmPassword) {
       setLocalError("Passwords do not match");
       return;
@@ -136,6 +149,11 @@ function SignIn({
   async function handleForgotPassword(e: React.FormEvent) {
     e.preventDefault();
     setLocalError(null);
+    if (!isValidEmailFormat(email)) {
+      setEmailError("Enter a valid email address.");
+      return;
+    }
+    setEmailError(null);
     setSubmitting(true);
     await onForgotPassword(email);
     setSubmitting(false);
@@ -214,12 +232,13 @@ function SignIn({
             label="Email"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => { setEmail(e.target.value); setEmailError(null); }}
             size="small"
             fullWidth
             required
             autoFocus
           />
+          <FieldError message={emailError} />
           {displayError && <ErrorBanner message={displayError} />}
           <Button
             type="submit"
@@ -314,11 +333,12 @@ function SignIn({
             label="Email"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => { setEmail(e.target.value); setEmailError(null); }}
             size="small"
             fullWidth
             required
           />
+          <FieldError message={emailError} />
           <TextField
             label="Username"
             value={username}
@@ -402,12 +422,13 @@ function SignIn({
           label="Email"
           type="email"
           value={email}
-          onChange={(e) => { setEmail(e.target.value); setResetSuccess(false); }}
+          onChange={(e) => { setEmail(e.target.value); setResetSuccess(false); setEmailError(null); }}
           size="small"
           fullWidth
           required
           autoFocus
         />
+        <FieldError message={emailError} />
         <TextField
           label="Password"
           type="password"
