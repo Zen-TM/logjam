@@ -304,6 +304,22 @@ resource "aws_iam_role_policy" "eb_instance_s3_scoped" {
           "arn:aws:s3:::logjam-topo-jobs",
         ]
       },
+      {
+        # PLATFORM, not app data. logjam-eb-role has NO AWSElasticBeanstalkWebTier
+        # policy attached — AmazonS3FullAccess is currently the ONLY grant that
+        # covers the EB platform bucket. EB uses the instance role to download the
+        # application-version bundle on deploy/instance-replacement and to upload
+        # rotated/bundle logs; without this, detaching AmazonS3FullAccess would
+        # break the next deploy (delayed outage). Mirrors the S3 grant in the
+        # AWS-managed AWSElasticBeanstalkWebTier policy, pinned to this one bucket.
+        Sid    = "ElasticBeanstalkPlatformBucket"
+        Effect = "Allow"
+        Action = ["s3:Get*", "s3:List*", "s3:PutObject"]
+        Resource = [
+          "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701",
+          "arn:aws:s3:::elasticbeanstalk-ap-southeast-2-620853681701/*",
+        ]
+      },
     ]
   })
 }
