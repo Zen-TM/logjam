@@ -26,8 +26,8 @@ output "ecs_subnets" {
 }
 
 output "ecs_security_groups" {
-  description = "Value for ECS_SECURITY_GROUPS (the VPC default SG used for Fargate ENIs)."
-  value       = aws_default_security_group.default.id
+  description = "Value for ECS_SECURITY_GROUPS — the dedicated Fargate worker SG (CP-003; was the VPC default SG)."
+  value       = aws_security_group.worker.id
 }
 
 output "cognito_user_pool_id" {
