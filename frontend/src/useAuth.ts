@@ -70,13 +70,13 @@ export function useAuth() {
   }, []);
 
   const handleSignIn = useCallback(
-    async (username: string, password: string) => {
+    async (username: string, password: string): Promise<boolean> => {
       setError(null);
       try {
         const result = await amplifySignIn({ username, password });
         if (!result.isSignedIn) {
           setError(mapAuthNextStep(result.nextStep.signInStep));
-          return;
+          return false;
         }
         // Await provisioning before flipping to authenticated: GET /users/me
         // creates the User row on first login, and every other endpoint 404s
@@ -86,9 +86,11 @@ export function useAuth() {
         // unreachable we sign in anyway rather than blocking the user.
         await ensureUserExists().catch(console.error);
         setState("authenticated");
+        return true;
       } catch (err) {
         console.error(err);
         setError(messageFromError(err, "Sign in failed. Please try again."));
+        return false;
       }
     },
     [],
@@ -121,24 +123,26 @@ export function useAuth() {
   );
 
   const handleConfirmSignUp = useCallback(
-    async (code: string): Promise<boolean> => {
+    async (code: string, password: string) => {
       setError(null);
       try {
         await amplifyConfirmSignUp({
           username: pendingUsername,
           confirmationCode: code,
         });
-        // Fallback if the caller's auto-login doesn't fire or fails: land on
-        // the pre-filled sign-in form rather than a dead confirm screen.
-        setState("signIn");
-        return true;
       } catch (err) {
         console.error(err);
         setError(messageFromError(err, "Confirmation failed. Please try again."));
-        return false;
+        return;
       }
+      // Account verified — sign the user straight in (email is the Cognito
+      // username, matching signUp). Go confirmSignUp → authenticated with no
+      // sign-in screen in between. Only if auto-login fails do we fall back to
+      // the pre-filled sign-in form (handleSignIn has already set the error).
+      const signedIn = await handleSignIn(pendingUsername, password);
+      if (!signedIn) setState("signIn");
     },
-    [pendingUsername],
+    [pendingUsername, handleSignIn],
   );
 
   const handleResendCode = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
