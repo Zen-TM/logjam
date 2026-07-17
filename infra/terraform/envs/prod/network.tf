@@ -63,7 +63,7 @@ resource "aws_default_security_group" "default" {
 #      the geo_pdf task-def env change in ecs.tf.
 resource "aws_security_group" "worker" {
   name        = "logjam-worker-sg"
-  description = "Fargate worker ENIs (topo/export/geo-pdf) — RDS ingress source"
+  description = "Fargate worker ENIs (topo/export/geo-pdf) - RDS ingress source"
   vpc_id      = data.aws_vpc.main.id
 
   egress {
