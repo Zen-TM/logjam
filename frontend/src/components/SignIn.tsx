@@ -32,14 +32,14 @@ function SignIn({
 }: {
   authState: AuthState;
   error: string | null;
-  onSignIn: (username: string, password: string) => Promise<void>;
+  onSignIn: (username: string, password: string) => Promise<boolean>;
   onSignUp: (
     username: string,
     password: string,
     email: string,
     name: string,
   ) => Promise<void>;
-  onConfirmSignUp: (code: string) => Promise<boolean>;
+  onConfirmSignUp: (code: string, password: string) => Promise<void>;
   onResendCode: () => Promise<{ ok: boolean; error?: string }>;
   onForgotPassword: (email: string) => Promise<void>;
   onConfirmForgotPassword: (code: string, newPassword: string) => Promise<boolean>;
@@ -126,14 +126,10 @@ function SignIn({
     e.preventDefault();
     setLocalError(null);
     setSubmitting(true);
-    const confirmed = await onConfirmSignUp(code);
-    if (confirmed) {
-      // Account just verified — the user proved ownership, so log them straight
-      // in with the credentials still held from the signUp form (this component
-      // never unmounts across signUp → confirmSignUp → signIn). onSignIn uses
-      // email as the Cognito username, matching how signUp registered them.
-      await onSignIn(email, password);
-    }
+    // Pass the password still held from the signUp form (this component never
+    // unmounts across signUp → confirmSignUp) so useAuth can auto-login the
+    // just-verified account without ever flashing the sign-in screen.
+    await onConfirmSignUp(code, password);
     setSubmitting(false);
   }
 
