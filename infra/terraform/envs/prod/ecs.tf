@@ -214,7 +214,9 @@ resource "aws_ecs_task_definition" "api_migrate" {
     logConfiguration = {
       logDriver = "awslogs"
       options = {
-        awslogs-create-group  = "true"
+        # Group pre-created in logging.tf (aws_cloudwatch_log_group.api_migrate);
+        # ecsTaskExecutionRole lacks logs:CreateLogGroup, so create-group=false.
+        awslogs-create-group  = "false"
         awslogs-group         = "/ecs/logjam-api-migrate"
         awslogs-region        = "ap-southeast-2"
         awslogs-stream-prefix = "ecs"
