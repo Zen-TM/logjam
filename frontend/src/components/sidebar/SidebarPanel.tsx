@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useIsMobile } from "../../useIsMobile";
 import BottomSheet from "./BottomSheet";
@@ -273,6 +273,13 @@ function SidebarPanel({
     }
   }, [activePanel]);
 
+  // Let a panel request the sheet expand to full (e.g. CanyonsPanel when its
+  // filters accordion opens). Stable so the panel's effect only fires on the
+  // actual open, not every render. No-op on desktop where there's no sheet.
+  const expandSheetToFull = useCallback(() => {
+    if (isMobile) setSheetSnap("full");
+  }, [isMobile]);
+
   if (!activePanel) return null;
 
   const title =
@@ -329,6 +336,7 @@ function SidebarPanel({
             setSelectedCanyonID={setSelectedCanyonID}
             setActivePanel={setActivePanel}
             canyonCustomFieldDefs={canyonCustomFieldDefs}
+            onExpandSheet={expandSheetToFull}
           />
         )}
         {activePanel === "geopdfs" && (

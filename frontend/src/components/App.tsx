@@ -1120,16 +1120,22 @@ function App() {
           >
             Select All
           </Button>
-          <Button
-            variant="contained"
-            size="small"
-            disabled={!filtersActive}
-            onClick={() =>
-              handleAreaSelected(filteredCanyons.map((c) => c.id))
-            }
-          >
-            Select All Filtered
-          </Button>
+          {/* Only render when filters are active. When they aren't, "filtered"
+              == all canyons (the button is redundant), and MUI's default
+              disabled styling (grey-on-grey) is illegible floating over the
+              map. Hiding it declutters the bar and drops it to two buttons that
+              fit on one row on narrow phones. */}
+          {filtersActive && (
+            <Button
+              variant="contained"
+              size="small"
+              onClick={() =>
+                handleAreaSelected(filteredCanyons.map((c) => c.id))
+              }
+            >
+              Select All Filtered
+            </Button>
+          )}
         </div>
       )}
 

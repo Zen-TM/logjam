@@ -807,7 +807,7 @@ function CanyonDialog({
               </Box>
             </Tooltip>
           </Box>
-          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: "flex-start" }}>
+          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: isMobile ? "stretch" : "flex-start" }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <ValidatedNumberField
                 label="Quality (1-5)"
@@ -829,7 +829,7 @@ function CanyonDialog({
               />
             </Box>
           </Box>
-          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: "flex-start" }}>
+          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: isMobile ? "stretch" : "flex-start" }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <ValidatedNumberField
                 label="Pitches"
