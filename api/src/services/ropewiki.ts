@@ -300,6 +300,10 @@ export async function fetchAndParseRopeWiki(): Promise<{
 }> {
   const response = await fetch(ROPEWIKI_CSV_URL, {
     signal: AbortSignal.timeout(15000),
+    headers: {
+      "User-Agent":
+        "Logjam/1.0 (canyoning logbook; https://logjamnsw.com; noreply@notifications.logjamnsw.com)",
+    },
   });
   if (!response.ok) {
     throw new Error(`RopeWiki returned HTTP ${response.status}`);
