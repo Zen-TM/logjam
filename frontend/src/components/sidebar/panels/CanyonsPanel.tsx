@@ -83,6 +83,7 @@ function CanyonsPanel({
   setSelectedCanyonID,
   setActivePanel,
   canyonCustomFieldDefs,
+  onExpandSheet,
 }: {
   canyons: TCanyon[];
   // True owned-canyon total before the server's list cap; null until known.
@@ -103,6 +104,11 @@ function CanyonsPanel({
   setSelectedCanyonID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
   canyonCustomFieldDefs: TripLogCustomFieldDef[];
+  // Mobile: request the bottom sheet expand to its full snap. No-op on desktop
+  // (SidebarPanel guards on isMobile). Used when opening the filters accordion,
+  // which needs the full sheet height to be usable (its scroll region collapses
+  // to an unusable sliver in the shorter "half" snap).
+  onExpandSheet?: () => void;
 }) {
   // Search: a substring query that filters the canyon cards below (matches the
   // primary name or any alternative name). ANDs with the filters. Session-scoped
@@ -122,6 +128,14 @@ function CanyonsPanel({
   useEffect(() => {
     if (filtersAccordionSignal > 0) setFiltersOpen(true);
   }, [filtersAccordionSignal]);
+
+  // On mobile the filters accordion's scroll region collapses to an unusable
+  // sliver in the "half" snap; expand the sheet to full whenever it opens so the
+  // filters get the height they need. Covers both the header toggle and the
+  // App-driven filtersAccordionSignal open. No-op on desktop.
+  useEffect(() => {
+    if (filtersOpen) onExpandSheet?.();
+  }, [filtersOpen, onExpandSheet]);
 
   const activeCount = activeFilterCount(filters);
 
