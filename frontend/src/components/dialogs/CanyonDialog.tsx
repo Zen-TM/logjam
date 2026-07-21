@@ -40,6 +40,7 @@ import {
 } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import { FieldError } from "../feedback/FieldError";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import AddCustomFieldForm from "./AddCustomFieldForm";
@@ -416,13 +417,13 @@ function CanyonDialog({
       const parsedLat = parseFloat(latitude);
       const parsedLng = parseFloat(longitude);
       if (!name.trim()) {
-        setError("Name is required");
+        // Inline under the Name field (FieldError), not the bottom banner.
         setInvalidField("name");
         setSaving(false);
         return;
       }
       if (!latitude || !longitude || isNaN(parsedLat) || isNaN(parsedLng)) {
-        setError("Valid coordinates are required");
+        // Inline under the coordinate fields (FieldError), not the bottom banner.
         setInvalidField("coords");
         setSaving(false);
         return;
@@ -627,57 +628,68 @@ function CanyonDialog({
       >
       <DialogContent dividers sx={{ borderColor: "rgba(255,255,255,0.1)" }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
-          <TextField
-            label="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            error={invalidField === "name"}
-            // Focused imperatively by the form-reset effect above, which shares
-            // the pick-on-map guard.
-            inputRef={nameInputRef}
-            size="small"
-          />
+          <div>
+            <TextField
+              label="Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              error={invalidField === "name"}
+              // Focused imperatively by the form-reset effect above, which shares
+              // the pick-on-map guard.
+              inputRef={nameInputRef}
+              size="small"
+              fullWidth
+            />
+            <FieldError message={invalidField === "name" ? "Name is required" : null} />
+          </div>
           <TextField
             label="Alternative Names (comma-separated)"
             value={altNames}
             onChange={(e) => setAltNames(e.target.value)}
             size="small"
           />
-          <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: isMobile ? "stretch" : "flex-start" }}>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <ValidatedNumberField
-                label="Latitude"
-                value={latitude}
-                onChange={setLatitude}
-                constraints={LAT_CONSTRAINTS}
-                showError={showFieldErrors || invalidField === "coords"}
-                tooltip="WGS84 decimal degrees (standard GPS format). Between -90 and 90."
-              />
+          <div>
+            <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2, alignItems: isMobile ? "stretch" : "flex-start" }}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <ValidatedNumberField
+                  label="Latitude"
+                  value={latitude}
+                  onChange={setLatitude}
+                  constraints={LAT_CONSTRAINTS}
+                  required
+                  showError={showFieldErrors || invalidField === "coords"}
+                  tooltip="WGS84 decimal degrees (standard GPS format). Between -90 and 90."
+                />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <ValidatedNumberField
+                  label="Longitude"
+                  value={longitude}
+                  onChange={setLongitude}
+                  constraints={LNG_CONSTRAINTS}
+                  required
+                  showError={showFieldErrors || invalidField === "coords"}
+                  tooltip="WGS84 decimal degrees (standard GPS format). Between -180 and 180."
+                />
+              </Box>
+              <Button
+                variant="contained"
+                color="secondary"
+                sx={{
+                  whiteSpace: "nowrap",
+                  minWidth: "auto",
+                  height: "40px",
+                }}
+                onClick={handlePickCoords}
+              >
+                📍 Select on Map
+              </Button>
             </Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <ValidatedNumberField
-                label="Longitude"
-                value={longitude}
-                onChange={setLongitude}
-                constraints={LNG_CONSTRAINTS}
-                showError={showFieldErrors || invalidField === "coords"}
-                tooltip="WGS84 decimal degrees (standard GPS format). Between -180 and 180."
-              />
-            </Box>
-            <Button
-              variant="contained"
-              color="secondary"
-              sx={{
-                whiteSpace: "nowrap",
-                minWidth: "auto",
-                height: "40px",
-              }}
-              onClick={handlePickCoords}
-            >
-              📍 Select on Map
-            </Button>
-          </Box>
+            <FieldError
+              message={invalidField === "coords" ? "Valid coordinates are required" : null}
+            />
+          </div>
           <Box sx={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 2 }}>
             <Tooltip
               title={
