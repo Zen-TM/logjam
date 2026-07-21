@@ -1,0 +1,17 @@
+# Expo / native build artifacts
+.expo/
+dist/
+web-build/
+*.orig.*
+
+# Native project dirs (managed by prebuild / EAS; regenerated, not committed
+# until/unless the app ejects to bare workflow)
+/ios
+/android
+
+# Env files carry config (and, if misused, secrets) — never commit
+.env
+.env.*.local
+
+# Metro / RN caches
+.metro-health-check*
