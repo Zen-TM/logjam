@@ -10,6 +10,7 @@ import { needsReconsent } from "@logjam/shared";
 import { fetchCurrentUser, getUnreadNotificationCount, useApiQuery } from "./api/queries";
 import type { TTripLog } from "./api/types";
 import { theme } from "./theme";
+import { MapScreen } from "./map/MapScreen";
 import { AccountScreen } from "./screens/AccountScreen";
 import { CanyonDetailScreen } from "./screens/CanyonDetailScreen";
 import { CanyonsScreen } from "./screens/CanyonsScreen";
@@ -31,6 +32,11 @@ const navigationTheme = {
   },
 };
 
+type MapStackParams = {
+  MapView: undefined;
+  MapCanyonDetail: { canyonId: string; name: string };
+};
+
 type CanyonsStackParams = {
   CanyonList: undefined;
   CanyonDetail: { canyonId: string; name: string };
@@ -41,6 +47,7 @@ type TripsStackParams = {
   TripDetail: { trip: TTripLog };
 };
 
+const MapStack = createNativeStackNavigator<MapStackParams>();
 const CanyonsStack = createNativeStackNavigator<CanyonsStackParams>();
 const TripsStack = createNativeStackNavigator<TripsStackParams>();
 const Tabs = createBottomTabNavigator();
@@ -50,6 +57,28 @@ const stackScreenOptions = {
   headerTintColor: theme.textPrimary,
   contentStyle: { backgroundColor: theme.primary },
 } as const;
+
+function MapStackNav() {
+  return (
+    <MapStack.Navigator screenOptions={stackScreenOptions}>
+      <MapStack.Screen name="MapView" options={{ headerShown: false }}>
+        {({ navigation }) => (
+          <MapScreen
+            onOpenCanyon={(canyonId, name) =>
+              navigation.navigate("MapCanyonDetail", { canyonId, name })
+            }
+          />
+        )}
+      </MapStack.Screen>
+      <MapStack.Screen
+        name="MapCanyonDetail"
+        options={({ route }) => ({ title: route.params.name })}
+      >
+        {({ route }) => <CanyonDetailScreen canyonId={route.params.canyonId} />}
+      </MapStack.Screen>
+    </MapStack.Navigator>
+  );
+}
 
 function CanyonsStackNav() {
   return (
@@ -137,6 +166,12 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
           tabBarInactiveTintColor: theme.textMuted,
         }}
       >
+        <Tabs.Screen
+          name="Map"
+          options={{ tabBarIcon: ({ color }) => <TabIcon glyph="◈" color={color} /> }}
+        >
+          {() => <MapStackNav />}
+        </Tabs.Screen>
         <Tabs.Screen
           name="Canyons"
           options={{ tabBarIcon: ({ color }) => <TabIcon glyph="▲" color={color} /> }}

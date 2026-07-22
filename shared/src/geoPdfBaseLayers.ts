@@ -7,9 +7,133 @@ import type { TopoLayerName } from "./topoSettings.js";
 // tiles are actually fetched — so layers set `requiresExtractionDate` and the
 // renderer appends the dated line at draw time.
 // Terms: https://www.spatial.nsw.gov.au/products_and_services/web_services/terms_and_conditions
-// Licensing research + per-layer sources: .claude/offline-basemap-licensing.md
+// Licensing research + per-layer sources: private/offline-basemap-licensing.md
 export const SIX_EXTRACTION_CREDIT_PREFIX = "© Department of Customer Service";
 
+// ── Basemap catalog ───────────────────────────────────────────────────────────
+// Canonical catalog of raster basemap providers, shared by the web map
+// (frontend BASE_LAYERS derives from it), the GeoPDF renderer (via
+// GEOPDF_BASE_LAYER_CONFIG below), and the mobile map. Consolidated from the
+// previously-drifting web/shared copies (map-sources.md deviation D2): the two
+// disagreed on six-imagery max zoom and six-base existed only on web — while
+// VALID_GEOPDF_BASE_LAYERS accepted "six-base", so a six-base GeoPDF silently
+// fell back to defaults. One list, no third copy.
+
+const SIX_ATTRIBUTION =
+  "Base map © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.";
+const SIX_ATTRIBUTION_HTML =
+  '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.';
+
+export type BasemapCatalogEntry = {
+  id: string;
+  /** Picker label (web layer switcher / mobile basemap picker). */
+  name: string;
+  urlTemplate: string;
+  /**
+   * Deepest zoom the provider's tile cache actually serves — the GeoPDF
+   * renderer fetches at this zoom for print resolution.
+   */
+  maxNativeZoom: number;
+  /**
+   * Cap for interactive map tile requests. Differs from maxNativeZoom where
+   * deep-cache tiles are patchy (six-imagery serves z20 in metro only — the
+   * web map has always capped display at 18 to avoid blank tiles in the
+   * bush; keep that behaviour).
+   */
+  displayMaxZoom: number;
+  /** Plain-text attribution (GeoPDF print, mobile). */
+  attribution: string;
+  /** HTML attribution (web AttributionControl). */
+  attributionHtml: string;
+  /**
+   * Whether Stage 4 offline region downloads may target this provider.
+   * OSM-family tile servers are online-only by policy (their usage policies
+   * prohibit bulk scraping); SIX rasters and the self-hosted Protomaps
+   * basemap are download-eligible.
+   */
+  offlineCapable: boolean;
+  /**
+   * NSW Spatial Services layers additionally need the dated extraction credit
+   * (see SIX_EXTRACTION_CREDIT_PREFIX above) appended at draw time.
+   */
+  requiresExtractionDate?: boolean;
+};
+
+export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
+  {
+    id: "osm",
+    name: "Default",
+    urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    maxNativeZoom: 19,
+    displayMaxZoom: 19,
+    attribution: "Base map © OpenStreetMap contributors",
+    attributionHtml:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    offlineCapable: false,
+  },
+  {
+    id: "osm-topo",
+    name: "OSM Topo",
+    urlTemplate: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
+    maxNativeZoom: 17,
+    displayMaxZoom: 17,
+    attribution: "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors",
+    attributionHtml:
+      '<a href="https://github.com/der-stefan/OpenTopoMap">OpenTopo</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    offlineCapable: false,
+  },
+  {
+    id: "osm-cycle",
+    name: "OSM Cycle Topo",
+    urlTemplate: "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+    maxNativeZoom: 20,
+    displayMaxZoom: 20,
+    attribution: "Base map © CyclOSM, © OpenStreetMap contributors",
+    attributionHtml:
+      '<a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases">CyclOSM</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    offlineCapable: false,
+  },
+  {
+    id: "six-topo",
+    name: "Six Maps Topo",
+    urlTemplate:
+      "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+    maxNativeZoom: 16,
+    displayMaxZoom: 16,
+    attribution: SIX_ATTRIBUTION,
+    attributionHtml: SIX_ATTRIBUTION_HTML,
+    offlineCapable: true,
+    requiresExtractionDate: true,
+  },
+  {
+    id: "six-base",
+    name: "SIX Maps Base Map",
+    urlTemplate:
+      "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
+    maxNativeZoom: 18,
+    displayMaxZoom: 18,
+    attribution: SIX_ATTRIBUTION,
+    attributionHtml: SIX_ATTRIBUTION_HTML,
+    offlineCapable: true,
+    requiresExtractionDate: true,
+  },
+  {
+    id: "six-imagery",
+    name: "SIX Maps Imagery",
+    urlTemplate:
+      "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
+    maxNativeZoom: 20,
+    displayMaxZoom: 18,
+    attribution:
+      "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.",
+    attributionHtml: SIX_ATTRIBUTION_HTML,
+    offlineCapable: true,
+    requiresExtractionDate: true,
+  },
+];
+
+// Legacy keyed view consumed by the GeoPDF renderer/estimator (api). Derived —
+// never hand-edit; extend BASEMAP_CATALOG instead.
 export const GEOPDF_BASE_LAYER_CONFIG: Record<
   string,
   {
@@ -18,42 +142,17 @@ export const GEOPDF_BASE_LAYER_CONFIG: Record<
     attribution: string;
     requiresExtractionDate?: boolean;
   }
-> = {
-  "six-topo": {
-    urlTemplate:
-      "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-    maxNativeZoom: 16,
-    attribution:
-      "Base map © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.",
-    requiresExtractionDate: true,
-  },
-  "six-imagery": {
-    urlTemplate:
-      "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
-    maxNativeZoom: 20,
-    attribution:
-      "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.",
-    requiresExtractionDate: true,
-  },
-  osm: {
-    urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-    maxNativeZoom: 19,
-    attribution: "Base map © OpenStreetMap contributors",
-  },
-  "osm-topo": {
-    urlTemplate: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
-    maxNativeZoom: 17,
-    attribution:
-      "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors",
-  },
-  "osm-cycle": {
-    urlTemplate:
-      "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
-    maxNativeZoom: 20,
-    attribution:
-      "Base map © CyclOSM, © OpenStreetMap contributors",
-  },
-};
+> = Object.fromEntries(
+  BASEMAP_CATALOG.map((entry) => [
+    entry.id,
+    {
+      urlTemplate: entry.urlTemplate,
+      maxNativeZoom: entry.maxNativeZoom,
+      attribution: entry.attribution,
+      requiresExtractionDate: entry.requiresExtractionDate,
+    },
+  ]),
+);
 
 /**
  * The dated credit line NSW Spatial Services requires alongside the standing

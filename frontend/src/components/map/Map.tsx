@@ -52,6 +52,7 @@ import { fetchTrackGeoJSON } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import {
+  BASEMAP_CATALOG,
   extentFromCentreAndSize,
   OSM_LINE_FEATURE_KEYS,
   OSM_POINT_FEATURE_KEYS,
@@ -126,62 +127,17 @@ function applyCanyonThemePaint(map: maplibregl.Map) {
   }
 }
 
-export const BASE_LAYERS = [
-  {
-    id: "osm",
-    name: "Default",
-    tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-    maxzoom: 19,
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  },
-  {
-    id: "osm-topo",
-    name: "OSM Topo",
-    tiles: ["https://a.tile.opentopomap.org/{z}/{x}/{y}.png"],
-    maxzoom: 17,
-    attribution:
-      '<a href="https://github.com/der-stefan/OpenTopoMap">OpenTopo</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  },
-  {
-    id: "osm-cycle",
-    name: "OSM Cycle Topo",
-    tiles: ["https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"],
-    maxzoom: 20,
-    attribution:
-      '<a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases">CyclOSM</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  },
-  {
-    id: "six-topo",
-    name: "Six Maps Topo",
-    tiles: [
-      "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-    ],
-    maxzoom: 16,
-    attribution:
-      '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.',
-  },
-  {
-    id: "six-base",
-    name: "SIX Maps Base Map",
-    tiles: [
-      "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
-    ],
-    maxzoom: 18,
-    attribution:
-      '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.',
-  },
-  {
-    id: "six-imagery",
-    name: "SIX Maps Imagery",
-    tiles: [
-      "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
-    ],
-    maxzoom: 18,
-    attribution:
-      '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.',
-  },
-];
+// Derived from the canonical shared basemap catalog (map-sources.md D2) —
+// same ids, order, URLs, and zoom caps as before the consolidation. The
+// interactive map uses displayMaxZoom (six-imagery stays capped at 18 here
+// while the GeoPDF renderer keeps fetching its native 20).
+export const BASE_LAYERS = BASEMAP_CATALOG.map((entry) => ({
+  id: entry.id,
+  name: entry.name,
+  tiles: [entry.urlTemplate],
+  maxzoom: entry.displayMaxZoom,
+  attribution: entry.attributionHtml,
+}));
 
 export type TBbox = {
   west: number;

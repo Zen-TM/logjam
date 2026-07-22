@@ -16,6 +16,10 @@ export const config = {
   authMode: process.env.EXPO_PUBLIC_AUTH_MODE ?? "cognito",
   cognitoUserPoolId: process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID,
   cognitoClientId: process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID,
+  // CDN serving master topo tiles + (future) Protomaps basemap/glyphs —
+  // parallels the web TOPO_CDN_BASE_URL.
+  topoCdnBaseUrl:
+    process.env.EXPO_PUBLIC_TOPO_CDN_BASE_URL ?? "https://logjamnsw.com",
 } as const;
 
 // Client-version discipline (Stage 0): every API request carries this header so
