@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@logjam/shared": "file:../shared",
+    "@maplibre/maplibre-react-native": "^10.4.2",
     "expo": "^53.0.0",
     "expo-asset": "~11.1.7",
     "expo-constants": "~17.1.8",

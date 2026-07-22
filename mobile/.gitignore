@@ -9,6 +9,9 @@ web-build/
 /ios
 /android
 
+# Local Expo modules: source is committed, Gradle build output is not
+modules/*/android/build/
+
 # Env files carry config (and, if misused, secrets) — never commit
 .env
 .env.*.local

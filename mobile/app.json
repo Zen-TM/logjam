@@ -22,7 +22,8 @@
     "plugins": [
       "expo-dev-client",
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      "@maplibre/maplibre-react-native"
     ],
     "extra": {
       "eas": {

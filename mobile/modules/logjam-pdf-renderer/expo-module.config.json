@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["LogjamPdfRendererModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.logjampdfrenderer.LogjamPdfRendererModule"]
+  }
+}
