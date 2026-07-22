@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   passesFilters,
+  isCanyonDoneByViewer,
   hasActiveFilters,
   activeFilterCount,
   reconcileCustomFilters,
@@ -145,6 +146,32 @@ describe("passesFilters — completion", () => {
     expect(passesFilters(canyon({ vGrade: 2, _count: { tripLogLinks: 1, shares: 0 } }), f, true)).toBe(false);
     // not done, but out of grade range
     expect(passesFilters(canyon({ vGrade: 6, _count: { tripLogLinks: 0, shares: 0 } }), f, true)).toBe(false);
+  });
+});
+
+// Single source for the completion filter AND the map's completed-marker style.
+describe("isCanyonDoneByViewer", () => {
+  it("is true for an owned canyon with at least one logged trip", () => {
+    expect(
+      isCanyonDoneByViewer(canyon({ _count: { tripLogLinks: 3, shares: 0 } }), true),
+    ).toBe(true);
+  });
+
+  it("is false for an owned canyon with zero trips", () => {
+    expect(
+      isCanyonDoneByViewer(canyon({ _count: { tripLogLinks: 0, shares: 0 } }), true),
+    ).toBe(false);
+  });
+
+  it("is false when _count is absent — never coalesce a missing tally to done", () => {
+    expect(isCanyonDoneByViewer(canyon(), true)).toBe(false);
+  });
+
+  it("is false for a shared canyon even when the owner's tally is positive", () => {
+    // Privacy/self-only boundary: the count is the owner's, not the viewer's.
+    expect(
+      isCanyonDoneByViewer(canyon({ _count: { tripLogLinks: 5, shares: 0 } }), false),
+    ).toBe(false);
   });
 });
 

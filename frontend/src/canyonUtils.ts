@@ -1259,6 +1259,16 @@ export function hasActiveFilters(filters: TFilters): boolean {
 // isOwned distinguishes the owner's own canyons from canyons shared with them.
 // It's structural (which list the canyon came from), so it can't be read off
 // TCanyon — callers pass it per bucket. See Map.tsx / App.tsx.
+// "Done" = the viewer has run this canyon. Self-only: only readable for canyons
+// the viewer owns. A trip can only link to its own owner's canyons, so on a canyon
+// shared *with* the viewer `_count.tripLogLinks` is the OWNER's tally, not theirs —
+// reading it would answer the wrong question and leak how often that friend runs it.
+// A missing `_count` is a payload shape, not a data gap: zero trips is a real answer.
+// Single source for both the completion filter and the map's completed-marker style.
+export function isCanyonDoneByViewer(canyon: TCanyon, isOwned: boolean): boolean {
+  return isOwned && (canyon._count?.tripLogLinks ?? 0) > 0;
+}
+
 export function passesFilters(
   canyon: TCanyon,
   filters: TFilters,
@@ -1314,17 +1324,9 @@ export function passesFilters(
 
   if (filters.shared_by_me && (canyon._count?.shares ?? 0) === 0) return false;
 
-  // Completion asks "have *I* done it", so the trip count is only read for
-  // canyons the viewer owns. A trip can only link to its own owner's canyons
-  // (resolveTripCanyonIds enforces ownerId), so on a canyon shared *with* the
-  // viewer `_count.tripLogLinks` is the OWNER's tally, not theirs — reading it
-  // would answer the wrong question (marking a canyon done because a friend ran
-  // it) and surface how often that friend runs it. The viewer structurally
-  // cannot have a linked trip there, so a shared canyon is never "done".
-  // Deliberately ignores include_unknowns: a missing `_count` is a payload
-  // shape, not a data gap — zero trips is a real answer, not an unknown one.
+  // "Have *I* done it" — self-only, see isCanyonDoneByViewer for the privacy rationale.
   if (filters.completion !== "any") {
-    const doneByViewer = isOwned && (canyon._count?.tripLogLinks ?? 0) > 0;
+    const doneByViewer = isCanyonDoneByViewer(canyon, isOwned);
     if (filters.completion === "done" && !doneByViewer) return false;
     if (filters.completion === "not_done" && doneByViewer) return false;
   }

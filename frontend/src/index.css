@@ -14,6 +14,7 @@
 
   --owned-canyon-color: #f97316;
   --shared-canyon-color: #629bf8;
+  --completed-canyon-color: #22c55e; /* owned canyon with a logged trip */
 
   /* Layout */
   --nav-rail-width: 56px;
