@@ -47,7 +47,7 @@ import MapSearchBox from "./MapSearchBox";
 import { MOBILE_MAX_WIDTH_PX } from "../../useIsMobile";
 import type { TCanyon, TFilters, CanyonTrack } from "../../canyonUtils";
 import type { GeoJsonPolygonal } from "../../topoLayerTypes";
-import { passesFilters } from "../../canyonUtils";
+import { passesFilters, isCanyonDoneByViewer } from "../../canyonUtils";
 import { fetchTrackGeoJSON } from "../media/trackGeo";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
@@ -99,12 +99,19 @@ function collectLngLatPairs(node: unknown): [number, number][] {
 
 function applyCanyonThemePaint(map: maplibregl.Map) {
   const owned = readCssVar("--owned-canyon-color", "#f97316");
+  const completed = readCssVar("--completed-canyon-color", "#22c55e");
   const shared = readCssVar("--shared-canyon-color", "#629bf8");
   const label = readCssVar("--theme-text-primary", "#ffffff");
   const halo = readCssVar("--theme-bonus-2", "#1a1a1a");
 
   if (map.getLayer("canyon-circles")) {
-    map.setPaintProperty("canyon-circles", "circle-color", owned);
+    // Completed (owned + logged trip) canyons render green; the rest stay orange.
+    map.setPaintProperty("canyon-circles", "circle-color", [
+      "case",
+      ["==", ["get", "done"], true],
+      completed,
+      owned,
+    ]);
   }
   if (map.getLayer("shared-canyon-circles")) {
     map.setPaintProperty("shared-canyon-circles", "circle-color", shared);
@@ -829,7 +836,7 @@ function Map({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
 
-    const toFeatureCollection = (list: TCanyon[]) => ({
+    const toFeatureCollection = (list: TCanyon[], isOwned: boolean) => ({
       type: "FeatureCollection" as const,
       features: list.map((c) => ({
         type: "Feature" as const,
@@ -837,7 +844,11 @@ function Map({
           type: "Point" as const,
           coordinates: [c.longitude, c.latitude],
         },
-        properties: { id: c.id, name: c.name },
+        properties: {
+          id: c.id,
+          name: c.name,
+          done: isCanyonDoneByViewer(c, isOwned),
+        },
       })),
     });
 
@@ -848,6 +859,7 @@ function Map({
       ownedSource.setData(
         toFeatureCollection(
           canyons.filter((c) => passesFilters(c, filters, true)),
+          true,
         ),
       );
     }
@@ -859,6 +871,7 @@ function Map({
       sharedSource.setData(
         toFeatureCollection(
           sharedCanyons.filter((c) => passesFilters(c, filters, false)),
+          false,
         ),
       );
     }
