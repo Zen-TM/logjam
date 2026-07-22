@@ -1,0 +1,28 @@
+# Stage 1 real-Cognito sign-in flow. Needs EXPO_PUBLIC_AUTH_MODE=cognito in
+# mobile/.env AND a confirmed test Cognito user (operator-provided — never a
+# real account, never committed creds; privacy rule mirrors
+# frontend/e2e/auth-lifecycle.spec.ts):
+#
+#   MAESTRO_TEST_EMAIL=... MAESTRO_TEST_PASSWORD=... \
+#     maestro test e2e/signin.yaml
+appId: com.logjamnsw.mobile
+env:
+  TEST_EMAIL: ${MAESTRO_TEST_EMAIL}
+  TEST_PASSWORD: ${MAESTRO_TEST_PASSWORD}
+---
+- openLink: "exp+logjam-mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
+- extendedWaitUntil:
+    visible: "Sign in"
+    timeout: 30000
+- tapOn: "Email"
+- inputText: ${TEST_EMAIL}
+- tapOn: "Password"
+- inputText: ${TEST_PASSWORD}
+- tapOn:
+    text: "Sign in"
+    index: 1 # the button, not the heading
+- extendedWaitUntil:
+    visible: "Canyons"
+    timeout: 30000
+- tapOn: "Account"
+- assertVisible: "Sign out"

@@ -1,90 +1,65 @@
-import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
-import { TOPO_LAYERS } from "@logjam/shared";
-
-import { config, CLIENT_VERSION, CLIENT_VERSION_HEADER } from "./src/config";
+import { CLIENT_VERSION } from "./src/config";
 import { useMinVersionGate } from "./src/useMinVersionGate";
-
-// Stage 0 deliverable: a blank shell that proves the app builds, runs on a
-// device/simulator, reads config, and can reach the API. Auth (Stage 1) will
-// wrap this fetch in a real Cognito token; for now an unauthed probe of the API
-// base is enough to confirm end-to-end wiring. Do not build UI beyond this in
-// Stage 0 — the real screens start at Stage 1.
-type Probe =
-  | { status: "loading" }
-  | { status: "reached"; httpStatus: number }
-  | { status: "error"; message: string };
+import { useAuth } from "./src/auth/useAuth";
+import { AuthFlow } from "./src/screens/AuthFlow";
+import { AppShell } from "./src/AppShell";
+import { LoadingState } from "./src/ui/ScreenStates";
+import { fontSize, spacing, theme } from "./src/theme";
 
 export default function App() {
-  const [probe, setProbe] = useState<Probe>({ status: "loading" });
   const minVersionGate = useMinVersionGate();
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`${config.apiUrl}/users/me`, {
-      headers: { [CLIENT_VERSION_HEADER]: CLIENT_VERSION },
-    })
-      .then((response) => {
-        if (!cancelled) {
-          setProbe({ status: "reached", httpStatus: response.status });
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setProbe({
-            status: "error",
-            message: error instanceof Error ? error.message : String(error),
-          });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const auth = useAuth();
 
   if (minVersionGate.status === "upgradeRequired") {
     return (
-      <View style={styles.container}>
-        <StatusBar style="auto" />
-        <Text style={styles.title}>Update required</Text>
-        <Text style={styles.line}>
-          This version ({CLIENT_VERSION}) is no longer supported. Minimum
-          supported version is {minVersionGate.minVersion}. Please update the
-          app to continue.
-        </Text>
-      </View>
+      <SafeAreaProvider>
+        <View style={styles.blockingContainer}>
+          <StatusBar style="light" />
+          <Text style={styles.blockingTitle}>Update required</Text>
+          <Text style={styles.blockingLine}>
+            This version ({CLIENT_VERSION}) is no longer supported. Minimum
+            supported version is {minVersionGate.minVersion}. Please update the
+            app to continue.
+          </Text>
+        </View>
+      </SafeAreaProvider>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="auto" />
-      <Text style={styles.title}>Logjam Mobile</Text>
-      <Text style={styles.line}>{CLIENT_VERSION}</Text>
-      <Text style={styles.line}>API: {config.apiUrl}</Text>
-      {/* Spike 2 closure: prove shared/dist ESM executes at runtime in Hermes,
-          not just that Metro bundles it. */}
-      <Text style={styles.line}>shared: {TOPO_LAYERS.length} topo layers</Text>
-      <Text style={styles.line}>
-        {probe.status === "loading" && "Probing API…"}
-        {probe.status === "reached" &&
-          `API reached (HTTP ${probe.httpStatus} — 401 expected until Stage 1 auth)`}
-        {probe.status === "error" && `API unreachable: ${probe.message}`}
-      </Text>
-    </View>
+    <SafeAreaProvider>
+      <StatusBar style="light" />
+      {auth.state === "loading" ? (
+        <LoadingState />
+      ) : auth.state === "authenticated" ? (
+        <AppShell onSignOut={auth.signOut} />
+      ) : (
+        <SafeAreaView style={styles.authSafeArea}>
+          <AuthFlow auth={auth} />
+        </SafeAreaView>
+      )}
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  blockingContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: 24,
-    gap: 8,
+    padding: spacing(3),
+    gap: spacing(1),
+    backgroundColor: theme.primary,
   },
-  title: { fontSize: 22, fontWeight: "600" },
-  line: { fontSize: 14, opacity: 0.8, textAlign: "center" },
+  blockingTitle: { fontSize: fontSize.xl, fontWeight: "600", color: theme.textPrimary },
+  blockingLine: {
+    fontSize: fontSize.sm,
+    color: theme.textMuted,
+    textAlign: "center",
+  },
+  authSafeArea: { flex: 1, backgroundColor: theme.primary },
 });

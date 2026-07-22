@@ -23,7 +23,9 @@
       "expo-dev-client",
       "expo-asset",
       "expo-font",
-      "@maplibre/maplibre-react-native"
+      "@maplibre/maplibre-react-native",
+      "expo-secure-store",
+      "@sentry/react-native"
     ],
     "extra": {
       "eas": {

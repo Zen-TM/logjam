@@ -6,13 +6,13 @@ navigation, track recording, trip logging. Consumes generated artifacts (topo
 tiles, GeoPDFs); does **not** generate them (that stays web-only). Full product
 plan + staged execution: `.claude/mobile-plan/` (local, not committed).
 
-## Scaffold status
+## Status
 
-Stage 0 scaffold only. Hand-written skeleton — **`node_modules` not installed,
-dependency versions are best-effort and unverified against a live registry.**
-First real build must reconcile: `cd mobile && npm install && npx expo install --fix`
-(aligns RN/React/Expo module versions to the installed SDK). Treat the SDK/RN/React
-pins in `package.json` as a starting point, not gospel.
+Stage 0 (scaffold, spikes, min-version lever, CI) and Stage 1 (Cognito auth,
+apiFetch, read-only browse screens, Sentry scrubber) are built. Dev loop:
+`npm start` (Metro) + emulator dev-client; native-dep changes need
+`npx expo prebuild -p android && cd android && ./gradlew :app:assembleDebug`.
+Maestro flows in `e2e/` (local, not CI — see `e2e/README.md`).
 
 ## Stack rules
 
