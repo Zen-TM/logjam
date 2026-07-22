@@ -22,4 +22,5 @@ export const config = {
 // the server can enforce a min-supported-version / forced-upgrade lever before
 // any stale build ships. Keep in sync with package.json version.
 export const CLIENT_VERSION_HEADER = "x-logjam-client";
-export const CLIENT_VERSION = "mobile/0.1.0";
+export const CLIENT_SEMVER = "0.1.0";
+export const CLIENT_VERSION = `mobile/${CLIENT_SEMVER}`;

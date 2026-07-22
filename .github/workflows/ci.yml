@@ -2,7 +2,7 @@ name: CI
 
 # Test/lint/typecheck gate. Runs on every PR and on pushes to main. This is
 # the workflow branch protection should require (jobs: shared, api, frontend,
-# topo). Integration tests (api/src/__tests__) are NOT run here — they need a
+# mobile, topo). Integration tests (api/src/__tests__) are NOT run here — they need a
 # live API + MiniStack (`make dev`); see CLAUDE.md "Testing".
 
 on:
@@ -81,6 +81,32 @@ jobs:
         run: npx tsc -b
       - name: Unit tests
         working-directory: frontend
+        run: npm test
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      # mobile depends on shared via file:../shared and imports from shared/dist
+      - name: Build shared
+        working-directory: shared
+        run: npm ci && npm run build
+      - name: Install
+        working-directory: mobile
+        run: npm ci
+      - name: Lint
+        working-directory: mobile
+        run: npm run lint
+      - name: Typecheck
+        working-directory: mobile
+        run: npm run typecheck
+      - name: Unit tests
+        working-directory: mobile
         run: npm test
 
   migrations:

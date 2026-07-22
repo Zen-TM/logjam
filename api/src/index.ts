@@ -41,6 +41,7 @@ import geoPdfRouter from "./routes/geoPdf";
 import analyticsRouter from "./routes/analytics";
 import customFieldsRouter from "./routes/customFields";
 import importsRouter from "./routes/imports";
+import metaRouter from "./routes/meta";
 
 const env = getEnv();
 
@@ -184,6 +185,7 @@ if (env.ORIGIN_VERIFY_SECRET) {
 // IP otherwise. Per-route stricter limiters layered inside individual routers.
 app.use(globalLimiter);
 
+app.use("/meta", metaRouter);
 app.use("/users", usersRouter);
 app.use("/canyons", canyonsRouter);
 app.use("/canyons/:canyonId/trips", tripLogsRouter);

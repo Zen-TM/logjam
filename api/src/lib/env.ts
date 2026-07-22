@@ -32,6 +32,15 @@ const baseSchema = z.object({
 
   CORS_ORIGIN: z.string().optional(),
 
+  // Forced-upgrade lever for the mobile app (GET /meta/min-mobile-version).
+  // Mobile builds below this semver show a blocking upgrade prompt. Default
+  // 0.0.0 = no build is ever blocked; bump only when a breaking API change
+  // strands stale clients.
+  MIN_MOBILE_VERSION: z
+    .string()
+    .regex(/^\d+\.\d+\.\d+$/, "must be a bare semver like 1.2.3")
+    .default("0.0.0"),
+
   // CloudFront origin-verify (WAF-bypass guard, SEC). CloudFront injects a
   // secret X-Origin-Verify header on every origin fetch; a request lacking the
   // matching value reached Elastic Beanstalk directly, bypassing the edge WAF.

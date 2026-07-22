@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 
+import { TOPO_LAYERS } from "@logjam/shared";
+
 import { config, CLIENT_VERSION, CLIENT_VERSION_HEADER } from "./src/config";
+import { useMinVersionGate } from "./src/useMinVersionGate";
 
 // Stage 0 deliverable: a blank shell that proves the app builds, runs on a
 // device/simulator, reads config, and can reach the API. Auth (Stage 1) will
@@ -16,6 +19,7 @@ type Probe =
 
 export default function App() {
   const [probe, setProbe] = useState<Probe>({ status: "loading" });
+  const minVersionGate = useMinVersionGate();
 
   useEffect(() => {
     let cancelled = false;
@@ -40,12 +44,29 @@ export default function App() {
     };
   }, []);
 
+  if (minVersionGate.status === "upgradeRequired") {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="auto" />
+        <Text style={styles.title}>Update required</Text>
+        <Text style={styles.line}>
+          This version ({CLIENT_VERSION}) is no longer supported. Minimum
+          supported version is {minVersionGate.minVersion}. Please update the
+          app to continue.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar style="auto" />
       <Text style={styles.title}>Logjam Mobile</Text>
       <Text style={styles.line}>{CLIENT_VERSION}</Text>
       <Text style={styles.line}>API: {config.apiUrl}</Text>
+      {/* Spike 2 closure: prove shared/dist ESM executes at runtime in Hermes,
+          not just that Metro bundles it. */}
+      <Text style={styles.line}>shared: {TOPO_LAYERS.length} topo layers</Text>
       <Text style={styles.line}>
         {probe.status === "loading" && "Probing API…"}
         {probe.status === "reached" &&
