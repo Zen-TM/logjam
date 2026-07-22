@@ -2,6 +2,7 @@
   "expo": {
     "name": "Logjam",
     "slug": "logjam-mobile",
+    "owner": "logjamnsw",
     "scheme": "logjam",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -19,11 +20,13 @@
       "allowBackup": false
     },
     "plugins": [
-      "expo-dev-client"
+      "expo-dev-client",
+      "expo-asset",
+      "expo-font"
     ],
     "extra": {
       "eas": {
-        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+        "projectId": "8008fb2a-ea4c-4cc1-a637-97eb64500cb7"
       }
     }
   }

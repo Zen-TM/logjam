@@ -15,7 +15,8 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
   path.resolve(monorepoRoot, "node_modules"),
 ];
-// Prevent Metro from walking up past projectRoot for hoisted deps unexpectedly.
-config.resolver.disableHierarchicalLookup = true;
+// NOTE: do not set disableHierarchicalLookup — npm nests some transitive deps
+// (e.g. node_modules/expo/node_modules/expo-asset) and shared/'s own deps live
+// in shared/node_modules; both need hierarchical resolution.
 
 module.exports = config;

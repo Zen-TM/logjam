@@ -15,16 +15,21 @@
   "dependencies": {
     "@logjam/shared": "file:../shared",
     "expo": "^53.0.0",
-    "expo-dev-client": "~5.0.0",
-    "expo-status-bar": "~2.0.0",
+    "expo-asset": "~11.1.7",
+    "expo-constants": "~17.1.8",
+    "expo-dev-client": "~5.2.4",
+    "expo-file-system": "~18.1.11",
+    "expo-font": "~13.3.2",
+    "expo-keep-awake": "~14.1.4",
+    "expo-status-bar": "~2.2.3",
     "react": "19.0.0",
-    "react-native": "0.79.0"
+    "react-native": "0.79.6"
   },
   "devDependencies": {
     "@types/react": "~19.0.0",
     "eslint": "^9.0.0",
-    "eslint-config-expo": "~9.0.0",
-    "typescript": "^5.8.3",
+    "eslint-config-expo": "~9.2.0",
+    "typescript": "~5.8.3",
     "vitest": "^4.1.8"
   }
 }
