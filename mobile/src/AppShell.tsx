@@ -1,8 +1,13 @@
 // Authenticated app shell: bottom tabs (Canyons / Trips / Inbox / Account)
 // with native stacks for detail screens, behind the consent gate.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Text } from "react-native";
-import { DarkTheme, NavigationContainer } from "@react-navigation/native";
+import {
+  DarkTheme,
+  NavigationContainer,
+  type NavigationContainerRef,
+} from "@react-navigation/native";
+import * as Notifications from "expo-notifications";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { needsReconsent } from "@logjam/shared";
@@ -11,6 +16,7 @@ import { fetchCurrentUser, getUnreadNotificationCount, useApiQuery } from "./api
 import type { TTripLog } from "./api/types";
 import { theme } from "./theme";
 import { MapScreen } from "./map/MapScreen";
+import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { AccountScreen } from "./screens/AccountScreen";
 import { CanyonDetailScreen } from "./screens/CanyonDetailScreen";
 import { CanyonsScreen } from "./screens/CanyonsScreen";
@@ -122,10 +128,52 @@ function TabIcon({ glyph, color }: { glyph: string; color: string }) {
   return <Text style={{ color, fontSize: 18 }}>{glyph}</Text>;
 }
 
+// Foreground pushes show as banners; the inbox badge is refreshed on focus.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
+
 export function AppShell({ onSignOut }: { onSignOut: () => void }) {
   const userQuery = useApiQuery(fetchCurrentUser, "Couldn't load your account.");
   const [consented, setConsented] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
+  const navigationRef = useRef<NavigationContainerRef<never>>(null);
+
+  // Register this device for pushes once authenticated (best-effort), and
+  // route notification taps: a canyon reference deep-links to its detail,
+  // everything else lands on the inbox. Payloads carry opaque IDs only — the
+  // screen fetches details over the authed API.
+  useEffect(() => {
+    registerForPushNotifications();
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const data = response.notification.request.content.data as {
+          type?: string;
+          canyonId?: string;
+        };
+        // The ref is untyped across nested navigators; runtime routes are
+        // the tab/screen names registered below.
+        const nav = navigationRef.current as unknown as {
+          navigate: (name: string, params?: object) => void;
+        } | null;
+        if (!nav) return;
+        if (typeof data.canyonId === "string") {
+          nav.navigate("Canyons", {
+            screen: "CanyonDetail",
+            params: { canyonId: data.canyonId, name: "Canyon" },
+          });
+        } else {
+          nav.navigate("Inbox");
+        }
+      },
+    );
+    return () => subscription.remove();
+  }, []);
 
   const refreshUnread = useCallback(() => {
     getUnreadNotificationCount()
@@ -157,7 +205,7 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
   }
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <Tabs.Navigator
         screenOptions={{
           headerShown: false,

@@ -5,6 +5,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { CLIENT_VERSION } from "./src/config";
 import { useMinVersionGate } from "./src/useMinVersionGate";
 import { useAuth } from "./src/auth/useAuth";
+import { unregisterPushNotifications } from "./src/notifications/pushRegistration";
 import { AuthFlow } from "./src/screens/AuthFlow";
 import { AppShell } from "./src/AppShell";
 import { LoadingState } from "./src/ui/ScreenStates";
@@ -36,7 +37,14 @@ export default function App() {
       {auth.state === "loading" ? (
         <LoadingState />
       ) : auth.state === "authenticated" ? (
-        <AppShell onSignOut={auth.signOut} />
+        <AppShell
+          onSignOut={async () => {
+            // Unregister the push token BEFORE tokens are cleared (the DELETE
+            // needs an authenticated request); best-effort inside.
+            await unregisterPushNotifications();
+            await auth.signOut();
+          }}
+        />
       ) : (
         <SafeAreaView style={styles.authSafeArea}>
           <AuthFlow auth={auth} />

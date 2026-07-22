@@ -5,6 +5,7 @@ import { AppError } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { normalizeUserUiPreferences } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
+import { sendPushToUser } from "../services/push";
 import { getCanyonRole, requireCanyonOwnerAccess } from "../lib/canyonAccess";
 
 const router = Router();
@@ -87,6 +88,11 @@ router.post(
       }
       return created;
     });
+    if (notifyRecipient) {
+      // Best-effort push after commit; generic title + opaque IDs only
+      // (privacy rule — the canyon name is NEVER in a push payload).
+      void sendPushToUser(sharedWithUserId, { type: "canyon_shared", canyonId });
+    }
 
     res.status(201).json(share);
   },

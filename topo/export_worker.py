@@ -389,6 +389,11 @@ def main():
             "errorMessage": None if ok else (error_msg or "Unknown failure"),
         },
     )
+    # Best-effort push — generic title + opaque IDs only (format/status/error
+    # stay in the in-app notification, never in a push).
+    from push_send import send_push
+    send_push(conn, export_job["user_id"],
+              {"type": "topo_export_complete", "exportId": EXPORT_JOB_ID})
 
     try:
         email = get_user_email(conn, export_job["user_id"])

@@ -807,6 +807,10 @@ def main():
             "footprint": extra.get("footprint"),
             "osmFailed": osm_failed,
         })
+        # Best-effort push — generic title + opaque IDs only (privacy rule:
+        # job name/footprint stay in the in-app notification, never in a push).
+        from push_send import send_push
+        send_push(conn, job["user_id"], {"type": "topo_complete", "jobId": JOB_ID})
 
         email = get_user_email(conn, job["user_id"])
         if email and wants_email(conn, job["user_id"], "topoEmail"):
@@ -828,6 +832,9 @@ def main():
             "jobId": JOB_ID,
             "jobName": job.get("name"),
         })
+        # Best-effort push — generic title + opaque IDs only.
+        from push_send import send_push
+        send_push(conn, job["user_id"], {"type": "topo_failed", "jobId": JOB_ID})
         sys.exit(1)
 
     finally:

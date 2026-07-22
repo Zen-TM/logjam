@@ -1,6 +1,7 @@
 import { StopTaskCommand } from "@aws-sdk/client-ecs";
 import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import prisma from "../services/prisma";
+import { sendPushToUser } from "../services/push";
 import { ecs, s3 } from "../services/awsClients";
 import { decrementStorageUsed } from "./storageQuota";
 import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
@@ -404,6 +405,9 @@ async function notifyAutoExportSkipped(
   await prisma.notification.create({
     data: { userId, type: "topo_export_skipped", payload: { topoJobId, reason } },
   });
+  // Best-effort push — generic title + opaque IDs only (the skip reason
+  // stays in the in-app notification, never in the push).
+  await sendPushToUser(userId, { type: "topo_export_skipped", jobId: topoJobId });
 }
 
 /**

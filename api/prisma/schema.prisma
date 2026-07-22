@@ -33,6 +33,7 @@ model User {
   tripLogs            TripLog[]
   geoPdfTemplates     GeoPdfTemplate[]
   topoTemplates       TopoTemplate[]
+  deviceTokens        DeviceToken[]
 
   @@map("users")
 }
@@ -340,4 +341,20 @@ model TopoTemplate {
 
   @@index([userId])
   @@map("topo_templates")
+}
+
+// Push-notification device registrations (Stage 3 mobile). One row per Expo
+// push token; a token moves between users on re-login (upsert reassigns).
+// Pruned when Expo reports DeviceNotRegistered.
+model DeviceToken {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  token      String   @unique
+  platform   String
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("device_tokens")
 }

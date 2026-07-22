@@ -6,6 +6,7 @@ import { friendsSearchLimiter } from "../middleware/rateLimit";
 import { getParam } from "../lib/getParam";
 import { normalizeUserUiPreferences } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
+import { sendPushToUser } from "../services/push";
 import { logger } from "../lib/logger";
 
 async function wantsInAppNotification(
@@ -144,6 +145,14 @@ router.post(
       }
       return created;
     });
+    if (notifyAddressee) {
+      // Best-effort push after commit; generic title + opaque IDs only
+      // (privacy rule — see services/push.ts).
+      void sendPushToUser(addresseeId, {
+        type: "friend_request",
+        friendshipId: friendship.id,
+      });
+    }
 
     res.status(201).json(friendship);
   },
@@ -200,6 +209,13 @@ router.patch(
       }
       return u;
     });
+    if (notifyRequester) {
+      // Best-effort push after commit; generic title + opaque IDs only.
+      void sendPushToUser(friendship.requesterId, {
+        type: "friend_request_accepted",
+        friendshipId: id,
+      });
+    }
 
     res.json(updated);
   },

@@ -20,6 +20,7 @@ import { s3 } from "../services/awsClients";
 import prisma from "../services/prisma";
 import { getEnv } from "../lib/env";
 import { logger } from "../lib/logger";
+import { sendPushToUser } from "../services/push";
 import { generateGeoPdf } from "../services/generateGeoPdf";
 import { sendEmail } from "../services/email";
 import type { GeoPdfConfig, VectorStyleSettings } from "@logjam/shared";
@@ -190,6 +191,9 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
       },
     },
   });
+
+  // Best-effort push, mirroring email — generic title + opaque IDs only.
+  await sendPushToUser(job.userId, { type: "geo_pdf_complete", geoPdfJobId: jobId });
 
   // Best-effort completion email (Resend), mirroring the Python workers'
   // send_completion_email. Gated on the user's geoPdfEmail preference (default
