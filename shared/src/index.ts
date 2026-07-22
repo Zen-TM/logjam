@@ -18,3 +18,5 @@ export * from "./media.js";
 export * from "./consent.js";
 export * from "./stats.js";
 export * from "./topoRuntimeEstimate.js";
+export * from "./apiErrors.js";
+export * from "./canyonGrade.js";

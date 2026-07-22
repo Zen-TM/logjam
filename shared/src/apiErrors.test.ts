@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { messageFromError } from "./messageFromError";
-import { ApiError } from "./ApiError";
+import { messageFromError, ApiError } from "./apiErrors.js";
 
 describe("messageFromError", () => {
   it("prefers a server-supplied message on an ApiError", () => {
@@ -29,8 +28,13 @@ describe("messageFromError", () => {
     );
   });
 
-  it("detects a network fetch TypeError", () => {
+  it("detects a network fetch TypeError (browser)", () => {
     const err = new TypeError("Failed to fetch");
+    expect(messageFromError(err, "fallback")).toMatch(/Couldn't reach the server/);
+  });
+
+  it("detects a network fetch TypeError (React Native)", () => {
+    const err = new TypeError("Network request failed");
     expect(messageFromError(err, "fallback")).toMatch(/Couldn't reach the server/);
   });
 
