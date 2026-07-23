@@ -329,6 +329,79 @@ router.post(
   },
 );
 
+// POST /media/download-urls — batch presigned GET URLs for the mobile blob
+// cache (Stage 8 §7.3; delta media rows carry metadata only). Authorization
+// per id: owner, or sharee of the canyon a canyon-linked row is attached to.
+// Rows the caller can't see are OMITTED, never erred — the response must not
+// confirm foreign ids (anti-oracle; deliberately supersedes the attach-403
+// pattern rather than copying it).
+const DOWNLOAD_URLS_MAX_IDS = 100;
+
+router.post(
+  "/download-urls",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const { ids } = (req.body ?? {}) as { ids?: unknown };
+    if (
+      !Array.isArray(ids) ||
+      ids.length === 0 ||
+      ids.some((id) => typeof id !== "string")
+    ) {
+      throw new AppError(400, "ids array is required");
+    }
+    if (ids.length > DOWNLOAD_URLS_MAX_IDS) {
+      throw new AppError(
+        413,
+        `At most ${DOWNLOAD_URLS_MAX_IDS} ids per request`,
+      );
+    }
+
+    const rows = await prisma.media.findMany({
+      where: { id: { in: ids as string[] } },
+    });
+    // Visibility set derived from the caller's own shares — one query, no
+    // per-id role lookups.
+    const candidateCanyonIds = Array.from(
+      new Set(
+        rows
+          .filter((m) => m.ownerId !== user.id && m.linkedType === "canyon")
+          .map((m) => m.linkedId),
+      ),
+    );
+    const sharedCanyonIds = new Set(
+      candidateCanyonIds.length > 0
+        ? (
+            await prisma.canyonShare.findMany({
+              where: {
+                sharedWithId: user.id,
+                canyonId: { in: candidateCanyonIds },
+              },
+              select: { canyonId: true },
+            })
+          ).map((s) => s.canyonId)
+        : [],
+    );
+    const visible = rows.filter(
+      (m) =>
+        m.ownerId === user.id ||
+        (m.linkedType === "canyon" && sharedCanyonIds.has(m.linkedId)),
+    );
+
+    const items = await Promise.all(
+      visible.map(async (row) => {
+        const item = await toMediaItem(row);
+        return {
+          id: item.id,
+          displayUrl: item.displayUrl,
+          thumbnailUrl: item.thumbnailUrl,
+        };
+      }),
+    );
+    res.json({ items });
+  },
+);
+
 // DELETE /media/:id — remove a single media item (owner only). Bulk/cascade
 // deletes on canyon/trip/account live in their respective routes.
 router.delete(

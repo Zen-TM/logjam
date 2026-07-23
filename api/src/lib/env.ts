@@ -140,6 +140,10 @@ const baseSchema = z.object({
   // (resetRequired), so the TTL bounds table growth, not correctness.
   // 0 disables the sweep (rows kept forever).
   SYNC_TOMBSTONE_TTL_MS: z.coerce.number().int().nonnegative().default(7_776_000_000), // 90 days
+  // Fleet-wide full-resync lever (stage8 §10.5): bump when server-side data
+  // changes shape without moving updatedAt (e.g. a migration rewriting rows).
+  // Clients whose cursor was minted under a different epoch get resetRequired.
+  SYNC_EPOCH: z.coerce.number().int().positive().default(1),
 });
 
 type Env = z.infer<typeof baseSchema> & {
