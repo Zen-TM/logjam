@@ -1,11 +1,15 @@
-// Map core (Stage 2, online) — full-bleed map with raster basemaps, canyon
-// overlay (owned vs shared theming), raster topo overlays, tap → detail,
-// locate-me. Every tile source flows through the resolver so Stage 4 offline
-// downloads change data, not this screen.
+// Map core (Stage 2, online) — full-bleed map with raster + Protomaps vector
+// basemaps, canyon overlay (owned vs shared theming), raster + vector topo
+// overlays (user vectorStyle), tap → detail, locate-me. Every tile source
+// flows through the resolver so Stage 4 offline downloads change data, not
+// this screen.
 //
-// Deferred to the vector-overlay pass: contours/features PMTiles layers with
-// the applyVectorPaint port (raster overlays render now); Protomaps vector
-// basemap awaits the operator's CDN extract.
+// NOTE (Android): MapLibre runs the Vulkan backend (app.json MLRN plugin
+// `nativeVariant: "vulkan"`). The OpenGL backend never draws ANY symbol layer
+// (text or icons) on modern emulators — silent, no glyph errors — because its
+// emulator detection (maplibre-native #3617) misses current AVD fingerprints.
+// Vulkan renders symbols correctly; don't revert to opengl without retesting
+// labels on the emulator AND a physical device.
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import {
@@ -18,15 +22,21 @@ import {
   UserLocation,
 } from "@maplibre/maplibre-react-native";
 import * as Location from "expo-location";
-import { BASEMAP_CATALOG } from "@logjam/shared";
+import { BASEMAP_CATALOG, VECTOR_STYLE_DEFAULTS } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
-import { getCanyons, getSharedCanyons, useApiQuery } from "../api/queries";
+import {
+  getCanyons,
+  getSharedCanyons,
+  getVectorStyle,
+  useApiQuery,
+} from "../api/queries";
 import type { TCanyon } from "../api/types";
 import { config } from "../config";
 import { fontSize, radius, spacing, theme } from "../theme";
+import { ProtomapsLayers, protomapsLayerCount } from "./basemap/ProtomapsLayers";
 import { useConnectivity } from "./connectivity";
-import { ResolvedSource } from "./ResolvedSource";
+import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
   resolveMapSource,
   type BasemapId,
@@ -35,12 +45,26 @@ import {
 import {
   composeTopoOverlayRefs,
   type CompletedOverlaysResponse,
+  type TopoOverlayRef,
 } from "./topoOverlays";
+import { buildTopoVectorLayerDefs } from "./topoVectorLayers";
+import { TopoIconImages, TopoVectorOverlay } from "./TopoVectorOverlay";
 
-// Same shell approach as web Map.tsx: empty style + glyphs only; every source
-// and layer is declarative on top. Must be an OBJECT — a JSON string is
+// Same shell approach as web Map.tsx: empty style + glyphs/sprite only; every
+// source and layer is declarative on top. Must be an OBJECT — a JSON string is
 // treated as a style URL by the native side, which drops the glyphs entry and
 // silently kills every SymbolLayer's text.
+//
+// Glyphs + sprite come from the Protomaps basemaps-assets host (fonts: the
+// Noto Sans stacks the generated basemap layers reference — canyon labels use
+// the same stack so one glyph source serves everything). No user data rides
+// these requests. Stage 4 bundles the assets in-app (file:// URLs, stage4a
+// §8.3); a CDN mirror under master/basemap/assets/ is the flagged operator
+// follow-up for a self-hosted online posture.
+const BASEMAP_ASSETS_BASE = "https://protomaps.github.io/basemaps-assets";
+// Light flavor everywhere for now — matches the paper-topo look of the SIX
+// rasters; the dark JSON ships alongside for a later theme pass.
+const PROTOMAPS_FLAVOR = "light" as const;
 const SHELL_STYLE = {
   version: 8,
   sources: {},
@@ -49,7 +73,8 @@ const SHELL_STYLE = {
     // surface colour while tiles load.
     { id: "background", type: "background", paint: { "background-color": "#4E4944" } },
   ],
-  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  glyphs: `${BASEMAP_ASSETS_BASE}/fonts/{fontstack}/{range}.pbf`,
+  sprite: `${BASEMAP_ASSETS_BASE}/sprites/v4/${PROTOMAPS_FLAVOR}`,
 };
 
 // Blue Mountains default view (matches the app's home turf).
@@ -95,6 +120,12 @@ function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
 }
 
+// Contour layers get contour styling; every other vector layer is the OSM
+// features set (web parity: `id.includes("contours")`).
+function overlayKind(ref: TopoOverlayRef): "contours" | "features" {
+  return ref.layer === "contours" ? "contours" : "features";
+}
+
 export function MapScreen({
   onOpenCanyon,
 }: {
@@ -111,6 +142,10 @@ export function MapScreen({
   const owned = useApiQuery(getCanyons, "Couldn't load canyons.");
   const shared = useApiQuery(getSharedCanyons, "Couldn't load shared canyons.");
   const overlays = useApiQuery(getCompletedOverlays, "Couldn't load topo overlays.");
+  // Server-side vector style (same one the web map + exports use); defaults
+  // until it loads / when offline.
+  const vectorStyleQuery = useApiQuery(getVectorStyle, "Couldn't load map style.");
+  const vectorStyle = vectorStyleQuery.data ?? VECTOR_STYLE_DEFAULTS;
 
   const ctx: ResolveContext = useMemo(
     () => ({
@@ -126,6 +161,11 @@ export function MapScreen({
     [basemapId, ctx],
   );
 
+  // First free layerIndex above the active basemap's layer band.
+  const overlayBaseIndex =
+    1 +
+    (basemapId === "protomaps" ? protomapsLayerCount(PROTOMAPS_FLAVOR) : 1);
+
   const overlayRefs = useMemo(
     () =>
       overlays.data
@@ -133,6 +173,21 @@ export function MapScreen({
         : [],
     [overlays.data, enabledOverlays],
   );
+
+  // Contiguous layerIndex allocation above the basemap band: raster overlays
+  // take one slot, vector overlays exactly as many slots as their layer defs —
+  // no gaps, so no index ever exceeds the mounted layer count.
+  const overlayRenderPlan = useMemo(() => {
+    let next = overlayBaseIndex;
+    return overlayRefs.map((ref) => {
+      const start = next;
+      next +=
+        ref.format === "vector"
+          ? buildTopoVectorLayerDefs(overlayKind(ref), vectorStyle).length
+          : 1;
+      return { ref, start };
+    });
+  }, [overlayRefs, overlayBaseIndex, vectorStyle]);
 
   const ownedFc = useMemo(
     () => toFeatureCollection(owned.data?.data ?? []),
@@ -185,39 +240,61 @@ export function MapScreen({
           followUserLocation={followUser}
           followZoomLevel={13}
         />
+        {/* Bundled point-feature icons for vector overlays. */}
+        <TopoIconImages />
 
         {/* layerIndex pins z-order across remounts: a swapped basemap source
             re-adds its layer at the TOP of the stack, burying the canyon
-            layers — explicit indexes (background=0, basemap=1, overlays 2+)
-            keep rasters underneath while canyon layers stay on top. */}
+            layers — explicit indexes (background=0, basemap band from 1,
+            overlays above the band) keep the basemap underneath while canyon
+            layers stay on top. The Protomaps band is ~70 layers wide, so the
+            overlay base index depends on the active basemap. */}
         {basemapResolved.map((resolved) =>
           resolved.status === "ok" ? (
             <ResolvedSource key={resolved.key} resolved={resolved}>
-              <RasterLayer
-                id={`basemap-layer-${resolved.key}`}
-                layerIndex={1}
-                style={{ rasterOpacity: 1 }}
-              />
+              {resolved.sourceType === "vector" ? (
+                <ProtomapsLayers
+                  flavor={PROTOMAPS_FLAVOR}
+                  sourceID={sourceIdFor(resolved.key)}
+                  startIndex={1}
+                />
+              ) : (
+                <RasterLayer
+                  id={`basemap-layer-${resolved.key}`}
+                  layerIndex={1}
+                  style={{ rasterOpacity: 1 }}
+                />
+              )}
             </ResolvedSource>
           ) : null,
         )}
 
-        {/* Raster topo overlays (vector overlays land with the paint port). */}
-        {overlayRefs
-          .filter((ref) => ref.format === "raster")
-          .flatMap((ref, refIndex) =>
-            resolveMapSource(ref, ctx).map((resolved) =>
-              resolved.status === "ok" ? (
-                <ResolvedSource key={resolved.key} resolved={resolved}>
+        {/* Topo overlays: raster = one translucent RasterLayer; vector =
+            the full contour/feature layer stack styled by the user's
+            server-side vectorStyle (web parity via buildTopoVectorLayerDefs). */}
+        {overlayRenderPlan.flatMap(({ ref, start }) =>
+          resolveMapSource(ref, ctx).map((resolved) =>
+            resolved.status === "ok" ? (
+              <ResolvedSource key={resolved.key} resolved={resolved}>
+                {ref.format === "vector" ? (
+                  <TopoVectorOverlay
+                    kind={overlayKind(ref)}
+                    idPrefix={`topo-${resolved.key}`}
+                    sourceID={sourceIdFor(resolved.key)}
+                    startIndex={start}
+                    vectorStyle={vectorStyle}
+                  />
+                ) : (
                   <RasterLayer
                     id={`topo-layer-${resolved.key}`}
-                    layerIndex={2 + refIndex}
+                    layerIndex={start}
                     style={{ rasterOpacity: 0.8 }}
                   />
-                </ResolvedSource>
-              ) : null,
-            ),
-          )}
+                )}
+              </ResolvedSource>
+            ) : null,
+          ),
+        )}
 
         {/* Canyon overlays: authed API GeoJSON — never baked into tiles
             (privacy rule). Shared first so owned draws on top. */}
@@ -234,13 +311,8 @@ export function MapScreen({
           <SymbolLayer
             id="shared-canyon-labels"
             style={{
-              // KNOWN ISSUE (Stage 2): SymbolLayer text does not render in the
-              // MLRN 10.4.2 Android dev-client — zero glyph fetches even with a
-              // literal textField, on both architectures. Circles/tap work.
-              // Tracked in PROGRESS.md; revisit with a minimal repro / MLRN
-              // upgrade. Code below is the intended label spec.
               textField: CANYON_LABEL_EXPR as unknown as string,
-              textFont: ["Open Sans Semibold"],
+              textFont: ["Noto Sans Medium"],
               textSize: 12,
               textColor: theme.textPrimary,
               textHaloColor: theme.bonus2,
@@ -263,13 +335,8 @@ export function MapScreen({
           <SymbolLayer
             id="canyon-labels"
             style={{
-              // KNOWN ISSUE (Stage 2): SymbolLayer text does not render in the
-              // MLRN 10.4.2 Android dev-client — zero glyph fetches even with a
-              // literal textField, on both architectures. Circles/tap work.
-              // Tracked in PROGRESS.md; revisit with a minimal repro / MLRN
-              // upgrade. Code below is the intended label spec.
               textField: CANYON_LABEL_EXPR as unknown as string,
-              textFont: ["Open Sans Semibold"],
+              textFont: ["Noto Sans Medium"],
               textSize: 12,
               textColor: theme.textPrimary,
               textHaloColor: theme.bonus2,
@@ -393,7 +460,6 @@ export function MapScreen({
                         style={[styles.pickerLabel, enabled && styles.pickerLabelActive]}
                       >
                         {enabled ? "☑" : "☐"} {overlay.label}
-                        {overlay.format === "vector" ? "  (vector — soon)" : ""}
                       </Text>
                     </Pressable>
                   );

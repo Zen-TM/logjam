@@ -142,23 +142,30 @@ function resolveBasemap(
   );
 
   if (basemapId === "protomaps") {
-    // Self-hosted vector basemap. Remote archive lives on our CDN; offline it
-    // needs a downloaded region (Stage 4).
+    // Self-hosted vector basemap. Remote archive lives on our CDN (catalog
+    // urlTemplate = CDN-relative archive path); offline it needs a downloaded
+    // region (Stage 4).
+    const protomapsEntry = catalogEntry("protomaps");
+    if (!protomapsEntry) {
+      throw new Error("protomaps missing from BASEMAP_CATALOG");
+    }
     if (online) {
-      const url = `pmtiles://${ctx.cdnBaseUrl}/master/basemap/protomaps-nsw.pmtiles`;
+      const url = `pmtiles://${ctx.cdnBaseUrl}/${protomapsEntry.urlTemplate}`;
       return [
         {
           status: "ok",
           key: `${logicalId}:remote:${hashKey(url)}`,
           sourceType: "vector",
           url,
-          attribution: "Base map © OpenStreetMap contributors (Protomaps build)",
+          attribution: protomapsEntry.attribution,
           origin: "remote",
         },
       ];
     }
     if (regions.length > 0) {
-      return regions.map((r) => localArtifactSource(r, logicalId));
+      return regions.map((r) =>
+        localArtifactSource(r, logicalId, protomapsEntry.attribution),
+      );
     }
     return [
       { status: "unavailable", key: logicalId, reason: "offline-not-downloaded" },

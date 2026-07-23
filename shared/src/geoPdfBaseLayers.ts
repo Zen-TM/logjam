@@ -28,6 +28,13 @@ export type BasemapCatalogEntry = {
   id: string;
   /** Picker label (web layer switcher / mobile basemap picker). */
   name: string;
+  /**
+   * "raster" = XYZ tile provider (urlTemplate is a {z}/{x}/{y} template).
+   * "vector" = self-hosted PMTiles archive (urlTemplate is the CDN-relative
+   * archive path; the mobile resolver prefixes the CDN base URL). Web
+   * BASE_LAYERS and the GeoPDF renderer consume raster entries only.
+   */
+  kind: "raster" | "vector";
   urlTemplate: string;
   /**
    * Deepest zoom the provider's tile cache actually serves — the GeoPDF
@@ -63,6 +70,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "osm",
     name: "Default",
+    kind: "raster",
     urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
     maxNativeZoom: 19,
     displayMaxZoom: 19,
@@ -74,6 +82,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "osm-topo",
     name: "OSM Topo",
+    kind: "raster",
     urlTemplate: "https://a.tile.opentopomap.org/{z}/{x}/{y}.png",
     maxNativeZoom: 17,
     displayMaxZoom: 17,
@@ -85,6 +94,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "osm-cycle",
     name: "OSM Cycle Topo",
+    kind: "raster",
     urlTemplate: "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
     maxNativeZoom: 20,
     displayMaxZoom: 20,
@@ -96,6 +106,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "six-topo",
     name: "Six Maps Topo",
+    kind: "raster",
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",
     maxNativeZoom: 16,
@@ -108,6 +119,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "six-base",
     name: "SIX Maps Base Map",
+    kind: "raster",
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Base_Map/MapServer/tile/{z}/{y}/{x}",
     maxNativeZoom: 18,
@@ -120,6 +132,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   {
     id: "six-imagery",
     name: "SIX Maps Imagery",
+    kind: "raster",
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Imagery/MapServer/tile/{z}/{y}/{x}",
     maxNativeZoom: 20,
@@ -130,10 +143,28 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     offlineCapable: true,
     requiresExtractionDate: true,
   },
+  {
+    // Self-hosted Protomaps vector basemap (mobile Stage 2+; the Stage 4
+    // offline-region source). urlTemplate is the CDN-relative archive path —
+    // the mobile resolver builds pmtiles://<cdnBaseUrl>/<urlTemplate>.
+    // ODbL requires the OSM credit; Protomaps credits the sponsor-funded
+    // planet builds the extract comes from.
+    id: "protomaps",
+    name: "Topo Vector (offline-ready)",
+    kind: "vector",
+    urlTemplate: "master/basemap/protomaps-nsw.pmtiles",
+    maxNativeZoom: 15,
+    displayMaxZoom: 15,
+    attribution: "Base map © OpenStreetMap contributors (Protomaps build)",
+    attributionHtml:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | <a href="https://protomaps.com">Protomaps</a>',
+    offlineCapable: true,
+  },
 ];
 
 // Legacy keyed view consumed by the GeoPDF renderer/estimator (api). Derived —
-// never hand-edit; extend BASEMAP_CATALOG instead.
+// never hand-edit; extend BASEMAP_CATALOG instead. Raster entries only: the
+// renderer fetches XYZ tiles, which a vector PMTiles archive can't provide.
 export const GEOPDF_BASE_LAYER_CONFIG: Record<
   string,
   {
@@ -143,7 +174,7 @@ export const GEOPDF_BASE_LAYER_CONFIG: Record<
     requiresExtractionDate?: boolean;
   }
 > = Object.fromEntries(
-  BASEMAP_CATALOG.map((entry) => [
+  BASEMAP_CATALOG.filter((entry) => entry.kind === "raster").map((entry) => [
     entry.id,
     {
       urlTemplate: entry.urlTemplate,

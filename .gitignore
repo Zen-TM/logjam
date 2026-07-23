@@ -40,3 +40,7 @@ postgres-data/
 CLAUDE.local.md
 .stfolder/
 .stignore
+
+# Protomaps planet extract (operator-produced, uploaded to S3; never commit)
+/nsw.pmtiles
+*.pmtiles

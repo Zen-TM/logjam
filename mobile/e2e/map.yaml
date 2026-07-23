@@ -1,0 +1,27 @@
+# Stage 2 map flow — fake-auth local dev (same setup as browse.yaml).
+# Verifies the map core: map tab renders, the layers picker opens with every
+# basemap (including the self-hosted Protomaps vector entry), swapping to the
+# vector basemap updates the attribution line, and the picker lists topo
+# overlays when the seeded API has completed jobs.
+# Run: maestro test e2e/map.yaml (emulator + Metro + local API running).
+appId: com.logjamnsw.mobile
+---
+- openLink: "exp+logjam-mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
+- extendedWaitUntil:
+    visible: "Map"
+    timeout: 30000
+- tapOn: "Map"
+# Layers picker lists the full basemap catalog.
+- tapOn: "Choose layers"
+- extendedWaitUntil:
+    visible: "Six Maps Topo"
+    timeout: 10000
+- assertVisible: "Topo Vector (offline-ready)"
+# Swap to the Protomaps vector basemap; attribution must follow.
+- tapOn: "Topo Vector (offline-ready)"
+- extendedWaitUntil:
+    visible: ".*OpenStreetMap contributors.*"
+    timeout: 15000
+# Locate-me control present (permission prompt is environment-dependent, so
+# only assert the control exists).
+- assertVisible: "Locate me"

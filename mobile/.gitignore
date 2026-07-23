@@ -16,5 +16,8 @@ modules/*/android/build/
 .env
 .env.*.local
 
+# Maestro E2E credentials (operator-provided test Cognito user)
+e2e/.env.maestro
+
 # Metro / RN caches
 .metro-health-check*

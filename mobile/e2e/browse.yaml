@@ -9,6 +9,9 @@ appId: com.logjamnsw.mobile
 - extendedWaitUntil:
     visible: "Canyons"
     timeout: 30000
+# The shell lands on the Map tab; the list lives on the Canyons tab. (The map
+# also labels canyons now, so assert/tap only after switching tabs.)
+- tapOn: "Canyons"
 # Canyon list loaded from the seeded API — alice owns Claustral Canyon.
 - extendedWaitUntil:
     visible: "Claustral Canyon"

@@ -130,8 +130,12 @@ function applyCanyonThemePaint(map: maplibregl.Map) {
 // Derived from the canonical shared basemap catalog (map-sources.md D2) —
 // same ids, order, URLs, and zoom caps as before the consolidation. The
 // interactive map uses displayMaxZoom (six-imagery stays capped at 18 here
-// while the GeoPDF renderer keeps fetching its native 20).
-export const BASE_LAYERS = BASEMAP_CATALOG.map((entry) => ({
+// while the GeoPDF renderer keeps fetching its native 20). Raster entries
+// only: the Protomaps vector basemap is mobile-only for now (web adoption
+// tracked as a follow-up).
+export const BASE_LAYERS = BASEMAP_CATALOG.filter(
+  (entry) => entry.kind === "raster",
+).map((entry) => ({
   id: entry.id,
   name: entry.name,
   tiles: [entry.urlTemplate],
