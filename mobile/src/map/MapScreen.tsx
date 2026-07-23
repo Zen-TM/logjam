@@ -11,11 +11,22 @@
 // Vulkan renders symbols correctly; don't revert to opengl without retesting
 // labels on the emulator AND a physical device.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Linking, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import {
   Camera,
   CircleLayer,
+  FillLayer,
   Images,
+  LineLayer,
   MapView,
   RasterLayer,
   ShapeSource,
@@ -41,6 +52,12 @@ import {
 import type { TCanyon } from "../api/types";
 import { config } from "../config";
 import { fontSize, radius, spacing, theme } from "../theme";
+import { setVectorImportVisible } from "../imports/importsDb";
+import { useVectorImports } from "../imports/useVectorImports";
+import {
+  deleteVectorImport,
+  importVectorFileFromPicker,
+} from "../imports/vectorImports";
 import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import {
   deleteDownloadedArtifact,
@@ -205,10 +222,11 @@ export function MapScreen({
 
   // Contiguous layerIndex allocation above the basemap band: raster overlays
   // take one slot, vector overlays exactly as many slots as their layer defs —
-  // no gaps, so no index ever exceeds the mounted layer count.
+  // no gaps, so no index ever exceeds the mounted layer count. `nextIndex` is
+  // where the next band (vector imports) starts.
   const overlayRenderPlan = useMemo(() => {
     let next = overlayBaseIndex;
-    return overlayRefs.map((ref) => {
+    const plans = overlayRefs.map((ref) => {
       const start = next;
       next +=
         ref.format === "vector"
@@ -216,6 +234,7 @@ export function MapScreen({
           : 1;
       return { ref, start };
     });
+    return { plans, nextIndex: next };
   }, [overlayRefs, overlayBaseIndex, vectorStyle]);
 
   const ownedFc = useMemo(
@@ -353,6 +372,31 @@ export function MapScreen({
     },
     [confirmCellularOk],
   );
+
+  // Stage 5: vector file imports. Import runs from the picker sheet; results
+  // and errors surface as a status line (static parser messages only).
+  const { imports } = useVectorImports();
+  const visibleImports = imports.filter((imported) => imported.visible);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const handleImportFile = useCallback(async () => {
+    try {
+      setImportStatus(null);
+      setImportBusy(true);
+      const outcome = await importVectorFileFromPicker(imports.length);
+      if (outcome.status === "imported") {
+        setImportStatus("Imported — showing on the map.");
+        const [west, south, east, north] = outcome.record.bbox;
+        cameraRef.current?.fitBounds([east, north], [west, south], 40, 600);
+        setPickerOpen(false);
+      }
+    } catch (err) {
+      console.error(err);
+      setImportStatus(messageFromError(err, "Couldn't import that file."));
+    } finally {
+      setImportBusy(false);
+    }
+  }, [imports.length]);
 
   const handleLocateMe = useCallback(async () => {
     // Non-prompting check first: requestForegroundPermissionsAsync has been
@@ -515,7 +559,7 @@ export function MapScreen({
         {/* Topo overlays: raster = one translucent RasterLayer; vector =
             the full contour/feature layer stack styled by the user's
             server-side vectorStyle (web parity via buildTopoVectorLayerDefs). */}
-        {overlayRenderPlan.flatMap(({ ref, start }) =>
+        {overlayRenderPlan.plans.flatMap(({ ref, start }) =>
           resolveMapSource(ref, ctx).map((resolved) =>
             resolved.status === "ok" ? (
               <ResolvedSource key={resolved.key} resolved={resolved}>
@@ -538,6 +582,52 @@ export function MapScreen({
             ) : null,
           ),
         )}
+
+        {/* Vector imports (Stage 5): device-local GeoJSON from user files,
+            pinned above the overlay band, below the canyon layers. Each
+            import is one ShapeSource read straight off disk. */}
+        {visibleImports.map((imported, importPosition) => {
+          const base = overlayRenderPlan.nextIndex + importPosition * 3;
+          return (
+            <ShapeSource
+              key={imported.id}
+              id={`import-${imported.id}`}
+              url={`file://${imported.path}`}
+            >
+              <FillLayer
+                id={`import-fill-${imported.id}`}
+                layerIndex={base}
+                filter={["==", "$type", "Polygon"] as never}
+                style={{ fillColor: imported.color, fillOpacity: 0.2 }}
+              />
+              <LineLayer
+                id={`import-line-${imported.id}`}
+                layerIndex={base + 1}
+                filter={
+                  ["any", ["==", "$type", "LineString"], ["==", "$type", "Polygon"]] as never
+                }
+                style={{
+                  lineColor: imported.color,
+                  lineWidth: 3,
+                  lineOpacity: 0.9,
+                  lineJoin: "round",
+                  lineCap: "round",
+                }}
+              />
+              <CircleLayer
+                id={`import-point-${imported.id}`}
+                layerIndex={base + 2}
+                filter={["==", "$type", "Point"] as never}
+                style={{
+                  circleRadius: 5,
+                  circleColor: imported.color,
+                  circleStrokeColor: "#ffffff",
+                  circleStrokeWidth: 1.5,
+                }}
+              />
+            </ShapeSource>
+          );
+        })}
 
         {/* Canyon overlays: authed API GeoJSON — never baked into tiles
             (privacy rule). Shared first so owned draws on top. */}
@@ -693,6 +783,9 @@ export function MapScreen({
       >
         <Pressable style={styles.pickerBackdrop} onPress={() => setPickerOpen(false)}>
           <View style={styles.pickerSheet}>
+            {/* Sections outgrew the screen once Imports landed — the sheet
+                scrolls within its 70% height cap. */}
+            <ScrollView contentContainerStyle={styles.pickerScrollContent}>
             <Text style={styles.pickerHeading}>Basemap</Text>
             {[...BASEMAP_CATALOG.map((e) => ({ id: e.id as BasemapId, name: e.name }))].map(
               (entry) => {
@@ -850,6 +943,57 @@ export function MapScreen({
                 ) : null}
               </>
             ) : null}
+            <Text style={styles.pickerHeading}>Imports</Text>
+            <Pressable
+              accessibilityRole="button"
+              disabled={importBusy}
+              onPress={handleImportFile}
+              style={styles.pickerRow}
+            >
+              <Text
+                style={[styles.pickerLabel, importBusy && styles.pickerLabelDisabled]}
+              >
+                {importBusy ? "Importing…" : "+ Import file (GPX / KML / GeoJSON)"}
+              </Text>
+            </Pressable>
+            {importStatus ? (
+              <Text style={styles.pickerStatus}>{importStatus}</Text>
+            ) : null}
+            {imports.map((imported) => (
+              <View key={imported.id} style={styles.pickerRegionRow}>
+                <Pressable
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: imported.visible }}
+                  onPress={() => {
+                    setVectorImportVisible(imported.id, !imported.visible).catch(
+                      console.error,
+                    );
+                  }}
+                  style={styles.pickerRowGrow}
+                >
+                  <Text
+                    style={[
+                      styles.pickerLabel,
+                      imported.visible && styles.pickerLabelActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {imported.visible ? "☑" : "☐"}{" "}
+                    <Text style={{ color: imported.color }}>●</Text> {imported.name}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete import"
+                  onPress={() => {
+                    deleteVectorImport(imported.id).catch(console.error);
+                  }}
+                >
+                  <Text style={styles.pickerDelete}>Delete</Text>
+                </Pressable>
+              </View>
+            ))}
+            </ScrollView>
           </View>
         </Pressable>
       </Modal>
@@ -903,9 +1047,9 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     padding: spacing(2),
-    gap: spacing(0.5),
     maxHeight: "70%",
   },
+  pickerScrollContent: { gap: spacing(0.5) },
   pickerHeading: {
     fontSize: fontSize.xs,
     fontWeight: "600",

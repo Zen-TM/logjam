@@ -11,6 +11,7 @@ import { AppState, StyleSheet, Text, View } from "react-native";
 import * as LocalAuthentication from "expo-local-authentication";
 
 import { Button } from "../ui/Button";
+import { useVectorImports } from "../imports/useVectorImports";
 import { fontSize, spacing, theme } from "../theme";
 import { useMapArtifacts } from "./useMapArtifacts";
 
@@ -32,8 +33,13 @@ const DEV_LOCK_DISABLED =
   __DEV__ && process.env.EXPO_PUBLIC_DISABLE_APP_LOCK === "1";
 
 export function AppLockGate({ children }: { children: React.ReactNode }) {
-  const { artifacts, loaded } = useMapArtifacts();
-  const lockRequired = !DEV_LOCK_DISABLED && artifacts.length > 0;
+  const { artifacts, loaded: artifactsLoaded } = useMapArtifacts();
+  // Imported tracks are the user's own canyon-area coordinates — they arm
+  // the lock exactly like downloaded map data.
+  const { imports, loaded: importsLoaded } = useVectorImports();
+  const loaded = artifactsLoaded && importsLoaded;
+  const lockRequired =
+    !DEV_LOCK_DISABLED && (artifacts.length > 0 || imports.length > 0);
   const [unlocked, setUnlocked] = useState(false);
   const [authFailed, setAuthFailed] = useState(false);
   const prompting = useRef(false);

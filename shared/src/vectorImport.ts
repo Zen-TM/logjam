@@ -208,10 +208,13 @@ export function parseGpx(text: string): VectorImportResult {
   }
 
   const meta = gpx.metadata as Record<string, unknown> | undefined;
+  // Document name: metadata, else the first track's name (a lone waypoint
+  // label like "Car park" is a bad title for a track file), else anything.
   const docName =
     textOf(meta?.name) ??
-    // Single-track files: promote the track name to the document name.
-    (features.length > 0 ? (features[0].properties.name ?? null) : null);
+    features.find((f) => f.geometry.type === "LineString")?.properties.name ??
+    features[0]?.properties.name ??
+    null;
   return finalize(docName, features);
 }
 

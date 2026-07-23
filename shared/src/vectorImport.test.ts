@@ -52,6 +52,10 @@ describe("parseGpx", () => {
     expect(result.bbox).toEqual([150.001, -33.01, 150.01, -33.001]);
   });
 
+  it("prefers the track name over a waypoint label for the document name", () => {
+    expect(result.name).toBe("Track 20260101-000000");
+  });
+
   it("rejects out-of-range coordinates with a static message", () => {
     const bad = fixture("sample-track.gpx").replace(
       'lat="-33.001000000"',

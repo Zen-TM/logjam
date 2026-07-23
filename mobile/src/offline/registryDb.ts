@@ -24,6 +24,12 @@ function notifyChanged(): void {
   for (const listener of listeners) listener();
 }
 
+// Shared with importsDb (vector_import lives in the same app-private store,
+// behind the same app lock). Not for use outside the offline/imports modules.
+export async function getOfflineDb(): Promise<SQLite.SQLiteDatabase> {
+  return getDb();
+}
+
 async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) {
     dbPromise = (async () => {
@@ -45,6 +51,19 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
         );
         CREATE INDEX IF NOT EXISTS idx_map_artifact_lookup
           ON map_artifact(kind, logicalKey);
+        CREATE TABLE IF NOT EXISTS vector_import (
+          id            TEXT PRIMARY KEY,
+          name          TEXT NOT NULL,
+          color         TEXT NOT NULL,
+          visible       INTEGER NOT NULL DEFAULT 1,
+          path          TEXT NOT NULL,
+          west REAL NOT NULL, south REAL NOT NULL,
+          east REAL NOT NULL, north REAL NOT NULL,
+          featureCount  INTEGER NOT NULL,
+          positionCount INTEGER NOT NULL,
+          sizeBytes     INTEGER NOT NULL,
+          createdAt     TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS region_download (
           id            TEXT PRIMARY KEY,
           taskKind      TEXT NOT NULL,
