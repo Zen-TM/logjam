@@ -10,8 +10,8 @@
 // emulator detection (maplibre-native #3617) misses current AVD fingerprints.
 // Vulkan renders symbols correctly; don't revert to opengl without retesting
 // labels on the emulator AND a physical device.
-import { useCallback, useMemo, useRef, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Linking, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import {
   Camera,
   CircleLayer,
@@ -19,7 +19,6 @@ import {
   RasterLayer,
   ShapeSource,
   SymbolLayer,
-  UserLocation,
 } from "@maplibre/maplibre-react-native";
 import * as Location from "expo-location";
 import {
@@ -152,7 +151,18 @@ export function MapScreen({
   const [enabledOverlays, setEnabledOverlays] = useState<ReadonlySet<string>>(new Set());
   const cameraRef = useRef<React.ComponentRef<typeof Camera>>(null);
   const [followUser, setFollowUser] = useState(false);
-  const [locationGranted, setLocationGranted] = useState(false);
+  const [userCoord, setUserCoord] = useState<[number, number] | null>(null);
+  const [userAccuracyM, setUserAccuracyM] = useState<number | null>(null);
+  const locationWatch = useRef<Location.LocationSubscription | null>(null);
+  const firstFix = useRef(true);
+
+  // Stop the position watcher when the screen unmounts.
+  useEffect(() => {
+    return () => {
+      locationWatch.current?.remove();
+      locationWatch.current = null;
+    };
+  }, []);
 
   const owned = useApiQuery(getCanyons, "Couldn't load canyons.");
   const shared = useApiQuery(getSharedCanyons, "Couldn't load shared canyons.");
@@ -249,10 +259,74 @@ export function MapScreen({
   const regionArtifacts = artifacts.filter((a) => a.kind === "basemap-region");
 
   const handleLocateMe = useCallback(async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") return;
-    setLocationGranted(true);
+    // Non-prompting check first: requestForegroundPermissionsAsync has been
+    // observed to hang on-device even when the permission is already granted.
+    let { status, canAskAgain } = await Location.getForegroundPermissionsAsync();
+    if (status !== "granted") {
+      ({ status, canAskAgain } = await Location.requestForegroundPermissionsAsync());
+    }
+    if (status !== "granted") {
+      // Android silently auto-denies after one refusal (canAskAgain=false) —
+      // the only path back is app settings. Never fail silently.
+      Alert.alert(
+        "Location permission needed",
+        canAskAgain
+          ? "Allow location access to show your position on the map."
+          : "Location was previously denied. Enable it for Logjam in system settings.",
+        canAskAgain
+          ? undefined
+          : [
+              { text: "Cancel", style: "cancel" },
+              { text: "Open settings", onPress: () => Linking.openSettings() },
+            ],
+      );
+      return;
+    }
+    // Drive the dot from expo-location directly — MLRN's built-in
+    // UserLocation engine produced no updates on-device (silent), and we
+    // need expo-location's watcher for Stage 7 track recording anyway.
+    if (locationWatch.current) {
+      // Toggle off.
+      locationWatch.current.remove();
+      locationWatch.current = null;
+      setFollowUser(false);
+      return;
+    }
     setFollowUser(true);
+    firstFix.current = true;
+
+    const applyFix = (position: Location.LocationObject, fly: boolean) => {
+      const coord: [number, number] = [
+        position.coords.longitude,
+        position.coords.latitude,
+      ];
+      setUserCoord(coord);
+      setUserAccuracyM(position.coords.accuracy ?? null);
+      if (fly && firstFix.current) {
+        firstFix.current = false;
+        cameraRef.current?.setCamera({
+          centerCoordinate: coord,
+          zoomLevel: 14,
+          animationDuration: 1200,
+        });
+      }
+    };
+
+    // Instant feedback from the OS's cached fix (fused provider keeps a
+    // recent network/wifi position even indoors) — the watcher then refines.
+    const lastKnown = await Location.getLastKnownPositionAsync();
+    if (lastKnown) applyFix(lastKnown, true);
+
+    // Balanced = fused wifi/cell + GPS. High (GPS-priority) starves indoors
+    // and the callback never fires — the original silent-failure mode.
+    locationWatch.current = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: 3000,
+        distanceInterval: 5,
+      },
+      (position) => applyFix(position, true),
+    );
   }, []);
 
   const overlayList = overlays.data
@@ -278,8 +352,6 @@ export function MapScreen({
         <Camera
           ref={cameraRef}
           defaultSettings={{ centerCoordinate: DEFAULT_CENTER, zoomLevel: DEFAULT_ZOOM }}
-          followUserLocation={followUser}
-          followZoomLevel={13}
         />
         {/* Bundled point-feature icons for vector overlays. */}
         <TopoIconImages />
@@ -388,7 +460,37 @@ export function MapScreen({
           />
         </ShapeSource>
 
-        {locationGranted ? <UserLocation /> : null}
+        {/* Own blue-dot location marker (expo-location watcher; accuracy
+            halo scales with the reported radius). Unpinned ⇒ renders above
+            everything, like the canyon layers. */}
+        {userCoord ? (
+          <ShapeSource
+            id="user-location"
+            shape={{
+              type: "Feature",
+              geometry: { type: "Point", coordinates: userCoord },
+              properties: {},
+            }}
+          >
+            <CircleLayer
+              id="user-location-halo"
+              style={{
+                circleRadius: Math.min(40, Math.max(14, (userAccuracyM ?? 30) / 3)),
+                circleColor: "#4285F4",
+                circleOpacity: 0.2,
+              }}
+            />
+            <CircleLayer
+              id="user-location-dot"
+              style={{
+                circleRadius: 7,
+                circleColor: "#4285F4",
+                circleStrokeColor: "#ffffff",
+                circleStrokeWidth: 2,
+              }}
+            />
+          </ShapeSource>
+        ) : null}
       </MapView>
 
       {/* Offline/unavailable basemap notice (fail visibly, never silently). */}

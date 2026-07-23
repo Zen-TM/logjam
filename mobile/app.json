@@ -27,7 +27,8 @@
         "@maplibre/maplibre-react-native",
         {
           "android": {
-            "nativeVariant": "vulkan"
+            "nativeVariant": "vulkan",
+            "nativeVersion": "12.3.1"
           }
         }
       ],

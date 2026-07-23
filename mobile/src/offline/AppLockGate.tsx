@@ -21,17 +21,36 @@ import { useMapArtifacts } from "./useMapArtifacts";
 // forever — each cycle remounting the whole app (observed: ~2.5 Hz).
 const POST_UNLOCK_GRACE_MS = 2500;
 
+// A prompt older than this is treated as hung (authenticateAsync can stall
+// when fired during activity transitions) — a manual retry cancels it and
+// starts fresh instead of being swallowed by the in-flight guard.
+const PROMPT_STALE_MS = 12_000;
+
+// Dev-only escape hatch: every dev-client reload re-arms the lock, which
+// makes emulator/device debug loops painful. Inert in release builds.
+const DEV_LOCK_DISABLED =
+  __DEV__ && process.env.EXPO_PUBLIC_DISABLE_APP_LOCK === "1";
+
 export function AppLockGate({ children }: { children: React.ReactNode }) {
   const artifacts = useMapArtifacts();
-  const lockRequired = artifacts.length > 0;
+  const lockRequired = !DEV_LOCK_DISABLED && artifacts.length > 0;
   const [unlocked, setUnlocked] = useState(false);
+  const [authFailed, setAuthFailed] = useState(false);
   const prompting = useRef(false);
+  const promptStartedAt = useRef(0);
   const lastUnlockAt = useRef(0);
   const autoPrompted = useRef(false);
 
   const prompt = useCallback(async () => {
-    if (prompting.current) return;
+    const now = Date.now();
+    if (prompting.current) {
+      if (now - promptStartedAt.current < PROMPT_STALE_MS) return;
+      // Hung prompt: cancel the native side so a fresh attempt can start.
+      await LocalAuthentication.cancelAuthenticate().catch(() => {});
+    }
     prompting.current = true;
+    promptStartedAt.current = now;
+    setAuthFailed(false);
     try {
       const level = await LocalAuthentication.getEnrolledLevelAsync();
       if (level === LocalAuthentication.SecurityLevel.NONE) {
@@ -54,10 +73,15 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
         // there's nothing usable — treat as no device security (emulators).
         lastUnlockAt.current = Date.now();
         setUnlocked(true);
+      } else {
+        // Cancelled / failed / lockout: stay locked, tell the user the
+        // button works (never fail silently).
+        setAuthFailed(true);
       }
     } catch (err) {
       // Fail closed: stay locked, the retry button remains.
       console.error(err);
+      setAuthFailed(true);
     } finally {
       prompting.current = false;
     }
@@ -97,6 +121,9 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
       <Text style={styles.line}>
         Offline maps are stored on this device. Unlock to continue.
       </Text>
+      {authFailed ? (
+        <Text style={styles.line}>Authentication didn&apos;t complete — try again.</Text>
+      ) : null}
       <Button label="Unlock" onPress={prompt} />
     </View>
   );
