@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@cantoo/pdf-lib": "^2.7.4",
     "fast-xml-parser": "^5.10.1",
     "luxon": "^3.7.2",
     "proj4": "^2.15.0"
