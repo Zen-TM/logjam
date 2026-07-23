@@ -27,10 +27,13 @@ import {
   SYNC_OVERLAP_MS,
   SYNC_PROTOCOL,
   SYNC_PUSH_MAX_OPS,
+  SYNC_PUSH_OPS_BY_ENTITY,
+  pushOpDependencies,
   validateCanyonPayload,
   validateWaypointPayload,
   type SyncCursor,
   type SyncCursorKeysets,
+  type SyncPushOp,
 } from "@logjam/shared";
 import {
   parseDisplayName,
@@ -577,21 +580,16 @@ export function conflictReceipts(
   return receipts;
 }
 
-type PushOp = {
-  opId: string;
-  entity: "canyon" | "tripLog" | "waypoint" | "notification";
-  op: "create" | "update" | "delete" | "markRead";
-  id: string;
-  baseUpdatedAt?: string;
-  fields?: Record<string, unknown>;
-};
+// Wire shape + entity/op vocabulary live in shared/src/sync.ts (§11: one
+// protocol definition for api + mobile).
+type PushOp = SyncPushOp;
 
-const PUSH_OPS: Record<PushOp["entity"], Set<string>> = {
-  canyon: new Set(["create", "update", "delete"]),
-  tripLog: new Set(["create", "update", "delete"]),
-  waypoint: new Set(["create", "update", "delete"]),
-  notification: new Set(["markRead"]),
-};
+const PUSH_OPS: Record<PushOp["entity"], Set<string>> = Object.fromEntries(
+  Object.entries(SYNC_PUSH_OPS_BY_ENTITY).map(([entity, ops]) => [
+    entity,
+    new Set(ops),
+  ]),
+) as Record<PushOp["entity"], Set<string>>;
 
 export function parsePushOp(raw: unknown, index: number): PushOp {
   if (typeof raw !== "object" || raw === null) {
@@ -636,20 +634,10 @@ export function parsePushOp(raw: unknown, index: number): PushOp {
   };
 }
 
-/** Ids this op depends on having been created successfully earlier in the
- * batch (or existing already): its own target for update/delete, and any
- * canyon references. Used for dependencyFailed propagation. */
-export function opDependencies(op: PushOp): string[] {
-  const deps: string[] = [];
-  if (op.op === "update" || op.op === "delete") deps.push(op.id);
-  const canyonIds = op.fields?.canyonIds;
-  if (Array.isArray(canyonIds)) {
-    deps.push(...canyonIds.filter((v): v is string => typeof v === "string"));
-  }
-  const canyonId = op.fields?.canyonId;
-  if (typeof canyonId === "string") deps.push(canyonId);
-  return deps;
-}
+// Dependency extraction moved to shared (§11 single source — the client's
+// flush engine runs the same closure). Re-exported so existing imports and
+// the unit suite keep working.
+export const opDependencies = pushOpDependencies;
 
 async function applyCanyonOp(userId: string, op: PushOp): Promise<PushOpResult> {
   if (op.op === "delete") {

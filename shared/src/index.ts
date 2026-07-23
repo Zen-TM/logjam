@@ -24,4 +24,5 @@ export * from "./mapRegionEstimate.js";
 export * from "./vectorImport.js";
 export * from "./trackStats.js";
 export * from "./sync.js";
+export * from "./syncClient.js";
 export * from "./waypointValidation.js";

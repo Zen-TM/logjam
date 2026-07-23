@@ -61,6 +61,190 @@ export const DELTA_ENTITY_ORDER = [
 
 export type DeltaEntityKey = (typeof DELTA_ENTITY_ORDER)[number];
 
+// ── Push op wire shape (§8.1) ────────────────────────────────────────────────
+
+/** Entities the push endpoint accepts. Media is deliberately absent — the
+ * three-phase presign flow owns media creation (§7.1). */
+export const SYNC_PUSH_OPS_BY_ENTITY = {
+  canyon: ["create", "update", "delete"],
+  tripLog: ["create", "update", "delete"],
+  waypoint: ["create", "update", "delete"],
+  notification: ["markRead"],
+} as const;
+
+export type SyncPushEntity = keyof typeof SYNC_PUSH_OPS_BY_ENTITY;
+export type SyncPushOpKind =
+  (typeof SYNC_PUSH_OPS_BY_ENTITY)[SyncPushEntity][number];
+
+export type SyncPushOp = {
+  /** Client-minted, for result correlation only. */
+  opId: string;
+  entity: SyncPushEntity;
+  op: SyncPushOpKind;
+  /** Entity id (client-minted UUIDv4 for creates). */
+  id: string;
+  /** Updates only: server updatedAt the edit was based on — conflict
+   * DETECTION only, never resolution (§6). */
+  baseUpdatedAt?: string;
+  /** Create: full payload; update: dirty fields only. */
+  fields?: Record<string, unknown>;
+};
+
+export type SyncPushOpStatus =
+  | "applied"
+  | "appliedWithConflict"
+  | "alreadyApplied"
+  | "rejected"
+  | "dependencyFailed";
+
+export type SyncConflictReceipt = { field: string; serverValue: unknown };
+
+export type SyncPushOpResult = {
+  opId: string;
+  status: SyncPushOpStatus;
+  row?: unknown;
+  conflicts?: SyncConflictReceipt[];
+  error?: { code: number; message: string };
+};
+
+export type SyncPushResponse = {
+  serverTime: string;
+  results: SyncPushOpResult[];
+};
+
+/**
+ * Ids this op depends on having been created successfully (earlier in the
+ * batch, or already server-side): its own target for update/delete, plus any
+ * canyon references in its fields. Both ends use it — the server for
+ * dependencyFailed propagation, the client for the flush engine's
+ * dependency-closure skip (§8.3).
+ */
+export function pushOpDependencies(op: SyncPushOp): string[] {
+  const deps: string[] = [];
+  if (op.op === "update" || op.op === "delete") deps.push(op.id);
+  const canyonIds = op.fields?.canyonIds;
+  if (Array.isArray(canyonIds)) {
+    deps.push(...canyonIds.filter((v): v is string => typeof v === "string"));
+  }
+  const canyonId = op.fields?.canyonId;
+  if (typeof canyonId === "string") deps.push(canyonId);
+  return deps;
+}
+
+// ── Delta wire shapes (§4.1) ─────────────────────────────────────────────────
+//
+// Client-side view of the delta serializers in api/src/routes/sync.ts —
+// dates arrive as ISO strings. The server builds these from Prisma rows, so
+// the shapes are mirrored here, not imported there; syncBoundary.test.ts
+// (integration) is the drift guard. Additive-only on protocol 1 (§10.3):
+// clients must tolerate unknown extra keys (preserved via extra_json in the
+// mobile mirror, never round-tripped).
+
+export type SyncUserRef = { id: string; username: string };
+
+export type SyncDeltaCanyonRow = {
+  id: string;
+  ownerId: string;
+  /** 'owner' | 'shared' — the caller's relationship to the row. */
+  syncRole: "owner" | "shared";
+  name: string;
+  altNames: string[];
+  latitude: number;
+  longitude: number;
+  numAbseils: number | null;
+  longestAbseil: number | null;
+  vGrade: number | null;
+  aGrade: number | null;
+  commitment: number | null;
+  quality: number | null;
+  hours: number | null;
+  notes: string | null;
+  attributes: Record<string, unknown>;
+  ropeWikiId: number | null;
+  forkedFromId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SyncDeltaTripRow = {
+  id: string;
+  userId: string;
+  date: string;
+  displayName: string | null;
+  types: string[];
+  notes: string | null;
+  customFields: Record<string, unknown>;
+  /** Ordered — order drives the derived title (shared/src/tripName.ts). */
+  canyons: { id: string; name: string }[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SyncDeltaWaypointRow = {
+  id: string;
+  ownerId: string;
+  canyonId: string | null;
+  name: string;
+  latitude: number;
+  longitude: number;
+  elevation: number | null;
+  symbol: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Metadata only — blobs come via POST /media/download-urls (§7.3). */
+export type SyncDeltaMediaRow = {
+  id: string;
+  linkedType: string;
+  linkedId: string;
+  mediaType: string;
+  filename: string | null;
+  fileSizeBytes: string;
+  color: string | null;
+  createdAt: string;
+};
+
+export type SyncDeltaShareRow = {
+  id: string;
+  canyonId: string;
+  sharedById: string;
+  sharedWithId: string;
+  createdAt: string;
+  sharedBy: SyncUserRef;
+  sharedWith: SyncUserRef;
+};
+
+export type SyncDeltaFriendshipRow = {
+  id: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  counterpart: SyncUserRef;
+  direction: "sent" | "received";
+};
+
+export type SyncDeltaTombstone = { type: SyncEntityType; id: string };
+
+export type SyncDeltaResponse = {
+  protocol: number;
+  epoch: number;
+  serverTime: string;
+  cursor: string;
+  hasMore: boolean;
+  resetRequired: boolean;
+  changes: {
+    canyons: SyncDeltaCanyonRow[];
+    tripLogs: SyncDeltaTripRow[];
+    waypoints: SyncDeltaWaypointRow[];
+    media: SyncDeltaMediaRow[];
+    canyonShares: SyncDeltaShareRow[];
+    friendships: SyncDeltaFriendshipRow[];
+  };
+  tombstones: SyncDeltaTombstone[];
+};
+
 // ── Cursor codec (§4.2) ──────────────────────────────────────────────────────
 //
 // The cursor is server-minted and opaque to the client (stored + returned
