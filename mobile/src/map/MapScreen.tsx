@@ -26,6 +26,8 @@ import {
   BASEMAP_CATALOG,
   VECTOR_STYLE_DEFAULTS,
   messageFromError,
+  type TopoLayerFormat,
+  type TopoLayerName,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -38,8 +40,9 @@ import {
 import type { TCanyon } from "../api/types";
 import { config } from "../config";
 import { fontSize, radius, spacing, theme } from "../theme";
+import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import {
-  deleteRegionArtifact,
+  deleteDownloadedArtifact,
   downloadProtomapsRegion,
 } from "../offline/regionDownloads";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
@@ -258,6 +261,50 @@ export function MapScreen({
 
   const regionArtifacts = artifacts.filter((a) => a.kind === "basemap-region");
 
+  // Stage 4b: per-overlay offline save. One download at a time (overlayBusy
+  // holds the in-flight "<jobId>/<layer>" key); errors surface as a status
+  // line under the section — state words only, never labels or paths.
+  const [overlayBusy, setOverlayBusy] = useState<string | null>(null);
+  const [overlayPct, setOverlayPct] = useState<number | null>(null);
+  const [overlayStatus, setOverlayStatus] = useState<string | null>(null);
+  const handleSaveOverlay = useCallback(
+    async (item: {
+      key: string;
+      jobId: string;
+      layer: TopoLayerName;
+      format: TopoLayerFormat;
+      pmtilesUrl: string;
+    }) => {
+      try {
+        setOverlayStatus(null);
+        setOverlayPct(null);
+        setOverlayBusy(item.key);
+        await downloadTopoOverlay(
+          {
+            jobId: item.jobId,
+            layer: item.layer,
+            format: item.format,
+            pmtilesUrl: item.pmtilesUrl,
+          },
+          (p) =>
+            setOverlayPct(
+              p.bytesTotal > 0
+                ? Math.min(100, Math.round((p.bytesDone / p.bytesTotal) * 100))
+                : null,
+            ),
+        );
+        setOverlayStatus("Overlay saved for offline use.");
+      } catch (err) {
+        console.error(err);
+        setOverlayStatus(messageFromError(err, "Couldn't save this overlay."));
+      } finally {
+        setOverlayBusy(null);
+        setOverlayPct(null);
+      }
+    },
+    [],
+  );
+
   const handleLocateMe = useCallback(async () => {
     // Non-prompting check first: requestForegroundPermissionsAsync has been
     // observed to hang on-device even when the permission is already granted.
@@ -353,7 +400,10 @@ export function MapScreen({
         job.layers.map((layer) => ({
           key: `${job.jobId}/${layer.name}`,
           label: `${job.name ?? job.jobId.slice(0, 8)} — ${layer.name}`,
+          jobId: job.jobId,
+          layer: layer.name,
           format: layer.format,
+          pmtilesUrl: layer.pmtilesUrl,
         })),
       )
     : [];
@@ -663,7 +713,7 @@ export function MapScreen({
                   accessibilityRole="button"
                   accessibilityLabel="Delete saved region"
                   onPress={() => {
-                    deleteRegionArtifact(artifact.id).catch(console.error);
+                    deleteDownloadedArtifact(artifact.id).catch(console.error);
                   }}
                 >
                   <Text style={styles.pickerDelete}>Delete</Text>
@@ -675,29 +725,75 @@ export function MapScreen({
                 <Text style={styles.pickerHeading}>Topo overlays</Text>
                 {overlayList.map((overlay) => {
                   const enabled = enabledOverlays.has(overlay.key);
+                  const saved = artifacts.find(
+                    (a) =>
+                      a.kind === "topo-overlay" && a.logicalKey === overlay.key,
+                  );
+                  const busy = overlayBusy === overlay.key;
                   return (
-                    <Pressable
-                      key={overlay.key}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: enabled }}
-                      onPress={() =>
-                        setEnabledOverlays((prev) => {
-                          const next = new Set(prev);
-                          if (enabled) next.delete(overlay.key);
-                          else next.add(overlay.key);
-                          return next;
-                        })
-                      }
-                      style={styles.pickerRow}
-                    >
-                      <Text
-                        style={[styles.pickerLabel, enabled && styles.pickerLabelActive]}
+                    <View key={overlay.key} style={styles.pickerRegionRow}>
+                      <Pressable
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: enabled }}
+                        onPress={() =>
+                          setEnabledOverlays((prev) => {
+                            const next = new Set(prev);
+                            if (enabled) next.delete(overlay.key);
+                            else next.add(overlay.key);
+                            return next;
+                          })
+                        }
+                        style={styles.pickerRowGrow}
                       >
-                        {enabled ? "☑" : "☐"} {overlay.label}
-                      </Text>
-                    </Pressable>
+                        <Text
+                          style={[
+                            styles.pickerLabel,
+                            enabled && styles.pickerLabelActive,
+                          ]}
+                        >
+                          {enabled ? "☑" : "☐"} {saved ? "▣ " : ""}
+                          {overlay.label}
+                        </Text>
+                      </Pressable>
+                      {saved ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Delete saved overlay"
+                          onPress={() => {
+                            deleteDownloadedArtifact(saved.id).catch(
+                              console.error,
+                            );
+                          }}
+                        >
+                          <Text style={styles.pickerDelete}>Delete</Text>
+                        </Pressable>
+                      ) : busy ? (
+                        <Text style={styles.pickerLabel}>
+                          {overlayPct != null ? `${overlayPct}%` : "…"}
+                        </Text>
+                      ) : connectivity === "online" ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Save overlay for offline use"
+                          disabled={overlayBusy != null}
+                          onPress={() => handleSaveOverlay(overlay)}
+                        >
+                          <Text
+                            style={[
+                              styles.pickerDelete,
+                              overlayBusy != null && styles.pickerLabelDisabled,
+                            ]}
+                          >
+                            ⤓ Save
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
                   );
                 })}
+                {overlayStatus ? (
+                  <Text style={styles.pickerStatus}>{overlayStatus}</Text>
+                ) : null}
               </>
             ) : null}
           </View>
@@ -765,6 +861,7 @@ const styles = StyleSheet.create({
     marginTop: spacing(1),
   },
   pickerRow: { paddingVertical: spacing(1) },
+  pickerRowGrow: { paddingVertical: spacing(1), flex: 1 },
   pickerRegionRow: {
     paddingVertical: spacing(1),
     flexDirection: "row",

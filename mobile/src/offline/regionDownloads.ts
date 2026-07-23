@@ -110,8 +110,8 @@ export async function downloadProtomapsRegion(
   }
 }
 
-/** Delete a downloaded region: registry row + file. */
-export async function deleteRegionArtifact(id: string): Promise<void> {
+/** Delete any downloaded artifact (region or overlay): registry row + file. */
+export async function deleteDownloadedArtifact(id: string): Promise<void> {
   const artifact = await deleteArtifact(id);
   if (artifact) {
     await FileSystem.deleteAsync(`file://${artifact.path}`, {
