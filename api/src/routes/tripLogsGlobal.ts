@@ -16,6 +16,7 @@ import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
 import { toMediaItems } from "../lib/mediaPresign";
 import { resolveUser } from "../lib/resolveUser";
+import { tripDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -361,6 +362,11 @@ router.patch(
               position,
             })),
           },
+          // Force-touch the watermark: a canyonIds-only PATCH writes only
+          // nested TripLogCanyon rows, and Prisma's @updatedAt is not
+          // guaranteed to bump the parent for nested-only writes. A trip whose
+          // links changed MUST move past the delta cursor (stage8 §3.1 trap).
+          updatedAt: new Date(),
         }),
       },
       include: tripCanyonsInclude,
@@ -386,7 +392,12 @@ router.delete(
 
     const media = await prisma.media.findMany({
       where: { linkedType: "tripLog", linkedId: id },
-      select: { s3KeyDisplay: true, s3KeyThumbnail: true, fileSizeBytes: true },
+      select: {
+        id: true,
+        s3KeyDisplay: true,
+        s3KeyThumbnail: true,
+        fileSizeBytes: true,
+      },
     });
 
     // S3-first (ARCH-004): blobs go before the rows, so an S3 failure leaves
@@ -405,6 +416,16 @@ router.delete(
       });
       await tx.tripLog.delete({ where: { id } });
       await decrementStorageUsed(user.id, totalBytes, tx);
+      // Same transaction as the delete (sync tombstone rule — see
+      // lib/syncTombstones.ts).
+      await writeTombstones(
+        tx,
+        tripDeleteTombstones({
+          ownerId: user.id,
+          tripId: id,
+          mediaIds: media.map((m) => m.id),
+        }),
+      );
     });
 
     res.status(204).send();

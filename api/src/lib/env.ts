@@ -135,6 +135,11 @@ const baseSchema = z.object({
   // the periodic sweep. Must comfortably exceed UPLOAD_URL_TTL_SECONDS so an
   // in-flight upload+confirm is never raced. 0 disables the sweep.
   MEDIA_ORPHAN_TTL_MS: z.coerce.number().int().nonnegative().default(86_400_000), // 24 h
+  // Sync tombstones (Stage 8) older than this are swept by the reaper. A
+  // client whose delta cursor predates the horizon is told to full-resync
+  // (resetRequired), so the TTL bounds table growth, not correctness.
+  // 0 disables the sweep (rows kept forever).
+  SYNC_TOMBSTONE_TTL_MS: z.coerce.number().int().nonnegative().default(7_776_000_000), // 90 days
 });
 
 type Env = z.infer<typeof baseSchema> & {

@@ -1,0 +1,122 @@
+import { describe, expect, it } from "vitest";
+import {
+  canyonDeleteTombstones,
+  friendshipDeleteTombstones,
+  mediaDeleteTombstones,
+  shareRevokeTombstones,
+  tripDeleteTombstones,
+  waypointDeleteTombstones,
+  type TombstoneRow,
+} from "./syncTombstones";
+
+const has = (rows: TombstoneRow[], row: TombstoneRow) =>
+  rows.some(
+    (r) =>
+      r.userId === row.userId &&
+      r.entityType === row.entityType &&
+      r.entityId === row.entityId,
+  );
+
+describe("tripDeleteTombstones", () => {
+  it("emits owner tripLog + media rows, no fan-out", () => {
+    const rows = tripDeleteTombstones({
+      ownerId: "alice",
+      tripId: "trip-1",
+      mediaIds: ["m1", "m2"],
+    });
+    expect(rows).toHaveLength(3);
+    expect(has(rows, { userId: "alice", entityType: "tripLog", entityId: "trip-1" })).toBe(true);
+    expect(has(rows, { userId: "alice", entityType: "media", entityId: "m2" })).toBe(true);
+    expect(rows.every((r) => r.userId === "alice")).toBe(true);
+  });
+});
+
+describe("canyonDeleteTombstones", () => {
+  it("fans out canyon + media to every sharee and share rows to the owner", () => {
+    const rows = canyonDeleteTombstones({
+      ownerId: "alice",
+      canyonId: "c1",
+      mediaIds: ["m1"],
+      shares: [
+        { id: "s-bob", sharedWithId: "bob" },
+        { id: "s-carol", sharedWithId: "carol" },
+      ],
+    });
+    // owner: canyon + 1 media + 2 canyonShare; each sharee: canyon + 1 media.
+    expect(rows).toHaveLength(4 + 2 * 2);
+    expect(has(rows, { userId: "alice", entityType: "canyonShare", entityId: "s-bob" })).toBe(true);
+    expect(has(rows, { userId: "bob", entityType: "canyon", entityId: "c1" })).toBe(true);
+    expect(has(rows, { userId: "bob", entityType: "media", entityId: "m1" })).toBe(true);
+    expect(has(rows, { userId: "carol", entityType: "canyon", entityId: "c1" })).toBe(true);
+    // Sharees never receive canyonShare tombstones for shares that aren't
+    // theirs (a sharee cannot enumerate co-sharees — §4.6.1).
+    expect(
+      rows.filter((r) => r.entityType === "canyonShare").every((r) => r.userId === "alice"),
+    ).toBe(true);
+  });
+
+  it("unshared canyon: owner rows only", () => {
+    const rows = canyonDeleteTombstones({
+      ownerId: "alice",
+      canyonId: "c1",
+      mediaIds: [],
+      shares: [],
+    });
+    expect(rows).toEqual([
+      { userId: "alice", entityType: "canyon", entityId: "c1" },
+    ]);
+  });
+});
+
+describe("mediaDeleteTombstones", () => {
+  it("owner + sharees forget the media", () => {
+    const rows = mediaDeleteTombstones({
+      ownerId: "alice",
+      mediaId: "m1",
+      shareeIds: ["bob"],
+    });
+    expect(rows).toHaveLength(2);
+    expect(has(rows, { userId: "bob", entityType: "media", entityId: "m1" })).toBe(true);
+  });
+});
+
+describe("shareRevokeTombstones", () => {
+  it("sharee loses canyon + canyon media; owner loses the share row", () => {
+    const rows = shareRevokeTombstones({
+      canyonOwnerId: "alice",
+      shareeId: "bob",
+      shareId: "s1",
+      canyonId: "c1",
+      canyonMediaIds: ["m1", "m2"],
+    });
+    expect(has(rows, { userId: "bob", entityType: "canyon", entityId: "c1" })).toBe(true);
+    expect(has(rows, { userId: "bob", entityType: "media", entityId: "m1" })).toBe(true);
+    expect(has(rows, { userId: "alice", entityType: "canyonShare", entityId: "s1" })).toBe(true);
+    // The sharee's signal is indistinguishable from a canyon delete: exactly
+    // one `canyon` tombstone, nothing owner-only rides along (§4.6.3).
+    const shareeRows = rows.filter((r) => r.userId === "bob");
+    expect(shareeRows.filter((r) => r.entityType === "canyon")).toHaveLength(1);
+    expect(shareeRows.some((r) => r.entityType === "canyonShare")).toBe(false);
+  });
+});
+
+describe("friendshipDeleteTombstones", () => {
+  it("both parties forget the edge", () => {
+    const rows = friendshipDeleteTombstones({
+      friendshipId: "f1",
+      userIds: ["alice", "bob"],
+    });
+    expect(rows).toEqual([
+      { userId: "alice", entityType: "friendship", entityId: "f1" },
+      { userId: "bob", entityType: "friendship", entityId: "f1" },
+    ]);
+  });
+});
+
+describe("waypointDeleteTombstones", () => {
+  it("owner-only", () => {
+    expect(
+      waypointDeleteTombstones({ ownerId: "alice", waypointId: "w1" }),
+    ).toEqual([{ userId: "alice", entityType: "waypoint", entityId: "w1" }]);
+  });
+});

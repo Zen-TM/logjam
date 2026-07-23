@@ -8,6 +8,11 @@ import { normalizeUserUiPreferences } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
 import { sendPushToUser } from "../services/push";
 import { logger } from "../lib/logger";
+import {
+  friendshipDeleteTombstones,
+  shareRevokeTombstones,
+  writeTombstones,
+} from "../lib/syncTombstones";
 
 async function wantsInAppNotification(
   userId: string,
@@ -242,7 +247,8 @@ router.patch(
 
     // Delete the friendship and purge this user's own friend_request
     // notification that referenced it (PRIV-003 — clean the row, don't rely on
-    // the read-time filter alone).
+    // the read-time filter alone). Both parties' mirrors must forget the edge
+    // (sync tombstones, same transaction).
     await prisma.$transaction([
       prisma.notification.deleteMany({
         where: {
@@ -250,6 +256,12 @@ router.patch(
           type: "friend_request",
           payload: { path: ["friendshipId"], equals: id },
         },
+      }),
+      prisma.syncTombstone.createMany({
+        data: friendshipDeleteTombstones({
+          friendshipId: id,
+          userIds: [friendship.requesterId, friendship.addresseeId],
+        }),
       }),
       prisma.friendship.delete({ where: { id } }),
     ]);
@@ -294,10 +306,44 @@ router.delete(
           { sharedById: otherId, sharedWithId: user.id },
         ],
       },
-      select: { canyonId: true, sharedWithId: true },
+      select: { id: true, canyonId: true, sharedById: true, sharedWithId: true },
     });
 
+    // Canyon-level media ids of every canyon whose share is being revoked —
+    // each sharee's mirror must forget the canyon AND its media (sync
+    // tombstone fan-out, written in the same transaction below).
+    const revokedCanyonIds = revokedShares.map((s) => s.canyonId);
+    const revokedCanyonMedia =
+      revokedCanyonIds.length > 0
+        ? await prisma.media.findMany({
+            where: { linkedType: "canyon", linkedId: { in: revokedCanyonIds } },
+            select: { id: true, linkedId: true },
+          })
+        : [];
+    const mediaIdsByCanyon = new Map<string, string[]>();
+    for (const m of revokedCanyonMedia) {
+      const list = mediaIdsByCanyon.get(m.linkedId) ?? [];
+      list.push(m.id);
+      mediaIdsByCanyon.set(m.linkedId, list);
+    }
+    const unfriendTombstones = [
+      ...friendshipDeleteTombstones({
+        friendshipId: id,
+        userIds: [friendship.requesterId, friendship.addresseeId],
+      }),
+      ...revokedShares.flatMap((s) =>
+        shareRevokeTombstones({
+          canyonOwnerId: s.sharedById,
+          shareeId: s.sharedWithId,
+          shareId: s.id,
+          canyonId: s.canyonId,
+          canyonMediaIds: mediaIdsByCanyon.get(s.canyonId) ?? [],
+        }),
+      ),
+    ];
+
     await prisma.$transaction([
+      prisma.syncTombstone.createMany({ data: unfriendTombstones }),
       // Revoke any canyons shared between these two users
       prisma.canyonShare.deleteMany({
         where: {
@@ -465,7 +511,34 @@ router.delete(
     });
 
     if (revoked.length > 0) {
+      // The friend's mirror must forget each canyon + its canyon-level media;
+      // the owner's mirror forgets the share rows (sync tombstones, same
+      // transaction as the revoke).
+      const canyonMedia = await prisma.media.findMany({
+        where: {
+          linkedType: "canyon",
+          linkedId: { in: revoked.map((r) => r.canyonId) },
+        },
+        select: { id: true, linkedId: true },
+      });
+      const mediaIdsByCanyon = new Map<string, string[]>();
+      for (const m of canyonMedia) {
+        const list = mediaIdsByCanyon.get(m.linkedId) ?? [];
+        list.push(m.id);
+        mediaIdsByCanyon.set(m.linkedId, list);
+      }
       await prisma.$transaction([
+        prisma.syncTombstone.createMany({
+          data: revoked.flatMap((r) =>
+            shareRevokeTombstones({
+              canyonOwnerId: user.id,
+              shareeId: friendId,
+              shareId: r.id,
+              canyonId: r.canyonId,
+              canyonMediaIds: mediaIdsByCanyon.get(r.canyonId) ?? [],
+            }),
+          ),
+        }),
         prisma.canyonShare.deleteMany({
           where: { id: { in: revoked.map((r) => r.id) } },
         }),

@@ -11,6 +11,11 @@ import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
 import { formatTripCanyonNames } from "@logjam/shared";
+import {
+  canyonDeleteTombstones,
+  tripDeleteTombstones,
+  writeTombstones,
+} from "./syncTombstones";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -41,7 +46,13 @@ export async function deleteCanyonsCascade(
 
   const media = await prisma.media.findMany({
     where: { linkedType: "canyon", linkedId: { in: ownedIds } },
-    select: { s3KeyDisplay: true, s3KeyThumbnail: true, fileSizeBytes: true },
+    select: {
+      id: true,
+      linkedId: true,
+      s3KeyDisplay: true,
+      s3KeyThumbnail: true,
+      fileSizeBytes: true,
+    },
   });
 
   // S3-first (ARCH-004): blobs before rows.
@@ -89,6 +100,25 @@ export async function deleteCanyonsCascade(
         }),
       ),
     );
+    // Queried before the deleteMany below, while the share rows still exist:
+    // per-canyon sync-tombstone fan-out — owner forgets canyon/media/share
+    // rows, each sharee forgets the canyon + its canyon-level media (same
+    // transaction as the delete; see lib/syncTombstones.ts).
+    const shares = await tx.canyonShare.findMany({
+      where: { canyonId: { in: ownedIds } },
+      select: { id: true, canyonId: true, sharedWithId: true },
+    });
+    const tombstones = ownedIds.flatMap((canyonId) =>
+      canyonDeleteTombstones({
+        ownerId: userId,
+        canyonId,
+        mediaIds: media
+          .filter((m) => m.linkedId === canyonId)
+          .map((m) => m.id),
+        shares: shares.filter((s) => s.canyonId === canyonId),
+      }),
+    );
+    await writeTombstones(tx, tombstones);
     await tx.canyonShare.deleteMany({ where: { canyonId: { in: ownedIds } } });
     // Purge canyon_shared notifications held by OTHER users (the share
     // recipients) that reference the deleted canyons (PRIV-003).
@@ -127,7 +157,13 @@ export async function deleteTripsCascade(
 
   const media = await prisma.media.findMany({
     where: { linkedType: "tripLog", linkedId: { in: ownedIds } },
-    select: { s3KeyDisplay: true, s3KeyThumbnail: true, fileSizeBytes: true },
+    select: {
+      id: true,
+      linkedId: true,
+      s3KeyDisplay: true,
+      s3KeyThumbnail: true,
+      fileSizeBytes: true,
+    },
   });
 
   // S3-first (ARCH-004): blobs before rows.
@@ -143,6 +179,19 @@ export async function deleteTripsCascade(
     });
     await tx.tripLog.deleteMany({ where: { id: { in: ownedIds } } });
     await decrementStorageUsed(userId, totalBytes, tx);
+    // Same transaction as the delete (sync tombstone rule).
+    await writeTombstones(
+      tx,
+      ownedIds.flatMap((tripId) =>
+        tripDeleteTombstones({
+          ownerId: userId,
+          tripId,
+          mediaIds: media
+            .filter((m) => m.linkedId === tripId)
+            .map((m) => m.id),
+        }),
+      ),
+    );
   });
 
   return ownedIds;

@@ -34,6 +34,8 @@ model User {
   geoPdfTemplates     GeoPdfTemplate[]
   topoTemplates       TopoTemplate[]
   deviceTokens        DeviceToken[]
+  waypoints           Waypoint[]
+  syncTombstones      SyncTombstone[]
 
   @@map("users")
 }
@@ -66,6 +68,7 @@ model Canyon {
   forks            Canyon[]      @relation("CanyonForks")
   owner            User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   tripLogLinks     TripLogCanyon[]
+  waypoints        Waypoint[]
 
   @@unique([ownerId, ropeWikiId])
   @@unique([ownerId, importKey])
@@ -96,6 +99,8 @@ model TripLog {
   notes        String?
   customFields Json     @default("{}") @map("custom_fields")
   createdAt    DateTime @default(now()) @map("created_at")
+  // Delta-sync watermark (Stage 8). Backfilled from created_at by migration.
+  updatedAt    DateTime @updatedAt @map("updated_at")
   importKey     String?  @map("import_key")
   importBatchId String?  @map("import_batch_id")
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -154,6 +159,9 @@ model Friendship {
   addresseeId String   @map("addressee_id")
   status      String   @default("pending")
   createdAt   DateTime @default(now()) @map("created_at")
+  // Delta-sync watermark (Stage 8): status flips pending→accepted, so
+  // createdAt alone can't carry the change. Backfilled from created_at.
+  updatedAt   DateTime @updatedAt @map("updated_at")
   addressee   User     @relation("addressee", fields: [addresseeId], references: [id], onDelete: Cascade)
   requester   User     @relation("requester", fields: [requesterId], references: [id], onDelete: Cascade)
 
@@ -341,6 +349,54 @@ model TopoTemplate {
 
   @@index([userId])
   @@map("topo_templates")
+}
+
+// Field waypoints (Stage 7 mobile capture; web read/edit later). Owner-private:
+// NEVER visible through canyon shares — sharing a canyon shares the canyon
+// record, not your marked anchors/exits (privacy default; revisit only as an
+// explicit per-waypoint opt-in feature).
+model Waypoint {
+  id        String   @id @default(uuid())
+  ownerId   String   @map("owner_id")
+  // Optional association; SetNull keeps waypoints when a canyon dies.
+  canyonId  String?  @map("canyon_id")
+  name      String
+  latitude  Float
+  longitude Float
+  elevation Float?
+  // Client icon key; server treats as opaque (length-capped in the route).
+  symbol    String?
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  canyon    Canyon?  @relation(fields: [canyonId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId])
+  @@index([canyonId])
+  @@map("waypoints")
+}
+
+// Per-user deletion/visibility-revocation log for mobile delta sync (Stage 8).
+// A row means "user X must remove entity (type,id) from any local mirror".
+// Deliberately carries NO name/coords — ids only — so the table is log-safe
+// and leaks nothing beyond what the recipient already legitimately knew
+// existed. Rows older than SYNC_TOMBSTONE_TTL_MS are swept by the reaper; a
+// client whose cursor predates the horizon is told to full-resync.
+model SyncTombstone {
+  id         BigInt   @id @default(autoincrement())
+  // Visibility scope: who must forget. Cascade wipes the deleted user's own
+  // tombstones on account delete; fan-out rows written FOR other users
+  // (their sharees) belong to those users and survive — that is the point.
+  userId     String   @map("user_id")
+  // "canyon" | "tripLog" | "media" | "canyonShare" | "friendship" | "waypoint"
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  deletedAt  DateTime @default(now()) @map("deleted_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, deletedAt])
+  @@map("sync_tombstones")
 }
 
 // Push-notification device registrations (Stage 3 mobile). One row per Expo

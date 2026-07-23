@@ -511,6 +511,24 @@ export async function queueAutoExports(now: Date = new Date()): Promise<number> 
   return queued;
 }
 
+/**
+ * Sweep sync tombstones (Stage 8) older than SYNC_TOMBSTONE_TTL_MS. Safe to
+ * run concurrently (deleteMany on a time cutoff is idempotent). A delta client
+ * whose cursor predates the horizon gets resetRequired from /sync/delta, so
+ * sweeping bounds table growth without correctness risk. 0 = never sweep.
+ */
+export async function sweepSyncTombstones(
+  now: Date = new Date(),
+): Promise<number> {
+  const ttl = getEnv().SYNC_TOMBSTONE_TTL_MS;
+  if (ttl === 0) return 0;
+  const cutoff = new Date(now.getTime() - ttl);
+  const { count } = await prisma.syncTombstone.deleteMany({
+    where: { deletedAt: { lt: cutoff } },
+  });
+  return count;
+}
+
 let timer: NodeJS.Timeout | null = null;
 
 /**
@@ -559,6 +577,13 @@ export function startTopoJobReaper(): () => void {
     sweepOrphanedMediaUploads().catch((err) => {
       logger.error({ err }, "media_orphan_sweep_failed");
     });
+    sweepSyncTombstones()
+      .then((count) => {
+        if (count > 0) logger.info({ count }, "sync_tombstones_swept");
+      })
+      .catch((err) => {
+        logger.error({ err }, "sync_tombstone_sweep_failed");
+      });
   };
 
   // Run once shortly after boot (catches jobs stranded while the API was down),

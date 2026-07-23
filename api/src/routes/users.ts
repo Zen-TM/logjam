@@ -472,31 +472,61 @@ router.delete(
     // rows are deleted the keys are unrecoverable, so cleanup must run S3-first:
     // if an S3 delete throws, the DB rows still exist and a retried DELETE /me
     // can re-derive the keys (ARCH-004 — no orphaned objects, no lost keys).
-    const [topoJobs, topoExportJobs, geoPdfJobs, media, ownedCanyons, friendships] =
-      await Promise.all([
-        prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
-        prisma.topoExportJob.findMany({
-          where: { userId: user.id },
-          select: { id: true, resultKey: true },
-        }),
-        prisma.geoPdfJob.findMany({ where: { userId: user.id }, select: { id: true } }),
-        prisma.media.findMany({
-          where: { ownerId: user.id },
-          select: { s3KeyDisplay: true, s3KeyThumbnail: true },
-        }),
-        // Canyon IDs and friendship IDs are needed to purge cross-user
-        // notifications that reference this user's data (PRIV-003).
-        prisma.canyon.findMany({
-          where: { ownerId: user.id },
-          select: { id: true },
-        }),
-        prisma.friendship.findMany({
-          where: {
-            OR: [{ requesterId: user.id }, { addresseeId: user.id }],
-          },
-          select: { id: true },
-        }),
-      ]);
+    const [
+      topoJobs,
+      topoExportJobs,
+      geoPdfJobs,
+      media,
+      ownedCanyons,
+      friendships,
+      sharesOut,
+      sharesIn,
+    ] = await Promise.all([
+      prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
+      prisma.topoExportJob.findMany({
+        where: { userId: user.id },
+        select: { id: true, resultKey: true },
+      }),
+      prisma.geoPdfJob.findMany({ where: { userId: user.id }, select: { id: true } }),
+      // linkedType/linkedId feed the sync-tombstone fan-out below (which
+      // canyon each media row belonged to).
+      prisma.media.findMany({
+        where: { ownerId: user.id },
+        select: {
+          id: true,
+          linkedType: true,
+          linkedId: true,
+          s3KeyDisplay: true,
+          s3KeyThumbnail: true,
+        },
+      }),
+      // Canyon IDs and friendship IDs are needed to purge cross-user
+      // notifications that reference this user's data (PRIV-003); the party
+      // ids feed the sync-tombstone fan-out (counterparts must forget the
+      // friendship edge).
+      prisma.canyon.findMany({
+        where: { ownerId: user.id },
+        select: { id: true },
+      }),
+      prisma.friendship.findMany({
+        where: {
+          OR: [{ requesterId: user.id }, { addresseeId: user.id }],
+        },
+        select: { id: true, requesterId: true, addresseeId: true },
+      }),
+      // Shares of canyons this user OWNS: each sharee's mirror must forget the
+      // canyon + its canyon-level media (sync tombstones).
+      prisma.canyonShare.findMany({
+        where: { canyon: { ownerId: user.id } },
+        select: { canyonId: true, sharedWithId: true },
+      }),
+      // Shares this user RECEIVED: the canyon owner's mirror must forget the
+      // share row.
+      prisma.canyonShare.findMany({
+        where: { sharedWithId: user.id },
+        select: { id: true, sharedById: true },
+      }),
+    ]);
 
     const ownedCanyonIds = ownedCanyons.map((c) => c.id);
     const friendshipIds = friendships.map((f) => f.id);
@@ -538,7 +568,52 @@ router.delete(
     // defense-in-depth and to keep the delete deterministic if a future child
     // table is added without a cascade. `Media` has a polymorphic linkedId with
     // no DB FK, so its row delete MUST stay explicit.
+    // Sync tombstones for OTHER users' mirrors (Stage 8): the deleted user's
+    // own tombstones are pointless (the cascade wipes their account, and
+    // SyncTombstone.userId cascades too), so every row here targets a
+    // counterpart. Ids only — never names/coords.
+    const mediaIdsByCanyon = new Map<string, string[]>();
+    for (const m of media) {
+      if (m.linkedType !== "canyon") continue;
+      const list = mediaIdsByCanyon.get(m.linkedId) ?? [];
+      list.push(m.id);
+      mediaIdsByCanyon.set(m.linkedId, list);
+    }
+    const accountTombstones = [
+      // Sharees of my canyons forget each canyon + its canyon-level media.
+      ...sharesOut.flatMap((share) => [
+        {
+          userId: share.sharedWithId,
+          entityType: "canyon",
+          entityId: share.canyonId,
+        },
+        ...(mediaIdsByCanyon.get(share.canyonId) ?? []).map((mediaId) => ({
+          userId: share.sharedWithId,
+          entityType: "media",
+          entityId: mediaId,
+        })),
+      ]),
+      // Friendship counterparts forget the edge.
+      ...friendships.map((f) => ({
+        userId: f.requesterId === user.id ? f.addresseeId : f.requesterId,
+        entityType: "friendship",
+        entityId: f.id,
+      })),
+      // Owners of canyons shared WITH me forget the share row.
+      ...sharesIn.map((share) => ({
+        userId: share.sharedById,
+        entityType: "canyonShare",
+        entityId: share.id,
+      })),
+    ];
+
     await prisma.$transaction([
+      ...(accountTombstones.length > 0
+        ? [prisma.syncTombstone.createMany({ data: accountTombstones })]
+        : []),
+      // The deleted user's own tombstone log (rows other users' deletes wrote
+      // FOR this user) — cascade covers it; explicit per ARCH-001 convention.
+      prisma.syncTombstone.deleteMany({ where: { userId: user.id } }),
       prisma.notification.deleteMany({ where: { userId: user.id } }),
       // Purge notifications held by OTHER users that reference this user's data
       // (PRIV-003): canyon_shared rows pointing at any of the deleted user's
@@ -590,6 +665,9 @@ router.delete(
       prisma.geoPdfTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.topoTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.deviceToken.deleteMany({ where: { userId: user.id } }),
+      // No S3 objects involved (ARCH-001 checklist entry; cascade covers the
+      // rows — explicit per convention).
+      prisma.waypoint.deleteMany({ where: { ownerId: user.id } }),
       prisma.user.delete({ where: { id: user.id } }),
     ]);
 

@@ -7,6 +7,7 @@ import { normalizeUserUiPreferences } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
 import { sendPushToUser } from "../services/push";
 import { getCanyonRole, requireCanyonOwnerAccess } from "../lib/canyonAccess";
+import { shareRevokeTombstones, writeTombstones } from "../lib/syncTombstones";
 
 const router = Router();
 
@@ -132,17 +133,33 @@ router.delete(
     // Revoke the share AND remove the recipient's canyon_shared notification
     // for this canyon in one transaction (PRIV-001). The read-time filter would
     // already hide the name, but revocation should purge the recipient's
-    // residual row, not leave it at rest.
-    await prisma.$transaction([
-      prisma.canyonShare.delete({ where: { id: share.id } }),
-      prisma.notification.deleteMany({
+    // residual row, not leave it at rest. Sync tombstones ride the same
+    // transaction: the sharee must forget the canyon record + its canyon-level
+    // media, the owner the share row (see lib/syncTombstones.ts).
+    await prisma.$transaction(async (tx) => {
+      const canyonMedia = await tx.media.findMany({
+        where: { linkedType: "canyon", linkedId: canyonId },
+        select: { id: true },
+      });
+      await tx.canyonShare.delete({ where: { id: share.id } });
+      await tx.notification.deleteMany({
         where: {
           userId: targetUserId,
           type: "canyon_shared",
           payload: { path: ["canyonId"], equals: canyonId },
         },
-      }),
-    ]);
+      });
+      await writeTombstones(
+        tx,
+        shareRevokeTombstones({
+          canyonOwnerId: canyon.ownerId,
+          shareeId: targetUserId,
+          shareId: share.id,
+          canyonId,
+          canyonMediaIds: canyonMedia.map((m) => m.id),
+        }),
+      );
+    });
 
     res.status(204).send();
   },

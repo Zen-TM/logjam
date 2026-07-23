@@ -10,6 +10,7 @@ import { decrementStorageUsed } from "../lib/storageQuota";
 import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
 import { requireCanyonAccess, requireCanyonOwnerAccess } from "../lib/canyonAccess";
 import { resolveUser } from "../lib/resolveUser";
+import { canyonDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
 import { TRACK_MIME_TYPES, validateCanyonPayload } from "@logjam/shared";
 import { serializeTrip, tripCanyonsInclude } from "./tripLogsGlobal";
 
@@ -415,7 +416,12 @@ router.delete(
 
     const media = await prisma.media.findMany({
       where: { linkedType: "canyon", linkedId: id },
-      select: { s3KeyDisplay: true, s3KeyThumbnail: true, fileSizeBytes: true },
+      select: {
+        id: true,
+        s3KeyDisplay: true,
+        s3KeyThumbnail: true,
+        fileSizeBytes: true,
+      },
     });
 
     // S3-first (ARCH-004): the media S3 keys are already captured in `media`
@@ -459,6 +465,22 @@ router.delete(
           data: { displayName: canyon.name },
         });
       }
+      // Queried before the deleteMany below, while the share rows still exist:
+      // each sharee must be told to forget the canyon + its canyon-level media
+      // (sync tombstone fan-out — same transaction as the delete).
+      const shares = await tx.canyonShare.findMany({
+        where: { canyonId: id },
+        select: { id: true, sharedWithId: true },
+      });
+      await writeTombstones(
+        tx,
+        canyonDeleteTombstones({
+          ownerId: user.id,
+          canyonId: id,
+          mediaIds: media.map((m) => m.id),
+          shares,
+        }),
+      );
       await tx.canyonShare.deleteMany({ where: { canyonId: id } });
       // Purge canyon_shared notifications held by OTHER users (the share
       // recipients) that reference this canyon — not just the owner's own rows

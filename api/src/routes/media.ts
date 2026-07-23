@@ -20,6 +20,7 @@ import { deleteS3Keys, deleteS3KeysBestEffort } from "../lib/s3Cleanup";
 import { validateUploadSizes } from "../lib/mediaUploadValidation";
 import { toMediaItem } from "../lib/mediaPresign";
 import { requireCanyonOwnerAccess } from "../lib/canyonAccess";
+import { mediaDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
 import {
   mediaCategory,
   categoryHasThumbnail,
@@ -326,8 +327,26 @@ router.delete(
       ),
     );
     await prisma.$transaction(async (tx) => {
+      // Canyon-level media is visible to the canyon's sharees (hybrid model),
+      // so they must be told to forget it too. Trip media is owner-private —
+      // no fan-out (sync tombstone rule, same transaction as the delete).
+      const sharees =
+        media.linkedType === "canyon"
+          ? await tx.canyonShare.findMany({
+              where: { canyonId: media.linkedId },
+              select: { sharedWithId: true },
+            })
+          : [];
       await tx.media.delete({ where: { id } });
       await decrementStorageUsed(user.id, media.fileSizeBytes, tx);
+      await writeTombstones(
+        tx,
+        mediaDeleteTombstones({
+          ownerId: user.id,
+          mediaId: id,
+          shareeIds: sharees.map((s) => s.sharedWithId),
+        }),
+      );
     });
 
     res.status(204).send();
