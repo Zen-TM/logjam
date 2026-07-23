@@ -15,6 +15,7 @@ import { Alert, Linking, Modal, Pressable, StyleSheet, Text, View } from "react-
 import {
   Camera,
   CircleLayer,
+  Images,
   MapView,
   RasterLayer,
   ShapeSource,
@@ -153,14 +154,19 @@ export function MapScreen({
   const [followUser, setFollowUser] = useState(false);
   const [userCoord, setUserCoord] = useState<[number, number] | null>(null);
   const [userAccuracyM, setUserAccuracyM] = useState<number | null>(null);
+  const [userHeading, setUserHeading] = useState<number | null>(null);
   const locationWatch = useRef<Location.LocationSubscription | null>(null);
+  const headingWatch = useRef<Location.LocationSubscription | null>(null);
+  const lastHeadingUpdate = useRef(0);
   const firstFix = useRef(true);
 
-  // Stop the position watcher when the screen unmounts.
+  // Stop the position/heading watchers when the screen unmounts.
   useEffect(() => {
     return () => {
       locationWatch.current?.remove();
       locationWatch.current = null;
+      headingWatch.current?.remove();
+      headingWatch.current = null;
     };
   }, []);
 
@@ -289,6 +295,9 @@ export function MapScreen({
       // Toggle off.
       locationWatch.current.remove();
       locationWatch.current = null;
+      headingWatch.current?.remove();
+      headingWatch.current = null;
+      setUserHeading(null);
       setFollowUser(false);
       return;
     }
@@ -327,6 +336,22 @@ export function MapScreen({
       },
       (position) => applyFix(position, true),
     );
+
+    // Compass heading for the direction beam. The magnetometer streams
+    // ~10 Hz — throttle to ≥200 ms and ≥3° so the map isn't re-rendered at
+    // sensor rate. trueHeading needs a location for declination; fall back
+    // to magnetic when it's unavailable (reported as -1).
+    headingWatch.current = await Location.watchHeadingAsync((heading) => {
+      const value =
+        heading.trueHeading >= 0 ? heading.trueHeading : heading.magHeading;
+      const now = Date.now();
+      if (now - lastHeadingUpdate.current < 200) return;
+      setUserHeading((prev) => {
+        if (prev != null && Math.abs(value - prev) < 3) return prev;
+        lastHeadingUpdate.current = now;
+        return value;
+      });
+    });
   }, []);
 
   const overlayList = overlays.data
@@ -355,6 +380,10 @@ export function MapScreen({
         />
         {/* Bundled point-feature icons for vector overlays. */}
         <TopoIconImages />
+        {/* Direction beam sprite for the locate-me marker. */}
+        <Images
+          images={{ "user-heading-beam": require("../../assets/user-heading.png") }}
+        />
 
         {/* layerIndex pins z-order across remounts: a swapped basemap source
             re-adds its layer at the TOP of the stack, burying the canyon
@@ -480,6 +509,21 @@ export function MapScreen({
                 circleOpacity: 0.2,
               }}
             />
+            {userHeading != null ? (
+              // Direction beam under the dot; rotates with the compass and
+              // stays map-aligned so it points at real-world bearings even
+              // when the map itself is rotated.
+              <SymbolLayer
+                id="user-location-heading"
+                style={{
+                  iconImage: "user-heading-beam",
+                  iconRotate: userHeading,
+                  iconRotationAlignment: "map",
+                  iconAllowOverlap: true,
+                  iconIgnorePlacement: true,
+                }}
+              />
+            ) : null}
             <CircleLayer
               id="user-location-dot"
               style={{
