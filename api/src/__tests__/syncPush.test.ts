@@ -1,0 +1,325 @@
+import { describe, it, expect } from "vitest";
+import request from "supertest";
+import { randomUUID } from "crypto";
+import { API_URL, ALICE_SUB, BOB_SUB, as } from "./_actors";
+
+// POST /sync/push contract (Stage 8 §8): FIFO order, per-op transactions,
+// per-op statuses, dependencyFailed propagation, conflict receipts, and the
+// foreign-id anti-oracle. Requires `make dev`. Synthetic coords only.
+
+const CLIENT = { "x-logjam-client": "mobile/0.1.0-test" } as const;
+
+function push(sub: string, ops: unknown[]) {
+  return request(API_URL)
+    .post("/sync/push")
+    .set(as(sub))
+    .set(CLIENT)
+    .send({ protocol: 1, ops });
+}
+
+describe("sync push — request contract", () => {
+  it("requires the client header, protocol 1, and 1..50 ops", async () => {
+    const noHeader = await request(API_URL)
+      .post("/sync/push")
+      .set(as(ALICE_SUB))
+      .send({ protocol: 1, ops: [] });
+    expect(noHeader.status).toBe(400);
+
+    expect((await push(ALICE_SUB, [])).status).toBe(400);
+
+    const badProtocol = await request(API_URL)
+      .post("/sync/push")
+      .set(as(ALICE_SUB))
+      .set(CLIENT)
+      .send({ protocol: 2, ops: [{}] });
+    expect(badProtocol.status).toBe(400);
+
+    const tooMany = await push(
+      ALICE_SUB,
+      Array.from({ length: 51 }, () => ({
+        opId: randomUUID(),
+        entity: "waypoint",
+        op: "delete",
+        id: randomUUID(),
+      })),
+    );
+    expect(tooMany.status).toBe(413);
+  });
+});
+
+describe("sync push — FIFO batch lifecycle", () => {
+  it("create canyon → trip linking it → waypoint on it; replay is alreadyApplied; delete wins", async () => {
+    const canyonId = randomUUID();
+    const tripId = randomUUID();
+    const waypointId = randomUUID();
+    const ops = [
+      {
+        opId: "op-canyon",
+        entity: "canyon",
+        op: "create",
+        id: canyonId,
+        fields: { name: "Push canyon", latitude: -33.61, longitude: 150.21 },
+      },
+      {
+        opId: "op-trip",
+        entity: "tripLog",
+        op: "create",
+        id: tripId,
+        fields: { date: "2026-07-10", canyonIds: [canyonId] },
+      },
+      {
+        opId: "op-wp",
+        entity: "waypoint",
+        op: "create",
+        id: waypointId,
+        fields: {
+          name: "Push anchor",
+          latitude: -33.62,
+          longitude: 150.22,
+          canyonId,
+        },
+      },
+    ];
+
+    const first = await push(ALICE_SUB, ops);
+    expect(first.status).toBe(200);
+    expect(first.body.results.map((r: { status: string }) => r.status)).toEqual([
+      "applied",
+      "applied",
+      "applied",
+    ]);
+    // The created trip carries the canyoning tag (validation parity with the
+    // REST route, not a parallel dialect).
+    const tripRow = first.body.results[1].row;
+    expect(tripRow.types).toContain("canyoning");
+    expect(tripRow.canyons.map((c: { id: string }) => c.id)).toEqual([canyonId]);
+
+    // Whole-batch replay (network drop after apply): everything idempotent.
+    const replay = await push(ALICE_SUB, ops);
+    expect(replay.body.results.map((r: { status: string }) => r.status)).toEqual([
+      "alreadyApplied",
+      "alreadyApplied",
+      "alreadyApplied",
+    ]);
+
+    // Deletes: applied, then alreadyApplied on replay.
+    const deletes = [
+      { opId: "d-wp", entity: "waypoint", op: "delete", id: waypointId },
+      { opId: "d-trip", entity: "tripLog", op: "delete", id: tripId },
+      { opId: "d-canyon", entity: "canyon", op: "delete", id: canyonId },
+    ];
+    const del = await push(ALICE_SUB, deletes);
+    expect(del.body.results.map((r: { status: string }) => r.status)).toEqual([
+      "applied",
+      "applied",
+      "applied",
+    ]);
+    const delReplay = await push(ALICE_SUB, deletes);
+    expect(
+      delReplay.body.results.map((r: { status: string }) => r.status),
+    ).toEqual(["alreadyApplied", "alreadyApplied", "alreadyApplied"]);
+  });
+
+  it("a rejected create fails its dependents (dependencyFailed), independents still apply", async () => {
+    const badCanyonId = randomUUID();
+    const goodWaypointId = randomUUID();
+    const res = await push(ALICE_SUB, [
+      {
+        opId: "bad-canyon",
+        entity: "canyon",
+        op: "create",
+        id: badCanyonId,
+        // latitude out of range → rejected 400
+        fields: { name: "Bad", latitude: 95, longitude: 150.2 },
+      },
+      {
+        opId: "dependent-trip",
+        entity: "tripLog",
+        op: "create",
+        id: randomUUID(),
+        fields: { date: "2026-07-11", canyonIds: [badCanyonId] },
+      },
+      {
+        opId: "independent-wp",
+        entity: "waypoint",
+        op: "create",
+        id: goodWaypointId,
+        fields: { name: "Fine", latitude: -33.63, longitude: 150.23 },
+      },
+    ]);
+    const statuses = res.body.results.map((r: { status: string }) => r.status);
+    expect(statuses).toEqual(["rejected", "dependencyFailed", "applied"]);
+    expect(res.body.results[0].error.code).toBe(400);
+
+    // cleanup
+    await push(ALICE_SUB, [
+      { opId: "c", entity: "waypoint", op: "delete", id: goodWaypointId },
+    ]);
+  });
+
+  it("unknown field key → rejected, not silently dropped", async () => {
+    const res = await push(ALICE_SUB, [
+      {
+        opId: "unknown-field",
+        entity: "waypoint",
+        op: "create",
+        id: randomUUID(),
+        fields: {
+          name: "x",
+          latitude: -33.6,
+          longitude: 150.2,
+          futureField: true,
+        },
+      },
+    ]);
+    expect(res.body.results[0].status).toBe("rejected");
+    expect(res.body.results[0].error.code).toBe(400);
+  });
+});
+
+describe("sync push — conflicts (§6)", () => {
+  it("stale base + server-differing field → appliedWithConflict, last flush wins, receipt carries the overwritten value", async () => {
+    const canyonId = randomUUID();
+    await push(ALICE_SUB, [
+      {
+        opId: "c",
+        entity: "canyon",
+        op: "create",
+        id: canyonId,
+        fields: { name: "Conflict canyon", latitude: -33.64, longitude: 150.24 },
+      },
+    ]);
+
+    // "Web" edit bumps updatedAt and sets notes.
+    const webEdit = await request(API_URL)
+      .patch(`/canyons/${canyonId}`)
+      .set(as(ALICE_SUB))
+      .send({ notes: "web edit" });
+    expect(webEdit.status).toBe(200);
+
+    // Phone flush based on the pre-web-edit row.
+    const staleBase = "2026-01-01T00:00:00.000Z";
+    const res = await push(ALICE_SUB, [
+      {
+        opId: "u",
+        entity: "canyon",
+        op: "update",
+        id: canyonId,
+        baseUpdatedAt: staleBase,
+        fields: { notes: "phone edit", quality: 4 },
+      },
+    ]);
+    const result = res.body.results[0];
+    expect(result.status).toBe("appliedWithConflict");
+    // Last flush wins…
+    expect(result.row.notes).toBe("phone edit");
+    expect(result.row.quality).toBe(4);
+    // …and receipts shelve every replaced value while the base was stale.
+    // The server over-reports by contract (no per-field history): quality's
+    // receipt carries the pre-write null, which the CLIENT drops as a
+    // self-conflict because it matches its own base value.
+    expect(result.conflicts).toEqual([
+      { field: "notes", serverValue: "web edit" },
+      { field: "quality", serverValue: null },
+    ]);
+
+    // Same edit with a fresh base → plain applied, no receipts.
+    const fresh = await push(ALICE_SUB, [
+      {
+        opId: "u2",
+        entity: "canyon",
+        op: "update",
+        id: canyonId,
+        baseUpdatedAt: result.row.updatedAt,
+        fields: { notes: "second phone edit" },
+      },
+    ]);
+    expect(fresh.body.results[0].status).toBe("applied");
+
+    await push(ALICE_SUB, [
+      { opId: "d", entity: "canyon", op: "delete", id: canyonId },
+    ]);
+  });
+
+  it("update on a deleted row → rejected 404 (delete wins; client parks deadRemote)", async () => {
+    const res = await push(ALICE_SUB, [
+      {
+        opId: "ghost",
+        entity: "canyon",
+        op: "update",
+        id: randomUUID(),
+        fields: { notes: "too late" },
+      },
+    ]);
+    expect(res.body.results[0].status).toBe("rejected");
+    expect(res.body.results[0].error.code).toBe(404);
+  });
+});
+
+describe("sync push — ownership boundary", () => {
+  it("foreign update/create-replay both read as 404-rejected, indistinguishable from nonexistent", async () => {
+    const canyonId = randomUUID();
+    await push(ALICE_SUB, [
+      {
+        opId: "c",
+        entity: "canyon",
+        op: "create",
+        id: canyonId,
+        fields: { name: "Alice push", latitude: -33.66, longitude: 150.26 },
+      },
+    ]);
+
+    const bobUpdate = await push(BOB_SUB, [
+      {
+        opId: "steal-u",
+        entity: "canyon",
+        op: "update",
+        id: canyonId,
+        fields: { notes: "bob was here" },
+      },
+    ]);
+    expect(bobUpdate.body.results[0].status).toBe("rejected");
+    expect(bobUpdate.body.results[0].error.code).toBe(404);
+
+    const bobCreate = await push(BOB_SUB, [
+      {
+        opId: "steal-c",
+        entity: "canyon",
+        op: "create",
+        id: canyonId,
+        fields: { name: "Bob claim", latitude: -33.67, longitude: 150.27 },
+      },
+    ]);
+    expect(bobCreate.body.results[0].status).toBe("rejected");
+    expect(bobCreate.body.results[0].error.code).toBe(404);
+
+    // Bob deleting alice's canyon: alreadyApplied (goal state "not there"
+    // from bob's view) — and the row must SURVIVE.
+    const bobDelete = await push(BOB_SUB, [
+      { opId: "steal-d", entity: "canyon", op: "delete", id: canyonId },
+    ]);
+    expect(bobDelete.body.results[0].status).toBe("alreadyApplied");
+    const stillThere = await request(API_URL)
+      .get(`/canyons/${canyonId}`)
+      .set(as(ALICE_SUB));
+    expect(stillThere.status).toBe(200);
+
+    await push(ALICE_SUB, [
+      { opId: "d", entity: "canyon", op: "delete", id: canyonId },
+    ]);
+  });
+});
+
+describe("sync push — notification markRead", () => {
+  it("markRead on a purged/foreign notification is alreadyApplied (monotonic, no oracle)", async () => {
+    const res = await push(ALICE_SUB, [
+      {
+        opId: "mr",
+        entity: "notification",
+        op: "markRead",
+        id: randomUUID(),
+      },
+    ]);
+    expect(res.body.results[0].status).toBe("alreadyApplied");
+  });
+});

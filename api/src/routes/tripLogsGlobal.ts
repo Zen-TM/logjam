@@ -148,7 +148,8 @@ export function resolvePatchedTripTypes(args: {
 
 // Normalizes an optional trip display name: trimmed, empty → null.
 // Returns undefined when the field was absent (PATCH: leave unchanged).
-function parseDisplayName(value: unknown): string | null | undefined {
+// Exported for the sync push path (§8.1: validation parity with this route).
+export function parseDisplayName(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
   if (typeof value !== "string")

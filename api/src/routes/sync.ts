@@ -20,14 +20,31 @@ import { resolveUser } from "../lib/resolveUser";
 import {
   decodeSyncCursor,
   encodeSyncCursor,
+  enforceCanyoningTag,
+  isUuidV4,
   SYNC_DELTA_DEFAULT_LIMIT,
   SYNC_DELTA_MAX_LIMIT,
   SYNC_OVERLAP_MS,
   SYNC_PROTOCOL,
+  SYNC_PUSH_MAX_OPS,
+  validateCanyonPayload,
+  validateWaypointPayload,
   type SyncCursor,
   type SyncCursorKeysets,
 } from "@logjam/shared";
-import { serializeTrip, tripCanyonsInclude } from "./tripLogsGlobal";
+import {
+  parseDisplayName,
+  parseTripTypes,
+  resolvePatchedTripTypes,
+  resolveTripCanyonIds,
+  serializeTrip,
+  tripCanyonsInclude,
+} from "./tripLogsGlobal";
+import { deleteCanyonsCascade, deleteTripsCascade } from "../lib/bulkDelete";
+import {
+  waypointDeleteTombstones,
+  writeTombstones,
+} from "../lib/syncTombstones";
 
 const router = Router();
 
@@ -457,6 +474,628 @@ router.get(
       },
       tombstones: tombstones.map((t) => ({ type: t.entityType, id: t.entityId })),
     });
+  },
+);
+
+// ── POST /sync/push — the outbox write path (§8) ────────────────────────────
+//
+// Applies up to SYNC_PUSH_MAX_OPS ops strictly in array order, each in its
+// own transaction: one bad op must not roll back applied predecessors — the
+// client learns per-op outcomes and partial progress + resume is the normal
+// case for flaky field connectivity. Validation is IDENTICAL to the REST
+// routes (same exported helpers — divergence here is the SEC-001 failure
+// mode). Media ops are NOT accepted (the three-phase presign flow owns them).
+// Conflict rule (§6): arrival-order field-scoped LWW — `baseUpdatedAt` is
+// used only to DETECT that a receipt is owed, never to resolve.
+
+type PushOpResult = {
+  opId: string;
+  status:
+    | "applied"
+    | "appliedWithConflict"
+    | "alreadyApplied"
+    | "rejected"
+    | "dependencyFailed";
+  row?: unknown;
+  conflicts?: { field: string; serverValue: unknown }[];
+  error?: { code: number; message: string };
+};
+
+// Per-entity field whitelists. An unknown key is a per-op 400 (`rejected`),
+// never silently dropped (§10.4) — the client parks the op visibly instead
+// of losing a field a newer app version wrote.
+const CANYON_FIELDS = new Set([
+  "name",
+  "altNames",
+  "latitude",
+  "longitude",
+  "numAbseils",
+  "longestAbseil",
+  "vGrade",
+  "aGrade",
+  "commitment",
+  "quality",
+  "hours",
+  "notes",
+  "attributes",
+]);
+const TRIP_FIELDS = new Set([
+  "date",
+  "displayName",
+  "types",
+  "notes",
+  "customFields",
+  "canyonIds",
+]);
+const WAYPOINT_FIELDS = new Set([
+  "name",
+  "latitude",
+  "longitude",
+  "elevation",
+  "symbol",
+  "notes",
+  "canyonId",
+]);
+
+function assertKnownFields(
+  fields: Record<string, unknown>,
+  allowed: Set<string>,
+): void {
+  for (const key of Object.keys(fields)) {
+    if (!allowed.has(key)) {
+      throw new AppError(400, `Unknown field: ${key}`);
+    }
+  }
+}
+
+// Field-scoped conflict receipts: the client's edit base predates the
+// server row AND the server's current value differs from what the op writes
+// → the write wins (arrival order) but the overwritten server value is
+// returned for the client's conflict shelf. Same-value writes owe nothing.
+//
+// CONTRACT: the server has no per-field history, so it deliberately
+// OVER-reports — a receipt means "this is the value your write replaced
+// while your base was stale", not "the server changed this field". The
+// client holds the base row, so it filters: a receipt whose serverValue
+// equals the client's own base value is a self-conflict and is dropped
+// before shelving (flush-engine rule, PR-5).
+export function conflictReceipts(
+  baseUpdatedAt: string | undefined,
+  serverUpdatedAt: Date,
+  incoming: Record<string, unknown>,
+  current: Record<string, unknown>,
+): { field: string; serverValue: unknown }[] {
+  if (!baseUpdatedAt) return [];
+  if (new Date(baseUpdatedAt).getTime() === serverUpdatedAt.getTime()) return [];
+  const receipts: { field: string; serverValue: unknown }[] = [];
+  for (const [field, value] of Object.entries(incoming)) {
+    const serverValue = current[field];
+    if (JSON.stringify(serverValue ?? null) !== JSON.stringify(value ?? null)) {
+      receipts.push({ field, serverValue: serverValue ?? null });
+    }
+  }
+  return receipts;
+}
+
+type PushOp = {
+  opId: string;
+  entity: "canyon" | "tripLog" | "waypoint" | "notification";
+  op: "create" | "update" | "delete" | "markRead";
+  id: string;
+  baseUpdatedAt?: string;
+  fields?: Record<string, unknown>;
+};
+
+const PUSH_OPS: Record<PushOp["entity"], Set<string>> = {
+  canyon: new Set(["create", "update", "delete"]),
+  tripLog: new Set(["create", "update", "delete"]),
+  waypoint: new Set(["create", "update", "delete"]),
+  notification: new Set(["markRead"]),
+};
+
+export function parsePushOp(raw: unknown, index: number): PushOp {
+  if (typeof raw !== "object" || raw === null) {
+    throw new AppError(400, `ops[${index}] must be an object`);
+  }
+  const { opId, entity, op, id, baseUpdatedAt, fields } = raw as Record<
+    string,
+    unknown
+  >;
+  if (typeof opId !== "string" || opId.length === 0 || opId.length > 64) {
+    throw new AppError(400, `ops[${index}].opId is required`);
+  }
+  if (typeof entity !== "string" || !(entity in PUSH_OPS)) {
+    throw new AppError(400, `ops[${index}].entity is invalid`);
+  }
+  if (typeof op !== "string" || !PUSH_OPS[entity as PushOp["entity"]].has(op)) {
+    throw new AppError(400, `ops[${index}].op is invalid for ${entity}`);
+  }
+  if (!isUuidV4(id)) {
+    throw new AppError(400, `ops[${index}].id must be a UUIDv4`);
+  }
+  if (
+    baseUpdatedAt !== undefined &&
+    (typeof baseUpdatedAt !== "string" ||
+      Number.isNaN(Date.parse(baseUpdatedAt)))
+  ) {
+    throw new AppError(400, `ops[${index}].baseUpdatedAt must be an ISO date`);
+  }
+  if (
+    fields !== undefined &&
+    (typeof fields !== "object" || fields === null || Array.isArray(fields))
+  ) {
+    throw new AppError(400, `ops[${index}].fields must be an object`);
+  }
+  return {
+    opId,
+    entity: entity as PushOp["entity"],
+    op: op as PushOp["op"],
+    id,
+    ...(baseUpdatedAt !== undefined && { baseUpdatedAt }),
+    ...(fields !== undefined && { fields: fields as Record<string, unknown> }),
+  };
+}
+
+/** Ids this op depends on having been created successfully earlier in the
+ * batch (or existing already): its own target for update/delete, and any
+ * canyon references. Used for dependencyFailed propagation. */
+export function opDependencies(op: PushOp): string[] {
+  const deps: string[] = [];
+  if (op.op === "update" || op.op === "delete") deps.push(op.id);
+  const canyonIds = op.fields?.canyonIds;
+  if (Array.isArray(canyonIds)) {
+    deps.push(...canyonIds.filter((v): v is string => typeof v === "string"));
+  }
+  const canyonId = op.fields?.canyonId;
+  if (typeof canyonId === "string") deps.push(canyonId);
+  return deps;
+}
+
+async function applyCanyonOp(userId: string, op: PushOp): Promise<PushOpResult> {
+  if (op.op === "delete") {
+    const deleted = await deleteCanyonsCascade(userId, [op.id]);
+    // Row already gone (or never visible): idempotent success — a delete's
+    // goal state is "not there" (§8.1), and distinguishing foreign from
+    // missing would be an oracle.
+    return { opId: op.opId, status: deleted.length ? "applied" : "alreadyApplied" };
+  }
+
+  const fields = op.fields ?? {};
+  assertKnownFields(fields, CANYON_FIELDS);
+  const validationError = validateCanyonPayload(fields, {
+    requireCoords: op.op === "create",
+  });
+  if (validationError) throw new AppError(400, validationError);
+
+  if (op.op === "create") {
+    if (!fields.name || fields.latitude === undefined || fields.longitude === undefined) {
+      throw new AppError(400, "name, latitude, and longitude are required");
+    }
+    const existing = await prisma.canyon.findUnique({ where: { id: op.id } });
+    if (existing) {
+      if (existing.ownerId !== userId)
+        throw new AppError(404, "Canyon not found");
+      return { opId: op.opId, status: "alreadyApplied", row: existing };
+    }
+    const canyon = await prisma.canyon.create({
+      data: {
+        id: op.id,
+        ownerId: userId,
+        name: fields.name as string,
+        altNames: (fields.altNames as string[] | undefined) ?? [],
+        latitude: fields.latitude as number,
+        longitude: fields.longitude as number,
+        numAbseils: (fields.numAbseils as number | null | undefined) ?? null,
+        longestAbseil: (fields.longestAbseil as number | null | undefined) ?? null,
+        vGrade: (fields.vGrade as number | null | undefined) ?? null,
+        aGrade: (fields.aGrade as number | null | undefined) ?? null,
+        commitment: (fields.commitment as number | null | undefined) ?? null,
+        quality: (fields.quality as number | null | undefined) ?? null,
+        hours: (fields.hours as number | null | undefined) ?? null,
+        notes: (fields.notes as string | null | undefined) ?? null,
+        attributes: (fields.attributes ?? {}) as Prisma.InputJsonValue,
+      },
+    });
+    return { opId: op.opId, status: "applied", row: canyon };
+  }
+
+  // update
+  const canyon = await prisma.canyon.findUnique({ where: { id: op.id } });
+  // Deleted-or-foreign → the same 404 the REST PATCH gives (client parks as
+  // deadRemote; delete-wins per §6).
+  if (!canyon || canyon.ownerId !== userId)
+    throw new AppError(404, "Canyon not found");
+
+  const conflicts = conflictReceipts(
+    op.baseUpdatedAt,
+    canyon.updatedAt,
+    fields,
+    canyon as unknown as Record<string, unknown>,
+  );
+  const updated = await prisma.canyon.update({
+    where: { id: op.id },
+    data: {
+      ...(fields.name !== undefined && { name: fields.name as string }),
+      ...(fields.altNames !== undefined && {
+        altNames: fields.altNames as string[],
+      }),
+      ...(fields.latitude !== undefined && {
+        latitude: fields.latitude as number,
+      }),
+      ...(fields.longitude !== undefined && {
+        longitude: fields.longitude as number,
+      }),
+      ...(fields.numAbseils !== undefined && {
+        numAbseils: fields.numAbseils as number | null,
+      }),
+      ...(fields.longestAbseil !== undefined && {
+        longestAbseil: fields.longestAbseil as number | null,
+      }),
+      ...(fields.vGrade !== undefined && {
+        vGrade: fields.vGrade as number | null,
+      }),
+      ...(fields.aGrade !== undefined && {
+        aGrade: fields.aGrade as number | null,
+      }),
+      ...(fields.commitment !== undefined && {
+        commitment: fields.commitment as number | null,
+      }),
+      ...(fields.quality !== undefined && {
+        quality: fields.quality as number | null,
+      }),
+      ...(fields.hours !== undefined && { hours: fields.hours as number | null }),
+      ...(fields.notes !== undefined && { notes: fields.notes as string | null }),
+      ...(fields.attributes !== undefined && {
+        attributes: (fields.attributes ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+      }),
+    },
+  });
+  return conflicts.length > 0
+    ? { opId: op.opId, status: "appliedWithConflict", row: updated, conflicts }
+    : { opId: op.opId, status: "applied", row: updated };
+}
+
+async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
+  if (op.op === "delete") {
+    const deleted = await deleteTripsCascade(userId, [op.id]);
+    return { opId: op.opId, status: deleted.length ? "applied" : "alreadyApplied" };
+  }
+
+  const fields = op.fields ?? {};
+  assertKnownFields(fields, TRIP_FIELDS);
+
+  if (op.op === "create") {
+    if (!fields.date) throw new AppError(400, "date is required");
+    const existing = await prisma.tripLog.findUnique({
+      where: { id: op.id },
+      include: tripCanyonsInclude,
+    });
+    if (existing) {
+      if (existing.userId !== userId)
+        throw new AppError(404, "Trip log not found");
+      return {
+        opId: op.opId,
+        status: "alreadyApplied",
+        row: serializeTrip(existing),
+      };
+    }
+    const resolvedCanyonIds = await resolveTripCanyonIds(
+      userId,
+      fields.canyonIds,
+    );
+    const trimmedDisplayName = parseDisplayName(fields.displayName) ?? null;
+    const parsedTypes = enforceCanyoningTag(
+      parseTripTypes(fields.types) ?? [],
+      resolvedCanyonIds.length > 0,
+    );
+    const trip = await prisma.tripLog.create({
+      data: {
+        id: op.id,
+        userId,
+        date: new Date(fields.date as string),
+        displayName: trimmedDisplayName,
+        types: parsedTypes,
+        notes: (fields.notes as string | null | undefined) ?? null,
+        customFields: (fields.customFields ?? {}) as Prisma.InputJsonValue,
+        canyons: {
+          create: resolvedCanyonIds.map((canyonId, position) => ({
+            canyonId,
+            position,
+          })),
+        },
+      },
+      include: tripCanyonsInclude,
+    });
+    return { opId: op.opId, status: "applied", row: serializeTrip(trip) };
+  }
+
+  // update — mirrors PATCH /trips/:id exactly (same helpers, same
+  // canyoning-tag enforcement, same watermark force-touch).
+  const trip = await prisma.tripLog.findUnique({
+    where: { id: op.id },
+    include: { canyons: { orderBy: { position: "asc" }, select: { canyonId: true } } },
+  });
+  if (!trip || trip.userId !== userId)
+    throw new AppError(404, "Trip log not found");
+
+  const resolvedCanyonIds =
+    fields.canyonIds !== undefined
+      ? await resolveTripCanyonIds(userId, fields.canyonIds)
+      : undefined;
+  const trimmedDisplayName = parseDisplayName(fields.displayName);
+  const parsedTypes = parseTripTypes(fields.types);
+  const { types: effectiveTypes, changed: typesChanged } =
+    resolvePatchedTripTypes({
+      parsedTypes,
+      storedTypes: trip.types,
+      resolvedCanyonIds,
+      storedHasLinkedCanyon: trip.canyons.length > 0,
+    });
+
+  const currentForConflicts: Record<string, unknown> = {
+    date: trip.date.toISOString(),
+    displayName: trip.displayName,
+    types: trip.types,
+    notes: trip.notes,
+    customFields: trip.customFields,
+    canyonIds: trip.canyons.map((link) => link.canyonId),
+  };
+  // Normalize the incoming date for comparison so equal instants don't owe a
+  // receipt over format differences.
+  const incomingForConflicts: Record<string, unknown> = {
+    ...fields,
+    ...(fields.date !== undefined && {
+      date: new Date(fields.date as string).toISOString(),
+    }),
+  };
+  const conflicts = conflictReceipts(
+    op.baseUpdatedAt,
+    trip.updatedAt,
+    incomingForConflicts,
+    currentForConflicts,
+  );
+
+  const updated = await prisma.tripLog.update({
+    where: { id: op.id },
+    data: {
+      ...(fields.date !== undefined && { date: new Date(fields.date as string) }),
+      ...(fields.notes !== undefined && {
+        notes: fields.notes as string | null,
+      }),
+      ...(fields.customFields !== undefined && {
+        customFields: (fields.customFields ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+      }),
+      ...(trimmedDisplayName !== undefined && {
+        displayName: trimmedDisplayName,
+      }),
+      ...(typesChanged && { types: effectiveTypes }),
+      ...(resolvedCanyonIds !== undefined && {
+        canyons: {
+          deleteMany: {},
+          create: resolvedCanyonIds.map((canyonId, position) => ({
+            canyonId,
+            position,
+          })),
+        },
+        // Watermark force-touch — same §3.1 trap as the REST PATCH.
+        updatedAt: new Date(),
+      }),
+    },
+    include: tripCanyonsInclude,
+  });
+  return conflicts.length > 0
+    ? {
+        opId: op.opId,
+        status: "appliedWithConflict",
+        row: serializeTrip(updated),
+        conflicts,
+      }
+    : { opId: op.opId, status: "applied", row: serializeTrip(updated) };
+}
+
+async function applyWaypointOp(
+  userId: string,
+  op: PushOp,
+): Promise<PushOpResult> {
+  if (op.op === "delete") {
+    const waypoint = await prisma.waypoint.findUnique({ where: { id: op.id } });
+    if (!waypoint || waypoint.ownerId !== userId) {
+      return { opId: op.opId, status: "alreadyApplied" };
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.waypoint.delete({ where: { id: op.id } });
+      await writeTombstones(
+        tx,
+        waypointDeleteTombstones({ ownerId: userId, waypointId: op.id }),
+      );
+    });
+    return { opId: op.opId, status: "applied" };
+  }
+
+  const fields = op.fields ?? {};
+  assertKnownFields(fields, WAYPOINT_FIELDS);
+  const validationError = validateWaypointPayload(fields, {
+    requireCore: op.op === "create",
+  });
+  if (validationError) throw new AppError(400, validationError);
+
+  // Owner-scoped association — foreign canyon id ≡ nonexistent (same rule as
+  // routes/waypoints.ts).
+  let resolvedCanyonId: string | null | undefined;
+  if (fields.canyonId === undefined) resolvedCanyonId = undefined;
+  else if (fields.canyonId === null) resolvedCanyonId = null;
+  else if (typeof fields.canyonId === "string") {
+    const owned = await prisma.canyon.count({
+      where: { id: fields.canyonId, ownerId: userId },
+    });
+    if (owned !== 1) throw new AppError(400, "Canyon not found");
+    resolvedCanyonId = fields.canyonId;
+  } else {
+    throw new AppError(400, "canyonId must be a string or null");
+  }
+
+  if (op.op === "create") {
+    const existing = await prisma.waypoint.findUnique({ where: { id: op.id } });
+    if (existing) {
+      if (existing.ownerId !== userId)
+        throw new AppError(404, "Waypoint not found");
+      return { opId: op.opId, status: "alreadyApplied", row: existing };
+    }
+    const waypoint = await prisma.waypoint.create({
+      data: {
+        id: op.id,
+        ownerId: userId,
+        canyonId: resolvedCanyonId ?? null,
+        name: (fields.name as string).trim(),
+        latitude: fields.latitude as number,
+        longitude: fields.longitude as number,
+        elevation: (fields.elevation as number | null | undefined) ?? null,
+        symbol: (fields.symbol as string | null | undefined) ?? null,
+        notes: (fields.notes as string | null | undefined) ?? null,
+      },
+    });
+    return { opId: op.opId, status: "applied", row: waypoint };
+  }
+
+  // update
+  const waypoint = await prisma.waypoint.findUnique({ where: { id: op.id } });
+  if (!waypoint || waypoint.ownerId !== userId)
+    throw new AppError(404, "Waypoint not found");
+  const conflicts = conflictReceipts(
+    op.baseUpdatedAt,
+    waypoint.updatedAt,
+    fields,
+    waypoint as unknown as Record<string, unknown>,
+  );
+  const updated = await prisma.waypoint.update({
+    where: { id: op.id },
+    data: {
+      ...(fields.name !== undefined && {
+        name: (fields.name as string).trim(),
+      }),
+      ...(fields.latitude !== undefined && {
+        latitude: fields.latitude as number,
+      }),
+      ...(fields.longitude !== undefined && {
+        longitude: fields.longitude as number,
+      }),
+      ...(fields.elevation !== undefined && {
+        elevation: fields.elevation as number | null,
+      }),
+      ...(fields.symbol !== undefined && {
+        symbol: fields.symbol as string | null,
+      }),
+      ...(fields.notes !== undefined && {
+        notes: fields.notes as string | null,
+      }),
+      ...(resolvedCanyonId !== undefined && { canyonId: resolvedCanyonId }),
+    },
+  });
+  return conflicts.length > 0
+    ? { opId: op.opId, status: "appliedWithConflict", row: updated, conflicts }
+    : { opId: op.opId, status: "applied", row: updated };
+}
+
+async function applyNotificationOp(
+  userId: string,
+  op: PushOp,
+): Promise<PushOpResult> {
+  // markRead is a monotonic one-way bit (§6): re-marking is a no-op, and a
+  // row purged by PRIV cleanup counts as success — nothing to distinguish.
+  const { count } = await prisma.notification.updateMany({
+    where: { id: op.id, userId },
+    data: { read: true },
+  });
+  return { opId: op.opId, status: count === 1 ? "applied" : "alreadyApplied" };
+}
+
+router.post(
+  "/push",
+  requireAuth,
+  requireClientHeader,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const { protocol, ops } = (req.body ?? {}) as {
+      protocol?: unknown;
+      ops?: unknown;
+    };
+    if (protocol !== SYNC_PROTOCOL) {
+      throw new AppError(400, `protocol must be ${SYNC_PROTOCOL}`);
+    }
+    if (!Array.isArray(ops) || ops.length === 0) {
+      throw new AppError(400, "ops array is required");
+    }
+    if (ops.length > SYNC_PUSH_MAX_OPS) {
+      throw new AppError(413, `At most ${SYNC_PUSH_MAX_OPS} ops per push`);
+    }
+    const parsed = ops.map((raw, index) => parsePushOp(raw, index));
+
+    const results: PushOpResult[] = [];
+    // Ids whose create (or a create they depended on) failed in THIS batch —
+    // dependents are skipped as dependencyFailed instead of being sent to a
+    // guaranteed 404 (§8.3).
+    const failedIds = new Set<string>();
+    // Ids created earlier in this batch (successfully) — a dependency on one
+    // of these is satisfied even though it didn't exist when the batch began.
+    const appliedCreateIds = new Set<string>();
+
+    for (const op of parsed) {
+      const failedDep = opDependencies(op).find((dep) => failedIds.has(dep));
+      if (failedDep) {
+        results.push({ opId: op.opId, status: "dependencyFailed" });
+        if (op.op === "create") failedIds.add(op.id);
+        continue;
+      }
+      try {
+        let result: PushOpResult;
+        switch (op.entity) {
+          case "canyon":
+            result = await applyCanyonOp(user.id, op);
+            break;
+          case "tripLog":
+            result = await applyTripOp(user.id, op);
+            break;
+          case "waypoint":
+            result = await applyWaypointOp(user.id, op);
+            break;
+          case "notification":
+            result = await applyNotificationOp(user.id, op);
+            break;
+        }
+        results.push(result);
+        if (op.op === "create") appliedCreateIds.add(op.id);
+      } catch (err) {
+        if (err instanceof AppError) {
+          // Terminal per-op rejection: later independent ops still run.
+          results.push({
+            opId: op.opId,
+            status: "rejected",
+            error: { code: err.statusCode, message: err.message },
+          });
+          if (op.op === "create") failedIds.add(op.id);
+        } else {
+          // Unexpected failure: abort the whole request (500). Applied ops
+          // stay applied; the client's whole-batch retry is safe — every op
+          // class is idempotent (§8.1).
+          throw err;
+        }
+      }
+    }
+
+    // Counts only — never op contents (§4.6.5).
+    logger.info(
+      {
+        userId: user.id,
+        opCount: parsed.length,
+        statuses: results.reduce<Record<string, number>>((acc, r) => {
+          acc[r.status] = (acc[r.status] ?? 0) + 1;
+          return acc;
+        }, {}),
+      },
+      "sync_push_applied",
+    );
+
+    res.json({ serverTime: new Date().toISOString(), results });
   },
 );
 
