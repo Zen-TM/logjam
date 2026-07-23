@@ -59,6 +59,12 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
     if (lockRequired && sessionBeganWithoutLock.current) {
       sessionBeganWithoutLock.current = false;
       lastUnlockAt.current = Date.now();
+      // Also consume this lock's auto-prompt: the prompt effect below runs in
+      // the SAME commit and still sees unlocked=false (state lands next
+      // render) — without this it fires the biometric sheet mid-import
+      // (observed on the Pixel). The background relock resets the flag, so
+      // the next genuine lock still auto-prompts.
+      autoPrompted.current = true;
       setUnlocked(true);
     }
   }, [loaded, lockRequired]);
