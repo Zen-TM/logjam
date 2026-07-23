@@ -62,6 +62,20 @@ export async function getAuthedRequestHeaders(): Promise<Record<string, string>>
   return baseHeaders(await getIdToken());
 }
 
+// A request that can hang forever hangs the UI that awaits it: observed on
+// hardware (Pixel 9, airplane mode) where a connect() neither succeeds nor
+// fails, leaving the app shell on its loading spinner indefinitely. Offline
+// must fail fast so screens fall through to their offline paths.
+const REQUEST_TIMEOUT_MS = 15_000;
+
+function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() =>
+    clearTimeout(timer),
+  );
+}
+
 async function throwApiError(res: Response, path: string, method: string): Promise<never> {
   let serverMessage: string | undefined;
   try {
@@ -79,7 +93,7 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const token = await getIdToken();
   const method = options?.method ?? "GET";
-  const res = await fetch(`${config.apiUrl}${path}`, {
+  const res = await fetchWithTimeout(`${config.apiUrl}${path}`, {
     method,
     headers: {
       ...baseHeaders(token),
@@ -104,7 +118,7 @@ export async function apiFetchWithTotal<T>(
   path: string,
 ): Promise<{ data: T; total: number | null }> {
   const token = await getIdToken();
-  const res = await fetch(`${config.apiUrl}${path}`, {
+  const res = await fetchWithTimeout(`${config.apiUrl}${path}`, {
     headers: baseHeaders(token),
   });
   if (!res.ok) await throwApiError(res, path, "GET");
