@@ -8,9 +8,11 @@ import {
   hasMirrorSynced,
   listMirrorCanyons,
   listMirrorTrips,
+  listMirrorWaypoints,
   getMirrorCanyon,
   type MirrorCanyon,
   type MirrorTrip,
+  type MirrorWaypoint,
 } from "./mirrorStore";
 import { onMirrorChanged } from "./syncDb";
 import {
@@ -85,6 +87,7 @@ function useMirrorQuery<T>(read: () => Promise<T>): MirrorQueryState<T> {
 
 const readCanyons = () => listMirrorCanyons();
 const readTrips = () => listMirrorTrips();
+const readWaypoints = () => listMirrorWaypoints();
 
 export function useMirrorCanyons(): MirrorQueryState<MirrorCanyon[]> {
   return useMirrorQuery(readCanyons);
@@ -97,4 +100,8 @@ export function useMirrorTrips(): MirrorQueryState<MirrorTrip[]> {
 export function useMirrorCanyon(id: string): MirrorQueryState<MirrorCanyon | null> {
   const read = useCallback(() => getMirrorCanyon(id), [id]);
   return useMirrorQuery(read);
+}
+
+export function useMirrorWaypoints(): MirrorQueryState<MirrorWaypoint[]> {
+  return useMirrorQuery(readWaypoints);
 }

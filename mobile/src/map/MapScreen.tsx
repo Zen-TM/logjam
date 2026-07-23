@@ -50,7 +50,7 @@ import {
 import { apiFetch } from "../api/apiFetch";
 import { getVectorStyle, useApiQuery } from "../api/queries";
 import type { TCanyon } from "../api/types";
-import { useMirrorCanyons } from "../sync/useSyncQueries";
+import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
 import { config } from "../config";
 import { fontSize, radius, spacing, theme } from "../theme";
 import { updateGeoPdfImport } from "../geopdf/geoPdfImportsDb";
@@ -76,15 +76,9 @@ import {
   deleteVectorImport,
   importVectorFileFromPicker,
   importVectorSource,
-  randomId,
 } from "../imports/vectorImports";
-import {
-  deleteTrack,
-  deleteWaypoint,
-  insertWaypoint,
-  updateTrack,
-  type Waypoint,
-} from "../tracks/tracksDb";
+import { deleteTrack, updateTrack, type Waypoint } from "../tracks/tracksDb";
+import { createWaypointLocal, deleteWaypointLocal } from "../sync/outbox";
 import {
   reconcileTrackRecordingOnLaunch,
   startTrackRecording,
@@ -540,7 +534,21 @@ export function MapScreen({
   // itself lives in tracks/trackRecorder (background task); this screen only
   // starts it and renders state. (The start/navigate callbacks live below
   // handleLocateMe — they depend on it.)
-  const { tracks, waypoints } = useTracks();
+  const { tracks } = useTracks();
+  // Waypoints are a synced entity since Stage 8: mirror-backed, offline
+  // writes queue through the outbox. TrackMapLayers keeps its lon/lat shape.
+  const mirrorWaypoints = useMirrorWaypoints();
+  const waypoints: Waypoint[] = useMemo(
+    () =>
+      (mirrorWaypoints.data ?? []).map((wp) => ({
+        id: wp.id,
+        name: wp.name,
+        lon: wp.longitude,
+        lat: wp.latitude,
+        createdAt: wp.createdAt,
+      })),
+    [mirrorWaypoints.data],
+  );
   const activeTrack =
     tracks.find(
       (track) => track.state === "recording" || track.state === "paused",
@@ -576,12 +584,10 @@ export function MapScreen({
         {
           text: "Drop waypoint",
           onPress: () => {
-            insertWaypoint({
-              id: randomId(),
+            createWaypointLocal({
               name: `Waypoint ${waypoints.length + 1}`,
-              lon,
-              lat,
-              createdAt: new Date().toISOString(),
+              latitude: lat,
+              longitude: lon,
             }).catch(console.error);
           },
         },
@@ -779,7 +785,7 @@ export function MapScreen({
             setNavTarget((current) =>
               current?.id === waypoint.id ? null : current,
             );
-            deleteWaypoint(waypoint.id).catch(console.error);
+            deleteWaypointLocal(waypoint.id).catch(console.error);
           },
         },
         {

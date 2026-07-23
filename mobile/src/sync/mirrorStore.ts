@@ -429,6 +429,55 @@ export async function listMirrorTrips(): Promise<MirrorTrip[]> {
   return rows.map(rowToTrip);
 }
 
+type WaypointRow = {
+  id: string;
+  canyon_id: string | null;
+  name: string;
+  latitude: number;
+  longitude: number;
+  elevation: number | null;
+  symbol: string | null;
+  notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type MirrorWaypoint = {
+  id: string;
+  canyonId: string | null;
+  name: string;
+  latitude: number;
+  longitude: number;
+  elevation: number | null;
+  symbol: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function rowToWaypoint(row: WaypointRow): MirrorWaypoint {
+  return {
+    id: row.id,
+    canyonId: row.canyon_id,
+    name: row.name,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    elevation: row.elevation,
+    symbol: row.symbol,
+    notes: row.notes,
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  };
+}
+
+export async function listMirrorWaypoints(): Promise<MirrorWaypoint[]> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<WaypointRow>(
+    "SELECT * FROM waypoints ORDER BY created_at DESC",
+  );
+  return rows.map(rowToWaypoint);
+}
+
 /** True once any delta page has ever been applied (first-sync gate). */
 export async function hasMirrorSynced(): Promise<boolean> {
   const db = await getSyncDb();

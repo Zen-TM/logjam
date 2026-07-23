@@ -5,9 +5,11 @@
 // field resource.
 import { AppState } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
+import { computeBackoffMs } from "@logjam/shared";
 
 import { fetchCurrentUser } from "../api/queries";
 import { runDeltaPull } from "./deltaPull";
+import { flushOutbox } from "./flush";
 import { getSyncStateValue, setSyncStateValue } from "./syncDb";
 
 export type SyncStatus = {
@@ -55,9 +57,11 @@ let followUpRequested = false;
 
 async function runCycleOnce(): Promise<void> {
   const userId = await resolveCurrentUserId();
-  // TODO(PR-5 outbox phase): flush the outbox here, BEFORE the pull, so the
-  // pull's rebase sees post-flush server state (§2 cycle order).
+  // Cycle order (§2): push then pull, so the pull's rebase sees post-flush
+  // server state and just-created rows come back confirmed.
+  await flushOutbox();
   await runDeltaPull(userId);
+  retryAttempt = 0;
   setStatus({
     state: "idle",
     lastSyncAt: new Date().toISOString(),
@@ -79,15 +83,45 @@ export function requestSync(): Promise<void> {
         await runCycleOnce();
       }
     } catch {
-      // Offline or server trouble: quiet failure — the mirror keeps serving
-      // and the next trigger retries. No row contents in the message.
+      // Offline or server trouble: quiet failure — the mirror keeps serving.
+      // Exponential-backoff retry (§8.3, 1 s..5 min jitter) on top of the
+      // event triggers, so a flaky link recovers without user action.
       followUpRequested = false;
       setStatus({ state: "error", errorMessage: "Couldn't sync. Will retry." });
+      scheduleBackoffRetry();
     } finally {
       running = null;
     }
   })();
   return running;
+}
+
+let retryAttempt = 0;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleBackoffRetry(): void {
+  if (retryTimer) return;
+  const delay = computeBackoffMs(retryAttempt);
+  retryAttempt += 1;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    void requestSync();
+  }, delay);
+}
+
+// ── debounced local-mutation trigger (§2) ────────────────────────────────────
+
+const MUTATION_SYNC_DEBOUNCE_MS = 10_000;
+let mutationTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Called by the outbox after every enqueue: one cycle fires 10 s after the
+ * LAST local edit, so a burst of field edits flushes as one batch. */
+export function scheduleMutationSync(): void {
+  if (mutationTimer) clearTimeout(mutationTimer);
+  mutationTimer = setTimeout(() => {
+    mutationTimer = null;
+    void requestSync();
+  }, MUTATION_SYNC_DEBOUNCE_MS);
 }
 
 // ── triggers ─────────────────────────────────────────────────────────────────
@@ -108,6 +142,17 @@ function requestAutoSync(): void {
  * returns a cleanup for sign-out.
  */
 export function registerSyncTriggers(): () => void {
+  // Wire the outbox's post-enqueue trigger, then run the one-time Stage 7 →
+  // Stage 8 promotion of legacy local-only waypoints into the synced mirror
+  // (best-effort; retried next launch on failure). Dynamic import keeps the
+  // engine→outbox edge out of the static module graph (cycle warning).
+  void import("./outbox")
+    .then((outbox) => {
+      outbox.setMutationSyncScheduler(scheduleMutationSync);
+      return outbox.migrateLegacyWaypoints();
+    })
+    .catch(() => {});
+
   // App returns to foreground.
   const appStateSub = AppState.addEventListener("change", (state) => {
     if (state === "active") requestAutoSync();
@@ -127,5 +172,13 @@ export function registerSyncTriggers(): () => void {
   return () => {
     appStateSub.remove();
     netInfoUnsub();
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
+    }
+    if (mutationTimer) {
+      clearTimeout(mutationTimer);
+      mutationTimer = null;
+    }
   };
 }
