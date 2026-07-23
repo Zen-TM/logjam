@@ -1,22 +1,23 @@
-// Canyon detail — read-only field view (GET /canyons/:id). The API's
-// 404-not-403 anti-oracle is surfaced as-is: an inaccessible canyon renders
-// the same "not found" state as a nonexistent one, never "exists but hidden".
-import { useCallback } from "react";
+// Canyon detail — read-only field view from the Stage 8 offline mirror. An
+// inaccessible canyon never reaches the mirror, so it renders the same "not
+// found" state as a nonexistent one — the API's 404-not-403 anti-oracle,
+// preserved locally.
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { formatCanyonGrade } from "@logjam/shared";
 
-import { getCanyonDetail, useApiQuery } from "../api/queries";
 import type { TCanyon } from "../api/types";
 import { fontSize, radius, spacing, theme } from "../theme";
-import { ErrorState, LoadingState } from "../ui/ScreenStates";
+import { useMirrorCanyon } from "../sync/useSyncQueries";
+import { EmptyState, ErrorState, LoadingState } from "../ui/ScreenStates";
 
 export function CanyonDetailScreen({ canyonId }: { canyonId: string }) {
-  const fetcher = useCallback(() => getCanyonDetail(canyonId), [canyonId]);
-  const query = useApiQuery(fetcher, "Couldn't load canyon.");
+  const query = useMirrorCanyon(canyonId);
 
-  if (query.loading && !query.data) return <LoadingState />;
-  if (query.error) return <ErrorState message={query.error} onRetry={query.refetch} />;
-  if (!query.data) return <LoadingState />;
+  if (query.loading) return <LoadingState />;
+  if (query.error) return <ErrorState message={query.error} onRetry={query.refresh} />;
+  if (!query.data) {
+    return <EmptyState title="Canyon not found" hint="It may have been deleted." />;
+  }
 
   return <CanyonDetailView canyon={query.data} />;
 }

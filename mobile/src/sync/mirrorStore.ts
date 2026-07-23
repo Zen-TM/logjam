@@ -1,0 +1,441 @@
+// Mirror row mapping: delta wire rows ⇄ SQLite mirror tables (§9). Known
+// fields land in typed columns; anything else the server sent is preserved
+// verbatim in extra_json (additive protocol §10.3, display-only). Reads
+// reassemble the client-facing shapes the screens already consume (TCanyon /
+// TTripLog compatible).
+import type { SQLiteDatabase } from "expo-sqlite";
+import type {
+  SyncDeltaCanyonRow,
+  SyncDeltaFriendshipRow,
+  SyncDeltaMediaRow,
+  SyncDeltaShareRow,
+  SyncDeltaTombstone,
+  SyncDeltaTripRow,
+  SyncDeltaWaypointRow,
+} from "@logjam/shared";
+
+import type { TCanyon, TTripLog } from "../api/types";
+import { getSyncDb, notifyMirrorChanged } from "./syncDb";
+
+// ── extras split ─────────────────────────────────────────────────────────────
+
+function splitExtras<Row extends Record<string, unknown>>(
+  row: Row,
+  knownKeys: readonly string[],
+): string | null {
+  const extras: Record<string, unknown> = {};
+  let any = false;
+  for (const [key, value] of Object.entries(row)) {
+    if (!knownKeys.includes(key)) {
+      extras[key] = value;
+      any = true;
+    }
+  }
+  return any ? JSON.stringify(extras) : null;
+}
+
+const CANYON_KNOWN = [
+  "id", "syncRole", "name", "altNames", "latitude", "longitude",
+  "numAbseils", "longestAbseil", "vGrade", "aGrade", "commitment",
+  "quality", "hours", "notes", "attributes", "forkedFromId",
+  "createdAt", "updatedAt",
+] as const;
+
+const TRIP_KNOWN = [
+  "id", "date", "displayName", "types", "notes", "customFields",
+  "canyons", "createdAt", "updatedAt",
+] as const;
+
+const WAYPOINT_KNOWN = [
+  "id", "canyonId", "name", "latitude", "longitude", "elevation",
+  "symbol", "notes", "createdAt", "updatedAt",
+] as const;
+
+const MEDIA_KNOWN = [
+  "id", "linkedType", "linkedId", "mediaType", "filename",
+  "fileSizeBytes", "color", "createdAt",
+] as const;
+
+// ── upserts (called inside the delta-apply transaction) ─────────────────────
+//
+// Rebase-on-pull (§8.5) happens in deltaPull: it merges pending dirty fields
+// over the server row BEFORE handing it here, and passes the surviving dirty
+// field names for the dirty_fields_json column. No pending ops → dirtyFields
+// is empty and columns hold pure server state.
+
+export async function upsertCanyon(
+  db: SQLiteDatabase,
+  row: SyncDeltaCanyonRow,
+  dirtyFieldNames: string[],
+): Promise<void> {
+  await db.runAsync(
+    `INSERT OR REPLACE INTO canyons
+       (id, sync_role, name, latitude, longitude, alt_names_json,
+        num_abseils, longest_abseil, v_grade, a_grade, commitment, quality,
+        hours, notes, attributes_json, forked_from_id, created_at, updated_at,
+        extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    row.id,
+    row.syncRole,
+    row.name,
+    row.latitude,
+    row.longitude,
+    JSON.stringify(row.altNames ?? []),
+    row.numAbseils,
+    row.longestAbseil,
+    row.vGrade,
+    row.aGrade,
+    row.commitment,
+    row.quality,
+    row.hours,
+    row.notes,
+    JSON.stringify(row.attributes ?? {}),
+    row.forkedFromId,
+    row.createdAt,
+    row.updatedAt,
+    splitExtras(row, CANYON_KNOWN),
+    dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
+  );
+}
+
+export async function upsertTrip(
+  db: SQLiteDatabase,
+  row: SyncDeltaTripRow,
+  dirtyFieldNames: string[],
+): Promise<void> {
+  await db.runAsync(
+    `INSERT OR REPLACE INTO trip_logs
+       (id, date, display_name, types_json, notes, custom_fields_json,
+        canyons_json, created_at, updated_at, extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    row.id,
+    row.date,
+    row.displayName,
+    JSON.stringify(row.types ?? []),
+    row.notes,
+    JSON.stringify(row.customFields ?? {}),
+    JSON.stringify(row.canyons ?? []),
+    row.createdAt,
+    row.updatedAt,
+    splitExtras(row, TRIP_KNOWN),
+    dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
+  );
+}
+
+export async function upsertWaypoint(
+  db: SQLiteDatabase,
+  row: SyncDeltaWaypointRow,
+  dirtyFieldNames: string[],
+): Promise<void> {
+  await db.runAsync(
+    `INSERT OR REPLACE INTO waypoints
+       (id, canyon_id, name, latitude, longitude, elevation, symbol, notes,
+        created_at, updated_at, extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    row.id,
+    row.canyonId,
+    row.name,
+    row.latitude,
+    row.longitude,
+    row.elevation,
+    row.symbol,
+    row.notes,
+    row.createdAt,
+    row.updatedAt,
+    splitExtras(row, WAYPOINT_KNOWN),
+    dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
+  );
+}
+
+export async function upsertMedia(
+  db: SQLiteDatabase,
+  row: SyncDeltaMediaRow,
+): Promise<void> {
+  // Preserve local cache/upload columns across re-delivery: INSERT OR
+  // REPLACE would null local_display_path etc., so update-then-insert.
+  const updated = await db.runAsync(
+    `UPDATE media SET linked_type = ?, linked_id = ?, media_type = ?,
+       filename = ?, file_size_bytes = ?, color = ?, created_at = ?,
+       extra_json = ?, sync_state = 'synced'
+     WHERE id = ?`,
+    row.linkedType,
+    row.linkedId,
+    row.mediaType,
+    row.filename,
+    row.fileSizeBytes,
+    row.color,
+    row.createdAt,
+    splitExtras(row, MEDIA_KNOWN),
+    row.id,
+  );
+  if (updated.changes === 0) {
+    await db.runAsync(
+      `INSERT INTO media
+         (id, linked_type, linked_id, media_type, filename, file_size_bytes,
+          color, created_at, extra_json, sync_state)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')`,
+      row.id,
+      row.linkedType,
+      row.linkedId,
+      row.mediaType,
+      row.filename,
+      row.fileSizeBytes,
+      row.color,
+      row.createdAt,
+      splitExtras(row, MEDIA_KNOWN),
+    );
+  }
+}
+
+export async function upsertShare(
+  db: SQLiteDatabase,
+  row: SyncDeltaShareRow,
+  currentUserId: string,
+): Promise<void> {
+  const outgoing = row.sharedById === currentUserId;
+  const counterpart = outgoing ? row.sharedWith : row.sharedBy;
+  await db.runAsync(
+    `INSERT OR REPLACE INTO canyon_shares
+       (id, canyon_id, direction, counterpart_user_id, counterpart_username,
+        created_at, extra_json)
+     VALUES (?, ?, ?, ?, ?, ?, NULL)`,
+    row.id,
+    row.canyonId,
+    outgoing ? "out" : "in",
+    counterpart.id,
+    counterpart.username,
+    row.createdAt,
+  );
+}
+
+export async function upsertFriendship(
+  db: SQLiteDatabase,
+  row: SyncDeltaFriendshipRow,
+): Promise<void> {
+  await db.runAsync(
+    `INSERT OR REPLACE INTO friendships
+       (id, status, direction, counterpart_user_id, counterpart_username,
+        created_at, updated_at, extra_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+    row.id,
+    row.status,
+    row.direction,
+    row.counterpart.id,
+    row.counterpart.username,
+    row.createdAt,
+    row.updatedAt,
+  );
+}
+
+// ── tombstone apply (§9 local cascade) ───────────────────────────────────────
+//
+// Returns local file paths of cached media blobs the caller must delete
+// AFTER the transaction commits (filesystem I/O doesn't belong inside it).
+
+export async function applyTombstone(
+  db: SQLiteDatabase,
+  tombstone: SyncDeltaTombstone,
+): Promise<string[]> {
+  const orphanedPaths: string[] = [];
+
+  const collectMediaPaths = async (where: string, ...args: string[]) => {
+    const rows = await db.getAllAsync<{
+      local_display_path: string | null;
+      local_thumb_path: string | null;
+    }>(
+      `SELECT local_display_path, local_thumb_path FROM media WHERE ${where}`,
+      ...args,
+    );
+    for (const row of rows) {
+      if (row.local_display_path) orphanedPaths.push(row.local_display_path);
+      if (row.local_thumb_path) orphanedPaths.push(row.local_thumb_path);
+    }
+  };
+
+  switch (tombstone.type) {
+    case "canyon": {
+      // Belt and braces both ends: the server fans out media tombstones too,
+      // but the local cascade must not depend on their delivery order.
+      await collectMediaPaths(
+        "linked_type = 'canyon' AND linked_id = ?",
+        tombstone.id,
+      );
+      await db.runAsync(
+        "DELETE FROM media WHERE linked_type = 'canyon' AND linked_id = ?",
+        tombstone.id,
+      );
+      await db.runAsync("DELETE FROM canyons WHERE id = ?", tombstone.id);
+      // Waypoint canyon links are SetNull server-side; mirror matches.
+      await db.runAsync(
+        "UPDATE waypoints SET canyon_id = NULL WHERE canyon_id = ?",
+        tombstone.id,
+      );
+      break;
+    }
+    case "tripLog": {
+      await collectMediaPaths(
+        "linked_type = 'tripLog' AND linked_id = ?",
+        tombstone.id,
+      );
+      await db.runAsync(
+        "DELETE FROM media WHERE linked_type = 'tripLog' AND linked_id = ?",
+        tombstone.id,
+      );
+      await db.runAsync("DELETE FROM trip_logs WHERE id = ?", tombstone.id);
+      break;
+    }
+    case "media": {
+      await collectMediaPaths("id = ?", tombstone.id);
+      await db.runAsync("DELETE FROM media WHERE id = ?", tombstone.id);
+      break;
+    }
+    case "canyonShare":
+      await db.runAsync("DELETE FROM canyon_shares WHERE id = ?", tombstone.id);
+      break;
+    case "friendship":
+      await db.runAsync("DELETE FROM friendships WHERE id = ?", tombstone.id);
+      break;
+    case "waypoint":
+      await db.runAsync("DELETE FROM waypoints WHERE id = ?", tombstone.id);
+      break;
+  }
+
+  // Pending local ops on a server-deleted row: delete wins (§6); park them
+  // deadRemote so the parked-ops UI can offer "recreate from local copy".
+  await db.runAsync(
+    `UPDATE outbox SET state = 'deadRemote'
+     WHERE entity_id = ? AND state IN ('queued', 'blocked')`,
+    tombstone.id,
+  );
+
+  return orphanedPaths;
+}
+
+// ── reads (screen-facing) ────────────────────────────────────────────────────
+
+type CanyonRow = {
+  id: string;
+  sync_role: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  alt_names_json: string | null;
+  num_abseils: number | null;
+  longest_abseil: number | null;
+  v_grade: number | null;
+  a_grade: number | null;
+  commitment: number | null;
+  quality: number | null;
+  hours: number | null;
+  notes: string | null;
+  attributes_json: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  extra_json: string | null;
+};
+
+export type MirrorCanyon = TCanyon & { syncRole: "owner" | "shared" };
+
+function parseJson<T>(value: string | null, fallback: T): T {
+  if (value == null) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function rowToCanyon(row: CanyonRow): MirrorCanyon {
+  const extras = parseJson<Record<string, unknown>>(row.extra_json, {});
+  return {
+    // Extras first — typed columns are authoritative for known fields.
+    ...(extras as Partial<TCanyon>),
+    id: row.id,
+    ownerId: (extras.ownerId as string) ?? "",
+    syncRole: row.sync_role === "owner" ? "owner" : "shared",
+    name: row.name,
+    altNames: parseJson<string[]>(row.alt_names_json, []),
+    latitude: row.latitude,
+    longitude: row.longitude,
+    numAbseils: row.num_abseils,
+    longestAbseil: row.longest_abseil,
+    vGrade: row.v_grade,
+    aGrade: row.a_grade,
+    commitment: row.commitment,
+    quality: row.quality,
+    hours: row.hours,
+    notes: row.notes,
+    attributes: parseJson(row.attributes_json, {}),
+    ropeWikiId: (extras.ropeWikiId as number | null) ?? null,
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  };
+}
+
+export async function listMirrorCanyons(): Promise<MirrorCanyon[]> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<CanyonRow>(
+    "SELECT * FROM canyons ORDER BY name COLLATE NOCASE ASC",
+  );
+  return rows.map(rowToCanyon);
+}
+
+export async function getMirrorCanyon(id: string): Promise<MirrorCanyon | null> {
+  const db = await getSyncDb();
+  const row = await db.getFirstAsync<CanyonRow>(
+    "SELECT * FROM canyons WHERE id = ?",
+    id,
+  );
+  return row ? rowToCanyon(row) : null;
+}
+
+type TripRow = {
+  id: string;
+  date: string;
+  display_name: string | null;
+  types_json: string | null;
+  notes: string | null;
+  custom_fields_json: string | null;
+  canyons_json: string;
+  created_at: string | null;
+  updated_at: string | null;
+  extra_json: string | null;
+};
+
+export type MirrorTrip = TTripLog & { updatedAt: string };
+
+function rowToTrip(row: TripRow): MirrorTrip {
+  const extras = parseJson<Record<string, unknown>>(row.extra_json, {});
+  return {
+    ...(extras as Partial<TTripLog>),
+    id: row.id,
+    userId: (extras.userId as string) ?? "",
+    date: row.date,
+    displayName: row.display_name,
+    types: parseJson<string[]>(row.types_json, []),
+    notes: row.notes,
+    customFields: parseJson(row.custom_fields_json, {}),
+    canyons: parseJson<{ id: string; name: string }[]>(row.canyons_json, []),
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  };
+}
+
+export async function listMirrorTrips(): Promise<MirrorTrip[]> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<TripRow>(
+    "SELECT * FROM trip_logs ORDER BY date DESC, created_at DESC",
+  );
+  return rows.map(rowToTrip);
+}
+
+/** True once any delta page has ever been applied (first-sync gate). */
+export async function hasMirrorSynced(): Promise<boolean> {
+  const db = await getSyncDb();
+  const row = await db.getFirstAsync<{ value: string }>(
+    "SELECT value FROM sync_state WHERE key = 'lastSyncAt'",
+  );
+  return row != null;
+}
+
+export { notifyMirrorChanged };

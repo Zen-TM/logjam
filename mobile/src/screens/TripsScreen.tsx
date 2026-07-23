@@ -4,10 +4,10 @@
 // renders the previous calendar day.
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { getTripLogs, useApiQuery } from "../api/queries";
 import { tripTitle } from "../api/tripTitle";
 import type { TTripLog } from "../api/types";
 import { fontSize, radius, spacing, theme } from "../theme";
+import { useMirrorTrips, useSyncStatus } from "../sync/useSyncQueries";
 import { EmptyState, ErrorState, LoadingState } from "../ui/ScreenStates";
 
 export function formatTripDate(isoDate: string): string {
@@ -20,19 +20,19 @@ export function formatTripDate(isoDate: string): string {
 }
 
 export function TripsScreen({ onOpenTrip }: { onOpenTrip: (trip: TTripLog) => void }) {
-  const query = useApiQuery(getTripLogs, "Couldn't load trip logs.");
+  // Stage 8 mirror read: the full trip list, offline. No list cap — delta
+  // sync delivers everything, so the old "Showing N of TOTAL" caption died.
+  const query = useMirrorTrips();
+  const syncStatus = useSyncStatus();
 
-  const trips = query.data?.data ?? [];
+  const trips = query.data ?? [];
   if (query.loading && trips.length === 0) return <LoadingState />;
   if (query.error && trips.length === 0) {
-    return <ErrorState message={query.error} onRetry={query.refetch} />;
+    return <ErrorState message={query.error} onRetry={query.refresh} />;
   }
   if (trips.length === 0) {
     return <EmptyState title="No trips yet" hint="Trips you log appear here." />;
   }
-
-  const total = query.data?.total;
-  const truncated = total != null && total > trips.length;
 
   return (
     <FlatList
@@ -42,17 +42,10 @@ export function TripsScreen({ onOpenTrip }: { onOpenTrip: (trip: TTripLog) => vo
       keyExtractor={(item) => item.id}
       refreshControl={
         <RefreshControl
-          refreshing={query.loading}
-          onRefresh={query.refetch}
+          refreshing={syncStatus.state === "syncing"}
+          onRefresh={query.refresh}
           tintColor={theme.accent}
         />
-      }
-      ListHeaderComponent={
-        truncated ? (
-          <Text style={styles.truncation}>
-            Showing {trips.length} of {total} trips
-          </Text>
-        ) : null
       }
       renderItem={({ item }) => (
         <Pressable
@@ -114,7 +107,6 @@ export function TripDetailScreen({ trip }: { trip: TTripLog }) {
 const styles = StyleSheet.create({
   list: { flex: 1, backgroundColor: theme.primary },
   listContent: { padding: spacing(2), gap: spacing(1) },
-  truncation: { fontSize: fontSize.xs, color: theme.textMuted, paddingBottom: spacing(1) },
   row: {
     backgroundColor: "rgba(255,255,255,0.04)",
     borderWidth: 1,

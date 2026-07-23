@@ -48,13 +48,9 @@ import {
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
-import {
-  getCanyons,
-  getSharedCanyons,
-  getVectorStyle,
-  useApiQuery,
-} from "../api/queries";
+import { getVectorStyle, useApiQuery } from "../api/queries";
 import type { TCanyon } from "../api/types";
+import { useMirrorCanyons } from "../sync/useSyncQueries";
 import { config } from "../config";
 import { fontSize, radius, spacing, theme } from "../theme";
 import { updateGeoPdfImport } from "../geopdf/geoPdfImportsDb";
@@ -239,8 +235,9 @@ export function MapScreen({
     };
   }, []);
 
-  const owned = useApiQuery(getCanyons, "Couldn't load canyons.");
-  const shared = useApiQuery(getSharedCanyons, "Couldn't load shared canyons.");
+  // Canyon overlay reads the offline mirror (Stage 8): instant, and the map
+  // keeps its pins in airplane mode.
+  const canyons = useMirrorCanyons();
   const overlays = useApiQuery(getCompletedOverlays, "Couldn't load topo overlays.");
   // Server-side vector style (same one the web map + exports use); defaults
   // until it loads / when offline.
@@ -292,12 +289,18 @@ export function MapScreen({
   }, [overlayRefs, overlayBaseIndex, vectorStyle]);
 
   const ownedFc = useMemo(
-    () => toFeatureCollection(owned.data?.data ?? []),
-    [owned.data],
+    () =>
+      toFeatureCollection(
+        (canyons.data ?? []).filter((c) => c.syncRole === "owner"),
+      ),
+    [canyons.data],
   );
   const sharedFc = useMemo(
-    () => toFeatureCollection(shared.data ?? []),
-    [shared.data],
+    () =>
+      toFeatureCollection(
+        (canyons.data ?? []).filter((c) => c.syncRole === "shared"),
+      ),
+    [canyons.data],
   );
 
   const handleCanyonPress = useCallback(
@@ -1100,9 +1103,9 @@ export function MapScreen({
       ) : null}
 
       {/* Error surfaces: background failures, non-blocking. */}
-      {owned.error ? (
+      {canyons.error ? (
         <View style={styles.notice}>
-          <Text style={styles.noticeText}>{owned.error}</Text>
+          <Text style={styles.noticeText}>{canyons.error}</Text>
         </View>
       ) : null}
 

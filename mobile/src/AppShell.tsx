@@ -14,6 +14,7 @@ import { needsReconsent } from "@logjam/shared";
 
 import { fetchCurrentUser, getUnreadNotificationCount, useApiQuery } from "./api/queries";
 import type { TTripLog } from "./api/types";
+import { registerSyncTriggers } from "./sync/syncEngine";
 import { theme } from "./theme";
 import { MapScreen } from "./map/MapScreen";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
@@ -148,6 +149,10 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
   // route notification taps: a canyon reference deep-links to its detail,
   // everything else lands on the inbox. Payloads carry opaque IDs only — the
   // screen fetches details over the authed API.
+  // Stage 8 sync triggers: initial cycle, app foreground, connectivity
+  // regained. Torn down on sign-out (shell unmount).
+  useEffect(() => registerSyncTriggers(), []);
+
   useEffect(() => {
     registerForPushNotifications();
     const subscription = Notifications.addNotificationResponseReceivedListener(

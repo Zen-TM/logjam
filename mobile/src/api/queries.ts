@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { messageFromError, type VectorStyleSettings } from "@logjam/shared";
 
 import { apiFetch, apiFetchWithTotal } from "./apiFetch";
-import type { TCanyon, TNotification, TTripLog, TUser } from "./types";
+import type { TNotification, TUser } from "./types";
 
 export function fetchCurrentUser(): Promise<TUser> {
   return apiFetch<TUser>("/users/me");
@@ -16,21 +16,8 @@ export function updateConsent(consentVersion: string): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: { consentVersion } });
 }
 
-export function getCanyons(): Promise<{ data: TCanyon[]; total: number | null }> {
-  return apiFetchWithTotal<TCanyon[]>("/canyons");
-}
-
-export function getSharedCanyons(): Promise<TCanyon[]> {
-  return apiFetch<TCanyon[]>("/canyons/shared");
-}
-
-export function getCanyonDetail(id: string): Promise<TCanyon> {
-  return apiFetch<TCanyon>(`/canyons/${id}`);
-}
-
-export function getTripLogs(): Promise<{ data: TTripLog[]; total: number | null }> {
-  return apiFetchWithTotal<TTripLog[]>("/trips");
-}
+// Canyon/trip list + detail reads moved to the Stage 8 offline mirror
+// (src/sync/useSyncQueries.ts) — REST fetchers for them died with the swap.
 
 export function getNotifications(): Promise<{ data: TNotification[]; total: number | null }> {
   return apiFetchWithTotal<TNotification[]>("/notifications");

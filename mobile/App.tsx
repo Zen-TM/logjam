@@ -1,10 +1,11 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import { CLIENT_VERSION } from "./src/config";
 import { useMinVersionGate } from "./src/useMinVersionGate";
 import { useAuth } from "./src/auth/useAuth";
+import { countUnsyncedChanges, wipeAllSyncData } from "./src/sync/syncDb";
 import { unregisterPushNotifications } from "./src/notifications/pushRegistration";
 import { AuthFlow } from "./src/screens/AuthFlow";
 import { AppShell } from "./src/AppShell";
@@ -42,9 +43,28 @@ export default function App() {
       ) : auth.state === "authenticated" ? (
         <AppShell
           onSignOut={async () => {
+            // Sign-out wipes the sync mirror AND the outbox (stage8 §9) —
+            // unflushed local changes die with it, so block on a
+            // confirmation when any exist.
+            const unsynced = await countUnsyncedChanges();
+            if (unsynced > 0) {
+              const confirmed = await new Promise<boolean>((resolve) => {
+                Alert.alert(
+                  "Unsynced changes",
+                  `You have ${unsynced} unsynced change${unsynced === 1 ? "" : "s"} that will be lost. Sign out anyway?`,
+                  [
+                    { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+                    { text: "Sign out", style: "destructive", onPress: () => resolve(true) },
+                  ],
+                  { cancelable: true, onDismiss: () => resolve(false) },
+                );
+              });
+              if (!confirmed) return;
+            }
             // Unregister the push token BEFORE tokens are cleared (the DELETE
             // needs an authenticated request); best-effort inside.
             await unregisterPushNotifications();
+            await wipeAllSyncData();
             await auth.signOut();
           }}
         />

@@ -1,42 +1,42 @@
 // Canyon list — owned + shared-with-me in one list, shared rows badged
-// (MOBILE_DESIGN_BRIEF: shared distinct from owned). Read-only in Stage 1.
+// (MOBILE_DESIGN_BRIEF: shared distinct from owned). Reads the Stage 8
+// offline mirror: instant, complete (delta-synced, no list cap), and alive
+// in airplane mode. Pull-to-refresh triggers a sync cycle.
 import { useMemo } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { formatCanyonGrade } from "@logjam/shared";
 
-import { getCanyons, getSharedCanyons, useApiQuery } from "../api/queries";
-import type { TCanyon } from "../api/types";
 import { fontSize, radius, spacing, theme } from "../theme";
+import { useMirrorCanyons, useMirrorTrips, useSyncStatus } from "../sync/useSyncQueries";
+import type { MirrorCanyon } from "../sync/mirrorStore";
 import { EmptyState, ErrorState, LoadingState } from "../ui/ScreenStates";
-
-type CanyonRow = TCanyon & { shared: boolean };
 
 export function CanyonsScreen({
   onOpenCanyon,
 }: {
-  onOpenCanyon: (canyon: CanyonRow) => void;
+  onOpenCanyon: (canyon: MirrorCanyon) => void;
 }) {
-  const owned = useApiQuery(getCanyons, "Couldn't load canyons.");
-  const shared = useApiQuery(getSharedCanyons, "Couldn't load shared canyons.");
+  const canyons = useMirrorCanyons();
+  const trips = useMirrorTrips();
+  const syncStatus = useSyncStatus();
 
-  const rows: CanyonRow[] = useMemo(() => {
-    const ownedRows = (owned.data?.data ?? []).map((c) => ({ ...c, shared: false }));
-    const sharedRows = (shared.data ?? []).map((c) => ({ ...c, shared: true }));
-    return [...ownedRows, ...sharedRows].sort((a, b) => a.name.localeCompare(b.name));
-  }, [owned.data, shared.data]);
+  // Trip tally per canyon, derived locally from the mirrored trip logs (own
+  // data only — trips of others never reach the mirror, so a shared canyon
+  // naturally shows the caller's own count: none).
+  const tripCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const trip of trips.data ?? []) {
+      for (const linked of trip.canyons) {
+        counts.set(linked.id, (counts.get(linked.id) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [trips.data]);
 
-  const refetchAll = () => {
-    owned.refetch();
-    shared.refetch();
-  };
-
-  const loading = owned.loading || shared.loading;
-  if (loading && rows.length === 0) return <LoadingState />;
-  // Surface an error only when it cost us the whole list; a partial failure
-  // (e.g. shared list down) still renders what loaded, with the error text
-  // available on pull-to-refresh.
-  if (owned.error && rows.length === 0) {
-    return <ErrorState message={owned.error} onRetry={refetchAll} />;
+  const rows = canyons.data ?? [];
+  if (canyons.loading && rows.length === 0) return <LoadingState />;
+  if (canyons.error && rows.length === 0) {
+    return <ErrorState message={canyons.error} onRetry={canyons.refresh} />;
   }
   if (rows.length === 0) {
     return (
@@ -47,10 +47,6 @@ export function CanyonsScreen({
     );
   }
 
-  const total = owned.data?.total;
-  const truncated =
-    total != null && owned.data != null && total > owned.data.data.length;
-
   return (
     <FlatList
       style={styles.list}
@@ -58,25 +54,33 @@ export function CanyonsScreen({
       data={rows}
       keyExtractor={(item) => item.id}
       refreshControl={
-        <RefreshControl refreshing={loading} onRefresh={refetchAll} tintColor={theme.accent} />
+        <RefreshControl
+          refreshing={syncStatus.state === "syncing"}
+          onRefresh={canyons.refresh}
+          tintColor={theme.accent}
+        />
       }
-      ListHeaderComponent={
-        truncated ? (
-          <Text style={styles.truncation}>
-            Showing {owned.data!.data.length} of {total} owned canyons
-          </Text>
-        ) : null
-      }
-      renderItem={({ item }) => <CanyonRowView canyon={item} onPress={() => onOpenCanyon(item)} />}
+      renderItem={({ item }) => (
+        <CanyonRowView
+          canyon={item}
+          tripCount={item.syncRole === "owner" ? tripCounts.get(item.id) : undefined}
+          onPress={() => onOpenCanyon(item)}
+        />
+      )}
     />
   );
 }
 
-function CanyonRowView({ canyon, onPress }: { canyon: CanyonRow; onPress: () => void }) {
+function CanyonRowView({
+  canyon,
+  tripCount,
+  onPress,
+}: {
+  canyon: MirrorCanyon;
+  tripCount: number | undefined;
+  onPress: () => void;
+}) {
   const grade = formatCanyonGrade(canyon);
-  // _count is absent (not zero) on shared canyons by design — owner-private
-  // aggregate. Only render a trip tally for owned rows.
-  const tripCount = !canyon.shared ? canyon._count?.tripLogLinks : undefined;
   return (
     <Pressable
       accessibilityRole="button"
@@ -93,7 +97,7 @@ function CanyonRowView({ canyon, onPress }: { canyon: CanyonRow; onPress: () => 
             .join(" · ") || " "}
         </Text>
       </View>
-      {canyon.shared ? (
+      {canyon.syncRole === "shared" ? (
         <View style={styles.badge}>
           <Text style={styles.badgeText}>Shared</Text>
         </View>
@@ -105,11 +109,6 @@ function CanyonRowView({ canyon, onPress }: { canyon: CanyonRow; onPress: () => 
 const styles = StyleSheet.create({
   list: { flex: 1, backgroundColor: theme.primary },
   listContent: { padding: spacing(2), gap: spacing(1) },
-  truncation: {
-    fontSize: fontSize.xs,
-    color: theme.textMuted,
-    paddingBottom: spacing(1),
-  },
   row: {
     flexDirection: "row",
     alignItems: "center",
