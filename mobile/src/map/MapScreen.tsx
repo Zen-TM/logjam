@@ -22,7 +22,11 @@ import {
   UserLocation,
 } from "@maplibre/maplibre-react-native";
 import * as Location from "expo-location";
-import { BASEMAP_CATALOG, VECTOR_STYLE_DEFAULTS } from "@logjam/shared";
+import {
+  BASEMAP_CATALOG,
+  VECTOR_STYLE_DEFAULTS,
+  messageFromError,
+} from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
 import {
@@ -34,6 +38,11 @@ import {
 import type { TCanyon } from "../api/types";
 import { config } from "../config";
 import { fontSize, radius, spacing, theme } from "../theme";
+import {
+  deleteRegionArtifact,
+  downloadProtomapsRegion,
+} from "../offline/regionDownloads";
+import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { ProtomapsLayers, protomapsLayerCount } from "./basemap/ProtomapsLayers";
 import { useConnectivity } from "./connectivity";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
@@ -131,9 +140,15 @@ export function MapScreen({
 }: {
   onOpenCanyon: (canyonId: string, name: string) => void;
 }) {
-  const connectivity = useConnectivity();
+  // "Offline maps only" forces the resolver to local artifacts even with
+  // signal — battery saver + predictability in the field.
+  const [offlineOnly, setOfflineOnly] = useState(false);
+  const connectivity = useConnectivity(offlineOnly);
+  const artifacts = useMapArtifacts();
   const [basemapId, setBasemapId] = useState<BasemapId>("six-topo");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [regionStatus, setRegionStatus] = useState<string | null>(null);
+  const mapRef = useRef<React.ComponentRef<typeof MapView>>(null);
   const [enabledOverlays, setEnabledOverlays] = useState<ReadonlySet<string>>(new Set());
   const cameraRef = useRef<React.ComponentRef<typeof Camera>>(null);
   const [followUser, setFollowUser] = useState(false);
@@ -150,10 +165,10 @@ export function MapScreen({
   const ctx: ResolveContext = useMemo(
     () => ({
       connectivity,
-      artifacts: [], // Stage 4 fills the downloads registry
+      artifacts,
       cdnBaseUrl: config.topoCdnBaseUrl,
     }),
-    [connectivity],
+    [connectivity, artifacts],
   );
 
   const basemapResolved = useMemo(
@@ -208,6 +223,31 @@ export function MapScreen({
     [onOpenCanyon],
   );
 
+  // Download the visible map area as a Protomaps offline region (stage4a
+  // §7.2). The bbox goes to the API in a POST body only; see regionDownloads.
+  const handleDownloadCurrentArea = useCallback(async () => {
+    try {
+      setRegionStatus("Preparing region…");
+      const bounds = await mapRef.current?.getVisibleBounds();
+      if (!bounds) throw new Error("Map not ready");
+      const [[neLng, neLat], [swLng, swLat]] = bounds;
+      const bbox = { west: swLng, south: swLat, east: neLng, north: neLat };
+      await downloadProtomapsRegion(bbox, (p) =>
+        setRegionStatus(
+          `Downloading… ${Math.min(100, Math.round((p.bytesDone / p.bytesTotal) * 100))}%`,
+        ),
+      );
+      setRegionStatus("Region saved for offline use.");
+    } catch (err) {
+      console.error(err);
+      setRegionStatus(
+        messageFromError(err, "Couldn't download this area. Try a smaller one."),
+      );
+    }
+  }, []);
+
+  const regionArtifacts = artifacts.filter((a) => a.kind === "basemap-region");
+
   const handleLocateMe = useCallback(async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") return;
@@ -228,6 +268,7 @@ export function MapScreen({
   return (
     <View style={styles.root}>
       <MapView
+        ref={mapRef}
         style={styles.map}
         mapStyle={SHELL_STYLE}
         attributionEnabled={false}
@@ -436,6 +477,51 @@ export function MapScreen({
                 );
               },
             )}
+            <Text style={styles.pickerHeading}>Offline maps</Text>
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityState={{ checked: offlineOnly }}
+              onPress={() => setOfflineOnly((v) => !v)}
+              style={styles.pickerRow}
+            >
+              <Text style={[styles.pickerLabel, offlineOnly && styles.pickerLabelActive]}>
+                {offlineOnly ? "☑" : "☐"} Offline maps only
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={connectivity !== "online"}
+              onPress={handleDownloadCurrentArea}
+              style={styles.pickerRow}
+            >
+              <Text
+                style={[
+                  styles.pickerLabel,
+                  connectivity !== "online" && styles.pickerLabelDisabled,
+                ]}
+              >
+                ⤓ Download current area (Topo Vector)
+              </Text>
+            </Pressable>
+            {regionStatus ? (
+              <Text style={styles.pickerStatus}>{regionStatus}</Text>
+            ) : null}
+            {regionArtifacts.map((artifact) => (
+              <View key={artifact.id} style={styles.pickerRegionRow}>
+                <Text style={styles.pickerLabel}>
+                  ▣ Saved region · {(artifact.sizeBytes / 1024 / 1024).toFixed(1)} MB
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete saved region"
+                  onPress={() => {
+                    deleteRegionArtifact(artifact.id).catch(console.error);
+                  }}
+                >
+                  <Text style={styles.pickerDelete}>Delete</Text>
+                </Pressable>
+              </View>
+            ))}
             {overlayList.length > 0 ? (
               <>
                 <Text style={styles.pickerHeading}>Topo overlays</Text>
@@ -531,6 +617,14 @@ const styles = StyleSheet.create({
     marginTop: spacing(1),
   },
   pickerRow: { paddingVertical: spacing(1) },
+  pickerRegionRow: {
+    paddingVertical: spacing(1),
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  pickerStatus: { color: theme.textMuted, fontSize: fontSize.sm },
+  pickerDelete: { color: theme.warning, fontSize: fontSize.sm, fontWeight: "600" },
   pickerLabel: { color: theme.textPrimary, fontSize: fontSize.base },
   pickerLabelActive: { color: theme.accent, fontWeight: "600" },
   pickerLabelDisabled: { color: theme.textMuted },

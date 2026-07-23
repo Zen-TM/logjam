@@ -44,6 +44,12 @@ export const redactPaths = [
   'req.body.canyons[*].latitude',
   'req.body.canyons[*].longitude',
   'req.body.displayName',
+  // Region-clip endpoint (stage 4a): the bbox IS a canyon-area coordinate.
+  // Body-shaped only — the route design keeps bounds out of URLs entirely.
+  'req.body.west',
+  'req.body.south',
+  'req.body.east',
+  'req.body.north',
   // Authorization headers (never log credentials)
   'req.headers.authorization',
   'req.headers["x-fake-auth"]',

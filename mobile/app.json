@@ -32,7 +32,8 @@
         }
       ],
       "expo-secure-store",
-      "@sentry/react-native"
+      "@sentry/react-native",
+      "expo-sqlite"
     ],
     "extra": {
       "eas": {

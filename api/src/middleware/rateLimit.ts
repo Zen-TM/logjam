@@ -51,6 +51,15 @@ export const ropeWikiHeavyLimiter = rateLimit({
   keyGenerator: userOrIpKey,
 });
 
+// Protomaps region clips cost real S3 range-read work per call (stage4a §7.1).
+export const regionClipLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
 export const userPatchLimiter = rateLimit({
   windowMs: 60_000,
   max: 30,

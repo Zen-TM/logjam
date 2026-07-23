@@ -53,6 +53,15 @@ function baseHeaders(token: string): Record<string, string> {
   };
 }
 
+/**
+ * Auth + client-version headers for non-JSON transports (file downloads via
+ * expo-file-system) that can't go through apiFetch. Same token path, same
+ * offline-session semantics.
+ */
+export async function getAuthedRequestHeaders(): Promise<Record<string, string>> {
+  return baseHeaders(await getIdToken());
+}
+
 async function throwApiError(res: Response, path: string, method: string): Promise<never> {
   let serverMessage: string | undefined;
   try {

@@ -1,0 +1,153 @@
+// Downloads registry (map-sources.md §4.2 + stage4a §5.1): one SQLite DB is
+// the single source of truth for "what offline map data is on disk". The
+// downloads manager writes it; the map resolver only reads it.
+//
+// PRIVACY: rows carry region bboxes — canyon-area coordinates. The DB lives
+// in app-private storage (expo-sqlite's default dir, under the app sandbox,
+// covered by allowBackup=false), is surfaced only behind the Stage 4 app
+// lock, and its contents must never reach logs, telemetry, or crash reports.
+import * as SQLite from "expo-sqlite";
+
+import type { MapArtifact } from "../map/sourceResolver";
+
+let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+
+// Registry mutations notify listeners so map state (resolver ctx.artifacts)
+// and the downloads UI refresh without polling.
+type Listener = () => void;
+const listeners = new Set<Listener>();
+export function onRegistryChanged(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+function notifyChanged(): void {
+  for (const listener of listeners) listener();
+}
+
+async function getDb(): Promise<SQLite.SQLiteDatabase> {
+  if (!dbPromise) {
+    dbPromise = (async () => {
+      const db = await SQLite.openDatabaseAsync("logjam-offline.db");
+      await db.execAsync(`
+        PRAGMA journal_mode = WAL;
+        CREATE TABLE IF NOT EXISTS map_artifact (
+          id           TEXT PRIMARY KEY,
+          kind         TEXT NOT NULL,
+          logicalKey   TEXT NOT NULL,
+          format       TEXT NOT NULL,
+          sourceType   TEXT NOT NULL,
+          path         TEXT NOT NULL,
+          west REAL, south REAL, east REAL, north REAL,
+          minzoom INTEGER, maxzoom INTEGER,
+          sizeBytes    INTEGER NOT NULL,
+          downloadedAt TEXT NOT NULL,
+          verifiedAt   TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_map_artifact_lookup
+          ON map_artifact(kind, logicalKey);
+        CREATE TABLE IF NOT EXISTS region_download (
+          id            TEXT PRIMARY KEY,
+          taskKind      TEXT NOT NULL,
+          basemapId     TEXT NOT NULL,
+          west REAL NOT NULL, south REAL NOT NULL,
+          east REAL NOT NULL, north REAL NOT NULL,
+          minzoom INTEGER NOT NULL, maxzoom INTEGER NOT NULL,
+          state         TEXT NOT NULL,
+          pausedReason  TEXT,
+          tilesPlanned  INTEGER, tilesDone INTEGER, tilesGap INTEGER,
+          bytesDone     INTEGER,
+          allowCellular INTEGER NOT NULL DEFAULT 0,
+          errorCode     TEXT,
+          filePath      TEXT NOT NULL,
+          createdAt     TEXT NOT NULL,
+          updatedAt     TEXT NOT NULL
+        );
+      `);
+      return db;
+    })();
+  }
+  return dbPromise;
+}
+
+type ArtifactRow = {
+  id: string;
+  kind: string;
+  logicalKey: string;
+  format: string;
+  sourceType: string;
+  path: string;
+  west: number | null;
+  south: number | null;
+  east: number | null;
+  north: number | null;
+  minzoom: number | null;
+  maxzoom: number | null;
+  sizeBytes: number;
+  downloadedAt: string;
+};
+
+function rowToArtifact(row: ArtifactRow): MapArtifact {
+  return {
+    id: row.id,
+    kind: row.kind as MapArtifact["kind"],
+    logicalKey: row.logicalKey,
+    format: row.format as MapArtifact["format"],
+    sourceType: row.sourceType as MapArtifact["sourceType"],
+    path: row.path,
+    bbox:
+      row.west != null && row.south != null && row.east != null && row.north != null
+        ? [row.west, row.south, row.east, row.north]
+        : null,
+    minzoom: row.minzoom,
+    maxzoom: row.maxzoom,
+    sizeBytes: row.sizeBytes,
+    downloadedAt: row.downloadedAt,
+  };
+}
+
+export async function listArtifacts(): Promise<MapArtifact[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<ArtifactRow>(
+    "SELECT * FROM map_artifact ORDER BY downloadedAt DESC",
+  );
+  return rows.map(rowToArtifact);
+}
+
+export async function insertArtifact(artifact: MapArtifact): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO map_artifact
+       (id, kind, logicalKey, format, sourceType, path,
+        west, south, east, north, minzoom, maxzoom,
+        sizeBytes, downloadedAt, verifiedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    artifact.id,
+    artifact.kind,
+    artifact.logicalKey,
+    artifact.format,
+    artifact.sourceType,
+    artifact.path,
+    artifact.bbox?.[0] ?? null,
+    artifact.bbox?.[1] ?? null,
+    artifact.bbox?.[2] ?? null,
+    artifact.bbox?.[3] ?? null,
+    artifact.minzoom,
+    artifact.maxzoom,
+    artifact.sizeBytes,
+    artifact.downloadedAt,
+    new Date().toISOString(),
+  );
+  notifyChanged();
+}
+
+export async function deleteArtifact(id: string): Promise<MapArtifact | null> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<ArtifactRow>(
+    "SELECT * FROM map_artifact WHERE id = ?",
+    id,
+  );
+  if (rows.length === 0) return null;
+  await db.runAsync("DELETE FROM map_artifact WHERE id = ?", id);
+  notifyChanged();
+  return rowToArtifact(rows[0]);
+}

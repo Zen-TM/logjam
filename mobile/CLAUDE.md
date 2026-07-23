@@ -11,8 +11,11 @@ plan + staged execution: `.claude/mobile-plan/` (local, not committed).
 Stage 0 (scaffold, spikes, min-version lever, CI), Stage 1 (Cognito auth,
 apiFetch, read-only browse screens, Sentry scrubber), Stage 2 (map core:
 raster + Protomaps vector basemaps, canyon overlay + labels, raster + vector
-topo overlays with the user vectorStyle), and Stage 3 (push, delivery gated on
-operator FCM) are built. Dev loop: `npm start` (Metro) + emulator dev-client;
+topo overlays with the user vectorStyle), Stage 3 (push, delivery gated on
+operator FCM), and Stage 4a-core (offline Protomaps regions: `src/offline/`
+registry + downloads + app lock, `/basemap/region-clip` API) are built.
+SIXMaps offline regions are blocked on an operator ToS gate (see
+OPERATOR_SETUP). Dev loop: `npm start` (Metro) + emulator dev-client;
 native-dep changes need `npx expo prebuild -p android && cd android &&
 RTK_DISABLED=1 ./gradlew :app:assembleDebug`. Maestro flows in `e2e/` (local,
 not CI — see `e2e/README.md`).

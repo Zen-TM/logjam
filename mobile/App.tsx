@@ -8,6 +8,7 @@ import { useAuth } from "./src/auth/useAuth";
 import { unregisterPushNotifications } from "./src/notifications/pushRegistration";
 import { AuthFlow } from "./src/screens/AuthFlow";
 import { AppShell } from "./src/AppShell";
+import { AppLockGate } from "./src/offline/AppLockGate";
 import { LoadingState } from "./src/ui/ScreenStates";
 import { fontSize, spacing, theme } from "./src/theme";
 
@@ -34,6 +35,8 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
+      {/* App lock (Stage 4): active once offline map data exists on-device. */}
+      <AppLockGate>
       {auth.state === "loading" ? (
         <LoadingState />
       ) : auth.state === "authenticated" ? (
@@ -50,6 +53,7 @@ export default function App() {
           <AuthFlow auth={auth} />
         </SafeAreaView>
       )}
+      </AppLockGate>
     </SafeAreaProvider>
   );
 }

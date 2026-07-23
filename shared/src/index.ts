@@ -20,3 +20,4 @@ export * from "./stats.js";
 export * from "./topoRuntimeEstimate.js";
 export * from "./apiErrors.js";
 export * from "./canyonGrade.js";
+export * from "./mapRegionEstimate.js";

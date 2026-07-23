@@ -43,6 +43,7 @@ import customFieldsRouter from "./routes/customFields";
 import importsRouter from "./routes/imports";
 import metaRouter from "./routes/meta";
 import devicesRouter from "./routes/devices";
+import basemapRouter from "./routes/basemap";
 
 const env = getEnv();
 
@@ -198,6 +199,7 @@ app.use("/canyons", sharingRouter);
 app.use("/friends", friendsRouter);
 app.use("/notifications", notificationsRouter);
 app.use("/devices", devicesRouter);
+app.use("/basemap", basemapRouter);
 app.use("/ropewiki", ropewikiRouter);
 app.use("/topo-jobs", topoJobsRouter);
 app.use("/media", mediaRouter);

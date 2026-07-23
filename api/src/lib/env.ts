@@ -68,6 +68,12 @@ const baseSchema = z.object({
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),
 
+  // Protomaps basemap archive the region-clip endpoint extracts from
+  // (stage 4a). s3:// URI in prod (go-pmtiles reads S3 natively under the
+  // task role); an https:// URL works for local dev (public CDN archive).
+  // Optional: the endpoint 503s when unset instead of crashing the API.
+  PROTOMAPS_ARCHIVE_URI: z.string().optional(),
+
   // Transactional email (Resend). Only the geoPdfWorker sends from the Node
   // side; the API server itself sends none. Both optional so a worker with no
   // key configured degrades to a no-op send (services/email.ts) instead of
