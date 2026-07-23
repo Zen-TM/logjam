@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.0" creator="GPSBabel - https://www.gpsbabel.org" xmlns="http://www.topografix.com/GPX/1/0">
+  <time>2026-01-01T00:00:00.000Z</time>
+  <bounds minlat="-33.010000000" minlon="150.000000000" maxlat="-33.000000000" maxlon="150.010000000"/>
+  <wpt lat="-33.001000000" lon="150.001000000">
+    <ele>500.000</ele>
+    <name>Car park</name>
+  </wpt>
+  <trk>
+    <name>Track 20260101-000000</name>
+    <trkseg>
+      <trkpt lat="-33.002000000" lon="150.002000000">
+        <ele>410.000</ele>
+      </trkpt>
+      <trkpt lat="-33.003000000" lon="150.003500000">
+        <ele>408.000</ele>
+      </trkpt>
+      <trkpt lat="-33.004500000" lon="150.004000000">
+        <ele>402.000</ele>
+      </trkpt>
+    </trkseg>
+    <trkseg>
+      <trkpt lat="-33.006000000" lon="150.006000000">
+        <ele>395.000</ele>
+      </trkpt>
+      <trkpt lat="-33.007000000" lon="150.007000000">
+        <ele>390.000</ele>
+      </trkpt>
+    </trkseg>
+  </trk>
+  <rte>
+    <name>Exit route</name>
+    <rtept lat="-33.008000000" lon="150.008000000"/>
+    <rtept lat="-33.010000000" lon="150.010000000"/>
+  </rte>
+</gpx>

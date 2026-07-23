@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"  xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2"
+     xmlns:atom="http://www.w3.org/2005/Atom">
+    <Document>
+        <name>Sample walk via ridge</name>
+        <description><![CDATA[<br/><p>Converted using <b><a href='http://example.com'>a converter</a></b></p><br/>]]></description>
+        <visibility>1</visibility>
+        <open>1</open>
+        <Style id="red">
+            <LineStyle>
+            <color>C81400FF</color>
+            <width>4</width>
+            </LineStyle>
+        </Style>
+        <Folder>
+            <name>Tracks</name>
+            <Placemark>
+                <name>Ridge line</name>
+                <styleUrl>#red</styleUrl>
+                <LineString>
+                    <extrude>0</extrude>
+                    <tessellate>1</tessellate>
+                    <altitudeMode>clampToGround</altitudeMode>
+                    <coordinates>
+                        150.002,-33.002,410 150.0035,-33.003,408 150.004,-33.0045,402
+                    </coordinates>
+                </LineString>
+            </Placemark>
+            <Placemark>
+                <name>Lookout</name>
+                <Point>
+                    <coordinates>150.001,-33.001,500</coordinates>
+                </Point>
+            </Placemark>
+        </Folder>
+        <Placemark>
+            <name>Camp area</name>
+            <MultiGeometry>
+                <Polygon>
+                    <outerBoundaryIs>
+                        <LinearRing>
+                            <coordinates>
+                                150.008,-33.008 150.009,-33.008 150.009,-33.009 150.008,-33.009 150.008,-33.008
+                            </coordinates>
+                        </LinearRing>
+                    </outerBoundaryIs>
+                </Polygon>
+                <Point>
+                    <coordinates>150.0085,-33.0085</coordinates>
+                </Point>
+            </MultiGeometry>
+        </Placemark>
+    </Document>
+</kml>
