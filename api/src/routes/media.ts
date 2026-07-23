@@ -22,6 +22,10 @@ import { toMediaItem } from "../lib/mediaPresign";
 import { requireCanyonOwnerAccess } from "../lib/canyonAccess";
 import { mediaDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
 import {
+  assertClientIdReplayable,
+  parseClientSuppliedId,
+} from "../lib/clientSuppliedId";
+import {
   mediaCategory,
   categoryHasThumbnail,
   randomTrackColor,
@@ -145,7 +149,26 @@ router.post(
       BigInt(sizes.sizeBytes + (sizes.thumbnailSizeBytes ?? 0)),
     );
 
-    const mediaId = randomUUID();
+    // Optional client-minted mediaId (Stage 8 §3.5). A client id whose row
+    // already exists means the whole three-phase flow already completed —
+    // return the existing item (200), never fresh upload URLs. Foreign id →
+    // 404 (anti-oracle; see lib/clientSuppliedId.ts).
+    const clientMediaId = parseClientSuppliedId(
+      (req.body ?? {}).mediaId,
+      "mediaId",
+    );
+    if (clientMediaId) {
+      const existing = await prisma.media.findUnique({
+        where: { id: clientMediaId },
+      });
+      if (existing) {
+        assertClientIdReplayable(existing.ownerId, user.id, "Media not found");
+        res.status(200).json(await toMediaItem(existing));
+        return;
+      }
+    }
+
+    const mediaId = clientMediaId ?? randomUUID();
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);
 
     const displayUploadUrl = await getSignedUrl(
@@ -193,13 +216,15 @@ router.post(
 
     // Idempotent confirm (ARCH-005): if the row already exists, this confirm
     // already succeeded — return it (handled below) before the track-slot guard
-    // so a retried confirm of the same row is a no-op, not a spurious 409.
-    // already succeeded — return it without re-charging quota, so client
-    // retries / double-clicks are benign no-ops. A foreign-owned row can't
-    // happen with server-minted UUIDs, but fail closed anyway.
+    // so a retried confirm of the same row is a no-op, not a spurious 409,
+    // and without re-charging quota (client retries / double-clicks are benign).
+    // A foreign-owned row is 404, not 403: with client-minted presign ids
+    // (Stage 8 §3.5) a probed foreign mediaId is reachable here, and 403 would
+    // confirm it exists (SEC-001 anti-oracle).
     const existing = await prisma.media.findUnique({ where: { id: mediaId } });
     if (existing) {
-      if (existing.ownerId !== user.id) throw new AppError(403, "Access denied");
+      if (existing.ownerId !== user.id)
+        throw new AppError(404, "Media not found");
       res.status(200).json(await toMediaItem(existing));
       return;
     }

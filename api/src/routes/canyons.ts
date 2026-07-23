@@ -11,6 +11,10 @@ import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
 import { requireCanyonAccess, requireCanyonOwnerAccess } from "../lib/canyonAccess";
 import { resolveUser } from "../lib/resolveUser";
 import { canyonDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
+import {
+  assertClientIdReplayable,
+  parseClientSuppliedId,
+} from "../lib/clientSuppliedId";
 import { TRACK_MIME_TYPES, validateCanyonPayload } from "@logjam/shared";
 import { serializeTrip, tripCanyonsInclude } from "./tripLogsGlobal";
 
@@ -179,25 +183,58 @@ router.post(
     });
     if (validationError) throw new AppError(400, validationError);
 
-    const canyon = await prisma.canyon.create({
-      data: {
-        ownerId: user.id,
-        name,
-        altNames: altNames ?? [],
-        latitude,
-        longitude,
-        numAbseils,
-        longestAbseil,
-        vGrade,
-        aGrade,
-        commitment,
-        quality,
-        hours,
+    // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
+    // existing row; foreign id → 404 (see lib/clientSuppliedId.ts).
+    const clientId = parseClientSuppliedId(req.body.id);
+    if (clientId) {
+      const existing = await prisma.canyon.findUnique({
+        where: { id: clientId },
+      });
+      if (existing) {
+        assertClientIdReplayable(existing.ownerId, user.id, "Canyon not found");
+        res.status(200).json(existing);
+        return;
+      }
+    }
 
-        notes,
-        attributes: attributes ?? {},
-      },
-    });
+    let canyon;
+    try {
+      canyon = await prisma.canyon.create({
+        data: {
+          ...(clientId && { id: clientId }),
+          ownerId: user.id,
+          name,
+          altNames: altNames ?? [],
+          latitude,
+          longitude,
+          numAbseils,
+          longestAbseil,
+          vGrade,
+          aGrade,
+          commitment,
+          quality,
+          hours,
+
+          notes,
+          attributes: attributes ?? {},
+        },
+      });
+    } catch (err) {
+      // Concurrent replay of the same client id (retried flush racing an
+      // in-flight request) — return the winner's row, mirroring media-confirm.
+      if (
+        clientId &&
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        const winner = await prisma.canyon.findUnique({ where: { id: clientId } });
+        if (winner && winner.ownerId === user.id) {
+          res.status(200).json(winner);
+          return;
+        }
+      }
+      throw err;
+    }
 
     res.status(201).json(canyon);
   },

@@ -10,6 +10,11 @@ import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import { validateWaypointPayload } from "@logjam/shared";
 import { waypointDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
+import {
+  assertClientIdReplayable,
+  parseClientSuppliedId,
+} from "../lib/clientSuppliedId";
+import { Prisma } from "@prisma/client";
 
 const router = Router();
 
@@ -71,18 +76,53 @@ router.post(
     if (validationError) throw new AppError(400, validationError);
     const resolvedCanyonId = await resolveCanyonAssociation(user.id, canyonId);
 
-    const waypoint = await prisma.waypoint.create({
-      data: {
-        ownerId: user.id,
-        canyonId: resolvedCanyonId ?? null,
-        name: (name as string).trim(),
-        latitude,
-        longitude,
-        elevation: elevation ?? null,
-        symbol: symbol ?? null,
-        notes: notes ?? null,
-      },
-    });
+    // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
+    // existing row; foreign id → 404 (see lib/clientSuppliedId.ts).
+    const clientId = parseClientSuppliedId((req.body ?? {}).id);
+    if (clientId) {
+      const existing = await prisma.waypoint.findUnique({
+        where: { id: clientId },
+      });
+      if (existing) {
+        assertClientIdReplayable(existing.ownerId, user.id, "Waypoint not found");
+        res.status(200).json(existing);
+        return;
+      }
+    }
+
+    let waypoint;
+    try {
+      waypoint = await prisma.waypoint.create({
+        data: {
+          ...(clientId && { id: clientId }),
+          ownerId: user.id,
+          canyonId: resolvedCanyonId ?? null,
+          name: (name as string).trim(),
+          latitude,
+          longitude,
+          elevation: elevation ?? null,
+          symbol: symbol ?? null,
+          notes: notes ?? null,
+        },
+      });
+    } catch (err) {
+      // Concurrent replay of the same client id — return the winner's row,
+      // mirroring media-confirm.
+      if (
+        clientId &&
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        const winner = await prisma.waypoint.findUnique({
+          where: { id: clientId },
+        });
+        if (winner && winner.ownerId === user.id) {
+          res.status(200).json(winner);
+          return;
+        }
+      }
+      throw err;
+    }
     res.status(201).json(waypoint);
   },
 );

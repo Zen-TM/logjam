@@ -17,6 +17,10 @@ import { decrementStorageUsed } from "../lib/storageQuota";
 import { toMediaItems } from "../lib/mediaPresign";
 import { resolveUser } from "../lib/resolveUser";
 import { tripDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
+import {
+  assertClientIdReplayable,
+  parseClientSuppliedId,
+} from "../lib/clientSuppliedId";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -272,23 +276,60 @@ router.post(
       resolvedCanyonIds.length > 0,
     );
 
-    const trip = await prisma.tripLog.create({
-      data: {
-        userId: user.id,
-        date: new Date(date),
-        displayName: trimmedDisplayName,
-        types: parsedTypes,
-        notes,
-        customFields: customFields ?? {},
-        canyons: {
-          create: resolvedCanyonIds.map((canyonId, position) => ({
-            canyonId,
-            position,
-          })),
+    // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
+    // existing row; foreign id → 404 (see lib/clientSuppliedId.ts).
+    const clientId = parseClientSuppliedId(req.body.id);
+    if (clientId) {
+      const existing = await prisma.tripLog.findUnique({
+        where: { id: clientId },
+        include: tripCanyonsInclude,
+      });
+      if (existing) {
+        assertClientIdReplayable(existing.userId, user.id, "Trip log not found");
+        res.status(200).json(serializeTrip(existing));
+        return;
+      }
+    }
+
+    let trip;
+    try {
+      trip = await prisma.tripLog.create({
+        data: {
+          ...(clientId && { id: clientId }),
+          userId: user.id,
+          date: new Date(date),
+          displayName: trimmedDisplayName,
+          types: parsedTypes,
+          notes,
+          customFields: customFields ?? {},
+          canyons: {
+            create: resolvedCanyonIds.map((canyonId, position) => ({
+              canyonId,
+              position,
+            })),
+          },
         },
-      },
-      include: tripCanyonsInclude,
-    });
+        include: tripCanyonsInclude,
+      });
+    } catch (err) {
+      // Concurrent replay of the same client id — return the winner's row,
+      // mirroring media-confirm.
+      if (
+        clientId &&
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        const winner = await prisma.tripLog.findUnique({
+          where: { id: clientId },
+          include: tripCanyonsInclude,
+        });
+        if (winner && winner.userId === user.id) {
+          res.status(200).json(serializeTrip(winner));
+          return;
+        }
+      }
+      throw err;
+    }
 
     res.status(201).json(serializeTrip(trip));
   },
