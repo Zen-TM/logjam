@@ -43,7 +43,9 @@ import {
   downloadProtomapsRegion,
 } from "../offline/regionDownloads";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
+import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers, protomapsLayerCount } from "./basemap/ProtomapsLayers";
+import { buildShellStyle } from "./basemap/shellStyle";
 import { useConnectivity } from "./connectivity";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
@@ -59,32 +61,15 @@ import {
 import { buildTopoVectorLayerDefs } from "./topoVectorLayers";
 import { TopoIconImages, TopoVectorOverlay } from "./TopoVectorOverlay";
 
-// Same shell approach as web Map.tsx: empty style + glyphs/sprite only; every
-// source and layer is declarative on top. Must be an OBJECT — a JSON string is
-// treated as a style URL by the native side, which drops the glyphs entry and
-// silently kills every SymbolLayer's text.
+// Shell style (glyphs/sprite) lives in basemap/shellStyle.ts — bundled
+// file:// assets once installed (stage 4a §8.3), remote host as the
+// install-failure fallback. Fonts: the Noto Sans stacks the generated basemap
+// layers reference — canyon labels use the same stack so one glyph source
+// serves everything.
 //
-// Glyphs + sprite come from the Protomaps basemaps-assets host (fonts: the
-// Noto Sans stacks the generated basemap layers reference — canyon labels use
-// the same stack so one glyph source serves everything). No user data rides
-// these requests. Stage 4 bundles the assets in-app (file:// URLs, stage4a
-// §8.3); a CDN mirror under master/basemap/assets/ is the flagged operator
-// follow-up for a self-hosted online posture.
-const BASEMAP_ASSETS_BASE = "https://protomaps.github.io/basemaps-assets";
 // Light flavor everywhere for now — matches the paper-topo look of the SIX
 // rasters; the dark JSON ships alongside for a later theme pass.
 const PROTOMAPS_FLAVOR = "light" as const;
-const SHELL_STYLE = {
-  version: 8,
-  sources: {},
-  layers: [
-    // A background layer so the style is never empty — matches the primary
-    // surface colour while tiles load.
-    { id: "background", type: "background", paint: { "background-color": "#4E4944" } },
-  ],
-  glyphs: `${BASEMAP_ASSETS_BASE}/fonts/{fontstack}/{range}.pbf`,
-  sprite: `${BASEMAP_ASSETS_BASE}/sprites/v4/${PROTOMAPS_FLAVOR}`,
-};
 
 // Blue Mountains default view (matches the app's home turf).
 const DEFAULT_CENTER: [number, number] = [150.31, -33.7];
@@ -145,6 +130,15 @@ export function MapScreen({
   const [offlineOnly, setOfflineOnly] = useState(false);
   const connectivity = useConnectivity(offlineOnly);
   const artifacts = useMapArtifacts();
+  // Bundled glyph/sprite install (§8.3). Map render is gated below until it
+  // resolves — swapping the style's glyphs URL after mount rebuilds the whole
+  // style. Post-install launches resolve in ~ms; install failure falls back
+  // to the remote asset host (online-only labels).
+  const basemapAssets = useBasemapAssets();
+  const shellStyle = useMemo(
+    () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
+    [basemapAssets.localBaseUrl],
+  );
   const [basemapId, setBasemapId] = useState<BasemapId>("six-topo");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [regionStatus, setRegionStatus] = useState<string | null>(null);
@@ -364,12 +358,20 @@ export function MapScreen({
       )
     : [];
 
+  // Hold the map until the bundled glyph/sprite install settles (first launch:
+  // one-time extraction, a second or two; after that: a marker check). Mounting
+  // earlier would bake the remote glyph URLs into the style and force a full
+  // style rebuild when the local ones arrive.
+  if (basemapAssets.localBaseUrl == null && !basemapAssets.failed) {
+    return <View style={styles.root} />;
+  }
+
   return (
     <View style={styles.root}>
       <MapView
         ref={mapRef}
         style={styles.map}
-        mapStyle={SHELL_STYLE}
+        mapStyle={shellStyle}
         attributionEnabled={false}
         logoEnabled={false}
         onPress={() => setFollowUser(false)}
