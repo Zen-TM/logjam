@@ -12,7 +12,8 @@
       "bundleIdentifier": "com.logjamnsw.mobile",
       "supportsTablet": false,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["location"]
       }
     },
     "android": {
@@ -47,7 +48,14 @@
       ],
       "expo-secure-store",
       "@sentry/react-native",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-location",
+        {
+          "isAndroidForegroundServiceEnabled": true,
+          "locationWhenInUsePermission": "Logjam shows your position on the map and records tracks you start."
+        }
+      ]
     ],
     "extra": {
       "eas": {

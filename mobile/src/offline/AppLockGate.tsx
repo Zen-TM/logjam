@@ -13,6 +13,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { Button } from "../ui/Button";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
 import { useVectorImports } from "../imports/useVectorImports";
+import { useTracks } from "../tracks/useTracks";
 import { fontSize, spacing, theme } from "../theme";
 import { useMapArtifacts } from "./useMapArtifacts";
 
@@ -40,10 +41,17 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   // the ROW (the source.pdf lands on disk before any map_artifact exists).
   const { imports, loaded: importsLoaded } = useVectorImports();
   const { geoPdfImports, loaded: geoPdfLoaded } = useGeoPdfImports();
-  const loaded = artifactsLoaded && importsLoaded && geoPdfLoaded;
+  // Recorded tracks/waypoints are precise user location history (Stage 7) —
+  // they arm the lock like every other on-device secret.
+  const { tracks, waypoints, loaded: tracksLoaded } = useTracks();
+  const loaded = artifactsLoaded && importsLoaded && geoPdfLoaded && tracksLoaded;
   const lockRequired =
     !DEV_LOCK_DISABLED &&
-    (artifacts.length > 0 || imports.length > 0 || geoPdfImports.length > 0);
+    (artifacts.length > 0 ||
+      imports.length > 0 ||
+      geoPdfImports.length > 0 ||
+      tracks.length > 0 ||
+      waypoints.length > 0);
   const [unlocked, setUnlocked] = useState(false);
   const [authFailed, setAuthFailed] = useState(false);
   const prompting = useRef(false);

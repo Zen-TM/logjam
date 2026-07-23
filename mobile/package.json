@@ -38,6 +38,7 @@
     "expo-secure-store": "~14.2.4",
     "expo-sqlite": "~15.2.14",
     "expo-status-bar": "~2.2.3",
+    "expo-task-manager": "~13.1.6",
     "fflate": "^0.8.3",
     "react": "19.0.0",
     "react-native": "0.79.6",

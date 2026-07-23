@@ -1,0 +1,266 @@
+// Track + waypoint storage (Stage 7): recorded GPS tracks and dropped
+// waypoints, in the same app-private SQLite DB as the offline registry (one
+// store, one backup-exclusion posture, one app-lock trigger).
+//
+// PRIVACY: a recorded track is precise user location history in a canyon —
+// the most sensitive data the app holds. Rows are app-private,
+// backup-excluded, arm the Stage 4 app lock, stay local until Stage 8's
+// explicit sync, and never reach logs, telemetry or crash reports. Logging
+// around this module is state transitions and counts only.
+import type { RecordedTrackPoint, TrackStats } from "@logjam/shared";
+
+import { getOfflineDb } from "../offline/registryDb";
+
+/** recording/paused = the single active track; done = saved. */
+export type TrackState = "recording" | "paused" | "done";
+
+export type Track = {
+  id: string;
+  name: string;
+  state: TrackState;
+  color: string;
+  visible: boolean;
+  /** Increments on resume so the polyline breaks across pause gaps. */
+  currentSegment: number;
+  /** Cached stats — recomputed after each written batch and on finish. */
+  distanceM: number;
+  durationMs: number;
+  elevationGainM: number;
+  elevationLossM: number;
+  pointCount: number;
+  startedAt: string;
+  endedAt: string | null;
+  updatedAt: string;
+};
+
+export type Waypoint = {
+  id: string;
+  name: string;
+  lon: number;
+  lat: number;
+  createdAt: string;
+};
+
+type Listener = () => void;
+const listeners = new Set<Listener>();
+export function onTracksChanged(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+function notifyChanged(): void {
+  for (const listener of listeners) listener();
+}
+
+type TrackRow = {
+  id: string;
+  name: string;
+  state: string;
+  color: string;
+  visible: number;
+  currentSegment: number;
+  distanceM: number;
+  durationMs: number;
+  elevationGainM: number;
+  elevationLossM: number;
+  pointCount: number;
+  startedAt: string;
+  endedAt: string | null;
+  updatedAt: string;
+};
+
+function rowToTrack(row: TrackRow): Track {
+  return {
+    id: row.id,
+    name: row.name,
+    state: row.state as TrackState,
+    color: row.color,
+    visible: row.visible !== 0,
+    currentSegment: row.currentSegment,
+    distanceM: row.distanceM,
+    durationMs: row.durationMs,
+    elevationGainM: row.elevationGainM,
+    elevationLossM: row.elevationLossM,
+    pointCount: row.pointCount,
+    startedAt: row.startedAt,
+    endedAt: row.endedAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export async function listTracks(): Promise<Track[]> {
+  const db = await getOfflineDb();
+  const rows = await db.getAllAsync<TrackRow>(
+    "SELECT * FROM track ORDER BY startedAt DESC",
+  );
+  return rows.map(rowToTrack);
+}
+
+/** The single recording/paused track, if any. */
+export async function findActiveTrack(): Promise<Track | null> {
+  const db = await getOfflineDb();
+  const rows = await db.getAllAsync<TrackRow>(
+    "SELECT * FROM track WHERE state IN ('recording', 'paused') LIMIT 1",
+  );
+  return rows.length > 0 ? rowToTrack(rows[0]) : null;
+}
+
+export async function insertTrack(track: Track): Promise<void> {
+  const db = await getOfflineDb();
+  await db.runAsync(
+    `INSERT INTO track
+       (id, name, state, color, visible, currentSegment,
+        distanceM, durationMs, elevationGainM, elevationLossM, pointCount,
+        startedAt, endedAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    track.id,
+    track.name,
+    track.state,
+    track.color,
+    track.visible ? 1 : 0,
+    track.currentSegment,
+    track.distanceM,
+    track.durationMs,
+    track.elevationGainM,
+    track.elevationLossM,
+    track.pointCount,
+    track.startedAt,
+    track.endedAt,
+    track.updatedAt,
+  );
+  notifyChanged();
+}
+
+/** Partial update; always bumps updatedAt and notifies. */
+export async function updateTrack(
+  id: string,
+  patch: Partial<
+    Pick<Track, "name" | "state" | "visible" | "currentSegment" | "endedAt">
+  > & { stats?: TrackStats },
+): Promise<void> {
+  const db = await getOfflineDb();
+  const sets: string[] = ["updatedAt = ?"];
+  const args: (string | number | null)[] = [new Date().toISOString()];
+  if (patch.name !== undefined) {
+    sets.push("name = ?");
+    args.push(patch.name);
+  }
+  if (patch.state !== undefined) {
+    sets.push("state = ?");
+    args.push(patch.state);
+  }
+  if (patch.visible !== undefined) {
+    sets.push("visible = ?");
+    args.push(patch.visible ? 1 : 0);
+  }
+  if (patch.currentSegment !== undefined) {
+    sets.push("currentSegment = ?");
+    args.push(patch.currentSegment);
+  }
+  if (patch.endedAt !== undefined) {
+    sets.push("endedAt = ?");
+    args.push(patch.endedAt);
+  }
+  if (patch.stats !== undefined) {
+    sets.push(
+      "distanceM = ?, durationMs = ?, elevationGainM = ?, elevationLossM = ?, pointCount = ?",
+    );
+    args.push(
+      patch.stats.distanceM,
+      patch.stats.durationMs,
+      patch.stats.elevationGainM,
+      patch.stats.elevationLossM,
+      patch.stats.pointCount,
+    );
+  }
+  await db.runAsync(`UPDATE track SET ${sets.join(", ")} WHERE id = ?`, ...args, id);
+  notifyChanged();
+}
+
+export async function deleteTrack(id: string): Promise<void> {
+  const db = await getOfflineDb();
+  await db.runAsync("DELETE FROM track_point WHERE trackId = ?", id);
+  await db.runAsync("DELETE FROM track WHERE id = ?", id);
+  notifyChanged();
+}
+
+export async function listTrackPoints(
+  trackId: string,
+): Promise<RecordedTrackPoint[]> {
+  const db = await getOfflineDb();
+  return db.getAllAsync<RecordedTrackPoint>(
+    `SELECT segment, lon, lat, altitudeM, accuracyM, timestampMs
+       FROM track_point WHERE trackId = ? ORDER BY seq`,
+    trackId,
+  );
+}
+
+/** Last accepted point — the acceptance filter's `prev` across batches. */
+export async function lastTrackPoint(
+  trackId: string,
+): Promise<RecordedTrackPoint | null> {
+  const db = await getOfflineDb();
+  const rows = await db.getAllAsync<RecordedTrackPoint>(
+    `SELECT segment, lon, lat, altitudeM, accuracyM, timestampMs
+       FROM track_point WHERE trackId = ? ORDER BY seq DESC LIMIT 1`,
+    trackId,
+  );
+  return rows.length > 0 ? rows[0] : null;
+}
+
+/** Append a batch in one transaction. Seq continues from the stored max. */
+export async function appendTrackPoints(
+  trackId: string,
+  points: RecordedTrackPoint[],
+): Promise<void> {
+  if (points.length === 0) return;
+  const db = await getOfflineDb();
+  await db.withTransactionAsync(async () => {
+    const maxRow = await db.getFirstAsync<{ maxSeq: number | null }>(
+      "SELECT MAX(seq) AS maxSeq FROM track_point WHERE trackId = ?",
+      trackId,
+    );
+    let seq = (maxRow?.maxSeq ?? -1) + 1;
+    for (const p of points) {
+      await db.runAsync(
+        `INSERT INTO track_point
+           (trackId, seq, segment, lon, lat, altitudeM, accuracyM, timestampMs)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        trackId,
+        seq++,
+        p.segment,
+        p.lon,
+        p.lat,
+        p.altitudeM,
+        p.accuracyM,
+        p.timestampMs,
+      );
+    }
+  });
+  notifyChanged();
+}
+
+// --- Waypoints ---
+
+export async function listWaypoints(): Promise<Waypoint[]> {
+  const db = await getOfflineDb();
+  return db.getAllAsync<Waypoint>("SELECT * FROM waypoint ORDER BY createdAt DESC");
+}
+
+export async function insertWaypoint(waypoint: Waypoint): Promise<void> {
+  const db = await getOfflineDb();
+  await db.runAsync(
+    "INSERT INTO waypoint (id, name, lon, lat, createdAt) VALUES (?, ?, ?, ?, ?)",
+    waypoint.id,
+    waypoint.name,
+    waypoint.lon,
+    waypoint.lat,
+    waypoint.createdAt,
+  );
+  notifyChanged();
+}
+
+export async function deleteWaypoint(id: string): Promise<void> {
+  const db = await getOfflineDb();
+  await db.runAsync("DELETE FROM waypoint WHERE id = ?", id);
+  notifyChanged();
+}

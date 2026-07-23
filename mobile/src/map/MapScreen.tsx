@@ -38,6 +38,10 @@ import NetInfo from "@react-native-community/netinfo";
 import {
   BASEMAP_CATALOG,
   VECTOR_STYLE_DEFAULTS,
+  compassPointFor,
+  formatDistanceM,
+  haversineMeters,
+  initialBearingDegrees,
   messageFromError,
   type TopoLayerFormat,
   type TopoLayerName,
@@ -76,7 +80,23 @@ import {
   deleteVectorImport,
   importVectorFileFromPicker,
   importVectorSource,
+  randomId,
 } from "../imports/vectorImports";
+import {
+  deleteTrack,
+  deleteWaypoint,
+  insertWaypoint,
+  updateTrack,
+  type Waypoint,
+} from "../tracks/tracksDb";
+import {
+  reconcileTrackRecordingOnLaunch,
+  startTrackRecording,
+} from "../tracks/trackRecorder";
+import { TrackMapLayers } from "../tracks/TrackMapLayers";
+import { TrackRecordingControls } from "../tracks/TrackRecordingControls";
+import { useTracks } from "../tracks/useTracks";
+import { ensureForegroundLocationPermission } from "./locationPermission";
 import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import {
   deleteDownloadedArtifact,
@@ -193,7 +213,14 @@ export function MapScreen({
   const mapRef = useRef<React.ComponentRef<typeof MapView>>(null);
   const [enabledOverlays, setEnabledOverlays] = useState<ReadonlySet<string>>(new Set());
   const cameraRef = useRef<React.ComponentRef<typeof Camera>>(null);
-  const [followUser, setFollowUser] = useState(false);
+  // Stage 7 follow modes: follow recenters on each fix (north-up); course-up
+  // additionally rotates the map to the direction of travel. The locate
+  // button cycles off → follow → course-up → off.
+  const [followMode, setFollowMode] = useState<"off" | "follow" | "course-up">(
+    "off",
+  );
+  const followModeRef = useRef(followMode);
+  followModeRef.current = followMode;
   const [userCoord, setUserCoord] = useState<[number, number] | null>(null);
   const [userAccuracyM, setUserAccuracyM] = useState<number | null>(null);
   const [userHeading, setUserHeading] = useState<number | null>(null);
@@ -506,6 +533,60 @@ export function MapScreen({
     [finishGeoPdf, geoPdfProgress],
   );
 
+  // Stage 7: track recording + waypoints + navigate-to-point. The recorder
+  // itself lives in tracks/trackRecorder (background task); this screen only
+  // starts it and renders state. (The start/navigate callbacks live below
+  // handleLocateMe — they depend on it.)
+  const { tracks, waypoints } = useTracks();
+  const activeTrack =
+    tracks.find(
+      (track) => track.state === "recording" || track.state === "paused",
+    ) ?? null;
+  const savedTracks = tracks.filter((track) => track.state === "done");
+  const [navTarget, setNavTarget] = useState<Waypoint | null>(null);
+  const navDistanceM =
+    navTarget && userCoord
+      ? haversineMeters(userCoord[1], userCoord[0], navTarget.lat, navTarget.lon)
+      : null;
+  const navBearingDeg =
+    navTarget && userCoord
+      ? initialBearingDegrees(
+          userCoord[1],
+          userCoord[0],
+          navTarget.lat,
+          navTarget.lon,
+        )
+      : null;
+
+  // Reconcile a recording that outlived the app (kill/reboot) — marks it
+  // paused when the platform task died, stops an orphaned task.
+  useEffect(() => {
+    reconcileTrackRecordingOnLaunch().catch(console.error);
+  }, []);
+
+  const handleMapLongPress = useCallback(
+    (feature: GeoJSON.Feature) => {
+      if (feature.geometry.type !== "Point") return;
+      const [lon, lat] = feature.geometry.coordinates as [number, number];
+      Alert.alert("Drop waypoint here?", undefined, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Drop waypoint",
+          onPress: () => {
+            insertWaypoint({
+              id: randomId(),
+              name: `Waypoint ${waypoints.length + 1}`,
+              lon,
+              lat,
+              createdAt: new Date().toISOString(),
+            }).catch(console.error);
+          },
+        },
+      ]);
+    },
+    [waypoints.length],
+  );
+
   // "Open in Logjam": ACTION_VIEW / share-sheet delivers a content:// URI.
   // Kind is sniffed from leading bytes (content URIs carry no reliable name).
   const handleIncomingUrl = useCallback(
@@ -582,43 +663,31 @@ export function MapScreen({
   }, []);
 
   const handleLocateMe = useCallback(async () => {
-    // Non-prompting check first: requestForegroundPermissionsAsync has been
-    // observed to hang on-device even when the permission is already granted.
-    let { status, canAskAgain } = await Location.getForegroundPermissionsAsync();
-    if (status !== "granted") {
-      ({ status, canAskAgain } = await Location.requestForegroundPermissionsAsync());
-    }
-    if (status !== "granted") {
-      // Android silently auto-denies after one refusal (canAskAgain=false) —
-      // the only path back is app settings. Never fail silently.
-      Alert.alert(
-        "Location permission needed",
-        canAskAgain
-          ? "Allow location access to show your position on the map."
-          : "Location was previously denied. Enable it for Logjam in system settings.",
-        canAskAgain
-          ? undefined
-          : [
-              { text: "Cancel", style: "cancel" },
-              { text: "Open settings", onPress: () => Linking.openSettings() },
-            ],
-      );
-      return;
-    }
+    if (!(await ensureForegroundLocationPermission())) return;
     // Drive the dot from expo-location directly — MLRN's built-in
     // UserLocation engine produced no updates on-device (silent), and we
     // need expo-location's watcher for Stage 7 track recording anyway.
     if (locationWatch.current) {
-      // Toggle off.
+      // Cycle the follow mode; the last step stops the watchers.
+      if (followModeRef.current === "off") {
+        setFollowMode("follow");
+        return;
+      }
+      if (followModeRef.current === "follow") {
+        setFollowMode("course-up");
+        return;
+      }
       locationWatch.current.remove();
       locationWatch.current = null;
       headingWatch.current?.remove();
       headingWatch.current = null;
       setUserHeading(null);
-      setFollowUser(false);
+      setFollowMode("off");
+      // Leave course-up's rotation behind — back to north-up.
+      cameraRef.current?.setCamera({ heading: 0, animationDuration: 300 });
       return;
     }
-    setFollowUser(true);
+    setFollowMode("follow");
     firstFix.current = true;
 
     const applyFix = (position: Location.LocationObject, fly: boolean) => {
@@ -628,12 +697,24 @@ export function MapScreen({
       ];
       setUserCoord(coord);
       setUserAccuracyM(position.coords.accuracy ?? null);
+      const mode = followModeRef.current;
       if (fly && firstFix.current) {
         firstFix.current = false;
         cameraRef.current?.setCamera({
           centerCoordinate: coord,
           zoomLevel: 14,
           animationDuration: 1200,
+        });
+      } else if (mode !== "off") {
+        // Course over ground comes from the fix (heading ⇒ movement
+        // direction); reported as -1 when stationary — keep the rotation.
+        const course = position.coords.heading;
+        cameraRef.current?.setCamera({
+          centerCoordinate: coord,
+          animationDuration: 600,
+          ...(mode === "course-up" && course != null && course >= 0
+            ? { heading: course }
+            : {}),
         });
       }
     };
@@ -671,6 +752,45 @@ export function MapScreen({
     });
   }, []);
 
+  const handleStartRecording = useCallback(async () => {
+    if (!(await ensureForegroundLocationPermission())) return;
+    try {
+      await startTrackRecording();
+      // Recording without seeing yourself is disorienting — start the dot +
+      // follow if it isn't already running.
+      if (!locationWatch.current) handleLocateMe();
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Recording error", "Couldn't start recording.");
+    }
+  }, [handleLocateMe]);
+
+  const handleWaypointPress = useCallback(
+    (waypoint: Waypoint) => {
+      Alert.alert(waypoint.name, undefined, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            setNavTarget((current) =>
+              current?.id === waypoint.id ? null : current,
+            );
+            deleteWaypoint(waypoint.id).catch(console.error);
+          },
+        },
+        {
+          text: "Navigate",
+          onPress: () => {
+            setNavTarget(waypoint);
+            if (!locationWatch.current) handleLocateMe();
+          },
+        },
+      ]);
+    },
+    [handleLocateMe],
+  );
+
   const overlayList = overlays.data
     ? overlays.data.jobs.flatMap((job) =>
         job.layers.map((layer) => ({
@@ -700,7 +820,8 @@ export function MapScreen({
         mapStyle={shellStyle}
         attributionEnabled={false}
         logoEnabled={false}
-        onPress={() => setFollowUser(false)}
+        onPress={() => setFollowMode("off")}
+        onLongPress={handleMapLongPress}
       >
         <Camera
           ref={cameraRef}
@@ -835,6 +956,39 @@ export function MapScreen({
           );
         })}
 
+        {/* Recorded tracks + waypoints (Stage 7): unpinned, mounted before
+            the canyon sources so canyons draw on top. */}
+        <TrackMapLayers
+          tracks={tracks}
+          waypoints={waypoints}
+          onWaypointPress={handleWaypointPress}
+        />
+
+        {/* Navigate-to-waypoint sight line: latest fix → target. */}
+        {navTarget && userCoord ? (
+          <ShapeSource
+            id="nav-line"
+            shape={{
+              type: "Feature",
+              geometry: {
+                type: "LineString",
+                coordinates: [userCoord, [navTarget.lon, navTarget.lat]],
+              },
+              properties: {},
+            }}
+          >
+            <LineLayer
+              id="nav-line-layer"
+              style={{
+                lineColor: "#4285F4",
+                lineWidth: 2,
+                lineOpacity: 0.8,
+                lineDasharray: [2, 2],
+              }}
+            />
+          </ShapeSource>
+        ) : null}
+
         {/* Canyon overlays: authed API GeoJSON — never baked into tiles
             (privacy rule). Shared first so owned draws on top. */}
         <ShapeSource id="shared-canyons" shape={sharedFc} onPress={handleCanyonPress}>
@@ -964,12 +1118,48 @@ export function MapScreen({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Locate me"
-          style={[styles.controlButton, followUser && styles.controlActive]}
+          style={[styles.controlButton, followMode !== "off" && styles.controlActive]}
           onPress={handleLocateMe}
         >
-          <Text style={styles.controlGlyph}>◎</Text>
+          <Text style={styles.controlGlyph}>
+            {followMode === "course-up" ? "➤" : "◎"}
+          </Text>
         </Pressable>
+        {!activeTrack ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Record track"
+            style={styles.controlButton}
+            onPress={handleStartRecording}
+          >
+            <Text style={[styles.controlGlyph, styles.recordGlyph]}>⏺</Text>
+          </Pressable>
+        ) : null}
       </View>
+
+      {activeTrack ? <TrackRecordingControls activeTrack={activeTrack} /> : null}
+
+      {/* Navigate-to-waypoint readout: live distance + bearing from the
+          latest fix. Static labels only — coordinates never rendered. */}
+      {navTarget ? (
+        <View style={styles.navChip}>
+          <Text style={styles.noticeText} numberOfLines={1}>
+            {navTarget.name}
+            {navDistanceM != null && navBearingDeg != null
+              ? ` · ${formatDistanceM(navDistanceM)} · ${compassPointFor(
+                  navBearingDeg,
+                )} ${Math.round(navBearingDeg)}°`
+              : " · waiting for GPS…"}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Stop navigating"
+            onPress={() => setNavTarget(null)}
+          >
+            <Text style={styles.pickerDelete}>✕</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {/* Attribution (plain text, required by providers). */}
       <View style={styles.attribution} pointerEvents="none">
@@ -1326,6 +1516,60 @@ export function MapScreen({
                 ) : null}
               </View>
             ))}
+            <Text style={styles.pickerHeading}>Tracks</Text>
+            {savedTracks.length === 0 ? (
+              <Text style={styles.pickerStatus}>
+                Record a track with the ⏺ button on the map.
+              </Text>
+            ) : null}
+            {savedTracks.map((track) => (
+              <View key={track.id} style={styles.pickerRegionRow}>
+                <Pressable
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: track.visible }}
+                  onPress={() => {
+                    updateTrack(track.id, { visible: !track.visible }).catch(
+                      console.error,
+                    );
+                  }}
+                  style={styles.pickerRowGrow}
+                >
+                  <Text
+                    style={[
+                      styles.pickerLabel,
+                      track.visible && styles.pickerLabelActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {track.visible ? "☑" : "☐"}{" "}
+                    <Text style={{ color: track.color }}>●</Text> {track.name} ·{" "}
+                    {formatDistanceM(track.distanceM)}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete track"
+                  onPress={() => {
+                    Alert.alert(
+                      "Delete track?",
+                      "The recorded points are deleted. This can't be undone.",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Delete",
+                          style: "destructive",
+                          onPress: () => {
+                            deleteTrack(track.id).catch(console.error);
+                          },
+                        },
+                      ],
+                    );
+                  }}
+                >
+                  <Text style={styles.pickerDelete}>Delete</Text>
+                </Pressable>
+              </View>
+            ))}
             </ScrollView>
           </View>
         </Pressable>
@@ -1363,6 +1607,19 @@ const styles = StyleSheet.create({
   },
   controlActive: { backgroundColor: theme.accent },
   controlGlyph: { color: theme.textPrimary, fontSize: 22 },
+  recordGlyph: { color: "#ef4444" },
+  navChip: {
+    position: "absolute",
+    top: spacing(2),
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1.5),
+    backgroundColor: "rgba(0,0,0,0.7)",
+    borderRadius: radius.md,
+    paddingHorizontal: spacing(2),
+    paddingVertical: spacing(1),
+  },
   attribution: {
     position: "absolute",
     bottom: spacing(0.5),

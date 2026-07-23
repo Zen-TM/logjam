@@ -83,6 +83,37 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
           createdAt       TEXT NOT NULL,
           updatedAt       TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS track (
+          id             TEXT PRIMARY KEY,
+          name           TEXT NOT NULL,
+          state          TEXT NOT NULL,
+          color          TEXT NOT NULL,
+          visible        INTEGER NOT NULL DEFAULT 1,
+          currentSegment INTEGER NOT NULL DEFAULT 0,
+          distanceM      REAL NOT NULL DEFAULT 0,
+          durationMs     INTEGER NOT NULL DEFAULT 0,
+          elevationGainM REAL NOT NULL DEFAULT 0,
+          elevationLossM REAL NOT NULL DEFAULT 0,
+          pointCount     INTEGER NOT NULL DEFAULT 0,
+          startedAt      TEXT NOT NULL,
+          endedAt        TEXT,
+          updatedAt      TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS track_point (
+          trackId     TEXT NOT NULL,
+          seq         INTEGER NOT NULL,
+          segment     INTEGER NOT NULL,
+          lon REAL NOT NULL, lat REAL NOT NULL,
+          altitudeM REAL, accuracyM REAL,
+          timestampMs INTEGER NOT NULL,
+          PRIMARY KEY (trackId, seq)
+        );
+        CREATE TABLE IF NOT EXISTS waypoint (
+          id        TEXT PRIMARY KEY,
+          name      TEXT NOT NULL,
+          lon REAL NOT NULL, lat REAL NOT NULL,
+          createdAt TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS region_download (
           id            TEXT PRIMARY KEY,
           taskKind      TEXT NOT NULL,
