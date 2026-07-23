@@ -32,7 +32,7 @@ const DEV_LOCK_DISABLED =
   __DEV__ && process.env.EXPO_PUBLIC_DISABLE_APP_LOCK === "1";
 
 export function AppLockGate({ children }: { children: React.ReactNode }) {
-  const artifacts = useMapArtifacts();
+  const { artifacts, loaded } = useMapArtifacts();
   const lockRequired = !DEV_LOCK_DISABLED && artifacts.length > 0;
   const [unlocked, setUnlocked] = useState(false);
   const [authFailed, setAuthFailed] = useState(false);
@@ -40,6 +40,22 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   const promptStartedAt = useRef(0);
   const lastUnlockAt = useRef(0);
   const autoPrompted = useRef(false);
+  const sessionBeganWithoutLock = useRef(false);
+
+  // When the FIRST offline artifact lands mid-session (user just tapped
+  // download), arming the lock must not slam the gate on the live session —
+  // treat the session as unlocked and gate from the next background instead.
+  // A cold start with existing artifacts never takes this path: its first
+  // completed registry read arrives WITH rows, so the
+  // "loaded-and-empty" flag below was never set.
+  useEffect(() => {
+    if (loaded && !lockRequired) sessionBeganWithoutLock.current = true;
+    if (lockRequired && sessionBeganWithoutLock.current) {
+      sessionBeganWithoutLock.current = false;
+      lastUnlockAt.current = Date.now();
+      setUnlocked(true);
+    }
+  }, [loaded, lockRequired]);
 
   const prompt = useCallback(async () => {
     const now = Date.now();

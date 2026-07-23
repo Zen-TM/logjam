@@ -22,6 +22,7 @@ import {
   SymbolLayer,
 } from "@maplibre/maplibre-react-native";
 import * as Location from "expo-location";
+import NetInfo from "@react-native-community/netinfo";
 import {
   BASEMAP_CATALOG,
   VECTOR_STYLE_DEFAULTS,
@@ -132,7 +133,7 @@ export function MapScreen({
   // signal — battery saver + predictability in the field.
   const [offlineOnly, setOfflineOnly] = useState(false);
   const connectivity = useConnectivity(offlineOnly);
-  const artifacts = useMapArtifacts();
+  const { artifacts } = useMapArtifacts();
   // Bundled glyph/sprite install (§8.3). Map render is gated below until it
   // resolves — swapping the style's glyphs URL after mount rebuilds the whole
   // style. Post-install launches resolve in ~ms; install failure falls back
@@ -236,15 +237,62 @@ export function MapScreen({
     [onOpenCanyon],
   );
 
+  // Wi-Fi-only download default (stage4a §5.6 policy, applied to both task
+  // kinds): on cellular, downloads need an explicit per-download opt-in.
+  const confirmCellularOk = useCallback(async (): Promise<boolean> => {
+    const netState = await NetInfo.fetch();
+    if (netState.type !== "cellular") return true;
+    return new Promise((resolve) => {
+      Alert.alert(
+        "Use mobile data?",
+        "You're not on Wi-Fi. Download over mobile data?",
+        [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+          { text: "Download", onPress: () => resolve(true) },
+        ],
+        { cancelable: true, onDismiss: () => resolve(false) },
+      );
+    });
+  }, []);
+
   // Download the visible map area as a Protomaps offline region (stage4a
   // §7.2). The bbox goes to the API in a POST body only; see regionDownloads.
   const handleDownloadCurrentArea = useCallback(async () => {
     try {
+      if (!(await confirmCellularOk())) return;
       setRegionStatus("Preparing region…");
       const bounds = await mapRef.current?.getVisibleBounds();
       if (!bounds) throw new Error("Map not ready");
       const [[neLng, neLat], [swLng, swLat]] = bounds;
       const bbox = { west: swLng, south: swLat, east: neLng, north: neLat };
+      // Overlap warning: downloading an area a saved region already fully
+      // covers is usually a mis-tap, not intent.
+      const alreadyCovered = artifacts.some(
+        (a) =>
+          a.kind === "basemap-region" &&
+          a.bbox != null &&
+          bbox.west >= a.bbox[0] &&
+          bbox.south >= a.bbox[1] &&
+          bbox.east <= a.bbox[2] &&
+          bbox.north <= a.bbox[3],
+      );
+      if (alreadyCovered) {
+        const proceed = await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            "Area already saved",
+            "A saved region already covers this area. Download it again anyway?",
+            [
+              { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+              { text: "Download", onPress: () => resolve(true) },
+            ],
+            { cancelable: true, onDismiss: () => resolve(false) },
+          );
+        });
+        if (!proceed) {
+          setRegionStatus(null);
+          return;
+        }
+      }
       await downloadProtomapsRegion(bbox, (p) =>
         setRegionStatus(
           `Downloading… ${Math.min(100, Math.round((p.bytesDone / p.bytesTotal) * 100))}%`,
@@ -257,7 +305,7 @@ export function MapScreen({
         messageFromError(err, "Couldn't download this area. Try a smaller one."),
       );
     }
-  }, []);
+  }, [confirmCellularOk, artifacts]);
 
   const regionArtifacts = artifacts.filter((a) => a.kind === "basemap-region");
 
@@ -276,6 +324,7 @@ export function MapScreen({
       pmtilesUrl: string;
     }) => {
       try {
+        if (!(await confirmCellularOk())) return;
         setOverlayStatus(null);
         setOverlayPct(null);
         setOverlayBusy(item.key);
@@ -302,7 +351,7 @@ export function MapScreen({
         setOverlayPct(null);
       }
     },
-    [],
+    [confirmCellularOk],
   );
 
   const handleLocateMe = useCallback(async () => {
@@ -707,7 +756,12 @@ export function MapScreen({
             {regionArtifacts.map((artifact) => (
               <View key={artifact.id} style={styles.pickerRegionRow}>
                 <Text style={styles.pickerLabel}>
-                  ▣ Saved region · {(artifact.sizeBytes / 1024 / 1024).toFixed(1)} MB
+                  ▣ Saved region ·{" "}
+                  {new Date(artifact.downloadedAt).toLocaleDateString(undefined, {
+                    day: "numeric",
+                    month: "short",
+                  })}{" "}
+                  · {(artifact.sizeBytes / 1024 / 1024).toFixed(1)} MB
                 </Text>
                 <Pressable
                   accessibilityRole="button"
