@@ -429,6 +429,54 @@ export async function listMirrorTrips(): Promise<MirrorTrip[]> {
   return rows.map(rowToTrip);
 }
 
+export type MirrorMedia = {
+  id: string;
+  linkedType: string;
+  linkedId: string;
+  mediaType: string;
+  filename: string | null;
+  color: string | null;
+  createdAt: string;
+  localThumbPath: string | null;
+  localDisplayPath: string | null;
+};
+
+export async function listMediaForLinked(
+  linkedType: string,
+  linkedId: string,
+): Promise<MirrorMedia[]> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<{
+    id: string;
+    linked_type: string;
+    linked_id: string;
+    media_type: string;
+    filename: string | null;
+    color: string | null;
+    created_at: string | null;
+    local_thumb_path: string | null;
+    local_display_path: string | null;
+  }>(
+    `SELECT id, linked_type, linked_id, media_type, filename, color,
+            created_at, local_thumb_path, local_display_path
+     FROM media WHERE linked_type = ? AND linked_id = ?
+     ORDER BY created_at ASC`,
+    linkedType,
+    linkedId,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    linkedType: row.linked_type,
+    linkedId: row.linked_id,
+    mediaType: row.media_type,
+    filename: row.filename,
+    color: row.color,
+    createdAt: row.created_at ?? "",
+    localThumbPath: row.local_thumb_path,
+    localDisplayPath: row.local_display_path,
+  }));
+}
+
 type WaypointRow = {
   id: string;
   canyon_id: string | null;

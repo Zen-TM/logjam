@@ -10,6 +10,7 @@ import { computeBackoffMs } from "@logjam/shared";
 import { fetchCurrentUser } from "../api/queries";
 import { runDeltaPull } from "./deltaPull";
 import { flushOutbox } from "./flush";
+import { syncThumbnailCache } from "./mediaCache";
 import { getSyncStateValue, setSyncStateValue } from "./syncDb";
 
 export type SyncStatus = {
@@ -61,6 +62,9 @@ async function runCycleOnce(): Promise<void> {
   // server state and just-created rows come back confirmed.
   await flushOutbox();
   await runDeltaPull(userId);
+  // Eager thumbnail cache (§7.3): best-effort — an offline-again failure
+  // must not mark the whole cycle failed (rows retry next pass).
+  await syncThumbnailCache().catch(() => {});
   retryAttempt = 0;
   setStatus({
     state: "idle",

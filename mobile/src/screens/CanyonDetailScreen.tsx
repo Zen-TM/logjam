@@ -2,16 +2,29 @@
 // inaccessible canyon never reaches the mirror, so it renders the same "not
 // found" state as a nonexistent one — the API's 404-not-403 anti-oracle,
 // preserved locally.
-import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { formatCanyonGrade } from "@logjam/shared";
+import { useCallback, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { categoryHasThumbnail, formatCanyonGrade, mediaCategory } from "@logjam/shared";
 
 import type { TCanyon } from "../api/types";
 import { fontSize, radius, spacing, theme } from "../theme";
-import { useMirrorCanyon } from "../sync/useSyncQueries";
+import { ensureDisplayCached } from "../sync/mediaCache";
+import type { MirrorMedia } from "../sync/mirrorStore";
+import { useMirrorCanyon, useMirrorCanyonMedia } from "../sync/useSyncQueries";
 import { EmptyState, ErrorState, LoadingState } from "../ui/ScreenStates";
 
 export function CanyonDetailScreen({ canyonId }: { canyonId: string }) {
   const query = useMirrorCanyon(canyonId);
+  const media = useMirrorCanyonMedia(canyonId);
 
   if (query.loading) return <LoadingState />;
   if (query.error) return <ErrorState message={query.error} onRetry={query.refresh} />;
@@ -19,10 +32,94 @@ export function CanyonDetailScreen({ canyonId }: { canyonId: string }) {
     return <EmptyState title="Canyon not found" hint="It may have been deleted." />;
   }
 
-  return <CanyonDetailView canyon={query.data} />;
+  return <CanyonDetailView canyon={query.data} media={media.data ?? []} />;
 }
 
-function CanyonDetailView({ canyon }: { canyon: TCanyon }) {
+// Thumbnail strip (§7.3): thumbs come from the eager offline cache; tapping
+// fetches the full-res lazily (cached after first view). Offline with no
+// cached full-res → the viewer falls back to the thumbnail.
+function MediaStrip({ media }: { media: MirrorMedia[] }) {
+  const [viewer, setViewer] = useState<{ media: MirrorMedia; uri: string | null } | null>(
+    null,
+  );
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  const openViewer = useCallback(async (item: MirrorMedia) => {
+    setLoadingId(item.id);
+    try {
+      const displayUri = await ensureDisplayCached(item.id);
+      setViewer({ media: item, uri: displayUri ?? item.localThumbPath });
+    } finally {
+      setLoadingId(null);
+    }
+  }, []);
+
+  const thumbs = media.filter((item) => {
+    const category = mediaCategory(item.mediaType);
+    return category !== null && categoryHasThumbnail(category);
+  });
+  if (thumbs.length === 0) return null;
+
+  return (
+    <View style={styles.mediaBlock}>
+      <Text style={styles.sectionLabel}>Photos</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={styles.mediaRow}>
+          {thumbs.map((item) => (
+            <Pressable
+              key={item.id}
+              accessibilityRole="imagebutton"
+              onPress={() => void openViewer(item)}
+              style={styles.thumbWrap}
+            >
+              {item.localThumbPath ? (
+                <Image source={{ uri: item.localThumbPath }} style={styles.thumb} />
+              ) : (
+                <View style={[styles.thumb, styles.thumbPlaceholder]}>
+                  <Text style={styles.thumbPlaceholderText}>⌛</Text>
+                </View>
+              )}
+              {loadingId === item.id ? (
+                <View style={styles.thumbLoading}>
+                  <ActivityIndicator color={theme.accent} />
+                </View>
+              ) : null}
+            </Pressable>
+          ))}
+        </View>
+      </ScrollView>
+
+      <Modal
+        visible={viewer !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewer(null)}
+      >
+        <Pressable style={styles.viewerBackdrop} onPress={() => setViewer(null)}>
+          {viewer?.uri ? (
+            <Image
+              source={{ uri: viewer.uri }}
+              style={styles.viewerImage}
+              resizeMode="contain"
+            />
+          ) : (
+            <Text style={styles.viewerUnavailable}>
+              Full photo not downloaded — available online.
+            </Text>
+          )}
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
+function CanyonDetailView({
+  canyon,
+  media,
+}: {
+  canyon: TCanyon;
+  media: MirrorMedia[];
+}) {
   const grade = formatCanyonGrade(canyon);
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
@@ -51,6 +148,8 @@ function CanyonDetailView({ canyon }: { canyon: TCanyon }) {
           <Text style={styles.notes}>{canyon.notes}</Text>
         </View>
       ) : null}
+
+      <MediaStrip media={media} />
     </ScrollView>
   );
 }
@@ -95,4 +194,31 @@ const styles = StyleSheet.create({
     color: theme.textMuted,
   },
   notes: { fontSize: fontSize.base, color: theme.textPrimary, lineHeight: 22 },
+  mediaBlock: { gap: spacing(0.5) },
+  mediaRow: { flexDirection: "row", gap: spacing(1) },
+  thumbWrap: { position: "relative" },
+  thumb: {
+    width: 96,
+    height: 96,
+    borderRadius: radius.md,
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  thumbPlaceholder: { alignItems: "center", justifyContent: "center" },
+  thumbPlaceholderText: { fontSize: fontSize.xl, color: theme.textMuted },
+  thumbLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.4)",
+    borderRadius: radius.md,
+  },
+  viewerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing(2),
+  },
+  viewerImage: { width: "100%", height: "100%" },
+  viewerUnavailable: { color: theme.textMuted, fontSize: fontSize.base },
 });

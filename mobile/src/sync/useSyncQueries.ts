@@ -6,11 +6,13 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   hasMirrorSynced,
+  listMediaForLinked,
   listMirrorCanyons,
   listMirrorTrips,
   listMirrorWaypoints,
   getMirrorCanyon,
   type MirrorCanyon,
+  type MirrorMedia,
   type MirrorTrip,
   type MirrorWaypoint,
 } from "./mirrorStore";
@@ -104,4 +106,11 @@ export function useMirrorCanyon(id: string): MirrorQueryState<MirrorCanyon | nul
 
 export function useMirrorWaypoints(): MirrorQueryState<MirrorWaypoint[]> {
   return useMirrorQuery(readWaypoints);
+}
+
+export function useMirrorCanyonMedia(
+  canyonId: string,
+): MirrorQueryState<MirrorMedia[]> {
+  const read = useCallback(() => listMediaForLinked("canyon", canyonId), [canyonId]);
+  return useMirrorQuery(read);
 }
