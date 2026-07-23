@@ -22,3 +22,4 @@ export * from "./apiErrors.js";
 export * from "./canyonGrade.js";
 export * from "./mapRegionEstimate.js";
 export * from "./vectorImport.js";
+export * from "./trackStats.js";
