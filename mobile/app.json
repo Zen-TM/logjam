@@ -17,7 +17,20 @@
     },
     "android": {
       "package": "com.logjamnsw.mobile",
-      "allowBackup": false
+      "allowBackup": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "category": ["DEFAULT"],
+          "data": [
+            { "mimeType": "application/pdf" },
+            { "mimeType": "application/gpx+xml" },
+            { "mimeType": "application/vnd.google-earth.kml+xml" },
+            { "mimeType": "application/vnd.google-earth.kmz" },
+            { "mimeType": "application/geo+json" }
+          ]
+        }
+      ]
     },
     "plugins": [
       "expo-dev-client",

@@ -32,6 +32,7 @@ import {
   ShapeSource,
   SymbolLayer,
 } from "@maplibre/maplibre-react-native";
+import * as FileSystem from "expo-file-system";
 import * as Location from "expo-location";
 import NetInfo from "@react-native-community/netinfo";
 import {
@@ -52,11 +53,29 @@ import {
 import type { TCanyon } from "../api/types";
 import { config } from "../config";
 import { fontSize, radius, spacing, theme } from "../theme";
+import { updateGeoPdfImport } from "../geopdf/geoPdfImportsDb";
+import {
+  GEOPDF_ERRORS,
+  RESIDUAL_WARN_FRACTION,
+  deleteGeoPdfImport,
+  importGeoPdfBytes,
+  importGeoPdfFromPicker,
+  resumeGeoPdfImport,
+  type GeoPdfCancelToken,
+  type GeoPdfProgress,
+} from "../geopdf/importPipeline";
+import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
 import { setVectorImportVisible } from "../imports/importsDb";
+import {
+  classifyIncomingBytes,
+  isFileIntentUrl,
+  syntheticNameFor,
+} from "../imports/incomingIntent";
 import { useVectorImports } from "../imports/useVectorImports";
 import {
   deleteVectorImport,
   importVectorFileFromPicker,
+  importVectorSource,
 } from "../imports/vectorImports";
 import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import {
@@ -97,6 +116,14 @@ const DEFAULT_CENTER: [number, number] = [150.31, -33.7];
 const DEFAULT_ZOOM = 9;
 
 // Web canyon colours (Map.tsx applyCanyonThemePaint fallbacks).
+// GeoPDF overlay opacity presets (spec asks 0–100%; steps avoid a native
+// slider dep and gesture conflicts inside the scrolling picker sheet).
+const GEOPDF_OPACITY_STEPS = [0.2, 0.4, 0.6, 0.8, 1] as const;
+
+// A remount (tab switch) re-fires Linking.getInitialURL with the same intent
+// URI — imports must not run twice for one "Open in Logjam".
+const handledIntentUrls = new Set<string>();
+
 const OWNED_CANYON_COLOR = "#f97316";
 const SHARED_CANYON_COLOR = "#629bf8";
 const MAX_LABEL_CHARS = 40;
@@ -398,6 +425,162 @@ export function MapScreen({
     }
   }, [imports.length]);
 
+  // Stage 6: GeoPDF imports. The pipeline runs on-device (parse → tile →
+  // MBTiles); progress and errors surface as a status line (static messages
+  // / error codes only — never file-derived text).
+  const { geoPdfImports } = useGeoPdfImports();
+  const readyGeoPdfImports = geoPdfImports.filter(
+    (gp) => gp.state === "ready" && gp.visible,
+  );
+  const [geoPdfBusy, setGeoPdfBusy] = useState(false);
+  const [geoPdfStatus, setGeoPdfStatus] = useState<string | null>(null);
+  const [geoPdfPct, setGeoPdfPct] = useState<number | null>(null);
+  const geoPdfCancel = useRef<GeoPdfCancelToken | null>(null);
+
+  const geoPdfProgress = useCallback((progress: GeoPdfProgress) => {
+    if (progress.phase === "rasterising" || progress.phase === "overviews") {
+      setGeoPdfPct(Math.round(progress.fraction * 100));
+    } else {
+      setGeoPdfPct(null);
+    }
+  }, []);
+
+  const finishGeoPdf = useCallback(
+    (outcome: Awaited<ReturnType<typeof importGeoPdfFromPicker>>) => {
+      if (outcome.status === "imported") {
+        setGeoPdfStatus("GeoPDF imported — showing on the map.");
+        if (outcome.record.bbox) {
+          const [west, south, east, north] = outcome.record.bbox;
+          cameraRef.current?.fitBounds([east, north], [west, south], 40, 600);
+        }
+        setPickerOpen(false);
+      } else if (outcome.status === "existing") {
+        setGeoPdfStatus("Already imported.");
+      } else if (outcome.status === "paused") {
+        setGeoPdfStatus("Import paused — resume it from this list.");
+      }
+    },
+    [],
+  );
+
+  const handleImportGeoPdf = useCallback(async () => {
+    try {
+      setGeoPdfStatus(null);
+      setGeoPdfBusy(true);
+      geoPdfCancel.current = { cancelled: false };
+      finishGeoPdf(await importGeoPdfFromPicker(geoPdfProgress, geoPdfCancel.current));
+    } catch (err) {
+      console.error(err);
+      const code = (err as { code?: string }).code;
+      setGeoPdfStatus(
+        (code && GEOPDF_ERRORS[code]) ??
+          messageFromError(err, "Couldn't import that PDF."),
+      );
+    } finally {
+      setGeoPdfBusy(false);
+      setGeoPdfPct(null);
+      geoPdfCancel.current = null;
+    }
+  }, [finishGeoPdf, geoPdfProgress]);
+
+  const handleResumeGeoPdf = useCallback(
+    async (id: string) => {
+      try {
+        setGeoPdfStatus(null);
+        setGeoPdfBusy(true);
+        geoPdfCancel.current = { cancelled: false };
+        finishGeoPdf(await resumeGeoPdfImport(id, geoPdfProgress, geoPdfCancel.current));
+      } catch (err) {
+        console.error(err);
+        const code = (err as { code?: string }).code;
+        setGeoPdfStatus(
+          (code && GEOPDF_ERRORS[code]) ??
+            messageFromError(err, "Couldn't finish that import."),
+        );
+      } finally {
+        setGeoPdfBusy(false);
+        setGeoPdfPct(null);
+        geoPdfCancel.current = null;
+      }
+    },
+    [finishGeoPdf, geoPdfProgress],
+  );
+
+  // "Open in Logjam": ACTION_VIEW / share-sheet delivers a content:// URI.
+  // Kind is sniffed from leading bytes (content URIs carry no reliable name).
+  const handleIncomingUrl = useCallback(
+    async (url: string | null) => {
+      if (!url || !isFileIntentUrl(url) || handledIntentUrls.has(url)) return;
+      handledIntentUrls.add(url);
+      try {
+        const headB64 = await FileSystem.readAsStringAsync(url, {
+          encoding: FileSystem.EncodingType.Base64,
+          position: 0,
+          length: 4096,
+        });
+        const head = Uint8Array.from(atob(headB64), (c) => c.charCodeAt(0));
+        const kind = classifyIncomingBytes(head);
+        if (kind === null) {
+          Alert.alert(
+            "Can't open this file",
+            "Logjam can import GeoPDF, GPX, KML/KMZ and GeoJSON files.",
+          );
+          return;
+        }
+        if (kind === "pdf") {
+          setGeoPdfStatus(null);
+          setGeoPdfBusy(true);
+          geoPdfCancel.current = { cancelled: false };
+          try {
+            const fullB64 = await FileSystem.readAsStringAsync(url, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            const bytes = Uint8Array.from(atob(fullB64), (c) => c.charCodeAt(0));
+            finishGeoPdf(
+              await importGeoPdfBytes(
+                "Shared map",
+                bytes,
+                geoPdfProgress,
+                geoPdfCancel.current,
+              ),
+            );
+          } finally {
+            setGeoPdfBusy(false);
+            setGeoPdfPct(null);
+            geoPdfCancel.current = null;
+          }
+        } else {
+          const record = await importVectorSource(
+            url,
+            syntheticNameFor(kind),
+            imports.length,
+          );
+          setImportStatus("Imported — showing on the map.");
+          const [west, south, east, north] = record.bbox;
+          cameraRef.current?.fitBounds([east, north], [west, south], 40, 600);
+        }
+      } catch (err) {
+        console.error(err);
+        const code = (err as { code?: string }).code;
+        Alert.alert(
+          "Import failed",
+          (code && GEOPDF_ERRORS[code]) ??
+            messageFromError(err, "Couldn't import that file."),
+        );
+      }
+    },
+    [finishGeoPdf, geoPdfProgress, imports.length],
+  );
+  const handleIncomingUrlRef = useRef(handleIncomingUrl);
+  handleIncomingUrlRef.current = handleIncomingUrl;
+  useEffect(() => {
+    Linking.getInitialURL().then((url) => handleIncomingUrlRef.current(url));
+    const sub = Linking.addEventListener("url", (event) =>
+      handleIncomingUrlRef.current(event.url),
+    );
+    return () => sub.remove();
+  }, []);
+
   const handleLocateMe = useCallback(async () => {
     // Non-prompting check first: requestForegroundPermissionsAsync has been
     // observed to hang on-device even when the permission is already granted.
@@ -583,11 +766,34 @@ export function MapScreen({
           ),
         )}
 
+        {/* GeoPDF imports (Stage 6): device-tiled MBTiles rendered through
+            the resolver's local-artifact path — one translucent RasterLayer
+            per ready import, above the overlay band. */}
+        {readyGeoPdfImports.map((geoPdf, geoPdfPosition) =>
+          resolveMapSource(
+            { kind: "geopdf-import", importId: geoPdf.id },
+            ctx,
+          ).map((resolved) =>
+            resolved.status === "ok" ? (
+              <ResolvedSource key={resolved.key} resolved={resolved}>
+                <RasterLayer
+                  id={`geopdf-layer-${geoPdf.id}`}
+                  layerIndex={overlayRenderPlan.nextIndex + geoPdfPosition}
+                  style={{ rasterOpacity: geoPdf.opacity }}
+                />
+              </ResolvedSource>
+            ) : null,
+          ),
+        )}
+
         {/* Vector imports (Stage 5): device-local GeoJSON from user files,
             pinned above the overlay band, below the canyon layers. Each
             import is one ShapeSource read straight off disk. */}
         {visibleImports.map((imported, importPosition) => {
-          const base = overlayRenderPlan.nextIndex + importPosition * 3;
+          const base =
+            overlayRenderPlan.nextIndex +
+            readyGeoPdfImports.length +
+            importPosition * 3;
           return (
             <ShapeSource
               key={imported.id}
@@ -993,6 +1199,133 @@ export function MapScreen({
                 </Pressable>
               </View>
             ))}
+            <Text style={styles.pickerHeading}>GeoPDF maps</Text>
+            <Pressable
+              accessibilityRole="button"
+              disabled={geoPdfBusy}
+              onPress={handleImportGeoPdf}
+              style={styles.pickerRow}
+            >
+              <Text
+                style={[styles.pickerLabel, geoPdfBusy && styles.pickerLabelDisabled]}
+              >
+                {geoPdfBusy
+                  ? geoPdfPct != null
+                    ? `Importing… ${geoPdfPct}%`
+                    : "Importing…"
+                  : "+ Import GeoPDF"}
+              </Text>
+            </Pressable>
+            {geoPdfBusy ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  if (geoPdfCancel.current) geoPdfCancel.current.cancelled = true;
+                }}
+                style={styles.pickerRow}
+              >
+                <Text style={styles.pickerDelete}>Cancel import</Text>
+              </Pressable>
+            ) : null}
+            {geoPdfStatus ? (
+              <Text style={styles.pickerStatus}>{geoPdfStatus}</Text>
+            ) : null}
+            {geoPdfImports.map((geoPdf) => (
+              <View key={geoPdf.id}>
+                <View style={styles.pickerRegionRow}>
+                  <Pressable
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: geoPdf.visible }}
+                    disabled={geoPdf.state !== "ready"}
+                    onPress={() => {
+                      updateGeoPdfImport(geoPdf.id, {
+                        visible: !geoPdf.visible,
+                      }).catch(console.error);
+                    }}
+                    style={styles.pickerRowGrow}
+                  >
+                    <Text
+                      style={[
+                        styles.pickerLabel,
+                        geoPdf.state === "ready" &&
+                          geoPdf.visible &&
+                          styles.pickerLabelActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {geoPdf.state === "ready"
+                        ? geoPdf.visible
+                          ? "☑ "
+                          : "☐ "
+                        : ""}
+                      {geoPdf.label}
+                      {geoPdf.state === "failed"
+                        ? ` — failed`
+                        : geoPdf.state !== "ready"
+                          ? ` — incomplete`
+                          : ""}
+                    </Text>
+                  </Pressable>
+                  {geoPdf.state !== "ready" && !geoPdfBusy ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Resume import"
+                      onPress={() => handleResumeGeoPdf(geoPdf.id)}
+                    >
+                      <Text style={styles.pickerAction}>Resume</Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete GeoPDF import"
+                    onPress={() => {
+                      deleteGeoPdfImport(geoPdf.id).catch(console.error);
+                    }}
+                  >
+                    <Text style={styles.pickerDelete}>Delete</Text>
+                  </Pressable>
+                </View>
+                {geoPdf.state === "failed" && geoPdf.errorCode ? (
+                  <Text style={styles.pickerStatus}>
+                    {GEOPDF_ERRORS[geoPdf.errorCode] ?? "Import failed."}
+                  </Text>
+                ) : null}
+                {geoPdf.state === "ready" &&
+                geoPdf.residualFraction != null &&
+                geoPdf.residualFraction > RESIDUAL_WARN_FRACTION ? (
+                  <Text style={styles.pickerStatus}>
+                    ⚠ Georeferencing in this file is imprecise — positions may
+                    be off.
+                  </Text>
+                ) : null}
+                {geoPdf.state === "ready" && geoPdf.visible ? (
+                  <View style={styles.opacityRow}>
+                    <Text style={styles.pickerStatus}>Opacity</Text>
+                    {GEOPDF_OPACITY_STEPS.map((step) => (
+                      <Pressable
+                        key={step}
+                        accessibilityRole="button"
+                        onPress={() => {
+                          updateGeoPdfImport(geoPdf.id, { opacity: step }).catch(
+                            console.error,
+                          );
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.opacityStep,
+                            Math.abs(geoPdf.opacity - step) < 0.01 &&
+                              styles.opacityStepActive,
+                          ]}
+                        >
+                          {Math.round(step * 100)}%
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            ))}
             </ScrollView>
           </View>
         </Pressable>
@@ -1071,4 +1404,18 @@ const styles = StyleSheet.create({
   pickerLabel: { color: theme.textPrimary, fontSize: fontSize.base },
   pickerLabelActive: { color: theme.accent, fontWeight: "600" },
   pickerLabelDisabled: { color: theme.textMuted },
+  pickerAction: {
+    color: theme.accent,
+    fontSize: fontSize.sm,
+    fontWeight: "600",
+    marginRight: spacing(2),
+  },
+  opacityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(2),
+    paddingBottom: spacing(1),
+  },
+  opacityStep: { color: theme.textMuted, fontSize: fontSize.sm },
+  opacityStepActive: { color: theme.accent, fontWeight: "700" },
 });

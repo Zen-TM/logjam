@@ -38,7 +38,7 @@ export function pickImportColor(existingCount: number): string {
   return IMPORT_COLORS[existingCount % IMPORT_COLORS.length];
 }
 
-function randomId(): string {
+export function randomId(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
@@ -73,6 +73,60 @@ export type ImportOutcome =
   | { status: "cancelled" };
 
 /**
+ * Parse + persist a vector file already read into memory. Shared tail of the
+ * picker flow and the incoming-intent ("Open in Logjam") flow.
+ */
+export async function importVectorSource(
+  sourceUri: string,
+  displayName: string,
+  existingCount: number,
+): Promise<VectorImport> {
+  let sourceName = displayName;
+  let text: string;
+  if (sourceName.toLowerCase().endsWith(".kmz")) {
+    const base64 = await FileSystem.readAsStringAsync(sourceUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    ({ fileName: sourceName, text } = kmlFromKmz(base64));
+  } else {
+    text = await FileSystem.readAsStringAsync(sourceUri);
+  }
+
+  const parsed = parseVectorImport(sourceName, text);
+
+  const dir = `${FileSystem.documentDirectory}imports/`;
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  const id = randomId();
+  const fileUri = `${dir}${id}.geojson`;
+  const collection = JSON.stringify({
+    type: "FeatureCollection",
+    features: parsed.features,
+  });
+  try {
+    await FileSystem.writeAsStringAsync(fileUri, collection);
+    const record: VectorImport = {
+      id,
+      // Fall back to the file name (minus extension) when the file itself
+      // is nameless.
+      name: parsed.name ?? displayName.replace(/\.[^.]+$/, ""),
+      color: pickImportColor(existingCount),
+      visible: true,
+      path: fileUri.replace(/^file:\/\//, ""),
+      bbox: parsed.bbox,
+      featureCount: parsed.features.length,
+      positionCount: parsed.stats.positions,
+      sizeBytes: collection.length,
+      createdAt: new Date().toISOString(),
+    };
+    await insertVectorImport(record);
+    return record;
+  } catch (err) {
+    await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => {});
+    throw err;
+  }
+}
+
+/**
  * Run the full pick → parse → persist flow. Throws parser/storage errors
  * (static messages); returns `cancelled` when the user backs out of the
  * picker.
@@ -94,50 +148,8 @@ export async function importVectorFileFromPicker(
   if (asset.size != null && asset.size > MAX_IMPORT_FILE_BYTES) {
     throw new Error(IMPORT_ERRORS.tooManyPositions);
   }
-
-  let sourceName = asset.name;
-  let text: string;
-  if (sourceName.toLowerCase().endsWith(".kmz")) {
-    const base64 = await FileSystem.readAsStringAsync(asset.uri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    ({ fileName: sourceName, text } = kmlFromKmz(base64));
-  } else {
-    text = await FileSystem.readAsStringAsync(asset.uri);
-  }
-
-  const parsed = parseVectorImport(sourceName, text);
-
-  const dir = `${FileSystem.documentDirectory}imports/`;
-  await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-  const id = randomId();
-  const fileUri = `${dir}${id}.geojson`;
-  const collection = JSON.stringify({
-    type: "FeatureCollection",
-    features: parsed.features,
-  });
-  try {
-    await FileSystem.writeAsStringAsync(fileUri, collection);
-    const record: VectorImport = {
-      id,
-      // Fall back to the file name (minus extension) when the file itself
-      // is nameless.
-      name: parsed.name ?? asset.name.replace(/\.[^.]+$/, ""),
-      color: pickImportColor(existingCount),
-      visible: true,
-      path: fileUri.replace(/^file:\/\//, ""),
-      bbox: parsed.bbox,
-      featureCount: parsed.features.length,
-      positionCount: parsed.stats.positions,
-      sizeBytes: collection.length,
-      createdAt: new Date().toISOString(),
-    };
-    await insertVectorImport(record);
-    return { status: "imported", record };
-  } catch (err) {
-    await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => {});
-    throw err;
-  }
+  const record = await importVectorSource(asset.uri, asset.name, existingCount);
+  return { status: "imported", record };
 }
 
 /** Delete an import: row + stored GeoJSON file. */

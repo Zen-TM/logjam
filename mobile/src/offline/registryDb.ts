@@ -64,6 +64,25 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
           sizeBytes     INTEGER NOT NULL,
           createdAt     TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS geo_pdf_import (
+          id              TEXT PRIMARY KEY,
+          label           TEXT NOT NULL,
+          sha256          TEXT NOT NULL UNIQUE,
+          pageIndex       INTEGER NOT NULL,
+          viewportIndex   INTEGER NOT NULL,
+          state           TEXT NOT NULL,
+          errorCode       TEXT,
+          west REAL, south REAL, east REAL, north REAL,
+          minzoom INTEGER, maxzoom INTEGER,
+          residualFraction REAL,
+          opacity         REAL NOT NULL DEFAULT 0.8,
+          visible         INTEGER NOT NULL DEFAULT 1,
+          dirPath         TEXT NOT NULL,
+          sourceSizeBytes INTEGER NOT NULL DEFAULT 0,
+          quirks          TEXT,
+          createdAt       TEXT NOT NULL,
+          updatedAt       TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS region_download (
           id            TEXT PRIMARY KEY,
           taskKind      TEXT NOT NULL,

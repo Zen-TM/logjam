@@ -11,6 +11,7 @@ import { AppState, StyleSheet, Text, View } from "react-native";
 import * as LocalAuthentication from "expo-local-authentication";
 
 import { Button } from "../ui/Button";
+import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
 import { useVectorImports } from "../imports/useVectorImports";
 import { fontSize, spacing, theme } from "../theme";
 import { useMapArtifacts } from "./useMapArtifacts";
@@ -35,11 +36,14 @@ const DEV_LOCK_DISABLED =
 export function AppLockGate({ children }: { children: React.ReactNode }) {
   const { artifacts, loaded: artifactsLoaded } = useMapArtifacts();
   // Imported tracks are the user's own canyon-area coordinates — they arm
-  // the lock exactly like downloaded map data.
+  // the lock exactly like downloaded map data. GeoPDF imports arm it from
+  // the ROW (the source.pdf lands on disk before any map_artifact exists).
   const { imports, loaded: importsLoaded } = useVectorImports();
-  const loaded = artifactsLoaded && importsLoaded;
+  const { geoPdfImports, loaded: geoPdfLoaded } = useGeoPdfImports();
+  const loaded = artifactsLoaded && importsLoaded && geoPdfLoaded;
   const lockRequired =
-    !DEV_LOCK_DISABLED && (artifacts.length > 0 || imports.length > 0);
+    !DEV_LOCK_DISABLED &&
+    (artifacts.length > 0 || imports.length > 0 || geoPdfImports.length > 0);
   const [unlocked, setUnlocked] = useState(false);
   const [authFailed, setAuthFailed] = useState(false);
   const prompting = useRef(false);
