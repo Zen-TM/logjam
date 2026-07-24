@@ -114,6 +114,9 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
           lon REAL NOT NULL, lat REAL NOT NULL,
           createdAt TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS overlay_enabled (
+          overlayKey TEXT PRIMARY KEY
+        );
         CREATE TABLE IF NOT EXISTS region_download (
           id            TEXT PRIMARY KEY,
           taskKind      TEXT NOT NULL,
@@ -207,6 +210,36 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
     new Date().toISOString(),
   );
   notifyChanged();
+}
+
+// Persisted topo-overlay visibility set. Survives cold launch so a downloaded
+// overlay renders offline without the online completed-overlays list (which has
+// no persistence). Keys are "<jobId>/<layer>" — opaque id + generic layer name,
+// same app-private, backup-excluded, app-lock-gated store; never logged.
+export async function listEnabledOverlayKeys(): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ overlayKey: string }>(
+    "SELECT overlayKey FROM overlay_enabled",
+  );
+  return rows.map((row) => row.overlayKey);
+}
+
+export async function setOverlayEnabled(
+  overlayKey: string,
+  enabled: boolean,
+): Promise<void> {
+  const db = await getDb();
+  if (enabled) {
+    await db.runAsync(
+      "INSERT OR IGNORE INTO overlay_enabled (overlayKey) VALUES (?)",
+      overlayKey,
+    );
+  } else {
+    await db.runAsync(
+      "DELETE FROM overlay_enabled WHERE overlayKey = ?",
+      overlayKey,
+    );
+  }
 }
 
 export async function deleteArtifact(id: string): Promise<MapArtifact | null> {

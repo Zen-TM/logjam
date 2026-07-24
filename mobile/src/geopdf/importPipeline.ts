@@ -12,6 +12,7 @@
 // strings or parser error CODES; file-derived detail stays in-app.
 import * as Crypto from "expo-crypto";
 import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
 import { Directory, File, Paths } from "expo-file-system/next";
 
 import {
@@ -206,6 +207,33 @@ export async function importGeoPdfBytes(
   };
   await insertGeoPdfImport(record);
   return buildArtifact(record, bytes, onProgress, token);
+}
+
+/**
+ * Import one of the user's own server-generated GeoPDFs from its presigned
+ * download URL (from GET /geo-pdf/). Streams the bytes to a scratch cache file,
+ * hands them to the shared byte importer, then discards the scratch file — the
+ * durable artifact is the tiled MBTiles, same as the picker flow. The presigned
+ * URL carries its own auth in the query string, so no Authorization header is
+ * sent (S3 rejects two auth mechanisms).
+ */
+export async function importGeoPdfFromUrl(
+  displayName: string,
+  downloadUrl: string,
+  onProgress: (progress: GeoPdfProgress) => void,
+  token: GeoPdfCancelToken,
+): Promise<GeoPdfImportOutcome> {
+  const scratchUri = `${FileSystem.cacheDirectory}geopdf-download-${randomId()}.pdf`;
+  try {
+    const result = await FileSystem.downloadAsync(downloadUrl, scratchUri);
+    if (result.status !== 200) {
+      throw new Error(`GeoPDF download failed (HTTP ${result.status})`);
+    }
+    const bytes = new File(scratchUri).bytes();
+    return await importGeoPdfBytes(displayName, bytes, onProgress, token);
+  } finally {
+    await FileSystem.deleteAsync(scratchUri, { idempotent: true }).catch(() => {});
+  }
 }
 
 /** Resume an incomplete import (state ≠ ready/failed acceptable too — retry). */

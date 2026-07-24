@@ -9,7 +9,7 @@ import {
   type TopoLayerName,
 } from "@logjam/shared";
 
-import type { LogicalLayerRef } from "./sourceResolver";
+import type { LogicalLayerRef, MapArtifact } from "./sourceResolver";
 
 export type CompletedOverlaysResponse = {
   jobs: {
@@ -22,6 +22,59 @@ export type CompletedOverlaysResponse = {
 };
 
 export type TopoOverlayRef = Extract<LogicalLayerRef, { kind: "topo-overlay" }>;
+
+/**
+ * Union the online completed-overlays list with the downloaded topo-overlay
+ * artifacts on disk, so a saved overlay is listed/rendered even on a cold
+ * offline launch (when the online fetch returns nothing — it has no
+ * persistence). Online jobs win for keys they cover (they carry the real name +
+ * presigned URL for the Save affordance); saved-only overlays become synthetic
+ * jobs whose layers have an empty `pmtilesUrl` (the resolver serves them from
+ * the local artifact and ignores the URL). `downloadedAt` stands in for
+ * `createdAt` so synthetic jobs still sort into the newest-first z-order.
+ */
+export function mergeSavedOverlayJobs(
+  response: CompletedOverlaysResponse | null,
+  artifacts: MapArtifact[],
+): CompletedOverlaysResponse {
+  const jobs = (response?.jobs ?? []).map((job) => ({
+    ...job,
+    layers: [...job.layers],
+  }));
+  const jobById = new Map(jobs.map((job) => [job.jobId, job]));
+  const coveredKeys = new Set(
+    jobs.flatMap((job) => job.layers.map((l) => `${job.jobId}/${l.name}`)),
+  );
+
+  for (const artifact of artifacts) {
+    if (artifact.kind !== "topo-overlay") continue;
+    if (coveredKeys.has(artifact.logicalKey)) continue;
+    const slash = artifact.logicalKey.indexOf("/");
+    if (slash < 0) continue;
+    const jobId = artifact.logicalKey.slice(0, slash);
+    const layer = {
+      name: artifact.logicalKey.slice(slash + 1) as TopoLayerName,
+      format: artifact.sourceType as TopoLayerFormat,
+      pmtilesUrl: "",
+    };
+    coveredKeys.add(artifact.logicalKey);
+    const existing = jobById.get(jobId);
+    if (existing) {
+      existing.layers.push(layer);
+    } else {
+      const job = {
+        jobId,
+        name: null,
+        createdAt: artifact.downloadedAt,
+        layers: [layer],
+      };
+      jobById.set(jobId, job);
+      jobs.push(job);
+    }
+  }
+
+  return { jobs, expiresAt: response?.expiresAt ?? "" };
+}
 
 /**
  * Flatten enabled job layers into resolver refs in render z-order (first =

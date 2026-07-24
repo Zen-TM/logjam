@@ -60,11 +60,17 @@ import {
   deleteGeoPdfImport,
   importGeoPdfBytes,
   importGeoPdfFromPicker,
+  importGeoPdfFromUrl,
   resumeGeoPdfImport,
   type GeoPdfCancelToken,
   type GeoPdfProgress,
 } from "../geopdf/importPipeline";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
+import {
+  getGeoPdfJob,
+  listGeoPdfJobs,
+  type GeoPdfJobView,
+} from "../api/geoPdfJobs";
 import { setVectorImportVisible } from "../imports/importsDb";
 import {
   classifyIncomingBytes,
@@ -88,6 +94,7 @@ import { TrackRecordingControls } from "../tracks/TrackRecordingControls";
 import { useTracks } from "../tracks/useTracks";
 import { ensureForegroundLocationPermission } from "./locationPermission";
 import { downloadTopoOverlay } from "../offline/overlayDownloads";
+import { listEnabledOverlayKeys, setOverlayEnabled } from "../offline/registryDb";
 import {
   deleteDownloadedArtifact,
   downloadProtomapsRegion,
@@ -105,6 +112,7 @@ import {
 } from "./sourceResolver";
 import {
   composeTopoOverlayRefs,
+  mergeSavedOverlayJobs,
   type CompletedOverlaysResponse,
   type TopoOverlayRef,
 } from "./topoOverlays";
@@ -201,7 +209,26 @@ export function MapScreen({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [regionStatus, setRegionStatus] = useState<string | null>(null);
   const mapRef = useRef<React.ComponentRef<typeof MapView>>(null);
+  // Enabled topo overlays. Seeded from the persisted set (registryDb) so a
+  // downloaded overlay stays visible across a cold offline launch; toggles
+  // write through. Saved overlays are auto-enabled on download.
   const [enabledOverlays, setEnabledOverlays] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    listEnabledOverlayKeys()
+      .then((keys) => setEnabledOverlays(new Set(keys)))
+      .catch(console.error);
+  }, []);
+  // Toggle one overlay on/off, persisting the change.
+  const toggleOverlay = useCallback((key: string) => {
+    setEnabledOverlays((prev) => {
+      const next = new Set(prev);
+      const enabled = !next.has(key);
+      if (enabled) next.add(key);
+      else next.delete(key);
+      setOverlayEnabled(key, enabled).catch(console.error);
+      return next;
+    });
+  }, []);
   const cameraRef = useRef<React.ComponentRef<typeof Camera>>(null);
   // Stage 7 follow modes: follow recenters on each fix (north-up); course-up
   // additionally rotates the map to the direction of travel. The locate
@@ -257,12 +284,17 @@ export function MapScreen({
     1 +
     (basemapId === "protomaps" ? protomapsLayerCount(PROTOMAPS_FLAVOR) : 1);
 
+  // Union the online overlay list with downloaded artifacts, so saved overlays
+  // list + render even on a cold offline launch (the online fetch has no
+  // persistence and returns nothing then).
+  const mergedOverlays = useMemo(
+    () => mergeSavedOverlayJobs(overlays.data, artifacts),
+    [overlays.data, artifacts],
+  );
+
   const overlayRefs = useMemo(
-    () =>
-      overlays.data
-        ? composeTopoOverlayRefs(overlays.data, enabledOverlays)
-        : [],
-    [overlays.data, enabledOverlays],
+    () => composeTopoOverlayRefs(mergedOverlays, enabledOverlays),
+    [mergedOverlays, enabledOverlays],
   );
 
   // Contiguous layerIndex allocation above the basemap band: raster overlays
@@ -412,6 +444,15 @@ export function MapScreen({
                 : null,
             ),
         );
+        // Auto-enable the saved overlay (persisted) so it renders offline
+        // without a manual toggle — you downloaded it to use it.
+        setEnabledOverlays((prev) => {
+          if (prev.has(item.key)) return prev;
+          const next = new Set(prev);
+          next.add(item.key);
+          setOverlayEnabled(item.key, true).catch(console.error);
+          return next;
+        });
         setOverlayStatus("Overlay saved for offline use.");
       } catch (err) {
         console.error(err);
@@ -520,6 +561,64 @@ export function MapScreen({
         setGeoPdfStatus(
           (code && GEOPDF_ERRORS[code]) ??
             messageFromError(err, "Couldn't finish that import."),
+        );
+      } finally {
+        setGeoPdfBusy(false);
+        setGeoPdfPct(null);
+        geoPdfCancel.current = null;
+      }
+    },
+    [finishGeoPdf, geoPdfProgress],
+  );
+
+  // Import your own server-generated GeoPDFs: list the account's completed
+  // jobs on demand (online-only), then stream a chosen one's presigned bytes
+  // into the same on-device pipeline. Loaded lazily on a tap, not on mount, so
+  // opening the sheet never fires a network call.
+  const [accountJobs, setAccountJobs] = useState<GeoPdfJobView[] | null>(null);
+  const [accountJobsLoading, setAccountJobsLoading] = useState(false);
+  const [accountJobsStatus, setAccountJobsStatus] = useState<string | null>(null);
+
+  const loadAccountGeoPdfs = useCallback(async () => {
+    try {
+      setAccountJobsStatus(null);
+      setAccountJobsLoading(true);
+      const jobs = await listGeoPdfJobs();
+      setAccountJobs(jobs.filter((job) => job.status === "completed"));
+    } catch (err) {
+      console.error(err);
+      setAccountJobsStatus(messageFromError(err, "Couldn't load your GeoPDFs."));
+    } finally {
+      setAccountJobsLoading(false);
+    }
+  }, []);
+
+  const handleImportAccountGeoPdf = useCallback(
+    async (job: GeoPdfJobView) => {
+      try {
+        setGeoPdfStatus(null);
+        setGeoPdfBusy(true);
+        geoPdfCancel.current = { cancelled: false };
+        // Re-presign right before download — the listed URL may have expired
+        // while the sheet was open.
+        const fresh = await getGeoPdfJob(job.id);
+        if (!fresh.downloadUrl) {
+          throw new Error("This GeoPDF isn't ready to download.");
+        }
+        finishGeoPdf(
+          await importGeoPdfFromUrl(
+            fresh.title ?? "Logjam GeoPDF",
+            fresh.downloadUrl,
+            geoPdfProgress,
+            geoPdfCancel.current,
+          ),
+        );
+      } catch (err) {
+        console.error(err);
+        const code = (err as { code?: string }).code;
+        setGeoPdfStatus(
+          (code && GEOPDF_ERRORS[code]) ??
+            messageFromError(err, "Couldn't import that GeoPDF."),
         );
       } finally {
         setGeoPdfBusy(false);
@@ -800,18 +899,16 @@ export function MapScreen({
     [handleLocateMe],
   );
 
-  const overlayList = overlays.data
-    ? overlays.data.jobs.flatMap((job) =>
-        job.layers.map((layer) => ({
-          key: `${job.jobId}/${layer.name}`,
-          label: `${job.name ?? job.jobId.slice(0, 8)} — ${layer.name}`,
-          jobId: job.jobId,
-          layer: layer.name,
-          format: layer.format,
-          pmtilesUrl: layer.pmtilesUrl,
-        })),
-      )
-    : [];
+  const overlayList = mergedOverlays.jobs.flatMap((job) =>
+    job.layers.map((layer) => ({
+      key: `${job.jobId}/${layer.name}`,
+      label: `${job.name ?? job.jobId.slice(0, 8)} — ${layer.name}`,
+      jobId: job.jobId,
+      layer: layer.name,
+      format: layer.format,
+      pmtilesUrl: layer.pmtilesUrl,
+    })),
+  );
 
   // Hold the map until the bundled glyph/sprite install settles (first launch:
   // one-time extraction, a second or two; after that: a marker check). Mounting
@@ -1287,14 +1384,7 @@ export function MapScreen({
                       <Pressable
                         accessibilityRole="checkbox"
                         accessibilityState={{ checked: enabled }}
-                        onPress={() =>
-                          setEnabledOverlays((prev) => {
-                            const next = new Set(prev);
-                            if (enabled) next.delete(overlay.key);
-                            else next.add(overlay.key);
-                            return next;
-                          })
-                        }
+                        onPress={() => toggleOverlay(overlay.key)}
                         style={styles.pickerRowGrow}
                       >
                         <Text
@@ -1415,6 +1505,64 @@ export function MapScreen({
                   : "+ Import GeoPDF"}
               </Text>
             </Pressable>
+            {connectivity === "online" ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={geoPdfBusy || accountJobsLoading}
+                onPress={loadAccountGeoPdfs}
+                style={styles.pickerRow}
+              >
+                <Text
+                  style={[
+                    styles.pickerLabel,
+                    (geoPdfBusy || accountJobsLoading) && styles.pickerLabelDisabled,
+                  ]}
+                >
+                  {accountJobsLoading
+                    ? "Loading your GeoPDFs…"
+                    : accountJobs
+                      ? "↻ Refresh my account GeoPDFs"
+                      : "⤓ Import from my account"}
+                </Text>
+              </Pressable>
+            ) : null}
+            {accountJobsStatus ? (
+              <Text style={styles.pickerStatus}>{accountJobsStatus}</Text>
+            ) : null}
+            {accountJobs != null && accountJobs.length === 0 ? (
+              <Text style={styles.pickerStatus}>
+                No generated GeoPDFs on your account yet.
+              </Text>
+            ) : null}
+            {accountJobs?.map((job) => (
+              <View key={job.id} style={styles.pickerRegionRow}>
+                <View style={styles.pickerRowGrow}>
+                  <Text style={styles.pickerLabel} numberOfLines={1}>
+                    {job.title ?? "Untitled GeoPDF"}
+                  </Text>
+                  {job.resultBytes != null ? (
+                    <Text style={styles.pickerSubLabel}>
+                      {(job.resultBytes / 1e6).toFixed(1)} MB
+                    </Text>
+                  ) : null}
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Import this GeoPDF for offline use"
+                  disabled={geoPdfBusy}
+                  onPress={() => handleImportAccountGeoPdf(job)}
+                >
+                  <Text
+                    style={[
+                      styles.pickerAction,
+                      geoPdfBusy && styles.pickerLabelDisabled,
+                    ]}
+                  >
+                    Import
+                  </Text>
+                </Pressable>
+              </View>
+            ))}
             {geoPdfBusy ? (
               <Pressable
                 accessibilityRole="button"
@@ -1668,6 +1816,7 @@ const styles = StyleSheet.create({
   pickerStatus: { color: theme.textMuted, fontSize: fontSize.sm },
   pickerDelete: { color: theme.warning, fontSize: fontSize.sm, fontWeight: "600" },
   pickerLabel: { color: theme.textPrimary, fontSize: fontSize.base },
+  pickerSubLabel: { color: theme.textMuted, fontSize: fontSize.xs },
   pickerLabelActive: { color: theme.accent, fontWeight: "600" },
   pickerLabelDisabled: { color: theme.textMuted },
   pickerAction: {
