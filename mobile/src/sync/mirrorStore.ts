@@ -429,6 +429,15 @@ export async function listMirrorTrips(): Promise<MirrorTrip[]> {
   return rows.map(rowToTrip);
 }
 
+export async function getMirrorTrip(id: string): Promise<MirrorTrip | null> {
+  const db = await getSyncDb();
+  const row = await db.getFirstAsync<TripRow>(
+    "SELECT * FROM trip_logs WHERE id = ?",
+    id,
+  );
+  return row ? rowToTrip(row) : null;
+}
+
 export type MirrorMedia = {
   id: string;
   linkedType: string;

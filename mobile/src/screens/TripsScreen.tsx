@@ -2,12 +2,15 @@
 // tripTitle() (root CLAUDE.md convention); trip dates are UTC-midnight
 // date-only values and MUST format with timeZone: "UTC" (CH-001) or AEST
 // renders the previous calendar day.
+import { useState } from "react";
 import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { tripTitle } from "../api/tripTitle";
 import type { TTripLog } from "../api/types";
 import { fontSize, radius, spacing, theme } from "../theme";
-import { useMirrorTrips, useSyncStatus } from "../sync/useSyncQueries";
+import { updateTripLocal } from "../sync/outbox";
+import { useMirrorTrip, useMirrorTrips, useSyncStatus } from "../sync/useSyncQueries";
+import { EntityEditForm, type EditFieldSpec } from "../ui/EntityEditForm";
 import { EmptyState, ErrorState, LoadingState } from "../ui/ScreenStates";
 
 export function formatTripDate(isoDate: string): string {
@@ -64,11 +67,49 @@ export function TripsScreen({ onOpenTrip }: { onOpenTrip: (trip: TTripLog) => vo
 }
 
 export function TripDetailScreen({ trip }: { trip: TTripLog }) {
+  // Read live from the mirror so optimistic edits reflect immediately; fall
+  // back to the navigation snapshot before the first mirror read resolves.
+  const live = useMirrorTrip(trip.id);
+  const current = live.data ?? trip;
+  const [editing, setEditing] = useState(false);
+
+  // Trips only ever reach the mirror for their owner (others' trips never
+  // sync), so the edit affordance needs no ownership gate.
+  const fields: EditFieldSpec[] = [
+    { key: "displayName", label: "Title", kind: "text", value: current.displayName ?? null },
+    { key: "notes", label: "Notes", kind: "multiline", value: current.notes ?? null },
+  ];
+
   return (
     <ScrollView style={styles.detailRoot} contentContainerStyle={styles.detailContent}>
-      <Text style={styles.detailTitle}>{tripTitle(trip)}</Text>
-      <Text style={styles.rowMeta}>{formatTripDate(trip.date)}</Text>
+      <View style={styles.detailHeader}>
+        <Text style={[styles.detailTitle, styles.detailHeaderTitle]}>{tripTitle(current)}</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setEditing(true)}
+          style={({ pressed }) => [styles.editButton, pressed && styles.editButtonPressed]}
+        >
+          <Text style={styles.editButtonText}>Edit</Text>
+        </Pressable>
+      </View>
+      <Text style={styles.rowMeta}>{formatTripDate(current.date)}</Text>
 
+      <EntityEditForm
+        visible={editing}
+        title="Edit trip"
+        fields={fields}
+        onCancel={() => setEditing(false)}
+        onSave={(changed) => updateTripLocal(current.id, changed)}
+      />
+
+      <TripDetailBody trip={current} />
+    </ScrollView>
+  );
+}
+
+function TripDetailBody({ trip }: { trip: TTripLog }) {
+  return (
+    <>
       {trip.canyons.length > 0 ? (
         <View style={styles.block}>
           <Text style={styles.sectionLabel}>Canyons</Text>
@@ -100,7 +141,7 @@ export function TripDetailScreen({ trip }: { trip: TTripLog }) {
           ))}
         </View>
       ) : null}
-    </ScrollView>
+    </>
   );
 }
 
@@ -120,7 +161,18 @@ const styles = StyleSheet.create({
   rowMeta: { color: theme.textMuted, fontSize: fontSize.sm },
   detailRoot: { flex: 1, backgroundColor: theme.primary },
   detailContent: { padding: spacing(2), gap: spacing(2) },
+  detailHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing(1) },
+  detailHeaderTitle: { flex: 1 },
   detailTitle: { fontSize: fontSize.xl, fontWeight: "700", color: theme.textPrimary },
+  editButton: {
+    borderWidth: 1,
+    borderColor: theme.accent,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing(1.5),
+    paddingVertical: spacing(0.5),
+  },
+  editButtonPressed: { backgroundColor: "rgba(255,255,255,0.08)" },
+  editButtonText: { color: theme.accent, fontSize: fontSize.sm, fontWeight: "600" },
   block: { gap: spacing(0.5) },
   sectionLabel: {
     fontSize: fontSize.xs,

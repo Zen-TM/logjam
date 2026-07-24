@@ -7,9 +7,9 @@ import { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { messageFromError } from "@logjam/shared";
 
-import { markAllNotificationsRead, markNotificationRead } from "../api/queries";
 import type { TNotification } from "../api/types";
 import { fontSize, radius, spacing, theme } from "../theme";
+import { enqueueNotificationRead } from "../sync/outbox";
 import {
   fetchAndCacheNotifications,
   patchCachedRead,
@@ -103,15 +103,17 @@ export function NotificationsScreen({ onUnreadChanged }: { onUnreadChanged?: () 
 
   const hasUnread = notifications.some((n) => !n.read);
 
+  // Mark-read goes through the outbox (like every other mutation) so it
+  // survives offline: patch the cache for an immediate read state, enqueue a
+  // markRead op that flushes on the next sync cycle. No REST fallback — the
+  // op IS the write path.
   const handleMarkRead = async (n: TNotification) => {
     if (n.read) return;
     setActionError(null);
-    // Optimistic: patch the cache first so the read state sticks even if the
-    // network call fails.
-    await patchCachedRead([n.id]);
-    onUnreadChanged?.();
     try {
-      await markNotificationRead(n.id);
+      await patchCachedRead([n.id]);
+      await enqueueNotificationRead([n.id]);
+      onUnreadChanged?.();
     } catch (err) {
       console.error(err);
       setActionError(messageFromError(err, "Couldn't mark notification as read."));
@@ -120,10 +122,11 @@ export function NotificationsScreen({ onUnreadChanged }: { onUnreadChanged?: () 
 
   const handleMarkAll = async () => {
     setActionError(null);
-    await patchCachedRead("all");
-    onUnreadChanged?.();
+    const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id);
     try {
-      await markAllNotificationsRead();
+      await patchCachedRead("all");
+      await enqueueNotificationRead(unreadIds);
+      onUnreadChanged?.();
     } catch (err) {
       console.error(err);
       setActionError(messageFromError(err, "Couldn't mark notifications as read."));

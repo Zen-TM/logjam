@@ -11,6 +11,7 @@ import {
   listMirrorTrips,
   listMirrorWaypoints,
   getMirrorCanyon,
+  getMirrorTrip,
   type MirrorCanyon,
   type MirrorMedia,
   type MirrorTrip,
@@ -102,6 +103,11 @@ export function useMirrorTrips(): MirrorQueryState<MirrorTrip[]> {
 
 export function useMirrorCanyon(id: string): MirrorQueryState<MirrorCanyon | null> {
   const read = useCallback(() => getMirrorCanyon(id), [id]);
+  return useMirrorQuery(read);
+}
+
+export function useMirrorTrip(id: string): MirrorQueryState<MirrorTrip | null> {
+  const read = useCallback(() => getMirrorTrip(id), [id]);
   return useMirrorQuery(read);
 }
 

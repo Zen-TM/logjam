@@ -62,6 +62,16 @@ export async function fetchAndCacheNotifications(): Promise<NotificationsCache> 
   return { notifications: data, total, fetchedAt: new Date().toISOString() };
 }
 
+/** Unread count derived from the cache — drives the inbox tab badge so it
+ * drops immediately on a (possibly offline) mark-read and stays correct
+ * offline. Null when no cache exists yet (first launch, inbox never opened);
+ * callers fall back to the server count then. */
+export async function getCachedUnreadCount(): Promise<number | null> {
+  const cache = await readNotificationsCache();
+  if (!cache) return null;
+  return cache.notifications.filter((notification) => !notification.read).length;
+}
+
 /** Optimistically flip cached read flags so the inbox reflects a mark-read
  * before the next fetch (keeps offline reads consistent with the action).
  * `ids === "all"` marks everything read. */

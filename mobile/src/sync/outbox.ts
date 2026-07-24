@@ -149,6 +149,72 @@ export async function deleteWaypointLocal(id: string): Promise<void> {
   scheduleMutationSync();
 }
 
+// ── canyon / trip update surface ─────────────────────────────────────────────
+//
+// Field-scoped updates over the generic enqueueUpdate path (§8.2 coalescing,
+// §8.5 optimistic materialization). Only own rows are pushable: a shared
+// canyon's update would 404 server-side and park deadRemote, so callers gate
+// the edit UI on syncRole === "owner". These maps list ONLY scalar columns —
+// array/object fields (altNames, attributes, types, customFields, canyon
+// links) aren't materialized here because enqueueUpdate binds values raw.
+
+const CANYON_UPDATE_COLUMNS: Record<string, string> = {
+  name: "name",
+  notes: "notes",
+  quality: "quality",
+  hours: "hours",
+  numAbseils: "num_abseils",
+  longestAbseil: "longest_abseil",
+  vGrade: "v_grade",
+  aGrade: "a_grade",
+  commitment: "commitment",
+};
+
+export async function updateCanyonLocal(
+  id: string,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  await enqueueUpdate("canyon", "canyons", id, fields, CANYON_UPDATE_COLUMNS);
+}
+
+const TRIP_UPDATE_COLUMNS: Record<string, string> = {
+  date: "date",
+  displayName: "display_name",
+  notes: "notes",
+};
+
+export async function updateTripLocal(
+  id: string,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  await enqueueUpdate("tripLog", "trip_logs", id, fields, TRIP_UPDATE_COLUMNS);
+}
+
+// ── notification markRead surface ────────────────────────────────────────────
+//
+// Notifications aren't in the delta protocol (§4.7 refetch-and-cache), so a
+// markRead has no mirror row to touch — the inbox cache is patched separately
+// (patchCachedRead). This routes the read through the SAME outbox as every
+// other mutation so it survives offline: the op flushes on the next cycle, and
+// the server treats markRead as a monotonic no-op (idempotent, §6). The shared
+// planner dedups a markRead against an already-queued one for the same id.
+
+export async function enqueueNotificationRead(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = await getSyncDb();
+  await db.withTransactionAsync(async () => {
+    for (const id of ids) {
+      await appendOp(db, {
+        opId: mintUuid(),
+        entity: "notification",
+        op: "markRead",
+        id,
+      });
+    }
+  });
+  scheduleMutationSync();
+}
+
 // ── generic enqueue plumbing ─────────────────────────────────────────────────
 
 type Db = Awaited<ReturnType<typeof getSyncDb>>;

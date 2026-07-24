@@ -17,12 +17,13 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { categoryHasThumbnail, formatCanyonGrade, mediaCategory } from "@logjam/shared";
 
-import type { TCanyon } from "../api/types";
 import { fontSize, radius, spacing, theme } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import { attachPhotoLocal, deleteMediaLocal } from "../sync/mediaUpload";
-import type { MirrorMedia } from "../sync/mirrorStore";
+import { updateCanyonLocal } from "../sync/outbox";
+import type { MirrorCanyon, MirrorMedia } from "../sync/mirrorStore";
 import { useMirrorCanyon, useMirrorCanyonMedia } from "../sync/useSyncQueries";
+import { EntityEditForm, type EditFieldSpec } from "../ui/EntityEditForm";
 import { EmptyState, ErrorState, LoadingState } from "../ui/ScreenStates";
 
 export function CanyonDetailScreen({ canyonId }: { canyonId: string }) {
@@ -41,6 +42,42 @@ export function CanyonDetailScreen({ canyonId }: { canyonId: string }) {
       canyonId={canyonId}
       media={media.data ?? []}
     />
+  );
+}
+
+// Owner-only edit (§8.2): a shared canyon's update would 404 server-side and
+// park deadRemote, so the button shows for owned rows only. The form enqueues
+// changed fields through the outbox; the mirror updates optimistically.
+function EditCanyonButton({ canyon }: { canyon: MirrorCanyon }) {
+  const [open, setOpen] = useState(false);
+  const fields: EditFieldSpec[] = [
+    { key: "name", label: "Name", kind: "text", value: canyon.name, required: true },
+    { key: "quality", label: "Quality (0–5)", kind: "number", value: canyon.quality },
+    { key: "numAbseils", label: "Abseils", kind: "number", value: canyon.numAbseils, integer: true },
+    { key: "longestAbseil", label: "Longest abseil (m)", kind: "number", value: canyon.longestAbseil },
+    { key: "vGrade", label: "V grade", kind: "number", value: canyon.vGrade, integer: true },
+    { key: "aGrade", label: "A grade", kind: "number", value: canyon.aGrade, integer: true },
+    { key: "commitment", label: "Commitment", kind: "number", value: canyon.commitment, integer: true },
+    { key: "hours", label: "Hours", kind: "number", value: canyon.hours },
+    { key: "notes", label: "Notes", kind: "multiline", value: canyon.notes },
+  ];
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => [styles.editButton, pressed && styles.editButtonPressed]}
+      >
+        <Text style={styles.editButtonText}>Edit</Text>
+      </Pressable>
+      <EntityEditForm
+        visible={open}
+        title="Edit canyon"
+        fields={fields}
+        onCancel={() => setOpen(false)}
+        onSave={(changed) => updateCanyonLocal(canyon.id, changed)}
+      />
+    </>
   );
 }
 
@@ -72,32 +109,48 @@ function MediaStrip({
     }
   }, []);
 
-  const addPhoto = useCallback(async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert(
-        "Photo access needed",
-        "Allow photo library access to attach photos.",
-      );
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: "images",
-      quality: 1,
-    });
-    if (result.canceled || result.assets.length === 0) return;
-    const asset = result.assets[0];
-    try {
-      await attachPhotoLocal("canyon", canyonId, {
-        uri: asset.uri,
-        mimeType: asset.mimeType,
-        fileName: asset.fileName,
-      });
-    } catch (err) {
-      console.error(err);
-      Alert.alert("Couldn't attach photo", "Please try again.");
-    }
-  }, [canyonId]);
+  const captureFrom = useCallback(
+    async (source: "camera" | "library") => {
+      const permission =
+        source === "camera"
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          source === "camera" ? "Camera access needed" : "Photo access needed",
+          source === "camera"
+            ? "Allow camera access to take photos."
+            : "Allow photo library access to attach photos.",
+        );
+        return;
+      }
+      const result =
+        source === "camera"
+          ? await ImagePicker.launchCameraAsync({ quality: 1 })
+          : await ImagePicker.launchImageLibraryAsync({ mediaTypes: "images", quality: 1 });
+      if (result.canceled || result.assets.length === 0) return;
+      const asset = result.assets[0];
+      try {
+        await attachPhotoLocal("canyon", canyonId, {
+          uri: asset.uri,
+          mimeType: asset.mimeType,
+          fileName: asset.fileName,
+        });
+      } catch (err) {
+        console.error(err);
+        Alert.alert("Couldn't attach photo", "Please try again.");
+      }
+    },
+    [canyonId],
+  );
+
+  const addPhoto = useCallback(() => {
+    Alert.alert("Add photo", undefined, [
+      { text: "Take photo", onPress: () => void captureFrom("camera") },
+      { text: "Choose from library", onPress: () => void captureFrom("library") },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }, [captureFrom]);
 
   const confirmDelete = useCallback((item: MirrorMedia) => {
     Alert.alert("Delete this photo?", undefined, [
@@ -191,14 +244,17 @@ function CanyonDetailView({
   canyonId,
   media,
 }: {
-  canyon: TCanyon;
+  canyon: MirrorCanyon;
   canyonId: string;
   media: MirrorMedia[];
 }) {
   const grade = formatCanyonGrade(canyon);
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.name}>{canyon.name}</Text>
+      <View style={styles.header}>
+        <Text style={[styles.name, styles.headerName]}>{canyon.name}</Text>
+        {canyon.syncRole === "owner" ? <EditCanyonButton canyon={canyon} /> : null}
+      </View>
       {canyon.altNames.length > 0 ? (
         <Text style={styles.altNames}>Also known as {canyon.altNames.join(", ")}</Text>
       ) : null}
@@ -241,6 +297,17 @@ function Field({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.primary },
   content: { padding: spacing(2), gap: spacing(2) },
+  header: { flexDirection: "row", alignItems: "flex-start", gap: spacing(1) },
+  headerName: { flex: 1 },
+  editButton: {
+    borderWidth: 1,
+    borderColor: theme.accent,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing(1.5),
+    paddingVertical: spacing(0.5),
+  },
+  editButtonPressed: { backgroundColor: "rgba(255,255,255,0.08)" },
+  editButtonText: { color: theme.accent, fontSize: fontSize.sm, fontWeight: "600" },
   name: { fontSize: fontSize.xl, fontWeight: "700", color: theme.textPrimary },
   altNames: { fontSize: fontSize.sm, color: theme.textMuted },
   fieldGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },

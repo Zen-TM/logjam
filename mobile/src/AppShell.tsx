@@ -14,6 +14,8 @@ import { needsReconsent } from "@logjam/shared";
 
 import { fetchCurrentUser, getUnreadNotificationCount, useApiQuery } from "./api/queries";
 import type { TTripLog } from "./api/types";
+import { getCachedUnreadCount } from "./sync/notificationsCache";
+import { onMirrorChanged } from "./sync/syncDb";
 import { registerSyncTriggers } from "./sync/syncEngine";
 import { theme } from "./theme";
 import { MapScreen } from "./map/MapScreen";
@@ -187,15 +189,27 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
     return () => subscription.remove();
   }, []);
 
+  // Badge count prefers the notifications cache: it incorporates optimistic
+  // (offline) mark-reads immediately and stays correct offline. Only when no
+  // cache exists yet (first launch, inbox never opened) does it fall back to
+  // the server count. Best-effort — the badge is decoration.
   const refreshUnread = useCallback(() => {
-    getUnreadNotificationCount()
-      .then(({ count }) => setUnreadCount(count))
-      // Best-effort: the badge is decoration; the inbox itself surfaces errors.
+    getCachedUnreadCount()
+      .then((cached) => {
+        if (cached !== null) {
+          setUnreadCount(cached);
+          return;
+        }
+        return getUnreadNotificationCount().then(({ count }) => setUnreadCount(count));
+      })
       .catch(console.error);
   }, []);
 
   useEffect(() => {
     refreshUnread();
+    // A cache patch (mark-read, offline included) fires notifyMirrorChanged;
+    // recompute the badge from the cache so it drops immediately.
+    return onMirrorChanged(refreshUnread);
   }, [refreshUnread]);
 
   if (userQuery.loading && !userQuery.data) return <LoadingState />;

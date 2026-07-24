@@ -69,7 +69,25 @@ export async function flushOutbox(): Promise<void> {
         body: { protocol: SYNC_PROTOCOL, ops: ready.map((entry) => entry.op) },
       });
     } catch (err) {
-      // Network / 5xx / 429: requeue the batch; the engine owns backoff.
+      const status = (err as { status?: number }).status;
+      // A permanent 4xx (malformed envelope/op — bad protocol, unknown entity,
+      // non-v4 id, oversized batch) will NEVER succeed on retry. Requeuing it
+      // head-of-line-blocks the whole outbox forever and never surfaces to the
+      // user. Park the batch's ops as blocked so they appear in Sync Issues
+      // (Retry / Discard) and the rest of the outbox keeps draining. 401/403
+      // (token) and 429 (rate limit) are transient — requeue + back off.
+      if (status === 400 || status === 413) {
+        await db.runAsync(
+          `UPDATE outbox SET state = 'blocked', error_json = ? WHERE state = 'inflight'`,
+          JSON.stringify({
+            code: status,
+            message: "The server rejected this change. Retry or discard it.",
+          }),
+        );
+        notifyMirrorChanged();
+        continue;
+      }
+      // Network / 5xx / 401 / 403 / 429: requeue the batch; the engine owns backoff.
       await db.runAsync(
         "UPDATE outbox SET state = 'queued' WHERE state = 'inflight'",
       );
