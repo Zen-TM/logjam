@@ -1,0 +1,329 @@
+// Offline media capture → upload (stage8-sync.md §7.1). An "attach photo"
+// copies the full-res image + a client-generated JPEG thumbnail into
+// app-private storage, writes a pendingUpload mirror row, and enqueues one
+// media.create outbox op. The flush engine (flush.ts) runs the three-phase
+// presign → PUT → confirm flow as one resumable unit, parking on quota
+// (507) / track-slot (409) races.
+//
+// PRIVACY: captured photos are canyon media — app-private media-cache/
+// (allowBackup=false), never logged. The three-phase flow reuses the same
+// authed endpoints + anti-oracle as the web client.
+import * as Crypto from "expo-crypto";
+import * as FileSystem from "expo-file-system";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
+import { isUuidV4 } from "@logjam/shared";
+
+import { apiFetch } from "../api/apiFetch";
+import type { MirrorMedia } from "./mirrorStore";
+import { getSyncDb, notifyMirrorChanged } from "./syncDb";
+import { scheduleMutationSync } from "./mediaSyncBridge";
+
+const CACHE_DIR = `${FileSystem.documentDirectory}media-cache/`;
+
+// Client thumbnail contract (mirrors the web): a downscaled JPEG. The server
+// only bounds thumbnailSizeBytes, not dimensions.
+const THUMBNAIL_MAX_WIDTH = 400;
+const THUMBNAIL_QUALITY = 0.7;
+
+export type PickedImage = {
+  uri: string;
+  mimeType?: string | null;
+  fileName?: string | null;
+};
+
+type PresignResponse = {
+  mediaId: string;
+  displayUploadUrl: string;
+  thumbnailUploadUrl: string | null;
+};
+
+type ConfirmedMedia = {
+  id: string;
+  linkedType: string;
+  linkedId: string;
+  mediaType: string;
+  filename: string | null;
+  fileSizeBytes: number | string;
+  color: string | null;
+  createdAt: string;
+};
+
+async function ensureCacheDir(): Promise<void> {
+  await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true }).catch(
+    () => {},
+  );
+}
+
+async function fileSize(uri: string): Promise<number> {
+  const info = await FileSystem.getInfoAsync(uri);
+  if (!info.exists) throw new Error("Captured file missing");
+  return info.size ?? 0;
+}
+
+function mintUuid(): string {
+  const id = Crypto.randomUUID();
+  if (!isUuidV4(id)) throw new Error("UUID mint produced a non-v4 id");
+  return id;
+}
+
+/**
+ * Attach a picked/captured image to a canyon or trip: copy it + a generated
+ * thumbnail into the app-private cache, write the pendingUpload mirror row,
+ * and enqueue the media.create op. Returns the new mediaId.
+ */
+export async function attachPhotoLocal(
+  linkedType: "canyon" | "tripLog",
+  linkedId: string,
+  image: PickedImage,
+): Promise<string> {
+  await ensureCacheDir();
+  const mediaId = mintUuid();
+  const mediaType = image.mimeType ?? "image/jpeg";
+  const filename = image.fileName ?? `${mediaId}.jpg`;
+
+  const displayPath = `${CACHE_DIR}${mediaId}.display`;
+  await FileSystem.copyAsync({ from: image.uri, to: displayPath });
+
+  const thumb = await manipulateAsync(
+    image.uri,
+    [{ resize: { width: THUMBNAIL_MAX_WIDTH } }],
+    { compress: THUMBNAIL_QUALITY, format: SaveFormat.JPEG },
+  );
+  const thumbPath = `${CACHE_DIR}${mediaId}.thumb`;
+  await FileSystem.copyAsync({ from: thumb.uri, to: thumbPath });
+  await FileSystem.deleteAsync(thumb.uri, { idempotent: true }).catch(() => {});
+
+  const sizeBytes = await fileSize(displayPath);
+  const thumbnailSizeBytes = await fileSize(thumbPath);
+
+  const db = await getSyncDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO media
+         (id, linked_type, linked_id, media_type, filename, file_size_bytes,
+          color, created_at, extra_json, sync_state, local_display_path,
+          local_thumb_path)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, 'pendingUpload', ?, ?)`,
+      mediaId,
+      linkedType,
+      linkedId,
+      mediaType,
+      filename,
+      String(sizeBytes),
+      new Date().toISOString(),
+      displayPath,
+      thumbPath,
+    );
+    // Media ops never coalesce (immutable rows) — insert directly, not via
+    // the shared enqueue planner (which is typed to push entities).
+    await db.runAsync(
+      `INSERT INTO outbox
+         (op_id, entity, op, entity_id, fields_json, state, attempts, created_at)
+       VALUES (?, 'media', 'create', ?, ?, 'queued', 0, ?)`,
+      mintUuid(),
+      mediaId,
+      JSON.stringify({
+        linkedType,
+        linkedId,
+        filename,
+        mediaType,
+        sizeBytes,
+        thumbnailSizeBytes,
+        localDisplayPath: displayPath,
+        localThumbPath: thumbPath,
+      }),
+      new Date().toISOString(),
+    );
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+  return mediaId;
+}
+
+// ── flush-side: the three-phase resumable flow (§7.1) ───────────────────────
+
+export type MediaOpRow = {
+  seq: number;
+  entity_id: string;
+  op: string;
+  fields_json: string | null;
+  media_phase: string | null;
+};
+
+/** Terminal outcome of running one media op. `blocked` = a quota/track-slot
+ * race the user must resolve; a thrown error means network/5xx (the engine
+ * backs off and retries the whole cycle). */
+export type MediaOpOutcome = "done" | "blocked";
+
+type MediaFields = {
+  linkedType: "canyon" | "tripLog";
+  linkedId: string;
+  filename: string;
+  mediaType: string;
+  sizeBytes: number;
+  thumbnailSizeBytes?: number;
+  localDisplayPath: string;
+  localThumbPath: string | null;
+};
+
+async function putFile(
+  url: string,
+  fileUri: string,
+  contentType: string,
+): Promise<void> {
+  const result = await FileSystem.uploadAsync(url, fileUri, {
+    httpMethod: "PUT",
+    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+    headers: { "Content-Type": contentType },
+  });
+  if (result.status < 200 || result.status >= 300) {
+    throw new Error(`Upload failed (${result.status})`);
+  }
+}
+
+async function finalizeConfirmed(
+  db: Awaited<ReturnType<typeof getSyncDb>>,
+  seq: number,
+  mediaId: string,
+  confirmed: ConfirmedMedia,
+): Promise<void> {
+  // The uploaded local files become the offline cache blobs (§7.3).
+  await db.runAsync(
+    `UPDATE media SET sync_state = 'synced', color = ?, file_size_bytes = ?,
+       media_type = ?, filename = ?
+     WHERE id = ?`,
+    confirmed.color,
+    String(confirmed.fileSizeBytes),
+    confirmed.mediaType,
+    confirmed.filename,
+    mediaId,
+  );
+  await db.runAsync("DELETE FROM outbox WHERE seq = ?", seq);
+}
+
+/**
+ * Run a media.create op through presign → PUT → confirm. Idempotent: presign
+ * with a client mediaId returns the finished row (200, no upload URLs) if the
+ * flow already completed; PUTs re-run against the same server-derived keys;
+ * confirm is idempotent server-side. `media_phase` records progress for
+ * observability, but every step is safe to re-run.
+ */
+export async function runMediaCreateOp(row: MediaOpRow): Promise<MediaOpOutcome> {
+  const db = await getSyncDb();
+  const fields = JSON.parse(row.fields_json ?? "{}") as MediaFields;
+
+  // Phase 1: presign. Quota (507) / track-slot (409) → park blocked.
+  let presign: PresignResponse | ConfirmedMedia;
+  try {
+    presign = await apiFetch<PresignResponse | ConfirmedMedia>("/media/presign", {
+      method: "POST",
+      body: {
+        mediaId: row.entity_id,
+        linkedType: fields.linkedType,
+        linkedId: fields.linkedId,
+        filename: fields.filename,
+        mediaType: fields.mediaType,
+        sizeBytes: fields.sizeBytes,
+        thumbnailSizeBytes: fields.thumbnailSizeBytes,
+      },
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    // 4xx (quota 507, track slot 409, validation) → user-visible park.
+    // 5xx / network (no status) → rethrow for backoff retry.
+    if (typeof status === "number" && status >= 400 && status < 600 && status !== 500) {
+      await db.runAsync(
+        "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
+        JSON.stringify({ code: status, message: messageForBlock(status) }),
+        row.seq,
+      );
+      return "blocked";
+    }
+    throw err;
+  }
+
+  // Replay: presign returned the confirmed row (200) — the flow already ran.
+  if (!("displayUploadUrl" in presign)) {
+    await finalizeConfirmed(db, row.seq, row.entity_id, presign);
+    return "done";
+  }
+
+  // Phase 2: PUT display + thumbnail to S3 (no limiter cost).
+  await putFile(presign.displayUploadUrl, fields.localDisplayPath, fields.mediaType);
+  if (presign.thumbnailUploadUrl && fields.localThumbPath) {
+    await putFile(presign.thumbnailUploadUrl, fields.localThumbPath, "image/jpeg");
+  }
+  await db.runAsync(
+    "UPDATE outbox SET media_phase = 'uploaded' WHERE seq = ?",
+    row.seq,
+  );
+
+  // Phase 3: confirm (idempotent) → canonical row.
+  const confirmed = await apiFetch<ConfirmedMedia>(
+    `/media/${row.entity_id}/confirm`,
+    {
+      method: "POST",
+      body: {
+        linkedType: fields.linkedType,
+        linkedId: fields.linkedId,
+        filename: fields.filename,
+        mediaType: fields.mediaType,
+      },
+    },
+  );
+  await finalizeConfirmed(db, row.seq, row.entity_id, confirmed);
+  return "done";
+}
+
+/** Delete a media row (idempotent: 404 → already gone). Removes the op, the
+ * mirror row, and the cached blobs. */
+export async function runMediaDeleteOp(row: MediaOpRow): Promise<MediaOpOutcome> {
+  const db = await getSyncDb();
+  try {
+    await apiFetch<void>(`/media/${row.entity_id}`, { method: "DELETE" });
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status !== 404) throw err; // 404 = goal state reached
+  }
+  const media = await db.getFirstAsync<{
+    local_display_path: string | null;
+    local_thumb_path: string | null;
+  }>(
+    "SELECT local_display_path, local_thumb_path FROM media WHERE id = ?",
+    row.entity_id,
+  );
+  await db.runAsync("DELETE FROM media WHERE id = ?", row.entity_id);
+  await db.runAsync("DELETE FROM outbox WHERE seq = ?", row.seq);
+  for (const path of [media?.local_display_path, media?.local_thumb_path]) {
+    if (path) await FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
+  }
+  return "done";
+}
+
+function messageForBlock(status: number): string {
+  if (status === 507) return "Not enough storage space. Free some space and retry.";
+  if (status === 409) return "This canyon already has a track. Remove it first.";
+  return "The server rejected this upload.";
+}
+
+/** Enqueue a media delete (used by the detail UI). */
+export async function deleteMediaLocal(media: MirrorMedia): Promise<void> {
+  const db = await getSyncDb();
+  await db.withTransactionAsync(async () => {
+    // Optimistic: hide the row immediately; the op reconciles server + blobs.
+    await db.runAsync(
+      "UPDATE media SET sync_state = 'pendingDelete' WHERE id = ?",
+      media.id,
+    );
+    await db.runAsync(
+      `INSERT INTO outbox
+         (op_id, entity, op, entity_id, fields_json, state, attempts, created_at)
+       VALUES (?, 'media', 'delete', ?, NULL, 'queued', 0, ?)`,
+      mintUuid(),
+      media.id,
+      new Date().toISOString(),
+    );
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+}

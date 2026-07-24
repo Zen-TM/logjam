@@ -18,11 +18,18 @@ import {
 
 import { apiFetch } from "../api/apiFetch";
 import { loadOutboxRows, rowToEntry, type OutboxRow } from "./outbox";
+import {
+  runMediaCreateOp,
+  runMediaDeleteOp,
+  type MediaOpRow,
+} from "./mediaUpload";
 import { upsertCanyon, upsertTrip, upsertWaypoint } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
 
 /** Flush to drain (or until only parked/deferred ops remain). Serialized by
- * the sync engine — never call concurrently. */
+ * the sync engine — never call concurrently. Push ops (canyon/trip/waypoint/
+ * notification) go through POST /sync/push in dependency-closure batches;
+ * media ops run their own three-phase / REST flow (§7.1, §8.3 interleave). */
 export async function flushOutbox(): Promise<void> {
   const db = await getSyncDb();
 
@@ -33,8 +40,20 @@ export async function flushOutbox(): Promise<void> {
   for (;;) {
     const rows = await loadOutboxRows();
     const byOpId = new Map(rows.map((row) => [row.op_id, row]));
-    const { ready } = selectFlushBatch(rows.map(rowToEntry), SYNC_PUSH_MAX_OPS);
-    if (ready.length === 0) return;
+    // Media ops are NOT push ops (push refuses media, §8.1) — exclude them
+    // from the push batch and run them separately below.
+    const pushEntries = rows
+      .filter((row) => row.entity !== "media")
+      .map(rowToEntry);
+    const { ready } = selectFlushBatch(pushEntries, SYNC_PUSH_MAX_OPS);
+    if (ready.length === 0) {
+      // No push work left: run pending media ops. If they make progress, loop
+      // (a media confirm may unblock nothing here, but keeps the drain simple);
+      // otherwise the outbox is drained-or-parked and we're done.
+      const progressed = await flushMediaOps();
+      if (progressed) continue;
+      return;
+    }
 
     const seqs = ready.map((entry) => entry.seq);
     await db.runAsync(
@@ -187,4 +206,67 @@ async function applyConfirmedRow(
     case "notification":
       break;
   }
+}
+
+// ── media ops (§7.1, §7.2) ───────────────────────────────────────────────────
+//
+// Media creates run the three-phase presign→PUT→confirm flow; deletes hit
+// REST DELETE. Sequential (the spec allows concurrency 2 — a modest field
+// photo count doesn't need it, and sequential keeps ordering trivial). A
+// media create waits until its linked entity has no pending outbox op (§7.2
+// dependency): a still-queued or blocked canyon/trip create for the same
+// linkedId would send the upload into a guaranteed 404.
+
+async function flushMediaOps(): Promise<boolean> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<MediaOpRow & { op: string }>(
+    `SELECT seq, entity_id, op, fields_json, media_phase FROM outbox
+     WHERE entity = 'media' AND state = 'queued' ORDER BY seq ASC`,
+  );
+  let progressed = false;
+  let mirrorTouched = false;
+
+  for (const row of rows) {
+    if (row.op === "create" && (await isLinkPending(db, row))) continue;
+
+    await db.runAsync("UPDATE outbox SET state = 'inflight' WHERE seq = ?", row.seq);
+    try {
+      const outcome =
+        row.op === "delete"
+          ? await runMediaDeleteOp(row)
+          : await runMediaCreateOp(row);
+      if (outcome === "done") {
+        progressed = true;
+        mirrorTouched = true;
+      }
+      // 'blocked' already set its own state inside the op runner.
+    } catch (err) {
+      // Network / 5xx: requeue and defer to the engine's backoff.
+      await db.runAsync(
+        "UPDATE outbox SET state = 'queued' WHERE seq = ? AND state = 'inflight'",
+        row.seq,
+      );
+      if (mirrorTouched) notifyMirrorChanged();
+      throw err;
+    }
+  }
+
+  if (mirrorTouched) notifyMirrorChanged();
+  return progressed;
+}
+
+/** A media create must wait for its linked entity's create to fully flush:
+ * any outbox row still targeting linkedId (queued create, or a parked one)
+ * means the row may not exist server-side yet. */
+async function isLinkPending(
+  db: Awaited<ReturnType<typeof getSyncDb>>,
+  row: MediaOpRow,
+): Promise<boolean> {
+  const fields = JSON.parse(row.fields_json ?? "{}") as { linkedId?: string };
+  if (!fields.linkedId) return false;
+  const pending = await db.getFirstAsync<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM outbox WHERE entity_id = ? AND entity != 'media'",
+    fields.linkedId,
+  );
+  return (pending?.n ?? 0) > 0;
 }

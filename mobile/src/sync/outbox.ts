@@ -13,17 +13,7 @@ import {
 } from "@logjam/shared";
 
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
-
-// The engine registers its debounced-sync scheduler here instead of being
-// imported — importing syncEngine from this file closes a require cycle
-// (engine → flush → outbox → engine) that Metro warns about.
-let mutationSyncScheduler: (() => void) | null = null;
-export function setMutationSyncScheduler(scheduler: () => void): void {
-  mutationSyncScheduler = scheduler;
-}
-function scheduleMutationSync(): void {
-  mutationSyncScheduler?.();
-}
+import { scheduleMutationSync } from "./mediaSyncBridge";
 
 export type OutboxRow = {
   seq: number;

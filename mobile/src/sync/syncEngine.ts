@@ -11,6 +11,7 @@ import { fetchCurrentUser } from "../api/queries";
 import { runDeltaPull } from "./deltaPull";
 import { flushOutbox } from "./flush";
 import { syncThumbnailCache } from "./mediaCache";
+import { setMutationSyncHandler } from "./mediaSyncBridge";
 import { getSyncStateValue, setSyncStateValue } from "./syncDb";
 
 export type SyncStatus = {
@@ -146,15 +147,13 @@ function requestAutoSync(): void {
  * returns a cleanup for sign-out.
  */
 export function registerSyncTriggers(): () => void {
-  // Wire the outbox's post-enqueue trigger, then run the one-time Stage 7 →
-  // Stage 8 promotion of legacy local-only waypoints into the synced mirror
-  // (best-effort; retried next launch on failure). Dynamic import keeps the
-  // engine→outbox edge out of the static module graph (cycle warning).
+  // Wire the post-enqueue trigger (outbox + media paths call it via the
+  // bridge), then run the one-time Stage 7 → Stage 8 promotion of legacy
+  // local-only waypoints into the synced mirror (best-effort; retried next
+  // launch on failure).
+  setMutationSyncHandler(scheduleMutationSync);
   void import("./outbox")
-    .then((outbox) => {
-      outbox.setMutationSyncScheduler(scheduleMutationSync);
-      return outbox.migrateLegacyWaypoints();
-    })
+    .then((outbox) => outbox.migrateLegacyWaypoints())
     .catch(() => {});
 
   // App returns to foreground.
@@ -174,6 +173,7 @@ export function registerSyncTriggers(): () => void {
   requestAutoSync();
 
   return () => {
+    setMutationSyncHandler(null);
     appStateSub.remove();
     netInfoUnsub();
     if (retryTimer) {

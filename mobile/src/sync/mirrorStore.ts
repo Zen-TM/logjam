@@ -437,6 +437,7 @@ export type MirrorMedia = {
   filename: string | null;
   color: string | null;
   createdAt: string;
+  syncState: string;
   localThumbPath: string | null;
   localDisplayPath: string | null;
 };
@@ -454,12 +455,14 @@ export async function listMediaForLinked(
     filename: string | null;
     color: string | null;
     created_at: string | null;
+    sync_state: string;
     local_thumb_path: string | null;
     local_display_path: string | null;
   }>(
     `SELECT id, linked_type, linked_id, media_type, filename, color,
-            created_at, local_thumb_path, local_display_path
+            created_at, sync_state, local_thumb_path, local_display_path
      FROM media WHERE linked_type = ? AND linked_id = ?
+       AND sync_state != 'pendingDelete'
      ORDER BY created_at ASC`,
     linkedType,
     linkedId,
@@ -472,6 +475,7 @@ export async function listMediaForLinked(
     filename: row.filename,
     color: row.color,
     createdAt: row.created_at ?? "",
+    syncState: row.sync_state,
     localThumbPath: row.local_thumb_path,
     localDisplayPath: row.local_display_path,
   }));

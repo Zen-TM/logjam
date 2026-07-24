@@ -5,6 +5,7 @@
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Modal,
   Pressable,
@@ -13,11 +14,13 @@ import {
   Text,
   View,
 } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { categoryHasThumbnail, formatCanyonGrade, mediaCategory } from "@logjam/shared";
 
 import type { TCanyon } from "../api/types";
 import { fontSize, radius, spacing, theme } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
+import { attachPhotoLocal, deleteMediaLocal } from "../sync/mediaUpload";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { useMirrorCanyon, useMirrorCanyonMedia } from "../sync/useSyncQueries";
 import { EmptyState, ErrorState, LoadingState } from "../ui/ScreenStates";
@@ -32,13 +35,27 @@ export function CanyonDetailScreen({ canyonId }: { canyonId: string }) {
     return <EmptyState title="Canyon not found" hint="It may have been deleted." />;
   }
 
-  return <CanyonDetailView canyon={query.data} media={media.data ?? []} />;
+  return (
+    <CanyonDetailView
+      canyon={query.data}
+      canyonId={canyonId}
+      media={media.data ?? []}
+    />
+  );
 }
 
-// Thumbnail strip (§7.3): thumbs come from the eager offline cache; tapping
-// fetches the full-res lazily (cached after first view). Offline with no
-// cached full-res → the viewer falls back to the thumbnail.
-function MediaStrip({ media }: { media: MirrorMedia[] }) {
+// Thumbnail strip (§7.1/§7.3): pendingUpload rows show immediately from
+// their local copy; synced thumbs come from the eager offline cache. Tapping
+// fetches the full-res lazily (cached after first view); long-press deletes.
+// The "Add photo" button picks from the library and queues the upload
+// through the outbox — works offline.
+function MediaStrip({
+  canyonId,
+  media,
+}: {
+  canyonId: string;
+  media: MirrorMedia[];
+}) {
   const [viewer, setViewer] = useState<{ media: MirrorMedia; uri: string | null } | null>(
     null,
   );
@@ -47,18 +64,56 @@ function MediaStrip({ media }: { media: MirrorMedia[] }) {
   const openViewer = useCallback(async (item: MirrorMedia) => {
     setLoadingId(item.id);
     try {
-      const displayUri = await ensureDisplayCached(item.id);
+      // A pendingUpload row's full-res IS the local copy; use it directly.
+      const displayUri = item.localDisplayPath ?? (await ensureDisplayCached(item.id));
       setViewer({ media: item, uri: displayUri ?? item.localThumbPath });
     } finally {
       setLoadingId(null);
     }
   }, []);
 
+  const addPhoto = useCallback(async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        "Photo access needed",
+        "Allow photo library access to attach photos.",
+      );
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: "images",
+      quality: 1,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+    const asset = result.assets[0];
+    try {
+      await attachPhotoLocal("canyon", canyonId, {
+        uri: asset.uri,
+        mimeType: asset.mimeType,
+        fileName: asset.fileName,
+      });
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Couldn't attach photo", "Please try again.");
+    }
+  }, [canyonId]);
+
+  const confirmDelete = useCallback((item: MirrorMedia) => {
+    Alert.alert("Delete this photo?", undefined, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => void deleteMediaLocal(item).catch(console.error),
+      },
+    ]);
+  }, []);
+
   const thumbs = media.filter((item) => {
     const category = mediaCategory(item.mediaType);
     return category !== null && categoryHasThumbnail(category);
   });
-  if (thumbs.length === 0) return null;
 
   return (
     <View style={styles.mediaBlock}>
@@ -70,6 +125,7 @@ function MediaStrip({ media }: { media: MirrorMedia[] }) {
               key={item.id}
               accessibilityRole="imagebutton"
               onPress={() => void openViewer(item)}
+              onLongPress={() => confirmDelete(item)}
               style={styles.thumbWrap}
             >
               {item.localThumbPath ? (
@@ -79,6 +135,11 @@ function MediaStrip({ media }: { media: MirrorMedia[] }) {
                   <Text style={styles.thumbPlaceholderText}>⌛</Text>
                 </View>
               )}
+              {item.syncState === "pendingUpload" ? (
+                <View style={styles.pendingBadge}>
+                  <Text style={styles.pendingBadgeText}>Uploading…</Text>
+                </View>
+              ) : null}
               {loadingId === item.id ? (
                 <View style={styles.thumbLoading}>
                   <ActivityIndicator color={theme.accent} />
@@ -86,6 +147,18 @@ function MediaStrip({ media }: { media: MirrorMedia[] }) {
               ) : null}
             </Pressable>
           ))}
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void addPhoto()}
+            style={({ pressed }) => [
+              styles.thumb,
+              styles.addTile,
+              pressed && styles.addTilePressed,
+            ]}
+          >
+            <Text style={styles.addTilePlus}>＋</Text>
+            <Text style={styles.addTileLabel}>Add photo</Text>
+          </Pressable>
         </View>
       </ScrollView>
 
@@ -115,9 +188,11 @@ function MediaStrip({ media }: { media: MirrorMedia[] }) {
 
 function CanyonDetailView({
   canyon,
+  canyonId,
   media,
 }: {
   canyon: TCanyon;
+  canyonId: string;
   media: MirrorMedia[];
 }) {
   const grade = formatCanyonGrade(canyon);
@@ -149,7 +224,7 @@ function CanyonDetailView({
         </View>
       ) : null}
 
-      <MediaStrip media={media} />
+      <MediaStrip canyonId={canyonId} media={media} />
     </ScrollView>
   );
 }
@@ -205,6 +280,31 @@ const styles = StyleSheet.create({
   },
   thumbPlaceholder: { alignItems: "center", justifyContent: "center" },
   thumbPlaceholderText: { fontSize: fontSize.xl, color: theme.textMuted },
+  pendingBadge: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    paddingVertical: spacing(0.25),
+    borderBottomLeftRadius: radius.md,
+    borderBottomRightRadius: radius.md,
+  },
+  pendingBadgeText: {
+    color: theme.textPrimary,
+    fontSize: fontSize.xs,
+    textAlign: "center",
+  },
+  addTile: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: theme.accent,
+    gap: spacing(0.25),
+  },
+  addTilePressed: { backgroundColor: "rgba(255,255,255,0.08)" },
+  addTilePlus: { color: theme.accent, fontSize: fontSize.xl },
+  addTileLabel: { color: theme.accent, fontSize: fontSize.xs },
   thumbLoading: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",

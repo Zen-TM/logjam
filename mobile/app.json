@@ -13,7 +13,9 @@
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["location"]
+        "UIBackgroundModes": [
+          "location"
+        ]
       }
     },
     "android": {
@@ -22,13 +24,25 @@
       "intentFilters": [
         {
           "action": "VIEW",
-          "category": ["DEFAULT"],
+          "category": [
+            "DEFAULT"
+          ],
           "data": [
-            { "mimeType": "application/pdf" },
-            { "mimeType": "application/gpx+xml" },
-            { "mimeType": "application/vnd.google-earth.kml+xml" },
-            { "mimeType": "application/vnd.google-earth.kmz" },
-            { "mimeType": "application/geo+json" }
+            {
+              "mimeType": "application/pdf"
+            },
+            {
+              "mimeType": "application/gpx+xml"
+            },
+            {
+              "mimeType": "application/vnd.google-earth.kml+xml"
+            },
+            {
+              "mimeType": "application/vnd.google-earth.kmz"
+            },
+            {
+              "mimeType": "application/geo+json"
+            }
           ]
         }
       ]
@@ -54,6 +68,13 @@
         {
           "isAndroidForegroundServiceEnabled": true,
           "locationWhenInUsePermission": "Logjam shows your position on the map and records tracks you start."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Logjam attaches photos from your library to canyons and trips.",
+          "cameraPermission": "Logjam lets you take photos to attach to canyons and trips."
         }
       ]
     ],
