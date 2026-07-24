@@ -1,21 +1,82 @@
 // Notifications inbox — read + mark-seen (Stage 1 scope; actions like
 // accept/decline arrive with their write surfaces in later stages).
-import { useState } from "react";
+// Cache-first (§4.7): the last fetch is cached so the inbox reads offline;
+// a live fetch refreshes it. Mark-read is online-only (fails gracefully
+// offline) but patches the cache optimistically so the read state sticks.
+import { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { messageFromError } from "@logjam/shared";
 
-import {
-  getNotifications,
-  markAllNotificationsRead,
-  markNotificationRead,
-  useApiQuery,
-} from "../api/queries";
+import { markAllNotificationsRead, markNotificationRead } from "../api/queries";
 import type { TNotification } from "../api/types";
 import { fontSize, radius, spacing, theme } from "../theme";
+import {
+  fetchAndCacheNotifications,
+  patchCachedRead,
+  readNotificationsCache,
+} from "../sync/notificationsCache";
+import { onMirrorChanged } from "../sync/syncDb";
 import { Button } from "../ui/Button";
 import { EmptyState, ErrorState, LoadingState } from "../ui/ScreenStates";
 import { ErrorBanner } from "../ui/ErrorBanner";
 import { notificationLabel } from "./notificationLabel";
+
+type NotificationsState = {
+  notifications: TNotification[];
+  loading: boolean;
+  error: string | null;
+  refetch: () => void;
+};
+
+// Cache-first inbox load: render the cache immediately, then live-fetch. A
+// failed fetch with a populated cache is silent (offline); only an empty
+// cache surfaces the error.
+function useNotifications(): NotificationsState {
+  const [notifications, setNotifications] = useState<TNotification[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [fetchCount, setFetchCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const cache = await readNotificationsCache().catch(() => null);
+      if (!cancelled && cache) setNotifications(cache.notifications);
+      try {
+        const fresh = await fetchAndCacheNotifications();
+        if (!cancelled) {
+          setNotifications(fresh.notifications);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled && !cache) {
+          setError(messageFromError(err, "Couldn't load notifications."));
+          setNotifications([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchCount]);
+
+  // markRead patches the cache and fires notifyMirrorChanged; re-read it.
+  useEffect(() => {
+    const unsubscribe = onMirrorChanged(() => {
+      readNotificationsCache()
+        .then((cache) => cache && setNotifications(cache.notifications))
+        .catch(() => {});
+    });
+    return unsubscribe;
+  }, []);
+
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+  return {
+    notifications: notifications ?? [],
+    loading: notifications === null,
+    error,
+    refetch,
+  };
+}
 
 function formatTimestamp(iso: string): string {
   // True timestamp (not date-only) — local timezone is correct here.
@@ -28,10 +89,10 @@ function formatTimestamp(iso: string): string {
 }
 
 export function NotificationsScreen({ onUnreadChanged }: { onUnreadChanged?: () => void }) {
-  const query = useApiQuery(getNotifications, "Couldn't load notifications.");
+  const query = useNotifications();
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const notifications = query.data?.data ?? [];
+  const notifications = query.notifications;
   if (query.loading && notifications.length === 0) return <LoadingState />;
   if (query.error && notifications.length === 0) {
     return <ErrorState message={query.error} onRetry={query.refetch} />;
@@ -45,10 +106,12 @@ export function NotificationsScreen({ onUnreadChanged }: { onUnreadChanged?: () 
   const handleMarkRead = async (n: TNotification) => {
     if (n.read) return;
     setActionError(null);
+    // Optimistic: patch the cache first so the read state sticks even if the
+    // network call fails.
+    await patchCachedRead([n.id]);
+    onUnreadChanged?.();
     try {
       await markNotificationRead(n.id);
-      query.refetch();
-      onUnreadChanged?.();
     } catch (err) {
       console.error(err);
       setActionError(messageFromError(err, "Couldn't mark notification as read."));
@@ -57,10 +120,10 @@ export function NotificationsScreen({ onUnreadChanged }: { onUnreadChanged?: () 
 
   const handleMarkAll = async () => {
     setActionError(null);
+    await patchCachedRead("all");
+    onUnreadChanged?.();
     try {
       await markAllNotificationsRead();
-      query.refetch();
-      onUnreadChanged?.();
     } catch (err) {
       console.error(err);
       setActionError(messageFromError(err, "Couldn't mark notifications as read."));
@@ -75,7 +138,7 @@ export function NotificationsScreen({ onUnreadChanged }: { onUnreadChanged?: () 
       keyExtractor={(item) => item.id}
       refreshControl={
         <RefreshControl
-          refreshing={query.loading}
+          refreshing={false}
           onRefresh={query.refetch}
           tintColor={theme.accent}
         />

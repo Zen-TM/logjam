@@ -23,6 +23,7 @@ import { CanyonDetailScreen } from "./screens/CanyonDetailScreen";
 import { CanyonsScreen } from "./screens/CanyonsScreen";
 import { ConsentGate } from "./screens/ConsentGate";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
+import { SyncIssuesScreen } from "./screens/SyncIssuesScreen";
 import { TripDetailScreen, TripsScreen } from "./screens/TripsScreen";
 import { LoadingState } from "./ui/ScreenStates";
 
@@ -54,9 +55,15 @@ type TripsStackParams = {
   TripDetail: { trip: TTripLog };
 };
 
+type AccountStackParams = {
+  AccountHome: undefined;
+  SyncIssues: undefined;
+};
+
 const MapStack = createNativeStackNavigator<MapStackParams>();
 const CanyonsStack = createNativeStackNavigator<CanyonsStackParams>();
 const TripsStack = createNativeStackNavigator<TripsStackParams>();
+const AccountStack = createNativeStackNavigator<AccountStackParams>();
 const Tabs = createBottomTabNavigator();
 
 const stackScreenOptions = {
@@ -252,13 +259,26 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
         <Tabs.Screen
           name="Account"
           options={{
-            headerShown: true,
-            headerStyle: { backgroundColor: theme.secondary },
-            headerTintColor: theme.textPrimary,
             tabBarIcon: ({ color }) => <TabIcon glyph="●" color={color} />,
           }}
         >
-          {() => <AccountScreen onSignOut={onSignOut} />}
+          {() => (
+            <AccountStack.Navigator screenOptions={stackScreenOptions}>
+              <AccountStack.Screen name="AccountHome" options={{ title: "Account" }}>
+                {({ navigation }) => (
+                  <AccountScreen
+                    onSignOut={onSignOut}
+                    onOpenSyncIssues={() => navigation.navigate("SyncIssues")}
+                  />
+                )}
+              </AccountStack.Screen>
+              <AccountStack.Screen
+                name="SyncIssues"
+                component={SyncIssuesScreen}
+                options={{ title: "Sync issues" }}
+              />
+            </AccountStack.Navigator>
+          )}
         </Tabs.Screen>
       </Tabs.Navigator>
     </NavigationContainer>

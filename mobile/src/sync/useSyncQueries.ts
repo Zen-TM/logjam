@@ -17,6 +17,7 @@ import {
   type MirrorWaypoint,
 } from "./mirrorStore";
 import { onMirrorChanged } from "./syncDb";
+import { countSyncIssues } from "./syncIssues";
 import {
   getSyncStatus,
   onSyncStatusChanged,
@@ -113,4 +114,26 @@ export function useMirrorCanyonMedia(
 ): MirrorQueryState<MirrorMedia[]> {
   const read = useCallback(() => listMediaForLinked("canyon", canyonId), [canyonId]);
   return useMirrorQuery(read);
+}
+
+/** Live count of parked ops + shelf entries for the "Sync issues (N)" row. */
+export function useSyncIssueCount(): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => {
+      countSyncIssues()
+        .then((n) => {
+          if (!cancelled) setCount(n);
+        })
+        .catch(() => {});
+    };
+    refresh();
+    const unsubscribe = onMirrorChanged(refresh);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+  return count;
 }
