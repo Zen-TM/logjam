@@ -2,7 +2,7 @@
 // inaccessible canyon never reaches the mirror, so it renders the same "not
 // found" state as a nonexistent one — the API's 404-not-403 anti-oracle,
 // preserved locally.
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -15,14 +15,29 @@ import {
   View,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { categoryHasThumbnail, formatCanyonGrade, mediaCategory } from "@logjam/shared";
+import {
+  categoryHasThumbnail,
+  formatCanyonGrade,
+  mediaCategory,
+  messageFromError,
+} from "@logjam/shared";
 
+import {
+  getCanyonShares,
+  getFriends,
+  shareCanyon,
+  unshareCanyon,
+  type CanyonShareRecipient,
+  type Friend,
+} from "../api/friends";
 import { fontSize, radius, spacing, theme } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import { attachPhotoLocal, deleteMediaLocal } from "../sync/mediaUpload";
 import { updateCanyonLocal } from "../sync/outbox";
 import type { MirrorCanyon, MirrorMedia } from "../sync/mirrorStore";
 import { useMirrorCanyon, useMirrorCanyonMedia } from "../sync/useSyncQueries";
+import { Button } from "../ui/Button";
+import { ErrorBanner } from "../ui/ErrorBanner";
 import { EntityEditForm, type EditFieldSpec } from "../ui/EntityEditForm";
 import { EmptyState, ErrorState, LoadingState } from "../ui/ScreenStates";
 
@@ -239,6 +254,168 @@ function MediaStrip({
   );
 }
 
+// Per-canyon sharing (§ canyon-share hybrid model) — owner-only. Online-only:
+// the grant/revoke actions hit REST directly (managing shares is not a field
+// use case); the resulting record + tombstone still propagate to the sharee's
+// mirror on their next pull. A sharee never sees this — the caller gates on
+// syncRole === "owner". Recipients + friend picker are username-only.
+function CanyonSharingSection({ canyonId }: { canyonId: string }) {
+  const [recipients, setRecipients] = useState<CanyonShareRecipient[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [friends, setFriends] = useState<Friend[] | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const next = await getCanyonShares(canyonId);
+      setRecipients(next);
+      setLoadError(null);
+    } catch (err) {
+      console.error(err);
+      // Detail renders offline; sharing needs the network. Degrade to a note
+      // rather than a hard error — never block the read view over it.
+      setLoadError(messageFromError(err, "Sharing is unavailable offline."));
+    }
+  }, [canyonId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const openPicker = useCallback(async () => {
+    setActionError(null);
+    setPickerOpen(true);
+    if (friends === null) {
+      try {
+        setFriends(await getFriends());
+      } catch (err) {
+        setActionError(messageFromError(err, "Couldn't load friends."));
+      }
+    }
+  }, [friends]);
+
+  const share = useCallback(
+    async (friend: Friend) => {
+      setBusyId(friend.id);
+      setActionError(null);
+      try {
+        await shareCanyon(canyonId, friend.id);
+        await load();
+        setPickerOpen(false);
+      } catch (err) {
+        setActionError(messageFromError(err, "Couldn't share canyon."));
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [canyonId, load],
+  );
+
+  const confirmUnshare = useCallback(
+    (recipient: CanyonShareRecipient) => {
+      Alert.alert(
+        `Stop sharing with ${recipient.sharedWith.username}?`,
+        "They'll lose access to this canyon and its photos.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Unshare",
+            style: "destructive",
+            onPress: () => {
+              setBusyId(recipient.id);
+              setActionError(null);
+              unshareCanyon(canyonId, recipient.sharedWith.id)
+                .then(() => load())
+                .catch((err: unknown) =>
+                  setActionError(messageFromError(err, "Couldn't unshare canyon.")),
+                )
+                .finally(() => setBusyId(null));
+            },
+          },
+        ],
+      );
+    },
+    [canyonId, load],
+  );
+
+  const sharedIds = new Set((recipients ?? []).map((r) => r.sharedWith.id));
+  const shareable = (friends ?? []).filter((f) => !sharedIds.has(f.id));
+
+  return (
+    <View style={styles.sharingBlock}>
+      <Text style={styles.sectionLabel}>Shared with</Text>
+      {actionError ? <ErrorBanner message={actionError} /> : null}
+      {recipients === null && loadError ? (
+        <Text style={styles.sharingNote}>{loadError}</Text>
+      ) : recipients === null ? (
+        <ActivityIndicator color={theme.accent} style={styles.sharingSpinner} />
+      ) : recipients.length === 0 ? (
+        <Text style={styles.sharingNote}>Not shared with anyone yet.</Text>
+      ) : (
+        recipients.map((recipient) => (
+          <View key={recipient.id} style={styles.shareRow}>
+            <Text style={styles.shareName}>{recipient.sharedWith.username}</Text>
+            {busyId === recipient.id ? (
+              <ActivityIndicator color={theme.accent} />
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => confirmUnshare(recipient)}
+                style={({ pressed }) => [styles.unsharePill, pressed && styles.addTilePressed]}
+              >
+                <Text style={styles.unshareText}>Unshare</Text>
+              </Pressable>
+            )}
+          </View>
+        ))
+      )}
+
+      <Button label="Share with a friend" variant="outlineAccent" onPress={() => void openPicker()} />
+
+      <Modal
+        visible={pickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <Pressable style={styles.pickerBackdrop} onPress={() => setPickerOpen(false)}>
+          <Pressable style={styles.pickerSheet} onPress={() => {}}>
+            <Text style={styles.pickerTitle}>Share with</Text>
+            {actionError ? <ErrorBanner message={actionError} /> : null}
+            {friends === null ? (
+              <ActivityIndicator color={theme.accent} style={styles.sharingSpinner} />
+            ) : shareable.length === 0 ? (
+              <Text style={styles.sharingNote}>
+                {friends.length === 0
+                  ? "No friends yet — add friends from the Account tab."
+                  : "All your friends already have access."}
+              </Text>
+            ) : (
+              <ScrollView>
+                {shareable.map((friend) => (
+                  <Pressable
+                    key={friend.id}
+                    accessibilityRole="button"
+                    onPress={() => void share(friend)}
+                    disabled={busyId !== null}
+                    style={({ pressed }) => [styles.shareRow, pressed && styles.addTilePressed]}
+                  >
+                    <Text style={styles.shareName}>{friend.username}</Text>
+                    {busyId === friend.id ? <ActivityIndicator color={theme.accent} /> : null}
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+            <Button label="Close" variant="ghost" onPress={() => setPickerOpen(false)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
 function CanyonDetailView({
   canyon,
   canyonId,
@@ -281,6 +458,8 @@ function CanyonDetailView({
       ) : null}
 
       <MediaStrip canyonId={canyonId} media={media} />
+
+      {canyon.syncRole === "owner" ? <CanyonSharingSection canyonId={canyonId} /> : null}
     </ScrollView>
   );
 }
@@ -388,4 +567,41 @@ const styles = StyleSheet.create({
   },
   viewerImage: { width: "100%", height: "100%" },
   viewerUnavailable: { color: theme.textMuted, fontSize: fontSize.base },
+  sharingBlock: { gap: spacing(1) },
+  sharingNote: { color: theme.textMuted, fontSize: fontSize.sm },
+  sharingSpinner: { alignSelf: "flex-start" },
+  shareRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    borderRadius: radius.md,
+    padding: spacing(1.5),
+    gap: spacing(1),
+  },
+  shareName: { flex: 1, color: theme.textPrimary, fontSize: fontSize.base },
+  unsharePill: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing(1.5),
+    paddingVertical: spacing(0.75),
+  },
+  unshareText: { color: theme.warning, fontSize: fontSize.sm, fontWeight: "600" },
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  pickerSheet: {
+    backgroundColor: theme.secondary,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    padding: spacing(2),
+    gap: spacing(1),
+    maxHeight: "70%",
+  },
+  pickerTitle: { color: theme.textPrimary, fontSize: fontSize.lg, fontWeight: "700" },
 });

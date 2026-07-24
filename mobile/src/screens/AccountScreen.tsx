@@ -12,9 +12,11 @@ import { useSyncIssueCount } from "../sync/useSyncQueries";
 export function AccountScreen({
   onSignOut,
   onOpenSyncIssues,
+  onOpenFriends,
 }: {
   onSignOut: () => void;
   onOpenSyncIssues: () => void;
+  onOpenFriends: () => void;
 }) {
   const query = useApiQuery(fetchCurrentUser, "Couldn't load your account.");
   const syncIssueCount = useSyncIssueCount();
@@ -33,6 +35,15 @@ export function AccountScreen({
           <Text style={styles.meta}>{user.email}</Text>
         </View>
       ) : null}
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={onOpenFriends}
+        style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      >
+        <Text style={styles.rowLabel}>Friends</Text>
+        <Text style={styles.rowValue}>Manage</Text>
+      </Pressable>
 
       <Pressable
         accessibilityRole="button"

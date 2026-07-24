@@ -24,6 +24,7 @@ import { AccountScreen } from "./screens/AccountScreen";
 import { CanyonDetailScreen } from "./screens/CanyonDetailScreen";
 import { CanyonsScreen } from "./screens/CanyonsScreen";
 import { ConsentGate } from "./screens/ConsentGate";
+import { FriendsScreen } from "./screens/FriendsScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { SyncIssuesScreen } from "./screens/SyncIssuesScreen";
 import { TripDetailScreen, TripsScreen } from "./screens/TripsScreen";
@@ -60,6 +61,7 @@ type TripsStackParams = {
 type AccountStackParams = {
   AccountHome: undefined;
   SyncIssues: undefined;
+  Friends: undefined;
 };
 
 const MapStack = createNativeStackNavigator<MapStackParams>();
@@ -283,6 +285,7 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
                   <AccountScreen
                     onSignOut={onSignOut}
                     onOpenSyncIssues={() => navigation.navigate("SyncIssues")}
+                    onOpenFriends={() => navigation.navigate("Friends")}
                   />
                 )}
               </AccountStack.Screen>
@@ -290,6 +293,11 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
                 name="SyncIssues"
                 component={SyncIssuesScreen}
                 options={{ title: "Sync issues" }}
+              />
+              <AccountStack.Screen
+                name="Friends"
+                component={FriendsScreen}
+                options={{ title: "Friends" }}
               />
             </AccountStack.Navigator>
           )}
