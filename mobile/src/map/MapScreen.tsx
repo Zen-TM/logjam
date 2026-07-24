@@ -23,6 +23,8 @@ import {
   ShapeSource,
   SymbolLayer,
 } from "@maplibre/maplibre-react-native";
+import { Feather } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
 import * as Location from "expo-location";
 import NetInfo from "@react-native-community/netinfo";
@@ -34,8 +36,6 @@ import {
   haversineMeters,
   initialBearingDegrees,
   messageFromError,
-  type TopoLayerFormat,
-  type TopoLayerName,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -46,28 +46,14 @@ import { config } from "../config";
 import { fontSize, radius, spacing, theme } from "../theme";
 import { BottomSheet } from "../ui/BottomSheet";
 import { Card } from "../ui/Card";
+import { Row } from "../ui/Row";
 import { SectionHeader } from "../ui/SectionHeader";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { StatusPill } from "../ui/StatusPill";
 import { Toggle } from "../ui/Toggle";
 import { updateGeoPdfImport } from "../geopdf/geoPdfImportsDb";
-import {
-  GEOPDF_ERRORS,
-  RESIDUAL_WARN_FRACTION,
-  deleteGeoPdfImport,
-  importGeoPdfBytes,
-  importGeoPdfFromPicker,
-  importGeoPdfFromUrl,
-  resumeGeoPdfImport,
-  type GeoPdfCancelToken,
-  type GeoPdfProgress,
-} from "../geopdf/importPipeline";
+import { GEOPDF_ERRORS, RESIDUAL_WARN_FRACTION, importGeoPdfBytes } from "../geopdf/importPipeline";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
-import {
-  getGeoPdfJob,
-  listGeoPdfJobs,
-  type GeoPdfJobView,
-} from "../api/geoPdfJobs";
 import { setVectorImportVisible } from "../imports/importsDb";
 import {
   classifyIncomingBytes,
@@ -75,12 +61,8 @@ import {
   syntheticNameFor,
 } from "../imports/incomingIntent";
 import { useVectorImports } from "../imports/useVectorImports";
-import {
-  deleteVectorImport,
-  importVectorFileFromPicker,
-  importVectorSource,
-} from "../imports/vectorImports";
-import { deleteTrack, updateTrack, type Waypoint } from "../tracks/tracksDb";
+import { importVectorSource } from "../imports/vectorImports";
+import { updateTrack, type Waypoint } from "../tracks/tracksDb";
 import { createWaypointLocal, deleteWaypointLocal } from "../sync/outbox";
 import {
   reconcileTrackRecordingOnLaunch,
@@ -90,12 +72,8 @@ import { TrackMapLayers } from "../tracks/TrackMapLayers";
 import { TrackRecordingControls } from "../tracks/TrackRecordingControls";
 import { useTracks } from "../tracks/useTracks";
 import { ensureForegroundLocationPermission } from "./locationPermission";
-import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import { listEnabledOverlayKeys, setOverlayEnabled } from "../offline/registryDb";
-import {
-  deleteDownloadedArtifact,
-  downloadProtomapsRegion,
-} from "../offline/regionDownloads";
+import { downloadProtomapsRegion } from "../offline/regionDownloads";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers, protomapsLayerCount } from "./basemap/ProtomapsLayers";
@@ -213,11 +191,18 @@ export function MapScreen({
   // downloaded overlay stays visible across a cold offline launch; toggles
   // write through. Saved overlays are auto-enabled on download.
   const [enabledOverlays, setEnabledOverlays] = useState<ReadonlySet<string>>(new Set());
-  useEffect(() => {
-    listEnabledOverlayKeys()
-      .then((keys) => setEnabledOverlays(new Set(keys)))
-      .catch(console.error);
-  }, []);
+  // Re-read on focus (not just mount): the Saved screen's "Save offline"
+  // action auto-enables an overlay by writing overlay_enabled directly, and
+  // that table has no change listener (unlike the artifact registry) — a
+  // focus refresh is how a Map screen that stayed mounted in the background
+  // picks up an overlay saved while the user was on the Saved tab.
+  useFocusEffect(
+    useCallback(() => {
+      listEnabledOverlayKeys()
+        .then((keys) => setEnabledOverlays(new Set(keys)))
+        .catch(console.error);
+    }, []),
+  );
   // Toggle one overlay on/off, persisting the change.
   const toggleOverlay = useCallback((key: string) => {
     setEnabledOverlays((prev) => {
@@ -409,224 +394,19 @@ export function MapScreen({
     }
   }, [confirmCellularOk, artifacts]);
 
-  const regionArtifacts = artifacts.filter((a) => a.kind === "basemap-region");
-
-  // Stage 4b: per-overlay offline save. One download at a time (overlayBusy
-  // holds the in-flight "<jobId>/<layer>" key); errors surface as a status
-  // line under the section — state words only, never labels or paths.
-  const [overlayBusy, setOverlayBusy] = useState<string | null>(null);
-  const [overlayPct, setOverlayPct] = useState<number | null>(null);
-  const [overlayStatus, setOverlayStatus] = useState<string | null>(null);
-  const handleSaveOverlay = useCallback(
-    async (item: {
-      key: string;
-      jobId: string;
-      layer: TopoLayerName;
-      format: TopoLayerFormat;
-      pmtilesUrl: string;
-    }) => {
-      try {
-        if (!(await confirmCellularOk())) return;
-        setOverlayStatus(null);
-        setOverlayPct(null);
-        setOverlayBusy(item.key);
-        await downloadTopoOverlay(
-          {
-            jobId: item.jobId,
-            layer: item.layer,
-            format: item.format,
-            pmtilesUrl: item.pmtilesUrl,
-          },
-          (p) =>
-            setOverlayPct(
-              p.bytesTotal > 0
-                ? Math.min(100, Math.round((p.bytesDone / p.bytesTotal) * 100))
-                : null,
-            ),
-        );
-        // Auto-enable the saved overlay (persisted) so it renders offline
-        // without a manual toggle — you downloaded it to use it.
-        setEnabledOverlays((prev) => {
-          if (prev.has(item.key)) return prev;
-          const next = new Set(prev);
-          next.add(item.key);
-          setOverlayEnabled(item.key, true).catch(console.error);
-          return next;
-        });
-        setOverlayStatus("Overlay saved for offline use.");
-      } catch (err) {
-        console.error(err);
-        setOverlayStatus(messageFromError(err, "Couldn't save this overlay."));
-      } finally {
-        setOverlayBusy(null);
-        setOverlayPct(null);
-      }
-    },
-    [confirmCellularOk],
-  );
-
-  // Stage 5: vector file imports. Import runs from the picker sheet; results
-  // and errors surface as a status line (static parser messages only).
+  // Stage 4b topo overlays + Stage 5 vector-import file management (save
+  // offline / import file / delete) relocated to SavedScreen — viewport-
+  // independent asset management. This screen keeps only the per-asset
+  // visibility toggles (registry/hooks below feed both screens).
   const { imports } = useVectorImports();
   const visibleImports = imports.filter((imported) => imported.visible);
-  const [importBusy, setImportBusy] = useState(false);
-  const [importStatus, setImportStatus] = useState<string | null>(null);
-  const handleImportFile = useCallback(async () => {
-    try {
-      setImportStatus(null);
-      setImportBusy(true);
-      const outcome = await importVectorFileFromPicker(imports.length);
-      if (outcome.status === "imported") {
-        setImportStatus("Imported — showing on the map.");
-        const [west, south, east, north] = outcome.record.bbox;
-        cameraRef.current?.fitBounds([east, north], [west, south], 40, 600);
-        setPickerOpen(false);
-      }
-    } catch (err) {
-      console.error(err);
-      setImportStatus(messageFromError(err, "Couldn't import that file."));
-    } finally {
-      setImportBusy(false);
-    }
-  }, [imports.length]);
 
-  // Stage 6: GeoPDF imports. The pipeline runs on-device (parse → tile →
-  // MBTiles); progress and errors surface as a status line (static messages
-  // / error codes only — never file-derived text).
+  // Stage 6: GeoPDF imports. Import/resume/account-import/delete relocated
+  // to SavedScreen (viewport-independent management); this screen keeps only
+  // the ready layers it renders plus the sheet's visibility + opacity rows.
   const { geoPdfImports } = useGeoPdfImports();
   const readyGeoPdfImports = geoPdfImports.filter(
     (gp) => gp.state === "ready" && gp.visible,
-  );
-  const [geoPdfBusy, setGeoPdfBusy] = useState(false);
-  const [geoPdfStatus, setGeoPdfStatus] = useState<string | null>(null);
-  const [geoPdfPct, setGeoPdfPct] = useState<number | null>(null);
-  const geoPdfCancel = useRef<GeoPdfCancelToken | null>(null);
-
-  const geoPdfProgress = useCallback((progress: GeoPdfProgress) => {
-    if (progress.phase === "rasterising" || progress.phase === "overviews") {
-      setGeoPdfPct(Math.round(progress.fraction * 100));
-    } else {
-      setGeoPdfPct(null);
-    }
-  }, []);
-
-  const finishGeoPdf = useCallback(
-    (outcome: Awaited<ReturnType<typeof importGeoPdfFromPicker>>) => {
-      if (outcome.status === "imported") {
-        setGeoPdfStatus("GeoPDF imported — showing on the map.");
-        if (outcome.record.bbox) {
-          const [west, south, east, north] = outcome.record.bbox;
-          cameraRef.current?.fitBounds([east, north], [west, south], 40, 600);
-        }
-        setPickerOpen(false);
-      } else if (outcome.status === "existing") {
-        setGeoPdfStatus("Already imported.");
-      } else if (outcome.status === "paused") {
-        setGeoPdfStatus("Import paused — resume it from this list.");
-      }
-    },
-    [],
-  );
-
-  const handleImportGeoPdf = useCallback(async () => {
-    try {
-      setGeoPdfStatus(null);
-      setGeoPdfBusy(true);
-      geoPdfCancel.current = { cancelled: false };
-      finishGeoPdf(await importGeoPdfFromPicker(geoPdfProgress, geoPdfCancel.current));
-    } catch (err) {
-      console.error(err);
-      const code = (err as { code?: string }).code;
-      setGeoPdfStatus(
-        (code && GEOPDF_ERRORS[code]) ??
-          messageFromError(err, "Couldn't import that PDF."),
-      );
-    } finally {
-      setGeoPdfBusy(false);
-      setGeoPdfPct(null);
-      geoPdfCancel.current = null;
-    }
-  }, [finishGeoPdf, geoPdfProgress]);
-
-  const handleResumeGeoPdf = useCallback(
-    async (id: string) => {
-      try {
-        setGeoPdfStatus(null);
-        setGeoPdfBusy(true);
-        geoPdfCancel.current = { cancelled: false };
-        finishGeoPdf(await resumeGeoPdfImport(id, geoPdfProgress, geoPdfCancel.current));
-      } catch (err) {
-        console.error(err);
-        const code = (err as { code?: string }).code;
-        setGeoPdfStatus(
-          (code && GEOPDF_ERRORS[code]) ??
-            messageFromError(err, "Couldn't finish that import."),
-        );
-      } finally {
-        setGeoPdfBusy(false);
-        setGeoPdfPct(null);
-        geoPdfCancel.current = null;
-      }
-    },
-    [finishGeoPdf, geoPdfProgress],
-  );
-
-  // Import your own server-generated GeoPDFs: list the account's completed
-  // jobs on demand (online-only), then stream a chosen one's presigned bytes
-  // into the same on-device pipeline. Loaded lazily on a tap, not on mount, so
-  // opening the sheet never fires a network call.
-  const [accountJobs, setAccountJobs] = useState<GeoPdfJobView[] | null>(null);
-  const [accountJobsLoading, setAccountJobsLoading] = useState(false);
-  const [accountJobsStatus, setAccountJobsStatus] = useState<string | null>(null);
-
-  const loadAccountGeoPdfs = useCallback(async () => {
-    try {
-      setAccountJobsStatus(null);
-      setAccountJobsLoading(true);
-      const jobs = await listGeoPdfJobs();
-      setAccountJobs(jobs.filter((job) => job.status === "completed"));
-    } catch (err) {
-      console.error(err);
-      setAccountJobsStatus(messageFromError(err, "Couldn't load your GeoPDFs."));
-    } finally {
-      setAccountJobsLoading(false);
-    }
-  }, []);
-
-  const handleImportAccountGeoPdf = useCallback(
-    async (job: GeoPdfJobView) => {
-      try {
-        setGeoPdfStatus(null);
-        setGeoPdfBusy(true);
-        geoPdfCancel.current = { cancelled: false };
-        // Re-presign right before download — the listed URL may have expired
-        // while the sheet was open.
-        const fresh = await getGeoPdfJob(job.id);
-        if (!fresh.downloadUrl) {
-          throw new Error("This GeoPDF isn't ready to download.");
-        }
-        finishGeoPdf(
-          await importGeoPdfFromUrl(
-            fresh.title ?? "Logjam GeoPDF",
-            fresh.downloadUrl,
-            geoPdfProgress,
-            geoPdfCancel.current,
-          ),
-        );
-      } catch (err) {
-        console.error(err);
-        const code = (err as { code?: string }).code;
-        setGeoPdfStatus(
-          (code && GEOPDF_ERRORS[code]) ??
-            messageFromError(err, "Couldn't import that GeoPDF."),
-        );
-      } finally {
-        setGeoPdfBusy(false);
-        setGeoPdfPct(null);
-        geoPdfCancel.current = null;
-      }
-    },
-    [finishGeoPdf, geoPdfProgress],
   );
 
   // Stage 7: track recording + waypoints + navigate-to-point. The recorder
@@ -697,6 +477,11 @@ export function MapScreen({
 
   // "Open in Logjam": ACTION_VIEW / share-sheet delivers a content:// URI.
   // Kind is sniffed from leading bytes (content URIs carry no reliable name).
+  // Self-contained (no shared busy/status state with the sheet or Saved's
+  // import management — this is a background, no-UI-affordance import path):
+  // a successful import shows itself by re-centering the map; the atypical
+  // outcomes (already-imported / paused) get a one-off Alert since there's no
+  // sheet status line left on this screen to carry the message.
   const handleIncomingUrl = useCallback(
     async (url: string | null) => {
       if (!url || !isFileIntentUrl(url) || handledIntentUrls.has(url)) return;
@@ -717,26 +502,26 @@ export function MapScreen({
           return;
         }
         if (kind === "pdf") {
-          setGeoPdfStatus(null);
-          setGeoPdfBusy(true);
-          geoPdfCancel.current = { cancelled: false };
-          try {
-            const fullB64 = await FileSystem.readAsStringAsync(url, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            const bytes = Uint8Array.from(atob(fullB64), (c) => c.charCodeAt(0));
-            finishGeoPdf(
-              await importGeoPdfBytes(
-                "Shared map",
-                bytes,
-                geoPdfProgress,
-                geoPdfCancel.current,
-              ),
+          const fullB64 = await FileSystem.readAsStringAsync(url, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          const bytes = Uint8Array.from(atob(fullB64), (c) => c.charCodeAt(0));
+          const outcome = await importGeoPdfBytes(
+            "Shared map",
+            bytes,
+            () => {},
+            { cancelled: false },
+          );
+          if (outcome.status === "imported" && outcome.record.bbox) {
+            const [west, south, east, north] = outcome.record.bbox;
+            cameraRef.current?.fitBounds([east, north], [west, south], 40, 600);
+          } else if (outcome.status === "existing") {
+            Alert.alert("Already imported", "This GeoPDF is already in Saved.");
+          } else if (outcome.status === "paused") {
+            Alert.alert(
+              "Import paused",
+              "Finish importing this GeoPDF from the Saved tab.",
             );
-          } finally {
-            setGeoPdfBusy(false);
-            setGeoPdfPct(null);
-            geoPdfCancel.current = null;
           }
         } else {
           const record = await importVectorSource(
@@ -744,7 +529,6 @@ export function MapScreen({
             syntheticNameFor(kind),
             imports.length,
           );
-          setImportStatus("Imported — showing on the map.");
           const [west, south, east, north] = record.bbox;
           cameraRef.current?.fitBounds([east, north], [west, south], 40, 600);
         }
@@ -758,7 +542,7 @@ export function MapScreen({
         );
       }
     },
-    [finishGeoPdf, geoPdfProgress, imports.length],
+    [imports.length],
   );
   const handleIncomingUrlRef = useRef(handleIncomingUrl);
   handleIncomingUrlRef.current = handleIncomingUrl;
@@ -1219,7 +1003,7 @@ export function MapScreen({
           style={styles.controlButton}
           onPress={() => setPickerOpen(true)}
         >
-          <Text style={styles.controlGlyph}>≡</Text>
+          <Feather name="layers" size={22} color={theme.textPrimary} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -1227,9 +1011,7 @@ export function MapScreen({
           style={[styles.controlButton, followMode !== "off" && styles.controlActive]}
           onPress={handleLocateMe}
         >
-          <Text style={styles.controlGlyph}>
-            {followMode === "course-up" ? "➤" : "◎"}
-          </Text>
+          <Feather name="navigation" size={22} color={theme.textPrimary} />
         </Pressable>
         {!activeTrack ? (
           <Pressable
@@ -1238,7 +1020,7 @@ export function MapScreen({
             style={styles.controlButton}
             onPress={handleStartRecording}
           >
-            <Text style={[styles.controlGlyph, styles.recordGlyph]}>⏺</Text>
+            <Feather name="circle" size={22} color={theme.warning} />
           </Pressable>
         ) : null}
       </View>
@@ -1309,43 +1091,33 @@ export function MapScreen({
           onPress={handleDownloadCurrentArea}
           style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
         >
-          <Text
-            style={[
-              styles.actionLabel,
-              connectivity !== "online" && styles.disabledText,
-            ]}
-          >
-            ⤓ Download current area
-          </Text>
+          <View style={styles.actionRowInner}>
+            <Feather
+              name="download"
+              size={16}
+              color={connectivity !== "online" ? theme.textMuted : theme.accent}
+            />
+            <Text
+              style={[
+                styles.actionLabel,
+                connectivity !== "online" && styles.disabledText,
+              ]}
+            >
+              Download current area
+            </Text>
+          </View>
         </Pressable>
         {regionStatus ? <Text style={styles.statusText}>{regionStatus}</Text> : null}
-        {regionArtifacts.map((artifact) => (
-          <Card key={artifact.id} style={styles.sheetRow}>
-            <View style={styles.rowMain}>
-              <Text style={styles.rowLabel} numberOfLines={1}>
-                Saved region
-              </Text>
-              <Text style={styles.rowSub}>
-                {new Date(artifact.downloadedAt).toLocaleDateString(undefined, {
-                  day: "numeric",
-                  month: "short",
-                })}{" "}
-                · {(artifact.sizeBytes / 1024 / 1024).toFixed(1)} MB
-              </Text>
-            </View>
-            <StatusPill label="Saved" tone="accent" />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Delete saved region"
-              hitSlop={8}
-              onPress={() => {
-                deleteDownloadedArtifact(artifact.id).catch(console.error);
-              }}
-            >
-              <Text style={styles.deleteText}>Delete</Text>
-            </Pressable>
-          </Card>
-        ))}
+        <Row
+          title="Manage offline maps in Saved"
+          subtitle="Downloads, GeoPDFs, imports, tracks"
+          accessibilityLabel="Manage offline maps in Saved"
+          right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+          onPress={() => {
+            setPickerOpen(false);
+            onOpenSaved?.();
+          }}
+        />
 
         {overlayList.length > 0 ? (
           <>
@@ -1355,7 +1127,6 @@ export function MapScreen({
               const saved = artifacts.find(
                 (a) => a.kind === "topo-overlay" && a.logicalKey === overlay.key,
               );
-              const busy = overlayBusy === overlay.key;
               return (
                 <Card key={overlay.key} style={styles.sheetRow}>
                   <View style={styles.rowMain}>
@@ -1364,39 +1135,6 @@ export function MapScreen({
                     </Text>
                     {saved ? <StatusPill label="Offline" tone="accent" /> : null}
                   </View>
-                  {saved ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Delete saved overlay"
-                      hitSlop={8}
-                      onPress={() => {
-                        deleteDownloadedArtifact(saved.id).catch(console.error);
-                      }}
-                    >
-                      <Text style={styles.deleteText}>Delete</Text>
-                    </Pressable>
-                  ) : busy ? (
-                    <Text style={styles.rowSub}>
-                      {overlayPct != null ? `${overlayPct}%` : "…"}
-                    </Text>
-                  ) : connectivity === "online" ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Save overlay for offline use"
-                      hitSlop={8}
-                      disabled={overlayBusy != null}
-                      onPress={() => handleSaveOverlay(overlay)}
-                    >
-                      <Text
-                        style={[
-                          styles.actionLabel,
-                          overlayBusy != null && styles.disabledText,
-                        ]}
-                      >
-                        ⤓ Save
-                      </Text>
-                    </Pressable>
-                  ) : null}
                   <Toggle
                     value={enabled}
                     onValueChange={() => toggleOverlay(overlay.key)}
@@ -1405,24 +1143,10 @@ export function MapScreen({
                 </Card>
               );
             })}
-            {overlayStatus ? (
-              <Text style={styles.statusText}>{overlayStatus}</Text>
-            ) : null}
           </>
         ) : null}
 
         <SectionHeader label="Imports" />
-        <Pressable
-          accessibilityRole="button"
-          disabled={importBusy}
-          onPress={handleImportFile}
-          style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
-        >
-          <Text style={[styles.actionLabel, importBusy && styles.disabledText]}>
-            {importBusy ? "Importing…" : "+ Import file (GPX / KML / GeoJSON)"}
-          </Text>
-        </Pressable>
-        {importStatus ? <Text style={styles.statusText}>{importStatus}</Text> : null}
         {imports.map((imported) => (
           <Card key={imported.id} style={styles.sheetRow}>
             <View style={[styles.dot, { backgroundColor: imported.color }]} />
@@ -1431,16 +1155,6 @@ export function MapScreen({
                 {imported.name}
               </Text>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Delete import"
-              hitSlop={8}
-              onPress={() => {
-                deleteVectorImport(imported.id).catch(console.error);
-              }}
-            >
-              <Text style={styles.deleteText}>Delete</Text>
-            </Pressable>
             <Toggle
               value={imported.visible}
               onValueChange={() => {
@@ -1453,175 +1167,66 @@ export function MapScreen({
           </Card>
         ))}
 
-        <SectionHeader label="GeoPDF maps" />
-        <Pressable
-          accessibilityRole="button"
-          disabled={geoPdfBusy}
-          onPress={handleImportGeoPdf}
-          style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
-        >
-          <Text style={[styles.actionLabel, geoPdfBusy && styles.disabledText]}>
-            {geoPdfBusy
-              ? geoPdfPct != null
-                ? `Importing… ${geoPdfPct}%`
-                : "Importing…"
-              : "+ Import GeoPDF"}
-          </Text>
-        </Pressable>
-        {connectivity === "online" ? (
-          <Pressable
-            accessibilityRole="button"
-            disabled={geoPdfBusy || accountJobsLoading}
-            onPress={loadAccountGeoPdfs}
-            style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
-          >
-            <Text
-              style={[
-                styles.actionLabel,
-                (geoPdfBusy || accountJobsLoading) && styles.disabledText,
-              ]}
-            >
-              {accountJobsLoading
-                ? "Loading your GeoPDFs…"
-                : accountJobs
-                  ? "↻ Refresh my account GeoPDFs"
-                  : "⤓ Import from my account"}
-            </Text>
-          </Pressable>
+        {geoPdfImports.some((gp) => gp.state === "ready") ? (
+          <>
+            <SectionHeader label="GeoPDF maps" />
+            {geoPdfImports
+              .filter((gp) => gp.state === "ready")
+              .map((geoPdf) => (
+                <View key={geoPdf.id} style={styles.stackRow}>
+                  <Card style={styles.sheetRow}>
+                    <View style={styles.rowMain}>
+                      <Text style={styles.rowLabel} numberOfLines={1}>
+                        {geoPdf.label}
+                      </Text>
+                    </View>
+                    <Toggle
+                      value={geoPdf.visible}
+                      onValueChange={() => {
+                        updateGeoPdfImport(geoPdf.id, {
+                          visible: !geoPdf.visible,
+                        }).catch(console.error);
+                      }}
+                      accessibilityLabel={`Show ${geoPdf.label}`}
+                    />
+                  </Card>
+                  {geoPdf.residualFraction != null &&
+                  geoPdf.residualFraction > RESIDUAL_WARN_FRACTION ? (
+                    <Text style={styles.statusText}>
+                      ⚠ Georeferencing in this file is imprecise — positions may
+                      be off.
+                    </Text>
+                  ) : null}
+                  {geoPdf.visible ? (
+                    <View style={styles.opacityWrap}>
+                      <Text style={styles.rowSub}>Opacity</Text>
+                      <SegmentedControl
+                        options={GEOPDF_OPACITY_STEPS.map((step) => ({
+                          value: String(step),
+                          label: `${Math.round(step * 100)}%`,
+                        }))}
+                        value={String(
+                          GEOPDF_OPACITY_STEPS.find(
+                            (step) => Math.abs(geoPdf.opacity - step) < 0.01,
+                          ) ?? 1,
+                        )}
+                        onChange={(next) => {
+                          updateGeoPdfImport(geoPdf.id, {
+                            opacity: Number(next),
+                          }).catch(console.error);
+                        }}
+                      />
+                    </View>
+                  ) : null}
+                </View>
+              ))}
+          </>
         ) : null}
-        {accountJobsStatus ? (
-          <Text style={styles.statusText}>{accountJobsStatus}</Text>
-        ) : null}
-        {accountJobs != null && accountJobs.length === 0 ? (
-          <Text style={styles.statusText}>
-            No generated GeoPDFs on your account yet.
-          </Text>
-        ) : null}
-        {accountJobs?.map((job) => (
-          <Card key={job.id} style={styles.sheetRow}>
-            <View style={styles.rowMain}>
-              <Text style={styles.rowLabel} numberOfLines={1}>
-                {job.title ?? "Untitled GeoPDF"}
-              </Text>
-              {job.resultBytes != null ? (
-                <Text style={styles.rowSub}>
-                  {(job.resultBytes / 1e6).toFixed(1)} MB
-                </Text>
-              ) : null}
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Import this GeoPDF for offline use"
-              hitSlop={8}
-              disabled={geoPdfBusy}
-              onPress={() => handleImportAccountGeoPdf(job)}
-            >
-              <Text
-                style={[styles.actionLabel, geoPdfBusy && styles.disabledText]}
-              >
-                Import
-              </Text>
-            </Pressable>
-          </Card>
-        ))}
-        {geoPdfBusy ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              if (geoPdfCancel.current) geoPdfCancel.current.cancelled = true;
-            }}
-            style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
-          >
-            <Text style={styles.deleteText}>Cancel import</Text>
-          </Pressable>
-        ) : null}
-        {geoPdfStatus ? <Text style={styles.statusText}>{geoPdfStatus}</Text> : null}
-        {geoPdfImports.map((geoPdf) => (
-          <View key={geoPdf.id} style={styles.stackRow}>
-            <Card style={styles.sheetRow}>
-              <View style={styles.rowMain}>
-                <Text style={styles.rowLabel} numberOfLines={1}>
-                  {geoPdf.label}
-                </Text>
-                {geoPdf.state === "failed" ? (
-                  <StatusPill label="Failed" tone="warning" />
-                ) : geoPdf.state !== "ready" ? (
-                  <StatusPill label="Incomplete" tone="outline" />
-                ) : null}
-              </View>
-              {geoPdf.state !== "ready" && !geoPdfBusy ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Resume import"
-                  hitSlop={8}
-                  onPress={() => handleResumeGeoPdf(geoPdf.id)}
-                >
-                  <Text style={styles.actionLabel}>Resume</Text>
-                </Pressable>
-              ) : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Delete GeoPDF import"
-                hitSlop={8}
-                onPress={() => {
-                  deleteGeoPdfImport(geoPdf.id).catch(console.error);
-                }}
-              >
-                <Text style={styles.deleteText}>Delete</Text>
-              </Pressable>
-              {geoPdf.state === "ready" ? (
-                <Toggle
-                  value={geoPdf.visible}
-                  onValueChange={() => {
-                    updateGeoPdfImport(geoPdf.id, {
-                      visible: !geoPdf.visible,
-                    }).catch(console.error);
-                  }}
-                  accessibilityLabel={`Show ${geoPdf.label}`}
-                />
-              ) : null}
-            </Card>
-            {geoPdf.state === "failed" && geoPdf.errorCode ? (
-              <Text style={styles.statusText}>
-                {GEOPDF_ERRORS[geoPdf.errorCode] ?? "Import failed."}
-              </Text>
-            ) : null}
-            {geoPdf.state === "ready" &&
-            geoPdf.residualFraction != null &&
-            geoPdf.residualFraction > RESIDUAL_WARN_FRACTION ? (
-              <Text style={styles.statusText}>
-                ⚠ Georeferencing in this file is imprecise — positions may be
-                off.
-              </Text>
-            ) : null}
-            {geoPdf.state === "ready" && geoPdf.visible ? (
-              <View style={styles.opacityWrap}>
-                <Text style={styles.rowSub}>Opacity</Text>
-                <SegmentedControl
-                  options={GEOPDF_OPACITY_STEPS.map((step) => ({
-                    value: String(step),
-                    label: `${Math.round(step * 100)}%`,
-                  }))}
-                  value={String(
-                    GEOPDF_OPACITY_STEPS.find(
-                      (step) => Math.abs(geoPdf.opacity - step) < 0.01,
-                    ) ?? 1,
-                  )}
-                  onChange={(next) => {
-                    updateGeoPdfImport(geoPdf.id, {
-                      opacity: Number(next),
-                    }).catch(console.error);
-                  }}
-                />
-              </View>
-            ) : null}
-          </View>
-        ))}
 
         <SectionHeader label="Tracks" />
         {savedTracks.length === 0 ? (
           <Text style={styles.statusText}>
-            Record a track with the ⏺ button on the map.
+            Record a track with the record button on the map.
           </Text>
         ) : null}
         {savedTracks.map((track) => (
@@ -1633,29 +1238,6 @@ export function MapScreen({
               </Text>
               <Text style={styles.rowSub}>{formatDistanceM(track.distanceM)}</Text>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Delete track"
-              hitSlop={8}
-              onPress={() => {
-                Alert.alert(
-                  "Delete track?",
-                  "The recorded points are deleted. This can't be undone.",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    {
-                      text: "Delete",
-                      style: "destructive",
-                      onPress: () => {
-                        deleteTrack(track.id).catch(console.error);
-                      },
-                    },
-                  ],
-                );
-              }}
-            >
-              <Text style={styles.deleteText}>Delete</Text>
-            </Pressable>
             <Toggle
               value={track.visible}
               onValueChange={() => {
@@ -1700,8 +1282,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   controlActive: { backgroundColor: theme.accent },
-  controlGlyph: { color: theme.textPrimary, fontSize: 22 },
-  recordGlyph: { color: "#ef4444" },
   navChip: {
     position: "absolute",
     top: spacing(2),
@@ -1735,6 +1315,7 @@ const styles = StyleSheet.create({
   rowSub: { color: theme.textMuted, fontSize: fontSize.xs },
   stackRow: { gap: spacing(0.5) },
   actionRow: { minHeight: 44, justifyContent: "center", marginTop: spacing(1) },
+  actionRowInner: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   actionLabel: { color: theme.accent, fontSize: fontSize.base, fontWeight: "600" },
   pressed: { opacity: 0.7 },
   deleteText: { color: theme.warning, fontSize: fontSize.sm, fontWeight: "600" },
