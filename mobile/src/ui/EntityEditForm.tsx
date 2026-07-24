@@ -5,18 +5,11 @@
 // Number fields normalize empty → null; required text guards against clearing
 // a mandatory field (e.g. canyon name).
 import { useEffect, useState } from "react";
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fontSize, radius, spacing, theme } from "../theme";
+import { fontSize, fontWeight, hitSlop, radius, scrim, spacing, theme } from "../theme";
+import { TextField } from "./TextField";
 
 export type EditFieldSpec = {
   key: string;
@@ -130,7 +123,7 @@ export function EntityEditForm({
               accessibilityRole="button"
               onPress={onCancel}
               disabled={saving}
-              hitSlop={8}
+              hitSlop={hitSlop}
             >
               <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
@@ -141,7 +134,7 @@ export function EntityEditForm({
               accessibilityRole="button"
               onPress={() => void handleSave()}
               disabled={saving}
-              hitSlop={8}
+              hitSlop={hitSlop}
             >
               <Text style={styles.saveText}>{saving ? "Saving…" : "Save"}</Text>
             </Pressable>
@@ -151,21 +144,15 @@ export function EntityEditForm({
             keyboardShouldPersistTaps="handled"
           >
             {fields.map((field) => (
-              <View key={field.key} style={styles.field}>
-                <Text style={styles.label}>{field.label}</Text>
-                <TextInput
-                  style={[styles.input, field.kind === "multiline" && styles.multiline]}
-                  value={inputs[field.key] ?? ""}
-                  onChangeText={(text) => setValue(field.key, text)}
-                  accessibilityLabel={field.label}
-                  placeholderTextColor={theme.textMuted}
-                  multiline={field.kind === "multiline"}
-                  keyboardType={field.kind === "number" ? "numeric" : "default"}
-                />
-                {errors[field.key] ? (
-                  <Text style={styles.error}>{errors[field.key]}</Text>
-                ) : null}
-              </View>
+              <TextField
+                key={field.key}
+                label={field.label}
+                value={inputs[field.key] ?? ""}
+                onChangeText={(text) => setValue(field.key, text)}
+                error={errors[field.key] ?? null}
+                multiline={field.kind === "multiline"}
+                keyboardType={field.kind === "number" ? "numeric" : "default"}
+              />
             ))}
           </ScrollView>
         </Pressable>
@@ -177,7 +164,7 @@ export function EntityEditForm({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: scrim.heavy,
     justifyContent: "flex-end",
   },
   sheet: {
@@ -192,31 +179,12 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "center",
     fontSize: fontSize.base,
-    fontWeight: "700",
+    fontWeight: fontWeight.bold,
     color: theme.textPrimary,
   },
   cancelText: { fontSize: fontSize.base, color: theme.textMuted },
-  saveText: { fontSize: fontSize.base, fontWeight: "700", color: theme.accent },
+  saveText: { fontSize: fontSize.base, fontWeight: fontWeight.bold, color: theme.accent },
   fields: { gap: spacing(1.5), paddingBottom: spacing(1) },
-  field: { gap: spacing(0.5) },
-  label: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: theme.textMuted,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: theme.accent,
-    borderRadius: radius.md,
-    paddingVertical: spacing(1.25),
-    paddingHorizontal: spacing(1.5),
-    fontSize: fontSize.base,
-    color: theme.textPrimary,
-  },
-  multiline: { minHeight: 96, textAlignVertical: "top" },
-  error: { fontSize: fontSize.sm, color: theme.warning },
   actions: {
     flexDirection: "row",
     alignItems: "center",

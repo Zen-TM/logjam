@@ -11,16 +11,7 @@
 // Vulkan renders symbols correctly; don't revert to opengl without retesting
 // labels on the emulator AND a physical device.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Alert,
-  Linking,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import {
   Camera,
   CircleLayer,
@@ -53,6 +44,12 @@ import type { TCanyon } from "../api/types";
 import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
 import { config } from "../config";
 import { fontSize, radius, spacing, theme } from "../theme";
+import { BottomSheet } from "../ui/BottomSheet";
+import { Card } from "../ui/Card";
+import { SectionHeader } from "../ui/SectionHeader";
+import { SegmentedControl } from "../ui/SegmentedControl";
+import { StatusPill } from "../ui/StatusPill";
+import { Toggle } from "../ui/Toggle";
 import { updateGeoPdfImport } from "../geopdf/geoPdfImportsDb";
 import {
   GEOPDF_ERRORS,
@@ -188,8 +185,11 @@ function overlayKind(ref: TopoOverlayRef): "contours" | "features" {
 
 export function MapScreen({
   onOpenCanyon,
+  onOpenSaved,
 }: {
   onOpenCanyon: (canyonId: string, name: string) => void;
+  // Opens the Saved tab from the trimmed layer sheet's "Manage in Saved" link.
+  onOpenSaved?: () => void;
 }) {
   // "Offline maps only" forces the resolver to local artifacts even with
   // signal — battery saver + predictability in the field.
@@ -1261,8 +1261,9 @@ export function MapScreen({
             accessibilityRole="button"
             accessibilityLabel="Stop navigating"
             onPress={() => setNavTarget(null)}
+            hitSlop={8}
           >
-            <Text style={styles.pickerDelete}>✕</Text>
+            <Text style={styles.deleteText}>✕</Text>
           </Pressable>
         </View>
       ) : null}
@@ -1277,460 +1278,396 @@ export function MapScreen({
         </Text>
       </View>
 
-      <Modal
+      <BottomSheet
         visible={pickerOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setPickerOpen(false)}
+        onClose={() => setPickerOpen(false)}
+        title="Map layers"
       >
-        <Pressable style={styles.pickerBackdrop} onPress={() => setPickerOpen(false)}>
-          <View style={styles.pickerSheet}>
-            {/* Sections outgrew the screen once Imports landed — the sheet
-                scrolls within its 70% height cap. */}
-            <ScrollView contentContainerStyle={styles.pickerScrollContent}>
-            <Text style={styles.pickerHeading}>Basemap</Text>
-            {[...BASEMAP_CATALOG.map((e) => ({ id: e.id as BasemapId, name: e.name }))].map(
-              (entry) => {
-                const unavailable =
-                  connectivity !== "online" &&
-                  !BASEMAP_CATALOG.find((e) => e.id === entry.id)?.offlineCapable;
-                return (
-                  <Pressable
-                    key={entry.id}
-                    disabled={unavailable}
-                    accessibilityRole="button"
-                    onPress={() => {
-                      setBasemapId(entry.id);
-                      setPickerOpen(false);
-                    }}
-                    style={styles.pickerRow}
-                  >
-                    <Text
-                      style={[
-                        styles.pickerLabel,
-                        entry.id === basemapId && styles.pickerLabelActive,
-                        unavailable && styles.pickerLabelDisabled,
-                      ]}
-                    >
-                      {entry.name}
-                      {unavailable ? "  (online only)" : ""}
-                    </Text>
-                  </Pressable>
-                );
-              },
-            )}
-            <Text style={styles.pickerHeading}>Offline maps</Text>
-            <Pressable
-              accessibilityRole="switch"
-              accessibilityState={{ checked: offlineOnly }}
-              onPress={() => setOfflineOnly((v) => !v)}
-              style={styles.pickerRow}
-            >
-              <Text style={[styles.pickerLabel, offlineOnly && styles.pickerLabelActive]}>
-                {offlineOnly ? "☑" : "☐"} Offline maps only
+        <SectionHeader label="Basemap" />
+        <SegmentedControl
+          options={BASEMAP_CATALOG.map((entry) => ({
+            value: entry.id as BasemapId,
+            label: entry.name,
+            disabled: connectivity !== "online" && !entry.offlineCapable,
+          }))}
+          value={basemapId}
+          onChange={setBasemapId}
+        />
+
+        <SectionHeader label="Offline maps" />
+        <Card style={styles.sheetRow}>
+          <Text style={styles.rowLabel}>Offline maps only</Text>
+          <Toggle
+            value={offlineOnly}
+            onValueChange={setOfflineOnly}
+            accessibilityLabel="Offline maps only"
+          />
+        </Card>
+        <Pressable
+          accessibilityRole="button"
+          disabled={connectivity !== "online"}
+          onPress={handleDownloadCurrentArea}
+          style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
+        >
+          <Text
+            style={[
+              styles.actionLabel,
+              connectivity !== "online" && styles.disabledText,
+            ]}
+          >
+            ⤓ Download current area
+          </Text>
+        </Pressable>
+        {regionStatus ? <Text style={styles.statusText}>{regionStatus}</Text> : null}
+        {regionArtifacts.map((artifact) => (
+          <Card key={artifact.id} style={styles.sheetRow}>
+            <View style={styles.rowMain}>
+              <Text style={styles.rowLabel} numberOfLines={1}>
+                Saved region
               </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              disabled={connectivity !== "online"}
-              onPress={handleDownloadCurrentArea}
-              style={styles.pickerRow}
-            >
-              <Text
-                style={[
-                  styles.pickerLabel,
-                  connectivity !== "online" && styles.pickerLabelDisabled,
-                ]}
-              >
-                ⤓ Download current area (Topo Vector)
+              <Text style={styles.rowSub}>
+                {new Date(artifact.downloadedAt).toLocaleDateString(undefined, {
+                  day: "numeric",
+                  month: "short",
+                })}{" "}
+                · {(artifact.sizeBytes / 1024 / 1024).toFixed(1)} MB
               </Text>
-            </Pressable>
-            {regionStatus ? (
-              <Text style={styles.pickerStatus}>{regionStatus}</Text>
-            ) : null}
-            {regionArtifacts.map((artifact) => (
-              <View key={artifact.id} style={styles.pickerRegionRow}>
-                <Text style={styles.pickerLabel}>
-                  ▣ Saved region ·{" "}
-                  {new Date(artifact.downloadedAt).toLocaleDateString(undefined, {
-                    day: "numeric",
-                    month: "short",
-                  })}{" "}
-                  · {(artifact.sizeBytes / 1024 / 1024).toFixed(1)} MB
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Delete saved region"
-                  onPress={() => {
-                    deleteDownloadedArtifact(artifact.id).catch(console.error);
-                  }}
-                >
-                  <Text style={styles.pickerDelete}>Delete</Text>
-                </Pressable>
-              </View>
-            ))}
-            {overlayList.length > 0 ? (
-              <>
-                <Text style={styles.pickerHeading}>Topo overlays</Text>
-                {overlayList.map((overlay) => {
-                  const enabled = enabledOverlays.has(overlay.key);
-                  const saved = artifacts.find(
-                    (a) =>
-                      a.kind === "topo-overlay" && a.logicalKey === overlay.key,
-                  );
-                  const busy = overlayBusy === overlay.key;
-                  return (
-                    <View key={overlay.key} style={styles.pickerRegionRow}>
-                      <Pressable
-                        accessibilityRole="checkbox"
-                        accessibilityState={{ checked: enabled }}
-                        onPress={() => toggleOverlay(overlay.key)}
-                        style={styles.pickerRowGrow}
-                      >
-                        <Text
-                          style={[
-                            styles.pickerLabel,
-                            enabled && styles.pickerLabelActive,
-                          ]}
-                        >
-                          {enabled ? "☑" : "☐"} {saved ? "▣ " : ""}
-                          {overlay.label}
-                        </Text>
-                      </Pressable>
-                      {saved ? (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel="Delete saved overlay"
-                          onPress={() => {
-                            deleteDownloadedArtifact(saved.id).catch(
-                              console.error,
-                            );
-                          }}
-                        >
-                          <Text style={styles.pickerDelete}>Delete</Text>
-                        </Pressable>
-                      ) : busy ? (
-                        <Text style={styles.pickerLabel}>
-                          {overlayPct != null ? `${overlayPct}%` : "…"}
-                        </Text>
-                      ) : connectivity === "online" ? (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel="Save overlay for offline use"
-                          disabled={overlayBusy != null}
-                          onPress={() => handleSaveOverlay(overlay)}
-                        >
-                          <Text
-                            style={[
-                              styles.pickerDelete,
-                              overlayBusy != null && styles.pickerLabelDisabled,
-                            ]}
-                          >
-                            ⤓ Save
-                          </Text>
-                        </Pressable>
-                      ) : null}
-                    </View>
-                  );
-                })}
-                {overlayStatus ? (
-                  <Text style={styles.pickerStatus}>{overlayStatus}</Text>
-                ) : null}
-              </>
-            ) : null}
-            <Text style={styles.pickerHeading}>Imports</Text>
+            </View>
+            <StatusPill label="Saved" tone="accent" />
             <Pressable
               accessibilityRole="button"
-              disabled={importBusy}
-              onPress={handleImportFile}
-              style={styles.pickerRow}
+              accessibilityLabel="Delete saved region"
+              hitSlop={8}
+              onPress={() => {
+                deleteDownloadedArtifact(artifact.id).catch(console.error);
+              }}
             >
-              <Text
-                style={[styles.pickerLabel, importBusy && styles.pickerLabelDisabled]}
-              >
-                {importBusy ? "Importing…" : "+ Import file (GPX / KML / GeoJSON)"}
-              </Text>
+              <Text style={styles.deleteText}>Delete</Text>
             </Pressable>
-            {importStatus ? (
-              <Text style={styles.pickerStatus}>{importStatus}</Text>
-            ) : null}
-            {imports.map((imported) => (
-              <View key={imported.id} style={styles.pickerRegionRow}>
-                <Pressable
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: imported.visible }}
-                  onPress={() => {
-                    setVectorImportVisible(imported.id, !imported.visible).catch(
-                      console.error,
-                    );
-                  }}
-                  style={styles.pickerRowGrow}
-                >
-                  <Text
-                    style={[
-                      styles.pickerLabel,
-                      imported.visible && styles.pickerLabelActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {imported.visible ? "☑" : "☐"}{" "}
-                    <Text style={{ color: imported.color }}>●</Text> {imported.name}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Delete import"
-                  onPress={() => {
-                    deleteVectorImport(imported.id).catch(console.error);
-                  }}
-                >
-                  <Text style={styles.pickerDelete}>Delete</Text>
-                </Pressable>
-              </View>
-            ))}
-            <Text style={styles.pickerHeading}>GeoPDF maps</Text>
-            <Pressable
-              accessibilityRole="button"
-              disabled={geoPdfBusy}
-              onPress={handleImportGeoPdf}
-              style={styles.pickerRow}
-            >
-              <Text
-                style={[styles.pickerLabel, geoPdfBusy && styles.pickerLabelDisabled]}
-              >
-                {geoPdfBusy
-                  ? geoPdfPct != null
-                    ? `Importing… ${geoPdfPct}%`
-                    : "Importing…"
-                  : "+ Import GeoPDF"}
-              </Text>
-            </Pressable>
-            {connectivity === "online" ? (
-              <Pressable
-                accessibilityRole="button"
-                disabled={geoPdfBusy || accountJobsLoading}
-                onPress={loadAccountGeoPdfs}
-                style={styles.pickerRow}
-              >
-                <Text
-                  style={[
-                    styles.pickerLabel,
-                    (geoPdfBusy || accountJobsLoading) && styles.pickerLabelDisabled,
-                  ]}
-                >
-                  {accountJobsLoading
-                    ? "Loading your GeoPDFs…"
-                    : accountJobs
-                      ? "↻ Refresh my account GeoPDFs"
-                      : "⤓ Import from my account"}
-                </Text>
-              </Pressable>
-            ) : null}
-            {accountJobsStatus ? (
-              <Text style={styles.pickerStatus}>{accountJobsStatus}</Text>
-            ) : null}
-            {accountJobs != null && accountJobs.length === 0 ? (
-              <Text style={styles.pickerStatus}>
-                No generated GeoPDFs on your account yet.
-              </Text>
-            ) : null}
-            {accountJobs?.map((job) => (
-              <View key={job.id} style={styles.pickerRegionRow}>
-                <View style={styles.pickerRowGrow}>
-                  <Text style={styles.pickerLabel} numberOfLines={1}>
-                    {job.title ?? "Untitled GeoPDF"}
-                  </Text>
-                  {job.resultBytes != null ? (
-                    <Text style={styles.pickerSubLabel}>
-                      {(job.resultBytes / 1e6).toFixed(1)} MB
+          </Card>
+        ))}
+
+        {overlayList.length > 0 ? (
+          <>
+            <SectionHeader label="Topo overlays" />
+            {overlayList.map((overlay) => {
+              const enabled = enabledOverlays.has(overlay.key);
+              const saved = artifacts.find(
+                (a) => a.kind === "topo-overlay" && a.logicalKey === overlay.key,
+              );
+              const busy = overlayBusy === overlay.key;
+              return (
+                <Card key={overlay.key} style={styles.sheetRow}>
+                  <View style={styles.rowMain}>
+                    <Text style={styles.rowLabel} numberOfLines={1}>
+                      {overlay.label}
                     </Text>
-                  ) : null}
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Import this GeoPDF for offline use"
-                  disabled={geoPdfBusy}
-                  onPress={() => handleImportAccountGeoPdf(job)}
-                >
-                  <Text
-                    style={[
-                      styles.pickerAction,
-                      geoPdfBusy && styles.pickerLabelDisabled,
-                    ]}
-                  >
-                    Import
-                  </Text>
-                </Pressable>
-              </View>
-            ))}
-            {geoPdfBusy ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  if (geoPdfCancel.current) geoPdfCancel.current.cancelled = true;
-                }}
-                style={styles.pickerRow}
-              >
-                <Text style={styles.pickerDelete}>Cancel import</Text>
-              </Pressable>
-            ) : null}
-            {geoPdfStatus ? (
-              <Text style={styles.pickerStatus}>{geoPdfStatus}</Text>
-            ) : null}
-            {geoPdfImports.map((geoPdf) => (
-              <View key={geoPdf.id}>
-                <View style={styles.pickerRegionRow}>
-                  <Pressable
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: geoPdf.visible }}
-                    disabled={geoPdf.state !== "ready"}
-                    onPress={() => {
-                      updateGeoPdfImport(geoPdf.id, {
-                        visible: !geoPdf.visible,
-                      }).catch(console.error);
-                    }}
-                    style={styles.pickerRowGrow}
-                  >
-                    <Text
-                      style={[
-                        styles.pickerLabel,
-                        geoPdf.state === "ready" &&
-                          geoPdf.visible &&
-                          styles.pickerLabelActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {geoPdf.state === "ready"
-                        ? geoPdf.visible
-                          ? "☑ "
-                          : "☐ "
-                        : ""}
-                      {geoPdf.label}
-                      {geoPdf.state === "failed"
-                        ? ` — failed`
-                        : geoPdf.state !== "ready"
-                          ? ` — incomplete`
-                          : ""}
-                    </Text>
-                  </Pressable>
-                  {geoPdf.state !== "ready" && !geoPdfBusy ? (
+                    {saved ? <StatusPill label="Offline" tone="accent" /> : null}
+                  </View>
+                  {saved ? (
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="Resume import"
-                      onPress={() => handleResumeGeoPdf(geoPdf.id)}
+                      accessibilityLabel="Delete saved overlay"
+                      hitSlop={8}
+                      onPress={() => {
+                        deleteDownloadedArtifact(saved.id).catch(console.error);
+                      }}
                     >
-                      <Text style={styles.pickerAction}>Resume</Text>
+                      <Text style={styles.deleteText}>Delete</Text>
+                    </Pressable>
+                  ) : busy ? (
+                    <Text style={styles.rowSub}>
+                      {overlayPct != null ? `${overlayPct}%` : "…"}
+                    </Text>
+                  ) : connectivity === "online" ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Save overlay for offline use"
+                      hitSlop={8}
+                      disabled={overlayBusy != null}
+                      onPress={() => handleSaveOverlay(overlay)}
+                    >
+                      <Text
+                        style={[
+                          styles.actionLabel,
+                          overlayBusy != null && styles.disabledText,
+                        ]}
+                      >
+                        ⤓ Save
+                      </Text>
                     </Pressable>
                   ) : null}
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Delete GeoPDF import"
-                    onPress={() => {
-                      deleteGeoPdfImport(geoPdf.id).catch(console.error);
-                    }}
-                  >
-                    <Text style={styles.pickerDelete}>Delete</Text>
-                  </Pressable>
-                </View>
-                {geoPdf.state === "failed" && geoPdf.errorCode ? (
-                  <Text style={styles.pickerStatus}>
-                    {GEOPDF_ERRORS[geoPdf.errorCode] ?? "Import failed."}
-                  </Text>
-                ) : null}
-                {geoPdf.state === "ready" &&
-                geoPdf.residualFraction != null &&
-                geoPdf.residualFraction > RESIDUAL_WARN_FRACTION ? (
-                  <Text style={styles.pickerStatus}>
-                    ⚠ Georeferencing in this file is imprecise — positions may
-                    be off.
-                  </Text>
-                ) : null}
-                {geoPdf.state === "ready" && geoPdf.visible ? (
-                  <View style={styles.opacityRow}>
-                    <Text style={styles.pickerStatus}>Opacity</Text>
-                    {GEOPDF_OPACITY_STEPS.map((step) => (
-                      <Pressable
-                        key={step}
-                        accessibilityRole="button"
-                        onPress={() => {
-                          updateGeoPdfImport(geoPdf.id, { opacity: step }).catch(
-                            console.error,
-                          );
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.opacityStep,
-                            Math.abs(geoPdf.opacity - step) < 0.01 &&
-                              styles.opacityStepActive,
-                          ]}
-                        >
-                          {Math.round(step * 100)}%
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
+                  <Toggle
+                    value={enabled}
+                    onValueChange={() => toggleOverlay(overlay.key)}
+                    accessibilityLabel={`Show ${overlay.label}`}
+                  />
+                </Card>
+              );
+            })}
+            {overlayStatus ? (
+              <Text style={styles.statusText}>{overlayStatus}</Text>
+            ) : null}
+          </>
+        ) : null}
+
+        <SectionHeader label="Imports" />
+        <Pressable
+          accessibilityRole="button"
+          disabled={importBusy}
+          onPress={handleImportFile}
+          style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
+        >
+          <Text style={[styles.actionLabel, importBusy && styles.disabledText]}>
+            {importBusy ? "Importing…" : "+ Import file (GPX / KML / GeoJSON)"}
+          </Text>
+        </Pressable>
+        {importStatus ? <Text style={styles.statusText}>{importStatus}</Text> : null}
+        {imports.map((imported) => (
+          <Card key={imported.id} style={styles.sheetRow}>
+            <View style={[styles.dot, { backgroundColor: imported.color }]} />
+            <View style={styles.rowMain}>
+              <Text style={styles.rowLabel} numberOfLines={1}>
+                {imported.name}
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Delete import"
+              hitSlop={8}
+              onPress={() => {
+                deleteVectorImport(imported.id).catch(console.error);
+              }}
+            >
+              <Text style={styles.deleteText}>Delete</Text>
+            </Pressable>
+            <Toggle
+              value={imported.visible}
+              onValueChange={() => {
+                setVectorImportVisible(imported.id, !imported.visible).catch(
+                  console.error,
+                );
+              }}
+              accessibilityLabel={`Show ${imported.name}`}
+            />
+          </Card>
+        ))}
+
+        <SectionHeader label="GeoPDF maps" />
+        <Pressable
+          accessibilityRole="button"
+          disabled={geoPdfBusy}
+          onPress={handleImportGeoPdf}
+          style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
+        >
+          <Text style={[styles.actionLabel, geoPdfBusy && styles.disabledText]}>
+            {geoPdfBusy
+              ? geoPdfPct != null
+                ? `Importing… ${geoPdfPct}%`
+                : "Importing…"
+              : "+ Import GeoPDF"}
+          </Text>
+        </Pressable>
+        {connectivity === "online" ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={geoPdfBusy || accountJobsLoading}
+            onPress={loadAccountGeoPdfs}
+            style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
+          >
+            <Text
+              style={[
+                styles.actionLabel,
+                (geoPdfBusy || accountJobsLoading) && styles.disabledText,
+              ]}
+            >
+              {accountJobsLoading
+                ? "Loading your GeoPDFs…"
+                : accountJobs
+                  ? "↻ Refresh my account GeoPDFs"
+                  : "⤓ Import from my account"}
+            </Text>
+          </Pressable>
+        ) : null}
+        {accountJobsStatus ? (
+          <Text style={styles.statusText}>{accountJobsStatus}</Text>
+        ) : null}
+        {accountJobs != null && accountJobs.length === 0 ? (
+          <Text style={styles.statusText}>
+            No generated GeoPDFs on your account yet.
+          </Text>
+        ) : null}
+        {accountJobs?.map((job) => (
+          <Card key={job.id} style={styles.sheetRow}>
+            <View style={styles.rowMain}>
+              <Text style={styles.rowLabel} numberOfLines={1}>
+                {job.title ?? "Untitled GeoPDF"}
+              </Text>
+              {job.resultBytes != null ? (
+                <Text style={styles.rowSub}>
+                  {(job.resultBytes / 1e6).toFixed(1)} MB
+                </Text>
+              ) : null}
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Import this GeoPDF for offline use"
+              hitSlop={8}
+              disabled={geoPdfBusy}
+              onPress={() => handleImportAccountGeoPdf(job)}
+            >
+              <Text
+                style={[styles.actionLabel, geoPdfBusy && styles.disabledText]}
+              >
+                Import
+              </Text>
+            </Pressable>
+          </Card>
+        ))}
+        {geoPdfBusy ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              if (geoPdfCancel.current) geoPdfCancel.current.cancelled = true;
+            }}
+            style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
+          >
+            <Text style={styles.deleteText}>Cancel import</Text>
+          </Pressable>
+        ) : null}
+        {geoPdfStatus ? <Text style={styles.statusText}>{geoPdfStatus}</Text> : null}
+        {geoPdfImports.map((geoPdf) => (
+          <View key={geoPdf.id} style={styles.stackRow}>
+            <Card style={styles.sheetRow}>
+              <View style={styles.rowMain}>
+                <Text style={styles.rowLabel} numberOfLines={1}>
+                  {geoPdf.label}
+                </Text>
+                {geoPdf.state === "failed" ? (
+                  <StatusPill label="Failed" tone="warning" />
+                ) : geoPdf.state !== "ready" ? (
+                  <StatusPill label="Incomplete" tone="outline" />
                 ) : null}
               </View>
-            ))}
-            <Text style={styles.pickerHeading}>Tracks</Text>
-            {savedTracks.length === 0 ? (
-              <Text style={styles.pickerStatus}>
-                Record a track with the ⏺ button on the map.
-              </Text>
-            ) : null}
-            {savedTracks.map((track) => (
-              <View key={track.id} style={styles.pickerRegionRow}>
-                <Pressable
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: track.visible }}
-                  onPress={() => {
-                    updateTrack(track.id, { visible: !track.visible }).catch(
-                      console.error,
-                    );
-                  }}
-                  style={styles.pickerRowGrow}
-                >
-                  <Text
-                    style={[
-                      styles.pickerLabel,
-                      track.visible && styles.pickerLabelActive,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {track.visible ? "☑" : "☐"}{" "}
-                    <Text style={{ color: track.color }}>●</Text> {track.name} ·{" "}
-                    {formatDistanceM(track.distanceM)}
-                  </Text>
-                </Pressable>
+              {geoPdf.state !== "ready" && !geoPdfBusy ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Delete track"
-                  onPress={() => {
-                    Alert.alert(
-                      "Delete track?",
-                      "The recorded points are deleted. This can't be undone.",
-                      [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Delete",
-                          style: "destructive",
-                          onPress: () => {
-                            deleteTrack(track.id).catch(console.error);
-                          },
-                        },
-                      ],
-                    );
-                  }}
+                  accessibilityLabel="Resume import"
+                  hitSlop={8}
+                  onPress={() => handleResumeGeoPdf(geoPdf.id)}
                 >
-                  <Text style={styles.pickerDelete}>Delete</Text>
+                  <Text style={styles.actionLabel}>Resume</Text>
                 </Pressable>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Delete GeoPDF import"
+                hitSlop={8}
+                onPress={() => {
+                  deleteGeoPdfImport(geoPdf.id).catch(console.error);
+                }}
+              >
+                <Text style={styles.deleteText}>Delete</Text>
+              </Pressable>
+              {geoPdf.state === "ready" ? (
+                <Toggle
+                  value={geoPdf.visible}
+                  onValueChange={() => {
+                    updateGeoPdfImport(geoPdf.id, {
+                      visible: !geoPdf.visible,
+                    }).catch(console.error);
+                  }}
+                  accessibilityLabel={`Show ${geoPdf.label}`}
+                />
+              ) : null}
+            </Card>
+            {geoPdf.state === "failed" && geoPdf.errorCode ? (
+              <Text style={styles.statusText}>
+                {GEOPDF_ERRORS[geoPdf.errorCode] ?? "Import failed."}
+              </Text>
+            ) : null}
+            {geoPdf.state === "ready" &&
+            geoPdf.residualFraction != null &&
+            geoPdf.residualFraction > RESIDUAL_WARN_FRACTION ? (
+              <Text style={styles.statusText}>
+                ⚠ Georeferencing in this file is imprecise — positions may be
+                off.
+              </Text>
+            ) : null}
+            {geoPdf.state === "ready" && geoPdf.visible ? (
+              <View style={styles.opacityWrap}>
+                <Text style={styles.rowSub}>Opacity</Text>
+                <SegmentedControl
+                  options={GEOPDF_OPACITY_STEPS.map((step) => ({
+                    value: String(step),
+                    label: `${Math.round(step * 100)}%`,
+                  }))}
+                  value={String(
+                    GEOPDF_OPACITY_STEPS.find(
+                      (step) => Math.abs(geoPdf.opacity - step) < 0.01,
+                    ) ?? 1,
+                  )}
+                  onChange={(next) => {
+                    updateGeoPdfImport(geoPdf.id, {
+                      opacity: Number(next),
+                    }).catch(console.error);
+                  }}
+                />
               </View>
-            ))}
-            </ScrollView>
+            ) : null}
           </View>
-        </Pressable>
-      </Modal>
+        ))}
+
+        <SectionHeader label="Tracks" />
+        {savedTracks.length === 0 ? (
+          <Text style={styles.statusText}>
+            Record a track with the ⏺ button on the map.
+          </Text>
+        ) : null}
+        {savedTracks.map((track) => (
+          <Card key={track.id} style={styles.sheetRow}>
+            <View style={[styles.dot, { backgroundColor: track.color }]} />
+            <View style={styles.rowMain}>
+              <Text style={styles.rowLabel} numberOfLines={1}>
+                {track.name}
+              </Text>
+              <Text style={styles.rowSub}>{formatDistanceM(track.distanceM)}</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Delete track"
+              hitSlop={8}
+              onPress={() => {
+                Alert.alert(
+                  "Delete track?",
+                  "The recorded points are deleted. This can't be undone.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Delete",
+                      style: "destructive",
+                      onPress: () => {
+                        deleteTrack(track.id).catch(console.error);
+                      },
+                    },
+                  ],
+                );
+              }}
+            >
+              <Text style={styles.deleteText}>Delete</Text>
+            </Pressable>
+            <Toggle
+              value={track.visible}
+              onValueChange={() => {
+                updateTrack(track.id, { visible: !track.visible }).catch(
+                  console.error,
+                );
+              }}
+              accessibilityLabel={`Show ${track.name}`}
+            />
+          </Card>
+        ))}
+      </BottomSheet>
     </View>
   );
 }
@@ -1784,53 +1721,25 @@ const styles = StyleSheet.create({
     right: spacing(1),
   },
   attributionText: { color: theme.textMuted, fontSize: 9 },
-  pickerBackdrop: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.4)",
-  },
-  pickerSheet: {
-    backgroundColor: theme.primary,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    padding: spacing(2),
-    maxHeight: "70%",
-  },
-  pickerScrollContent: { gap: spacing(0.5) },
-  pickerHeading: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: theme.textMuted,
+  // Layer-sheet rows (content lives in the shared BottomSheet). A row is a Card
+  // laid out horizontally: main text block (flex) + optional pill/action + the
+  // trailing Toggle.
+  sheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1.5),
     marginTop: spacing(1),
   },
-  pickerRow: { paddingVertical: spacing(1) },
-  pickerRowGrow: { paddingVertical: spacing(1), flex: 1 },
-  pickerRegionRow: {
-    paddingVertical: spacing(1),
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  pickerStatus: { color: theme.textMuted, fontSize: fontSize.sm },
-  pickerDelete: { color: theme.warning, fontSize: fontSize.sm, fontWeight: "600" },
-  pickerLabel: { color: theme.textPrimary, fontSize: fontSize.base },
-  pickerSubLabel: { color: theme.textMuted, fontSize: fontSize.xs },
-  pickerLabelActive: { color: theme.accent, fontWeight: "600" },
-  pickerLabelDisabled: { color: theme.textMuted },
-  pickerAction: {
-    color: theme.accent,
-    fontSize: fontSize.sm,
-    fontWeight: "600",
-    marginRight: spacing(2),
-  },
-  opacityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(2),
-    paddingBottom: spacing(1),
-  },
-  opacityStep: { color: theme.textMuted, fontSize: fontSize.sm },
-  opacityStepActive: { color: theme.accent, fontWeight: "700" },
+  rowMain: { flex: 1, gap: spacing(0.5) },
+  rowLabel: { color: theme.textPrimary, fontSize: fontSize.base, fontWeight: "600" },
+  rowSub: { color: theme.textMuted, fontSize: fontSize.xs },
+  stackRow: { gap: spacing(0.5) },
+  actionRow: { minHeight: 44, justifyContent: "center", marginTop: spacing(1) },
+  actionLabel: { color: theme.accent, fontSize: fontSize.base, fontWeight: "600" },
+  pressed: { opacity: 0.7 },
+  deleteText: { color: theme.warning, fontSize: fontSize.sm, fontWeight: "600" },
+  disabledText: { color: theme.textMuted },
+  statusText: { color: theme.textMuted, fontSize: fontSize.sm, marginTop: spacing(0.5) },
+  dot: { width: 12, height: 12, borderRadius: 6 },
+  opacityWrap: { gap: spacing(0.5) },
 });

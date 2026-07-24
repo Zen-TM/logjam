@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   },
   statusRow: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
   state: { fontSize: fontSize.sm, fontWeight: "700" },
-  stateRec: { color: "#ef4444" },
+  stateRec: { color: theme.warning },
   statePaused: { color: theme.textMuted },
   stats: { color: theme.textPrimary, fontSize: fontSize.sm },
   buttonRow: { flexDirection: "row", gap: spacing(3) },

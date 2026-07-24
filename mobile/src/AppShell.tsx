@@ -1,7 +1,9 @@
-// Authenticated app shell: bottom tabs (Canyons / Trips / Inbox / Account)
-// with native stacks for detail screens, behind the consent gate.
+// Authenticated app shell: bottom tabs (Map / Canyons / Logs / Saved / More)
+// with native stacks for detail screens, behind the consent gate. The More
+// tab is a hub folding Inbox, Account, Friends, Sync issues and Settings off
+// the tab bar.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Text } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import {
   DarkTheme,
   NavigationContainer,
@@ -20,12 +22,15 @@ import { registerSyncTriggers } from "./sync/syncEngine";
 import { theme } from "./theme";
 import { MapScreen } from "./map/MapScreen";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
+import { SavedScreen } from "./saved/SavedScreen";
 import { AccountScreen } from "./screens/AccountScreen";
 import { CanyonDetailScreen } from "./screens/CanyonDetailScreen";
 import { CanyonsScreen } from "./screens/CanyonsScreen";
 import { ConsentGate } from "./screens/ConsentGate";
 import { FriendsScreen } from "./screens/FriendsScreen";
+import { MoreScreen } from "./screens/MoreScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
+import { SettingsScreen } from "./screens/SettingsScreen";
 import { SyncIssuesScreen } from "./screens/SyncIssuesScreen";
 import { TripDetailScreen, TripsScreen } from "./screens/TripsScreen";
 import { LoadingState } from "./ui/ScreenStates";
@@ -58,16 +63,24 @@ type TripsStackParams = {
   TripDetail: { trip: TTripLog };
 };
 
-type AccountStackParams = {
-  AccountHome: undefined;
-  SyncIssues: undefined;
+type SavedStackParams = {
+  SavedHome: undefined;
+};
+
+type MoreStackParams = {
+  MoreHome: undefined;
+  Inbox: undefined;
+  Account: undefined;
   Friends: undefined;
+  SyncIssues: undefined;
+  Settings: undefined;
 };
 
 const MapStack = createNativeStackNavigator<MapStackParams>();
 const CanyonsStack = createNativeStackNavigator<CanyonsStackParams>();
 const TripsStack = createNativeStackNavigator<TripsStackParams>();
-const AccountStack = createNativeStackNavigator<AccountStackParams>();
+const SavedStack = createNativeStackNavigator<SavedStackParams>();
+const MoreStack = createNativeStackNavigator<MoreStackParams>();
 const Tabs = createBottomTabNavigator();
 
 const stackScreenOptions = {
@@ -85,6 +98,7 @@ function MapStackNav() {
             onOpenCanyon={(canyonId, name) =>
               navigation.navigate("MapCanyonDetail", { canyonId, name })
             }
+            onOpenSaved={() => navigation.getParent()?.navigate("Saved")}
           />
         )}
       </MapStack.Screen>
@@ -95,6 +109,18 @@ function MapStackNav() {
         {({ route }) => <CanyonDetailScreen canyonId={route.params.canyonId} />}
       </MapStack.Screen>
     </MapStack.Navigator>
+  );
+}
+
+function SavedStackNav() {
+  return (
+    <SavedStack.Navigator screenOptions={stackScreenOptions}>
+      <SavedStack.Screen
+        name="SavedHome"
+        component={SavedScreen}
+        options={{ title: "Saved" }}
+      />
+    </SavedStack.Navigator>
   );
 }
 
@@ -123,7 +149,7 @@ function CanyonsStackNav() {
 function TripsStackNav() {
   return (
     <TripsStack.Navigator screenOptions={stackScreenOptions}>
-      <TripsStack.Screen name="TripList" options={{ title: "Trips" }}>
+      <TripsStack.Screen name="TripList" options={{ title: "Logs" }}>
         {({ navigation }) => (
           <TripsScreen onOpenTrip={(trip) => navigation.navigate("TripDetail", { trip })} />
         )}
@@ -135,9 +161,14 @@ function TripsStackNav() {
   );
 }
 
-function TabIcon({ glyph, color }: { glyph: string; color: string }) {
-  // Placeholder glyph icons until an icon set lands with the design pass.
-  return <Text style={{ color, fontSize: 18 }}>{glyph}</Text>;
+function TabIcon({
+  name,
+  color,
+}: {
+  name: React.ComponentProps<typeof Feather>["name"];
+  color: string;
+}) {
+  return <Feather name={name} size={22} color={color} />;
 }
 
 // Foreground pushes show as banners; the inbox badge is refreshed on focus.
@@ -184,7 +215,8 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
             params: { canyonId: data.canyonId, name: "Canyon" },
           });
         } else {
-          nav.navigate("Inbox");
+          // Inbox now lives inside the More stack.
+          nav.navigate("More", { screen: "Inbox" });
         }
       },
     );
@@ -244,43 +276,53 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
       >
         <Tabs.Screen
           name="Map"
-          options={{ tabBarIcon: ({ color }) => <TabIcon glyph="◈" color={color} /> }}
+          options={{ tabBarIcon: ({ color }) => <TabIcon name="map" color={color} /> }}
         >
           {() => <MapStackNav />}
         </Tabs.Screen>
         <Tabs.Screen
           name="Canyons"
-          options={{ tabBarIcon: ({ color }) => <TabIcon glyph="▲" color={color} /> }}
+          options={{ tabBarIcon: ({ color }) => <TabIcon name="map-pin" color={color} /> }}
         >
           {() => <CanyonsStackNav />}
         </Tabs.Screen>
         <Tabs.Screen
-          name="Trips"
-          options={{ tabBarIcon: ({ color }) => <TabIcon glyph="≋" color={color} /> }}
+          name="Logs"
+          options={{ tabBarIcon: ({ color }) => <TabIcon name="book-open" color={color} /> }}
         >
           {() => <TripsStackNav />}
         </Tabs.Screen>
         <Tabs.Screen
-          name="Inbox"
+          name="Saved"
+          options={{ tabBarIcon: ({ color }) => <TabIcon name="download" color={color} /> }}
+        >
+          {() => <SavedStackNav />}
+        </Tabs.Screen>
+        <Tabs.Screen
+          name="More"
           options={{
-            headerShown: true,
-            headerStyle: { backgroundColor: theme.secondary },
-            headerTintColor: theme.textPrimary,
-            tabBarIcon: ({ color }) => <TabIcon glyph="◉" color={color} />,
+            tabBarIcon: ({ color }) => <TabIcon name="more-horizontal" color={color} />,
             ...(unreadCount ? { tabBarBadge: unreadCount } : {}),
           }}
         >
-          {() => <NotificationsScreen onUnreadChanged={refreshUnread} />}
-        </Tabs.Screen>
-        <Tabs.Screen
-          name="Account"
-          options={{
-            tabBarIcon: ({ color }) => <TabIcon glyph="●" color={color} />,
-          }}
-        >
           {() => (
-            <AccountStack.Navigator screenOptions={stackScreenOptions}>
-              <AccountStack.Screen name="AccountHome" options={{ title: "Account" }}>
+            <MoreStack.Navigator screenOptions={stackScreenOptions}>
+              <MoreStack.Screen name="MoreHome" options={{ title: "More" }}>
+                {({ navigation }) => (
+                  <MoreScreen
+                    unreadCount={unreadCount}
+                    onOpenInbox={() => navigation.navigate("Inbox")}
+                    onOpenAccount={() => navigation.navigate("Account")}
+                    onOpenFriends={() => navigation.navigate("Friends")}
+                    onOpenSyncIssues={() => navigation.navigate("SyncIssues")}
+                    onOpenSettings={() => navigation.navigate("Settings")}
+                  />
+                )}
+              </MoreStack.Screen>
+              <MoreStack.Screen name="Inbox" options={{ title: "Inbox" }}>
+                {() => <NotificationsScreen onUnreadChanged={refreshUnread} />}
+              </MoreStack.Screen>
+              <MoreStack.Screen name="Account" options={{ title: "Account" }}>
                 {({ navigation }) => (
                   <AccountScreen
                     onSignOut={onSignOut}
@@ -288,18 +330,23 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
                     onOpenFriends={() => navigation.navigate("Friends")}
                   />
                 )}
-              </AccountStack.Screen>
-              <AccountStack.Screen
-                name="SyncIssues"
-                component={SyncIssuesScreen}
-                options={{ title: "Sync issues" }}
-              />
-              <AccountStack.Screen
+              </MoreStack.Screen>
+              <MoreStack.Screen
                 name="Friends"
                 component={FriendsScreen}
                 options={{ title: "Friends" }}
               />
-            </AccountStack.Navigator>
+              <MoreStack.Screen
+                name="SyncIssues"
+                component={SyncIssuesScreen}
+                options={{ title: "Sync issues" }}
+              />
+              <MoreStack.Screen
+                name="Settings"
+                component={SettingsScreen}
+                options={{ title: "Settings" }}
+              />
+            </MoreStack.Navigator>
           )}
         </Tabs.Screen>
       </Tabs.Navigator>

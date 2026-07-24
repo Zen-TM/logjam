@@ -25,7 +25,8 @@ export function ErrorBanner({ message, onRetry }: ErrorBannerProps) {
 
 const styles = StyleSheet.create({
   banner: {
-    backgroundColor: "rgba(245, 166, 147, 0.12)",
+    // Warning hue at ~12% — 8-digit hex so it tracks the active scheme.
+    backgroundColor: `${theme.warning}1F`,
     borderWidth: 1,
     borderColor: theme.warning,
     borderRadius: radius.md,

@@ -18,18 +18,27 @@ type TextFieldProps = {
   | "autoFocus"
   | "onSubmitEditing"
   | "returnKeyType"
+  | "multiline"
 >;
 
-export function TextField({ label, value, onChangeText, error, ...inputProps }: TextFieldProps) {
+export function TextField({
+  label,
+  value,
+  onChangeText,
+  error,
+  multiline,
+  ...inputProps
+}: TextFieldProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, multiline && styles.multiline]}
         value={value}
         onChangeText={onChangeText}
         placeholderTextColor={theme.textMuted}
         accessibilityLabel={label}
+        multiline={multiline}
         {...inputProps}
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -55,5 +64,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     color: theme.textPrimary,
   },
+  multiline: { minHeight: 96, textAlignVertical: "top" },
   error: { fontSize: fontSize.sm, color: theme.warning },
 });
