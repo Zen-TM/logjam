@@ -3,13 +3,21 @@
 // offline mirror: instant, complete (delta-synced, no list cap), and alive
 // in airplane mode. Pull-to-refresh triggers a sync cycle.
 import { useMemo } from "react";
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import { formatCanyonGrade } from "@logjam/shared";
 
-import { fontSize, radius, spacing, theme } from "../theme";
+import { spacing, theme } from "../theme";
 import { useMirrorCanyons, useMirrorTrips, useSyncStatus } from "../sync/useSyncQueries";
 import type { MirrorCanyon } from "../sync/mirrorStore";
 import { EmptyState, ErrorState, LoadingState } from "../ui/ScreenStates";
+import { Row } from "../ui/Row";
+import { SectionHeader } from "../ui/SectionHeader";
+import { StatusPill } from "../ui/StatusPill";
+
+type ListItem =
+  | { kind: "header"; key: string; label: string }
+  | { kind: "canyon"; key: string; canyon: MirrorCanyon; tripCount: number | undefined };
 
 export function CanyonsScreen({
   onOpenCanyon,
@@ -34,6 +42,28 @@ export function CanyonsScreen({
   }, [trips.data]);
 
   const rows = canyons.data ?? [];
+
+  // Owned first, shared-with-me grouped under its own header — matches the
+  // design mockup without changing what data is fetched or how it's synced.
+  const listItems = useMemo<ListItem[]>(() => {
+    const data = canyons.data ?? [];
+    const owned = data.filter((canyon) => canyon.syncRole !== "shared");
+    const shared = data.filter((canyon) => canyon.syncRole === "shared");
+    const items: ListItem[] = owned.map((canyon) => ({
+      kind: "canyon",
+      key: canyon.id,
+      canyon,
+      tripCount: tripCounts.get(canyon.id),
+    }));
+    if (shared.length > 0) {
+      items.push({ kind: "header", key: "shared-header", label: "SHARED WITH ME" });
+      for (const canyon of shared) {
+        items.push({ kind: "canyon", key: canyon.id, canyon, tripCount: undefined });
+      }
+    }
+    return items;
+  }, [canyons.data, tripCounts]);
+
   if (canyons.loading && rows.length === 0) return <LoadingState />;
   if (canyons.error && rows.length === 0) {
     return <ErrorState message={canyons.error} onRetry={canyons.refresh} />;
@@ -51,8 +81,8 @@ export function CanyonsScreen({
     <FlatList
       style={styles.list}
       contentContainerStyle={styles.listContent}
-      data={rows}
-      keyExtractor={(item) => item.id}
+      data={listItems}
+      keyExtractor={(item) => item.key}
       refreshControl={
         <RefreshControl
           refreshing={syncStatus.state === "syncing"}
@@ -60,13 +90,17 @@ export function CanyonsScreen({
           tintColor={theme.accent}
         />
       }
-      renderItem={({ item }) => (
-        <CanyonRowView
-          canyon={item}
-          tripCount={item.syncRole === "owner" ? tripCounts.get(item.id) : undefined}
-          onPress={() => onOpenCanyon(item)}
-        />
-      )}
+      renderItem={({ item }) =>
+        item.kind === "header" ? (
+          <SectionHeader label={item.label} />
+        ) : (
+          <CanyonRowView
+            canyon={item.canyon}
+            tripCount={item.tripCount}
+            onPress={() => onOpenCanyon(item.canyon)}
+          />
+        )
+      }
     />
   );
 }
@@ -81,54 +115,27 @@ function CanyonRowView({
   onPress: () => void;
 }) {
   const grade = formatCanyonGrade(canyon);
+  const subtitle = [grade, tripCount != null ? `${tripCount} trip${tripCount === 1 ? "" : "s"}` : null]
+    .filter(Boolean)
+    .join(" · ");
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-    >
-      <View style={styles.rowMain}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
-          {canyon.name}
-        </Text>
-        <Text style={styles.rowMeta} numberOfLines={1}>
-          {[grade, tripCount != null ? `${tripCount} trip${tripCount === 1 ? "" : "s"}` : null]
-            .filter(Boolean)
-            .join(" · ") || " "}
-        </Text>
-      </View>
-      {canyon.syncRole === "shared" ? (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>Shared</Text>
+    <Row
+      title={canyon.name}
+      subtitle={subtitle || undefined}
+      leading={<Feather name="map-pin" size={20} color={theme.accent} />}
+      right={
+        <View style={styles.trailing}>
+          {canyon.syncRole === "shared" ? <StatusPill label="Shared" tone="outline" /> : null}
+          <Feather name="chevron-right" size={20} color={theme.textMuted} />
         </View>
-      ) : null}
-    </Pressable>
+      }
+      onPress={onPress}
+    />
   );
 }
 
 const styles = StyleSheet.create({
   list: { flex: 1, backgroundColor: theme.primary },
   listContent: { padding: spacing(2), gap: spacing(1) },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radius.md,
-    padding: spacing(1.5),
-    gap: spacing(1),
-  },
-  rowPressed: { backgroundColor: "rgba(255,255,255,0.08)" },
-  rowMain: { flex: 1, gap: spacing(0.25) },
-  rowTitle: { color: theme.textPrimary, fontSize: fontSize.base, fontWeight: "600" },
-  rowMeta: { color: theme.textMuted, fontSize: fontSize.sm },
-  badge: {
-    borderWidth: 1,
-    borderColor: theme.bonus1,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing(1),
-    paddingVertical: spacing(0.25),
-  },
-  badgeText: { color: theme.bonus1, fontSize: fontSize.xs, fontWeight: "600" },
+  trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
 });

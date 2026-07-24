@@ -7,13 +7,16 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import {
   categoryHasThumbnail,
@@ -30,16 +33,21 @@ import {
   type CanyonShareRecipient,
   type Friend,
 } from "../api/friends";
-import { fontSize, radius, spacing, theme } from "../theme";
+import { fontSize, fontWeight, lineHeight, radius, spacing, theme } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import { attachPhotoLocal, deleteMediaLocal } from "../sync/mediaUpload";
 import { updateCanyonLocal } from "../sync/outbox";
 import type { MirrorCanyon, MirrorMedia } from "../sync/mirrorStore";
 import { useMirrorCanyon, useMirrorCanyonMedia } from "../sync/useSyncQueries";
+import { BottomSheet } from "../ui/BottomSheet";
 import { Button } from "../ui/Button";
 import { ErrorBanner } from "../ui/ErrorBanner";
 import { EntityEditForm, type EditFieldSpec } from "../ui/EntityEditForm";
+import { Row } from "../ui/Row";
+import { SectionHeader } from "../ui/SectionHeader";
 import { EmptyState, ErrorState, LoadingState } from "../ui/ScreenStates";
+import { StatGrid, type Stat } from "../ui/StatGrid";
+import { StatusPill } from "../ui/StatusPill";
 
 export function CanyonDetailScreen({ canyonId }: { canyonId: string }) {
   const query = useMirrorCanyon(canyonId);
@@ -80,10 +88,11 @@ function EditCanyonButton({ canyon }: { canyon: MirrorCanyon }) {
     <>
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel="Edit canyon"
         onPress={() => setOpen(true)}
         style={({ pressed }) => [styles.editButton, pressed && styles.editButtonPressed]}
       >
-        <Text style={styles.editButtonText}>Edit</Text>
+        <Feather name="edit-2" size={16} color={theme.accent} />
       </Pressable>
       <EntityEditForm
         visible={open}
@@ -185,7 +194,7 @@ function MediaStrip({
 
   return (
     <View style={styles.mediaBlock}>
-      <Text style={styles.sectionLabel}>Photos</Text>
+      <SectionHeader label="PHOTOS" />
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.mediaRow}>
           {thumbs.map((item) => (
@@ -224,7 +233,7 @@ function MediaStrip({
               pressed && styles.addTilePressed,
             ]}
           >
-            <Text style={styles.addTilePlus}>＋</Text>
+            <Feather name="plus" size={20} color={theme.accent} />
             <Text style={styles.addTileLabel}>Add photo</Text>
           </Pressable>
         </View>
@@ -259,7 +268,17 @@ function MediaStrip({
 // use case); the resulting record + tombstone still propagate to the sharee's
 // mirror on their next pull. A sharee never sees this — the caller gates on
 // syncRole === "owner". Recipients + friend picker are username-only.
-function CanyonSharingSection({ canyonId }: { canyonId: string }) {
+//
+// `openRequest` lets the top-level "Share" action tile trigger this section's
+// picker sheet without lifting its load/share/unshare state out of the
+// component — bump the counter and the effect below opens the sheet.
+function CanyonSharingSection({
+  canyonId,
+  openRequest,
+}: {
+  canyonId: string;
+  openRequest: number;
+}) {
   const [recipients, setRecipients] = useState<CanyonShareRecipient[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -295,6 +314,13 @@ function CanyonSharingSection({ canyonId }: { canyonId: string }) {
       }
     }
   }, [friends]);
+
+  // openRequest starts at 0; only act on it once it's been bumped above 0 by
+  // the caller (an effect-mount value of 0 must not auto-open the sheet).
+  useEffect(() => {
+    if (openRequest > 0) void openPicker();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest]);
 
   const share = useCallback(
     async (friend: Friend) => {
@@ -345,7 +371,7 @@ function CanyonSharingSection({ canyonId }: { canyonId: string }) {
 
   return (
     <View style={styles.sharingBlock}>
-      <Text style={styles.sectionLabel}>Shared with</Text>
+      <SectionHeader label="SHARED WITH" />
       {actionError ? <ErrorBanner message={actionError} /> : null}
       {recipients === null && loadError ? (
         <Text style={styles.sharingNote}>{loadError}</Text>
@@ -355,63 +381,51 @@ function CanyonSharingSection({ canyonId }: { canyonId: string }) {
         <Text style={styles.sharingNote}>Not shared with anyone yet.</Text>
       ) : (
         recipients.map((recipient) => (
-          <View key={recipient.id} style={styles.shareRow}>
-            <Text style={styles.shareName}>{recipient.sharedWith.username}</Text>
-            {busyId === recipient.id ? (
-              <ActivityIndicator color={theme.accent} />
-            ) : (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => confirmUnshare(recipient)}
-                style={({ pressed }) => [styles.unsharePill, pressed && styles.addTilePressed]}
-              >
-                <Text style={styles.unshareText}>Unshare</Text>
-              </Pressable>
-            )}
-          </View>
+          <Row
+            key={recipient.id}
+            title={recipient.sharedWith.username}
+            right={
+              busyId === recipient.id ? (
+                <ActivityIndicator color={theme.accent} />
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Stop sharing with ${recipient.sharedWith.username}`}
+                  onPress={() => confirmUnshare(recipient)}
+                >
+                  <StatusPill label="Unshare" tone="warning" />
+                </Pressable>
+              )
+            }
+          />
         ))
       )}
 
       <Button label="Share with a friend" variant="outlineAccent" onPress={() => void openPicker()} />
 
-      <Modal
-        visible={pickerOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setPickerOpen(false)}
-      >
-        <Pressable style={styles.pickerBackdrop} onPress={() => setPickerOpen(false)}>
-          <Pressable style={styles.pickerSheet} onPress={() => {}}>
-            <Text style={styles.pickerTitle}>Share with</Text>
-            {actionError ? <ErrorBanner message={actionError} /> : null}
-            {friends === null ? (
-              <ActivityIndicator color={theme.accent} style={styles.sharingSpinner} />
-            ) : shareable.length === 0 ? (
-              <Text style={styles.sharingNote}>
-                {friends.length === 0
-                  ? "No friends yet — add friends from the Account tab."
-                  : "All your friends already have access."}
-              </Text>
-            ) : (
-              <ScrollView>
-                {shareable.map((friend) => (
-                  <Pressable
-                    key={friend.id}
-                    accessibilityRole="button"
-                    onPress={() => void share(friend)}
-                    disabled={busyId !== null}
-                    style={({ pressed }) => [styles.shareRow, pressed && styles.addTilePressed]}
-                  >
-                    <Text style={styles.shareName}>{friend.username}</Text>
-                    {busyId === friend.id ? <ActivityIndicator color={theme.accent} /> : null}
-                  </Pressable>
-                ))}
-              </ScrollView>
-            )}
-            <Button label="Close" variant="ghost" onPress={() => setPickerOpen(false)} />
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <BottomSheet visible={pickerOpen} onClose={() => setPickerOpen(false)} title="Share with">
+        {actionError ? <ErrorBanner message={actionError} /> : null}
+        {friends === null ? (
+          <ActivityIndicator color={theme.accent} style={styles.sharingSpinner} />
+        ) : shareable.length === 0 ? (
+          <Text style={styles.sharingNote}>
+            {friends.length === 0
+              ? "No friends yet — add friends from the Account tab."
+              : "All your friends already have access."}
+          </Text>
+        ) : (
+          <View style={styles.sheetList}>
+            {shareable.map((friend) => (
+              <Row
+                key={friend.id}
+                title={friend.username}
+                onPress={busyId === null ? () => void share(friend) : undefined}
+                right={busyId === friend.id ? <ActivityIndicator color={theme.accent} /> : undefined}
+              />
+            ))}
+          </View>
+        )}
+      </BottomSheet>
     </View>
   );
 }
@@ -426,95 +440,150 @@ function CanyonDetailView({
   media: MirrorMedia[];
 }) {
   const grade = formatCanyonGrade(canyon);
+  const isOwner = canyon.syncRole === "owner";
+  const [shareOpenRequest, setShareOpenRequest] = useState(0);
+
+  const navigate = useCallback(() => {
+    const latitude = canyon.latitude;
+    const longitude = canyon.longitude;
+    const label = encodeURIComponent(canyon.name);
+    const url =
+      Platform.OS === "ios"
+        ? `maps:0,0?q=${label}@${latitude},${longitude}`
+        : `geo:${latitude},${longitude}?q=${latitude},${longitude}(${label})`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert("Couldn't open maps", "No maps app is available on this device.");
+    });
+  }, [canyon.latitude, canyon.longitude, canyon.name]);
+
+  const stats: Stat[] = [];
+  if (grade) stats.push({ label: "Grade", value: grade });
+  if (canyon.quality != null) stats.push({ label: "Rating", value: `${canyon.quality}/5` });
+  if (canyon.numAbseils != null) {
+    stats.push({ label: "Abseils", value: String(canyon.numAbseils) });
+  }
+  if (canyon.longestAbseil != null) {
+    stats.push({ label: "Longest drop", value: `${canyon.longestAbseil} m` });
+  }
+  if (canyon.hours != null) stats.push({ label: "Hours", value: String(canyon.hours) });
+  stats.push({
+    label: "Location",
+    value: `${canyon.latitude.toFixed(5)}, ${canyon.longitude.toFixed(5)}`,
+  });
+
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+      <View style={styles.pillRow}>
+        <StatusPill label={isOwner ? "Owned" : "Shared"} tone={isOwner ? "accent" : "outline"} />
+        <StatusPill label="Downloaded" tone="accent" />
+      </View>
+
       <View style={styles.header}>
-        <Text style={[styles.name, styles.headerName]}>{canyon.name}</Text>
-        {canyon.syncRole === "owner" ? <EditCanyonButton canyon={canyon} /> : null}
+        <Text style={[styles.name, styles.headerName]} numberOfLines={2}>
+          {canyon.name}
+        </Text>
+        {isOwner ? <EditCanyonButton canyon={canyon} /> : null}
       </View>
       {canyon.altNames.length > 0 ? (
         <Text style={styles.altNames}>Also known as {canyon.altNames.join(", ")}</Text>
       ) : null}
 
-      <View style={styles.fieldGrid}>
-        {grade ? <Field label="Grade" value={grade} /> : null}
-        {canyon.quality != null ? <Field label="Quality" value={`${canyon.quality}/5`} /> : null}
-        {canyon.numAbseils != null ? <Field label="Abseils" value={String(canyon.numAbseils)} /> : null}
-        {canyon.longestAbseil != null ? (
-          <Field label="Longest abseil" value={`${canyon.longestAbseil} m`} />
+      <View style={styles.actionRow}>
+        <ActionTile icon="navigation" label="Navigate" tone="filled" onPress={navigate} />
+        <ActionTile icon="check" label="Downloaded" tone="outline" />
+        {isOwner ? (
+          <ActionTile
+            icon="share-2"
+            label="Share"
+            tone="plain"
+            onPress={() => setShareOpenRequest((n) => n + 1)}
+          />
         ) : null}
-        {canyon.hours != null ? <Field label="Hours" value={String(canyon.hours)} /> : null}
-        <Field
-          label="Location"
-          value={`${canyon.latitude.toFixed(5)}, ${canyon.longitude.toFixed(5)}`}
-        />
       </View>
+
+      <SectionHeader label="OVERVIEW" />
+      <StatGrid stats={stats} />
 
       {canyon.notes ? (
         <View style={styles.notesBlock}>
-          <Text style={styles.sectionLabel}>Notes</Text>
+          <SectionHeader label="NOTES · SHARED WITH SHAREES" />
           <Text style={styles.notes}>{canyon.notes}</Text>
         </View>
       ) : null}
 
       <MediaStrip canyonId={canyonId} media={media} />
 
-      {canyon.syncRole === "owner" ? <CanyonSharingSection canyonId={canyonId} /> : null}
+      {isOwner ? <CanyonSharingSection canyonId={canyonId} openRequest={shareOpenRequest} /> : null}
     </ScrollView>
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function ActionTile({
+  icon,
+  label,
+  onPress,
+  tone,
+}: {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+  onPress?: () => void;
+  tone: "filled" | "outline" | "plain";
+}) {
   return (
-    <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <Text style={styles.fieldValue}>{value}</Text>
-    </View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !onPress }}
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [
+        styles.actionTile,
+        styles[`actionTile_${tone}`],
+        pressed && onPress ? styles.actionTilePressed : null,
+      ]}
+    >
+      <Feather name={icon} size={20} color={tone === "filled" ? theme.primary : theme.accent} />
+      <Text style={[styles.actionLabel, tone === "filled" ? styles.actionLabelOnFilled : styles.actionLabelAccent]}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.primary },
-  content: { padding: spacing(2), gap: spacing(2) },
+  content: { padding: spacing(2), gap: spacing(1) },
+  pillRow: { flexDirection: "row", gap: spacing(1) },
   header: { flexDirection: "row", alignItems: "flex-start", gap: spacing(1) },
   headerName: { flex: 1 },
   editButton: {
     borderWidth: 1,
     borderColor: theme.accent,
     borderRadius: radius.sm,
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.5),
+    padding: spacing(1),
   },
-  editButtonPressed: { backgroundColor: "rgba(255,255,255,0.08)" },
-  editButtonText: { color: theme.accent, fontSize: fontSize.sm, fontWeight: "600" },
-  name: { fontSize: fontSize.xl, fontWeight: "700", color: theme.textPrimary },
+  editButtonPressed: { backgroundColor: theme.bonus2 },
+  name: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: theme.textPrimary },
   altNames: { fontSize: fontSize.sm, color: theme.textMuted },
-  fieldGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
-  field: {
-    backgroundColor: "rgba(255,255,255,0.04)",
+  actionRow: { flexDirection: "row", gap: spacing(1) },
+  actionTile: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
     borderRadius: radius.md,
-    padding: spacing(1.5),
-    minWidth: "45%",
-    flexGrow: 1,
-    gap: spacing(0.25),
+    paddingVertical: spacing(1.25),
+    gap: spacing(0.5),
+    minHeight: 64,
   },
-  fieldLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: theme.textMuted,
-  },
-  fieldValue: { fontSize: fontSize.base, color: theme.textPrimary },
+  actionTile_filled: { backgroundColor: theme.accent },
+  actionTile_outline: { borderWidth: 1, borderColor: theme.accent },
+  actionTile_plain: { borderWidth: 1, borderColor: theme.bonus2 },
+  actionTilePressed: { opacity: 0.75 },
+  actionLabel: { fontSize: fontSize.xs, fontWeight: fontWeight.medium },
+  actionLabelOnFilled: { color: theme.primary },
+  actionLabelAccent: { color: theme.accent },
   notesBlock: { gap: spacing(0.5) },
-  sectionLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: theme.textMuted,
-  },
-  notes: { fontSize: fontSize.base, color: theme.textPrimary, lineHeight: 22 },
+  notes: { fontSize: fontSize.base, color: theme.textPrimary, lineHeight: lineHeight.body },
   mediaBlock: { gap: spacing(0.5) },
   mediaRow: { flexDirection: "row", gap: spacing(1) },
   thumbWrap: { position: "relative" },
@@ -522,7 +591,7 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: radius.md,
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: theme.bonus2,
   },
   thumbPlaceholder: { alignItems: "center", justifyContent: "center" },
   thumbPlaceholderText: { fontSize: fontSize.xl, color: theme.textMuted },
@@ -548,8 +617,7 @@ const styles = StyleSheet.create({
     borderColor: theme.accent,
     gap: spacing(0.25),
   },
-  addTilePressed: { backgroundColor: "rgba(255,255,255,0.08)" },
-  addTilePlus: { color: theme.accent, fontSize: fontSize.xl },
+  addTilePressed: { backgroundColor: theme.bonus2 },
   addTileLabel: { color: theme.accent, fontSize: fontSize.xs },
   thumbLoading: {
     ...StyleSheet.absoluteFillObject,
@@ -570,38 +638,5 @@ const styles = StyleSheet.create({
   sharingBlock: { gap: spacing(1) },
   sharingNote: { color: theme.textMuted, fontSize: fontSize.sm },
   sharingSpinner: { alignSelf: "flex-start" },
-  shareRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radius.md,
-    padding: spacing(1.5),
-    gap: spacing(1),
-  },
-  shareName: { flex: 1, color: theme.textPrimary, fontSize: fontSize.base },
-  unsharePill: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.75),
-  },
-  unshareText: { color: theme.warning, fontSize: fontSize.sm, fontWeight: "600" },
-  pickerBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-end",
-  },
-  pickerSheet: {
-    backgroundColor: theme.secondary,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    padding: spacing(2),
-    gap: spacing(1),
-    maxHeight: "70%",
-  },
-  pickerTitle: { color: theme.textPrimary, fontSize: fontSize.lg, fontWeight: "700" },
+  sheetList: { gap: spacing(1) },
 });
