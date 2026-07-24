@@ -7,9 +7,8 @@ import { ScrollView, StyleSheet, Text } from "react-native";
 import { CURRENT_CONSENT_VERSION, messageFromError } from "@logjam/shared";
 
 import { updateConsent } from "../api/queries";
-import { fontSize, spacing, theme } from "../theme";
-import { Button } from "../ui/Button";
-import { ErrorBanner } from "../ui/ErrorBanner";
+import { fontSize, fontWeight, lineHeight, spacing, theme } from "../theme";
+import { Button, ErrorBanner } from "../ui";
 
 export function ConsentGate({
   onConsented,
@@ -57,6 +56,6 @@ const styles = StyleSheet.create({
     padding: spacing(3),
     gap: spacing(2),
   },
-  title: { fontSize: fontSize.xl, fontWeight: "700", color: theme.textPrimary },
-  body: { fontSize: fontSize.base, color: theme.textPrimary, lineHeight: 22 },
+  title: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: theme.textPrimary },
+  body: { fontSize: fontSize.base, color: theme.textPrimary, lineHeight: lineHeight.body },
 });

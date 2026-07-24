@@ -10,11 +10,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, StyleSheet, Text, View } from "react-native";
 import * as LocalAuthentication from "expo-local-authentication";
 
-import { Button } from "../ui/Button";
+import { Button } from "../ui";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
 import { useVectorImports } from "../imports/useVectorImports";
 import { useTracks } from "../tracks/useTracks";
-import { fontSize, spacing, theme } from "../theme";
+import { fontSize, fontWeight, spacing, theme } from "../theme";
 import { useMapArtifacts } from "./useMapArtifacts";
 
 // The system auth sheet runs in its own activity: launching and dismissing it
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     padding: spacing(3),
     backgroundColor: theme.primary,
   },
-  title: { fontSize: fontSize.xl, fontWeight: "600", color: theme.textPrimary },
+  title: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: theme.textPrimary },
   line: {
     fontSize: fontSize.sm,
     color: theme.textMuted,

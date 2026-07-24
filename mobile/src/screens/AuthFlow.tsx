@@ -14,10 +14,8 @@ import {
 } from "react-native";
 
 import type { useAuth } from "../auth/useAuth";
-import { fontSize, spacing, theme } from "../theme";
-import { Button } from "../ui/Button";
-import { ErrorBanner } from "../ui/ErrorBanner";
-import { TextField } from "../ui/TextField";
+import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { Button, ErrorBanner, TextField } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
 
@@ -237,14 +235,14 @@ const styles = StyleSheet.create({
   },
   appTitle: {
     fontSize: fontSize.xl,
-    fontWeight: "700",
+    fontWeight: fontWeight.bold,
     color: theme.textPrimary,
     textAlign: "center",
     marginBottom: spacing(2),
   },
   bannerSlot: { marginBottom: spacing(1) },
   form: { gap: spacing(2) },
-  heading: { fontSize: fontSize.lg, fontWeight: "600", color: theme.textPrimary },
+  heading: { fontSize: fontSize.lg, fontWeight: fontWeight.medium, color: theme.textPrimary },
   hint: { fontSize: fontSize.sm, color: theme.textMuted },
   footerLink: { alignSelf: "center", padding: spacing(1) },
   footerLinkText: { color: theme.accent, fontSize: fontSize.sm },
