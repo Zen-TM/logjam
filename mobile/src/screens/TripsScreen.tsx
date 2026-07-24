@@ -2,16 +2,26 @@
 // tripTitle() (root CLAUDE.md convention); trip dates are UTC-midnight
 // date-only values and MUST format with timeZone: "UTC" (CH-001) or AEST
 // renders the previous calendar day.
+import { Feather } from "@expo/vector-icons";
 import { useState } from "react";
-import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 
 import { tripTitle } from "../api/tripTitle";
 import type { TTripLog } from "../api/types";
-import { fontSize, radius, spacing, theme } from "../theme";
+import { fontSize, fontWeight, hitSlop, lineHeight, radius, spacing, theme } from "../theme";
 import { updateTripLocal } from "../sync/outbox";
 import { useMirrorTrip, useMirrorTrips, useSyncStatus } from "../sync/useSyncQueries";
-import { EntityEditForm, type EditFieldSpec } from "../ui/EntityEditForm";
-import { EmptyState, ErrorState, LoadingState } from "../ui/ScreenStates";
+import {
+  Card,
+  EmptyState,
+  EntityEditForm,
+  ErrorState,
+  LoadingState,
+  Row,
+  ScreenScroll,
+  SectionHeader,
+  type EditFieldSpec,
+} from "../ui";
 
 export function formatTripDate(isoDate: string): string {
   return new Date(isoDate).toLocaleDateString(undefined, {
@@ -51,16 +61,13 @@ export function TripsScreen({ onOpenTrip }: { onOpenTrip: (trip: TTripLog) => vo
         />
       }
       renderItem={({ item }) => (
-        <Pressable
-          accessibilityRole="button"
+        <Row
+          title={tripTitle(item)}
+          subtitle={formatTripDate(item.date)}
+          leading={<Feather name="book-open" size={20} color={theme.accent} />}
+          right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
           onPress={() => onOpenTrip(item)}
-          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-        >
-          <Text style={styles.rowTitle} numberOfLines={1}>
-            {tripTitle(item)}
-          </Text>
-          <Text style={styles.rowMeta}>{formatTripDate(item.date)}</Text>
-        </Pressable>
+        />
       )}
     />
   );
@@ -81,18 +88,22 @@ export function TripDetailScreen({ trip }: { trip: TTripLog }) {
   ];
 
   return (
-    <ScrollView style={styles.detailRoot} contentContainerStyle={styles.detailContent}>
+    <ScreenScroll>
       <View style={styles.detailHeader}>
-        <Text style={[styles.detailTitle, styles.detailHeaderTitle]}>{tripTitle(current)}</Text>
+        <Text style={[styles.detailTitle, styles.detailHeaderTitle]} numberOfLines={2}>
+          {tripTitle(current)}
+        </Text>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Edit trip"
           onPress={() => setEditing(true)}
+          hitSlop={hitSlop}
           style={({ pressed }) => [styles.editButton, pressed && styles.editButtonPressed]}
         >
-          <Text style={styles.editButtonText}>Edit</Text>
+          <Feather name="edit-2" size={18} color={theme.accent} />
         </Pressable>
       </View>
-      <Text style={styles.rowMeta}>{formatTripDate(current.date)}</Text>
+      <Text style={styles.dateText}>{formatTripDate(current.date)}</Text>
 
       <EntityEditForm
         visible={editing}
@@ -103,7 +114,7 @@ export function TripDetailScreen({ trip }: { trip: TTripLog }) {
       />
 
       <TripDetailBody trip={current} />
-    </ScrollView>
+    </ScreenScroll>
   );
 }
 
@@ -111,34 +122,42 @@ function TripDetailBody({ trip }: { trip: TTripLog }) {
   return (
     <>
       {trip.canyons.length > 0 ? (
-        <View style={styles.block}>
-          <Text style={styles.sectionLabel}>Canyons</Text>
-          <Text style={styles.bodyText}>{trip.canyons.map((c) => c.name).join(", ")}</Text>
+        <View>
+          <SectionHeader label="Canyons" />
+          <Card>
+            <Text style={styles.bodyText}>{trip.canyons.map((c) => c.name).join(", ")}</Text>
+          </Card>
         </View>
       ) : null}
 
       {trip.types.length > 0 ? (
-        <View style={styles.block}>
-          <Text style={styles.sectionLabel}>Type</Text>
-          <Text style={styles.bodyText}>{trip.types.join(", ")}</Text>
+        <View>
+          <SectionHeader label="Type" />
+          <Card>
+            <Text style={styles.bodyText}>{trip.types.join(", ")}</Text>
+          </Card>
         </View>
       ) : null}
 
       {trip.notes ? (
-        <View style={styles.block}>
-          <Text style={styles.sectionLabel}>Notes</Text>
-          <Text style={styles.bodyText}>{trip.notes}</Text>
+        <View>
+          <SectionHeader label="Notes" />
+          <Card>
+            <Text style={styles.bodyText}>{trip.notes}</Text>
+          </Card>
         </View>
       ) : null}
 
       {Object.keys(trip.customFields).length > 0 ? (
-        <View style={styles.block}>
-          <Text style={styles.sectionLabel}>Custom fields</Text>
-          {Object.entries(trip.customFields).map(([key, value]) => (
-            <Text key={key} style={styles.bodyText}>
-              {key}: {String(value)}
-            </Text>
-          ))}
+        <View>
+          <SectionHeader label="Custom fields" />
+          <Card style={styles.customFieldsCard}>
+            {Object.entries(trip.customFields).map(([key, value]) => (
+              <Text key={key} style={styles.bodyText}>
+                {key}: {String(value)}
+              </Text>
+            ))}
+          </Card>
         </View>
       ) : null}
     </>
@@ -148,38 +167,17 @@ function TripDetailBody({ trip }: { trip: TTripLog }) {
 const styles = StyleSheet.create({
   list: { flex: 1, backgroundColor: theme.primary },
   listContent: { padding: spacing(2), gap: spacing(1) },
-  row: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radius.md,
-    padding: spacing(1.5),
-    gap: spacing(0.25),
-  },
-  rowPressed: { backgroundColor: "rgba(255,255,255,0.08)" },
-  rowTitle: { color: theme.textPrimary, fontSize: fontSize.base, fontWeight: "600" },
-  rowMeta: { color: theme.textMuted, fontSize: fontSize.sm },
-  detailRoot: { flex: 1, backgroundColor: theme.primary },
-  detailContent: { padding: spacing(2), gap: spacing(2) },
   detailHeader: { flexDirection: "row", alignItems: "flex-start", gap: spacing(1) },
   detailHeaderTitle: { flex: 1 },
-  detailTitle: { fontSize: fontSize.xl, fontWeight: "700", color: theme.textPrimary },
+  detailTitle: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, color: theme.textPrimary },
   editButton: {
     borderWidth: 1,
     borderColor: theme.accent,
     borderRadius: radius.sm,
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.5),
+    padding: spacing(1),
   },
-  editButtonPressed: { backgroundColor: "rgba(255,255,255,0.08)" },
-  editButtonText: { color: theme.accent, fontSize: fontSize.sm, fontWeight: "600" },
-  block: { gap: spacing(0.5) },
-  sectionLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: theme.textMuted,
-  },
-  bodyText: { fontSize: fontSize.base, color: theme.textPrimary, lineHeight: 22 },
+  editButtonPressed: { backgroundColor: theme.bonus2 },
+  dateText: { color: theme.textMuted, fontSize: fontSize.sm },
+  customFieldsCard: { gap: spacing(0.5) },
+  bodyText: { fontSize: fontSize.base, color: theme.textPrimary, lineHeight: lineHeight.body },
 });
