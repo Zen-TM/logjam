@@ -12,9 +12,9 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { messageFromError } from "@logjam/shared";
 
 import {
@@ -29,11 +29,36 @@ import {
   type FriendRequest,
   type UserSearchResult,
 } from "../api/friends";
-import { fontSize, radius, spacing, theme } from "../theme";
-import { ErrorBanner } from "../ui/ErrorBanner";
-import { ErrorState, LoadingState } from "../ui/ScreenStates";
+import { fontSize, spacing, theme } from "../theme";
+import {
+  ErrorBanner,
+  ErrorState,
+  LoadingState,
+  Row,
+  SectionHeader,
+  StatusPill,
+  TextField,
+} from "../ui";
 
 const SEARCH_MIN_CHARS = 3;
+
+// Compact pill-style action used for Accept/Decline/Add/Remove — fits the
+// trailing slot of a Row without the full Button footprint.
+function ActionPill({
+  label,
+  tone,
+  onPress,
+}: {
+  label: string;
+  tone: "accent" | "outline" | "warning";
+  onPress: () => void;
+}) {
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} hitSlop={8}>
+      <StatusPill label={label} tone={tone} />
+    </Pressable>
+  );
+}
 
 export function FriendsScreen() {
   const [friends, setFriends] = useState<Friend[] | null>(null);
@@ -136,48 +161,48 @@ export function FriendsScreen() {
 
           {requests.length > 0 ? (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Requests</Text>
+              <SectionHeader label="Requests" />
               {requests.map((request) => (
-                <View key={request.id} style={styles.row}>
-                  <Text style={styles.username}>{request.requester.username}</Text>
-                  {busyId === request.id ? (
-                    <ActivityIndicator color={theme.accent} />
-                  ) : (
-                    <View style={styles.rowActions}>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() =>
-                          void runAction(
-                            request.id,
-                            () => acceptFriendRequest(request.id),
-                            "Couldn't accept request.",
-                          )
-                        }
-                        style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
-                      >
-                        <Text style={styles.pillText}>Accept</Text>
-                      </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() =>
-                          void runAction(
-                            request.id,
-                            () => declineFriendRequest(request.id),
-                            "Couldn't decline request.",
-                          )
-                        }
-                        style={({ pressed }) => [styles.pillGhost, pressed && styles.pillPressed]}
-                      >
-                        <Text style={styles.pillGhostText}>Decline</Text>
-                      </Pressable>
-                    </View>
-                  )}
-                </View>
+                <Row
+                  key={request.id}
+                  title={request.requester.username}
+                  leading={<Feather name="user" size={20} color={theme.accent} />}
+                  right={
+                    busyId === request.id ? (
+                      <ActivityIndicator color={theme.accent} />
+                    ) : (
+                      <View style={styles.rowActions}>
+                        <ActionPill
+                          label="Accept"
+                          tone="accent"
+                          onPress={() =>
+                            void runAction(
+                              request.id,
+                              () => acceptFriendRequest(request.id),
+                              "Couldn't accept request.",
+                            )
+                          }
+                        />
+                        <ActionPill
+                          label="Decline"
+                          tone="outline"
+                          onPress={() =>
+                            void runAction(
+                              request.id,
+                              () => declineFriendRequest(request.id),
+                              "Couldn't decline request.",
+                            )
+                          }
+                        />
+                      </View>
+                    )
+                  }
+                />
               ))}
             </View>
           ) : null}
 
-          <Text style={styles.sectionLabel}>Friends</Text>
+          <SectionHeader label="Friends" />
           {friends.length === 0 ? (
             <Text style={styles.emptyHint}>
               No friends yet. Search above to send a request.
@@ -186,21 +211,19 @@ export function FriendsScreen() {
         </View>
       }
       renderItem={({ item }) => (
-        <View style={styles.row}>
-          <Text style={styles.username}>{item.username}</Text>
-          {busyId === item.friendshipId ? (
-            <ActivityIndicator color={theme.accent} />
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => confirmRemove(item)}
-              style={({ pressed }) => [styles.pillGhost, pressed && styles.pillPressed]}
-            >
-              <Text style={styles.removeText}>Remove</Text>
-            </Pressable>
-          )}
-        </View>
+        <Row
+          title={item.username}
+          leading={<Feather name="user" size={20} color={theme.accent} />}
+          right={
+            busyId === item.friendshipId ? (
+              <ActivityIndicator color={theme.accent} />
+            ) : (
+              <ActionPill label="Remove" tone="warning" onPress={() => confirmRemove(item)} />
+            )
+          }
+        />
       )}
+      ItemSeparatorComponent={() => <View style={styles.separator} />}
     />
   );
 }
@@ -267,15 +290,12 @@ function AddFriendSection({
 
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionLabel}>Add a friend</Text>
-      <TextInput
-        style={styles.input}
+      <SectionHeader label="Add a friend" />
+      <TextField
+        label="Search by username"
         value={query}
         onChangeText={setQuery}
-        placeholder="Search by username"
-        placeholderTextColor={theme.textMuted}
         autoCapitalize="none"
-        autoCorrect={false}
       />
       {error ? <ErrorBanner message={error} /> : null}
       {searching ? <ActivityIndicator color={theme.accent} style={styles.searchSpinner} /> : null}
@@ -283,22 +303,20 @@ function AddFriendSection({
         const alreadyFriend = existingIds.includes(user.id);
         const sent = sentIds.includes(user.id);
         return (
-          <View key={user.id} style={styles.row}>
-            <Text style={styles.username}>{user.username}</Text>
-            {alreadyFriend ? (
-              <Text style={styles.mutedTag}>Friend</Text>
-            ) : sent ? (
-              <Text style={styles.mutedTag}>Requested</Text>
-            ) : (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => void send(user)}
-                style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
-              >
-                <Text style={styles.pillText}>Add</Text>
-              </Pressable>
-            )}
-          </View>
+          <Row
+            key={user.id}
+            title={user.username}
+            leading={<Feather name="user" size={20} color={theme.accent} />}
+            right={
+              alreadyFriend ? (
+                <StatusPill label="Friend" tone="outline" />
+              ) : sent ? (
+                <StatusPill label="Requested" tone="outline" />
+              ) : (
+                <ActionPill label="Add" tone="accent" onPress={() => void send(user)} />
+              )
+            }
+          />
         );
       })}
     </View>
@@ -310,55 +328,8 @@ const styles = StyleSheet.create({
   content: { padding: spacing(2), gap: spacing(1) },
   header: { gap: spacing(2) },
   section: { gap: spacing(1) },
-  sectionLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: theme.textMuted,
-  },
   emptyHint: { fontSize: fontSize.sm, color: theme.textMuted },
-  input: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    borderRadius: radius.md,
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(1.25),
-    color: theme.textPrimary,
-    fontSize: fontSize.base,
-  },
   searchSpinner: { alignSelf: "flex-start" },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radius.md,
-    padding: spacing(1.5),
-    gap: spacing(1),
-    marginBottom: spacing(1),
-  },
-  username: { flex: 1, color: theme.textPrimary, fontSize: fontSize.base },
   rowActions: { flexDirection: "row", gap: spacing(1) },
-  pill: {
-    backgroundColor: theme.accent,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.75),
-  },
-  pillPressed: { opacity: 0.75 },
-  pillText: { color: theme.primary, fontSize: fontSize.sm, fontWeight: "700" },
-  pillGhost: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.75),
-  },
-  pillGhostText: { color: theme.textPrimary, fontSize: fontSize.sm, fontWeight: "600" },
-  removeText: { color: theme.warning, fontSize: fontSize.sm, fontWeight: "600" },
-  mutedTag: { color: theme.textMuted, fontSize: fontSize.sm },
+  separator: { height: spacing(1) },
 });

@@ -3,11 +3,10 @@
 // The fail-loudly rule made visible — every entry has an explicit action;
 // nothing is silently dropped.
 import { useCallback, useEffect, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 
-import { fontSize, radius, spacing, theme } from "../theme";
-import { Button } from "../ui/Button";
-import { EmptyState } from "../ui/ScreenStates";
+import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { Button, Card, EmptyState, ScreenScroll, SectionHeader } from "../ui";
 import { onMirrorChanged } from "../sync/syncDb";
 import {
   discardParkedOp,
@@ -93,12 +92,12 @@ export function SyncIssuesScreen() {
   }
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+    <ScreenScroll>
       {parked.length > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Parked changes</Text>
+          <SectionHeader label="Parked changes" />
           {parked.map((op) => (
-            <View key={op.seq} style={styles.card}>
+            <Card key={op.seq} style={styles.card}>
               <Text style={styles.cardTitle}>{opTitle(op)}</Text>
               <Text style={styles.cardCause}>
                 {op.state === "deadRemote"
@@ -125,20 +124,20 @@ export function SyncIssuesScreen() {
                   onPress={() => confirmDiscard(op)}
                 />
               </View>
-            </View>
+            </Card>
           ))}
         </View>
       ) : null}
 
       {shelf.length > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Conflict shelf</Text>
+          <SectionHeader label="Conflict shelf" />
           <Text style={styles.sectionHint}>
             Values overwritten by a change made elsewhere. Auto-cleared after 30
             days.
           </Text>
           {shelf.map((entry) => (
-            <View key={entry.id} style={styles.card}>
+            <Card key={entry.id} style={styles.card}>
               <Text style={styles.cardTitle}>
                 {(ENTITY_LABEL[entry.entity] ?? entry.entity)} · {entry.field}
               </Text>
@@ -157,35 +156,19 @@ export function SyncIssuesScreen() {
                   onPress={() => void dismissShelfEntry(entry.id).then(load)}
                 />
               </View>
-            </View>
+            </Card>
           ))}
         </View>
       ) : null}
-    </ScrollView>
+    </ScreenScroll>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.primary },
-  content: { padding: spacing(2), gap: spacing(2) },
   section: { gap: spacing(1) },
-  sectionLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: theme.textMuted,
-  },
   sectionHint: { fontSize: fontSize.xs, color: theme.textMuted },
-  card: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderRadius: radius.md,
-    padding: spacing(1.5),
-    gap: spacing(0.5),
-  },
-  cardTitle: { color: theme.textPrimary, fontSize: fontSize.base, fontWeight: "600" },
+  card: { gap: spacing(0.5) },
+  cardTitle: { color: theme.textPrimary, fontSize: fontSize.base, fontWeight: fontWeight.medium },
   cardCause: { color: theme.textMuted, fontSize: fontSize.sm },
   actionRow: { flexDirection: "row", gap: spacing(1), paddingTop: spacing(0.5) },
 });
