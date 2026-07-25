@@ -3,10 +3,8 @@ import {
   Animated,
   Dimensions,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
   PanResponder,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,7 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { fontSize, fontWeight, radius, scrim, spacing, theme } from "../theme";
+import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "../theme";
 
 // Slide-up modal sheet with a draggable handle + title, capped at 80% height
 // and scrolling within.
@@ -42,25 +40,40 @@ export function BottomSheet({
   visible,
   onClose,
   title,
+  footer,
   children,
 }: {
   visible: boolean;
   onClose: () => void;
   title: string;
+  /**
+   * Pinned below the scroll area — put the sheet's primary action here whenever
+   * its content can outgrow the 80% cap. A confirm button that scrolls away
+   * with a long list leaves the handle as the only way out, and dragging the
+   * handle means "discard", not "done".
+   */
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
-  // The bottom inset clears the nav bar — but the keyboard already covers it,
-  // so keeping it while typing leaves a dead band under the form.
-  const [keyboardUp, setKeyboardUp] = useState(false);
+  // Keyboard handling is done by hand rather than with KeyboardAvoidingView.
+  // KAV's "height" behavior shrinks its own frame, and a sheet that MOUNTS
+  // while the IME is already up inherits that shrunk frame and never gets it
+  // back — the sheet then floats a nav-bar's height above the screen edge with
+  // a stripe of tab bar showing beneath it. Measuring the keyboard ourselves
+  // and lifting by exactly that much is deterministic in both orders.
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
-    const shown = Keyboard.addListener("keyboardDidShow", () => setKeyboardUp(true));
-    const hidden = Keyboard.addListener("keyboardDidHide", () => setKeyboardUp(false));
+    const shown = Keyboard.addListener("keyboardDidShow", (event) =>
+      setKeyboardHeight(event.endCoordinates.height),
+    );
+    const hidden = Keyboard.addListener("keyboardDidHide", () => setKeyboardHeight(0));
     return () => {
       shown.remove();
       hidden.remove();
     };
   }, []);
+  const keyboardUp = keyboardHeight > 0;
   // Kept mounted through the close animation, then torn down.
   const [mounted, setMounted] = useState(visible);
   const progress = useRef(new Animated.Value(0)).current;
@@ -136,16 +149,15 @@ export function BottomSheet({
         <Pressable style={styles.backdropPress} onPress={onClose} />
       </Animated.View>
       {/* Keyboard-aware: a sheet containing a TextInput must ride above the
-          keyboard, or the field it exists to expose is the one thing hidden. */}
-      <KeyboardAvoidingView
-        style={styles.dock}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        pointerEvents="box-none"
-      >
+          keyboard, or the field it exists to expose is the one thing hidden.
+          The bottom inset is dropped while the keyboard is up — the keyboard
+          already covers the nav bar, so keeping it leaves a dead band. */}
+      <View style={styles.dock} pointerEvents="box-none">
         <Animated.View
           style={[
             styles.sheet,
             {
+              marginBottom: keyboardHeight,
               paddingBottom: spacing(3) + (keyboardUp ? 0 : insets.bottom),
               transform: [{ translateY }],
             },
@@ -166,8 +178,9 @@ export function BottomSheet({
           >
             {children}
           </ScrollView>
+          {footer != null ? <View style={styles.footer}>{footer}</View> : null}
         </Animated.View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -198,4 +211,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing(1),
   },
   scrollContent: { paddingBottom: spacing(2) },
+  // Hairline above the pinned action, so it reads as attached to the sheet
+  // rather than floating over the last row.
+  footer: {
+    paddingTop: spacing(1.5),
+    borderTopWidth: 1,
+    borderTopColor: withAlpha(theme.bonus1, 0.2),
+  },
 });

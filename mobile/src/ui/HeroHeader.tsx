@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
+import { IconButton } from "./IconButton";
 
 /**
  * Screen-opening hero — replaces the native stack header on screens that lead
@@ -17,24 +18,45 @@ import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../them
 export function HeroHeader({
   eyebrow,
   title,
+  titleNumberOfLines = 1,
   value,
   valueSuffix,
   action,
+  onBack,
   children,
 }: {
   eyebrow?: string;
   title: string;
+  titleNumberOfLines?: number;
   value?: string;
   valueSuffix?: string;
   action?: React.ReactNode;
+  /**
+   * Back affordance for a hero on a PUSHED screen. A hero replaces the native
+   * header, which means it also has to replace the back button it removed —
+   * a gesture is not a visible way out.
+   */
+  onBack?: () => void;
   children?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.hero, { paddingTop: insets.top + spacing(1.5) }]}>
-      {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+      {onBack ? (
+        <View style={styles.backRow}>
+          <IconButton
+            icon="chevron-left"
+            accessibilityLabel="Back"
+            color={theme.textPrimary}
+            onPress={onBack}
+          />
+          {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+        </View>
+      ) : eyebrow ? (
+        <Text style={styles.eyebrow}>{eyebrow}</Text>
+      ) : null}
       <View style={styles.titleRow}>
-        <Text style={styles.title} numberOfLines={1}>
+        <Text style={styles.title} numberOfLines={titleNumberOfLines}>
           {title}
         </Text>
         {action}
@@ -70,6 +92,9 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
   },
+  // The back button sits on the eyebrow line and hangs into the horizontal
+  // padding, so the title still starts on the screen's text margin.
+  backRow: { flexDirection: "row", alignItems: "center", marginLeft: -spacing(1) },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
   title: {
     flex: 1,

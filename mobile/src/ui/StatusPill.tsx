@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
-import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
 
 // Small status chip. `accent` = filled (active/saved-for-offline), `outline` =
 // neutral bordered (Shared / Online), `warning` = attention (Update / error),
@@ -17,14 +17,27 @@ export function StatusPill({
   label,
   tone = "outline",
   icon,
+  hue,
 }: {
   label: string;
   tone?: PillTone;
   icon?: React.ComponentProps<typeof Feather>["name"];
+  /**
+   * Identity colour override — outlines and letters the pill in `hue` instead
+   * of the tone's colour. For a pill that says *what a thing is* (a trip type)
+   * rather than how it is going; the four tones stay the vocabulary for state.
+   */
+  hue?: string;
 }) {
-  const color = TONE_TEXT[tone];
+  const color = hue ?? TONE_TEXT[tone];
   return (
-    <View style={[styles.base, styles[`${tone}Box`]]}>
+    <View
+      style={[
+        styles.base,
+        styles[`${tone}Box`],
+        hue != null && { borderWidth: 1, borderColor: withAlpha(hue, 0.6), backgroundColor: "transparent" },
+      ]}
+    >
       {icon ? <Feather name={icon} size={12} color={color} /> : null}
       <Text style={[styles.label, { color }]} numberOfLines={1}>
         {label}

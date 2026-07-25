@@ -32,8 +32,13 @@ export const lineHeight = { body: 22, tight: 18 } as const;
 
 // Modal/sheet scrims — the only intentional black-alpha overlays. Everything
 // else derives from the scheme. `light` for bottom sheets, `heavy` for
-// full-screen edit/image modals.
-export const scrim = { light: "rgba(0,0,0,0.5)", heavy: "rgba(0,0,0,0.6)" } as const;
+// full-screen edit modals, `photo` for the full-res photo viewer (a photo is
+// judged against black, and any scheme tint here reads as a colour cast).
+export const scrim = {
+  light: "rgba(0,0,0,0.5)",
+  heavy: "rgba(0,0,0,0.6)",
+  photo: "rgba(0,0,0,0.92)",
+} as const;
 
 // Default touch-target padding for small text/icon actions.
 export const hitSlop = 8;

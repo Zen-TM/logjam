@@ -1,7 +1,9 @@
 # Mobile design conventions
 
-The house style for the Logjam RN app. **Reference implementation:
-`src/saved/SavedScreen.tsx`** — when a rule here is ambiguous, read that screen.
+The house style for the Logjam RN app. **Reference implementations:
+`src/saved/SavedScreen.tsx`** (inventory: hero metric, categories, per-item
+actions) and **`src/logs/`** (records: chronology, multi-axis filtering, a
+create/edit form in a sheet). When a rule here is ambiguous, read those.
 
 Scope: this supersedes the earlier "everything is a `Card` in a stack of
 `SectionHeader` groups" pattern still present on some screens. Rebuild screens
@@ -19,7 +21,9 @@ answer, and answers it before any list appears.
 
 - Saved → "what have I actually got on this phone, and what is it costing me?"
 - A canyon → "what am I walking into?"
-- Logs → "what have I done?"
+- Logs → "what have I done?" (a count, a twelve-month activity spark, a
+  chronological list)
+- A trip → "what did I do that day?"
 
 That answer is the **hero**, not a title bar. A screen whose top edge is a
 generic label with content dumped underneath is the pattern being replaced.
@@ -48,6 +52,30 @@ BottomSheet(s)      acquisition + per-item actions
   as one.
 - Screens that are genuinely a plain form or a settings list keep
   `Screen`/`ScreenScroll` + the native header. Don't force a hero onto them.
+- **A hero on a pushed screen owns the back button** (`HeroHeader.onBack`).
+  Turning off the native header removes the back affordance too, and the
+  swipe/hardware gesture is not a visible way out.
+
+### Chrome stays constant; secondary filters stay collapsed
+
+Pinned chrome is a tax on every scroll, so a screen gets ONE pinned filter axis
+— the one you flick between (Saved: category; Logs: activity type). Precise
+filters (free text, a date range) hide behind a hero `IconButton` that reveals
+them **in a slot the hero already occupies**: Logs swaps the activity spark for
+the search row, so opening search doesn't shove the list down, and the spark —
+retrospective decoration — isn't competing with a hunt for one trip.
+
+An active hidden filter must announce itself: the reveal button renders
+`filled`, and a set date range gets a dismissible summary strip above the list.
+A filter you can't see is a bug report waiting to happen.
+
+### Chronological lists group by time
+
+Filters replace *category* sections (above), not date headers. A record list
+gets a sticky year header carrying its own tally ("2025 · 16 trips"): it is an
+ordering aid inside one filtered list, not a second way to pick a subset. Use
+`SectionList` so the header stays pinned while its own rows pass under it, and
+give the header the page colour so rows don't ghost through it.
 
 ### Filters over stacked sections
 
@@ -81,6 +109,36 @@ primary.
 
 `region` intentionally aliases the active scheme's `accent`, so the biggest and
 most common class always feels native to the chosen theme.
+
+### Open vocabularies hash their hue from the label
+
+Some "kinds" aren't a fixed set — trip types are a seed list the user extends
+with free text. Those can't have an exhaustive map, so (see
+`src/logs/tripTypeMeta.ts`):
+
+- The **seeded** entries get a fixed identity, and the canonical one
+  (`canyoning`) takes the scheme accent, exactly as `assetHue.region` does.
+- **User-typed** entries hash the LABEL into a fixed palette — never an index
+  into a sorted list, which would repaint every custom kind the moment another
+  one sorts ahead of it. Hashing keeps a colour stable across sessions,
+  reorderings and devices.
+- A record with several kinds is represented by its **first** (the user's own
+  ordering), so a picker that reorders selected chips must order them by
+  selection, not by vocabulary — otherwise the row's glyph changes for reasons
+  the user can't see.
+- Stored casing is the user's own; capitalise for display only
+  (`tripTypeLabel`). Writing the display form back creates exactly the
+  case-variant duplicate the API rejects.
+
+### Tallies answer "what would I get", and empty chips stay put
+
+A filter chip's count is computed with **every axis except its own** applied, so
+it predicts the result of tapping it rather than restating the current view. A
+chip the other axes have emptied is rendered `disabled` — still in place, but
+not a tap into a dead end. Never remove it: a rail that reshuffles under the
+thumb on every keystroke is worse than a greyed chip. Same rule for the
+synthetic buckets ("No type"): existence comes from the whole set, the count
+from the other axes.
 
 ## 4. Type, shape, depth
 
@@ -158,6 +216,23 @@ because each was a bug once:
   (`requestAnimationFrame`), **not** `autoFocus`, which runs before attach. With
   the sheet already open and focused, the keyboard then rises *with* the form
   appearing.
+- **Keyboard offset is measured, not delegated.** The sheet lifts by the
+  keyboard's own reported height; it does not use `KeyboardAvoidingView`. KAV's
+  `height` behavior shrinks its own frame, and a sheet that MOUNTS while the IME
+  is already up inherits the shrunk frame and never gets it back — it then
+  floats a nav-bar's height off the screen edge with a stripe of tab bar showing
+  underneath. (`Keyboard.dismiss()` before opening is not a fix: dismissal is
+  async, so the sheet still mounts into the shrunk frame.)
+- **A sheet whose content can outgrow the 80% cap puts its primary action in
+  `footer`**, pinned below the scroll area. A Done button that scrolls away
+  behind a long list leaves the handle as the only exit — and the handle means
+  *discard*, not *done*.
+- **A sub-mode backs out to its parent, not out of the sheet.** When a sheet
+  swaps content (form → date picker → canyon picker), route the drag and the
+  backdrop tap to "return to the form" while a sub-mode is open. Otherwise the
+  gesture that means "go back one step" throws away everything the user typed.
+  The sheet's title changes with the mode, so which step you are on is never a
+  guess.
 
 **Toasts** (`Toast`), not inline banners, for the outcome of an action: an
 inline card reflows the list under the user's thumb and then lingers with no
@@ -196,6 +271,17 @@ row with a retry — it persists because the problem persists.
 - **Open editors don't outlive their context.** Changing filter or leaving the
   tab drops an in-progress rename — a form that survives the thing it was
   editing being scrolled out of view is a stale prompt, not a resumed task.
+- **One form per entity, create and edit.** `TripEditSheet` is the same
+  component in both modes: same fields, same validation, same derived-title
+  preview, with only the sheet title and the submit label differing. Two forms
+  drift, and the one the user reaches less often is the one that rots.
+- **An edit pushes only the fields that changed.** Diff against the entity you
+  seeded from and send the difference (see `save()` in `TripEditSheet`). Sending
+  the whole form makes every save a write to every column, which under
+  field-scoped LWW clobbers a concurrent edit to a field the user never touched.
+- **A chart is not an affordance.** `ActivitySpark` is deliberately
+  non-interactive because it exposes no filter — same rule as the drag handle,
+  read the other way: don't render something that looks tappable unless it is.
 
 ## 8. States
 
@@ -229,10 +315,25 @@ driven by scroll offset — a fade on only one end still leaves a hard-sliced ch
 at the other, and a fade shown at rest dims a chip with nothing behind it. Use a
 real gradient for any fade; stacked alpha steps band visibly.
 
-Current kit: `Button` · `CapacityBar` · `Card` · `HeroHeader` · `IconButton` ·
-`Row` · `Screen`/`ScreenScroll` · `ScreenStates` · `SectionHeader` ·
+**One visual, one component.** `Chip` is the single pill primitive behind both
+`SegmentedControl` (single-select rail) and `ChipPicker` (multi-select
+vocabulary); `MediaStrip` is the single photo surface behind both detail
+screens. When a second screen needs something the first already draws, lift it
+into the kit rather than copying the styles — two stylesheets for one visual is
+the drift itself, not a risk of it.
+
+Native pickers are not automatically the lazy option. `DatePicker` is a themed
+month grid rather than the Android dialog because a trip log needs the same
+picker for one date and for both ends of a range: the OS dialog can't be tinted
+to the scheme and would put two or three different-looking pickers on one
+screen. One themed surface, reused three times, no native dependency.
+
+Current kit: `ActivitySpark` · `BottomSheet` · `Button` · `CapacityBar` ·
+`Card` · `Chip` · `ChipPicker` · `DatePicker` · `EntityEditForm` ·
+`ErrorBanner` · `HeroHeader` · `IconButton` · `MediaStrip` · `Row` ·
+`Screen`/`ScreenScroll` · `ScreenStates` · `SectionHeader` ·
 `SegmentedControl` · `StatGrid` · `StatusPill` · `TextField` · `Toast` ·
-`Toggle` · `BottomSheet` · `EntityEditForm` · `ErrorBanner`.
+`Toggle`.
 
 ## 10. Privacy in the UI
 
@@ -241,3 +342,14 @@ labels ("Offline map region"), user-supplied names, sizes and dates — **never
 coordinates, bboxes or derived location detail**, however useful it would look.
 When a label would have to leak location to be informative, the generic label
 wins.
+
+**Failure copy is ours, not the error's.** A caught error goes to `console.error`
+and the user gets a sentence we wrote ("Couldn't save this trip."). Interpolating
+an error message into a toast is how a canyon name reaches a screenshot.
+
+**Nothing is autosaved outside the app's own storage.** The web keeps a
+half-written trip in `localStorage`; mobile deliberately has no equivalent —
+form state lives in component state and goes out only through the outbox's
+authed push. The OS doesn't reclaim a foreground sheet the way a browser evicts
+a tab, so the draft would be a persistent copy of canyon names and notes bought
+for no benefit.

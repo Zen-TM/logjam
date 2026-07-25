@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import type { Feather } from "@expo/vector-icons";
 
-import { fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
+import { spacing, theme, withAlpha } from "../theme";
+import { Chip } from "./Chip";
 
 export type SegmentOption<T extends string> = {
   value: T;
@@ -20,6 +20,8 @@ export type SegmentOption<T extends string> = {
   count?: number;
   /** Optional identity hue — tints the chip's border/label when active. */
   hue?: string;
+  /** Optional leading glyph, for a rail whose options have a kind. */
+  icon?: React.ComponentProps<typeof Feather>["name"];
 };
 
 // Chip group for a single-select choice (basemap picker, filters, category
@@ -41,42 +43,18 @@ export function SegmentedControl<T extends string>({
   onChange: (next: T) => void;
   scroll?: boolean;
 }) {
-  const chips = options.map((option) => {
-    const active = option.value === value;
-    const tint = option.hue ?? theme.accent;
-    return (
-      <Pressable
-        key={option.value}
-        accessibilityRole="button"
-        accessibilityState={{ selected: active, disabled: option.disabled }}
-        disabled={option.disabled}
-        onPress={() => onChange(option.value)}
-        style={({ pressed }) => [
-          styles.chip,
-          active && { backgroundColor: tint, borderColor: tint },
-          pressed && styles.chipPressed,
-          option.disabled && styles.chipDisabled,
-        ]}
-      >
-        <Text
-          style={[
-            styles.label,
-            active && styles.labelActive,
-            option.disabled && styles.labelDisabled,
-          ]}
-        >
-          {option.label}
-        </Text>
-        {option.count != null ? (
-          <View style={[styles.badge, active && styles.badgeActive]}>
-            <Text style={[styles.badgeText, active && styles.badgeTextActive]}>
-              {option.count}
-            </Text>
-          </View>
-        ) : null}
-      </Pressable>
-    );
-  });
+  const chips = options.map((option) => (
+    <Chip
+      key={option.value}
+      label={option.label}
+      active={option.value === value}
+      disabled={option.disabled}
+      hue={option.hue}
+      icon={option.icon}
+      count={option.count}
+      onPress={() => onChange(option.value)}
+    />
+  ));
 
   if (!scroll) return <View style={styles.group}>{chips}</View>;
   return <Rail value={value}>{chips}</Rail>;
@@ -172,31 +150,4 @@ const styles = StyleSheet.create({
   fade: { position: "absolute", top: 0, bottom: 0, width: spacing(6) },
   fadeStart: { left: 0 },
   fadeEnd: { right: 0 },
-  chip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(0.75),
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: surface.border,
-    backgroundColor: surface.card,
-    paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.75),
-    minHeight: 36,
-  },
-  chipPressed: { opacity: 0.75 },
-  chipDisabled: { opacity: 0.4 },
-  label: { color: theme.textPrimary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
-  labelActive: { color: theme.primary },
-  labelDisabled: { color: theme.textMuted },
-  badge: {
-    minWidth: 20,
-    paddingHorizontal: spacing(0.5),
-    borderRadius: radius.pill,
-    backgroundColor: withAlpha(theme.textPrimary, 0.12),
-    alignItems: "center",
-  },
-  badgeActive: { backgroundColor: withAlpha(theme.primary, 0.2) },
-  badgeText: { color: theme.textMuted, fontSize: fontSize.xs, fontWeight: fontWeight.medium },
-  badgeTextActive: { color: theme.primary },
 });

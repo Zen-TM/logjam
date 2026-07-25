@@ -15,7 +15,6 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { needsReconsent } from "@logjam/shared";
 
 import { fetchCurrentUser, getUnreadNotificationCount, useApiQuery } from "./api/queries";
-import type { TTripLog } from "./api/types";
 import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
 import { registerSyncTriggers } from "./sync/syncEngine";
@@ -32,7 +31,9 @@ import { MoreScreen } from "./screens/MoreScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { SyncIssuesScreen } from "./screens/SyncIssuesScreen";
-import { TripDetailScreen, TripsScreen } from "./screens/TripsScreen";
+import type { MirrorTrip } from "./sync/mirrorStore";
+import { LogsScreen } from "./logs/LogsScreen";
+import { TripDetailScreen } from "./logs/TripDetailScreen";
 import { LoadingState } from "./ui/ScreenStates";
 
 const navigationTheme = {
@@ -64,7 +65,8 @@ type CanyonsStackParams = {
 
 type TripsStackParams = {
   TripList: undefined;
-  TripDetail: { trip: TTripLog };
+  TripDetail: { trip: MirrorTrip };
+  TripCanyonDetail: { canyonId: string; name: string };
 };
 
 type SavedStackParams = {
@@ -162,13 +164,29 @@ function CanyonsStackNav() {
 function TripsStackNav() {
   return (
     <TripsStack.Navigator screenOptions={stackScreenOptions}>
-      <TripsStack.Screen name="TripList" options={{ title: "Logs" }}>
+      {/* Logs and trip detail both carry their own HeroHeader, so the native
+          header is off and the hero owns the back affordance (DESIGN.md §2). */}
+      <TripsStack.Screen name="TripList" options={{ headerShown: false }}>
         {({ navigation }) => (
-          <TripsScreen onOpenTrip={(trip) => navigation.navigate("TripDetail", { trip })} />
+          <LogsScreen onOpenTrip={(trip) => navigation.navigate("TripDetail", { trip })} />
         )}
       </TripsStack.Screen>
-      <TripsStack.Screen name="TripDetail" options={{ title: "Trip" }}>
-        {({ route }) => <TripDetailScreen trip={route.params.trip} />}
+      <TripsStack.Screen name="TripDetail" options={{ headerShown: false }}>
+        {({ navigation, route }) => (
+          <TripDetailScreen
+            trip={route.params.trip}
+            onBack={() => navigation.goBack()}
+            onOpenCanyon={(canyonId, name) =>
+              navigation.navigate("TripCanyonDetail", { canyonId, name })
+            }
+          />
+        )}
+      </TripsStack.Screen>
+      <TripsStack.Screen
+        name="TripCanyonDetail"
+        options={({ route }) => ({ title: route.params.name })}
+      >
+        {({ route }) => <CanyonDetailScreen canyonId={route.params.canyonId} />}
       </TripsStack.Screen>
     </TripsStack.Navigator>
   );

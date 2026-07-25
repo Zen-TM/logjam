@@ -177,17 +177,142 @@ export async function updateCanyonLocal(
   await enqueueUpdate("canyon", "canyons", id, fields, CANYON_UPDATE_COLUMNS);
 }
 
-const TRIP_UPDATE_COLUMNS: Record<string, string> = {
+const TRIP_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   date: "date",
   displayName: "display_name",
   notes: "notes",
+  types: {
+    column: "types_json",
+    encode: (value) => JSON.stringify(value ?? []),
+    decode: (raw) => JSON.parse((raw as string | null) ?? "[]"),
+  },
 };
 
+/** A trip's canyon links, ordered — order drives the derived title. */
+export type TripCanyonLink = { id: string; name: string };
+
+export type TripDraftFields = {
+  /** UTC-midnight ISO instant for a date-only value (CH-001). */
+  date: string;
+  displayName?: string | null;
+  notes?: string | null;
+  types?: string[];
+  /** Ordered; the mirror needs the names, the push op sends ids only. */
+  canyons?: TripCanyonLink[];
+};
+
+/**
+ * The canyon-links column spec. The push op carries ids (`canyonIds`, what the
+ * server resolves), but the mirror column stores `{id, name}` because the
+ * derived trip title is built from names offline. So the caller has to supply
+ * the names it already had on screen — there is no id→name lookup down here,
+ * and a blank name would render a blank trip title.
+ */
+function canyonLinksColumn(links: TripCanyonLink[]): ColumnSpec {
+  const nameById = new Map(links.map((link) => [link.id, link.name]));
+  return {
+    column: "canyons_json",
+    encode: (value) =>
+      JSON.stringify(
+        ((value ?? []) as string[]).map((canyonId) => {
+          const name = nameById.get(canyonId);
+          if (name == null) {
+            throw new Error("Trip canyon link is missing its name for the mirror row");
+          }
+          return { id: canyonId, name };
+        }),
+      ),
+    decode: (raw) =>
+      (JSON.parse((raw as string | null) ?? "[]") as TripCanyonLink[]).map(
+        (link) => link.id,
+      ),
+  };
+}
+
+/**
+ * Field-scoped trip update. `canyons` is translated into the `canyonIds` op
+ * field; every other key passes through as-is.
+ */
 export async function updateTripLocal(
   id: string,
-  fields: Record<string, unknown>,
+  fields: Omit<Partial<TripDraftFields>, "canyons"> & { canyons?: TripCanyonLink[] },
 ): Promise<void> {
-  await enqueueUpdate("tripLog", "trip_logs", id, fields, TRIP_UPDATE_COLUMNS);
+  const { canyons, ...scalar } = fields;
+  const columns: Record<string, ColumnSpec> = { ...TRIP_UPDATE_COLUMNS };
+  const opFields: Record<string, unknown> = { ...scalar };
+  if (canyons !== undefined) {
+    columns.canyonIds = canyonLinksColumn(canyons);
+    opFields.canyonIds = canyons.map((link) => link.id);
+  }
+  await enqueueUpdate("tripLog", "trip_logs", id, opFields, columns);
+}
+
+/**
+ * Log a trip offline: optimistic mirror row + a tripLog.create op. Mirrors
+ * createWaypointLocal — every field is locally dirty until the create flushes,
+ * and the server row replaces the provisional timestamps.
+ *
+ * `types` is stored exactly as given: the caller applies
+ * `enforceCanyoningTag` (shared) so the tag list it displayed is the one the
+ * server will store.
+ */
+export async function createTripLocal(draft: TripDraftFields): Promise<string> {
+  const id = mintUuid();
+  const now = new Date().toISOString();
+  const canyons = draft.canyons ?? [];
+  const types = draft.types ?? [];
+  const fields: Record<string, unknown> = {
+    date: draft.date,
+    types,
+    canyonIds: canyons.map((link) => link.id),
+    ...(draft.displayName != null && { displayName: draft.displayName }),
+    ...(draft.notes != null && { notes: draft.notes }),
+  };
+
+  const db = await getSyncDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO trip_logs
+         (id, date, display_name, types_json, notes, custom_fields_json,
+          canyons_json, created_at, updated_at, extra_json, dirty_fields_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+      id,
+      draft.date,
+      draft.displayName ?? null,
+      JSON.stringify(types),
+      draft.notes ?? null,
+      JSON.stringify({}),
+      JSON.stringify(canyons),
+      now,
+      now,
+      JSON.stringify(Object.keys(fields)),
+    );
+    await appendOp(db, {
+      opId: mintUuid(),
+      entity: "tripLog",
+      op: "create",
+      id,
+      fields,
+    });
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+  return id;
+}
+
+export async function deleteTripLocal(id: string): Promise<void> {
+  const db = await getSyncDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync("DELETE FROM trip_logs WHERE id = ?", id);
+    await appendOp(db, {
+      opId: mintUuid(),
+      entity: "tripLog",
+      op: "delete",
+      id,
+    });
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
 }
 
 // ── notification markRead surface ────────────────────────────────────────────
@@ -273,6 +398,21 @@ async function appendOp(db: Db, incoming: SyncPushOp): Promise<void> {
 let pendingBaseSnapshot: Record<string, unknown> = {};
 
 /**
+ * How an op field maps onto its mirror column. A bare string is the scalar
+ * case (column name, value bound raw). Array/object fields need the pair:
+ * SQLite can't bind them, and the conflict base snapshot has to be read back
+ * in the op's own shape (§6 compares base against the server's field values,
+ * not against our JSON encoding).
+ */
+type ColumnSpec =
+  | string
+  | {
+      column: string;
+      encode: (value: unknown) => string | number | null;
+      decode: (raw: unknown) => unknown;
+    };
+
+/**
  * Generic update enqueue: snapshot base values for newly-dirtied fields
  * (server-confirmed = current column value when the field isn't already
  * dirty), materialize the new values into the mirror columns, extend
@@ -283,7 +423,7 @@ async function enqueueUpdate(
   table: string,
   id: string,
   fields: Record<string, unknown>,
-  columnByField: Record<string, string>,
+  columnByField: Record<string, ColumnSpec>,
 ): Promise<void> {
   const db = await getSyncDb();
   await db.withTransactionAsync(async () => {
@@ -296,10 +436,20 @@ async function enqueueUpdate(
     const dirtyNow = new Set(
       JSON.parse((current.dirty_fields_json as string) ?? "[]") as string[],
     );
+    const specFor = (field: string): ColumnSpec => {
+      const spec = columnByField[field];
+      if (!spec) throw new Error(`Unknown ${entity} field: ${field}`);
+      return spec;
+    };
+
     const baseSnapshot: Record<string, unknown> = {};
     for (const field of Object.keys(fields)) {
       if (!dirtyNow.has(field)) {
-        baseSnapshot[field] = current[columnByField[field]] ?? null;
+        const spec = specFor(field);
+        baseSnapshot[field] =
+          typeof spec === "string"
+            ? current[spec] ?? null
+            : spec.decode(current[spec.column]);
       }
       dirtyNow.add(field);
     }
@@ -308,10 +458,9 @@ async function enqueueUpdate(
     const assignments: string[] = [];
     const values: unknown[] = [];
     for (const [field, value] of Object.entries(fields)) {
-      const column = columnByField[field];
-      if (!column) throw new Error(`Unknown ${entity} field: ${field}`);
-      assignments.push(`${column} = ?`);
-      values.push(value ?? null);
+      const spec = specFor(field);
+      assignments.push(`${typeof spec === "string" ? spec : spec.column} = ?`);
+      values.push(typeof spec === "string" ? value ?? null : spec.encode(value));
     }
     assignments.push("dirty_fields_json = ?");
     values.push(JSON.stringify([...dirtyNow]));

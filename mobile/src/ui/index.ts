@@ -1,9 +1,15 @@
 // Kit barrel — screens import components from "../ui" rather than reaching into
 // individual files. Keep this the single public surface of the UI kit.
+export { ActivitySpark, type ActivityBucket } from "./ActivitySpark";
 export { Button } from "./Button";
 export { CapacityBar, type CapacitySegment } from "./CapacityBar";
 export { Card } from "./Card";
+export { Chip } from "./Chip";
+export { ChipPicker, type ChipOption } from "./ChipPicker";
+export { DatePicker } from "./DatePicker";
 export { HeroHeader } from "./HeroHeader";
+export { MediaStrip } from "./MediaStrip";
+export { toDateKey, fromDateKey } from "./monthGrid";
 export { IconButton } from "./IconButton";
 export { SectionHeader } from "./SectionHeader";
 export { StatusPill } from "./StatusPill";

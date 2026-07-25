@@ -1,15 +1,16 @@
 import { useState, useMemo } from "react";
 import { useStoredState } from "../../../useStoredState";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
+import {
+  distinctTripTypes,
+  filterTrips,
+  NO_TYPE_FILTER_VALUE,
+  type TripLogCustomFieldDef,
+} from "@logjam/shared";
 import type { TCanyon, TTripLog } from "../../../canyonUtils";
 import { tripTitle } from "../../../canyonUtils";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import classes from "./TripLogsPanel.module.css";
-
-// The type-filter dropdown's "no type set" bucket. Distinct from "" (All),
-// which never matches an actual trip.types entry.
-const NO_TYPE_FILTER_VALUE = "__no_type__";
 
 function TripLogsPanel({
   tripLogs,
@@ -61,34 +62,12 @@ function TripLogsPanel({
     () => tripLogs.flatMap((t) => t.types),
     [tripLogs],
   );
-  const distinctTypes = useMemo(
-    () => Array.from(new Set(existingTripTypes)).sort((a, b) => a.localeCompare(b)),
-    [existingTripTypes],
-  );
+  const distinctTypes = useMemo(() => distinctTripTypes(tripLogs), [tripLogs]);
 
-  const filtered = useMemo(() => {
-    return tripLogs.filter((t) => {
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        const nameMatch =
-          t.canyons.some((c) => c.name.toLowerCase().includes(q)) ||
-          t.displayName?.toLowerCase().includes(q);
-        if (!nameMatch) return false;
-      }
-      if (dateFrom) {
-        if (new Date(t.date) < new Date(dateFrom)) return false;
-      }
-      if (dateTo) {
-        if (new Date(t.date) > new Date(dateTo)) return false;
-      }
-      if (typeFilter === NO_TYPE_FILTER_VALUE) {
-        if (t.types.length > 0) return false;
-      } else if (typeFilter) {
-        if (!t.types.includes(typeFilter)) return false;
-      }
-      return true;
-    });
-  }, [tripLogs, search, dateFrom, dateTo, typeFilter]);
+  const filtered = useMemo(
+    () => filterTrips(tripLogs, { search, dateFrom, dateTo, type: typeFilter }),
+    [tripLogs, search, dateFrom, dateTo, typeFilter],
+  );
 
   return (
     <div className={classes.panel}>

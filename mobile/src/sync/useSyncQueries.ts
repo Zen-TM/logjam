@@ -115,10 +115,15 @@ export function useMirrorWaypoints(): MirrorQueryState<MirrorWaypoint[]> {
   return useMirrorQuery(readWaypoints);
 }
 
-export function useMirrorCanyonMedia(
-  canyonId: string,
+/** Media attached to one canyon or trip, pendingUpload rows included. */
+export function useMirrorMedia(
+  linkedType: "canyon" | "tripLog",
+  linkedId: string,
 ): MirrorQueryState<MirrorMedia[]> {
-  const read = useCallback(() => listMediaForLinked("canyon", canyonId), [canyonId]);
+  const read = useCallback(
+    () => listMediaForLinked(linkedType, linkedId),
+    [linkedType, linkedId],
+  );
   return useMirrorQuery(read);
 }
 
