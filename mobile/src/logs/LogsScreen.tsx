@@ -12,7 +12,7 @@
 // already holds on this device. None of it is logged, and the failure paths
 // here print our own copy rather than an error string that might embed a
 // canyon name.
-import { useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -36,7 +36,12 @@ import { tripTitle } from "../api/tripTitle";
 import { fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
-import { useMirrorCanyons, useMirrorTrips, useSyncStatus } from "../sync/useSyncQueries";
+import {
+  useMirrorCanyons,
+  useMirrorMediaCounts,
+  useMirrorTrips,
+  useSyncStatus,
+} from "../sync/useSyncQueries";
 import {
   ActivitySpark,
   BottomSheet,
@@ -70,6 +75,7 @@ const ALL_TYPES = "";
 export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => void }) {
   const query = useMirrorTrips();
   const canyonsQuery = useMirrorCanyons();
+  const attachmentCounts = useMirrorMediaCounts("tripLog");
   const syncStatus = useSyncStatus();
   // Memoised so the many derived useMemos below don't recompute on every render.
   const trips = useMemo(() => query.data ?? [], [query.data]);
@@ -139,9 +145,16 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
     const untyped = withoutType.filter((trip) => trip.types.length === 0).length;
     return [
       { value: ALL_TYPES, label: "All", count: withoutType.length },
-      ...distinct.map((type) => {
-        const count = withoutType.filter((trip) => trip.types.includes(type)).length;
-        return {
+      // Busiest activity first: the rail's left end is the reachable end, and
+      // a logbook's answer to "which of these do I actually do" is the tally.
+      // Ties break alphabetically so the order is stable, not arbitrary.
+      ...distinct
+        .map((type) => ({
+          type,
+          count: withoutType.filter((trip) => trip.types.includes(type)).length,
+        }))
+        .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type))
+        .map(({ type, count }) => ({
           value: type,
           label: tripTypeLabel(type),
           hue: tripTypeMeta(type).hue,
@@ -151,8 +164,7 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
           // tapped into a dead end — removing it instead would make the rail
           // shuffle under the thumb on every keystroke.
           disabled: count === 0 && typeFilter !== type,
-        };
-      }),
+        })),
       ...(anyUntyped
         ? [
             {
@@ -174,6 +186,35 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
   const menuTrip = trips.find((trip) => trip.id === menuTripId) ?? null;
   const filtering = hasActiveTripFilter(criteria);
   const rangeSet = dateFrom != null || dateTo != null;
+
+  // Stable identities so the memoised rows below never re-render on a state
+  // change that has nothing to do with them.
+  const openTrip = useCallback((trip: MirrorTrip) => onOpenTrip(trip), [onOpenTrip]);
+  const openMenu = useCallback((trip: MirrorTrip) => setMenuTripId(trip.id), []);
+  const keyExtractor = useCallback((trip: MirrorTrip) => trip.id, []);
+  const counts = attachmentCounts.data;
+  const renderItem = useCallback(
+    ({ item }: { item: MirrorTrip }) => (
+      <TripRow
+        trip={item}
+        attachments={counts?.[item.id] ?? 0}
+        onOpen={openTrip}
+        onMenu={openMenu}
+      />
+    ),
+    [counts, openMenu, openTrip],
+  );
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: { title: string; count: number } }) => (
+      <View style={styles.yearHeader}>
+        <Text style={styles.yearLabel}>{section.title}</Text>
+        <Text style={styles.yearCount}>
+          {section.count === 1 ? "1 trip" : `${section.count} trips`}
+        </Text>
+      </View>
+    ),
+    [],
+  );
 
   const clearFind = useCallback(() => {
     setSearch("");
@@ -315,7 +356,16 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
         style={styles.list}
         contentContainerStyle={styles.listContent}
         sections={sections}
-        keyExtractor={(item) => item.id}
+        keyExtractor={keyExtractor}
+        // A logbook is append-only and long. The defaults keep roughly 21
+        // screens of rows mounted, which for a few hundred trips means EVERY
+        // row re-renders on any state change — tapping the search icon was
+        // paying for 100+ row renders. Narrow the window and let the memoised
+        // rows below skip the rest.
+        initialNumToRender={12}
+        maxToRenderPerBatch={8}
+        windowSize={5}
+        removeClippedSubviews
         refreshControl={
           <RefreshControl
             refreshing={syncStatus.state === "syncing"}
@@ -333,21 +383,8 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
             }}
           />
         }
-        renderSectionHeader={({ section }) => (
-          <View style={styles.yearHeader}>
-            <Text style={styles.yearLabel}>{section.title}</Text>
-            <Text style={styles.yearCount}>
-              {section.count === 1 ? "1 trip" : `${section.count} trips`}
-            </Text>
-          </View>
-        )}
-        renderItem={({ item }) => (
-          <TripRow
-            trip={item}
-            onOpen={() => onOpenTrip(item)}
-            onMenu={() => setMenuTripId(item.id)}
-          />
-        )}
+        renderSectionHeader={renderSectionHeader}
+        renderItem={renderItem}
       />
 
       {/* Per-trip actions, titled with the trip so a mis-tap can't destroy the
@@ -469,17 +506,21 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
   );
 }
 
-function TripRow({
+// Memoised: the list holds hundreds of these, and a hero/filter state change
+// must not re-render a row whose trip is untouched. Handlers take the trip back
+// rather than closing over it, so their identity stays stable across renders.
+const TripRow = memo(function TripRow({
   trip,
+  attachments,
   onOpen,
   onMenu,
 }: {
   trip: MirrorTrip;
-  onOpen: () => void;
-  onMenu: () => void;
+  attachments: number;
+  onOpen: (trip: MirrorTrip) => void;
+  onMenu: (trip: MirrorTrip) => void;
 }) {
   const meta = tripTypeMeta(primaryTripType(trip.types));
-  const extraTypes = trip.types.length - 1;
   return (
     <Row
       icon={meta.icon}
@@ -492,25 +533,37 @@ function TripRow({
       ]
         .filter(Boolean)
         .join(" · ")}
-      onPress={onOpen}
+      onPress={() => onOpen(trip)}
       right={
         <View style={styles.rowTrailing}>
-          {/* Glanceable extras, not sentences: the subtitle is one line and
-              "+1 more type" was the clause that got ellipsised out of it. */}
-          {extraTypes > 0 ? <Text style={styles.extraTypes}>+{extraTypes}</Text> : null}
+          {/* What is IN this entry, each glyph labelled by its own count where
+              a count means something. A bare "+2" (it used to mean extra trip
+              types) reads as an unexplained number — the extra types are
+              already implied by the rail and shown in full on the trip. */}
+          {attachments > 0 ? (
+            <View style={styles.badge}>
+              <Feather name="paperclip" size={12} color={theme.textMuted} />
+              <Text style={styles.badgeText}>{attachments}</Text>
+            </View>
+          ) : null}
           {trip.notes ? (
-            <Feather name="align-left" size={14} color={theme.textMuted} />
+            <Feather
+              name="align-left"
+              size={14}
+              color={theme.textMuted}
+              accessibilityLabel="Has notes"
+            />
           ) : null}
           <IconButton
             icon="more-vertical"
             accessibilityLabel={`Actions for ${tripTitle(trip)}`}
-            onPress={onMenu}
+            onPress={() => onMenu(trip)}
           />
         </View>
       }
     />
   );
-}
+});
 
 /** Per-state empty panel: nothing logged yet is a different problem from a
  * filter that excludes everything, and each has its own way out. */
@@ -593,7 +646,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.regular,
   },
   // The rail's bottom pad is the gap the list scrolls against (DESIGN.md §2).
-  rail: { paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
+  rail: { paddingLeft: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
   rangeNote: {
     flexDirection: "row",
     alignItems: "center",
@@ -625,7 +678,8 @@ const styles = StyleSheet.create({
   },
   yearCount: { color: theme.textMuted, fontSize: fontSize.xs },
   rowTrailing: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
-  extraTypes: { color: theme.textMuted, fontSize: fontSize.xs },
+  badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
+  badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
   sheetBody: { gap: spacing(1) },
   presets: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   empty: {

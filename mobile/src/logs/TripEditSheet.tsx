@@ -24,6 +24,7 @@ import {
   SectionHeader,
   TextField,
   toDateKey,
+  todayDateKey,
   type ChipOption,
 } from "../ui";
 import { formatDateKey } from "./logbook";
@@ -67,7 +68,7 @@ export function TripEditSheet({
 }) {
   const editing = trip != null;
   const [mode, setMode] = useState<Mode>("form");
-  const [dateKey, setDateKey] = useState(() => toDateKey(new Date()));
+  const [dateKey, setDateKey] = useState(todayDateKey);
   const [selected, setSelected] = useState<TripCanyonLink[]>([]);
   const [displayName, setDisplayName] = useState("");
   const [types, setTypes] = useState<string[]>([]);
@@ -84,7 +85,7 @@ export function TripEditSheet({
     setCanyonSearch("");
     setCustomTypes([]);
     setSaving(false);
-    setDateKey(trip ? toDateKey(new Date(trip.date)) : toDateKey(new Date()));
+    setDateKey(trip ? toDateKey(new Date(trip.date)) : todayDateKey());
     setSelected(trip ? trip.canyons.map((link) => ({ ...link })) : []);
     setDisplayName(trip?.displayName ?? "");
     setTypes(trip?.types ?? []);

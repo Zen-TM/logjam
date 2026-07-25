@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   hasMirrorSynced,
+  countMediaByLinkedId,
   listMediaForLinked,
   listMirrorCanyons,
   listMirrorTrips,
@@ -113,6 +114,14 @@ export function useMirrorTrip(id: string): MirrorQueryState<MirrorTrip | null> {
 
 export function useMirrorWaypoints(): MirrorQueryState<MirrorWaypoint[]> {
   return useMirrorQuery(readWaypoints);
+}
+
+/** Attachment counts keyed by linked row id — for list badges. */
+export function useMirrorMediaCounts(
+  linkedType: "canyon" | "tripLog",
+): MirrorQueryState<Record<string, number>> {
+  const read = useCallback(() => countMediaByLinkedId(linkedType), [linkedType]);
+  return useMirrorQuery(read);
 }
 
 /** Media attached to one canyon or trip, pendingUpload rows included. */

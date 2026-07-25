@@ -451,6 +451,24 @@ export type MirrorMedia = {
   localDisplayPath: string | null;
 };
 
+/**
+ * Attachment tally per linked row, for a list that wants to show "this entry
+ * has photos" without loading every media row. One grouped read rather than a
+ * query per visible row.
+ */
+export async function countMediaByLinkedId(
+  linkedType: string,
+): Promise<Record<string, number>> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<{ linked_id: string; n: number }>(
+    `SELECT linked_id, COUNT(*) AS n FROM media
+     WHERE linked_type = ? AND sync_state != 'pendingDelete'
+     GROUP BY linked_id`,
+    linkedType,
+  );
+  return Object.fromEntries(rows.map((row) => [row.linked_id, row.n]));
+}
+
 export async function listMediaForLinked(
   linkedType: string,
   linkedId: string,

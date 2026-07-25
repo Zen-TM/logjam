@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { addMonths, fromDateKey, monthGrid, monthOf, toDateKey } from "./monthGrid";
+import {
+  addMonths,
+  fromDateKey,
+  monthGrid,
+  monthOf,
+  todayDateKey,
+  toDateKey,
+} from "./monthGrid";
 
 describe("date keys", () => {
   it("round-trips through UTC midnight", () => {
@@ -32,7 +39,7 @@ describe("monthGrid", () => {
   it("pads to whole Monday-first weeks", () => {
     // 1 March 2026 is a Sunday → six leading blanks.
     const cells = monthGrid({ year: 2026, month: 2 });
-    expect(cells.length % 7).toBe(0);
+    expect(cells).toHaveLength(42);
     expect(cells.slice(0, 6)).toEqual([null, null, null, null, null, null]);
     expect(cells[6]).toBe("2026-03-01");
     expect(cells.filter((cell) => cell !== null)).toHaveLength(31);
@@ -45,6 +52,15 @@ describe("monthGrid", () => {
     expect(cells[0]).toBe("2026-06-01");
   });
 
+  it("is always six rows, so the grid never changes height", () => {
+    // February 2026 needs five rows, August 2026 needs six; both pad to 42 so
+    // paging between them can't resize the sheet.
+    for (const month of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) {
+      expect(monthGrid({ year: 2026, month })).toHaveLength(42);
+    }
+    expect(monthGrid({ year: 2024, month: 1 })).toHaveLength(42);
+  });
+
   it("handles a leap February", () => {
     const cells = monthGrid({ year: 2024, month: 1 }).filter((cell) => cell !== null);
     expect(cells).toHaveLength(29);
@@ -55,5 +71,18 @@ describe("monthGrid", () => {
     const cells = monthGrid({ year: 2026, month: 6 }).filter((cell) => cell !== null);
     expect(cells[0]).toBe("2026-07-01");
     expect(cells[cells.length - 1]).toBe("2026-07-31");
+  });
+});
+
+describe("todayDateKey", () => {
+  it("reads the LOCAL calendar day, not the UTC one", () => {
+    // 00:30 on 26 July in AEST (UTC+10) is still 25 July in UTC. A trip logged
+    // then belongs to the 26th, and the 26th must not be a disabled future day.
+    const justAfterLocalMidnight = new Date(2026, 6, 26, 0, 30);
+    expect(todayDateKey(justAfterLocalMidnight)).toBe("2026-07-26");
+  });
+
+  it("zero-pads month and day", () => {
+    expect(todayDateKey(new Date(2026, 0, 5, 12))).toBe("2026-01-05");
   });
 });

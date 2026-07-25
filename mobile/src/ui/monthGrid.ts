@@ -11,6 +11,21 @@ export function toDateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * The user's own calendar day, as a date key.
+ *
+ * NOT `toDateKey(new Date())`: that reads the clock in UTC, so east of
+ * Greenwich it still says yesterday for the first hours of every local day —
+ * someone logging a trip at 00:30 AEST would find today's date greyed out as
+ * "the future". A trip date is a calendar day the user was out on, so "today"
+ * is their local one; only the STORED instant is UTC midnight of that day.
+ */
+export function todayDateKey(now: Date = new Date()): string {
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getDate()}`.padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
 /** UTC midnight of a "YYYY-MM-DD" key — the instant the API stores. */
 export function fromDateKey(key: string): Date {
   const date = new Date(`${key}T00:00:00.000Z`);
@@ -19,6 +34,9 @@ export function fromDateKey(key: string): Date {
 }
 
 export type YearMonth = { year: number; month: number };
+
+/** Rows in every month grid — the worst case, so the grid never resizes. */
+export const WEEKS_SHOWN = 6;
 
 /** `month` is 0-indexed, matching Date. Wraps across year boundaries. */
 export function addMonths({ year, month }: YearMonth, delta: number): YearMonth {
@@ -33,7 +51,13 @@ export function monthOf(key: string): YearMonth {
 
 /**
  * Week-aligned day keys for one month, Monday-first (AU convention), padded
- * with nulls so every row is a full week of seven cells.
+ * with nulls to a FIXED six rows.
+ *
+ * Six rather than "however many this month needs": a month grid that changes
+ * height changes the height of the sheet containing it, so paging through
+ * months would make the whole panel jump. Six is the maximum any month
+ * requires (31 days starting on a Sunday), so every month fits without ever
+ * resizing.
  */
 export function monthGrid({ year, month }: YearMonth): (string | null)[] {
   const first = new Date(Date.UTC(year, month, 1));
@@ -45,7 +69,7 @@ export function monthGrid({ year, month }: YearMonth): (string | null)[] {
   for (let day = 1; day <= daysInMonth; day += 1) {
     cells.push(toDateKey(new Date(Date.UTC(year, month, day))));
   }
-  while (cells.length % 7 !== 0) cells.push(null);
+  while (cells.length < WEEKS_SHOWN * 7) cells.push(null);
   return cells;
 }
 

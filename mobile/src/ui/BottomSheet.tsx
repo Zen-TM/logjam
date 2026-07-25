@@ -158,6 +158,13 @@ export function BottomSheet({
             styles.sheet,
             {
               marginBottom: keyboardHeight,
+              // Lifting a tall sheet by the keyboard height would push its TOP
+              // off the screen, taking whatever field is up there with it — the
+              // exact field the user just tapped. Cap the height to what is left
+              // above the keyboard instead, and let the inner ScrollView pan.
+              maxHeight: keyboardUp
+                ? SHEET_TRAVEL - keyboardHeight - insets.top - spacing(2)
+                : "80%",
               paddingBottom: spacing(3) + (keyboardUp ? 0 : insets.bottom),
               transform: [{ translateY }],
             },
@@ -194,7 +201,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     paddingHorizontal: spacing(2),
-    maxHeight: "80%",
   },
   handleHit: { alignItems: "center", paddingVertical: spacing(1.5) },
   handle: {
