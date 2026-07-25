@@ -12,8 +12,13 @@
 import { useCallback, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { customFieldDisplayLabel, distinctTripTypes } from "@logjam/shared";
+import {
+  customFieldDisplayLabel,
+  distinctTripTypes,
+  mediaCategory,
+} from "@logjam/shared";
 
+import { useConnectivity } from "../map/connectivity";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { tripTitle } from "../api/tripTitle";
 import { MediaStrip } from "../media/MediaStrip";
@@ -42,16 +47,20 @@ export function TripDetailScreen({
   trip,
   onBack,
   onOpenCanyon,
+  onShowRoute,
 }: {
   trip: MirrorTrip;
   onBack: () => void;
   onOpenCanyon: (canyonId: string, name: string) => void;
+  /** Opens the Map tab with this route attachment drawn on it. */
+  onShowRoute: (mediaId: string, filename: string, localPath: string | null) => void;
 }) {
   const live = useMirrorTrip(trip.id);
   const current = live.data ?? trip;
   const media = useMirrorMedia("tripLog", trip.id);
   const canyonsQuery = useMirrorCanyons();
   const allTrips = useMirrorTrips();
+  const online = useConnectivity() === "online";
   // Definitions give each stored value its real label and ordering; without
   // them (offline, or a field deleted since) the key is un-slugged instead.
   const userQuery = useApiQuery(fetchCurrentUser, "Couldn't load your fields.");
@@ -66,7 +75,14 @@ export function TripDetailScreen({
   }, []);
 
   const meta = tripTypeMeta(primaryTripType(current.types));
-  const photoCount = media.data?.length ?? 0;
+  const attachments = media.data ?? [];
+  const photoCount = attachments.filter((item) => {
+    const category = mediaCategory(item.mediaType);
+    return category === "image" || category === "video";
+  }).length;
+  const routeCount = attachments.filter(
+    (item) => mediaCategory(item.mediaType) === "track",
+  ).length;
   const storedFields = current.customFields;
   const definedFirst = fieldDefs
     .filter((def) => storedFields[def.key] !== undefined)
@@ -135,14 +151,30 @@ export function TripDetailScreen({
         )}
 
         <SectionHeader
-          label={photoCount === 0 ? "Attachments" : `Attachments · ${photoCount}`}
+          label={photoCount === 0 ? "Photos & videos" : `Photos & videos · ${photoCount}`}
         />
         <MediaStrip
+          kind="media"
+          online={online}
           linkedType="tripLog"
           linkedId={current.id}
-          media={media.data ?? []}
-          emptyHint="Nothing attached yet — a photo, a video, or the track you recorded."
+          media={attachments}
+          emptyHint="No photos or videos yet — the camera works with no signal."
           onFailed={(text) => notify(text, "error")}
+        />
+
+        <SectionHeader label={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`} />
+        <MediaStrip
+          kind="track"
+          online={online}
+          linkedType="tripLog"
+          linkedId={current.id}
+          media={attachments}
+          emptyHint="Attach a .gpx or .kml, or a track you recorded in the app."
+          onFailed={(text) => notify(text, "error")}
+          onShowRoute={(item) =>
+            onShowRoute(item.id, item.filename ?? "Route", item.localDisplayPath)
+          }
         />
 
         <SectionHeader label="Notes" />
@@ -168,6 +200,7 @@ export function TripDetailScreen({
       </ScrollView>
 
       <TripEditSheet
+        online={online}
         visible={editing}
         trip={current}
         canyons={canyonsQuery.data ?? []}

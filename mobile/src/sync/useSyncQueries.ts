@@ -19,6 +19,7 @@ import {
   type MirrorWaypoint,
 } from "./mirrorStore";
 import { onMirrorChanged } from "./syncDb";
+import { countPendingOps } from "./outbox";
 import { countSyncIssues } from "./syncIssues";
 import {
   getSyncStatus,
@@ -134,6 +135,36 @@ export function useMirrorMedia(
     [linkedType, linkedId],
   );
   return useMirrorQuery(read);
+}
+
+/**
+ * How many local changes are still waiting to reach the server.
+ *
+ * The reassurance an offline-first app owes the user: their edit is not lost, it
+ * is queued. Counts every outbox row that hasn't flushed, media uploads
+ * included, and updates live as the queue drains.
+ */
+export function usePendingSyncCount(): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => {
+      countPendingOps()
+        .then((n) => {
+          if (!cancelled) setCount(n);
+        })
+        .catch((err: unknown) => console.error(err));
+    };
+    refresh();
+    const unsubscribeMirror = onMirrorChanged(refresh);
+    const unsubscribeSync = onSyncStatusChanged(refresh);
+    return () => {
+      cancelled = true;
+      unsubscribeMirror();
+      unsubscribeSync();
+    };
+  }, []);
+  return count;
 }
 
 /** Live count of parked ops + shelf entries for the "Sync issues (N)" row. */

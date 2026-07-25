@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,11 +21,11 @@ import {
 } from "@logjam/shared";
 
 import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "../theme";
-import { ensureDisplayCached } from "../sync/mediaCache";
 import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { listTrackPoints, listTracks, type Track } from "../tracks/tracksDb";
 import { BottomSheet, Row, SectionHeader } from "../ui";
+import { MediaViewer } from "./MediaViewer";
 
 /**
  * Attachment strip for a canyon or a trip — the one media surface, used by both
@@ -52,27 +51,61 @@ import { BottomSheet, Row, SectionHeader } from "../ui";
 type SourceMode = "sources" | "tracks";
 
 export function MediaStrip({
+  kind,
+  online = true,
   linkedType,
   linkedId,
   media,
   emptyHint,
   onFailed,
+  onShowRoute,
 }: {
+  /**
+   * Which family of attachment this strip owns. Photos/videos and route files
+   * are separate strips (as on the web) because they answer different questions
+   * — "what did it look like" vs "where did we go" — and mixing them makes a
+   * photo roll you have to visually filter.
+   */
+  kind: "media" | "track";
+  /**
+   * Whether uploads can actually move. A queued attachment says "Uploading…"
+   * when that is true and "Waiting" when it isn't — a spinner-flavoured label
+   * that never finishes reads as a bug rather than as a queue.
+   */
+  online?: boolean;
   linkedType: "canyon" | "tripLog";
   linkedId: string;
+  /** All attachments for the row; this strip shows only its own `kind`. */
   media: MirrorMedia[];
   /** Shown after the add tile when there are no attachments yet. */
   emptyHint?: string;
   /** Routed to the screen's toast channel; falls back to an Alert. */
   onFailed?: (message: string) => void;
+  /**
+   * Show a route attachment on the map. Given for `kind="track"`, a tap opens
+   * the map rather than the viewer — a line on a basemap is the only useful way
+   * to read a GPX, and a full-screen "open it elsewhere" page is a dead end.
+   */
+  onShowRoute?: (item: MirrorMedia) => void;
 }) {
-  const [viewer, setViewer] = useState<{ media: MirrorMedia; uri: string | null } | null>(
-    null,
-  );
-  const [loadingId, setLoadingId] = useState<string | null>(null);
   const [sourceMode, setSourceMode] = useState<SourceMode | null>(null);
   const [tracks, setTracks] = useState<Track[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  /**
+   * Work deferred until the source sheet has fully closed.
+   *
+   * Every system picker AND every permission request has to run with no Modal
+   * on screen. `requestCameraPermissionsAsync()` called from inside the open
+   * sheet never resolves at all — the dialog has no window to attach to, so the
+   * promise simply hangs and the button looks dead. Closing first and running
+   * the job from the sheet's `onClosed` is the only ordering that works.
+   */
+  const [pending, setPending] = useState<null | (() => void | Promise<void>)>(null);
+  const runAfterSheet = useCallback((job: () => void | Promise<void>) => {
+    setPending(() => job);
+    setSourceMode(null);
+  }, []);
 
   const fail = useCallback(
     (message: string) => {
@@ -82,23 +115,11 @@ export function MediaStrip({
     [onFailed],
   );
 
-  const openViewer = useCallback(async (item: MirrorMedia) => {
-    setLoadingId(item.id);
-    try {
-      // A pendingUpload row's full-res IS the local copy; use it directly.
-      const displayUri = item.localDisplayPath ?? (await ensureDisplayCached(item.id));
-      setViewer({ media: item, uri: displayUri ?? item.localThumbPath });
-    } finally {
-      setLoadingId(null);
-    }
-  }, []);
-
   const attach = useCallback(
     async (file: { uri: string; mimeType?: string | null; fileName?: string | null }) => {
       setBusy(true);
       try {
         await attachMediaLocal(linkedType, linkedId, file);
-        setSourceMode(null);
       } catch (err) {
         console.error(err);
         fail("That file couldn't be attached. Please try again.");
@@ -178,7 +199,6 @@ export function MediaStrip({
           mimeType: "application/gpx+xml",
           fileName: `${track.name}.gpx`,
         });
-        setSourceMode(null);
       } catch (err) {
         console.error(err);
         fail("That track couldn't be attached. Please try again.");
@@ -206,6 +226,11 @@ export function MediaStrip({
     };
   }, [sourceMode]);
 
+  const shown = media.filter((item) => {
+    const category = mediaCategory(item.mediaType);
+    return kind === "track" ? category === "track" : category === "image" || category === "video";
+  });
+
   const confirmDelete = useCallback((item: MirrorMedia) => {
     Alert.alert("Delete this attachment?", undefined, [
       { text: "Cancel", style: "cancel" },
@@ -223,7 +248,7 @@ export function MediaStrip({
         <View style={styles.row}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Add an attachment"
+            accessibilityLabel={kind === "track" ? "Add a route" : "Add a photo or video"}
             onPress={() => setSourceMode("sources")}
             style={({ pressed }) => [
               styles.tile,
@@ -235,17 +260,21 @@ export function MediaStrip({
             <Text style={styles.addTileLabel}>Add</Text>
           </Pressable>
 
-          {media.map((item) => (
+          {shown.map((item, itemIndex) => (
             <AttachmentTile
               key={item.id}
               item={item}
-              loading={loadingId === item.id}
-              onPress={() => void openViewer(item)}
+              onPress={() =>
+                kind === "track" && onShowRoute
+                  ? onShowRoute(item)
+                  : setViewerIndex(itemIndex)
+              }
               onLongPress={() => confirmDelete(item)}
+              online={online}
             />
           ))}
 
-          {media.length === 0 && emptyHint ? (
+          {shown.length === 0 && emptyHint ? (
             <Text style={styles.emptyHint}>{emptyHint}</Text>
           ) : null}
         </View>
@@ -256,37 +285,56 @@ export function MediaStrip({
         // The track list is a mode of this sheet, so backing out of it returns
         // to the source list rather than closing the whole thing.
         onClose={() => setSourceMode(sourceMode === "tracks" ? "sources" : null)}
-        title={sourceMode === "tracks" ? "Recorded tracks" : "Add an attachment"}
+        onClosed={() => {
+          const job = pending;
+          if (!job) return;
+          setPending(null);
+          void job();
+        }}
+        title={
+          sourceMode === "tracks"
+            ? "Recorded tracks"
+            : kind === "track"
+              ? "Add a route"
+              : "Add a photo or video"
+        }
       >
         {sourceMode === "sources" ? (
           <View style={styles.sheetBody}>
-            <Row
-              icon="camera"
-              title="Take photo"
-              onPress={() => void captureFrom("camera", "photo")}
-            />
-            <Row
-              icon="video"
-              title="Record video"
-              onPress={() => void captureFrom("camera", "video")}
-            />
-            <Row
-              icon="image"
-              title="Choose from library"
-              onPress={() => void captureFrom("library", "photo")}
-            />
-            <Row
-              icon="map"
-              title="Attach a route file"
-              subtitle="A .gpx or .kml from this phone"
-              onPress={() => void pickRouteFile()}
-            />
-            <Row
-              icon="activity"
-              title="Attach a recorded track"
-              subtitle="A track you recorded in Logjam"
-              onPress={() => setSourceMode("tracks")}
-            />
+            {kind === "media" ? (
+              <>
+                <Row
+                  icon="camera"
+                  title="Take photo"
+                  onPress={() => runAfterSheet(() => captureFrom("camera", "photo"))}
+                />
+                <Row
+                  icon="video"
+                  title="Record video"
+                  onPress={() => runAfterSheet(() => captureFrom("camera", "video"))}
+                />
+                <Row
+                  icon="image"
+                  title="Choose from library"
+                  onPress={() => runAfterSheet(() => captureFrom("library", "photo"))}
+                />
+              </>
+            ) : (
+              <>
+                <Row
+                  icon="map"
+                  title="Attach a route file"
+                  subtitle="A .gpx or .kml from this phone"
+                  onPress={() => runAfterSheet(pickRouteFile)}
+                />
+                <Row
+                  icon="activity"
+                  title="Attach a recorded track"
+                  subtitle="A track you recorded in Logjam"
+                  onPress={() => setSourceMode("tracks")}
+                />
+              </>
+            )}
             {busy ? <ActivityIndicator color={theme.accent} /> : null}
           </View>
         ) : null}
@@ -320,26 +368,14 @@ export function MediaStrip({
         ) : null}
       </BottomSheet>
 
-      <Modal
-        visible={viewer !== null}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        navigationBarTranslucent
-        onRequestClose={() => setViewer(null)}
-      >
-        <Pressable style={styles.viewerBackdrop} onPress={() => setViewer(null)}>
-          {viewer !== null && mediaCategory(viewer.media.mediaType) === "image" && viewer.uri ? (
-            <Image
-              source={{ uri: viewer.uri }}
-              style={styles.viewerImage}
-              resizeMode="contain"
-            />
-          ) : (
-            <Text style={styles.viewerUnavailable}>{viewerFallback(viewer?.media)}</Text>
-          )}
-        </Pressable>
-      </Modal>
+      {viewerIndex !== null && shown.length > 0 ? (
+        <MediaViewer
+          items={shown}
+          startIndex={Math.min(viewerIndex, shown.length - 1)}
+          onClose={() => setViewerIndex(null)}
+        />
+      ) : null}
+
     </View>
   );
 }
@@ -351,12 +387,12 @@ export function MediaStrip({
  */
 function AttachmentTile({
   item,
-  loading,
+  online,
   onPress,
   onLongPress,
 }: {
   item: MirrorMedia;
-  loading: boolean;
+  online: boolean;
   onPress: () => void;
   onLongPress: () => void;
 }) {
@@ -394,12 +430,9 @@ function AttachmentTile({
       ) : null}
       {item.syncState === "pendingUpload" ? (
         <View style={styles.pendingBadge}>
-          <Text style={styles.pendingBadgeText}>Uploading…</Text>
-        </View>
-      ) : null}
-      {loading ? (
-        <View style={styles.tileLoading}>
-          <ActivityIndicator color={theme.accent} />
+          <Text style={styles.pendingBadgeText}>
+            {online ? "Uploading…" : "Waiting"}
+          </Text>
         </View>
       ) : null}
     </Pressable>
@@ -412,13 +445,6 @@ function glyphFor(
   if (category === "track") return "map";
   if (category === "video") return "video";
   return "image";
-}
-
-function viewerFallback(item: MirrorMedia | undefined): string {
-  if (!item) return "";
-  const category = mediaCategory(item.mediaType);
-  if (category === "image") return "Full photo not downloaded — available online.";
-  return `${item.filename ?? "Attachment"} — open it on the web to view.`;
 }
 
 /** Android often hands back octet-stream for .gpx/.kml, so trust the extension. */

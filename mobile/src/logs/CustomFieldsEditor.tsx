@@ -14,7 +14,7 @@ import {
   getCustomFieldImpact,
   updateTripLogCustomFields,
 } from "../api/queries";
-import { Button, Row, SectionHeader, SegmentedControl, TextField } from "../ui";
+import { Button, Row, SectionHeader, SegmentedControl, TextField, Toggle } from "../ui";
 
 /**
  * Manage the user's own trip-log field definitions — the mobile counterpart of
@@ -38,10 +38,12 @@ import { Button, Row, SectionHeader, SegmentedControl, TextField } from "../ui";
  */
 export function CustomFieldList({
   defs,
+  online,
   onAdd,
   onEdit,
 }: {
   defs: TripLogCustomFieldDef[];
+  online: boolean;
   onAdd: () => void;
   onEdit: (def: TripLogCustomFieldDef) => void;
 }) {
@@ -60,25 +62,36 @@ export function CustomFieldList({
               key={def.key}
               icon="tag"
               title={customFieldDisplayLabel(def)}
-              subtitle={typeLabel(def.type)}
-              onPress={() => onEdit(def)}
+              subtitle={fieldSummary(def)}
+              onPress={online ? () => onEdit(def) : undefined}
             />
           ))}
         </>
       )}
-      <Row icon="plus" title="Add a field" onPress={onAdd} />
+      {/* Reading the list works offline; changing it doesn't. Say which, rather
+          than letting the save fail after the typing. */}
+      {online ? (
+        <Row icon="plus" title="Add a field" onPress={onAdd} />
+      ) : (
+        <Text style={styles.hint}>
+          Adding or changing fields needs a connection. Your trips and their
+          values keep working offline.
+        </Text>
+      )}
     </View>
   );
 }
 
 export function CustomFieldForm({
   defs,
+  online,
   editing,
   onSaved,
   onFailed,
   onDone,
 }: {
   defs: TripLogCustomFieldDef[];
+  online: boolean;
   /** null = adding a new field. */
   editing: TripLogCustomFieldDef | null;
   onSaved: (defs: TripLogCustomFieldDef[], message: string) => void;
@@ -89,16 +102,18 @@ export function CustomFieldForm({
   const [type, setType] = useState<TripLogCustomFieldType>(editing?.type ?? "string");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bounded, setBounded] = useState(editing?.min != null);
+  const [min, setMin] = useState(editing?.min != null ? String(editing.min) : "");
+  const [max, setMax] = useState(editing?.max != null ? String(editing.max) : "");
+  // Bounds are only meaningful on a number, and the API rejects them elsewhere.
+  const numeric = type === "integer" || type === "float";
 
   const save = useCallback(async () => {
     setError(null);
     // Same builder the web uses, so the key slug and the validation rules can't
     // drift between clients.
-    // `bounded: false` — min/max bounds are a web-only nicety (they drive a
-    // range slider in the canyon filter); a field created there keeps its
-    // bounds, this just doesn't offer them.
     const built = buildCustomFieldDef(
-      { label, type, bounded: false, min: "", max: "" },
+      { label, type, bounded: numeric && bounded, min, max },
       defs.filter((def) => def.key !== editing?.key),
     );
     if ("error" in built) {
@@ -123,7 +138,7 @@ export function CustomFieldForm({
     } finally {
       setSaving(false);
     }
-  }, [defs, editing, label, onDone, onFailed, onSaved, type]);
+  }, [bounded, defs, editing, label, max, min, numeric, onDone, onFailed, onSaved, type]);
 
   const confirmDelete = useCallback(() => {
     if (!editing) return;
@@ -193,17 +208,68 @@ export function CustomFieldForm({
           </Text>
         ) : null}
       </View>
+
+      {/* Range is offered only for numbers, because that is the only place it
+          means anything — and it is what makes the web's range slider work. */}
+      {numeric ? (
+        <View style={styles.typeBlock}>
+          <Row
+            icon="sliders"
+            title="Limit to a range"
+            subtitle={bounded ? "Values must fall between min and max" : "Any number"}
+            right={
+              <Toggle
+                value={bounded}
+                onValueChange={setBounded}
+                accessibilityLabel="Limit to a range"
+              />
+            }
+          />
+          {bounded ? (
+            <View style={styles.boundsRow}>
+              <View style={styles.bound}>
+                <TextField
+                  label="Min"
+                  value={min}
+                  onChangeText={setMin}
+                  keyboardType={type === "integer" ? "number-pad" : "decimal-pad"}
+                />
+              </View>
+              <View style={styles.bound}>
+                <TextField
+                  label="Max"
+                  value={max}
+                  onChangeText={setMax}
+                  keyboardType={type === "integer" ? "number-pad" : "decimal-pad"}
+                />
+              </View>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
       <Button
         label={editing ? "Save field" : "Add field"}
         icon="check"
         loading={saving}
+        disabled={!online}
         onPress={() => void save()}
       />
+      {online ? null : <Text style={styles.hint}>This needs a connection.</Text>}
       {editing ? (
-        <Row icon="trash-2" hue={theme.warning} title="Delete field" onPress={confirmDelete} />
+        <Row
+          icon="trash-2"
+          hue={theme.warning}
+          title="Delete field"
+          onPress={online ? confirmDelete : undefined}
+        />
       ) : null}
     </View>
   );
+}
+
+function fieldSummary(def: TripLogCustomFieldDef): string {
+  const base = typeLabel(def.type);
+  return def.min != null && def.max != null ? `${base} · ${def.min}–${def.max}` : base;
 }
 
 function typeLabel(type: TripLogCustomFieldType): string {
@@ -214,4 +280,6 @@ const styles = StyleSheet.create({
   body: { gap: spacing(1) },
   typeBlock: { gap: spacing(0.5) },
   hint: { color: theme.textMuted, fontSize: fontSize.sm },
+  boundsRow: { flexDirection: "row", gap: spacing(1) },
+  bound: { flex: 1 },
 });

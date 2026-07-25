@@ -39,6 +39,7 @@ const DISMISS_VELOCITY = 1.2;
 export function BottomSheet({
   visible,
   onClose,
+  onClosed,
   title,
   footer,
   children,
@@ -46,6 +47,13 @@ export function BottomSheet({
   visible: boolean;
   onClose: () => void;
   title: string;
+  /**
+   * Fired once the sheet has finished closing AND unmounted. Use it to run
+   * anything that must not overlap the modal window — a permission request or a
+   * system picker launched while a Modal is up can never attach its own window,
+   * and its promise simply never settles.
+   */
+  onClosed?: () => void;
   /**
    * Pinned below the scroll area — put the sheet's primary action here whenever
    * its content can outgrow the 80% cap. A confirm button that scrolls away
@@ -76,6 +84,8 @@ export function BottomSheet({
   const keyboardUp = keyboardHeight > 0;
   // Kept mounted through the close animation, then torn down.
   const [mounted, setMounted] = useState(visible);
+  const onClosedRef = useRef(onClosed);
+  onClosedRef.current = onClosed;
   const progress = useRef(new Animated.Value(0)).current;
   const drag = useRef(new Animated.Value(0)).current;
 
@@ -95,9 +105,13 @@ export function BottomSheet({
       duration: 180,
       useNativeDriver: true,
     }).start(({ finished }) => {
-      if (finished) setMounted(false);
+      if (!finished) return;
+      setMounted(false);
+      onClosedRef.current?.();
     });
   }, [drag, progress, visible]);
+
+
 
   // The PanResponder is created once; route its release through a ref so it
   // always calls the current onClose.

@@ -45,6 +45,7 @@ import {
 import { apiFetch } from "../api/apiFetch";
 import { getGeoPdfJob, listGeoPdfJobs, type GeoPdfJobView } from "../api/geoPdfJobs";
 import { useApiQuery } from "../api/queries";
+import { usePendingSyncCount } from "../sync/useSyncQueries";
 import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
 import {
   BottomSheet,
@@ -146,6 +147,7 @@ type SavedItem = {
 export function SavedScreen({ onOpenMap }: { onOpenMap: (bbox?: Bbox) => void }) {
   const connectivity = useConnectivity();
   const online = connectivity === "online";
+  const pendingCount = usePendingSyncCount();
 
   // One toast channel for every async outcome on the screen (import, save,
   // rename, account list). Transient and out of the layout — a banner in the
@@ -694,11 +696,21 @@ export function SavedScreen({ onOpenMap }: { onOpenMap: (bbox?: Bbox) => void })
         action={<Button label="Add" icon="plus" compact onPress={() => setAddSheetOpen(true)} />}
       >
         <CapacityBar segments={segments} />
-        {online ? null : (
+        {/* Offline is a normal state here — everything already on the device
+            still works — so it sits beside what is still waiting to leave
+            rather than reading as an error. */}
+        {!online || pendingCount > 0 ? (
           <View style={styles.pillRow}>
-            <StatusPill label="Offline" tone="muted" icon="cloud-off" />
+            {online ? null : <StatusPill label="Offline" tone="muted" icon="cloud-off" />}
+            {pendingCount > 0 ? (
+              <StatusPill
+                label={`${pendingCount} waiting to sync`}
+                tone="outline"
+                icon="upload-cloud"
+              />
+            ) : null}
           </View>
-        )}
+        ) : null}
       </HeroHeader>
 
       <View style={styles.rail}>

@@ -51,9 +51,18 @@ const navigationTheme = {
 
 type MapStackParams = {
   // `focus` = "show on map" from Saved: a bbox to fit on arrival (see
-  // MapScreen's `focus` prop). Params only — never persisted or logged.
+  // MapScreen's `focus` prop). `route` = a trip's route attachment to draw
+  // transiently. Params only — never persisted or logged.
   MapView:
-    | { focus?: { bbox: [number, number, number, number]; nonce: number } }
+    | {
+        focus?: { bbox: [number, number, number, number]; nonce: number };
+        route?: {
+          mediaId: string;
+          filename: string;
+          localPath?: string | null;
+          nonce: number;
+        };
+      }
     | undefined;
   MapCanyonDetail: { canyonId: string; name: string };
 };
@@ -106,6 +115,7 @@ function MapStackNav() {
             }
             onOpenSaved={() => navigation.getParent()?.navigate("Saved")}
             focus={route.params?.focus ?? null}
+            route={route.params?.route ?? null}
           />
         )}
       </MapStack.Screen>
@@ -178,6 +188,12 @@ function TripsStackNav() {
             onBack={() => navigation.goBack()}
             onOpenCanyon={(canyonId, name) =>
               navigation.navigate("TripCanyonDetail", { canyonId, name })
+            }
+            onShowRoute={(mediaId, filename, localPath) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
+              })
             }
           />
         )}

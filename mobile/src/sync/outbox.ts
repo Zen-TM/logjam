@@ -46,6 +46,19 @@ export function rowToEntry(row: OutboxRow): OutboxEntry {
   };
 }
 
+/**
+ * Local changes not yet accepted by the server — queued, inflight or blocked.
+ * Drives the "N waiting to sync" indicator; `blocked` rows are counted because
+ * from the user's point of view they are still unsent work.
+ */
+export async function countPendingOps(): Promise<number> {
+  const db = await getSyncDb();
+  const row = await db.getFirstAsync<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM outbox WHERE state IN ('queued', 'inflight', 'blocked')",
+  );
+  return row?.n ?? 0;
+}
+
 export async function loadOutboxRows(): Promise<OutboxRow[]> {
   const db = await getSyncDb();
   return db.getAllAsync<OutboxRow>("SELECT * FROM outbox ORDER BY seq ASC");

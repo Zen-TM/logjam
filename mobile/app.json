@@ -77,7 +77,8 @@
           "photosPermission": "Logjam attaches photos from your library to canyons and trips.",
           "cameraPermission": "Logjam lets you take photos to attach to canyons and trips."
         }
-      ]
+      ],
+      "expo-video"
     ],
     "extra": {
       "eas": {

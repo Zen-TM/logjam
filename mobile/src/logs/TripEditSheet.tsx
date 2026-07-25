@@ -64,6 +64,7 @@ export function TripEditSheet({
   existingTypes,
   onSaved,
   onFailed,
+  online,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -74,6 +75,12 @@ export function TripEditSheet({
   existingTypes: string[];
   onSaved: (message: string) => void;
   onFailed: (message: string) => void;
+  /**
+   * Trip edits queue offline, but field DEFINITIONS are an account-level
+   * preference that needs the network — so that one door is closed with a
+   * reason rather than opened onto a failure.
+   */
+  online: boolean;
 }) {
   const editing = trip != null;
   const [mode, setMode] = useState<Mode>("form");
@@ -317,6 +324,7 @@ export function TripEditSheet({
 
       {mode === "fields" ? (
         <CustomFieldList
+          online={online}
           defs={customFieldDefs}
           onAdd={() => {
             setEditingField(null);
@@ -331,6 +339,7 @@ export function TripEditSheet({
 
       {mode === "fieldForm" ? (
         <CustomFieldForm
+          online={online}
           defs={customFieldDefs}
           editing={editingField}
           onSaved={(next, message) => {
@@ -425,7 +434,9 @@ export function TripEditSheet({
             title="Your trip fields"
             subtitle={
               customFieldDefs.length === 0
-                ? "Add your own — water level, party size, anything"
+                ? online
+                  ? "Add your own — water level, party size, anything"
+                  : "Managing fields needs a connection"
                 : `${customFieldDefs.length} field${customFieldDefs.length === 1 ? "" : "s"}`
             }
             right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}

@@ -344,8 +344,11 @@ function CanyonDetailView({
         </View>
       ) : null}
 
-      <SectionHeader label="PHOTOS" />
-      <MediaStrip linkedType="canyon" linkedId={canyonId} media={media} />
+      <SectionHeader label="PHOTOS & VIDEOS" />
+      <MediaStrip kind="media" linkedType="canyon" linkedId={canyonId} media={media} />
+
+      <SectionHeader label="ROUTES" />
+      <MediaStrip kind="track" linkedType="canyon" linkedId={canyonId} media={media} />
 
       {isOwner ? <CanyonSharingSection canyonId={canyonId} openRequest={shareOpenRequest} /> : null}
     </ScrollView>

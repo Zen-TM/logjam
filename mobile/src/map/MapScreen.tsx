@@ -52,9 +52,10 @@ import { getVectorStyle, useApiQuery } from "../api/queries";
 import type { TCanyon } from "../api/types";
 import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
 import { config } from "../config";
-import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "../theme";
 import { MapSearchBar } from "./MapSearchBar";
 import { ScaleBar } from "./ScaleBar";
+import { RouteMapLayer, ROUTE_COLOR, type RouteRequest } from "../media/RouteMapLayer";
 import {
   CHROME_GAP,
   FAB_ICON,
@@ -64,6 +65,7 @@ import {
 } from "./mapChrome";
 import { BottomSheet } from "../ui/BottomSheet";
 import { Card } from "../ui/Card";
+import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
 import { SectionHeader } from "../ui/SectionHeader";
 import { SegmentedControl } from "../ui/SegmentedControl";
@@ -193,15 +195,30 @@ export function MapScreen({
   onOpenCanyon,
   onOpenSaved,
   focus,
+  route,
 }: {
   onOpenCanyon: (canyonId: string, name: string) => void;
   // Opens the Saved tab from the trimmed layer sheet's "Manage in Saved" link.
   onOpenSaved?: () => void;
+  // "Show on map" for a trip's route attachment. Transient: drawn until the
+  // user clears its badge, never added to the imports registry.
+  route?: RouteRequest | null;
   // "Show on map" from the Saved tab: fit this bbox once on arrival. `nonce`
   // makes a repeat request for the same asset refocus instead of no-op.
   // Coordinates stay in navigation params + component state — never logged.
   focus?: { bbox: [number, number, number, number]; nonce: number } | null;
 }) {
+  // A route arrives via navigation params; clearing its badge drops it, and a
+  // fresh request (new nonce) replaces whatever was showing.
+  const [shownRoute, setShownRoute] = useState<RouteRequest | null>(route ?? null);
+  const [routeError, setRouteError] = useState<string | null>(null);
+  useEffect(() => {
+    if (route) {
+      setShownRoute(route);
+      setRouteError(null);
+    }
+  }, [route]);
+
   // "Offline maps only" forces the resolver to local artifacts even with
   // signal — battery saver + predictability in the field.
   const [offlineOnly, setOfflineOnly] = useState(false);
@@ -952,6 +969,21 @@ export function MapScreen({
           );
         })}
 
+        {/* A trip's route attachment, shown transiently. Mounted alongside the
+            recorded tracks so it sits in the same band, under the canyons. */}
+        {shownRoute ? (
+          <RouteMapLayer
+            request={shownRoute}
+            onLoaded={([west, south, east, north]) =>
+              cameraRef.current?.fitBounds([east, north], [west, south], 60, 600)
+            }
+            onFailed={(message) => {
+              setShownRoute(null);
+              setRouteError(message);
+            }}
+          />
+        ) : null}
+
         {/* Recorded tracks + waypoints (Stage 7): unpinned, mounted before
             the canyon sources so canyons draw on top. */}
         <TrackMapLayers
@@ -1087,23 +1119,50 @@ export function MapScreen({
       {/* Place search: collapsed button top-left, expands to a full-width bar. */}
       <MapSearchBar topInset={insets.top} onSelectPlace={handleSelectPlace} />
 
-      {/* Offline/unavailable basemap notice (fail visibly, never silently). */}
-      {basemapResolved.every((r) => r.status !== "ok") ? (
-        <View style={[styles.notice, { top: noticeTop }]}>
-          <Text style={styles.noticeText}>
-            {connectivity === "online"
-              ? "This basemap is unavailable."
-              : "Offline — no downloaded basemap for this area."}
-          </Text>
-        </View>
-      ) : null}
+      {/* Everything that talks to the user from the top of the map stacks in
+          one column, so a second message can never land on top of the first. */}
+      <View style={[styles.noticeStack, { top: noticeTop }]} pointerEvents="box-none">
+        {/* Offline/unavailable basemap notice (fail visibly, never silently). */}
+        {basemapResolved.every((r) => r.status !== "ok") ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>
+              {connectivity === "online"
+                ? "This basemap is unavailable."
+                : "Offline — no downloaded basemap for this area."}
+            </Text>
+          </View>
+        ) : null}
 
-      {/* Error surfaces: background failures, non-blocking. */}
-      {canyons.error ? (
-        <View style={[styles.notice, { top: noticeTop }]}>
-          <Text style={styles.noticeText}>{canyons.error}</Text>
-        </View>
-      ) : null}
+        {/* Error surfaces: background failures, non-blocking. */}
+        {canyons.error ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>{canyons.error}</Text>
+          </View>
+        ) : null}
+
+        {routeError ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>{routeError}</Text>
+          </View>
+        ) : null}
+
+        {/* Says what is on the map that the user didn't put there, and gives
+            them one tap to take it off again. */}
+        {shownRoute ? (
+          <View style={styles.routeBadge}>
+            <Feather name="map" size={14} color={ROUTE_COLOR} />
+            <Text style={styles.routeBadgeText} numberOfLines={1}>
+              {shownRoute.filename}
+            </Text>
+            <IconButton
+              icon="x"
+              size={16}
+              accessibilityLabel="Stop showing this route"
+              onPress={() => setShownRoute(null)}
+            />
+          </View>
+        ) : null}
+      </View>
 
       <View style={styles.controls}>
         <Pressable
@@ -1174,6 +1233,8 @@ export function MapScreen({
         </Pressable>
       </View>
 
+      {/* Says what is on the map that the user didn't put there, and gives them
+          one tap to take it off again. */}
       <View style={styles.scaleBarWrap}>
         <ScaleBar
           latitude={camera.latitude}
@@ -1418,10 +1479,15 @@ export function MapScreen({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.primary },
   map: { flex: 1 },
-  notice: {
+  noticeStack: {
     position: "absolute",
+    left: spacing(2),
+    right: spacing(2),
+    gap: spacing(1),
+  },
+  notice: {
     alignSelf: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: scrim.heavy,
     borderRadius: radius.md,
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1),
@@ -1474,6 +1540,23 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     backgroundColor: theme.warning,
+  },
+  routeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1),
+    paddingLeft: spacing(1.5),
+    paddingRight: spacing(0.5),
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: withAlpha(ROUTE_COLOR, 0.5),
+    backgroundColor: withAlpha(theme.primary, 0.92),
+  },
+  routeBadgeText: {
+    flex: 1,
+    color: theme.textPrimary,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
   },
   scaleBarWrap: {
     position: "absolute",

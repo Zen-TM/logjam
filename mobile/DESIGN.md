@@ -234,6 +234,12 @@ because each was a bug once:
   The sheet's title changes with the mode, so which step you are on is never a
   guess.
 
+**Stack chrome that talks to the user.** Notices, error strips and state badges
+anchored to the same edge belong in ONE positioned column with a gap, not each
+absolutely positioned at the same offset — otherwise the second message to
+appear lands on top of the first (the map's route badge and its offline notice
+did exactly this).
+
 **A list of choices is a sheet, not an `Alert`.** Android's Alert caps at three
 buttons and drops the rest silently — that is how "Take photo" shipped
 unreachable behind a three-option Alert. `Alert` is for destructive confirms
@@ -295,6 +301,12 @@ row with a retry — it persists because the problem persists.
   custom field also clears its value from every trip that had one, so the
   confirm asks the server for that count first and puts it in the dialog
   ("12 trips have a value…"), rather than discovering it afterwards.
+- **Never open a system window from an open sheet.** Permission requests and
+  media pickers both need a window of their own; launched from a `Modal` they
+  can't attach one, and `requestCameraPermissionsAsync()` simply never resolves
+  — the button looks dead. Close the sheet first and run the job from its
+  `onClosed` callback. (A `Keyboard.dismiss()`-style pre-call is not enough:
+  the close is asynchronous, so the Modal is still up when the picker launches.)
 - **A chart is not an affordance.** `ActivitySpark` is deliberately
   non-interactive because it exposes no filter — same rule as the drag handle,
   read the other way: don't render something that looks tappable unless it is.
@@ -365,7 +377,43 @@ Current kit: `ActivitySpark` · `BottomSheet` · `Button` · `CapacityBar` ·
 `SegmentedControl` · `StatGrid` · `StatusPill` · `TextField` · `Toast` ·
 `Toggle`.
 
-## 10. Privacy in the UI
+## 10. Offline is a normal state, not an error
+
+Almost everything in this app works with no signal: reads come from the mirror,
+writes queue in the outbox. So the offline UI's job is not to apologise — it is
+to answer three questions, once each, without cluttering a screen that mostly
+still works.
+
+**"Am I offline?"** One `StatusPill` in the hero (`cloud-off`, `muted` tone).
+Never a banner, never per-row.
+
+**"Is my work safe?"** The question users actually have, and the one the app
+never answered. A second pill counts unflushed outbox rows — "10 waiting to
+sync" — and drains as they flush. Pair it with the offline pill rather than
+hiding it when online: work can be queued because the server is down, not just
+because you are in a canyon.
+
+**"What can't I do right now?"** Network-only actions are **disabled with the
+reason in place of their subtitle** ("Needs a connection"), never hidden. Know
+which those are:
+
+| Works offline | Needs a connection |
+|---|---|
+| Reading trips, canyons, notes, fields | Custom field DEFINITIONS (account-level blob) |
+| Logging, editing, deleting a trip | Downloading regions, topo overlays, GeoPDFs |
+| Attaching photos, videos, routes, tracks | Sharing a canyon |
+| Viewing anything already cached | Full-res media not yet downloaded |
+
+**Say what is true, not what is optimistic.** A queued upload says "Uploading…"
+only when it can actually upload; offline it says "Waiting". A label that
+implies progress and never finishes reads as a bug, not as a queue. Same for
+pull-to-refresh: offline it says so and reassures, rather than spinning into a
+silent failure.
+
+**Content that isn't downloaded gets its own state**, not an error — "Not
+downloaded to this phone yet. It will appear once you have signal."
+
+## 11. Privacy in the UI
 
 A design constraint, not a checklist item (see `CLAUDE.md`). Rows show generic
 labels ("Offline map region"), user-supplied names, sizes and dates — **never

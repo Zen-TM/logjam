@@ -36,10 +36,12 @@ import { tripTitle } from "../api/tripTitle";
 import { fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
+import { useConnectivity } from "../map/connectivity";
 import {
   useMirrorCanyons,
   useMirrorMediaCounts,
   useMirrorTrips,
+  usePendingSyncCount,
   useSyncStatus,
 } from "../sync/useSyncQueries";
 import {
@@ -55,6 +57,7 @@ import {
   Row,
   SectionHeader,
   SegmentedControl,
+  StatusPill,
   Toast,
   type SegmentOption,
   type ToastMessage,
@@ -73,6 +76,9 @@ import { TripEditSheet } from "./TripEditSheet";
 const ALL_TYPES = "";
 
 export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => void }) {
+  const connectivity = useConnectivity();
+  const online = connectivity === "online";
+  const pendingCount = usePendingSyncCount();
   const query = useMirrorTrips();
   const canyonsQuery = useMirrorCanyons();
   const attachmentCounts = useMirrorMediaCounts("tripLog");
@@ -324,6 +330,22 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
             }`}
           />
         )}
+
+        {/* State of the world, once, where it can be read at a glance. Offline
+            is not an error here — logging, editing and attaching all work — so
+            it is paired with what is waiting rather than with a warning. */}
+        {!online || pendingCount > 0 ? (
+          <View style={styles.statusRow}>
+            {online ? null : <StatusPill label="Offline" tone="muted" icon="cloud-off" />}
+            {pendingCount > 0 ? (
+              <StatusPill
+                label={`${pendingCount} waiting to sync`}
+                tone="outline"
+                icon="upload-cloud"
+              />
+            ) : null}
+          </View>
+        ) : null}
       </HeroHeader>
 
       <View style={styles.rail}>
@@ -369,7 +391,13 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
         refreshControl={
           <RefreshControl
             refreshing={syncStatus.state === "syncing"}
-            onRefresh={query.refresh}
+            onRefresh={() => {
+              if (!online) {
+                info("No connection — your changes will sync when you're back.");
+                return;
+              }
+              query.refresh();
+            }}
             tintColor={theme.accent}
           />
         }
@@ -492,6 +520,7 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
       </BottomSheet>
 
       <TripEditSheet
+        online={online}
         visible={editing !== null}
         trip={editing?.trip ?? null}
         canyons={canyonsQuery.data ?? []}
@@ -626,6 +655,7 @@ function datePresets(): { label: string; from: string; to: string }[] {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.primary },
   heroActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
+  statusRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
   findRow: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
   searchWrap: {
     flex: 1,
