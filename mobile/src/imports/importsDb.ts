@@ -108,6 +108,12 @@ export async function setVectorImportVisible(
   notifyChanged();
 }
 
+export async function renameVectorImport(id: string, name: string): Promise<void> {
+  const db = await getOfflineDb();
+  await db.runAsync("UPDATE vector_import SET name = ? WHERE id = ?", name, id);
+  notifyChanged();
+}
+
 export async function deleteVectorImportRow(
   id: string,
 ): Promise<VectorImport | null> {

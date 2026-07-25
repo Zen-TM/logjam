@@ -42,6 +42,12 @@ extract/schema refresh.
 - **UI is a fresh RN component layer.** MUI is web-only; do not port it. Reuse the
   design tokens/logic, rebuild the presentation. Design system: Claude Design
   project "Logjam Mobile" via DesignSync (`/design-login` first).
+- **Read `mobile/DESIGN.md` before building or reshaping any screen.** It owns the
+  layout skeleton (hero + pinned filter rail + scrolling list), category hue/glyph
+  identity, radius/type/depth scales, action and destructive-confirm rules, and
+  state handling. Reference implementation: `src/saved/SavedScreen.tsx`. Extend the
+  `src/ui` primitives rather than hand-rolling a local variant, and update
+  `DESIGN.md` in the same commit as any convention change.
 - **Env:** `EXPO_PUBLIC_*` (parallels web `VITE_*`). Non-secret only. Read through
   `src/config.ts`, which **fails loudly** on a missing API URL. Dev/prod parity via
   env files + EAS build profiles.

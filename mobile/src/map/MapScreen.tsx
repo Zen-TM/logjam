@@ -192,10 +192,15 @@ function overlayKind(ref: TopoOverlayRef): "contours" | "features" {
 export function MapScreen({
   onOpenCanyon,
   onOpenSaved,
+  focus,
 }: {
   onOpenCanyon: (canyonId: string, name: string) => void;
   // Opens the Saved tab from the trimmed layer sheet's "Manage in Saved" link.
   onOpenSaved?: () => void;
+  // "Show on map" from the Saved tab: fit this bbox once on arrival. `nonce`
+  // makes a repeat request for the same asset refocus instead of no-op.
+  // Coordinates stay in navigation params + component state — never logged.
+  focus?: { bbox: [number, number, number, number]; nonce: number } | null;
 }) {
   // "Offline maps only" forces the resolver to local artifacts even with
   // signal — battery saver + predictability in the field.
@@ -592,6 +597,15 @@ export function MapScreen({
     );
     return () => sub.remove();
   }, []);
+
+  // "Show on map" arrival: fit the requested asset's bbox. Keyed on the nonce
+  // so tapping the same asset again refocuses, and so a re-render with the
+  // same params doesn't fight the user's own panning.
+  useEffect(() => {
+    if (!focus) return;
+    const [west, south, east, north] = focus.bbox;
+    cameraRef.current?.fitBounds([east, north], [west, south], 40, 600);
+  }, [focus?.nonce, focus]);
 
   // Camera readout for the scale bar + compass. Coordinates stay in component
   // state only — never logged (privacy rule).

@@ -47,7 +47,8 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
           minzoom INTEGER, maxzoom INTEGER,
           sizeBytes    INTEGER NOT NULL,
           downloadedAt TEXT NOT NULL,
-          verifiedAt   TEXT
+          verifiedAt   TEXT,
+          label        TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_map_artifact_lookup
           ON map_artifact(kind, logicalKey);
@@ -135,10 +136,31 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
           updatedAt     TEXT NOT NULL
         );
       `);
+      await addMissingColumns(db);
       return db;
     })();
   }
   return dbPromise;
+}
+
+// Columns added to a table that already exists on installed devices. The
+// CREATE TABLE statements above only run on a fresh DB, so each addition needs
+// an idempotent ALTER here, guarded by an actual column check rather than a
+// swallowed error (a genuinely broken ALTER must still throw).
+const ADDED_COLUMNS: { table: string; column: string; definition: string }[] = [
+  // User-facing rename of a downloaded region/overlay (Saved tab). Display
+  // only — resolution still keys off `logicalKey`.
+  { table: "map_artifact", column: "label", definition: "TEXT" },
+];
+
+async function addMissingColumns(db: SQLite.SQLiteDatabase): Promise<void> {
+  for (const { table, column, definition } of ADDED_COLUMNS) {
+    const columns = await db.getAllAsync<{ name: string }>(
+      `PRAGMA table_info(${table})`,
+    );
+    if (columns.some((existing) => existing.name === column)) continue;
+    await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
 }
 
 type ArtifactRow = {
@@ -156,6 +178,7 @@ type ArtifactRow = {
   maxzoom: number | null;
   sizeBytes: number;
   downloadedAt: string;
+  label: string | null;
 };
 
 function rowToArtifact(row: ArtifactRow): MapArtifact {
@@ -174,6 +197,7 @@ function rowToArtifact(row: ArtifactRow): MapArtifact {
     maxzoom: row.maxzoom,
     sizeBytes: row.sizeBytes,
     downloadedAt: row.downloadedAt,
+    label: row.label,
   };
 }
 
@@ -191,8 +215,8 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
     `INSERT OR REPLACE INTO map_artifact
        (id, kind, logicalKey, format, sourceType, path,
         west, south, east, north, minzoom, maxzoom,
-        sizeBytes, downloadedAt, verifiedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sizeBytes, downloadedAt, verifiedAt, label)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     artifact.id,
     artifact.kind,
     artifact.logicalKey,
@@ -208,7 +232,15 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
     artifact.sizeBytes,
     artifact.downloadedAt,
     new Date().toISOString(),
+    artifact.label ?? null,
   );
+  notifyChanged();
+}
+
+/** Rename a downloaded region/overlay for display in Saved. */
+export async function renameArtifact(id: string, label: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync("UPDATE map_artifact SET label = ? WHERE id = ?", label, id);
   notifyChanged();
 }
 

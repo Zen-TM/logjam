@@ -8,6 +8,13 @@ type TextFieldProps = {
   onChangeText: (text: string) => void;
   // Per-field validation message (web FieldError equivalent); null renders nothing.
   error?: string | null;
+  /**
+   * Handle on the underlying input. `autoFocus` is unreliable for a field that
+   * mounts inside an animating modal — the window isn't focusable yet, so the
+   * keyboard never comes up. Callers in that situation keep a ref and call
+   * `.focus()` once the animation has settled.
+   */
+  inputRef?: React.Ref<TextInput>;
 } & Pick<
   TextInputProps,
   | "secureTextEntry"
@@ -27,12 +34,14 @@ export function TextField({
   onChangeText,
   error,
   multiline,
+  inputRef,
   ...inputProps
 }: TextFieldProps) {
   return (
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
+        ref={inputRef}
         style={[styles.input, multiline && styles.multiline]}
         value={value}
         onChangeText={onChangeText}

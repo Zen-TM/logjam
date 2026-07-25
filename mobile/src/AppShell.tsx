@@ -49,7 +49,11 @@ const navigationTheme = {
 };
 
 type MapStackParams = {
-  MapView: undefined;
+  // `focus` = "show on map" from Saved: a bbox to fit on arrival (see
+  // MapScreen's `focus` prop). Params only — never persisted or logged.
+  MapView:
+    | { focus?: { bbox: [number, number, number, number]; nonce: number } }
+    | undefined;
   MapCanyonDetail: { canyonId: string; name: string };
 };
 
@@ -93,12 +97,13 @@ function MapStackNav() {
   return (
     <MapStack.Navigator screenOptions={stackScreenOptions}>
       <MapStack.Screen name="MapView" options={{ headerShown: false }}>
-        {({ navigation }) => (
+        {({ navigation, route }) => (
           <MapScreen
             onOpenCanyon={(canyonId, name) =>
               navigation.navigate("MapCanyonDetail", { canyonId, name })
             }
             onOpenSaved={() => navigation.getParent()?.navigate("Saved")}
+            focus={route.params?.focus ?? null}
           />
         )}
       </MapStack.Screen>
@@ -115,11 +120,19 @@ function MapStackNav() {
 function SavedStackNav() {
   return (
     <SavedStack.Navigator screenOptions={stackScreenOptions}>
-      <SavedStack.Screen
-        name="SavedHome"
-        component={SavedScreen}
-        options={{ title: "Saved" }}
-      />
+      {/* No native header: SavedScreen leads with its own HeroHeader. */}
+      <SavedStack.Screen name="SavedHome" options={{ headerShown: false }}>
+        {({ navigation }) => (
+          <SavedScreen
+            onOpenMap={(bbox) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: bbox ? { focus: { bbox, nonce: Date.now() } } : undefined,
+              })
+            }
+          />
+        )}
+      </SavedStack.Screen>
     </SavedStack.Navigator>
   );
 }

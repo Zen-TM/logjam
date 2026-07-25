@@ -79,6 +79,12 @@ export interface MapArtifact {
   maxzoom: number | null;
   sizeBytes: number;
   downloadedAt: string;
+  /**
+   * User's display rename for the Saved tab (optional — absent on artifacts
+   * built outside the registry). Display only: resolution keys off
+   * `logicalKey`, never this.
+   */
+  label?: string | null;
 }
 
 export interface ResolveContext {

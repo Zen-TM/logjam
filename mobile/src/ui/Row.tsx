@@ -1,3 +1,4 @@
+import { Feather } from "@expo/vector-icons";
 import {
   Pressable,
   StyleSheet,
@@ -6,18 +7,36 @@ import {
   type ViewStyle,
 } from "react-native";
 
-import { fontSize, fontWeight, hitSlop, radius, spacing, surface, theme } from "../theme";
+import {
+  fontSize,
+  fontWeight,
+  hitSlop,
+  radius,
+  spacing,
+  surface,
+  theme,
+  withAlpha,
+} from "../theme";
 
-// Canonical list row — one warm card laid out horizontally: optional leading
-// node (icon/dot/thumbnail), a title + optional subtitle, and an optional
-// trailing accessory (StatusPill, chevron, Toggle, custom). Replaces the
-// `rgba(255,255,255,0.04)` rows hand-rolled across Canyons/Trips/Account/
-// Notifications/Friends/CanyonDetail. Non-pressable when `onPress` is omitted.
+// Canonical list row — one warm card laid out horizontally: a leading node
+// (icon tile / dot / thumbnail), a title + optional subtitle, and an optional
+// trailing accessory (StatusPill, chevron, Toggle, action buttons).
+// Non-pressable when `onPress` is omitted.
+//
+// Pass `icon` + `hue` for the standard identity tile: a 40pt rounded square
+// tinted with the hue at 16% behind a hue-coloured glyph. That tile is how a
+// list of mixed kinds stays scannable — colour and glyph say *what* a row is
+// before the text is read — so prefer it over a bare `leading` node whenever
+// the row has a kind. `progress` (0-1) draws a hue-coloured determinate bar
+// pinned to the row's bottom edge for in-flight work.
 export function Row({
   title,
   subtitle,
   leading,
+  icon,
+  hue,
   right,
+  progress,
   onPress,
   accessibilityLabel,
   titleNumberOfLines = 1,
@@ -26,15 +45,27 @@ export function Row({
   title: string;
   subtitle?: string;
   leading?: React.ReactNode;
+  icon?: React.ComponentProps<typeof Feather>["name"];
+  hue?: string;
   right?: React.ReactNode;
+  progress?: number | null;
   onPress?: () => void;
   accessibilityLabel?: string;
   titleNumberOfLines?: number;
   style?: ViewStyle | ViewStyle[];
 }) {
+  const tint = hue ?? theme.accent;
+  const lead =
+    leading ??
+    (icon ? (
+      <View style={[styles.iconTile, { backgroundColor: withAlpha(tint, 0.16) }]}>
+        <Feather name={icon} size={20} color={tint} />
+      </View>
+    ) : null);
+
   const body = (
     <>
-      {leading != null ? <View style={styles.leading}>{leading}</View> : null}
+      {lead != null ? <View style={styles.leading}>{lead}</View> : null}
       <View style={styles.main}>
         <Text style={styles.title} numberOfLines={titleNumberOfLines}>
           {title}
@@ -46,6 +77,19 @@ export function Row({
         ) : null}
       </View>
       {right != null ? <View style={styles.right}>{right}</View> : null}
+      {progress != null ? (
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressFill,
+              {
+                backgroundColor: tint,
+                width: `${Math.min(100, Math.max(0, progress * 100))}%`,
+              },
+            ]}
+          />
+        </View>
+      ) : null}
     </>
   );
 
@@ -73,14 +117,31 @@ const styles = StyleSheet.create({
     backgroundColor: surface.card,
     borderWidth: 1,
     borderColor: surface.border,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     padding: spacing(1.5),
     minHeight: 56,
+    overflow: "hidden",
   },
   pressed: { backgroundColor: surface.cardPressed },
   leading: { alignItems: "center", justifyContent: "center" },
+  iconTile: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   main: { flex: 1, gap: spacing(0.25) },
   right: { alignItems: "flex-end", justifyContent: "center", gap: spacing(0.5) },
   title: { color: theme.textPrimary, fontSize: fontSize.base, fontWeight: fontWeight.medium },
   subtitle: { color: theme.textMuted, fontSize: fontSize.sm },
+  progressTrack: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 3,
+    backgroundColor: withAlpha(theme.textPrimary, 0.1),
+  },
+  progressFill: { height: 3, borderRadius: radius.pill },
 });
