@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
-import { geocode, type GeocodeResult } from "../../geocode";
+import { geocode, type GeocodeResult } from "@logjam/shared";
 import { messageFromError } from "../../errors/messageFromError";
 import classes from "./MapSearchBox.module.css";
 

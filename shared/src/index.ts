@@ -7,6 +7,7 @@ export * from "./tripName.js";
 export * from "./elvisZip.js";
 export * from "./canyonNameMatch.js";
 export * from "./canyonGeo.js";
+export * from "./geocode.js";
 export * from "./canyonValidation.js";
 export * from "./canyonMatch.js";
 export * from "./mergeCanyon.js";

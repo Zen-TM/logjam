@@ -11,7 +11,15 @@
 // Vulkan renders symbols correctly; don't revert to opengl without retesting
 // labels on the emulator AND a physical device.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Linking,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import {
   Camera,
   CircleLayer,
@@ -24,6 +32,7 @@ import {
   SymbolLayer,
 } from "@maplibre/maplibre-react-native";
 import { Feather } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
 import * as Location from "expo-location";
@@ -43,7 +52,16 @@ import { getVectorStyle, useApiQuery } from "../api/queries";
 import type { TCanyon } from "../api/types";
 import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
 import { config } from "../config";
-import { fontSize, radius, spacing, theme } from "../theme";
+import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { MapSearchBar } from "./MapSearchBar";
+import { ScaleBar } from "./ScaleBar";
+import {
+  CHROME_GAP,
+  FAB_ICON,
+  FAB_SIZE,
+  MINI_FAB_ICON,
+  MINI_FAB_SIZE,
+} from "./mapChrome";
 import { BottomSheet } from "../ui/BottomSheet";
 import { Card } from "../ui/Card";
 import { Row } from "../ui/Row";
@@ -107,6 +125,16 @@ const PROTOMAPS_FLAVOR = "light" as const;
 // Blue Mountains default view (matches the app's home turf).
 const DEFAULT_CENTER: [number, number] = [150.31, -33.7];
 const DEFAULT_ZOOM = 9;
+
+// Bearing to 0..360 so "is the map facing north" is a single comparison.
+function normalizeBearing(heading: number): number {
+  if (!Number.isFinite(heading)) return 0;
+  return ((heading % 360) + 360) % 360;
+}
+
+// How far off north before the compass button appears. A degree of slop keeps
+// it from flickering in on rounding noise after a reset.
+const COMPASS_VISIBLE_DEG = 1;
 
 // Web canyon colours (Map.tsx applyCanyonThemePaint fallbacks).
 // GeoPDF overlay opacity presets (spec asks 0–100%; steps avoid a native
@@ -185,7 +213,18 @@ export function MapScreen({
   );
   const [basemapId, setBasemapId] = useState<BasemapId>("six-topo");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [attributionOpen, setAttributionOpen] = useState(false);
   const [regionStatus, setRegionStatus] = useState<string | null>(null);
+  // Camera readout for the JS-drawn chrome: the scale bar needs zoom+latitude,
+  // the compass button needs the bearing. Fed by onRegionDidChange (fires when
+  // a gesture settles), seeded with the default camera.
+  const [camera, setCamera] = useState({
+    zoom: DEFAULT_ZOOM,
+    latitude: DEFAULT_CENTER[1],
+    bearing: 0,
+  });
+  const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const mapRef = useRef<React.ComponentRef<typeof MapView>>(null);
   // Enabled topo overlays. Seeded from the persisted set (registryDb) so a
   // downloaded overlay stays visible across a cold offline launch; toggles
@@ -554,6 +593,43 @@ export function MapScreen({
     return () => sub.remove();
   }, []);
 
+  // Camera readout for the scale bar + compass. Coordinates stay in component
+  // state only — never logged (privacy rule).
+  const handleRegionDidChange = useCallback(
+    (feature: {
+      geometry: { coordinates: number[] };
+      properties: { zoomLevel: number; heading: number };
+    }) => {
+      const latitude = feature.geometry.coordinates[1];
+      const { zoomLevel, heading } = feature.properties;
+      if (!Number.isFinite(latitude) || !Number.isFinite(zoomLevel)) return;
+      setCamera({
+        zoom: zoomLevel,
+        latitude: latitude as number,
+        bearing: normalizeBearing(heading),
+      });
+    },
+    [],
+  );
+
+  // Compass tap: rotate back to north-up. Course-up follow would immediately
+  // re-rotate on the next fix, so drop to plain follow as well.
+  const handleResetNorth = useCallback(() => {
+    setFollowMode((mode) => (mode === "course-up" ? "follow" : mode));
+    cameraRef.current?.setCamera({ heading: 0, animationDuration: 300 });
+    setCamera((prev) => ({ ...prev, bearing: 0 }));
+  }, []);
+
+  // Place search result: recentre without changing zoom intent drastically.
+  const handleSelectPlace = useCallback((latitude: number, longitude: number) => {
+    setFollowMode("off");
+    cameraRef.current?.setCamera({
+      centerCoordinate: [longitude, latitude],
+      zoomLevel: 13,
+      animationDuration: 800,
+    });
+  }, []);
+
   const handleLocateMe = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
     // Drive the dot from expo-location directly — MLRN's built-in
@@ -694,6 +770,17 @@ export function MapScreen({
     })),
   );
 
+  // Chrome geometry. Notices clear the search row so an expanded search bar
+  // never covers them; the scale bar runs from the left edge up to the floating
+  // button column on the right.
+  const noticeTop = insets.top + CHROME_GAP + FAB_SIZE + spacing(1);
+  const scaleBarMaxWidth =
+    windowWidth - FAB_SIZE - CHROME_GAP * 3 - spacing(1);
+  const attributionText = basemapResolved
+    .map((r) => (r.status === "ok" ? r.attribution : null))
+    .filter(Boolean)
+    .join(" · ");
+
   // Hold the map until the bundled glyph/sprite install settles (first launch:
   // one-time extraction, a second or two; after that: a marker check). Mounting
   // earlier would bake the remote glyph URLs into the style and force a full
@@ -710,6 +797,11 @@ export function MapScreen({
         mapStyle={shellStyle}
         attributionEnabled={false}
         logoEnabled={false}
+        // Native ornaments off: the compass can only be pinned to one of four
+        // corners and can't be restyled or stacked with our chrome, and v10
+        // has no scale-bar ornament at all — both are drawn in JS instead.
+        compassEnabled={false}
+        onRegionDidChange={handleRegionDidChange}
         onPress={() => setFollowMode("off")}
         onLongPress={handleMapLongPress}
       >
@@ -978,9 +1070,12 @@ export function MapScreen({
         ) : null}
       </MapView>
 
+      {/* Place search: collapsed button top-left, expands to a full-width bar. */}
+      <MapSearchBar topInset={insets.top} onSelectPlace={handleSelectPlace} />
+
       {/* Offline/unavailable basemap notice (fail visibly, never silently). */}
       {basemapResolved.every((r) => r.status !== "ok") ? (
-        <View style={styles.notice}>
+        <View style={[styles.notice, { top: noticeTop }]}>
           <Text style={styles.noticeText}>
             {connectivity === "online"
               ? "This basemap is unavailable."
@@ -991,7 +1086,7 @@ export function MapScreen({
 
       {/* Error surfaces: background failures, non-blocking. */}
       {canyons.error ? (
-        <View style={styles.notice}>
+        <View style={[styles.notice, { top: noticeTop }]}>
           <Text style={styles.noticeText}>{canyons.error}</Text>
         </View>
       ) : null}
@@ -1003,7 +1098,7 @@ export function MapScreen({
           style={styles.controlButton}
           onPress={() => setPickerOpen(true)}
         >
-          <Feather name="layers" size={22} color={theme.textPrimary} />
+          <Feather name="layers" size={FAB_ICON} color={theme.textPrimary} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -1011,7 +1106,14 @@ export function MapScreen({
           style={[styles.controlButton, followMode !== "off" && styles.controlActive]}
           onPress={handleLocateMe}
         >
-          <Feather name="navigation" size={22} color={theme.textPrimary} />
+          {/* The arrow glyph's ink sits up-and-right of its box centre, so a
+              geometrically centred icon reads off-centre — nudge it back. */}
+          <Feather
+            name="navigation"
+            size={FAB_ICON}
+            color={theme.textPrimary}
+            style={styles.locateIcon}
+          />
         </Pressable>
         {!activeTrack ? (
           <Pressable
@@ -1020,9 +1122,50 @@ export function MapScreen({
             style={styles.controlButton}
             onPress={handleStartRecording}
           >
-            <Feather name="circle" size={22} color={theme.warning} />
+            {/* Drawn rather than a Feather glyph: the icon font gives no
+                control over ring thickness or a nested fill. */}
+            <View style={styles.recordRing}>
+              <View style={styles.recordCore} />
+            </View>
           </Pressable>
         ) : null}
+      </View>
+
+      {/* Bottom-left chrome: compass (only off-north) above the attribution
+          button, with the scale bar along the bottom edge. */}
+      <View style={styles.leftControls}>
+        {camera.bearing > COMPASS_VISIBLE_DEG &&
+        camera.bearing < 360 - COMPASS_VISIBLE_DEG ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Face map north"
+            style={styles.controlButton}
+            onPress={handleResetNorth}
+          >
+            <Feather
+              name="compass"
+              size={FAB_ICON}
+              color={theme.textPrimary}
+              style={{ transform: [{ rotate: `${-camera.bearing}deg` }] }}
+            />
+          </Pressable>
+        ) : null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Map data attribution"
+          style={styles.miniButton}
+          onPress={() => setAttributionOpen(true)}
+        >
+          <Feather name="info" size={MINI_FAB_ICON} color={theme.textPrimary} />
+        </Pressable>
+      </View>
+
+      <View style={styles.scaleBarWrap}>
+        <ScaleBar
+          latitude={camera.latitude}
+          zoom={camera.zoom}
+          maxWidth={scaleBarMaxWidth}
+        />
       </View>
 
       {activeTrack ? <TrackRecordingControls activeTrack={activeTrack} /> : null}
@@ -1030,7 +1173,7 @@ export function MapScreen({
       {/* Navigate-to-waypoint readout: live distance + bearing from the
           latest fix. Static labels only — coordinates never rendered. */}
       {navTarget ? (
-        <View style={styles.navChip}>
+        <View style={[styles.navChip, { top: noticeTop }]}>
           <Text style={styles.noticeText} numberOfLines={1}>
             {navTarget.name}
             {navDistanceM != null && navBearingDeg != null
@@ -1050,15 +1193,19 @@ export function MapScreen({
         </View>
       ) : null}
 
-      {/* Attribution (plain text, required by providers). */}
-      <View style={styles.attribution} pointerEvents="none">
-        <Text style={styles.attributionText} numberOfLines={2}>
-          {basemapResolved
-            .map((r) => (r.status === "ok" ? r.attribution : null))
-            .filter(Boolean)
-            .join(" · ")}
+      {/* Attribution is required by the providers but ate the bottom of the
+          map; it now lives behind the (i) button. */}
+      <BottomSheet
+        visible={attributionOpen}
+        onClose={() => setAttributionOpen(false)}
+        title="Map data"
+      >
+        <Text style={styles.attributionText}>
+          {attributionText.length > 0
+            ? attributionText
+            : "No attribution reported for the active basemap."}
         </Text>
-      </View>
+      </BottomSheet>
 
       <BottomSheet
         visible={pickerOpen}
@@ -1259,7 +1406,6 @@ const styles = StyleSheet.create({
   map: { flex: 1 },
   notice: {
     position: "absolute",
-    top: spacing(2),
     alignSelf: "center",
     backgroundColor: "rgba(0,0,0,0.6)",
     borderRadius: radius.md,
@@ -1269,22 +1415,59 @@ const styles = StyleSheet.create({
   noticeText: { color: theme.textPrimary, fontSize: fontSize.sm },
   controls: {
     position: "absolute",
-    right: spacing(2),
-    bottom: spacing(5),
+    right: CHROME_GAP,
+    bottom: CHROME_GAP + spacing(4),
     gap: spacing(1),
   },
+  // Bottom-left stack sits clear of the scale bar that runs along the very
+  // bottom edge.
+  leftControls: {
+    position: "absolute",
+    left: CHROME_GAP,
+    bottom: CHROME_GAP + spacing(4),
+    gap: spacing(1),
+    alignItems: "center",
+  },
   controlButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: FAB_SIZE,
+    height: FAB_SIZE,
+    borderRadius: FAB_SIZE / 2,
+    backgroundColor: theme.secondary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  miniButton: {
+    width: MINI_FAB_SIZE,
+    height: MINI_FAB_SIZE,
+    borderRadius: MINI_FAB_SIZE / 2,
     backgroundColor: theme.secondary,
     alignItems: "center",
     justifyContent: "center",
   },
   controlActive: { backgroundColor: theme.accent },
+  locateIcon: { marginTop: 3, marginLeft: -3 },
+  recordRing: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 4,
+    borderColor: theme.warning,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recordCore: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: theme.warning,
+  },
+  scaleBarWrap: {
+    position: "absolute",
+    left: CHROME_GAP,
+    bottom: spacing(1),
+  },
   navChip: {
     position: "absolute",
-    top: spacing(2),
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
@@ -1294,13 +1477,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1),
   },
-  attribution: {
-    position: "absolute",
-    bottom: spacing(0.5),
-    left: spacing(1),
-    right: spacing(1),
+  attributionText: {
+    color: theme.textMuted,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.regular,
   },
-  attributionText: { color: theme.textMuted, fontSize: 9 },
   // Layer-sheet rows (content lives in the shared BottomSheet). A row is a Card
   // laid out horizontally: main text block (flex) + optional pill/action + the
   // trailing Toggle.

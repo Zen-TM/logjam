@@ -1,4 +1,4 @@
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
@@ -20,7 +20,7 @@ export default function App() {
   if (minVersionGate.status === "upgradeRequired") {
     return (
       <SafeAreaProvider>
-        <View style={styles.blockingContainer}>
+        <SafeAreaView style={styles.blockingContainer}>
           <StatusBar style="light" />
           <Text style={styles.blockingTitle}>Update required</Text>
           <Text style={styles.blockingLine}>
@@ -28,7 +28,7 @@ export default function App() {
             supported version is {minVersionGate.minVersion}. Please update the
             app to continue.
           </Text>
-        </View>
+        </SafeAreaView>
       </SafeAreaProvider>
     );
   }

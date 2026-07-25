@@ -4,6 +4,7 @@
 // other than CURRENT_CONSENT_VERSION.
 import { useState } from "react";
 import { ScrollView, StyleSheet, Text } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CURRENT_CONSENT_VERSION, messageFromError } from "@logjam/shared";
 
 import { updateConsent } from "../api/queries";
@@ -19,6 +20,8 @@ export function ConsentGate({
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // No nav header on the gates, so the status-bar/camera inset is ours to clear.
+  const insets = useSafeAreaInsets();
 
   const agree = async () => {
     setSubmitting(true);
@@ -35,7 +38,13 @@ export function ConsentGate({
   };
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + spacing(3), paddingBottom: insets.bottom + spacing(3) },
+      ]}
+    >
       <Text style={styles.title}>Terms & privacy</Text>
       <Text style={styles.body}>
         Logjam&apos;s terms of service or privacy policy have changed since you

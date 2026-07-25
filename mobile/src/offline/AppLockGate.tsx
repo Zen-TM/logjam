@@ -7,7 +7,8 @@
 // to gate with; the gate passes through rather than bricking the app — the
 // data is exactly as protected as everything else on an unlocked device.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, StyleSheet, Text, View } from "react-native";
+import { AppState, StyleSheet, Text } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as LocalAuthentication from "expo-local-authentication";
 
 import { Button } from "../ui";
@@ -156,7 +157,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   if (!lockRequired || unlocked) return <>{children}</>;
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Locked</Text>
       <Text style={styles.line}>
         Offline maps are stored on this device. Unlock to continue.
@@ -165,7 +166,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
         <Text style={styles.line}>Authentication didn&apos;t complete — try again.</Text>
       ) : null}
       <Button label="Unlock" onPress={prompt} />
-    </View>
+    </SafeAreaView>
   );
 }
 

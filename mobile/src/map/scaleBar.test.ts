@@ -1,0 +1,63 @@
+import { describe, it, expect } from "vitest";
+import { chooseScaleStep, metersPerPixel } from "./scaleBar";
+
+describe("metersPerPixel", () => {
+  it("matches the known Web-Mercator resolution at the equator", () => {
+    expect(metersPerPixel(0, 0)).toBeCloseTo(156543.03392, 3);
+    expect(metersPerPixel(0, 10)).toBeCloseTo(152.8740565, 5);
+  });
+
+  it("shrinks with latitude (NSW canyoning country is ~-33)", () => {
+    const equator = metersPerPixel(0, 14);
+    const nsw = metersPerPixel(-33.7, 14);
+    expect(nsw).toBeLessThan(equator);
+    expect(nsw).toBeCloseTo(equator * Math.cos((33.7 * Math.PI) / 180), 6);
+  });
+
+  it("is sign-agnostic about hemisphere", () => {
+    expect(metersPerPixel(-33.7, 12)).toBeCloseTo(metersPerPixel(33.7, 12), 9);
+  });
+
+  it("throws on out-of-range input rather than returning NaN", () => {
+    expect(() => metersPerPixel(91, 10)).toThrow(/latitude out of range/);
+    expect(() => metersPerPixel(Number.NaN, 10)).toThrow(/latitude out of range/);
+    expect(() => metersPerPixel(0, -1)).toThrow(/zoom out of range/);
+  });
+});
+
+describe("chooseScaleStep", () => {
+  it("picks the largest round step that fits the offered width", () => {
+    // 1 m/px over 300 px offers 300 m → 200 m is the largest round step.
+    const step = chooseScaleStep(1, 300);
+    expect(step.meters).toBe(200);
+    expect(step.widthPx).toBe(200);
+    expect(step.label).toBe("200 m");
+  });
+
+  it("never draws wider than the space offered", () => {
+    for (const zoom of [0, 4, 8, 11, 14, 17, 20]) {
+      const step = chooseScaleStep(metersPerPixel(-33.7, zoom), 280);
+      expect(step.widthPx).toBeLessThanOrEqual(280);
+      expect(step.widthPx).toBeGreaterThan(0);
+    }
+  });
+
+  it("labels kilometres once past 1000 m", () => {
+    expect(chooseScaleStep(10, 300).label).toBe("2 km");
+    expect(chooseScaleStep(100, 300).label).toBe("20 km");
+  });
+
+  it("clamps to the offered width when even the smallest step overflows", () => {
+    // 1000 m/px over 0.5 px offers 500 m of ground in half a pixel; the
+    // smallest round step (1 m) would still need 0.001 px, so it fits — force
+    // the overflow branch with a metersPerPixel above the whole offer.
+    const step = chooseScaleStep(1000, 0.0005);
+    expect(step.widthPx).toBe(0.0005);
+    expect(step.meters).toBe(1);
+  });
+
+  it("throws on degenerate input", () => {
+    expect(() => chooseScaleStep(0, 300)).toThrow(/bad metersPerPixel/);
+    expect(() => chooseScaleStep(1, 0)).toThrow(/bad maxWidthPx/);
+  });
+});
