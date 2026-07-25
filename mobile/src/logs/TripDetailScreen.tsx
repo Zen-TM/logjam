@@ -12,9 +12,11 @@
 import { useCallback, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { distinctTripTypes } from "@logjam/shared";
+import { customFieldDisplayLabel, distinctTripTypes } from "@logjam/shared";
 
+import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { tripTitle } from "../api/tripTitle";
+import { MediaStrip } from "../media/MediaStrip";
 import { fontSize, fontWeight, lineHeight, radius, spacing, surface, theme } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import {
@@ -26,7 +28,6 @@ import {
 import {
   HeroHeader,
   IconButton,
-  MediaStrip,
   Row,
   SectionHeader,
   StatusPill,
@@ -51,6 +52,10 @@ export function TripDetailScreen({
   const media = useMirrorMedia("tripLog", trip.id);
   const canyonsQuery = useMirrorCanyons();
   const allTrips = useMirrorTrips();
+  // Definitions give each stored value its real label and ordering; without
+  // them (offline, or a field deleted since) the key is un-slugged instead.
+  const userQuery = useApiQuery(fetchCurrentUser, "Couldn't load your fields.");
+  const fieldDefs = userQuery.data?.uiPreferences?.tripLogCustomFields ?? [];
 
   const [editing, setEditing] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -62,7 +67,14 @@ export function TripDetailScreen({
 
   const meta = tripTypeMeta(primaryTripType(current.types));
   const photoCount = media.data?.length ?? 0;
-  const customFields = Object.entries(current.customFields);
+  const storedFields = current.customFields;
+  const definedFirst = fieldDefs
+    .filter((def) => storedFields[def.key] !== undefined)
+    .map((def) => [customFieldDisplayLabel(def), storedFields[def.key]] as const);
+  const orphaned = Object.entries(storedFields)
+    .filter(([key]) => !fieldDefs.some((def) => def.key === key))
+    .map(([key, value]) => [humanizeFieldKey(key), value] as const);
+  const customFields = [...definedFirst, ...orphaned];
 
   return (
     <View style={styles.screen}>
@@ -122,12 +134,15 @@ export function TripDetailScreen({
           ))
         )}
 
-        <SectionHeader label={photoCount === 0 ? "Photos" : `Photos · ${photoCount}`} />
+        <SectionHeader
+          label={photoCount === 0 ? "Attachments" : `Attachments · ${photoCount}`}
+        />
         <MediaStrip
           linkedType="tripLog"
           linkedId={current.id}
           media={media.data ?? []}
-          emptyHint="No photos yet — add one straight from the camera, even with no signal."
+          emptyHint="Nothing attached yet — a photo, a video, or the track you recorded."
+          onFailed={(text) => notify(text, "error")}
         />
 
         <SectionHeader label="Notes" />
@@ -141,9 +156,9 @@ export function TripDetailScreen({
           <>
             <SectionHeader label="Your fields" />
             <View style={styles.fieldCard}>
-              {customFields.map(([key, value]) => (
-                <View key={key} style={styles.fieldRow}>
-                  <Text style={styles.fieldKey}>{humanizeFieldKey(key)}</Text>
+              {customFields.map(([label, value]) => (
+                <View key={label} style={styles.fieldRow}>
+                  <Text style={styles.fieldKey}>{label}</Text>
                   <Text style={styles.fieldValue}>{formatFieldValue(value)}</Text>
                 </View>
               ))}
@@ -168,11 +183,9 @@ export function TripDetailScreen({
 }
 
 /**
- * Custom-field keys are slugs of the label the user typed on the web
- * (`makeCustomFieldKey`). Mobile doesn't sync the field DEFINITIONS yet, so
- * there is no stored label or type to render from — un-slug the key rather than
- * showing `water_level` raw, and show the value as-is. Read-only for the same
- * reason: without the definition there is no type to validate an edit against.
+ * Fallback label for a value whose DEFINITION is gone — deleted on another
+ * device, or not loaded because we are offline. Keys are slugs of the original
+ * label (`makeCustomFieldKey`), so un-slugging beats showing `water_level` raw.
  */
 function humanizeFieldKey(key: string): string {
   const spaced = key.replace(/[_-]+/g, " ").trim();

@@ -234,6 +234,12 @@ because each was a bug once:
   The sheet's title changes with the mode, so which step you are on is never a
   guess.
 
+**A list of choices is a sheet, not an `Alert`.** Android's Alert caps at three
+buttons and drops the rest silently — that is how "Take photo" shipped
+unreachable behind a three-option Alert. `Alert` is for destructive confirms
+(where the copy is the point) and nothing else; anything with glyphs, subtitles
+or a sub-step is a sheet.
+
 **Toasts** (`Toast`), not inline banners, for the outcome of an action: an
 inline card reflows the list under the user's thumb and then lingers with no
 owner. One toast channel per screen, `{ text, tone, nonce }`; errors stay up
@@ -279,6 +285,16 @@ row with a retry — it persists because the problem persists.
   seeded from and send the difference (see `save()` in `TripEditSheet`). Sending
   the whole form makes every save a write to every column, which under
   field-scoped LWW clobbers a concurrent edit to a field the user never touched.
+- **Definitions are online, values are offline.** A trip's field VALUES queue
+  through the outbox like everything else, but the field DEFINITIONS live in an
+  account-level preference blob the web and every device share, so editing them
+  requires a connection and says so when it fails. Queuing an offline edit to a
+  shared list would need merge rules for a list the user could be reordering in
+  a browser at the same time.
+- **A destructive action reports the part the user can't see.** Deleting a
+  custom field also clears its value from every trip that had one, so the
+  confirm asks the server for that count first and puts it in the dialog
+  ("12 trips have a value…"), rather than discovering it afterwards.
 - **A chart is not an affordance.** `ActivitySpark` is deliberately
   non-interactive because it exposes no filter — same rule as the drag handle,
   read the other way: don't render something that looks tappable unless it is.
@@ -308,6 +324,15 @@ screen needs a variation, **extend the primitive** (`Row.icon`, `Button.icon`,
 copy — a hand-rolled row is how the last drift started. Add a new kit file only
 for a genuinely new shape (`CapacityBar`, `HeroHeader`).
 
+**A long list is a `SectionList`/`FlatList` with stable render callbacks and a
+narrowed window.** An inline `renderItem={({item}) => …}` arrow is a new
+function identity every render, which makes VirtualizedList re-render every
+mounted cell — and the default `windowSize` of 21 screens means "every mounted
+cell" is the whole list. Memoise the row component, hand it callbacks that take
+the item rather than closing over it, and set `windowSize`/`initialNumToRender`
+to something near what fits. This was the whole of the Logs screen's
+sluggishness: tapping the search icon re-rendered 115 rows to change one chip.
+
 A rail cues its own scrollability: **either** edge dissolves into the page
 colour when there is content past it (`SegmentedControl`'s `EdgeFade`, an
 `expo-linear-gradient` fade to `theme.primary`, `spacing(6)` wide). Both sides,
@@ -328,9 +353,14 @@ picker for one date and for both ends of a range: the OS dialog can't be tinted
 to the scheme and would put two or three different-looking pickers on one
 screen. One themed surface, reused three times, no native dependency.
 
+The kit is presentation only. A shared component that owns permissions, file
+IO or outbox writes is a FEATURE component and lives with its feature
+(`src/media/MediaStrip.tsx`), even when two screens use it — otherwise `src/ui`
+slowly becomes the place everything shared goes.
+
 Current kit: `ActivitySpark` · `BottomSheet` · `Button` · `CapacityBar` ·
 `Card` · `Chip` · `ChipPicker` · `DatePicker` · `EntityEditForm` ·
-`ErrorBanner` · `HeroHeader` · `IconButton` · `MediaStrip` · `Row` ·
+`ErrorBanner` · `HeroHeader` · `IconButton` · `Row` ·
 `Screen`/`ScreenScroll` · `ScreenStates` · `SectionHeader` ·
 `SegmentedControl` · `StatGrid` · `StatusPill` · `TextField` · `Toast` ·
 `Toggle`.
@@ -346,6 +376,12 @@ wins.
 **Failure copy is ours, not the error's.** A caught error goes to `console.error`
 and the user gets a sentence we wrote ("Couldn't save this trip."). Interpolating
 an error message into a toast is how a canyon name reaches a screenshot.
+
+**A calendar day is the user's, not UTC's.** Date-only values are stored as UTC
+midnight, but "today" for a picker or a default must come from the LOCAL clock
+(`todayDateKey`). Reading it in UTC greys out the current day for the first
+hours of every AEST morning — the user cannot log the trip they just got back
+from.
 
 **Nothing is autosaved outside the app's own storage.** The web keeps a
 half-written trip in `localStorage`; mobile deliberately has no equivalent —

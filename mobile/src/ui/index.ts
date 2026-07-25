@@ -8,7 +8,6 @@ export { Chip } from "./Chip";
 export { ChipPicker, type ChipOption } from "./ChipPicker";
 export { DatePicker } from "./DatePicker";
 export { HeroHeader } from "./HeroHeader";
-export { MediaStrip } from "./MediaStrip";
 export { toDateKey, fromDateKey, todayDateKey } from "./monthGrid";
 export { IconButton } from "./IconButton";
 export { SectionHeader } from "./SectionHeader";

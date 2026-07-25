@@ -5,6 +5,7 @@ export * from "./themeSchemes.js";
 export * from "./tripLogFields.js";
 export * from "./tripName.js";
 export * from "./tripFilter.js";
+export * from "./gpxWrite.js";
 export * from "./elvisZip.js";
 export * from "./canyonNameMatch.js";
 export * from "./canyonGeo.js";

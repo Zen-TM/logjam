@@ -186,6 +186,11 @@ const TRIP_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
     encode: (value) => JSON.stringify(value ?? []),
     decode: (raw) => JSON.parse((raw as string | null) ?? "[]"),
   },
+  customFields: {
+    column: "custom_fields_json",
+    encode: (value) => JSON.stringify(value ?? {}),
+    decode: (raw) => JSON.parse((raw as string | null) ?? "{}"),
+  },
 };
 
 /** A trip's canyon links, ordered — order drives the derived title. */
@@ -197,6 +202,8 @@ export type TripDraftFields = {
   displayName?: string | null;
   notes?: string | null;
   types?: string[];
+  /** Values for the user's own field definitions, keyed by field key. */
+  customFields?: Record<string, unknown>;
   /** Ordered; the mirror needs the names, the push op sends ids only. */
   canyons?: TripCanyonLink[];
 };
@@ -261,10 +268,12 @@ export async function createTripLocal(draft: TripDraftFields): Promise<string> {
   const now = new Date().toISOString();
   const canyons = draft.canyons ?? [];
   const types = draft.types ?? [];
+  const customFields = draft.customFields ?? {};
   const fields: Record<string, unknown> = {
     date: draft.date,
     types,
     canyonIds: canyons.map((link) => link.id),
+    ...(Object.keys(customFields).length > 0 && { customFields }),
     ...(draft.displayName != null && { displayName: draft.displayName }),
     ...(draft.notes != null && { notes: draft.notes }),
   };
@@ -281,7 +290,7 @@ export async function createTripLocal(draft: TripDraftFields): Promise<string> {
       draft.displayName ?? null,
       JSON.stringify(types),
       draft.notes ?? null,
-      JSON.stringify({}),
+      JSON.stringify(customFields),
       JSON.stringify(canyons),
       now,
       now,

@@ -32,7 +32,7 @@ import { useMirrorCanyon, useMirrorMedia } from "../sync/useSyncQueries";
 import { BottomSheet } from "../ui/BottomSheet";
 import { Button } from "../ui/Button";
 import { ErrorBanner } from "../ui/ErrorBanner";
-import { MediaStrip } from "../ui/MediaStrip";
+import { MediaStrip } from "../media/MediaStrip";
 import { EntityEditForm, type EditFieldSpec } from "../ui/EntityEditForm";
 import { Row } from "../ui/Row";
 import { SectionHeader } from "../ui/SectionHeader";

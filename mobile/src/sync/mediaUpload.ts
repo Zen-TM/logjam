@@ -11,7 +11,13 @@
 import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
-import { isUuidV4 } from "@logjam/shared";
+import { getThumbnailAsync } from "expo-video-thumbnails";
+import {
+  categoryHasThumbnail,
+  isUuidV4,
+  mediaCategory,
+  MEDIA_EXTENSION_BY_MIME,
+} from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
 import type { MirrorMedia } from "./mirrorStore";
@@ -24,8 +30,10 @@ const CACHE_DIR = `${FileSystem.documentDirectory}media-cache/`;
 // only bounds thumbnailSizeBytes, not dimensions.
 const THUMBNAIL_MAX_WIDTH = 400;
 const THUMBNAIL_QUALITY = 0.7;
+/** Frame to grab for a video thumbnail — 1s in, past any black lead-in. */
+const VIDEO_THUMBNAIL_MS = 1000;
 
-export type PickedImage = {
+export type PickedFile = {
   uri: string;
   mimeType?: string | null;
   fileName?: string | null;
@@ -67,34 +75,58 @@ function mintUuid(): string {
 }
 
 /**
- * Attach a picked/captured image to a canyon or trip: copy it + a generated
- * thumbnail into the app-private cache, write the pendingUpload mirror row,
- * and enqueue the media.create op. Returns the new mediaId.
+ * Attach a picked/captured file to a canyon or trip: copy it (plus a generated
+ * thumbnail where the category has one) into the app-private cache, write the
+ * pendingUpload mirror row, and enqueue the media.create op. Returns the new
+ * mediaId.
+ *
+ * Images get a downscaled JPEG thumbnail generated here. Track files
+ * (GPX/KML) have no thumbnail at all — `categoryHasThumbnail` decides, the
+ * presign mints no thumbnail URL for them, and the flush already treats a
+ * missing thumbnail as normal. An unsupported MIME type throws rather than
+ * uploading something the server will reject at confirm.
  */
-export async function attachPhotoLocal(
+export async function attachMediaLocal(
   linkedType: "canyon" | "tripLog",
   linkedId: string,
-  image: PickedImage,
+  file: PickedFile,
 ): Promise<string> {
   await ensureCacheDir();
   const mediaId = mintUuid();
-  const mediaType = image.mimeType ?? "image/jpeg";
-  const filename = image.fileName ?? `${mediaId}.jpg`;
+  const mediaType = file.mimeType ?? "image/jpeg";
+  const category = mediaCategory(mediaType);
+  if (category === null) {
+    throw new Error(`Unsupported media type for upload: ${mediaType}`);
+  }
+  const filename = file.fileName ?? `${mediaId}.${MEDIA_EXTENSION_BY_MIME[mediaType] ?? "bin"}`;
 
   const displayPath = `${CACHE_DIR}${mediaId}.display`;
-  await FileSystem.copyAsync({ from: image.uri, to: displayPath });
+  await FileSystem.copyAsync({ from: file.uri, to: displayPath });
 
-  const thumb = await manipulateAsync(
-    image.uri,
-    [{ resize: { width: THUMBNAIL_MAX_WIDTH } }],
-    { compress: THUMBNAIL_QUALITY, format: SaveFormat.JPEG },
-  );
-  const thumbPath = `${CACHE_DIR}${mediaId}.thumb`;
-  await FileSystem.copyAsync({ from: thumb.uri, to: thumbPath });
-  await FileSystem.deleteAsync(thumb.uri, { idempotent: true }).catch(() => {});
+  let thumbPath: string | null = null;
+  if (categoryHasThumbnail(category)) {
+    // A video's thumbnail has to be extracted from a frame first —
+    // ImageManipulator cannot read an mp4. The server REQUIRES a thumbnail for
+    // every category that declares one, so this is not optional.
+    const stillUri =
+      category === "video"
+        ? (await getThumbnailAsync(file.uri, { time: VIDEO_THUMBNAIL_MS })).uri
+        : file.uri;
+    const thumb = await manipulateAsync(
+      stillUri,
+      [{ resize: { width: THUMBNAIL_MAX_WIDTH } }],
+      { compress: THUMBNAIL_QUALITY, format: SaveFormat.JPEG },
+    );
+    thumbPath = `${CACHE_DIR}${mediaId}.thumb`;
+    await FileSystem.copyAsync({ from: thumb.uri, to: thumbPath });
+    await FileSystem.deleteAsync(thumb.uri, { idempotent: true }).catch(() => {});
+    if (stillUri !== file.uri) {
+      await FileSystem.deleteAsync(stillUri, { idempotent: true }).catch(() => {});
+    }
+  }
 
   const sizeBytes = await fileSize(displayPath);
-  const thumbnailSizeBytes = await fileSize(thumbPath);
+  const thumbnailSizeBytes = thumbPath === null ? null : await fileSize(thumbPath);
 
   const db = await getSyncDb();
   await db.withTransactionAsync(async () => {
@@ -128,7 +160,7 @@ export async function attachPhotoLocal(
         filename,
         mediaType,
         sizeBytes,
-        thumbnailSizeBytes,
+        ...(thumbnailSizeBytes != null && { thumbnailSizeBytes }),
         localDisplayPath: displayPath,
         localThumbPath: thumbPath,
       }),

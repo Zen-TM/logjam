@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
+  coerceFieldValue,
+  customFieldDisplayLabel,
   enforceCanyoningTag,
   formatTripCanyonNames,
   MAX_CANYONS_PER_TRIP,
   TRIP_TYPE_SUGGESTIONS,
+  type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
 import { fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
@@ -23,10 +26,13 @@ import {
   Row,
   SectionHeader,
   TextField,
+  Toggle,
   toDateKey,
   todayDateKey,
   type ChipOption,
 } from "../ui";
+import { fetchCurrentUser } from "../api/queries";
+import { CustomFieldForm, CustomFieldList } from "./CustomFieldsEditor";
 import { formatDateKey } from "./logbook";
 import { tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 
@@ -45,7 +51,10 @@ import { tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
  * equivalent: the OS doesn't evict this form mid-edit the way a browser tab
  * gets reclaimed).
  */
-type Mode = "form" | "date" | "canyons";
+type Mode = "form" | "date" | "canyons" | "fields" | "fieldForm";
+
+/** Which date the picker mode is editing: the trip's, or a custom date field. */
+type DateTarget = { kind: "trip" } | { kind: "field"; key: string };
 
 export function TripEditSheet({
   visible,
@@ -76,6 +85,25 @@ export function TripEditSheet({
   const [customTypes, setCustomTypes] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [canyonSearch, setCanyonSearch] = useState("");
+  const [dateTarget, setDateTarget] = useState<DateTarget>({ kind: "trip" });
+  // Custom-field VALUES are held as strings while editing (like the web form)
+  // and coerced to their declared type on save.
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [customFieldDefs, setCustomFieldDefs] = useState<TripLogCustomFieldDef[]>([]);
+  const [editingField, setEditingField] = useState<TripLogCustomFieldDef | null>(null);
+
+  // Definitions are fetched the first time the sheet opens, not on mount: this
+  // component is always rendered (closed) by two screens, and most visits never
+  // open it. Failing is silent on purpose — the form still works, it just shows
+  // the fields it already knows about.
+  const loadedDefs = useRef(false);
+  useEffect(() => {
+    if (!visible || loadedDefs.current) return;
+    loadedDefs.current = true;
+    fetchCurrentUser()
+      .then((user) => setCustomFieldDefs(user.uiPreferences?.tripLogCustomFields ?? []))
+      .catch((err: unknown) => console.error(err));
+  }, [visible]);
 
   // Seed from the trip being edited (or today's blank form) each time the sheet
   // opens, so a cancelled edit never leaks into the next one.
@@ -90,6 +118,16 @@ export function TripEditSheet({
     setDisplayName(trip?.displayName ?? "");
     setTypes(trip?.types ?? []);
     setNotes(trip?.notes ?? "");
+    setDateTarget({ kind: "trip" });
+    setEditingField(null);
+    setFieldValues(
+      Object.fromEntries(
+        Object.entries(trip?.customFields ?? {}).map(([key, value]) => [
+          key,
+          value == null ? "" : String(value),
+        ]),
+      ),
+    );
   }, [trip, visible]);
 
   const typeOptions: ChipOption[] = useMemo(() => {
@@ -151,6 +189,7 @@ export function TripEditSheet({
     // user just saw are exactly what the server will store (shared derivation).
     const effectiveTypes = enforceCanyoningTag(types, selected.length > 0);
     const isoDate = `${dateKey}T00:00:00.000Z`;
+    const effectiveCustomFields = coerceCustomFields(fieldValues, customFieldDefs);
     try {
       if (trip) {
         // Field-scoped: push only what actually changed, so a concurrent edit
@@ -162,6 +201,11 @@ export function TripEditSheet({
         }
         if ((trimmedNotes || null) !== trip.notes) changes.notes = trimmedNotes || null;
         if (!sameOrder(effectiveTypes, trip.types)) changes.types = effectiveTypes;
+        if (
+          JSON.stringify(effectiveCustomFields) !== JSON.stringify(trip.customFields ?? {})
+        ) {
+          changes.customFields = effectiveCustomFields;
+        }
         if (
           !sameOrder(
             selected.map((link) => link.id),
@@ -182,6 +226,7 @@ export function TripEditSheet({
           displayName: trimmedName || null,
           notes: trimmedNotes || null,
           types: effectiveTypes,
+          customFields: effectiveCustomFields,
           canyons: selected,
         });
         onSaved("Trip logged.");
@@ -195,24 +240,46 @@ export function TripEditSheet({
     } finally {
       setSaving(false);
     }
-  }, [dateKey, displayName, notes, onClose, onFailed, onSaved, selected, trip, types]);
+  }, [
+    customFieldDefs,
+    dateKey,
+    displayName,
+    fieldValues,
+    notes,
+    onClose,
+    onFailed,
+    onSaved,
+    selected,
+    trip,
+    types,
+  ]);
 
   const derivedTitle = formatTripCanyonNames(selected.map((link) => link.name));
   const title =
     mode === "date"
-      ? "Trip date"
+      ? dateTarget.kind === "trip"
+        ? "Trip date"
+        : (customFieldDefs.find((def) => def.key === dateTarget.key)?.label ?? "Date")
       : mode === "canyons"
         ? "Canyons on this trip"
-        : editing
-          ? "Edit trip"
-          : "Log a trip";
+        : mode === "fields"
+          ? "Your trip fields"
+          : mode === "fieldForm"
+            ? (editingField ? "Edit field" : "New field")
+            : editing
+              ? "Edit trip"
+              : "Log a trip";
 
   return (
     <BottomSheet
       visible={visible}
       // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
       // not "throw away everything I just typed".
-      onClose={mode === "form" ? onClose : () => setMode("form")}
+      onClose={
+        mode === "form"
+          ? onClose
+          : () => setMode(mode === "fieldForm" ? "fields" : "form")
+      }
       title={title}
       // Pinned, because the canyon list is longer than the sheet: a Done button
       // that scrolls out of reach leaves the handle as the only exit.
@@ -224,15 +291,55 @@ export function TripEditSheet({
             loading={saving}
             onPress={() => void save()}
           />
+        ) : mode === "fieldForm" ? (
+          // Its own body carries the save action; this is just the way back.
+          <Button label="Cancel" variant="outlineAccent" onPress={() => setMode("fields")} />
         ) : (
-          <Button label="Done" icon="check" onPress={() => setMode("form")} />
+          <Button
+            label="Done"
+            icon="check"
+            onPress={() => setMode(mode === "fields" ? "form" : "form")}
+          />
         )
       }
     >
       {mode === "date" ? (
         <View style={styles.modeBody}>
-          <DatePicker value={dateKey} onChange={setDateKey} />
+          <DatePicker
+            value={dateTarget.kind === "trip" ? dateKey : (fieldValues[dateTarget.key] || null)}
+            onChange={(key) => {
+              if (dateTarget.kind === "trip") setDateKey(key);
+              else setFieldValues((current) => ({ ...current, [dateTarget.key]: key }));
+            }}
+          />
         </View>
+      ) : null}
+
+      {mode === "fields" ? (
+        <CustomFieldList
+          defs={customFieldDefs}
+          onAdd={() => {
+            setEditingField(null);
+            setMode("fieldForm");
+          }}
+          onEdit={(def) => {
+            setEditingField(def);
+            setMode("fieldForm");
+          }}
+        />
+      ) : null}
+
+      {mode === "fieldForm" ? (
+        <CustomFieldForm
+          defs={customFieldDefs}
+          editing={editingField}
+          onSaved={(next, message) => {
+            setCustomFieldDefs(next);
+            onSaved(message);
+          }}
+          onFailed={onFailed}
+          onDone={() => setMode("fields")}
+        />
       ) : null}
 
       {mode === "canyons" ? (
@@ -297,10 +404,113 @@ export function TripEditSheet({
               autoCapitalize="sentences"
             />
           </View>
+
+          {customFieldDefs.map((def) => (
+            <CustomFieldValueInput
+              key={def.key}
+              def={def}
+              value={fieldValues[def.key] ?? (def.type === "boolean" ? "false" : "")}
+              onChange={(next) =>
+                setFieldValues((current) => ({ ...current, [def.key]: next }))
+              }
+              onPickDate={() => {
+                setDateTarget({ kind: "field", key: def.key });
+                setMode("date");
+              }}
+            />
+          ))}
+
+          <Row
+            icon="sliders"
+            title="Your trip fields"
+            subtitle={
+              customFieldDefs.length === 0
+                ? "Add your own — water level, party size, anything"
+                : `${customFieldDefs.length} field${customFieldDefs.length === 1 ? "" : "s"}`
+            }
+            right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+            onPress={() => setMode("fields")}
+          />
         </View>
       ) : null}
     </BottomSheet>
   );
+}
+
+/**
+ * One value input, shaped by the field's declared type. A date field opens the
+ * same picker the trip date uses (as a mode of this sheet), rather than asking
+ * the user to type a date into a text box.
+ */
+function CustomFieldValueInput({
+  def,
+  value,
+  onChange,
+  onPickDate,
+}: {
+  def: TripLogCustomFieldDef;
+  value: string;
+  onChange: (next: string) => void;
+  onPickDate: () => void;
+}) {
+  const label = customFieldDisplayLabel(def);
+  if (def.type === "boolean") {
+    return (
+      <Row
+        icon="check-square"
+        title={label}
+        right={
+          <Toggle
+            value={value === "true"}
+            onValueChange={(next) => onChange(next ? "true" : "false")}
+            accessibilityLabel={label}
+          />
+        }
+      />
+    );
+  }
+  if (def.type === "date") {
+    return (
+      <Row
+        icon="calendar"
+        title={value ? formatDateKey(`${value}T00:00:00.000Z`) : "Not set"}
+        subtitle={label}
+        right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+        onPress={onPickDate}
+      />
+    );
+  }
+  return (
+    <View style={styles.field}>
+      <TextField
+        label={label}
+        value={value}
+        onChangeText={onChange}
+        keyboardType={def.type === "integer" ? "number-pad" : def.type === "float" ? "decimal-pad" : "default"}
+        autoCapitalize="sentences"
+      />
+    </View>
+  );
+}
+
+/**
+ * String form → stored value, using the shared coercion so a number typed here
+ * lands as a number, not a string. An empty value drops the key entirely rather
+ * than storing "" — a field with no answer should read as unset, and the trip
+ * detail's "—" placeholder depends on it.
+ */
+function coerceCustomFields(
+  values: Record<string, string>,
+  defs: TripLogCustomFieldDef[],
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const def of defs) {
+    const raw = values[def.key];
+    if (raw == null || raw.trim() === "") continue;
+    if (def.type === "boolean" && raw === "false") continue;
+    result[def.key] = coerceFieldValue(raw, def.type);
+  }
+  return result;
 }
 
 /** Order-sensitive comparison — a trip's canyon order drives its derived title. */
