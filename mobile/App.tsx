@@ -1,5 +1,9 @@
 import { Alert, StyleSheet, Text } from "react-native";
-import { StatusBar } from "expo-status-bar";
+// SystemBars (react-native-edge-to-edge) rather than expo-status-bar: with
+// android.edgeToEdgeEnabled the app draws behind BOTH system bars, so the
+// navigation bar needs light icons too — expo-status-bar only styles the status
+// bar, which left the gesture area a black strip below the tab bar.
+import { SystemBars } from "react-native-edge-to-edge";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import { CLIENT_VERSION } from "./src/config";
@@ -21,7 +25,7 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.blockingContainer}>
-          <StatusBar style="light" />
+          <SystemBars style="light" />
           <Text style={styles.blockingTitle}>Update required</Text>
           <Text style={styles.blockingLine}>
             This version ({CLIENT_VERSION}) is no longer supported. Minimum
@@ -35,7 +39,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
+      <SystemBars style="light" />
       {/* App lock (Stage 4): active once offline map data exists on-device. */}
       <AppLockGate>
       {auth.state === "loading" ? (

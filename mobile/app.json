@@ -21,6 +21,7 @@
     "android": {
       "package": "com.logjamnsw.mobile",
       "allowBackup": false,
+      "edgeToEdgeEnabled": true,
       "intentFilters": [
         {
           "action": "VIEW",
