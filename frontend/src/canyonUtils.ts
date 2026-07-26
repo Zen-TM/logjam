@@ -123,45 +123,6 @@ export type TNotification = {
   createdAt: string;
 };
 
-// [start, end] inclusive ISO-date bounds (yyyy-mm-dd from a date input); either bound nullable.
-export type TDateRange = [string | null, string | null];
-
-// A single active custom-field filter. Self-describing (carries its own kind)
-// so passesFilters can apply it without consulting the field definitions. The
-// kind maps from the field's TripLogCustomFieldType: string→text,
-// integer/float→number, date→date, boolean→boolean.
-export type TCustomFieldFilter =
-  | { kind: "text"; value: string }
-  | { kind: "number"; op: "Less than" | "More than" | "Exactly"; value: number }
-  // Inclusive [min, max] range for bounded integer/float fields; rendered as a
-  // double-ended slider. Full span commits as null (the inactive state).
-  | { kind: "numberRange"; range: [number, number] }
-  | { kind: "date"; range: TDateRange }
-  | { kind: "boolean"; value: boolean };
-
-export type TFilters = {
-  name: string | null;
-  v_grade: number[] | null;
-  a_grade: number[] | null;
-  commitment: number[] | null;
-  quality: number[] | null;
-  pitches: ["Any" | "Less than" | "More than" | "Exactly", number] | null;
-  longest_pitch: ["Any" | "Less than" | "More than" | "Exactly", number] | null;
-  hours: ["Any" | "Less than" | "More than" | "Exactly", number] | null;
-  ownership: "all" | "owned" | "shared";
-  // When true, keep only canyons the user has shared with at least one friend.
-  shared_by_me: boolean;
-  // "Have I done it?" — a canyon is done once it has at least one linked trip,
-  // the same rule AnalyticsPanel's completion ring counts (canyonsWithTrips).
-  completion: "any" | "done" | "not_done";
-  created_at: TDateRange | null;
-  updated_at: TDateRange | null;
-  ropewiki: "any" | "linked" | "unlinked";
-  // Active custom-field filters keyed by field key. Only active filters are
-  // present; clearing a field deletes its key. Empty {} means none active.
-  custom: Record<string, TCustomFieldFilter>;
-  include_unknowns: boolean;
-};
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
@@ -1128,273 +1089,30 @@ export function useNotifications(enabled: boolean) {
 }
 
 // ── Filters ───────────────────────────────────────────────────
+//
+// The predicate itself lives in `shared/src/canyonFilter.ts` so the mobile
+// Canyons screen applies the SAME rules; re-exported here under the names the
+// web callers have always used.
 
-export const emptyFilters: TFilters = {
-  name: null,
-  v_grade: null,
-  a_grade: null,
-  commitment: null,
-  quality: null,
-  pitches: null,
-  longest_pitch: null,
-  hours: null,
-  ownership: "all",
-  shared_by_me: false,
-  completion: "any",
-  created_at: null,
-  updated_at: null,
-  ropewiki: "any",
-  custom: {},
-  include_unknowns: false,
-};
+export {
+  passesCanyonFilters as passesFilters,
+  isCanyonDoneByViewer,
+  activeCanyonFilterCount as activeFilterCount,
+  hasActiveCanyonFilters as hasActiveFilters,
+  canyonMatchesSearch,
+  compareCanyons,
+  customFilterKind,
+  reconcileCustomFilters,
+  EMPTY_CANYON_FILTERS as emptyFilters,
+  CANYON_RANGE_BOUNDS,
+} from "@logjam/shared";
+export type {
+  CanyonFilters as TFilters,
+  CanyonDateRange as TDateRange,
+  CanyonCustomFieldFilter as TCustomFieldFilter,
+  CanyonSortKey,
+} from "@logjam/shared";
 
-// Range sliders whose default [min, max] means "inactive".
-const RANGE_FILTER_DEFAULTS: [keyof TFilters, [number, number]][] = [
-  ["v_grade", [1, 7]],
-  ["a_grade", [1, 7]],
-  ["commitment", [1, 6]],
-  ["quality", [1, 5]],
-];
-
-const THRESHOLD_FILTER_KEYS: (keyof TFilters)[] = [
-  "pitches",
-  "longest_pitch",
-  "hours",
-];
-
-const DATE_FILTER_KEYS: (keyof TFilters)[] = ["created_at", "updated_at"];
-
-// Returns true when a single filter field is set to anything other than its
-// inactive default. Single source of truth for hasActiveFilters/activeFilterCount.
-function isFilterActive(filters: TFilters, key: keyof TFilters): boolean {
-  if (key === "name") return !!filters.name && filters.name.trim() !== "";
-  if (key === "ownership") return filters.ownership !== "all";
-  if (key === "shared_by_me") return filters.shared_by_me;
-  if (key === "completion") return filters.completion !== "any";
-  if (key === "ropewiki") return filters.ropewiki !== "any";
-  if (key === "include_unknowns") return false; // a modifier, not a filter
-  const rangeDefault = RANGE_FILTER_DEFAULTS.find(([k]) => k === key);
-  if (rangeDefault) {
-    const [, [min, max]] = rangeDefault;
-    const val = filters[key] as number[] | null;
-    return !!val && (val[0] !== min || val[1] !== max);
-  }
-  if (THRESHOLD_FILTER_KEYS.includes(key)) {
-    const val = filters[key] as
-      | ["Any" | "Less than" | "More than" | "Exactly", number]
-      | null;
-    return !!val && val[0] !== "Any";
-  }
-  if (DATE_FILTER_KEYS.includes(key)) {
-    const val = filters[key] as TDateRange | null;
-    return !!val && (val[0] != null || val[1] != null);
-  }
-  return false;
-}
-
-// Every filter key that contributes to the active-count badge (excludes name,
-// which lives in the separate fly-to search box, and include_unknowns).
-const COUNTED_FILTER_KEYS: (keyof TFilters)[] = [
-  ...RANGE_FILTER_DEFAULTS.map(([k]) => k),
-  ...THRESHOLD_FILTER_KEYS,
-  ...DATE_FILTER_KEYS,
-  "ownership",
-  "shared_by_me",
-  "completion",
-  "ropewiki",
-];
-
-export function activeFilterCount(filters: TFilters): number {
-  const builtIn = COUNTED_FILTER_KEYS.reduce(
-    (count, key) => count + (isFilterActive(filters, key) ? 1 : 0),
-    0,
-  );
-  return builtIn + Object.keys(filters.custom ?? {}).length;
-}
-
-// Maps a custom-field definition to the filter kind it produces, so a stored
-// filter can be validated against the current definition. Bounded integer/float
-// fields render a range slider (numberRange); unbounded ones use op+value.
-export function customFilterKind(
-  def: TripLogCustomFieldDef,
-): TCustomFieldFilter["kind"] {
-  switch (def.type) {
-    case "string":
-      return "text";
-    case "integer":
-    case "float":
-      return def.min != null && def.max != null ? "numberRange" : "number";
-    case "date":
-      return "date";
-    case "boolean":
-      return "boolean";
-  }
-}
-
-// Drops custom-field filters that no longer correspond to a live definition
-// (deleted field) or whose stored kind no longer matches the field's type
-// (deleted-then-recreated with a different type). Returns the same reference
-// when nothing changes so callers can rely on identity stability.
-export function reconcileCustomFilters(
-  filters: TFilters,
-  defs: TripLogCustomFieldDef[],
-): TFilters {
-  const current = filters.custom ?? {};
-  const next: Record<string, TCustomFieldFilter> = {};
-  for (const [key, filter] of Object.entries(current)) {
-    const def = defs.find((d) => d.key === key);
-    if (def && customFilterKind(def) === filter.kind) {
-      next[key] = filter;
-    }
-  }
-  if (Object.keys(next).length === Object.keys(current).length) return filters;
-  return { ...filters, custom: next };
-}
-
-export function hasActiveFilters(filters: TFilters): boolean {
-  if (isFilterActive(filters, "name")) return true;
-  return activeFilterCount(filters) > 0;
-}
-
-// isOwned distinguishes the owner's own canyons from canyons shared with them.
-// It's structural (which list the canyon came from), so it can't be read off
-// TCanyon — callers pass it per bucket. See Map.tsx / App.tsx.
-// "Done" = the viewer has run this canyon. Self-only: only readable for canyons
-// the viewer owns. A trip can only link to its own owner's canyons, so on a canyon
-// shared *with* the viewer `_count.tripLogLinks` is the OWNER's tally, not theirs —
-// reading it would answer the wrong question and leak how often that friend runs it.
-// A missing `_count` is a payload shape, not a data gap: zero trips is a real answer.
-// Single source for both the completion filter and the map's completed-marker style.
-export function isCanyonDoneByViewer(canyon: TCanyon, isOwned: boolean): boolean {
-  return isOwned && (canyon._count?.tripLogLinks ?? 0) > 0;
-}
-
-export function passesFilters(
-  canyon: TCanyon,
-  filters: TFilters,
-  isOwned: boolean,
-): boolean {
-  const includeUnknowns = filters.include_unknowns;
-
-  function passesSliderFilter(
-    value: number | null | undefined,
-    filter: number[] | null,
-    range: [number, number],
-  ): boolean {
-    if (filter && (filter[0] !== range[0] || filter[1] !== range[1])) {
-      if (value == null) return includeUnknowns;
-      if (value < filter[0] || value > filter[1]) return false;
-    }
-    return true;
-  }
-
-  function passesSelectNumberFilter(
-    value: number | null | undefined,
-    filter: ["Any" | "Less than" | "More than" | "Exactly", number] | null,
-  ): boolean {
-    if (filter && filter[0] !== "Any") {
-      if (value == null) return includeUnknowns;
-      if (filter[0] === "Less than" && value >= filter[1]) return false;
-      if (filter[0] === "More than" && value <= filter[1]) return false;
-      if (filter[0] === "Exactly" && value !== filter[1]) return false;
-    }
-    return true;
-  }
-
-  function passesDateRangeFilter(
-    value: string | null | undefined,
-    filter: TDateRange | null,
-  ): boolean {
-    if (!filter) return true;
-    const [start, end] = filter;
-    if (start == null && end == null) return true;
-    if (value == null) return includeUnknowns;
-    const time = Date.parse(value);
-    if (start != null && time < Date.parse(start)) return false;
-    if (end != null) {
-      // end is a yyyy-mm-dd day; include the whole day by extending to its end.
-      const endOfDay = Date.parse(end) + 24 * 60 * 60 * 1000 - 1;
-      if (time > endOfDay) return false;
-    }
-    return true;
-  }
-
-  if (filters.ownership === "owned" && !isOwned) return false;
-  if (filters.ownership === "shared" && isOwned) return false;
-
-  if (filters.shared_by_me && (canyon._count?.shares ?? 0) === 0) return false;
-
-  // "Have *I* done it" — self-only, see isCanyonDoneByViewer for the privacy rationale.
-  if (filters.completion !== "any") {
-    const doneByViewer = isCanyonDoneByViewer(canyon, isOwned);
-    if (filters.completion === "done" && !doneByViewer) return false;
-    if (filters.completion === "not_done" && doneByViewer) return false;
-  }
-
-  if (filters.ropewiki === "linked" && canyon.ropeWikiId == null) return false;
-  if (filters.ropewiki === "unlinked" && canyon.ropeWikiId != null) return false;
-
-  if (filters.name && filters.name.trim() !== "") {
-    const query = filters.name.toLowerCase();
-    const matchesName = canyon.name.toLowerCase().includes(query);
-    const matchesAlt = canyon.altNames?.some((n) =>
-      n.toLowerCase().includes(query),
-    );
-    if (!matchesName && !matchesAlt) return false;
-  }
-
-  if (!passesSliderFilter(canyon.vGrade, filters.v_grade, [1, 7])) return false;
-  if (!passesSliderFilter(canyon.aGrade, filters.a_grade, [1, 7])) return false;
-  if (!passesSliderFilter(canyon.commitment, filters.commitment, [1, 6]))
-    return false;
-  if (!passesSliderFilter(canyon.quality, filters.quality, [1, 5]))
-    return false;
-  if (!passesSelectNumberFilter(canyon.numAbseils, filters.pitches))
-    return false;
-  if (!passesSelectNumberFilter(canyon.longestAbseil, filters.longest_pitch))
-    return false;
-  if (!passesSelectNumberFilter(canyon.hours, filters.hours)) return false;
-  if (!passesDateRangeFilter(canyon.createdAt, filters.created_at)) return false;
-  if (!passesDateRangeFilter(canyon.updatedAt, filters.updated_at)) return false;
-
-  for (const [key, filter] of Object.entries(filters.custom ?? {})) {
-    const value = canyon.attributes?.customFields?.[key];
-    if (value == null) {
-      if (!includeUnknowns) return false;
-      continue;
-    }
-    switch (filter.kind) {
-      case "text":
-        if (!String(value).toLowerCase().includes(filter.value.toLowerCase()))
-          return false;
-        break;
-      case "number": {
-        const num = typeof value === "number" ? value : Number(value);
-        if (filter.op === "Less than" && !(num < filter.value)) return false;
-        if (filter.op === "More than" && !(num > filter.value)) return false;
-        if (filter.op === "Exactly" && num !== filter.value) return false;
-        break;
-      }
-      case "numberRange": {
-        const num = typeof value === "number" ? value : Number(value);
-        if (Number.isNaN(num)) {
-          if (!includeUnknowns) return false;
-          break;
-        }
-        if (num < filter.range[0] || num > filter.range[1]) return false;
-        break;
-      }
-      case "boolean":
-        if (Boolean(value) !== filter.value) return false;
-        break;
-      case "date":
-        if (!passesDateRangeFilter(String(value), filter.range)) return false;
-        break;
-    }
-  }
-
-  return true;
-}
 
 // ── Vector style (live, per-user) ─────────────────────────────
 

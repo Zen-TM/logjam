@@ -7,6 +7,7 @@ import * as Crypto from "expo-crypto";
 import {
   isUuidV4,
   planOutboxEnqueue,
+  validateCanyonPayload,
   type OutboxEntry,
   type SyncPushEntity,
   type SyncPushOp,
@@ -171,7 +172,7 @@ export async function deleteWaypointLocal(id: string): Promise<void> {
 // array/object fields (altNames, attributes, types, customFields, canyon
 // links) aren't materialized here because enqueueUpdate binds values raw.
 
-const CANYON_UPDATE_COLUMNS: Record<string, string> = {
+const CANYON_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   name: "name",
   notes: "notes",
   quality: "quality",
@@ -181,6 +182,13 @@ const CANYON_UPDATE_COLUMNS: Record<string, string> = {
   vGrade: "v_grade",
   aGrade: "a_grade",
   commitment: "commitment",
+  latitude: "latitude",
+  longitude: "longitude",
+  altNames: {
+    column: "alt_names_json",
+    encode: (value) => JSON.stringify(value ?? []),
+    decode: (raw) => JSON.parse((raw as string | null) ?? "[]"),
+  },
 };
 
 export async function updateCanyonLocal(
@@ -188,6 +196,148 @@ export async function updateCanyonLocal(
   fields: Record<string, unknown>,
 ): Promise<void> {
   await enqueueUpdate("canyon", "canyons", id, fields, CANYON_UPDATE_COLUMNS);
+}
+
+/** The fields a canyon can be created with offline. Coordinates are required:
+ * a canyon without a position isn't a canyon, and the server rejects it. */
+export type CanyonDraftFields = {
+  name: string;
+  latitude: number;
+  longitude: number;
+  altNames?: string[];
+  numAbseils?: number | null;
+  longestAbseil?: number | null;
+  vGrade?: number | null;
+  aGrade?: number | null;
+  commitment?: number | null;
+  quality?: number | null;
+  hours?: number | null;
+  notes?: string | null;
+};
+
+/**
+ * Add a canyon offline: optimistic mirror row + a canyon.create op. Mirrors
+ * createTripLocal — every field is locally dirty until the create flushes, and
+ * the server row replaces the provisional timestamps.
+ *
+ * Validated with the same predicate the API applies (`validateCanyonPayload`),
+ * so a bad value fails here with a message rather than parking a deadRemote op
+ * on the next flush.
+ */
+export async function createCanyonLocal(draft: CanyonDraftFields): Promise<string> {
+  const id = mintUuid();
+  const now = new Date().toISOString();
+  const altNames = draft.altNames ?? [];
+  const fields: Record<string, unknown> = {
+    name: draft.name,
+    latitude: draft.latitude,
+    longitude: draft.longitude,
+    altNames,
+    ...optionalNumbers(draft),
+    ...(draft.notes != null && { notes: draft.notes }),
+  };
+
+  const invalid = validateCanyonPayload(fields, { requireCoords: true });
+  if (invalid) throw new Error(invalid);
+
+  const db = await getSyncDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO canyons
+         (id, sync_role, name, latitude, longitude, alt_names_json, num_abseils,
+          longest_abseil, v_grade, a_grade, commitment, quality, hours, notes,
+          attributes_json, forked_from_id, created_at, updated_at, extra_json,
+          dirty_fields_json)
+       VALUES (?, 'owner', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', NULL, ?, ?, NULL, ?)`,
+      id,
+      draft.name,
+      draft.latitude,
+      draft.longitude,
+      JSON.stringify(altNames),
+      draft.numAbseils ?? null,
+      draft.longestAbseil ?? null,
+      draft.vGrade ?? null,
+      draft.aGrade ?? null,
+      draft.commitment ?? null,
+      draft.quality ?? null,
+      draft.hours ?? null,
+      draft.notes ?? null,
+      now,
+      now,
+      JSON.stringify(Object.keys(fields)),
+    );
+    await appendOp(db, {
+      opId: mintUuid(),
+      entity: "canyon",
+      op: "create",
+      id,
+      fields,
+    });
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+  return id;
+}
+
+/** Only the numeric fields the caller actually set — an omitted grade must stay
+ * absent from the op rather than being pushed as an explicit null. */
+function optionalNumbers(draft: CanyonDraftFields): Record<string, number> {
+  const keys = [
+    "numAbseils",
+    "longestAbseil",
+    "vGrade",
+    "aGrade",
+    "commitment",
+    "quality",
+    "hours",
+  ] as const;
+  const out: Record<string, number> = {};
+  for (const key of keys) {
+    const value = draft[key];
+    if (value != null) out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * Delete a canyon offline. Owner-only (the caller gates on syncRole): a
+ * sharee's delete would 404 server-side and park deadRemote.
+ *
+ * Trip links to it go with it server-side, so the mirror's trip rows are
+ * scrubbed of the link here too — otherwise a trip keeps rendering a title
+ * built from a canyon that no longer exists until the next delta pull.
+ */
+export async function deleteCanyonLocal(id: string): Promise<void> {
+  const db = await getSyncDb();
+  await db.withTransactionAsync(async () => {
+    const trips = await db.getAllAsync<{ id: string; canyons_json: string }>(
+      "SELECT id, canyons_json FROM trip_logs WHERE canyons_json LIKE ?",
+      `%${id}%`,
+    );
+    for (const trip of trips) {
+      const links = JSON.parse(trip.canyons_json ?? "[]") as TripCanyonLink[];
+      const kept = links.filter((link) => link.id !== id);
+      if (kept.length === links.length) continue; // LIKE matched a substring only
+      await db.runAsync(
+        "UPDATE trip_logs SET canyons_json = ? WHERE id = ?",
+        JSON.stringify(kept),
+        trip.id,
+      );
+    }
+    await db.runAsync("DELETE FROM canyons WHERE id = ?", id);
+    await db.runAsync(
+      "DELETE FROM canyon_shares WHERE canyon_id = ?",
+      id,
+    );
+    await appendOp(db, {
+      opId: mintUuid(),
+      entity: "canyon",
+      op: "delete",
+      id,
+    });
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
 }
 
 const TRIP_UPDATE_COLUMNS: Record<string, ColumnSpec> = {

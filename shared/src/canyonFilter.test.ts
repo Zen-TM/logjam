@@ -1,14 +1,21 @@
 import { describe, it, expect } from "vitest";
+
 import {
-  passesFilters,
+  activeCanyonFilterCount as activeFilterCount,
+  canyonMatchesSearch,
+  compareCanyons,
+  EMPTY_CANYON_FILTERS as emptyFilters,
+  hasActiveCanyonFilters as hasActiveFilters,
   isCanyonDoneByViewer,
-  hasActiveFilters,
-  activeFilterCount,
+  passesCanyonFilters as passesFilters,
   reconcileCustomFilters,
-  emptyFilters,
-} from "./canyonUtils";
-import type { TCanyon, TFilters } from "./canyonUtils";
-import type { TripLogCustomFieldDef } from "@logjam/shared";
+} from "./canyonFilter.js";
+import type { CanyonFilterFields, CanyonFilters as TFilters } from "./canyonFilter.js";
+import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+
+// Named TCanyon here because these cases were written against the web canyon
+// type; the predicate only ever reads the structural subset.
+type TCanyon = CanyonFilterFields & { id: string; latitude: number; longitude: number };
 
 // Override type permits null on any field so tests can simulate canyons with
 // missing values (the API types them non-null, but filters must handle gaps).
@@ -374,5 +381,61 @@ describe("hasActiveFilters", () => {
 
   it("is true when any counted filter is active", () => {
     expect(hasActiveFilters(filters({ ownership: "shared" }))).toBe(true);
+  });
+});
+
+describe("canyonMatchesSearch", () => {
+  it("matches the primary name, case- and whitespace-insensitively", () => {
+    expect(canyonMatchesSearch(canyon(), "  EMPRESS  ")).toBe(true);
+    expect(canyonMatchesSearch(canyon(), "claustral")).toBe(false);
+  });
+
+  it("matches an alternative name", () => {
+    const c = canyon({ name: "Bowens Creek North", altNames: ["Bowens North"] });
+    expect(canyonMatchesSearch(c, "bowens north")).toBe(true);
+  });
+
+  it("an empty query matches everything", () => {
+    expect(canyonMatchesSearch(canyon(), "   ")).toBe(true);
+  });
+});
+
+describe("compareCanyons", () => {
+  const sorted = (rows: TCanyon[], sort: Parameters<typeof compareCanyons>[2]) =>
+    [...rows].sort((a, b) => compareCanyons(a, b, sort)).map((c) => c.name);
+
+  it("sorts by name, then by newest first for recent", () => {
+    const rows = [
+      canyon({ name: "Zobra", createdAt: "2026-01-01T00:00:00.000Z" }),
+      canyon({ name: "Alpha", createdAt: "2026-05-01T00:00:00.000Z" }),
+    ];
+    expect(sorted(rows, "name")).toEqual(["Alpha", "Zobra"]);
+    expect(sorted(rows, "recent")).toEqual(["Alpha", "Zobra"]);
+  });
+
+  it("sorts grade easiest first, V before A", () => {
+    const rows = [
+      canyon({ name: "HardV", vGrade: 5, aGrade: 1 }),
+      canyon({ name: "EasyV", vGrade: 3, aGrade: 4 }),
+      canyon({ name: "SameVWetA", vGrade: 3, aGrade: 5 }),
+    ];
+    expect(sorted(rows, "grade")).toEqual(["EasyV", "SameVWetA", "HardV"]);
+  });
+
+  it("sorts quality best first and puts an unrated canyon last, not first", () => {
+    const rows = [
+      canyon({ name: "Unrated", quality: null }),
+      canyon({ name: "Good", quality: 4 }),
+      canyon({ name: "Best", quality: 5 }),
+    ];
+    expect(sorted(rows, "quality")).toEqual(["Best", "Good", "Unrated"]);
+  });
+
+  it("falls back to name so the order is total, not arbitrary", () => {
+    const rows = [
+      canyon({ name: "Beta", vGrade: 3, aGrade: 3 }),
+      canyon({ name: "Alpha", vGrade: 3, aGrade: 3 }),
+    ];
+    expect(sorted(rows, "grade")).toEqual(["Alpha", "Beta"]);
   });
 });

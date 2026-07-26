@@ -23,8 +23,8 @@ import { MapScreen } from "./map/MapScreen";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { SavedScreen } from "./saved/SavedScreen";
 import { AccountScreen } from "./screens/AccountScreen";
-import { CanyonDetailScreen } from "./screens/CanyonDetailScreen";
-import { CanyonsScreen } from "./screens/CanyonsScreen";
+import { CanyonDetailScreen } from "./canyons/CanyonDetailScreen";
+import { CanyonsScreen } from "./canyons/CanyonsScreen";
 import { ConsentGate } from "./screens/ConsentGate";
 import { FriendsScreen } from "./screens/FriendsScreen";
 import { MoreScreen } from "./screens/MoreScreen";
@@ -65,11 +65,13 @@ type MapStackParams = {
       }
     | undefined;
   MapCanyonDetail: { canyonId: string; name: string };
+  MapTripDetail: { trip: MirrorTrip };
 };
 
 type CanyonsStackParams = {
   CanyonList: undefined;
   CanyonDetail: { canyonId: string; name: string };
+  CanyonTripDetail: { trip: MirrorTrip };
 };
 
 type TripsStackParams = {
@@ -98,6 +100,24 @@ const SavedStack = createNativeStackNavigator<SavedStackParams>();
 const MoreStack = createNativeStackNavigator<MoreStackParams>();
 const Tabs = createBottomTabNavigator();
 
+/**
+ * Map focus for one canyon — a tight box around its point (~1 km across), which
+ * is what `MapView`'s `focus` param takes. Built at navigation time and never
+ * stored: a region of interest stays off the server (mobile/CLAUDE.md).
+ */
+const CANYON_FOCUS_DEGREES = 0.005;
+function canyonFocus(canyon: { latitude: number; longitude: number }) {
+  return {
+    bbox: [
+      canyon.longitude - CANYON_FOCUS_DEGREES,
+      canyon.latitude - CANYON_FOCUS_DEGREES,
+      canyon.longitude + CANYON_FOCUS_DEGREES,
+      canyon.latitude + CANYON_FOCUS_DEGREES,
+    ] as [number, number, number, number],
+    nonce: Date.now(),
+  };
+}
+
 const stackScreenOptions = {
   headerStyle: { backgroundColor: theme.secondary },
   headerTintColor: theme.textPrimary,
@@ -119,11 +139,36 @@ function MapStackNav() {
           />
         )}
       </MapStack.Screen>
-      <MapStack.Screen
-        name="MapCanyonDetail"
-        options={({ route }) => ({ title: route.params.name })}
-      >
-        {({ route }) => <CanyonDetailScreen canyonId={route.params.canyonId} />}
+      {/* Canyon and trip detail both carry their own HeroHeader, which owns the
+          back affordance (DESIGN.md §2). */}
+      <MapStack.Screen name="MapCanyonDetail" options={{ headerShown: false }}>
+        {({ navigation, route }) => (
+          <CanyonDetailScreen
+            canyonId={route.params.canyonId}
+            onBack={() => navigation.goBack()}
+            onOpenTrip={(trip) => navigation.navigate("MapTripDetail", { trip })}
+            onShowOnMap={(canyon) =>
+              navigation.navigate("MapView", { focus: canyonFocus(canyon) })
+            }
+            onDeleted={() => navigation.goBack()}
+          />
+        )}
+      </MapStack.Screen>
+      <MapStack.Screen name="MapTripDetail" options={{ headerShown: false }}>
+        {({ navigation, route }) => (
+          <TripDetailScreen
+            trip={route.params.trip}
+            onBack={() => navigation.goBack()}
+            onOpenCanyon={(canyonId, name) =>
+              navigation.navigate("MapCanyonDetail", { canyonId, name })
+            }
+            onShowRoute={(mediaId, filename, localPath) =>
+              navigation.navigate("MapView", {
+                route: { mediaId, filename, localPath, nonce: Date.now() },
+              })
+            }
+          />
+        )}
       </MapStack.Screen>
     </MapStack.Navigator>
   );
@@ -152,20 +197,58 @@ function SavedStackNav() {
 function CanyonsStackNav() {
   return (
     <CanyonsStack.Navigator screenOptions={stackScreenOptions}>
-      <CanyonsStack.Screen name="CanyonList" options={{ title: "Canyons" }}>
+      {/* No native header on any of these: each screen leads with its own
+          HeroHeader (DESIGN.md §2). */}
+      <CanyonsStack.Screen name="CanyonList" options={{ headerShown: false }}>
         {({ navigation }) => (
           <CanyonsScreen
             onOpenCanyon={(canyon) =>
               navigation.navigate("CanyonDetail", { canyonId: canyon.id, name: canyon.name })
             }
+            onShowOnMap={(canyon) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { focus: canyonFocus(canyon) },
+              })
+            }
+            onPickOnMap={() =>
+              navigation.getParent()?.navigate("Map", { screen: "MapView" })
+            }
           />
         )}
       </CanyonsStack.Screen>
-      <CanyonsStack.Screen
-        name="CanyonDetail"
-        options={({ route }) => ({ title: route.params.name })}
-      >
-        {({ route }) => <CanyonDetailScreen canyonId={route.params.canyonId} />}
+      <CanyonsStack.Screen name="CanyonDetail" options={{ headerShown: false }}>
+        {({ navigation, route }) => (
+          <CanyonDetailScreen
+            canyonId={route.params.canyonId}
+            onBack={() => navigation.goBack()}
+            onOpenTrip={(trip) => navigation.navigate("CanyonTripDetail", { trip })}
+            onShowOnMap={(canyon) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { focus: canyonFocus(canyon) },
+              })
+            }
+            onDeleted={() => navigation.goBack()}
+          />
+        )}
+      </CanyonsStack.Screen>
+      <CanyonsStack.Screen name="CanyonTripDetail" options={{ headerShown: false }}>
+        {({ navigation, route }) => (
+          <TripDetailScreen
+            trip={route.params.trip}
+            onBack={() => navigation.goBack()}
+            onOpenCanyon={(canyonId, name) =>
+              navigation.navigate("CanyonDetail", { canyonId, name })
+            }
+            onShowRoute={(mediaId, filename, localPath) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
+              })
+            }
+          />
+        )}
       </CanyonsStack.Screen>
     </CanyonsStack.Navigator>
   );
@@ -198,11 +281,21 @@ function TripsStackNav() {
           />
         )}
       </TripsStack.Screen>
-      <TripsStack.Screen
-        name="TripCanyonDetail"
-        options={({ route }) => ({ title: route.params.name })}
-      >
-        {({ route }) => <CanyonDetailScreen canyonId={route.params.canyonId} />}
+      <TripsStack.Screen name="TripCanyonDetail" options={{ headerShown: false }}>
+        {({ navigation, route }) => (
+          <CanyonDetailScreen
+            canyonId={route.params.canyonId}
+            onBack={() => navigation.goBack()}
+            onOpenTrip={(trip) => navigation.navigate("TripDetail", { trip })}
+            onShowOnMap={(canyon) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { focus: canyonFocus(canyon) },
+              })
+            }
+            onDeleted={() => navigation.goBack()}
+          />
+        )}
       </TripsStack.Screen>
     </TripsStack.Navigator>
   );

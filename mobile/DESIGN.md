@@ -2,8 +2,10 @@
 
 The house style for the Logjam RN app. **Reference implementations:
 `src/saved/SavedScreen.tsx`** (inventory: hero metric, categories, per-item
-actions) and **`src/logs/`** (records: chronology, multi-axis filtering, a
-create/edit form in a sheet). When a rule here is ambiguous, read those.
+actions), **`src/logs/`** (records: chronology, multi-axis filtering, a
+create/edit form in a sheet) and **`src/canyons/`** (a collection: a partition
+rail, a filter sheet over a shared predicate, cross-entity actions). When a rule
+here is ambiguous, read those.
 
 Scope: this supersedes the earlier "everything is a `Card` in a stack of
 `SectionHeader` groups" pattern still present on some screens. Rebuild screens
@@ -20,6 +22,8 @@ Every screen leads with the single question its user actually opened it to
 answer, and answers it before any list appears.
 
 - Saved → "what have I actually got on this phone, and what is it costing me?"
+- Canyons → "how far through my list am I, and what's left?" (a count and a
+  three-way tick-list meter: done / to do / shared with me)
 - A canyon → "what am I walking into?"
 - Logs → "what have I done?" (a count, a twelve-month activity spark, a
   chronological list)
@@ -85,6 +89,12 @@ tallies), it shows what exists before you touch it, and it keeps a long screen
 one screen tall.
 
 - The first chip is **All**, a flat list across every category.
+- **Prefer a rail whose buckets PARTITION the list.** Canyons uses done / to do /
+  shared, which is a partition because a shared canyon structurally cannot be
+  "done" (a trip only links to its own owner's canyons). Every row is in exactly
+  one bucket, the tallies sum to All, and the user never has to work out what a
+  combination of two axes would show. When the natural axes overlap, pick the one
+  that partitions and push the rest into the filter sheet.
 - Sort "All" by the axis the hero implies. On Saved the hero is storage, so All
   is size-descending — the order that answers "what do I delete". Inside a
   single category, registry/insertion order wins.
@@ -109,6 +119,13 @@ primary.
 
 `region` intentionally aliases the active scheme's `accent`, so the biggest and
 most common class always feels native to the chosen theme.
+
+**When a thing has no kinds, its STATE is the category.** Canyons are all the
+same sort of object, so `canyonHue` keys off done / to do / shared instead
+(`CANYON_STATUS_META` in `src/canyons/canyonMeta.ts`), and `done` takes the
+scheme accent for the same reason `region` does — the accent belongs on the state
+the screen is celebrating. The identity still appears in both places the rule
+requires: the row's icon tile and its rail chip.
 
 ### Open vocabularies hash their hue from the label
 
@@ -250,6 +267,12 @@ absolutely positioned at the same offset — otherwise the second message to
 appear lands on top of the first (the map's route badge and its offline notice
 did exactly this).
 
+**A choice that leads to a form parks the target and opens it from
+`onClosed`.** The map's press-and-hold sheet ("waypoint or canyon?") can't mount
+the canyon form directly — see the never-two-sheets rule above — so it stores the
+point in a ref, closes, and the `onClosed` callback opens the form with it. Same
+shape as launching a system window from a sheet, and the same reason.
+
 **A list of choices is a sheet, not an `Alert`.** Android's Alert caps at three
 buttons and drops the rest silently — that is how "Take photo" shipped
 unreachable behind a three-option Alert. `Alert` is for destructive confirms
@@ -293,10 +316,19 @@ row with a retry — it persists because the problem persists.
 - **Open editors don't outlive their context.** Changing filter or leaving the
   tab drops an in-progress rename — a form that survives the thing it was
   editing being scrolled out of view is a stale prompt, not a resumed task.
-- **One form per entity, create and edit.** `TripEditSheet` is the same
-  component in both modes: same fields, same validation, same derived-title
-  preview, with only the sheet title and the submit label differing. Two forms
+- **One form per entity, create and edit.** `TripEditSheet` and
+  `CanyonEditSheet` are each the same component in both modes: same fields, same
+  validation, with only the sheet title and the submit label differing. Two forms
   drift, and the one the user reaches less often is the one that rots.
+- **A picker over an OPTIONAL value keeps an explicit "not recorded" stop.** The
+  grade rails in `CanyonEditSheet` lead with `—`. Most imported canyons have gaps,
+  and a picker you can't get back out of turns "I don't know" into a wrong answer
+  the user can't retract.
+- **A cross-entity shortcut hands off to the real form, pre-filled — it never
+  reimplements it.** "Log a trip here" on a canyon opens `TripEditSheet` with
+  that canyon already linked (`initialCanyons`). Seeding is keyed on the sheet
+  OPENING, not on the prop: callers build that array inline, so a new identity
+  every render would re-seed the form under the user mid-edit.
 - **An edit pushes only the fields that changed.** Diff against the entity you
   seeded from and send the difference (see `save()` in `TripEditSheet`). Sending
   the whole form makes every save a write to every column, which under
@@ -377,6 +409,17 @@ screens. When a second screen needs something the first already draws, lift it
 into the kit rather than copying the styles — two stylesheets for one visual is
 the drift itself, not a risk of it.
 
+**A bounded numeric RANGE is a row of numbered pills, not a slider**
+(`RangePills` + the pure `nextRange` in `src/ui/rangeSelect.ts`). Three reasons,
+in order: a slider's thumbs are smaller than a fingertip; a horizontal drag inside
+a `BottomSheet` fights the sheet's own drag-to-dismiss; and a slider needs a
+tooltip to say what it's set to, where pills show it. The interaction is one rule
+applied from wherever the tap lands — nothing selected takes the tapped value,
+tapping outside the range grows it, tapping inside a wider range collapses to that
+value, and tapping the only selected value clears. `null` means "any", which is
+exactly what the filter treats as inactive, so a cleared axis and an untouched one
+are the same value.
+
 Native pickers are not automatically the lazy option. `DatePicker` is a themed
 month grid rather than the Android dialog because a trip log needs the same
 picker for one date and for both ends of a range: the OS dialog can't be tinted
@@ -390,7 +433,7 @@ slowly becomes the place everything shared goes.
 
 Current kit: `ActivitySpark` · `BottomSheet` · `Button` · `CapacityBar` ·
 `Card` · `Chip` · `ChipPicker` · `DatePicker` · `EntityEditForm` ·
-`ErrorBanner` · `HeroHeader` · `IconButton` · `Row` ·
+`ErrorBanner` · `HeroHeader` · `IconButton` · `RangePills` · `Row` ·
 `Screen`/`ScreenScroll` · `ScreenStates` · `SectionHeader` ·
 `SegmentedControl` · `StatGrid` · `StatusPill` · `TextField` · `Toast` ·
 `Toggle`.
@@ -419,8 +462,9 @@ which those are:
 |---|---|
 | Reading trips, canyons, notes, fields | Custom field DEFINITIONS (account-level blob) |
 | Logging, editing, deleting a trip | Downloading regions, topo overlays, GeoPDFs |
-| Attaching photos, videos, routes, tracks | Sharing a canyon |
-| Viewing anything already cached | Full-res media not yet downloaded |
+| Adding, editing, deleting a canyon | Sharing a canyon (and reading who it's shared with) |
+| Attaching photos, videos, routes, tracks | Full-res media not yet downloaded |
+| Viewing anything already cached | RopeWiki / file import (web only) |
 
 **Say what is true, not what is optimistic.** A queued upload says "Uploading…"
 only when it can actually upload; offline it says "Waiting". A label that
@@ -438,6 +482,18 @@ labels ("Offline map region"), user-supplied names, sizes and dates — **never
 coordinates, bboxes or derived location detail**, however useful it would look.
 When a label would have to leak location to be informative, the generic label
 wins.
+
+**A coordinate belongs on a detail screen, never in a list.** Canyon detail shows
+the position, because that IS the answer to the question the screen exists for and
+the user asked for that canyon by name. A list is different: it is what ends up in
+a screenshot, and a screen full of name-plus-position pairs is the canyon
+database this app exists not to publish.
+
+**A "distance from me" figure is derived location detail.** A nearest-first sort
+with per-row distances was designed and REJECTED for the Canyons screen for that
+reason: it pairs each name with roughly where it is, in the one view most likely to
+be shared, and it buys a convenience the map already provides. Don't re-propose it
+without deciding to change this rule first.
 
 **Failure copy is ours, not the error's.** A caught error goes to `console.error`
 and the user gets a sentence we wrote ("Couldn't save this trip."). Interpolating

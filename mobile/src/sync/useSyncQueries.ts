@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   hasMirrorSynced,
   countMediaByLinkedId,
+  countOutgoingSharesByCanyon,
   listMediaForLinked,
   listMirrorCanyons,
   listMirrorTrips,
@@ -94,6 +95,7 @@ function useMirrorQuery<T>(read: () => Promise<T>): MirrorQueryState<T> {
 const readCanyons = () => listMirrorCanyons();
 const readTrips = () => listMirrorTrips();
 const readWaypoints = () => listMirrorWaypoints();
+const readShareCounts = () => countOutgoingSharesByCanyon();
 
 export function useMirrorCanyons(): MirrorQueryState<MirrorCanyon[]> {
   return useMirrorQuery(readCanyons);
@@ -123,6 +125,11 @@ export function useMirrorMediaCounts(
 ): MirrorQueryState<Record<string, number>> {
   const read = useCallback(() => countMediaByLinkedId(linkedType), [linkedType]);
   return useMirrorQuery(read);
+}
+
+/** Share fan-out per owned canyon, for the "Shared with N" badge. */
+export function useMirrorShareCounts(): MirrorQueryState<Record<string, number>> {
+  return useMirrorQuery(readShareCounts);
 }
 
 /** Media attached to one canyon or trip, pendingUpload rows included. */

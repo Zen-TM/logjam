@@ -72,6 +72,8 @@ import { SectionHeader } from "../ui/SectionHeader";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { StatusPill } from "../ui/StatusPill";
 import { Toggle } from "../ui/Toggle";
+import { Toast, type ToastMessage } from "../ui/Toast";
+import { CanyonEditSheet } from "../canyons/CanyonEditSheet";
 import { updateGeoPdfImport } from "../geopdf/geoPdfImportsDb";
 import { GEOPDF_ERRORS, RESIDUAL_WARN_FRACTION, importGeoPdfBytes } from "../geopdf/importPipeline";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
@@ -131,6 +133,9 @@ const DEFAULT_ZOOM = 9;
 // Module-level: <Camera> is memo'd and takes no dynamic props, so a stable
 // object lets the memo hold and keeps every re-render of this screen from
 // re-committing props to the native camera.
+/** A bare lat/lng, as the map hands one back from a long press. */
+type MapPoint = { latitude: number; longitude: number };
+
 const CAMERA_DEFAULTS = {
   centerCoordinate: DEFAULT_CENTER,
   zoomLevel: DEFAULT_ZOOM,
@@ -245,6 +250,13 @@ export function MapScreen({
   const [basemapId, setBasemapId] = useState<BasemapId>("six-topo");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
+  // Press-and-hold target, and the point handed to the canyon form once that
+  // sheet has actually closed (never two sheets at once — DESIGN.md §6).
+  const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
+  const [addCanyonAt, setAddCanyonAt] = useState<MapPoint | null>(null);
+  const pendingCanyonPoint = useRef<MapPoint | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const toastNonce = useRef(0);
   const [regionStatus, setRegionStatus] = useState<string | null>(null);
   // Camera readout for the JS-drawn chrome: the scale bar needs zoom+latitude,
   // the compass button needs the bearing. Fed by onRegionDidChange (fires when
@@ -550,23 +562,28 @@ export function MapScreen({
     reconcileTrackRecordingOnLaunch().catch(console.error);
   }, []);
 
-  const handleMapLongPress = useCallback(
-    (feature: GeoJSON.Feature) => {
-      if (feature.geometry.type !== "Point") return;
-      const [lon, lat] = feature.geometry.coordinates as [number, number];
-      Alert.alert("Drop waypoint here?", undefined, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Drop waypoint",
-          onPress: () => {
-            createWaypointLocal({
-              name: `Waypoint ${waypoints.length + 1}`,
-              latitude: lat,
-              longitude: lon,
-            }).catch(console.error);
-          },
-        },
-      ]);
+  // A press-and-hold is "something goes here". Two things can: a waypoint (a
+  // scratch mark) and a canyon (a real record). A sheet rather than an Alert now
+  // that there is more than one — Android's Alert drops buttons past three, and
+  // these entries carry glyphs and a subtitle (DESIGN.md §6).
+  const handleMapLongPress = useCallback((feature: GeoJSON.Feature) => {
+    if (feature.geometry.type !== "Point") return;
+    const [lon, lat] = feature.geometry.coordinates as [number, number];
+    setLongPressPoint({ latitude: lat, longitude: lon });
+  }, []);
+
+  const notify = useCallback((text: string, tone: "info" | "error") => {
+    toastNonce.current += 1;
+    setToast({ text, tone, nonce: toastNonce.current });
+  }, []);
+
+  const dropWaypointAt = useCallback(
+    (point: { latitude: number; longitude: number }) => {
+      createWaypointLocal({
+        name: `Waypoint ${waypoints.length + 1}`,
+        latitude: point.latitude,
+        longitude: point.longitude,
+      }).catch(console.error);
     },
     [waypoints.length],
   );
@@ -1331,6 +1348,51 @@ export function MapScreen({
             : "No attribution reported for the active basemap."}
         </Text>
       </BottomSheet>
+
+      {/* Press-and-hold: a waypoint is a scratch mark, a canyon is a record.
+          The canyon form can't open from here directly — a second Modal over the
+          first doesn't hold focus — so the point is parked and picked up in
+          `onClosed`. */}
+      <BottomSheet
+        visible={longPressPoint !== null}
+        onClose={() => setLongPressPoint(null)}
+        onClosed={() => {
+          const point = pendingCanyonPoint.current;
+          if (!point) return;
+          pendingCanyonPoint.current = null;
+          setAddCanyonAt(point);
+        }}
+        title="What goes here?"
+      >
+        <Row
+          icon="map-pin"
+          title="Drop a waypoint"
+          onPress={() => {
+            const point = longPressPoint;
+            setLongPressPoint(null);
+            if (point) dropWaypointAt(point);
+          }}
+        />
+        <Row
+          icon="plus-circle"
+          title="Add a canyon"
+          subtitle="Opens the canyon form with this position filled in"
+          onPress={() => {
+            pendingCanyonPoint.current = longPressPoint;
+            setLongPressPoint(null);
+          }}
+        />
+      </BottomSheet>
+
+      <CanyonEditSheet
+        visible={addCanyonAt !== null}
+        initialCoords={addCanyonAt}
+        onClose={() => setAddCanyonAt(null)}
+        onSaved={(text) => notify(text, "info")}
+        onFailed={(text) => notify(text, "error")}
+      />
+
+      <Toast message={toast} onDismissed={() => setToast(null)} />
 
       <BottomSheet
         visible={pickerOpen}

@@ -61,6 +61,7 @@ export function TripEditSheet({
   onClose,
   trip,
   canyons,
+  initialCanyons,
   existingTypes,
   onSaved,
   onFailed,
@@ -71,6 +72,12 @@ export function TripEditSheet({
   /** null/undefined = log a new trip. */
   trip?: MirrorTrip | null;
   canyons: MirrorCanyon[];
+  /**
+   * Pre-linked canyons for a NEW trip, so "log a trip here" arrives with the
+   * canyon already attached. Ignored when editing — an existing trip's links
+   * are its own.
+   */
+  initialCanyons?: TripCanyonLink[];
   /** Types across the user's own history, unioned with the seed vocabulary. */
   existingTypes: string[];
   onSaved: (message: string) => void;
@@ -121,7 +128,9 @@ export function TripEditSheet({
     setCustomTypes([]);
     setSaving(false);
     setDateKey(trip ? toDateKey(new Date(trip.date)) : todayDateKey());
-    setSelected(trip ? trip.canyons.map((link) => ({ ...link })) : []);
+    setSelected(
+      trip ? trip.canyons.map((link) => ({ ...link })) : (initialCanyons ?? []),
+    );
     setDisplayName(trip?.displayName ?? "");
     setTypes(trip?.types ?? []);
     setNotes(trip?.notes ?? "");
@@ -135,6 +144,10 @@ export function TripEditSheet({
         ]),
       ),
     );
+    // Deliberately keyed on the sheet OPENING, not on `initialCanyons`: callers
+    // build that array inline, so a new identity every render would re-seed the
+    // form under the user mid-edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip, visible]);
 
   const typeOptions: ChipOption[] = useMemo(() => {

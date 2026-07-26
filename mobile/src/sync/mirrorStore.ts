@@ -456,6 +456,26 @@ export type MirrorMedia = {
  * has photos" without loading every media row. One grouped read rather than a
  * query per visible row.
  */
+/**
+ * How many people each of the viewer's own canyons is shared WITH, keyed by
+ * canyon id. Derived from the mirrored `canyon_shares` rows so the "Shared with
+ * N" badge works offline — the server's `_count.shares` never reaches the
+ * mirror.
+ *
+ * Outgoing only: an incoming share is the row that made a canyon visible to
+ * the viewer, not evidence of their own fan-out. Canyons with no share have no
+ * key, which is what "not shared" reads as.
+ */
+export async function countOutgoingSharesByCanyon(): Promise<Record<string, number>> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<{ canyon_id: string; n: number }>(
+    `SELECT canyon_id, COUNT(*) AS n FROM canyon_shares
+     WHERE direction = 'out'
+     GROUP BY canyon_id`,
+  );
+  return Object.fromEntries(rows.map((row) => [row.canyon_id, row.n]));
+}
+
 export async function countMediaByLinkedId(
   linkedType: string,
 ): Promise<Record<string, number>> {

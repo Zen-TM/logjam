@@ -9,6 +9,9 @@ import type {
   TCustomFieldFilter,
 } from "../../../canyonUtils";
 import { refreshFromRopeWiki, passesFilters, activeFilterCount } from "../../../canyonUtils";
+// The graded axes' bounds double as the "inactive" value, so they come from
+// the same place the predicate reads them (shared/src/canyonFilter.ts).
+import { CANYON_RANGE_BOUNDS as SLIDER_RANGES, type CanyonRangeKey } from "@logjam/shared";
 import type { RefreshResult } from "../../../canyonUtils";
 import { useStoredState } from "../../../useStoredState";
 import type { PanelId } from "../panels";
@@ -19,7 +22,7 @@ import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 
-type SliderKey = "v_grade" | "a_grade" | "commitment" | "quality";
+type SliderKey = CanyonRangeKey;
 type ThresholdKey = "pitches" | "longest_pitch" | "hours";
 
 type SortKey = "name" | "recent" | "grade";
@@ -29,13 +32,6 @@ const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "recent", label: "Recently added" },
   { value: "grade", label: "Grade (V/A)" },
 ];
-
-const SLIDER_RANGES: Record<SliderKey, [number, number]> = {
-  v_grade: [1, 7],
-  a_grade: [1, 7],
-  commitment: [1, 6],
-  quality: [1, 5],
-};
 
 const OWNERSHIP_OPTIONS: { value: TFilters["ownership"]; label: string }[] = [
   { value: "all", label: "All" },
@@ -184,10 +180,10 @@ function CanyonsPanel({
   // commits as null — the canonical "inactive" value (see canyonUtils).
   const draftFromFilters = useCallback(
     (f: TFilters): Record<SliderKey, number[]> => ({
-      v_grade: f.v_grade ?? SLIDER_RANGES.v_grade,
-      a_grade: f.a_grade ?? SLIDER_RANGES.a_grade,
-      commitment: f.commitment ?? SLIDER_RANGES.commitment,
-      quality: f.quality ?? SLIDER_RANGES.quality,
+      v_grade: f.v_grade ?? [...SLIDER_RANGES.v_grade],
+      a_grade: f.a_grade ?? [...SLIDER_RANGES.a_grade],
+      commitment: f.commitment ?? [...SLIDER_RANGES.commitment],
+      quality: f.quality ?? [...SLIDER_RANGES.quality],
     }),
     [],
   );

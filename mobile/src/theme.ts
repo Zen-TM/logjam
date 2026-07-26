@@ -102,3 +102,18 @@ export const assetHue = {
 } as const;
 
 export type AssetHue = keyof typeof assetHue;
+
+/**
+ * Canyon status identity for the Canyons screen — the same hue on a row's icon
+ * tile and on its filter chip, exactly as `assetHue` works for saved assets
+ * (DESIGN.md §3). Scheme-independent for the same reason: a canyon you have run
+ * is what it is regardless of the user's theme.
+ */
+export const canyonHue = {
+  /** Run at least once — the scheme's own accent, because this is the win. */
+  done: theme.accent,
+  /** On the list, not yet run — dry sandstone, the resting state. */
+  todo: "#C7B39A",
+  /** Shared with you by a friend — heath flower: someone else's line. */
+  shared: "#B79EC0",
+} as const;
