@@ -212,6 +212,7 @@ export function MapScreen({
   // fresh request (new nonce) replaces whatever was showing.
   const [shownRoute, setShownRoute] = useState<RouteRequest | null>(route ?? null);
   const [routeError, setRouteError] = useState<string | null>(null);
+  const fittedRouteNonce = useRef<number | null>(null);
   useEffect(() => {
     if (route) {
       setShownRoute(route);
@@ -974,9 +975,15 @@ export function MapScreen({
         {shownRoute ? (
           <RouteMapLayer
             request={shownRoute}
-            onLoaded={([west, south, east, north]) =>
-              cameraRef.current?.fitBounds([east, north], [west, south], 60, 600)
-            }
+            onLoaded={([west, south, east, north]) => {
+              // Fit once per request. The layer can re-resolve its file for
+              // reasons that have nothing to do with the user (a re-render, a
+              // remount), and refitting then yanks the camera back mid-pan —
+              // the map became impossible to explore around the route.
+              if (fittedRouteNonce.current === shownRoute.nonce) return;
+              fittedRouteNonce.current = shownRoute.nonce;
+              cameraRef.current?.fitBounds([east, north], [west, south], 60, 600);
+            }}
             onFailed={(message) => {
               setShownRoute(null);
               setRouteError(message);

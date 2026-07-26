@@ -873,9 +873,14 @@ export function SavedScreen({ onOpenMap }: { onOpenMap: (bbox?: Bbox) => void })
         <View style={styles.sheetBody}>
           <Row
             title="Download a map region"
-            subtitle="Pick an area on the map, then save its tiles"
+            subtitle={
+              online
+                ? "Pick an area on the map, then save its tiles"
+                : "Needs a connection"
+            }
             icon="map"
             hue={assetHue.region}
+            disabled={!online}
             onPress={() => {
               setAddSheetOpen(false);
               onOpenMap();
@@ -883,7 +888,7 @@ export function SavedScreen({ onOpenMap }: { onOpenMap: (bbox?: Bbox) => void })
           />
           <Row
             title="Import a GeoPDF file"
-            subtitle="From this phone's storage or a download"
+            subtitle="From this phone's storage — works offline"
             icon="file-text"
             hue={assetHue.geoPdf}
             onPress={() => {
@@ -896,6 +901,7 @@ export function SavedScreen({ onOpenMap }: { onOpenMap: (bbox?: Bbox) => void })
             subtitle={online ? "Maps you generated on the web" : "Needs a connection"}
             icon="cloud"
             hue={assetHue.geoPdf}
+            disabled={!online}
             onPress={
               online && !accountJobsLoading
                 ? () => {
@@ -907,7 +913,7 @@ export function SavedScreen({ onOpenMap }: { onOpenMap: (bbox?: Bbox) => void })
           />
           <Row
             title="Import GPX, KML or GeoJSON"
-            subtitle="Tracks and waypoints from another app"
+            subtitle="From this phone's storage — works offline"
             icon="file-plus"
             hue={assetHue.vector}
             onPress={
@@ -926,6 +932,7 @@ export function SavedScreen({ onOpenMap }: { onOpenMap: (bbox?: Bbox) => void })
             }
             icon="layers"
             hue={assetHue.overlay}
+            disabled={!online}
             onPress={
               online
                 ? () => {

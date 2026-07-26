@@ -132,18 +132,24 @@ export function MediaStrip({
 
   const captureFrom = useCallback(
     async (source: "camera" | "library", kind: "photo" | "video") => {
-      const permission =
-        source === "camera"
-          ? await ImagePicker.requestCameraPermissionsAsync()
+      // NO permission call for the camera here. `launchCameraAsync` always asks
+      // natively (ImagePickerModule.ensureCameraPermissionsAreGranted), so a
+      // second ask from JS is redundant — and on this device that ask is exactly
+      // what hangs: expo's permission request for CAMERA never invokes its
+      // callback, so the promise never settles and the button appears dead.
+      // Asking once, natively, is the smaller surface until that is resolved.
+      if (source === "library") {
+        const existing = await ImagePicker.getMediaLibraryPermissionsAsync();
+        const permission = existing.granted
+          ? existing
           : await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert(
-          source === "camera" ? "Camera access needed" : "Photo access needed",
-          source === "camera"
-            ? "Allow camera access to take photos and videos."
-            : "Allow photo library access to attach photos and videos.",
-        );
-        return;
+        if (!permission.granted) {
+          Alert.alert(
+            "Photo access needed",
+            "Allow photo library access to attach photos and videos.",
+          );
+          return;
+        }
       }
       const mediaTypes: ImagePicker.MediaType[] =
         kind === "video" ? ["videos"] : source === "camera" ? ["images"] : ["images", "videos"];

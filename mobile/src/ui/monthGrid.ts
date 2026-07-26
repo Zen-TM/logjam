@@ -73,6 +73,18 @@ export function monthGrid({ year, month }: YearMonth): (string | null)[] {
   return cells;
 }
 
+/**
+ * First year of the fixed block a year belongs to — blocks END on a multiple of
+ * `size` (with size 20: 1981-2000, 2001-2020, 2021-2040).
+ *
+ * Fixed rather than centred on the selection: a grid whose contents shift with
+ * what is selected puts the same year in a different place every time it opens,
+ * so the user can never learn where anything is.
+ */
+export function yearBlockStart(year: number, size: number): number {
+  return Math.ceil(year / size) * size - (size - 1);
+}
+
 export const WEEKDAY_INITIALS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
 export function formatMonthLabel({ year, month }: YearMonth): string {

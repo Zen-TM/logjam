@@ -234,6 +234,16 @@ because each was a bug once:
   The sheet's title changes with the mode, so which step you are on is never a
   guess.
 
+**A paged surface puts its arrows at the vertical middle, over the content's
+own edges.** Along the bottom they land on a video's transport controls, which
+is the one place they must not be; and the row between them stays
+`pointerEvents="box-none"` so it doesn't steal taps from the page underneath.
+
+**Fit the camera once per request, not once per load.** A map layer can
+re-resolve its source for reasons that have nothing to do with the user, and
+refitting on each one yanks the camera back mid-pan — the map becomes
+impossible to explore. Guard on the request's nonce.
+
 **Stack chrome that talks to the user.** Notices, error strips and state badges
 anchored to the same edge belong in ONE positioned column with a gap, not each
 absolutely positioned at the same offset — otherwise the second message to
@@ -301,6 +311,12 @@ row with a retry — it persists because the problem persists.
   custom field also clears its value from every trip that had one, so the
   confirm asks the server for that count first and puts it in the dialog
   ("12 trips have a value…"), rather than discovering it afterwards.
+- **A disabled cell is a plain `View`, not a disabled `Pressable`.** A
+  `Pressable` takes the touch responder on press-in and will not hand it back,
+  so a swipe that starts over one never reaches an ancestor's pan responder —
+  even a capture-phase one. This made a future month (every day disabled) and
+  the future half of a year page completely unswipeable while the arrows still
+  worked. Render the disabled state as inert markup.
 - **Never open a system window from an open sheet.** Permission requests and
   media pickers both need a window of their own; launched from a `Modal` they
   can't attach one, and `requestCameraPermissionsAsync()` simply never resolves

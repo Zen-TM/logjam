@@ -108,32 +108,41 @@ export function MediaViewer({
           />
         </View>
 
+        {/* Arrows sit at the vertical middle, over the media's own edges —
+            along the bottom they land on a video's transport controls, which is
+            the one place they must not be. `box-none` so the space between them
+            still belongs to the page underneath. */}
+        {items.length > 1 ? (
+          <View style={styles.arrowRow} pointerEvents="box-none">
+            <View style={styles.arrowSlot}>
+              {index > 0 ? (
+                <IconButton
+                  icon="chevron-left"
+                  accessibilityLabel="Previous attachment"
+                  color={theme.textPrimary}
+                  filled
+                  onPress={() => go(-1)}
+                />
+              ) : null}
+            </View>
+            <View style={styles.arrowSlot}>
+              {index < items.length - 1 ? (
+                <IconButton
+                  icon="chevron-right"
+                  accessibilityLabel="Next attachment"
+                  color={theme.textPrimary}
+                  filled
+                  onPress={() => go(1)}
+                />
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing(1) }]}>
-          {items.length > 1 ? (
-            <>
-              <IconButton
-                icon="chevron-left"
-                accessibilityLabel="Previous attachment"
-                color={theme.textPrimary}
-                disabled={index === 0}
-                onPress={() => go(-1)}
-              />
-              <Text style={styles.caption} numberOfLines={1}>
-                {current?.filename ?? ""}
-              </Text>
-              <IconButton
-                icon="chevron-right"
-                accessibilityLabel="Next attachment"
-                color={theme.textPrimary}
-                disabled={index === items.length - 1}
-                onPress={() => go(1)}
-              />
-            </>
-          ) : (
-            <Text style={styles.caption} numberOfLines={1}>
-              {current?.filename ?? ""}
-            </Text>
-          )}
+          <Text style={styles.caption} numberOfLines={1}>
+            {current?.filename ?? ""}
+          </Text>
         </View>
       </View>
     </Modal>
@@ -267,6 +276,18 @@ const styles = StyleSheet.create({
     paddingVertical: spacing(0.25),
     overflow: "hidden",
   },
+  arrowRow: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing(1),
+  },
+  arrowSlot: { width: 40 },
   bottomBar: {
     position: "absolute",
     bottom: 0,
@@ -274,8 +295,7 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing(1),
+    justifyContent: "center",
     paddingHorizontal: spacing(1),
   },
   caption: {

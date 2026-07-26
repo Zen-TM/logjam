@@ -38,6 +38,7 @@ export function Row({
   right,
   progress,
   onPress,
+  disabled = false,
   accessibilityLabel,
   titleNumberOfLines = 1,
   style,
@@ -50,6 +51,12 @@ export function Row({
   right?: React.ReactNode;
   progress?: number | null;
   onPress?: () => void;
+  /**
+   * Unavailable right now, with the reason in the subtitle. Dims the row AND
+   * stops it responding — dropping `onPress` alone leaves a row that looks
+   * live and silently does nothing, which is worse than a visibly dead one.
+   */
+  disabled?: boolean;
   accessibilityLabel?: string;
   titleNumberOfLines?: number;
   style?: ViewStyle | ViewStyle[];
@@ -93,13 +100,16 @@ export function Row({
     </>
   );
 
-  if (!onPress) {
-    return <View style={[styles.row, style]}>{body}</View>;
+  if (!onPress || disabled) {
+    return (
+      <View style={[styles.row, disabled && styles.disabled, style]}>{body}</View>
+    );
   }
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityState={{ disabled }}
       onPress={onPress}
       hitSlop={hitSlop}
       style={({ pressed }) => [styles.row, pressed && styles.pressed, style]}
@@ -123,6 +133,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   pressed: { backgroundColor: surface.cardPressed },
+  disabled: { opacity: 0.45 },
   leading: { alignItems: "center", justifyContent: "center" },
   iconTile: {
     width: 40,

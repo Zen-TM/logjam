@@ -7,6 +7,7 @@ import {
   monthOf,
   todayDateKey,
   toDateKey,
+  yearBlockStart,
 } from "./monthGrid";
 
 describe("date keys", () => {
@@ -84,5 +85,24 @@ describe("todayDateKey", () => {
 
   it("zero-pads month and day", () => {
     expect(todayDateKey(new Date(2026, 0, 5, 12))).toBe("2026-01-05");
+  });
+});
+
+describe("yearBlockStart", () => {
+  it("aligns blocks to end on a multiple of the size", () => {
+    expect(yearBlockStart(2026, 20)).toBe(2021);
+    expect(yearBlockStart(2021, 20)).toBe(2021);
+    expect(yearBlockStart(2040, 20)).toBe(2021);
+    expect(yearBlockStart(2041, 20)).toBe(2041);
+    expect(yearBlockStart(2020, 20)).toBe(2001);
+    expect(yearBlockStart(2000, 20)).toBe(1981);
+  });
+
+  it("puts a year in the same block regardless of which year you ask from", () => {
+    // The point of fixed blocks: every year in a block agrees on the block.
+    const block = yearBlockStart(2026, 20);
+    for (let year = block; year < block + 20; year += 1) {
+      expect(yearBlockStart(year, 20)).toBe(block);
+    }
   });
 });
