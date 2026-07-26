@@ -10,7 +10,8 @@
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@aws-amplify/react-native": "^1.3.3",
@@ -58,6 +59,7 @@
     "@types/react": "~19.0.0",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~9.2.0",
+    "patch-package": "^8.0.1",
     "typescript": "~5.8.3",
     "vitest": "^4.1.8"
   }

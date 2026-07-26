@@ -151,7 +151,16 @@ export function DatePicker({
 
       {/* Clipped to its own width so a paging grid never paints over the sheet's
           padding on the way past. */}
-      <View style={styles.viewport} {...swipe.panHandlers}>
+      {/* `collapsable={false}` matters on Android: a View whose children are all
+          plain layout Views (an all-in-the-future month, where every cell is
+          inert) gets optimised out of the native hierarchy, and the touch then
+          never reaches this responder at all — the grid became unswipeable
+          exactly when nothing in it was pressable. */}
+      <View
+        style={styles.viewport}
+        collapsable={false}
+        {...swipe.panHandlers}
+      >
         <Animated.View style={{ transform: [{ translateX: pan }] }}>
           {pickingYear ? (
             // Explicit rows rather than flex-wrap: wrapped cells size
@@ -268,24 +277,23 @@ function DayCell({
     </Text>
   );
 
-  // A DISABLED cell is a plain View, never a disabled Pressable. A Pressable
-  // still takes the touch responder on press-in and won't hand it back, so a
-  // swipe starting over one never reaches the grid's pan responder — which made
-  // a future month, and the future half of a year page, impossible to swipe.
-  if (disabled) {
-    return (
-      <View style={styles.day} accessibilityLabel={dateKey}>
-        <View style={[styles.dayPill, isToday && styles.todayRing]}>{label}</View>
-      </View>
-    );
-  }
-
+  // An unavailable cell stays a Pressable with a no-op press — it must NOT use
+  // the `disabled` prop, and must not become a plain View.
+  //
+  // Both alternatives break the swipe that pages the grid, for the same
+  // underlying reason: RN's touch dispatch looks for a JS touch target under
+  // the finger, and an inert View isn't one. In a month entirely in the future
+  // EVERY cell is unavailable, so nothing under the finger was a target, the
+  // gesture went to the sheet's native ScrollView, and the pan responder was
+  // never consulted — the grid became unswipeable exactly when nothing in it
+  // was pressable. Keeping them pressable keeps the responder chain alive;
+  // `accessibilityState` still announces them as unavailable.
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={dateKey}
-      accessibilityState={{ selected }}
-      onPress={onPress}
+      accessibilityState={{ selected, disabled }}
+      onPress={disabled ? noop : onPress}
       style={styles.day}
     >
       {({ pressed }) => (
@@ -294,7 +302,7 @@ function DayCell({
             styles.dayPill,
             isToday && styles.todayRing,
             selected && styles.selectedFill,
-            pressed && styles.pressed,
+            pressed && !disabled && styles.pressed,
           ]}
         >
           {label}
@@ -327,22 +335,14 @@ function YearCell({
     </Text>
   );
 
-  // Plain View when disabled — see DayCell: a disabled Pressable would eat the
-  // swipe that pages the grid.
-  if (disabled) {
-    return (
-      <View style={styles.yearCell} accessibilityLabel={String(year)}>
-        <View style={[styles.yearPill, isCurrent && styles.todayRing]}>{label}</View>
-      </View>
-    );
-  }
-
+  // Pressable with a no-op press when unavailable — see DayCell for why an
+  // inert View here would break paging.
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={String(year)}
-      accessibilityState={{ selected }}
-      onPress={onPress}
+      accessibilityState={{ selected, disabled }}
+      onPress={disabled ? noop : onPress}
       style={styles.yearCell}
     >
       {({ pressed }) => (
@@ -351,7 +351,7 @@ function YearCell({
             styles.yearPill,
             isCurrent && styles.todayRing,
             selected && styles.selectedFill,
-            pressed && styles.pressed,
+            pressed && !disabled && styles.pressed,
           ]}
         >
           {label}
@@ -423,6 +423,8 @@ function Header({
   );
 }
 
+function noop(): void {}
+
 function chunk<T>(items: T[], size: number): T[][] {
   const rows: T[][] = [];
   for (let index = 0; index < items.length; index += size) {
@@ -460,7 +462,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     fontWeight: fontWeight.medium,
   },
-  viewport: { overflow: "hidden" },
+  viewport: { overflow: "hidden", backgroundColor: "transparent" },
   week: { flexDirection: "row" },
   weekday: {
     flex: 1,

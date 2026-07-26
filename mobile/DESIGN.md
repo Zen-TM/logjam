@@ -311,12 +311,14 @@ row with a retry — it persists because the problem persists.
   custom field also clears its value from every trip that had one, so the
   confirm asks the server for that count first and puts it in the dialog
   ("12 trips have a value…"), rather than discovering it afterwards.
-- **A disabled cell is a plain `View`, not a disabled `Pressable`.** A
-  `Pressable` takes the touch responder on press-in and will not hand it back,
-  so a swipe that starts over one never reaches an ancestor's pan responder —
-  even a capture-phase one. This made a future month (every day disabled) and
-  the future half of a year page completely unswipeable while the arrows still
-  worked. Render the disabled state as inert markup.
+- **An unavailable cell inside a swipeable grid stays a `Pressable` with a
+  no-op press** — never the `disabled` prop, and never a plain `View`. RN's
+  touch dispatch looks for a JS touch target under the finger; an inert View
+  isn't one, so in a grid where EVERYTHING is unavailable (a month entirely in
+  the future) the gesture falls through to the enclosing native ScrollView and
+  the grid's pan responder is never consulted at all. It became unswipeable
+  exactly when nothing in it was pressable. `accessibilityState` still
+  announces it as unavailable.
 - **Never open a system window from an open sheet.** Permission requests and
   media pickers both need a window of their own; launched from a `Modal` they
   can't attach one, and `requestCameraPermissionsAsync()` simply never resolves

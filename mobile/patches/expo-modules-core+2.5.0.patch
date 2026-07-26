@@ -1,0 +1,34 @@
+diff --git a/node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/permissions/PermissionsService.kt b/node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/permissions/PermissionsService.kt
+index 0d7947e..d953aab 100644
+--- a/node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/permissions/PermissionsService.kt
++++ b/node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/permissions/PermissionsService.kt
+@@ -243,6 +243,29 @@ open class PermissionsService(val context: Context) : InternalModule, Permission
+   }
+ 
+   protected open fun askForManifestPermissions(permissions: Array<out String>, listener: PermissionsResponseListener) {
++    // Short-circuit when everything asked for is already granted.
++    //
++    // Android's PermissionController (Mainline update, 2025-09) answers
++    // "No requestable permission in the request" synchronously and never shows
++    // UI when there is nothing to ask. The activity is therefore never
++    // paused/resumed, and React Native only flushes its permission callback
++    // from onResume (ReactActivityDelegate.onResume) — so the listener never
++    // runs, the caller's promise never settles, and mCurrentPermissionListener
++    // stays non-null, queueing every later request behind it forever.
++    //
++    // That is why ImagePicker.launchCameraAsync() hangs: it always asks for
++    // CAMERA (ImagePickerModule.ensureCameraPermissionsAreGranted) even when
++    // the permission is already held. expo/expo#39480; fixed upstream in
++    // react-native 0.81.5 (SDK 54), with no 0.79.x backport.
++    if (permissions.isNotEmpty() && permissions.all { isPermissionGranted(it) }) {
++      listener.onResult(
++        parseNativeResult(
++          arrayOf(*permissions),
++          IntArray(permissions.size) { PackageManager.PERMISSION_GRANTED }
++        )
++      )
++      return
++    }
+     delegateRequestToActivity(arrayOf(*permissions), listener)
+   }
+ 
