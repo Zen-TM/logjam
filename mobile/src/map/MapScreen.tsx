@@ -30,6 +30,7 @@ import {
   RasterLayer,
   ShapeSource,
   SymbolLayer,
+  type CameraStop,
 } from "@maplibre/maplibre-react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -127,6 +128,13 @@ const PROTOMAPS_FLAVOR = "light" as const;
 // Blue Mountains default view (matches the app's home turf).
 const DEFAULT_CENTER: [number, number] = [150.31, -33.7];
 const DEFAULT_ZOOM = 9;
+// Module-level: <Camera> is memo'd and takes no dynamic props, so a stable
+// object lets the memo hold and keeps every re-render of this screen from
+// re-committing props to the native camera.
+const CAMERA_DEFAULTS = {
+  centerCoordinate: DEFAULT_CENTER,
+  zoomLevel: DEFAULT_ZOOM,
+};
 
 // Bearing to 0..360 so "is the map facing north" is a single comparison.
 function normalizeBearing(heading: number): number {
@@ -277,6 +285,32 @@ export function MapScreen({
     });
   }, []);
   const cameraRef = useRef<React.ComponentRef<typeof Camera>>(null);
+  // MLRN's native camera KEEPS the last stop handed to it imperatively, and
+  // under the new architecture the legacy-interop layer re-sends that view's
+  // props on later commits — so any re-render of this screen replays the last
+  // camera move. Left alone, that makes the map unpannable after a programmatic
+  // move (each region change writes the readout state below ⇒ re-render ⇒
+  // replay ⇒ region change…) and it outlives whatever asked for the move: a
+  // route fit still yanked the camera back after the route was dismissed.
+  // Fix: once a move has settled, overwrite the stop with an empty one
+  // (no target, no animation ⇒ "stay where you are"), so a later replay is a
+  // no-op. Every camera write goes through the two helpers below so nothing
+  // can leave a stale stop behind.
+  const stopNeedsReset = useRef(false);
+  const setCameraStop = useCallback((stop: CameraStop) => {
+    if (!cameraRef.current) return;
+    stopNeedsReset.current = true;
+    cameraRef.current.setCamera(stop);
+  }, []);
+  const fitCameraToBbox = useCallback(
+    (bbox: [number, number, number, number], padding = 40) => {
+      if (!cameraRef.current) return;
+      const [west, south, east, north] = bbox;
+      stopNeedsReset.current = true;
+      cameraRef.current.fitBounds([east, north], [west, south], padding, 600);
+    },
+    [],
+  );
   // Stage 7 follow modes: follow recenters on each fix (north-up); course-up
   // additionally rotates the map to the direction of travel. The locate
   // button cycles off → follow → course-up → off.
@@ -575,8 +609,7 @@ export function MapScreen({
             { cancelled: false },
           );
           if (outcome.status === "imported" && outcome.record.bbox) {
-            const [west, south, east, north] = outcome.record.bbox;
-            cameraRef.current?.fitBounds([east, north], [west, south], 40, 600);
+            fitCameraToBbox(outcome.record.bbox);
           } else if (outcome.status === "existing") {
             Alert.alert("Already imported", "This GeoPDF is already in Saved.");
           } else if (outcome.status === "paused") {
@@ -591,8 +624,7 @@ export function MapScreen({
             syntheticNameFor(kind),
             imports.length,
           );
-          const [west, south, east, north] = record.bbox;
-          cameraRef.current?.fitBounds([east, north], [west, south], 40, 600);
+          fitCameraToBbox(record.bbox);
         }
       } catch (err) {
         console.error(err);
@@ -604,7 +636,7 @@ export function MapScreen({
         );
       }
     },
-    [imports.length],
+    [imports.length, fitCameraToBbox],
   );
   const handleIncomingUrlRef = useRef(handleIncomingUrl);
   handleIncomingUrlRef.current = handleIncomingUrl;
@@ -621,9 +653,8 @@ export function MapScreen({
   // same params doesn't fight the user's own panning.
   useEffect(() => {
     if (!focus) return;
-    const [west, south, east, north] = focus.bbox;
-    cameraRef.current?.fitBounds([east, north], [west, south], 40, 600);
-  }, [focus?.nonce, focus]);
+    fitCameraToBbox(focus.bbox);
+  }, [focus?.nonce, focus, fitCameraToBbox]);
 
   // Camera readout for the scale bar + compass. Coordinates stay in component
   // state only — never logged (privacy rule).
@@ -635,11 +666,23 @@ export function MapScreen({
       const latitude = feature.geometry.coordinates[1];
       const { zoomLevel, heading } = feature.properties;
       if (!Number.isFinite(latitude) || !Number.isFinite(zoomLevel)) return;
-      setCamera({
-        zoom: zoomLevel,
-        latitude: latitude as number,
-        bearing: normalizeBearing(heading),
-      });
+      // The move that just settled is done with; drop its stop so a re-render
+      // can't replay it (see stopNeedsReset).
+      if (stopNeedsReset.current) {
+        stopNeedsReset.current = false;
+        cameraRef.current?.setCamera({ animationDuration: 0 });
+      }
+      const bearing = normalizeBearing(heading);
+      setCamera((prev) =>
+        prev.zoom === zoomLevel &&
+        prev.latitude === latitude &&
+        prev.bearing === bearing
+          ? // Same readout ⇒ same render output. Bailing keeps a stop replay
+            // (which reports the unchanged region again) from re-rendering and
+            // replaying forever.
+            prev
+          : { zoom: zoomLevel, latitude: latitude as number, bearing },
+      );
     },
     [],
   );
@@ -648,19 +691,19 @@ export function MapScreen({
   // re-rotate on the next fix, so drop to plain follow as well.
   const handleResetNorth = useCallback(() => {
     setFollowMode((mode) => (mode === "course-up" ? "follow" : mode));
-    cameraRef.current?.setCamera({ heading: 0, animationDuration: 300 });
+    setCameraStop({ heading: 0, animationDuration: 300 });
     setCamera((prev) => ({ ...prev, bearing: 0 }));
-  }, []);
+  }, [setCameraStop]);
 
   // Place search result: recentre without changing zoom intent drastically.
   const handleSelectPlace = useCallback((latitude: number, longitude: number) => {
     setFollowMode("off");
-    cameraRef.current?.setCamera({
+    setCameraStop({
       centerCoordinate: [longitude, latitude],
       zoomLevel: 13,
       animationDuration: 800,
     });
-  }, []);
+  }, [setCameraStop]);
 
   const handleLocateMe = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
@@ -684,7 +727,7 @@ export function MapScreen({
       setUserHeading(null);
       setFollowMode("off");
       // Leave course-up's rotation behind — back to north-up.
-      cameraRef.current?.setCamera({ heading: 0, animationDuration: 300 });
+      setCameraStop({ heading: 0, animationDuration: 300 });
       return;
     }
     setFollowMode("follow");
@@ -700,7 +743,7 @@ export function MapScreen({
       const mode = followModeRef.current;
       if (fly && firstFix.current) {
         firstFix.current = false;
-        cameraRef.current?.setCamera({
+        setCameraStop({
           centerCoordinate: coord,
           zoomLevel: 14,
           animationDuration: 1200,
@@ -709,7 +752,7 @@ export function MapScreen({
         // Course over ground comes from the fix (heading ⇒ movement
         // direction); reported as -1 when stationary — keep the rotation.
         const course = position.coords.heading;
-        cameraRef.current?.setCamera({
+        setCameraStop({
           centerCoordinate: coord,
           animationDuration: 600,
           ...(mode === "course-up" && course != null && course >= 0
@@ -750,7 +793,7 @@ export function MapScreen({
         return value;
       });
     });
-  }, []);
+  }, [setCameraStop]);
 
   const handleStartRecording = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
@@ -839,7 +882,7 @@ export function MapScreen({
       >
         <Camera
           ref={cameraRef}
-          defaultSettings={{ centerCoordinate: DEFAULT_CENTER, zoomLevel: DEFAULT_ZOOM }}
+          defaultSettings={CAMERA_DEFAULTS}
         />
         {/* Bundled point-feature icons for vector overlays. */}
         <TopoIconImages />
@@ -975,14 +1018,14 @@ export function MapScreen({
         {shownRoute ? (
           <RouteMapLayer
             request={shownRoute}
-            onLoaded={([west, south, east, north]) => {
+            onLoaded={(bbox) => {
               // Fit once per request. The layer can re-resolve its file for
               // reasons that have nothing to do with the user (a re-render, a
               // remount), and refitting then yanks the camera back mid-pan —
               // the map became impossible to explore around the route.
               if (fittedRouteNonce.current === shownRoute.nonce) return;
               fittedRouteNonce.current = shownRoute.nonce;
-              cameraRef.current?.fitBounds([east, north], [west, south], 60, 600);
+              fitCameraToBbox(bbox, 60);
             }}
             onFailed={(message) => {
               setShownRoute(null);

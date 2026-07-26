@@ -45,6 +45,8 @@ import {
  */
 const SWIPE_SLOP = 8;
 const PAGE_MS = 130;
+/** Day pill box; the radius is exactly half of this — see the style comment. */
+const DAY_PILL_SIZE = 36;
 const YEAR_COLUMNS = 4;
 const YEAR_ROWS = 5;
 const YEARS_PER_PAGE = YEAR_COLUMNS * YEAR_ROWS;
@@ -474,10 +476,20 @@ const styles = StyleSheet.create({
   },
   day: { flex: 1, aspectRatio: 1, alignItems: "center", justifyContent: "center" },
   // Pill sized to the glyph and centred in its cell, not filling it.
+  //
+  // Two Android-specific details, both learned the hard way: the radius is
+  // exactly half the box rather than `radius.pill`'s 999, and the background is
+  // always set (transparent when unselected) instead of appearing only on the
+  // selected state. RN Android draws corner radii through the view's background
+  // drawable, so a cell that gains a background AFTER it was first laid out —
+  // which is what happens when the grid pages away and back and React reuses
+  // the same cell for a different date — could come back square.
   dayPill: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.pill,
+    width: DAY_PILL_SIZE,
+    height: DAY_PILL_SIZE,
+    borderRadius: DAY_PILL_SIZE / 2,
+    backgroundColor: "transparent",
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -502,6 +514,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(1.25),
     paddingVertical: spacing(0.75),
     borderRadius: radius.pill,
+    // Same reason as dayPill: keep the background drawable present from the
+    // first layout so paging back to a selected year can't lose its rounding.
+    backgroundColor: "transparent",
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
   },
