@@ -208,9 +208,7 @@ function MediaPage({ item, active }: { item: MirrorMedia; active: boolean }) {
         <Text style={styles.notice}>
           {item.filename ?? "Route file"}
         </Text>
-        <Text style={styles.noticeMuted}>
-          Open it on the map from the trip to see where it goes.
-        </Text>
+        <Text style={styles.noticeMuted}>Routes open on the map.</Text>
       </View>
     );
   }

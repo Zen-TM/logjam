@@ -16,7 +16,7 @@
 // PRIVACY: rows carry names, grades, tallies — never coordinates or any derived
 // location detail (DESIGN.md §11). Nothing here is logged, and the failure paths
 // print our own copy rather than an error string that might embed a canyon name.
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -31,7 +31,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activeCanyonFilterCount,
-  CANYON_RANGE_BOUNDS,
   canyonMatchesSearch,
   compareCanyons,
   distinctTripTypes,
@@ -56,44 +55,32 @@ import {
   BottomSheet,
   Button,
   CapacityBar,
-  Chip,
   HeroHeader,
   IconButton,
   LoadingState,
   ErrorState,
-  RangePills,
   Row,
-  SectionHeader,
   SegmentedControl,
   StatusPill,
   Toast,
-  Toggle,
   type CapacitySegment,
-  type NumberRange,
   type SegmentOption,
   type ToastMessage,
 } from "../ui";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { CanyonEditSheet } from "./CanyonEditSheet";
+import { CanyonFilterSheet, sortLabel } from "./CanyonFilterSheet";
+import {
+  publishVisibleCanyons,
+  setCanyonMapFilterEnabled,
+  useCanyonMapFilter,
+} from "./canyonMapFilter";
 import { CANYON_STATUS_META, canyonStatus, canyonSummary, qualityLabel, type CanyonStatus } from "./canyonMeta";
 
 type Bucket = "all" | CanyonStatus;
 
 /** A canyon plus the tallies the shared predicate reads off `_count`. */
 type Countable = MirrorCanyon & { _count?: { tripLogLinks: number; shares: number } };
-
-const SORTS: { key: CanyonSortKey; label: string }[] = [
-  { key: "name", label: "Name" },
-  { key: "recent", label: "Recently added" },
-  { key: "grade", label: "Easiest first" },
-  { key: "quality", label: "Best rated" },
-];
-
-/** Rope length and daylight — the two logistics questions worth a preset. Each
- * is the strict "Less than" the shared predicate implements, so the label says
- * "under" and means it. */
-const ROPE_PRESETS = [20, 30, 45, 60];
-const HOURS_PRESETS = [4, 6, 8];
 
 export function CanyonsScreen({
   onOpenCanyon,
@@ -122,6 +109,7 @@ export function CanyonsScreen({
   const [filters, setFilters] = useState<CanyonFilters>(EMPTY_CANYON_FILTERS);
   const [sort, setSort] = useState<CanyonSortKey>("name");
   const [sheet, setSheet] = useState<"filters" | "add" | null>(null);
+  const mapFilter = useCanyonMapFilter();
   const [menuCanyonId, setMenuCanyonId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ canyon: MirrorCanyon | null } | null>(null);
   const [loggingFor, setLoggingFor] = useState<MirrorCanyon | null>(null);
@@ -260,6 +248,16 @@ export function CanyonsScreen({
   // chips as logging from the Logs tab.
   const tripTypes = useMemo(() => distinctTripTypes(trips), [trips]);
 
+  // Hand the resolved set to the map. Published even while the option is off, so
+  // switching it on is instant; the store drops an identical republish, so this
+  // doesn't re-render the map on every keystroke.
+  useEffect(() => {
+    publishVisibleCanyons(
+      visible.map((canyon) => canyon.id),
+      canyons.length,
+    );
+  }, [canyons.length, visible]);
+
   const filterCount = activeCanyonFilterCount(filters);
   const filtering = filterCount > 0 || search.trim() !== "";
   const menuCanyon = canyons.find((canyon) => canyon.id === menuCanyonId) ?? null;
@@ -288,23 +286,6 @@ export function CanyonsScreen({
   }, []);
 
   const resetFilters = useCallback(() => setFilters(EMPTY_CANYON_FILTERS), []);
-
-  const setRange = useCallback(
-    (axis: keyof typeof CANYON_RANGE_BOUNDS, next: NumberRange | null) => {
-      setFilters((current) => ({ ...current, [axis]: next }));
-    },
-    [],
-  );
-
-  const setThreshold = useCallback(
-    (key: "longest_pitch" | "hours", value: number | null) => {
-      setFilters((current) => ({
-        ...current,
-        [key]: value == null ? null : (["Less than", value] as const),
-      }));
-    },
-    [],
-  );
 
   const confirmDelete = useCallback(
     (canyon: MirrorCanyon) => {
@@ -437,7 +418,7 @@ export function CanyonsScreen({
         <View style={styles.filterNote}>
           <Text style={styles.filterText} numberOfLines={1}>
             {filterCount === 1 ? "1 filter active" : `${filterCount} filters active`}
-            {sort === "name" ? "" : ` · ${SORTS.find((s) => s.key === sort)?.label}`}
+            {sort === "name" ? "" : ` · ${sortLabel(sort)}`}
           </Text>
           <IconButton
             icon="x"
@@ -576,90 +557,20 @@ export function CanyonsScreen({
         </View>
       </BottomSheet>
 
-      <BottomSheet
+      <CanyonFilterSheet
         visible={sheet === "filters"}
         onClose={() => setSheet(null)}
-        title="Sort & filter"
-        footer={<Button label="Done" icon="check" onPress={() => setSheet(null)} />}
-      >
-        <View style={styles.sheetBody}>
-          <SectionHeader label="Sort" />
-          <View style={styles.chipRow}>
-            {SORTS.map((option) => (
-              <Chip
-                key={option.key}
-                label={option.label}
-                active={sort === option.key}
-                onPress={() => setSort(option.key)}
-              />
-            ))}
-          </View>
-
-          <SectionHeader label="Grade" />
-          <RangePills
-            label="Vertical"
-            prefix="V"
-            bounds={CANYON_RANGE_BOUNDS.v_grade}
-            value={filters.v_grade as NumberRange | null}
-            onChange={(next) => setRange("v_grade", next)}
-          />
-          <RangePills
-            label="Aquatic"
-            prefix="A"
-            bounds={CANYON_RANGE_BOUNDS.a_grade}
-            value={filters.a_grade as NumberRange | null}
-            onChange={(next) => setRange("a_grade", next)}
-          />
-          <RangePills
-            label="Commitment"
-            bounds={CANYON_RANGE_BOUNDS.commitment}
-            value={filters.commitment as NumberRange | null}
-            onChange={(next) => setRange("commitment", next)}
-          />
-          <RangePills
-            label="Quality"
-            bounds={CANYON_RANGE_BOUNDS.quality}
-            value={filters.quality as NumberRange | null}
-            onChange={(next) => setRange("quality", next)}
-          />
-
-          <SectionHeader label="Fits the day" />
-          <PresetRow
-            label="Longest abseil"
-            unit="m"
-            presets={ROPE_PRESETS}
-            value={filters.longest_pitch?.[1] ?? null}
-            onChange={(next) => setThreshold("longest_pitch", next)}
-          />
-          <PresetRow
-            label="Time out"
-            unit="h"
-            presets={HOURS_PRESETS}
-            value={filters.hours?.[1] ?? null}
-            onChange={(next) => setThreshold("hours", next)}
-          />
-
-          <SectionHeader label="Gaps in the data" />
-          <Row
-            icon="help-circle"
-            title="Include canyons missing this data"
-            subtitle="Most imported canyons have no recorded grade"
-            right={
-              <Toggle
-                value={filters.include_unknowns}
-                accessibilityLabel="Include canyons missing the filtered data"
-                onValueChange={(next) =>
-                  setFilters((current) => ({ ...current, include_unknowns: next }))
-                }
-              />
-            }
-          />
-
-          {filterCount > 0 ? (
-            <Button label="Reset filters" variant="outlineAccent" onPress={resetFilters} />
-          ) : null}
-        </View>
-      </BottomSheet>
+        filters={filters}
+        onChangeFilters={setFilters}
+        sort={sort}
+        onChangeSort={setSort}
+        onReset={resetFilters}
+        activeCount={filterCount}
+        showFilteredOnMap={mapFilter.enabled}
+        onChangeShowFilteredOnMap={setCanyonMapFilterEnabled}
+        filteredCount={visible.length}
+        totalCount={canyons.length}
+      />
 
       <CanyonEditSheet
         visible={editing !== null}
@@ -734,39 +645,6 @@ const CanyonRow = memo(function CanyonRow({
     />
   );
 });
-
-/** A "no more than N" threshold as presets. The shared predicate's operator is
- * a strict `<`, so the labels say "under" rather than implying an inclusive
- * bound the filter doesn't apply. */
-function PresetRow({
-  label,
-  unit,
-  presets,
-  value,
-  onChange,
-}: {
-  label: string;
-  unit: string;
-  presets: number[];
-  value: number | null;
-  onChange: (next: number | null) => void;
-}) {
-  return (
-    <View style={styles.presetBlock}>
-      <Text style={styles.presetLabel}>{label}</Text>
-      <View style={styles.chipRow}>
-        {presets.map((preset) => (
-          <Chip
-            key={preset}
-            label={`Under ${preset} ${unit}`}
-            active={value === preset}
-            onPress={() => onChange(value === preset ? null : preset)}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
 
 /** Per-bucket empty states: an empty tick list, an exhausted one and an
  * over-tight filter are three different problems with three different ways out
@@ -871,14 +749,6 @@ const styles = StyleSheet.create({
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
   badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
   sheetBody: { gap: spacing(1) },
-  sheetHint: { color: theme.textMuted, fontSize: fontSize.sm },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
-  presetBlock: { gap: spacing(0.75) },
-  presetLabel: {
-    color: theme.textPrimary,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
   empty: {
     alignItems: "center",
     gap: spacing(1),

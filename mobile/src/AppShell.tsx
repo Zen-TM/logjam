@@ -150,6 +150,11 @@ function MapStackNav() {
             onShowOnMap={(canyon) =>
               navigation.navigate("MapView", { focus: canyonFocus(canyon) })
             }
+            onShowRoute={(mediaId, filename, localPath) =>
+              navigation.navigate("MapView", {
+                route: { mediaId, filename, localPath, nonce: Date.now() },
+              })
+            }
             onDeleted={() => navigation.goBack()}
           />
         )}
@@ -229,6 +234,12 @@ function CanyonsStackNav() {
                 params: { focus: canyonFocus(canyon) },
               })
             }
+            onShowRoute={(mediaId, filename, localPath) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
+              })
+            }
             onDeleted={() => navigation.goBack()}
           />
         )}
@@ -291,6 +302,12 @@ function TripsStackNav() {
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
                 params: { focus: canyonFocus(canyon) },
+              })
+            }
+            onShowRoute={(mediaId, filename, localPath) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
               })
             }
             onDeleted={() => navigation.goBack()}

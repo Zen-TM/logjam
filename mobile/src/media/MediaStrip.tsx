@@ -57,6 +57,7 @@ export function MediaStrip({
   linkedId,
   media,
   emptyHint,
+  limit,
   onFailed,
   onShowRoute,
 }: {
@@ -79,6 +80,15 @@ export function MediaStrip({
   media: MirrorMedia[];
   /** Shown after the add tile when there are no attachments yet. */
   emptyHint?: string;
+  /**
+   * How many attachments this strip accepts. At the limit the add tile is
+   * replaced by a line saying so, rather than left there to fail on upload.
+   *
+   * A canyon takes exactly ONE route: the API rejects a second with 409 "This
+   * canyon already has a track" (`api/src/routes/media.ts`), and a rejected
+   * upload would sit in the outbox as a dead push. Photos are uncapped.
+   */
+  limit?: number;
   /** Routed to the screen's toast channel; falls back to an Alert. */
   onFailed?: (message: string) => void;
   /**
@@ -248,23 +258,27 @@ export function MediaStrip({
     ]);
   }, []);
 
+  const atLimit = limit != null && shown.length >= limit;
+
   return (
     <View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.row}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={kind === "track" ? "Add a route" : "Add a photo or video"}
-            onPress={() => setSourceMode("sources")}
-            style={({ pressed }) => [
-              styles.tile,
-              styles.addTile,
-              pressed && styles.addTilePressed,
-            ]}
-          >
-            <Feather name="plus" size={20} color={theme.accent} />
-            <Text style={styles.addTileLabel}>Add</Text>
-          </Pressable>
+          {atLimit ? null : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={kind === "track" ? "Add a route" : "Add a photo or video"}
+              onPress={() => setSourceMode("sources")}
+              style={({ pressed }) => [
+                styles.tile,
+                styles.addTile,
+                pressed && styles.addTilePressed,
+              ]}
+            >
+              <Feather name="plus" size={20} color={theme.accent} />
+              <Text style={styles.addTileLabel}>Add</Text>
+            </Pressable>
+          )}
 
           {shown.map((item, itemIndex) => (
             <AttachmentTile
@@ -282,6 +296,13 @@ export function MediaStrip({
 
           {shown.length === 0 && emptyHint ? (
             <Text style={styles.emptyHint}>{emptyHint}</Text>
+          ) : null}
+          {atLimit ? (
+            <Text style={styles.emptyHint}>
+              {limit === 1
+                ? "One route per canyon. Press and hold to replace it."
+                : `${limit} is the limit here.`}
+            </Text>
           ) : null}
         </View>
       </ScrollView>

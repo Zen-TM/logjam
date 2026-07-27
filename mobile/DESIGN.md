@@ -69,6 +69,14 @@ them **in a slot the hero already occupies**: Logs swaps the activity spark for
 the search row, so opening search doesn't shove the list down, and the spark —
 retrospective decoration — isn't competing with a hunt for one trip.
 
+**Presets are the shortcut, not the ceiling.** A mobile filter that only offers
+"under 30 m" is friendlier than the desktop's operator + number, and strictly
+less capable — which is a downgrade, not a simplification. Lead with the three
+or four answers people actually pick, and put the full control one tap behind a
+`Custom` chip (see `ThresholdFilter` in `CanyonFilterSheet`). The draft rule
+matters: opening Custom must NOT commit a value, or "under 0" applies the
+instant you tap it and the list empties for no reason the user can see.
+
 An active hidden filter must announce itself: the reveal button renders
 `filled`, and a set date range gets a dismissible summary strip above the list.
 A filter you can't see is a bug report waiting to happen.
@@ -320,6 +328,11 @@ row with a retry — it persists because the problem persists.
   `CanyonEditSheet` are each the same component in both modes: same fields, same
   validation, with only the sheet title and the submit label differing. Two forms
   drift, and the one the user reaches less often is the one that rots.
+- **A server-side cap is a UI rule, not an error to discover.** A canyon takes
+  exactly one route (the API answers a second with 409), so the strip stops
+  offering "Add" at the limit and says what the limit is. An affordance that
+  exists only to fail parks a dead op in the outbox, where the user can't see
+  the reason.
 - **A picker over an OPTIONAL value keeps an explicit "not recorded" stop.** The
   grade rails in `CanyonEditSheet` lead with `—`. Most imported canyons have gaps,
   and a picker you can't get back out of turns "I don't know" into a wrong answer
@@ -367,6 +380,20 @@ row with a retry — it persists because the problem persists.
   missing, say why it matters *in the field*, offer the action that fixes it.
   A shared grey "nothing here" is not acceptable; nor is a muted one-liner
   hanging under a section header.
+- **That applies to a SCREEN's empty state, not to every empty slot.** A section
+  that is merely empty gets a label, not a lesson: "Nothing written down.",
+  "No photos yet.", "Attach a .gpx or .kml." The add button next to it already
+  says what to do, and repeating the pitch beside every empty strip turns the
+  page into a tutorial.
+- **A screen that hides content on another screen's behalf says so THERE, and the
+  dismissal is the off switch.** The Canyons filter can restrict the map to its
+  own result (opt-in — the web forces it). While that is on, the map carries a
+  pill counting what's missing ("Showing 5 of 28 canyons"), and clearing the pill
+  turns the option off rather than just hiding the warning. A map that silently
+  drops pins is a map you stop trusting; a warning you can dismiss without fixing
+  the cause is one you learn to ignore. State crossing screens like this lives in
+  a small module store (`canyonMapFilter.ts`), not a context — it has to outlive
+  the screen that set it.
 - **One notice channel per screen** — see §6. Four independent status lines,
   each owning its own corner, is the anti-pattern.
 - Background fetches report failure **inside the filter that needs the data**

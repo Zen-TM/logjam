@@ -74,6 +74,11 @@ import { StatusPill } from "../ui/StatusPill";
 import { Toggle } from "../ui/Toggle";
 import { Toast, type ToastMessage } from "../ui/Toast";
 import { CanyonEditSheet } from "../canyons/CanyonEditSheet";
+import {
+  isWithholdingCanyons,
+  setCanyonMapFilterEnabled,
+  useCanyonMapFilter,
+} from "../canyons/canyonMapFilter";
 import { updateGeoPdfImport } from "../geopdf/geoPdfImportsDb";
 import { GEOPDF_ERRORS, RESIDUAL_WARN_FRACTION, importGeoPdfBytes } from "../geopdf/importPipeline";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
@@ -407,19 +412,46 @@ export function MapScreen({
     return { plans, nextIndex: next };
   }, [overlayRefs, overlayBaseIndex, vectorStyle]);
 
+  // "Show only these on the map" — the Canyons screen's filter, opt-in, handed
+  // over as a set of ids (never a bbox; nothing persisted). Until that screen
+  // has published, or with the option off, every canyon draws.
+  //
+  // NOT BUILT YET: the web also has a layer toggle that draws every canyon's
+  // ROUTE (`showCanyonTracks` + GET /canyons/tracks). There is no mobile
+  // equivalent — a route is drawn one at a time, transiently, from a canyon's
+  // detail screen. It belongs in the map-page redesign, alongside the layer
+  // sheet; the mirror already holds the files, so it can work offline.
+  const mapFilter = useCanyonMapFilter();
+  const allowedCanyonIds = useMemo(
+    () =>
+      mapFilter.enabled && mapFilter.visibleIds !== null
+        ? new Set(mapFilter.visibleIds)
+        : null,
+    [mapFilter.enabled, mapFilter.visibleIds],
+  );
+  const withholdingCanyons = isWithholdingCanyons(mapFilter);
+
   const ownedFc = useMemo(
     () =>
       toFeatureCollection(
-        (canyons.data ?? []).filter((c) => c.syncRole === "owner"),
+        (canyons.data ?? []).filter(
+          (c) =>
+            c.syncRole === "owner" &&
+            (allowedCanyonIds === null || allowedCanyonIds.has(c.id)),
+        ),
       ),
-    [canyons.data],
+    [allowedCanyonIds, canyons.data],
   );
   const sharedFc = useMemo(
     () =>
       toFeatureCollection(
-        (canyons.data ?? []).filter((c) => c.syncRole === "shared"),
+        (canyons.data ?? []).filter(
+          (c) =>
+            c.syncRole === "shared" &&
+            (allowedCanyonIds === null || allowedCanyonIds.has(c.id)),
+        ),
       ),
-    [canyons.data],
+    [allowedCanyonIds, canyons.data],
   );
 
   const handleCanyonPress = useCallback(
@@ -1213,6 +1245,24 @@ export function MapScreen({
           </View>
         ) : null}
 
+        {/* A map that quietly hides pins is a map you can't trust. Says how many
+            are missing, and the dismiss IS the way out — clearing it turns the
+            Canyons screen's "show only these" option back off. */}
+        {withholdingCanyons ? (
+          <View style={styles.filterBadge}>
+            <Feather name="filter" size={14} color={theme.accent} />
+            <Text style={styles.noticeText} numberOfLines={1}>
+              {`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} canyons`}
+            </Text>
+            <IconButton
+              icon="x"
+              size={16}
+              accessibilityLabel="Show all canyons again"
+              onPress={() => setCanyonMapFilterEnabled(false)}
+            />
+          </View>
+        ) : null}
+
         {/* Says what is on the map that the user didn't put there, and gives
             them one tap to take it off again. */}
         {shownRoute ? (
@@ -1652,6 +1702,19 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     backgroundColor: theme.warning,
+  },
+  // Same pill shape as the route badge, in the accent rather than the route
+  // colour — both are "something is being done to this map".
+  filterBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1),
+    paddingLeft: spacing(1.5),
+    paddingRight: spacing(0.5),
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: withAlpha(theme.accent, 0.5),
+    backgroundColor: withAlpha(theme.primary, 0.92),
   },
   routeBadge: {
     flexDirection: "row",

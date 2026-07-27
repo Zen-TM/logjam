@@ -79,6 +79,7 @@ export function CanyonDetailScreen({
   onBack,
   onOpenTrip,
   onShowOnMap,
+  onShowRoute,
   onDeleted,
 }: {
   canyonId: string;
@@ -86,6 +87,8 @@ export function CanyonDetailScreen({
   /** Opens one of the viewer's own logged trips at this canyon. */
   onOpenTrip: (trip: MirrorTrip) => void;
   onShowOnMap: (canyon: MirrorCanyon) => void;
+  /** Opens the Map tab with this route attachment drawn on it. */
+  onShowRoute: (mediaId: string, filename: string, localPath: string | null) => void;
   /** The canyon this screen is showing is gone — leave, don't render a husk. */
   onDeleted: () => void;
 }) {
@@ -267,11 +270,7 @@ export function CanyonDetailScreen({
         {canyon.notes ? (
           <Text style={styles.notes}>{canyon.notes}</Text>
         ) : (
-          <Text style={styles.muted}>
-            {isOwner
-              ? "Nothing written down. Access, water, escape routes — the things you'd want next time."
-              : "The owner hasn't written any notes."}
-          </Text>
+          <Text style={styles.muted}>Nothing written down.</Text>
         )}
 
         <SectionHeader
@@ -283,19 +282,32 @@ export function CanyonDetailScreen({
           linkedType="canyon"
           linkedId={canyonId}
           media={attachments}
-          emptyHint="No photos yet — the camera works with no signal."
+          emptyHint="No photos yet."
           onFailed={(text) => notify(text, "error")}
         />
 
         <SectionHeader label={routeCount === 0 ? "Routes" : `Routes · ${routeCount}`} />
+        {/* One route per canyon — the API enforces it, so the UI has to as well
+            (see `limit` in MediaStrip).
+
+            NOT BUILT YET: the web has a map layer toggle that draws every
+            canyon's route at once (`showCanyonTracks` in LayersPanel +
+            `GET /canyons/tracks`). The mobile map has no equivalent; a tap here
+            draws this ONE route transiently. Belongs in the map-page redesign,
+            where the layer sheet lives — the mirror already holds the files, so
+            it can work offline. */}
         <MediaStrip
           kind="track"
           online={online}
+          limit={1}
           linkedType="canyon"
           linkedId={canyonId}
           media={attachments}
-          emptyHint="Attach a .gpx or .kml so the route is on the map next time."
+          emptyHint="Attach a .gpx or .kml."
           onFailed={(text) => notify(text, "error")}
+          onShowRoute={(item) =>
+            onShowRoute(item.id, item.filename ?? "Route", item.localDisplayPath)
+          }
         />
 
         {/* Your own history here — the half a "done" badge can't tell you. Only

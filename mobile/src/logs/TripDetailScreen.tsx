@@ -159,7 +159,7 @@ export function TripDetailScreen({
           linkedType="tripLog"
           linkedId={current.id}
           media={attachments}
-          emptyHint="No photos or videos yet — the camera works with no signal."
+          emptyHint="No photos or videos yet."
           onFailed={(text) => notify(text, "error")}
         />
 
@@ -170,7 +170,7 @@ export function TripDetailScreen({
           linkedType="tripLog"
           linkedId={current.id}
           media={attachments}
-          emptyHint="Attach a .gpx or .kml, or a track you recorded in the app."
+          emptyHint="Attach a .gpx or .kml."
           onFailed={(text) => notify(text, "error")}
           onShowRoute={(item) =>
             onShowRoute(item.id, item.filename ?? "Route", item.localDisplayPath)
@@ -181,7 +181,7 @@ export function TripDetailScreen({
         {current.notes ? (
           <Text style={styles.notes}>{current.notes}</Text>
         ) : (
-          <Text style={styles.muted}>Nothing written down for this trip.</Text>
+          <Text style={styles.muted}>Nothing written down.</Text>
         )}
 
         {customFields.length > 0 ? (
