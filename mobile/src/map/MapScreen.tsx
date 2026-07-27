@@ -1376,7 +1376,7 @@ export function MapScreen({
         <Row
           icon="plus-circle"
           title="Add a canyon"
-          subtitle="Opens the canyon form with this position filled in"
+          subtitle="With this position filled in"
           onPress={() => {
             pendingCanyonPoint.current = longPressPoint;
             setLongPressPoint(null);
