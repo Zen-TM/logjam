@@ -171,6 +171,17 @@ export function CanyonFilterSheet({
       // A date picker backs out to the filter list, not out of the sheet.
       onClose={mode.kind === "main" ? onClose : () => setMode({ kind: "main" })}
       title={title}
+      overlay={
+        mode.kind === "date" ? (
+          <DatePicker
+            value={filters[mode.field]?.[mode.bound] ?? null}
+            onChange={(key) => {
+              setDateBound(mode.field, mode.bound, key);
+              setMode({ kind: "main" });
+            }}
+          />
+        ) : null
+      }
       footer={
         mode.kind === "main" ? (
           <Button label="Done" icon="check" onPress={onClose} />
@@ -186,149 +197,146 @@ export function CanyonFilterSheet({
         )
       }
     >
-      {mode.kind === "date" ? (
-        <DatePicker
-          value={filters[mode.field]?.[mode.bound] ?? null}
-          onChange={(key) => {
-            setDateBound(mode.field, mode.bound, key);
-            setMode({ kind: "main" });
-          }}
-        />
-      ) : (
-        <View style={styles.body}>
-          {/* Says where the missing axes went, so their absence reads as a
-              decision rather than a gap. */}
-          <Text style={styles.hint}>
-            Done, to do and shared are the chips above this sheet.
-          </Text>
+      {/* The list stays mounted underneath (see `overlay` on BottomSheet):
+          swapping the sheet's CHILDREN for the short picker collapses the
+          scroll content, and RN clamps the offset to 0 — so coming back from a
+          date threw the user to the top of a long sheet. */}
+      <View style={styles.body}>
+        {/* Says where the missing axes went, so their absence reads as a
+            decision rather than a gap. */}
+        <Text style={styles.hint}>
+          Done, to do and shared are the chips above this sheet.
+        </Text>
 
-          <SectionHeader label="Sort" />
-          <View style={styles.chipRow}>
-            {SORTS.map((option) => (
-              <Chip
-                key={option.key}
-                label={option.label}
-                active={sort === option.key}
-                onPress={() => onChangeSort(option.key)}
-              />
-            ))}
-          </View>
-
-          <SectionHeader label="Grade" />
-          <RangePills
-            label="Vertical"
-            prefix="V"
-            bounds={CANYON_RANGE_BOUNDS.v_grade}
-            value={filters.v_grade as NumberRange | null}
-            onChange={(next) => patch({ v_grade: next })}
-          />
-          <RangePills
-            label="Aquatic"
-            prefix="A"
-            bounds={CANYON_RANGE_BOUNDS.a_grade}
-            value={filters.a_grade as NumberRange | null}
-            onChange={(next) => patch({ a_grade: next })}
-          />
-          <RangePills
-            label="Commitment"
-            bounds={CANYON_RANGE_BOUNDS.commitment}
-            value={filters.commitment as NumberRange | null}
-            onChange={(next) => patch({ commitment: next })}
-          />
-          <RangePills
-            label="Quality"
-            bounds={CANYON_RANGE_BOUNDS.quality}
-            value={filters.quality as NumberRange | null}
-            onChange={(next) => patch({ quality: next })}
-          />
-
-          <SectionHeader label="Logistics" />
-          {THRESHOLDS.map((spec) => (
-            <ThresholdFilter
-              key={spec.key}
-              label={spec.label}
-              unit={spec.unit}
-              presets={spec.presets}
-              value={filters[spec.key]}
-              onChange={(next) => patch({ [spec.key]: next })}
+        <SectionHeader label="Sort" />
+        <View style={styles.chipRow}>
+          {SORTS.map((option) => (
+            <Chip
+              key={option.key}
+              label={option.label}
+              active={sort === option.key}
+              onPress={() => onChangeSort(option.key)}
             />
           ))}
-
-          <SectionHeader label="Source" />
-          <View style={styles.chipRow}>
-            {ROPEWIKI.map((option) => (
-              <Chip
-                key={option.value}
-                label={option.label}
-                active={filters.ropewiki === option.value}
-                onPress={() => patch({ ropewiki: option.value })}
-              />
-            ))}
-          </View>
-          <Row
-            icon="share-2"
-            title="Shared by me"
-            subtitle="Only canyons you've given a friend access to"
-            right={
-              <Toggle
-                value={filters.shared_by_me}
-                accessibilityLabel="Only canyons you have shared"
-                onValueChange={(next) => patch({ shared_by_me: next })}
-              />
-            }
-          />
-
-          <SectionHeader label="Dates" />
-          <DateRangeFilter
-            label="Added"
-            value={filters.created_at}
-            onPick={(bound) => setMode({ kind: "date", field: "created_at", bound })}
-            onClear={() => patch({ created_at: null })}
-          />
-          <DateRangeFilter
-            label="Updated"
-            value={filters.updated_at}
-            onPick={(bound) => setMode({ kind: "date", field: "updated_at", bound })}
-            onClear={() => patch({ updated_at: null })}
-          />
-
-          <SectionHeader label="On the map" />
-          <Row
-            icon="map"
-            title="Show only these on the map"
-            subtitle={
-              showFilteredOnMap
-                ? `${filteredCount} of ${totalCount} canyons`
-                : "The map shows every canyon"
-            }
-            right={
-              <Toggle
-                value={showFilteredOnMap}
-                accessibilityLabel="Show only the filtered canyons on the map"
-                onValueChange={onChangeShowFilteredOnMap}
-              />
-            }
-          />
-
-          <SectionHeader label="Gaps in the data" />
-          <Row
-            icon="help-circle"
-            title="Include canyons missing this data"
-            subtitle="Most imported canyons have no recorded grade"
-            right={
-              <Toggle
-                value={filters.include_unknowns}
-                accessibilityLabel="Include canyons missing the filtered data"
-                onValueChange={(next) => patch({ include_unknowns: next })}
-              />
-            }
-          />
-
-          {activeCount > 0 ? (
-            <Button label="Reset filters" variant="outlineAccent" onPress={onReset} />
-          ) : null}
         </View>
-      )}
+
+        <SectionHeader label="Grade" />
+        <RangePills
+          label="Vertical"
+          prefix="V"
+          bounds={CANYON_RANGE_BOUNDS.v_grade}
+          value={filters.v_grade as NumberRange | null}
+          onChange={(next) => patch({ v_grade: next })}
+        />
+        <RangePills
+          label="Aquatic"
+          prefix="A"
+          bounds={CANYON_RANGE_BOUNDS.a_grade}
+          value={filters.a_grade as NumberRange | null}
+          onChange={(next) => patch({ a_grade: next })}
+        />
+        <RangePills
+          label="Commitment"
+          bounds={CANYON_RANGE_BOUNDS.commitment}
+          value={filters.commitment as NumberRange | null}
+          onChange={(next) => patch({ commitment: next })}
+        />
+        <RangePills
+          label="Quality"
+          bounds={CANYON_RANGE_BOUNDS.quality}
+          value={filters.quality as NumberRange | null}
+          onChange={(next) => patch({ quality: next })}
+        />
+
+        <SectionHeader label="Logistics" />
+        {THRESHOLDS.map((spec) => (
+          <ThresholdFilter
+            key={spec.key}
+            label={spec.label}
+            unit={spec.unit}
+            presets={spec.presets}
+            value={filters[spec.key]}
+            onChange={(next) => patch({ [spec.key]: next })}
+          />
+        ))}
+
+        <SectionHeader label="Source" />
+        <View style={styles.chipRow}>
+          {ROPEWIKI.map((option) => (
+            <Chip
+              key={option.value}
+              label={option.label}
+              active={filters.ropewiki === option.value}
+              onPress={() => patch({ ropewiki: option.value })}
+            />
+          ))}
+        </View>
+        <Row
+          icon="share-2"
+          title="Shared by me"
+          right={
+            <Toggle
+              value={filters.shared_by_me}
+              accessibilityLabel="Only canyons you have shared"
+              onValueChange={(next) => patch({ shared_by_me: next })}
+            />
+          }
+        />
+
+        <SectionHeader label="Dates" />
+        <DateRangeFilter
+          label="Added"
+          value={filters.created_at}
+          onPick={(bound) => setMode({ kind: "date", field: "created_at", bound })}
+          onClear={() => patch({ created_at: null })}
+        />
+        <DateRangeFilter
+          label="Updated"
+          value={filters.updated_at}
+          onPick={(bound) => setMode({ kind: "date", field: "updated_at", bound })}
+          onClear={() => patch({ updated_at: null })}
+        />
+
+        <SectionHeader label="On the map" />
+        <Row
+          icon="map"
+          title="Show only these on the map"
+          subtitle={
+            !showFilteredOnMap
+              ? "The map shows every canyon"
+              : filteredCount >= totalCount
+                ? // Nothing is being narrowed — say so rather than printing a
+                  // fraction that reads as "1 canyon is missing".
+                  `All ${totalCount} canyons`
+                : `${filteredCount} of ${totalCount} canyons`
+          }
+          right={
+            <Toggle
+              value={showFilteredOnMap}
+              accessibilityLabel="Show only the filtered canyons on the map"
+              onValueChange={onChangeShowFilteredOnMap}
+            />
+          }
+        />
+
+        <SectionHeader label="Gaps in the data" />
+        <Row
+          icon="help-circle"
+          title="Include canyons missing this data"
+          subtitle="Most imported canyons have no recorded grade"
+          right={
+            <Toggle
+              value={filters.include_unknowns}
+              accessibilityLabel="Include canyons missing the filtered data"
+              onValueChange={(next) => patch({ include_unknowns: next })}
+            />
+          }
+        />
+
+        {activeCount > 0 ? (
+        <Button label="Reset filters" variant="outlineAccent" onPress={onReset} />
+        ) : null}
+      </View>
     </BottomSheet>
   );
 }

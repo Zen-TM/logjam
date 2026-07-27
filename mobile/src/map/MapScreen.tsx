@@ -138,6 +138,10 @@ const DEFAULT_ZOOM = 9;
 // Module-level: <Camera> is memo'd and takes no dynamic props, so a stable
 // object lets the memo hold and keeps every re-render of this screen from
 // re-committing props to the native camera.
+/** Below this span an extent is a point, not an area (~1 m). */
+const DEGENERATE_BBOX_DEGREES = 1e-5;
+const SINGLE_POINT_ZOOM = 14;
+
 /** A bare lat/lng, as the map hands one back from a long press. */
 type MapPoint = { latitude: number; longitude: number };
 
@@ -324,6 +328,17 @@ export function MapScreen({
       if (!cameraRef.current) return;
       const [west, south, east, north] = bbox;
       stopNeedsReset.current = true;
+      // A route with a single point (a lone waypoint file) has a zero-area
+      // bbox; fitting to it asks the camera for infinite zoom. Centre on the
+      // point at a fixed close zoom instead.
+      if (east - west < DEGENERATE_BBOX_DEGREES && north - south < DEGENERATE_BBOX_DEGREES) {
+        cameraRef.current.setCamera({
+          centerCoordinate: [(west + east) / 2, (south + north) / 2],
+          zoomLevel: SINGLE_POINT_ZOOM,
+          animationDuration: 600,
+        });
+        return;
+      }
       cameraRef.current.fitBounds([east, north], [west, south], padding, 600);
     },
     [],
@@ -1251,7 +1266,7 @@ export function MapScreen({
         {withholdingCanyons ? (
           <View style={styles.filterBadge}>
             <Feather name="filter" size={14} color={theme.accent} />
-            <Text style={styles.noticeText} numberOfLines={1}>
+            <Text style={styles.filterBadgeText} numberOfLines={1}>
               {`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} canyons`}
             </Text>
             <IconButton
@@ -1655,6 +1670,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing(1),
   },
   noticeText: { color: theme.textPrimary, fontSize: fontSize.sm },
+  // Takes the slack so the dismiss sits at the pill's right edge rather than
+  // floating next to the text.
+  filterBadgeText: { flex: 1, color: theme.textPrimary, fontSize: fontSize.sm },
   controls: {
     position: "absolute",
     right: CHROME_GAP,

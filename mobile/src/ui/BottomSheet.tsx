@@ -42,6 +42,7 @@ export function BottomSheet({
   onClosed,
   title,
   footer,
+  overlay,
   children,
 }: {
   visible: boolean;
@@ -61,6 +62,19 @@ export function BottomSheet({
    * handle means "discard", not "done".
    */
   footer?: React.ReactNode;
+  /**
+   * A sub-mode drawn OVER the scroll area, with `children` left mounted
+   * underneath. Use it for a step that replaces the sheet's content
+   * temporarily — a date picker inside a long filter list.
+   *
+   * Swapping `children` instead would collapse the scroll content to the
+   * sub-mode's height; RN clamps the offset to 0, and the user lands back at
+   * the top of a list they were halfway down.
+   *
+   * It is absolutely positioned, so it cannot make the sheet taller: keep
+   * overlay content shorter than the list it covers.
+   */
+  overlay?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -193,12 +207,18 @@ export function BottomSheet({
             <View style={styles.handle} />
           </View>
           <Text style={styles.title}>{title}</Text>
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {children}
-          </ScrollView>
+          <View>
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              // Frozen while a sub-mode covers it: a drag on the overlay must
+              // not scroll the list hidden behind it.
+              scrollEnabled={overlay == null}
+            >
+              {children}
+            </ScrollView>
+            {overlay != null ? <View style={styles.overlay}>{overlay}</View> : null}
+          </View>
           {footer != null ? <View style={styles.footer}>{footer}</View> : null}
         </Animated.View>
       </View>
@@ -207,6 +227,8 @@ export function BottomSheet({
 }
 
 const styles = StyleSheet.create({
+  // Opaque, so the list it covers doesn't ghost through.
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.primary },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: scrim.light },
   backdropPress: { flex: 1 },
   dock: { flex: 1, justifyContent: "flex-end" },

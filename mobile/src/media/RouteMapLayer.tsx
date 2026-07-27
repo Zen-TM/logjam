@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import * as FileSystem from "expo-file-system";
-import { LineLayer, ShapeSource } from "@maplibre/maplibre-react-native";
+import { CircleLayer, LineLayer, ShapeSource } from "@maplibre/maplibre-react-native";
 import { parseVectorImport, type ImportedFeature } from "@logjam/shared";
 
 import { theme } from "../theme";
@@ -94,6 +94,20 @@ export function RouteMapLayer({
           lineWidth: 3.5,
           lineCap: "round",
           lineJoin: "round",
+        }}
+      />
+      {/* Point features too: plenty of real .gpx files are a bare list of
+          waypoints with no track at all, and drawing only lines left the map
+          empty at a place the camera had just flown to — which reads as the
+          app being broken rather than as the file having no route in it. */}
+      <CircleLayer
+        id="trip-route-points"
+        filter={["==", ["geometry-type"], "Point"]}
+        style={{
+          circleRadius: 5,
+          circleColor: ROUTE_COLOR,
+          circleStrokeWidth: 2,
+          circleStrokeColor: theme.primary,
         }}
       />
     </ShapeSource>
