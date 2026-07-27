@@ -207,7 +207,10 @@ export function BottomSheet({
             <View style={styles.handle} />
           </View>
           <Text style={styles.title}>{title}</Text>
-          <View>
+          {/* flexShrink so the scroll area yields to the pinned footer under
+              the sheet's maxHeight cap. Without it this wrapper claims the
+              full content height and pushes the footer off-screen. */}
+          <View style={styles.scrollArea}>
             <ScrollView
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
@@ -227,6 +230,7 @@ export function BottomSheet({
 }
 
 const styles = StyleSheet.create({
+  scrollArea: { flexShrink: 1 },
   // Opaque, so the list it covers doesn't ghost through.
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.primary },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: scrim.light },

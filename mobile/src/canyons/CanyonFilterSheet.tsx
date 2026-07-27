@@ -186,14 +186,27 @@ export function CanyonFilterSheet({
         mode.kind === "main" ? (
           <Button label="Done" icon="check" onPress={onClose} />
         ) : (
-          <Button
-            label="Clear this bound"
-            variant="outlineAccent"
-            onPress={() => {
-              setDateBound(mode.field, mode.bound, null);
-              setMode({ kind: "main" });
-            }}
-          />
+          // Two ways back out of a date, because they mean different things:
+          // Cancel keeps whatever bound was already set, Clear removes it.
+          <View style={styles.dateActions}>
+            <View style={styles.dateAction}>
+              <Button
+                label="Cancel"
+                variant="ghost"
+                onPress={() => setMode({ kind: "main" })}
+              />
+            </View>
+            <View style={styles.dateAction}>
+              <Button
+                label="Clear this bound"
+                variant="outlineAccent"
+                onPress={() => {
+                  setDateBound(mode.field, mode.bound, null);
+                  setMode({ kind: "main" });
+                }}
+              />
+            </View>
+          </View>
         )
       }
     >
@@ -515,6 +528,8 @@ const styles = StyleSheet.create({
   blockValue: { color: theme.textMuted, fontSize: fontSize.sm },
   blockValueActive: { color: theme.accent, fontWeight: fontWeight.medium },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
+  dateActions: { flexDirection: "row", gap: spacing(1) },
+  dateAction: { flex: 1 },
   customRow: { gap: spacing(0.75) },
   customField: { maxWidth: 200 },
 });
