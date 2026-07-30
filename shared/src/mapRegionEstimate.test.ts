@@ -2,12 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   MAX_REGION_TILES,
+  REGION_MIN_ZOOM,
   SOFT_WARN_TILES,
   checkRegionCaps,
+  estimateRegionSeconds,
+  estimateRegionSize,
   lonLatToTile,
+  planRegionForBasemaps,
   planRegionTiles,
   regionEdgesKm,
   xyzToTmsRow,
+  type OfflineBasemapId,
   type RegionBbox,
 } from "./mapRegionEstimate.js";
 
@@ -83,7 +88,7 @@ describe("planRegionTiles", () => {
 describe("caps", () => {
   it("passes the default 10×10 km region without warning", () => {
     const plan = planRegionTiles(TEN_KM, 8, 16);
-    expect(checkRegionCaps(TEN_KM, plan)).toEqual({ ok: true, softWarn: false });
+    expect(checkRegionCaps(TEN_KM, plan.totalTiles)).toEqual({ ok: true, softWarn: false });
   });
 
   it("soft-warns between SOFT_WARN_TILES and MAX_REGION_TILES", () => {
@@ -92,14 +97,14 @@ describe("caps", () => {
     const plan = planRegionTiles(bbox, 8, 16);
     expect(plan.totalTiles).toBeGreaterThan(SOFT_WARN_TILES);
     expect(plan.totalTiles).toBeLessThanOrEqual(MAX_REGION_TILES);
-    expect(checkRegionCaps(bbox, plan)).toEqual({ ok: true, softWarn: true });
+    expect(checkRegionCaps(bbox, plan.totalTiles)).toEqual({ ok: true, softWarn: true });
   });
 
   it("rejects over-cap tile counts", () => {
     const bbox: RegionBbox = { west: 150.0, south: -33.9, east: 150.45, north: -33.55 };
     const plan = planRegionTiles(bbox, 8, 16);
     expect(plan.totalTiles).toBeGreaterThan(MAX_REGION_TILES);
-    expect(checkRegionCaps(bbox, plan)).toEqual({
+    expect(checkRegionCaps(bbox, plan.totalTiles)).toEqual({
       ok: false,
       reason: "too-many-tiles",
     });
@@ -110,9 +115,94 @@ describe("caps", () => {
     const [w] = regionEdgesKm(bbox);
     expect(w).toBeGreaterThan(50);
     const plan = planRegionTiles(bbox, 8, 8);
-    expect(checkRegionCaps(bbox, plan)).toEqual({
+    expect(checkRegionCaps(bbox, plan.totalTiles)).toEqual({
       ok: false,
       reason: "edge-too-long",
     });
+  });
+});
+
+describe("estimateRegionSize", () => {
+  it("weights each level by its own measured tile size", () => {
+    // six-base is the source that makes this matter: z12 tiles measured
+    // 57.8 KB, z18 tiles 4.3 KB. A pyramid ending at z18 must NOT be priced at
+    // the shallow rate, or the estimate is out by an order of magnitude.
+    const deep = planRegionTiles(TEN_KM, 17, 18);
+    const shallow = planRegionTiles(TEN_KM, 12, 13);
+    const perTileDeep = estimateRegionSize(deep, "six-base").meanBytes / deep.totalTiles;
+    const perTileShallow =
+      estimateRegionSize(shallow, "six-base").meanBytes / shallow.totalTiles;
+    expect(perTileShallow).toBeGreaterThan(perTileDeep * 5);
+  });
+
+  it("prices z8–z11 at the shallowest measured zoom rather than throwing", () => {
+    // Nothing below z12 was sampled (there are ~10 such tiles in a region);
+    // they take the nearest measurement instead of a missing-key crash.
+    const plan = planRegionTiles(TEN_KM, REGION_MIN_ZOOM, 9);
+    const estimate = estimateRegionSize(plan, "six-topo");
+    expect(estimate.meanBytes).toBeGreaterThan(0);
+    expect(estimate.p90Bytes).toBeGreaterThanOrEqual(estimate.meanBytes);
+  });
+
+  it("brackets a real measured download", () => {
+    // Ground truth from a region actually downloaded to a phone on 2026-07-30:
+    // six-topo over central Katoomba, z8→16, these exact per-level counts, and a
+    // finished file of 839,680 bytes on disk.
+    //
+    // The mean may sit under a town-only download (it is a mean over mixed
+    // terrain) but the p90 has to cover it — "up to" is a promise, and this is
+    // the case that broke the first, bush-only calibration.
+    const measuredFileBytes = 839_680;
+    const plan = {
+      perZoom: [
+        { z: 8, x0: 0, x1: 0, y0: 0, y1: 0, count: 1 },
+        { z: 9, x0: 0, x1: 0, y0: 0, y1: 0, count: 1 },
+        { z: 10, x0: 0, x1: 0, y0: 0, y1: 0, count: 1 },
+        { z: 11, x0: 0, x1: 0, y0: 0, y1: 0, count: 1 },
+        { z: 12, x0: 0, x1: 0, y0: 0, y1: 0, count: 1 },
+        { z: 13, x0: 0, x1: 0, y0: 0, y1: 0, count: 1 },
+        { z: 14, x0: 0, x1: 1, y0: 0, y1: 0, count: 2 },
+        { z: 15, x0: 0, x1: 2, y0: 0, y1: 1, count: 6 },
+        { z: 16, x0: 0, x1: 4, y0: 0, y1: 3, count: 20 },
+      ],
+      totalTiles: 34,
+    };
+    const estimate = estimateRegionSize(plan, "six-topo");
+    expect(estimate.p90Bytes).toBeGreaterThan(measuredFileBytes);
+    // And not absurdly wide: within 2x of what actually landed.
+    expect(estimate.meanBytes).toBeGreaterThan(measuredFileBytes / 2);
+  });
+
+  it("throws on an unknown source rather than guessing a size", () => {
+    const plan = planRegionTiles(TEN_KM, 12, 12);
+    expect(() => estimateRegionSize(plan, "six-nope" as OfflineBasemapId)).toThrow();
+  });
+});
+
+describe("planRegionForBasemaps", () => {
+  const maxZoomFor = (id: OfflineBasemapId) =>
+    ({ "six-topo": 16, "six-base": 18, "six-imagery": 18 })[id];
+
+  it("clamps each source to its own deepest served level", () => {
+    const job = planRegionForBasemaps(TEN_KM, ["six-topo", "six-base"], 18, maxZoomFor);
+    expect(job.perSource.map((s) => s.zMax)).toEqual([16, 18]);
+  });
+
+  it("totals tiles and bytes across sources — three maps is three downloads", () => {
+    const one = planRegionForBasemaps(TEN_KM, ["six-topo"], 16, maxZoomFor);
+    const two = planRegionForBasemaps(
+      TEN_KM,
+      ["six-topo", "six-imagery"],
+      16,
+      maxZoomFor,
+    );
+    expect(two.totalTiles).toBe(one.totalTiles * 2);
+    expect(two.meanBytes).toBeGreaterThan(one.meanBytes);
+    expect(two.seconds).toBe(estimateRegionSeconds(two.totalTiles));
+  });
+
+  it("starts every pyramid at REGION_MIN_ZOOM so a zoomed-out offline map is not blank", () => {
+    const job = planRegionForBasemaps(TEN_KM, ["six-topo"], 14, maxZoomFor);
+    expect(job.perSource[0].plan.perZoom[0].z).toBe(REGION_MIN_ZOOM);
   });
 });

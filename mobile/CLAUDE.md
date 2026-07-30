@@ -14,8 +14,12 @@ raster + Protomaps vector basemaps, canyon overlay + labels, raster + vector
 topo overlays with the user vectorStyle), Stage 3 (push, delivery gated on
 operator FCM), and Stage 4a-core (offline Protomaps regions: `src/offline/`
 registry + downloads + app lock, `/basemap/region-clip` API) are built.
-SIXMaps offline regions are blocked on an operator ToS gate (see
-OPERATOR_SETUP). Dev loop on a connected Android device or emulator:
+SIXMaps offline regions are built too: the ToS gate in `stage4a-basemaps.md` §2 was
+cleared by the operator for the three CC-licensed NSW sources, and `offlineCapable`
+in the shared basemap catalog stays the single source of what may be downloaded
+(see "Offline basemap downloads" below).
+
+Dev loop on a connected Android device or emulator:
 **`npm run dev:android`** (`scripts/dev-android.sh`) — finds the device and
 explains the fix when it can't, reverses every port the app dials on localhost
 (8081 Metro, 8080 API, 4566 MiniStack — `.env` points at 127.0.0.1, which on the
@@ -67,6 +71,36 @@ extract/schema refresh.
 - **Client-version header on every request** (`x-logjam-client: mobile/<semver>`,
   `src/config.ts`). The forced-upgrade lever depends on it — do not drop it.
 
+## Offline basemap downloads
+
+`src/map/RegionDownloadScreen.tsx` frames an area (edge-handle selector, pure maths
+in `regionFrame.ts`), prices it, and enqueues one job per selected map through
+`src/offline/regionDownloadQueue.ts`. Two task kinds share that queue
+(stage4a §9): `tile-pyramid` fetches SIX raster tiles straight from the provider
+into an on-device MBTiles (`regionTileDownload.ts` + `regionMbtiles.ts`), and
+`http-file` pulls the self-hosted Protomaps clip through our API
+(`regionDownloads.ts`). Both end in a `map_artifact` row, which is the only thing
+the map resolver ever sees.
+
+**The politeness envelope is not optional** (`regionTileDownload.ts` header):
+concurrency 2, a token bucket refilling 3 tiles/s with ±20 % jitter, no
+app-identifying headers on a provider request (never `x-logjam-client`, never an
+auth token), and an immediate full stop on 403/429 rather than retries. Load shape,
+not disguise — do not "optimise" the pace.
+
+**The file is the checkpoint.** A partial MBTiles carries `logjam:build_state`
+(plan hash + the 404 gap list) and is never registered as usable; resume diffs the
+plan against the tiles present, and unfinished downloads are discovered by reading
+the region directory (`listUnfinishedRegions`), not from a progress table. The
+`region_download` table in `registryDb.ts` is from the original plan and is unused.
+
+**Size estimates are measured, not guessed.** `shared/src/mapRegionEstimate.ts`
+holds per-source, per-zoom tile sizes calibrated by
+`shared/scripts/calibrate-basemap-tile-sizes.mjs` (bush AND town samples — a
+bush-only calibration read 40 % under for a Katoomba download) plus a measured 7.1 %
+MBTiles container overhead. Re-run the script and update both together; a test
+asserts the range still brackets a real 34-tile download.
+
 ## Privacy (design constraint — see root CLAUDE.md)
 
 Going offline puts canyon coords/names **on the device**. Every stage's privacy
@@ -86,7 +120,9 @@ note is mandatory. Non-negotiables:
 - No new public/unauth endpoints. Reuse the authed API + its 404-not-403 anti-oracle
   (surface "not found", never "exists but hidden").
 - Region-of-interest bboxes stay off the server (SIXMaps client-direct; Protomaps
-  clip endpoint must not log bboxes).
+  clip endpoint must not log bboxes). The tile-pyramid path contains **no**
+  `apiFetch` — that absence is the privacy property, so keep it out of any new code
+  on that path.
 
 ## Verify
 
@@ -101,6 +137,14 @@ note is mandatory. Non-negotiables:
   alone gives a snapshot missing every recent commit — which reads as "the write
   didn't happen". Pull `logjam.db`, `logjam.db-wal` and `logjam.db-shm` together,
   or check the UI instead.
+- **Inspecting a downloaded region:** pull it with
+  `adb exec-out run-as com.logjamnsw.mobile cat files/offline/regions/<id>.mbtiles`
+  and read it with `node:sqlite`. A FINISHED region has no WAL sidecar (finalize
+  flips the journal to DELETE), so unlike `logjam.db` a bare `cat` is safe; an
+  unfinished one is still WAL and needs the sidecars. Worth checking: the tile blob
+  magic (`FFD8FF` JPEG / `89504E47` PNG — the cache is MIXED and `format=png` in
+  the metadata is advisory), and that a known tile sits at the FLIPPED TMS row —
+  storing the unflipped y renders the whole map mirrored.
 - The biometric prompt is `FLAG_SECURE`: `screencap` of it is solid black. Confirm
   it appeared with `adb shell dumpsys window | grep mCurrentFocus` (look for
   `BiometricPrompt`), not with a screenshot.

@@ -37,9 +37,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
 import * as Location from "expo-location";
-import NetInfo from "@react-native-community/netinfo";
 import {
-  BASEMAP_CATALOG,
   VECTOR_STYLE_DEFAULTS,
   compassPointFor,
   formatDistanceM,
@@ -58,21 +56,21 @@ import { MapSearchBar } from "./MapSearchBar";
 import { ScaleBar } from "./ScaleBar";
 import { RouteMapLayer, ROUTE_COLOR, type RouteRequest } from "../media/RouteMapLayer";
 import {
+  CHROME_BOTTOM,
   CHROME_GAP,
+  DEFAULT_CENTER,
+  DEFAULT_ZOOM,
   FAB_ICON,
   FAB_SIZE,
   MINI_FAB_ICON,
   MINI_FAB_SIZE,
 } from "./mapChrome";
 import { BottomSheet } from "../ui/BottomSheet";
-import { Card } from "../ui/Card";
 import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
-import { SectionHeader } from "../ui/SectionHeader";
-import { SegmentedControl } from "../ui/SegmentedControl";
-import { StatusPill } from "../ui/StatusPill";
-import { Toggle } from "../ui/Toggle";
 import { Toast, type ToastMessage } from "../ui/Toast";
+import { CanyonRoutesLayer, type CanyonRoutesStatus } from "./CanyonRoutesLayer";
+import { MapLayersSheet } from "./MapLayersSheet";
 import { CanyonEditSheet } from "../canyons/CanyonEditSheet";
 import {
   isWithholdingCanyons,
@@ -80,7 +78,7 @@ import {
   useCanyonMapFilter,
 } from "../canyons/canyonMapFilter";
 import { updateGeoPdfImport } from "../geopdf/geoPdfImportsDb";
-import { GEOPDF_ERRORS, RESIDUAL_WARN_FRACTION, importGeoPdfBytes } from "../geopdf/importPipeline";
+import { GEOPDF_ERRORS, importGeoPdfBytes } from "../geopdf/importPipeline";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
 import { setVectorImportVisible } from "../imports/importsDb";
 import {
@@ -101,7 +99,10 @@ import { TrackRecordingControls } from "../tracks/TrackRecordingControls";
 import { useTracks } from "../tracks/useTracks";
 import { ensureForegroundLocationPermission } from "./locationPermission";
 import { listEnabledOverlayKeys, setOverlayEnabled } from "../offline/registryDb";
-import { downloadProtomapsRegion } from "../offline/regionDownloads";
+import {
+  activeRegionJob,
+  useRegionDownloads,
+} from "../offline/regionDownloadQueue";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers, protomapsLayerCount } from "./basemap/ProtomapsLayers";
@@ -132,9 +133,6 @@ import { TopoIconImages, TopoVectorOverlay } from "./TopoVectorOverlay";
 // rasters; the dark JSON ships alongside for a later theme pass.
 const PROTOMAPS_FLAVOR = "light" as const;
 
-// Blue Mountains default view (matches the app's home turf).
-const DEFAULT_CENTER: [number, number] = [150.31, -33.7];
-const DEFAULT_ZOOM = 9;
 // Module-level: <Camera> is memo'd and takes no dynamic props, so a stable
 // object lets the memo hold and keeps every re-render of this screen from
 // re-committing props to the native camera.
@@ -159,11 +157,6 @@ function normalizeBearing(heading: number): number {
 // How far off north before the compass button appears. A degree of slop keeps
 // it from flickering in on rounding noise after a reset.
 const COMPASS_VISIBLE_DEG = 1;
-
-// Web canyon colours (Map.tsx applyCanyonThemePaint fallbacks).
-// GeoPDF overlay opacity presets (spec asks 0–100%; steps avoid a native
-// slider dep and gesture conflicts inside the scrolling picker sheet).
-const GEOPDF_OPACITY_STEPS = [0.2, 0.4, 0.6, 0.8, 1] as const;
 
 // A remount (tab switch) re-fires Linking.getInitialURL with the same intent
 // URI — imports must not run twice for one "Open in Logjam".
@@ -216,10 +209,20 @@ function overlayKind(ref: TopoOverlayRef): "contours" | "features" {
 export function MapScreen({
   onOpenCanyon,
   onOpenSaved,
+  onSaveMapsOffline,
   focus,
   route,
 }: {
   onOpenCanyon: (canyonId: string, name: string) => void;
+  /**
+   * Opens the offline-download screen on the ground the user is looking at, so
+   * framing an area starts from what they already framed by panning here.
+   */
+  onSaveMapsOffline?: (context: {
+    basemapId: BasemapId;
+    center: [number, number];
+    zoom: number;
+  }) => void;
   // Opens the Saved tab from the trimmed layer sheet's "Manage in Saved" link.
   onOpenSaved?: () => void;
   // "Show on map" for a trip's route attachment. Transient: drawn until the
@@ -266,13 +269,20 @@ export function MapScreen({
   const pendingCanyonPoint = useRef<MapPoint | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
-  const [regionStatus, setRegionStatus] = useState<string | null>(null);
+  // "Canyon routes" layer (web parity), off by default: it is a lot of ink to
+  // add to a map unasked, and the layers sheet is where it belongs.
+  const [showCanyonRoutes, setShowCanyonRoutes] = useState(false);
+  const [routesStatus, setRoutesStatus] = useState<CanyonRoutesStatus | null>(null);
+  // Measured height of the recording HUD, so both floating control columns lift
+  // out of its way instead of sitting on top of it.
+  const [hudHeight, setHudHeight] = useState(0);
   // Camera readout for the JS-drawn chrome: the scale bar needs zoom+latitude,
   // the compass button needs the bearing. Fed by onRegionDidChange (fires when
   // a gesture settles), seeded with the default camera.
   const [camera, setCamera] = useState({
     zoom: DEFAULT_ZOOM,
     latitude: DEFAULT_CENTER[1],
+    longitude: DEFAULT_CENTER[0],
     bearing: 0,
   });
   const insets = useSafeAreaInsets();
@@ -479,76 +489,6 @@ export function MapScreen({
     [onOpenCanyon],
   );
 
-  // Wi-Fi-only download default (stage4a §5.6 policy, applied to both task
-  // kinds): on cellular, downloads need an explicit per-download opt-in.
-  const confirmCellularOk = useCallback(async (): Promise<boolean> => {
-    const netState = await NetInfo.fetch();
-    if (netState.type !== "cellular") return true;
-    return new Promise((resolve) => {
-      Alert.alert(
-        "Use mobile data?",
-        "You're not on Wi-Fi. Download over mobile data?",
-        [
-          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-          { text: "Download", onPress: () => resolve(true) },
-        ],
-        { cancelable: true, onDismiss: () => resolve(false) },
-      );
-    });
-  }, []);
-
-  // Download the visible map area as a Protomaps offline region (stage4a
-  // §7.2). The bbox goes to the API in a POST body only; see regionDownloads.
-  const handleDownloadCurrentArea = useCallback(async () => {
-    try {
-      if (!(await confirmCellularOk())) return;
-      setRegionStatus("Preparing region…");
-      const bounds = await mapRef.current?.getVisibleBounds();
-      if (!bounds) throw new Error("Map not ready");
-      const [[neLng, neLat], [swLng, swLat]] = bounds;
-      const bbox = { west: swLng, south: swLat, east: neLng, north: neLat };
-      // Overlap warning: downloading an area a saved region already fully
-      // covers is usually a mis-tap, not intent.
-      const alreadyCovered = artifacts.some(
-        (a) =>
-          a.kind === "basemap-region" &&
-          a.bbox != null &&
-          bbox.west >= a.bbox[0] &&
-          bbox.south >= a.bbox[1] &&
-          bbox.east <= a.bbox[2] &&
-          bbox.north <= a.bbox[3],
-      );
-      if (alreadyCovered) {
-        const proceed = await new Promise<boolean>((resolve) => {
-          Alert.alert(
-            "Area already saved",
-            "A saved region already covers this area. Download it again anyway?",
-            [
-              { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-              { text: "Download", onPress: () => resolve(true) },
-            ],
-            { cancelable: true, onDismiss: () => resolve(false) },
-          );
-        });
-        if (!proceed) {
-          setRegionStatus(null);
-          return;
-        }
-      }
-      await downloadProtomapsRegion(bbox, (p) =>
-        setRegionStatus(
-          `Downloading… ${Math.min(100, Math.round((p.bytesDone / p.bytesTotal) * 100))}%`,
-        ),
-      );
-      setRegionStatus("Region saved for offline use.");
-    } catch (err) {
-      console.error(err);
-      setRegionStatus(
-        messageFromError(err, "Couldn't download this area. Try a smaller one."),
-      );
-    }
-  }, [confirmCellularOk, artifacts]);
-
   // Stage 4b topo overlays + Stage 5 vector-import file management (save
   // offline / import file / delete) relocated to SavedScreen — viewport-
   // independent asset management. This screen keeps only the per-asset
@@ -569,6 +509,8 @@ export function MapScreen({
   // starts it and renders state. (The start/navigate callbacks live below
   // handleLocateMe — they depend on it.)
   const { tracks } = useTracks();
+  // Live region downloads, so the map can report one that is still running.
+  const downloadJob = activeRegionJob(useRegionDownloads());
   // Waypoints are a synced entity since Stage 8: mirror-backed, offline
   // writes queue through the outbox. TrackMapLayers keeps its lon/lat shape.
   const mirrorWaypoints = useMirrorWaypoints();
@@ -587,7 +529,6 @@ export function MapScreen({
     tracks.find(
       (track) => track.state === "recording" || track.state === "paused",
     ) ?? null;
-  const savedTracks = tracks.filter((track) => track.state === "done");
   const [navTarget, setNavTarget] = useState<Waypoint | null>(null);
   const navDistanceM =
     navTarget && userCoord
@@ -728,6 +669,7 @@ export function MapScreen({
       properties: { zoomLevel: number; heading: number };
     }) => {
       const latitude = feature.geometry.coordinates[1];
+      const longitude = feature.geometry.coordinates[0];
       const { zoomLevel, heading } = feature.properties;
       if (!Number.isFinite(latitude) || !Number.isFinite(zoomLevel)) return;
       // The move that just settled is done with; drop its stop so a re-render
@@ -740,12 +682,18 @@ export function MapScreen({
       setCamera((prev) =>
         prev.zoom === zoomLevel &&
         prev.latitude === latitude &&
+        prev.longitude === longitude &&
         prev.bearing === bearing
           ? // Same readout ⇒ same render output. Bailing keeps a stop replay
             // (which reports the unchanged region again) from re-rendering and
             // replaying forever.
             prev
-          : { zoom: zoomLevel, latitude: latitude as number, bearing },
+          : {
+              zoom: zoomLevel,
+              latitude: latitude as number,
+              longitude: longitude as number,
+              bearing,
+            },
       );
     },
     [],
@@ -913,6 +861,10 @@ export function MapScreen({
   // never covers them; the scale bar runs from the left edge up to the floating
   // button column on the right.
   const noticeTop = insets.top + CHROME_GAP + FAB_SIZE + spacing(1);
+  // Both floating columns sit above the scale bar, and above the recording HUD
+  // when one is up.
+  const chromeBottom =
+    CHROME_BOTTOM + (hudHeight > 0 ? hudHeight + spacing(1) : 0);
   const scaleBarMaxWidth =
     windowWidth - FAB_SIZE - CHROME_GAP * 3 - spacing(1);
   const attributionText = basemapResolved
@@ -1098,6 +1050,12 @@ export function MapScreen({
           />
         ) : null}
 
+        {/* Every canyon route at once (layers sheet → Layers → Canyon routes).
+            Mirror-backed, so it draws with no signal for any file this phone
+            has fetched; mounted before the canyon pins so the pins stay on
+            top of their own lines. */}
+        {showCanyonRoutes ? <CanyonRoutesLayer onStatus={setRoutesStatus} /> : null}
+
         {/* Recorded tracks + waypoints (Stage 7): unpinned, mounted before
             the canyon sources so canyons draw on top. */}
         <TrackMapLayers
@@ -1278,6 +1236,34 @@ export function MapScreen({
           </View>
         ) : null}
 
+        {/* A download keeps running while the user walks around the map, so it
+            reports here rather than only on the screen that started it. */}
+        {downloadJob ? (
+          <View style={styles.filterBadge}>
+            <Feather name="download" size={14} color={theme.accent} />
+            <Text style={styles.filterBadgeText} numberOfLines={1}>
+              {downloadJob.progress.tilesTotal > 0
+                ? `Saving maps · ${Math.round(
+                    (downloadJob.progress.tilesDone /
+                      downloadJob.progress.tilesTotal) *
+                      100,
+                  )}%`
+                : "Saving maps…"}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* The routes layer draws what this phone has. Saying so beats drawing
+            three-quarters of a picture silently (DESIGN.md §8). */}
+        {showCanyonRoutes && routesStatus && routesStatus.unavailable > 0 ? (
+          <View style={styles.filterBadge}>
+            <Feather name="git-commit" size={14} color={theme.accent} />
+            <Text style={styles.filterBadgeText} numberOfLines={2}>
+              {`${routesStatus.drawn} routes shown · ${routesStatus.unavailable} not downloaded yet`}
+            </Text>
+          </View>
+        ) : null}
+
         {/* Says what is on the map that the user didn't put there, and gives
             them one tap to take it off again. */}
         {shownRoute ? (
@@ -1296,7 +1282,7 @@ export function MapScreen({
         ) : null}
       </View>
 
-      <View style={styles.controls}>
+      <View style={[styles.controls, { bottom: chromeBottom }]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Choose layers"
@@ -1338,7 +1324,7 @@ export function MapScreen({
 
       {/* Bottom-left chrome: compass (only off-north) above the attribution
           button, with the scale bar along the bottom edge. */}
-      <View style={styles.leftControls}>
+      <View style={[styles.leftControls, { bottom: chromeBottom }]}>
         {camera.bearing > COMPASS_VISIBLE_DEG &&
         camera.bearing < 360 - COMPASS_VISIBLE_DEG ? (
           <Pressable
@@ -1375,7 +1361,17 @@ export function MapScreen({
         />
       </View>
 
-      {activeTrack ? <TrackRecordingControls activeTrack={activeTrack} /> : null}
+      {/* The HUD spans the chrome column and REPORTS its height, which is what
+          lifts the two button columns above it (see chromeBottom). Chrome
+          stacking on chrome was this panel's old bug. */}
+      {activeTrack ? (
+        <View
+          style={styles.hud}
+          onLayout={(event) => setHudHeight(event.nativeEvent.layout.height)}
+        >
+          <TrackRecordingControls activeTrack={activeTrack} />
+        </View>
+      ) : null}
 
       {/* Navigate-to-waypoint readout: live distance + bearing from the
           latest fix. Static labels only — coordinates never rendered. */}
@@ -1459,196 +1455,46 @@ export function MapScreen({
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
 
-      <BottomSheet
+      <MapLayersSheet
         visible={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        title="Map layers"
-      >
-        <SectionHeader label="Basemap" />
-        <SegmentedControl
-          options={BASEMAP_CATALOG.map((entry) => ({
-            value: entry.id as BasemapId,
-            label: entry.name,
-            disabled: connectivity !== "online" && !entry.offlineCapable,
-          }))}
-          value={basemapId}
-          onChange={setBasemapId}
-        />
-
-        <SectionHeader label="Offline maps" />
-        <Card style={styles.sheetRow}>
-          <Text style={styles.rowLabel}>Offline maps only</Text>
-          <Toggle
-            value={offlineOnly}
-            onValueChange={setOfflineOnly}
-            accessibilityLabel="Offline maps only"
-          />
-        </Card>
-        <Pressable
-          accessibilityRole="button"
-          disabled={connectivity !== "online"}
-          onPress={handleDownloadCurrentArea}
-          style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
-        >
-          <View style={styles.actionRowInner}>
-            <Feather
-              name="download"
-              size={16}
-              color={connectivity !== "online" ? theme.textMuted : theme.accent}
-            />
-            <Text
-              style={[
-                styles.actionLabel,
-                connectivity !== "online" && styles.disabledText,
-              ]}
-            >
-              Download current area
-            </Text>
-          </View>
-        </Pressable>
-        {regionStatus ? <Text style={styles.statusText}>{regionStatus}</Text> : null}
-        <Row
-          title="Manage offline maps in Saved"
-          subtitle="Downloads, GeoPDFs, imports, tracks"
-          accessibilityLabel="Manage offline maps in Saved"
-          right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
-          onPress={() => {
-            setPickerOpen(false);
-            onOpenSaved?.();
-          }}
-        />
-
-        {overlayList.length > 0 ? (
-          <>
-            <SectionHeader label="Topo overlays" />
-            {overlayList.map((overlay) => {
-              const enabled = enabledOverlays.has(overlay.key);
-              const saved = artifacts.find(
-                (a) => a.kind === "topo-overlay" && a.logicalKey === overlay.key,
-              );
-              return (
-                <Card key={overlay.key} style={styles.sheetRow}>
-                  <View style={styles.rowMain}>
-                    <Text style={styles.rowLabel} numberOfLines={1}>
-                      {overlay.label}
-                    </Text>
-                    {saved ? <StatusPill label="Offline" tone="accent" /> : null}
-                  </View>
-                  <Toggle
-                    value={enabled}
-                    onValueChange={() => toggleOverlay(overlay.key)}
-                    accessibilityLabel={`Show ${overlay.label}`}
-                  />
-                </Card>
-              );
-            })}
-          </>
-        ) : null}
-
-        <SectionHeader label="Imports" />
-        {imports.map((imported) => (
-          <Card key={imported.id} style={styles.sheetRow}>
-            <View style={[styles.dot, { backgroundColor: imported.color }]} />
-            <View style={styles.rowMain}>
-              <Text style={styles.rowLabel} numberOfLines={1}>
-                {imported.name}
-              </Text>
-            </View>
-            <Toggle
-              value={imported.visible}
-              onValueChange={() => {
-                setVectorImportVisible(imported.id, !imported.visible).catch(
-                  console.error,
-                );
-              }}
-              accessibilityLabel={`Show ${imported.name}`}
-            />
-          </Card>
-        ))}
-
-        {geoPdfImports.some((gp) => gp.state === "ready") ? (
-          <>
-            <SectionHeader label="GeoPDF maps" />
-            {geoPdfImports
-              .filter((gp) => gp.state === "ready")
-              .map((geoPdf) => (
-                <View key={geoPdf.id} style={styles.stackRow}>
-                  <Card style={styles.sheetRow}>
-                    <View style={styles.rowMain}>
-                      <Text style={styles.rowLabel} numberOfLines={1}>
-                        {geoPdf.label}
-                      </Text>
-                    </View>
-                    <Toggle
-                      value={geoPdf.visible}
-                      onValueChange={() => {
-                        updateGeoPdfImport(geoPdf.id, {
-                          visible: !geoPdf.visible,
-                        }).catch(console.error);
-                      }}
-                      accessibilityLabel={`Show ${geoPdf.label}`}
-                    />
-                  </Card>
-                  {geoPdf.residualFraction != null &&
-                  geoPdf.residualFraction > RESIDUAL_WARN_FRACTION ? (
-                    <Text style={styles.statusText}>
-                      ⚠ Georeferencing in this file is imprecise — positions may
-                      be off.
-                    </Text>
-                  ) : null}
-                  {geoPdf.visible ? (
-                    <View style={styles.opacityWrap}>
-                      <Text style={styles.rowSub}>Opacity</Text>
-                      <SegmentedControl
-                        options={GEOPDF_OPACITY_STEPS.map((step) => ({
-                          value: String(step),
-                          label: `${Math.round(step * 100)}%`,
-                        }))}
-                        value={String(
-                          GEOPDF_OPACITY_STEPS.find(
-                            (step) => Math.abs(geoPdf.opacity - step) < 0.01,
-                          ) ?? 1,
-                        )}
-                        onChange={(next) => {
-                          updateGeoPdfImport(geoPdf.id, {
-                            opacity: Number(next),
-                          }).catch(console.error);
-                        }}
-                      />
-                    </View>
-                  ) : null}
-                </View>
-              ))}
-          </>
-        ) : null}
-
-        <SectionHeader label="Tracks" />
-        {savedTracks.length === 0 ? (
-          <Text style={styles.statusText}>
-            Record a track with the record button on the map.
-          </Text>
-        ) : null}
-        {savedTracks.map((track) => (
-          <Card key={track.id} style={styles.sheetRow}>
-            <View style={[styles.dot, { backgroundColor: track.color }]} />
-            <View style={styles.rowMain}>
-              <Text style={styles.rowLabel} numberOfLines={1}>
-                {track.name}
-              </Text>
-              <Text style={styles.rowSub}>{formatDistanceM(track.distanceM)}</Text>
-            </View>
-            <Toggle
-              value={track.visible}
-              onValueChange={() => {
-                updateTrack(track.id, { visible: !track.visible }).catch(
-                  console.error,
-                );
-              }}
-              accessibilityLabel={`Show ${track.name}`}
-            />
-          </Card>
-        ))}
-      </BottomSheet>
+        connectivity={connectivity}
+        basemapId={basemapId}
+        onBasemapChange={setBasemapId}
+        artifacts={artifacts}
+        overlays={overlayList}
+        enabledOverlays={enabledOverlays}
+        onToggleOverlay={toggleOverlay}
+        geoPdfImports={geoPdfImports}
+        onGeoPdfChange={(id, patch) => {
+          updateGeoPdfImport(id, patch).catch(console.error);
+        }}
+        imports={imports}
+        onImportVisibility={(id, visible) => {
+          setVectorImportVisible(id, visible).catch(console.error);
+        }}
+        tracks={tracks}
+        onTrackVisibility={(id, visible) => {
+          updateTrack(id, { visible }).catch(console.error);
+        }}
+        showCanyonRoutes={showCanyonRoutes}
+        onShowCanyonRoutesChange={setShowCanyonRoutes}
+        canyonRouteHue={OWNED_CANYON_COLOR}
+        offlineOnly={offlineOnly}
+        onOfflineOnlyChange={setOfflineOnly}
+        onSaveArea={() => {
+          setPickerOpen(false);
+          onSaveMapsOffline?.({
+            basemapId,
+            center: [camera.longitude, camera.latitude],
+            zoom: camera.zoom,
+          });
+        }}
+        onOpenSaved={() => {
+          setPickerOpen(false);
+          onOpenSaved?.();
+        }}
+      />
     </View>
   );
 }
@@ -1751,6 +1597,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },
+  hud: {
+    position: "absolute",
+    left: CHROME_GAP,
+    right: CHROME_GAP,
+    bottom: CHROME_BOTTOM - spacing(1),
+  },
   scaleBarWrap: {
     position: "absolute",
     left: CHROME_GAP,
@@ -1772,26 +1624,5 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.regular,
   },
-  // Layer-sheet rows (content lives in the shared BottomSheet). A row is a Card
-  // laid out horizontally: main text block (flex) + optional pill/action + the
-  // trailing Toggle.
-  sheetRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(1.5),
-    marginTop: spacing(1),
-  },
-  rowMain: { flex: 1, gap: spacing(0.5) },
-  rowLabel: { color: theme.textPrimary, fontSize: fontSize.base, fontWeight: "600" },
-  rowSub: { color: theme.textMuted, fontSize: fontSize.xs },
-  stackRow: { gap: spacing(0.5) },
-  actionRow: { minHeight: 44, justifyContent: "center", marginTop: spacing(1) },
-  actionRowInner: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-  actionLabel: { color: theme.accent, fontSize: fontSize.base, fontWeight: "600" },
-  pressed: { opacity: 0.7 },
   deleteText: { color: theme.warning, fontSize: fontSize.sm, fontWeight: "600" },
-  disabledText: { color: theme.textMuted },
-  statusText: { color: theme.textMuted, fontSize: fontSize.sm, marginTop: spacing(0.5) },
-  dot: { width: 12, height: 12, borderRadius: 6 },
-  opacityWrap: { gap: spacing(0.5) },
 });

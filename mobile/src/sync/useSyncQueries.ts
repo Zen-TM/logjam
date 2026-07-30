@@ -8,6 +8,7 @@ import {
   hasMirrorSynced,
   countMediaByLinkedId,
   countOutgoingSharesByCanyon,
+  listCanyonTrackMedia,
   listMediaForLinked,
   listMirrorCanyons,
   listMirrorTrips,
@@ -117,6 +118,20 @@ export function useMirrorTrip(id: string): MirrorQueryState<MirrorTrip | null> {
 
 export function useMirrorWaypoints(): MirrorQueryState<MirrorWaypoint[]> {
   return useMirrorQuery(readWaypoints);
+}
+
+/**
+ * Every canyon route attachment on this account, for the map's "Canyon routes"
+ * layer. Mirror-backed, so it works with no signal.
+ */
+export function useMirrorCanyonTracks(
+  trackMimeTypes: readonly string[],
+): MirrorQueryState<MirrorMedia[]> {
+  const read = useCallback(
+    () => listCanyonTrackMedia(trackMimeTypes),
+    [trackMimeTypes],
+  );
+  return useMirrorQuery(read);
 }
 
 /** Attachment counts keyed by linked row id — for list badges. */

@@ -137,7 +137,13 @@ type SavedItem = {
   delete: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
 };
 
-export function SavedScreen({ onOpenMap }: { onOpenMap: (bbox?: Bbox) => void }) {
+export function SavedScreen({
+  onOpenMap,
+  onDownloadRegion,
+}: {
+  onOpenMap: (bbox?: Bbox) => void;
+  onDownloadRegion: () => void;
+}) {
   const connectivity = useConnectivity();
   const online = connectivity === "online";
   const pendingCount = usePendingSyncCount();
@@ -868,7 +874,7 @@ export function SavedScreen({ onOpenMap }: { onOpenMap: (bbox?: Bbox) => void })
             title="Download a map region"
             subtitle={
               online
-                ? "Pick an area on the map, then save its tiles"
+                ? "Frame an area, pick the maps and the detail"
                 : "Needs a connection"
             }
             icon="map"
@@ -876,7 +882,7 @@ export function SavedScreen({ onOpenMap }: { onOpenMap: (bbox?: Bbox) => void })
             disabled={!online}
             onPress={() => {
               setAddSheetOpen(false);
-              onOpenMap();
+              onDownloadRegion();
             }}
           />
           <Row

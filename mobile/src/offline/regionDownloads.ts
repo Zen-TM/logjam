@@ -44,10 +44,16 @@ export type RegionDownloadProgress = {
 export async function downloadProtomapsRegion(
   bbox: { west: number; south: number; east: number; north: number },
   onProgress?: (progress: RegionDownloadProgress) => void,
+  /**
+   * Detail ceiling, so the download screen's detail rail means the same thing
+   * for the vector basemap as for the raster ones. Clamped server-side to the
+   * archive's own z15.
+   */
+  maxzoom?: number,
 ): Promise<MapArtifact> {
   const clip = await apiFetch<RegionClipResponse>("/basemap/region-clip", {
     method: "POST",
-    body: bbox,
+    body: maxzoom != null ? { ...bbox, maxzoom } : bbox,
   });
 
   const dir = `${FileSystem.documentDirectory}offline/regions/`;
@@ -98,7 +104,7 @@ export async function downloadProtomapsRegion(
       path: fileUri.replace(/^file:\/\//, ""),
       bbox: [bbox.west, bbox.south, bbox.east, bbox.north],
       minzoom: 0,
-      maxzoom: 15,
+      maxzoom: Math.min(maxzoom ?? 15, 15),
       sizeBytes: clip.sizeBytes,
       downloadedAt: new Date().toISOString(),
     };

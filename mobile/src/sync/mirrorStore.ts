@@ -528,6 +528,54 @@ export async function listMediaForLinked(
   }));
 }
 
+/**
+ * Every canyon route attachment (.gpx/.kml) the mirror knows about — the map's
+ * "Canyon routes" layer.
+ *
+ * Read from the MIRROR rather than `GET /canyons/tracks` (which is what the web
+ * map uses): the rows and, for anything the user has looked at, the files are
+ * already on the device, so the layer draws in a canyon with no signal. It also
+ * means the feature adds no new server call and no new coordinate traffic.
+ */
+export async function listCanyonTrackMedia(
+  trackMimeTypes: readonly string[],
+): Promise<MirrorMedia[]> {
+  const db = await getSyncDb();
+  const placeholders = trackMimeTypes.map(() => "?").join(", ");
+  const rows = await db.getAllAsync<{
+    id: string;
+    linked_type: string;
+    linked_id: string;
+    media_type: string;
+    filename: string | null;
+    color: string | null;
+    created_at: string | null;
+    sync_state: string;
+    local_thumb_path: string | null;
+    local_display_path: string | null;
+  }>(
+    `SELECT id, linked_type, linked_id, media_type, filename, color,
+            created_at, sync_state, local_thumb_path, local_display_path
+     FROM media
+     WHERE linked_type = 'canyon' AND media_type IN (${placeholders})
+       AND sync_state != 'pendingDelete'
+     ORDER BY created_at ASC`,
+    ...trackMimeTypes,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    linkedType: row.linked_type,
+    linkedId: row.linked_id,
+    mediaType: row.media_type,
+    filename: row.filename,
+    color: row.color,
+    createdAt: row.created_at ?? "",
+    syncState: row.sync_state,
+    localThumbPath: row.local_thumb_path,
+    localDisplayPath: row.local_display_path,
+  }));
+}
+
 type WaypointRow = {
   id: string;
   canyon_id: string | null;

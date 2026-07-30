@@ -20,6 +20,8 @@ import { onMirrorChanged } from "./sync/syncDb";
 import { registerSyncTriggers } from "./sync/syncEngine";
 import { activeThemeSchemeId, persistThemeSchemeId, theme } from "./theme";
 import { MapScreen } from "./map/MapScreen";
+import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
+import type { BasemapId } from "./map/sourceResolver";
 import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { SavedScreen } from "./saved/SavedScreen";
@@ -67,6 +69,15 @@ type MapStackParams = {
     | undefined;
   MapCanyonDetail: { canyonId: string; name: string };
   MapTripDetail: { trip: MirrorTrip };
+  // Where the map was looking when "Save maps for offline use" was tapped, so
+  // the download screen opens on the same ground. Params only, never persisted.
+  MapRegionDownload:
+    | {
+        basemapId: BasemapId;
+        center: [number, number];
+        zoom: number;
+      }
+    | undefined;
 };
 
 type CanyonsStackParams = {
@@ -139,8 +150,22 @@ function MapStackNav() {
               navigation.navigate("MapCanyonDetail", { canyonId, name })
             }
             onOpenSaved={() => navigation.getParent()?.navigate("Saved")}
+            onSaveMapsOffline={(context) =>
+              navigation.navigate("MapRegionDownload", context)
+            }
             focus={route.params?.focus ?? null}
             route={route.params?.route ?? null}
+          />
+        )}
+      </MapStack.Screen>
+      {/* Its own hero owns the back affordance (DESIGN.md §2). */}
+      <MapStack.Screen name="MapRegionDownload" options={{ headerShown: false }}>
+        {({ navigation, route }) => (
+          <RegionDownloadScreen
+            onBack={() => navigation.goBack()}
+            initialBasemapId={route.params?.basemapId}
+            initialCenter={route.params?.center}
+            initialZoom={route.params?.zoom}
           />
         )}
       </MapStack.Screen>
@@ -195,6 +220,13 @@ function SavedStackNav() {
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
                 params: bbox ? { focus: { bbox, nonce: Date.now() } } : undefined,
+              })
+            }
+            // "Download a map region" used to drop the user on the map to find
+            // the affordance themselves; it now opens the screen that does it.
+            onDownloadRegion={() =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapRegionDownload",
               })
             }
           />

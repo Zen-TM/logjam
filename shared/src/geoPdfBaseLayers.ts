@@ -105,7 +105,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
   },
   {
     id: "six-topo",
-    name: "Six Maps Topo",
+    name: "SIX Maps Topo",
     kind: "raster",
     urlTemplate:
       "https://maps.six.nsw.gov.au/arcgis/rest/services/public/NSW_Topo_Map/MapServer/tile/{z}/{y}/{x}",

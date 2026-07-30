@@ -36,6 +36,11 @@ answer, and answers it before any list appears.
 - Friends → "who can I share with, and who is waiting on me?"
 - Sync issues → "what couldn't be saved, and what do you want done about it?"
 - Account → "who am I on this service, and what am I using of it?"
+- Map → nothing. The map IS the answer, and it gets the whole screen (below).
+- Map layers → "what is my map made of, what is drawn on it, and what works with
+  no signal?" — three questions, so three tabs, not one long scroll
+- Save maps offline → "what is this going to cost me?" (a size, a tile count and
+  a duration, updating as the area, the maps and the detail change)
 
 That answer is the **hero**, not a title bar. A screen whose top edge is a
 generic label with content dumped underneath is the pattern being replaced.
@@ -73,6 +78,16 @@ BottomSheet(s)      acquisition + per-item actions
   synced · Last synced 2 min ago") with `Sync now` as the one action. The menu
   under it is deliberately plain. If a hub has no such question, leave it on the
   native header rather than inventing a metric for it.
+- **The MAP has no hero, and no chrome it can do without.** It is the one screen
+  whose content is the whole point, and every pinned element is a piece of map the
+  user can't see. So: no header, no hero, no rail — a search button, one column of
+  floating actions, and badges only while something is true (a filter withholding
+  pins, a route being shown, a download running). Anything that can live behind the
+  layers sheet lives behind the layers sheet.
+- **Map chrome offsets live in ONE module** (`mapChrome.ts`), because chrome that
+  positions itself lands on other chrome: the recording HUD used to sit on top of
+  the compass, the attribution button and the scale bar. The HUD reports its
+  measured height and both floating columns lift by it.
 - **A hero on a pushed screen owns the back button** (`HeroHeader.onBack`).
   Turning off the native header removes the back affordance too, and the
   swipe/hardware gesture is not a visible way out.
@@ -97,6 +112,19 @@ instant you tap it and the list empties for no reason the user can see.
 An active hidden filter must announce itself: the reveal button renders
 `filled`, and a set date range gets a dismissible summary strip above the list.
 A filter you can't see is a bug report waiting to happen.
+
+### A sheet with three subjects gets a rail, not a longer scroll
+
+`MapLayersSheet` is the worked example: basemap choice, layer visibility and
+offline storage were one column of six stacked `SectionHeader` groups, so each of
+the three was a scroll away from the others. They are now a pinned
+`SegmentedControl` inside the sheet — the same content-swap rule as §6 ("never
+open a second sheet"), applied to a sheet that is really three panels. The rail
+carries the count that matters (`Layers 9`), and the tab you are in is never
+scrolled out of reach.
+
+Reach for this only when the sections are genuinely different SUBJECTS. Two short
+groups are a scroll; three unrelated ones are a rail.
 
 ### Chronological lists group by time
 
@@ -387,6 +415,28 @@ row with a retry — it persists because the problem persists.
   `CanyonEditSheet` are each the same component in both modes: same fields, same
   validation, with only the sheet title and the submit label differing. Two forms
   drift, and the one the user reaches less often is the one that rots.
+- **Work the user pays for in time and disk is priced BEFORE they commit, and the
+  price updates as they change the inputs.** The download screen's hero is the
+  estimate ("≈ 41 MB · up to 68 MB · 2,140 tiles · about 12 min"), recomputed on
+  every edge drag and detail change, because the whole decision is the tradeoff
+  between area, detail and how many maps. Two rules follow: the range is derived
+  from MEASURED per-zoom tile sizes (`mapRegionEstimate.ts`, calibrated by a
+  committed script over both bush and town — a bush-only sample read 40 % under for
+  a real download), and the caps are enforced in the hero as a sentence naming the
+  way out ("Lower the detail, shrink the area, or pick fewer maps"), never as a
+  silently dead button.
+- **An area selector uses EDGE handles, not corners.** Each edge is a
+  one-dimensional drag with nothing to anchor, so any aspect ratio is one gesture
+  away — a tall strip for a creek line, a wide one for a plateau — where a corner
+  couples two axes and only reaches the shapes a corner reaches. The frame's
+  interior stays `pointerEvents="none"` so the map underneath keeps its own pan and
+  pinch: the map moves the area, the handles shape it. (Rotation and pitch are
+  disabled while framing, because the frame→bbox maths reads axis-aligned bounds.)
+- **An affordance that can only refuse is absent, not disabled.** The download
+  screen offers the three NSW sources whose licence permits keeping a copy plus our
+  own vector basemap; the OSM-family sources aren't listed at all. Compare the
+  layers sheet, where they ARE listed and DO grey out offline — there the row is
+  still the way to select them when online, so the reason belongs in its subtitle.
 - **A server-side cap is a UI rule, not an error to discover.** A canyon takes
   exactly one route (the API answers a second with 409), so the strip stops
   offering "Add" at the limit and says what the limit is. An affordance that
@@ -468,6 +518,16 @@ row with a retry — it persists because the problem persists.
   one fact in two places beside itself is the same anti-pattern as four corners.
 - Background fetches report failure **inside the filter that needs the data**
   (with a retry), not as a screen-level error. Never swallow it entirely.
+- **A tile the provider never made is not an error.** A third of `six-imagery`'s
+  z18 tiles over bush are 404s (measured). The download reports them as
+  "3 not available" alongside its progress, keeps the region usable, and never
+  retries them — an error tone here would teach the user to distrust a map that is
+  as complete as it can be.
+- **A layer that draws part of the picture says which part is missing.** The
+  canyon-routes layer draws every route file this phone actually has; when some
+  aren't cached it posts a badge ("12 routes shown · 3 not downloaded yet") rather
+  than quietly rendering three quarters of the answer. Same rule as the withheld-
+  pins pill, one level down.
 - **Report the true cost of a thing.** A saved asset's size is everything it put
   on disk — an imported GeoPDF is its source file *plus* the tiles rendered from
   it, which is the larger half. A storage figure that quietly omits a component
@@ -569,6 +629,8 @@ which those are:
 | Attaching photos, videos, routes, tracks | Full-res media not yet downloaded |
 | Viewing anything already cached | RopeWiki / file import (web only) |
 | Picking a theme (device copy) | Data export (web only — needs a share sheet) |
+| Rendering a saved offline region | Saving a new region (Wi-Fi unless opted in) |
+| Canyon routes already cached | Canyon routes never opened on this phone |
 | Turning the app lock on/off | Auto-downloading a finished GeoPDF (Wi-Fi only) |
 | — | Notification prefs, auto-download, field DEFINITIONS |
 | — | Username, email, account deletion |
