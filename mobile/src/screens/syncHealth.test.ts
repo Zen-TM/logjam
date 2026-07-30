@@ -1,0 +1,109 @@
+import { describe, expect, it } from "vitest";
+
+import { relativeTime, syncHealth, type SyncHealthInput } from "./syncHealth";
+
+const NOW = Date.parse("2026-07-30T10:00:00.000Z");
+
+function input(overrides: Partial<SyncHealthInput> = {}): SyncHealthInput {
+  return {
+    online: true,
+    state: "idle",
+    lastSyncAt: "2026-07-30T09:58:00.000Z",
+    pendingCount: 0,
+    issueCount: 0,
+    now: NOW,
+    ...overrides,
+  };
+}
+
+describe("relativeTime", () => {
+  it("is coarse, and stops at days", () => {
+    expect(relativeTime("2026-07-30T09:59:30.000Z", NOW)).toBe("just now");
+    expect(relativeTime("2026-07-30T09:45:00.000Z", NOW)).toBe("15 min ago");
+    expect(relativeTime("2026-07-30T09:00:00.000Z", NOW)).toBe("1 hour ago");
+    expect(relativeTime("2026-07-30T05:00:00.000Z", NOW)).toBe("5 hours ago");
+    expect(relativeTime("2026-07-29T09:00:00.000Z", NOW)).toBe("yesterday");
+    expect(relativeTime("2026-07-24T09:00:00.000Z", NOW)).toBe("6 days ago");
+  });
+
+  it("never counts forwards from a jumped clock", () => {
+    // A timezone change or NTP correction must not render "in -3 minutes".
+    expect(relativeTime("2026-07-30T10:05:00.000Z", NOW)).toBe("just now");
+  });
+
+  it("does not pretend to know an unparseable instant", () => {
+    expect(relativeTime("not a date", NOW)).toBe("at an unknown time");
+  });
+});
+
+describe("syncHealth", () => {
+  it("reports a clean queue", () => {
+    const health = syncHealth(input());
+    expect(health).toEqual({
+      headline: "Everything's synced",
+      detail: "Last synced 2 min ago.",
+      tone: "ok",
+    });
+  });
+
+  it("treats offline with an empty outbox as fine, not as a warning", () => {
+    // The whole app is built to work with no signal; a scary tone here would
+    // train the user to ignore the one that matters.
+    const health = syncHealth(input({ online: false }));
+    expect(health.tone).toBe("ok");
+    expect(health.headline).toBe("Everything's synced");
+    expect(health.detail).toBe("You're offline, and nothing is waiting.");
+  });
+
+  it("promises signal, not progress, while offline with a queue", () => {
+    const health = syncHealth(input({ online: false, pendingCount: 3 }));
+    expect(health.headline).toBe("3 changes waiting to sync");
+    expect(health.detail).toBe("Saved on this phone. It goes up when you have signal.");
+    expect(health.tone).toBe("pending");
+  });
+
+  it("never claims to be syncing while offline", () => {
+    // The optimistic-label bug: a cycle can be mid-flight when the link drops.
+    const health = syncHealth(input({ online: false, state: "syncing", pendingCount: 2 }));
+    expect(health.headline).not.toMatch(/Sending|Syncing/);
+    expect(health.headline).toBe("2 changes waiting to sync");
+  });
+
+  it("counts what it is sending while a cycle runs", () => {
+    expect(syncHealth(input({ state: "syncing", pendingCount: 1 })).headline).toBe(
+      "Sending 1 change…",
+    );
+    expect(syncHealth(input({ state: "syncing" })).headline).toBe("Syncing…");
+  });
+
+  it("puts an unresolvable issue above everything else", () => {
+    // Retrying will never clear a parked op, so it outranks a queue and an
+    // in-flight cycle alike.
+    const health = syncHealth(
+      input({ issueCount: 2, pendingCount: 4, state: "syncing" }),
+    );
+    expect(health).toEqual({
+      headline: "2 changes need you",
+      detail: "4 other changes are still queued.",
+      tone: "problem",
+    });
+  });
+
+  it("singularises the issue headline", () => {
+    const health = syncHealth(input({ issueCount: 1 }));
+    expect(health.headline).toBe("1 change needs you");
+    expect(health.detail).toBe("Everything else is synced.");
+  });
+
+  it("owns up to a failed cycle with an empty outbox", () => {
+    const health = syncHealth(input({ state: "error" }));
+    expect(health.tone).toBe("problem");
+    expect(health.headline).toBe("Can't reach your account");
+    expect(health.detail).toBe("Last synced 2 min ago. It will keep retrying.");
+  });
+
+  it("says so when nothing has ever synced", () => {
+    const health = syncHealth(input({ lastSyncAt: null }));
+    expect(health.detail).toBe("Nothing has reached your account yet.");
+  });
+});

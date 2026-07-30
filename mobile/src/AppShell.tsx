@@ -12,13 +12,13 @@ import {
 import * as Notifications from "expo-notifications";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { needsReconsent } from "@logjam/shared";
+import { isThemeSchemeId, needsReconsent } from "@logjam/shared";
 
 import { fetchCurrentUser, getUnreadNotificationCount, useApiQuery } from "./api/queries";
 import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
 import { registerSyncTriggers } from "./sync/syncEngine";
-import { theme } from "./theme";
+import { activeThemeSchemeId, persistThemeSchemeId, theme } from "./theme";
 import { MapScreen } from "./map/MapScreen";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { SavedScreen } from "./saved/SavedScreen";
@@ -87,6 +87,10 @@ type SavedStackParams = {
 type MoreStackParams = {
   MoreHome: undefined;
   Inbox: undefined;
+  // Reached from a notification that refers to a canyon — pushed inside the
+  // More stack so Back returns to the inbox, not to another tab's history.
+  MoreCanyonDetail: { canyonId: string };
+  MoreTripDetail: { trip: MirrorTrip };
   Account: undefined;
   Friends: undefined;
   SyncIssues: undefined;
@@ -352,6 +356,16 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
   // regained. Torn down on sign-out (shell unmount).
   useEffect(() => registerSyncTriggers(), []);
 
+  // Mirror the account's theme choice onto this device, so a scheme picked in the
+  // browser (or on another phone) is what this app opens in next launch. The
+  // device copy is what `theme.ts` reads at module-eval time; see DESIGN.md §12.
+  useEffect(() => {
+    const accountScheme = userQuery.data?.uiPreferences?.themeSchemeId;
+    if (isThemeSchemeId(accountScheme) && accountScheme !== activeThemeSchemeId) {
+      persistThemeSchemeId(accountScheme);
+    }
+  }, [userQuery.data?.uiPreferences?.themeSchemeId]);
+
   useEffect(() => {
     registerForPushNotifications();
     const subscription = Notifications.addNotificationResponseReceivedListener(
@@ -464,7 +478,12 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
         >
           {() => (
             <MoreStack.Navigator screenOptions={stackScreenOptions}>
-              <MoreStack.Screen name="MoreHome" options={{ title: "More" }}>
+              {/* Every screen here except Settings leads with its own
+                  HeroHeader, which owns the back affordance (DESIGN.md §2).
+                  Settings is a plain settings list, so it keeps the native
+                  header — the rule that a bare-label hero is the pattern being
+                  replaced cuts both ways. */}
+              <MoreStack.Screen name="MoreHome" options={{ headerShown: false }}>
                 {({ navigation }) => (
                   <MoreScreen
                     unreadCount={unreadCount}
@@ -476,28 +495,74 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
                   />
                 )}
               </MoreStack.Screen>
-              <MoreStack.Screen name="Inbox" options={{ title: "Inbox" }}>
-                {() => <NotificationsScreen onUnreadChanged={refreshUnread} />}
+              <MoreStack.Screen name="Inbox" options={{ headerShown: false }}>
+                {({ navigation }) => (
+                  <NotificationsScreen
+                    onBack={() => navigation.goBack()}
+                    onUnreadChanged={refreshUnread}
+                    // A share notification is a way in to the canyon it is
+                    // about; the name is unknown here, so the detail screen
+                    // resolves it from the id over the authed API.
+                    onOpenCanyon={(canyonId) =>
+                      navigation.navigate("MoreCanyonDetail", { canyonId })
+                    }
+                  />
+                )}
               </MoreStack.Screen>
-              <MoreStack.Screen name="Account" options={{ title: "Account" }}>
+              <MoreStack.Screen name="MoreCanyonDetail" options={{ headerShown: false }}>
+                {({ navigation, route }) => (
+                  <CanyonDetailScreen
+                    canyonId={route.params.canyonId}
+                    onBack={() => navigation.goBack()}
+                    onOpenTrip={(trip) => navigation.navigate("MoreTripDetail", { trip })}
+                    onShowOnMap={(canyon) =>
+                      navigation.getParent()?.navigate("Map", {
+                        screen: "MapView",
+                        params: { focus: canyonFocus(canyon) },
+                      })
+                    }
+                    onShowRoute={(mediaId, filename, localPath) =>
+                      navigation.getParent()?.navigate("Map", {
+                        screen: "MapView",
+                        params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
+                      })
+                    }
+                    onDeleted={() => navigation.goBack()}
+                  />
+                )}
+              </MoreStack.Screen>
+              <MoreStack.Screen name="MoreTripDetail" options={{ headerShown: false }}>
+                {({ navigation, route }) => (
+                  <TripDetailScreen
+                    trip={route.params.trip}
+                    onBack={() => navigation.goBack()}
+                    onOpenCanyon={(canyonId) =>
+                      navigation.navigate("MoreCanyonDetail", { canyonId })
+                    }
+                    onShowRoute={(mediaId, filename, localPath) =>
+                      navigation.getParent()?.navigate("Map", {
+                        screen: "MapView",
+                        params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
+                      })
+                    }
+                  />
+                )}
+              </MoreStack.Screen>
+              <MoreStack.Screen name="Account" options={{ headerShown: false }}>
                 {({ navigation }) => (
                   <AccountScreen
+                    onBack={() => navigation.goBack()}
                     onSignOut={onSignOut}
-                    onOpenSyncIssues={() => navigation.navigate("SyncIssues")}
                     onOpenFriends={() => navigation.navigate("Friends")}
                   />
                 )}
               </MoreStack.Screen>
-              <MoreStack.Screen
-                name="Friends"
-                component={FriendsScreen}
-                options={{ title: "Friends" }}
-              />
-              <MoreStack.Screen
-                name="SyncIssues"
-                component={SyncIssuesScreen}
-                options={{ title: "Sync issues" }}
-              />
+              <MoreStack.Screen name="Friends" options={{ headerShown: false }}>
+                {({ navigation }) => <FriendsScreen onBack={() => navigation.goBack()} />}
+              </MoreStack.Screen>
+              <MoreStack.Screen name="SyncIssues" options={{ headerShown: false }}>
+                {({ navigation }) => <SyncIssuesScreen onBack={() => navigation.goBack()} />}
+              </MoreStack.Screen>
               <MoreStack.Screen
                 name="Settings"
                 component={SettingsScreen}

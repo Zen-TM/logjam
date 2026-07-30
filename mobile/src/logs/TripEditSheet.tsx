@@ -31,8 +31,8 @@ import {
   todayDateKey,
   type ChipOption,
 } from "../ui";
-import { fetchCurrentUser } from "../api/queries";
-import { CustomFieldForm, CustomFieldList } from "./CustomFieldsEditor";
+import { customFieldDefsOf, fetchCurrentUser } from "../api/queries";
+import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
 import { formatDateKey } from "./logbook";
 import { tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 
@@ -115,7 +115,7 @@ export function TripEditSheet({
     if (!visible || loadedDefs.current) return;
     loadedDefs.current = true;
     fetchCurrentUser()
-      .then((user) => setCustomFieldDefs(user.uiPreferences?.tripLogCustomFields ?? []))
+      .then((user) => setCustomFieldDefs(customFieldDefsOf(user, "tripLog")))
       .catch((err: unknown) => console.error(err));
   }, [visible]);
 
@@ -337,6 +337,7 @@ export function TripEditSheet({
 
       {mode === "fields" ? (
         <CustomFieldList
+          entity="tripLog"
           online={online}
           defs={customFieldDefs}
           onAdd={() => {
@@ -352,6 +353,7 @@ export function TripEditSheet({
 
       {mode === "fieldForm" ? (
         <CustomFieldForm
+          entity="tripLog"
           online={online}
           defs={customFieldDefs}
           editing={editingField}

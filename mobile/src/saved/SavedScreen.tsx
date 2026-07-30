@@ -43,6 +43,7 @@ import {
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
+import { formatBytes } from "../format";
 import { getGeoPdfJob, listGeoPdfJobs, type GeoPdfJobView } from "../api/geoPdfJobs";
 import { useApiQuery } from "../api/queries";
 import { usePendingSyncCount } from "../sync/useSyncQueries";
@@ -90,14 +91,6 @@ import type { Bbox } from "./bboxOfPoints";
 
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
-}
-
-function formatBytes(bytes: number): string {
-  const gb = bytes / 1024 ** 3;
-  if (gb >= 1) return `${gb.toFixed(1)} GB`;
-  const mb = bytes / 1024 ** 2;
-  if (mb >= 1) return `${Math.round(mb)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 function formatDay(iso: string): string {

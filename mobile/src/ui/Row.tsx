@@ -41,6 +41,7 @@ export function Row({
   disabled = false,
   accessibilityLabel,
   titleNumberOfLines = 1,
+  subtitleNumberOfLines = 1,
   style,
 }: {
   title: string;
@@ -59,6 +60,8 @@ export function Row({
   disabled?: boolean;
   accessibilityLabel?: string;
   titleNumberOfLines?: number;
+  /** Raise it when the subtitle is a short explanation rather than a status. */
+  subtitleNumberOfLines?: number;
   style?: ViewStyle | ViewStyle[];
 }) {
   const tint = hue ?? theme.accent;
@@ -78,7 +81,7 @@ export function Row({
           {title}
         </Text>
         {subtitle ? (
-          <Text style={styles.subtitle} numberOfLines={1}>
+          <Text style={styles.subtitle} numberOfLines={subtitleNumberOfLines}>
             {subtitle}
           </Text>
         ) : null}

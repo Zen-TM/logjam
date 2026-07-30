@@ -1,15 +1,29 @@
-// Notifications inbox — read + mark-seen (Stage 1 scope; actions like
-// accept/decline arrive with their write surfaces in later stages).
-// Cache-first (§4.7): the last fetch is cached so the inbox reads offline;
-// a live fetch refreshes it. Mark-read is online-only (fails gracefully
-// offline) but patches the cache optimistically so the read state sticks.
-import { useCallback, useEffect, useState } from "react";
-import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
+// Inbox — "what happened while I was away?"
+//
+// LAYOUT (DESIGN.md §1, §2): hero answers the question with a count and carries
+// the one bulk action; a pinned rail partitions into Unread / Read; the list is a
+// `SectionList` grouped by local calendar day with sticky headers, because a
+// notification list is chronological and dates are an ordering aid, not a second
+// filter.
+//
+// Cache-first (§4.7): the last fetch is cached so the inbox reads offline; a live
+// fetch refreshes it. Mark-read goes through the outbox like every other mutation
+// so it survives offline, patching the cache first for an immediate read state.
+//
+// A notification that REFERS to something is a way in to that thing: tapping a
+// canyon share opens the canyon. Previously every tap did nothing but mark the
+// row read, which made the inbox a dead end you had to navigate out of by hand.
+//
+// PRIVACY: rows show the server-resolved label (which may include a canyon NAME —
+// user-supplied text, allowed) and a timestamp. Never a coordinate. Tapping
+// through passes an opaque id and the detail screen fetches over the authed API,
+// so a share revoked since the notification lands on the 404-not-403 path.
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
 import { messageFromError } from "@logjam/shared";
 
 import type { TNotification } from "../api/types";
-import { spacing, theme } from "../theme";
+import { fontSize, fontWeight, spacing, theme } from "../theme";
 import { enqueueNotificationRead } from "../sync/outbox";
 import {
   fetchAndCacheNotifications,
@@ -17,8 +31,23 @@ import {
   readNotificationsCache,
 } from "../sync/notificationsCache";
 import { onMirrorChanged } from "../sync/syncDb";
-import { Button, EmptyState, ErrorBanner, ErrorState, LoadingState, Row, StatusPill } from "../ui";
-import { notificationLabel } from "./notificationLabel";
+import {
+  Button,
+  ErrorBanner,
+  ErrorState,
+  HeroHeader,
+  LoadingState,
+  Row,
+  SegmentedControl,
+  StatusPill,
+  type SegmentOption,
+} from "../ui";
+import {
+  groupNotificationsByDay,
+  notificationCanyonId,
+  notificationLabel,
+  notificationMeta,
+} from "./notificationLabel";
 
 type NotificationsState = {
   notifications: TNotification[];
@@ -77,49 +106,59 @@ function useNotifications(): NotificationsState {
   };
 }
 
-function formatTimestamp(iso: string): string {
-  // True timestamp (not date-only) — local timezone is correct here.
-  return new Date(iso).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+function formatTime(iso: string): string {
+  // True timestamp (not date-only), and the day is already the section header —
+  // so the row only needs the clock.
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  return at.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
-export function NotificationsScreen({ onUnreadChanged }: { onUnreadChanged?: () => void }) {
+type Bucket = "all" | "unread" | "read";
+
+export function NotificationsScreen({
+  onBack,
+  onUnreadChanged,
+  onOpenCanyon,
+}: {
+  onBack: () => void;
+  onUnreadChanged?: () => void;
+  onOpenCanyon: (canyonId: string) => void;
+}) {
   const query = useNotifications();
   const [actionError, setActionError] = useState<string | null>(null);
-
+  const [bucket, setBucket] = useState<Bucket>("all");
   const notifications = query.notifications;
-  if (query.loading && notifications.length === 0) return <LoadingState />;
-  if (query.error && notifications.length === 0) {
-    return <ErrorState message={query.error} onRetry={query.refetch} />;
-  }
-  if (notifications.length === 0) {
-    return <EmptyState title="No notifications" hint="You're all caught up." />;
-  }
 
-  const hasUnread = notifications.some((n) => !n.read);
+  const unreadCount = notifications.filter((n) => !n.read).length;
+  const readCount = notifications.length - unreadCount;
 
-  // Mark-read goes through the outbox (like every other mutation) so it
-  // survives offline: patch the cache for an immediate read state, enqueue a
-  // markRead op that flushes on the next sync cycle. No REST fallback — the
-  // op IS the write path.
-  const handleMarkRead = async (n: TNotification) => {
-    if (n.read) return;
-    setActionError(null);
-    try {
-      await patchCachedRead([n.id]);
-      await enqueueNotificationRead([n.id]);
-      onUnreadChanged?.();
-    } catch (err) {
-      console.error(err);
-      setActionError(messageFromError(err, "Couldn't mark notification as read."));
-    }
-  };
+  const visible = useMemo(
+    () =>
+      bucket === "all"
+        ? notifications
+        : notifications.filter((n) => (bucket === "unread" ? !n.read : n.read)),
+    [bucket, notifications],
+  );
+  const sections = useMemo(() => groupNotificationsByDay(visible), [visible]);
 
-  const handleMarkAll = async () => {
+  const markRead = useCallback(
+    async (n: TNotification) => {
+      if (n.read) return;
+      setActionError(null);
+      try {
+        await patchCachedRead([n.id]);
+        await enqueueNotificationRead([n.id]);
+        onUnreadChanged?.();
+      } catch (err) {
+        console.error(err);
+        setActionError(messageFromError(err, "Couldn't mark that as read."));
+      }
+    },
+    [onUnreadChanged],
+  );
+
+  const markAll = useCallback(async () => {
     setActionError(null);
     const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id);
     try {
@@ -128,61 +167,194 @@ export function NotificationsScreen({ onUnreadChanged }: { onUnreadChanged?: () 
       onUnreadChanged?.();
     } catch (err) {
       console.error(err);
-      setActionError(messageFromError(err, "Couldn't mark notifications as read."));
+      setActionError(messageFromError(err, "Couldn't mark those as read."));
     }
-  };
+  }, [notifications, onUnreadChanged]);
+
+  // Reading it is what marks it read, so both happen on one tap; the canyon
+  // then opens on top.
+  const openNotification = useCallback(
+    (n: TNotification) => {
+      void markRead(n);
+      const canyonId = notificationCanyonId(n);
+      if (canyonId) onOpenCanyon(canyonId);
+    },
+    [markRead, onOpenCanyon],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: TNotification }) => (
+      <NotificationRow item={item} onPress={openNotification} />
+    ),
+    [openNotification],
+  );
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: { title: string; data: TNotification[] } }) => (
+      <View style={styles.dayHeader}>
+        <Text style={styles.dayLabel}>{section.title}</Text>
+        <Text style={styles.dayCount}>{section.data.length}</Text>
+      </View>
+    ),
+    [],
+  );
+
+  const buckets: SegmentOption<Bucket>[] = [
+    { value: "all", label: "All", count: notifications.length },
+    { value: "unread", label: "Unread", count: unreadCount, disabled: unreadCount === 0 },
+    { value: "read", label: "Read", count: readCount, disabled: readCount === 0 },
+  ];
+
+  if (query.loading && notifications.length === 0) return <LoadingState />;
+  if (query.error && notifications.length === 0) {
+    return <ErrorState message={query.error} onRetry={query.refetch} />;
+  }
 
   return (
-    <FlatList
-      style={styles.list}
-      contentContainerStyle={styles.listContent}
-      data={notifications}
-      keyExtractor={(item) => item.id}
-      refreshControl={
-        <RefreshControl
-          refreshing={false}
-          onRefresh={query.refetch}
-          tintColor={theme.accent}
-        />
-      }
-      ListHeaderComponent={
-        <View style={styles.header}>
-          {actionError ? <ErrorBanner message={actionError} /> : null}
-          {hasUnread ? (
-            <Button label="Mark all as read" variant="outlineAccent" onPress={handleMarkAll} />
-          ) : null}
+    <View style={styles.root}>
+      <HeroHeader
+        eyebrow="Inbox"
+        title={unreadCount > 0 ? "Something new" : "All caught up"}
+        onBack={onBack}
+        value={unreadCount > 0 ? String(unreadCount) : String(notifications.length)}
+        valueSuffix={unreadCount > 0 ? "unread" : "read"}
+        action={
+          unreadCount > 0 ? (
+            <Button
+              label="Mark all read"
+              variant="outlineAccent"
+              compact
+              onPress={() => void markAll()}
+            />
+          ) : undefined
+        }
+      />
+
+      {notifications.length > 0 ? (
+        <View style={styles.rail}>
+          <SegmentedControl options={buckets} value={bucket} onChange={setBucket} scroll />
         </View>
-      }
-      renderItem={({ item }) => {
-        const label = notificationLabel(item);
-        const subtitle = [label.warning, formatTimestamp(item.createdAt)]
-          .filter(Boolean)
-          .join(" · ");
-        return (
-          <Row
-            title={label.text}
-            subtitle={subtitle}
-            titleNumberOfLines={2}
-            leading={
-              <Feather
-                name="bell"
-                size={20}
-                color={item.read ? theme.textMuted : theme.accent}
-              />
-            }
-            right={!item.read ? <StatusPill label="New" tone="accent" /> : undefined}
-            onPress={() => handleMarkRead(item)}
-            style={!item.read ? styles.rowUnread : undefined}
-          />
-        );
-      }}
+      ) : null}
+
+      {actionError ? (
+        <View style={styles.banner}>
+          <ErrorBanner message={actionError} />
+        </View>
+      ) : null}
+
+      <SectionList
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        sections={sections}
+        keyExtractor={keyExtractor}
+        initialNumToRender={12}
+        maxToRenderPerBatch={8}
+        windowSize={5}
+        removeClippedSubviews
+        refreshControl={
+          <RefreshControl refreshing={false} onRefresh={query.refetch} tintColor={theme.accent} />
+        }
+        renderSectionHeader={renderSectionHeader}
+        renderItem={renderItem}
+        ListEmptyComponent={<EmptyPanel bucket={bucket} onShowAll={() => setBucket("all")} />}
+      />
+    </View>
+  );
+}
+
+function keyExtractor(item: TNotification): string {
+  return item.id;
+}
+
+// Memoised, with a callback that takes the item rather than closing over it —
+// §9, the whole reason the Logs list stopped re-rendering every mounted cell.
+const NotificationRow = ({
+  item,
+  onPress,
+}: {
+  item: TNotification;
+  onPress: (item: TNotification) => void;
+}) => {
+  const label = notificationLabel(item);
+  const meta = notificationMeta(item);
+  const subtitle = [label.warning, formatTime(item.createdAt)].filter(Boolean).join(" · ");
+  return (
+    <Row
+      icon={meta.icon}
+      hue={meta.hue}
+      title={label.text}
+      subtitle={subtitle}
+      titleNumberOfLines={2}
+      right={!item.read ? <StatusPill label="New" tone="accent" /> : undefined}
+      onPress={() => onPress(item)}
+      style={!item.read ? styles.rowUnread : undefined}
     />
+  );
+};
+
+/** Per-bucket, and actionable where there is an action (§8). */
+function EmptyPanel({
+  bucket,
+  onShowAll,
+}: {
+  bucket: Bucket;
+  onShowAll: () => void;
+}) {
+  if (bucket === "unread") {
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyTitle}>Nothing unread</Text>
+        <Button label="Show everything" variant="ghost" onPress={onShowAll} />
+      </View>
+    );
+  }
+  if (bucket === "read") {
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyTitle}>Nothing read yet</Text>
+        <Button label="Show everything" variant="ghost" onPress={onShowAll} />
+      </View>
+    );
+  }
+  return (
+    <View style={styles.empty}>
+      <Text style={styles.emptyTitle}>No notifications</Text>
+      <Text style={styles.emptyHint}>
+        Shares, friend requests and finished map jobs land here.
+      </Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  list: { flex: 1, backgroundColor: theme.primary },
-  listContent: { padding: spacing(2), gap: spacing(1) },
-  header: { gap: spacing(1), paddingBottom: spacing(1) },
+  root: { flex: 1, backgroundColor: theme.primary },
+  rail: { paddingHorizontal: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
+  banner: { paddingHorizontal: spacing(2), paddingBottom: spacing(1) },
+  list: { flex: 1 },
+  listContent: { paddingHorizontal: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
+  // The page colour, so rows don't ghost through the sticky header.
+  dayHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: theme.primary,
+    paddingVertical: spacing(0.75),
+  },
+  dayLabel: {
+    color: theme.textMuted,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  dayCount: { color: theme.textMuted, fontSize: fontSize.xs },
   rowUnread: { borderColor: theme.accent },
+  empty: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(6) },
+  emptyTitle: { color: theme.textPrimary, fontSize: fontSize.base },
+  emptyHint: {
+    color: theme.textMuted,
+    fontSize: fontSize.sm,
+    textAlign: "center",
+    paddingHorizontal: spacing(2),
+  },
 });

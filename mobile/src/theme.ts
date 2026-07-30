@@ -1,14 +1,48 @@
 // Design tokens — sourced from the shared theme schemes (single source of
-// truth for both clients; MOBILE_DESIGN_BRIEF §4). Stage 1 ships the default
-// Sandstone scheme; per-user scheme selection (uiPreferences.themeSchemeId)
-// arrives with the settings surface.
+// truth for both clients; MOBILE_DESIGN_BRIEF §4).
+//
+// The user's scheme (`uiPreferences.themeSchemeId`) is resolved HERE, at module
+// evaluation, from a synchronous on-device preference — because everything
+// derived from it (`surface`, `assetHue`, `canyonHue`, and the ~45 files whose
+// `StyleSheet.create` reads these tokens) is a module constant snapshotted at
+// import time. That is also why a change applies at the next launch rather
+// than repainting the running app: see `persistThemeSchemeId` and DESIGN.md §12.
 import {
   DEFAULT_THEME_SCHEME_ID,
+  isThemeSchemeId,
   THEME_SCHEMES,
+  type ThemeSchemeId,
   type ThemeTokens,
 } from "@logjam/shared";
 
-export const theme: ThemeTokens = THEME_SCHEMES[DEFAULT_THEME_SCHEME_ID].tokens;
+import { readPref, writePref } from "./prefsDb";
+
+const THEME_SCHEME_PREF_KEY = "themeSchemeId";
+
+function resolveSchemeId(): ThemeSchemeId {
+  const stored = readPref(THEME_SCHEME_PREF_KEY);
+  // An unrecognised id (downgraded app, hand-edited row) falls back rather than
+  // crashing the whole style layer on a bad string.
+  return isThemeSchemeId(stored) ? stored : DEFAULT_THEME_SCHEME_ID;
+}
+
+/** The scheme this launch is painted in. */
+export const activeThemeSchemeId: ThemeSchemeId = resolveSchemeId();
+
+export const theme: ThemeTokens = THEME_SCHEMES[activeThemeSchemeId].tokens;
+
+/**
+ * Record the scheme for the NEXT launch. Returns false when the device refused
+ * to store it, so the caller can say so instead of showing a selection that
+ * silently reverts.
+ *
+ * The account-level copy (`PATCH /users/me`) is the caller's job — that one is
+ * what makes the choice follow the user to the web and to another phone; this
+ * one is what makes the app open in the right colours with no network.
+ */
+export function persistThemeSchemeId(id: ThemeSchemeId): boolean {
+  return writePref(THEME_SCHEME_PREF_KEY, id);
+}
 
 // Spacing/radius/type scale mirroring the web tokens (frontend/src/index.css).
 // `pill` is the fully-rounded end of the scale (chips, meters, badges).
@@ -116,4 +150,30 @@ export const canyonHue = {
   todo: "#C7B39A",
   /** Shared with you by a friend — heath flower: someone else's line. */
   shared: "#B79EC0",
+} as const;
+
+/**
+ * Inbox identity — BORROWED, not invented (DESIGN.md §3). A notification is
+ * always about something that lives somewhere else in the app, so it wears that
+ * thing's hue: a topo notification is the same eucalypt as a topo overlay in
+ * Saved, a canyon-share is the same heath as a shared canyon on the Canyons
+ * screen. Recognising a thing again where it lives is what makes the inbox part
+ * of the app rather than a log of unrelated events.
+ *
+ * Adding a kind means pointing at an existing hue. If the thing it refers to has
+ * no hue yet, that is the gap to fill first.
+ */
+export const notificationHue = {
+  /** A canyon shared with you — as on the Canyons rail. */
+  share: canyonHue.shared,
+  /** Friends and requests — the account class takes the scheme accent. */
+  people: theme.accent,
+  /** LiDAR topo jobs — as in Saved. */
+  topo: assetHue.overlay,
+  /** Topo exports — the waterhole blue of the vector files they produce. */
+  export: assetHue.vector,
+  /** GeoPDFs — as in Saved. */
+  geoPdf: assetHue.geoPdf,
+  /** Anything that failed or was skipped. The one place a hue means "look". */
+  problem: theme.warning,
 } as const;

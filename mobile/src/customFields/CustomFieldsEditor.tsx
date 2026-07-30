@@ -10,18 +10,22 @@ import {
 
 import { fontSize, spacing, theme } from "../theme";
 import {
-  deleteTripLogCustomField,
+  deleteCustomFieldDef,
   getCustomFieldImpact,
-  updateTripLogCustomFields,
+  updateCustomFieldDefs,
+  type CustomFieldEntity,
 } from "../api/queries";
 import { Button, Row, SectionHeader, SegmentedControl, TextField, Toggle } from "../ui";
 
 /**
- * Manage the user's own trip-log field definitions — the mobile counterpart of
- * the web's account-level custom fields.
+ * Manage the user's own custom field definitions — the mobile counterpart of the
+ * web's account-level custom fields. One component for BOTH entities a field can
+ * hang off (trip logs and canyons); they differ only in the nouns below and in
+ * the route the API layer picks.
  *
- * Rendered as MODES of the trip editor's sheet (never its own sheet), because
- * you reach it from the form you were filling in. Two bodies:
+ * Rendered as MODES of a sheet, never as its own sheet — either the entity's
+ * edit form (you reached it from the form you were filling in) or the Settings
+ * screen's fields sheet. Two bodies:
  *
  * - `CustomFieldList`: what exists, plus a way in to add or change one.
  * - `CustomFieldForm`: add/rename/retype one, and delete it.
@@ -29,30 +33,40 @@ import { Button, Row, SectionHeader, SegmentedControl, TextField, Toggle } from 
  * Definitions live in `User.uiPreferences`, which every device and the web
  * share, so this is deliberately ONLINE-ONLY: a queued offline edit to a shared
  * list would need merge rules for a list the user could be reordering in a
- * browser at the same time. Trip VALUES stay offline-first as always.
+ * browser at the same time. The VALUES stay offline-first as always.
  *
  * A rename keeps the field's `key`, so stored values stay attached (that is why
  * renaming goes through the same PATCH as adding). Deleting is a separate
- * endpoint because it also strips the orphaned values off every trip that
+ * endpoint because it also strips the orphaned values off every row that
  * carried one — reported up front, before the user confirms.
  */
+
+/** The only per-entity difference in this file: what to call the rows. */
+const ENTITY_NOUN: Record<CustomFieldEntity, { one: string; many: string; has: string; have: string }> = {
+  tripLog: { one: "trip", many: "trips", has: "trip has", have: "trips have" },
+  canyon: { one: "canyon", many: "canyons", has: "canyon has", have: "canyons have" },
+};
+
 export function CustomFieldList({
+  entity,
   defs,
   online,
   onAdd,
   onEdit,
 }: {
+  entity: CustomFieldEntity;
   defs: TripLogCustomFieldDef[];
   online: boolean;
   onAdd: () => void;
   onEdit: (def: TripLogCustomFieldDef) => void;
 }) {
+  const noun = ENTITY_NOUN[entity];
   return (
     <View style={styles.body}>
       {defs.length === 0 ? (
         <Text style={styles.hint}>
           Your own fields go here — water level, party size, car shuttle, whatever
-          you want to record on every trip.
+          you want to record on every {noun.one}.
         </Text>
       ) : (
         <>
@@ -74,7 +88,7 @@ export function CustomFieldList({
         <Row icon="plus" title="Add a field" onPress={onAdd} />
       ) : (
         <Text style={styles.hint}>
-          Adding or changing fields needs a connection. Your trips and their
+          Adding or changing fields needs a connection. Your {noun.many} and their
           values keep working offline.
         </Text>
       )}
@@ -83,6 +97,7 @@ export function CustomFieldList({
 }
 
 export function CustomFieldForm({
+  entity,
   defs,
   online,
   editing,
@@ -90,6 +105,7 @@ export function CustomFieldForm({
   onFailed,
   onDone,
 }: {
+  entity: CustomFieldEntity;
   defs: TripLogCustomFieldDef[];
   online: boolean;
   /** null = adding a new field. */
@@ -98,6 +114,7 @@ export function CustomFieldForm({
   onFailed: (message: string) => void;
   onDone: () => void;
 }) {
+  const noun = ENTITY_NOUN[entity];
   const [label, setLabel] = useState(editing?.label ?? "");
   const [type, setType] = useState<TripLogCustomFieldType>(editing?.type ?? "string");
   const [saving, setSaving] = useState(false);
@@ -129,7 +146,7 @@ export function CustomFieldForm({
       : [...defs, built.def];
     setSaving(true);
     try {
-      await updateTripLogCustomFields(next);
+      await updateCustomFieldDefs(entity, next);
       onSaved(next, editing ? "Field updated." : "Field added.");
       onDone();
     } catch (err) {
@@ -138,33 +155,33 @@ export function CustomFieldForm({
     } finally {
       setSaving(false);
     }
-  }, [bounded, defs, editing, label, max, min, numeric, onDone, onFailed, onSaved, type]);
+  }, [bounded, defs, editing, entity, label, max, min, numeric, onDone, onFailed, onSaved, type]);
 
   const confirmDelete = useCallback(() => {
     if (!editing) return;
     const key = editing.key;
-    // Ask the server how many trips carry a value BEFORE confirming: "this also
+    // Ask the server how many rows carry a value BEFORE confirming: "this also
     // clears it from 12 trips" is the part of the consequence the user can't see.
-    getCustomFieldImpact(key)
-      .then(({ tripLogCount }) => {
+    getCustomFieldImpact(entity, key)
+      .then((affected) => {
         Alert.alert(
           `Delete “${editing.label}”?`,
-          tripLogCount === 0
-            ? "No trips use this field yet. This can't be undone."
-            : `${tripLogCount} ${tripLogCount === 1 ? "trip has" : "trips have"} a value for this field, and it will be cleared from ${tripLogCount === 1 ? "it" : "them"} too. This can't be undone.`,
+          affected === 0
+            ? `No ${noun.many} use this field yet. This can't be undone.`
+            : `${affected} ${affected === 1 ? noun.has : noun.have} a value for this field, and it will be cleared from ${affected === 1 ? "it" : "them"} too. This can't be undone.`,
           [
             { text: "Cancel", style: "cancel" },
             {
               text: "Delete",
               style: "destructive",
               onPress: () => {
-                deleteTripLogCustomField(key)
-                  .then(({ removedFromTripCount }) => {
+                deleteCustomFieldDef(entity, key)
+                  .then((removed) => {
                     onSaved(
                       defs.filter((def) => def.key !== key),
-                      removedFromTripCount === 0
+                      removed === 0
                         ? "Field deleted."
-                        : `Field deleted, and cleared from ${removedFromTripCount} ${removedFromTripCount === 1 ? "trip" : "trips"}.`,
+                        : `Field deleted, and cleared from ${removed} ${removed === 1 ? noun.one : noun.many}.`,
                     );
                     onDone();
                   })
@@ -179,9 +196,9 @@ export function CustomFieldForm({
       })
       .catch((err: unknown) => {
         console.error(err);
-        onFailed("Couldn't check which trips use this field.");
+        onFailed(`Couldn't check which ${noun.many} use this field.`);
       });
-  }, [defs, editing, onDone, onFailed, onSaved]);
+  }, [defs, editing, entity, noun, onDone, onFailed, onSaved]);
 
   return (
     <View style={styles.body}>

@@ -1,20 +1,30 @@
-// Friends management (Stage 8): incoming requests (accept/decline), the friend
-// list (remove), and username search to send new requests. Online-only —
-// managing friendships is never a field use case (the mirror handles the
-// offline propagation of the resulting shares/tombstones). Username-only
-// throughout, mirroring the server.
-import { useCallback, useEffect, useState } from "react";
+// Friends — "who can I share a canyon with, and who is waiting on me?"
+//
+// LAYOUT (DESIGN.md §1, §2): hero answers with a count and owns the one
+// acquisition action (Add, which opens the username search in a sheet); a pinned
+// rail partitions into Friends / Requests — a true partition, because a pending
+// request is not yet a friendship; one flat list under it. Per-row actions live
+// in an overflow sheet titled with the username, so a mis-tap can't revoke
+// anything (§7).
+//
+// Online-only, deliberately: managing friendships is never a field use case, and
+// the mirror handles the offline propagation of the resulting shares and
+// tombstones. The More hub disables the row when offline, and this screen still
+// reports the failure with a retry if it is reached another way.
+//
+// PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
+// `/friends/search` never return an email (root CLAUDE.md convention) and nothing
+// here would have somewhere to put one.
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { messageFromError } from "@logjam/shared";
 
 import {
@@ -29,44 +39,49 @@ import {
   type FriendRequest,
   type UserSearchResult,
 } from "../api/friends";
-import { fontSize, spacing, theme } from "../theme";
+import { canyonHue, fontSize, spacing, theme } from "../theme";
 import {
+  BottomSheet,
+  Button,
   ErrorBanner,
   ErrorState,
+  HeroHeader,
   LoadingState,
   Row,
-  SectionHeader,
+  SegmentedControl,
   StatusPill,
   TextField,
+  Toast,
+  type SegmentOption,
+  type ToastMessage,
 } from "../ui";
 
 const SEARCH_MIN_CHARS = 3;
 
-// Compact pill-style action used for Accept/Decline/Add/Remove — fits the
-// trailing slot of a Row without the full Button footprint.
-function ActionPill({
-  label,
-  tone,
-  onPress,
-}: {
-  label: string;
-  tone: "accent" | "outline" | "warning";
-  onPress: () => void;
-}) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} hitSlop={8}>
-      <StatusPill label={label} tone={tone} />
-    </Pressable>
-  );
-}
+type Bucket = "all" | "friends" | "requests";
 
-export function FriendsScreen() {
+/**
+ * One row shape for both populations, so a single renderer covers the list.
+ * A request wears the heath hue a shared canyon wears — it is someone else
+ * reaching into your account, which is the same idea (§3).
+ */
+type FriendItem =
+  | { kind: "friend"; key: string; username: string; friendshipId: string }
+  | { kind: "request"; key: string; username: string; requestId: string };
+
+export function FriendsScreen({ onBack }: { onBack: () => void }) {
   const [friends, setFriends] = useState<Friend[] | null>(null);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [bucket, setBucket] = useState<Bucket>("all");
+  const [addOpen, setAddOpen] = useState(false);
+  const [menuItem, setMenuItem] = useState<FriendItem | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const notify = useCallback((text: string, tone: ToastMessage["tone"] = "info") => {
+    setToast({ text, tone, nonce: Date.now() });
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -81,14 +96,13 @@ export function FriendsScreen() {
       console.error(err);
       // Only surface a full-screen error when nothing has loaded yet; a later
       // refresh failure keeps the last-good lists on screen.
-      if (friends === null) setLoadError(messageFromError(err, "Couldn't load friends."));
+      setLoadError(messageFromError(err, "Couldn't load friends."));
     }
-  }, [friends]);
+  }, []);
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void load();
+  }, [load]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -97,26 +111,29 @@ export function FriendsScreen() {
   }, [load]);
 
   const runAction = useCallback(
-    async (id: string, action: () => Promise<unknown>, fallback: string) => {
+    async (id: string, action: () => Promise<unknown>, fallback: string, done?: string) => {
       setBusyId(id);
-      setActionError(null);
       try {
         await action();
         await load();
+        if (done) notify(done);
       } catch (err) {
         console.error(err);
-        setActionError(messageFromError(err, fallback));
+        notify(messageFromError(err, fallback), "error");
       } finally {
         setBusyId(null);
       }
     },
-    [load],
+    [load, notify],
   );
 
   const confirmRemove = useCallback(
-    (friend: Friend) => {
+    (item: Extract<FriendItem, { kind: "friend" }>) => {
+      setMenuItem(null);
+      // A dialog, because the consequence is the point and it is bigger than the
+      // verb suggests (§7).
       Alert.alert(
-        `Remove ${friend.username}?`,
+        `Remove ${item.username}?`,
         "This also revokes every canyon shared between you, both directions.",
         [
           { text: "Cancel", style: "cancel" },
@@ -125,9 +142,10 @@ export function FriendsScreen() {
             style: "destructive",
             onPress: () =>
               void runAction(
-                friend.friendshipId,
-                () => removeFriend(friend.friendshipId),
-                "Couldn't remove friend.",
+                item.friendshipId,
+                () => removeFriend(item.friendshipId),
+                "Couldn't remove that friend.",
+                `${item.username} removed.`,
               ),
           },
         ],
@@ -136,107 +154,220 @@ export function FriendsScreen() {
     [runAction],
   );
 
+  const items = useMemo<FriendItem[]>(() => {
+    const requestItems: FriendItem[] = requests.map((request) => ({
+      kind: "request",
+      key: `request:${request.id}`,
+      username: request.requester.username,
+      requestId: request.id,
+    }));
+    const friendItems: FriendItem[] = (friends ?? []).map((friend) => ({
+      kind: "friend",
+      key: `friend:${friend.friendshipId}`,
+      username: friend.username,
+      friendshipId: friend.friendshipId,
+    }));
+    // Requests first in "All": they are the only entries that need a decision.
+    if (bucket === "friends") return friendItems;
+    if (bucket === "requests") return requestItems;
+    return [...requestItems, ...friendItems];
+  }, [bucket, friends, requests]);
+
   if (friends === null && loadError) {
     return <ErrorState message={loadError} onRetry={() => void load()} />;
   }
   if (friends === null) return <LoadingState />;
 
+  const buckets: SegmentOption<Bucket>[] = [
+    { value: "all", label: "All", count: friends.length + requests.length },
+    { value: "friends", label: "Friends", count: friends.length, disabled: friends.length === 0 },
+    {
+      value: "requests",
+      label: "Requests",
+      count: requests.length,
+      hue: canyonHue.shared,
+      disabled: requests.length === 0,
+    },
+  ];
+
   return (
-    <FlatList
-      style={styles.root}
-      contentContainerStyle={styles.content}
-      data={friends}
-      keyExtractor={(item) => item.friendshipId}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />
-      }
-      ListHeaderComponent={
-        <View style={styles.header}>
-          {actionError ? <ErrorBanner message={actionError} /> : null}
-
-          <AddFriendSection
-            existingIds={friends.map((f) => f.id)}
-            onSent={() => void load()}
+    <View style={styles.root}>
+      <HeroHeader
+        eyebrow="Friends"
+        title={requests.length > 0 ? "Someone's waiting" : "Your people"}
+        onBack={onBack}
+        value={String(friends.length)}
+        valueSuffix={friends.length === 1 ? "friend" : "friends"}
+        action={
+          <Button
+            label="Add"
+            icon="user-plus"
+            variant="outlineAccent"
+            compact
+            onPress={() => setAddOpen(true)}
           />
+        }
+      />
 
-          {requests.length > 0 ? (
-            <View style={styles.section}>
-              <SectionHeader label="Requests" />
-              {requests.map((request) => (
-                <Row
-                  key={request.id}
-                  title={request.requester.username}
-                  leading={<Feather name="user" size={20} color={theme.accent} />}
-                  right={
-                    busyId === request.id ? (
-                      <ActivityIndicator color={theme.accent} />
-                    ) : (
-                      <View style={styles.rowActions}>
-                        <ActionPill
-                          label="Accept"
-                          tone="accent"
-                          onPress={() =>
-                            void runAction(
-                              request.id,
-                              () => acceptFriendRequest(request.id),
-                              "Couldn't accept request.",
-                            )
-                          }
-                        />
-                        <ActionPill
-                          label="Decline"
-                          tone="outline"
-                          onPress={() =>
-                            void runAction(
-                              request.id,
-                              () => declineFriendRequest(request.id),
-                              "Couldn't decline request.",
-                            )
-                          }
-                        />
-                      </View>
-                    )
-                  }
-                />
-              ))}
-            </View>
-          ) : null}
+      <View style={styles.rail}>
+        <SegmentedControl options={buckets} value={bucket} onChange={setBucket} scroll />
+      </View>
 
-          <SectionHeader label="Friends" />
-          {friends.length === 0 ? (
-            <Text style={styles.emptyHint}>
-              No friends yet. Search above to send a request.
-            </Text>
-          ) : null}
+      {/* Stays inline with a retry, because a stale list IS the problem and it
+          persists until the fetch works (§6). */}
+      {loadError ? (
+        <View style={styles.banner}>
+          <ErrorBanner message={loadError} onRetry={() => void load()} />
         </View>
-      }
-      renderItem={({ item }) => (
-        <Row
-          title={item.username}
-          leading={<Feather name="user" size={20} color={theme.accent} />}
-          right={
-            busyId === item.friendshipId ? (
-              <ActivityIndicator color={theme.accent} />
-            ) : (
-              <ActionPill label="Remove" tone="warning" onPress={() => confirmRemove(item)} />
-            )
-          }
+      ) : null}
+
+      <FlatList
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        data={items}
+        keyExtractor={(item) => item.key}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />
+        }
+        renderItem={({ item }) => (
+          <FriendRow
+            item={item}
+            busy={
+              busyId ===
+              (item.kind === "friend" ? item.friendshipId : item.requestId)
+            }
+            onAccept={() =>
+              item.kind === "request"
+                ? void runAction(
+                    item.requestId,
+                    () => acceptFriendRequest(item.requestId),
+                    "Couldn't accept that request.",
+                    `${item.username} is now a friend.`,
+                  )
+                : undefined
+            }
+            onMenu={() => setMenuItem(item)}
+          />
+        )}
+        ListEmptyComponent={
+          <EmptyPanel bucket={bucket} onAdd={() => setAddOpen(true)} />
+        }
+      />
+
+      <BottomSheet
+        visible={addOpen}
+        onClose={() => setAddOpen(false)}
+        title="Add a friend"
+      >
+        <AddFriendBody
+          existingIds={friends.map((friend) => friend.id)}
+          onSent={() => void load()}
+          onFailed={(message) => notify(message, "error")}
         />
-      )}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
+      </BottomSheet>
+
+      {/* Per-row actions, titled with the username (§7). */}
+      <BottomSheet
+        visible={menuItem !== null}
+        onClose={() => setMenuItem(null)}
+        title={menuItem?.username ?? ""}
+      >
+        {menuItem?.kind === "friend" ? (
+          <Row
+            icon="user-minus"
+            hue={theme.warning}
+            title="Remove friend"
+            onPress={() => confirmRemove(menuItem)}
+          />
+        ) : null}
+        {menuItem?.kind === "request" ? (
+          <View style={styles.menuBody}>
+            <Row
+              icon="user-check"
+              title="Accept"
+              onPress={() => {
+                const request = menuItem;
+                setMenuItem(null);
+                void runAction(
+                  request.requestId,
+                  () => acceptFriendRequest(request.requestId),
+                  "Couldn't accept that request.",
+                  `${request.username} is now a friend.`,
+                );
+              }}
+            />
+            <Row
+              icon="user-x"
+              hue={theme.warning}
+              title="Decline"
+              onPress={() => {
+                const request = menuItem;
+                setMenuItem(null);
+                void runAction(
+                  request.requestId,
+                  () => declineFriendRequest(request.requestId),
+                  "Couldn't decline that request.",
+                  "Request declined.",
+                );
+              }}
+            />
+          </View>
+        ) : null}
+      </BottomSheet>
+
+      <Toast message={toast} onDismissed={() => setToast(null)} />
+    </View>
+  );
+}
+
+/**
+ * One tap accepts, because that is the answer nearly every request gets; the
+ * overflow carries the same accept plus decline, so "no" is never a mis-tap
+ * away from "yes".
+ */
+function FriendRow({
+  item,
+  busy,
+  onAccept,
+  onMenu,
+}: {
+  item: FriendItem;
+  busy: boolean;
+  onAccept: () => void;
+  onMenu: () => void;
+}) {
+  const request = item.kind === "request";
+  return (
+    <Row
+      icon={request ? "user-plus" : "user"}
+      hue={request ? canyonHue.shared : undefined}
+      title={item.username}
+      subtitle={request ? "Wants to be friends" : undefined}
+      onPress={onMenu}
+      right={
+        busy ? (
+          <ActivityIndicator color={theme.accent} />
+        ) : request ? (
+          <Button label="Accept" variant="outlineAccent" compact onPress={onAccept} />
+        ) : (
+          <StatusPill label="Friend" tone="muted" />
+        )
+      }
     />
   );
 }
 
-// Username search → send request. Requests already-friend/pending targets are
-// rejected server-side (409); the error surfaces in the banner. Sent targets
-// are locally marked so the button reflects the pending state without a reload.
-function AddFriendSection({
+// Username search → send request. Already-friend / already-pending targets are
+// rejected server-side (409) and the message is worth showing. Sent targets are
+// locally marked so the row reflects the pending state without a reload.
+function AddFriendBody({
   existingIds,
   onSent,
+  onFailed,
 }: {
   existingIds: string[];
   onSent: () => void;
+  onFailed: (message: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<UserSearchResult[]>([]);
@@ -262,6 +393,7 @@ function AddFriendSection({
           }
         })
         .catch((err: unknown) => {
+          console.error(err);
           if (!cancelled) setError(messageFromError(err, "Search failed."));
         })
         .finally(() => {
@@ -279,18 +411,19 @@ function AddFriendSection({
       setError(null);
       try {
         await sendFriendRequest(user.id);
-        setSentIds((prev) => [...prev, user.id]);
+        setSentIds((current) => [...current, user.id]);
         onSent();
       } catch (err) {
-        setError(messageFromError(err, "Couldn't send request."));
+        console.error(err);
+        onFailed(messageFromError(err, "Couldn't send that request."));
       }
     },
-    [onSent],
+    [onFailed, onSent],
   );
 
+  const trimmed = query.trim();
   return (
-    <View style={styles.section}>
-      <SectionHeader label="Add a friend" />
+    <View style={styles.addBody}>
       <TextField
         label="Search by username"
         value={query}
@@ -298,22 +431,33 @@ function AddFriendSection({
         autoCapitalize="none"
       />
       {error ? <ErrorBanner message={error} /> : null}
-      {searching ? <ActivityIndicator color={theme.accent} style={styles.searchSpinner} /> : null}
+      {searching ? <ActivityIndicator color={theme.accent} style={styles.spinner} /> : null}
+      {!searching && trimmed.length >= SEARCH_MIN_CHARS && results.length === 0 ? (
+        <Text style={styles.hint}>No one by that name.</Text>
+      ) : null}
+      {trimmed.length > 0 && trimmed.length < SEARCH_MIN_CHARS ? (
+        <Text style={styles.hint}>Keep typing — at least {SEARCH_MIN_CHARS} characters.</Text>
+      ) : null}
       {results.map((user) => {
         const alreadyFriend = existingIds.includes(user.id);
         const sent = sentIds.includes(user.id);
         return (
           <Row
             key={user.id}
+            icon="user"
             title={user.username}
-            leading={<Feather name="user" size={20} color={theme.accent} />}
             right={
               alreadyFriend ? (
-                <StatusPill label="Friend" tone="outline" />
+                <StatusPill label="Friend" tone="muted" />
               ) : sent ? (
                 <StatusPill label="Requested" tone="outline" />
               ) : (
-                <ActionPill label="Add" tone="accent" onPress={() => void send(user)} />
+                <Button
+                  label="Add"
+                  variant="outlineAccent"
+                  compact
+                  onPress={() => void send(user)}
+                />
               )
             }
           />
@@ -323,13 +467,43 @@ function AddFriendSection({
   );
 }
 
+/** Per-bucket and actionable (§8). */
+function EmptyPanel({ bucket, onAdd }: { bucket: Bucket; onAdd: () => void }) {
+  if (bucket === "requests") {
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyTitle}>No pending requests</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.empty}>
+      <Text style={styles.emptyTitle}>No friends yet</Text>
+      <Text style={styles.emptyHint}>
+        Sharing a canyon needs a friendship first — it is the only way another
+        account can see one of yours.
+      </Text>
+      <Button label="Add a friend" icon="user-plus" onPress={onAdd} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.primary },
-  content: { padding: spacing(2), gap: spacing(1) },
-  header: { gap: spacing(2) },
-  section: { gap: spacing(1) },
-  emptyHint: { fontSize: fontSize.sm, color: theme.textMuted },
-  searchSpinner: { alignSelf: "flex-start" },
-  rowActions: { flexDirection: "row", gap: spacing(1) },
-  separator: { height: spacing(1) },
+  rail: { paddingHorizontal: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
+  banner: { paddingHorizontal: spacing(2), paddingBottom: spacing(1) },
+  list: { flex: 1 },
+  listContent: { paddingHorizontal: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
+  menuBody: { gap: spacing(1) },
+  addBody: { gap: spacing(1) },
+  spinner: { alignSelf: "flex-start" },
+  hint: { color: theme.textMuted, fontSize: fontSize.sm },
+  empty: { alignItems: "center", gap: spacing(1.5), paddingVertical: spacing(6) },
+  emptyTitle: { color: theme.textPrimary, fontSize: fontSize.base },
+  emptyHint: {
+    color: theme.textMuted,
+    fontSize: fontSize.sm,
+    textAlign: "center",
+    paddingHorizontal: spacing(2),
+  },
 });

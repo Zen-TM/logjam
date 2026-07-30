@@ -7,6 +7,7 @@
   "scripts": {
     "start": "expo start --dev-client",
     "android": "expo run:android",
+    "dev:android": "./scripts/dev-android.sh",
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

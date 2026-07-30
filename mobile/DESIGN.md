@@ -4,7 +4,9 @@ The house style for the Logjam RN app. **Reference implementations:
 `src/saved/SavedScreen.tsx`** (inventory: hero metric, categories, per-item
 actions), **`src/logs/`** (records: chronology, multi-axis filtering, a
 create/edit form in a sheet) and **`src/canyons/`** (a collection: a partition
-rail, a filter sheet over a shared predicate, cross-entity actions). When a rule
+rail, a filter sheet over a shared predicate, cross-entity actions) and
+**`src/screens/`** (the More hub and its sub-pages: a hero that reports app state,
+a plain settings list, and preference writes that are online-only). When a rule
 here is ambiguous, read those.
 
 Scope: this supersedes the earlier "everything is a `Card` in a stack of
@@ -28,6 +30,12 @@ answer, and answers it before any list appears.
 - Logs → "what have I done?" (a count, a twelve-month activity spark, a
   chronological list)
 - A trip → "what did I do that day?"
+- More → "is my work safe, and where is everything else?" (the sync answer in a
+  sentence, then the menu)
+- Inbox → "what happened while I was away?"
+- Friends → "who can I share with, and who is waiting on me?"
+- Sync issues → "what couldn't be saved, and what do you want done about it?"
+- Account → "who am I on this service, and what am I using of it?"
 
 That answer is the **hero**, not a title bar. A screen whose top edge is a
 generic label with content dumped underneath is the pattern being replaced.
@@ -56,6 +64,15 @@ BottomSheet(s)      acquisition + per-item actions
   as one.
 - Screens that are genuinely a plain form or a settings list keep
   `Screen`/`ScreenScroll` + the native header. Don't force a hero onto them.
+  `SettingsScreen` is the worked example: it is a list of switches with no
+  headline state, so a hero there could only say the word "Settings", which is
+  the pattern the hero rule exists to replace.
+- **A HUB earns a hero if it can answer a real question, not otherwise.** More is
+  a menu, and a menu is dull — but it is also the only screen in the app that can
+  be about the app itself, so its hero is the §10 sync answer ("Everything's
+  synced · Last synced 2 min ago") with `Sync now` as the one action. The menu
+  under it is deliberately plain. If a hub has no such question, leave it on the
+  native header rather than inventing a metric for it.
 - **A hero on a pushed screen owns the back button** (`HeroHeader.onBack`).
   Turning off the native header removes the back affordance too, and the
   swipe/hardware gesture is not a visible way out.
@@ -134,6 +151,28 @@ same sort of object, so `canyonHue` keys off done / to do / shared instead
 scheme accent for the same reason `region` does — the accent belongs on the state
 the screen is celebrating. The identity still appears in both places the rule
 requires: the row's icon tile and its rail chip.
+
+### A notification borrows the hue of the thing it is about
+
+The inbox is a genuine vocabulary of kinds, so it gets the glyph+hue treatment —
+but every hue in `notificationHue` POINTS AT an existing one (`src/theme.ts`). A
+topo notification wears the same eucalypt a topo overlay wears in Saved; a
+canyon-share wears the same heath a shared canyon wears on the Canyons rail. The
+inbox is where you first hear about a thing, and recognising it again where it
+lives is what makes the inbox part of the app instead of a log of unrelated
+events. Adding a kind means naming an existing hue; if the thing it refers to has
+no hue yet, that gap is what to fill first.
+
+The one exception earns itself: anything **failed or skipped** takes
+`theme.warning` and the alert glyph regardless of what it was about, because
+scanning an inbox is a hunt for the thing that went wrong.
+
+### A hub menu is not a category vocabulary
+
+Five hues for Inbox / Friends / Sync issues / Settings / Account would be
+decoration — those rows aren't kinds of one thing, they're destinations. They take
+the default accent tile, and only Sync issues changes hue (to `theme.warning`,
+and only while something is actually parked). Don't invent a palette for a menu.
 
 ### Open vocabularies hash their hue from the label
 
@@ -310,6 +349,13 @@ row with a retry — it persists because the problem persists.
 - **Destructive actions confirm in a dialog**, which carries the explanation.
   The sheet entry itself is just the verb ("Delete from device") — consequence
   copy in a menu row only ellipsises.
+- **A navigation row's subtitle is live STATE, never an explanation.** More's rows
+  used to read "Notifications, shares and requests" and "Conflicts that need your
+  attention" — copy that told the user nothing the title didn't. They now carry
+  what is true right now: "3 unread", "2 changes need a decision", "1.2 GB of 5 GB
+  used". Where there is no state to report (Settings, Friends) there is NO
+  subtitle, and the slot is free for the §10 "Needs a connection" reason when the
+  destination is online-only.
 - **No explanatory subtitles on actions.** A glyph plus a verb ("Show on map",
   "Rename") is the whole affordance; if it needs a sentence to be understood,
   the label or the icon is wrong. Reserve subtitles for entries where something
@@ -396,6 +442,11 @@ row with a retry — it persists because the problem persists.
   the screen that set it.
 - **One notice channel per screen** — see §6. Four independent status lines,
   each owning its own corner, is the anti-pattern.
+- **The screen that states the answer in words does not also state it in pills.**
+  §10's offline and "N waiting to sync" pills exist to carry the sync answer onto
+  screens that are about something else. On More that answer IS the subject, in a
+  sentence with a tone-coloured glyph — so the pills are dropped there. Repeating
+  one fact in two places beside itself is the same anti-pattern as four corners.
 - Background fetches report failure **inside the filter that needs the data**
   (with a retry), not as a screen-level error. Never swallow it entirely.
 - **Report the true cost of a thing.** A saved asset's size is everything it put
@@ -428,6 +479,12 @@ colour when there is content past it (`SegmentedControl`'s `EdgeFade`, an
 driven by scroll offset — a fade on only one end still leaves a hard-sliced chip
 at the other, and a fade shown at rest dims a chip with nothing behind it. Use a
 real gradient for any fade; stacked alpha steps band visibly.
+
+`Row` takes `subtitleNumberOfLines` for the case where the subtitle is a short
+explanation rather than a status (Settings' app-lock row). Reach for it rarely: a
+subtitle that needs two lines is usually a sign the row wanted a section note. And
+drop the trailing pill when you do — the pill's width is what forced the
+ellipsis in the first place.
 
 **One visual, one component.** `Chip` is the single pill primitive behind both
 `SegmentedControl` (single-select rail) and `ChipPicker` (multi-select
@@ -492,6 +549,9 @@ which those are:
 | Adding, editing, deleting a canyon | Sharing a canyon (and reading who it's shared with) |
 | Attaching photos, videos, routes, tracks | Full-res media not yet downloaded |
 | Viewing anything already cached | RopeWiki / file import (web only) |
+| Picking a theme (device copy) | Data export (web only — needs a share sheet) |
+| — | Notification prefs, auto-download, field DEFINITIONS |
+| — | Username, email, account deletion |
 
 **Say what is true, not what is optimistic.** A queued upload says "Uploading…"
 only when it can actually upload; offline it says "Waiting". A label that
@@ -532,9 +592,49 @@ midnight, but "today" for a picker or a default must come from the LOCAL clock
 hours of every AEST morning — the user cannot log the trip they just got back
 from.
 
+**A privacy guard survives being useful.** The Sync issues screen exists to show
+you the field values the server refused — and a parked canyon create carries
+latitude/longitude. `previewValue` in `src/screens/syncIssueDisplay.ts` refuses to
+render those two fields whatever the op holds, and it lives in its own pure module
+with its own test for exactly that reason: this is the page most likely to end up
+screenshotted into a bug report.
+
 **Nothing is autosaved outside the app's own storage.** The web keeps a
 half-written trip in `localStorage`; mobile deliberately has no equivalent —
 form state lives in component state and goes out only through the outbox's
 authed push. The OS doesn't reclaim a foreground sheet the way a browser evicts
 a tab, so the draft would be a persistent copy of canyon names and notes bought
 for no benefit.
+
+## 12. Theme: chosen at any time, applied at launch
+
+The four schemes live in `shared/src/themeSchemes.ts` and are picked in Settings.
+The mobile app applies a change **at the next launch**, and says so.
+
+That is a real limitation, chosen deliberately. `theme` is a module constant, and
+~45 files snapshot it into `StyleSheet.create` at import time; repainting a running
+app means a theme provider plus a style factory in every one of those files, which
+is a large diff across every screen already built for the sake of a preference
+people set once. The trade was taken with the ceiling documented rather than hidden.
+
+What the implementation must keep true:
+
+- **The device's copy is the one that paints.** `theme.ts` resolves the scheme
+  synchronously at module evaluation from `prefsDb` (its own tiny
+  `logjam-prefs.db`, opened with `openDatabaseSync` — everything else here is
+  async, and this has to answer before the first `await` exists). No network, so
+  the app opens in the user's colours in a canyon.
+- **The account's copy is what follows the user.** Settings PATCHes
+  `themeSchemeId`, and `AppShell` mirrors the account value back onto the device
+  whenever they differ — so a scheme picked in the browser is what this phone
+  opens in next time.
+- **The picker shows the CHOICE, not the paint.** Selection tracks the account
+  value; the "applies next time you open Logjam" note appears exactly when the
+  choice and `activeThemeSchemeId` disagree. That covers a change made here AND a
+  change made in a browser since this app started.
+- **Swatches carry a hairline border.** Sandstone's `secondary` IS the card colour
+  they sit on, so without an edge that swatch vanishes and the scheme looks like it
+  has two colours.
+- A device that refuses the write says so (`persistThemeSchemeId` returns false →
+  toast). A selection that silently reverts on the next launch is the one failure
+  this must not have.

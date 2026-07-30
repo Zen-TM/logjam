@@ -15,7 +15,14 @@ topo overlays with the user vectorStyle), Stage 3 (push, delivery gated on
 operator FCM), and Stage 4a-core (offline Protomaps regions: `src/offline/`
 registry + downloads + app lock, `/basemap/region-clip` API) are built.
 SIXMaps offline regions are blocked on an operator ToS gate (see
-OPERATOR_SETUP). Dev loop: `npm start` (Metro) + emulator dev-client;
+OPERATOR_SETUP). Dev loop on a connected Android device or emulator:
+**`npm run dev:android`** (`scripts/dev-android.sh`) — finds the device and
+explains the fix when it can't, reverses every port the app dials on localhost
+(8081 Metro, 8080 API, 4566 MiniStack — `.env` points at 127.0.0.1, which on the
+phone means THE PHONE, so a missing tunnel looks like an app bug, not an error),
+installs the debug dev client if absent, and launches it. `--build` rebuilds it,
+`--logs` tails its logcat, `--metro` runs Metro in the foreground. Then
+`npm start` (Metro) + emulator dev-client;
 native-dep changes need `npx expo prebuild -p android && cd android &&
 RTK_DISABLED=1 ./gradlew :app:assembleDebug`. Maestro flows in `e2e/` (local,
 not CI — see `e2e/README.md`).

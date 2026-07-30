@@ -1,12 +1,31 @@
-// "Sync issues" surface (stage8-sync.md §8.4/§8.5): parked ops the server
-// rejected or that lost an edit↔delete race, plus shelved conflict values.
-// The fail-loudly rule made visible — every entry has an explicit action;
-// nothing is silently dropped.
-import { useCallback, useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+// Sync issues — "what couldn't be saved, and what do you want me to do about it?"
+//
+// The fail-loudly rule made visible (stage8-sync.md §8.4/§8.5): parked ops the
+// server rejected or that lost an edit↔delete race, plus shelved conflict values.
+// Nothing is ever silently dropped, and every entry has an explicit way out.
+//
+// LAYOUT (DESIGN.md §1, §2): hero states how many things need a decision; a rail
+// partitions Parked (things that still want to happen) from Shelved (values that
+// already lost). Rows, not cards with button rows — the per-entry actions live in
+// an overflow sheet titled with the entry, which is the same shape as every other
+// list in the app and keeps a destructive action off the row itself (§7).
+//
+// PRIVACY: an op's own field values are what is in question here, so a name can
+// appear (user-supplied text, allowed). Never a coordinate: `previewValue`
+// deliberately refuses to render latitude/longitude, which a canyon create op
+// carries (§11 — a list is what ends up in a screenshot).
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
 
-import { fontSize, fontWeight, spacing, theme } from "../theme";
-import { Button, Card, EmptyState, ScreenScroll, SectionHeader } from "../ui";
+import { fontSize, spacing, theme } from "../theme";
+import {
+  BottomSheet,
+  HeroHeader,
+  Row,
+  SegmentedControl,
+  StatusPill,
+  type SegmentOption,
+} from "../ui";
 import { onMirrorChanged } from "../sync/syncDb";
 import {
   discardParkedOp,
@@ -18,36 +37,24 @@ import {
   type ParkedOp,
   type ShelfEntry,
 } from "../sync/syncIssues";
+import {
+  opCause,
+  opTitle,
+  previewValue,
+  shelfTitle,
+} from "./syncIssueDisplay";
 
-const ENTITY_LABEL: Record<string, string> = {
-  canyon: "Canyon",
-  tripLog: "Trip",
-  waypoint: "Waypoint",
-  notification: "Notification",
-};
+type Bucket = "all" | "parked" | "shelved";
 
-const OP_LABEL: Record<string, string> = {
-  create: "create",
-  update: "edit",
-  delete: "delete",
-  markRead: "mark read",
-};
+type Issue =
+  | { kind: "parked"; key: string; op: ParkedOp }
+  | { kind: "shelved"; key: string; entry: ShelfEntry };
 
-function opTitle(op: ParkedOp): string {
-  const entity = ENTITY_LABEL[op.entity] ?? op.entity;
-  const name = typeof op.fields?.name === "string" ? ` “${op.fields.name}”` : "";
-  return `${entity}${name} — ${OP_LABEL[op.op] ?? op.op}`;
-}
-
-function previewValue(value: unknown): string {
-  if (value === null || value === undefined) return "(empty)";
-  if (typeof value === "string") return value;
-  return JSON.stringify(value);
-}
-
-export function SyncIssuesScreen() {
+export function SyncIssuesScreen({ onBack }: { onBack: () => void }) {
   const [parked, setParked] = useState<ParkedOp[]>([]);
   const [shelf, setShelf] = useState<ShelfEntry[]>([]);
+  const [bucket, setBucket] = useState<Bucket>("all");
+  const [menuIssue, setMenuIssue] = useState<Issue | null>(null);
 
   const load = useCallback(() => {
     Promise.all([listParkedOps(), listShelfEntries()])
@@ -60,15 +67,23 @@ export function SyncIssuesScreen() {
 
   useEffect(() => {
     load();
-    const unsubscribe = onMirrorChanged(load);
-    return unsubscribe;
+    return onMirrorChanged(load);
   }, [load]);
+
+  const act = useCallback(
+    (run: Promise<unknown>) => {
+      setMenuIssue(null);
+      void run.then(load).catch((err: unknown) => console.error(err));
+    },
+    [load],
+  );
 
   const confirmDiscard = useCallback(
     (op: ParkedOp) => {
+      setMenuIssue(null);
       Alert.alert(
         "Discard this change?",
-        "Your field data is kept in the conflict shelf below.",
+        "Your field data is kept in the conflict shelf, so you can still read what you had typed.",
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -82,93 +97,180 @@ export function SyncIssuesScreen() {
     [load],
   );
 
-  if (parked.length === 0 && shelf.length === 0) {
+  const items = useMemo<Issue[]>(() => {
+    const parkedItems: Issue[] = parked.map((op) => ({
+      kind: "parked",
+      key: `parked:${op.seq}`,
+      op,
+    }));
+    const shelvedItems: Issue[] = shelf.map((entry) => ({
+      kind: "shelved",
+      key: `shelf:${entry.id}`,
+      entry,
+    }));
+    if (bucket === "parked") return parkedItems;
+    if (bucket === "shelved") return shelvedItems;
+    // Parked first: those still want to happen, shelved values already lost.
+    return [...parkedItems, ...shelvedItems];
+  }, [bucket, parked, shelf]);
+
+  const total = parked.length + shelf.length;
+  const buckets: SegmentOption<Bucket>[] = [
+    { value: "all", label: "All", count: total },
+    { value: "parked", label: "Parked", count: parked.length, disabled: parked.length === 0 },
+    {
+      value: "shelved",
+      label: "Shelved",
+      count: shelf.length,
+      disabled: shelf.length === 0,
+    },
+  ];
+
+  return (
+    <View style={styles.root}>
+      <HeroHeader
+        eyebrow="Sync issues"
+        title={parked.length > 0 ? "Needs a decision" : total > 0 ? "Nothing blocked" : "All clear"}
+        onBack={onBack}
+        value={String(total)}
+        valueSuffix={total === 1 ? "entry" : "entries"}
+      />
+
+      {total > 0 ? (
+        <View style={styles.rail}>
+          <SegmentedControl options={buckets} value={bucket} onChange={setBucket} scroll />
+        </View>
+      ) : null}
+
+      <FlatList
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        data={items}
+        keyExtractor={(item) => item.key}
+        renderItem={({ item }) => (
+          <IssueRow item={item} onMenu={() => setMenuIssue(item)} />
+        )}
+        ListHeaderComponent={
+          bucket === "shelved" && shelf.length > 0 ? (
+            <Text style={styles.sectionHint}>
+              Values overwritten by a change made elsewhere. Cleared automatically
+              after 30 days.
+            </Text>
+          ) : null
+        }
+        ListEmptyComponent={<EmptyPanel bucket={bucket} />}
+      />
+
+      {/* Per-entry actions, titled with the entry (§7). */}
+      <BottomSheet
+        visible={menuIssue !== null}
+        onClose={() => setMenuIssue(null)}
+        title={menuIssue ? issueTitle(menuIssue) : ""}
+      >
+        {menuIssue?.kind === "parked" ? (
+          <View style={styles.menuBody}>
+            <Text style={styles.menuCause}>{opCause(menuIssue.op)}</Text>
+            {menuIssue.op.state === "deadRemote" ? (
+              <Row
+                icon="rotate-ccw"
+                title="Recreate it"
+                onPress={() => act(recreateFromDeadRemote(menuIssue.op.seq))}
+              />
+            ) : (
+              <Row
+                icon="refresh-cw"
+                title="Try again"
+                onPress={() => act(retryParkedOp(menuIssue.op.seq))}
+              />
+            )}
+            <Row
+              icon="trash-2"
+              hue={theme.warning}
+              title="Discard this change"
+              onPress={() => confirmDiscard(menuIssue.op)}
+            />
+          </View>
+        ) : null}
+        {menuIssue?.kind === "shelved" ? (
+          <View style={styles.menuBody}>
+            <Text style={styles.menuCause}>
+              Yours: {previewValue(menuIssue.entry.field, menuIssue.entry.shelvedValue)}
+            </Text>
+            <Text style={styles.menuCause}>
+              Kept: {previewValue(menuIssue.entry.field, menuIssue.entry.serverValue)}
+            </Text>
+            <Row
+              icon="check"
+              title="Dismiss"
+              onPress={() => act(dismissShelfEntry(menuIssue.entry.id))}
+            />
+          </View>
+        ) : null}
+      </BottomSheet>
+    </View>
+  );
+}
+
+function issueTitle(issue: Issue): string {
+  if (issue.kind === "parked") return opTitle(issue.op);
+  return shelfTitle(issue.entry);
+}
+
+function IssueRow({ item, onMenu }: { item: Issue; onMenu: () => void }) {
+  if (item.kind === "parked") {
+    const dead = item.op.state === "deadRemote";
     return (
-      <EmptyState
-        title="No sync issues"
-        hint="Changes that can't be synced would appear here."
+      <Row
+        icon="alert-triangle"
+        hue={theme.warning}
+        title={opTitle(item.op)}
+        subtitle={opCause(item.op)}
+        titleNumberOfLines={2}
+        onPress={onMenu}
+        right={<StatusPill label={dead ? "Gone" : "Rejected"} tone="warning" />}
       />
     );
   }
-
   return (
-    <ScreenScroll>
-      {parked.length > 0 ? (
-        <View style={styles.section}>
-          <SectionHeader label="Parked changes" />
-          {parked.map((op) => (
-            <Card key={op.seq} style={styles.card}>
-              <Text style={styles.cardTitle}>{opTitle(op)}</Text>
-              <Text style={styles.cardCause}>
-                {op.state === "deadRemote"
-                  ? "The item was deleted elsewhere while you were editing it."
-                  : (op.error?.message ?? "Rejected by the server.")}
-              </Text>
-              <View style={styles.actionRow}>
-                {op.state === "deadRemote" ? (
-                  <Button
-                    label="Recreate"
-                    variant="outlineAccent"
-                    onPress={() => void recreateFromDeadRemote(op.seq).then(load)}
-                  />
-                ) : (
-                  <Button
-                    label="Retry"
-                    variant="outlineAccent"
-                    onPress={() => void retryParkedOp(op.seq).then(load)}
-                  />
-                )}
-                <Button
-                  label="Discard"
-                  variant="ghost"
-                  onPress={() => confirmDiscard(op)}
-                />
-              </View>
-            </Card>
-          ))}
-        </View>
-      ) : null}
+    <Row
+      icon="archive"
+      title={shelfTitle(item.entry)}
+      subtitle={`Kept: ${previewValue(item.entry.field, item.entry.serverValue)}`}
+      onPress={onMenu}
+      right={<StatusPill label="Shelved" tone="muted" />}
+    />
+  );
+}
 
-      {shelf.length > 0 ? (
-        <View style={styles.section}>
-          <SectionHeader label="Conflict shelf" />
-          <Text style={styles.sectionHint}>
-            Values overwritten by a change made elsewhere. Auto-cleared after 30
-            days.
-          </Text>
-          {shelf.map((entry) => (
-            <Card key={entry.id} style={styles.card}>
-              <Text style={styles.cardTitle}>
-                {(ENTITY_LABEL[entry.entity] ?? entry.entity)} · {entry.field}
-              </Text>
-              <Text style={styles.cardCause}>
-                Server value: {previewValue(entry.serverValue)}
-              </Text>
-              {entry.shelvedValue !== null ? (
-                <Text style={styles.cardCause}>
-                  Your value: {previewValue(entry.shelvedValue)}
-                </Text>
-              ) : null}
-              <View style={styles.actionRow}>
-                <Button
-                  label="Dismiss"
-                  variant="ghost"
-                  onPress={() => void dismissShelfEntry(entry.id).then(load)}
-                />
-              </View>
-            </Card>
-          ))}
-        </View>
-      ) : null}
-    </ScreenScroll>
+function EmptyPanel({ bucket }: { bucket: Bucket }) {
+  return (
+    <View style={styles.empty}>
+      <Text style={styles.emptyTitle}>
+        {bucket === "shelved" ? "Nothing shelved" : "No sync issues"}
+      </Text>
+      <Text style={styles.emptyHint}>
+        {bucket === "shelved"
+          ? "A value replaced by an edit made elsewhere would be kept here."
+          : "Changes the server can't accept would wait here for you. Nothing does."}
+      </Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { gap: spacing(1) },
-  sectionHint: { fontSize: fontSize.xs, color: theme.textMuted },
-  card: { gap: spacing(0.5) },
-  cardTitle: { color: theme.textPrimary, fontSize: fontSize.base, fontWeight: fontWeight.medium },
-  cardCause: { color: theme.textMuted, fontSize: fontSize.sm },
-  actionRow: { flexDirection: "row", gap: spacing(1), paddingTop: spacing(0.5) },
+  root: { flex: 1, backgroundColor: theme.primary },
+  rail: { paddingHorizontal: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
+  list: { flex: 1 },
+  listContent: { paddingHorizontal: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
+  sectionHint: { color: theme.textMuted, fontSize: fontSize.sm, paddingBottom: spacing(1) },
+  menuBody: { gap: spacing(1) },
+  menuCause: { color: theme.textMuted, fontSize: fontSize.sm },
+  empty: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(6) },
+  emptyTitle: { color: theme.textPrimary, fontSize: fontSize.base },
+  emptyHint: {
+    color: theme.textMuted,
+    fontSize: fontSize.sm,
+    textAlign: "center",
+    paddingHorizontal: spacing(2),
+  },
 });
