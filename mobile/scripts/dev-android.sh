@@ -5,9 +5,14 @@
 # replugged, the app is force-stopped, or a reverse tunnel has died.
 #
 #   ./scripts/dev-android.sh              # set up + launch, leave Metro to you
+#   ./scripts/dev-android.sh --emulator   # boot the AVD first (no phone needed)
 #   ./scripts/dev-android.sh --metro      # ...and run Metro in the foreground
 #   ./scripts/dev-android.sh --build      # rebuild + reinstall the dev client
 #   ./scripts/dev-android.sh --logs       # tail the app's logcat instead
+#
+# With a phone plugged in, prefer the phone: it is the only place GPS, real
+# cameras and the biometric prompt behave like they will in a canyon. --emulator
+# is for when no phone is attached, or for checking a second screen size.
 #
 # What it does, and why each step exists:
 #
@@ -29,6 +34,11 @@ cd "$(dirname "$0")/.."
 PACKAGE="com.logjamnsw.mobile"
 APK="android/app/build/outputs/apk/debug/app-debug.apk"
 
+# The AVD this project develops against. Create it in Android Studio if missing;
+# the script lists what it found rather than guessing at another one.
+AVD="logjam"
+EMULATOR_BOOT_TIMEOUT_S=180
+
 # host port -> what lives there. Metro must be first: it is the one the dev
 # client itself needs to load any JS at all.
 PORTS=(
@@ -40,12 +50,14 @@ PORTS=(
 RUN_METRO=false
 DO_BUILD=false
 TAIL_LOGS=false
+START_EMULATOR=false
 for arg in "$@"; do
   case "$arg" in
+    --emulator) START_EMULATOR=true ;;
     --metro) RUN_METRO=true ;;
     --build) DO_BUILD=true ;;
     --logs) TAIL_LOGS=true ;;
-    -h|--help) sed -n '3,20p' "$0" | sed 's|^# \?||'; exit 0 ;;
+    -h|--help) sed -n '3,25p' "$0" | sed 's|^# \?||'; exit 0 ;;
     *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -59,6 +71,45 @@ die()  { printf '\033[1;31m !!\033[0m %s\n' "$*" >&2; exit 1; }
 command -v adb >/dev/null || die "adb not on PATH. Install platform-tools, or add \$ANDROID_HOME/platform-tools to PATH."
 
 adb start-server >/dev/null 2>&1 || true
+
+# --emulator: boot the AVD and block until Android is actually up. `adb
+# wait-for-device` returns as soon as adbd answers, which is minutes before the
+# launcher exists — installing or launching in that window fails confusingly, so
+# poll sys.boot_completed instead.
+if [ "$START_EMULATOR" = true ]; then
+  command -v emulator >/dev/null || die "\`emulator\` not on PATH. Add \$ANDROID_HOME/emulator to PATH."
+
+  if adb devices | awk 'NR>1 && $2=="device"' | grep -q '^emulator-'; then
+    say "Emulator already running — reusing it."
+  else
+    avds="$(emulator -list-avds 2>/dev/null)"
+    if ! printf '%s\n' "$avds" | grep -qx "$AVD"; then
+      die "No AVD named '$AVD'. Found:
+$(printf '%s\n' "${avds:-  (none)}" | sed 's/^/       /')
+     Create one in Android Studio, or edit AVD= at the top of this script."
+    fi
+    say "Booting the '$AVD' emulator…"
+    # -no-snapshot-save keeps the AVD's saved state clean between runs;
+    # detached with its own log so this script can keep going.
+    emulator -avd "$AVD" -no-snapshot-save -no-boot-anim \
+      >"${TMPDIR:-/tmp}/logjam-emulator.log" 2>&1 &
+    printf '    waiting for Android to finish booting'
+    waited=0
+    until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+      [ "$waited" -lt "$EMULATOR_BOOT_TIMEOUT_S" ] || {
+        printf '\n'
+        die "Emulator didn't finish booting in ${EMULATOR_BOOT_TIMEOUT_S}s.
+     Log: ${TMPDIR:-/tmp}/logjam-emulator.log"
+      }
+      printf '.'
+      sleep 3
+      waited=$((waited + 3))
+    done
+    printf '\n'
+    # The lock screen swallows the first taps after boot.
+    adb shell input keyevent 82 >/dev/null 2>&1 || true
+  fi
+fi
 
 # `adb devices` prints a header line and a trailing blank; keep only rows that
 # carry a state we care about.
@@ -100,7 +151,8 @@ fi
 
 if [ ${#ready[@]} -gt 1 ]; then
   die "More than one device attached (${ready[*]}). Unplug the others, or set
-     ANDROID_SERIAL=<serial> and re-run."
+     ANDROID_SERIAL=<serial> and re-run. (A phone AND an emulator both being up
+     is the usual cause — close one; the phone is the better target.)"
 fi
 
 SERIAL="${ready[0]}"
@@ -181,9 +233,10 @@ fi
 cat <<EOF
 
 Ready. Next:
-  npm start                     # Metro, if it isn't already running
-  ./scripts/dev-android.sh      # re-run any time after a replug
+  npm start                       # Metro, if it isn't already running
+  ./scripts/dev-android.sh        # re-run any time after a replug
   ./scripts/dev-android.sh --logs
+  ./scripts/dev-android.sh --emulator   # when no phone is attached
 
 Handy while developing against this device:
   adb exec-out screencap -p > /tmp/shot.png

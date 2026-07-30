@@ -346,6 +346,19 @@ row with a retry — it persists because the problem persists.
   learn which kinds happen to support which action. Renaming is display-only
   (`label` overrides the derived name; resolution still keys off ids), so it is
   cheap to extend to a new kind.
+- **A switch that LOWERS a guard costs an authentication; raising it is free.**
+  The app-lock toggle (Settings → This phone) is what stands between someone
+  holding this unlocked phone and the canyon coordinates on it, so turning it off
+  goes through the device authenticator and a cancelled prompt springs the switch
+  back on (`appLockPreference.ts`, fail-closed on any error). Without that
+  asymmetry the switch is a one-tap bypass of the thing it controls. It is also
+  DEVICE-scoped, not account-scoped: it is a claim about one handset's physical
+  security, and syncing it would quietly unlock the user's other phone.
+- **A destructive confirm describes what THIS entity loses.** Discarding a parked
+  canyon edit keeps the typing on the conflict shelf; discarding a parked upload
+  does not (its "fields" are a filename and two cache paths) and instead deletes
+  the copy waiting on the device. One sentence for both was simply false for one of
+  them — see `discardExplanation`.
 - **Destructive actions confirm in a dialog**, which carries the explanation.
   The sheet entry itself is just the verb ("Delete from device") — consequence
   copy in a menu row only ellipsises.
@@ -440,6 +453,12 @@ row with a retry — it persists because the problem persists.
   the cause is one you learn to ignore. State crossing screens like this lives in
   a small module store (`canyonMapFilter.ts`), not a context — it has to outlive
   the screen that set it.
+- **A screen whose every action is a LOCAL write is not disabled offline.** Sync
+  issues stays fully live with no signal: reads come from SQLite, Discard and
+  Recreate never touch the network, and Retry only flips the op back to `queued`.
+  What offline changes is the PROMISE — "Try again" becomes "Queue it again · It
+  goes up when you have signal", because the button cannot do what its usual label
+  claims. Disable an action when it can't work; reword it when it can, but later.
 - **One notice channel per screen** — see §6. Four independent status lines,
   each owning its own corner, is the anti-pattern.
 - **The screen that states the answer in words does not also state it in pills.**
@@ -550,6 +569,7 @@ which those are:
 | Attaching photos, videos, routes, tracks | Full-res media not yet downloaded |
 | Viewing anything already cached | RopeWiki / file import (web only) |
 | Picking a theme (device copy) | Data export (web only — needs a share sheet) |
+| Turning the app lock on/off | Auto-downloading a finished GeoPDF (Wi-Fi only) |
 | — | Notification prefs, auto-download, field DEFINITIONS |
 | — | Username, email, account deletion |
 
@@ -558,6 +578,16 @@ only when it can actually upload; offline it says "Waiting". A label that
 implies progress and never finishes reads as a bug, not as a queue. Same for
 pull-to-refresh: offline it says so and reassures, rather than spinning into a
 silent failure.
+
+**Work that happens unasked names its own moment, and its own limit.**
+"Auto-download finished GeoPDFs" checks on app start, on return to the foreground,
+and when a connection is regained — the same three moments the sync engine uses,
+and never a background timer, because battery is a field resource. It runs on
+Wi-Fi only (`isConnectionExpensive`), because a GeoPDF is tens of megabytes and
+rendering it to tiles is the expensive half: doing that over cellular at a
+trailhead is not a favour. The subtitle says "Over Wi-Fi" for exactly that reason
+— a background feature whose conditions aren't stated reads as broken on the day
+it doesn't fire.
 
 **Content that isn't downloaded gets its own state**, not an error — "Not
 downloaded to this phone yet. It will appear once you have signal."

@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
 
+import { useConnectivity } from "../map/connectivity";
 import { fontSize, spacing, theme } from "../theme";
 import {
   BottomSheet,
@@ -38,6 +39,7 @@ import {
   type ShelfEntry,
 } from "../sync/syncIssues";
 import {
+  discardExplanation,
   opCause,
   opTitle,
   previewValue,
@@ -55,6 +57,11 @@ export function SyncIssuesScreen({ onBack }: { onBack: () => void }) {
   const [shelf, setShelf] = useState<ShelfEntry[]>([]);
   const [bucket, setBucket] = useState<Bucket>("all");
   const [menuIssue, setMenuIssue] = useState<Issue | null>(null);
+  // Nothing on this screen is disabled offline, and that is deliberate: every
+  // action here is a LOCAL write. Discard and Recreate never touch the network,
+  // and Retry only flips the op back to `queued` for the next cycle. What offline
+  // does change is what Retry can honestly promise (§10).
+  const online = useConnectivity() === "online";
 
   const load = useCallback(() => {
     Promise.all([listParkedOps(), listShelfEntries()])
@@ -83,7 +90,7 @@ export function SyncIssuesScreen({ onBack }: { onBack: () => void }) {
       setMenuIssue(null);
       Alert.alert(
         "Discard this change?",
-        "Your field data is kept in the conflict shelf, so you can still read what you had typed.",
+        discardExplanation(op),
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -179,7 +186,8 @@ export function SyncIssuesScreen({ onBack }: { onBack: () => void }) {
             ) : (
               <Row
                 icon="refresh-cw"
-                title="Try again"
+                title={online ? "Try again" : "Queue it again"}
+                subtitle={online ? undefined : "It goes up when you have signal."}
                 onPress={() => act(retryParkedOp(menuIssue.op.seq))}
               />
             )}

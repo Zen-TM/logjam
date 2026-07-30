@@ -21,8 +21,11 @@ explains the fix when it can't, reverses every port the app dials on localhost
 (8081 Metro, 8080 API, 4566 MiniStack — `.env` points at 127.0.0.1, which on the
 phone means THE PHONE, so a missing tunnel looks like an app bug, not an error),
 installs the debug dev client if absent, and launches it. `--build` rebuilds it,
-`--logs` tails its logcat, `--metro` runs Metro in the foreground. Then
-`npm start` (Metro) + emulator dev-client;
+`--logs` tails its logcat, `--metro` runs Metro in the foreground, and
+`--emulator` boots the `logjam` AVD first and waits on `sys.boot_completed` (not
+`adb wait-for-device`, which returns minutes before the launcher exists). Prefer a
+real phone when one is attached — GPS, cameras and the biometric prompt only
+behave correctly there. Then `npm start` (Metro);
 native-dep changes need `npx expo prebuild -p android && cd android &&
 RTK_DISABLED=1 ./gradlew :app:assembleDebug`. Maestro flows in `e2e/` (local,
 not CI — see `e2e/README.md`).
@@ -72,6 +75,10 @@ note is mandatory. Non-negotiables:
 - All local data in **app-private storage, excluded from cloud backup**
   (`allowBackup=false` Android; `NSURLIsExcludedFromBackupKey` iOS data dirs).
 - **App lock** (biometric/PIN) gates the UI from Stage 4 (first offline secret data).
+  User-disableable since the More redesign, and the asymmetry is the mandate:
+  turning it OFF requires the device authenticator and fails closed, turning it on
+  is free, and the pref is device-scoped (`src/offline/appLockPreference.ts`,
+  DESIGN.md §7). Defaults to on, and an unreadable/absent pref reads as on.
 - **No canyon names/coords in push payloads** — opaque IDs only; fetch details over
   the authed API on tap.
 - Crash/error reporter scrubs coords/names (mirror `api/src/lib/logger.ts`) — wired
@@ -85,8 +92,17 @@ note is mandatory. Non-negotiables:
 
 - `npm run typecheck` + `npm run lint` gate every change (wire into CI alongside the
   other packages).
-- Runtime verify: Android emulator (screenshot loop via `adb exec-out screencap`;
-  mock GPS via `adb emu geo fix`) + Maestro flows. iOS = EAS build + real device
-  (no local iOS on the Linux dev host).
+- Runtime verify: `npm run dev:android` (add `--emulator` for the AVD), then the
+  screenshot loop via `adb exec-out screencap -p`; mock GPS via `adb emu geo fix`;
+  Maestro flows in `e2e/`. iOS = EAS build + real device (no local iOS on the
+  Linux dev host).
+- **Reading the on-device mirror: copy the `-wal` file too.** `logjam.db` runs in
+  WAL mode, so `adb exec-out run-as com.logjamnsw.mobile cat files/SQLite/logjam.db`
+  alone gives a snapshot missing every recent commit — which reads as "the write
+  didn't happen". Pull `logjam.db`, `logjam.db-wal` and `logjam.db-shm` together,
+  or check the UI instead.
+- The biometric prompt is `FLAG_SECURE`: `screencap` of it is solid black. Confirm
+  it appeared with `adb shell dumpsys window | grep mCurrentFocus` (look for
+  `BiometricPrompt`), not with a screenshot.
 - Field-only realities (real GPS, no-signal, battery day) are operator-tested — see
   the operator setup doc.

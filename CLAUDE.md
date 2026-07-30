@@ -1,6 +1,6 @@
 # CLAUDE.md — Logjam Root
 
-Guidance for Claude Code in this repo. Sub-CLAUDE.md in `frontend/`, `api/`, `topo/` cover stack rules.
+Guidance for Claude Code in this repo. Sub-CLAUDE.md in `frontend/`, `api/`, `mobile/`, `topo/` cover stack rules.
 
 ## Context
 

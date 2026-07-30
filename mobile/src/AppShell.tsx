@@ -20,6 +20,7 @@ import { onMirrorChanged } from "./sync/syncDb";
 import { registerSyncTriggers } from "./sync/syncEngine";
 import { activeThemeSchemeId, persistThemeSchemeId, theme } from "./theme";
 import { MapScreen } from "./map/MapScreen";
+import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { SavedScreen } from "./saved/SavedScreen";
 import { AccountScreen } from "./screens/AccountScreen";
@@ -355,6 +356,11 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
   // Stage 8 sync triggers: initial cycle, app foreground, connectivity
   // regained. Torn down on sign-out (shell unmount).
   useEffect(() => registerSyncTriggers(), []);
+
+  // "Auto-download finished GeoPDFs" (Settings → Downloads): app start,
+  // foreground, and connection regained — Wi-Fi only. See autoDownload.ts for
+  // why it checks then and not on a timer.
+  useEffect(() => registerGeoPdfAutoDownload(), []);
 
   // Mirror the account's theme choice onto this device, so a scheme picked in the
   // browser (or on another phone) is what this app opens in next launch. The

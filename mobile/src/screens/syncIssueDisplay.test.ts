@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ParkedOp } from "../sync/syncIssues";
-import { opCause, opTitle, previewValue } from "./syncIssueDisplay";
+import { discardExplanation, opCause, opTitle, previewValue } from "./syncIssueDisplay";
 
 function parked(overrides: Partial<ParkedOp> = {}): ParkedOp {
   return {
@@ -49,11 +49,37 @@ describe("opTitle", () => {
     );
   });
 
+  it("names a media op by its filename and its own verb", () => {
+    // "media — create" was the raw column values reaching the screen, and every
+    // stuck upload looked like every other one.
+    const title = opTitle(
+      parked({ entity: "media", op: "create", fields: { filename: "Davies.kml" } }),
+    );
+    expect(title).toBe("Attachment “Davies.kml” — upload");
+    expect(opTitle(parked({ entity: "media", op: "delete", fields: null }))).toBe(
+      "Attachment — remove",
+    );
+  });
+
   it("falls back to the raw entity and op rather than rendering nothing", () => {
     const title = opTitle(
       parked({ entity: "somethingNew" as ParkedOp["entity"], op: "merge" as ParkedOp["op"] }),
     );
     expect(title).toBe("somethingNew — merge");
+  });
+});
+
+describe("discardExplanation", () => {
+  it("describes the shelf for a synced entity", () => {
+    expect(discardExplanation(parked({ entity: "canyon" }))).toMatch(/conflict shelf/);
+  });
+
+  it("describes the deleted local copy for media, which is NOT shelved", () => {
+    // Media fields are bookkeeping; shelvesDiscardedFields(media) is false, so
+    // promising the shelf here would be a plain lie in a destructive confirm.
+    const text = discardExplanation(parked({ entity: "media" }));
+    expect(text).not.toMatch(/shelf/);
+    expect(text).toMatch(/deleted from this phone/);
   });
 });
 

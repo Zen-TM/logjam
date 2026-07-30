@@ -5,18 +5,26 @@
 //
 // PRIVACY: parked ops and shelf entries carry canyon field values (names,
 // coords). Rendered only behind the app lock; never logged.
-import type { SyncPushEntity, SyncPushOp } from "@logjam/shared";
+import * as FileSystem from "expo-file-system";
+
+import type { SyncPushOp } from "@logjam/shared";
 
 import {
   createWaypointLocal,
   type WaypointDraft,
 } from "./outbox";
+import {
+  outboxMirrorTable,
+  shelvesDiscardedFields,
+  type OutboxEntity,
+} from "./outboxTables";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
 import { requestSync } from "./syncEngine";
 
 export type ParkedOp = {
   seq: number;
-  entity: SyncPushEntity;
+  /** The OUTBOX's entity set, which includes `media` — see outboxTables.ts. */
+  entity: OutboxEntity;
   op: SyncPushOp["op"];
   entityId: string;
   /** 'blocked' = server rejected (validation/quota); 'deadRemote' = the row
@@ -61,7 +69,7 @@ export async function listParkedOps(): Promise<ParkedOp[]> {
   );
   return rows.map((row) => ({
     seq: row.seq,
-    entity: row.entity as SyncPushEntity,
+    entity: row.entity as OutboxEntity,
     op: row.op as SyncPushOp["op"],
     entityId: row.entity_id,
     state: row.state as "blocked" | "deadRemote",
@@ -129,14 +137,17 @@ export async function retryParkedOp(seq: number): Promise<void> {
  */
 export async function discardParkedOp(seq: number): Promise<void> {
   const db = await getSyncDb();
+  // Cache files whose owning row this discard removes; unlinked after the commit.
+  const orphanedFiles: string[] = [];
   await db.withTransactionAsync(async () => {
     const row = await db.getFirstAsync<ParkedRow>(
       "SELECT * FROM outbox WHERE seq = ?",
       seq,
     );
     if (!row) return;
+    const entity = row.entity as OutboxEntity;
     const at = new Date().toISOString();
-    if (row.fields_json) {
+    if (row.fields_json && shelvesDiscardedFields(entity)) {
       const fields = JSON.parse(row.fields_json) as Record<string, unknown>;
       for (const [field, value] of Object.entries(fields)) {
         await db.runAsync(
@@ -151,15 +162,39 @@ export async function discardParkedOp(seq: number): Promise<void> {
         );
       }
     }
-    // A create that never synced leaves an orphan optimistic mirror row.
+    // A create that never synced leaves an orphan optimistic mirror row — the
+    // pendingUpload tile in a media strip, the ghost canyon in a list. Guard on
+    // null: an entity with no id-keyed mirror row must SKIP this, not build
+    // `DELETE FROM null` and roll the whole transaction back (which is how
+    // "Discard" came to do nothing at all for a media op).
     if (row.op === "create") {
-      await db.runAsync(
-        `DELETE FROM ${mirrorTable(row.entity as SyncPushEntity)} WHERE id = ?`,
-        row.entity_id,
-      );
+      const table = outboxMirrorTable(entity);
+      if (table) {
+        // Read the media row's cache paths BEFORE deleting it — dropping the row
+        // is what makes the files unreachable, so this is the only chance to
+        // learn where they are. (Same shape as the blocked-media path in
+        // mediaUpload.ts.)
+        if (entity === "media") {
+          const media = await db.getFirstAsync<{
+            local_display_path: string | null;
+            local_thumb_path: string | null;
+          }>(
+            "SELECT local_display_path, local_thumb_path FROM media WHERE id = ?",
+            row.entity_id,
+          );
+          if (media?.local_display_path) orphanedFiles.push(media.local_display_path);
+          if (media?.local_thumb_path) orphanedFiles.push(media.local_thumb_path);
+        }
+        await db.runAsync(`DELETE FROM ${table} WHERE id = ?`, row.entity_id);
+      }
     }
     await db.runAsync("DELETE FROM outbox WHERE seq = ?", seq);
   });
+  // File IO is not transactional, so it happens after the commit: a failed
+  // unlink must not resurrect the op the user just discarded.
+  for (const path of orphanedFiles) {
+    await FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
+  }
   notifyMirrorChanged();
 }
 
@@ -205,15 +240,3 @@ async function purgeExpiredShelf(): Promise<void> {
   await db.runAsync("DELETE FROM conflict_shelf WHERE at < ?", cutoff);
 }
 
-function mirrorTable(entity: SyncPushEntity): string {
-  switch (entity) {
-    case "canyon":
-      return "canyons";
-    case "tripLog":
-      return "trip_logs";
-    case "waypoint":
-      return "waypoints";
-    case "notification":
-      return "notifications_cache"; // no id column; never a create target
-  }
-}

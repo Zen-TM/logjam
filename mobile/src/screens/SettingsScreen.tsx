@@ -43,6 +43,10 @@ import {
 } from "../api/queries";
 import { CLIENT_VERSION } from "../config";
 import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
+import {
+  isAppLockEnabled,
+  setAppLockEnabled,
+} from "../offline/appLockPreference";
 import { useConnectivity } from "../map/connectivity";
 import {
   activeThemeSchemeId,
@@ -182,6 +186,28 @@ export function SettingsScreen() {
     });
   }, [notify]);
 
+  // ── app lock ─────────────────────────────────────────────────────────────
+  // Device-scoped and readable synchronously, so this row never renders in the
+  // wrong position while a read resolves. Turning it OFF goes through the device
+  // authenticator (appLockPreference.ts) — the one switch here that can't be
+  // flipped by whoever is holding an unlocked phone.
+  const [appLockEnabled, setAppLockEnabledState] = useState(isAppLockEnabled);
+
+  const toggleAppLock = useCallback(async () => {
+    const next = !appLockEnabled;
+    const outcome = await setAppLockEnabled(next);
+    if (outcome.status === "changed") {
+      setAppLockEnabledState(outcome.enabled);
+      notify(
+        outcome.enabled ? "App lock on." : "App lock off for this phone.",
+      );
+      return;
+    }
+    // Cancelled or unreachable: the switch springs back, which is the truth.
+    setAppLockEnabledState(isAppLockEnabled());
+    if (outcome.status === "failed") notify(outcome.message, "error");
+  }, [appLockEnabled, notify]);
+
   // ── custom fields ────────────────────────────────────────────────────────
   const [sheet, setSheet] = useState<SheetMode>({ kind: "closed" });
   const [tripFieldDefs, setTripFieldDefs] = useState<TripLogCustomFieldDef[]>([]);
@@ -265,7 +291,10 @@ export function SettingsScreen() {
         <SectionHeader label="Downloads" />
         <PreferenceRow
           title="Auto-download finished GeoPDFs"
-          subtitle={prefsBlocked ?? "Onto this phone, as soon as one is generated"}
+          // Says Wi-Fi because it MEANS Wi-Fi: a GeoPDF is tens of MB and
+          // rendering it is the expensive half, so it never runs on a metered
+          // connection (autoDownload.ts).
+          subtitle={prefsBlocked ?? "Over Wi-Fi, as soon as one is ready"}
           value={autoDownloadGeoPdfs ?? false}
           ready={autoDownloadGeoPdfs !== null && prefsReady}
           onToggle={toggleAutoDownload}
@@ -295,13 +324,17 @@ export function SettingsScreen() {
             protects it?" is a fair question to have about an offline app, and
             leaving it unanswered doesn't make the answer better. */}
         <SectionHeader label="This phone" />
-        <Row
+        <PreferenceRow
           icon="lock"
           title="App lock"
-          // No "Automatic" pill beside this: the sentence already says it, and
-          // the pill's width was what forced the sentence to ellipsise.
-          subtitle="Automatic once offline data is stored here. Unlocks with your phone's fingerprint or PIN."
+          // Two lines and no trailing pill beside the switch: the switch is
+          // already the trailing element, and a pill next to it was what forced
+          // this sentence to ellipsise.
+          subtitle="Ask for your fingerprint or PIN when Logjam has offline data on this phone."
           subtitleNumberOfLines={2}
+          value={appLockEnabled}
+          ready
+          onToggle={() => void toggleAppLock()}
         />
         <Row
           icon="hard-drive"
@@ -389,22 +422,33 @@ function fieldCountLabel(count: number): string {
  * the account's value has loaded is a lie the user can act on.
  */
 function PreferenceRow({
+  icon,
   title,
   subtitle,
+  subtitleNumberOfLines,
   value,
   ready,
   onToggle,
 }: {
+  /**
+   * Only for a switch over a THING (the app lock). The notification and download
+   * sections are lists of statements — "A GeoPDF is ready" is not an object and a
+   * glyph beside it would be decoration.
+   */
+  icon?: React.ComponentProps<typeof Feather>["name"];
   title: string;
   subtitle?: string;
+  subtitleNumberOfLines?: number;
   value: boolean;
   ready: boolean;
   onToggle: () => void;
 }) {
   return (
     <Row
+      icon={icon}
       title={title}
       subtitle={subtitle}
+      subtitleNumberOfLines={subtitleNumberOfLines}
       disabled={!ready}
       right={
         <Toggle

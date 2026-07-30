@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as LocalAuthentication from "expo-local-authentication";
 
 import { Button } from "../ui";
+import { isAppLockEnabled, onAppLockPreferenceChanged } from "./appLockPreference";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
 import { useVectorImports } from "../imports/useVectorImports";
 import { useTracks } from "../tracks/useTracks";
@@ -46,8 +47,16 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   // they arm the lock like every other on-device secret.
   const { tracks, waypoints, loaded: tracksLoaded } = useTracks();
   const loaded = artifactsLoaded && importsLoaded && geoPdfLoaded && tracksLoaded;
+  // The user's own switch (Settings → This phone). Read synchronously so the
+  // gate's very first render already knows — an async read would flash the lock
+  // screen at someone who turned it off. Turning it OFF costs a biometric; see
+  // appLockPreference.ts.
+  const [lockPreferred, setLockPreferred] = useState(isAppLockEnabled);
+  useEffect(() => onAppLockPreferenceChanged(() => setLockPreferred(isAppLockEnabled())), []);
+
   const lockRequired =
     !DEV_LOCK_DISABLED &&
+    lockPreferred &&
     (artifacts.length > 0 ||
       imports.length > 0 ||
       geoPdfImports.length > 0 ||
