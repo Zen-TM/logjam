@@ -336,7 +336,11 @@ export function CanyonFilterSheet({
         <Row
           icon="help-circle"
           title="Include canyons missing this data"
-          subtitle="Most imported canyons have no recorded grade"
+          // Two lines: it has to fit beside a Toggle, and the one-line version
+          // ellipsised. Also no longer says "grade" — this switch covers every
+          // filtered field, not just the grades.
+          subtitle="Imported canyons often have gaps — filters would hide them."
+          subtitleNumberOfLines={2}
           right={
             <Toggle
               value={filters.include_unknowns}
