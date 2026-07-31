@@ -134,6 +134,9 @@ function regionLabelFor(basemapId: string): string {
   return `${name ?? "Map"} region`;
 }
 
+/** How far the map runs up behind the hero — one corner radius. */
+const HERO_OVERLAP = 16;
+
 function formatMinutes(seconds: number): string {
   if (seconds < 90) return "under a minute";
   const minutes = Math.round(seconds / 60);
@@ -299,40 +302,50 @@ export function RegionDownloadScreen({
 
   return (
     <View style={styles.root}>
-      <HeroHeader
-        onBack={onBack}
-        eyebrow="Offline maps"
-        title="Save maps offline"
-        value={
-          job && job.totalTiles > 0 ? `≈ ${formatBytes(job.meanBytes)}` : "—"
-        }
-        valueSuffix={
-          job && job.totalTiles > 0
-            ? `up to ${formatBytes(job.p90Bytes)} · ${job.totalTiles.toLocaleString()} tiles · ${formatMinutes(job.seconds)}`
-            : includesVector
-              ? "the vector map's size is known once it starts"
-              : undefined
-        }
-      >
-        {/* Always mounted, even when empty: the hero and the panel are the two
-            things the map is measured against, and a warning appearing or
-            clearing used to resize the map under a frame the user was already
-            dragging. */}
-        <View style={styles.heroNote}>
-          {capNote ? (
-            <Text style={styles.capNote} numberOfLines={2}>
-              {capNote}
-            </Text>
-          ) : caps?.ok && caps.softWarn ? (
-            <StatusPill
-              label="Large area — keep Logjam open"
-              tone="warning"
-              icon="alert-triangle"
-            />
-          ) : null}
-        </View>
-      </HeroHeader>
+      {/* Wrapped only to lift it above the map, which now slides up under its
+          rounded bottom corners. */}
+      <View style={styles.hero}>
+        <HeroHeader
+          onBack={onBack}
+          eyebrow="Offline maps"
+          title="Save maps offline"
+          value={
+            job && job.totalTiles > 0 ? `≈ ${formatBytes(job.meanBytes)}` : "—"
+          }
+          valueSuffix={
+            job && job.totalTiles > 0
+              ? `up to ${formatBytes(job.p90Bytes)} · ${job.totalTiles.toLocaleString()} tiles · ${formatMinutes(job.seconds)}`
+              : includesVector
+                ? "the vector map's size is known once it starts"
+                : undefined
+          }
+        >
+          {/* Always mounted, even when empty: the hero and the panel are the
+              two things the map is measured against, and a warning appearing
+              or clearing used to resize the map under a frame the user was
+              already dragging. Two lines tall — the tile-cap sentence names
+              the three ways out of it and clipping the way out is worse than
+              an empty band. */}
+          <View style={styles.heroNote}>
+            {capNote ? (
+              <Text style={styles.capNote} numberOfLines={2}>
+                {capNote}
+              </Text>
+            ) : caps?.ok && caps.softWarn ? (
+              <StatusPill
+                label="Large area — keep Logjam open"
+                tone="warning"
+                icon="alert-triangle"
+              />
+            ) : null}
+          </View>
+        </HeroHeader>
+      </View>
 
+      {/* The map slides UP under the hero's rounded bottom corners, so those
+          two notches show map instead of page colour. The frame's top inset is
+          clamped to the same overlap, or the top edge handle can be dragged in
+          behind the hero and become ungrabbable. */}
       <View style={styles.mapWrap} onLayout={handleLayout}>
         <MapView
           ref={mapRef}
@@ -365,7 +378,13 @@ export function RegionDownloadScreen({
           )}
         </MapView>
         {frame && size.width > 0 ? (
-          <SelectionFrame insets={frame} size={size} onChange={setFrame} />
+          <SelectionFrame
+            insets={frame}
+            size={size}
+            onChange={(next) =>
+              setFrame({ ...next, top: Math.max(HERO_OVERLAP, next.top) })
+            }
+          />
         ) : null}
         <View style={styles.mapHint} pointerEvents="none">
           <Text style={styles.mapHintText}>
@@ -543,7 +562,9 @@ function DownloadRow({ job }: { job: RegionJob }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.primary },
-  mapWrap: { flex: 1, overflow: "hidden" },
+  // The hero paints over the map's top strip, so it has to win the z-order.
+  hero: { zIndex: 1 },
+  mapWrap: { flex: 1, overflow: "hidden", marginTop: -HERO_OVERLAP },
   mapHint: {
     position: "absolute",
     left: spacing(2),
@@ -564,7 +585,7 @@ const styles = StyleSheet.create({
   // grew or shrank (a cellular row appearing, a warning clearing, a download
   // row replacing the button) resized the map mid-gesture and moved the frame
   // the user was dragging.
-  heroNote: { height: 26, justifyContent: "center" },
+  heroNote: { height: 44, justifyContent: "center" },
   panel: {
     height: 208,
     backgroundColor: theme.primary,

@@ -51,6 +51,8 @@ const EARTH_RADIUS = 6378137;
 const ORIGIN_SHIFT = 20037508.342789244;
 const Z_MAX_CLAMP = { min: 10, max: 18 } as const;
 const Z_MIN_FLOOR = 7;
+/** Extra overview levels below "the whole map fits in 2x2 tiles". */
+const ZOOM_OUT_HEADROOM = 2;
 
 /** Web Mercator ground resolution (m/px) at latitude φ for a 512px-tile zoom. */
 function webMercatorRes(z: number, latDeg: number): number {
@@ -164,7 +166,8 @@ export function buildTilePlan(
   // Clip polygon in mercator, once.
   const clipMerc = clipPolygonPt.map((p) => transform.pageToMercator(p));
 
-  // zMin: coarsest level with the whole map inside ≤ 2×2 tiles.
+  // zMin: coarsest level with the whole map inside ≤ 2×2 tiles, then two
+  // levels coarser again (see ZOOM_OUT_HEADROOM).
   const mercXs = clipMerc.map((p) => p.x);
   const mercYs = clipMerc.map((p) => p.y);
   const spanX = Math.max(...mercXs) - Math.min(...mercXs);
@@ -172,10 +175,16 @@ export function buildTilePlan(
   // zMin = the coarsest level built: downsample from zMax until the whole
   // map fits in ≤ 2×2 tiles (i.e. its span ≤ 2 tile spans), floor Z_MIN_FLOOR.
   const worldSize = 2 * ORIGIN_SHIFT;
-  let zMin = zMax;
+  let zMin: number = zMax;
   while (zMin > Z_MIN_FLOOR && Math.max(spanX, spanY) > 2 * (worldSize / 2 ** zMin)) {
     zMin--;
   }
+  // A raster source draws NOTHING below its minzoom — no downscaling from the
+  // level above — so an imported map vanished the moment the user pulled back
+  // far enough to want context around it. The extra levels cost ~1/4 and ~1/16
+  // of one level's tiles (single digits of tiles) and are what keeps the import
+  // on screen while you zoom out to see where it sits.
+  zMin = Math.max(Z_MIN_FLOOR, zMin - ZOOM_OUT_HEADROOM);
 
   // Tile list at zMax over the wgs84 bounds, clip-filtered.
   const nw = lonLatToMercator(wgs84Bounds.west, wgs84Bounds.north);

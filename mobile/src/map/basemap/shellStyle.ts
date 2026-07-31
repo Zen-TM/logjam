@@ -9,6 +9,8 @@
 // fetches, and offline regions render labels with zero network — the Stage 4a
 // requirement. The remote host is only the fallback while installing on first
 // launch or if the install fails. No user data rides these requests either way.
+import { theme } from "../../theme";
+
 export const BASEMAP_ASSETS_REMOTE_BASE =
   "https://protomaps.github.io/basemaps-assets";
 
@@ -26,12 +28,14 @@ export function buildShellStyle(
     version: 8,
     sources: {},
     layers: [
-      // A background layer so the style is never empty — matches the primary
-      // surface colour while tiles load.
+      // A background layer so the style is never empty. It is the PAGE colour,
+      // and it has to be the same colour the offline mask paints with: zoomed
+      // out past the mask's extent the background is what shows, and two
+      // different "nothing here" colours reads as a rendering fault.
       {
         id: "background",
         type: "background",
-        paint: { "background-color": "#4E4944" },
+        paint: { "background-color": theme.primary },
       },
     ],
     glyphs: `${base}/fonts/{fontstack}/{range}.pbf`,

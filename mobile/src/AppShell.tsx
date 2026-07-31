@@ -95,7 +95,8 @@ type TripsStackParams = {
 type SavedStackParams = {
   // `filter` lands the screen on one category — the map's layer sheet points
   // at the regions it manages, and "All" would make the user find them again.
-  SavedHome: { filter?: "region" } | undefined;
+  // `nonce` so following the same pointer twice re-selects it.
+  SavedHome: { filter?: "region"; nonce?: number } | undefined;
 };
 
 type MoreStackParams = {
@@ -154,7 +155,7 @@ function MapStackNav() {
             onOpenSaved={(category) =>
               navigation.getParent()?.navigate("Saved", {
                 screen: "SavedHome",
-                params: { filter: category },
+                params: { filter: category, nonce: Date.now() },
               })
             }
             onSaveMapsOffline={(context) =>
@@ -223,7 +224,11 @@ function SavedStackNav() {
       <SavedStack.Screen name="SavedHome" options={{ headerShown: false }}>
         {({ navigation, route }) => (
           <SavedScreen
-            initialFilter={route.params?.filter}
+            initialFilter={
+              route.params?.filter
+                ? { category: route.params.filter, nonce: route.params.nonce ?? 0 }
+                : undefined
+            }
             onOpenMap={(bbox) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",

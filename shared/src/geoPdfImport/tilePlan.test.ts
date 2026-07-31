@@ -39,8 +39,10 @@ describe("buildTilePlan — Logjam A5 fixture (affine fast path)", () => {
     // anisotropic — √|det J| ≈ 41 merc-m/pt → ~8.2 m/px source → zMax 13
     // (snapshot; a real generator export keeps aspect and would land at 14).
     expect(plan.zMax).toBe(13);
-    // Coarsest level where the ~13.4 km mercator span fits in ≤ 2×2 tiles.
-    expect(plan.zMin).toBe(12);
+    // Coarsest level where the ~13.4 km mercator span fits in ≤ 2×2 tiles (12),
+    // less the two-level zoom-out headroom that keeps the import drawn while
+    // the user pulls back for context.
+    expect(plan.zMin).toBe(10);
     expect(plan.tileSize).toBe(512);
   });
 

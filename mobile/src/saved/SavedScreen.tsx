@@ -148,8 +148,12 @@ export function SavedScreen({
    * Land on one category rather than "All". The map's layer sheet points at
    * this screen for region management ("3 saved areas ›"), and dropping the
    * user in an everything-list to find them again is a dead-ended handoff.
+   *
+   * `nonce` makes a REPEAT request work: navigating a second time with the same
+   * category leaves the params identical, so nothing downstream changes and the
+   * user stays on whatever filter they picked in between.
    */
-  initialFilter?: Category;
+  initialFilter?: { category: Category; nonce: number };
 }) {
   const connectivity = useConnectivity();
   const online = connectivity === "online";
@@ -175,12 +179,14 @@ export function SavedScreen({
   const refreshFreeSpace = useCallback(() => {
     FileSystem.getFreeDiskStorageAsync().then(setFreeBytes).catch(console.error);
   }, []);
-  const [filter, setFilter] = useState<Category | "all">(initialFilter ?? "all");
-  // A later arrival with a different category (the sheet's regions pointer,
-  // tapped while this tab is still mounted) re-selects it.
+  const [filter, setFilter] = useState<Category | "all">(
+    initialFilter?.category ?? "all",
+  );
+  // A later arrival re-selects, even for the same category — this tab stays
+  // mounted, so the pointer has to work every time it is followed.
   useEffect(() => {
-    if (initialFilter) setFilter(initialFilter);
-  }, [initialFilter]);
+    if (initialFilter) setFilter(initialFilter.category);
+  }, [initialFilter?.nonce, initialFilter]);
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   // The per-item sheet has two faces: its action list, and the rename form the
   // "Rename" action swaps in. ONE sheet, not two — a second Modal opening while

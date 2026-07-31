@@ -375,6 +375,24 @@ absolutely positioned at the same offset — otherwise the second message to
 appear lands on top of the first (the map's route badge and its offline notice
 did exactly this).
 
+**A pointer between screens carries a nonce.** "3 saved areas ›" hands Saved a
+category to select. Navigating there a second time with identical params changes
+nothing downstream, so the pointer silently stops working once the user has
+touched the filter themselves — the same failure the map's "show on map" nonce
+exists to prevent, one screen over.
+
+**A follow mode recentres on entry, not on the next sensor reading.** Position
+fixes arrive every few seconds and only after several metres of movement, so a
+"follow me" button that waits for one does nothing at all for a stationary user
+who has panned away. Tapping it moves the camera immediately from the last known
+fix; the watcher only keeps it there. And a camera write that repeats at sensor
+rate (the POV heading) must carry the position too, or it cancels every recentre
+the location watcher asks for.
+
+**Draw what the user can act on.** The location marker is an arrow (position and
+facing in one glyph) with no accuracy halo: the halo was a translucent disc the
+size of a suburb that changed no decision and hid the map under itself.
+
 **A choice that leads to a form parks the target and opens it from
 `onClosed`.** The map's press-and-hold sheet ("waypoint or canyon?") can't mount
 the canyon form directly — see the never-two-sheets rule above — so it stores the

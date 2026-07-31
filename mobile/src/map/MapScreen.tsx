@@ -72,6 +72,7 @@ import { BottomSheet } from "../ui/BottomSheet";
 import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
 import { Toast, type ToastMessage } from "../ui/Toast";
+import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { CanyonRoutesLayer, type CanyonRoutesStatus } from "./CanyonRoutesLayer";
 import { MapLayersSheet } from "./MapLayersSheet";
 import { CanyonEditSheet } from "../canyons/CanyonEditSheet";
@@ -371,8 +372,10 @@ export function MapScreen({
   const followModeRef = useRef(followMode);
   followModeRef.current = followMode;
   const [userCoord, setUserCoord] = useState<[number, number] | null>(null);
-  const [userAccuracyM, setUserAccuracyM] = useState<number | null>(null);
   const [userHeading, setUserHeading] = useState<number | null>(null);
+  // Latest fix, in a ref as well as in state: entering a follow mode has to
+  // recentre NOW, from the sensor callback's own value, not on the next render.
+  const latestFix = useRef<[number, number] | null>(null);
   const locationWatch = useRef<Location.LocationSubscription | null>(null);
   const headingWatch = useRef<Location.LocationSubscription | null>(null);
   // Running smoothed heading, kept in a ref as well as in state: the POV
@@ -760,6 +763,12 @@ export function MapScreen({
     });
   }, [setCameraStop]);
 
+  /** Put the latest fix back under the crosshair, at the zoom they are at. */
+  const recentre = useCallback(() => {
+    if (!latestFix.current) return;
+    setCameraStop({ centerCoordinate: latestFix.current, animationDuration: 600 });
+  }, [setCameraStop]);
+
   const handleLocateMe = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
     // Drive the dot from expo-location directly — MLRN's built-in
@@ -767,13 +776,19 @@ export function MapScreen({
     // need expo-location's watcher for Stage 7 track recording anyway.
     if (locationWatch.current) {
       // Cycle the follow mode; the last step stops the watchers.
+      // Every mode change also RECENTRES. Fixes only arrive every few seconds
+      // (and only after 5 m of movement), so without this the map stayed
+      // wherever the user had panned it until they walked somewhere — which
+      // reads as the follow button doing nothing at all.
       if (followModeRef.current === "off") {
         setFollowMode("follow");
+        recentre();
         return;
       }
       if (followModeRef.current === "follow") {
         setFollowMode("course-up");
         lastPovBearing.current = null;
+        recentre();
         return;
       }
       // Third tap drops follow but KEEPS the dot and its watchers: "don't
@@ -793,7 +808,7 @@ export function MapScreen({
         position.coords.latitude,
       ];
       setUserCoord(coord);
-      setUserAccuracyM(position.coords.accuracy ?? null);
+      latestFix.current = coord;
       const mode = followModeRef.current;
       if (fly && firstFix.current) {
         firstFix.current = false;
@@ -854,10 +869,14 @@ export function MapScreen({
       lastPovBearing.current = next;
       setCameraStop({
         heading: normalizeBearing(next),
+        // Carry the position too: this stop REPLACES whatever the last one was,
+        // and at ~20 writes a second it would otherwise cancel every recentre
+        // the location watcher asked for.
+        ...(latestFix.current ? { centerCoordinate: latestFix.current } : {}),
         animationDuration: HEADING_RENDER_MS,
       });
     });
-  }, [setCameraStop]);
+  }, [recentre, setCameraStop]);
 
   const handleStartRecording = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
@@ -1210,9 +1229,10 @@ export function MapScreen({
           />
         </ShapeSource>
 
-        {/* Own blue-dot location marker (expo-location watcher; accuracy
-            halo scales with the reported radius). Unpinned ⇒ renders above
-            everything, like the canyon layers. */}
+        {/* Own location marker (expo-location watcher). Unpinned ⇒ renders
+            above everything, like the canyon layers. No accuracy halo: it was a
+            translucent disc the size of a suburb that told the user nothing
+            actionable and hid the map under itself. */}
         {userCoord ? (
           <ShapeSource
             id="user-location"
@@ -1222,14 +1242,6 @@ export function MapScreen({
               properties: {},
             }}
           >
-            <CircleLayer
-              id="user-location-halo"
-              style={{
-                circleRadius: Math.min(40, Math.max(14, (userAccuracyM ?? 30) / 3)),
-                circleColor: "#4285F4",
-                circleOpacity: 0.2,
-              }}
-            />
             {userHeading != null ? (
               // Direction beam under the arrow. Map-aligned, so it points at
               // real-world bearings even when the map itself is rotated.
@@ -1450,6 +1462,10 @@ export function MapScreen({
             ? attributionText
             : "No attribution reported for the active basemap."}
         </Text>
+        {/* The layer picker ships a sample tile of every basemap, including the
+            ones that aren't currently drawn — their licences permit that with
+            credit, so the credit lives here rather than nowhere. */}
+        <Text style={styles.attributionText}>{BASEMAP_THUMB_CREDIT}</Text>
       </BottomSheet>
 
       {/* Press-and-hold: a waypoint is a scratch mark, a canyon is a record.
