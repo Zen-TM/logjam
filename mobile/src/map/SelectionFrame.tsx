@@ -29,11 +29,27 @@ export function SelectionFrame({
   size: { width: number; height: number };
   onChange: (next: FrameInsets) => void;
 }) {
+  // Destructured: `size` is a fresh object on some renders, and the memo below
+  // must not rebuild for that.
+  const { width, height } = size;
   // The insets at the moment the finger went down. Deltas are measured from
   // there, so a slow drag can't accumulate rounding drift.
   const dragStart = useRef<FrameInsets>(insets);
   const latest = useRef<FrameInsets>(insets);
   latest.current = insets;
+
+  // `onChange` goes through a ref, and the responders are memoised on the
+  // SIZE alone.
+  //
+  // This is load-bearing. Rebuilding a PanResponder swaps the handler props on
+  // the handle View, which detaches the native gesture mid-drag — the finger
+  // keeps moving and the frame snaps back to its last committed value. Every
+  // move calls `onChange`, so if the responders depended on that callback's
+  // IDENTITY, a parent passing an inline arrow (`(next) => setFrame(...)`)
+  // would rebuild them on every single frame of the gesture and the handles
+  // would be impossible to drag. Which is exactly what happened.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const responders = useMemo(() => {
     const make = (edge: FrameEdge, axis: "x" | "y") =>
@@ -44,12 +60,12 @@ export function SelectionFrame({
           dragStart.current = latest.current;
         },
         onPanResponderMove: (_event, gesture) => {
-          onChange(
+          onChangeRef.current(
             moveFrameEdge(
               dragStart.current,
               edge,
               axis === "x" ? gesture.dx : gesture.dy,
-              size,
+              { width, height },
             ),
           );
         },
@@ -60,10 +76,10 @@ export function SelectionFrame({
       left: make("left", "x"),
       right: make("right", "x"),
     };
-  }, [onChange, size]);
+  }, [width, height]);
 
-  const frameWidth = Math.max(0, size.width - insets.left - insets.right);
-  const frameHeight = Math.max(0, size.height - insets.top - insets.bottom);
+  const frameWidth = Math.max(0, width - insets.left - insets.right);
+  const frameHeight = Math.max(0, height - insets.top - insets.bottom);
   const centreX = insets.left + frameWidth / 2;
   const centreY = insets.top + frameHeight / 2;
 
@@ -120,7 +136,7 @@ export function SelectionFrame({
           styles.handleH,
           {
             left: centreX - HANDLE_LENGTH / 2,
-            top: size.height - insets.bottom - HANDLE_TOUCH / 2,
+            top: height - insets.bottom - HANDLE_TOUCH / 2,
           },
         ]}
       >
@@ -145,7 +161,7 @@ export function SelectionFrame({
           styles.handleV,
           {
             top: centreY - HANDLE_LENGTH / 2,
-            left: size.width - insets.right - HANDLE_TOUCH / 2,
+            left: width - insets.right - HANDLE_TOUCH / 2,
           },
         ]}
       >

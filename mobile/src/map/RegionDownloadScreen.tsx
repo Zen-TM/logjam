@@ -136,6 +136,12 @@ function regionLabelFor(basemapId: string): string {
 
 /** How far the map runs up behind the hero — one corner radius. */
 const HERO_OVERLAP = 16;
+/**
+ * Lowest the top edge may go. The overlap plus half a handle: clamping to the
+ * overlap alone leaves the handle's upper half behind the hero, which is still
+ * a handle you have to aim under.
+ */
+const MIN_TOP_INSET = HERO_OVERLAP + 22;
 
 function formatMinutes(seconds: number): string {
   if (seconds < 90) return "under a minute";
@@ -198,6 +204,14 @@ export function RegionDownloadScreen({
     NetInfo.fetch()
       .then((state) => setOnCellular(state.type === "cellular"))
       .catch(console.error);
+  }, []);
+
+  // Stable identity: the frame's gesture handlers are rebuilt whenever this
+  // changes, and rebuilding one mid-drag kills the drag (see SelectionFrame).
+  const handleFrameChange = useCallback((next: FrameInsets) => {
+    // Never let the top edge slide up behind the hero, which overlaps the map
+    // — a handle under it can't be grabbed again.
+    setFrame({ ...next, top: Math.max(MIN_TOP_INSET, next.top) });
   }, []);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
@@ -378,13 +392,7 @@ export function RegionDownloadScreen({
           )}
         </MapView>
         {frame && size.width > 0 ? (
-          <SelectionFrame
-            insets={frame}
-            size={size}
-            onChange={(next) =>
-              setFrame({ ...next, top: Math.max(HERO_OVERLAP, next.top) })
-            }
-          />
+          <SelectionFrame insets={frame} size={size} onChange={handleFrameChange} />
         ) : null}
         <View style={styles.mapHint} pointerEvents="none">
           <Text style={styles.mapHintText}>
