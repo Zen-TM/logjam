@@ -14,28 +14,7 @@ Logjam = **private** mapping/logbook app for canyoning NSW. **Not** publication 
 - No share/export defaults broadening visibility — sharing explicit, per-canyon, between auth'd users.
 - Logs/errors must not contain canyon coords or names in plain text.
 
-## Repo layout
-
-```
-api/       Express 5 + Prisma + TS — see api/CLAUDE.md
-frontend/  React 19 + Vite + MapLibre + MUI — see frontend/CLAUDE.md
-shared/    Cross-package types/utils (geoPdfExtent, geoPdfConfig, themeSchemes, topoSettings — canonical TOPO_LAYERS; api/frontend re-export, topo mirrors with sync comment)
-topo/      Python/GDAL/PDAL MBTiles pipeline — see topo/CLAUDE.md
-scripts/   One-off shell scripts (seed, snapshot)
-```
-
 **Shared rebuild rule:** after editing `shared/`, run `cd shared && npm run build` (or `make shared`) before `api`/`frontend` pick up changes. Both depend via `file:../shared` and import from `shared/dist/`. `make dev` and `make reset` invoke `make shared` automatically; manual rebuild is only needed when editing `shared/` while app dev servers are already running.
-
-## Commands
-
-| Pkg | Dev | Build | Test |
-|---|---|---|---|
-| frontend | `npm run dev` | `npm run build` (tsc + vite) | — (lint: `npm run lint`) |
-| api | `npm run dev` (nodemon:8080) | `npm run build` | `npm test` (integration, needs `make dev`) |
-| shared | — | `npm run build` | `npm test` (vitest) |
-| root | `make dev` / `make reset` | — | — |
-
-Prisma: `npx prisma generate` after schema change · `npx prisma migrate dev` for dev migration.
 
 ## Environments — never confuse
 
@@ -51,37 +30,7 @@ Prisma: `npx prisma generate` after schema change · `npx prisma migrate dev` fo
 
 ## AWS architecture
 
-- **IaC = Terraform** (`infra/terraform/`, see its README). Single source of truth for prod AWS; the `envs/local` root reuses the same `storage` module for MiniStack S3 and adds `ecs.tf` (cluster + worker task defs) so MiniStack RunTask launches workers locally. All resources below were imported, not recreated. Prod root `envs/prod` (S3 backend); `terraform output` gives canonical values. RDS/Cognito/CloudFront/EB carry `prevent_destroy`. CI still owns deploys (EB env ignores `setting`; task defs ride `:latest`). Infra PRs get `fmt`/`validate` (`terraform-ci.yml`) plus a read-only prod `terraform plan` posted as a PR comment (`terraform-plan.yml` — CI role is ReadOnlyAccess with a privacy Deny on user-data object reads/secret values); `terraform apply` stays manual, operator-gated.
-- **VPC-bound:** data-plane access needs SSM Session Manager, not SSH.
-- **Elastic Beanstalk** runs API (single Docker container via `api/Dockerrun.aws.json`; image from ECR `logjam-api`).
-- **ECS Fargate** runs the on-demand workers — three task defs: `logjam-topo-worker` and `logjam-topo-export-worker` (one Python image with a command override, see `topo/Dockerfile`), plus `logjam-geo-pdf-worker` (the `logjam-api` Node image with command override `node dist/worker/geoPdfWorker.js`; defined by `aws_ecs_task_definition.geo_pdf_worker` in `infra/terraform/envs/prod/ecs.tf`). Launched on-demand by API via the shared `api/src/lib/ecsRunTask.ts` helper (`RunTaskCommand` + placement-failure check) with a job-ID env var (`JOB_ID` / `EXPORT_JOB_ID` / `GEO_PDF_JOB_ID`). Lifecycle owned by ECS; retry semantics owned by the `TopoJob`/`TopoExportJob`/`GeoPdfJob` status columns (no SQS). Stuck jobs/exports are swept by the in-API reaper (`api/src/lib/topoJobReaper.ts`); the API stops orphaned Fargate tasks via StopTask using the persisted task ARN.
-- **S3:** two buckets — `logjam-media` (photos/media) and `logjam-topo-jobs` (LiDAR ZIPs + MBTiles/PMTiles output). Presigned URLs for client upload/download. `logjam-topo-jobs` has a 7-day lifecycle rule on `exports/` (backstop; the reaper's expiry sweep is authoritative). `logjam-media` deliberately has no lifecycle rules — orphaned unconfirmed uploads are swept by the in-API reaper (`api/src/lib/mediaOrphanSweeper.ts`), which never deletes objects backed by a confirmed `Media` row.
-- **CloudFront:** two distributions — `web` (E22J79PHZM2K: `logjamnsw.com`, multi-origin serving the frontend SPA bucket + topo tiles from `logjam-topo-jobs` under `/master/*`; this is `TOPO_CDN_BASE_URL=https://logjamnsw.com`) and `api` (E29GLTTDM6CXX4: `api.logjamnsw.com`, fronts the EB API).
-- **Resend** for transactional email on job/export/GeoPDF completion (replaced AWS SES, whose production access was denied). API key in Secrets Manager (`logjam/resend-api-key`), injected into the three worker task defs as `RESEND_API_KEY`; sender `EMAIL_FROM=noreply@notifications.logjamnsw.com`. Node side: `api/src/services/email.ts` (`sendEmail`); Python workers: `topo/email_send.py`. Sends are best-effort (no-op if key unset); the in-app `Notification` row is the source of truth.
-- **Cognito** user pool; API verifies JWT via JWKS.
-- **ECR** image registry (`logjam-api`, `logjam-topo-worker`).
-
-### AWS one-liners (always `--profile logjam --region ap-southeast-2`)
-
-```bash
-# Logs
-aws logs tail /ecs/<service> --follow --profile logjam
-
-# ECS task state
-aws ecs describe-tasks --cluster <cluster> --tasks <task-arn> --profile logjam
-aws ecs list-tasks --cluster <cluster> --profile logjam
-
-# SSM into a running task
-aws ecs execute-command --cluster <cluster> --task <task-arn> \
-  --container <name> --interactive --command "/bin/sh" --profile logjam
-
-# S3 listing
-aws s3 ls s3://<bucket>/ --profile logjam
-```
-
-## Data model
-
-Core Prisma entities: `User` (Cognito-linked) · `Canyon` · `TripLog` · `Media` (S3) · `Friendship` · `CanyonShare` · `TopoJob` · `TopoExportJob` · `Notification` · `GeoPdfTemplate`. Schema: `api/prisma/schema.prisma`.
+Prod runs on Elastic Beanstalk (API) + ECS Fargate (workers) + S3 + CloudFront + Cognito, IaC'd in `infra/terraform/`. All AWS CLI calls use `--profile logjam --region ap-southeast-2`. Full topology, task-def/bucket/distribution details, and CLI one-liners: the **aws-architecture** skill.
 
 ## Conventions (self-updating)
 
@@ -99,7 +48,7 @@ Additive only. Never silently delete existing conventions — flag stale entries
 
 ## Testing
 
-CI (`.github/workflows/ci.yml`) runs the unit suites + lint + typecheck for all four packages on every PR and push to `main` — a red PR doesn't merge. Integration suites (`api` `npm test`, topo Docker runbooks) are NOT in CI; run them locally before committing changes they cover.
+Integration suites (`api` `npm test`, topo Docker runbooks) are **NOT** in CI — run them locally before committing changes they cover. Everything else (unit suites, lint, typecheck) gates PRs via `.github/workflows/ci.yml`.
 
 ### How to run
 
@@ -121,17 +70,12 @@ Two kinds of `api` test, kept separate: `*.unit.test.ts` (colocated with source,
 
 ### What to test when adding code
 
-Write pure unit tests for the logic, not the plumbing. Prioritise:
-- **Privacy/security boundaries** (mandatory — see privacy rules above): share-visibility filters, email-omission, log redaction (`api/src/lib/logger.ts`), error-detail whitelist (`api/src/middleware/errorHandler.ts`), auth fail-closed guards. A new endpoint touching shared canyons or user data deserves a test that the boundary holds.
-- **Pure transforms & parsers:** anything that maps/validates/parses input → output with branches (CSV import chain, RopeWiki parsers, coordinate/extent math, quota arithmetic, config validators). Highest value, cheapest to test.
-- **State machines / lifecycle:** job status transitions, reaper cutoffs, dedupe tier assignment.
-
-Don't unit-test: thin Prisma/AWS pass-through route handlers (covered by integration tests), MapLibre/MUI rendering, GDAL/PDAL subprocess orchestration. When logic is tangled with Prisma/AWS/MapLibre, extract the pure part and test that. Mock Prisma via `vi.mock("../services/prisma")`, AWS via the `@aws-sdk/*` module; never hit a real service in a unit test.
+- **Privacy/security boundaries are mandatory** (see privacy rules above): share-visibility filters, email-omission, log redaction (`api/src/lib/logger.ts`), error-detail whitelist (`api/src/middleware/errorHandler.ts`), auth fail-closed guards. A new endpoint touching shared canyons or user data deserves a test that the boundary holds.
+- **Don't unit-test:** thin Prisma/AWS pass-through route handlers (covered by integration tests), MapLibre/MUI rendering, GDAL/PDAL subprocess orchestration. When logic is tangled with Prisma/AWS/MapLibre, extract the pure part and test that.
+- Mock Prisma via `vi.mock("../services/prisma")`, AWS via the `@aws-sdk/*` module; never hit a real service in a unit test.
 
 ## README updates
 
 Touch `README.md` only when user-facing setup changes (commands, env vars, install steps). Skip internal refactors. Per-subdir READMEs (`topo/README.md`) follow same rule.
 
-## Working style
-
-Project-specific rules only; general engineering practices live in `~/.claude/CLAUDE.md`. When in doubt on Logjam-specific convention, ask before writing code.
+When in doubt on a Logjam-specific convention, ask before writing code.

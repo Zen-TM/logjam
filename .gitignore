@@ -1,4 +1,9 @@
-.claude
+# Personal scratch data — datasets, screenshots, plans, one-off exports
+/private/
+
+# Claude Code: skills + project settings are checked in; local overrides aren't
+.claude/settings.local.json
+
 .playwright-mcp/
 repomix-output.xml
 
@@ -30,3 +35,8 @@ dist/
 snapshots/*.sql
 localstack-data/
 postgres-data/
+
+# Personal, un-committed dev setup (syncthing repo mirror, local CLAUDE.md overrides)
+CLAUDE.local.md
+.stfolder/
+.stignore

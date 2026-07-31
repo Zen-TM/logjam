@@ -1,8 +1,23 @@
 import type { TopoLayerName } from "./topoSettings.js";
 
+// Data from NSW Spatial Services' web services is licensed CC BY, subject to one
+// extra term in their Terms and Conditions (cl. 3.1.1): they assert the right to
+// be attributed as "©Department of Customer Service [date of extraction]". The
+// standing credit string can't carry that — the date is only known when the
+// tiles are actually fetched — so layers set `requiresExtractionDate` and the
+// renderer appends the dated line at draw time.
+// Terms: https://www.spatial.nsw.gov.au/products_and_services/web_services/terms_and_conditions
+// Licensing research + per-layer sources: .claude/offline-basemap-licensing.md
+export const SIX_EXTRACTION_CREDIT_PREFIX = "© Department of Customer Service";
+
 export const GEOPDF_BASE_LAYER_CONFIG: Record<
   string,
-  { urlTemplate: string; maxNativeZoom: number; attribution: string }
+  {
+    urlTemplate: string;
+    maxNativeZoom: number;
+    attribution: string;
+    requiresExtractionDate?: boolean;
+  }
 > = {
   "six-topo": {
     urlTemplate:
@@ -10,6 +25,7 @@ export const GEOPDF_BASE_LAYER_CONFIG: Record<
     maxNativeZoom: 16,
     attribution:
       "Base map © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.",
+    requiresExtractionDate: true,
   },
   "six-imagery": {
     urlTemplate:
@@ -17,6 +33,7 @@ export const GEOPDF_BASE_LAYER_CONFIG: Record<
     maxNativeZoom: 20,
     attribution:
       "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.",
+    requiresExtractionDate: true,
   },
   osm: {
     urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -37,6 +54,23 @@ export const GEOPDF_BASE_LAYER_CONFIG: Record<
       "Base map © CyclOSM, © OpenStreetMap contributors",
   },
 };
+
+/**
+ * The dated credit line NSW Spatial Services requires alongside the standing
+ * base-map credit, or null for layers that don't come from their web services.
+ *
+ * `extractedAt` is when the tiles were actually fetched, not when the PDF was
+ * assembled — the two straddle midnight often enough to matter for a date that
+ * exists to say when this copy of the data was taken. Formatted ISO (UTC) so
+ * the date is unambiguous to a reader in any timezone.
+ */
+export function extractionCreditLine(
+  baseLayer: string,
+  extractedAt: Date,
+): string | null {
+  if (!GEOPDF_BASE_LAYER_CONFIG[baseLayer]?.requiresExtractionDate) return null;
+  return `${SIX_EXTRACTION_CREDIT_PREFIX} ${extractedAt.toISOString().slice(0, 10)}`;
+}
 
 // ── Overlay attribution ───────────────────────────────────────────────────────
 // Logjam's topo overlays derive from open-data sources, each requiring its own

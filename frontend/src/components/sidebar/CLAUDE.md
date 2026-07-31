@@ -4,22 +4,13 @@
 
 **NavRail** (56px fixed icon bar) + **SidebarPanel** (280px flyout to its right). No router — panel navigation is state-driven via `activePanel: PanelId | null`.
 
-## NavRail (`NavRail.tsx` + `NavRail.module.css`)
+## NavRail / SidebarPanel
 
-- Icons: lucide-react at `size={20}`
-- Labels: `9px` font, `line-height: 1`
-- Default icon opacity: `0.6`; hover/active: `1`
-- Active item background: `color-mix(in srgb, var(--theme-secondary) 80%, transparent)`
-- Groups: top = feature panels; bottom = notifications, account, settings
+Exact sizing, spacing, opacity and animation values live in `NavRail.module.css` and `SidebarPanel.module.css` — read them rather than duplicating here. Fixed points:
 
-## SidebarPanel (`SidebarPanel.tsx` + `SidebarPanel.module.css`)
-
-- Header: `padding: 12px 16px`, `border-bottom: 1px solid var(--theme-secondary)`
-  - Title: `var(--text-base)`, truncated with ellipsis
-  - Close button: lucide-react `<X size={18} />`
-- Body: `padding: 12px 16px`, `flex: 1`, `overflow-y: auto`
-- Entry animation: `slideIn` (`translateX(-100%)` → 0) at `var(--transition-med)` ease-out
-- Shadow: `var(--shadow-panel)` on the right edge
+- NavRail icons are lucide-react at `size={20}`; groups are top = feature panels, bottom = notifications/account/settings.
+- SidebarPanel close button is lucide-react `<X size={18} />`.
+- Panel body owns the scroll (`overflow-y: auto`, `flex: 1`) — never nest another scroll container inside it.
 
 ## Toggle behaviour
 
