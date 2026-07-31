@@ -94,6 +94,15 @@ plan against the tiles present, and unfinished downloads are discovered by readi
 the region directory (`listUnfinishedRegions`), not from a progress table. The
 `region_download` table in `registryDb.ts` is from the original plan and is unused.
 
+**The offline map is drawn to its own edges.** With "Offline maps only" on (or no
+signal), `src/map/offlineMask.ts` fills everywhere outside the downloaded regions
+with the page colour, mounted directly above the basemap band. Two things are load-
+bearing there: the mask is a MultiPolygon of the COMPLEMENT as disjoint rectangles
+(a world polygon with a hole per region breaks the moment two saved areas overlap),
+and its `layerIndex` is `1 + basemapLayerCount` — an offline basemap mounts one
+raster layer *per region*, all asking for index 1, so assuming a single basemap
+layer buries the mask under one of them and it renders half the screen.
+
 **Size estimates are measured, not guessed.** `shared/src/mapRegionEstimate.ts`
 holds per-source, per-zoom tile sizes calibrated by
 `shared/scripts/calibrate-basemap-tile-sizes.mjs` (bush AND town samples — a

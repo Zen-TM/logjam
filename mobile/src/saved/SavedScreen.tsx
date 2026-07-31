@@ -66,17 +66,14 @@ import {
 } from "../ui";
 import {
   GEOPDF_ERRORS,
-  deleteGeoPdfImport,
   importGeoPdfFromPicker,
   importGeoPdfFromUrl,
   resumeGeoPdfImport,
   type GeoPdfCancelToken,
   type GeoPdfProgress,
 } from "../geopdf/importPipeline";
-import { updateGeoPdfImport } from "../geopdf/geoPdfImportsDb";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
-import { renameVectorImport } from "../imports/importsDb";
-import { deleteVectorImport, importVectorFileFromPicker } from "../imports/vectorImports";
+import { importVectorFileFromPicker } from "../imports/vectorImports";
 import { useVectorImports } from "../imports/useVectorImports";
 import { useConnectivity } from "../map/connectivity";
 import { mergeSavedOverlayJobs, type CompletedOverlaysResponse } from "../map/topoOverlays";
@@ -84,8 +81,11 @@ import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import { deleteDownloadedArtifact } from "../offline/regionDownloads";
 import { renameArtifact } from "../offline/registryDb";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
-import { deleteTrack, listTrackPoints, updateTrack } from "../tracks/tracksDb";
-import { bboxOfPoints } from "./bboxOfPoints";
+import {
+  geoPdfActions,
+  trackActions,
+  vectorImportActions,
+} from "./assetActions";
 import { useTracks } from "../tracks/useTracks";
 import type { Bbox } from "./bboxOfPoints";
 
@@ -140,9 +140,16 @@ type SavedItem = {
 export function SavedScreen({
   onOpenMap,
   onDownloadRegion,
+  initialFilter,
 }: {
   onOpenMap: (bbox?: Bbox) => void;
   onDownloadRegion: () => void;
+  /**
+   * Land on one category rather than "All". The map's layer sheet points at
+   * this screen for region management ("3 saved areas ›"), and dropping the
+   * user in an everything-list to find them again is a dead-ended handoff.
+   */
+  initialFilter?: Category;
 }) {
   const connectivity = useConnectivity();
   const online = connectivity === "online";
@@ -168,7 +175,12 @@ export function SavedScreen({
   const refreshFreeSpace = useCallback(() => {
     FileSystem.getFreeDiskStorageAsync().then(setFreeBytes).catch(console.error);
   }, []);
-  const [filter, setFilter] = useState<Category | "all">("all");
+  const [filter, setFilter] = useState<Category | "all">(initialFilter ?? "all");
+  // A later arrival with a different category (the sheet's regions pointer,
+  // tapped while this tab is still mounted) re-selects it.
+  useEffect(() => {
+    if (initialFilter) setFilter(initialFilter);
+  }, [initialFilter]);
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   // The per-item sheet has two faces: its action list, and the rename form the
   // "Rename" action swaps in. ONE sheet, not two — a second Modal opening while
@@ -533,14 +545,7 @@ export function SavedScreen({
               },
             }
           : {}),
-        locatable: geoPdf.bbox != null,
-        resolveBbox: async () => geoPdf.bbox,
-        rename: (name) => updateGeoPdfImport(geoPdf.id, { label: name }),
-        delete: {
-          confirmTitle: "Delete this GeoPDF?",
-          confirmBody: "The imported map and its tiles are removed from the device.",
-          run: () => deleteGeoPdfImport(geoPdf.id),
-        },
+        ...geoPdfActions(geoPdf),
       });
     }
 
@@ -551,14 +556,7 @@ export function SavedScreen({
         title: imported.name,
         subtitle: `${imported.featureCount} feature${imported.featureCount === 1 ? "" : "s"} · imported ${formatDay(imported.createdAt)}`,
         sizeBytes: imported.sizeBytes,
-        locatable: true,
-        resolveBbox: async () => imported.bbox,
-        rename: (name) => renameVectorImport(imported.id, name),
-        delete: {
-          confirmTitle: "Delete this import?",
-          confirmBody: "The imported features are removed from the device and the map.",
-          run: () => deleteVectorImport(imported.id),
-        },
+        ...vectorImportActions(imported),
       });
     }
 
@@ -571,15 +569,7 @@ export function SavedScreen({
         // Tracks are DB rows, not files — they carry no meaningful on-disk
         // size, so they stay out of the capacity meter.
         sizeBytes: 0,
-        locatable: track.pointCount > 0,
-        // A track's extent isn't stored; derive it from its points on demand.
-        resolveBbox: async () => bboxOfPoints(await listTrackPoints(track.id)),
-        rename: (name) => updateTrack(track.id, { name }),
-        delete: {
-          confirmTitle: "Delete track?",
-          confirmBody: "The recorded points are deleted. This can't be undone.",
-          run: () => deleteTrack(track.id),
-        },
+        ...trackActions(track),
       });
     }
 

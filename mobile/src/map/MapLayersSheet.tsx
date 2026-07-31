@@ -13,25 +13,41 @@
 // Tabs rather than a second sheet, per DESIGN.md §6: one sheet, content swapped
 // in place. The rail is pinned, so switching tabs never scrolls the list you are
 // working in out of reach (§2).
-import { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+//
+// The Layers tab is one row PER KIND, not per file: a phone with thirty tracks
+// and a dozen GeoPDFs made that tab a scroll of near-identical switches with no
+// way to turn a whole kind off. Each kind carries its own master switch and
+// opens to reveal its items — and an item's overflow gives the same three verbs
+// Saved does (`assetActions.ts`), so the map is not a dead end for the layer you
+// are looking at.
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, StyleSheet, Text, TextInput, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { BASEMAP_CATALOG, formatDistanceM } from "@logjam/shared";
+import { BASEMAP_CATALOG, formatDistanceM, messageFromError } from "@logjam/shared";
 
 import { assetHue, fontSize, fontWeight, spacing, theme, withAlpha } from "../theme";
 import {
   BottomSheet,
+  Button,
   IconButton,
   Row,
   SectionHeader,
   SegmentedControl,
   StatusPill,
+  TextField,
   Toggle,
 } from "../ui";
 import { RESIDUAL_WARN_FRACTION } from "../geopdf/importPipeline";
 import type { GeoPdfImport } from "../geopdf/geoPdfImportsDb";
 import type { VectorImport } from "../imports/importsDb";
 import type { Track } from "../tracks/tracksDb";
+import {
+  geoPdfActions,
+  trackActions,
+  vectorImportActions,
+  type AssetActions,
+} from "../saved/assetActions";
+import type { Bbox } from "../saved/bboxOfPoints";
 import {
   listUnfinishedRegions,
   deleteRegionFile,
@@ -41,7 +57,9 @@ import {
   enqueueRegionDownloads,
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
+import { BasemapThumb } from "./BasemapThumb";
 import { BASEMAP_META } from "./basemapMeta";
+import type { CanyonRoutesStatus } from "./CanyonRoutesLayer";
 import type { Connectivity } from "./connectivity";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
@@ -55,6 +73,9 @@ export type OverlayEntry = {
   key: string;
   label: string;
 };
+
+/** An item's overflow sheet: which asset, and how far into it we are. */
+type ItemMenu = { title: string; actions: AssetActions };
 
 export function MapLayersSheet({
   visible,
@@ -74,10 +95,12 @@ export function MapLayersSheet({
   onTrackVisibility,
   showCanyonRoutes,
   onShowCanyonRoutesChange,
+  routesStatus,
   canyonRouteHue,
   offlineOnly,
   onOfflineOnlyChange,
   onSaveArea,
+  onShowOnMap,
   onOpenSaved,
 }: {
   visible: boolean;
@@ -97,14 +120,19 @@ export function MapLayersSheet({
   onTrackVisibility: (id: string, visible: boolean) => void;
   showCanyonRoutes: boolean;
   onShowCanyonRoutesChange: (next: boolean) => void;
+  /** What the routes layer actually managed to draw, reported on its own row. */
+  routesStatus: CanyonRoutesStatus | null;
   /** The colour the routes are actually drawn in, so the row matches the map. */
   canyonRouteHue: string;
   offlineOnly: boolean;
   onOfflineOnlyChange: (next: boolean) => void;
   onSaveArea: () => void;
-  onOpenSaved: () => void;
+  /** Fly the map to an asset's extent (and close the sheet). */
+  onShowOnMap: (bbox: Bbox) => void;
+  onOpenSaved: (category: "region") => void;
 }) {
   const [tab, setTab] = useState<Tab>("basemap");
+  const [menu, setMenu] = useState<ItemMenu | null>(null);
   const online = connectivity === "online";
   const readyGeoPdfs = geoPdfImports.filter((entry) => entry.state === "ready");
   const savedTracks = tracks.filter((track) => track.state === "done");
@@ -116,8 +144,32 @@ export function MapLayersSheet({
     savedTracks.filter((track) => track.visible).length +
     (showCanyonRoutes ? 1 : 0);
 
+  // The sheet closing for any reason drops an open overflow: coming back to a
+  // rename form for a layer you have since navigated away from is a stale
+  // prompt, not a resumed task.
+  useEffect(() => {
+    if (!visible) setMenu(null);
+  }, [visible]);
+
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Map layers">
+    <BottomSheet
+      visible={visible}
+      // A sub-mode backs out to its parent, not out of the sheet (DESIGN.md §6).
+      onClose={menu ? () => setMenu(null) : onClose}
+      title={menu ? menu.title : "Map layers"}
+      overlay={
+        menu ? (
+          <ItemMenuPanel
+            menu={menu}
+            onDone={() => setMenu(null)}
+            onShowOnMap={(bbox) => {
+              setMenu(null);
+              onShowOnMap(bbox);
+            }}
+          />
+        ) : undefined
+      }
+    >
       <View style={styles.rail}>
         <SegmentedControl
           options={[
@@ -134,7 +186,6 @@ export function MapLayersSheet({
         <BasemapTab
           basemapId={basemapId}
           onBasemapChange={onBasemapChange}
-          artifacts={artifacts}
           online={online}
         />
       ) : null}
@@ -144,7 +195,6 @@ export function MapLayersSheet({
           overlays={overlays}
           enabledOverlays={enabledOverlays}
           onToggleOverlay={onToggleOverlay}
-          artifacts={artifacts}
           geoPdfImports={readyGeoPdfs}
           onGeoPdfChange={onGeoPdfChange}
           imports={imports}
@@ -153,7 +203,9 @@ export function MapLayersSheet({
           onTrackVisibility={onTrackVisibility}
           showCanyonRoutes={showCanyonRoutes}
           onShowCanyonRoutesChange={onShowCanyonRoutesChange}
+          routesStatus={routesStatus}
           canyonRouteHue={canyonRouteHue}
+          onOpenMenu={setMenu}
         />
       ) : null}
 
@@ -175,12 +227,10 @@ export function MapLayersSheet({
 function BasemapTab({
   basemapId,
   onBasemapChange,
-  artifacts,
   online,
 }: {
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
-  artifacts: MapArtifact[];
   online: boolean;
 }) {
   // Offline-capable sources first. The catalog's own order leads with the three
@@ -195,11 +245,6 @@ function BasemapTab({
     <View style={styles.body}>
       {ordered.map((entry) => {
         const id = entry.id as BasemapId;
-        const meta = BASEMAP_META[id];
-        const saved = artifacts.some(
-          (artifact) =>
-            artifact.kind === "basemap-region" && artifact.logicalKey === entry.id,
-        );
         // Online-only sources are unavailable offline BY POLICY (their tile
         // usage terms), which is a different thing from "not downloaded" — the
         // subtitle says which.
@@ -208,19 +253,20 @@ function BasemapTab({
         return (
           <Row
             key={entry.id}
-            icon={meta.icon}
-            hue={assetHue.region}
+            leading={<BasemapThumb basemapId={id} />}
             title={entry.name}
-            subtitle={unavailable ? "Needs a connection" : meta.blurb}
+            subtitle={unavailable ? "Needs a connection" : BASEMAP_META[id].blurb}
+            subtitleNumberOfLines={2}
             disabled={unavailable}
             onPress={() => onBasemapChange(id)}
+            // No "Showing" pill: the selection is a state of the row, not a
+            // label on it. A filled check on an accent-lit card says it at a
+            // glance, and a downloaded-region pill used to say "Offline" for a
+            // basemap of which one small area is on the phone.
             right={
-              <View style={styles.trailing}>
-                {saved ? <StatusPill label="Offline" tone="accent" icon="check" /> : null}
-                {active ? (
-                  <StatusPill label="Showing" tone="outline" />
-                ) : null}
-              </View>
+              active ? (
+                <Feather name="check-circle" size={22} color={theme.accent} />
+              ) : null
             }
             style={active ? styles.activeRow : undefined}
           />
@@ -230,11 +276,67 @@ function BasemapTab({
   );
 }
 
+/**
+ * One kind of layer: a master switch over the whole kind, and its items behind
+ * a disclosure. Collapsed it is one row however many files are underneath it.
+ */
+function LayerGroup({
+  icon,
+  hue,
+  title,
+  subtitle,
+  visibleCount,
+  totalCount,
+  onSetAll,
+  children,
+}: {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  hue: string;
+  title: string;
+  subtitle: string;
+  visibleCount: number;
+  totalCount: number;
+  onSetAll: (next: boolean) => void;
+  children?: React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const expandable = totalCount > 0 && children != null;
+  return (
+    <View style={styles.group}>
+      <Row
+        icon={icon}
+        hue={hue}
+        title={title}
+        subtitle={subtitle}
+        subtitleNumberOfLines={2}
+        onPress={expandable ? () => setExpanded((current) => !current) : undefined}
+        accessibilityLabel={`${title} — ${expanded ? "hide" : "show"} the list`}
+        right={
+          <View style={styles.trailing}>
+            <Toggle
+              value={visibleCount > 0}
+              onValueChange={onSetAll}
+              accessibilityLabel={`Show ${title}`}
+            />
+            {expandable ? (
+              <Feather
+                name={expanded ? "chevron-up" : "chevron-down"}
+                size={20}
+                color={theme.textMuted}
+              />
+            ) : null}
+          </View>
+        }
+      />
+      {expanded ? <View style={styles.groupItems}>{children}</View> : null}
+    </View>
+  );
+}
+
 function LayersTab({
   overlays,
   enabledOverlays,
   onToggleOverlay,
-  artifacts,
   geoPdfImports,
   onGeoPdfChange,
   imports,
@@ -243,12 +345,13 @@ function LayersTab({
   onTrackVisibility,
   showCanyonRoutes,
   onShowCanyonRoutesChange,
+  routesStatus,
   canyonRouteHue,
+  onOpenMenu,
 }: {
   overlays: OverlayEntry[];
   enabledOverlays: ReadonlySet<string>;
   onToggleOverlay: (key: string) => void;
-  artifacts: MapArtifact[];
   geoPdfImports: GeoPdfImport[];
   onGeoPdfChange: (id: string, patch: { visible?: boolean; opacity?: number }) => void;
   imports: VectorImport[];
@@ -257,76 +360,92 @@ function LayersTab({
   onTrackVisibility: (id: string, visible: boolean) => void;
   showCanyonRoutes: boolean;
   onShowCanyonRoutesChange: (next: boolean) => void;
+  routesStatus: CanyonRoutesStatus | null;
   canyonRouteHue: string;
+  onOpenMenu: (menu: ItemMenu) => void;
 }) {
+  const visibleGeoPdfs = geoPdfImports.filter((entry) => entry.visible);
+  // ONE opacity for every GeoPDF, not one rail per file. They are all the same
+  // kind of thing over the same basemap, and a stack of identical 5-step rails
+  // was most of the height of this tab.
+  const sharedOpacity = visibleGeoPdfs[0]?.opacity ?? 1;
+  const setAllOpacity = (next: number) => {
+    for (const geoPdf of geoPdfImports) onGeoPdfChange(geoPdf.id, { opacity: next });
+  };
+
   return (
     <View style={styles.body}>
-      <SectionHeader label="Canyons" />
       {/* Web parity: the web map can draw every canyon's route as a layer.
           Mobile only ever drew one at a time, transiently, from a canyon's own
-          screen. The mirror already holds the files, so this works offline. */}
-      <Row
+          screen. The mirror already holds the files, so this works offline.
+          Its partial-coverage report lives HERE rather than as a badge on the
+          map: this layer is one people leave on, and a permanent chip over the
+          map is a permanent tax on the thing the map is for. */}
+      <LayerGroup
         icon="git-commit"
         hue={canyonRouteHue}
         title="Canyon routes"
-        subtitle="Every route you have, drawn at once"
-        right={
-          <Toggle
-            value={showCanyonRoutes}
-            onValueChange={onShowCanyonRoutesChange}
-            accessibilityLabel="Show canyon routes"
-          />
+        subtitle={
+          showCanyonRoutes && routesStatus && routesStatus.unavailable > 0
+            ? `${routesStatus.drawn} drawn · ${routesStatus.unavailable} not downloaded yet`
+            : "Every route you have, drawn at once"
         }
+        visibleCount={showCanyonRoutes ? 1 : 0}
+        totalCount={1}
+        onSetAll={onShowCanyonRoutesChange}
       />
 
       {overlays.length > 0 ? (
-        <>
-          <SectionHeader label="Topo overlays" />
-          {overlays.map((overlay) => {
-            const saved = artifacts.some(
-              (artifact) =>
-                artifact.kind === "topo-overlay" &&
-                artifact.logicalKey === overlay.key,
-            );
-            return (
-              <Row
-                key={overlay.key}
-                icon="layers"
-                hue={assetHue.overlay}
-                title={overlay.label}
-                right={
-                  <View style={styles.trailing}>
-                    {saved ? <StatusPill label="Offline" tone="accent" /> : null}
-                    <Toggle
-                      value={enabledOverlays.has(overlay.key)}
-                      onValueChange={() => onToggleOverlay(overlay.key)}
-                      accessibilityLabel={`Show ${overlay.label}`}
-                    />
-                  </View>
-                }
-              />
-            );
-          })}
-        </>
+        <LayerGroup
+          icon="layers"
+          hue={assetHue.overlay}
+          title="Topo overlays"
+          subtitle={`${enabledOverlays.size} of ${overlays.length} shown`}
+          visibleCount={enabledOverlays.size}
+          totalCount={overlays.length}
+          onSetAll={(next) => {
+            for (const overlay of overlays) {
+              if (enabledOverlays.has(overlay.key) !== next) onToggleOverlay(overlay.key);
+            }
+          }}
+        >
+          {overlays.map((overlay) => (
+            <ItemRow
+              key={overlay.key}
+              hue={assetHue.overlay}
+              title={overlay.label}
+              visible={enabledOverlays.has(overlay.key)}
+              onVisibility={() => onToggleOverlay(overlay.key)}
+            />
+          ))}
+        </LayerGroup>
       ) : null}
 
       {geoPdfImports.length > 0 ? (
-        <>
-          <SectionHeader label="GeoPDF maps" />
+        <LayerGroup
+          icon="file-text"
+          hue={assetHue.geoPdf}
+          title="GeoPDF maps"
+          subtitle={`${visibleGeoPdfs.length} of ${geoPdfImports.length} shown`}
+          visibleCount={visibleGeoPdfs.length}
+          totalCount={geoPdfImports.length}
+          onSetAll={(next) => {
+            for (const geoPdf of geoPdfImports) {
+              onGeoPdfChange(geoPdf.id, { visible: next });
+            }
+          }}
+        >
           {geoPdfImports.map((geoPdf) => (
             <View key={geoPdf.id} style={styles.stack}>
-              <Row
-                icon="file-text"
+              <ItemRow
                 hue={assetHue.geoPdf}
                 title={geoPdf.label}
-                right={
-                  <Toggle
-                    value={geoPdf.visible}
-                    onValueChange={() =>
-                      onGeoPdfChange(geoPdf.id, { visible: !geoPdf.visible })
-                    }
-                    accessibilityLabel={`Show ${geoPdf.label}`}
-                  />
+                visible={geoPdf.visible}
+                onVisibility={() =>
+                  onGeoPdfChange(geoPdf.id, { visible: !geoPdf.visible })
+                }
+                onMenu={() =>
+                  onOpenMenu({ title: geoPdf.label, actions: geoPdfActions(geoPdf) })
                 }
               />
               {geoPdf.residualFraction != null &&
@@ -335,76 +454,238 @@ function LayersTab({
                   Georeferencing in this file is imprecise — positions may be off.
                 </Text>
               ) : null}
-              {geoPdf.visible ? (
-                <View style={styles.opacity}>
-                  <Text style={styles.opacityLabel}>Opacity</Text>
-                  <SegmentedControl
-                    options={GEOPDF_OPACITY_STEPS.map((step) => ({
-                      value: String(step),
-                      label: `${Math.round(step * 100)}%`,
-                    }))}
-                    value={String(
-                      GEOPDF_OPACITY_STEPS.find(
-                        (step) => Math.abs(geoPdf.opacity - step) < 0.01,
-                      ) ?? 1,
-                    )}
-                    onChange={(next) =>
-                      onGeoPdfChange(geoPdf.id, { opacity: Number(next) })
-                    }
-                  />
-                </View>
-              ) : null}
             </View>
           ))}
-        </>
+          {visibleGeoPdfs.length > 0 ? (
+            <View style={styles.opacity}>
+              <Text style={styles.opacityLabel}>Opacity</Text>
+              <SegmentedControl
+                scroll
+                options={GEOPDF_OPACITY_STEPS.map((step) => ({
+                  value: String(step),
+                  label: `${Math.round(step * 100)}%`,
+                }))}
+                value={String(
+                  GEOPDF_OPACITY_STEPS.find(
+                    (step) => Math.abs(sharedOpacity - step) < 0.01,
+                  ) ?? 1,
+                )}
+                onChange={(next) => setAllOpacity(Number(next))}
+              />
+            </View>
+          ) : null}
+        </LayerGroup>
       ) : null}
 
       {imports.length > 0 ? (
-        <>
-          <SectionHeader label="Imported files" />
+        <LayerGroup
+          icon="file-plus"
+          hue={assetHue.vector}
+          title="Other routes"
+          subtitle={`${imports.filter((entry) => entry.visible).length} of ${imports.length} shown`}
+          visibleCount={imports.filter((entry) => entry.visible).length}
+          totalCount={imports.length}
+          onSetAll={(next) => {
+            for (const imported of imports) onImportVisibility(imported.id, next);
+          }}
+        >
           {imports.map((imported) => (
-            <Row
+            <ItemRow
               key={imported.id}
-              icon="map"
               hue={imported.color}
               title={imported.name}
-              right={
-                <Toggle
-                  value={imported.visible}
-                  onValueChange={() =>
-                    onImportVisibility(imported.id, !imported.visible)
-                  }
-                  accessibilityLabel={`Show ${imported.name}`}
-                />
+              visible={imported.visible}
+              onVisibility={() => onImportVisibility(imported.id, !imported.visible)}
+              onMenu={() =>
+                onOpenMenu({
+                  title: imported.name,
+                  actions: vectorImportActions(imported),
+                })
               }
             />
           ))}
-        </>
+        </LayerGroup>
       ) : null}
 
-      <SectionHeader label="Tracks" />
-      {tracks.length === 0 ? (
-        <Text style={styles.note}>
-          Nothing recorded yet. The record button on the map starts one.
-        </Text>
-      ) : (
-        tracks.map((track) => (
-          <Row
+      <LayerGroup
+        icon="activity"
+        hue={assetHue.track}
+        title="Tracks"
+        subtitle={
+          tracks.length === 0
+            ? "The record button on the map starts one"
+            : `${tracks.filter((track) => track.visible).length} of ${tracks.length} shown`
+        }
+        visibleCount={tracks.filter((track) => track.visible).length}
+        totalCount={tracks.length}
+        onSetAll={(next) => {
+          for (const track of tracks) onTrackVisibility(track.id, next);
+        }}
+      >
+        {tracks.map((track) => (
+          <ItemRow
             key={track.id}
-            icon="activity"
             hue={track.color}
             title={track.name}
             subtitle={formatDistanceM(track.distanceM)}
-            right={
-              <Toggle
-                value={track.visible}
-                onValueChange={() => onTrackVisibility(track.id, !track.visible)}
-                accessibilityLabel={`Show ${track.name}`}
-              />
+            visible={track.visible}
+            onVisibility={() => onTrackVisibility(track.id, !track.visible)}
+            onMenu={() =>
+              onOpenMenu({ title: track.name, actions: trackActions(track) })
             }
           />
-        ))
-      )}
+        ))}
+      </LayerGroup>
+    </View>
+  );
+}
+
+/** One file inside a group: a colour dot, its name, its switch, its overflow. */
+function ItemRow({
+  hue,
+  title,
+  subtitle,
+  visible,
+  onVisibility,
+  onMenu,
+}: {
+  hue: string;
+  title: string;
+  subtitle?: string;
+  visible: boolean;
+  onVisibility: () => void;
+  onMenu?: () => void;
+}) {
+  return (
+    <Row
+      leading={<View style={[styles.dot, { backgroundColor: hue }]} />}
+      title={title}
+      subtitle={subtitle}
+      style={styles.itemRow}
+      right={
+        <View style={styles.trailing}>
+          <Toggle
+            value={visible}
+            onValueChange={onVisibility}
+            accessibilityLabel={`Show ${title}`}
+          />
+          {onMenu ? (
+            <IconButton
+              icon="more-horizontal"
+              accessibilityLabel={`More actions for ${title}`}
+              onPress={onMenu}
+            />
+          ) : null}
+        </View>
+      }
+    />
+  );
+}
+
+/**
+ * The three verbs, over the layer list rather than in a second sheet — the same
+ * content-swap rule the tabs follow, and the same actions the Saved tab offers
+ * (`assetActions.ts` is the one definition of what each verb means).
+ */
+function ItemMenuPanel({
+  menu,
+  onDone,
+  onShowOnMap,
+}: {
+  menu: ItemMenu;
+  onDone: () => void;
+  onShowOnMap: (bbox: Bbox) => void;
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(menu.title);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  // The sheet is already open and focused, so focusing on the next frame is
+  // what actually raises the keyboard (DESIGN.md §6 — `autoFocus` runs before
+  // the field attaches).
+  useEffect(() => {
+    if (!renaming) return;
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [renaming]);
+
+  if (renaming) {
+    return (
+      <View style={styles.menu}>
+        <TextField
+          inputRef={inputRef}
+          label="Name"
+          value={draft}
+          onChangeText={setDraft}
+        />
+        {error ? <Text style={styles.menuError}>{error}</Text> : null}
+        <Button
+          label="Save"
+          icon="check"
+          onPress={() => {
+            const name = draft.trim();
+            if (name.length === 0) {
+              setError("Give it a name.");
+              return;
+            }
+            menu.actions
+              .rename(name)
+              .then(onDone)
+              .catch((err: unknown) => {
+                console.error(err);
+                setError(messageFromError(err, "Couldn't rename that."));
+              });
+          }}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.menu}>
+      <Row
+        icon="map-pin"
+        title="Show on map"
+        // Absent, not disabled, when there is nothing to fly to — an affordance
+        // that exists only to refuse is worse than no affordance (DESIGN.md §7).
+        onPress={
+          menu.actions.locatable
+            ? () => {
+                menu.actions
+                  .resolveBbox()
+                  .then((bbox) => {
+                    if (bbox) onShowOnMap(bbox);
+                    else onDone();
+                  })
+                  .catch((err: unknown) => {
+                    console.error(err);
+                    onDone();
+                  });
+              }
+            : undefined
+        }
+        disabled={!menu.actions.locatable}
+      />
+      <Row icon="edit-2" title="Rename" onPress={() => setRenaming(true)} />
+      <Row
+        icon="trash-2"
+        hue={theme.warning}
+        title="Delete from device"
+        onPress={() =>
+          Alert.alert(menu.actions.delete.confirmTitle, menu.actions.delete.confirmBody, [
+            { text: "Keep it", style: "cancel" },
+            {
+              text: "Delete",
+              style: "destructive",
+              onPress: () => {
+                menu.actions.delete.run().catch(console.error);
+                onDone();
+              },
+            },
+          ])
+        }
+      />
     </View>
   );
 }
@@ -422,13 +703,13 @@ function OfflineTab({
   offlineOnly: boolean;
   onOfflineOnlyChange: (next: boolean) => void;
   onSaveArea: () => void;
-  onOpenSaved: () => void;
+  onOpenSaved: (category: "region") => void;
   artifacts: MapArtifact[];
   visible: boolean;
 }) {
   const [unfinished, setUnfinished] = useState<UnfinishedRegion[]>([]);
   const jobs = useRegionDownloads();
-  const activeIds = new Set(jobs.map((job) => job.spec.id));
+  const activeIds = useMemo(() => new Set(jobs.map((job) => job.spec.id)), [jobs]);
 
   // Read the half-written files each time the sheet opens: a download that died
   // with the app is only discoverable from disk (regionMbtiles.ts).
@@ -559,7 +840,9 @@ function OfflineTab({
             ? "The map goes blank without one"
             : `${(savedBytes / 1024 / 1024).toFixed(0)} MB · rename or delete in Saved`
         }
-        onPress={onOpenSaved}
+        // Lands on Saved's Regions filter, not its everything-list: a pointer
+        // that makes the user find the thing again is not a pointer.
+        onPress={() => onOpenSaved("region")}
         right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
       />
     </View>
@@ -572,16 +855,24 @@ const styles = StyleSheet.create({
   rail: { paddingBottom: spacing(1.5) },
   body: { gap: spacing(1) },
   stack: { gap: spacing(0.5) },
+  group: { gap: spacing(0.5) },
+  // Items hang off their group's row, indented so the hierarchy is visible
+  // without a second card colour.
+  groupItems: { gap: spacing(0.5), paddingLeft: spacing(2) },
+  itemRow: { minHeight: 48, paddingVertical: spacing(1) },
+  dot: { width: 12, height: 12, borderRadius: 6 },
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   activeRow: {
     borderWidth: 1,
-    borderColor: withAlpha(theme.accent, 0.5),
+    borderColor: theme.accent,
+    backgroundColor: withAlpha(theme.accent, 0.12),
   },
+  menu: { gap: spacing(1), backgroundColor: theme.primary },
+  menuError: { color: theme.warning, fontSize: fontSize.sm },
   note: { color: theme.textMuted, fontSize: fontSize.xs, lineHeight: 16 },
   opacity: {
     gap: spacing(0.5),
-    paddingLeft: spacing(1),
-    paddingBottom: spacing(0.5),
+    paddingTop: spacing(0.5),
   },
   opacityLabel: {
     color: theme.textMuted,

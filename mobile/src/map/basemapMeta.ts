@@ -8,6 +8,10 @@
 //
 // The blurb is what a name can't say. "SIX Maps Topo" means nothing to someone
 // who has not used it; "the printed NSW topo sheets" does.
+//
+// The glyph is now the FALLBACK identity: the layer sheet leads each basemap
+// with a real sample tile (`BasemapThumb`), which says more than any icon can,
+// and drops back to this glyph for the vector source and when offline.
 import type { Feather } from "@expo/vector-icons";
 
 import type { BasemapId } from "./sourceResolver";
@@ -21,7 +25,10 @@ export const BASEMAP_META: Record<BasemapId, BasemapMeta> = {
   "six-topo": { icon: "map", blurb: "The printed NSW topo sheets" },
   "six-base": { icon: "git-branch", blurb: "Roads, tracks and labels" },
   "six-imagery": { icon: "image", blurb: "Aerial photography" },
-  protomaps: { icon: "layers", blurb: "Vector map, built for offline" },
+  protomaps: {
+    icon: "layers",
+    blurb: "OpenStreetMap roads and tracks, drawn on the phone",
+  },
   osm: { icon: "globe", blurb: "OpenStreetMap" },
   "osm-topo": { icon: "trending-up", blurb: "OpenTopoMap contours" },
   "osm-cycle": { icon: "navigation-2", blurb: "CyclOSM tracks and trails" },

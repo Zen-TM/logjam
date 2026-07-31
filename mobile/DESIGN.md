@@ -83,11 +83,27 @@ BottomSheet(s)      acquisition + per-item actions
   user can't see. So: no header, no hero, no rail — a search button, one column of
   floating actions, and badges only while something is true (a filter withholding
   pins, a route being shown, a download running). Anything that can live behind the
-  layers sheet lives behind the layers sheet.
-- **Map chrome offsets live in ONE module** (`mapChrome.ts`), because chrome that
-  positions itself lands on other chrome: the recording HUD used to sit on top of
-  the compass, the attribution button and the scale bar. The HUD reports its
-  measured height and both floating columns lift by it.
+  layers sheet lives behind the layers sheet. A badge for a layer the user chose to
+  leave ON is not that: the canyon-routes coverage note moved onto its own row in
+  the sheet, because a permanent chip is a permanent tax on the thing the map is for.
+- **The map's two edges have different jobs.** The RIGHT edge is the action column
+  (layers, locate, record, and the small attribution button under them). The LEFT
+  edge belongs to the map's own instruments — the native compass and the scale bar —
+  and carries nothing you can press to change the app.
+- **Map chrome offsets live in ONE module** (`mapChrome.ts`), and `CHROME_BOTTOM`
+  is a CONSTANT. It used to grow by the recording HUD's measured height so the
+  columns could lift out of the way; `onLayout` never fires on the way out, so the
+  lift stuck after recording ended and every button stayed shoved up the screen.
+  Anything that would push chrome around goes in the top notice stack instead —
+  which is where the recording HUD now lives.
+- **Prefer the native map ornament to a JS one.** The compass is `compassEnabled`
+  + `compassViewPosition`: it tracks the camera frame by frame, fades itself at
+  north and resets north on tap, none of which the hand-rolled button did (it
+  redrew only when a gesture settled, and a rotated glyph is not a needle). The
+  scale bar stays in JS only because MapLibre RN v10 ships no scale-bar ornament —
+  and it follows the camera through a ref (`ScaleBarHandle`), not through screen
+  state, so gesture-rate updates re-render one small component instead of every
+  layer on the map.
 - **A hero on a pushed screen owns the back button** (`HeroHeader.onBack`).
   Turning off the native header removes the back affordance too, and the
   swipe/hardware gesture is not a visible way out.
@@ -125,6 +141,23 @@ scrolled out of reach.
 
 Reach for this only when the sections are genuinely different SUBJECTS. Two short
 groups are a scroll; three unrelated ones are a rail.
+
+### A list of layers is one row per KIND, not one row per file
+
+The layers tab is the worked example. A phone with a dozen GeoPDFs and thirty
+tracks turned it into a scroll of near-identical switches with no way to turn a
+whole kind off. Each kind is now ONE row — its glyph and hue, a live count
+("4 of 4 shown"), a master switch, and a chevron that opens its files underneath.
+
+- The master switch's value is "any of them visible"; flipping it writes every
+  item in the kind. Kinds with exactly one thing behind them (canyon routes) are
+  the same row without the disclosure.
+- **A control that is the same for every item in a kind belongs to the KIND.**
+  GeoPDF opacity was five identical 5-step rails stacked; it is now one rail under
+  the group, writing all of them.
+- Items keep their own identity as a colour dot, not a second icon tile — the
+  tile belongs to the group row above them, and repeating it flattens the
+  hierarchy the disclosure just created.
 
 ### Chronological lists group by time
 
@@ -369,6 +402,25 @@ row with a retry — it persists because the problem persists.
   a `Row` with its category glyph/hue and a verb title.
 - **Per-item actions live in an overflow sheet**, titled with the item's name.
   Rows stay clean and a mis-tap can't destroy anything.
+- **The three verbs follow the asset wherever it is listed.** A GeoPDF or a track
+  you can see on the map gets the same `⋯` in the map's layer sheet that it has in
+  Saved — same actions, same copy, from one definition (`saved/assetActions.ts`).
+  Two places offering "Delete" with two descriptions of what is deleted is how one
+  of them goes stale. Inside a sheet it opens as an `overlay` sub-mode, not a second
+  sheet (§6).
+- **A selection is a STATE of the row, not a label on it.** The basemap list used
+  to hang a "Showing" pill off the active row; it now lights the whole card (accent
+  border, accent tint, a filled check). One row looking different is read before any
+  word is. Same pass killed an "Offline" pill on basemaps with a downloaded region —
+  three square kilometres of saved tiles is not an offline basemap, and the pill
+  claimed it was.
+- **Show the thing, not a glyph standing in for it.** Three of the basemaps are
+  renderings of the same NSW ground, and no icon vocabulary can say how "SIX Maps
+  Topo" differs from "SIX Maps Base Map" — so each row leads with a real 44pt tile
+  OF that basemap (`BasemapThumb`), glyph only as the fallback for the vector source
+  and for offline. The tile is fetched only from providers whose terms let us keep
+  their tiles; asking the OSM servers for a thumbnail earns an "Access blocked"
+  image, which is both a policy breach and a worse icon.
 - **Every asset gets the same three verbs** where they apply: *show on map*,
   *rename*, *delete*. Uniformity is the feature — a user should never have to
   learn which kinds happen to support which action. Renaming is display-only
@@ -525,9 +577,17 @@ row with a retry — it persists because the problem persists.
   as complete as it can be.
 - **A layer that draws part of the picture says which part is missing.** The
   canyon-routes layer draws every route file this phone actually has; when some
-  aren't cached it posts a badge ("12 routes shown · 3 not downloaded yet") rather
-  than quietly rendering three quarters of the answer. Same rule as the withheld-
-  pins pill, one level down.
+  aren't cached it says so ("12 drawn · 3 not downloaded yet") rather than quietly
+  rendering three quarters of the answer. Same rule as the withheld-pins pill, one
+  level down. Where it says so depends on how long it is true: a transient fact gets
+  a map badge, a fact that holds for as long as the layer is on gets its row's
+  subtitle.
+- **Blank beats plausible-but-wrong.** Offline, MapLibre will happily upscale a z8
+  tile 256× to fill the screen around a downloaded region — a soft, convincing map
+  of ground the phone has no data for. The map instead fills everywhere outside its
+  saved regions with the page colour (`offlineMask.ts`), so the edge of what you
+  actually have is visible. A map you can't trust the edges of is worse than a map
+  with edges.
 - **Report the true cost of a thing.** A saved asset's size is everything it put
   on disk — an imported GeoPDF is its source file *plus* the tiles rendered from
   it, which is the larger half. A storage figure that quietly omits a component

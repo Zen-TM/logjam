@@ -15,14 +15,20 @@
 // tile-pyramid path never calls it (mobile/CLAUDE.md: region-of-interest bboxes
 // stay off the server).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, LayoutChangeEvent, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  LayoutChangeEvent,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { Camera, MapView, RasterLayer } from "@maplibre/maplibre-react-native";
 import NetInfo from "@react-native-community/netinfo";
 import {
   BASEMAP_CATALOG,
   MAX_REGION_EDGE_KM,
   MAX_REGION_TILES,
-  REGION_MIN_ZOOM,
   checkRegionCaps,
   planRegionForBasemaps,
   type OfflineBasemapId,
@@ -87,9 +93,9 @@ function isRasterPyramid(id: SelectableId): id is OfflineBasemapId {
 }
 
 /**
- * Chip labels, not the catalog's picker names: "Topo Vector (offline-ready)" is
- * a whole row on its own and pushed the chips onto a third line, and every
- * source here is offline-ready by definition.
+ * Chip labels, not the catalog's picker names: "SIX Maps Base Map" on a chip
+ * pushed the row onto a third line, and the "SIX Maps" prefix is noise when
+ * every chip here carries it.
  */
 const DOWNLOAD_CHIP_LABEL: Record<SelectableId, string> = {
   "six-topo": "Topo",
@@ -308,15 +314,23 @@ export function RegionDownloadScreen({
               : undefined
         }
       >
-        {capNote ? (
-          <Text style={styles.capNote}>{capNote}</Text>
-        ) : caps?.ok && caps.softWarn ? (
-          <StatusPill
-            label="Large area — keep Logjam open"
-            tone="warning"
-            icon="alert-triangle"
-          />
-        ) : null}
+        {/* Always mounted, even when empty: the hero and the panel are the two
+            things the map is measured against, and a warning appearing or
+            clearing used to resize the map under a frame the user was already
+            dragging. */}
+        <View style={styles.heroNote}>
+          {capNote ? (
+            <Text style={styles.capNote} numberOfLines={2}>
+              {capNote}
+            </Text>
+          ) : caps?.ok && caps.softWarn ? (
+            <StatusPill
+              label="Large area — keep Logjam open"
+              tone="warning"
+              icon="alert-triangle"
+            />
+          ) : null}
+        </View>
       </HeroHeader>
 
       <View style={styles.mapWrap} onLayout={handleLayout}>
@@ -361,7 +375,12 @@ export function RegionDownloadScreen({
       </View>
 
       <View style={styles.panel}>
-        <View style={styles.chipRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipScroll}
+          contentContainerStyle={styles.chipRow}
+        >
           {DOWNLOADABLE.map((id) => {
             const active = selected.includes(id);
             return (
@@ -380,8 +399,12 @@ export function RegionDownloadScreen({
               />
             );
           })}
-        </View>
+        </ScrollView>
 
+        <ScrollView
+          style={styles.panelScroll}
+          contentContainerStyle={styles.panelScrollContent}
+        >
         <View style={styles.detailBlock}>
           <View style={styles.detailHeader}>
             <SectionHeader label="Detail" />
@@ -398,17 +421,6 @@ export function RegionDownloadScreen({
             value={String(detailZoom)}
             onChange={(next) => setDetailZoom(Number(next))}
           />
-          {/* Says what the user does NOT choose, once, instead of a per-source
-              footnote: every download also takes the wide-context levels. */}
-          <Text style={styles.footnote}>
-            {`Zoomed-out levels (z${REGION_MIN_ZOOM} up) always come along, so the map isn't blank when you pull back.`}
-            {selected.some((id) => catalogMaxZoom(id) < detailZoom)
-              ? " Some of these maps stop short of that detail and save as deep as they go."
-              : ""}
-            {includesVector && job && job.totalTiles > 0
-              ? " The vector map is one file from our own server, so it isn't in the size above."
-              : ""}
-          </Text>
         </View>
 
         {onCellular ? (
@@ -446,6 +458,7 @@ export function RegionDownloadScreen({
               : `${finished.length} maps saved — they work with no signal from now on.`}
           </Text>
         ) : null}
+        </ScrollView>
       </View>
     </View>
   );
@@ -547,16 +560,37 @@ const styles = StyleSheet.create({
     paddingVertical: spacing(0.5),
     overflow: "hidden",
   },
+  // Fixed height, both of them: the map fills what is left, and a panel that
+  // grew or shrank (a cellular row appearing, a warning clearing, a download
+  // row replacing the button) resized the map mid-gesture and moved the frame
+  // the user was dragging.
+  heroNote: { height: 26, justifyContent: "center" },
   panel: {
+    height: 208,
     backgroundColor: theme.primary,
-    paddingHorizontal: spacing(2),
-    paddingTop: spacing(1.5),
-    paddingBottom: spacing(2),
-    gap: spacing(1.25),
+    paddingTop: spacing(1.25),
+    paddingBottom: spacing(1.5),
+    gap: spacing(1),
     borderTopWidth: 1,
     borderTopColor: surface.border,
   },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
+  panelScroll: { flex: 1 },
+  panelScrollContent: {
+    paddingHorizontal: spacing(2),
+    paddingBottom: spacing(1),
+    gap: spacing(1.25),
+  },
+  // Horizontally scrolling, like the detail rail: four chips wrapped onto a
+  // second line and took the height straight out of the map.
+  // `flexGrow: 0` and a centred cross-axis: a horizontal ScrollView otherwise
+  // grows to fill the panel and stretches its chips into tall ovals.
+  chipScroll: { flexGrow: 0 },
+  chipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1),
+    paddingHorizontal: spacing(2),
+  },
   detailBlock: { gap: spacing(0.75) },
   detailHeader: {
     flexDirection: "row",

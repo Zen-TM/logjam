@@ -53,7 +53,7 @@ import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
 import { config } from "../config";
 import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "../theme";
 import { MapSearchBar } from "./MapSearchBar";
-import { ScaleBar } from "./ScaleBar";
+import { ScaleBar, type ScaleBarHandle } from "./ScaleBar";
 import { RouteMapLayer, ROUTE_COLOR, type RouteRequest } from "../media/RouteMapLayer";
 import {
   CHROME_BOTTOM,
@@ -64,7 +64,10 @@ import {
   FAB_SIZE,
   MINI_FAB_ICON,
   MINI_FAB_SIZE,
+  SEARCH_SIZE,
 } from "./mapChrome";
+import { HEADING_RENDER_MS, shortestAngleDelta, smoothHeading } from "./heading";
+import { offlineCoverageMask } from "./offlineMask";
 import { BottomSheet } from "../ui/BottomSheet";
 import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
@@ -154,13 +157,23 @@ function normalizeBearing(heading: number): number {
   return ((heading % 360) + 360) % 360;
 }
 
-// How far off north before the compass button appears. A degree of slop keeps
-// it from flickering in on rounding noise after a reset.
-const COMPASS_VISIBLE_DEG = 1;
-
 // A remount (tab switch) re-fires Linking.getInitialURL with the same intent
 // URI — imports must not run twice for one "Open in Logjam".
 const handledIntentUrls = new Set<string>();
+
+type FollowMode = "off" | "follow" | "course-up";
+
+const LOCATE_ICON: Record<FollowMode, "navigation" | "crosshair" | "compass"> = {
+  off: "navigation",
+  follow: "crosshair",
+  "course-up": "compass",
+};
+
+const LOCATE_LABEL: Record<FollowMode, string> = {
+  off: "Show where I am",
+  follow: "Following you — tap to face the way you are looking",
+  "course-up": "Facing your direction — tap to stop following",
+};
 
 const OWNED_CANYON_COLOR = "#f97316";
 const SHARED_CANYON_COLOR = "#629bf8";
@@ -223,8 +236,8 @@ export function MapScreen({
     center: [number, number];
     zoom: number;
   }) => void;
-  // Opens the Saved tab from the trimmed layer sheet's "Manage in Saved" link.
-  onOpenSaved?: () => void;
+  // Opens the Saved tab on one category, from the layer sheet's regions row.
+  onOpenSaved?: (category: "region") => void;
   // "Show on map" for a trip's route attachment. Transient: drawn until the
   // user clears its badge, never added to the imports registry.
   route?: RouteRequest | null;
@@ -273,18 +286,16 @@ export function MapScreen({
   // add to a map unasked, and the layers sheet is where it belongs.
   const [showCanyonRoutes, setShowCanyonRoutes] = useState(false);
   const [routesStatus, setRoutesStatus] = useState<CanyonRoutesStatus | null>(null);
-  // Measured height of the recording HUD, so both floating control columns lift
-  // out of its way instead of sitting on top of it.
-  const [hudHeight, setHudHeight] = useState(0);
-  // Camera readout for the JS-drawn chrome: the scale bar needs zoom+latitude,
-  // the compass button needs the bearing. Fed by onRegionDidChange (fires when
-  // a gesture settles), seeded with the default camera.
+  // Settled camera readout, used only to hand the offline-download screen the
+  // ground the user is looking at. The scale bar does NOT read this: it follows
+  // the camera continuously through its own ref (see scaleBarRef), because
+  // re-rendering this screen at gesture rate would re-reconcile every layer.
   const [camera, setCamera] = useState({
     zoom: DEFAULT_ZOOM,
     latitude: DEFAULT_CENTER[1],
     longitude: DEFAULT_CENTER[0],
-    bearing: 0,
   });
+  const scaleBarRef = useRef<ScaleBarHandle>(null);
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const mapRef = useRef<React.ComponentRef<typeof MapView>>(null);
@@ -356,9 +367,7 @@ export function MapScreen({
   // Stage 7 follow modes: follow recenters on each fix (north-up); course-up
   // additionally rotates the map to the direction of travel. The locate
   // button cycles off → follow → course-up → off.
-  const [followMode, setFollowMode] = useState<"off" | "follow" | "course-up">(
-    "off",
-  );
+  const [followMode, setFollowMode] = useState<FollowMode>("off");
   const followModeRef = useRef(followMode);
   followModeRef.current = followMode;
   const [userCoord, setUserCoord] = useState<[number, number] | null>(null);
@@ -366,7 +375,12 @@ export function MapScreen({
   const [userHeading, setUserHeading] = useState<number | null>(null);
   const locationWatch = useRef<Location.LocationSubscription | null>(null);
   const headingWatch = useRef<Location.LocationSubscription | null>(null);
-  const lastHeadingUpdate = useRef(0);
+  // Running smoothed heading, kept in a ref as well as in state: the POV
+  // camera writes from the sensor callback, which must not close over a stale
+  // render's value.
+  const smoothedHeading = useRef<number | null>(null);
+  const lastHeadingRender = useRef(0);
+  const lastPovBearing = useRef<number | null>(null);
   const firstFix = useRef(true);
 
   // Stop the position/heading watchers when the screen unmounts.
@@ -402,10 +416,34 @@ export function MapScreen({
     [basemapId, ctx],
   );
 
-  // First free layerIndex above the active basemap's layer band.
-  const overlayBaseIndex =
-    1 +
-    (basemapId === "protomaps" ? protomapsLayerCount(PROTOMAPS_FLAVOR) : 1);
+  // Everywhere the phone has no saved tiles, blanked out — but only when the
+  // basemap is actually being drawn FROM those saved tiles. Online there is
+  // nothing to hide behind (see offlineMask.ts).
+  const offlineMask = useMemo(() => {
+    if (!basemapResolved.some((r) => r.status === "ok" && r.origin === "local")) {
+      return null;
+    }
+    return offlineCoverageMask(
+      basemapResolved.flatMap((r) =>
+        r.status === "ok" && r.bounds ? [r.bounds] : [],
+      ),
+    );
+  }, [basemapResolved]);
+
+  // How many layers the basemap band actually occupies. NOT always one: an
+  // offline basemap mounts one raster layer PER downloaded region, and they all
+  // ask for layerIndex 1, so each insert pushes the previous one up. Assuming a
+  // single layer put the offline mask underneath a region's raster — which
+  // looked exactly like the mask half-rendering, red to that region's east
+  // edge and nothing west of it.
+  const basemapLayerCount =
+    basemapId === "protomaps"
+      ? protomapsLayerCount(PROTOMAPS_FLAVOR)
+      : Math.max(1, basemapResolved.filter((r) => r.status === "ok").length);
+
+  const maskLayerIndex = 1 + basemapLayerCount;
+  // First free layerIndex above the basemap band and the mask's own slot.
+  const overlayBaseIndex = maskLayerIndex + (offlineMask ? 1 : 0);
 
   // Union the online overlay list with downloaded artifacts, so saved overlays
   // list + render even on a cold offline launch (the online fetch has no
@@ -661,8 +699,23 @@ export function MapScreen({
     fitCameraToBbox(focus.bbox);
   }, [focus?.nonce, focus, fitCameraToBbox]);
 
-  // Camera readout for the scale bar + compass. Coordinates stay in component
-  // state only — never logged (privacy rule).
+  // Live camera → the scale bar only, at gesture rate. Coordinates stay in
+  // component state only — never logged (privacy rule).
+  const handleRegionIsChanging = useCallback(
+    (feature: {
+      geometry: { coordinates: number[] };
+      properties: { zoomLevel: number };
+    }) => {
+      scaleBarRef.current?.update(
+        feature.geometry.coordinates[1],
+        feature.properties.zoomLevel,
+      );
+    },
+    [],
+  );
+
+  // Settled camera readout. Coordinates stay in component state only — never
+  // logged (privacy rule).
   const handleRegionDidChange = useCallback(
     (feature: {
       geometry: { coordinates: number[] };
@@ -670,20 +723,19 @@ export function MapScreen({
     }) => {
       const latitude = feature.geometry.coordinates[1];
       const longitude = feature.geometry.coordinates[0];
-      const { zoomLevel, heading } = feature.properties;
+      const { zoomLevel } = feature.properties;
       if (!Number.isFinite(latitude) || !Number.isFinite(zoomLevel)) return;
+      scaleBarRef.current?.update(latitude, zoomLevel);
       // The move that just settled is done with; drop its stop so a re-render
       // can't replay it (see stopNeedsReset).
       if (stopNeedsReset.current) {
         stopNeedsReset.current = false;
         cameraRef.current?.setCamera({ animationDuration: 0 });
       }
-      const bearing = normalizeBearing(heading);
       setCamera((prev) =>
         prev.zoom === zoomLevel &&
         prev.latitude === latitude &&
-        prev.longitude === longitude &&
-        prev.bearing === bearing
+        prev.longitude === longitude
           ? // Same readout ⇒ same render output. Bailing keeps a stop replay
             // (which reports the unchanged region again) from re-rendering and
             // replaying forever.
@@ -692,20 +744,11 @@ export function MapScreen({
               zoom: zoomLevel,
               latitude: latitude as number,
               longitude: longitude as number,
-              bearing,
             },
       );
     },
     [],
   );
-
-  // Compass tap: rotate back to north-up. Course-up follow would immediately
-  // re-rotate on the next fix, so drop to plain follow as well.
-  const handleResetNorth = useCallback(() => {
-    setFollowMode((mode) => (mode === "course-up" ? "follow" : mode));
-    setCameraStop({ heading: 0, animationDuration: 300 });
-    setCamera((prev) => ({ ...prev, bearing: 0 }));
-  }, [setCameraStop]);
 
   // Place search result: recentre without changing zoom intent drastically.
   const handleSelectPlace = useCallback((latitude: number, longitude: number) => {
@@ -730,15 +773,14 @@ export function MapScreen({
       }
       if (followModeRef.current === "follow") {
         setFollowMode("course-up");
+        lastPovBearing.current = null;
         return;
       }
-      locationWatch.current.remove();
-      locationWatch.current = null;
-      headingWatch.current?.remove();
-      headingWatch.current = null;
-      setUserHeading(null);
+      // Third tap drops follow but KEEPS the dot and its watchers: "don't
+      // chase me" is a different request from "stop showing me", and a
+      // canyoner who wants to look at the next drop still wants to see where
+      // they are. Stopping the watchers is what leaving the screen does.
       setFollowMode("off");
-      // Leave course-up's rotation behind — back to north-up.
       setCameraStop({ heading: 0, animationDuration: 300 });
       return;
     }
@@ -761,16 +803,12 @@ export function MapScreen({
           animationDuration: 1200,
         });
       } else if (mode !== "off") {
-        // Course over ground comes from the fix (heading ⇒ movement
-        // direction); reported as -1 when stationary — keep the rotation.
-        const course = position.coords.heading;
-        setCameraStop({
-          centerCoordinate: coord,
-          animationDuration: 600,
-          ...(mode === "course-up" && course != null && course >= 0
-            ? { heading: course }
-            : {}),
-        });
+        // Course-up rotation is driven by the COMPASS, not by the fix's course
+        // over ground: the user wants the map to face where they are looking,
+        // which on a scramble is often not where they last moved (and course
+        // is reported as -1 whenever they stand still). The heading watcher
+        // below owns that rotation; this only recentres.
+        setCameraStop({ centerCoordinate: coord, animationDuration: 600 });
       }
     };
 
@@ -790,19 +828,33 @@ export function MapScreen({
       (position) => applyFix(position, true),
     );
 
-    // Compass heading for the direction beam. The magnetometer streams
-    // ~10 Hz — throttle to ≥200 ms and ≥3° so the map isn't re-rendered at
-    // sensor rate. trueHeading needs a location for declination; fall back
-    // to magnetic when it's unavailable (reported as -1).
+    // Compass heading — which way the user is FACING. It orients the location
+    // arrow and, in course-up, the whole map, so it is smoothed rather than
+    // gated (see heading.ts: the old ≥3° deadband turned a wobble into a
+    // staircase). trueHeading needs a location fix for declination; fall back
+    // to magnetic when it is unavailable (reported as -1).
     headingWatch.current = await Location.watchHeadingAsync((heading) => {
-      const value =
-        heading.trueHeading >= 0 ? heading.trueHeading : heading.magHeading;
+      const raw = heading.trueHeading >= 0 ? heading.trueHeading : heading.magHeading;
+      const next = smoothHeading(smoothedHeading.current, raw);
+      smoothedHeading.current = next;
+
+      // The sensor runs ~10 Hz; the arrow only needs ~20 fps of it, and every
+      // update re-renders this screen.
       const now = Date.now();
-      if (now - lastHeadingUpdate.current < 200) return;
-      setUserHeading((prev) => {
-        if (prev != null && Math.abs(value - prev) < 3) return prev;
-        lastHeadingUpdate.current = now;
-        return value;
+      if (now - lastHeadingRender.current >= HEADING_RENDER_MS) {
+        lastHeadingRender.current = now;
+        setUserHeading(next);
+      }
+
+      // Course-up: turn the map with them. Below a degree of change this is
+      // sensor noise, and a camera commit per sample makes the map seasick.
+      if (followModeRef.current !== "course-up") return;
+      const previous = lastPovBearing.current;
+      if (previous != null && Math.abs(shortestAngleDelta(previous, next)) < 1) return;
+      lastPovBearing.current = next;
+      setCameraStop({
+        heading: normalizeBearing(next),
+        animationDuration: HEADING_RENDER_MS,
       });
     });
   }, [setCameraStop]);
@@ -860,11 +912,7 @@ export function MapScreen({
   // Chrome geometry. Notices clear the search row so an expanded search bar
   // never covers them; the scale bar runs from the left edge up to the floating
   // button column on the right.
-  const noticeTop = insets.top + CHROME_GAP + FAB_SIZE + spacing(1);
-  // Both floating columns sit above the scale bar, and above the recording HUD
-  // when one is up.
-  const chromeBottom =
-    CHROME_BOTTOM + (hudHeight > 0 ? hudHeight + spacing(1) : 0);
+  const noticeTop = insets.top + CHROME_GAP + SEARCH_SIZE + spacing(1);
   const scaleBarMaxWidth =
     windowWidth - FAB_SIZE - CHROME_GAP * 3 - spacing(1);
   const attributionText = basemapResolved
@@ -888,10 +936,16 @@ export function MapScreen({
         mapStyle={shellStyle}
         attributionEnabled={false}
         logoEnabled={false}
-        // Native ornaments off: the compass can only be pinned to one of four
-        // corners and can't be restyled or stacked with our chrome, and v10
-        // has no scale-bar ornament at all — both are drawn in JS instead.
-        compassEnabled={false}
+        // The compass is the NATIVE ornament: it tracks the camera frame by
+        // frame, fades itself out at north, and resets north on tap — all
+        // things the JS button did badly or not at all (it only redrew once a
+        // gesture settled, and a rotated Feather glyph is not a needle).
+        // Bottom-left (position 2), above the scale bar. There is still no
+        // native scale bar in v10, so that one stays drawn in JS.
+        compassEnabled
+        compassViewPosition={2}
+        compassViewMargins={{ x: CHROME_GAP, y: CHROME_BOTTOM }}
+        onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}
         onPress={() => setFollowMode("off")}
         onLongPress={handleMapLongPress}
@@ -902,9 +956,12 @@ export function MapScreen({
         />
         {/* Bundled point-feature icons for vector overlays. */}
         <TopoIconImages />
-        {/* Direction beam sprite for the locate-me marker. */}
+        {/* Locate-me sprites: the facing arrow, and the beam behind it. */}
         <Images
-          images={{ "user-heading-beam": require("../../assets/user-heading.png") }}
+          images={{
+            "user-heading-beam": require("../../assets/user-heading.png"),
+            "user-arrow": require("../../assets/user-arrow.png"),
+          }}
         />
 
         {/* layerIndex pins z-order across remounts: a swapped basemap source
@@ -932,6 +989,19 @@ export function MapScreen({
             </ResolvedSource>
           ) : null,
         )}
+
+        {/* The edge of what this phone actually holds. Above the basemap band
+            and below everything else, so canyon pins, tracks and imports stay
+            visible over the blanked ground. */}
+        {offlineMask ? (
+          <ShapeSource id="offline-mask" shape={offlineMask}>
+            <FillLayer
+              id="offline-mask-fill"
+              layerIndex={maskLayerIndex}
+              style={{ fillColor: theme.primary, fillOpacity: 1 }}
+            />
+          </ShapeSource>
+        ) : null}
 
         {/* Topo overlays: raster = one translucent RasterLayer; vector =
             the full contour/feature layer stack styled by the user's
@@ -1161,9 +1231,8 @@ export function MapScreen({
               }}
             />
             {userHeading != null ? (
-              // Direction beam under the dot; rotates with the compass and
-              // stays map-aligned so it points at real-world bearings even
-              // when the map itself is rotated.
+              // Direction beam under the arrow. Map-aligned, so it points at
+              // real-world bearings even when the map itself is rotated.
               <SymbolLayer
                 id="user-location-heading"
                 style={{
@@ -1175,13 +1244,20 @@ export function MapScreen({
                 }}
               />
             ) : null}
-            <CircleLayer
+            {/* An arrow, not a dot: a dot says where you are and a compass
+                says which way north is, and the user is left to combine them
+                while standing on a ledge. The arrow answers both at once —
+                which is why the heading watcher now runs for as long as the
+                marker is on screen, not only in course-up. */}
+            <SymbolLayer
               id="user-location-dot"
               style={{
-                circleRadius: 7,
-                circleColor: "#4285F4",
-                circleStrokeColor: "#ffffff",
-                circleStrokeWidth: 2,
+                iconImage: "user-arrow",
+                iconSize: 0.28,
+                iconRotate: userHeading ?? 0,
+                iconRotationAlignment: "map",
+                iconAllowOverlap: true,
+                iconIgnorePlacement: true,
               }}
             />
           </ShapeSource>
@@ -1194,6 +1270,11 @@ export function MapScreen({
       {/* Everything that talks to the user from the top of the map stacks in
           one column, so a second message can never land on top of the first. */}
       <View style={[styles.noticeStack, { top: noticeTop }]} pointerEvents="box-none">
+        {/* The recording panel leads the stack: while a track is running it is
+            the most important thing on the screen, and up here it competes
+            with no other chrome (see mapChrome's CHROME_BOTTOM). */}
+        {activeTrack ? <TrackRecordingControls activeTrack={activeTrack} /> : null}
+
         {/* Offline/unavailable basemap notice (fail visibly, never silently). */}
         {basemapResolved.every((r) => r.status !== "ok") ? (
           <View style={styles.notice}>
@@ -1253,17 +1334,6 @@ export function MapScreen({
           </View>
         ) : null}
 
-        {/* The routes layer draws what this phone has. Saying so beats drawing
-            three-quarters of a picture silently (DESIGN.md §8). */}
-        {showCanyonRoutes && routesStatus && routesStatus.unavailable > 0 ? (
-          <View style={styles.filterBadge}>
-            <Feather name="git-commit" size={14} color={theme.accent} />
-            <Text style={styles.filterBadgeText} numberOfLines={2}>
-              {`${routesStatus.drawn} routes shown · ${routesStatus.unavailable} not downloaded yet`}
-            </Text>
-          </View>
-        ) : null}
-
         {/* Says what is on the map that the user didn't put there, and gives
             them one tap to take it off again. */}
         {shownRoute ? (
@@ -1282,7 +1352,9 @@ export function MapScreen({
         ) : null}
       </View>
 
-      <View style={[styles.controls, { bottom: chromeBottom }]}>
+      {/* One column of actions on the right; the left edge belongs to the map's
+          own instruments (native compass + scale bar). */}
+      <View style={styles.controls}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Choose layers"
@@ -1293,17 +1365,21 @@ export function MapScreen({
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Locate me"
+          accessibilityLabel={LOCATE_LABEL[followMode]}
           style={[styles.controlButton, followMode !== "off" && styles.controlActive]}
           onPress={handleLocateMe}
         >
-          {/* The arrow glyph's ink sits up-and-right of its box centre, so a
-              geometrically centred icon reads off-centre — nudge it back. */}
+          {/* Three states, three glyphs: an arrow you are not following, a
+              crosshair locked on you, a compass rose when the map itself turns
+              to face where you are looking. Colour alone said "active" but
+              never said WHICH active. */}
           <Feather
-            name="navigation"
+            name={LOCATE_ICON[followMode]}
             size={FAB_ICON}
             color={theme.textPrimary}
-            style={styles.locateIcon}
+            // The arrow glyph's ink sits up-and-right of its box centre, so a
+            // geometrically centred icon reads off-centre — nudge it back.
+            style={followMode === "off" ? styles.locateIcon : undefined}
           />
         </Pressable>
         {!activeTrack ? (
@@ -1320,27 +1396,6 @@ export function MapScreen({
             </View>
           </Pressable>
         ) : null}
-      </View>
-
-      {/* Bottom-left chrome: compass (only off-north) above the attribution
-          button, with the scale bar along the bottom edge. */}
-      <View style={[styles.leftControls, { bottom: chromeBottom }]}>
-        {camera.bearing > COMPASS_VISIBLE_DEG &&
-        camera.bearing < 360 - COMPASS_VISIBLE_DEG ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Face map north"
-            style={styles.controlButton}
-            onPress={handleResetNorth}
-          >
-            <Feather
-              name="compass"
-              size={FAB_ICON}
-              color={theme.textPrimary}
-              style={{ transform: [{ rotate: `${-camera.bearing}deg` }] }}
-            />
-          </Pressable>
-        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Map data attribution"
@@ -1351,27 +1406,14 @@ export function MapScreen({
         </Pressable>
       </View>
 
-      {/* Says what is on the map that the user didn't put there, and gives them
-          one tap to take it off again. */}
       <View style={styles.scaleBarWrap}>
         <ScaleBar
+          ref={scaleBarRef}
           latitude={camera.latitude}
           zoom={camera.zoom}
           maxWidth={scaleBarMaxWidth}
         />
       </View>
-
-      {/* The HUD spans the chrome column and REPORTS its height, which is what
-          lifts the two button columns above it (see chromeBottom). Chrome
-          stacking on chrome was this panel's old bug. */}
-      {activeTrack ? (
-        <View
-          style={styles.hud}
-          onLayout={(event) => setHudHeight(event.nativeEvent.layout.height)}
-        >
-          <TrackRecordingControls activeTrack={activeTrack} />
-        </View>
-      ) : null}
 
       {/* Navigate-to-waypoint readout: live distance + bearing from the
           latest fix. Static labels only — coordinates never rendered. */}
@@ -1479,6 +1521,7 @@ export function MapScreen({
         }}
         showCanyonRoutes={showCanyonRoutes}
         onShowCanyonRoutesChange={setShowCanyonRoutes}
+        routesStatus={routesStatus}
         canyonRouteHue={OWNED_CANYON_COLOR}
         offlineOnly={offlineOnly}
         onOfflineOnlyChange={setOfflineOnly}
@@ -1490,9 +1533,13 @@ export function MapScreen({
             zoom: camera.zoom,
           });
         }}
-        onOpenSaved={() => {
+        onShowOnMap={(bbox) => {
           setPickerOpen(false);
-          onOpenSaved?.();
+          fitCameraToBbox(bbox);
+        }}
+        onOpenSaved={(category) => {
+          setPickerOpen(false);
+          onOpenSaved?.(category);
         }}
       />
     </View>
@@ -1522,15 +1569,7 @@ const styles = StyleSheet.create({
   controls: {
     position: "absolute",
     right: CHROME_GAP,
-    bottom: CHROME_GAP + spacing(4),
-    gap: spacing(1),
-  },
-  // Bottom-left stack sits clear of the scale bar that runs along the very
-  // bottom edge.
-  leftControls: {
-    position: "absolute",
-    left: CHROME_GAP,
-    bottom: CHROME_GAP + spacing(4),
+    bottom: CHROME_BOTTOM,
     gap: spacing(1),
     alignItems: "center",
   },
@@ -1596,12 +1635,6 @@ const styles = StyleSheet.create({
     color: theme.textPrimary,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
-  },
-  hud: {
-    position: "absolute",
-    left: CHROME_GAP,
-    right: CHROME_GAP,
-    bottom: CHROME_BOTTOM - spacing(1),
   },
   scaleBarWrap: {
     position: "absolute",

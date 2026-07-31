@@ -1,25 +1,47 @@
-// Scale bar drawn in JS (MapLibre RN v10 ships no scale-bar ornament). Sits
-// along the bottom edge of the map, spanning the width left of the floating
-// button column. Classic cartographic form: label above a capped rule.
+// Scale bar drawn in JS (MapLibre RN v10 ships no scale-bar ornament — it
+// exposes compass, attribution and logo only). Sits along the bottom-left edge
+// of the map, under the native compass.
+//
+// It updates IMPERATIVELY, through a ref, rather than from props. The bar has
+// to follow the camera continuously to be worth having — a bar that only
+// redraws once a gesture settles is wrong for the whole duration of every pan —
+// and `onRegionIsChanging` fires at gesture rate. Routing that through the map
+// screen's state would re-reconcile every layer, source and badge on the screen
+// at 60 Hz; this way the only thing that re-renders is the bar.
+import { forwardRef, useImperativeHandle, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
 import { chooseScaleStep, metersPerPixel } from "./scaleBar";
 
-export function ScaleBar({
-  latitude,
-  zoom,
-  maxWidth,
-}: {
-  latitude: number;
-  zoom: number;
-  /** Horizontal space the bar may occupy, in px. */
-  maxWidth: number;
-}) {
+export type ScaleBarHandle = { update: (latitude: number, zoom: number) => void };
+
+export const ScaleBar = forwardRef<
+  ScaleBarHandle,
+  {
+    latitude: number;
+    zoom: number;
+    /** Horizontal space the bar may occupy, in px. */
+    maxWidth: number;
+  }
+>(function ScaleBar({ latitude, zoom, maxWidth }, ref) {
+  const [camera, setCamera] = useState({ latitude, zoom });
+
+  useImperativeHandle(ref, () => ({
+    update: (nextLatitude: number, nextZoom: number) => {
+      if (!Number.isFinite(nextLatitude) || !Number.isFinite(nextZoom)) return;
+      setCamera((current) =>
+        current.latitude === nextLatitude && current.zoom === nextZoom
+          ? current
+          : { latitude: nextLatitude, zoom: nextZoom },
+      );
+    },
+  }));
+
   // Guard the degenerate first frame (zero-width layout) rather than letting
   // chooseScaleStep throw during mount.
   if (maxWidth <= 0) return null;
-  const step = chooseScaleStep(metersPerPixel(latitude, zoom), maxWidth);
+  const step = chooseScaleStep(metersPerPixel(camera.latitude, camera.zoom), maxWidth);
 
   return (
     <View style={styles.root} pointerEvents="none">
@@ -27,7 +49,7 @@ export function ScaleBar({
       <View style={[styles.rule, { width: step.widthPx }]} />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   // Translucent warm backing: the bar sits over map imagery that can be any

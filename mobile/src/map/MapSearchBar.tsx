@@ -1,5 +1,12 @@
-// Place search on the map. Collapsed it's a circular button in the top-left
-// corner; tapping expands it into a full-width search bar with the keyboard up.
+// Place search on the map.
+//
+// It is ONE pill the whole time. Collapsed it is a circle exactly as tall as
+// the expanded bar, with the search glyph at its centre; tapping it grows the
+// circle rightwards into the full bar and the glyph never moves — the button
+// becomes the field rather than being replaced by one. (The previous version
+// swapped a 72pt round button for a full-width rounded rectangle, so the icon
+// jumped left and up and the two shapes had nothing in common.)
+//
 // Behaviour mirrors the web MapSearchBox: 3-char minimum, 350 ms debounce,
 // Nominatim via `geocode`, tap a result to recentre.
 //
@@ -7,6 +14,8 @@
 // names and coordinates are never sent here, and results are not persisted.
 import { useEffect, useRef, useState } from "react";
 import {
+  Animated,
+  Easing,
   Keyboard,
   Pressable,
   ScrollView,
@@ -14,15 +23,20 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { geocode, messageFromError, type GeocodeResult } from "@logjam/shared";
 
 import { fontSize, fontWeight, hitSlop, radius, spacing, theme } from "../theme";
-import { CHROME_GAP, FAB_ICON, FAB_SIZE } from "./mapChrome";
+import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
 
 const DEBOUNCE_MS = 350;
 const MIN_QUERY_LENGTH = 3;
+const GLYPH = 20;
+/** Keeps the glyph on the circle's centre line at every width. */
+const GLYPH_INSET = (SEARCH_SIZE - GLYPH) / 2;
+const EXPAND_MS = 220;
 
 export function MapSearchBar({
   topInset,
@@ -38,6 +52,21 @@ export function MapSearchBar({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
+  const { width: windowWidth } = useWindowDimensions();
+
+  // One driver for width and for the fade of everything that only exists in
+  // the expanded state. Width can't run on the native driver, so neither does
+  // the opacity — keeping them on one value is what stops the text appearing
+  // before there is room for it.
+  const grow = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(grow, {
+      toValue: expanded ? 1 : 0,
+      duration: EXPAND_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [expanded, grow]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -72,6 +101,16 @@ export function MapSearchBar({
     };
   }, [query, expanded]);
 
+  // Focus AFTER the expansion has committed, not from the tap handler: the
+  // field is `editable={expanded}`, and a focus() that lands on the frame
+  // where it is still false is silently dropped — the bar opened with no
+  // keyboard and swallowed everything typed at it.
+  useEffect(() => {
+    if (!expanded) return;
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [expanded]);
+
   const collapse = () => {
     Keyboard.dismiss();
     setExpanded(false);
@@ -81,46 +120,54 @@ export function MapSearchBar({
     setLoading(false);
   };
 
-  if (!expanded) {
-    return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Search for a place"
-        style={[styles.fab, { top: topInset + CHROME_GAP }]}
-        onPress={() => setExpanded(true)}
-      >
-        <Feather name="search" size={FAB_ICON} color={theme.textPrimary} />
-      </Pressable>
-    );
-  }
-
-  const showPanel = loading || error !== null || results.length > 0;
+  const width = grow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [SEARCH_SIZE, windowWidth - CHROME_GAP * 2],
+  });
+  const showPanel = expanded && (loading || error !== null || results.length > 0);
 
   return (
-    <View style={[styles.expanded, { top: topInset + CHROME_GAP }]}>
-      <View style={styles.inputRow}>
-        <Feather name="search" size={18} color={theme.textMuted} />
-        <TextInput
-          ref={inputRef}
-          style={styles.input}
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search for a place…"
-          placeholderTextColor={theme.textMuted}
-          accessibilityLabel="Search for a place to centre the map"
-          autoFocus
-          autoCorrect={false}
-          returnKeyType="search"
+    <View style={[styles.root, { top: topInset + CHROME_GAP }]} pointerEvents="box-none">
+      <Animated.View style={[styles.pill, { width }]}>
+        <Feather
+          name="search"
+          size={GLYPH}
+          color={expanded ? theme.textMuted : theme.textPrimary}
+          style={styles.glyph}
         />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={query ? "Clear search" : "Close search"}
-          hitSlop={hitSlop}
-          onPress={() => (query ? setQuery("") : collapse())}
-        >
-          <Feather name="x" size={20} color={theme.textPrimary} />
-        </Pressable>
-      </View>
+        <Animated.View style={[styles.field, { opacity: grow }]}>
+          <TextInput
+            ref={inputRef}
+            style={styles.input}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search for a place…"
+            placeholderTextColor={theme.textMuted}
+            accessibilityLabel="Search for a place to centre the map"
+            autoCorrect={false}
+            returnKeyType="search"
+            editable={expanded}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={query ? "Clear search" : "Close search"}
+            hitSlop={hitSlop}
+            onPress={() => (query ? setQuery("") : collapse())}
+          >
+            <Feather name="x" size={GLYPH} color={theme.textPrimary} />
+          </Pressable>
+        </Animated.View>
+        {/* Collapsed, the whole circle is the button; expanded it must not
+            steal taps from the field underneath it. */}
+        {!expanded ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Search for a place"
+            style={StyleSheet.absoluteFill}
+            onPress={() => setExpanded(true)}
+          />
+        ) : null}
+      </Animated.View>
 
       {showPanel ? (
         <View style={styles.panel}>
@@ -155,38 +202,39 @@ export function MapSearchBar({
 }
 
 const styles = StyleSheet.create({
-  fab: {
-    position: "absolute",
-    left: CHROME_GAP,
-    width: FAB_SIZE,
-    height: FAB_SIZE,
-    borderRadius: FAB_SIZE / 2,
-    backgroundColor: theme.secondary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  expanded: {
+  root: {
     position: "absolute",
     left: CHROME_GAP,
     right: CHROME_GAP,
     gap: spacing(1),
+    alignItems: "flex-start",
   },
-  inputRow: {
+  pill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing(1.5),
+    height: SEARCH_SIZE,
+    borderRadius: SEARCH_SIZE / 2,
     backgroundColor: theme.secondary,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing(2),
-    minHeight: 52,
+    // The field is clipped by the growing circle rather than spilling past it.
+    overflow: "hidden",
+  },
+  glyph: { marginLeft: GLYPH_INSET },
+  field: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1),
+    paddingLeft: spacing(1.5),
+    paddingRight: GLYPH_INSET,
   },
   input: {
     flex: 1,
     fontSize: fontSize.base,
     color: theme.textPrimary,
-    paddingVertical: spacing(1.25),
+    paddingVertical: spacing(1),
   },
   panel: {
+    alignSelf: "stretch",
     backgroundColor: theme.secondary,
     borderRadius: radius.lg,
     overflow: "hidden",

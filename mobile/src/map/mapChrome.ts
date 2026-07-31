@@ -8,6 +8,15 @@
 export const FAB_SIZE = 72;
 export const FAB_ICON = 32;
 
+/**
+ * The search pill's height, and therefore its collapsed diameter. Smaller than
+ * a control-column button on purpose: search is a thing you go looking for,
+ * not one you reach for with a thumb mid-scramble, and the collapsed circle has
+ * to be the same size as the bar it becomes for the expansion to read as one
+ * shape growing (see MapSearchBar).
+ */
+export const SEARCH_SIZE = 52;
+
 // Secondary chrome that must not compete with the primary column: the
 // attribution (i) button.
 export const MINI_FAB_SIZE = 36;
@@ -17,11 +26,14 @@ export const MINI_FAB_ICON = 18;
 export const CHROME_GAP = 16;
 
 /**
- * Bottom of the floating chrome, clearing the scale bar that runs along the very
- * bottom edge. Both control columns share it, and both lift by the recording
- * HUD's measured height when one is up — chrome that stacks on other chrome was
- * the recording panel's old bug, so the offsets live here rather than per
- * component.
+ * Bottom of the floating chrome, clearing the scale bar and the native compass
+ * that sit along the bottom edge.
+ *
+ * It is a CONSTANT. It used to grow by the recording HUD's measured height so
+ * the columns could lift out of its way — but `onLayout` never fires on the way
+ * out, so the lift stuck after a recording ended and every button stayed shoved
+ * up the screen until the app restarted. The HUD now lives in the top notice
+ * stack, where it competes with nothing and this number can't move.
  */
 export const CHROME_BOTTOM = CHROME_GAP + 32;
 

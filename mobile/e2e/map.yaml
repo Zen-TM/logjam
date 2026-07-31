@@ -16,9 +16,9 @@ appId: com.logjamnsw.mobile
 - extendedWaitUntil:
     visible: "Six Maps Topo"
     timeout: 10000
-- assertVisible: "Topo Vector (offline-ready)"
+- assertVisible: "Vector Map"
 # Swap to the Protomaps vector basemap; attribution must follow.
-- tapOn: "Topo Vector (offline-ready)"
+- tapOn: "Vector Map"
 - extendedWaitUntil:
     visible: ".*OpenStreetMap contributors.*"
     timeout: 15000

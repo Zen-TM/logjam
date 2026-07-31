@@ -93,7 +93,9 @@ type TripsStackParams = {
 };
 
 type SavedStackParams = {
-  SavedHome: undefined;
+  // `filter` lands the screen on one category — the map's layer sheet points
+  // at the regions it manages, and "All" would make the user find them again.
+  SavedHome: { filter?: "region" } | undefined;
 };
 
 type MoreStackParams = {
@@ -149,7 +151,12 @@ function MapStackNav() {
             onOpenCanyon={(canyonId, name) =>
               navigation.navigate("MapCanyonDetail", { canyonId, name })
             }
-            onOpenSaved={() => navigation.getParent()?.navigate("Saved")}
+            onOpenSaved={(category) =>
+              navigation.getParent()?.navigate("Saved", {
+                screen: "SavedHome",
+                params: { filter: category },
+              })
+            }
             onSaveMapsOffline={(context) =>
               navigation.navigate("MapRegionDownload", context)
             }
@@ -214,8 +221,9 @@ function SavedStackNav() {
     <SavedStack.Navigator screenOptions={stackScreenOptions}>
       {/* No native header: SavedScreen leads with its own HeroHeader. */}
       <SavedStack.Screen name="SavedHome" options={{ headerShown: false }}>
-        {({ navigation }) => (
+        {({ navigation, route }) => (
           <SavedScreen
+            initialFilter={route.params?.filter}
             onOpenMap={(bbox) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",

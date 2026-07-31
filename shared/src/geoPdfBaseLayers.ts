@@ -150,7 +150,10 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     // ODbL requires the OSM credit; Protomaps credits the sponsor-funded
     // planet builds the extract comes from.
     id: "protomaps",
-    name: "Topo Vector (offline-ready)",
+    // Named for what it IS, not for what it can do: every downloadable source
+    // is "offline-ready", and "Topo Vector" read as a topographic map, which
+    // this is not — it is the OSM road/track network drawn on the device.
+    name: "Vector Map",
     kind: "vector",
     urlTemplate: "master/basemap/protomaps-nsw.pmtiles",
     maxNativeZoom: 15,

@@ -2,9 +2,15 @@
 // (only compass/attribution/logo), so the bar is drawn in JS from the camera's
 // zoom and latitude — these are the pure bits, unit-tested.
 
-// Web-Mercator ground resolution at zoom 0, latitude 0: equator circumference
-// (40075016.686 m) / 256 px tile.
-const EQUATOR_METERS_PER_PIXEL_Z0 = 156543.03392;
+// Web-Mercator ground resolution at zoom 0, latitude 0.
+//
+// MapLibre's camera zoom is 512-BASED: the world is `512 · 2^zoom` points
+// across, not `256 · 2^zoom` (the slippy-tile convention). A raster source
+// declaring `tileSize: 256` is served its z+1 tiles to compensate, but the
+// number `onRegionDidChange` reports is still the 512-based one — so the bar
+// must divide by 512, and the 256-based 156543.034 constant this used made
+// every distance read exactly double.
+const EQUATOR_METERS_PER_PIXEL_Z0 = 40075016.686 / 512;
 
 // Round distances a reader can divide in their head. Ends at 500 km — beyond
 // that the whole state fits on screen and the bar stops being useful.

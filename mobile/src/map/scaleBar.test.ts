@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import { chooseScaleStep, metersPerPixel } from "./scaleBar";
 
 describe("metersPerPixel", () => {
-  it("matches the known Web-Mercator resolution at the equator", () => {
-    expect(metersPerPixel(0, 0)).toBeCloseTo(156543.03392, 3);
-    expect(metersPerPixel(0, 10)).toBeCloseTo(152.8740565, 5);
+  it("matches MapLibre's 512-based resolution at the equator", () => {
+    // Half the familiar slippy-tile figures: MapLibre's zoom puts 512 points
+    // across a tile, so z0 is the whole world in 512, not 256 (see scaleBar.ts).
+    expect(metersPerPixel(0, 0)).toBeCloseTo(78271.51696, 3);
+    expect(metersPerPixel(0, 10)).toBeCloseTo(76.43702827, 5);
   });
 
   it("shrinks with latitude (NSW canyoning country is ~-33)", () => {
