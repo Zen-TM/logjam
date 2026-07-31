@@ -30,3 +30,8 @@ dist/
 snapshots/*.sql
 localstack-data/
 postgres-data/
+
+# Personal, un-committed dev setup (syncthing repo mirror, local CLAUDE.md overrides)
+CLAUDE.local.md
+.stfolder/
+.stignore
