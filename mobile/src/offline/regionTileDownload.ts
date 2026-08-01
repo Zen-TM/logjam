@@ -136,7 +136,7 @@ class TokenBucket {
   }
 }
 
-async function connectionAllows(allowCellular: boolean): Promise<boolean> {
+export async function connectionAllows(allowCellular: boolean): Promise<boolean> {
   const state = await NetInfo.fetch();
   if (state.isConnected !== true) return false;
   if (allowCellular) return true;
@@ -232,14 +232,29 @@ export async function runRegionDownload(
         bytesTotal: 0,
       });
 
+    // Gaps are part of the checkpoint, not a side effect of writing tiles.
+    // Flushing only when a TILE was fetched meant a run of 404s persisted
+    // nothing and reported nothing: SIX imagery LOD coverage is blocky, so a
+    // wilderness region's deepest zoom can be hundreds of consecutive 404s.
+    // Killing the app in there lost the whole gap list, and the resume then
+    // re-poked the provider for every one of them at 3/s — precisely what
+    // regionMbtiles.ts says must not happen — while the user watched a frozen
+    // counter for two minutes and reasonably concluded it had hung.
+    let gapsAtLastFlush = 0;
     const flush = async (force: boolean) => {
-      if (pending.length === 0) return;
-      if (!force && pending.length < BATCH_TILES && Date.now() - lastFlush < BATCH_MS) {
+      const newGaps = gaps.size !== gapsAtLastFlush;
+      if (pending.length === 0 && !newGaps) return;
+      if (
+        !force &&
+        pending.length < BATCH_TILES &&
+        Date.now() - lastFlush < BATCH_MS
+      ) {
         return;
       }
       const batch = pending;
       pending = [];
       lastFlush = Date.now();
+      gapsAtLastFlush = gaps.size;
       await writeRegionBatch(target, batch, buildState());
       report();
     };
@@ -319,6 +334,7 @@ export async function runRegionDownload(
           }
           if (result.verdict === "gap") {
             gaps.add(`${z}/${x}/${y}`);
+            await flush(false);
             break;
           }
           if (result.verdict === "backoff") {
@@ -368,8 +384,6 @@ export async function runRegionDownload(
       return { status: "failed", code: "verify-failed" };
     }
 
-    await finalizeRegionMbtiles(target, gaps.size);
-    await closeRegionMbtiles(target);
     // The real cost on disk, not this session's byte counter — a resumed job
     // only counted the tiles IT fetched, and Saved reports storage from this
     // number (DESIGN.md §8: report the true cost of a thing).
@@ -388,7 +402,16 @@ export async function runRegionDownload(
       downloadedAt: new Date().toISOString(),
       label: spec.label,
     };
+    // Registry row FIRST, then drop the build-state marker. Finalizing first
+    // opened a window in which the file had neither: listUnfinishedRegions
+    // skips it (no build state), listArtifacts doesn't know it, and the Saved
+    // storage total is computed from registry rows — so a process kill in
+    // there turned a finished 17 MB region into invisible, unusable,
+    // undeletable disk. This order can only ever leave the region listed
+    // twice, which is visible and recoverable.
     await insertArtifact(artifact);
+    await finalizeRegionMbtiles(target, gaps.size);
+    await closeRegionMbtiles(target);
     return { status: "ready", artifact, gaps: gaps.size, failed: dead };
   } catch (err) {
     await closeRegionMbtiles(target);

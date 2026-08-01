@@ -11,10 +11,13 @@
 // run in sequence, because the politeness envelope is per-provider and running
 // them in parallel would triple the request rate at the same host.
 import { useSyncExternalStore } from "react";
+import { AppState } from "react-native";
+import NetInfo from "@react-native-community/netinfo";
 import type { OfflineBasemapId, RegionBbox } from "@logjam/shared";
 
 import type { PausedReason } from "./downloadMachine";
 import {
+  connectionAllows,
   runRegionDownload,
   type RegionCancelToken,
   type RegionFailureCode,
@@ -102,7 +105,55 @@ export function pendingRegionJobCount(list: RegionJob[]): number {
   ).length;
 }
 
+/**
+ * Re-queue jobs the WORKER parked on its own, once the condition that parked
+ * them has cleared.
+ *
+ * Without this, backgrounding the phone was terminal: the worker parks on
+ * `AppState !== "active"` and on a disallowed connection, the pump then walks
+ * to the next queued job which parks on the same check, and the only caller of
+ * `resumeRegionDownload` anywhere in the app was the Resume button on a screen
+ * the user had already left. The screen lock at 30 s was enough to end the
+ * download — and because a partial region is never registered as an artifact,
+ * the user walked into the gorge with no map at all rather than a partial one,
+ * having read "Paused — waiting for Wi-Fi", which promises the opposite.
+ *
+ * `user` and `provider-backoff` are deliberately excluded: one is the user's
+ * decision, the other is the politeness envelope's, and neither is ours to
+ * overturn.
+ */
+function resumeJobsPausedBy(reason: Extract<PausedReason, "background" | "connectivity">): void {
+  let changed = false;
+  jobs = jobs.map((job) => {
+    if (job.state.kind !== "paused" || job.state.reason !== reason) return job;
+    changed = true;
+    return { ...job, state: { kind: "queued" } as RegionJobState };
+  });
+  if (!changed) return;
+  publish();
+  void pump();
+}
+
+// Installed on first enqueue rather than at import: a user who never downloads
+// a region should not be paying for two global subscriptions.
+let watchersInstalled = false;
+function installAutoResumeWatchers(): void {
+  if (watchersInstalled) return;
+  watchersInstalled = true;
+  AppState.addEventListener("change", (state) => {
+    if (state === "active") resumeJobsPausedBy("background");
+  });
+  // Edge-triggered (offline → online), same shape as the sync engine's.
+  let wasConnected: boolean | null = null;
+  NetInfo.addEventListener((netState) => {
+    const connected = netState.isConnected === true;
+    if (connected && wasConnected === false) resumeJobsPausedBy("connectivity");
+    wasConnected = connected;
+  });
+}
+
 export function enqueueRegionDownloads(specs: RegionTaskSpec[]): void {
+  installAutoResumeWatchers();
   jobs = [
     ...jobs,
     ...specs.map((spec) => ({
@@ -170,6 +221,14 @@ async function runProtomapsClip(
   const { deleteDownloadedArtifact, downloadProtomapsRegion } = await import(
     "./regionDownloads"
   );
+  // The tile path re-checks this every 16 tiles; the clip path never checked
+  // it at all. The only guard was an alert on the download screen driven by a
+  // connection state read ONCE on mount — so opening the screen on Wi-Fi at
+  // the trailhead and tapping Save after walking out of range pulled an up-to-
+  // 80 MB clip over mobile data with no warning.
+  if (!(await connectionAllows(spec.allowCellular))) {
+    return { status: "paused", reason: "connectivity" };
+  }
   try {
     const artifact = await downloadProtomapsRegion(
       spec.bbox,

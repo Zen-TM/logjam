@@ -100,6 +100,11 @@ export const MAX_REGION_EDGE_KM = 50;
 const EARTH_RADIUS_KM = 6371;
 
 /** Great-circle-ish edge lengths of the bbox (km): [widthAtCenterLat, height]. */
+/** Area cap for the server-side vector clip. The API enforces the same
+ * number (api/src/lib/regionClip.ts imports it) — one source, so the client
+ * can never offer a region the server will refuse. */
+export const MAX_REGION_AREA_KM2 = 1600; // 40×40 km
+
 export function regionEdgesKm(bbox: RegionBbox): [number, number] {
   const centerLatRad = (((bbox.south + bbox.north) / 2) * Math.PI) / 180;
   const width =
@@ -111,16 +116,27 @@ export function regionEdgesKm(bbox: RegionBbox): [number, number] {
 
 export type RegionCapCheck =
   | { ok: true; softWarn: boolean }
-  | { ok: false; reason: "too-many-tiles" | "edge-too-long" };
+  | { ok: false; reason: "too-many-tiles" | "edge-too-long" | "area-too-large" };
 
 /** `totalTiles` is the sum across every selected source — see MAX_REGION_TILES. */
 export function checkRegionCaps(
   bbox: RegionBbox,
   totalTiles: number,
+  /** True when the selection includes the server-side vector clip, which has
+   * its own AREA cap on top of the per-edge one. */
+  includesVectorClip = false,
 ): RegionCapCheck {
   const [w, h] = regionEdgesKm(bbox);
   if (w > MAX_REGION_EDGE_KM || h > MAX_REGION_EDGE_KM) {
     return { ok: false, reason: "edge-too-long" };
+  }
+  // The two caps disagreed: a 50 × 40 km box passes both edge tests at
+  // 2000 km² and is then refused by the clip endpoint. With only the vector
+  // map selected there are no tiles to trip the tile cap, so the client
+  // happily enqueued a job that could never succeed — and the failure
+  // surfaced as "That didn't finish. Try again."
+  if (includesVectorClip && w * h > MAX_REGION_AREA_KM2) {
+    return { ok: false, reason: "area-too-large" };
   }
   if (totalTiles > MAX_REGION_TILES) {
     return { ok: false, reason: "too-many-tiles" };

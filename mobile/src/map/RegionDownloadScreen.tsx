@@ -27,6 +27,7 @@ import { Camera, MapView, RasterLayer } from "@maplibre/maplibre-react-native";
 import NetInfo from "@react-native-community/netinfo";
 import {
   BASEMAP_CATALOG,
+  MAX_REGION_AREA_KM2,
   MAX_REGION_EDGE_KM,
   MAX_REGION_TILES,
   checkRegionCaps,
@@ -34,6 +35,8 @@ import {
   type OfflineBasemapId,
   type RegionBbox,
 } from "@logjam/shared";
+
+import * as FileSystem from "expo-file-system";
 
 import { formatBytes } from "../format";
 import { fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
@@ -257,7 +260,8 @@ export function RegionDownloadScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bbox, pyramidIds.join(","), detailZoom],
   );
-  const caps = bbox && job ? checkRegionCaps(bbox, job.totalTiles) : null;
+  const caps =
+    bbox && job ? checkRegionCaps(bbox, job.totalTiles, includesVector) : null;
   const canDownload =
     selected.length > 0 &&
     bbox != null &&
@@ -271,20 +275,17 @@ export function RegionDownloadScreen({
 
   const capNote = useMemo(() => {
     if (!caps || caps.ok) return null;
-    return caps.reason === "edge-too-long"
-      ? `That area is wider than ${MAX_REGION_EDGE_KM} km. Drag an edge in.`
-      : `That is more than ${MAX_REGION_TILES.toLocaleString()} tiles. Lower the detail, shrink the area, or pick fewer maps.`;
+    if (caps.reason === "edge-too-long") {
+      return `That area is wider than ${MAX_REGION_EDGE_KM} km. Drag an edge in.`;
+    }
+    if (caps.reason === "area-too-large") {
+      return `The vector map covers at most ${MAX_REGION_AREA_KM2.toLocaleString()} km². Shrink the area, or turn the vector map off.`;
+    }
+    return `That is more than ${MAX_REGION_TILES.toLocaleString()} tiles. Lower the detail, shrink the area, or pick fewer maps.`;
   }, [caps]);
 
-  const handleSave = useCallback(() => {
+  const startDownloads = useCallback(() => {
     if (!bbox || !job) return;
-    if (onCellular && !allowCellular) {
-      Alert.alert(
-        "You're on mobile data",
-        "Turn on “Use mobile data” to download without Wi-Fi.",
-      );
-      return;
-    }
     enqueueRegionDownloads([
       ...job.perSource.map((source) => ({
         taskKind: "tile-pyramid" as const,
@@ -309,7 +310,37 @@ export function RegionDownloadScreen({
           ]
         : []),
     ]);
-  }, [allowCellular, bbox, detailZoom, includesVector, job, onCellular]);
+  }, [allowCellular, bbox, detailZoom, includesVector, job]);
+
+  const handleSave = useCallback(() => {
+    if (!bbox || !job) return;
+    if (onCellular && !allowCellular) {
+      Alert.alert(
+        "You're on mobile data",
+        "Turn on “Use mobile data” to download without Wi-Fi.",
+      );
+      return;
+    }
+    // The screen computes and shows a size estimate and then never compared it
+    // to the space available. On a full phone the SQLite insert fails mid-batch
+    // and the job reports "That didn't finish. Try again." — no hint that the
+    // phone is full, and nothing reclaimed. Check before starting; the p90 is
+    // what actually lands, so that is what has to fit.
+    void (async () => {
+      const freeBytes = await FileSystem.getFreeDiskStorageAsync().catch(
+        () => null,
+      );
+      if (freeBytes != null && job.p90Bytes > freeBytes * 0.9) {
+        Alert.alert(
+          "Not enough space",
+          `This needs about ${formatBytes(job.p90Bytes)} and the phone has ${formatBytes(freeBytes)} free. Free some space, or pick fewer maps.`,
+        );
+        return;
+      }
+      startDownloads();
+    })();
+  }, [bbox, job, onCellular, allowCellular, startDownloads]);
+
 
   const running = jobs.filter((entry) => entry.state.kind !== "ready");
   const finished = jobs.filter((entry) => entry.state.kind === "ready");

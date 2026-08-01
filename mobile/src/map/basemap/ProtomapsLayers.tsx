@@ -31,9 +31,10 @@ function layerComponent(
   def: ProtomapsLayerDef,
   sourceID: string,
   layerIndex: number,
+  idPrefix: string,
 ) {
   const shared = {
-    id: `pm-${def.id}`,
+    id: `${idPrefix}-${def.id}`,
     layerIndex,
     ...(def.sourceLayer && { sourceLayerID: def.sourceLayer }),
     // MLRN's FilterExpression is a stricter tuple type than the generated
@@ -97,10 +98,16 @@ export function ProtomapsLayers({
   sourceID: string;
   startIndex: number;
 }) {
+  // Layer ids must be unique across the whole map, and offline this component
+  // mounts ONCE PER DOWNLOADED REGION — every stack emitting the same fixed
+  // `pm-background`, `pm-water`, … meant the second saved vector region
+  // collided with the first and never drew. The source id is already unique
+  // per region, so it seeds the prefix.
+  const idPrefix = `pm-${sourceID}`;
   return (
     <>
       {protomapsLayerDefs(flavor).map((def, i) =>
-        layerComponent(def, sourceID, startIndex + i),
+        layerComponent(def, sourceID, startIndex + i, idPrefix),
       )}
     </>
   );

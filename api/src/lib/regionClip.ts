@@ -7,7 +7,11 @@
 // in this process's memory until the clip is streamed or expires. It must
 // never appear in URLs, filenames, error messages, or persisted storage.
 import { randomUUID } from "crypto";
-import { regionEdgesKm, type RegionBbox } from "@logjam/shared";
+import {
+  MAX_REGION_AREA_KM2,
+  regionEdgesKm,
+  type RegionBbox,
+} from "@logjam/shared";
 
 /** Bounds of the NSW/ACT archive extract — requests must intersect. */
 export const ARCHIVE_BOUNDS: RegionBbox = {
@@ -18,7 +22,8 @@ export const ARCHIVE_BOUNDS: RegionBbox = {
 };
 
 /** Server-side caps (stage4a §7.2). */
-export const MAX_CLIP_AREA_KM2 = 1600; // 40×40 km
+/** Re-exported from shared so the client offers exactly what this accepts. */
+export const MAX_CLIP_AREA_KM2 = MAX_REGION_AREA_KM2; // 40×40 km
 export const MAX_CLIP_ZOOM = 15;
 export const MAX_CLIP_OUTPUT_BYTES = 80 * 1024 * 1024;
 export const CLIP_TOKEN_TTL_MS = 120_000;

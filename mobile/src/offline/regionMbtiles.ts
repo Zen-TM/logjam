@@ -320,7 +320,14 @@ export async function listUnfinishedRegions(): Promise<UnfinishedRegion[]> {
 }
 
 export async function deleteRegionFile(id: string): Promise<void> {
-  await FileSystem.deleteAsync(`${REGION_DIR_URI}${regionFileName(id)}`, {
-    idempotent: true,
-  }).catch(() => {});
+  // An UNFINISHED region is still in WAL mode (finalize is what flips it to
+  // DELETE), so if the app was killed its -wal/-shm were never checkpointed
+  // away. Deleting only the .mbtiles left them behind, and since
+  // listUnfinishedRegions filters on `.endsWith(".mbtiles")` they were
+  // invisible to the UI and uncounted in the storage total — tens of MB of
+  // orphan for a half-done imagery region.
+  const base = `${REGION_DIR_URI}${regionFileName(id)}`;
+  for (const uri of [base, `${base}-wal`, `${base}-shm`]) {
+    await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+  }
 }

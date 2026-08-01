@@ -444,10 +444,20 @@ export function MapScreen({
   // single layer put the offline mask underneath a region's raster — which
   // looked exactly like the mask half-rendering, red to that region's east
   // edge and nothing west of it.
+  // Both branches scale with the number of resolved sources for the same
+  // reason. The vector branch used a per-flavor CONSTANT, so with two saved
+  // Protomaps regions the band is ~140 layers deep and the mask landed at 71
+  // — inside the second region's stack, with ~70 basemap layers drawn over
+  // the top of it. That is the half-rendered mask this comment warns about,
+  // still live on the vector path.
+  const resolvedSourceCount = Math.max(
+    1,
+    basemapResolved.filter((r) => r.status === "ok").length,
+  );
   const basemapLayerCount =
     basemapId === "protomaps"
-      ? protomapsLayerCount(PROTOMAPS_FLAVOR)
-      : Math.max(1, basemapResolved.filter((r) => r.status === "ok").length);
+      ? protomapsLayerCount(PROTOMAPS_FLAVOR) * resolvedSourceCount
+      : resolvedSourceCount;
 
   const maskLayerIndex = 1 + basemapLayerCount;
   // First free layerIndex above the basemap band and the mask's own slot.
