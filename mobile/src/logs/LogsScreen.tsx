@@ -59,6 +59,7 @@ import {
   SegmentedControl,
   StatusPill,
   Toast,
+  todayDateKey,
   type SegmentOption,
   type ToastMessage,
 } from "../ui";
@@ -511,8 +512,16 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
           <DatePicker
             value={dateMode === "from" ? dateFrom : dateTo}
             onChange={(key) => {
-              if (dateMode === "from") setDateFrom(key);
-              else setDateTo(key);
+              // Bounds are set independently, so `from` could be dragged
+              // past `to` — after which the predicate matches nothing and the
+              // list is empty with no explanation. Push the other bound along.
+              if (dateMode === "from") {
+                setDateFrom(key);
+                if (dateTo != null && key > dateTo) setDateTo(key);
+              } else {
+                setDateTo(key);
+                if (dateFrom != null && key < dateFrom) setDateFrom(key);
+              }
               setDateMode("presets");
             }}
           />
@@ -637,12 +646,15 @@ function rangeLabel(from: string | null, to: string | null): string {
 
 /** The ranges people actually ask for, relative to now. */
 function datePresets(): { label: string; from: string; to: string }[] {
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const year = now.getUTCFullYear();
-  const twelveMonths = new Date(
-    Date.UTC(year, now.getUTCMonth() - 11, 1),
-  )
+  // LOCAL today, not UTC. In AEDT before 11:00 the UTC date is yesterday, so
+  // "This year" was labelled with last year on New Year's morning and, every
+  // other morning, set `to` = yesterday and hid a trip logged today. The rest
+  // of this screen already disables future days by local today, so the sheet
+  // was disagreeing with itself.
+  const today = todayDateKey();
+  const year = Number(today.slice(0, 4));
+  const month = Number(today.slice(5, 7)) - 1;
+  const twelveMonths = new Date(Date.UTC(year, month - 11, 1))
     .toISOString()
     .slice(0, 10);
   return [

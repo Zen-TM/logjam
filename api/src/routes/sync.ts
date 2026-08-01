@@ -659,6 +659,25 @@ export function parsePushOp(raw: unknown, index: number): PushOp {
 export const opDependencies = pushOpDependencies;
 
 /**
+ * A trip's `date` is a DATE, stored as UTC midnight (CH-001) — `tripFilter`'s
+ * whole-day comparisons depend on it. The push path accepted any parseable
+ * string, so a client sending an instant stored a trip with a nonzero time
+ * that its own day's `dateTo` filter then excluded. Normalize at the boundary
+ * rather than trusting the client to.
+ */
+function tripDateFromPush(value: unknown): Date {
+  const parsed = new Date(value as string);
+  if (Number.isNaN(parsed.getTime())) throw new AppError(400, "date is invalid");
+  return new Date(
+    Date.UTC(
+      parsed.getUTCFullYear(),
+      parsed.getUTCMonth(),
+      parsed.getUTCDate(),
+    ),
+  );
+}
+
+/**
  * A create op is replay-safe by "does this row exist?" — but a replay that
  * arrives AFTER the row was deleted found nothing and dutifully recreated it,
  * undoing the delete. (The gap is real: a push whose response is lost returns
@@ -825,7 +844,7 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
       data: {
         id: op.id,
         userId,
-        date: new Date(fields.date as string),
+        date: tripDateFromPush(fields.date),
         displayName: trimmedDisplayName,
         types: parsedTypes,
         notes: (fields.notes as string | null | undefined) ?? null,
@@ -891,7 +910,7 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
   const updated = await prisma.tripLog.update({
     where: { id: op.id },
     data: {
-      ...(fields.date !== undefined && { date: new Date(fields.date as string) }),
+      ...(fields.date !== undefined && { date: tripDateFromPush(fields.date) }),
       ...(fields.notes !== undefined && {
         notes: fields.notes as string | null,
       }),

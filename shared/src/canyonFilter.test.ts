@@ -204,9 +204,19 @@ describe("passesFilters — date range", () => {
   });
 
   it("created_at end bound is inclusive of the whole end day", () => {
+    // Day bounds mean the VIEWER's day. These instants are built from local
+    // wall-clock times so the assertion says the same thing in every zone —
+    // written as fixed Z instants it silently asserted UTC days, which is the
+    // bug (in Sydney, 18:30 UTC on the 16th is already the 17th).
+    const localInstant = (wallClock: string) =>
+      new Date(wallClock).toISOString();
     const f = filters({ created_at: [null, "2026-06-16"] });
-    expect(passesFilters(canyon({ createdAt: "2026-06-16T18:30:00.000Z" }), f, true)).toBe(true);
-    expect(passesFilters(canyon({ createdAt: "2026-06-17T00:00:00.000Z" }), f, true)).toBe(false);
+    expect(
+      passesFilters(canyon({ createdAt: localInstant("2026-06-16T18:30:00") }), f, true),
+    ).toBe(true);
+    expect(
+      passesFilters(canyon({ createdAt: localInstant("2026-06-17T00:00:00") }), f, true),
+    ).toBe(false);
   });
 
   it("updated_at range filters on the updated timestamp", () => {
@@ -437,5 +447,30 @@ describe("compareCanyons", () => {
       canyon({ name: "Alpha", vGrade: 3, aGrade: 3 }),
     ];
     expect(sorted(rows, "grade")).toEqual(["Alpha", "Beta"]);
+  });
+});
+
+describe("passesFilters — date range timezone and validity", () => {
+  it("files a canyon under the viewer's day, not UTC's", () => {
+    // Added 09:00 on 15 January local. East of UTC that instant is still
+    // 14 January in UTC, and the filter used to file it under the 14th: it
+    // was excluded from "from the 15th" and included in "up to the 14th".
+    const addedAt = new Date("2026-01-15T09:00:00").toISOString();
+    expect(
+      passesFilters(canyon({ createdAt: addedAt }), filters({ created_at: ["2026-01-15", null] }), true),
+    ).toBe(true);
+    expect(
+      passesFilters(canyon({ createdAt: addedAt }), filters({ created_at: [null, "2026-01-14"] }), true),
+    ).toBe(false);
+  });
+
+  it("an unparseable timestamp is unknown, not a universal match", () => {
+    // Every `<`/`>` against NaN is false, so a value like "15/01/2026" used to
+    // pass EVERY range — in or out of it.
+    const range: [string, string] = ["2026-01-01", "2026-01-31"];
+    const shown = filters({ created_at: range, include_unknowns: true });
+    const hidden = filters({ created_at: range, include_unknowns: false });
+    expect(passesFilters(canyon({ createdAt: "15/01/2026" }), shown, true)).toBe(true);
+    expect(passesFilters(canyon({ createdAt: "15/01/2026" }), hidden, true)).toBe(false);
   });
 });

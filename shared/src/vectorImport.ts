@@ -5,7 +5,7 @@
 // PRIVACY: imported files are the user's own track/waypoint data — parse
 // errors are STATIC strings and must never echo file content or coordinate
 // values.
-import { XMLParser } from "fast-xml-parser";
+import { XMLParser, XMLValidator } from "fast-xml-parser";
 
 export type ImportedPosition = number[]; // [lon, lat] or [lon, lat, ele]
 
@@ -48,6 +48,11 @@ export const IMPORT_ERRORS = {
 // ── shared helpers ──────────────────────────────────────────────────────────
 
 function assertValidPosition(position: ImportedPosition): void {
+  // A non-array reached this via a structurally bad GeoJSON geometry
+  // (`"coordinates": [150.1, -33.1]` on a LineString, or none at all) and
+  // escaped as a raw `TypeError: position is not iterable` from positionsOf,
+  // straight to the user. Errors out of this module are static IMPORT_ERRORS.
+  if (!Array.isArray(position)) throw new Error(IMPORT_ERRORS.invalidCoordinates);
   const [lon, lat] = position;
   if (
     typeof lon !== "number" ||
@@ -63,6 +68,14 @@ function assertValidPosition(position: ImportedPosition): void {
   }
 }
 
+/** Nesting depth is part of a GeoJSON geometry's validity, and nothing
+ * checked it: a Polygon whose `coordinates` were a bare position made this
+ * iterate a number and escape as a raw TypeError. */
+function asNested<T>(value: T[]): T[] {
+  if (!Array.isArray(value)) throw new Error(IMPORT_ERRORS.invalidCoordinates);
+  return value;
+}
+
 function* positionsOf(geometry: ImportedGeometry): Generator<ImportedPosition> {
   switch (geometry.type) {
     case "Point":
@@ -70,15 +83,15 @@ function* positionsOf(geometry: ImportedGeometry): Generator<ImportedPosition> {
       break;
     case "MultiPoint":
     case "LineString":
-      yield* geometry.coordinates;
+      yield* asNested(geometry.coordinates);
       break;
     case "MultiLineString":
     case "Polygon":
-      for (const ring of geometry.coordinates) yield* ring;
+      for (const ring of asNested(geometry.coordinates)) yield* asNested(ring);
       break;
     case "MultiPolygon":
-      for (const polygon of geometry.coordinates)
-        for (const ring of polygon) yield* ring;
+      for (const polygon of asNested(geometry.coordinates))
+        for (const ring of asNested(polygon)) yield* asNested(ring);
       break;
   }
 }
@@ -159,14 +172,27 @@ function gpxPosition(pt: GpxPoint): ImportedPosition {
   return position;
 }
 
-/** Parse GPX 1.0/1.1: wpt → Point, trk/trkseg → LineString, rte → LineString. */
-export function parseGpx(text: string): VectorImportResult {
-  let root: Record<string, unknown>;
+/**
+ * fast-xml-parser's XMLParser does NOT validate — it never throws on a
+ * mismatched, unclosed or crossed tag, which made the try/catch around
+ * `.parse()` near-dead code. A GPX truncated mid-download therefore imported
+ * as a SUCCESSFUL shorter track: a route that stops in the middle of a canyon,
+ * with nothing on screen to say so.
+ */
+function parseXmlStrict(text: string): Record<string, unknown> {
+  if (XMLValidator.validate(text) !== true) {
+    throw new Error(IMPORT_ERRORS.unparseable);
+  }
   try {
-    root = makeXmlParser().parse(text) as Record<string, unknown>;
+    return makeXmlParser().parse(text) as Record<string, unknown>;
   } catch {
     throw new Error(IMPORT_ERRORS.unparseable);
   }
+}
+
+/** Parse GPX 1.0/1.1: wpt → Point, trk/trkseg → LineString, rte → LineString. */
+export function parseGpx(text: string): VectorImportResult {
+  const root = parseXmlStrict(text);
   const gpx = root.gpx as Record<string, unknown> | undefined;
   if (gpx == null) throw new Error(IMPORT_ERRORS.unparseable);
 
@@ -225,7 +251,13 @@ function kmlCoordinates(text: string): ImportedPosition[] {
   const positions: ImportedPosition[] = [];
   for (const tuple of text.trim().split(/\s+/)) {
     if (tuple === "") continue;
-    const parts = tuple.split(",").map(Number);
+    const rawParts = tuple.split(",");
+    // `Number("")` is 0, so "150.1,-33.1," fabricated an altitude of exactly
+    // sea level for a tuple that simply had a trailing comma.
+    if (rawParts.some((part) => part.trim() === "")) {
+      throw new Error(IMPORT_ERRORS.invalidCoordinates);
+    }
+    const parts = rawParts.map(Number);
     if (parts.length < 2) throw new Error(IMPORT_ERRORS.invalidCoordinates);
     const position =
       parts.length >= 3 && Number.isFinite(parts[2])
@@ -239,15 +271,21 @@ function kmlCoordinates(text: string): ImportedPosition[] {
 
 function kmlGeometries(node: Record<string, unknown>): ImportedGeometry[] {
   const geometries: ImportedGeometry[] = [];
+  // An element that IS there and yields nothing is a dropped geometry, not an
+  // absent one. Skipping it quietly lost half a KML while still reporting
+  // success — `finalize` only complains when the whole file is empty, so the
+  // user saw an import that worked and a map missing features.
+  const required = (coords: ImportedPosition[]): ImportedPosition[] => {
+    if (coords.length === 0) throw new Error(IMPORT_ERRORS.invalidCoordinates);
+    return coords;
+  };
   for (const point of asArray(node.Point as Record<string, unknown>[])) {
-    const coords = kmlCoordinates(textOf(point?.coordinates) ?? "");
-    if (coords.length > 0)
-      geometries.push({ type: "Point", coordinates: coords[0] });
+    const coords = required(kmlCoordinates(textOf(point?.coordinates) ?? ""));
+    geometries.push({ type: "Point", coordinates: coords[0] });
   }
   for (const line of asArray(node.LineString as Record<string, unknown>[])) {
-    const coords = kmlCoordinates(textOf(line?.coordinates) ?? "");
-    if (coords.length > 0)
-      geometries.push({ type: "LineString", coordinates: coords });
+    const coords = required(kmlCoordinates(textOf(line?.coordinates) ?? ""));
+    geometries.push({ type: "LineString", coordinates: coords });
   }
   for (const polygon of asArray(node.Polygon as Record<string, unknown>[])) {
     const rings: ImportedPosition[][] = [];
@@ -256,8 +294,7 @@ function kmlGeometries(node: Record<string, unknown>): ImportedGeometry[] {
         | Record<string, unknown>
         | undefined
     )?.coordinates;
-    const outerCoords = kmlCoordinates(textOf(outer) ?? "");
-    if (outerCoords.length > 0) rings.push(outerCoords);
+    rings.push(required(kmlCoordinates(textOf(outer) ?? "")));
     for (const inner of asArray(
       polygon?.innerBoundaryIs as Record<string, unknown>[],
     )) {
@@ -300,12 +337,7 @@ function collectPlacemarks(
 
 /** Parse KML 2.2: Placemark Point/LineString/Polygon/MultiGeometry. */
 export function parseKml(text: string): VectorImportResult {
-  let root: Record<string, unknown>;
-  try {
-    root = makeXmlParser().parse(text) as Record<string, unknown>;
-  } catch {
-    throw new Error(IMPORT_ERRORS.unparseable);
-  }
+  const root = parseXmlStrict(text);
   const kml = root.kml as Record<string, unknown> | undefined;
   if (kml == null) throw new Error(IMPORT_ERRORS.unparseable);
   const features: ImportedFeature[] = [];

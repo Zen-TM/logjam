@@ -199,3 +199,54 @@ describe("parseVectorImport dispatcher", () => {
     );
   });
 });
+
+// Every case here imported "successfully" before, with data missing or made
+// up — the failure mode the root CLAUDE.md no-silent-fallbacks rule exists to
+// prevent. A canyoner cannot tell a short track from a truncated one.
+describe("malformed input fails loudly", () => {
+  it("rejects a GPX truncated mid-download instead of importing a short track", () => {
+    const truncated =
+      '<gpx><trk><name>W</name><trkseg>' +
+      '<trkpt lat="-33.00" lon="150.00"/><trkpt lat="-33.01" lon="150.01"/>';
+    expect(() => parseGpx(truncated)).toThrow(IMPORT_ERRORS.unparseable);
+  });
+
+  it("rejects crossed close tags and trailing garbage", () => {
+    expect(() =>
+      parseGpx('<gpx><trk><trkseg><trkpt lat="-33" lon="150"/></trk></trkseg></gpx>'),
+    ).toThrow(IMPORT_ERRORS.unparseable);
+    expect(() =>
+      parseGpx('<gpx><wpt lat="-33" lon="150"/></gpx>JUNK'),
+    ).toThrow(IMPORT_ERRORS.unparseable);
+  });
+
+  it("rejects a KML whose geometry element carries no coordinates", () => {
+    const kml =
+      "<kml><Document>" +
+      "<Placemark><Point><coordinates>150.0,-33.0</coordinates></Point></Placemark>" +
+      "<Placemark><LineString><coordinates>   </coordinates></LineString></Placemark>" +
+      "</Document></kml>";
+    expect(() => parseKml(kml)).toThrow(IMPORT_ERRORS.invalidCoordinates);
+  });
+
+  it("does not invent a sea-level altitude from a trailing comma", () => {
+    const kml =
+      "<kml><Document><Placemark><Point>" +
+      "<coordinates>150.0,-33.0,</coordinates>" +
+      "</Point></Placemark></Document></kml>";
+    expect(() => parseKml(kml)).toThrow(IMPORT_ERRORS.invalidCoordinates);
+  });
+
+  it("reports structurally bad GeoJSON coordinates as an import error", () => {
+    // These escaped as a raw "position is not iterable" TypeError.
+    for (const geometry of [
+      '{"type":"LineString","coordinates":[150.1,-33.1]}',
+      '{"type":"Polygon","coordinates":[150.1,-33.1]}',
+      '{"type":"Point"}',
+    ]) {
+      expect(() => parseGeoJson(geometry)).toThrow(
+        IMPORT_ERRORS.invalidCoordinates,
+      );
+    }
+  });
+});

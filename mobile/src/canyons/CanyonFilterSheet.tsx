@@ -155,6 +155,13 @@ export function CanyonFilterSheet({
       const current = filters[field] ?? [null, null];
       const next: [string | null, string | null] =
         bound === 0 ? [value, current[1]] : [current[0], value];
+      // The bounds are set independently, so `from` can be dragged past `to`
+      // — after which the predicate matches nothing and the list is empty
+      // with no explanation. Push the other bound along instead.
+      if (next[0] != null && next[1] != null && next[0] > next[1]) {
+        if (bound === 0) next[1] = next[0];
+        else next[0] = next[1];
+      }
       patch({ [field]: next[0] == null && next[1] == null ? null : next });
     },
     [filters, patch],

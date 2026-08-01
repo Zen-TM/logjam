@@ -169,6 +169,23 @@ const COUNTED_FILTER_KEYS: (keyof CanyonFilters)[] = [
   "ropewiki",
 ];
 
+/**
+ * Midnight of a `yyyy-mm-dd` bound in the VIEWER's timezone, or null if it
+ * isn't a usable date.
+ *
+ * `created_at`/`updated_at` are real instants, and the bounds were parsed as
+ * UTC midnight — so in Sydney (UTC+10/+11) everything added between local
+ * midnight and 11:00 filed under the previous day. A canyon added
+ * 15 January 09:00 AEDT is 14 January 22:00 UTC: filtering "from 15 January"
+ * excluded it, and "up to 14 January" included it. `Date.parse` on a date-only
+ * string is UTC by spec; the explicit `T00:00:00` form is local by spec.
+ */
+function dayStartMs(day: string | null | undefined): number | null {
+  if (day == null) return null;
+  const parsed = new Date(`${day}T00:00:00`).getTime();
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 export function activeCanyonFilterCount(filters: CanyonFilters): number {
   const builtIn = COUNTED_FILTER_KEYS.reduce(
     (count, key) => count + (isFilterActive(filters, key) ? 1 : 0),
@@ -255,11 +272,17 @@ export function passesCanyonFilters(
     if (start == null && end == null) return true;
     if (value == null) return includeUnknowns;
     const time = Date.parse(value);
-    if (start != null && time < Date.parse(start)) return false;
+    // A value the viewer can't place on a calendar can't be range-filtered.
+    // Returning true here (which is what every NaN comparison did) meant a
+    // custom date field holding "15/01/2026" matched EVERY range, in or out.
+    if (Number.isNaN(time)) return includeUnknowns;
+    const from = dayStartMs(start);
+    if (from != null && time < from) return false;
     if (end != null) {
-      // end is a yyyy-mm-dd day; include the whole day by extending to its end.
-      const endOfDay = Date.parse(end) + 24 * 60 * 60 * 1000 - 1;
-      if (time > endOfDay) return false;
+      const endOfDay = dayStartMs(end);
+      if (endOfDay != null && time > endOfDay + 24 * 60 * 60 * 1000 - 1) {
+        return false;
+      }
     }
     return true;
   }
