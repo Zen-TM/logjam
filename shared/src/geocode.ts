@@ -38,9 +38,17 @@ export async function geocode(
 
   // Raw fetch, not apiFetch: this is a third-party host with no app auth or
   // base URL — apiFetch would inject the wrong origin and our credentials.
+  //
+  // User-Agent is required by the Nominatim usage policy: it 403s generic
+  // library agents, which is what React Native sends on Android (okhttp/...).
+  // Browsers treat User-Agent as a forbidden header and drop it before the
+  // request (and before preflight computation), so setting it is a no-op there.
   const res = await fetch(`${NOMINATIM_URL}?${params.toString()}`, {
     signal,
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "Logjam/0.1.0 (https://logjamnsw.com)",
+    },
   });
   if (!res.ok) throw new Error(`Geocoder returned ${res.status}`);
 
