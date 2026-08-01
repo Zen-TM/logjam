@@ -66,7 +66,12 @@ import {
   MINI_FAB_SIZE,
   SEARCH_SIZE,
 } from "./mapChrome";
-import { HEADING_RENDER_MS, shortestAngleDelta, smoothHeading } from "./heading";
+import {
+  HEADING_RENDER_MS,
+  resolveTrueHeading,
+  shortestAngleDelta,
+  smoothHeading,
+} from "./heading";
 import { offlineCoverageMask } from "./offlineMask";
 import { BottomSheet } from "../ui/BottomSheet";
 import { IconButton } from "../ui/IconButton";
@@ -846,10 +851,13 @@ export function MapScreen({
     // Compass heading — which way the user is FACING. It orients the location
     // arrow and, in course-up, the whole map, so it is smoothed rather than
     // gated (see heading.ts: the old ≥3° deadband turned a wobble into a
-    // staircase). trueHeading needs a location fix for declination; fall back
-    // to magnetic when it is unavailable (reported as -1).
+    // staircase). trueHeading needs a location fix for declination; when it is
+    // unavailable (reported as -1) resolveTrueHeading corrects the magnetic
+    // reading rather than passing it off as true — everything else on this
+    // screen, including the navigate-to chip, is true north.
     headingWatch.current = await Location.watchHeadingAsync((heading) => {
-      const raw = heading.trueHeading >= 0 ? heading.trueHeading : heading.magHeading;
+      const raw = resolveTrueHeading(heading);
+      if (raw == null) return;
       const next = smoothHeading(smoothedHeading.current, raw);
       smoothedHeading.current = next;
 

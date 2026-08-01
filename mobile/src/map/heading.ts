@@ -17,7 +17,7 @@
  */
 export const HEADING_RENDER_MS = 50;
 
-/** Signed shortest turn from `from` to `to`, in (-180, 180]. */
+/** Signed shortest turn from `from` to `to`, in [-180, 180). */
 export function shortestAngleDelta(from: number, to: number): number {
   return ((((to - from) % 360) + 540) % 360) - 180;
 }
@@ -44,4 +44,39 @@ export function smoothHeading(previous: number | null, sample: number): number {
   const delta = shortestAngleDelta(previous, wrapped);
   if (Math.abs(delta) > 90) return wrapped;
   return (((previous + delta * HEADING_SMOOTHING) % 360) + 360) % 360;
+}
+
+/**
+ * Magnetic declination for the NSW canyoning area, degrees EAST of true north
+ * (Blue Mountains / Wollemi ≈ +12.4°, Kanangra ≈ +12.2°, the far south coast
+ * ≈ +12.9°).
+ *
+ * ponytail: one constant for the whole operating area, worth ≤1° of error
+ * inside NSW and wrong outside it. The upgrade path is Android's
+ * `GeomagneticField` (or a WMM port) through a tiny native call, keyed on the
+ * user's own fix — worth doing the day the app is used outside this state.
+ */
+export const NSW_MAGNETIC_DECLINATION_DEG = 12.5;
+
+/**
+ * True-north heading from an expo-location heading sample, or null when the
+ * device has nothing usable.
+ *
+ * `trueHeading` is -1 whenever expo-location has no location fix to compute
+ * declination from — which is the norm on a cold start in the bush, exactly
+ * where this matters. The old code silently fell back to `magHeading` and drew
+ * it as if it were true, so the arrow pointed 12.5° off while the
+ * navigate-to-waypoint chip beside it printed a real great-circle bearing:
+ * two different norths on one screen. Walk a kilometre on that arrow and you
+ * arrive ~220 m from where you aimed.
+ */
+export function resolveTrueHeading(sample: {
+  trueHeading: number;
+  magHeading: number;
+}): number | null {
+  if (sample.trueHeading >= 0) return sample.trueHeading;
+  if (!(sample.magHeading >= 0)) return null;
+  return (
+    (((sample.magHeading + NSW_MAGNETIC_DECLINATION_DEG) % 360) + 360) % 360
+  );
 }

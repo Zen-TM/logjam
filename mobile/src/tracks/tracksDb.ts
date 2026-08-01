@@ -30,6 +30,10 @@ export type Track = {
   pointCount: number;
   startedAt: string;
   endedAt: string | null;
+  /** Time already spent paused, summed at each resume. */
+  pausedMs: number;
+  /** Start of the pause in progress, else null. */
+  pausedAt: string | null;
   updatedAt: string;
 };
 
@@ -65,6 +69,8 @@ type TrackRow = {
   pointCount: number;
   startedAt: string;
   endedAt: string | null;
+  pausedMs: number;
+  pausedAt: string | null;
   updatedAt: string;
 };
 
@@ -83,6 +89,8 @@ function rowToTrack(row: TrackRow): Track {
     pointCount: row.pointCount,
     startedAt: row.startedAt,
     endedAt: row.endedAt,
+    pausedMs: row.pausedMs,
+    pausedAt: row.pausedAt,
     updatedAt: row.updatedAt,
   };
 }
@@ -104,14 +112,23 @@ export async function findActiveTrack(): Promise<Track | null> {
   return rows.length > 0 ? rowToTrack(rows[0]) : null;
 }
 
+export async function getTrack(id: string): Promise<Track | null> {
+  const db = await getOfflineDb();
+  const rows = await db.getAllAsync<TrackRow>(
+    "SELECT * FROM track WHERE id = ? LIMIT 1",
+    id,
+  );
+  return rows.length > 0 ? rowToTrack(rows[0]) : null;
+}
+
 export async function insertTrack(track: Track): Promise<void> {
   const db = await getOfflineDb();
   await db.runAsync(
     `INSERT INTO track
        (id, name, state, color, visible, currentSegment,
         distanceM, durationMs, elevationGainM, elevationLossM, pointCount,
-        startedAt, endedAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        startedAt, endedAt, pausedMs, pausedAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     track.id,
     track.name,
     track.state,
@@ -125,6 +142,8 @@ export async function insertTrack(track: Track): Promise<void> {
     track.pointCount,
     track.startedAt,
     track.endedAt,
+    track.pausedMs,
+    track.pausedAt,
     track.updatedAt,
   );
   notifyChanged();
@@ -134,7 +153,16 @@ export async function insertTrack(track: Track): Promise<void> {
 export async function updateTrack(
   id: string,
   patch: Partial<
-    Pick<Track, "name" | "state" | "visible" | "currentSegment" | "endedAt">
+    Pick<
+      Track,
+      | "name"
+      | "state"
+      | "visible"
+      | "currentSegment"
+      | "endedAt"
+      | "pausedMs"
+      | "pausedAt"
+    >
   > & { stats?: TrackStats },
 ): Promise<void> {
   const db = await getOfflineDb();
@@ -159,6 +187,14 @@ export async function updateTrack(
   if (patch.endedAt !== undefined) {
     sets.push("endedAt = ?");
     args.push(patch.endedAt);
+  }
+  if (patch.pausedMs !== undefined) {
+    sets.push("pausedMs = ?");
+    args.push(patch.pausedMs);
+  }
+  if (patch.pausedAt !== undefined) {
+    sets.push("pausedAt = ?");
+    args.push(patch.pausedAt);
   }
   if (patch.stats !== undefined) {
     sets.push(

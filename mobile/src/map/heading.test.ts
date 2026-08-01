@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { shortestAngleDelta, smoothHeading } from "./heading";
+import { resolveTrueHeading, shortestAngleDelta, smoothHeading } from "./heading";
 
 describe("shortestAngleDelta", () => {
   it("takes the short way across north", () => {
@@ -44,5 +44,35 @@ describe("smoothHeading", () => {
 
   it("follows a real turn immediately rather than crawling", () => {
     expect(smoothHeading(10, 190)).toBe(190);
+  });
+});
+
+describe("resolveTrueHeading", () => {
+  it("passes a real true heading through untouched", () => {
+    expect(resolveTrueHeading({ trueHeading: 42, magHeading: 30 })).toBe(42);
+    expect(resolveTrueHeading({ trueHeading: 0, magHeading: 350 })).toBe(0);
+  });
+
+  it("corrects magnetic for NSW declination when true is unavailable", () => {
+    // Facing true north, the magnetometer reads 347.5° in the Blue Mountains.
+    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 347.5 })).toBeCloseTo(
+      0,
+      6,
+    );
+    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 100 })).toBeCloseTo(
+      112.5,
+      6,
+    );
+  });
+
+  it("wraps past 360 rather than returning an out-of-range bearing", () => {
+    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 355 })).toBeCloseTo(
+      7.5,
+      6,
+    );
+  });
+
+  it("returns null when the device has no usable heading at all", () => {
+    expect(resolveTrueHeading({ trueHeading: -1, magHeading: -1 })).toBeNull();
   });
 });

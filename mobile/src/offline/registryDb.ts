@@ -98,6 +98,8 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
           pointCount     INTEGER NOT NULL DEFAULT 0,
           startedAt      TEXT NOT NULL,
           endedAt        TEXT,
+          pausedMs       INTEGER NOT NULL DEFAULT 0,
+          pausedAt       TEXT,
           updatedAt      TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS track_point (
@@ -151,6 +153,12 @@ const ADDED_COLUMNS: { table: string; column: string; definition: string }[] = [
   // User-facing rename of a downloaded region/overlay (Saved tab). Display
   // only — resolution still keys off `logicalKey`.
   { table: "map_artifact", column: "label", definition: "TEXT" },
+  // Wall-clock recording time. The elapsed clock used to be derived from the
+  // stored fix series, which stops at the last accepted fix — so the time
+  // between the last fix and the Finish tap vanished from the saved track.
+  // Pauses are now accumulated explicitly at the pause/resume taps.
+  { table: "track", column: "pausedMs", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "track", column: "pausedAt", definition: "TEXT" },
 ];
 
 async function addMissingColumns(db: SQLite.SQLiteDatabase): Promise<void> {

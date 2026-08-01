@@ -15,6 +15,7 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import {
   computeTrackStats,
+  recordedDurationMs,
   rejectTrackFix,
   type CandidateFix,
   type RecordedTrackPoint,
@@ -25,6 +26,7 @@ import {
   appendTrackPoints,
   deleteTrack,
   findActiveTrack,
+  getTrack,
   insertTrack,
   lastTrackPoint,
   listTrackPoints,
@@ -58,12 +60,34 @@ const TRACK_COLOR = "#f59e0b"; // amber — distinct from the import palette
 // and two interleaved handlers would both read the same lastTrackPoint.
 let writeChain: Promise<void> = Promise.resolve();
 
+/**
+ * Elapsed recording time from the wall clock. The point-derived duration in
+ * TrackStats stops at the last accepted fix, so standing still froze the
+ * on-screen clock and the Finish tap's trailing minutes never made it into the
+ * saved track. `endedAtMs` is null while the recording is still live.
+ */
+export function trackDurationMs(track: Track, endedAtMs: number | null): number {
+  return recordedDurationMs({
+    startedAtMs: Date.parse(track.startedAt),
+    endedAtMs,
+    pausedMs: track.pausedMs,
+    pausedAtMs: track.pausedAt == null ? null : Date.parse(track.pausedAt),
+    nowMs: Date.now(),
+  });
+}
+
 async function handleLocationBatch(locations: Location.LocationObject[]) {
   const track = await findActiveTrack();
   // Fixes can trail in after pause/finish (queued deliveries) — drop them.
   if (!track || track.state !== "recording") return;
 
-  let prev = await lastTrackPoint(track.id);
+  const lastPoint = await lastTrackPoint(track.id);
+  // A resumed segment starts fresh: measured against the PREVIOUS segment's
+  // last point, every fix after a resume-in-place reads "too-close" and the
+  // new segment records nothing until the user walks away from where they
+  // paused.
+  let prev =
+    lastPoint && lastPoint.segment === track.currentSegment ? lastPoint : null;
   const accepted: RecordedTrackPoint[] = [];
   for (const location of locations) {
     const fix: CandidateFix = {
@@ -82,7 +106,9 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
   await appendTrackPoints(track.id, accepted);
   // O(points) per batch — fine at canyon scale (a full day ≈ thousands).
   const stats = computeTrackStats(await listTrackPoints(track.id));
-  await updateTrack(track.id, { stats });
+  await updateTrack(track.id, {
+    stats: { ...stats, durationMs: trackDurationMs(track, null) },
+  });
 }
 
 // Module scope, imported from the app entry — required so the handler exists
@@ -129,6 +155,8 @@ export async function startTrackRecording(): Promise<Track> {
     pointCount: 0,
     startedAt: now.toISOString(),
     endedAt: null,
+    pausedMs: 0,
+    pausedAt: null,
     updatedAt: now.toISOString(),
   };
   await insertTrack(track);
@@ -144,26 +172,40 @@ export async function startTrackRecording(): Promise<Track> {
 
 export async function pauseTrackRecording(trackId: string): Promise<void> {
   await stopLocationUpdatesIfRunning();
-  await updateTrack(trackId, { state: "paused" });
+  // The pause clock starts at the TAP, not at the last fix — a user who stood
+  // still for ten minutes before pausing was otherwise credited with them.
+  await updateTrack(trackId, {
+    state: "paused",
+    pausedAt: new Date().toISOString(),
+  });
 }
 
 export async function resumeTrackRecording(track: Track): Promise<void> {
   // New segment ⇒ the pause gap is excluded from distance/duration and the
   // rendered line breaks instead of drawing a teleport.
+  const pausedSinceMs =
+    track.pausedAt == null
+      ? 0
+      : Math.max(0, Date.now() - Date.parse(track.pausedAt));
   await updateTrack(track.id, {
     state: "recording",
     currentSegment: track.currentSegment + 1,
+    pausedMs: track.pausedMs + pausedSinceMs,
+    pausedAt: null,
   });
   await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, LOCATION_OPTIONS);
 }
 
 export async function finishTrackRecording(trackId: string): Promise<void> {
   await stopLocationUpdatesIfRunning();
+  const track = await getTrack(trackId);
+  if (!track) throw new Error(`finishTrackRecording: no track ${trackId}`);
+  const endedAt = new Date();
   const stats = computeTrackStats(await listTrackPoints(trackId));
   await updateTrack(trackId, {
     state: "done",
-    endedAt: new Date().toISOString(),
-    stats,
+    endedAt: endedAt.toISOString(),
+    stats: { ...stats, durationMs: trackDurationMs(track, endedAt.getTime()) },
   });
 }
 
@@ -185,7 +227,16 @@ export async function reconcileTrackRecordingOnLaunch(): Promise<void> {
     TRACK_RECORDING_TASK,
   );
   if (active?.state === "recording" && !taskRunning) {
-    await updateTrack(active.id, { state: "paused" });
+    // The recorder died at some unknown moment; everything from the last fix
+    // to now is a gap, not recording time, so open a pause at that fix rather
+    // than at launch.
+    const lastPoint = await lastTrackPoint(active.id);
+    await updateTrack(active.id, {
+      state: "paused",
+      pausedAt: new Date(
+        lastPoint?.timestampMs ?? Date.parse(active.startedAt),
+      ).toISOString(),
+    });
   } else if (!active && taskRunning) {
     await Location.stopLocationUpdatesAsync(TRACK_RECORDING_TASK);
   }

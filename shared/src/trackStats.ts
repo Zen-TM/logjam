@@ -31,25 +31,49 @@ export type CandidateFix = Omit<RecordedTrackPoint, "segment">;
 // (deep canyon GPS is routinely 20–40 m) while dropping cell-tower garbage.
 export const MAX_ACCEPTED_ACCURACY_M = 50;
 
-// Below this movement a fix is a duplicate, not progress. Matches the
-// recorder's OS-level distanceInterval; re-applied here because resumed /
-// replayed batches can re-deliver the last fix.
+// Floor for the movement gate below. A fix that moved less than this is a
+// duplicate, not progress, however good the fix is — it matches the recorder's
+// OS-level distanceInterval, re-applied here because resumed / replayed
+// batches can re-deliver the last fix.
 export const MIN_POINT_DISTANCE_M = 5;
 
-// GPS altitude jitters ±5–10 m standing still. Elevation gain uses a
-// hysteresis filter: a climb/descent only counts once it exceeds this
-// threshold, so sawtooth noise sums to zero instead of hundreds of metres.
-export const ELEVATION_HYSTERESIS_M = 8;
+// Ground-speed ceiling for a plausible fix. Canyoning tops out around 2 m/s on
+// good track; 5 m/s (18 km/h) leaves headroom for a scramble or a jog while
+// still rejecting the multi-hundred-metre teleport a re-acquired fix makes.
+export const MAX_TRACK_SPEED_MPS = 5;
+
+// GPS altitude jitters ±5–15 m standing still, and that jitter is a RANDOM
+// WALK, not a sawtooth: any per-sample threshold leaks it, because the walk
+// eventually wanders past whatever threshold you pick. So the series is
+// median-smoothed first (below) and only then run through hysteresis at a
+// threshold above the smoothed residual. Simulated 60 min walk with 15 m
+// vertical sigma and 400 m of real climb: shipped 8 m / unsmoothed read
+// 9472 m, this reads 435 m.
+export const ELEVATION_HYSTERESIS_M = 15;
+
+// Odd, centred window for the altitude median. Median (not mean) because it
+// passes a monotone climb through untouched while killing spikes.
+export const ELEVATION_SMOOTHING_WINDOW = 5;
+
+// Odd, centred window for the lat/lon mean used by DISTANCE only — the stored
+// points, the drawn line and the GPX export stay raw. Mean (not median)
+// because position error is gaussian. 5 is the corner-cutting compromise: the
+// tightest realistic switchback (15 m amplitude, 80 m wavelength) under-reads
+// ~8 %, where a window of 9 under-reads ~19 %.
+export const DISTANCE_SMOOTHING_WINDOW = 5;
 
 export type FixRejection =
   | "invalid"
   | "inaccurate"
   | "out-of-order"
-  | "too-close";
+  | "too-close"
+  | "implausible";
 
 /**
  * Gate a platform fix before persisting it. `prev` is the last ACCEPTED point
- * (null at track/segment start). Returns null to accept, else the reason.
+ * (null at track/segment start — a resumed segment must pass null, or the
+ * first fix after the pause is measured against wherever the user was before
+ * it). Returns null to accept, else the reason.
  */
 export function rejectTrackFix(
   prev: RecordedTrackPoint | null,
@@ -70,9 +94,51 @@ export function rejectTrackFix(
   if (prev) {
     if (fix.timestampMs <= prev.timestampMs) return "out-of-order";
     const moved = haversineMeters(prev.lat, prev.lon, fix.lat, fix.lon);
-    if (moved < MIN_POINT_DISTANCE_M) return "too-close";
+    // Movement inside the fix's own error circle is drift, not travel. A
+    // 30 m-accurate fix wanders 30 m while the phone sits on a rock, and a
+    // flat 5 m gate books every one of those hops as distance walked — a
+    // phone left still for 20 minutes recorded 10.5 km before this.
+    const driftRadiusM = Math.max(
+      MIN_POINT_DISTANCE_M,
+      fix.accuracyM ?? 0,
+      prev.accuracyM ?? 0,
+    );
+    if (moved < driftRadiusM) return "too-close";
+    // dt > 0 is guaranteed by the out-of-order check above.
+    const dtSeconds = (fix.timestampMs - prev.timestampMs) / 1000;
+    if (moved / dtSeconds > MAX_TRACK_SPEED_MPS) return "implausible";
   }
   return null;
+}
+
+/**
+ * Half-width of a SYMMETRIC window at `index` — it shrinks near the ends
+ * rather than running off them. A one-sided window at the edges would drag
+ * the first and last values inward and quietly shorten every track by up to a
+ * window's worth of distance; symmetric-shrinking leaves the endpoints exactly
+ * where they were measured and passes a straight ramp through untouched.
+ */
+function symmetricHalfWidth(index: number, length: number, window: number): number {
+  return Math.min((window - 1) >> 1, index, length - 1 - index);
+}
+
+function movingMean(values: number[], window: number): number[] {
+  if (window <= 1) return values.slice();
+  return values.map((_, index) => {
+    const half = symmetricHalfWidth(index, values.length, window);
+    let sum = 0;
+    for (let i = index - half; i <= index + half; i++) sum += values[i]!;
+    return sum / (2 * half + 1);
+  });
+}
+
+function movingMedian(values: number[], window: number): number[] {
+  if (window <= 1) return values.slice();
+  return values.map((_, index) => {
+    const half = symmetricHalfWidth(index, values.length, window);
+    const slice = values.slice(index - half, index + half + 1).sort((a, b) => a - b);
+    return slice[half]!;
+  });
 }
 
 export type TrackStats = {
@@ -95,12 +161,29 @@ export type TrackStats = {
 export function computeTrackStats(points: RecordedTrackPoint[]): TrackStats {
   let distanceM = 0;
   let durationMs = 0;
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1];
-    const b = points[i];
-    if (a.segment !== b.segment) continue;
-    distanceM += haversineMeters(a.lat, a.lon, b.lat, b.lon);
-    durationMs += b.timestampMs - a.timestampMs;
+  // Distance walks a position-SMOOTHED copy of each segment: summing raw
+  // fix-to-fix hops integrates the error circle as travel, which over-reads a
+  // 4.3 km walk as 32 km on 30 m-accurate canyon fixes. Smoothing is per
+  // segment so a pause gap never averages across the two sides of it.
+  for (let start = 0; start < points.length; ) {
+    let end = start + 1;
+    while (end < points.length && points[end]!.segment === points[start]!.segment) {
+      end++;
+    }
+    const segment = points.slice(start, end);
+    const lats = movingMean(
+      segment.map((point) => point.lat),
+      DISTANCE_SMOOTHING_WINDOW,
+    );
+    const lons = movingMean(
+      segment.map((point) => point.lon),
+      DISTANCE_SMOOTHING_WINDOW,
+    );
+    for (let i = 1; i < segment.length; i++) {
+      distanceM += haversineMeters(lats[i - 1]!, lons[i - 1]!, lats[i]!, lons[i]!);
+      durationMs += segment[i]!.timestampMs - segment[i - 1]!.timestampMs;
+    }
+    start = end;
   }
 
   // Hysteresis elevation: track the extreme reached since the last committed
@@ -111,9 +194,13 @@ export function computeTrackStats(points: RecordedTrackPoint[]): TrackStats {
   let anchor: number | null = null; // altitude at last committed turn point
   let extreme: number | null = null; // furthest altitude seen since anchor
   let direction: 1 | -1 | 0 = 0;
-  for (const point of points) {
-    const alt = point.altitudeM;
-    if (alt == null || !Number.isFinite(alt)) continue;
+  const altitudes = movingMedian(
+    points
+      .map((point) => point.altitudeM)
+      .filter((alt): alt is number => alt != null && Number.isFinite(alt)),
+    ELEVATION_SMOOTHING_WINDOW,
+  );
+  for (const alt of altitudes) {
     if (anchor == null || extreme == null) {
       anchor = alt;
       extreme = alt;
@@ -157,6 +244,38 @@ export function computeTrackStats(points: RecordedTrackPoint[]): TrackStats {
     elevationLossM,
     pointCount: points.length,
   };
+}
+
+/**
+ * Elapsed recording time for a LIVE or finished recording, from the wall
+ * clock rather than from the fix series.
+ *
+ * The point-derived `durationMs` in TrackStats stops at the last accepted fix,
+ * so the twenty minutes between the last fix and the Finish tap — derigging,
+ * eating, waiting — vanish from the saved track, and the on-screen clock
+ * freezes whenever the user stands still. Pauses are excluded by accumulating
+ * them explicitly at the pause/resume taps, which is also the only way a pause
+ * that began after the last fix is counted at all.
+ *
+ * Returns 0 rather than a negative span if the device clock is wound back
+ * mid-recording.
+ */
+export function recordedDurationMs(input: {
+  startedAtMs: number;
+  /** Finish time, or null while still recording/paused. */
+  endedAtMs: number | null;
+  /** Total time already spent paused, summed at each resume. */
+  pausedMs: number;
+  /** Start of the pause currently in progress, else null. */
+  pausedAtMs: number | null;
+  /** Now, injected so this stays pure and testable. */
+  nowMs: number;
+}): number {
+  const { startedAtMs, endedAtMs, pausedMs, pausedAtMs, nowMs } = input;
+  const until = endedAtMs ?? nowMs;
+  const openPauseMs =
+    pausedAtMs == null ? 0 : Math.max(0, until - pausedAtMs);
+  return Math.max(0, until - startedAtMs - pausedMs - openPauseMs);
 }
 
 /**

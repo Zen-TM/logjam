@@ -61,7 +61,9 @@ export function chooseScaleStep(
   const maxMeters = metersPerPixelValue * maxWidthPx;
   const fitting = NICE_STEPS_M.filter((step) => step <= maxMeters);
   if (fitting.length === 0) {
-    const meters = Math.round(maxMeters);
+    // Never label the bar "0 m": below half a metre the rounding would wipe
+    // the number out entirely and the bar would claim no scale at all.
+    const meters = Math.max(1, Math.round(maxMeters));
     return { meters, widthPx: maxWidthPx, label: formatScaleLabel(meters) };
   }
   const meters = fitting[fitting.length - 1]!;

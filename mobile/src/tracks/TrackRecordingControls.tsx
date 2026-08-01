@@ -11,7 +11,7 @@
 // while walking), distance and ascent ride beside it as labelled stats, and the
 // three controls sit on their own row so none of them is a mis-tap away from
 // another.
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import { formatDistanceM, formatDurationMs } from "@logjam/shared";
 
@@ -22,11 +22,28 @@ import {
   finishTrackRecording,
   pauseTrackRecording,
   resumeTrackRecording,
+  trackDurationMs,
 } from "./trackRecorder";
 import type { Track } from "./tracksDb";
 
 export function TrackRecordingControls({ activeTrack }: { activeTrack: Track }) {
   const recording = activeTrack.state === "recording";
+
+  // The clock ticks on its own second, not on the arrival of a fix batch. The
+  // stored durationMs only moves when a batch lands, so on good GPS while
+  // standing still the headline number used to sit frozen and then jump.
+  const [elapsedMs, setElapsedMs] = useState(() =>
+    trackDurationMs(activeTrack, null),
+  );
+  useEffect(() => {
+    setElapsedMs(trackDurationMs(activeTrack, null));
+    if (!recording) return;
+    const timer = setInterval(
+      () => setElapsedMs(trackDurationMs(activeTrack, null)),
+      1000,
+    );
+    return () => clearInterval(timer);
+  }, [activeTrack, recording]);
 
   const handlePauseResume = useCallback(() => {
     (recording
@@ -82,7 +99,7 @@ export function TrackRecordingControls({ activeTrack }: { activeTrack: Track }) 
               {recording ? "Recording" : "Paused"}
             </Text>
           </View>
-          <Text style={styles.clock}>{formatDurationMs(activeTrack.durationMs)}</Text>
+          <Text style={styles.clock}>{formatDurationMs(elapsedMs)}</Text>
         </View>
         <View style={styles.stats}>
           <Stat label="Distance" value={formatDistanceM(activeTrack.distanceM)} />
