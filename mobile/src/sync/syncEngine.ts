@@ -61,8 +61,20 @@ async function runCycleOnce(): Promise<void> {
   const userId = await resolveCurrentUserId();
   // Cycle order (§2): push then pull, so the pull's rebase sees post-flush
   // server state and just-created rows come back confirmed.
-  await flushOutbox();
+  //
+  // The pull runs even when the push failed. One unsendable op — a media file
+  // the OS reclaimed, say, which throws with no HTTP status and so is never
+  // parked — used to abort the cycle before the pull and stop the mirror
+  // receiving ANY server change, for as long as that op sat in the outbox.
+  // Push failure is still a cycle failure; it just isn't a pull failure.
+  let flushError: unknown = null;
+  try {
+    await flushOutbox();
+  } catch (err) {
+    flushError = err;
+  }
   await runDeltaPull(userId);
+  if (flushError) throw flushError;
   // Eager thumbnail cache (§7.3): best-effort — an offline-again failure
   // must not mark the whole cycle failed (rows retry next pass).
   await syncThumbnailCache().catch(() => {});

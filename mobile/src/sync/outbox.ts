@@ -54,8 +54,12 @@ export function rowToEntry(row: OutboxRow): OutboxEntry {
  */
 export async function countPendingOps(): Promise<number> {
   const db = await getSyncDb();
+  // Parked ops are NOT pending: countSyncIssues already counts blocked +
+  // deadRemote, so including 'blocked' here made one stuck op render as
+  // "1 change needs you / 1 other change is still queued" — the same op,
+  // twice, on the line the user reads to decide whether their work is safe.
   const row = await db.getFirstAsync<{ n: number }>(
-    "SELECT COUNT(*) AS n FROM outbox WHERE state IN ('queued', 'inflight', 'blocked')",
+    "SELECT COUNT(*) AS n FROM outbox WHERE state IN ('queued', 'inflight')",
   );
   return row?.n ?? 0;
 }
@@ -133,19 +137,21 @@ export async function createWaypointLocal(draft: WaypointDraft): Promise<string>
   return id;
 }
 
+const WAYPOINT_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
+  name: "name",
+  latitude: "latitude",
+  longitude: "longitude",
+  elevation: "elevation",
+  symbol: "symbol",
+  notes: "notes",
+  canyonId: "canyon_id",
+};
+
 export async function updateWaypointLocal(
   id: string,
   fields: Record<string, unknown>,
 ): Promise<void> {
-  await enqueueUpdate("waypoint", "waypoints", id, fields, {
-    name: "name",
-    latitude: "latitude",
-    longitude: "longitude",
-    elevation: "elevation",
-    symbol: "symbol",
-    notes: "notes",
-    canyonId: "canyon_id",
-  });
+  await enqueueUpdate("waypoint", "waypoints", id, fields, WAYPOINT_UPDATE_COLUMNS);
 }
 
 export async function deleteWaypointLocal(id: string): Promise<void> {
@@ -684,4 +690,90 @@ export async function migrateLegacyWaypoints(): Promise<void> {
     });
     await legacyDb.runAsync("DELETE FROM waypoint WHERE id = ?", row.id);
   }
+}
+
+// ── discard-an-update revert ────────────────────────────────────────────────
+
+const UPDATE_TARGETS: Partial<
+  Record<SyncPushEntity, { table: string; columns: Record<string, ColumnSpec> }>
+> = {
+  canyon: { table: "canyons", columns: CANYON_UPDATE_COLUMNS },
+  tripLog: { table: "trip_logs", columns: TRIP_UPDATE_COLUMNS },
+  waypoint: { table: "waypoints", columns: WAYPOINT_UPDATE_COLUMNS },
+};
+
+/**
+ * Put the mirror back the way it was before a DISCARDED update.
+ *
+ * `enqueueUpdate` materializes an edit into the mirror columns immediately, so
+ * discarding the op has to undo that write — otherwise the rejected value sits
+ * on screen indefinitely (the canyon keeps the name the server refused), and
+ * the field stays in `dirty_fields_json`, which then makes the NEXT edit skip
+ * its base snapshot and shelve spurious conflicts. Only the create case used
+ * to be cleaned up.
+ *
+ * `remainingDirty` are the fields a still-pending op owns: those are left
+ * alone, because a newer edit — not the discarded one — is what the column
+ * currently holds.
+ */
+export async function revertDiscardedUpdate(
+  db: Awaited<ReturnType<typeof getSyncDb>>,
+  entity: SyncPushEntity,
+  id: string,
+  baseFields: Record<string, unknown>,
+  remainingDirty: Set<string>,
+): Promise<void> {
+  const target = UPDATE_TARGETS[entity];
+  if (!target) return;
+  const current = await db.getFirstAsync<{ dirty_fields_json: string | null }>(
+    `SELECT dirty_fields_json FROM ${target.table} WHERE id = ?`,
+    id,
+  );
+  if (!current) return;
+
+  const assignments: string[] = [];
+  const values: unknown[] = [];
+  const reverted: string[] = [];
+  for (const [field, value] of Object.entries(baseFields)) {
+    if (remainingDirty.has(field)) continue;
+    const spec =
+      field === "canyonIds" && entity === "tripLog"
+        ? await canyonLinksColumnFromMirror(db, value)
+        : target.columns[field];
+    if (!spec) continue;
+    assignments.push(`${typeof spec === "string" ? spec : spec.column} = ?`);
+    values.push(typeof spec === "string" ? value ?? null : spec.encode(value));
+    reverted.push(field);
+  }
+  if (reverted.length === 0) return;
+
+  const dirty = new Set(JSON.parse(current.dirty_fields_json ?? "[]") as string[]);
+  for (const field of reverted) dirty.delete(field);
+  assignments.push("dirty_fields_json = ?");
+  values.push(dirty.size ? JSON.stringify([...dirty]) : null);
+  await db.runAsync(
+    `UPDATE ${target.table} SET ${assignments.join(", ")} WHERE id = ?`,
+    ...(values as (string | number | null)[]),
+    id,
+  );
+}
+
+/** `canyonLinksColumn` needs id→name, and a revert has only the ids the base
+ * snapshot decoded to. The names are in the mirror's own canyons table. */
+async function canyonLinksColumnFromMirror(
+  db: Awaited<ReturnType<typeof getSyncDb>>,
+  baseValue: unknown,
+): Promise<ColumnSpec> {
+  const ids = Array.isArray(baseValue) ? (baseValue as string[]) : [];
+  const links: TripCanyonLink[] = [];
+  for (const canyonId of ids) {
+    const canyon = await db.getFirstAsync<{ name: string }>(
+      "SELECT name FROM canyons WHERE id = ?",
+      canyonId,
+    );
+    // A canyon the mirror no longer holds can't be named, so it can't be put
+    // back — drop the link rather than write a blank trip title.
+    if (canyon) links.push({ id: canyonId, name: canyon.name });
+  }
+  return canyonLinksColumn(links);
 }

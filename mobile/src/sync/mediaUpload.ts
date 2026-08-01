@@ -240,6 +240,12 @@ async function finalizeConfirmed(
  * confirm is idempotent server-side. `media_phase` records progress for
  * observability, but every step is safe to re-run.
  */
+// Presign failures a retry can never fix: quota exhausted, track slot taken,
+// payload too large, and outright validation/authorisation refusals. Anything
+// else — 5xx, 429, 401, or a network error with no status at all — is
+// transient and belongs in the backoff, not in the user's Sync Issues list.
+const PERMANENT_PRESIGN_STATUSES = new Set([400, 403, 404, 409, 413, 422, 507]);
+
 export async function runMediaCreateOp(row: MediaOpRow): Promise<MediaOpOutcome> {
   const db = await getSyncDb();
   const fields = JSON.parse(row.fields_json ?? "{}") as MediaFields;
@@ -261,9 +267,14 @@ export async function runMediaCreateOp(row: MediaOpRow): Promise<MediaOpOutcome>
     });
   } catch (err) {
     const status = (err as { status?: number }).status;
-    // 4xx (quota 507, track slot 409, validation) → user-visible park.
-    // 5xx / network (no status) → rethrow for backoff retry.
-    if (typeof status === "number" && status >= 400 && status < 600 && status !== 500) {
+    // Park only what a retry can never fix; rethrow the rest for the engine's
+    // backoff. The old test was `>= 400 && < 600 && !== 500`, which swept in
+    // 502/503/504 (an API deploy), 429 (rate limit) and 401 (an expired
+    // token) — so six photos attached in a canyon became six sync issues
+    // needing six manual Retry taps the moment the user hit a mid-deploy API.
+    // flush.ts classifies those same statuses as transient; this is the copy
+    // that disagreed.
+    if (typeof status === "number" && PERMANENT_PRESIGN_STATUSES.has(status)) {
       await db.runAsync(
         "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
         JSON.stringify({ code: status, message: messageForBlock(status) }),

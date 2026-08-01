@@ -7,12 +7,18 @@
 // coords). Rendered only behind the app lock; never logged.
 import * as FileSystem from "expo-file-system";
 
-import type { SyncPushOp } from "@logjam/shared";
+import {
+  collectDirtyFields,
+  type SyncPushEntity,
+  type SyncPushOp,
+} from "@logjam/shared";
 
 import {
   createWaypointLocal,
+  revertDiscardedUpdate,
   type WaypointDraft,
 } from "./outbox";
+import { loadOutboxEntries } from "./deltaPull";
 import {
   outboxMirrorTable,
   shelvesDiscardedFields,
@@ -55,6 +61,8 @@ type ParkedRow = {
   entity_id: string;
   state: string;
   fields_json: string | null;
+  /** Pre-edit values, for reverting the mirror when an update is discarded. */
+  base_fields_json: string | null;
   error_json: string | null;
   attempts: number;
   created_at: string;
@@ -187,6 +195,41 @@ export async function discardParkedOp(seq: number): Promise<void> {
         }
         await db.runAsync(`DELETE FROM ${table} WHERE id = ?`, row.entity_id);
       }
+    }
+
+    if (row.op === "update") {
+      // Undo the optimistic write this op made. Fields a LATER pending op
+      // owns are left alone — that op's value is what the column holds now.
+      const base = row.base_fields_json
+        ? (JSON.parse(row.base_fields_json) as Record<string, unknown>)
+        : {};
+      const others = (await loadOutboxEntries()).filter(
+        (candidate) => candidate.seq !== seq,
+      );
+      const remainingDirty = new Set(
+        Object.keys(
+          collectDirtyFields(others, entity as SyncPushEntity, row.entity_id),
+        ),
+      );
+      await revertDiscardedUpdate(
+        db,
+        entity as SyncPushEntity,
+        row.entity_id,
+        base,
+        remainingDirty,
+      );
+    }
+
+    if (row.op === "create") {
+      // Discarding a create discards its lineage. The row will never exist
+      // server-side, so a queued update or delete still pointing at it is no
+      // longer merely deferred (nothing is `blocked` any more) — it flushes,
+      // 404s, and parks as a FRESH sync issue. One discard became a cascade.
+      await db.runAsync(
+        "DELETE FROM outbox WHERE entity_id = ? AND seq != ?",
+        row.entity_id,
+        seq,
+      );
     }
     await db.runAsync("DELETE FROM outbox WHERE seq = ?", seq);
   });

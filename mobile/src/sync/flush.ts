@@ -131,6 +131,14 @@ async function applyOpResult(
           : {};
         const real = filterSelfConflicts(result.conflicts, base);
         const at = new Date().toISOString();
+        // `shelved_json` is what the USER wrote and `server_json` is what won
+        // — the Sync Issues screen renders them as "Yours:" and "Kept:".
+        // Both columns used to be filled from serverValue, so the user was
+        // shown the other device's value labelled as their own, and their own
+        // was never recorded anywhere.
+        const ownFields = row.fields_json
+          ? (JSON.parse(row.fields_json) as Record<string, unknown>)
+          : {};
         for (const receipt of real) {
           await db.runAsync(
             `INSERT INTO conflict_shelf
@@ -139,7 +147,7 @@ async function applyOpResult(
             row.entity,
             row.entity_id,
             receipt.field,
-            JSON.stringify(receipt.serverValue ?? null),
+            JSON.stringify(ownFields[receipt.field] ?? null),
             JSON.stringify(receipt.serverValue ?? null),
             at,
           );
@@ -274,8 +282,11 @@ async function flushMediaOps(): Promise<boolean> {
 }
 
 /** A media create must wait for its linked entity's create to fully flush:
- * any outbox row still targeting linkedId (queued create, or a parked one)
- * means the row may not exist server-side yet. */
+ * an outbox row still targeting linkedId means the row may not exist
+ * server-side yet. PARKED ops don't count — a parked link is never going to
+ * flush on its own, and counting it left the photos of a blocked canyon
+ * create sitting queued forever: never uploaded, never parked, and so never
+ * shown in Sync Issues either. */
 async function isLinkPending(
   db: Awaited<ReturnType<typeof getSyncDb>>,
   row: MediaOpRow,
@@ -283,7 +294,9 @@ async function isLinkPending(
   const fields = JSON.parse(row.fields_json ?? "{}") as { linkedId?: string };
   if (!fields.linkedId) return false;
   const pending = await db.getFirstAsync<{ n: number }>(
-    "SELECT COUNT(*) AS n FROM outbox WHERE entity_id = ? AND entity != 'media'",
+    `SELECT COUNT(*) AS n FROM outbox
+      WHERE entity_id = ? AND entity != 'media'
+        AND state IN ('queued', 'inflight')`,
     fields.linkedId,
   );
   return (pending?.n ?? 0) > 0;

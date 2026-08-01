@@ -122,6 +122,43 @@ export async function upsertTrip(
   );
 }
 
+/**
+ * A trip's pending canyon-link edit, rebased onto a fresh server row.
+ *
+ * The push op carries `canyonIds: string[]` while the delta row carries
+ * `canyons: {id,name}[]`, so the generic rebase — which merges op fields over
+ * row fields BY NAME — never overrode the link list: the server's value won
+ * and `canyonIds` fell through into `extra_json` as junk. Re-link a trip
+ * offline and the next pull visibly snapped it back.
+ *
+ * The local mirror column already holds the edit complete with names (that is
+ * what `updateTripLocal` wrote), so the rebase keeps the local column rather
+ * than trying to resolve id→name here.
+ */
+export async function rebasePendingCanyonLinks(
+  db: SQLiteDatabase,
+  row: SyncDeltaTripRow,
+  dirtyNames: string[],
+): Promise<{ effective: SyncDeltaTripRow; dirtyNames: string[] }> {
+  if (!dirtyNames.includes("canyonIds")) return { effective: row, dirtyNames };
+  const local = await db.getFirstAsync<{ canyons_json: string | null }>(
+    "SELECT canyons_json FROM trip_logs WHERE id = ?",
+    row.id,
+  );
+  const { canyonIds: _discard, ...rest } = row as SyncDeltaTripRow & {
+    canyonIds?: unknown;
+  };
+  return {
+    effective: {
+      ...rest,
+      canyons: local?.canyons_json
+        ? (JSON.parse(local.canyons_json) as SyncDeltaTripRow["canyons"])
+        : row.canyons,
+    },
+    dirtyNames: dirtyNames.map((name) => (name === "canyonIds" ? "canyons" : name)),
+  };
+}
+
 export async function upsertWaypoint(
   db: SQLiteDatabase,
   row: SyncDeltaWaypointRow,
@@ -302,6 +339,16 @@ export async function applyTombstone(
 
   // Pending local ops on a server-deleted row: delete wins (§6); park them
   // deadRemote so the parked-ops UI can offer "recreate from local copy".
+  //
+  // A pending local DELETE is the exception — it wanted exactly what just
+  // happened. Parking it raised a permanent "needs your attention" issue for
+  // work already done (delete the canyon on the phone offline, delete it on
+  // the web too, and the phone demanded a decision about it forever), whose
+  // only resolution was Discard. Drop it instead: goal state reached.
+  await db.runAsync(
+    "DELETE FROM outbox WHERE entity_id = ? AND op = 'delete'",
+    tombstone.id,
+  );
   await db.runAsync(
     `UPDATE outbox SET state = 'deadRemote'
      WHERE entity_id = ? AND state IN ('queued', 'blocked')`,

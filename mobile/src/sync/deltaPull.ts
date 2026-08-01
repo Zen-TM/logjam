@@ -23,6 +23,7 @@ import {
   upsertFriendship,
   upsertMedia,
   upsertShare,
+  rebasePendingCanyonLinks,
   upsertTrip,
   upsertWaypoint,
 } from "./mirrorStore";
@@ -42,7 +43,7 @@ type OutboxRow = {
   state: string;
 };
 
-async function loadOutboxEntries(): Promise<OutboxEntry[]> {
+export async function loadOutboxEntries(): Promise<OutboxEntry[]> {
   const db = await getSyncDb();
   const rows = await db.getAllAsync<OutboxRow>(
     "SELECT seq, entity, op, entity_id, fields_json, state FROM outbox ORDER BY seq ASC",
@@ -119,7 +120,12 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
         await upsertCanyon(db, effective, dirtyNames);
       }
       for (const row of changes.tripLogs) {
-        const { effective, dirtyNames } = rebase(row, "tripLog", outbox);
+        const rebased = rebase(row, "tripLog", outbox);
+        const { effective, dirtyNames } = await rebasePendingCanyonLinks(
+          db,
+          rebased.effective,
+          rebased.dirtyNames,
+        );
         await upsertTrip(db, effective, dirtyNames);
       }
       for (const row of changes.waypoints) {
