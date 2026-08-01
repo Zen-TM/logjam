@@ -70,6 +70,16 @@ router.post(
           sharedWithId: sharedWithUserId,
         },
       });
+      // The delta's shared-canyon visibility is a WHERE-restriction layered on
+      // `updatedAt > since`, so GRANTING visibility moves no watermark and the
+      // canyon is simply not in the recipient's next page. A sharee who had
+      // ever synced before received the share row pointing at a canyon they
+      // never got — until the owner happened to edit it. Only a first-ever
+      // pull (since = epoch) was unaffected, which is why it went unnoticed.
+      await tx.canyon.update({
+        where: { id: canyonId },
+        data: { updatedAt: new Date() },
+      });
       if (notifyRecipient) {
         // Store only reference IDs — never denormalise plaintext canyon names
         // or usernames into the payload (PRIV-005). Display strings are resolved

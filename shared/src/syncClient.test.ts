@@ -26,8 +26,9 @@ function entry(
   seq: number,
   o: SyncPushOp,
   state: OutboxEntry["state"] = "queued",
+  attempts = 0,
 ): OutboxEntry {
-  return { seq, state, op: o };
+  return { seq, state, attempts, op: o };
 }
 
 describe("planOutboxEnqueue (§8.2 coalescing)", () => {
@@ -104,6 +105,24 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
   it("delete after queued updates drops the updates, keeps the delete", () => {
     const entries = [
       entry(1, op({ entity: "canyon", op: "update", id: CANYON_A, fields: { notes: "n" } })),
+    ];
+    const del = op({ entity: "canyon", op: "delete", id: CANYON_A });
+    const plan = planOutboxEnqueue(entries, del);
+    expect(plan.dropSeqs).toEqual([1]);
+    expect(plan.append).toBe(del);
+  });
+
+  it("delete does not cancel a create that has already been SENT", () => {
+    // Back in the queue after a network failure or a process kill — the
+    // server may hold the row regardless. Cancelling here let the create
+    // stand server-side while the delete was thrown away.
+    const entries = [
+      entry(
+        1,
+        op({ entity: "canyon", op: "create", id: CANYON_A, fields: { name: "X" } }),
+        "queued",
+        1,
+      ),
     ];
     const del = op({ entity: "canyon", op: "delete", id: CANYON_A });
     const plan = planOutboxEnqueue(entries, del);

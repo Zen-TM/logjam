@@ -21,6 +21,9 @@ export type OutboxEntry = {
   /** Local monotonic FIFO sequence — never reordered (§8.2). */
   seq: number;
   state: OutboxState;
+  /** Push attempts made. Nonzero means the op HAS been sent, so the server
+   * may hold its effect even though the op is back in the queue. */
+  attempts: number;
   op: SyncPushOp;
 };
 
@@ -65,11 +68,19 @@ export function planOutboxEnqueue(
   }
 
   if (incoming.op === "delete") {
-    const queuedCreate = sameRowQueued.find((entry) => entry.op.op === "create");
+    // `queued` is NOT proof the create never left the device: a network
+    // failure after the request was sent, or a process kill mid-flight, both
+    // return an op to `queued`. Cancelling the pair in that case discarded a
+    // delete for a row the server had actually committed — the canyon came
+    // back on the next pull and the user's delete had silently done nothing.
+    // `attempts === 0` is the real "never sent" test.
+    const unsentCreate = sameRowQueued.find(
+      (entry) => entry.op.op === "create" && entry.attempts === 0,
+    );
     const dropSeqs = sameRowQueued.map((entry) => entry.seq);
     // Row never reached the server: cancel everything, enqueue nothing.
-    if (queuedCreate) return { dropSeqs };
-    // Row exists server-side: pending updates are moot, the delete stands.
+    if (unsentCreate) return { dropSeqs };
+    // Row may exist server-side: pending updates are moot, the delete stands.
     return { dropSeqs, append: incoming };
   }
 

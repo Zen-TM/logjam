@@ -439,6 +439,16 @@ router.get(
       "sync_delta_served",
     );
 
+    // Ids delivered as live rows in this same page, by tombstone entityType.
+    const liveIds = new Map<string, Set<string>>([
+      ["canyon", new Set(canyons.map((row) => row.id))],
+      ["tripLog", new Set(tripLogs.map((row) => row.id))],
+      ["waypoint", new Set(waypoints.map((row) => row.id))],
+      ["media", new Set(media.map((row) => row.id))],
+      ["canyonShare", new Set(canyonShares.map((row) => row.id))],
+      ["friendship", new Set(friendships.map((row) => row.id))],
+    ]);
+
     res.json({
       protocol: SYNC_PROTOCOL,
       epoch: env.SYNC_EPOCH,
@@ -475,7 +485,16 @@ router.get(
           direction: f.requesterId === user.id ? "sent" : "received",
         })),
       },
-      tombstones: tombstones.map((t) => ({ type: t.entityType, id: t.entityId })),
+      // A tombstone for a row that is ALSO in this page's changes is stale by
+      // construction: the change was read from the live table, so the row
+      // exists now. The client applies every upsert and then every tombstone,
+      // with no per-item ordering, so shipping both meant the delete won —
+      // unshare at 09:00, re-share at 09:05, edit at 09:06, and the 09:10
+      // pull deleted the canyon, its cached media and its blobs. Same shape
+      // for any delete-then-recreate under one id.
+      tombstones: tombstones
+        .filter((t) => !liveIds.get(t.entityType)?.has(t.entityId))
+        .map((t) => ({ type: t.entityType, id: t.entityId })),
     });
   },
 );
@@ -639,6 +658,26 @@ export function parsePushOp(raw: unknown, index: number): PushOp {
 // the unit suite keep working.
 export const opDependencies = pushOpDependencies;
 
+/**
+ * A create op is replay-safe by "does this row exist?" — but a replay that
+ * arrives AFTER the row was deleted found nothing and dutifully recreated it,
+ * undoing the delete. (The gap is real: a push whose response is lost returns
+ * the op to the client's queue, and the user can delete the row from the web
+ * in the meantime.) A tombstone is the record that this id is meant to be
+ * gone, so it stands in for the row that is no longer there to be found.
+ */
+async function createAlreadyTombstoned(
+  userId: string,
+  entityType: string,
+  entityId: string,
+): Promise<boolean> {
+  const tombstone = await prisma.syncTombstone.findFirst({
+    where: { userId, entityType, entityId },
+    select: { id: true },
+  });
+  return tombstone !== null;
+}
+
 async function applyCanyonOp(userId: string, op: PushOp): Promise<PushOpResult> {
   if (op.op === "delete") {
     const deleted = await deleteCanyonsCascade(userId, [op.id]);
@@ -664,6 +703,9 @@ async function applyCanyonOp(userId: string, op: PushOp): Promise<PushOpResult> 
       if (existing.ownerId !== userId)
         throw new AppError(404, "Canyon not found");
       return { opId: op.opId, status: "alreadyApplied", row: existing };
+    }
+    if (await createAlreadyTombstoned(userId, "canyon", op.id)) {
+      return { opId: op.opId, status: "alreadyApplied" };
     }
     const canyon = await prisma.canyon.create({
       data: {
@@ -766,6 +808,9 @@ async function applyTripOp(userId: string, op: PushOp): Promise<PushOpResult> {
         status: "alreadyApplied",
         row: serializeTrip(existing),
       };
+    }
+    if (await createAlreadyTombstoned(userId, "tripLog", op.id)) {
+      return { opId: op.opId, status: "alreadyApplied" };
     }
     const resolvedCanyonIds = await resolveTripCanyonIds(
       userId,
@@ -928,6 +973,9 @@ async function applyWaypointOp(
       if (existing.ownerId !== userId)
         throw new AppError(404, "Waypoint not found");
       return { opId: op.opId, status: "alreadyApplied", row: existing };
+    }
+    if (await createAlreadyTombstoned(userId, "waypoint", op.id)) {
+      return { opId: op.opId, status: "alreadyApplied" };
     }
     const waypoint = await prisma.waypoint.create({
       data: {

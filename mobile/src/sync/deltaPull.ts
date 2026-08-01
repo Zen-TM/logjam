@@ -41,16 +41,19 @@ type OutboxRow = {
   entity_id: string;
   fields_json: string | null;
   state: string;
+  attempts: number;
 };
 
 export async function loadOutboxEntries(): Promise<OutboxEntry[]> {
   const db = await getSyncDb();
   const rows = await db.getAllAsync<OutboxRow>(
-    "SELECT seq, entity, op, entity_id, fields_json, state FROM outbox ORDER BY seq ASC",
+    `SELECT seq, entity, op, entity_id, fields_json, state, attempts
+       FROM outbox ORDER BY seq ASC`,
   );
   return rows.map((row) => ({
     seq: row.seq,
     state: row.state as OutboxEntry["state"],
+    attempts: row.attempts,
     op: {
       opId: String(row.seq),
       entity: row.entity,

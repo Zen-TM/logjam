@@ -34,6 +34,7 @@ export function rowToEntry(row: OutboxRow): OutboxEntry {
   return {
     seq: row.seq,
     state: row.state as OutboxEntry["state"],
+    attempts: row.attempts,
     op: {
       opId: row.op_id,
       entity: row.entity as SyncPushOp["entity"],

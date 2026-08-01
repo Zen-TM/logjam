@@ -130,6 +130,16 @@ export async function deleteCanyonsCascade(
         })),
       },
     });
+    // TripLogCanyon rows go via DB ON DELETE CASCADE, which does not fire
+    // Prisma's @updatedAt. Only trips that lost their LAST canyon are touched
+    // (the displayName backfill above), so a trip that keeps another canyon
+    // was never re-delivered: every mirror kept rendering the deleted canyon
+    // in the trip's derived title and linking to a canyon that no longer
+    // exists. Touch them before the cascade removes the evidence.
+    await tx.tripLog.updateMany({
+      where: { canyons: { some: { canyonId: { in: ownedIds } } } },
+      data: { updatedAt: new Date() },
+    });
     await tx.canyon.deleteMany({ where: { id: { in: ownedIds } } });
     await decrementStorageUsed(userId, totalBytes, tx);
   });
