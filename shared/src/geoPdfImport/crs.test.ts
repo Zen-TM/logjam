@@ -86,3 +86,37 @@ describe("resolveCrs — WKT fallback", () => {
     expect((caught as GeoPdfParseError).code).toBe("UNSUPPORTED_CRS");
   });
 });
+
+describe("resolveCrs — EPSG ↔ WKT cross-check", () => {
+  // A zone-56 sheet whose /EPSG says zone 55. The affine still fits its own
+  // control points perfectly (it is fitted in the wrong plane), so nothing
+  // downstream can catch this — it has to be caught here.
+  it("refuses an EPSG code that contradicts the embedded WKT", () => {
+    expect(() =>
+      resolveCrs({ kind: "PROJCS", epsg: 7855, wkt: NSW_MGA2020_Z56_WKT }),
+    ).toThrow(GeoPdfParseError);
+  });
+
+  it("accepts an EPSG code the WKT agrees with", () => {
+    const resolved = resolveCrs({
+      kind: "PROJCS",
+      epsg: 7856,
+      wkt: NSW_MGA2020_Z56_WKT,
+    });
+    expect(resolved.key).toBe("EPSG:7856");
+  });
+
+  it("keeps the EPSG code when the WKT is unparseable", () => {
+    // Junk WKT is not evidence of disagreement; the code stands on its own.
+    const resolved = resolveCrs({
+      kind: "PROJCS",
+      epsg: 7856,
+      wkt: "PROJCS[not actually wkt",
+    });
+    expect(resolved.key).toBe("EPSG:7856");
+  });
+
+  it("still resolves an EPSG-only viewport", () => {
+    expect(resolveCrs({ kind: "EPSG_ONLY", epsg: 7856 }).key).toBe("EPSG:7856");
+  });
+});

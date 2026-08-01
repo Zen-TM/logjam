@@ -54,6 +54,42 @@ const PARSER_VERSION = 1;
 export { RESIDUAL_WARN_FRACTION };
 
 // Static user-facing messages per error code — never file content.
+/**
+ * The renderer and the georeference parser must agree on the page rectangle.
+ *
+ * They can disagree in two ways, and both put the map somewhere it isn't:
+ *
+ *  - `/Rotate 90|270`. pdfium SWAPS the page size and renders into a rotated,
+ *    top-left-origin space, while the parser reports the MediaBox and the
+ *    viewport BBox in unrotated user space (which is where the spec defines
+ *    them). The tiles are georeferenced correctly and filled with pixels
+ *    scraped from a 90°-rotated region — an error of order the page dimension,
+ *    which at 1:25 000 is kilometres.
+ *  - A CropBox or MediaBox whose origin is not (0,0). pdfium renders the
+ *    CropBox ∩ MediaBox from ITS corner; the renderer's page-to-region maths
+ *    assumes the box starts at the origin. The whole overlay shifts by the box
+ *    offset — 159 m for a ¼″ trim at 1:25 000, and it looks entirely plausible
+ *    on screen, which is the worst way for an overlay to be wrong.
+ *
+ * Neither is supported yet, so this refuses the import rather than producing a
+ * confidently misplaced map. Fixing either means teaching the native renderer
+ * about rotation and the crop origin; until then, failing loud is the honest
+ * behaviour (root CLAUDE.md: no silent fallbacks).
+ */
+function assertRendererPageMatchesGeoref(
+  rendered: { widthPt: number; heightPt: number } | undefined,
+  page: { pageWidthPt: number; pageHeightPt: number },
+): void {
+  if (!rendered) throw new Error(GEOPDF_ERRORS.RENDER_FAILED);
+  // pdfium rounds to whole points; a point of slack costs 8.8 m at 1:25 000,
+  // which is inside GPS noise, and anything real is off by tens of points.
+  const TOLERANCE_PT = 1;
+  const matches =
+    Math.abs(rendered.widthPt - page.pageWidthPt) <= TOLERANCE_PT &&
+    Math.abs(rendered.heightPt - page.pageHeightPt) <= TOLERANCE_PT;
+  if (!matches) throw new Error(GEOPDF_ERRORS.UNSUPPORTED_PAGE_BOX);
+}
+
 export const GEOPDF_ERRORS: Record<string, string> = {
   NOT_A_PDF: "This file isn't a readable PDF.",
   ENCRYPTED: "This PDF is encrypted and can't be imported.",
@@ -61,6 +97,8 @@ export const GEOPDF_ERRORS: Record<string, string> = {
   LGIDICT_ONLY:
     "This GeoPDF uses an older georeferencing format that isn't supported yet.",
   MALFORMED_GEOREF: "This PDF's georeferencing is malformed.",
+  UNSUPPORTED_PAGE_BOX:
+    "This PDF's page is rotated or cropped in a way Logjam can't place accurately.",
   UNSUPPORTED_CRS: "This PDF uses a map projection that isn't supported.",
   FILE_TOO_LARGE: "This PDF is too large to import (300 MB limit).",
   RENDER_FAILED: "Rendering this PDF failed.",
@@ -285,6 +323,7 @@ async function buildArtifact(
       `file://${record.dirPath}/source.pdf`,
     );
     try {
+      assertRendererPageMatchesGeoref(opened.pages[page.pageIndex], page);
       await LogjamPdfRenderer.createMbtiles(mbtilesUri, {
         name: record.label,
         format: "png",

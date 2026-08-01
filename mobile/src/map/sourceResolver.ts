@@ -95,6 +95,8 @@ export interface ResolveContext {
 }
 
 const RASTER_TILE_SIZE = 256;
+/** Matches TILE_SIZE in shared/src/geoPdfImport/tilePlan.ts. */
+const GEOPDF_TILE_SIZE = 512;
 
 // Deterministic non-cryptographic hash for source keys (djb2). A rotated
 // presigned URL yields a new key → remount → native re-fetch, which is the
@@ -128,7 +130,17 @@ function localArtifactSource(
     // PMTiles rides the source `url`; MBTiles rides `tiles` (matches the
     // spike-verified MLRN 10.4.2 behaviour).
     ...(artifact.format === "pmtiles" ? { url: uri } : { tiles: [uri] }),
-    ...(artifact.sourceType === "raster" && { tileSize: RASTER_TILE_SIZE }),
+    // SIX region tiles are 256; a GeoPDF import is written at 512 by the tile
+    // planner. Declaring 256 for both didn't move the map — z/x/y pin the
+    // geography — but it made MapLibre pick a tile z one level deeper than it
+    // should, so an import hit its maxZoom a level early and overzoomed:
+    // blurry at exactly the zoom a canyoner reads it at.
+    ...(artifact.sourceType === "raster" && {
+      tileSize:
+        artifact.kind === "geopdf-import"
+          ? GEOPDF_TILE_SIZE
+          : RASTER_TILE_SIZE,
+    }),
     ...(artifact.minzoom != null && { minZoom: artifact.minzoom }),
     ...(artifact.maxzoom != null && { maxZoom: artifact.maxzoom }),
     ...(artifact.bbox != null && { bounds: artifact.bbox }),

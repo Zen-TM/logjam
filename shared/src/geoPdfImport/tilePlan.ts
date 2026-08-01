@@ -186,10 +186,14 @@ export function buildTilePlan(
   // on screen while you zoom out to see where it sits.
   zMin = Math.max(Z_MIN_FLOOR, zMin - ZOOM_OUT_HEADROOM);
 
-  // Tile list at zMax over the wgs84 bounds, clip-filtered.
-  const nw = lonLatToMercator(wgs84Bounds.west, wgs84Bounds.north);
-  const se = lonLatToMercator(wgs84Bounds.east, wgs84Bounds.south);
+  // Tile list at zMax over the CLIP's own extent, clip-filtered. This used to
+  // range over `transform.wgs84Bounds`, which is baked from the neatline — so
+  // any caller passing a clip larger than the neatline silently lost the
+  // tiles outside it. Production passes the matching polygon today; the
+  // coupling is the bug.
   const tileSpan = worldSize / 2 ** zMax;
+  const nw = { x: Math.min(...mercXs), y: Math.max(...mercYs) };
+  const se = { x: Math.max(...mercXs), y: Math.min(...mercYs) };
   const txMin = Math.max(0, Math.floor((nw.x + ORIGIN_SHIFT) / tileSpan));
   const txMax = Math.min(2 ** zMax - 1, Math.floor((se.x + ORIGIN_SHIFT) / tileSpan));
   const tyMin = Math.max(0, Math.floor((ORIGIN_SHIFT - nw.y) / tileSpan));
