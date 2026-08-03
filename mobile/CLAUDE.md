@@ -133,6 +133,30 @@ note is mandatory. Non-negotiables:
   `apiFetch` — that absence is the privacy property, so keep it out of any new code
   on that path.
 
+## Builds & distribution (EAS)
+
+`eas.json` holds three profiles: `development` (dev-client APK, the Metro loop),
+`preview` (standalone internal-distribution APK — bundled JS, no Metro, no cable;
+this is how a phone gets tested away from the dev host) and `production` (AAB for
+the Play track). `preview`/`production` point at the prod API.
+
+**The repo is public, so eas.json carries only non-identifying config.** The
+Cognito pool/client IDs and the Sentry DSN live as EAS environment variables
+(`eas env:create --scope project --environment preview --name EXPO_PUBLIC_...`),
+not in the committed file. `mobile/.env` is gitignored and **is not uploaded to
+EAS** — a build missing those vars fails loudly at launch, because `config.ts`
+throws on an absent API URL. Set the vars before the first cloud build.
+
+OTA: `expo-updates` is wired (`runtimeVersion` = `appVersion` policy, channel per
+profile). JS-only fixes ship with `eas update --branch preview`; anything native
+(a new Expo module, a plugin change) needs a fresh build, because the runtime
+version moves with `app.json` `version`.
+
+**`version` lives in three places that must move together:** `app.json` `version`,
+`package.json` `version`, and `CLIENT_SEMVER` in `src/config.ts` (the
+`x-logjam-client` header the min-version lever reads). Android `versionCode` is
+EAS-managed (`appVersionSource: "remote"` + `autoIncrement`) — don't hand-set it.
+
 ## Verify
 
 - `npm run typecheck` + `npm run lint` gate every change (wire into CI alongside the

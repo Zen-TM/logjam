@@ -8,6 +8,12 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "runtimeVersion": { "policy": "appVersion" },
+    "updates": {
+      "url": "https://u.expo.dev/8008fb2a-ea4c-4cc1-a637-97eb64500cb7",
+      "fallbackToCacheTimeout": 0
+    },
     "ios": {
       "bundleIdentifier": "com.logjamnsw.mobile",
       "supportsTablet": false,
@@ -22,6 +28,10 @@
       "package": "com.logjamnsw.mobile",
       "allowBackup": false,
       "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#4E4944"
+      },
       "intentFilters": [
         {
           "action": "VIEW",
@@ -79,6 +89,16 @@
         }
       ],
       "expo-video",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/adaptive-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#4E4944"
+        }
+      ],
+      "expo-updates",
       "./plugins/withCameraCapture"
     ],
     "extra": {

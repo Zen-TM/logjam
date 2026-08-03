@@ -6,8 +6,10 @@
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
 
+import { createElement } from "react";
 import { registerRootComponent } from "expo";
 
+import { RootErrorBoundary } from "./src/ui/RootErrorBoundary";
 import { initSentry } from "./src/sentry/initSentry";
 import { configureAmplify } from "./src/auth/amplifyConfig";
 // Side-effect import: registers the background track-recording task at module
@@ -20,4 +22,10 @@ configureAmplify();
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App)
 // and sets up the Expo environment appropriately for dev-client and native builds.
-registerRootComponent(App);
+// App is wrapped OUTSIDE itself so the boundary also catches throws from App's
+// own hooks (min-version gate, auth) — a boundary rendered inside App cannot
+// catch the render that mounts it. createElement rather than JSX because this
+// entry stays a .ts (package.json "main").
+registerRootComponent(() =>
+  createElement(RootErrorBoundary, null, createElement(App)),
+);

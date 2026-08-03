@@ -1,0 +1,34 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "channel": "development"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "channel": "preview",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.logjamnsw.com",
+        "EXPO_PUBLIC_AUTH_MODE": "cognito",
+        "EXPO_PUBLIC_TOPO_CDN_BASE_URL": "https://logjamnsw.com"
+      }
+    },
+    "production": {
+      "extends": "preview",
+      "distribution": "store",
+      "android": { "buildType": "app-bundle" },
+      "channel": "production"
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

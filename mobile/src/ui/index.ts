@@ -20,6 +20,7 @@ export { BottomSheet } from "./BottomSheet";
 export { TextField } from "./TextField";
 export { EmptyState, ErrorState, LoadingState } from "./ScreenStates";
 export { ErrorBanner } from "./ErrorBanner";
+export { RootErrorBoundary } from "./RootErrorBoundary";
 export { EntityEditForm, type EditFieldSpec } from "./EntityEditForm";
 export { Screen, ScreenScroll } from "./Screen";
 export { Row } from "./Row";
