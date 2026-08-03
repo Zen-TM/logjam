@@ -48,8 +48,19 @@ export interface GeoPdfViewport {
 
 export interface GeoPdfPageGeoref {
   pageIndex: number;
+  /** MediaBox dimensions — the sheet the georeference is defined against. */
   pageWidthPt: number;
   pageHeightPt: number;
+  /**
+   * The rectangle a renderer actually rasterises: CropBox ∩ MediaBox, in user
+   * space. Usually `{x: 0, y: 0}` with the page's full size, but neither the
+   * origin nor the size is guaranteed — and a renderer's own pixel (0,0) is
+   * THIS box's corner, not user-space (0,0). Anything converting page points
+   * to renderer pixels has to rebase onto it (see rebaseViewportToRenderBox).
+   */
+  renderBoxPt: { x: number; y: number; width: number; height: number };
+  /** Page /Rotate, normalised to 0 | 90 | 180 | 270. */
+  rotationDeg: number;
   /** File order. Only GEO viewports that passed all invariants. */
   viewports: GeoPdfViewport[];
 }
@@ -354,6 +365,21 @@ export async function parseGeoPdfGeoref(bytes: Uint8Array): Promise<GeoPdfParseR
       pageWidthPt: page.getWidth(),
       pageHeightPt: page.getHeight(),
     };
+    const mediaBox = page.getMediaBox();
+    const cropBox = page.getCropBox();
+    // A CropBox is only meaningful where it overlaps the MediaBox; renderers
+    // rasterise the intersection.
+    const boxX = Math.max(mediaBox.x, cropBox.x);
+    const boxY = Math.max(mediaBox.y, cropBox.y);
+    const renderBoxPt = {
+      x: boxX,
+      y: boxY,
+      width:
+        Math.min(mediaBox.x + mediaBox.width, cropBox.x + cropBox.width) - boxX,
+      height:
+        Math.min(mediaBox.y + mediaBox.height, cropBox.y + cropBox.height) - boxY,
+    };
+    const rotationDeg = ((page.getRotation().angle % 360) + 360) % 360;
     const viewports: GeoPdfViewport[] = [];
     for (const viewportDict of viewportDicts) {
       const parsed = parseViewport(ctx, viewportDict, quirkCtx, vpQuirks);
@@ -367,6 +393,8 @@ export async function parseGeoPdfGeoref(bytes: Uint8Array): Promise<GeoPdfParseR
         pageIndex,
         pageWidthPt: page.getWidth(),
         pageHeightPt: page.getHeight(),
+        renderBoxPt,
+        rotationDeg,
         viewports,
       });
     }
@@ -400,4 +428,48 @@ export function chooseMainViewport(page: GeoPdfPageGeoref): number {
     }
   });
   return best;
+}
+
+/**
+ * Rebase a viewport's page coordinates onto the page's RENDER BOX.
+ *
+ * The georeference is defined in PDF user space, whose origin is wherever the
+ * MediaBox says. A rasteriser's output, though, starts at the corner of the
+ * CropBox ∩ MediaBox — so its pixel (0,0) is user-space `renderBoxPt.{x,y}`.
+ * Where those differ, every page point handed to a renderer is off by the box
+ * origin, and since the ground coordinates are untouched the whole overlay
+ * comes out uniformly SHIFTED: at 1:25 000 one point is 8.8 m, so a routine
+ * ¼-inch trim is about 159 m of displacement, on a map that otherwise looks
+ * perfectly normal.
+ *
+ * Translation only — no scale, no rotation — so the affine fit, its residuals
+ * and every derived ground coordinate are unchanged. Do this once, before
+ * building the transform, and the tile plan, clip polygon and warp meshes are
+ * all in renderer space for free.
+ */
+export function rebaseViewportToRenderBox(
+  viewport: GeoPdfViewport,
+  renderBoxPt: { x: number; y: number },
+): GeoPdfViewport {
+  const { x, y } = renderBoxPt;
+  if (x === 0 && y === 0) return viewport;
+  return {
+    ...viewport,
+    bboxPt: {
+      x0: viewport.bboxPt.x0 - x,
+      y0: viewport.bboxPt.y0 - y,
+      x1: viewport.bboxPt.x1 - x,
+      y1: viewport.bboxPt.y1 - y,
+    },
+    controlPoints: viewport.controlPoints.map((point) => ({
+      ...point,
+      pagePt: { x: point.pagePt.x - x, y: point.pagePt.y - y },
+    })),
+    ...(viewport.boundsPolygonPt && {
+      boundsPolygonPt: viewport.boundsPolygonPt.map((point) => ({
+        x: point.x - x,
+        y: point.y - y,
+      })),
+    }),
+  };
 }

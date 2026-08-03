@@ -8,6 +8,8 @@ import {
   GeoPdfParseError,
   chooseMainViewport,
   parseGeoPdfGeoref,
+  rebaseViewportToRenderBox,
+  type GeoPdfViewport,
 } from "./parseGeoref";
 
 const fixture = (name: string) =>
@@ -292,3 +294,108 @@ describe("parseGeoPdfGeoref — error codes", () => {
     );
   });
 });
+
+describe("render box and page rotation", () => {
+  it("reports the full page as the render box for an ordinary sheet", async () => {
+    const result = await parseGeoPdfGeoref(buildTestPdf({ vp: [validVp()] }));
+    const page = result.pages[0];
+    expect(page.renderBoxPt).toEqual({ x: 0, y: 0, width: 421, height: 298 });
+    expect(page.rotationDeg).toBe(0);
+  });
+
+  it("reports a MediaBox origin that isn't at (0,0)", async () => {
+    const result = await parseGeoPdfGeoref(
+      buildTestPdf({ vp: [validVp()], mediaBoxOrigin: { x: 20, y: 20 } }),
+    );
+    // Same 421×298 sheet — only the origin moved, which is exactly the case a
+    // width/height comparison cannot see.
+    expect(result.pages[0].renderBoxPt).toEqual({
+      x: 20,
+      y: 20,
+      width: 421,
+      height: 298,
+    });
+  });
+
+  it("intersects the CropBox with the MediaBox", async () => {
+    const result = await parseGeoPdfGeoref(
+      buildTestPdf({ vp: [validVp()], cropBox: { x0: 18, y0: 18, x1: 500, y1: 280 } }),
+    );
+    expect(result.pages[0].renderBoxPt).toEqual({
+      x: 18,
+      y: 18,
+      // Clipped to the MediaBox's right edge at 421, not the CropBox's 500.
+      width: 403,
+      height: 262,
+    });
+  });
+
+  it("normalises /Rotate, including the value dimensions can't reveal", async () => {
+    for (const [rotate, expected] of [
+      [90, 90],
+      [180, 180],
+      [-90, 270],
+    ] as const) {
+      const result = await parseGeoPdfGeoref(
+        buildTestPdf({ vp: [validVp()], rotate }),
+      );
+      expect(result.pages[0].rotationDeg).toBe(expected);
+    }
+  });
+});
+
+describe("rebaseViewportToRenderBox", () => {
+  it("is a pure translation of every page-space value", async () => {
+    const atOrigin = (
+      await parseGeoPdfGeoref(buildTestPdf({ vp: [validVp()] }))
+    ).pages[0];
+    const offset = (
+      await parseGeoPdfGeoref(
+        buildTestPdf({ vp: [validVp()], mediaBoxOrigin: { x: 20, y: 35 } }),
+      )
+    ).pages[0];
+
+    // The georeference is identical in user space; only the page's own origin
+    // differs. Rebased onto their render boxes, the two must agree exactly —
+    // that is what stops the offset sheet rendering ~176 m to one side.
+    const rebasedOffset = rebaseViewportToRenderBox(
+      // The VP is written in absolute user space, so shift it as a producer
+      // targeting this MediaBox would have.
+      shiftViewport(offset.viewports[0], 20, 35),
+      offset.renderBoxPt,
+    );
+    expect(rebasedOffset.bboxPt).toEqual(atOrigin.viewports[0].bboxPt);
+    expect(rebasedOffset.controlPoints.map((cp) => cp.pagePt)).toEqual(
+      atOrigin.viewports[0].controlPoints.map((cp) => cp.pagePt),
+    );
+  });
+
+  it("returns the viewport untouched when the box is already at the origin", async () => {
+    const page = (await parseGeoPdfGeoref(buildTestPdf({ vp: [validVp()] }))).pages[0];
+    expect(rebaseViewportToRenderBox(page.viewports[0], page.renderBoxPt)).toBe(
+      page.viewports[0],
+    );
+  });
+});
+
+/** Move a parsed viewport's page coordinates, standing in for a producer that
+ * wrote its /VP against a shifted MediaBox. */
+function shiftViewport(
+  viewport: GeoPdfViewport,
+  dx: number,
+  dy: number,
+): GeoPdfViewport {
+  return {
+    ...viewport,
+    bboxPt: {
+      x0: viewport.bboxPt.x0 + dx,
+      y0: viewport.bboxPt.y0 + dy,
+      x1: viewport.bboxPt.x1 + dx,
+      y1: viewport.bboxPt.y1 + dy,
+    },
+    controlPoints: viewport.controlPoints.map((cp) => ({
+      ...cp,
+      pagePt: { x: cp.pagePt.x + dx, y: cp.pagePt.y + dy },
+    })),
+  };
+}

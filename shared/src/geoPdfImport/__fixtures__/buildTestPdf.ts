@@ -34,6 +34,12 @@ function serialize(value: TestPdfValue): string {
 export interface TestPdfOptions {
   pageWidthPt?: number;
   pageHeightPt?: number;
+  /** MediaBox lower-left corner. Non-zero exercises the render-box rebase. */
+  mediaBoxOrigin?: { x: number; y: number };
+  /** Page /CropBox, absolute user-space rect. */
+  cropBox?: { x0: number; y0: number; x1: number; y1: number };
+  /** Page /Rotate (0 | 90 | 180 | 270). */
+  rotate?: number;
   /** Value of the page's /VP key; omit for no georef. */
   vp?: TestPdfValue;
   /** Adds a page-level /LGIDict (TerraGo marker). */
@@ -45,11 +51,17 @@ export function buildTestPdf(options: TestPdfOptions): Uint8Array {
   const width = options.pageWidthPt ?? 421;
   const height = options.pageHeightPt ?? 298;
 
+  const origin = options.mediaBoxOrigin ?? { x: 0, y: 0 };
   const pageEntries: string[] = [
     "/Type /Page",
     "/Parent 2 0 R",
-    `/MediaBox [0 0 ${width} ${height}]`,
+    `/MediaBox [${origin.x} ${origin.y} ${origin.x + width} ${origin.y + height}]`,
   ];
+  if (options.cropBox) {
+    const { x0, y0, x1, y1 } = options.cropBox;
+    pageEntries.push(`/CropBox [${x0} ${y0} ${x1} ${y1}]`);
+  }
+  if (options.rotate !== undefined) pageEntries.push(`/Rotate ${options.rotate}`);
   if (options.vp !== undefined) pageEntries.push(`/VP ${serialize(options.vp)}`);
   if (options.lgiDict) {
     pageEntries.push("/LGIDict << /Type /LGIDict /Version (2.1) >>");

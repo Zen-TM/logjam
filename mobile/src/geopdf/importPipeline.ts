@@ -19,6 +19,7 @@ import {
   GeoPdfParseError,
   chooseMainViewport,
   parseGeoPdfGeoref,
+  rebaseViewportToRenderBox,
   type GeoPdfViewport,
 } from "@logjam/shared/dist/geoPdfImport/parseGeoref.js";
 import {
@@ -78,15 +79,24 @@ export { RESIDUAL_WARN_FRACTION };
  */
 function assertRendererPageMatchesGeoref(
   rendered: { widthPt: number; heightPt: number } | undefined,
-  page: { pageWidthPt: number; pageHeightPt: number },
+  page: {
+    renderBoxPt: { width: number; height: number };
+    rotationDeg: number;
+  },
 ): void {
   if (!rendered) throw new Error(GEOPDF_ERRORS.RENDER_FAILED);
+  // /Rotate is checked on its own value, not inferred from the dimensions.
+  // 90 and 270 swap them, but 180 does not — so a dimension comparison alone
+  // waved through an upside-down page and fetched every tile from the
+  // diagonally opposite corner of the sheet.
+  if (page.rotationDeg !== 0) throw new Error(GEOPDF_ERRORS.UNSUPPORTED_PAGE_BOX);
+  // Belt and braces: the box we rebased onto must be the one being rendered.
   // pdfium rounds to whole points; a point of slack costs 8.8 m at 1:25 000,
   // which is inside GPS noise, and anything real is off by tens of points.
   const TOLERANCE_PT = 1;
   const matches =
-    Math.abs(rendered.widthPt - page.pageWidthPt) <= TOLERANCE_PT &&
-    Math.abs(rendered.heightPt - page.pageHeightPt) <= TOLERANCE_PT;
+    Math.abs(rendered.widthPt - page.renderBoxPt.width) <= TOLERANCE_PT &&
+    Math.abs(rendered.heightPt - page.renderBoxPt.height) <= TOLERANCE_PT;
   if (!matches) throw new Error(GEOPDF_ERRORS.UNSUPPORTED_PAGE_BOX);
 }
 
@@ -98,7 +108,7 @@ export const GEOPDF_ERRORS: Record<string, string> = {
     "This GeoPDF uses an older georeferencing format that isn't supported yet.",
   MALFORMED_GEOREF: "This PDF's georeferencing is malformed.",
   UNSUPPORTED_PAGE_BOX:
-    "This PDF's page is rotated or cropped in a way Logjam can't place accurately.",
+    "This PDF's page is rotated in a way Logjam can't place accurately.",
   UNSUPPORTED_CRS: "This PDF uses a map projection that isn't supported.",
   FILE_TOO_LARGE: "This PDF is too large to import (300 MB limit).",
   RENDER_FAILED: "Rendering this PDF failed.",
@@ -303,7 +313,14 @@ async function buildArtifact(
     const parsed = await parseGeoPdfGeoref(bytes);
     const page = parsed.pages[0];
     const viewportIndex = chooseMainViewport(page);
-    const viewport = page.viewports[viewportIndex];
+    // Everything downstream of here — transform, clip polygon, tile plan, warp
+    // meshes — is handed to the native rasteriser, whose pixel origin is the
+    // render box's corner rather than user-space (0,0). Rebasing once, here,
+    // puts all of it in renderer space and keeps the two from drifting apart.
+    const viewport = rebaseViewportToRenderBox(
+      page.viewports[viewportIndex],
+      page.renderBoxPt,
+    );
 
     await setState("planning");
     const transform = buildGeoTransform(viewport);
