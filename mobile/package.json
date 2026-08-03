@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "eas-build-post-install": "cd ../shared && npm ci && npm run build"
   },
   "dependencies": {
     "@aws-amplify/react-native": "^1.3.3",

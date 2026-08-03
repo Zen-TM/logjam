@@ -147,6 +147,13 @@ not in the committed file. `mobile/.env` is gitignored and **is not uploaded to
 EAS** — a build missing those vars fails loudly at launch, because `config.ts`
 throws on an absent API URL. Set the vars before the first cloud build.
 
+**The shared-rebuild rule applies on the build machine too.** `shared/dist` is
+gitignored, so it never reaches an EAS builder — and `@logjam/shared` resolves to
+`dist/index.js`, so a build without it dies in the Bundle JavaScript phase with
+an "unable to resolve" that looks like a mobile bug. `eas-build-post-install` in
+`package.json` runs `npm ci && npm run build` in `../shared` to produce it. Don't
+remove that hook, and don't "fix" it by committing `dist/`.
+
 OTA: `expo-updates` is wired (`runtimeVersion` = `appVersion` policy, channel per
 profile). JS-only fixes ship with `eas update --branch preview`; anything native
 (a new Expo module, a plugin change) needs a fresh build, because the runtime
