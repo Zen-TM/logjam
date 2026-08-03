@@ -154,6 +154,15 @@ an "unable to resolve" that looks like a mobile bug. `eas-build-post-install` in
 `package.json` runs `npm ci && npm run build` in `../shared` to produce it. Don't
 remove that hook, and don't "fix" it by committing `dist/`.
 
+**Sentry sourcemap upload is OFF** (`SENTRY_DISABLE_AUTO_UPLOAD=true` in the
+build profiles). The Sentry Gradle plugin fails the build outright when it has no
+org/project/auth token, and those need operator setup. Consequence: crash reports
+from a release build arrive with minified Hermes frames — the reporter works, the
+stack traces are close to unreadable. To turn it on: add `organization` + `project`
+to the `@sentry/react-native` plugin config in `app.json`, put the Sentry auth
+token in an EAS secret (`SENTRY_AUTH_TOKEN`, secret-visibility — it IS a real
+credential, unlike the DSN), and drop the disable flag.
+
 OTA: `expo-updates` is wired (`runtimeVersion` = `appVersion` policy, channel per
 profile). JS-only fixes ship with `eas update --branch preview`; anything native
 (a new Expo module, a plugin change) needs a fresh build, because the runtime
