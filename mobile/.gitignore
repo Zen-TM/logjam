@@ -19,5 +19,10 @@ modules/*/android/build/
 # Maestro E2E credentials (operator-provided test Cognito user)
 e2e/.env.maestro
 
+# FCM config: not a secret (it ships inside the APK) but it carries the Firebase
+# project id + Android API key, and this repo is public. EAS builds read it from
+# the GOOGLE_SERVICES_JSON file env variable — see app.config.ts.
+google-services.json
+
 # Metro / RN caches
 .metro-health-check*
