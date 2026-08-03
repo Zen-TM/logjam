@@ -8,13 +8,15 @@
       "developmentClient": true,
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "channel": "development"
+      "channel": "development",
+      "environment": "development"
     },
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
       "channel": "preview",
       "autoIncrement": true,
+      "environment": "preview",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.logjamnsw.com",
         "EXPO_PUBLIC_AUTH_MODE": "cognito",
@@ -25,7 +27,8 @@
       "extends": "preview",
       "distribution": "store",
       "android": { "buildType": "app-bundle" },
-      "channel": "production"
+      "channel": "production",
+      "environment": "production"
     }
   },
   "submit": {
