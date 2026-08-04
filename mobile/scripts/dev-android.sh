@@ -6,6 +6,7 @@
 #
 #   ./scripts/dev-android.sh              # set up + launch, leave Metro to you
 #   ./scripts/dev-android.sh --emulator   # boot the AVD first (no phone needed)
+#   ./scripts/dev-android.sh --emulator --headless   # ...with no window
 #   ./scripts/dev-android.sh --metro      # ...and run Metro in the foreground
 #   ./scripts/dev-android.sh --build      # rebuild + reinstall the dev client
 #   ./scripts/dev-android.sh --logs       # tail the app's logcat instead
@@ -38,6 +39,7 @@ APK="android/app/build/outputs/apk/debug/app-debug.apk"
 # the script lists what it found rather than guessing at another one.
 AVD="logjam"
 EMULATOR_BOOT_TIMEOUT_S=180
+HEADLESS_BOOT_TIMEOUT_S=300
 
 # host port -> what lives there. Metro must be first: it is the one the dev
 # client itself needs to load any JS at all.
@@ -51,9 +53,11 @@ RUN_METRO=false
 DO_BUILD=false
 TAIL_LOGS=false
 START_EMULATOR=false
+HEADLESS=false
 for arg in "$@"; do
   case "$arg" in
     --emulator) START_EMULATOR=true ;;
+    --headless) HEADLESS=true ;;
     --metro) RUN_METRO=true ;;
     --build) DO_BUILD=true ;;
     --logs) TAIL_LOGS=true ;;
@@ -88,10 +92,19 @@ if [ "$START_EMULATOR" = true ]; then
 $(printf '%s\n' "${avds:-  (none)}" | sed 's/^/       /')
      Create one in Android Studio, or edit AVD= at the top of this script."
     fi
+    # --headless: no window, CPU rendering, for running on a remote box. The
+    # Vulkan backend still renders symbol layers on SwiftShader, so screenshots
+    # are trustworthy. ~120s to boot, hence the longer timeout.
+    gpu_args=()
+    if [ "$HEADLESS" = true ]; then
+      gpu_args=(-no-window -no-audio -gpu swiftshader_indirect)
+      EMULATOR_BOOT_TIMEOUT_S=$HEADLESS_BOOT_TIMEOUT_S
+    fi
+
     say "Booting the '$AVD' emulator…"
     # -no-snapshot-save keeps the AVD's saved state clean between runs;
     # detached with its own log so this script can keep going.
-    emulator -avd "$AVD" -no-snapshot-save -no-boot-anim \
+    emulator -avd "$AVD" -no-snapshot-save -no-boot-anim "${gpu_args[@]}" \
       >"${TMPDIR:-/tmp}/logjam-emulator.log" 2>&1 &
     printf '    waiting for Android to finish booting'
     waited=0
