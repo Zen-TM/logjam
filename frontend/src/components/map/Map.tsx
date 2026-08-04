@@ -625,6 +625,19 @@ function Map({
         });
       });
 
+      // 3D Terrain - Soruce DEM for 3d Terrain
+      map.addSource("3d-terrain-dem", {
+        type: "raster-dem",
+        tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        encoding: "terrarium",
+      });
+      // 3D Terrain - Enable the terrain layer with exaggerated height
+      map.setTerrain({
+        source: "3d-terrain-dem",
+        exaggeration: 1.5,
+      });
+
       // Owned canyon GeoJSON source (starts empty)
       map.addSource("canyons", {
         type: "geojson",
