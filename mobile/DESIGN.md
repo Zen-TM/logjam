@@ -88,8 +88,11 @@ BottomSheet(s)      acquisition + per-item actions
   the sheet, because a permanent chip is a permanent tax on the thing the map is for.
 - **The map's two edges have different jobs.** The RIGHT edge is the action column
   (layers, locate, measure, record, and the small attribution button under them).
-  The LEFT edge belongs to the map's own instruments — the native compass and the
-  scale bar — and carries nothing you can press to change the app.
+  The LEFT edge belongs to the map's own instruments — the native compass, the
+  compass tape (which way the USER faces, as against the native ornament's which
+  way the MAP faces) and the scale bar — and carries nothing you can press to
+  change the app. An instrument that runs a sensor gets a device-scoped switch in
+  Settings → This phone rather than a control on the map (`compassPreference.ts`).
 - **A map TOOL is a mode with a HUD, and closing it discards its work.** The
   measure tool arms from the action column (the button lights while it is on),
   collects taps, and reports through a panel in the top notice stack next to the

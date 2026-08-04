@@ -72,6 +72,12 @@ import {
   shortestAngleDelta,
   smoothHeading,
 } from "./heading";
+import {
+  CompassStrip,
+  COMPASS_STRIP_HEIGHT,
+  COMPASS_STRIP_WIDTH,
+} from "./CompassStrip";
+import { isCompassEnabled } from "./compassPreference";
 import { offlineCoverageMask } from "./offlineMask";
 import { MeasurePanel } from "./MeasurePanel";
 import {
@@ -335,8 +341,12 @@ export function MapScreen({
   // that table has no change listener (unlike the artifact registry) — a
   // focus refresh is how a Map screen that stayed mounted in the background
   // picks up an overlay saved while the user was on the Saved tab.
+  // The compass switch lives in Settings, on another tab, so its value is
+  // re-read on focus alongside the overlays rather than only at mount.
+  const [compassEnabled, setCompassEnabled] = useState(isCompassEnabled);
   useFocusEffect(
     useCallback(() => {
+      setCompassEnabled(isCompassEnabled());
       listEnabledOverlayKeys()
         .then((keys) => setEnabledOverlays(new Set(keys)))
         .catch(console.error);
@@ -404,6 +414,9 @@ export function MapScreen({
   const latestFix = useRef<[number, number] | null>(null);
   const locationWatch = useRef<Location.LocationSubscription | null>(null);
   const headingWatch = useRef<Location.LocationSubscription | null>(null);
+  // Set between "asked for the compass" and "have the subscription" — see
+  // ensureHeadingWatch.
+  const headingWatchStarting = useRef(false);
   // Running smoothed heading, kept in a ref as well as in state: the POV
   // camera writes from the sensor callback, which must not close over a stale
   // render's value.
@@ -897,6 +910,81 @@ export function MapScreen({
     setCameraStop({ centerCoordinate: latestFix.current, animationDuration: 600 });
   }, [setCameraStop]);
 
+  /**
+   * Start the compass watcher if it isn't already running. Two independent
+   * things want it — the location arrow / course-up camera, and the compass
+   * tape, which runs with no fix at all — so ownership sits here rather than
+   * inside the locate-me flow.
+   */
+  const ensureHeadingWatch = useCallback(async () => {
+    // `watchHeadingAsync` is awaited, so a second caller arriving during that
+    // await would subscribe a second time and never be able to remove it.
+    if (headingWatch.current || headingWatchStarting.current) return;
+    headingWatchStarting.current = true;
+    try {
+      // Compass heading — which way the user is FACING. It orients the location
+      // arrow, the compass tape and, in course-up, the whole map, so it is
+      // smoothed rather than gated (see heading.ts: the old ≥3° deadband turned
+      // a wobble into a staircase). trueHeading needs a location fix for
+      // declination; when it is unavailable (reported as -1) resolveTrueHeading
+      // corrects the magnetic reading rather than passing it off as true —
+      // everything else on this screen, including the navigate-to chip and the
+      // tape's labels, is true north.
+      headingWatch.current = await Location.watchHeadingAsync((heading) => {
+        const raw = resolveTrueHeading(heading);
+        if (raw == null) return;
+        const next = smoothHeading(smoothedHeading.current, raw);
+        smoothedHeading.current = next;
+
+        // The sensor runs ~10 Hz; the arrow only needs ~20 fps of it, and every
+        // update re-renders this screen.
+        const now = Date.now();
+        if (now - lastHeadingRender.current >= HEADING_RENDER_MS) {
+          lastHeadingRender.current = now;
+          setUserHeading(next);
+        }
+
+        // Course-up: turn the map with them. Below a degree of change this is
+        // sensor noise, and a camera commit per sample makes the map seasick.
+        if (followModeRef.current !== "course-up") return;
+        const previous = lastPovBearing.current;
+        if (previous != null && Math.abs(shortestAngleDelta(previous, next)) < 1) return;
+        lastPovBearing.current = next;
+        setCameraStop({
+          heading: normalizeBearing(next),
+          // Carry the position too: this stop REPLACES whatever the last one was,
+          // and at ~20 writes a second it would otherwise cancel every recentre
+          // the location watcher asked for.
+          ...(latestFix.current ? { centerCoordinate: latestFix.current } : {}),
+          animationDuration: HEADING_RENDER_MS,
+        });
+      });
+    } finally {
+      headingWatchStarting.current = false;
+    }
+  }, [setCameraStop]);
+
+  // The compass tape's own subscription. Permission is CHECKED, never requested
+  // here — a map that asks for location the moment it opens is the prompt every
+  // user learns to deny. Settings does the asking when the switch goes on, and
+  // locate-me does it on demand; until then the tape simply doesn't draw.
+  useEffect(() => {
+    if (compassEnabled) {
+      Location.getForegroundPermissionsAsync()
+        .then(({ status }) => {
+          if (status === "granted") return ensureHeadingWatch();
+        })
+        .catch(console.error);
+      return;
+    }
+    // Switched off: drop the sensor unless the location marker still needs it.
+    if (locationWatch.current) return;
+    headingWatch.current?.remove();
+    headingWatch.current = null;
+    setUserHeading(null);
+    smoothedHeading.current = null;
+  }, [compassEnabled, ensureHeadingWatch]);
+
   const handleLocateMe = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
     // Drive the dot from expo-location directly — MLRN's built-in
@@ -971,43 +1059,8 @@ export function MapScreen({
       (position) => applyFix(position, true),
     );
 
-    // Compass heading — which way the user is FACING. It orients the location
-    // arrow and, in course-up, the whole map, so it is smoothed rather than
-    // gated (see heading.ts: the old ≥3° deadband turned a wobble into a
-    // staircase). trueHeading needs a location fix for declination; when it is
-    // unavailable (reported as -1) resolveTrueHeading corrects the magnetic
-    // reading rather than passing it off as true — everything else on this
-    // screen, including the navigate-to chip, is true north.
-    headingWatch.current = await Location.watchHeadingAsync((heading) => {
-      const raw = resolveTrueHeading(heading);
-      if (raw == null) return;
-      const next = smoothHeading(smoothedHeading.current, raw);
-      smoothedHeading.current = next;
-
-      // The sensor runs ~10 Hz; the arrow only needs ~20 fps of it, and every
-      // update re-renders this screen.
-      const now = Date.now();
-      if (now - lastHeadingRender.current >= HEADING_RENDER_MS) {
-        lastHeadingRender.current = now;
-        setUserHeading(next);
-      }
-
-      // Course-up: turn the map with them. Below a degree of change this is
-      // sensor noise, and a camera commit per sample makes the map seasick.
-      if (followModeRef.current !== "course-up") return;
-      const previous = lastPovBearing.current;
-      if (previous != null && Math.abs(shortestAngleDelta(previous, next)) < 1) return;
-      lastPovBearing.current = next;
-      setCameraStop({
-        heading: normalizeBearing(next),
-        // Carry the position too: this stop REPLACES whatever the last one was,
-        // and at ~20 writes a second it would otherwise cancel every recentre
-        // the location watcher asked for.
-        ...(latestFix.current ? { centerCoordinate: latestFix.current } : {}),
-        animationDuration: HEADING_RENDER_MS,
-      });
-    });
-  }, [recentre, setCameraStop]);
+    await ensureHeadingWatch();
+  }, [ensureHeadingWatch, recentre, setCameraStop]);
 
   const handleStartRecording = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
@@ -1071,6 +1124,11 @@ export function MapScreen({
   const noticeTop = insets.top + CHROME_GAP + SEARCH_SIZE + spacing(1);
   const scaleBarMaxWidth =
     windowWidth - FAB_SIZE - CHROME_GAP * 3 - spacing(1);
+  // Fixed rather than run to the button column: the tape is a glance-at
+  // reference, not a ruler, and a strip that changes width with the phone
+  // changes how many degrees a thumb-width represents. Only narrow screens
+  // shrink it.
+  const compassWidth = Math.min(scaleBarMaxWidth, COMPASS_STRIP_WIDTH);
   const attributionText = basemapResolved
     .map((r) => (r.status === "ok" ? r.attribution : null))
     .filter(Boolean)
@@ -1096,11 +1154,16 @@ export function MapScreen({
         // frame, fades itself out at north, and resets north on tap — all
         // things the JS button did badly or not at all (it only redrew once a
         // gesture settled, and a rotated Feather glyph is not a needle).
-        // Bottom-left (position 2), above the scale bar. There is still no
-        // native scale bar in v10, so that one stays drawn in JS.
+        // Bottom-left (position 2), above the JS instruments — it answers a
+        // different question from the compass tape (which way the MAP faces, vs
+        // which way the USER does), so both are on screen at once. The margin is
+        // a static clearance for the tape + scale bar rather than a measured
+        // one: an ornament margin that moves with a toggle re-commits a native
+        // view prop for a 46 px gap nobody notices. There is still no native
+        // scale bar in v10, so that one stays drawn in JS.
         compassEnabled
         compassViewPosition={2}
-        compassViewMargins={{ x: CHROME_GAP, y: CHROME_BOTTOM }}
+        compassViewMargins={{ x: CHROME_GAP, y: CHROME_BOTTOM + COMPASS_STRIP_HEIGHT }}
         onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}
         onPress={handleMapPress}
@@ -1607,7 +1670,10 @@ export function MapScreen({
         </Pressable>
       </View>
 
-      <View style={styles.scaleBarWrap}>
+      {/* The map's own instruments, stacked along the bottom-left edge: which
+          way the user is facing, then how far things are. */}
+      <View style={styles.instruments} pointerEvents="none">
+        <CompassStrip heading={compassEnabled ? userHeading : null} width={compassWidth} />
         <ScaleBar
           ref={scaleBarRef}
           latitude={camera.latitude}
@@ -1841,10 +1907,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },
-  scaleBarWrap: {
+  instruments: {
     position: "absolute",
     left: CHROME_GAP,
     bottom: spacing(1),
+    alignItems: "flex-start",
+    gap: spacing(0.75),
   },
   navChip: {
     position: "absolute",

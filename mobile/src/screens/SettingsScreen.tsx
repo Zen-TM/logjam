@@ -48,6 +48,8 @@ import {
   setAppLockEnabled,
 } from "../offline/appLockPreference";
 import { useConnectivity } from "../map/connectivity";
+import { isCompassEnabled, setCompassEnabled } from "../map/compassPreference";
+import { ensureForegroundLocationPermission } from "../map/locationPermission";
 import {
   activeThemeSchemeId,
   fontSize,
@@ -208,6 +210,23 @@ export function SettingsScreen() {
     if (outcome.status === "failed") notify(outcome.message, "error");
   }, [appLockEnabled, notify]);
 
+  // ── map compass ──────────────────────────────────────────────────────────
+  // Device-scoped (the magnetometer is this handset's), read synchronously like
+  // the app lock. Turning it ON is where the location permission gets asked for
+  // — the compass needs it, and a switch that goes on and shows nothing is the
+  // failure mode worth one prompt to avoid.
+  const [compassEnabled, setCompassEnabledState] = useState(isCompassEnabled);
+
+  const toggleCompass = useCallback(async () => {
+    const next = !compassEnabled;
+    if (next && !(await ensureForegroundLocationPermission())) return;
+    if (!setCompassEnabled(next)) {
+      notify("This phone wouldn't store that setting.", "error");
+      return;
+    }
+    setCompassEnabledState(next);
+  }, [compassEnabled, notify]);
+
   // ── custom fields ────────────────────────────────────────────────────────
   const [sheet, setSheet] = useState<SheetMode>({ kind: "closed" });
   const [tripFieldDefs, setTripFieldDefs] = useState<TripLogCustomFieldDef[]>([]);
@@ -335,6 +354,18 @@ export function SettingsScreen() {
           value={appLockEnabled}
           ready
           onToggle={() => void toggleAppLock()}
+        />
+        <PreferenceRow
+          icon="compass"
+          title="Compass"
+          // Says true north HERE rather than on the map: this is the one place
+          // it can be said without spending map on it, and a reading that sits
+          // ~12.5° above a baseplate compass needle needs saying once.
+          subtitle="Overlaid on the map. Oriented true north."
+          subtitleNumberOfLines={2}
+          value={compassEnabled}
+          ready
+          onToggle={() => void toggleCompass()}
         />
         <Row
           icon="hard-drive"
