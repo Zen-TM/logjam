@@ -73,6 +73,12 @@ import {
   smoothHeading,
 } from "./heading";
 import { offlineCoverageMask } from "./offlineMask";
+import { MeasurePanel } from "./MeasurePanel";
+import {
+  measureShape,
+  nearestContourElevation,
+  type MeasurePoint,
+} from "./measure";
 import { BottomSheet } from "../ui/BottomSheet";
 import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
@@ -148,6 +154,15 @@ const PROTOMAPS_FLAVOR = "light" as const;
 /** Below this span an extent is a point, not an area (~1 m). */
 const DEGENERATE_BBOX_DEGREES = 1e-5;
 const SINGLE_POINT_ZOOM = 14;
+
+// Measure tool. The height under a tap is read off the contour lines rendered
+// beneath it (see measure.ts for why there is no DEM): this is how far, in
+// screen pixels, the query looks around the tap for one. Roughly a fingertip —
+// wide enough to catch a contour the user was aiming at, narrow enough that it
+// doesn't grab the next one along on steep ground.
+const MEASURE_CONTOUR_REACH_PX = 24;
+/** The measured line: the scheme accent, so it reads as chrome, not as data. */
+const MEASURE_COLOR = theme.accent;
 
 /** A bare lat/lng, as the map hands one back from a long press. */
 type MapPoint = { latitude: number; longitude: number };
@@ -288,6 +303,12 @@ export function MapScreen({
   const pendingCanyonPoint = useRef<MapPoint | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
+  // Measure tool: null = off, an array = armed and collecting taps. Ids come
+  // from a counter rather than the array length, because the async elevation
+  // lookup patches a point that an undo may already have removed.
+  const [measurePoints, setMeasurePoints] = useState<MeasurePoint[] | null>(null);
+  const measureId = useRef(0);
+  const measuring = measurePoints !== null;
   // "Canyon routes" layer (web parity), off by default: it is a lot of ink to
   // add to a map unasked, and the layers sheet is where it belongs.
   const [showCanyonRoutes, setShowCanyonRoutes] = useState(false);
@@ -535,14 +556,106 @@ export function MapScreen({
     [allowedCanyonIds, canyons.data],
   );
 
+  // Measure tool. A tap lands a point IMMEDIATELY with no height, and the
+  // contour lookup patches it in when the query returns — the alternative
+  // (await, then append) makes every tap feel laggy and lands rapid taps out
+  // of order. `screenPoint` comes free from a map/layer press; a call without
+  // one (a tapped waypoint) asks the map where that coordinate is drawn.
+  const addMeasurePoint = useCallback(
+    (
+      longitude: number,
+      latitude: number,
+      screenPoint?: { x: number; y: number },
+    ) => {
+      measureId.current += 1;
+      const id = measureId.current;
+      setMeasurePoints((current) =>
+        current === null
+          ? current
+          : [...current, { id, longitude, latitude, elevationM: null }],
+      );
+      void (async () => {
+        try {
+          const map = mapRef.current;
+          if (!map) return;
+          let point = screenPoint;
+          if (!point) {
+            const view = await map.getPointInView([longitude, latitude]);
+            point = { x: view[0], y: view[1] };
+          }
+          // Tap-sized rect around the point, in screen coordinates:
+          // [top, right, bottom, left] (MLRN's ConvertUtils.toRectF order).
+          const reach = MEASURE_CONTOUR_REACH_PX;
+          const features = await map.queryRenderedFeaturesInRect(
+            [point.y - reach, point.x + reach, point.y + reach, point.x - reach],
+            ["has", "elev"],
+            [],
+          );
+          const elevationM = nearestContourElevation(
+            features.features,
+            longitude,
+            latitude,
+          );
+          if (elevationM == null) return;
+          setMeasurePoints((current) =>
+            current === null
+              ? current
+              : current.map((existing) =>
+                  existing.id === id ? { ...existing, elevationM } : existing,
+                ),
+          );
+        } catch (err) {
+          // A failed height query leaves the point at "no contour here" — the
+          // panel already says the heights are incomplete.
+          console.error(err);
+        }
+      })();
+    },
+    [],
+  );
+
+  const handleMapPress = useCallback(
+    (feature: GeoJSON.Feature) => {
+      setFollowMode("off");
+      if (!measuring || feature.geometry.type !== "Point") return;
+      const [lon, lat] = feature.geometry.coordinates as [number, number];
+      const props = feature.properties;
+      const x = props?.screenPointX;
+      const y = props?.screenPointY;
+      addMeasurePoint(
+        lon,
+        lat,
+        typeof x === "number" && typeof y === "number" ? { x, y } : undefined,
+      );
+    },
+    [addMeasurePoint, measuring],
+  );
+
   const handleCanyonPress = useCallback(
-    (event: { features?: { properties?: Record<string, unknown> | null }[] }) => {
+    (event: {
+      features?: { properties?: Record<string, unknown> | null }[];
+      coordinates?: { latitude: number; longitude: number };
+      point?: { x: number; y: number };
+    }) => {
+      // A pin swallows the press before the map sees it, so while measuring it
+      // has to place the point itself — otherwise tapping near a canyon does
+      // nothing and reads as a broken tool.
+      if (measuring) {
+        if (event.coordinates) {
+          addMeasurePoint(
+            event.coordinates.longitude,
+            event.coordinates.latitude,
+            event.point,
+          );
+        }
+        return;
+      }
       const props = event.features?.[0]?.properties;
       if (props && typeof props.id === "string" && typeof props.name === "string") {
         onOpenCanyon(props.id, props.name);
       }
     },
-    [onOpenCanyon],
+    [addMeasurePoint, measuring, onOpenCanyon],
   );
 
   // Stage 4b topo overlays + Stage 5 vector-import file management (save
@@ -911,6 +1024,12 @@ export function MapScreen({
 
   const handleWaypointPress = useCallback(
     (waypoint: Waypoint) => {
+      // Same reason as a canyon pin: while measuring, a marker under the thumb
+      // places a point rather than opening its menu.
+      if (measuring) {
+        addMeasurePoint(waypoint.lon, waypoint.lat);
+        return;
+      }
       Alert.alert(waypoint.name, undefined, [
         { text: "Cancel", style: "cancel" },
         {
@@ -932,7 +1051,7 @@ export function MapScreen({
         },
       ]);
     },
-    [handleLocateMe],
+    [addMeasurePoint, handleLocateMe, measuring],
   );
 
   const overlayList = mergedOverlays.jobs.flatMap((job) =>
@@ -984,7 +1103,7 @@ export function MapScreen({
         compassViewMargins={{ x: CHROME_GAP, y: CHROME_BOTTOM }}
         onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}
-        onPress={() => setFollowMode("off")}
+        onPress={handleMapPress}
         onLongPress={handleMapLongPress}
       >
         <Camera
@@ -1247,6 +1366,33 @@ export function MapScreen({
           />
         </ShapeSource>
 
+        {/* Measured line: dotted, like a ruler laid over the map rather than
+            anything recorded. Unpinned (no layerIndex) so it sits above every
+            overlay — a measurement you can't see under a topo layer is
+            useless. */}
+        {measurePoints && measurePoints.length > 0 ? (
+          <ShapeSource id="measure" shape={measureShape(measurePoints)}>
+            <LineLayer
+              id="measure-line"
+              style={{
+                lineColor: MEASURE_COLOR,
+                lineWidth: 3,
+                lineDasharray: [1, 1.5],
+                lineCap: "round",
+              }}
+            />
+            <CircleLayer
+              id="measure-points"
+              style={{
+                circleRadius: 5,
+                circleColor: MEASURE_COLOR,
+                circleStrokeWidth: 2,
+                circleStrokeColor: theme.primary,
+              }}
+            />
+          </ShapeSource>
+        ) : null}
+
         {/* Own location marker (expo-location watcher). Unpinned ⇒ renders
             above everything, like the canyon layers. No accuracy halo: it was a
             translucent disc the size of a suburb that told the user nothing
@@ -1304,6 +1450,18 @@ export function MapScreen({
             the most important thing on the screen, and up here it competes
             with no other chrome (see mapChrome's CHROME_BOTTOM). */}
         {activeTrack ? <TrackRecordingControls activeTrack={activeTrack} /> : null}
+
+        {/* Measure HUD — only while the tool is armed. */}
+        {measurePoints ? (
+          <MeasurePanel
+            points={measurePoints}
+            onUndo={() =>
+              setMeasurePoints((current) => current && current.slice(0, -1))
+            }
+            onClear={() => setMeasurePoints([])}
+            onDone={() => setMeasurePoints(null)}
+          />
+        ) : null}
 
         {/* Offline/unavailable basemap notice (fail visibly, never silently). */}
         {basemapResolved.every((r) => r.status !== "ok") ? (
@@ -1411,6 +1569,19 @@ export function MapScreen({
             // geometrically centred icon reads off-centre — nudge it back.
             style={followMode === "off" ? styles.locateIcon : undefined}
           />
+        </Pressable>
+        {/* Measure. Turning it OFF discards the points — a measurement is a
+            question you asked once, not an asset, and one that survived being
+            closed would reappear over unrelated ground later. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={measuring ? "Stop measuring" : "Measure distance"}
+          style={[styles.controlButton, measuring && styles.controlActive]}
+          onPress={() => setMeasurePoints((current) => (current ? null : []))}
+        >
+          {/* No ruler in Feather; git-commit is a line with a marked point on
+              it, which is what the tool draws. */}
+          <Feather name="git-commit" size={FAB_ICON} color={theme.textPrimary} />
         </Pressable>
         {!activeTrack ? (
           <Pressable

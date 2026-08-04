@@ -87,9 +87,16 @@ BottomSheet(s)      acquisition + per-item actions
   leave ON is not that: the canyon-routes coverage note moved onto its own row in
   the sheet, because a permanent chip is a permanent tax on the thing the map is for.
 - **The map's two edges have different jobs.** The RIGHT edge is the action column
-  (layers, locate, record, and the small attribution button under them). The LEFT
-  edge belongs to the map's own instruments — the native compass and the scale bar —
-  and carries nothing you can press to change the app.
+  (layers, locate, measure, record, and the small attribution button under them).
+  The LEFT edge belongs to the map's own instruments — the native compass and the
+  scale bar — and carries nothing you can press to change the app.
+- **A map TOOL is a mode with a HUD, and closing it discards its work.** The
+  measure tool arms from the action column (the button lights while it is on),
+  collects taps, and reports through a panel in the top notice stack next to the
+  recording HUD — never a chip pinned over the map. Its points are a question
+  asked once, not an asset: leaving the tool clears them, so a measurement can
+  never reappear over unrelated ground later. A tool that produces something the
+  user would want to keep is a different thing and belongs in Saved.
 - **Map chrome offsets live in ONE module** (`mapChrome.ts`), and `CHROME_BOTTOM`
   is a CONSTANT. It used to grow by the recording HUD's measured height so the
   columns could lift out of the way; `onLayout` never fires on the way out, so the
