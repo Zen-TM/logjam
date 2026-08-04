@@ -36,7 +36,12 @@ services:
       # Required for ECS RunTask to spawn worker containers (Docker-out-of-Docker).
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health | grep -q '\"s3\": \"available\"'"]
+      # python3, not curl — curl is not installed in this image.
+      test:
+        - CMD
+        - python3
+        - -c
+        - import json,urllib.request,sys; sys.exit(0 if json.load(urllib.request.urlopen('http://localhost:4566/_localstack/health')).get('services',{}).get('s3')=='available' else 1)
       interval: 5s
       timeout: 5s
       retries: 20
