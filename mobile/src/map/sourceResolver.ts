@@ -26,7 +26,6 @@ export type BasemapId =
   | "six-topo"
   | "six-base"
   | "six-imagery"
-  | "osm"
   | "osm-topo"
   | "osm-cycle";
 

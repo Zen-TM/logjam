@@ -58,7 +58,7 @@ import {
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
 import { BasemapThumb } from "./BasemapThumb";
-import { BASEMAP_META } from "./basemapMeta";
+import { BASEMAP_META, MOBILE_BASEMAPS } from "./basemapMeta";
 import type { CanyonRoutesStatus } from "./CanyonRoutesLayer";
 import type { Connectivity } from "./connectivity";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
@@ -70,8 +70,14 @@ const GEOPDF_OPACITY_STEPS = [0.2, 0.4, 0.6, 0.8, 1] as const;
 type Tab = "basemap" | "layers" | "offline";
 
 export type OverlayEntry = {
+  /** "<jobId>/<layerName>" — the enabled-set key. */
   key: string;
-  label: string;
+  /** The LiDAR job this layer was rendered from. */
+  areaId: string;
+  areaLabel: string;
+  /** TopoLayerName + its display label ("hillshade" / "Hillshade"). */
+  layer: string;
+  layerLabel: string;
 };
 
 /** An item's overflow sheet: which asset, and how far into it we are. */
@@ -87,6 +93,8 @@ export function MapLayersSheet({
   overlays,
   enabledOverlays,
   onToggleOverlay,
+  mutedAreas,
+  onSetAreasMuted,
   geoPdfImports,
   onGeoPdfChange,
   imports,
@@ -112,6 +120,9 @@ export function MapLayersSheet({
   overlays: OverlayEntry[];
   enabledOverlays: ReadonlySet<string>;
   onToggleOverlay: (key: string) => void;
+  /** Areas hidden wholesale — the "where" axis (see TopoOverlayList). */
+  mutedAreas: ReadonlySet<string>;
+  onSetAreasMuted: (areaIds: string[], muted: boolean) => void;
   geoPdfImports: GeoPdfImport[];
   onGeoPdfChange: (id: string, patch: { visible?: boolean; opacity?: number }) => void;
   imports: VectorImport[];
@@ -138,7 +149,9 @@ export function MapLayersSheet({
   const savedTracks = tracks.filter((track) => track.state === "done");
 
   const visibleLayerCount =
-    enabledOverlays.size +
+    overlays.filter(
+      (overlay) => enabledOverlays.has(overlay.key) && !mutedAreas.has(overlay.areaId),
+    ).length +
     readyGeoPdfs.filter((entry) => entry.visible).length +
     imports.filter((entry) => entry.visible).length +
     savedTracks.filter((track) => track.visible).length +
@@ -195,6 +208,8 @@ export function MapLayersSheet({
           overlays={overlays}
           enabledOverlays={enabledOverlays}
           onToggleOverlay={onToggleOverlay}
+          mutedAreas={mutedAreas}
+          onSetAreasMuted={onSetAreasMuted}
           geoPdfImports={readyGeoPdfs}
           onGeoPdfChange={onGeoPdfChange}
           imports={imports}
@@ -233,18 +248,14 @@ function BasemapTab({
   onBasemapChange: (id: BasemapId) => void;
   online: boolean;
 }) {
-  // Offline-capable sources first. The catalog's own order leads with the three
-  // OSM ones, which are the least useful here — they can't be saved, and offline
-  // they are the rows that grey out. What a canyoner reaches for goes on top.
-  const ordered = [
-    ...BASEMAP_CATALOG.filter((entry) => entry.offlineCapable),
-    ...BASEMAP_CATALOG.filter((entry) => !entry.offlineCapable),
-  ];
-
   return (
     <View style={styles.body}>
-      {ordered.map((entry) => {
-        const id = entry.id as BasemapId;
+      {/* Order and membership are MOBILE_BASEMAPS', not the catalog's — see
+          basemapMeta.ts (the catalog also carries the web-only "osm" raster). */}
+      {MOBILE_BASEMAPS.map((id) => {
+        const entry = BASEMAP_CATALOG.find((candidate) => candidate.id === id);
+        // Fail loudly: an id the catalog doesn't know is a programming error.
+        if (!entry) throw new Error(`Unknown basemap id: ${id}`);
         // Online-only sources are unavailable offline BY POLICY (their tile
         // usage terms), which is a different thing from "not downloaded" — the
         // subtitle says which.
@@ -337,6 +348,8 @@ function LayersTab({
   overlays,
   enabledOverlays,
   onToggleOverlay,
+  mutedAreas,
+  onSetAreasMuted,
   geoPdfImports,
   onGeoPdfChange,
   imports,
@@ -352,6 +365,8 @@ function LayersTab({
   overlays: OverlayEntry[];
   enabledOverlays: ReadonlySet<string>;
   onToggleOverlay: (key: string) => void;
+  mutedAreas: ReadonlySet<string>;
+  onSetAreasMuted: (areaIds: string[], muted: boolean) => void;
   geoPdfImports: GeoPdfImport[];
   onGeoPdfChange: (id: string, patch: { visible?: boolean; opacity?: number }) => void;
   imports: VectorImport[];
@@ -364,6 +379,11 @@ function LayersTab({
   canyonRouteHue: string;
   onOpenMenu: (menu: ItemMenu) => void;
 }) {
+  // Both axes have to agree before an overlay is on the map (TopoOverlayList).
+  const shownOverlayCount = overlays.filter(
+    (overlay) => enabledOverlays.has(overlay.key) && !mutedAreas.has(overlay.areaId),
+  ).length;
+
   const visibleGeoPdfs = geoPdfImports.filter((entry) => entry.visible);
   // ONE opacity for every GeoPDF, not one rail per file. They are all the same
   // kind of thing over the same basemap, and a stack of identical 5-step rails
@@ -400,24 +420,29 @@ function LayersTab({
           icon="layers"
           hue={assetHue.overlay}
           title="Topo overlays"
-          subtitle={`${enabledOverlays.size} of ${overlays.length} shown`}
-          visibleCount={enabledOverlays.size}
+          // Counts what is actually on the map: a cell whose area is muted is
+          // selected but not drawn, and reporting it as shown would have this
+          // row disagree with the map behind the sheet.
+          subtitle={`${shownOverlayCount} of ${overlays.length} shown`}
+          visibleCount={shownOverlayCount}
           totalCount={overlays.length}
+          // The master is "show me the topo overlays" / "take them off", so
+          // turning it on has to clear the muting as well — otherwise it
+          // enables every cell and the map stays empty.
           onSetAll={(next) => {
             for (const overlay of overlays) {
               if (enabledOverlays.has(overlay.key) !== next) onToggleOverlay(overlay.key);
             }
+            if (next) onSetAreasMuted([...mutedAreas], false);
           }}
         >
-          {overlays.map((overlay) => (
-            <ItemRow
-              key={overlay.key}
-              hue={assetHue.overlay}
-              title={overlay.label}
-              visible={enabledOverlays.has(overlay.key)}
-              onVisibility={() => onToggleOverlay(overlay.key)}
-            />
-          ))}
+          <TopoOverlayList
+            overlays={overlays}
+            enabledOverlays={enabledOverlays}
+            onToggleOverlay={onToggleOverlay}
+            mutedAreas={mutedAreas}
+            onSetAreasMuted={onSetAreasMuted}
+          />
         </LayerGroup>
       ) : null}
 
@@ -537,6 +562,100 @@ function LayersTab({
         ))}
       </LayerGroup>
     </View>
+  );
+}
+
+/**
+ * The topo overlays, as two questions rather than a grid.
+ *
+ * A LiDAR job covers ONE area and renders the same handful of layers inside it
+ * (hillshade, contours, features…), so the honest shape of this data is a
+ * matrix — and a row per cell grows by five with every area saved. Nobody asks
+ * it a per-cell question. They ask "contours, everywhere" or "not this area at
+ * all", so those are the two sections:
+ *
+ *   LAYERS — what to draw. One switch per layer kind, across every area.
+ *   AREAS  — where to draw it. One switch per area.
+ *
+ * The two are INDEPENDENT, not two views of one set: an overlay renders when
+ * its layer is on AND its area is not muted. That is what makes each switch
+ * mean one thing — muting an area hides it without destroying the layer picks
+ * underneath, so unmuting brings back exactly what was showing. Deriving the
+ * area switch from the cells instead would make it read "off" the moment any
+ * single layer was off, which is the state the map is in almost all the time.
+ *
+ * Storage follows the same split: cells in `overlay_enabled` (registryDb),
+ * muting in `topoAreaMuting.ts`.
+ */
+function TopoOverlayList({
+  overlays,
+  enabledOverlays,
+  onToggleOverlay,
+  mutedAreas,
+  onSetAreasMuted,
+}: {
+  overlays: OverlayEntry[];
+  enabledOverlays: ReadonlySet<string>;
+  onToggleOverlay: (key: string) => void;
+  mutedAreas: ReadonlySet<string>;
+  onSetAreasMuted: (areaIds: string[], muted: boolean) => void;
+}) {
+  // Both groupings keep first-seen order, which is the order MapScreen composed
+  // the jobs in (newest area first, TOPO_LAYERS order within one).
+  const byLayer = useMemo(() => {
+    const groups = new Map<string, { label: string; keys: string[] }>();
+    for (const overlay of overlays) {
+      const group = groups.get(overlay.layer) ?? {
+        label: overlay.layerLabel,
+        keys: [],
+      };
+      group.keys.push(overlay.key);
+      groups.set(overlay.layer, group);
+    }
+    return [...groups];
+  }, [overlays]);
+
+  // Areas keep first-seen order too, and are deduped by id — one row per area,
+  // however many layers it rendered.
+  const areas = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const overlay of overlays) {
+      if (!seen.has(overlay.areaId)) seen.set(overlay.areaId, overlay.areaLabel);
+    }
+    return [...seen];
+  }, [overlays]);
+
+  return (
+    <>
+      <SectionHeader label="Layers" />
+      {byLayer.map(([layer, group]) => {
+        const allOn = group.keys.every((key) => enabledOverlays.has(key));
+        return (
+          <ItemRow
+            key={layer}
+            hue={assetHue.overlay}
+            title={group.label}
+            visible={allOn}
+            onVisibility={() => {
+              for (const key of group.keys) {
+                if (enabledOverlays.has(key) !== !allOn) onToggleOverlay(key);
+              }
+            }}
+          />
+        );
+      })}
+
+      <SectionHeader label="Areas" />
+      {areas.map(([areaId, label]) => (
+        <ItemRow
+          key={areaId}
+          hue={assetHue.overlay}
+          title={label}
+          visible={!mutedAreas.has(areaId)}
+          onVisibility={() => onSetAreasMuted([areaId], !mutedAreas.has(areaId))}
+        />
+      ))}
+    </>
   );
 }
 

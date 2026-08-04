@@ -37,7 +37,6 @@ const THUMBS: Partial<Record<BasemapId, number>> = {
   "six-base": require("../../assets/basemap-thumbs/six-base.webp"),
   "six-imagery": require("../../assets/basemap-thumbs/six-imagery.webp"),
   protomaps: require("../../assets/basemap-thumbs/protomaps.webp"),
-  osm: require("../../assets/basemap-thumbs/osm.webp"),
   "osm-topo": require("../../assets/basemap-thumbs/osm-topo.webp"),
   "osm-cycle": require("../../assets/basemap-thumbs/osm-cycle.webp"),
 };

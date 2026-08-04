@@ -349,7 +349,7 @@ export function SettingsScreen() {
           // Two lines and no trailing pill beside the switch: the switch is
           // already the trailing element, and a pill next to it was what forced
           // this sentence to ellipsise.
-          subtitle="Ask for your fingerprint or PIN when Logjam has offline data on this phone."
+          subtitle="Ask for your fingerprint or PIN every time Logjam opens."
           subtitleNumberOfLines={2}
           value={appLockEnabled}
           ready

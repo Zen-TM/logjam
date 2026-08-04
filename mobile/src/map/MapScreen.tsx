@@ -38,6 +38,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
 import * as Location from "expo-location";
 import {
+  TOPO_LAYERS,
   VECTOR_STYLE_DEFAULTS,
   compassPointFor,
   formatDistanceM,
@@ -78,6 +79,8 @@ import {
   COMPASS_STRIP_WIDTH,
 } from "./CompassStrip";
 import { isCompassEnabled } from "./compassPreference";
+import { readBasemapPreference, setBasemapPreference } from "./basemapPreference";
+import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
 import { offlineCoverageMask } from "./offlineMask";
 import { MeasurePanel } from "./MeasurePanel";
 import {
@@ -178,6 +181,18 @@ const CAMERA_DEFAULTS = {
   zoomLevel: DEFAULT_ZOOM,
 };
 
+/**
+ * The scale "where am I" always lands on: opening the app, and entering either
+ * follow mode. Around 300 m across on a phone — the next few minutes of
+ * walking, with the creek and the contours either side of it still legible.
+ *
+ * Applied absolutely, in both directions. Asking to be put back on yourself is
+ * asking for a known scale, so it zooms out from a close reading just as it
+ * zooms in from a whole-of-NSW view; the alternative (clamp one way) makes the
+ * same button do two different things depending on where the map happened to be.
+ */
+const FOLLOW_ZOOM = 15;
+
 // Bearing to 0..360 so "is the map facing north" is a single comparison.
 function normalizeBearing(heading: number): number {
   if (!Number.isFinite(heading)) return 0;
@@ -187,6 +202,20 @@ function normalizeBearing(heading: number): number {
 // A remount (tab switch) re-fires Linking.getInitialURL with the same intent
 // URI — imports must not run twice for one "Open in Logjam".
 const handledIntentUrls = new Set<string>();
+
+/**
+ * One-shot compass read, for the moment a mode is ENTERED — as opposed to the
+ * watcher, which keeps it fed afterwards. Returns null when the device has no
+ * usable reading; a mode that can't rotate yet is not an error worth an alert.
+ */
+async function currentHeading(): Promise<number | null> {
+  try {
+    return resolveTrueHeading(await Location.getHeadingAsync());
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
+}
 
 type FollowMode = "off" | "follow" | "course-up";
 
@@ -299,7 +328,17 @@ export function MapScreen({
     () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
     [basemapAssets.localBaseUrl],
   );
-  const [basemapId, setBasemapId] = useState<BasemapId>("six-topo");
+  // Whether the MapView (and therefore the camera) is mounted at all — the same
+  // condition as the render gate at the bottom of this component. Anything that
+  // drives the camera from an effect has to wait for this.
+  const mapReady = basemapAssets.localBaseUrl != null || basemapAssets.failed;
+  // Seeded from (and written back to) the device preference: a map that reset
+  // to the default on every launch made the choice worth nothing.
+  const [basemapId, setBasemapId] = useState<BasemapId>(readBasemapPreference);
+  const chooseBasemap = useCallback((next: BasemapId) => {
+    setBasemapId(next);
+    setBasemapPreference(next);
+  }, []);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
   // Press-and-hold target, and the point handed to the canyon form once that
@@ -329,6 +368,8 @@ export function MapScreen({
     longitude: DEFAULT_CENTER[0],
   });
   const scaleBarRef = useRef<ScaleBarHandle>(null);
+  /** Set once the user has panned/zoomed themselves — see the open-on-location effect. */
+  const userMovedCamera = useRef(false);
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const mapRef = useRef<React.ComponentRef<typeof MapView>>(null);
@@ -352,6 +393,21 @@ export function MapScreen({
         .catch(console.error);
     }, []),
   );
+  // Which areas are hidden wholesale — the "where" axis of the overlay matrix
+  // (topoAreaMuting.ts). Independent of the per-cell enabled set above, so
+  // unmuting an area restores whatever layers were selected for it.
+  const [mutedAreas, setMutedAreas] = useState<ReadonlySet<string>>(readMutedTopoAreas);
+  const setAreasMuted = useCallback((areaIds: string[], muted: boolean) => {
+    setMutedAreas((prev) => {
+      const next = new Set(prev);
+      for (const areaId of areaIds) {
+        if (muted) next.add(areaId);
+        else next.delete(areaId);
+      }
+      writeMutedTopoAreas(next);
+      return next;
+    });
+  }, []);
   // Toggle one overlay on/off, persisting the change.
   const toggleOverlay = useCallback((key: string) => {
     setEnabledOverlays((prev) => {
@@ -506,8 +562,13 @@ export function MapScreen({
   );
 
   const overlayRefs = useMemo(
-    () => composeTopoOverlayRefs(mergedOverlays, enabledOverlays),
-    [mergedOverlays, enabledOverlays],
+    () =>
+      // A muted area draws nothing, whatever its cells say — the "where" gate
+      // applied after the "what" (topoAreaMuting.ts).
+      composeTopoOverlayRefs(mergedOverlays, enabledOverlays).filter(
+        (ref) => !mutedAreas.has(ref.jobId),
+      ),
+    [mergedOverlays, enabledOverlays, mutedAreas],
   );
 
   // Contiguous layerIndex allocation above the basemap band: raster overlays
@@ -835,6 +896,66 @@ export function MapScreen({
     return () => sub.remove();
   }, []);
 
+  // Open on the ground the user is standing on, at the standard scale — a map
+  // that opens over the middle of NSW every time makes finding yourself the
+  // first chore of every session.
+  //
+  // Permission is CHECKED, never requested (same rule as the compass tape): a
+  // map that prompts the moment it opens is the prompt everyone learns to deny.
+  // Without it, this quietly does nothing and the locate button still works.
+  //
+  // The OS's cached fix first, because it is instant and free. It is NOT always
+  // there though — a phone that has just rebooted, or has had nothing ask for
+  // location yet, has no last-known position at all, and that is exactly a
+  // trailhead morning. So fall back to one Balanced fix (fused wifi/cell, not a
+  // GPS spin-up) rather than leaving the user over the middle of NSW. One shot,
+  // never a watcher: the live dot stays the locate button's job.
+  //
+  // Mount-only, and yields to an explicit destination: arriving with a route or
+  // a "Show on map" bbox means the user asked for somewhere specific, and that
+  // beats where they happen to be standing.
+  const openedWithDestination = useRef(focus != null || route != null);
+  const centredOnOpen = useRef(false);
+  useEffect(() => {
+    // WAIT FOR THE MAP. There is no <Camera> until the bundled glyph/sprite
+    // install settles (the gate at the end of this component returns an empty
+    // View until then), and `setCameraStop` against a null ref is silently
+    // dropped — so an effect that ran plainly on mount did nothing at all, on
+    // every launch. `mapReady` is the same condition that gate uses.
+    if (!mapReady || centredOnOpen.current || openedWithDestination.current) return;
+    centredOnOpen.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== "granted" || cancelled) return;
+        const position =
+          (await Location.getLastKnownPositionAsync()) ??
+          (await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          }));
+        // The fallback can take seconds. Whatever the user has done with the
+        // map in the meantime wins — yanking the camera out from under a pan
+        // is worse than opening in the wrong place.
+        if (!position || cancelled || userMovedCamera.current) return;
+        setCameraStop({
+          centerCoordinate: [position.coords.longitude, position.coords.latitude],
+          zoomLevel: FOLLOW_ZOOM,
+          // Instant when it came from the cache; a fetched fix animates in so
+          // the jump reads as the map answering, not as a glitch.
+          animationDuration: 0,
+        });
+      } catch (err) {
+        // Never blocks the map: an unavailable provider just leaves the
+        // default view (coordinates are never logged — privacy rule).
+        console.error(err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mapReady, setCameraStop]);
+
   // "Show on map" arrival: fit the requested asset's bbox. Keyed on the nonce
   // so tapping the same asset again refocuses, and so a re-render with the
   // same params doesn't fight the user's own panning.
@@ -845,15 +966,38 @@ export function MapScreen({
 
   // Live camera → the scale bar only, at gesture rate. Coordinates stay in
   // component state only — never logged (privacy rule).
+  //
+  // This is also where a follow mode ends. Panning while the camera is being
+  // driven is a fight the user cannot win: every fix (and, in course-up, every
+  // compass sample at ~20 Hz) writes a camera stop that snaps the map back
+  // mid-gesture, so the map reads as broken rather than as locked. The gesture
+  // wins — `isUserInteraction` is false for our own stops, so the recentres
+  // and rotations this screen asks for can't cancel themselves.
+  //
+  // Course-up's rotation is left applied: yanking the map back to north under
+  // a thumb that is mid-pan is a second unrequested camera move. The native
+  // compass ornament resets north on tap.
   const handleRegionIsChanging = useCallback(
     (feature: {
       geometry: { coordinates: number[] };
-      properties: { zoomLevel: number };
+      properties: { zoomLevel: number; isUserInteraction: boolean };
     }) => {
       scaleBarRef.current?.update(
         feature.geometry.coordinates[1],
         feature.properties.zoomLevel,
       );
+      if (feature.properties.isUserInteraction) {
+        // Also the open-on-your-location effect's stop signal: once the user
+        // has moved the map themselves, a fix that arrives late must not take
+        // the camera back off them.
+        userMovedCamera.current = true;
+        if (followModeRef.current !== "off") {
+          // The ref too, not just the state: this fires many times per gesture
+          // and state only lands on the next render.
+          followModeRef.current = "off";
+          setFollowMode("off");
+        }
+      }
     },
     [],
   );
@@ -904,11 +1048,26 @@ export function MapScreen({
     });
   }, [setCameraStop]);
 
-  /** Put the latest fix back under the crosshair, at the zoom they are at. */
-  const recentre = useCallback(() => {
-    if (!latestFix.current) return;
-    setCameraStop({ centerCoordinate: latestFix.current, animationDuration: 600 });
-  }, [setCameraStop]);
+  /**
+   * Put the latest fix back under the crosshair, at the standard scale
+   * (FOLLOW_ZOOM — set there, in both directions, never relative to where the
+   * camera happened to be).
+   *
+   * `heading` rotates in the same stop rather than a second one; a stop
+   * REPLACES its predecessor, so two writes would cancel each other.
+   */
+  const recentre = useCallback(
+    (heading?: number) => {
+      if (!latestFix.current) return;
+      setCameraStop({
+        centerCoordinate: latestFix.current,
+        zoomLevel: FOLLOW_ZOOM,
+        ...(heading != null ? { heading: normalizeBearing(heading) } : {}),
+        animationDuration: 600,
+      });
+    },
+    [setCameraStop],
+  );
 
   /**
    * Start the compass watcher if it isn't already running. Two independent
@@ -1003,8 +1162,24 @@ export function MapScreen({
       }
       if (followModeRef.current === "follow") {
         setFollowMode("course-up");
+        // The ref too: the heading callback reads it, and state lands a render
+        // later — a sample arriving in between would be dropped as "not
+        // course-up" and the map would wait for the one after it.
+        followModeRef.current = "course-up";
         lastPovBearing.current = null;
-        recentre();
+        // Rotate from a heading we ALREADY have rather than waiting to be told
+        // one. Android's heading watcher reports on change, so a phone lying
+        // still on a rock emits nothing for seconds after the user asks to face
+        // their direction — the map just sat north-up, which reads as the mode
+        // not working. Last smoothed sample first, a one-shot sensor read if
+        // there has never been one, and only then fall through to the watcher.
+        let heading = smoothedHeading.current;
+        if (heading == null) {
+          heading = await currentHeading();
+          if (heading != null) smoothedHeading.current = heading;
+        }
+        if (heading != null) lastPovBearing.current = heading;
+        recentre(heading ?? undefined);
         return;
       }
       // Third tap drops follow but KEEPS the dot and its watchers: "don't
@@ -1030,7 +1205,7 @@ export function MapScreen({
         firstFix.current = false;
         setCameraStop({
           centerCoordinate: coord,
-          zoomLevel: 14,
+          zoomLevel: FOLLOW_ZOOM,
           animationDuration: 1200,
         });
       } else if (mode !== "off") {
@@ -1107,14 +1282,17 @@ export function MapScreen({
     [addMeasurePoint, handleLocateMe, measuring],
   );
 
+  // The layer sheet groups these two ways at once — by layer across every area,
+  // and by area — so each entry carries both its area and its layer rather than
+  // one pre-joined label to be parsed back apart.
   const overlayList = mergedOverlays.jobs.flatMap((job) =>
     job.layers.map((layer) => ({
       key: `${job.jobId}/${layer.name}`,
-      label: `${job.name ?? job.jobId.slice(0, 8)} — ${layer.name}`,
-      jobId: job.jobId,
+      areaId: job.jobId,
+      areaLabel: job.name ?? job.jobId.slice(0, 8),
       layer: layer.name,
-      format: layer.format,
-      pmtilesUrl: layer.pmtilesUrl,
+      layerLabel:
+        TOPO_LAYERS.find((meta) => meta.name === layer.name)?.label ?? layer.name,
     })),
   );
 
@@ -1138,7 +1316,7 @@ export function MapScreen({
   // one-time extraction, a second or two; after that: a marker check). Mounting
   // earlier would bake the remote glyph URLs into the style and force a full
   // style rebuild when the local ones arrive.
-  if (basemapAssets.localBaseUrl == null && !basemapAssets.failed) {
+  if (!mapReady) {
     return <View style={styles.root} />;
   }
 
@@ -1350,6 +1528,7 @@ export function MapScreen({
         <TrackMapLayers
           tracks={tracks}
           waypoints={waypoints}
+          liveCoord={userCoord}
           onWaypointPress={handleWaypointPress}
         />
 
@@ -1773,11 +1952,13 @@ export function MapScreen({
         onClose={() => setPickerOpen(false)}
         connectivity={connectivity}
         basemapId={basemapId}
-        onBasemapChange={setBasemapId}
+        onBasemapChange={chooseBasemap}
         artifacts={artifacts}
         overlays={overlayList}
         enabledOverlays={enabledOverlays}
         onToggleOverlay={toggleOverlay}
+        mutedAreas={mutedAreas}
+        onSetAreasMuted={setAreasMuted}
         geoPdfImports={geoPdfImports}
         onGeoPdfChange={(id, patch) => {
           updateGeoPdfImport(id, patch).catch(console.error);

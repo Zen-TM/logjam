@@ -1,7 +1,17 @@
-// App lock (Stage 4 mandate): once offline map data exists on the device,
-// the UI locks behind the device's biometric/credential auth on cold start
-// and whenever the app returns from background. Uses the OS authenticator
-// (biometric with PIN/pattern fallback) — no app-managed secret.
+// App lock: when the user has turned it on, the UI locks behind the device's
+// biometric/credential auth on cold start and whenever the app returns from
+// background. Uses the OS authenticator (biometric with PIN/pattern fallback) —
+// no app-managed secret.
+//
+// The lock is UNCONDITIONAL on the preference. It used to arm only once
+// downloaded map data existed, on the theory that an empty device had nothing
+// worth gating — which was never true: the sync mirror holds canyon names and
+// coordinates from the first sync after sign-in, and trips, notes and photos
+// with them. "Nothing downloaded" is not "nothing sensitive", so the data hooks
+// that used to decide this are gone rather than reworded.
+//
+// The preference itself now defaults to OFF (appLockPreference.ts has the
+// operator's reasoning) — so this gate is inert until someone asks for it.
 //
 // A device with NO enrolled security (no biometrics, no passcode) has nothing
 // to gate with; the gate passes through rather than bricking the app — the
@@ -13,11 +23,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 
 import { Button } from "../ui";
 import { isAppLockEnabled, onAppLockPreferenceChanged } from "./appLockPreference";
-import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
-import { useVectorImports } from "../imports/useVectorImports";
-import { useTracks } from "../tracks/useTracks";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
-import { useMapArtifacts } from "./useMapArtifacts";
 
 // The system auth sheet runs in its own activity: launching and dismissing it
 // fires background/active AppState churn on the host activity. Any relock
@@ -37,59 +43,54 @@ const DEV_LOCK_DISABLED =
   __DEV__ && process.env.EXPO_PUBLIC_DISABLE_APP_LOCK === "1";
 
 export function AppLockGate({ children }: { children: React.ReactNode }) {
-  const { artifacts, loaded: artifactsLoaded } = useMapArtifacts();
-  // Imported tracks are the user's own canyon-area coordinates — they arm
-  // the lock exactly like downloaded map data. GeoPDF imports arm it from
-  // the ROW (the source.pdf lands on disk before any map_artifact exists).
-  const { imports, loaded: importsLoaded } = useVectorImports();
-  const { geoPdfImports, loaded: geoPdfLoaded } = useGeoPdfImports();
-  // Recorded tracks/waypoints are precise user location history (Stage 7) —
-  // they arm the lock like every other on-device secret.
-  const { tracks, waypoints, loaded: tracksLoaded } = useTracks();
-  const loaded = artifactsLoaded && importsLoaded && geoPdfLoaded && tracksLoaded;
-  // The user's own switch (Settings → This phone). Read synchronously so the
-  // gate's very first render already knows — an async read would flash the lock
-  // screen at someone who turned it off. Turning it OFF costs a biometric; see
-  // appLockPreference.ts.
+  // The user's own switch (Settings → This phone) is the whole condition. Read
+  // synchronously so the gate's very first render already knows — an async read
+  // would flash the lock screen at someone who has it off. Turning it OFF costs
+  // a biometric; see appLockPreference.ts.
   const [lockPreferred, setLockPreferred] = useState(isAppLockEnabled);
   useEffect(() => onAppLockPreferenceChanged(() => setLockPreferred(isAppLockEnabled())), []);
 
-  const lockRequired =
-    !DEV_LOCK_DISABLED &&
-    lockPreferred &&
-    (artifacts.length > 0 ||
-      imports.length > 0 ||
-      geoPdfImports.length > 0 ||
-      tracks.length > 0 ||
-      waypoints.length > 0);
+  const lockRequired = !DEV_LOCK_DISABLED && lockPreferred;
   const [unlocked, setUnlocked] = useState(false);
   const [authFailed, setAuthFailed] = useState(false);
+  // Whether the app is actually on screen. The auto-prompt below waits for it:
+  // `authenticateAsync` needs a resumed activity to put BiometricPrompt on, and
+  // fired without one it neither shows nor settles — it just hangs, holding the
+  // in-flight guard so the Unlock button does nothing for the next 12 seconds.
+  //
+  // That is reachable ONLY while something keeps JS alive in the background,
+  // which is exactly what track recording's foreground service does: going to
+  // background relocks (below) and the prompt effect used to fire on the spot,
+  // in the background, against no activity. The recording had to be killed from
+  // Android to get back in. Prompt when we're on screen, not before.
+  const [appActive, setAppActive] = useState(
+    () => AppState.currentState === "active",
+  );
   const prompting = useRef(false);
   const promptStartedAt = useRef(0);
   const lastUnlockAt = useRef(0);
   const autoPrompted = useRef(false);
-  const sessionBeganWithoutLock = useRef(false);
 
-  // When the FIRST offline artifact lands mid-session (user just tapped
-  // download), arming the lock must not slam the gate on the live session —
-  // treat the session as unlocked and gate from the next background instead.
-  // A cold start with existing artifacts never takes this path: its first
-  // completed registry read arrives WITH rows, so the
-  // "loaded-and-empty" flag below was never set.
+  // Turning the lock ON mid-session must not slam the gate on the session that
+  // just asked for it — the user is in Settings, they know who they are. This
+  // session is let through and the lock starts biting at the next background.
+  //
+  // It is STATE, decided at mount, and deliberately not an effect that reacts
+  // to the switch. An effect runs after the commit that already swapped
+  // `children` for the lock screen, and that unmount tears down the whole
+  // navigation tree: flipping the switch in Settings bounced the user out to a
+  // freshly-mounted Map tab before the effect let them back in. Seeded from the
+  // preference so a cold start with the lock already on is gated normally.
+  const [lockDeferred, setLockDeferred] = useState(() => !isAppLockEnabled());
+  // Turning it back OFF re-arms the deferral, so switching off and on again
+  // doesn't prompt mid-session either. Safe as an effect: with lockRequired
+  // false nothing is gated in that commit anyway.
   useEffect(() => {
-    if (loaded && !lockRequired) sessionBeganWithoutLock.current = true;
-    if (lockRequired && sessionBeganWithoutLock.current) {
-      sessionBeganWithoutLock.current = false;
-      lastUnlockAt.current = Date.now();
-      // Also consume this lock's auto-prompt: the prompt effect below runs in
-      // the SAME commit and still sees unlocked=false (state lands next
-      // render) — without this it fires the biometric sheet mid-import
-      // (observed on the Pixel). The background relock resets the flag, so
-      // the next genuine lock still auto-prompts.
-      autoPrompted.current = true;
-      setUnlocked(true);
-    }
-  }, [loaded, lockRequired]);
+    if (!lockRequired) setLockDeferred(true);
+  }, [lockRequired]);
+
+  /** The gate is actually shut: asked for, not yet satisfied, not deferred. */
+  const locked = lockRequired && !unlocked && !lockDeferred;
 
   const prompt = useCallback(async () => {
     const now = Date.now();
@@ -141,12 +142,16 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   // sheet's own activity transitions (see POST_UNLOCK_GRACE_MS note).
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
+      setAppActive(state === "active");
       if (
         state === "background" &&
         !prompting.current &&
         Date.now() - lastUnlockAt.current > POST_UNLOCK_GRACE_MS
       ) {
         autoPrompted.current = false;
+        // The deferral is spent: whatever let this session through, the app has
+        // now left the screen, which is the moment the lock exists for.
+        setLockDeferred(false);
         setUnlocked(false);
       }
     });
@@ -157,19 +162,19 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   // unconditional retry here is what looped when the authenticator fails
   // instantly.
   useEffect(() => {
-    if (lockRequired && !unlocked && !autoPrompted.current) {
+    if (appActive && locked && !autoPrompted.current) {
       autoPrompted.current = true;
       prompt();
     }
-  }, [lockRequired, unlocked, prompt]);
+  }, [appActive, locked, prompt]);
 
-  if (!lockRequired || unlocked) return <>{children}</>;
+  if (!locked) return <>{children}</>;
 
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Locked</Text>
       <Text style={styles.line}>
-        Offline maps are stored on this device. Unlock to continue.
+        Your canyons, trips and maps are on this device. Unlock to continue.
       </Text>
       {authFailed ? (
         <Text style={styles.line}>Authentication didn&apos;t complete — try again.</Text>

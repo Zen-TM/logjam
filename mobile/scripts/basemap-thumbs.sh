@@ -33,7 +33,6 @@ SIX=https://maps.six.nsw.gov.au/arcgis/rest/services/public
 fetch six-topo    "$SIX/NSW_Topo_Map/MapServer/tile/$Z/$Y/$X"
 fetch six-base    "$SIX/NSW_Base_Map/MapServer/tile/$Z/$Y/$X"
 fetch six-imagery "$SIX/NSW_Imagery/MapServer/tile/$Z/$Y/$X"
-fetch osm         "https://tile.openstreetmap.org/$Z/$X/$Y.png"
 fetch osm-topo    "https://a.tile.opentopomap.org/$Z/$X/$Y.png"
 fetch osm-cycle   "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/$Z/$X/$Y.png"
 

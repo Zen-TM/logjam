@@ -117,11 +117,20 @@ note is mandatory. Non-negotiables:
 
 - All local data in **app-private storage, excluded from cloud backup**
   (`allowBackup=false` Android; `NSURLIsExcludedFromBackupKey` iOS data dirs).
-- **App lock** (biometric/PIN) gates the UI from Stage 4 (first offline secret data).
-  User-disableable since the More redesign, and the asymmetry is the mandate:
-  turning it OFF requires the device authenticator and fails closed, turning it on
-  is free, and the pref is device-scoped (`src/offline/appLockPreference.ts`,
-  DESIGN.md §7). Defaults to on, and an unreadable/absent pref reads as on.
+- **App lock** (biometric/PIN) gates the whole UI whenever the user has it on —
+  **unconditionally**, not only once downloads exist. The old data-armed condition
+  was wrong on its own terms: the sync mirror holds canyon names and coordinates
+  from the first sync after sign-in, so "nothing downloaded" never meant "nothing
+  sensitive". The asymmetry stands: turning it OFF requires the device
+  authenticator and fails closed, turning it on is free, and the pref is
+  device-scoped (`src/offline/appLockPreference.ts`).
+  - **It defaults to OFF, and an unreadable/absent pref reads as off** — an
+    operator decision (2026-08-04) that knowingly departs from the fail-safe
+    default in the privacy rules: a lock armed on a fresh install put a biometric
+    prompt in front of every cold start and every return from the camera, and the
+    field friction outweighed the guard. Don't "fix" this back to on without the
+    operator; do keep the off-requires-auth asymmetry, which is what still makes
+    the switch safe once raised.
 - **No canyon names/coords in push payloads** — opaque IDs only; fetch details over
   the authed API on tap.
 - Crash/error reporter scrubs coords/names (mirror `api/src/lib/logger.ts`) — wired

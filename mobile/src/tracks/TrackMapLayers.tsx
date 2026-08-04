@@ -19,10 +19,21 @@ const WAYPOINT_COLOR = "#f97316"; // matches the owned-canyon orange family
 export function TrackMapLayers({
   tracks,
   waypoints,
+  liveCoord,
   onWaypointPress,
 }: {
   tracks: Track[];
   waypoints: Waypoint[];
+  /**
+   * The map's own latest fix, drawn as the live tail of the track being
+   * recorded. Recorded points reach SQLite through Android's JobScheduler,
+   * which batches: the stored line grew several segments at a time and then
+   * sat still, trailing the location marker by a visible gap until the next
+   * batch landed. The tail closes that gap with the same fix the marker is
+   * drawn from — it is only ever the last leg, so nothing here is stored, and
+   * the batch that follows replaces it with the real points.
+   */
+  liveCoord: [number, number] | null;
   onWaypointPress: (waypoint: Waypoint) => void;
 }) {
   const visibleTracks = tracks.filter((track) => track.visible);
@@ -55,8 +66,22 @@ export function TrackMapLayers({
   return (
     <>
       {visibleTracks.map((track) => {
-        const points = pointsById.get(track.id);
-        if (!points || points.length < 2) return null;
+        const stored = pointsById.get(track.id) ?? [];
+        const points =
+          liveCoord && track.state === "recording"
+            ? [
+                ...stored,
+                {
+                  lon: liveCoord[0],
+                  lat: liveCoord[1],
+                  altitudeM: null,
+                  accuracyM: null,
+                  timestampMs: Date.now(),
+                  segment: track.currentSegment,
+                },
+              ]
+            : stored;
+        if (points.length < 2) return null;
         return (
           <ShapeSource
             key={track.id}

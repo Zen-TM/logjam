@@ -153,7 +153,10 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     // Named for what it IS, not for what it can do: every downloadable source
     // is "offline-ready", and "Topo Vector" read as a topographic map, which
     // this is not — it is the OSM road/track network drawn on the device.
-    name: "Vector Map",
+    // It is also the ONLY OSM default the mobile picker offers (the "osm"
+    // raster entry above is web-only): same cartography, drawn on the phone
+    // and downloadable, so the name says which rendering it is.
+    name: "OSM Default (vector)",
     kind: "vector",
     urlTemplate: "master/basemap/protomaps-nsw.pmtiles",
     maxNativeZoom: 15,

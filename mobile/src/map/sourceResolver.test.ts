@@ -42,7 +42,7 @@ describe("basemap resolution", () => {
 
   it("offline: OSM-family is online-only by policy", () => {
     const [r] = resolveMapSource(
-      { kind: "basemap", basemapId: "osm" },
+      { kind: "basemap", basemapId: "osm-topo" },
       ctx({ connectivity: "offline" }),
     );
     expect(r).toMatchObject({ status: "unavailable", reason: "online-only-source" });
