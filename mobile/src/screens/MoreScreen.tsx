@@ -23,6 +23,8 @@ import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
+import { useAccountState } from "../auth/AccountStateContext";
+import { capabilityRowProps, capabilityStatus } from "../auth/capabilities";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import {
@@ -62,9 +64,16 @@ export function MoreScreen({
   onOpenSyncIssues: () => void;
   onOpenSettings: () => void;
 }) {
+  const { accountState, linkAccount } = useAccountState();
+  const isGuest = accountState === "guest";
   // Best-effort: the hub is fully usable without it (offline, or a failed
-  // fetch), so a failure costs one subtitle rather than the screen.
-  const userQuery = useApiQuery(fetchCurrentUser, "Couldn't load your account.");
+  // fetch), so a failure costs one subtitle rather than the screen. A guest has
+  // no user record to fetch at all.
+  const userQuery = useApiQuery(
+    fetchCurrentUser,
+    "Couldn't load your account.",
+    !isGuest,
+  );
   const online = useConnectivity() === "online";
   const syncStatus = useSyncStatus();
   const pendingCount = usePendingSyncCount();
@@ -76,6 +85,7 @@ export function MoreScreen({
     lastSyncAt: syncStatus.lastSyncAt,
     pendingCount,
     issueCount,
+    accountState,
   });
   const tone = TONE_STYLE[health.tone];
   const user = userQuery.data;
@@ -85,18 +95,34 @@ export function MoreScreen({
     // the rule and a sixth entry shouldn't push the sync answer off screen.
     <View style={styles.root}>
       <HeroHeader
-        eyebrow={user ? "Signed in as" : "Logjam"}
-        title={user?.username ?? "Your account"}
+        eyebrow={isGuest ? "Logjam" : user ? "Signed in as" : "Logjam"}
+        title={isGuest ? "No account" : (user?.username ?? "Your account")}
         action={
-          <Button
-            label="Sync now"
-            icon="refresh-cw"
-            variant="outlineAccent"
-            compact
-            loading={syncStatus.state === "syncing"}
-            disabled={!online}
-            onPress={() => void requestSync()}
-          />
+          // "Sync now" is meaningless without an account, so the hero's one
+          // action becomes the way to get one — the same affordance slot, the
+          // offer instead of the operation.
+          isGuest ? (
+            <Button
+              label="Create account"
+              icon="user-plus"
+              variant="outlineAccent"
+              compact
+              onPress={linkAccount}
+            />
+          ) : (
+            <Button
+              label="Sync now"
+              icon="refresh-cw"
+              variant="outlineAccent"
+              compact
+              loading={syncStatus.state === "syncing"}
+              disabled={
+                capabilityStatus("syncNow", accountState, online).status !==
+                "available"
+              }
+              onPress={() => void requestSync()}
+            />
+          )
         }
       >
         <View style={styles.health}>
@@ -114,6 +140,7 @@ export function MoreScreen({
           title="Inbox"
           subtitle={unreadCount ? `${unreadCount} unread` : "Nothing new"}
           onPress={onOpenInbox}
+          {...capabilityRowProps("inbox", accountState, online)}
           right={
             <Trailing
               badge={unreadCount ? <StatusPill label={String(unreadCount)} tone="accent" /> : null}
@@ -123,39 +150,49 @@ export function MoreScreen({
         <Row
           icon="users"
           title="Friends"
-          // Managing friendships is online-only; say so in place of a subtitle
-          // rather than letting the screen fail after the tap (§10).
-          subtitle={online ? undefined : "Needs a connection"}
-          disabled={!online}
+          // Managing friendships needs an account and a connection; say which
+          // in place of a subtitle rather than letting the screen fail after
+          // the tap (§10).
           onPress={onOpenFriends}
+          {...capabilityRowProps("friends", accountState, online)}
           right={<Trailing />}
         />
-        <Row
-          icon="alert-triangle"
-          hue={issueCount > 0 ? theme.warning : undefined}
-          title="Sync issues"
-          subtitle={
-            issueCount > 0
-              ? `${issueCount} ${issueCount === 1 ? "change needs" : "changes need"} a decision`
-              : "Nothing waiting on you"
-          }
-          onPress={onOpenSyncIssues}
-          right={
-            <Trailing
-              badge={
-                issueCount > 0 ? (
-                  <StatusPill label={String(issueCount)} tone="warning" />
-                ) : null
-              }
-            />
-          }
-        />
+        {/* Sync issues can only exist once something has tried to sync. */}
+        {isGuest ? null : (
+          <Row
+            icon="alert-triangle"
+            hue={issueCount > 0 ? theme.warning : undefined}
+            title="Sync issues"
+            subtitle={
+              issueCount > 0
+                ? `${issueCount} ${issueCount === 1 ? "change needs" : "changes need"} a decision`
+                : "Nothing waiting on you"
+            }
+            onPress={onOpenSyncIssues}
+            right={
+              <Trailing
+                badge={
+                  issueCount > 0 ? (
+                    <StatusPill label={String(issueCount)} tone="warning" />
+                  ) : null
+                }
+              />
+            }
+          />
+        )}
         <Row icon="settings" title="Settings" onPress={onOpenSettings} right={<Trailing />} />
         <Row
           icon="user"
-          title="Account"
+          // The Account row stays live for a guest: it is the way IN to an
+          // account, so disabling it with "Needs an account" would be a joke at
+          // the user's expense.
+          title={isGuest ? "Create an account" : "Account"}
           subtitle={
-            user ? `${formatBytes(user.storageUsedBytes)} of ${formatBytes(user.storageQuotaBytes)} used` : undefined
+            isGuest
+              ? "Back up and share what's on this phone"
+              : user
+                ? `${formatBytes(user.storageUsedBytes)} of ${formatBytes(user.storageQuotaBytes)} used`
+                : undefined
           }
           onPress={onOpenAccount}
           right={<Trailing />}

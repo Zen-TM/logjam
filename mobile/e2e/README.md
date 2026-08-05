@@ -13,3 +13,9 @@ api integration suite). Prereqs:
 |---|---|---|
 | `browse.yaml` | `fake` | seeded local API (alice) |
 | `signin.yaml` | `cognito` | `MAESTRO_TEST_EMAIL` / `MAESTRO_TEST_PASSWORD` — a confirmed **test** Cognito user (operator-provided; never a real account, never committed) |
+| `guest.yaml` | `cognito` | nothing — no credentials, no API. **Run `adb shell pm clear com.logjamnsw.mobile` first** |
+
+`guest.yaml` needs the clear because the entry choice is persisted: once an
+install has chosen guest or account, the chooser never appears again, and the
+flow's first assertion is that it does. `fake` auth mode won't work for it
+either — that mode boots straight to `authenticated`, past the chooser.

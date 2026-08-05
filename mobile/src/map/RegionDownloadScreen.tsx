@@ -39,6 +39,7 @@ import {
 import * as FileSystem from "expo-file-system";
 
 import { formatBytes } from "../format";
+import { useAccountState } from "../auth/AccountStateContext";
 import { fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
 import {
   Button,
@@ -177,8 +178,23 @@ export function RegionDownloadScreen({
   );
   const mapRef = useRef<React.ComponentRef<typeof MapView>>(null);
 
+  // The vector clip is cut server-side (POST /basemap/region-clip) and streamed
+  // back over an authenticated request, so it is the one map source a guest
+  // genuinely cannot have. The three SIX rasters are fetched client-direct from
+  // the provider with no Logjam request at all (regionTileDownload.ts) and work
+  // exactly as they do for anyone else.
+  //
+  // Dropped from the list rather than shown disabled, following this screen's
+  // existing rule for the unlicensed OSM sources: a chip that exists only to
+  // refuse is worse than no chip. The note under the rail says why, and where
+  // to change it — which a greyed chip could not.
+  const isGuest = useAccountState().accountState === "guest";
+  const downloadable = isGuest
+    ? DOWNLOADABLE.filter((id) => id !== "protomaps")
+    : DOWNLOADABLE;
+
   const [selected, setSelected] = useState<SelectableId[]>(() =>
-    DOWNLOADABLE.includes(initialBasemapId as SelectableId)
+    downloadable.includes(initialBasemapId as SelectableId)
       ? [initialBasemapId as SelectableId]
       : ["six-topo"],
   );
@@ -439,7 +455,7 @@ export function RegionDownloadScreen({
           style={styles.chipScroll}
           contentContainerStyle={styles.chipRow}
         >
-          {DOWNLOADABLE.map((id) => {
+          {downloadable.map((id) => {
             const active = selected.includes(id);
             return (
               <Chip
@@ -458,6 +474,13 @@ export function RegionDownloadScreen({
             );
           })}
         </ScrollView>
+
+        {isGuest ? (
+          <Text style={styles.guestSourceNote}>
+            The detailed vector basemap needs an account. These topographic and
+            aerial maps download without one.
+          </Text>
+        ) : null}
 
         <ScrollView
           style={styles.panelScroll}
@@ -645,6 +668,12 @@ const styles = StyleSheet.create({
   // `flexGrow: 0` and a centred cross-axis: a horizontal ScrollView otherwise
   // grows to fill the panel and stretches its chips into tall ovals.
   chipScroll: { flexGrow: 0 },
+  guestSourceNote: {
+    color: theme.textMuted,
+    fontSize: fontSize.sm,
+    paddingHorizontal: spacing(2),
+    paddingTop: spacing(0.5),
+  },
   chipRow: {
     flexDirection: "row",
     alignItems: "center",

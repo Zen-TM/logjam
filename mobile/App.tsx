@@ -8,10 +8,12 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import { CLIENT_VERSION } from "./src/config";
 import { useMinVersionGate } from "./src/useMinVersionGate";
-import { useAuth } from "./src/auth/useAuth";
-import { countUnsyncedChanges, wipeAllSyncData } from "./src/sync/syncDb";
+import { mountsAppShell, useAuth } from "./src/auth/useAuth";
+import { countUnsyncedChanges } from "./src/sync/syncDb";
+import { wipeAllLocalData } from "./src/offline/wipeLocalData";
 import { unregisterPushNotifications } from "./src/notifications/pushRegistration";
 import { AuthFlow } from "./src/screens/AuthFlow";
+import { EntryChooser } from "./src/screens/EntryChooser";
 import { AppShell } from "./src/AppShell";
 import { AppLockGate } from "./src/offline/AppLockGate";
 import { LoadingState } from "./src/ui/ScreenStates";
@@ -44,12 +46,14 @@ export default function App() {
       <AppLockGate>
       {auth.state === "loading" ? (
         <LoadingState />
-      ) : auth.state === "authenticated" ? (
+      ) : mountsAppShell(auth.state) ? (
         <AppShell
+          accountState={auth.accountState}
+          onLinkAccount={auth.linkAccount}
           onSignOut={async () => {
-            // Sign-out wipes the sync mirror AND the outbox (stage8 §9) —
-            // unflushed local changes die with it, so block on a
-            // confirmation when any exist.
+            // Sign-out wipes the sync mirror AND the outbox (stage8 §9), plus
+            // the offline registry and every downloaded file — unflushed local
+            // changes die with it, so block on a confirmation when any exist.
             const unsynced = await countUnsyncedChanges();
             if (unsynced > 0) {
               const confirmed = await new Promise<boolean>((resolve) => {
@@ -68,10 +72,26 @@ export default function App() {
             // Unregister the push token BEFORE tokens are cleared (the DELETE
             // needs an authenticated request); best-effort inside.
             await unregisterPushNotifications();
-            await wipeAllSyncData();
+            const wiped = await wipeAllLocalData();
+            if (wiped.failed.length > 0) {
+              // The privacy line held only partly. Say so — the next person to
+              // use this phone would otherwise inherit the remains silently.
+              Alert.alert(
+                "Some data couldn't be removed",
+                `This phone kept your ${wiped.failed.join(" and ")}. Signing out anyway; clear the app's storage in Android settings to be sure.`,
+              );
+            }
             await auth.signOut();
           }}
         />
+      ) : auth.state === "chooser" ? (
+        <SafeAreaView style={styles.authSafeArea}>
+          <EntryChooser
+            onContinueAsGuest={auth.chooseGuest}
+            onSignIn={auth.goToSignIn}
+            error={auth.error}
+          />
+        </SafeAreaView>
       ) : (
         <SafeAreaView style={styles.authSafeArea}>
           <AuthFlow auth={auth} />

@@ -14,6 +14,7 @@ export { toDateKey, fromDateKey, todayDateKey } from "./monthGrid";
 export { IconButton } from "./IconButton";
 export { SectionHeader } from "./SectionHeader";
 export { StatusPill } from "./StatusPill";
+export { SyncStatusPills } from "./SyncStatusPills";
 export { Toggle } from "./Toggle";
 export { SegmentedControl, type SegmentOption } from "./SegmentedControl";
 export { BottomSheet } from "./BottomSheet";

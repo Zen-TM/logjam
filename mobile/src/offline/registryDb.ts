@@ -24,6 +24,11 @@ function notifyChanged(): void {
   for (const listener of listeners) listener();
 }
 
+// Exported for the account-transition wipe (offline/wipeLocalData.ts), which
+// clears every table here in one transaction rather than through the per-row
+// helpers that would each notify.
+export { notifyChanged as notifyRegistryChanged };
+
 // Shared with importsDb (vector_import lives in the same app-private store,
 // behind the same app lock). Not for use outside the offline/imports modules.
 export async function getOfflineDb(): Promise<SQLite.SQLiteDatabase> {

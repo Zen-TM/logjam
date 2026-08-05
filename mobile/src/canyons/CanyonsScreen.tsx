@@ -40,6 +40,7 @@ import {
   type CanyonSortKey,
 } from "@logjam/shared";
 
+import { useAccountState } from "../auth/AccountStateContext";
 import { canyonHue, fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
 import type { MirrorCanyon } from "../sync/mirrorStore";
 import { deleteCanyonLocal } from "../sync/outbox";
@@ -61,7 +62,7 @@ import {
   ErrorState,
   Row,
   SegmentedControl,
-  StatusPill,
+  SyncStatusPills,
   Toast,
   type CapacitySegment,
   type SegmentOption,
@@ -394,18 +395,7 @@ export function CanyonsScreen({
           </View>
         )}
 
-        {!online || pendingCount > 0 ? (
-          <View style={styles.statusRow}>
-            {online ? null : <StatusPill label="Offline" tone="muted" icon="cloud-off" />}
-            {pendingCount > 0 ? (
-              <StatusPill
-                label={`${pendingCount} waiting to sync`}
-                tone="outline"
-                icon="upload-cloud"
-              />
-            ) : null}
-          </View>
-        ) : null}
+        <SyncStatusPills online={online} pendingCount={pendingCount} />
       </HeroHeader>
 
       <View style={styles.rail}>
@@ -660,6 +650,7 @@ function EmptyPanel({
   onAdd: () => void;
   onClear: () => void;
 }) {
+  const isGuest = useAccountState().accountState === "guest";
   const copy = filtering
     ? {
         icon: "filter" as const,
@@ -687,7 +678,12 @@ function EmptyPanel({
           : {
               icon: "map-pin" as const,
               title: "No canyons yet",
-              body: "Add the ones you want to run, or import your list on the web. Everything here works with no signal once it has synced.",
+              // Without an account there is no web list to import from and
+              // nothing will ever sync — promising both would be the first
+              // thing a new guest reads, and wrong.
+              body: isGuest
+                ? "Add the ones you want to run. Everything here is saved on this phone and works with no signal."
+                : "Add the ones you want to run, or import your list on the web. Everything here works with no signal once it has synced.",
             };
   return (
     <View style={styles.empty}>
@@ -706,7 +702,6 @@ function EmptyPanel({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.primary },
   heroActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
-  statusRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
   meterRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   meter: { flex: 1 },
   findRow: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },

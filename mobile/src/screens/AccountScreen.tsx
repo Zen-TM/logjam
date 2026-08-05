@@ -12,8 +12,8 @@
 // PRIVACY: username, email, byte counts and tile counts. The email appears here
 // and nowhere else in the app — friend search and lists are username-only, per
 // the root CLAUDE.md convention.
-import { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
   confirmUserAttribute,
@@ -24,10 +24,14 @@ import { messageFromError } from "@logjam/shared";
 import { apiFetch } from "../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import type { TUser } from "../api/types";
+import { useAccountState } from "../auth/AccountStateContext";
+import { capabilityRowProps } from "../auth/capabilities";
 import { CLIENT_VERSION } from "../config";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
-import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
+import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
+import { describeLocalData, linkConfirmationMessage } from "./linkAccountCopy";
+import { assetHue, fontSize, fontWeight, lineHeight, spacing, theme } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -44,6 +48,90 @@ import {
   Toast,
   type ToastMessage,
 } from "../ui";
+
+/**
+ * The Account screen for a guest: what's on this phone, what an account would
+ * add, and the way to get one.
+ *
+ * The confirmation before handing off to the sign-in flow is the load-bearing
+ * part. Linking merges this device's data into whichever account is signed in
+ * to, through the ordinary outbox flush, and there is no unlink — so the user
+ * is told the counts and the irreversibility BEFORE they reach a password
+ * field, not after.
+ */
+function GuestAccountScreen({ onBack }: { onBack: () => void }) {
+  const { linkAccount } = useAccountState();
+  const [counts, setCounts] = useState<LocalEntityCounts | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    countLocalEntities()
+      .then((result) => {
+        if (!cancelled) setCounts(result);
+      })
+      .catch(console.error);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const startLinking = () => {
+    const message = counts ? linkConfirmationMessage(counts) : null;
+    // Nothing recorded yet — there is nothing to warn about, so don't make
+    // them dismiss a dialog about their zero canyons.
+    if (!message) {
+      linkAccount();
+      return;
+    }
+    Alert.alert("Add this phone's data to an account?", message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Continue", onPress: linkAccount },
+    ]);
+  };
+
+  const summary = counts ? describeLocalData(counts) : null;
+
+  return (
+    <View style={styles.root}>
+      <HeroHeader eyebrow="Account" title="No account" onBack={onBack}>
+        <Text style={styles.email}>
+          {summary
+            ? `${summary} on this phone`
+            : "Everything you record stays on this phone"}
+        </Text>
+      </HeroHeader>
+
+      <ScreenScroll padded={false} contentStyle={styles.body}>
+        <SectionHeader label="With an account" />
+        <Row
+          icon="upload-cloud"
+          title="Backed up"
+          subtitle="Your canyons and trips survive a lost phone"
+        />
+        <Row
+          icon="users"
+          title="Sharing"
+          subtitle="Share individual canyons with friends"
+        />
+        <Row
+          icon="layers"
+          title="LiDAR maps"
+          subtitle="Import the topo maps you generate on the web"
+        />
+
+        <SectionHeader label="Get one" />
+        <Button label="Sign in or create an account" icon="user-plus" onPress={startLinking} />
+        <Text style={styles.guestNote}>
+          What&apos;s already on this phone comes with you — nothing is lost by
+          creating an account. It can&apos;t be undone afterwards, though: there
+          is no way to un-upload it.
+        </Text>
+
+        <Text style={styles.version}>{CLIENT_VERSION}</Text>
+      </ScreenScroll>
+    </View>
+  );
+}
 
 function updateUsername(username: string): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: { username } });
@@ -62,6 +150,23 @@ const SHEET_TITLE: Record<Exclude<SheetMode, "closed">, string> = {
 };
 
 export function AccountScreen({
+  onBack,
+  onSignOut,
+  onOpenFriends,
+}: {
+  onBack: () => void;
+  onSignOut: () => void;
+  onOpenFriends: () => void;
+}) {
+  const { accountState } = useAccountState();
+  // A guest has no account record, no quotas and nothing to sign out of, so
+  // this is a different screen rather than the same one with everything
+  // disabled — the whole point of it is the way IN.
+  if (accountState === "guest") return <GuestAccountScreen onBack={onBack} />;
+  return <LinkedAccountScreen onBack={onBack} onSignOut={onSignOut} onOpenFriends={onOpenFriends} />;
+}
+
+function LinkedAccountScreen({
   onBack,
   onSignOut,
   onOpenFriends,
@@ -160,16 +265,15 @@ export function AccountScreen({
         <Row
           icon="mail"
           title="Email"
-          subtitle={online ? user.email : "Needs a connection"}
-          disabled={!online}
+          subtitle={online ? user.email : undefined}
+          {...capabilityRowProps("serverPrefs", "linked", online)}
           onPress={() => setSheet("email")}
           right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
         />
         <Row
           icon="users"
           title="Friends"
-          subtitle={online ? undefined : "Needs a connection"}
-          disabled={!online}
+          {...capabilityRowProps("friends", "linked", online)}
           onPress={onOpenFriends}
           right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
         />
@@ -180,8 +284,7 @@ export function AccountScreen({
           icon="trash-2"
           hue={theme.warning}
           title="Delete account"
-          subtitle={online ? undefined : "Needs a connection"}
-          disabled={!online}
+          {...capabilityRowProps("serverPrefs", "linked", online)}
           onPress={() => setSheet("delete")}
         />
 
@@ -441,4 +544,9 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
   },
   version: { color: theme.textMuted, fontSize: fontSize.xs, paddingTop: spacing(1) },
+  guestNote: {
+    color: theme.textMuted,
+    fontSize: fontSize.sm,
+    lineHeight: lineHeight.body,
+  },
 });

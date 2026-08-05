@@ -58,6 +58,7 @@ import {
   SectionHeader,
   SegmentedControl,
   StatusPill,
+  SyncStatusPills,
   TextField,
   Toast,
   type CapacitySegment,
@@ -75,6 +76,8 @@ import {
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
 import { importVectorFileFromPicker } from "../imports/vectorImports";
 import { useVectorImports } from "../imports/useVectorImports";
+import { useAccountState } from "../auth/AccountStateContext";
+import { capabilityRowProps, capabilityStatus } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { mergeSavedOverlayJobs, type CompletedOverlaysResponse } from "../map/topoOverlays";
 import { downloadTopoOverlay } from "../offline/overlayDownloads";
@@ -157,6 +160,15 @@ export function SavedScreen({
 }) {
   const connectivity = useConnectivity();
   const online = connectivity === "online";
+  // Both of these come off the user's web account, so a guest has neither.
+  // Local imports (a GeoPDF or a GPX off this phone's storage) are unaffected
+  // and stay in the same sheet — the point being that "Add to this device"
+  // still does something useful without an account.
+  const { accountState } = useAccountState();
+  const lidarReady =
+    capabilityStatus("lidarOverlays", accountState, online).status === "available";
+  const accountGeoPdfReady =
+    capabilityStatus("accountGeoPdf", accountState, online).status === "available";
   const pendingCount = usePendingSyncCount();
 
   // One toast channel for every async outcome on the screen (import, save,
@@ -237,7 +249,11 @@ export function SavedScreen({
   const { artifacts } = useMapArtifacts();
   const regionArtifacts = artifacts.filter((a) => a.kind === "basemap-region");
 
-  const overlaysQuery = useApiQuery(getCompletedOverlays, "Couldn't load topo overlays.");
+  const overlaysQuery = useApiQuery(
+    getCompletedOverlays,
+    "Couldn't load topo overlays.",
+    accountState !== "guest",
+  );
   const mergedOverlays = mergeSavedOverlayJobs(overlaysQuery.data, artifacts);
   const overlayCatalog = mergedOverlays.jobs.flatMap((job) =>
     job.layers.map((layer) => ({
@@ -694,18 +710,7 @@ export function SavedScreen({
         {/* Offline is a normal state here — everything already on the device
             still works — so it sits beside what is still waiting to leave
             rather than reading as an error. */}
-        {!online || pendingCount > 0 ? (
-          <View style={styles.pillRow}>
-            {online ? null : <StatusPill label="Offline" tone="muted" icon="cloud-off" />}
-            {pendingCount > 0 ? (
-              <StatusPill
-                label={`${pendingCount} waiting to sync`}
-                tone="outline"
-                icon="upload-cloud"
-              />
-            ) : null}
-          </View>
-        ) : null}
+        <SyncStatusPills online={online} pendingCount={pendingCount} />
       </HeroHeader>
 
       <View style={styles.rail}>
@@ -814,7 +819,7 @@ export function SavedScreen({
               <Row
                 key={overlay.key}
                 title={overlay.label}
-                subtitle={online ? "Not on this device" : "Connect to download"}
+                subtitle={lidarReady ? "Not on this device" : "Connect to download"}
                 icon="layers"
                 hue={assetHue.overlay}
                 right={
@@ -822,7 +827,7 @@ export function SavedScreen({
                     icon="download"
                     accessibilityLabel={`Save ${overlay.label} for offline use`}
                     color={theme.accent}
-                    disabled={!online || overlayBusyKey != null}
+                    disabled={!lidarReady || overlayBusyKey != null}
                     onPress={() => handleSaveOverlay(overlay)}
                   />
                 }
@@ -893,12 +898,12 @@ export function SavedScreen({
           />
           <Row
             title={accountJobsLoading ? "Loading your GeoPDFs…" : "GeoPDFs from my account"}
-            subtitle={online ? "Maps you generated on the web" : "Needs a connection"}
+            subtitle="Maps you generated on the web"
             icon="cloud"
             hue={assetHue.geoPdf}
-            disabled={!online}
+            {...capabilityRowProps("accountGeoPdf", accountState, online)}
             onPress={
-              online && !accountJobsLoading
+              accountGeoPdfReady && !accountJobsLoading
                 ? () => {
                     setAddSheetOpen(false);
                     loadAccountGeoPdfs();
@@ -922,14 +927,12 @@ export function SavedScreen({
           />
           <Row
             title="Save a LiDAR topo overlay"
-            subtitle={
-              online ? "Contours, slope and vegetation you generated" : "Needs a connection"
-            }
+            subtitle="Contours, slope and vegetation you generated"
             icon="layers"
             hue={assetHue.overlay}
-            disabled={!online}
+            {...capabilityRowProps("lidarOverlays", accountState, online)}
             onPress={
-              online
+              lidarReady
                 ? () => {
                     setAddSheetOpen(false);
                     setFilter("overlay");
@@ -1009,6 +1012,9 @@ function EmptyPanel({
   online: boolean;
   onAdd: () => void;
 }) {
+  // An empty panel is where someone works out whether a feature is missing or
+  // merely unused — so for the two account-backed categories it must say which.
+  const isGuest = useAccountState().accountState === "guest";
   const copy: Record<Category | "all", { title: string; hint: string }> = {
     all: {
       title: "Nothing saved yet",
@@ -1020,13 +1026,17 @@ function EmptyPanel({
     },
     overlay: {
       title: "No LiDAR topos here",
-      hint: online
-        ? "Topo overlays you generate on the web can be saved for offline use."
-        : "Connect to see the overlays on your account.",
+      hint: isGuest
+        ? "LiDAR topos are generated on the web and need a Logjam account."
+        : online
+          ? "Topo overlays you generate on the web can be saved for offline use."
+          : "Connect to see the overlays on your account.",
     },
     geoPdf: {
       title: "No GeoPDF maps",
-      hint: "Import a GeoPDF from this phone, or pull one from your Logjam account.",
+      hint: isGuest
+        ? "Import a GeoPDF from this phone. Pulling one from a Logjam account needs an account."
+        : "Import a GeoPDF from this phone, or pull one from your Logjam account.",
     },
     vector: {
       title: "No GPX or KML files",
@@ -1103,7 +1113,6 @@ function RenameForm({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.primary },
-  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   // The rail's own bottom pad is the gap the list scrolls against — without it
   // rows slide flush into the chips.
   rail: { paddingLeft: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },

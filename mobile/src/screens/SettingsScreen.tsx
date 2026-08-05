@@ -41,8 +41,14 @@ import {
   useApiQuery,
   type CustomFieldEntity,
 } from "../api/queries";
+import { useAccountState } from "../auth/AccountStateContext";
+import { capabilityStatus, unavailableReasonText } from "../auth/capabilities";
 import { CLIENT_VERSION } from "../config";
 import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
+import {
+  areCrashReportsEnabled,
+  setCrashReportsEnabled,
+} from "../sentry/crashReportPreference";
 import {
   isAppLockEnabled,
   setAppLockEnabled,
@@ -100,7 +106,12 @@ type SheetMode =
   | { kind: "fieldForm"; entity: CustomFieldEntity; editing: TripLogCustomFieldDef | null };
 
 export function SettingsScreen() {
-  const userQuery = useApiQuery(fetchCurrentUser, "Couldn't load your settings.");
+  const { accountState } = useAccountState();
+  const userQuery = useApiQuery(
+    fetchCurrentUser,
+    "Couldn't load your settings.",
+    accountState !== "guest",
+  );
   const online = useConnectivity() === "online";
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback((text: string, tone: ToastMessage["tone"] = "info") => {
@@ -129,13 +140,17 @@ export function SettingsScreen() {
         notify("This phone wouldn't store that theme.", "error");
         return;
       }
+      // A guest has no account copy to mirror it to, and the device copy above
+      // is the one that paints the app. Attempting the PATCH would toast a
+      // failure for a preference that in fact saved perfectly.
+      if (accountState === "guest") return;
       updateUserPreferences({ themeSchemeId: id }).catch((err: unknown) => {
         console.error(err);
         // True, and specific: the phone kept it, the account didn't get it.
         notify("Saved on this phone, but it didn't reach your account.", "error");
       });
     },
-    [notify],
+    [notify, accountState],
   );
 
   // ── notification preferences ─────────────────────────────────────────────
@@ -227,6 +242,18 @@ export function SettingsScreen() {
     setCompassEnabledState(next);
   }, [compassEnabled, notify]);
 
+  // Device-scoped like the two above, and the one place the entry chooser's
+  // crash-report question can be revisited (the chooser says so).
+  const [crashReports, setCrashReportsState] = useState(areCrashReportsEnabled);
+  const toggleCrashReports = useCallback(() => {
+    const next = !crashReports;
+    if (!setCrashReportsEnabled(next)) {
+      notify("This phone wouldn't store that setting.", "error");
+      return;
+    }
+    setCrashReportsState(next);
+  }, [crashReports, notify]);
+
   // ── custom fields ────────────────────────────────────────────────────────
   const [sheet, setSheet] = useState<SheetMode>({ kind: "closed" });
   const [tripFieldDefs, setTripFieldDefs] = useState<TripLogCustomFieldDef[]>([]);
@@ -244,14 +271,21 @@ export function SettingsScreen() {
     else setCanyonFieldDefs(next);
   };
 
-  // Why a preference row can't be touched right now — offline is one reason, a
-  // failed account fetch is another, and a dead row with no reason is the state
-  // this must never render in (§8).
-  const prefsBlocked: string | undefined = !online
-    ? "Needs a connection"
-    : userQuery.error
-      ? "Couldn't reach your account"
-      : undefined;
+  // Why a preference row can't be touched right now — no account is one reason,
+  // offline is another, a failed account fetch a third, and a dead row with no
+  // reason is the state this must never render in (§8).
+  //
+  // Every row above the "This phone" divider is stored on the user record
+  // (PATCH /users/me), which is why a guest can't have any of them. The device
+  // preferences below it — theme, app lock, compass, crash reports — live in
+  // `prefsDb` and work for everyone.
+  const serverPrefs = capabilityStatus("serverPrefs", accountState, online);
+  const prefsBlocked: string | undefined =
+    serverPrefs.status === "unavailable"
+      ? unavailableReasonText(serverPrefs.reason)
+      : userQuery.error
+        ? "Couldn't reach your account"
+        : undefined;
   const prefsReady = prefsBlocked === undefined;
 
   return (
@@ -366,6 +400,18 @@ export function SettingsScreen() {
           value={compassEnabled}
           ready
           onToggle={() => void toggleCompass()}
+        />
+        <PreferenceRow
+          icon="alert-octagon"
+          title="Send crash reports"
+          // Names what is scrubbed, because "anonymous" alone is a claim the
+          // user has no way to check and this app's whole premise is that
+          // canyon locations don't leave it (scrubEvent.ts does the work).
+          subtitle="Scrubbed of canyon names and coordinates. Takes effect next launch."
+          subtitleNumberOfLines={2}
+          value={crashReports}
+          ready
+          onToggle={toggleCrashReports}
         />
         <Row
           icon="hard-drive"

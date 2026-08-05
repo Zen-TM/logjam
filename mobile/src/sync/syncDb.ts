@@ -242,3 +242,31 @@ export async function countUnsyncedChanges(): Promise<number> {
   );
   return row?.n ?? 0;
 }
+
+export type LocalEntityCounts = {
+  canyons: number;
+  trips: number;
+  media: number;
+};
+
+/**
+ * What this device holds, by kind — for the guest→account link confirmation.
+ *
+ * Deliberately counts MIRROR rows rather than outbox ops: the user is being
+ * asked about their canyons and photos, not about a queue depth, and after a
+ * partial flush the two numbers diverge. Media is called out separately
+ * because it is the part that takes hours, not seconds, to upload.
+ */
+export async function countLocalEntities(): Promise<LocalEntityCounts> {
+  const db = await getSyncDb();
+  const [canyons, trips, media] = await Promise.all([
+    db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM canyons"),
+    db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM trip_logs"),
+    db.getFirstAsync<{ n: number }>("SELECT COUNT(*) AS n FROM media"),
+  ]);
+  return {
+    canyons: canyons?.n ?? 0,
+    trips: trips?.n ?? 0,
+    media: media?.n ?? 0,
+  };
+}

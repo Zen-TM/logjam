@@ -76,6 +76,7 @@ function SignInForm({ auth }: { auth: Auth }) {
       <Button label="Sign in" onPress={submit} loading={submitting} />
       <FooterLink label="Forgot password?" onPress={auth.goToForgotPassword} />
       <FooterLink label="No account? Sign up" onPress={auth.goToSignUp} />
+      <FooterLink label="Back" onPress={auth.backToChooser} />
     </View>
   );
 }

@@ -41,6 +41,8 @@ import {
 } from "../api/friends";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { tripTitle } from "../api/tripTitle";
+import { useAccountState } from "../auth/AccountStateContext";
+import { capabilityStatus, unavailableReasonText } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { MediaStrip } from "../media/MediaStrip";
 import { fontSize, fontWeight, lineHeight, radius, spacing, surface, theme } from "../theme";
@@ -97,7 +99,16 @@ export function CanyonDetailScreen({
   const trips = useMirrorTrips();
   const canyonsQuery = useMirrorCanyons();
   const online = useConnectivity() === "online";
-  const userQuery = useApiQuery(fetchCurrentUser, "Couldn't load your fields.");
+  // Custom-field DEFINITIONS live on the user record, so a guest has none —
+  // and would spend a failing request per screen open finding that out. Their
+  // field VALUES on a canyon are local and unaffected; the keys simply render
+  // un-slugged, exactly as they do offline.
+  const { accountState } = useAccountState();
+  const userQuery = useApiQuery(
+    fetchCurrentUser,
+    "Couldn't load your fields.",
+    accountState !== "guest",
+  );
 
   const [editing, setEditing] = useState(false);
   const [logging, setLogging] = useState(false);
@@ -440,9 +451,14 @@ function CanyonSharingSection({
     }
   }, [canyonId]);
 
+  const { accountState } = useAccountState();
+  const shareStatus = capabilityStatus("sharing", accountState, online);
+  const canShare = shareStatus.status === "available";
+
   useEffect(() => {
-    if (online) void load();
-  }, [load, online]);
+    // A guest has no shares to list and no endpoint that would answer.
+    if (canShare) void load();
+  }, [load, canShare]);
 
   const openPicker = useCallback(async () => {
     setActionError(null);
@@ -549,8 +565,8 @@ function CanyonSharingSection({
         icon="share-2"
         title="Share with a friend"
         subtitle={
-          !online
-            ? "Needs a connection"
+          shareStatus.status === "unavailable"
+            ? unavailableReasonText(shareStatus.reason)
             : loadFailed
               ? "Can't reach your account right now"
               : recipients === null
@@ -559,7 +575,7 @@ function CanyonSharingSection({
                   ? "Not shared with anyone yet"
                   : undefined
         }
-        disabled={!online || loadFailed}
+        disabled={!canShare || loadFailed}
         onPress={onShareRequested}
       />
 

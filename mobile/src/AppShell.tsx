@@ -1,7 +1,13 @@
-// Authenticated app shell: bottom tabs (Map / Canyons / Logs / Saved / More)
-// with native stacks for detail screens, behind the consent gate. The More
-// tab is a hub folding Inbox, Account, Friends, Sync issues and Settings off
-// the tab bar.
+// The app shell: bottom tabs (Map / Canyons / Logs / Saved / More) with native
+// stacks for detail screens, behind the consent gate. The More tab is a hub
+// folding Inbox, Account, Friends, Sync issues and Settings off the tab bar.
+//
+// Mounts for a GUEST as well as an authenticated user. Everything that talks to
+// the server is registered conditionally below — a guest starts no sync engine,
+// registers no push token, fetches no user record and runs no auto-download.
+// Local storage is untouched by that distinction: guest mutations still write
+// the mirror and still enqueue to the outbox, which is precisely what makes
+// linking an account later a flush rather than a migration.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Feather } from "@expo/vector-icons";
 import {
@@ -15,6 +21,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { isThemeSchemeId, needsReconsent } from "@logjam/shared";
 
 import { fetchCurrentUser, getUnreadNotificationCount, useApiQuery } from "./api/queries";
+import { AccountStateProvider } from "./auth/AccountStateContext";
+import type { AccountState } from "./auth/capabilities";
 import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
 import { registerSyncTriggers } from "./sync/syncEngine";
@@ -388,8 +396,21 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export function AppShell({ onSignOut }: { onSignOut: () => void }) {
-  const userQuery = useApiQuery(fetchCurrentUser, "Couldn't load your account.");
+export function AppShell({
+  accountState,
+  onLinkAccount,
+  onSignOut,
+}: {
+  accountState: AccountState;
+  onLinkAccount: () => void;
+  onSignOut: () => void;
+}) {
+  const isGuest = accountState === "guest";
+  const userQuery = useApiQuery(
+    fetchCurrentUser,
+    "Couldn't load your account.",
+    !isGuest,
+  );
   const [consented, setConsented] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
   const navigationRef = useRef<NavigationContainerRef<never>>(null);
@@ -400,12 +421,26 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
   // screen fetches details over the authed API.
   // Stage 8 sync triggers: initial cycle, app foreground, connectivity
   // regained. Torn down on sign-out (shell unmount).
-  useEffect(() => registerSyncTriggers(), []);
+  //
+  // A guest registers none of them. This is the load-bearing half of guest
+  // mode: without a cycle ever running, local mutations pile up in the outbox
+  // exactly as they would offline, and the day an account is linked the first
+  // cycle drains them. Registering triggers that could only ever 401 would
+  // also mean a failing sync every foreground, and a permanently red sync
+  // health line on the More tab.
+  useEffect(() => {
+    if (isGuest) return;
+    return registerSyncTriggers();
+  }, [isGuest]);
 
   // "Auto-download finished GeoPDFs" (Settings → Downloads): app start,
   // foreground, and connection regained — Wi-Fi only. See autoDownload.ts for
-  // why it checks then and not on a timer.
-  useEffect(() => registerGeoPdfAutoDownload(), []);
+  // why it checks then and not on a timer. GeoPDFs come from the user's web
+  // account, so there is nothing to download for a guest.
+  useEffect(() => {
+    if (isGuest) return;
+    return registerGeoPdfAutoDownload();
+  }, [isGuest]);
 
   // Mirror the account's theme choice onto this device, so a scheme picked in the
   // browser (or on another phone) is what this app opens in next launch. The
@@ -418,7 +453,10 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
   }, [userQuery.data?.uiPreferences?.themeSchemeId]);
 
   useEffect(() => {
-    registerForPushNotifications();
+    // No account, no device row to register the push token against. The tap
+    // listener still mounts — it costs nothing and keeps this effect's shape
+    // identical either way.
+    if (!isGuest) registerForPushNotifications();
     const subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
         const data = response.notification.request.content.data as {
@@ -443,13 +481,17 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
       },
     );
     return () => subscription.remove();
-  }, []);
+  }, [isGuest]);
 
   // Badge count prefers the notifications cache: it incorporates optimistic
   // (offline) mark-reads immediately and stays correct offline. Only when no
   // cache exists yet (first launch, inbox never opened) does it fall back to
   // the server count. Best-effort — the badge is decoration.
+  //
+  // A guest has no notifications at all, and the server fallback would be a
+  // guaranteed-failing request on every mirror change.
   const refreshUnread = useCallback(() => {
+    if (isGuest) return;
     getCachedUnreadCount()
       .then((cached) => {
         if (cached !== null) {
@@ -459,7 +501,7 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
         return getUnreadNotificationCount().then(({ count }) => setUnreadCount(count));
       })
       .catch(console.error);
-  }, []);
+  }, [isGuest]);
 
   useEffect(() => {
     refreshUnread();
@@ -473,6 +515,11 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
   // Consent gate: block when we KNOW consent is stale. If the user fetch
   // failed (offline), proceed — never lock someone out of the app in the
   // field over an unreachable consent check.
+  //
+  // A guest passes through the same way an offline user does, and for a
+  // stronger reason: consent is recorded ON the user record, so there is
+  // nothing to be stale and nowhere to write an answer. The entry chooser
+  // carries what a guest actually needs to agree to.
   const user = userQuery.data;
   if (user && !consented && needsReconsent(user)) {
     return (
@@ -487,6 +534,7 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
   }
 
   return (
+    <AccountStateProvider accountState={accountState} linkAccount={onLinkAccount}>
     <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <Tabs.Navigator
         screenOptions={{
@@ -624,5 +672,6 @@ export function AppShell({ onSignOut }: { onSignOut: () => void }) {
         </Tabs.Screen>
       </Tabs.Navigator>
     </NavigationContainer>
+    </AccountStateProvider>
   );
 }

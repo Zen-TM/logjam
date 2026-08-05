@@ -32,6 +32,8 @@ import {
   type ChipOption,
 } from "../ui";
 import { customFieldDefsOf, fetchCurrentUser } from "../api/queries";
+import { useAccountState } from "../auth/AccountStateContext";
+import { capabilityRowProps } from "../auth/capabilities";
 import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
 import { formatDateKey } from "./logbook";
 import { tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
@@ -90,6 +92,7 @@ export function TripEditSheet({
   online: boolean;
 }) {
   const editing = trip != null;
+  const { accountState } = useAccountState();
   const [mode, setMode] = useState<Mode>("form");
   const [dateKey, setDateKey] = useState(todayDateKey);
   const [selected, setSelected] = useState<TripCanyonLink[]>([]);
@@ -113,11 +116,14 @@ export function TripEditSheet({
   const loadedDefs = useRef(false);
   useEffect(() => {
     if (!visible || loadedDefs.current) return;
+    // A guest has no user record to read definitions from — and no way to
+    // define any, so the empty list is the whole truth rather than a fallback.
+    if (accountState === "guest") return;
     loadedDefs.current = true;
     fetchCurrentUser()
       .then((user) => setCustomFieldDefs(customFieldDefsOf(user, "tripLog")))
       .catch((err: unknown) => console.error(err));
-  }, [visible]);
+  }, [visible, accountState]);
 
   // Seed from the trip being edited (or today's blank form) each time the sheet
   // opens, so a cancelled edit never leaks into the next one.
@@ -444,16 +450,19 @@ export function TripEditSheet({
             />
           ))}
 
+          {/* Field DEFINITIONS live on the user record, so this door is shut
+              for a guest. The values they've already typed into a trip are
+              local and keep working — only defining new fields needs the
+              account. */}
           <Row
             icon="sliders"
             title="Your trip fields"
             subtitle={
               customFieldDefs.length === 0
-                ? online
-                  ? "Add your own — water level, party size, anything"
-                  : "Managing fields needs a connection"
+                ? "Add your own — water level, party size, anything"
                 : `${customFieldDefs.length} field${customFieldDefs.length === 1 ? "" : "s"}`
             }
+            {...capabilityRowProps("customFieldDefs", accountState, online)}
             right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
             onPress={() => setMode("fields")}
           />

@@ -28,9 +28,23 @@ export type SyncHealthInput = {
   pendingCount: number;
   /** Parked ops + shelved conflicts — things only the user can resolve. */
   issueCount: number;
+  /** No account: nothing syncs, and the honest answer is a different sentence. */
+  accountState?: "guest" | "linked";
   /** Injectable for tests. */
   now?: number;
 };
+
+/**
+ * Above this many queued changes, a running cycle is a bulk upload rather than
+ * an ordinary catch-up, and needs copy that reads as progress. A guest who
+ * links after a season has hundreds of ops and a photo backlog that can take
+ * hours; "Sending 847 changes…" with no sense of scale reads as a hang, and the
+ * pull-to-refresh reflex it provokes achieves nothing.
+ *
+ * The threshold is a judgement call, not a measurement: comfortably above a
+ * day's editing, comfortably below a first link.
+ */
+const BULK_UPLOAD_THRESHOLD = 50;
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -74,6 +88,18 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   const { online, state, lastSyncAt, pendingCount, issueCount } = input;
   const now = input.now ?? Date.now();
 
+  // 0. No account. Every branch below is a claim about a server this user
+  //    doesn't have one of, and the outbox rows they've accumulated are not
+  //    "waiting" for anything — they are the permanent state. The one thing
+  //    worth saying is where the data lives, and that nothing else holds a copy.
+  if (input.accountState === "guest") {
+    return {
+      headline: "Saved on this phone",
+      detail: "You don't have an account, so nothing is uploaded or backed up.",
+      tone: "ok",
+    };
+  }
+
   // Order is a priority ranking, most serious first. Only one headline gets to
   // be the answer, so the worst true statement wins.
 
@@ -93,6 +119,14 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   // 2. A cycle is actually running. Only claim this while there is a link —
   //    "Syncing…" with no signal is the optimistic label §10 forbids.
   if (state === "syncing" && online) {
+    if (pendingCount >= BULK_UPLOAD_THRESHOLD) {
+      return {
+        headline: `Uploading ${plural(pendingCount, "change", "changes")}…`,
+        detail:
+          "This can take a while, and photos are the slow part. You can keep using the app.",
+        tone: "pending",
+      };
+    }
     return {
       headline: pendingCount > 0 ? `Sending ${plural(pendingCount, "change", "changes")}…` : "Syncing…",
       detail: lastSyncDetail(lastSyncAt, now),
@@ -102,6 +136,13 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
 
   // 3. Work is queued. Which sentence is true depends on whether it CAN move.
   if (pendingCount > 0) {
+    if (pendingCount >= BULK_UPLOAD_THRESHOLD && online) {
+      return {
+        headline: `${plural(pendingCount, "change", "changes")} to upload`,
+        detail: "It goes up in batches. This can take a while.",
+        tone: "pending",
+      };
+    }
     return {
       headline: `${plural(pendingCount, "change", "changes")} waiting to sync`,
       detail: online

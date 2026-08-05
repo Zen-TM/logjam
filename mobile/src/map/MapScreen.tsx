@@ -49,6 +49,7 @@ import {
 
 import { apiFetch } from "../api/apiFetch";
 import { getVectorStyle, useApiQuery } from "../api/queries";
+import { useAccountState } from "../auth/AccountStateContext";
 import type { TCanyon } from "../api/types";
 import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
 import { config } from "../config";
@@ -494,10 +495,22 @@ export function MapScreen({
   // Canyon overlay reads the offline mirror (Stage 8): instant, and the map
   // keeps its pins in airplane mode.
   const canyons = useMirrorCanyons();
-  const overlays = useApiQuery(getCompletedOverlays, "Couldn't load topo overlays.");
+  // Both of these are account-backed. A guest gets no LiDAR overlays at all,
+  // and the default vector style — which is what every user sees offline
+  // anyway, so the map itself is unaffected.
+  const isGuest = useAccountState().accountState === "guest";
+  const overlays = useApiQuery(
+    getCompletedOverlays,
+    "Couldn't load topo overlays.",
+    !isGuest,
+  );
   // Server-side vector style (same one the web map + exports use); defaults
   // until it loads / when offline.
-  const vectorStyleQuery = useApiQuery(getVectorStyle, "Couldn't load map style.");
+  const vectorStyleQuery = useApiQuery(
+    getVectorStyle,
+    "Couldn't load map style.",
+    !isGuest,
+  );
   const vectorStyle = vectorStyleQuery.data ?? VECTOR_STYLE_DEFAULTS;
 
   const ctx: ResolveContext = useMemo(

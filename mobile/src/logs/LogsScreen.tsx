@@ -57,7 +57,7 @@ import {
   Row,
   SectionHeader,
   SegmentedControl,
-  StatusPill,
+  SyncStatusPills,
   Toast,
   todayDateKey,
   type SegmentOption,
@@ -335,18 +335,7 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
         {/* State of the world, once, where it can be read at a glance. Offline
             is not an error here — logging, editing and attaching all work — so
             it is paired with what is waiting rather than with a warning. */}
-        {!online || pendingCount > 0 ? (
-          <View style={styles.statusRow}>
-            {online ? null : <StatusPill label="Offline" tone="muted" icon="cloud-off" />}
-            {pendingCount > 0 ? (
-              <StatusPill
-                label={`${pendingCount} waiting to sync`}
-                tone="outline"
-                icon="upload-cloud"
-              />
-            ) : null}
-          </View>
-        ) : null}
+        <SyncStatusPills online={online} pendingCount={pendingCount} />
       </HeroHeader>
 
       <View style={styles.rail}>
@@ -667,7 +656,6 @@ function datePresets(): { label: string; from: string; to: string }[] {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.primary },
   heroActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
-  statusRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(0.75) },
   findRow: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
   searchWrap: {
     flex: 1,

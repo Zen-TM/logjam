@@ -106,4 +106,56 @@ describe("syncHealth", () => {
     const health = syncHealth(input({ lastSyncAt: null }));
     expect(health.detail).toBe("Nothing has reached your account yet.");
   });
+
+  describe("guest", () => {
+    // A guest's outbox rows are not "waiting" for anything — there is no
+    // account for them to go to — so every sync sentence below would be a lie
+    // about their data. The guest branch outranks all of them.
+    it("answers where the data lives, not how a sync is going", () => {
+      const health = syncHealth(
+        input({ accountState: "guest", pendingCount: 120, issueCount: 3 }),
+      );
+      expect(health.headline).toBe("Saved on this phone");
+      expect(health.detail).toContain("nothing is uploaded or backed up");
+      expect(health.tone).toBe("ok");
+    });
+
+    it("says the same thing offline", () => {
+      const health = syncHealth(input({ accountState: "guest", online: false }));
+      expect(health.headline).toBe("Saved on this phone");
+    });
+
+    it("leaves a linked user's answers untouched", () => {
+      const health = syncHealth(input({ accountState: "linked" }));
+      expect(health.headline).toBe("Everything's synced");
+    });
+  });
+
+  describe("bulk upload after linking an account", () => {
+    // A first link can queue hundreds of ops. "Sending 847 changes…" with no
+    // sense of duration reads as a hang and provokes pointless refreshing.
+    it("reframes a large in-flight backlog as a long job", () => {
+      const health = syncHealth(input({ state: "syncing", pendingCount: 847 }));
+      expect(health.headline).toBe("Uploading 847 changes…");
+      expect(health.detail).toContain("take a while");
+      expect(health.tone).toBe("pending");
+    });
+
+    it("keeps the ordinary wording below the threshold", () => {
+      const health = syncHealth(input({ state: "syncing", pendingCount: 3 }));
+      expect(health.headline).toBe("Sending 3 changes…");
+    });
+
+    it("warns before the cycle starts too, when it can move", () => {
+      const health = syncHealth(input({ pendingCount: 200 }));
+      expect(health.headline).toBe("200 changes to upload");
+      expect(health.detail).toContain("batches");
+    });
+
+    it("still leads with offline when the backlog can't move", () => {
+      const health = syncHealth(input({ pendingCount: 200, online: false }));
+      expect(health.headline).toBe("200 changes waiting to sync");
+      expect(health.detail).toContain("when you have signal");
+    });
+  });
 });

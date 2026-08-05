@@ -1,0 +1,62 @@
+# Guest-mode flow — no account, everything local.
+#
+# Runs in `cognito` auth mode with NO session and NO recorded entry choice, so
+# the app lands on the entry chooser. It never reaches Cognito: the chooser sits
+# in front of the sign-in form, so this flow needs no credentials and no network
+# beyond Metro. It does need a CLEAN app state — `adb shell pm clear
+# com.logjamnsw.mobile` first, or the stored entry choice skips the chooser.
+#
+# What it proves: a guest gets into the app, can create a canyon that lands in
+# local SQLite, and sees account-backed features disabled with the reason rather
+# than hidden or crashing. Run: maestro test e2e/guest.yaml
+appId: com.logjamnsw.mobile
+---
+- openLink: "exp+logjam-mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
+
+# The chooser, not the sign-in form.
+- extendedWaitUntil:
+    visible: "Continue without an account"
+    timeout: 30000
+- assertVisible: "not backed up anywhere"
+- tapOn: "Continue without an account"
+
+# The shell mounts for a guest — same tabs as an authed user.
+- extendedWaitUntil:
+    visible: "Canyons"
+    timeout: 20000
+
+# A local write: create a canyon and confirm it comes back from the mirror.
+- tapOn: "Canyons"
+# Empty list shows "Add a canyon"; a populated one shows the compact "Add" in
+# the hero. A fresh guest install is the former, but don't depend on it.
+- tapOn:
+    text: "Add a canyon|Add"
+- extendedWaitUntil:
+    visible: "Name"
+    timeout: 10000
+- tapOn: "Name"
+- inputText: "Guest Test Canyon"
+- tapOn: "Latitude"
+- inputText: "-33.5603"
+- tapOn: "Longitude"
+- inputText: "150.4033"
+- tapOn: "Save"
+- extendedWaitUntil:
+    visible: "Guest Test Canyon"
+    timeout: 10000
+
+# Sharing is account-backed: the row must be visibly dead WITH the reason, not
+# missing and not live-then-failing.
+- tapOn: "Guest Test Canyon"
+- scrollUntilVisible:
+    element: "Share with a friend"
+    direction: DOWN
+- assertVisible: "Needs an account"
+- back
+
+# The More hub tells the truth about where the data is, and offers the way out.
+- tapOn: "More"
+- assertVisible: "Saved on this phone"
+- assertVisible: "Create account"
+# Friends is gated for the same reason sharing is.
+- assertVisible: "Needs an account"

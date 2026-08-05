@@ -68,6 +68,30 @@ extract/schema refresh.
 - **Auth:** `aws-amplify/auth` against the same Cognito pool as web (`useAuth.ts` is
   the reference flow). Tokens in `expo-secure-store` (Keychain/Keystore) — never
   AsyncStorage, never plain SQLite.
+- **Guest mode: the app runs without an account.** A fresh install lands on the
+  entry chooser (`screens/EntryChooser.tsx`); "continue without an account" sets a
+  `prefsDb` flag and mounts the same `AppShell` with `accountState: "guest"`.
+  - **The mechanism is "don't sync yet", not a separate storage path.** Guest
+    mutations write the mirror and enqueue to the outbox exactly as they always
+    do — `AppShell` simply never calls `registerSyncTriggers()`, so the mutation
+    handler is never installed and the queue accumulates. Linking an account
+    starts the engine and the first cycle drains it. There is no import, no
+    id remapping (ids are client-minted UUIDv4 already) and no merge code; the
+    delta pull is `INSERT OR REPLACE`, so linking into an account that already
+    has data merges rather than replaces. **Never add a guest-specific write
+    path** — that equivalence is the whole feature.
+  - **`auth/capabilities.ts` is the single source of what is gated**, and the
+    only place "Needs an account" / "Needs a connection" are spelled. Screens
+    read `accountState` from `auth/AccountStateContext`, never from the
+    preference directly (that read wouldn't re-render on link). `needs-account`
+    beats `needs-connection` — see DESIGN.md §10.
+  - Every `useApiQuery` and every effect that talks to the server must be
+    disabled for a guest, not left to fail. A guaranteed-401 request per screen
+    open is a battery cost and a permanently red sync health line.
+  - **Crash reports are consent-gated** (`sentry/crashReportPreference.ts`):
+    a guest has no account for telemetry to "stay within", so `initSentry()`
+    no-ops until the chooser's toggle (default OFF) is answered. Installs that
+    predate the toggle are grandfathered by `grandfatherCrashReports()`.
 - **Client-version header on every request** (`x-logjam-client: mobile/<semver>`,
   `src/config.ts`). The forced-upgrade lever depends on it — do not drop it.
 
@@ -131,6 +155,15 @@ note is mandatory. Non-negotiables:
     field friction outweighed the guard. Don't "fix" this back to on without the
     operator; do keep the off-requires-auth asymmetry, which is what still makes
     the switch safe once raised.
+- **One wipe path for account transitions:** `offline/wipeLocalData.ts`. Sign-out
+  and a DIFFERENT user signing in both call it, and it clears `logjam.db`,
+  `logjam-offline.db`, the MBTiles regions, the overlay bundles, the imports and
+  the media cache. It deliberately spares `logjam-prefs.db` — theme, app lock and
+  crash-report choices describe the handset, not the account, and clearing them
+  would silently disarm a lock the owner turned on. Guest mode made this the
+  privacy boundary between two users of one phone: don't add a wipe anywhere
+  else, extend this one. (A guest *linking* keeps their data — they have no
+  local identity, so the different-user comparison never fires.)
 - **No canyon names/coords in push payloads** — opaque IDs only; fetch details over
   the authed API on tap.
 - Crash/error reporter scrubs coords/names (mirror `api/src/lib/logger.ts`) — wired

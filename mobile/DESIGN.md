@@ -723,6 +723,31 @@ which those are:
 | — | Notification prefs, auto-download, field DEFINITIONS |
 | — | Username, email, account deletion |
 
+**"Needs an account" outranks "Needs a connection".** The app runs without a
+Logjam account at all (guest mode — see `src/auth/capabilities.ts`, which owns
+the whole matrix and is the only place either string is spelled). Telling a
+guest to find signal is a dead end: they can be on full-strength Wi-Fi and the
+feature still won't work. So when both are true, the row says **"Needs an
+account"**.
+
+The same disabled-with-the-reason rule applies, with one carve-out: where an
+affordance can *only ever* refuse — the Protomaps vector clip on the region
+download screen, which no guest can obtain — it is dropped from the list
+entirely and a sentence under the rail explains why, following the existing
+precedent for the unlicensed OSM basemaps. A chip that exists only to say no is
+worse than no chip; a *row* has a subtitle to explain itself, so rows stay.
+
+Never disable the way IN. The Account row and its screen are the one thing a
+guest most needs, so they stay live and change wording ("Create an account")
+rather than greying out.
+
+| Guest can | Needs an account |
+|---|---|
+| Everything in the "Works offline" column | Sharing, friends, the inbox |
+| Recording tracks, importing a local GeoPDF/GPX | LiDAR topo overlays, account GeoPDFs |
+| Downloading SIX raster regions (client-direct) | The Protomaps vector region clip |
+| Theme, app lock, compass, crash reports (device prefs) | Notification/download prefs, field DEFINITIONS |
+
 **Say what is true, not what is optimistic.** A queued upload says "Uploading…"
 only when it can actually upload; offline it says "Waiting". A label that
 implies progress and never finishes reads as a bug, not as a queue. Same for
