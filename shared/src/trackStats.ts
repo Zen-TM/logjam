@@ -8,6 +8,7 @@
 // reports (root privacy rules).
 
 import { haversineMeters } from "./canyonGeo.js";
+import { elevationGainLoss } from "./elevation.js";
 
 /** One stored track point. `segment` increments across pause/resume gaps so
  * renderers break the polyline instead of drawing a teleport line. */
@@ -186,56 +187,21 @@ export function computeTrackStats(points: RecordedTrackPoint[]): TrackStats {
     start = end;
   }
 
-  // Hysteresis elevation: track the extreme reached since the last committed
-  // direction change; commit gain/loss only when the swing away from that
-  // extreme exceeds the threshold.
-  let elevationGainM = 0;
-  let elevationLossM = 0;
-  let anchor: number | null = null; // altitude at last committed turn point
-  let extreme: number | null = null; // furthest altitude seen since anchor
-  let direction: 1 | -1 | 0 = 0;
+  // Hysteresis elevation. The accumulator itself is shared with DEM-derived
+  // route profiles (elevation.ts) — same algorithm, different threshold: GPS
+  // altitude needs a wide one to survive its random walk, a DEM surface does
+  // not. The median smoothing below stays here, because it exists to fight
+  // that same GPS jitter and a DEM has none to fight.
   const altitudes = movingMedian(
     points
       .map((point) => point.altitudeM)
       .filter((alt): alt is number => alt != null && Number.isFinite(alt)),
     ELEVATION_SMOOTHING_WINDOW,
   );
-  for (const alt of altitudes) {
-    if (anchor == null || extreme == null) {
-      anchor = alt;
-      extreme = alt;
-      continue;
-    }
-    if (direction === 0) {
-      // Undecided until the series moves a full threshold either way.
-      if (alt - anchor >= ELEVATION_HYSTERESIS_M) direction = 1;
-      else if (anchor - alt >= ELEVATION_HYSTERESIS_M) direction = -1;
-      extreme = direction === 0 ? extreme : alt;
-      continue;
-    }
-    if (direction === 1) {
-      if (alt > extreme) extreme = alt;
-      else if (extreme - alt >= ELEVATION_HYSTERESIS_M) {
-        elevationGainM += extreme - anchor;
-        anchor = extreme;
-        extreme = alt;
-        direction = -1;
-      }
-    } else {
-      if (alt < extreme) extreme = alt;
-      else if (alt - extreme >= ELEVATION_HYSTERESIS_M) {
-        elevationLossM += anchor - extreme;
-        anchor = extreme;
-        extreme = alt;
-        direction = 1;
-      }
-    }
-  }
-  // Flush the open leg.
-  if (anchor != null && extreme != null) {
-    if (direction === 1 && extreme > anchor) elevationGainM += extreme - anchor;
-    if (direction === -1 && extreme < anchor) elevationLossM += anchor - extreme;
-  }
+  const { gainM: elevationGainM, lossM: elevationLossM } = elevationGainLoss(
+    altitudes,
+    ELEVATION_HYSTERESIS_M,
+  );
 
   return {
     distanceM,

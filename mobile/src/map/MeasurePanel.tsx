@@ -4,15 +4,20 @@
 // notice stack), and it wears the same surface treatment so the chrome over the
 // map reads as one family.
 //
-// Distance is the whole readout — it is the number the tool exists for, and it
-// needs no data beyond the taps. Ascent/descent were removed with the
-// contour-derived heights (see measure.ts); they come back when the statewide
-// DEM lands, derived on demand rather than stored.
+// Distance is the primary readout — it is the number the tool exists for, and
+// it needs no data beyond the taps, so it is always right.
+//
+// Ascent/descent are back, but on a different footing than the contour-derived
+// heights that were removed (see measure.ts): they are DERIVED ON DEMAND from
+// the tapped points plus the DEM, never stored on a point, and they are absent
+// rather than wrong when there is no signal.
 import { StyleSheet, Text, View } from "react-native";
 import { formatDistanceM } from "@logjam/shared";
 
 import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
 import { Button, IconButton } from "../ui";
+import { ElevationReadout } from "./ElevationReadout";
+import { useElevationProfile } from "./useElevationProfile";
 import { measureStats, type MeasurePoint } from "./measure";
 
 export function MeasurePanel({
@@ -27,6 +32,10 @@ export function MeasurePanel({
   onDone: () => void;
 }) {
   const stats = measureStats(points);
+  const line = points.map(
+    (point) => [point.longitude, point.latitude] as [number, number],
+  );
+  const { profile, loading } = useElevationProfile(line);
   return (
     <View style={styles.panel}>
       <View style={styles.readout}>
@@ -39,6 +48,8 @@ export function MeasurePanel({
           <Text style={styles.distance}>{formatDistanceM(stats.distanceM)}</Text>
         </View>
       </View>
+
+      <ElevationReadout profile={profile} loading={loading} />
 
       <View style={styles.actions}>
         <Button

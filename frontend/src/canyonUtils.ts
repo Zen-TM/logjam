@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
-import type { ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, CanyonMergePolicy } from "@logjam/shared";
+import type { ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, CanyonMergePolicy, ElevationProfile } from "@logjam/shared";
 import { formatTripCanyonNames } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
@@ -483,6 +483,61 @@ export function updateRoute(
 
 export function deleteRoute(id: string): Promise<void> {
   return apiFetch<void>(`/routes/${id}`, { method: "DELETE" });
+}
+
+/**
+ * Elevation profile for an arbitrary line, sampled from the DEM server-side.
+ *
+ * Never stored: geometry is the source of truth, so the profile is re-derived
+ * whenever it is shown. See shared/src/elevation.ts.
+ */
+export function getElevationProfile(
+  points: [number, number][],
+): Promise<ElevationProfile & { attribution: string }> {
+  return apiFetch<ElevationProfile & { attribution: string }>(
+    "/elevation/profile",
+    { method: "POST", body: { points } },
+  );
+}
+
+/**
+ * Loads a profile for the given points. Keyed on the geometry itself so a
+ * vertex edit re-samples, and so reopening the same route does not.
+ */
+export function useElevationProfile(points: [number, number][] | null) {
+  const [profile, setProfile] = useState<
+    (ElevationProfile & { attribution: string }) | null
+  >(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const geometryKey = points ? JSON.stringify(points) : null;
+
+  useEffect(() => {
+    if (!geometryKey) {
+      setProfile(null);
+      return;
+    }
+    // A late response from a previous line must not overwrite this one's.
+    let current = true;
+    setLoading(true);
+    setError(null);
+    getElevationProfile(JSON.parse(geometryKey) as [number, number][])
+      .then((result) => {
+        if (current) setProfile(result);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (current) setError(messageFromError(err, "Couldn't load elevation."));
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [geometryKey]);
+
+  return { profile, loading, error };
 }
 
 /** Fetches routes only while the map layer is enabled, mirroring

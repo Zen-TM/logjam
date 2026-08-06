@@ -31,3 +31,4 @@ export * from "./sync.js";
 export * from "./syncClient.js";
 export * from "./waypointValidation.js";
 export * from "./routeValidation.js";
+export * from "./elevation.js";

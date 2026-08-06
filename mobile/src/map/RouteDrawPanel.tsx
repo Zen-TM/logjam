@@ -10,12 +10,15 @@
 // measure, closing it does NOT silently bin the work — Save is the primary
 // action and Discard asks first (in the caller).
 //
-// Distance only, for the same reason as MeasurePanel: heights need a DEM.
+// Gain/loss come from the DEM on demand, same as MeasurePanel, and are simply
+// absent offline — which is the case this tool is built for.
 import { StyleSheet, Text, View } from "react-native";
 import { formatDistanceM, routeLengthM, MAX_ROUTE_POINTS } from "@logjam/shared";
 
 import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
 import { Button, IconButton } from "../ui";
+import { ElevationReadout } from "./ElevationReadout";
+import { useElevationProfile } from "./useElevationProfile";
 
 export function RouteDrawPanel({
   points,
@@ -36,6 +39,7 @@ export function RouteDrawPanel({
   onCancel: () => void;
 }) {
   const atCap = points.length >= MAX_ROUTE_POINTS;
+  const { profile, loading } = useElevationProfile(points);
   return (
     <View style={styles.panel}>
       <View style={styles.readout}>
@@ -55,6 +59,8 @@ export function RouteDrawPanel({
             : `${points.length} point${points.length === 1 ? "" : "s"}`}
         </Text>
       </View>
+
+      <ElevationReadout profile={profile} loading={loading} />
 
       {atCap ? (
         <Text style={styles.note}>

@@ -21,6 +21,16 @@
   font-size: var(--text-xs);
 }
 
+/* Gain / loss / range as text, so every figure the chart shows is also
+   readable without resolving the plot. */
+.elevationStats {
+  display: flex;
+  gap: 1em;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-text-primary);
+}
+
 .linkRow {
   display: flex;
   align-items: center;

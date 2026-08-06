@@ -12,9 +12,11 @@ import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import TrackIcon from "../../media/TrackIcon";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
+import ElevationProfile from "../../routes/ElevationProfile";
 import {
   deleteRoute,
   updateRoute,
+  useElevationProfile,
   type TRoute,
   type TCanyon,
 } from "../../../canyonUtils";
@@ -91,6 +93,13 @@ export default function RouteDetailPanel({
     incumbentName: string;
   } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Above the early return — hooks cannot be conditional. Null points mean no
+  // request is made at all.
+  const {
+    profile,
+    loading: profileLoading,
+    error: profileError,
+  } = useElevationProfile(route?.points ?? null);
 
   if (!route) {
     return <span className={classes.caption}>No route selected.</span>;
@@ -177,6 +186,32 @@ export default function RouteDetailPanel({
           Shared with you — you can view and export this route, but not change it.
         </p>
       )}
+
+      <div className={shared.sectionLabel}>Elevation</div>
+      {profileLoading && <span className={classes.caption}>Reading the terrain…</span>}
+      {profileError && <span className={classes.caption}>{profileError}</span>}
+      {profile && (
+        <>
+          <div className={classes.elevationStats}>
+            <span title="Total climb">↑ {Math.round(profile.gainM)} m</span>
+            <span title="Total descent">↓ {Math.round(profile.lossM)} m</span>
+            {profile.minM != null && profile.maxM != null && (
+              <span title="Lowest and highest point">
+                {Math.round(profile.minM)}–{Math.round(profile.maxM)} m
+              </span>
+            )}
+          </div>
+          <ElevationProfile
+            samples={profile.samples}
+            minM={profile.minM}
+            maxM={profile.maxM}
+            color={route.color}
+          />
+          <span className={classes.caption}>{profile.attribution}</span>
+        </>
+      )}
+
+      <div className={shared.divider} />
 
       <div className={shared.sectionLabel}>Canyon</div>
       {linkedCanyon ? (
