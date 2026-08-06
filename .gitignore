@@ -44,3 +44,6 @@ CLAUDE.local.md
 # Protomaps planet extract (operator-produced, uploaded to S3; never commit)
 /nsw.pmtiles
 *.pmtiles
+
+# Personal kiosk dev helper (not shared)
+scripts/kiosk-dev.sh
