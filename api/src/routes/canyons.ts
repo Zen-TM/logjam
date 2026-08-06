@@ -284,6 +284,27 @@ router.post(
       },
     });
 
+    // The linked route is copied with the canyon — deliberately UNLIKE media,
+    // which a copy does not duplicate. A route is one row the copier now owns;
+    // media is S3 objects plus a quota charge. The route is also the single
+    // most useful thing to receive with a copied canyon, and the copier can
+    // already see it (a linked route is part of the shared canyon record).
+    const sourceRoute = await prisma.route.findUnique({
+      where: { canyonId },
+      select: { name: true, color: true, points: true },
+    });
+    if (sourceRoute) {
+      await prisma.route.create({
+        data: {
+          ownerId: user.id,
+          canyonId: copiedCanyon.id,
+          name: sourceRoute.name,
+          color: sourceRoute.color,
+          points: sourceRoute.points as Prisma.InputJsonValue,
+        },
+      });
+    }
+
     res.status(201).json(copiedCanyon);
   },
 );
@@ -509,6 +530,13 @@ router.delete(
         where: { canyonId: id },
         select: { id: true, sharedWithId: true },
       });
+      // The linked route (if any) SURVIVES this delete — Route.canyonId is
+      // SetNull, so it becomes standalone and the owner keeps it. Only the
+      // sharees lose sight of it, which needs a tombstone each.
+      const linkedRoute = await tx.route.findUnique({
+        where: { canyonId: id },
+        select: { id: true },
+      });
       await writeTombstones(
         tx,
         canyonDeleteTombstones({
@@ -516,6 +544,7 @@ router.delete(
           canyonId: id,
           mediaIds: media.map((m) => m.id),
           shares,
+          routeId: linkedRoute?.id ?? null,
         }),
       );
       await tx.canyonShare.deleteMany({ where: { canyonId: id } });

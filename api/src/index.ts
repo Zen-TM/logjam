@@ -45,6 +45,7 @@ import metaRouter from "./routes/meta";
 import devicesRouter from "./routes/devices";
 import basemapRouter from "./routes/basemap";
 import waypointsRouter from "./routes/waypoints";
+import routesRouter from "./routes/routes";
 import syncRouter from "./routes/sync";
 
 const env = getEnv();
@@ -213,6 +214,7 @@ app.use("/geo-pdf", geoPdfRouter);
 app.use("/analytics", analyticsRouter);
 app.use("/custom-fields", customFieldsRouter);
 app.use("/waypoints", waypointsRouter);
+app.use("/routes", routesRouter);
 app.use("/sync", syncRouter);
 
 app.use(errorHandler);

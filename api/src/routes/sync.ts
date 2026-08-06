@@ -24,13 +24,17 @@ import {
   isUuidV4,
   SYNC_DELTA_DEFAULT_LIMIT,
   SYNC_DELTA_MAX_LIMIT,
+  SYNC_DELTA_ROUTE_LIMIT,
   SYNC_OVERLAP_MS,
   SYNC_PROTOCOL,
   SYNC_PUSH_MAX_OPS,
   SYNC_PUSH_OPS_BY_ENTITY,
   pushOpDependencies,
   validateCanyonPayload,
+  validateRoutePayload,
   validateWaypointPayload,
+  parseRoutePoints,
+  randomTrackColor,
   type SyncCursor,
   type SyncCursorKeysets,
   type SyncPushOp,
@@ -45,9 +49,15 @@ import {
 } from "./tripLogsGlobal";
 import { deleteCanyonsCascade, deleteTripsCascade } from "../lib/bulkDelete";
 import {
+  routeDeleteTombstones,
   waypointDeleteTombstones,
   writeTombstones,
 } from "../lib/syncTombstones";
+import {
+  applyRouteCanyonLink,
+  canyonShareeIds,
+  resolveRouteCanyonId,
+} from "../lib/routeLink";
 
 const router = Router();
 
@@ -166,6 +176,7 @@ router.get(
           canyons: [],
           tripLogs: [],
           waypoints: [],
+          routes: [],
           media: [],
           canyonShares: [],
           friendships: [],
@@ -201,21 +212,31 @@ router.get(
       // this context-sensitive lambda first, inference collapses Row to the
       // constraint and loses every column.
       watermarkOf: (row: Row) => Date,
+      // Optional per-entity row cap, tighter than the shared budget. Only
+      // routes use it: they carry their whole geometry inline (up to
+      // MAX_ROUTE_POINTS ≈ 20 KB each), so the default 500-row budget would
+      // build a ~10 MB page. Hitting this cap sets hasMore like any other
+      // truncation, so the rest arrives on the next page.
+      maxRows?: number,
     ): Promise<Row[]> {
-      if (hasMore || remaining === 0) {
+      const budget =
+        maxRows === undefined ? remaining : Math.min(remaining, maxRows);
+      if (hasMore || budget === 0) {
         // Budget already spent: preserve an existing resume point so the next
         // page continues where the cursor said, not from scratch.
         if (keysets[key]) nextKeysets[key] = keysets[key];
         hasMore = true;
         return [];
       }
-      const rows = await fetch(keysets[key], remaining + 1);
-      if (rows.length > remaining) {
-        const page = rows.slice(0, remaining);
+      const rows = await fetch(keysets[key], budget + 1);
+      if (rows.length > budget) {
+        const page = rows.slice(0, budget);
         const last = page[page.length - 1];
         nextKeysets[key] = [watermarkOf(last).toISOString(), last.id];
         hasMore = true;
-        remaining = 0;
+        // Equivalent to the old `remaining = 0` when no cap applies (page
+        // length is then exactly `remaining`), and correct when one does.
+        remaining -= page.length;
         return page;
       }
       // Entity drained. STILL record a resume point (last row delivered, or
@@ -280,6 +301,31 @@ router.get(
           take,
         }),
       (row) => row.updatedAt,
+    );
+
+    // Owned routes, plus routes LINKED to a canyon shared with me — the same
+    // visibility canyon-level media has (a linked route is part of the shared
+    // canyon record). An unlinked route of another owner can never match.
+    const routes = await fill(
+      "routes",
+      (after, take) =>
+        prisma.route.findMany({
+          where: {
+            AND: [
+              {
+                OR: [
+                  { ownerId: user.id },
+                  { canyonId: { in: sharedCanyonIds } },
+                ],
+              },
+              keysetWhere("updatedAt", since, after),
+            ],
+          },
+          orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+          take,
+        }),
+      (row) => row.updatedAt,
+      SYNC_DELTA_ROUTE_LIMIT,
     );
 
     const media = await fill(
@@ -430,6 +476,7 @@ router.get(
           canyons: canyons.length,
           tripLogs: tripLogs.length,
           waypoints: waypoints.length,
+          routes: routes.length,
           media: media.length,
           canyonShares: canyonShares.length,
           friendships: friendships.length,
@@ -444,6 +491,7 @@ router.get(
       ["canyon", new Set(canyons.map((row) => row.id))],
       ["tripLog", new Set(tripLogs.map((row) => row.id))],
       ["waypoint", new Set(waypoints.map((row) => row.id))],
+      ["route", new Set(routes.map((row) => row.id))],
       ["media", new Set(media.map((row) => row.id))],
       ["canyonShare", new Set(canyonShares.map((row) => row.id))],
       ["friendship", new Set(friendships.map((row) => row.id))],
@@ -463,6 +511,13 @@ router.get(
         })),
         tripLogs: tripLogs.map(serializeTrip),
         waypoints,
+        // Geometry travels INLINE (no blob leg). syncRole tells the client
+        // whether this is its own route or one seen through a canyon share —
+        // a 'shared' route is read-only there.
+        routes: routes.map((route) => ({
+          syncRole: route.ownerId === user.id ? "owner" : "shared",
+          ...route,
+        })),
         // Metadata only: no S3 keys, no presigned URLs (§7.3 — blobs are
         // fetched via POST /media/download-urls). BigInt → string.
         media: media.map((row) => ({
@@ -558,6 +613,9 @@ const WAYPOINT_FIELDS = new Set([
   "notes",
   "canyonId",
 ]);
+// `color` is deliberately absent: it is assigned server-side from
+// TRACK_COLORS at create, like track media.
+const ROUTE_FIELDS = new Set(["name", "points", "canyonId"]);
 
 function assertKnownFields(
   fields: Record<string, unknown>,
@@ -1051,6 +1109,117 @@ async function applyWaypointOp(
     : { opId: op.opId, status: "applied", row: updated };
 }
 
+async function applyRouteOp(
+  userId: string,
+  op: PushOp,
+): Promise<PushOpResult> {
+  if (op.op === "delete") {
+    const route = await prisma.route.findUnique({ where: { id: op.id } });
+    // Non-owner (including a sharee, who can see it but not change it) gets
+    // the same alreadyApplied as a missing row — no existence oracle.
+    if (!route || route.ownerId !== userId) {
+      return { opId: op.opId, status: "alreadyApplied" };
+    }
+    await prisma.$transaction(async (tx) => {
+      // Sharees of the linked canyon must forget it too. Read before delete.
+      const shareeIds =
+        route.canyonId === null ? [] : await canyonShareeIds(tx, route.canyonId);
+      await tx.route.delete({ where: { id: op.id } });
+      await writeTombstones(
+        tx,
+        routeDeleteTombstones({ ownerId: userId, routeId: op.id, shareeIds }),
+      );
+    });
+    return { opId: op.opId, status: "applied" };
+  }
+
+  const fields = op.fields ?? {};
+  assertKnownFields(fields, ROUTE_FIELDS);
+  const validationError = validateRoutePayload(fields, {
+    requireCore: op.op === "create",
+  });
+  if (validationError) throw new AppError(400, validationError);
+
+  let points: [number, number][] | undefined;
+  if (fields.points !== undefined) {
+    const parsed = parseRoutePoints(fields.points);
+    if ("error" in parsed) throw new AppError(400, parsed.error);
+    points = parsed.points;
+  }
+  const resolvedCanyonId = await resolveRouteCanyonId(userId, fields.canyonId);
+
+  if (op.op === "create") {
+    const existing = await prisma.route.findUnique({ where: { id: op.id } });
+    if (existing) {
+      if (existing.ownerId !== userId) throw new AppError(404, "Route not found");
+      return { opId: op.opId, status: "alreadyApplied", row: existing };
+    }
+    if (await createAlreadyTombstoned(userId, "route", op.id)) {
+      return { opId: op.opId, status: "alreadyApplied" };
+    }
+    const created = await prisma.$transaction(async (tx) => {
+      const route = await tx.route.create({
+        data: {
+          id: op.id,
+          ownerId: userId,
+          canyonId: null,
+          name: (fields.name as string).trim(),
+          color: randomTrackColor(),
+          points: points!,
+        },
+      });
+      // Link through the shared helper so displacement + its tombstones have
+      // exactly one implementation (lib/routeLink.ts).
+      if (resolvedCanyonId) {
+        await applyRouteCanyonLink(tx, {
+          routeId: route.id,
+          canyonId: resolvedCanyonId,
+          currentCanyonId: null,
+        });
+        return tx.route.findUniqueOrThrow({ where: { id: route.id } });
+      }
+      return route;
+    });
+    return { opId: op.opId, status: "applied", row: created };
+  }
+
+  // update
+  const route = await prisma.route.findUnique({ where: { id: op.id } });
+  // A sharee may see this route but never edit it — same 404 as a stranger,
+  // so the status can't distinguish "yours" from "someone else's".
+  if (!route || route.ownerId !== userId) throw new AppError(404, "Route not found");
+  const conflicts = conflictReceipts(
+    op.baseUpdatedAt,
+    route.updatedAt,
+    fields,
+    route as unknown as Record<string, unknown>,
+  );
+  const updated = await prisma.$transaction(async (tx) => {
+    if (fields.name !== undefined || points !== undefined) {
+      await tx.route.update({
+        where: { id: op.id },
+        data: {
+          ...(fields.name !== undefined && {
+            name: (fields.name as string).trim(),
+          }),
+          ...(points !== undefined && { points }),
+        },
+      });
+    }
+    if (resolvedCanyonId !== undefined) {
+      await applyRouteCanyonLink(tx, {
+        routeId: op.id,
+        canyonId: resolvedCanyonId,
+        currentCanyonId: route.canyonId,
+      });
+    }
+    return tx.route.findUniqueOrThrow({ where: { id: op.id } });
+  });
+  return conflicts.length > 0
+    ? { opId: op.opId, status: "appliedWithConflict", row: updated, conflicts }
+    : { opId: op.opId, status: "applied", row: updated };
+}
+
 async function applyNotificationOp(
   userId: string,
   op: PushOp,
@@ -1112,6 +1281,9 @@ router.post(
             break;
           case "waypoint":
             result = await applyWaypointOp(user.id, op);
+            break;
+          case "route":
+            result = await applyRouteOp(user.id, op);
             break;
           case "notification":
             result = await applyNotificationOp(user.id, op);

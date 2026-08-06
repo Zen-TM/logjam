@@ -15,6 +15,7 @@ export const SYNC_ENTITY_TYPES = [
   "canyonShare",
   "friendship",
   "waypoint",
+  "route",
 ] as const;
 
 export type SyncEntityType = (typeof SYNC_ENTITY_TYPES)[number];
@@ -54,12 +55,22 @@ export const DELTA_ENTITY_ORDER = [
   "canyons",
   "tripLogs",
   "waypoints",
+  "routes",
   "media",
   "canyonShares",
   "friendships",
 ] as const;
 
 export type DeltaEntityKey = (typeof DELTA_ENTITY_ORDER)[number];
+
+/**
+ * Per-page row cap for routes specifically, well under
+ * SYNC_DELTA_DEFAULT_LIMIT. A route carries its whole geometry inline (up to
+ * MAX_ROUTE_POINTS ≈ 20 KB), so the default 500-row budget would build a
+ * ~10 MB page. Every other delta entity is a fixed-size row and keeps the
+ * default.
+ */
+export const SYNC_DELTA_ROUTE_LIMIT = 50;
 
 // ── Push op wire shape (§8.1) ────────────────────────────────────────────────
 
@@ -69,6 +80,7 @@ export const SYNC_PUSH_OPS_BY_ENTITY = {
   canyon: ["create", "update", "delete"],
   tripLog: ["create", "update", "delete"],
   waypoint: ["create", "update", "delete"],
+  route: ["create", "update", "delete"],
   notification: ["markRead"],
 } as const;
 
@@ -194,6 +206,28 @@ export type SyncDeltaWaypointRow = {
   updatedAt: string;
 };
 
+/**
+ * A user-authored route. Unlike media, the geometry travels INLINE — a route
+ * is a vertex list on the row, not a blob behind a presigned URL.
+ *
+ * `syncRole` mirrors SyncDeltaCanyonRow: 'shared' means the row arrives only
+ * because it is LINKED to a canyon shared with the caller. A sharee may render
+ * and export it, never edit it — and unlinking it revokes their copy via a
+ * tombstone with no delete anywhere.
+ */
+export type SyncDeltaRouteRow = {
+  id: string;
+  ownerId: string;
+  syncRole: "owner" | "shared";
+  canyonId: string | null;
+  name: string;
+  color: string;
+  /** [[lon, lat], ...] — see MAX_ROUTE_POINTS in routeValidation.ts. */
+  points: [number, number][];
+  createdAt: string;
+  updatedAt: string;
+};
+
 /** Metadata only — blobs come via POST /media/download-urls (§7.3). */
 export type SyncDeltaMediaRow = {
   id: string;
@@ -238,6 +272,7 @@ export type SyncDeltaResponse = {
     canyons: SyncDeltaCanyonRow[];
     tripLogs: SyncDeltaTripRow[];
     waypoints: SyncDeltaWaypointRow[];
+    routes: SyncDeltaRouteRow[];
     media: SyncDeltaMediaRow[];
     canyonShares: SyncDeltaShareRow[];
     friendships: SyncDeltaFriendshipRow[];

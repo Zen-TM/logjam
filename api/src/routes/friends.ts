@@ -326,6 +326,18 @@ router.delete(
       list.push(m.id);
       mediaIdsByCanyon.set(m.linkedId, list);
     }
+    // A linked route rides with the shared canyon record, so unfriending
+    // revokes it too.
+    const revokedRoutes =
+      revokedCanyonIds.length > 0
+        ? await prisma.route.findMany({
+            where: { canyonId: { in: revokedCanyonIds } },
+            select: { id: true, canyonId: true },
+          })
+        : [];
+    const routeIdByCanyon = new Map(
+      revokedRoutes.map((route) => [route.canyonId!, route.id]),
+    );
     const unfriendTombstones = [
       ...friendshipDeleteTombstones({
         friendshipId: id,
@@ -338,6 +350,7 @@ router.delete(
           shareId: s.id,
           canyonId: s.canyonId,
           canyonMediaIds: mediaIdsByCanyon.get(s.canyonId) ?? [],
+          routeId: routeIdByCanyon.get(s.canyonId) ?? null,
         }),
       ),
     ];
@@ -527,6 +540,14 @@ router.delete(
         list.push(m.id);
         mediaIdsByCanyon.set(m.linkedId, list);
       }
+      // A linked route rides with the shared canyon record.
+      const revokedRoutes = await prisma.route.findMany({
+        where: { canyonId: { in: revoked.map((r) => r.canyonId) } },
+        select: { id: true, canyonId: true },
+      });
+      const routeIdByCanyon = new Map(
+        revokedRoutes.map((route) => [route.canyonId!, route.id]),
+      );
       await prisma.$transaction([
         prisma.syncTombstone.createMany({
           data: revoked.flatMap((r) =>
@@ -536,6 +557,7 @@ router.delete(
               shareId: r.id,
               canyonId: r.canyonId,
               canyonMediaIds: mediaIdsByCanyon.get(r.canyonId) ?? [],
+              routeId: routeIdByCanyon.get(r.canyonId) ?? null,
             }),
           ),
         }),

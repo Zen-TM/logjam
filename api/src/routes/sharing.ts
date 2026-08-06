@@ -151,6 +151,12 @@ router.delete(
         where: { linkedType: "canyon", linkedId: canyonId },
         select: { id: true },
       });
+      // A linked route is part of the shared canyon record, so the sharee
+      // loses it alongside the canyon-level media.
+      const linkedRoute = await tx.route.findUnique({
+        where: { canyonId },
+        select: { id: true },
+      });
       await tx.canyonShare.delete({ where: { id: share.id } });
       await tx.notification.deleteMany({
         where: {
@@ -167,6 +173,7 @@ router.delete(
           shareId: share.id,
           canyonId,
           canyonMediaIds: canyonMedia.map((m) => m.id),
+          routeId: linkedRoute?.id ?? null,
         }),
       );
     });

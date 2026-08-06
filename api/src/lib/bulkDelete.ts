@@ -108,6 +108,12 @@ export async function deleteCanyonsCascade(
       where: { canyonId: { in: ownedIds } },
       select: { id: true, canyonId: true, sharedWithId: true },
     });
+    // Linked routes SURVIVE (Route.canyonId is SetNull) — they become
+    // standalone and the owner keeps them; only sharees need a tombstone.
+    const linkedRoutes = await tx.route.findMany({
+      where: { canyonId: { in: ownedIds } },
+      select: { id: true, canyonId: true },
+    });
     const tombstones = ownedIds.flatMap((canyonId) =>
       canyonDeleteTombstones({
         ownerId: userId,
@@ -116,6 +122,8 @@ export async function deleteCanyonsCascade(
           .filter((m) => m.linkedId === canyonId)
           .map((m) => m.id),
         shares: shares.filter((s) => s.canyonId === canyonId),
+        routeId:
+          linkedRoutes.find((route) => route.canyonId === canyonId)?.id ?? null,
       }),
     );
     await writeTombstones(tx, tombstones);

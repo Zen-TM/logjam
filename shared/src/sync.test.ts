@@ -92,7 +92,7 @@ describe("sync cursor codec", () => {
 });
 
 describe("SYNC_ENTITY_TYPES", () => {
-  it("covers the six synced entities", () => {
+  it("covers the seven synced entities", () => {
     expect(SYNC_ENTITY_TYPES).toEqual([
       "canyon",
       "tripLog",
@@ -100,6 +100,7 @@ describe("SYNC_ENTITY_TYPES", () => {
       "canyonShare",
       "friendship",
       "waypoint",
+      "route",
     ]);
   });
 });

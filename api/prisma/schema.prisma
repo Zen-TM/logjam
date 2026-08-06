@@ -8,23 +8,23 @@ datasource db {
 }
 
 model User {
-  id                  String         @id @default(uuid())
-  cognitoId           String         @unique @map("cognito_id")
-  username            String         @unique
-  email               String         @unique
-  uiPreferences       Json           @default("{}") @map("ui_preferences")
-  vectorStyle         Json?          @map("vector_style")
-  storageUsedBytes    BigInt         @default(0) @map("storage_used_bytes")
-  storageQuotaBytes   BigInt         @default(5368709120) @map("storage_quota_bytes")
-  monthlyTileQuota    Int            @default(40) @map("monthly_tile_quota")
-  consentedAt         DateTime?      @map("consented_at")
-  consentVersion      String?        @map("consent_version")
-  createdAt           DateTime       @default(now()) @map("created_at")
-  sharedBy            CanyonShare[]  @relation("sharedBy")
-  sharedWith          CanyonShare[]  @relation("sharedWith")
+  id                  String           @id @default(uuid())
+  cognitoId           String           @unique @map("cognito_id")
+  username            String           @unique
+  email               String           @unique
+  uiPreferences       Json             @default("{}") @map("ui_preferences")
+  vectorStyle         Json?            @map("vector_style")
+  storageUsedBytes    BigInt           @default(0) @map("storage_used_bytes")
+  storageQuotaBytes   BigInt           @default(5368709120) @map("storage_quota_bytes")
+  monthlyTileQuota    Int              @default(40) @map("monthly_tile_quota")
+  consentedAt         DateTime?        @map("consented_at")
+  consentVersion      String?          @map("consent_version")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  sharedBy            CanyonShare[]    @relation("sharedBy")
+  sharedWith          CanyonShare[]    @relation("sharedWith")
   canyons             Canyon[]
-  receivedFriendships Friendship[]   @relation("addressee")
-  sentFriendships     Friendship[]   @relation("requester")
+  receivedFriendships Friendship[]     @relation("addressee")
+  sentFriendships     Friendship[]     @relation("requester")
   media               Media[]
   notifications       Notification[]
   topoJobs            TopoJob[]
@@ -35,40 +35,43 @@ model User {
   topoTemplates       TopoTemplate[]
   deviceTokens        DeviceToken[]
   waypoints           Waypoint[]
+  routes              Route[]
   syncTombstones      SyncTombstone[]
 
   @@map("users")
 }
 
 model Canyon {
-  id               String        @id @default(uuid())
-  ownerId          String        @map("owner_id")
+  id               String          @id @default(uuid())
+  ownerId          String          @map("owner_id")
   name             String
-  altNames         String[]      @default([])
+  altNames         String[]        @default([])
   latitude         Float
   longitude        Float
-  numAbseils       Int?          @map("num_abseils")
-  longestAbseil    Float?        @map("longest_abseil_m")
+  numAbseils       Int?            @map("num_abseils")
+  longestAbseil    Float?          @map("longest_abseil_m")
   notes            String?
-  attributes       Json          @default("{}")
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
-  forkedFromId     String?       @map("forked_from_id")
-  ropeWikiId       Int?          @map("ropewiki_id")
-  ropeWikiSnapshot Json?         @map("ropewiki_snapshot")
-  vGrade           Int?          @map("v_grade")
-  aGrade           Int?          @map("a_grade")
+  attributes       Json            @default("{}")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  forkedFromId     String?         @map("forked_from_id")
+  ropeWikiId       Int?            @map("ropewiki_id")
+  ropeWikiSnapshot Json?           @map("ropewiki_snapshot")
+  vGrade           Int?            @map("v_grade")
+  aGrade           Int?            @map("a_grade")
   commitment       Int?
   quality          Float?
   hours            Float?
-  importKey        String?       @map("import_key")
-  importBatchId    String?       @map("import_batch_id")
+  importKey        String?         @map("import_key")
+  importBatchId    String?         @map("import_batch_id")
   shares           CanyonShare[]
-  forkedFrom       Canyon?       @relation("CanyonForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
-  forks            Canyon[]      @relation("CanyonForks")
-  owner            User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  forkedFrom       Canyon?         @relation("CanyonForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
+  forks            Canyon[]        @relation("CanyonForks")
+  owner            User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   tripLogLinks     TripLogCanyon[]
   waypoints        Waypoint[]
+  // At most one — the canyon's route slot. See Route.canyonId.
+  route            Route?
 
   @@unique([ownerId, ropeWikiId])
   @@unique([ownerId, importKey])
@@ -91,23 +94,23 @@ model Notification {
 }
 
 model TripLog {
-  id           String   @id @default(uuid())
-  userId       String   @map("user_id")
-  date         DateTime
-  displayName  String?  @map("display_name")
-  types        String[] @default([])
-  notes        String?
-  customFields Json     @default("{}") @map("custom_fields")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id            String          @id @default(uuid())
+  userId        String          @map("user_id")
+  date          DateTime
+  displayName   String?         @map("display_name")
+  types         String[]        @default([])
+  notes         String?
+  customFields  Json            @default("{}") @map("custom_fields")
+  createdAt     DateTime        @default(now()) @map("created_at")
   // Delta-sync watermark (Stage 8). Backfilled from created_at by migration.
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  importKey     String?  @map("import_key")
-  importBatchId String?  @map("import_batch_id")
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  canyons      TripLogCanyon[]
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  importKey     String?         @map("import_key")
+  importBatchId String?         @map("import_batch_id")
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  canyons       TripLogCanyon[]
 
-  @@index([userId])
   @@unique([userId, importKey])
+  @@index([userId])
   @@index([userId, importBatchId])
   @@map("trip_logs")
 }
@@ -187,59 +190,59 @@ model CanyonShare {
 }
 
 model TopoJob {
-  id            String   @id @default(uuid())
-  userId        String   @map("user_id")
-  status        String   @default("uploading")
+  id                  String    @id @default(uuid())
+  userId              String    @map("user_id")
+  status              String    @default("uploading")
   // status values: uploading | pending | processing | complete | failed
-  name          String?
-  footprint     Json?
-  tileCount     Int?     @map("tile_count")
-  estimatedSeconds Int?  @map("estimated_seconds")
-  layerOptions  Json?    @map("layer_options")
-  vectorStyleSnapshot Json? @map("vector_style_snapshot")
+  name                String?
+  footprint           Json?
+  tileCount           Int?      @map("tile_count")
+  estimatedSeconds    Int?      @map("estimated_seconds")
+  layerOptions        Json?     @map("layer_options")
+  vectorStyleSnapshot Json?     @map("vector_style_snapshot")
   // Auto-export config captured at submit (AutoExportSettings). When enabled,
   // the reaper queues a TopoExportJob once this job reaches "complete".
-  autoExport    Json?    @map("auto_export")
+  autoExport          Json?     @map("auto_export")
   // Set by the reaper when it has handled the auto-export (queued it or
   // recorded why it couldn't). Dedup marker: a non-null value means "don't
   // auto-export again", so overlapping sweeps can't double-queue.
-  autoExportedAt DateTime? @map("auto_exported_at")
-  s3InputKey    String?  @map("s3_input_key")
-  s3OutputKeys  Json?    @map("s3_output_keys")
+  autoExportedAt      DateTime? @map("auto_exported_at")
+  s3InputKey          String?   @map("s3_input_key")
+  s3OutputKeys        Json?     @map("s3_output_keys")
   // s3OutputKeys shape: { name: string, cogKey: string|null, pmtilesKey: string|null }[]
   // Raster layers (hillshade/vegetation/slope): cogKey set, pmtilesKey set (for in-app display).
   // Vector layers (contours/features): cogKey null, pmtilesKey set.
   // Composite + downloadable formats are produced on-demand by the export worker.
-  outputBytes   BigInt?  @map("output_bytes")
+  outputBytes         BigInt?   @map("output_bytes")
   // Runtime instrumentation (set by the worker on completion from the
   // pipeline's metrics file). Feeds the adaptive runtime estimator — aggregate
   // timing/tile counts only, never canyon data.
-  outputTileCount Int?   @map("output_tile_count")
-  pipelineMetrics Json?  @map("pipeline_metrics")
+  outputTileCount     Int?      @map("output_tile_count")
+  pipelineMetrics     Json?     @map("pipeline_metrics")
   // pipelineMetrics shape: { schemaVersion, wallSeconds, phases: { key: seconds }, inputTileCount, outputTileCount, zoomMin, zoomMax }
   // Render progress heartbeat (written by the worker's heartbeat thread while
   // processing). lastProgressAt is the reaper's staleness anchor: a job is
   // reaped only when progress stalls (or an absolute ceiling is hit), so a
   // slow-but-healthy job that keeps advancing is never force-failed.
-  renderTilesDone  Int?     @map("render_tiles_done")
-  renderTilesTotal Int?     @map("render_tiles_total")
-  lastProgressAt   DateTime? @map("last_progress_at")
-  errorMessage  String?  @map("error_message")
+  renderTilesDone     Int?      @map("render_tiles_done")
+  renderTilesTotal    Int?      @map("render_tiles_total")
+  lastProgressAt      DateTime? @map("last_progress_at")
+  errorMessage        String?   @map("error_message")
   // Set when the worker transitions the job to "processing". Distinguishes a
   // stale-stuck job from one that simply hasn't been picked up yet, so the
   // reaper can apply a separate (longer) timeout to actively-running jobs.
-  startedAt     DateTime? @map("started_at")
+  startedAt           DateTime? @map("started_at")
   // Number of times /start has launched this job (currently at most 1 — the
   // status guard means a job can never re-enter /start; kept for forensics
   // and a possible future bounded re-launch).
-  attemptCount  Int      @default(0) @map("attempt_count")
+  attemptCount        Int       @default(0) @map("attempt_count")
   // ARN of the Fargate task launched for this job (Design L2). Lets the
   // reaper and DELETE handler issue a best-effort ECS StopTask instead of
   // letting an orphaned task run to completion. Null until RunTask succeeds.
-  ecsTaskArn    String?  @map("ecs_task_arn")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ecsTaskArn          String?   @map("ecs_task_arn")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
@@ -330,22 +333,22 @@ model GeoPdfTemplate {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("geo_pdf_templates")
 }
 
 model TopoTemplate {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  name      String
-  config    Json
-  autoExport Json?   @map("auto_export")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  name       String
+  config     Json
+  autoExport Json?    @map("auto_export")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("topo_templates")
@@ -377,6 +380,49 @@ model Waypoint {
   @@map("waypoints")
 }
 
+// User-authored routes: the line the user drew, imported, or derived from a
+// recording. Geometry is a vertex list ON THE ROW, not an S3 blob — a route is
+// authored and edited in place, so it rides the delta-sync protocol like
+// canyons/waypoints (offline draw → outbox → flush) and an edit is a PATCH.
+// GPX/KML is an EXPORT format, not storage.
+//
+// NOT a recording. A recorded GPS track is an observation — immutable,
+// timestamped, thousands of points — and keeps its own storage and its
+// duration (shared/src/trackStats.ts). The only bridge is the deliberate
+// "create route from recording" action, which simplifies to fit and leaves the
+// recording intact.
+//
+// Visibility follows canyon-level MEDIA, not waypoints: a route LINKED to a
+// shared canyon is part of that shared record (sharees may view and export,
+// never edit); an unlinked route is owner-private.
+model Route {
+  id        String   @id @default(uuid())
+  ownerId   String   @map("owner_id")
+  // The canyon's single route slot. @unique enforces one-route-per-canyon in
+  // the DB rather than app code (many NULLs are allowed, so unlinked routes
+  // are unconstrained). Linking to an occupied canyon UNLINKS the incumbent,
+  // which survives standalone — a link never destroys anything. SetNull keeps
+  // routes alive when a canyon dies.
+  canyonId  String?  @unique @map("canyon_id")
+  name      String
+  // From TRACK_COLORS (shared/src/media.ts), so routes and legacy track media
+  // share one palette on the map. Assigned server-side.
+  color     String
+  // [[lon, lat], ...]. Shape and length enforced by validateRoutePayload
+  // (shared/src/routeValidation.ts); MAX_ROUTE_POINTS is derived from the 1 MB
+  // body limit divided by SYNC_PUSH_MAX_OPS — see that file's header before
+  // raising it. No lengthM column: length is derived on read, and a stored one
+  // goes stale the moment a vertex moves.
+  points    Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  canyon    Canyon?  @relation(fields: [canyonId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId])
+  @@map("routes")
+}
+
 // Per-user deletion/visibility-revocation log for mobile delta sync (Stage 8).
 // A row means "user X must remove entity (type,id) from any local mirror".
 // Deliberately carries NO name/coords — ids only — so the table is log-safe
@@ -390,6 +436,7 @@ model SyncTombstone {
   // (their sharees) belong to those users and survive — that is the point.
   userId     String   @map("user_id")
   // "canyon" | "tripLog" | "media" | "canyonShare" | "friendship" | "waypoint"
+  // | "route"
   entityType String   @map("entity_type")
   entityId   String   @map("entity_id")
   deletedAt  DateTime @default(now()) @map("deleted_at")

@@ -3,6 +3,8 @@ import {
   canyonDeleteTombstones,
   friendshipDeleteTombstones,
   mediaDeleteTombstones,
+  routeDeleteTombstones,
+  routeUnlinkTombstones,
   shareRevokeTombstones,
   tripDeleteTombstones,
   waypointDeleteTombstones,
@@ -97,6 +99,85 @@ describe("shareRevokeTombstones", () => {
     const shareeRows = rows.filter((r) => r.userId === "bob");
     expect(shareeRows.filter((r) => r.entityType === "canyon")).toHaveLength(1);
     expect(shareeRows.some((r) => r.entityType === "canyonShare")).toBe(false);
+  });
+});
+
+describe("routeDeleteTombstones", () => {
+  it("owner-only for an unlinked route", () => {
+    const rows = routeDeleteTombstones({
+      ownerId: "alice",
+      routeId: "r1",
+      shareeIds: [],
+    });
+    expect(rows).toEqual([
+      { userId: "alice", entityType: "route", entityId: "r1" },
+    ]);
+  });
+
+  it("fans out to every sharee of the linked canyon", () => {
+    const rows = routeDeleteTombstones({
+      ownerId: "alice",
+      routeId: "r1",
+      shareeIds: ["bob", "carol"],
+    });
+    expect(rows).toHaveLength(3);
+    expect(has(rows, { userId: "bob", entityType: "route", entityId: "r1" })).toBe(true);
+    expect(has(rows, { userId: "carol", entityType: "route", entityId: "r1" })).toBe(true);
+  });
+});
+
+describe("routeUnlinkTombstones", () => {
+  // The trap this guards: unlinking revokes sharee visibility with NO delete
+  // anywhere, so without these rows a sharee's mirror keeps the route forever.
+  it("revokes from sharees but NOT from the owner, who keeps it standalone", () => {
+    const rows = routeUnlinkTombstones({ routeId: "r1", shareeIds: ["bob", "carol"] });
+    expect(rows).toHaveLength(2);
+    expect(has(rows, { userId: "bob", entityType: "route", entityId: "r1" })).toBe(true);
+    expect(rows.some((r) => r.userId === "alice")).toBe(false);
+  });
+
+  it("is empty when the canyon had no sharees", () => {
+    expect(routeUnlinkTombstones({ routeId: "r1", shareeIds: [] })).toEqual([]);
+  });
+});
+
+describe("linked routes in canyon-delete and share-revoke", () => {
+  it("canyon delete revokes the route from sharees but not the owner", () => {
+    // Route.canyonId is SetNull: the route SURVIVES a canyon delete as a
+    // standalone route, so the owner must NOT be told to forget it.
+    const rows = canyonDeleteTombstones({
+      ownerId: "alice",
+      canyonId: "c1",
+      mediaIds: [],
+      shares: [{ id: "s1", sharedWithId: "bob" }],
+      routeId: "r1",
+    });
+    expect(has(rows, { userId: "bob", entityType: "route", entityId: "r1" })).toBe(true);
+    expect(has(rows, { userId: "alice", entityType: "route", entityId: "r1" })).toBe(false);
+  });
+
+  it("emits no route rows when the canyon had none", () => {
+    const rows = canyonDeleteTombstones({
+      ownerId: "alice",
+      canyonId: "c1",
+      mediaIds: [],
+      shares: [{ id: "s1", sharedWithId: "bob" }],
+      routeId: null,
+    });
+    expect(rows.some((r) => r.entityType === "route")).toBe(false);
+  });
+
+  it("share revoke takes the linked route with the canyon record", () => {
+    const rows = shareRevokeTombstones({
+      canyonOwnerId: "alice",
+      shareeId: "bob",
+      shareId: "s1",
+      canyonId: "c1",
+      canyonMediaIds: [],
+      routeId: "r1",
+    });
+    expect(has(rows, { userId: "bob", entityType: "route", entityId: "r1" })).toBe(true);
+    expect(has(rows, { userId: "alice", entityType: "route", entityId: "r1" })).toBe(false);
   });
 });
 

@@ -668,6 +668,9 @@ router.delete(
       // No S3 objects involved (ARCH-001 checklist entry; cascade covers the
       // rows — explicit per convention).
       prisma.waypoint.deleteMany({ where: { ownerId: user.id } }),
+      // Routes store their geometry on the row, so like waypoints there is no
+      // S3 leg here — that is the point of the design (ARCH-001).
+      prisma.route.deleteMany({ where: { ownerId: user.id } }),
       prisma.user.delete({ where: { id: user.id } }),
     ]);
 

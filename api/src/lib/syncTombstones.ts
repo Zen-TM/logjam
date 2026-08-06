@@ -56,8 +56,13 @@ export function canyonDeleteTombstones(args: {
   canyonId: string;
   mediaIds: string[];
   shares: { id: string; sharedWithId: string }[];
+  /** The canyon's linked route, if it had one. The ROUTE ITSELF SURVIVES —
+   * Route.canyonId is SetNull, so deleting a canyon unlinks its route rather
+   * than destroying it. Only the sharees lose sight of it; the owner keeps it
+   * as a standalone route and gets no tombstone. */
+  routeId?: string | null;
 }): TombstoneRow[] {
-  const { ownerId, canyonId, mediaIds, shares } = args;
+  const { ownerId, canyonId, mediaIds, shares, routeId } = args;
   const rows: TombstoneRow[] = [
     { userId: ownerId, entityType: "canyon", entityId: canyonId },
     ...mediaIds.map(
@@ -75,6 +80,9 @@ export function canyonDeleteTombstones(args: {
     rows.push({ userId: share.sharedWithId, entityType: "canyon", entityId: canyonId });
     for (const id of mediaIds) {
       rows.push({ userId: share.sharedWithId, entityType: "media", entityId: id });
+    }
+    if (routeId) {
+      rows.push({ userId: share.sharedWithId, entityType: "route", entityId: routeId });
     }
   }
   return rows;
@@ -106,13 +114,20 @@ export function shareRevokeTombstones(args: {
   shareId: string;
   canyonId: string;
   canyonMediaIds: string[];
+  /** The canyon's linked route, if any — the sharee loses it along with the
+   * canyon record. Owner-side nothing changes; the route is still linked. */
+  routeId?: string | null;
 }): TombstoneRow[] {
-  const { canyonOwnerId, shareeId, shareId, canyonId, canyonMediaIds } = args;
+  const { canyonOwnerId, shareeId, shareId, canyonId, canyonMediaIds, routeId } =
+    args;
   return [
     { userId: shareeId, entityType: "canyon", entityId: canyonId },
     ...canyonMediaIds.map(
       (id): TombstoneRow => ({ userId: shareeId, entityType: "media", entityId: id }),
     ),
+    ...(routeId
+      ? [{ userId: shareeId, entityType: "route" as const, entityId: routeId }]
+      : []),
     { userId: canyonOwnerId, entityType: "canyonShare", entityId: shareId },
   ];
 }
@@ -131,6 +146,39 @@ export function friendshipDeleteTombstones(args: {
       entityType: "friendship",
       entityId: friendshipId,
     }),
+  );
+}
+
+/** DELETE /routes/:id: the owner forgets it; if it was LINKED to a shared
+ * canyon, every current sharee of that canyon forgets it too (a linked route
+ * follows canyon-level media visibility, not the owner-private waypoint rule).
+ * `shareeIds` is empty for an unlinked route. */
+export function routeDeleteTombstones(args: {
+  ownerId: string;
+  routeId: string;
+  shareeIds: string[];
+}): TombstoneRow[] {
+  const { ownerId, routeId, shareeIds } = args;
+  return [
+    { userId: ownerId, entityType: "route", entityId: routeId },
+    ...shareeIds.map(
+      (userId): TombstoneRow => ({ userId, entityType: "route", entityId: routeId }),
+    ),
+  ];
+}
+
+/** Route UNLINKED from a canyon (including the incumbent displaced by a new
+ * link): the sharees of that canyon lose sight of it, but the OWNER keeps it —
+ * it survives as a standalone route. This is the sync-era trap of the linking
+ * rule: visibility is revoked with no delete anywhere, so without these rows a
+ * sharee's mirror would keep the route forever. */
+export function routeUnlinkTombstones(args: {
+  routeId: string;
+  shareeIds: string[];
+}): TombstoneRow[] {
+  const { routeId, shareeIds } = args;
+  return shareeIds.map(
+    (userId): TombstoneRow => ({ userId, entityType: "route", entityId: routeId }),
   );
 }
 
