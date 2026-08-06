@@ -87,7 +87,8 @@ BottomSheet(s)      acquisition + per-item actions
   leave ON is not that: the canyon-routes coverage note moved onto its own row in
   the sheet, because a permanent chip is a permanent tax on the thing the map is for.
 - **The map's two edges have different jobs.** The RIGHT edge is the action column
-  (layers, locate, measure, record, and the small attribution button under them).
+  (layers, locate, the TOOL GROUP, record, and the small attribution button under
+  them).
   The LEFT edge belongs to the map's own instruments — the native compass, the
   compass tape (which way the USER faces, as against the native ornament's which
   way the MAP faces) and the scale bar — and carries nothing you can press to
@@ -100,6 +101,25 @@ BottomSheet(s)      acquisition + per-item actions
   asked once, not an asset: leaving the tool clears them, so a measurement can
   never reappear over unrelated ground later. A tool that produces something the
   user would want to keep is a different thing and belongs in Saved.
+- **Tools live behind ONE `+` button, and its tray opens SIDEWAYS.** Every tool
+  added to the column is a permanent piece of map the user can't see, so they
+  share one slot (`MapToolGroup.tsx`). Sideways, not upward, because the column
+  is bottom-anchored against a constant `CHROME_BOTTOM` and upward growth walks
+  into the search pill. The tray is ABSOLUTELY positioned: laid out in flow its
+  width pushed the whole action column leftward and every other button visibly
+  jumped when the tools opened. Arming a tool closes the tray — the HUD is then
+  the thing saying what mode you are in, and an open tray behind it is a second
+  answer to the same question.
+- **A tool that produces an ASSET asks before discarding.** Measure and route
+  draw look alike and behave oppositely at the exit: leaving measure bins its
+  points silently (a question asked once), while leaving route draw confirms,
+  because those points were meant to become something. Route draw ends in Save,
+  and the result lands in Saved.
+- **Feather is the icon family; a second family is allowed only for a glyph it
+  lacks.** Feather has no ruler in its 286 glyphs and the near misses read as
+  "resize" or "commit", so measure uses MaterialCommunityIcons `ruler` (already
+  inside `@expo/vector-icons` — no new dependency) while route draw uses Feather
+  `pen-tool`. Reach for the second family only after checking Feather first.
 - **Map chrome offsets live in ONE module** (`mapChrome.ts`), and `CHROME_BOTTOM`
   is a CONSTANT. It used to grow by the recording HUD's measured height so the
   columns could lift out of the way; `onLayout` never fires on the way out, so the

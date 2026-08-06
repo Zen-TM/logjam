@@ -170,6 +170,99 @@ export async function deleteWaypointLocal(id: string): Promise<void> {
   scheduleMutationSync();
 }
 
+// ── routes ───────────────────────────────────────────────────────────────────
+//
+// Geometry rides in `fields.points` like any other value — no blob, no
+// presign, so a route drawn with no signal is just an ordinary queued create.
+
+export type RouteDraft = {
+  name: string;
+  points: [number, number][];
+  canyonId?: string | null;
+};
+
+export async function createRouteLocal(draft: RouteDraft): Promise<string> {
+  const id = mintUuid();
+  const now = new Date().toISOString();
+  const fields: Record<string, unknown> = {
+    name: draft.name,
+    points: draft.points,
+    ...(draft.canyonId != null && { canyonId: draft.canyonId }),
+  };
+
+  const db = await getSyncDb();
+  await db.withTransactionAsync(async () => {
+    // color is null until the server assigns one from TRACK_COLORS; the map
+    // falls back to the accent so an unsynced route still draws.
+    await db.runAsync(
+      `INSERT INTO routes
+         (id, owner_id, canyon_id, name, color, points_json, sync_role,
+          created_at, updated_at, extra_json, dirty_fields_json)
+       VALUES (?, NULL, ?, ?, NULL, ?, 'owner', ?, ?, NULL, ?)`,
+      id,
+      draft.canyonId ?? null,
+      draft.name,
+      JSON.stringify(draft.points),
+      now,
+      now,
+      JSON.stringify(Object.keys(fields)),
+    );
+    await appendOp(db, {
+      opId: mintUuid(),
+      entity: "route",
+      op: "create",
+      id,
+      fields,
+    });
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+  return id;
+}
+
+const ROUTE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
+  name: "name",
+  canyonId: "canyon_id",
+  // The mirror stores geometry as JSON text, so the value is encoded into the
+  // column while the OUTBOX carries the real array — and decode reads the base
+  // snapshot back in the op's shape, so a §6 conflict compares arrays against
+  // the server's arrays rather than against our JSON encoding.
+  points: {
+    column: "points_json",
+    encode: (value) => JSON.stringify(value),
+    decode: (raw) => {
+      if (typeof raw !== "string") return [];
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return [];
+      }
+    },
+  },
+};
+
+export async function updateRouteLocal(
+  id: string,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  await enqueueUpdate("route", "routes", id, fields, ROUTE_UPDATE_COLUMNS);
+}
+
+export async function deleteRouteLocal(id: string): Promise<void> {
+  const db = await getSyncDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync("DELETE FROM routes WHERE id = ?", id);
+    await appendOp(db, {
+      opId: mintUuid(),
+      entity: "route",
+      op: "delete",
+      id,
+    });
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+}
+
 // ── canyon / trip update surface ─────────────────────────────────────────────
 //
 // Field-scoped updates over the generic enqueueUpdate path (§8.2 coalescing,

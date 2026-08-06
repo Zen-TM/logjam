@@ -19,6 +19,7 @@ import {
   Text,
   View,
   useWindowDimensions,
+  type TextInput,
 } from "react-native";
 import {
   Camera,
@@ -45,13 +46,19 @@ import {
   haversineMeters,
   initialBearingDegrees,
   messageFromError,
+  MAX_ROUTE_POINTS,
+  ROUTE_NAME_MAX_LENGTH,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
 import { getVectorStyle, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import type { TCanyon } from "../api/types";
-import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
+import {
+  useMirrorCanyons,
+  useMirrorWaypoints,
+  useMirrorRoutes,
+} from "../sync/useSyncQueries";
 import { config } from "../config";
 import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "../theme";
 import { MapSearchBar } from "./MapSearchBar";
@@ -85,7 +92,12 @@ import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
 import { offlineCoverageMask } from "./offlineMask";
 import { MeasurePanel } from "./MeasurePanel";
 import { measureShape, type MeasurePoint } from "./measure";
+import { MapToolGroup, type MapTool } from "./MapToolGroup";
+import { RouteDrawPanel } from "./RouteDrawPanel";
+import { RoutesLayer } from "./RoutesLayer";
 import { BottomSheet } from "../ui/BottomSheet";
+import { Button } from "../ui/Button";
+import { TextField } from "../ui/TextField";
 import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
 import { Toast, type ToastMessage } from "../ui/Toast";
@@ -110,7 +122,12 @@ import {
 import { useVectorImports } from "../imports/useVectorImports";
 import { importVectorSource } from "../imports/vectorImports";
 import { updateTrack, type Waypoint } from "../tracks/tracksDb";
-import { createWaypointLocal, deleteWaypointLocal } from "../sync/outbox";
+import {
+  createWaypointLocal,
+  createRouteLocal,
+  updateRouteLocal,
+  deleteWaypointLocal,
+} from "../sync/outbox";
 import {
   reconcileTrackRecordingOnLaunch,
   startTrackRecording,
@@ -345,6 +362,17 @@ export function MapScreen({
   const [measurePoints, setMeasurePoints] = useState<MeasurePoint[] | null>(null);
   const measureId = useRef(0);
   const measuring = measurePoints !== null;
+  // Route draw/edit: null = off, an array = armed. Unlike measure, leaving the
+  // tool asks before discarding — this one produces an asset (DESIGN.md §8).
+  const [routePoints, setRoutePoints] = useState<[number, number][] | null>(null);
+  const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
+  const [savingRoute, setSavingRoute] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [namingRoute, setNamingRoute] = useState(false);
+  const drawingRoute = routePoints !== null;
+  /** Either point-collecting tool is armed — the flag every tap surface reads. */
+  const collectingPoints = measuring || drawingRoute;
+  const routes = useMirrorRoutes();
   // "Canyon routes" layer (web parity), off by default: it is a lot of ink to
   // add to a map unasked, and the layers sheet is where it belongs.
   const [showCanyonRoutes, setShowCanyonRoutes] = useState(false);
@@ -643,14 +671,100 @@ export function MapScreen({
     );
   }, []);
 
+  /** Leaving route draw is NOT free the way leaving measure is — these points
+   *  were meant to become something. Confirm before binning real work. */
+  const handleCancelRouteDraw = useCallback(() => {
+    const discard = () => {
+      setRoutePoints(null);
+      setEditingRouteId(null);
+    };
+    if ((routePoints?.length ?? 0) === 0) {
+      discard();
+      return;
+    }
+    Alert.alert("Discard this route?", "The points you placed will be lost.", [
+      { text: "Keep drawing", style: "cancel" },
+      { text: "Discard", style: "destructive", onPress: discard },
+    ]);
+  }, [routePoints]);
+
+  const addRoutePoint = useCallback((longitude: number, latitude: number) => {
+    setRoutePoints((current) =>
+      current === null || current.length >= MAX_ROUTE_POINTS
+        ? current
+        : [...current, [longitude, latitude]],
+    );
+  }, []);
+
+  /** Save the drawn points as a route. Offline is the expected case, not a
+   *  degraded one: createRouteLocal writes the mirror and queues the op, so the
+   *  route is on the map immediately and reaches the server whenever there is
+   *  signal. */
+  const handleSaveRoute = useCallback(
+    async (name: string) => {
+      const points = routePoints;
+      if (!points || points.length < 2) return;
+      setSavingRoute(true);
+      try {
+        if (editingRouteId) {
+          await updateRouteLocal(editingRouteId, { name, points });
+        } else {
+          await createRouteLocal({ name, points });
+        }
+        setNamingRoute(false);
+        setRoutePoints(null);
+        setEditingRouteId(null);
+      } catch (err) {
+        console.error(err);
+        Alert.alert("Route error", "Couldn't save that route.");
+      } finally {
+        setSavingRoute(false);
+      }
+    },
+    [editingRouteId, routePoints],
+  );
+
+  /** Arming a tool closes the tray: the HUD then says what mode you are in,
+   *  and an open tray behind it would be a second answer to that question.
+   *  Tapping the armed tool again turns it off. */
+  const handlePickTool = useCallback(
+    (tool: MapTool) => {
+      setToolsOpen(false);
+      if (tool === "measure") {
+        setMeasurePoints((current) => (current ? null : []));
+        return;
+      }
+      if (routePoints !== null) {
+        handleCancelRouteDraw();
+        return;
+      }
+      // Measure and route both want the map's taps — only one can have them.
+      setMeasurePoints(null);
+      setEditingRouteId(null);
+      setRoutePoints([]);
+    },
+    // handleCancelRouteDraw is declared below and is stable; see its useCallback.
+    [routePoints, handleCancelRouteDraw],
+  );
+
+  /** One entry point for both point-collecting tools, so every tap surface
+   *  (map, canyon pin, waypoint pin) only has to know "a tool wants this". */
+  const addToolPoint = useCallback(
+    (longitude: number, latitude: number) => {
+      if (measuring) addMeasurePoint(longitude, latitude);
+      else if (drawingRoute) addRoutePoint(longitude, latitude);
+    },
+    [addMeasurePoint, addRoutePoint, drawingRoute, measuring],
+  );
+
   const handleMapPress = useCallback(
     (feature: GeoJSON.Feature) => {
       setFollowMode("off");
-      if (!measuring || feature.geometry.type !== "Point") return;
+      if (!collectingPoints || feature.geometry.type !== "Point") return;
       const [lon, lat] = feature.geometry.coordinates as [number, number];
-      addMeasurePoint(lon, lat);
+      addToolPoint(lon, lat);
     },
-    [addMeasurePoint, measuring],
+    [addToolPoint, collectingPoints],
   );
 
   const handleCanyonPress = useCallback(
@@ -659,12 +773,12 @@ export function MapScreen({
       coordinates?: { latitude: number; longitude: number };
       point?: { x: number; y: number };
     }) => {
-      // A pin swallows the press before the map sees it, so while measuring it
-      // has to place the point itself — otherwise tapping near a canyon does
-      // nothing and reads as a broken tool.
-      if (measuring) {
+      // A pin swallows the press before the map sees it, so while a
+      // point-collecting tool is armed it has to place the point itself —
+      // otherwise tapping near a canyon does nothing and reads as broken.
+      if (collectingPoints) {
         if (event.coordinates) {
-          addMeasurePoint(event.coordinates.longitude, event.coordinates.latitude);
+          addToolPoint(event.coordinates.longitude, event.coordinates.latitude);
         }
         return;
       }
@@ -673,7 +787,7 @@ export function MapScreen({
         onOpenCanyon(props.id, props.name);
       }
     },
-    [addMeasurePoint, measuring, onOpenCanyon],
+    [addToolPoint, collectingPoints, onOpenCanyon],
   );
 
   // Stage 4b topo overlays + Stage 5 vector-import file management (save
@@ -1196,10 +1310,10 @@ export function MapScreen({
 
   const handleWaypointPress = useCallback(
     (waypoint: Waypoint) => {
-      // Same reason as a canyon pin: while measuring, a marker under the thumb
-      // places a point rather than opening its menu.
-      if (measuring) {
-        addMeasurePoint(waypoint.lon, waypoint.lat);
+      // Same reason as a canyon pin: while a tool is armed, a marker under the
+      // thumb places a point rather than opening its menu.
+      if (collectingPoints) {
+        addToolPoint(waypoint.lon, waypoint.lat);
         return;
       }
       Alert.alert(waypoint.name, undefined, [
@@ -1223,7 +1337,7 @@ export function MapScreen({
         },
       ]);
     },
-    [addMeasurePoint, handleLocateMe, measuring],
+    [addToolPoint, collectingPoints, handleLocateMe],
   );
 
   // The layer sheet groups these two ways at once — by layer across every area,
@@ -1552,6 +1666,58 @@ export function MapScreen({
           />
         </ShapeSource>
 
+        <RoutesLayer routes={routes.data ?? []} hiddenRouteId={editingRouteId} />
+
+        {/* The route being drawn: dashed like the measured line, because it is
+            equally provisional until saved. */}
+        {routePoints && routePoints.length > 0 ? (
+          <ShapeSource
+            id="route-draft"
+            shape={{
+              type: "FeatureCollection",
+              features: [
+                ...(routePoints.length >= 2
+                  ? [
+                      {
+                        type: "Feature" as const,
+                        geometry: {
+                          type: "LineString" as const,
+                          coordinates: routePoints as number[][],
+                        },
+                        properties: {},
+                      },
+                    ]
+                  : []),
+                ...routePoints.map((point) => ({
+                  type: "Feature" as const,
+                  geometry: { type: "Point" as const, coordinates: point },
+                  properties: {},
+                })),
+              ],
+            }}
+          >
+            <LineLayer
+              id="route-draft-line"
+              style={{
+                lineColor: theme.accent,
+                lineWidth: 3,
+                lineDasharray: [1, 1.5],
+                lineCap: "round",
+              }}
+            />
+            <CircleLayer
+              id="route-draft-points"
+              filter={["==", ["geometry-type"], "Point"]}
+              style={{
+                circleRadius: 5,
+                circleColor: theme.accent,
+                circleStrokeWidth: 2,
+                circleStrokeColor: theme.primary,
+              }}
+            />
+          </ShapeSource>
+        ) : null}
+
         {/* Measured line: dotted, like a ruler laid over the map rather than
             anything recorded. Unpinned (no layerIndex) so it sits above every
             overlay — a measurement you can't see under a topo layer is
@@ -1646,6 +1812,23 @@ export function MapScreen({
             }
             onClear={() => setMeasurePoints([])}
             onDone={() => setMeasurePoints(null)}
+          />
+        ) : null}
+
+        {/* Route draw HUD — only while the tool is armed. */}
+        {routePoints ? (
+          <RouteDrawPanel
+            points={routePoints}
+            editingName={
+              editingRouteId
+                ? (routes.data?.find((r) => r.id === editingRouteId)?.name ?? null)
+                : null
+            }
+            saving={savingRoute}
+            onUndo={() => setRoutePoints((current) => current && current.slice(0, -1))}
+            onClear={() => setRoutePoints([])}
+            onSave={() => setNamingRoute(true)}
+            onCancel={handleCancelRouteDraw}
           />
         ) : null}
 
@@ -1756,19 +1939,15 @@ export function MapScreen({
             style={followMode === "off" ? styles.locateIcon : undefined}
           />
         </Pressable>
-        {/* Measure. Turning it OFF discards the points — a measurement is a
-            question you asked once, not an asset, and one that survived being
-            closed would reappear over unrelated ground later. */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={measuring ? "Stop measuring" : "Measure distance"}
-          style={[styles.controlButton, measuring && styles.controlActive]}
-          onPress={() => setMeasurePoints((current) => (current ? null : []))}
-        >
-          {/* No ruler in Feather; git-commit is a line with a marked point on
-              it, which is what the tool draws. */}
-          <Feather name="git-commit" size={FAB_ICON} color={theme.textPrimary} />
-        </Pressable>
+        {/* Map tools behind one button. Turning MEASURE off discards its
+            points — a measurement is a question you asked once, not an asset.
+            Route draw is the opposite and asks before discarding. */}
+        <MapToolGroup
+          open={toolsOpen}
+          activeTool={measuring ? "measure" : drawingRoute ? "route" : null}
+          onToggleOpen={() => setToolsOpen((open) => !open)}
+          onPickTool={handlePickTool}
+        />
         {!activeTrack ? (
           <Pressable
             accessibilityRole="button"
@@ -1830,6 +2009,22 @@ export function MapScreen({
 
       {/* Attribution is required by the providers but ate the bottom of the
           map; it now lives behind the (i) button. */}
+      <BottomSheet
+        visible={namingRoute}
+        onClose={() => setNamingRoute(false)}
+        title="Name this route"
+      >
+        <RouteNameForm
+          initialName={
+            editingRouteId
+              ? (routes.data?.find((r) => r.id === editingRouteId)?.name ?? "")
+              : ""
+          }
+          saving={savingRoute}
+          onSubmit={(name) => void handleSaveRoute(name)}
+        />
+      </BottomSheet>
+
       <BottomSheet
         visible={attributionOpen}
         onClose={() => setAttributionOpen(false)}
@@ -1939,6 +2134,60 @@ export function MapScreen({
         }}
       />
     </View>
+  );
+}
+
+/**
+ * Name-the-route form, rendered INSIDE the sheet rather than as its own modal —
+ * same reasoning as SavedScreen's RenameForm: the sheet is already open and
+ * focused, so the keyboard rises with the form instead of shoving a settled
+ * sheet upward a beat later.
+ */
+function RouteNameForm({
+  initialName,
+  saving,
+  onSubmit,
+}: {
+  initialName: string;
+  saving: boolean;
+  onSubmit: (name: string) => void;
+}) {
+  const [draft, setDraft] = useState(initialName);
+  const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    // autoFocus runs before the field is attached and is unreliable here.
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const trimmed = draft.trim();
+  const tooLong = trimmed.length > ROUTE_NAME_MAX_LENGTH;
+  const commit = () => {
+    if (!trimmed || tooLong || saving) return;
+    onSubmit(trimmed);
+  };
+
+  return (
+    <>
+      <TextField
+        label="Name"
+        value={draft}
+        onChangeText={setDraft}
+        inputRef={inputRef}
+        returnKeyType="done"
+        onSubmitEditing={commit}
+        error={
+          tooLong ? `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters` : undefined
+        }
+      />
+      <Button
+        label={saving ? "Saving…" : "Save"}
+        icon="check"
+        disabled={!trimmed || tooLong || saving}
+        onPress={commit}
+      />
+    </>
   );
 }
 

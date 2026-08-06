@@ -123,6 +123,25 @@ export async function getSyncDb(): Promise<SQLite.SQLiteDatabase> {
           extra_json TEXT,
           dirty_fields_json TEXT
         );
+        -- Drawn/imported routes. points_json holds the whole geometry
+        -- ([[lon, lat], ...]) because the server stores it on the row too --
+        -- there is no blob to cache, so a route works offline the moment the
+        -- delta lands.
+        CREATE TABLE IF NOT EXISTS routes (
+          id TEXT PRIMARY KEY,
+          owner_id TEXT,
+          canyon_id TEXT,
+          name TEXT NOT NULL,
+          color TEXT,
+          points_json TEXT NOT NULL,
+          sync_role TEXT,
+          created_at TEXT,
+          updated_at TEXT,
+          extra_json TEXT,
+          dirty_fields_json TEXT
+        );
+        CREATE INDEX IF NOT EXISTS routes_canyon ON routes(canyon_id);
+
         CREATE TABLE IF NOT EXISTS media (
           id TEXT PRIMARY KEY,
           linked_type TEXT NOT NULL,

@@ -13,12 +13,14 @@ import {
   listMirrorCanyons,
   listMirrorTrips,
   listMirrorWaypoints,
+  listMirrorRoutes,
   getMirrorCanyon,
   getMirrorTrip,
   type MirrorCanyon,
   type MirrorMedia,
   type MirrorTrip,
   type MirrorWaypoint,
+  type MirrorRoute,
 } from "./mirrorStore";
 import { onMirrorChanged } from "./syncDb";
 import { countPendingOps } from "./outbox";
@@ -118,6 +120,11 @@ export function useMirrorTrip(id: string): MirrorQueryState<MirrorTrip | null> {
 
 export function useMirrorWaypoints(): MirrorQueryState<MirrorWaypoint[]> {
   return useMirrorQuery(readWaypoints);
+}
+
+/** Every route the account can see (own + through a canyon share). */
+export function useMirrorRoutes(): MirrorQueryState<MirrorRoute[]> {
+  return useMirrorQuery(listMirrorRoutes);
 }
 
 /**

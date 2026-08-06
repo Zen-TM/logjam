@@ -26,6 +26,7 @@ import {
   rebasePendingCanyonLinks,
   upsertTrip,
   upsertWaypoint,
+  upsertRoute,
 } from "./mirrorStore";
 import {
   getSyncDb,
@@ -135,6 +136,10 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
         const { effective, dirtyNames } = rebase(row, "waypoint", outbox);
         await upsertWaypoint(db, effective, dirtyNames);
       }
+      for (const row of changes.routes) {
+        const { effective, dirtyNames } = rebase(row, "route", outbox);
+        await upsertRoute(db, effective, dirtyNames);
+      }
       for (const row of changes.media) await upsertMedia(db, row);
       for (const row of changes.canyonShares) {
         await upsertShare(db, row, currentUserId);
@@ -148,6 +153,7 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
         changes.canyons.length +
         changes.tripLogs.length +
         changes.waypoints.length +
+        changes.routes.length +
         changes.media.length +
         changes.canyonShares.length +
         changes.friendships.length +

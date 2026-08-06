@@ -12,6 +12,7 @@ import type {
   SyncDeltaTombstone,
   SyncDeltaTripRow,
   SyncDeltaWaypointRow,
+  SyncDeltaRouteRow,
 } from "@logjam/shared";
 
 import type { TCanyon, TTripLog } from "../api/types";
@@ -49,6 +50,11 @@ const TRIP_KNOWN = [
 const WAYPOINT_KNOWN = [
   "id", "canyonId", "name", "latitude", "longitude", "elevation",
   "symbol", "notes", "createdAt", "updatedAt",
+] as const;
+
+const ROUTE_KNOWN = [
+  "id", "ownerId", "canyonId", "name", "color", "points", "syncRole",
+  "createdAt", "updatedAt",
 ] as const;
 
 const MEDIA_KNOWN = [
@@ -184,6 +190,30 @@ export async function upsertWaypoint(
   );
 }
 
+export async function upsertRoute(
+  db: SQLiteDatabase,
+  row: SyncDeltaRouteRow,
+  dirtyFieldNames: string[],
+): Promise<void> {
+  await db.runAsync(
+    `INSERT OR REPLACE INTO routes
+       (id, owner_id, canyon_id, name, color, points_json, sync_role,
+        created_at, updated_at, extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    row.id,
+    row.ownerId,
+    row.canyonId,
+    row.name,
+    row.color,
+    JSON.stringify(row.points),
+    row.syncRole,
+    row.createdAt,
+    row.updatedAt,
+    splitExtras(row, ROUTE_KNOWN),
+    dirtyFieldNames.length ? JSON.stringify(dirtyFieldNames) : null,
+  );
+}
+
 export async function upsertMedia(
   db: SQLiteDatabase,
   row: SyncDeltaMediaRow,
@@ -304,6 +334,10 @@ export async function applyTombstone(
       await db.runAsync("DELETE FROM canyons WHERE id = ?", tombstone.id);
       // Waypoint canyon links are SetNull server-side; mirror matches.
       await db.runAsync(
+        "UPDATE routes SET canyon_id = NULL WHERE canyon_id = ?",
+        tombstone.id,
+      );
+      await db.runAsync(
         "UPDATE waypoints SET canyon_id = NULL WHERE canyon_id = ?",
         tombstone.id,
       );
@@ -334,6 +368,11 @@ export async function applyTombstone(
       break;
     case "waypoint":
       await db.runAsync("DELETE FROM waypoints WHERE id = ?", tombstone.id);
+      break;
+    case "route":
+      // Also the signal for "unlinked from a canyon you can see" — the route
+      // still exists for its owner, but this user must forget it.
+      await db.runAsync("DELETE FROM routes WHERE id = ?", tombstone.id);
       break;
   }
 
@@ -670,6 +709,62 @@ export async function listMirrorWaypoints(): Promise<MirrorWaypoint[]> {
     "SELECT * FROM waypoints ORDER BY created_at DESC",
   );
   return rows.map(rowToWaypoint);
+}
+
+type RouteRow = {
+  id: string;
+  owner_id: string | null;
+  canyon_id: string | null;
+  name: string;
+  color: string | null;
+  points_json: string;
+  sync_role: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type MirrorRoute = {
+  id: string;
+  ownerId: string | null;
+  canyonId: string | null;
+  name: string;
+  color: string | null;
+  points: [number, number][];
+  /** 'shared' means this arrived through a canyon share — read-only here. */
+  syncRole: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function rowToRoute(row: RouteRow): MirrorRoute {
+  let points: [number, number][] = [];
+  try {
+    const parsed: unknown = JSON.parse(row.points_json);
+    if (Array.isArray(parsed)) points = parsed as [number, number][];
+  } catch {
+    // A row we can't parse draws as nothing rather than crashing the map. The
+    // next delta overwrites it; never log the contents (they are coordinates).
+    points = [];
+  }
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    canyonId: row.canyon_id,
+    name: row.name,
+    color: row.color,
+    points,
+    syncRole: row.sync_role,
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  };
+}
+
+export async function listMirrorRoutes(): Promise<MirrorRoute[]> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<RouteRow>(
+    "SELECT * FROM routes ORDER BY created_at DESC",
+  );
+  return rows.map(rowToRoute);
 }
 
 /** True once any delta page has ever been applied (first-sync gate). */
