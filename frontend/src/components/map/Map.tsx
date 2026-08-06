@@ -429,6 +429,7 @@ function Map({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [is3D, setIs3D] = useState(false);
   const toast = useToast();
   // Touch/stylus input (coarse pointer) vs mouse — drives "Tap" vs "Click"
   // copy in the map-pick banners (MOBILE-12a). Pointer capability, not
@@ -623,6 +624,13 @@ function Map({
           source: layer.id,
           layout: { visibility: i === 0 ? "visible" : "none" },
         });
+      });
+
+      // 3D Terrain - Soruce DEM for 3d Terrain
+      map.addSource("3d-terrain-dem", {
+        type: "raster-dem",
+        tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+        encoding: "terrarium",
       });
 
       // Owned canyon GeoJSON source (starts empty)
@@ -2162,9 +2170,53 @@ function Map({
     onGeoPdfExtentConfirmedRef.current?.(bounds, scale);
   }, []);
 
+  // Toggle 3d Terrain
+  const toggleTerrain = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (is3D) {
+      // Turning off — nothing to wait for, flatten immediately
+      map.setTerrain(null);
+      map.easeTo({ pitch: 0, duration: 1000 });
+    } else {
+      // Toast to inform user about movement controls in 3D mode
+      if (window.matchMedia("(pointer: coarse)").matches) {
+        toast.info("Use two fingers to pan and pinch to zoom in 3D mode.");
+      } else {
+        toast.info("Use right-click + drag (OR Ctrl + drag) to pan and scroll to zoom in 3D mode.");
+      }
+      // Turning on — wait for the terrain tiles to actually load before tilting
+      map.setTerrain({ source: "3d-terrain-dem", exaggeration: 1.5 });
+      map.once("idle", () => {
+        map.easeTo({ pitch: 30, duration: 1200 });
+      });
+    }
+
+    setIs3D(!is3D);
+  };
+
   return (
     <div id="map" className={classes.map} data-sidebar-open={sidebarOpen ? "true" : "false"}>
       <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
+      {/* Button to toggle 3D terrain on and off. */}
+      <button onClick={toggleTerrain} style={{
+        position: "absolute",
+        top: "145px", 
+        left: "auto", 
+        right: "10px", 
+        zIndex: 1000, 
+        width: "29px", 
+        height: "29px",
+        color: "black",
+        background: "white",
+        border: "none",
+        borderRadius: "4px",
+        boxShadow: "0 0 0 2px rgba(0,0,0,0.1)",
+        fontSize: "13px",
+        fontWeight: "bold",
+        cursor: "pointer",
+      }}> 3D </button>
+
       {/* Persistent place search — always available; stays usable during pick
           modes for a quick fly-to. Slides right with the sidebar like the
           attribution control. */}
