@@ -1990,6 +1990,12 @@ function Map({
       map.setTerrain(null);
       map.easeTo({ pitch: 0, duration: 1000 });
     } else {
+      // Toast to inform user about movement controls in 3D mode
+      if (window.matchMedia("(pointer: coarse)").matches) {
+        toast.info("Use two fingers to pan and pinch to zoom in 3D mode.");
+      } else {
+        toast.info("Use right-click + drag (OR Ctrl + drag) to pan and scroll to zoom in 3D mode.");
+      }
       // Turning on — wait for the terrain tiles to actually load before tilting
       map.setTerrain({ source: "3d-terrain-dem", exaggeration: 1.5 });
       map.once("idle", () => {
