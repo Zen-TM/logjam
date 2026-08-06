@@ -1234,7 +1234,11 @@ function GeoPdfDialog({
           <div className={classes.layerColumns}>
             <div className={classes.layerColumn}>
               <div className={classes.layerColumnLabel}>Base layer</div>
-              {BASE_LAYERS.filter((l) => !l.id.startsWith("osm") && l.id !== "six-base").map((layer) => (
+              {/* Raster only — the GeoPDF renderer fetches XYZ tiles, which a
+                  vector PMTiles archive cannot provide. */}
+              {BASE_LAYERS.filter(
+                (l) => l.kind === "raster" && !l.id.startsWith("osm") && l.id !== "six-base",
+              ).map((layer) => (
                 <label key={layer.id} className={classes.layerOption}>
                   <input
                     type="radio"

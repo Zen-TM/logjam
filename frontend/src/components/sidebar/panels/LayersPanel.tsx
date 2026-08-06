@@ -8,6 +8,15 @@ import { TOPO_LAYERS } from "../../../topoLayerTypes";
 
 type BaseLayer = TileLayer & { id: string; name: string };
 
+/** `previewUrlFor` needs an XYZ template; vector entries carry none. */
+function thumbnailFor(
+  layer: BaseLayer,
+  mapView: { lng: number; lat: number; zoom: number } | null,
+): string | null {
+  if (!mapView || layer.tiles.length === 0) return null;
+  return previewUrlFor(layer, mapView);
+}
+
 // Layer-row descriptors (display only; keyed by TOPO_LAYERS name). Rendered as a
 // native-title info tooltip. Only vegetation needs one today — its orange
 // crosshatch (fire more recent than the LiDAR survey) is the least-intuitive
@@ -267,7 +276,7 @@ function LayersPanel({
       <div className={classes.gallery}>
         {layers.map((layer) => {
           const isActive = layer.id === activeLayerId;
-          const thumbUrl = mapView ? previewUrlFor(layer, mapView) : null;
+          const thumbUrl = thumbnailFor(layer, mapView);
           return (
             <button
               key={layer.id}
@@ -275,12 +284,19 @@ function LayersPanel({
               onClick={() => onActiveLayerChange(layer.id)}
               aria-pressed={isActive}
             >
-              <img
-                src={thumbUrl ?? undefined}
-                alt={layer.name}
-                className={classes.tileImage}
-                draggable={false}
-              />
+              {/* Vector basemaps have no XYZ template to thumbnail from, so
+                  they show a captioned placeholder rather than a broken
+                  image. */}
+              {thumbUrl ? (
+                <img
+                  src={thumbUrl}
+                  alt={layer.name}
+                  className={classes.tileImage}
+                  draggable={false}
+                />
+              ) : (
+                <div className={classes.tilePlaceholder} aria-hidden="true" />
+              )}
               <div className={classes.tileCaption}>{layer.name}</div>
             </button>
           );

@@ -175,6 +175,11 @@
   aspect-ratio: 1;
 }
 
+/* Stand-in thumbnail for basemaps with no XYZ tile to preview (vector). */
+.tilePlaceholder {
+  composes: tileImage;
+}
+
 .tileCaption {
   font-size: var(--text-xs);
   color: var(--theme-text-primary);

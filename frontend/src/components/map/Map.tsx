@@ -8,6 +8,7 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-csp-worker?url";
 // "on is not defined" errors and breaking GeoJSON source processing.
 setWorkerUrl(maplibreWorkerUrl);
 import { Protocol } from "pmtiles";
+import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
 
 // Register PMTiles protocol for serving topo overlay layers from S3
 const pmtilesProtocol = new Protocol();
@@ -127,21 +128,91 @@ function applyCanyonThemePaint(map: maplibregl.Map) {
   }
 }
 
+// Protomaps glyph + sprite assets. Mobile vendors these into the app bundle
+// because offline regions must render labels with zero network; the web map
+// has no offline requirement, so it reads them from the upstream host (CSP
+// allowlisted). No user data rides these requests — they are keyed by font
+// stack and codepoint range only.
+const BASEMAP_ASSETS_BASE_URL = "https://protomaps.github.io/basemaps-assets";
+
+/**
+ * Prefix for the generated Protomaps style layers. Namespaced because the
+ * upstream set includes generic ids ("background", "water") that would collide
+ * with layers this map already owns.
+ */
+const PROTOMAPS_LAYER_PREFIX = "pm-";
+const PROTOMAPS_SOURCE_ID = "protomaps";
+
 // Derived from the canonical shared basemap catalog (map-sources.md D2) —
 // same ids, order, URLs, and zoom caps as before the consolidation. The
 // interactive map uses displayMaxZoom (six-imagery stays capped at 18 here
-// while the GeoPDF renderer keeps fetching its native 20). Raster entries
-// only: the Protomaps vector basemap is mobile-only for now (web adoption
-// tracked as a follow-up).
-export const BASE_LAYERS = BASEMAP_CATALOG.filter(
-  (entry) => entry.kind === "raster",
-).map((entry) => ({
+// while the GeoPDF renderer keeps fetching its native 20).
+//
+// `kind` rides along because the two entry kinds are not interchangeable
+// downstream: raster entries are XYZ templates the GeoPDF renderer can fetch,
+// the vector entry is a PMTiles archive it cannot.
+export const BASE_LAYERS = BASEMAP_CATALOG.map((entry) => ({
   id: entry.id,
   name: entry.name,
-  tiles: [entry.urlTemplate],
+  kind: entry.kind,
+  // Vector has no XYZ template — `tiles` stays empty and the picker falls back
+  // to a captioned placeholder instead of a tile thumbnail.
+  tiles: entry.kind === "raster" ? [entry.urlTemplate] : [],
   maxzoom: entry.displayMaxZoom,
   attribution: entry.attributionHtml,
 }));
+
+/**
+ * Mounts the self-hosted Protomaps vector basemap: one PMTiles source plus the
+ * generated @protomaps/basemaps layer set.
+ *
+ * The layer set comes from the package at runtime rather than a committed JSON
+ * because web needs plain MapLibre layers, while the committed JSONs under
+ * mobile/src/map/basemap/ are reshaped for maplibre-react-native (paint+layout
+ * merged into one camelCase object). Same package, same pinned version — see
+ * scripts/basemap/package.json; bump both together or neither.
+ *
+ * Light flavor only: the web app has no dark theme (index.css carries a single
+ * prefers-color-scheme rule that inverts icons, nothing more).
+ */
+function addProtomapsBasemap(
+  map: maplibregl.Map,
+  visibility: "visible" | "none",
+) {
+  const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
+  // Fail loudly — a missing catalog entry is a programming error, and silently
+  // skipping it would leave the picker offering a basemap that draws nothing.
+  if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
+
+  // Always same-origin: prod serves /master/* from the web distribution, and
+  // the dev server proxies the same prefix (see vite.config.ts). That keeps
+  // the archive under CSP 'self' and out of the CORS problem entirely.
+  map.addSource(PROTOMAPS_SOURCE_ID, {
+    type: "vector",
+    url: `pmtiles://${window.location.origin}/${entry.urlTemplate}`,
+    attribution: entry.attributionHtml,
+  });
+
+  for (const layer of protomapsLayers(
+    PROTOMAPS_SOURCE_ID,
+    namedFlavor("light"),
+    { lang: "en" },
+  )) {
+    map.addLayer({
+      ...layer,
+      id: `${PROTOMAPS_LAYER_PREFIX}${layer.id}`,
+      layout: { ...layer.layout, visibility },
+    } as maplibregl.LayerSpecification);
+  }
+}
+
+/** Every layer id belonging to the Protomaps band, in style order. */
+function protomapsLayerIds(map: maplibregl.Map): string[] {
+  return map
+    .getStyle()
+    .layers.map((l) => l.id)
+    .filter((id) => id.startsWith(PROTOMAPS_LAYER_PREFIX));
+}
 
 export type TBbox = {
   west: number;
@@ -509,7 +580,12 @@ function Map({
       container: containerRef.current,
       style: {
         version: 8,
-        glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+        // Protomaps' own glyph + sprite set, not MapLibre's demotiles: the
+        // generated vector basemap layers reference Noto Sans stacks that
+        // demotiles does not serve, and a missing stack fails silently as
+        // blank labels rather than an error.
+        glyphs: `${BASEMAP_ASSETS_BASE_URL}/fonts/{fontstack}/{range}.pbf`,
+        sprite: `${BASEMAP_ASSETS_BASE_URL}/sprites/v4/light`,
         sources: {},
         layers: [],
       },
@@ -609,8 +685,16 @@ function Map({
     });
 
     map.on("load", () => {
-      // Add all raster base layers
+      // Add all base layers. Raster entries are one source + one layer each;
+      // the Protomaps vector entry is one source plus the whole generated
+      // style set, all added here so the basemap band sits below every canyon,
+      // route and topo layer added later in this handler.
       BASE_LAYERS.forEach((layer, i) => {
+        const visibility = i === 0 ? "visible" : "none";
+        if (layer.kind === "vector") {
+          addProtomapsBasemap(map, visibility);
+          return;
+        }
         map.addSource(layer.id, {
           type: "raster",
           tiles: layer.tiles,
@@ -622,7 +706,7 @@ function Map({
           id: layer.id,
           type: "raster",
           source: layer.id,
-          layout: { visibility: i === 0 ? "visible" : "none" },
+          layout: { visibility },
         });
       });
 
@@ -759,7 +843,7 @@ function Map({
         minzoom: 9,
         layout: {
           "text-field": CANYON_LABEL_FIELD,
-          "text-font": ["Open Sans Semibold"],
+          "text-font": ["Noto Sans Medium"],
           "text-size": 12,
           "text-offset": [0, 1.2],
           "text-anchor": "top",
@@ -779,7 +863,7 @@ function Map({
         minzoom: 9,
         layout: {
           "text-field": CANYON_LABEL_FIELD,
-          "text-font": ["Open Sans Semibold"],
+          "text-font": ["Noto Sans Medium"],
           "text-size": 12,
           "text-offset": [0, 1.2],
           "text-anchor": "top",
@@ -1334,12 +1418,18 @@ function Map({
   // Toggle base layer visibility
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
     BASE_LAYERS.forEach((layer) => {
-      mapRef.current!.setLayoutProperty(
-        layer.id,
-        "visibility",
-        layer.id === activeLayerId ? "visible" : "none",
-      );
+      const visibility = layer.id === activeLayerId ? "visible" : "none";
+      if (layer.kind === "vector") {
+        // The vector basemap is a band of ~70 layers, not one — toggling the
+        // source id alone would silently do nothing.
+        for (const id of protomapsLayerIds(map)) {
+          map.setLayoutProperty(id, "visibility", visibility);
+        }
+        return;
+      }
+      map.setLayoutProperty(layer.id, "visibility", visibility);
     });
   }, [activeLayerId, mapLoaded]);
 
@@ -1636,7 +1726,7 @@ function Map({
               minzoom: 12,
               layout: {
                 "text-field": ["concat", ["to-string", ["get", "elev"]], "m"],
-                "text-font": ["Open Sans Semibold"],
+                "text-font": ["Noto Sans Medium"],
                 "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
                 "symbol-placement": "line",
                 // LAZ-derived contours are VERY knobbly — even 90° left few
@@ -1775,7 +1865,7 @@ function Map({
                     ["get", "ref"],
                     "",
                   ],
-                  "text-font": ["Open Sans Semibold"],
+                  "text-font": ["Noto Sans Medium"],
                   "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
                   "symbol-placement": "line",
                   // Looser bend tolerance (was 30) so curvy creeks/tracks still
@@ -1841,7 +1931,7 @@ function Map({
               minzoom: 12,
               layout: {
                 "text-field": textField,
-                "text-font": ["Open Sans Semibold"],
+                "text-font": ["Noto Sans Medium"],
                 "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
                 "text-anchor": "top",
                 "text-offset": [0, 0.8],

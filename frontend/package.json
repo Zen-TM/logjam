@@ -19,6 +19,7 @@
     "@logjam/shared": "file:../shared",
     "@mui/icons-material": "^7.3.9",
     "@mui/material": "^7.1.1",
+    "@protomaps/basemaps": "5.7.2",
     "@tmcw/togeojson": "^7.1.2",
     "@types/papaparse": "^5.5.2",
     "aws-amplify": "^6.17.0",
