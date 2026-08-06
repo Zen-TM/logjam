@@ -101,6 +101,14 @@ BottomSheet(s)      acquisition + per-item actions
   asked once, not an asset: leaving the tool clears them, so a measurement can
   never reappear over unrelated ground later. A tool that produces something the
   user would want to keep is a different thing and belongs in Saved.
+- **A tool's own settings belong in its HUD, not in the layers sheet.** The snap
+  picker (`SnapPicker.tsx`) sits in the measure and route-draw panels because it
+  governs what the NEXT TAP does — it is part of the tool's mode, not a property
+  of the map. Layer visibility goes in the layers sheet; tool behaviour goes with
+  the tool. Use the wrapped `SegmentedControl` from the kit for the choice (§9:
+  never hand-roll a chip row), and say plainly when the setting cannot take
+  effect — snapping needs the vector basemap at a zoom that still carries paths
+  and creeks, so the picker names that rather than silently doing nothing.
 - **Tools live behind ONE `+` button, and its tray opens SIDEWAYS.** Every tool
   added to the column is a permanent piece of map the user can't see, so they
   share one slot (`MapToolGroup.tsx`). Sideways, not upward, because the column

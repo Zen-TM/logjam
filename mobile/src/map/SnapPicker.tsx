@@ -1,18 +1,23 @@
 // Snap picker for the measure and route-draw HUDs.
 //
-// Segmented rather than a dropdown: four short options, and on a phone in the
-// field a single tap beats opening a menu. It sits in the tool that it changes
-// — it governs what the NEXT tap does, not a map layer.
-import { Pressable, StyleSheet, Text, View } from "react-native";
+// A wrapped SegmentedControl from the kit, not a hand-rolled chip row
+// (DESIGN.md §9): four short options, all visible at once, and per §2 the
+// wrapped form is right because this picks a SETTING rather than filtering a
+// list below it.
+//
+// It lives in the tool it changes, not in the layers sheet, because it governs
+// what the next tap does.
+import { StyleSheet, Text, View } from "react-native";
 import type { SnapMode } from "@logjam/shared";
 
-import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
+import { fontSize, fontWeight, spacing, theme } from "../theme";
+import { SegmentedControl } from "../ui";
 
-const OPTIONS: { mode: SnapMode; label: string }[] = [
-  { mode: "off", label: "Off" },
-  { mode: "trails", label: "Trails" },
-  { mode: "waterways", label: "Creeks" },
-  { mode: "both", label: "Both" },
+const OPTIONS: { value: SnapMode; label: string }[] = [
+  { value: "off", label: "Off" },
+  { value: "trails", label: "Trails" },
+  { value: "waterways", label: "Creeks" },
+  { value: "both", label: "Both" },
 ];
 
 export function SnapPicker({
@@ -29,27 +34,12 @@ export function SnapPicker({
 }) {
   return (
     <View style={styles.wrap}>
-      <View style={styles.row}>
-        <Text style={styles.label}>Snap</Text>
-        {OPTIONS.map((option) => {
-          const active = option.mode === mode;
-          return (
-            <Pressable
-              key={option.mode}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active, disabled }}
-              accessibilityLabel={`Snap to ${option.label}`}
-              disabled={disabled}
-              onPress={() => onChange(option.mode)}
-              style={[styles.chip, active && styles.chipActive]}
-            >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <Text style={styles.label}>Snap to</Text>
+      <SegmentedControl
+        options={OPTIONS.map((option) => ({ ...option, disabled }))}
+        value={mode}
+        onChange={onChange}
+      />
       {mode !== "off" && unavailable ? (
         <Text style={styles.note}>
           Needs the OSM Default (vector) basemap, zoomed in.
@@ -61,27 +51,12 @@ export function SnapPicker({
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing(0.5) },
-  row: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
   label: {
     color: theme.textMuted,
     fontSize: fontSize.xs,
     fontWeight: fontWeight.medium,
     textTransform: "uppercase",
     letterSpacing: 0.8,
-    marginRight: spacing(0.25),
   },
-  chip: {
-    paddingHorizontal: spacing(0.75),
-    paddingVertical: spacing(0.35),
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: withAlpha(theme.accent, 0.35),
-  },
-  chipActive: {
-    backgroundColor: withAlpha(theme.accent, 0.25),
-    borderColor: theme.accent,
-  },
-  chipText: { color: theme.textMuted, fontSize: fontSize.xs },
-  chipTextActive: { color: theme.textPrimary, fontWeight: fontWeight.medium },
   note: { color: theme.warning, fontSize: fontSize.xs },
 });
