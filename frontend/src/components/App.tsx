@@ -25,6 +25,10 @@ import type { CompletedTopoJob, CompletedOverlaysResponse } from "../topoLayerTy
 import {
   useCanyons,
   useCanyonTracks,
+  useRoutes,
+  type TRoute,
+  createRoute,
+  updateRoute,
   useSharedCanyons,
   useFriends,
   useNotifications,
@@ -52,7 +56,9 @@ import {
 } from "../consent";
 import ConsentGate from "./ConsentGate";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
-import { TOPO_OVERLAY_SOURCE, GEOPDF_OVERLAY_ATTRIBUTION } from "@logjam/shared";
+import { RouteDrawPanel } from "./routes/RouteDrawPanel";
+import RouteNameDialog from "./dialogs/RouteNameDialog";
+import { TOPO_OVERLAY_SOURCE, GEOPDF_OVERLAY_ATTRIBUTION, MAX_ROUTE_POINTS } from "@logjam/shared";
 import type { OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import { useStoredState } from "../useStoredState";
@@ -119,6 +125,17 @@ function App() {
   const [showOwnedCanyons, setShowOwnedCanyons] = useStoredState("logjam.showOwnedCanyons", true);
   const [showSharedCanyons, setShowSharedCanyons] = useStoredState("logjam.showSharedCanyons", true);
   const [showCanyonTracks, setShowCanyonTracks] = useStoredState("logjam.showCanyonTracks", false);
+  const [showRoutes, setShowRoutes] = useStoredState("logjam.showRoutes", true);
+
+  // Route draw/edit mode. The vertex list lives here (not in Map) so the HUD
+  // can show the running distance and drive undo. `editingRouteId` is null
+  // while drawing a new route.
+  const [drawingRoute, setDrawingRoute] = useState(false);
+  const [drawPoints, setDrawPoints] = useState<[number, number][]>([]);
+  const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
+  const [savingRoute, setSavingRoute] = useState(false);
+  const [namingRoute, setNamingRoute] = useState(false);
+  const [selectedRouteID, setSelectedRouteID] = useState<string | null>(null);
 
   // Coordinate picking mode for CanyonDialog
   const [pickingCoords, setPickingCoords] = useState(false);
@@ -372,6 +389,7 @@ function App() {
       notifications: "Alerts",
       account: "Account",
       "canyon-detail": "Canyon",
+      "route-detail": "Route",
     };
     document.title = activePanel ? `${panelTitles[activePanel]} — Logjam` : "Logjam";
   }, [activePanel]);
@@ -400,6 +418,11 @@ function App() {
     useSharedCanyons(authenticated);
   const { tracks: canyonTracks, refetch: refetchCanyonTracks } = useCanyonTracks(
     authenticated && showCanyonTracks,
+  );
+  // Routes load whenever the layer is on OR a draw/edit session is live (the
+  // editor needs the row it is editing even with the layer toggled off).
+  const { routes, refetch: refetchRoutes } = useRoutes(
+    authenticated && (showRoutes || drawingRoute),
   );
   // A canyon list change (e.g. after a track upload) should refresh the layer.
   useEffect(() => {
@@ -869,6 +892,47 @@ function App() {
   const pendingConsentMatchesCurrent =
     localStorage.getItem(PENDING_CONSENT_STORAGE_KEY) ===
     CURRENT_CONSENT_VERSION;
+  const selectedRoute = routes.find((r) => r.id === selectedRouteID) ?? null;
+
+  const startDrawingRoute = () => {
+    setEditingRouteId(null);
+    setDrawPoints([]);
+    setDrawingRoute(true);
+    setActivePanel(null);
+  };
+
+  const startEditingRoute = (route: TRoute) => {
+    setEditingRouteId(route.id);
+    setDrawPoints(route.points);
+    setDrawingRoute(true);
+    setActivePanel(null);
+  };
+
+  const cancelDrawingRoute = () => {
+    setDrawingRoute(false);
+    setDrawPoints([]);
+    setEditingRouteId(null);
+  };
+
+  const saveDrawnRoute = async (name: string) => {
+    setSavingRoute(true);
+    try {
+      const result = editingRouteId
+        ? await updateRoute(editingRouteId, { name, points: drawPoints })
+        : await createRoute({ name, points: drawPoints });
+      setNamingRoute(false);
+      cancelDrawingRoute();
+      refetchRoutes();
+      setSelectedRouteID(result.id);
+      setActivePanel("route-detail");
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't save the route."));
+    } finally {
+      setSavingRoute(false);
+    }
+  };
+
   if (currentUser && needsReconsent(currentUser) && !pendingConsentMatchesCurrent) {
     return <ConsentGate onAccepted={applyCurrentUser} onSignOut={auth.signOut} />;
   }
@@ -955,6 +1019,14 @@ function App() {
           setShowSharedCanyons={setShowSharedCanyons}
           showCanyonTracks={showCanyonTracks}
           setShowCanyonTracks={setShowCanyonTracks}
+          showRoutes={showRoutes}
+          setShowRoutes={setShowRoutes}
+          onStartDrawingRoute={startDrawingRoute}
+          selectedRoute={selectedRoute}
+          allRoutes={routes}
+          currentUserId={currentUser?.id ?? null}
+          onEditRoute={startEditingRoute}
+          onRoutesChanged={refetchRoutes}
           lidarEnabled={lidarEnabled}
           setLidarEnabled={setLidarEnabled}
           lidarLayerToggles={lidarLayerToggles}
@@ -1064,6 +1136,25 @@ function App() {
         showSharedCanyons={showSharedCanyons}
         showCanyonTracks={showCanyonTracks}
         canyonTracks={canyonTracks}
+        showRoutes={showRoutes}
+        routes={routes}
+        selectRoute={(id) => {
+          setSelectedRouteID(id);
+          setActivePanel("route-detail");
+        }}
+        drawingRoute={drawingRoute}
+        drawPoints={drawPoints}
+        editingRouteId={editingRouteId}
+        onDrawPointAdd={(lngLat) =>
+          setDrawPoints((current) =>
+            current.length >= MAX_ROUTE_POINTS ? current : [...current, lngLat],
+          )
+        }
+        onDrawPointMove={(index, lngLat) =>
+          setDrawPoints((current) =>
+            current.map((point, i) => (i === index ? lngLat : point)),
+          )
+        }
         selectCanyon={(id) => {
           setSelectedCanyonID(id);
           setActivePanel("canyon-detail");
@@ -1107,6 +1198,28 @@ function App() {
         onTopoSourceUnavailable={handleTopoSourceUnavailable}
       />
       </main>
+
+      {drawingRoute && (
+        <RouteDrawPanel
+          points={drawPoints}
+          editingName={routes.find((r) => r.id === editingRouteId)?.name ?? null}
+          onUndo={() => setDrawPoints((current) => current.slice(0, -1))}
+          onClear={() => setDrawPoints([])}
+          onSave={() => setNamingRoute(true)}
+          onCancel={cancelDrawingRoute}
+          saving={savingRoute}
+        />
+      )}
+
+      <RouteNameDialog
+        open={namingRoute}
+        initialName={
+          routes.find((r) => r.id === editingRouteId)?.name ?? "New route"
+        }
+        busy={savingRoute}
+        onSave={(name) => void saveDrawnRoute(name)}
+        onClose={() => setNamingRoute(false)}
+      />
 
       {selectingArea && (
         <div className={classes.selectAllButtons}>

@@ -8,4 +8,7 @@ export type PanelId =
   | "friends"
   | "notifications"
   | "account"
-  | "canyon-detail";
+  | "canyon-detail"
+  // Opened programmatically from a map click, like canyon-detail — never a
+  // nav item (NavItemId excludes both).
+  | "route-detail";

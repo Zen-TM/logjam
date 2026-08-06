@@ -1,0 +1,63 @@
+/* Floating HUD for the route draw/edit tool. Mirrors .pickBanner's position
+   and depth so map-mode chrome reads as one family, but this one is
+   interactive, so it takes pointer events. */
+.panel {
+  position: absolute;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  min-width: 260px;
+  max-width: min(92vw, 380px);
+  background: var(--theme-primary);
+  color: var(--theme-text-primary);
+  padding: 0.75em 1em;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-float);
+  font-size: var(--text-sm);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1em;
+}
+
+.title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.distance {
+  font-variant-numeric: tabular-nums;
+  color: var(--theme-accent);
+  font-weight: 600;
+}
+
+.hint {
+  margin: 0.4em 0 0;
+  color: var(--theme-text-secondary);
+  font-size: var(--text-xs);
+}
+
+.warning {
+  margin: 0.4em 0 0;
+  color: var(--theme-warning, #f59e0b);
+  font-size: var(--text-xs);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  margin-top: 0.7em;
+}
+
+@media (max-width: 768px) {
+  .panel {
+    max-width: 92vw;
+  }
+}

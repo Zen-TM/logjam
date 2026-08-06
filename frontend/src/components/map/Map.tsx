@@ -45,7 +45,7 @@ import { useMediaQuery } from "@mui/material";
 import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
 import { MOBILE_MAX_WIDTH_PX } from "../../useIsMobile";
-import type { TCanyon, TFilters, CanyonTrack } from "../../canyonUtils";
+import type { TCanyon, TFilters, CanyonTrack, TRoute } from "../../canyonUtils";
 import type { GeoJsonPolygonal } from "../../topoLayerTypes";
 import { passesFilters, isCanyonDoneByViewer } from "../../canyonUtils";
 import { fetchTrackGeoJSON } from "../media/trackGeo";
@@ -325,6 +325,14 @@ function Map({
   showSharedCanyons,
   showCanyonTracks,
   canyonTracks,
+  showRoutes,
+  routes,
+  selectRoute,
+  drawingRoute,
+  drawPoints,
+  editingRouteId,
+  onDrawPointAdd,
+  onDrawPointMove,
   selectingArea,
   onAreaSelected,
   selectingBbox,
@@ -359,6 +367,20 @@ function Map({
   showSharedCanyons: boolean;
   showCanyonTracks: boolean;
   canyonTracks: CanyonTrack[];
+  // User-authored routes. Geometry arrives inline, so unlike canyonTracks
+  // there is nothing to fetch and parse per feature.
+  showRoutes: boolean;
+  routes: TRoute[];
+  selectRoute: (id: string) => void;
+  // Draw/edit mode. The vertex list lives in App so the HUD can render the
+  // running distance and drive undo; the map only reports gestures.
+  drawingRoute: boolean;
+  drawPoints: [number, number][];
+  /** Route being edited; null while drawing a new one. The saved-routes layer
+   * skips it so the draft layer isn't drawing over a stale copy. */
+  editingRouteId: string | null;
+  onDrawPointAdd: (lngLat: [number, number]) => void;
+  onDrawPointMove: (index: number, lngLat: [number, number]) => void;
   selectingArea: boolean;
   onAreaSelected: (ids: string[]) => void;
   selectingBbox?: boolean;
@@ -437,6 +459,24 @@ function Map({
     pickModeRef.current =
       pickingCoords || selectingArea || (selectingGeoPdfExtent ?? false);
   }, [pickingCoords, selectingArea, selectingGeoPdfExtent]);
+
+  // Route draw/edit mode, read by the once-on-load layer handlers.
+  const drawingRouteRef = useRef(false);
+  useEffect(() => {
+    drawingRouteRef.current = drawingRoute;
+  }, [drawingRoute]);
+  const selectRouteRef = useRef(selectRoute);
+  useEffect(() => {
+    selectRouteRef.current = selectRoute;
+  }, [selectRoute]);
+  const onDrawPointAddRef = useRef(onDrawPointAdd);
+  useEffect(() => {
+    onDrawPointAddRef.current = onDrawPointAdd;
+  }, [onDrawPointAdd]);
+  const onDrawPointMoveRef = useRef(onDrawPointMove);
+  useEffect(() => {
+    onDrawPointMoveRef.current = onDrawPointMove;
+  }, [onDrawPointMove]);
 
   const onMapViewChangeRef = useRef(onMapViewChange);
   useEffect(() => {
@@ -615,6 +655,59 @@ function Map({
           ],
           "line-width": ["interpolate", ["linear"], ["zoom"], 7, 2, 14, 4],
           "line-opacity": 0.9,
+        },
+      });
+
+      // User-authored routes. Same treatment as canyon-tracks (below the
+      // markers so pins stay clickable), but the geometry is already in hand —
+      // no per-feature fetch. Hidden until the "Routes" layer is toggled on.
+      map.addSource("routes", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: "routes-lines",
+        type: "line",
+        source: "routes",
+        layout: {
+          visibility: "none",
+          "line-cap": "round",
+          "line-join": "round",
+        },
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 7, 2, 14, 4],
+          "line-opacity": 0.9,
+        },
+      });
+
+      // The route being drawn or edited. Dashed, so an unsaved line never
+      // reads as a saved one, and unpinned above the saved routes.
+      map.addSource("route-draft", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: "route-draft-line",
+        type: "line",
+        source: "route-draft",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": readCssVar("--theme-accent", "#3b82f6"),
+          "line-width": 3,
+          "line-dasharray": [1, 1.5],
+        },
+      });
+      map.addLayer({
+        id: "route-draft-vertices",
+        type: "circle",
+        source: "route-draft",
+        filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-radius": 5,
+          "circle-color": "#ffffff",
+          "circle-stroke-width": 2,
+          "circle-stroke-color": readCssVar("--theme-accent", "#3b82f6"),
         },
       });
 
@@ -1092,7 +1185,143 @@ function Map({
       "visibility",
       vis(showCanyonTracks),
     );
-  }, [showOwnedCanyons, showSharedCanyons, showCanyonTracks, mapLoaded]);
+    // The route being drawn stays visible even with the Routes layer off —
+    // hiding your own in-progress work would read as the tool being broken.
+    mapRef.current.setLayoutProperty(
+      "routes-lines",
+      "visibility",
+      vis(showRoutes || drawingRoute),
+    );
+  }, [
+    showOwnedCanyons,
+    showSharedCanyons,
+    showCanyonTracks,
+    showRoutes,
+    drawingRoute,
+    mapLoaded,
+  ]);
+
+  // Push saved routes to the map. No fetch/parse step: geometry is inline.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const source = mapRef.current.getSource("routes") as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+    source.setData({
+      type: "FeatureCollection",
+      features: routes
+        // The route being edited is drawn by the draft layer instead, so it
+        // isn't painted twice (and stale) underneath the handles.
+        .filter((route) => route.id !== editingRouteId)
+        .map((route) => ({
+          type: "Feature" as const,
+          geometry: { type: "LineString" as const, coordinates: route.points },
+          properties: { id: route.id, name: route.name, color: route.color },
+        })),
+    });
+  }, [routes, mapLoaded, editingRouteId]);
+
+  // Draw/edit mode: click appends a vertex. Follows the coord-pick idiom
+  // (crosshair cursor, handler torn down on exit), except the listener is
+  // `on` rather than `once` — a route is many clicks, not one.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || !drawingRoute) return;
+    const map = mapRef.current;
+    map.getCanvas().style.cursor = "crosshair";
+    const handleClick = (e: maplibregl.MapMouseEvent) => {
+      onDrawPointAddRef.current([e.lngLat.lng, e.lngLat.lat]);
+    };
+    map.on("click", handleClick);
+    return () => {
+      map.getCanvas().style.cursor = "";
+      map.off("click", handleClick);
+    };
+  }, [drawingRoute, mapLoaded]);
+
+  // Draft geometry: the line plus a point per vertex. Mirrors measureShape on
+  // mobile — the line only exists once there are two ends.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const source = mapRef.current.getSource("route-draft") as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+    source.setData({
+      type: "FeatureCollection",
+      features: drawingRoute
+        ? [
+            ...(drawPoints.length >= 2
+              ? [
+                  {
+                    type: "Feature" as const,
+                    geometry: {
+                      type: "LineString" as const,
+                      coordinates: drawPoints,
+                    },
+                    properties: {},
+                  },
+                ]
+              : []),
+            ...drawPoints.map((point) => ({
+              type: "Feature" as const,
+              geometry: { type: "Point" as const, coordinates: point },
+              properties: {},
+            })),
+          ]
+        : [],
+    });
+  }, [drawPoints, drawingRoute, mapLoaded]);
+
+  // Draggable vertex handles. MapLibre markers do the drag maths natively, so
+  // this only has to keep one marker per vertex alive and report the drop.
+  const vertexMarkersRef = useRef<maplibregl.Marker[]>([]);
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+    // Rebuild wholesale: the vertex count changes on nearly every gesture, and
+    // a handful of markers is far cheaper than diffing them.
+    for (const marker of vertexMarkersRef.current) marker.remove();
+    vertexMarkersRef.current = [];
+    if (!drawingRoute) return;
+
+    drawPoints.forEach((point, index) => {
+      const el = document.createElement("div");
+      el.className = classes.routeVertexHandle;
+      el.title = "Drag to move this point";
+      const marker = new maplibregl.Marker({ element: el, draggable: true })
+        .setLngLat(point)
+        .addTo(map);
+      marker.on("dragend", () => {
+        const { lng, lat } = marker.getLngLat();
+        onDrawPointMoveRef.current(index, [lng, lat]);
+      });
+      vertexMarkersRef.current.push(marker);
+    });
+
+    return () => {
+      for (const marker of vertexMarkersRef.current) marker.remove();
+      vertexMarkersRef.current = [];
+    };
+  }, [drawPoints, drawingRoute, mapLoaded]);
+
+  // Click a route line to open its detail panel — suppressed while a pick or
+  // draw mode owns the click.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+    const handleClick = (
+      e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] },
+    ) => {
+      if (pickModeRef.current || drawingRouteRef.current) return;
+      const id = e.features?.[0]?.properties?.id;
+      if (typeof id === "string") selectRouteRef.current(id);
+    };
+    map.on("click", "routes-lines", handleClick);
+    return () => {
+      map.off("click", "routes-lines", handleClick);
+    };
+  }, [mapLoaded]);
 
   // Toggle base layer visibility
   useEffect(() => {

@@ -439,6 +439,74 @@ export function useCanyonTracks(enabled: boolean) {
 }
 
 
+// ── Routes ───────────────────────────────────────────────────────────────
+// User-authored lines. Unlike tracks, geometry arrives INLINE (no presigned
+// blob to fetch and parse) — see the Route model in the API schema.
+
+export type TRoute = {
+  id: string;
+  ownerId: string;
+  canyonId: string | null;
+  name: string;
+  color: string;
+  points: [number, number][];
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** A PATCH/POST that changed a canyon link reports which route it displaced. */
+export type RouteWriteResult = TRoute & {
+  displacedRoute: { id: string; name: string } | null;
+};
+
+export function getRoutes(): Promise<TRoute[]> {
+  return apiFetch<TRoute[]>("/routes");
+}
+
+export function createRoute(data: {
+  name: string;
+  points: [number, number][];
+  canyonId?: string | null;
+}): Promise<RouteWriteResult> {
+  return apiFetch<RouteWriteResult>("/routes", { method: "POST", body: data });
+}
+
+export function updateRoute(
+  id: string,
+  data: Partial<{ name: string; points: [number, number][]; canyonId: string | null }>,
+): Promise<RouteWriteResult> {
+  return apiFetch<RouteWriteResult>(`/routes/${id}`, {
+    method: "PATCH",
+    body: data,
+  });
+}
+
+export function deleteRoute(id: string): Promise<void> {
+  return apiFetch<void>(`/routes/${id}`, { method: "DELETE" });
+}
+
+/** Fetches routes only while the map layer is enabled, mirroring
+ * useCanyonTracks. Bump `refetch` after any route write. */
+export function useRoutes(enabled: boolean) {
+  const [routes, setRoutes] = useState<TRoute[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [fetchCount, setFetchCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    getRoutes()
+      .then(setRoutes)
+      .catch((err) => {
+        console.error(err);
+        setError(messageFromError(err, "Couldn't load routes."));
+      });
+  }, [enabled, fetchCount]);
+
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+
+  return { routes, error, refetch };
+}
+
 export function useCanyons(enabled: boolean) {
   const [canyons, setCanyons] = useState<TCanyon[]>([]);
   // True owner-filtered total before the server's list cap; null until known.

@@ -102,3 +102,18 @@
 .geoPdfButton:hover {
   background: color-mix(in srgb, var(--theme-accent) 80%, transparent);
 }
+
+/* Draggable vertex handle for the route draw/edit tool. Larger than the
+   painted circle underneath it so it stays grabbable on a trackpad; the
+   painted circle is what the user actually sees. */
+.routeVertexHandle {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full, 50%);
+  background: transparent;
+  cursor: grab;
+}
+
+.routeVertexHandle:active {
+  cursor: grabbing;
+}

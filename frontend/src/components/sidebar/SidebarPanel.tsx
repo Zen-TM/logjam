@@ -13,6 +13,7 @@ import type {
   TTripLog,
   TAnalytics,
   TUser,
+  TRoute,
 } from "../../canyonUtils";
 import type { TripLogCustomFieldDef, VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
@@ -26,6 +27,7 @@ import LidarPanel from "./panels/LidarPanel";
 import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import CanyonDetailPanel from "./panels/CanyonDetailPanel";
+import RouteDetailPanel from "./panels/RouteDetailPanel";
 import AccountPanel from "./panels/AccountPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
@@ -46,6 +48,7 @@ const PANEL_TITLES: Record<PanelId, string> = {
   notifications: "Alerts",
   account: "Account",
   "canyon-detail": "Canyon Detail",
+  "route-detail": "Route",
 };
 
 function SidebarPanel({
@@ -59,6 +62,9 @@ function SidebarPanel({
   setShowSharedCanyons,
   showCanyonTracks,
   setShowCanyonTracks,
+  showRoutes,
+  setShowRoutes,
+  onStartDrawingRoute,
   lidarEnabled,
   setLidarEnabled,
   lidarLayerToggles,
@@ -121,6 +127,11 @@ function SidebarPanel({
   // Canyon detail
   canyon,
   isOwnedCanyon,
+  selectedRoute,
+  allRoutes,
+  currentUserId,
+  onEditRoute,
+  onRoutesChanged,
   onPickCoords,
   pickingCoords,
   onCancelPickCoords,
@@ -216,6 +227,15 @@ function SidebarPanel({
   // Canyon detail
   canyon: TCanyon | undefined;
   isOwnedCanyon: boolean;
+  // Routes
+  showRoutes: boolean;
+  setShowRoutes: (v: boolean) => void;
+  onStartDrawingRoute: () => void;
+  selectedRoute: TRoute | null;
+  allRoutes: TRoute[];
+  currentUserId: string | null;
+  onEditRoute: (route: TRoute) => void;
+  onRoutesChanged: () => void;
   onPickCoords: (onPicked: (lat: number, lng: number) => void) => void;
   pickingCoords: boolean;
   onCancelPickCoords: () => void;
@@ -304,6 +324,9 @@ function SidebarPanel({
             setShowSharedCanyons={setShowSharedCanyons}
             showCanyonTracks={showCanyonTracks}
             setShowCanyonTracks={setShowCanyonTracks}
+            showRoutes={showRoutes}
+            setShowRoutes={setShowRoutes}
+            onStartDrawingRoute={onStartDrawingRoute}
             lidarEnabled={lidarEnabled}
             setLidarEnabled={setLidarEnabled}
             lidarLayerToggles={lidarLayerToggles}
@@ -445,6 +468,17 @@ function SidebarPanel({
             onQuotaChanged={onQuotaChanged}
             onRefetchTripLogs={onRefetchTripLogs}
             onAfterDelete={() => setActivePanel("canyons")}
+          />
+        )}
+        {activePanel === "route-detail" && (
+          <RouteDetailPanel
+            route={selectedRoute}
+            currentUserId={currentUserId}
+            ownedCanyons={canyons}
+            allRoutes={allRoutes}
+            onEdit={onEditRoute}
+            onChanged={onRoutesChanged}
+            onClose={() => setActivePanel(null)}
           />
         )}
       </div>

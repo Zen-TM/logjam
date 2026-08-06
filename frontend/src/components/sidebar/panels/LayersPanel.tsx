@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Switch } from "@mui/material";
-import { GripVertical, Info } from "lucide-react";
+import { GripVertical, Info, Pencil } from "lucide-react";
 import classes from "./LayersPanel.module.css";
 import { previewUrlFor } from "./tilePreview";
 import type { TileLayer } from "./tilePreview";
@@ -27,6 +27,9 @@ function LayersPanel({
   setShowSharedCanyons,
   showCanyonTracks,
   setShowCanyonTracks,
+  showRoutes,
+  setShowRoutes,
+  onStartDrawingRoute,
   lidarEnabled,
   setLidarEnabled,
   lidarLayerToggles,
@@ -46,6 +49,9 @@ function LayersPanel({
   setShowSharedCanyons: (v: boolean) => void;
   showCanyonTracks: boolean;
   setShowCanyonTracks: (v: boolean) => void;
+  showRoutes: boolean;
+  setShowRoutes: (v: boolean) => void;
+  onStartDrawingRoute: () => void;
   lidarEnabled: boolean;
   setLidarEnabled: (v: boolean) => void;
   lidarLayerToggles: Record<string, boolean>;
@@ -157,6 +163,24 @@ function LayersPanel({
           sx={switchSx("var(--theme-accent)")}
         />
       </div>
+
+      <div className={classes.toggleRow}>
+        <span>Routes</span>
+        <Switch
+          size="small"
+          checked={showRoutes}
+          onChange={(_, v) => setShowRoutes(v)}
+          sx={switchSx("var(--theme-accent)")}
+        />
+      </div>
+
+      <button
+        type="button"
+        className={classes.drawRouteBtn}
+        onClick={onStartDrawingRoute}
+      >
+        <Pencil size={14} /> Draw a route
+      </button>
 
       <div className={classes.lidarRow}>
         <span>LiDAR Topos</span>
