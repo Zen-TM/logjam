@@ -84,11 +84,7 @@ import { readBasemapPreference, setBasemapPreference } from "./basemapPreference
 import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
 import { offlineCoverageMask } from "./offlineMask";
 import { MeasurePanel } from "./MeasurePanel";
-import {
-  measureShape,
-  nearestContourElevation,
-  type MeasurePoint,
-} from "./measure";
+import { measureShape, type MeasurePoint } from "./measure";
 import { BottomSheet } from "../ui/BottomSheet";
 import { IconButton } from "../ui/IconButton";
 import { Row } from "../ui/Row";
@@ -165,12 +161,6 @@ const PROTOMAPS_FLAVOR = "light" as const;
 const DEGENERATE_BBOX_DEGREES = 1e-5;
 const SINGLE_POINT_ZOOM = 14;
 
-// Measure tool. The height under a tap is read off the contour lines rendered
-// beneath it (see measure.ts for why there is no DEM): this is how far, in
-// screen pixels, the query looks around the tap for one. Roughly a fingertip —
-// wide enough to catch a contour the user was aiming at, narrow enough that it
-// doesn't grab the next one along on steep ground.
-const MEASURE_CONTOUR_REACH_PX = 24;
 /** The measured line: the scheme accent, so it reads as chrome, not as data. */
 const MEASURE_COLOR = theme.accent;
 
@@ -350,8 +340,8 @@ export function MapScreen({
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
   // Measure tool: null = off, an array = armed and collecting taps. Ids come
-  // from a counter rather than the array length, because the async elevation
-  // lookup patches a point that an undo may already have removed.
+  // from a counter rather than the array length so a point stays identifiable
+  // across an undo.
   const [measurePoints, setMeasurePoints] = useState<MeasurePoint[] | null>(null);
   const measureId = useRef(0);
   const measuring = measurePoints !== null;
@@ -643,77 +633,22 @@ export function MapScreen({
     [allowedCanyonIds, canyons.data],
   );
 
-  // Measure tool. A tap lands a point IMMEDIATELY with no height, and the
-  // contour lookup patches it in when the query returns — the alternative
-  // (await, then append) makes every tap feel laggy and lands rapid taps out
-  // of order. `screenPoint` comes free from a map/layer press; a call without
-  // one (a tapped waypoint) asks the map where that coordinate is drawn.
-  const addMeasurePoint = useCallback(
-    (
-      longitude: number,
-      latitude: number,
-      screenPoint?: { x: number; y: number },
-    ) => {
-      measureId.current += 1;
-      const id = measureId.current;
-      setMeasurePoints((current) =>
-        current === null
-          ? current
-          : [...current, { id, longitude, latitude, elevationM: null }],
-      );
-      void (async () => {
-        try {
-          const map = mapRef.current;
-          if (!map) return;
-          let point = screenPoint;
-          if (!point) {
-            const view = await map.getPointInView([longitude, latitude]);
-            point = { x: view[0], y: view[1] };
-          }
-          // Tap-sized rect around the point, in screen coordinates:
-          // [top, right, bottom, left] (MLRN's ConvertUtils.toRectF order).
-          const reach = MEASURE_CONTOUR_REACH_PX;
-          const features = await map.queryRenderedFeaturesInRect(
-            [point.y - reach, point.x + reach, point.y + reach, point.x - reach],
-            ["has", "elev"],
-            [],
-          );
-          const elevationM = nearestContourElevation(
-            features.features,
-            longitude,
-            latitude,
-          );
-          if (elevationM == null) return;
-          setMeasurePoints((current) =>
-            current === null
-              ? current
-              : current.map((existing) =>
-                  existing.id === id ? { ...existing, elevationM } : existing,
-                ),
-          );
-        } catch (err) {
-          // A failed height query leaves the point at "no contour here" — the
-          // panel already says the heights are incomplete.
-          console.error(err);
-        }
-      })();
-    },
-    [],
-  );
+  // Measure tool. A tap lands a point immediately; distance is pure maths over
+  // the tapped coordinates, so there is nothing to look up and nothing async.
+  const addMeasurePoint = useCallback((longitude: number, latitude: number) => {
+    measureId.current += 1;
+    const id = measureId.current;
+    setMeasurePoints((current) =>
+      current === null ? current : [...current, { id, longitude, latitude }],
+    );
+  }, []);
 
   const handleMapPress = useCallback(
     (feature: GeoJSON.Feature) => {
       setFollowMode("off");
       if (!measuring || feature.geometry.type !== "Point") return;
       const [lon, lat] = feature.geometry.coordinates as [number, number];
-      const props = feature.properties;
-      const x = props?.screenPointX;
-      const y = props?.screenPointY;
-      addMeasurePoint(
-        lon,
-        lat,
-        typeof x === "number" && typeof y === "number" ? { x, y } : undefined,
-      );
+      addMeasurePoint(lon, lat);
     },
     [addMeasurePoint, measuring],
   );
@@ -729,11 +664,7 @@ export function MapScreen({
       // nothing and reads as a broken tool.
       if (measuring) {
         if (event.coordinates) {
-          addMeasurePoint(
-            event.coordinates.longitude,
-            event.coordinates.latitude,
-            event.point,
-          );
+          addMeasurePoint(event.coordinates.longitude, event.coordinates.latitude);
         }
         return;
       }

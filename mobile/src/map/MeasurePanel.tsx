@@ -4,10 +4,10 @@
 // notice stack), and it wears the same surface treatment so the chrome over the
 // map reads as one family.
 //
-// Distance is the headline — it is the number the tool exists for. Ascent and
-// descent ride beside it, and say "—" rather than "0 m" when no contour was
-// found under the taps, because a confident zero is a lie about unknown ground
-// (see the elevation ceiling in measure.ts).
+// Distance is the whole readout — it is the number the tool exists for, and it
+// needs no data beyond the taps. Ascent/descent were removed with the
+// contour-derived heights (see measure.ts); they come back when the statewide
+// DEM lands, derived on demand rather than stored.
 import { StyleSheet, Text, View } from "react-native";
 import { formatDistanceM } from "@logjam/shared";
 
@@ -38,20 +38,7 @@ export function MeasurePanel({
           </Text>
           <Text style={styles.distance}>{formatDistanceM(stats.distanceM)}</Text>
         </View>
-        <View style={styles.stats}>
-          <Stat label="Ascent" value={heightText(stats.gainM)} />
-          <Stat label="Descent" value={heightText(stats.lossM)} />
-        </View>
       </View>
-
-      {/* Says WHY the heights are missing, so "—" doesn't read as a bug. The
-          only place in the app that explains the contour-derived ceiling. */}
-      {points.length >= 2 && !stats.elevationComplete ? (
-        <Text style={styles.note}>
-          Heights come from contour lines — turn on a vector topo overlay to
-          measure climb.
-        </Text>
-      ) : null}
 
       <View style={styles.actions}>
         <Button
@@ -71,19 +58,6 @@ export function MeasurePanel({
           onPress={onClear}
         />
       </View>
-    </View>
-  );
-}
-
-function heightText(metres: number | null): string {
-  return metres == null ? "—" : `${Math.round(metres)} m`;
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
     </View>
   );
 }
@@ -117,25 +91,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
     fontVariant: ["tabular-nums"],
-  },
-  stats: { flexDirection: "row", gap: spacing(2) },
-  stat: { alignItems: "flex-end", gap: spacing(0.25) },
-  statLabel: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  statValue: {
-    color: theme.textPrimary,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-    fontVariant: ["tabular-nums"],
-  },
-  note: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
   },
   actions: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   spacer: { flex: 1 },
