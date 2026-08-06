@@ -2,10 +2,10 @@
 // placement) and reports the running distance so the user can judge the line
 // as they place it.
 //
-// No elevation readout: gain/loss would need a DEM, and the contour-derived
-// figure the measure tool used only worked inside a generated topo footprint.
-// Distance needs no data and is always correct.
+// Snapping is a per-session choice, offered here rather than in Layers because
+// it changes what the NEXT click does — it belongs with the tool it modifies.
 import { formatDistanceM, routeLengthM, MAX_ROUTE_POINTS } from "@logjam/shared";
+import type { SnapMode } from "../map/Map";
 import classes from "./RouteDrawPanel.module.css";
 import shared from "../../styles/shared.module.css";
 
@@ -18,6 +18,10 @@ type RouteDrawPanelProps = {
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
+  snapMode: SnapMode;
+  onSnapModeChange: (mode: SnapMode) => void;
+  /** True when the map is zoomed out past where the basemap carries ways. */
+  snapUnavailable: boolean;
 };
 
 export function RouteDrawPanel({
@@ -28,6 +32,9 @@ export function RouteDrawPanel({
   onSave,
   onCancel,
   saving,
+  snapMode,
+  onSnapModeChange,
+  snapUnavailable,
 }: RouteDrawPanelProps): React.JSX.Element {
   const canSave = points.length >= 2 && !saving;
   const atCap = points.length >= MAX_ROUTE_POINTS;
@@ -50,6 +57,27 @@ export function RouteDrawPanel({
             ? "Click again to extend the line. Drag a point to move it."
             : `${points.length} points · drag to adjust`}
       </p>
+
+      <label className={classes.snapRow}>
+        <span>Snap to</span>
+        <select
+          className={classes.snapSelect}
+          value={snapMode}
+          onChange={(e) => onSnapModeChange(e.target.value as SnapMode)}
+          disabled={saving}
+        >
+          <option value="off">Nothing (straight lines)</option>
+          <option value="trails">Trails</option>
+          <option value="waterways">Creeks &amp; rivers</option>
+          <option value="both">Trails, creeks &amp; rivers</option>
+        </select>
+      </label>
+
+      {snapMode !== "off" && snapUnavailable && (
+        <p className={classes.warning}>
+          Zoom in to snap — tracks and creeks aren't in the map at this zoom.
+        </p>
+      )}
 
       {atCap && (
         <p className={classes.warning}>

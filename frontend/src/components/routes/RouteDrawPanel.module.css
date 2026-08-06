@@ -61,3 +61,24 @@
     max-width: 92vw;
   }
 }
+
+/* Snap picker. Sits between the hint and the actions: it changes what the next
+   click does, so it reads before the buttons that end the session. */
+.snapRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: var(--text-xs);
+  color: var(--theme-text-secondary);
+}
+
+.snapSelect {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--theme-text-primary);
+  background: var(--theme-secondary);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--radius-xs);
+  padding: 0.25em 0.4em;
+}

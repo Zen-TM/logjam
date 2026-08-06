@@ -9,6 +9,9 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-csp-worker?url";
 setWorkerUrl(maplibreWorkerUrl);
 import { Protocol } from "pmtiles";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
+import { snapSegment, type SnapLine, type SnapMode } from "@logjam/shared";
+
+export type { SnapMode };
 
 // Register PMTiles protocol for serving topo overlay layers from S3
 const pmtilesProtocol = new Protocol();
@@ -206,6 +209,56 @@ function addProtomapsBasemap(
   }
 }
 
+/**
+ * Below this zoom the vector basemap serves simplified tiles with creeks and
+ * paths dropped entirely (verified against the NSW extract: at z12 a canyoning
+ * tile carries one "river" and no streams; at z14+ it carries several streams
+ * and every path). Snapping there would silently do nothing, so the UI says so
+ * instead.
+ */
+export const SNAP_MIN_ZOOM = 14;
+
+/**
+ * Candidate ways for snapping, read out of the loaded vector basemap tiles.
+ *
+ * Requires the Protomaps basemap to be the active one — the raster basemaps
+ * have no queryable geometry at all. Returns [] otherwise, which the caller
+ * renders as "no snap", i.e. the straight line.
+ *
+ * Features repeat across neighbouring tile buffers; that is not deduplicated
+ * here because buildSnapGraph already collapses duplicate vertices onto one
+ * node.
+ */
+function collectSnapLines(map: maplibregl.Map, mode: SnapMode): SnapLine[] {
+  if (mode === "off" || !map.getSource(PROTOMAPS_SOURCE_ID)) return [];
+  const wanted: { sourceLayer: string; kinds: string[] }[] = [];
+  if (mode === "trails" || mode === "both") {
+    wanted.push({ sourceLayer: "roads", kinds: ["path"] });
+  }
+  if (mode === "waterways" || mode === "both") {
+    wanted.push({ sourceLayer: "water", kinds: ["stream", "river", "canal"] });
+  }
+
+  const lines: SnapLine[] = [];
+  for (const { sourceLayer, kinds } of wanted) {
+    const features = map.querySourceFeatures(PROTOMAPS_SOURCE_ID, {
+      sourceLayer,
+      filter: ["in", ["get", "kind"], ["literal", kinds]],
+    });
+    for (const feature of features) {
+      const geometry = feature.geometry;
+      if (geometry.type === "LineString") {
+        lines.push({ coords: geometry.coordinates as [number, number][] });
+      } else if (geometry.type === "MultiLineString") {
+        for (const part of geometry.coordinates) {
+          lines.push({ coords: part as [number, number][] });
+        }
+      }
+    }
+  }
+  return lines;
+}
+
 /** Every layer id belonging to the Protomaps band, in style order. */
 function protomapsLayerIds(map: maplibregl.Map): string[] {
   return map
@@ -401,6 +454,7 @@ function Map({
   selectRoute,
   drawingRoute,
   drawPoints,
+  snapMode,
   editingRouteId,
   onDrawPointAdd,
   onDrawPointMove,
@@ -447,10 +501,13 @@ function Map({
   // running distance and drive undo; the map only reports gestures.
   drawingRoute: boolean;
   drawPoints: [number, number][];
+  /** Whether new segments follow trails/creeks from the vector basemap. */
+  snapMode: SnapMode;
   /** Route being edited; null while drawing a new one. The saved-routes layer
    * skips it so the draft layer isn't drawing over a stale copy. */
   editingRouteId: string | null;
-  onDrawPointAdd: (lngLat: [number, number]) => void;
+  /** Appends one or more vertices — more than one when a segment snapped. */
+  onDrawPointAdd: (points: [number, number][]) => void;
   onDrawPointMove: (index: number, lngLat: [number, number]) => void;
   selectingArea: boolean;
   onAreaSelected: (ids: string[]) => void;
@@ -541,6 +598,17 @@ function Map({
   useEffect(() => {
     selectRouteRef.current = selectRoute;
   }, [selectRoute]);
+  // Read inside the click handler, which is installed once per draw session:
+  // without refs it would close over the first render's points and snap every
+  // segment from the same stale vertex.
+  const drawPointsRef = useRef(drawPoints);
+  useEffect(() => {
+    drawPointsRef.current = drawPoints;
+  }, [drawPoints]);
+  const snapModeRef = useRef(snapMode);
+  useEffect(() => {
+    snapModeRef.current = snapMode;
+  }, [snapMode]);
   const onDrawPointAddRef = useRef(onDrawPointAdd);
   useEffect(() => {
     onDrawPointAddRef.current = onDrawPointAdd;
@@ -1322,7 +1390,26 @@ function Map({
     const map = mapRef.current;
     map.getCanvas().style.cursor = "crosshair";
     const handleClick = (e: maplibregl.MapMouseEvent) => {
-      onDrawPointAddRef.current([e.lngLat.lng, e.lngLat.lat]);
+      const tapped: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+      const previous = drawPointsRef.current[drawPointsRef.current.length - 1];
+      // Snapping only ever ADDS intermediate points between the previous
+      // vertex and this one — the user's own clicks stay exactly where they
+      // put them, so a bad snap is undone by one Undo rather than by
+      // reconstructing what they meant.
+      if (previous && snapModeRef.current !== "off" && map.getZoom() >= SNAP_MIN_ZOOM) {
+        const between = snapSegment(
+          collectSnapLines(map, snapModeRef.current),
+          previous,
+          tapped,
+        );
+        // `between` includes the graph nodes nearest both ends; drop them, or
+        // the line jumps sideways onto the track at each tap.
+        if (between && between.length > 2) {
+          onDrawPointAddRef.current([...between.slice(1, -1), tapped]);
+          return;
+        }
+      }
+      onDrawPointAddRef.current([tapped]);
     };
     map.on("click", handleClick);
     return () => {

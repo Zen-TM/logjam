@@ -12,11 +12,12 @@
 // the tapped points plus the DEM, never stored on a point, and they are absent
 // rather than wrong when there is no signal.
 import { StyleSheet, Text, View } from "react-native";
-import { formatDistanceM } from "@logjam/shared";
+import { formatDistanceM, type SnapMode } from "@logjam/shared";
 
 import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
 import { Button, IconButton } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
+import { SnapPicker } from "./SnapPicker";
 import { useElevationProfile } from "./useElevationProfile";
 import { measureStats, type MeasurePoint } from "./measure";
 
@@ -25,11 +26,17 @@ export function MeasurePanel({
   onUndo,
   onClear,
   onDone,
+  snapMode,
+  onSnapModeChange,
+  snapUnavailable,
 }: {
   points: readonly MeasurePoint[];
   onUndo: () => void;
   onClear: () => void;
   onDone: () => void;
+  snapMode: SnapMode;
+  onSnapModeChange: (mode: SnapMode) => void;
+  snapUnavailable: boolean;
 }) {
   const stats = measureStats(points);
   const line = points.map(
@@ -50,6 +57,12 @@ export function MeasurePanel({
       </View>
 
       <ElevationReadout profile={profile} loading={loading} />
+
+      <SnapPicker
+        mode={snapMode}
+        onChange={onSnapModeChange}
+        unavailable={snapUnavailable}
+      />
 
       <View style={styles.actions}>
         <Button

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import NavRail from "./sidebar/NavRail";
 import SidebarPanel from "./sidebar/SidebarPanel";
-import Map, { BASE_LAYERS } from "./map/Map";
+import Map, { BASE_LAYERS, SNAP_MIN_ZOOM, type SnapMode } from "./map/Map";
 import SignIn from "./SignIn";
 import BrandMark from "./brand/BrandMark";
 import TopoDialog from "./dialogs/TopoDialog";
@@ -135,6 +135,11 @@ function App() {
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [savingRoute, setSavingRoute] = useState(false);
   const [namingRoute, setNamingRoute] = useState(false);
+  // Persisted: a canyoner who wants creek-following wants it every session.
+  const [snapMode, setSnapMode] = useStoredState<SnapMode>(
+    "logjam.snapMode",
+    "off",
+  );
   const [selectedRouteID, setSelectedRouteID] = useState<string | null>(null);
 
   // Coordinate picking mode for CanyonDialog
@@ -1145,9 +1150,13 @@ function App() {
         drawingRoute={drawingRoute}
         drawPoints={drawPoints}
         editingRouteId={editingRouteId}
-        onDrawPointAdd={(lngLat) =>
+        snapMode={snapMode}
+        onDrawPointAdd={(added) =>
           setDrawPoints((current) =>
-            current.length >= MAX_ROUTE_POINTS ? current : [...current, lngLat],
+            // Truncate rather than reject: a snapped segment arrives as many
+            // points at once, and dropping the whole segment because its tail
+            // crosses the cap would lose the click entirely.
+            [...current, ...added].slice(0, MAX_ROUTE_POINTS),
           )
         }
         onDrawPointMove={(index, lngLat) =>
@@ -1208,6 +1217,12 @@ function App() {
           onSave={() => setNamingRoute(true)}
           onCancel={cancelDrawingRoute}
           saving={savingRoute}
+          snapMode={snapMode}
+          onSnapModeChange={setSnapMode}
+          snapUnavailable={
+            activeLayerId !== "protomaps" ||
+            (mapCenter?.zoom ?? 0) < SNAP_MIN_ZOOM
+          }
         />
       )}
 

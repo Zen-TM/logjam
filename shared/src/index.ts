@@ -32,3 +32,4 @@ export * from "./syncClient.js";
 export * from "./waypointValidation.js";
 export * from "./routeValidation.js";
 export * from "./elevation.js";
+export * from "./snapToPath.js";

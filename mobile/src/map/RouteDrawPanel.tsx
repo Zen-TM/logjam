@@ -13,11 +13,17 @@
 // Gain/loss come from the DEM on demand, same as MeasurePanel, and are simply
 // absent offline — which is the case this tool is built for.
 import { StyleSheet, Text, View } from "react-native";
-import { formatDistanceM, routeLengthM, MAX_ROUTE_POINTS } from "@logjam/shared";
+import {
+  formatDistanceM,
+  routeLengthM,
+  MAX_ROUTE_POINTS,
+  type SnapMode,
+} from "@logjam/shared";
 
 import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
 import { Button, IconButton } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
+import { SnapPicker } from "./SnapPicker";
 import { useElevationProfile } from "./useElevationProfile";
 
 export function RouteDrawPanel({
@@ -28,6 +34,9 @@ export function RouteDrawPanel({
   onClear,
   onSave,
   onCancel,
+  snapMode,
+  onSnapModeChange,
+  snapUnavailable,
 }: {
   points: readonly [number, number][];
   /** Set when editing a saved route, so the HUD says which. */
@@ -37,6 +46,9 @@ export function RouteDrawPanel({
   onClear: () => void;
   onSave: () => void;
   onCancel: () => void;
+  snapMode: SnapMode;
+  onSnapModeChange: (mode: SnapMode) => void;
+  snapUnavailable: boolean;
 }) {
   const atCap = points.length >= MAX_ROUTE_POINTS;
   const { profile, loading } = useElevationProfile(points);
@@ -61,6 +73,12 @@ export function RouteDrawPanel({
       </View>
 
       <ElevationReadout profile={profile} loading={loading} />
+
+      <SnapPicker
+        mode={snapMode}
+        onChange={onSnapModeChange}
+        unavailable={snapUnavailable}
+      />
 
       {atCap ? (
         <Text style={styles.note}>

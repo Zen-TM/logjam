@@ -48,9 +48,13 @@ import {
   messageFromError,
   MAX_ROUTE_POINTS,
   ROUTE_NAME_MAX_LENGTH,
+  snapSegment,
+  type SnapMode,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
+import { SNAP_MIN_ZOOM, collectSnapLines } from "./snapLines";
+import { readSnapMode, writeSnapMode } from "./snapPreference";
 import { getVectorStyle, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import type { TCanyon } from "../api/types";
@@ -390,7 +394,20 @@ export function MapScreen({
   /** Set once the user has panned/zoomed themselves — see the open-on-location effect. */
   const userMovedCamera = useRef(false);
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  // What new segments follow. Device-scoped and persisted, read once so the
+  // tool is armed correctly on its first frame.
+  const [snapMode, setSnapMode] = useState<SnapMode>(readSnapMode);
+  // Snapping reads geometry off the rendered vector basemap, so it needs that
+  // basemap, at a zoom where the extract still carries paths and creeks.
+  const snapUnavailable =
+    basemapId !== "protomaps" || camera.zoom < SNAP_MIN_ZOOM;
+  const handleSnapModeChange = useCallback((mode: SnapMode) => {
+    setSnapMode(mode);
+    // Best-effort: a device that refuses to store the preference still gets
+    // the behaviour for this session.
+    writeSnapMode(mode);
+  }, []);
   const mapRef = useRef<React.ComponentRef<typeof MapView>>(null);
   // Enabled topo overlays. Seeded from the persisted set (registryDb) so a
   // downloaded overlay stays visible across a cold offline launch; toggles
@@ -748,13 +765,61 @@ export function MapScreen({
   );
 
   /** One entry point for both point-collecting tools, so every tap surface
-   *  (map, canyon pin, waypoint pin) only has to know "a tool wants this". */
+   *  (map, canyon pin, waypoint pin) only has to know "a tool wants this".
+   *
+   *  Snapping happens here rather than in each tool, so both behave the same.
+   *  It only ever ADDS points between the previous vertex and this one — the
+   *  tapped point itself always lands where the finger did, so a snap the user
+   *  dislikes costs one Undo rather than a guess at what they meant. */
   const addToolPoint = useCallback(
-    (longitude: number, latitude: number) => {
-      if (measuring) addMeasurePoint(longitude, latitude);
-      else if (drawingRoute) addRoutePoint(longitude, latitude);
+    async (longitude: number, latitude: number) => {
+      const tapped: [number, number] = [longitude, latitude];
+      const lastMeasure = measurePoints?.at(-1);
+      const previousPoint: [number, number] | null = measuring
+        ? lastMeasure
+          ? [lastMeasure.longitude, lastMeasure.latitude]
+          : null
+        : (routePoints?.at(-1) ?? null);
+
+      let between: [number, number][] | null = null;
+      const query = mapRef.current?.queryRenderedFeaturesInRect;
+      if (
+        previousPoint &&
+        snapMode !== "off" &&
+        query &&
+        camera.zoom >= SNAP_MIN_ZOOM
+      ) {
+        const lines = await collectSnapLines(
+          query.bind(mapRef.current),
+          snapMode,
+          [0, windowWidth, windowHeight, 0],
+        );
+        const snapped = snapSegment(lines, previousPoint, tapped);
+        // The path includes the graph nodes nearest both ends; drop them, or
+        // the line jumps sideways onto the track at every tap.
+        if (snapped && snapped.length > 2) between = snapped.slice(1, -1);
+      }
+
+      if (measuring) {
+        for (const point of between ?? []) addMeasurePoint(point[0], point[1]);
+        addMeasurePoint(longitude, latitude);
+      } else if (drawingRoute) {
+        for (const point of between ?? []) addRoutePoint(point[0], point[1]);
+        addRoutePoint(longitude, latitude);
+      }
     },
-    [addMeasurePoint, addRoutePoint, drawingRoute, measuring],
+    [
+      addMeasurePoint,
+      addRoutePoint,
+      camera.zoom,
+      drawingRoute,
+      measurePoints,
+      measuring,
+      routePoints,
+      snapMode,
+      windowHeight,
+      windowWidth,
+    ],
   );
 
   const handleMapPress = useCallback(
@@ -762,7 +827,7 @@ export function MapScreen({
       setFollowMode("off");
       if (!collectingPoints || feature.geometry.type !== "Point") return;
       const [lon, lat] = feature.geometry.coordinates as [number, number];
-      addToolPoint(lon, lat);
+      void addToolPoint(lon, lat);
     },
     [addToolPoint, collectingPoints],
   );
@@ -778,7 +843,7 @@ export function MapScreen({
       // otherwise tapping near a canyon does nothing and reads as broken.
       if (collectingPoints) {
         if (event.coordinates) {
-          addToolPoint(event.coordinates.longitude, event.coordinates.latitude);
+          void addToolPoint(event.coordinates.longitude, event.coordinates.latitude);
         }
         return;
       }
@@ -1313,7 +1378,7 @@ export function MapScreen({
       // Same reason as a canyon pin: while a tool is armed, a marker under the
       // thumb places a point rather than opening its menu.
       if (collectingPoints) {
-        addToolPoint(waypoint.lon, waypoint.lat);
+        void addToolPoint(waypoint.lon, waypoint.lat);
         return;
       }
       Alert.alert(waypoint.name, undefined, [
@@ -1812,6 +1877,9 @@ export function MapScreen({
             }
             onClear={() => setMeasurePoints([])}
             onDone={() => setMeasurePoints(null)}
+            snapMode={snapMode}
+            onSnapModeChange={handleSnapModeChange}
+            snapUnavailable={snapUnavailable}
           />
         ) : null}
 
@@ -1827,6 +1895,9 @@ export function MapScreen({
             saving={savingRoute}
             onUndo={() => setRoutePoints((current) => current && current.slice(0, -1))}
             onClear={() => setRoutePoints([])}
+            snapMode={snapMode}
+            onSnapModeChange={handleSnapModeChange}
+            snapUnavailable={snapUnavailable}
             onSave={() => setNamingRoute(true)}
             onCancel={handleCancelRouteDraw}
           />
