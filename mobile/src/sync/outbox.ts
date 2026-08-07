@@ -178,6 +178,8 @@ export async function deleteWaypointLocal(id: string): Promise<void> {
 export type RouteDraft = {
   name: string;
   points: [number, number][];
+  /** Indices into `points` the user placed; the rest is snapped filler. */
+  anchors?: number[] | null;
   canyonId?: string | null;
 };
 
@@ -187,6 +189,7 @@ export async function createRouteLocal(draft: RouteDraft): Promise<string> {
   const fields: Record<string, unknown> = {
     name: draft.name,
     points: draft.points,
+    ...(draft.anchors != null && { anchors: draft.anchors }),
     ...(draft.canyonId != null && { canyonId: draft.canyonId }),
   };
 
@@ -196,13 +199,14 @@ export async function createRouteLocal(draft: RouteDraft): Promise<string> {
     // falls back to the accent so an unsynced route still draws.
     await db.runAsync(
       `INSERT INTO routes
-         (id, owner_id, canyon_id, name, color, points_json, sync_role,
-          created_at, updated_at, extra_json, dirty_fields_json)
-       VALUES (?, NULL, ?, ?, NULL, ?, 'owner', ?, ?, NULL, ?)`,
+         (id, owner_id, canyon_id, name, color, points_json, anchors_json,
+          sync_role, created_at, updated_at, extra_json, dirty_fields_json)
+       VALUES (?, NULL, ?, ?, NULL, ?, ?, 'owner', ?, ?, NULL, ?)`,
       id,
       draft.canyonId ?? null,
       draft.name,
       JSON.stringify(draft.points),
+      draft.anchors == null ? null : JSON.stringify(draft.anchors),
       now,
       now,
       JSON.stringify(Object.keys(fields)),
@@ -236,6 +240,20 @@ const ROUTE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
         return JSON.parse(raw);
       } catch {
         return [];
+      }
+    },
+  },
+  // Anchors travel with the geometry they index — a points edit that left
+  // stale anchors behind would mark the wrong vertices as the user's.
+  anchors: {
+    column: "anchors_json",
+    encode: (value) => (value == null ? null : JSON.stringify(value)),
+    decode: (raw) => {
+      if (typeof raw !== "string") return null;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
       }
     },
   },

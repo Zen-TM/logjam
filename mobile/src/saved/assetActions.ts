@@ -15,6 +15,8 @@ import { updateGeoPdfImport, type GeoPdfImport } from "../geopdf/geoPdfImportsDb
 import { renameVectorImport, type VectorImport } from "../imports/importsDb";
 import { deleteVectorImport } from "../imports/vectorImports";
 import { deleteTrack, listTrackPoints, updateTrack, type Track } from "../tracks/tracksDb";
+import { deleteRouteLocal, updateRouteLocal } from "../sync/outbox";
+import type { MirrorRoute } from "../sync/mirrorStore";
 import { bboxOfPoints, type Bbox } from "./bboxOfPoints";
 
 export type AssetActions = {
@@ -49,6 +51,32 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
       confirmTitle: "Delete this import?",
       confirmBody: "The imported features are removed from the device and the map.",
       run: () => deleteVectorImport(imported.id),
+    },
+  };
+}
+
+/**
+ * A drawn route. Unlike every other asset here it is a SYNCED record, not a
+ * file on this device, so deleting it deletes it everywhere — which the confirm
+ * has to say plainly.
+ *
+ * A route arriving through a canyon share is read-only: the API refuses the
+ * write, so the UI must not offer it.
+ */
+export function routeActions(route: MirrorRoute): AssetActions {
+  const readOnly = route.syncRole === "shared";
+  return {
+    locatable: route.points.length > 0,
+    resolveBbox: async () =>
+      bboxOfPoints(route.points.map(([lon, lat]) => ({ lon, lat }))),
+    rename: readOnly
+      ? async () => undefined
+      : (name) => updateRouteLocal(route.id, { name }),
+    delete: {
+      confirmTitle: "Delete route?",
+      confirmBody:
+        "The route is removed from every device on your account. This can't be undone.",
+      run: () => deleteRouteLocal(route.id),
     },
   };
 }

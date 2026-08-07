@@ -224,6 +224,12 @@ export type SyncDeltaRouteRow = {
   color: string;
   /** [[lon, lat], ...] — see MAX_ROUTE_POINTS in routeValidation.ts. */
   points: [number, number][];
+  /**
+   * Indices into `points` marking the vertices the USER placed, as opposed to
+   * those snapping filled in. Null on routes drawn before snapping existed,
+   * which reads as "every point is the user's".
+   */
+  anchors: number[] | null;
   createdAt: string;
   updatedAt: string;
 };

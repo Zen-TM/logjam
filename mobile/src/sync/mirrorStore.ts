@@ -197,15 +197,16 @@ export async function upsertRoute(
 ): Promise<void> {
   await db.runAsync(
     `INSERT OR REPLACE INTO routes
-       (id, owner_id, canyon_id, name, color, points_json, sync_role,
-        created_at, updated_at, extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, owner_id, canyon_id, name, color, points_json, anchors_json,
+        sync_role, created_at, updated_at, extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.ownerId,
     row.canyonId,
     row.name,
     row.color,
     JSON.stringify(row.points),
+    row.anchors == null ? null : JSON.stringify(row.anchors),
     row.syncRole,
     row.createdAt,
     row.updatedAt,
@@ -718,6 +719,7 @@ type RouteRow = {
   name: string;
   color: string | null;
   points_json: string;
+  anchors_json: string | null;
   sync_role: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -730,6 +732,8 @@ export type MirrorRoute = {
   name: string;
   color: string | null;
   points: [number, number][];
+  /** Indices into `points` the user placed; null means "no record". */
+  anchors: number[] | null;
   /** 'shared' means this arrived through a canyon share — read-only here. */
   syncRole: string | null;
   createdAt: string;
@@ -746,6 +750,17 @@ function rowToRoute(row: RouteRow): MirrorRoute {
     // next delta overwrites it; never log the contents (they are coordinates).
     points = [];
   }
+  let anchors: number[] | null = null;
+  if (typeof row.anchors_json === "string") {
+    try {
+      const parsed: unknown = JSON.parse(row.anchors_json);
+      if (Array.isArray(parsed)) anchors = parsed as number[];
+    } catch {
+      // Unparseable reads as "no record", which degrades to every point being
+      // an anchor — the same as a route drawn before snapping existed.
+      anchors = null;
+    }
+  }
   return {
     id: row.id,
     ownerId: row.owner_id,
@@ -753,6 +768,7 @@ function rowToRoute(row: RouteRow): MirrorRoute {
     name: row.name,
     color: row.color,
     points,
+    anchors,
     syncRole: row.sync_role,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",

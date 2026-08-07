@@ -134,6 +134,7 @@ export async function getSyncDb(): Promise<SQLite.SQLiteDatabase> {
           name TEXT NOT NULL,
           color TEXT,
           points_json TEXT NOT NULL,
+          anchors_json TEXT,
           sync_role TEXT,
           created_at TEXT,
           updated_at TEXT,
@@ -183,10 +184,40 @@ export async function getSyncDb(): Promise<SQLite.SQLiteDatabase> {
           payload_json TEXT NOT NULL
         );
       `);
+      await addMissingColumns(db);
       return db;
     })();
   }
   return dbPromise;
+}
+
+/**
+ * Columns added to a table that already exists on installed devices.
+ *
+ * `CREATE TABLE IF NOT EXISTS` above only ever builds the schema for a FRESH
+ * install — it silently does nothing when the table is already there, so an
+ * app that has synced before never gains a new column and every insert naming
+ * it fails with "no such column". That is not theoretical: it broke saving a
+ * route on the first device that ran the anchors change.
+ *
+ * SQLite has no ADD COLUMN IF NOT EXISTS, so each add is attempted and a
+ * duplicate-column error is the success case. Keep entries here forever —
+ * removing one strands anyone who skipped that version.
+ */
+const ADDED_COLUMNS: { table: string; column: string; type: string }[] = [
+  // Which vertices of a route the user placed, vs snapped filler.
+  { table: "routes", column: "anchors_json", type: "TEXT" },
+];
+
+async function addMissingColumns(db: SQLite.SQLiteDatabase): Promise<void> {
+  for (const { table, column, type } of ADDED_COLUMNS) {
+    try {
+      await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+    } catch {
+      // Already present — the expected outcome on every launch after the
+      // first. Nothing to log: this is not an error condition.
+    }
+  }
 }
 
 // ── sync_state key/value helpers ─────────────────────────────────────────────

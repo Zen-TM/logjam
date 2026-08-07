@@ -129,6 +129,9 @@ export const assetHue = {
   overlay: "#9DBE8B",
   /** GeoPDF maps — fired clay, a lifted cousin of the sandstone rust. */
   geoPdf: "#C97B4A",
+  /** Routes you drew — she-oak green, distinct from the imported-file blue
+   *  because a route is authored rather than brought in. */
+  route: "#8FBFA6",
   /** Imported vector files (GPX/KML/GeoJSON) — waterhole blue. */
   vector: "#86B5D4",
   /** Recorded tracks — heath flower. */

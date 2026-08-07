@@ -37,6 +37,7 @@ import * as FileSystem from "expo-file-system";
 
 import {
   formatDistanceM,
+  routeLengthM,
   messageFromError,
   type TopoLayerFormat,
   type TopoLayerName,
@@ -46,7 +47,7 @@ import { apiFetch } from "../api/apiFetch";
 import { formatBytes } from "../format";
 import { getGeoPdfJob, listGeoPdfJobs, type GeoPdfJobView } from "../api/geoPdfJobs";
 import { useApiQuery } from "../api/queries";
-import { usePendingSyncCount } from "../sync/useSyncQueries";
+import { useMirrorRoutes, usePendingSyncCount } from "../sync/useSyncQueries";
 import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
 import {
   BottomSheet,
@@ -87,6 +88,7 @@ import { useMapArtifacts } from "../offline/useMapArtifacts";
 import {
   geoPdfActions,
   trackActions,
+  routeActions,
   vectorImportActions,
 } from "./assetActions";
 import { useTracks } from "../tracks/useTracks";
@@ -103,11 +105,15 @@ function formatDay(iso: string): string {
 // --- Category model -------------------------------------------------------
 // One entry per asset kind: the filter rail, the capacity meter and every
 // row's glyph/hue all read from here, so a new asset kind is one addition.
-type Category = "region" | "overlay" | "geoPdf" | "vector" | "track";
+type Category = "region" | "overlay" | "geoPdf" | "route" | "vector" | "track";
 
 const CATEGORY_META: Record<
   Category,
-  { label: string; plural: string; icon: "map" | "layers" | "file-text" | "file-plus" | "activity" }
+  {
+    label: string;
+    plural: string;
+    icon: "map" | "layers" | "file-text" | "file-plus" | "activity" | "edit-3";
+  }
 > = {
   region: { label: "Region", plural: "Regions", icon: "map" },
   overlay: { label: "LiDAR topo", plural: "LiDAR Topos", icon: "layers" },
@@ -115,11 +121,23 @@ const CATEGORY_META: Record<
   // "Files" was too vague (everything here is a file); the category is
   // specifically vector data brought in from another app, so it is named for
   // the formats users recognise.
+  // Routes you drew, as opposed to files you brought in. Kept a separate
+  // category rather than folded into "vector": they behave differently (a route
+  // is editable and syncs; an import is an opaque file on this device), and a
+  // list that mixes them would need to explain which rows can be edited.
+  route: { label: "Route", plural: "Routes", icon: "edit-3" },
   vector: { label: "GPX / KML", plural: "GPX & KML", icon: "file-plus" },
   track: { label: "Track", plural: "Tracks", icon: "activity" },
 };
 
-const CATEGORY_ORDER: Category[] = ["region", "overlay", "geoPdf", "vector", "track"];
+const CATEGORY_ORDER: Category[] = [
+  "region",
+  "overlay",
+  "geoPdf",
+  "route",
+  "vector",
+  "track",
+];
 
 /** A single on-device asset, flattened so one renderer covers every kind. */
 type SavedItem = {
@@ -330,6 +348,9 @@ export function SavedScreen({
     },
     [confirmCellularOk, fail, info, refreshFreeSpace],
   );
+
+  // --- Drawn routes (synced records, not device files) ---
+  const routes = useMirrorRoutes();
 
   // --- Vector imports (GPX/KML/GeoJSON) ---
   const { imports } = useVectorImports();
@@ -571,6 +592,26 @@ export function SavedScreen({
       });
     }
 
+    for (const route of routes.data ?? []) {
+      const shared = route.syncRole === "shared";
+      rows.push({
+        key: route.id,
+        category: "route",
+        title: route.name,
+        // Length is DERIVED, never stored — a saved length goes stale the
+        // moment a vertex moves.
+        subtitle: `${formatDistanceM(routeLengthM(route.points))} · ${
+          shared ? "shared with you" : `drawn ${formatDay(route.createdAt)}`
+        }`,
+        // Routes live in the sync mirror as a row of coordinates, not as a file
+        // on this device, so they take no meaningful storage. Same deliberate
+        // treatment as recorded tracks.
+        sizeBytes: 0,
+        ...(shared ? { pill: { label: "Shared", tone: "muted" as const } } : {}),
+        ...routeActions(route),
+      });
+    }
+
     for (const imported of imports) {
       rows.push({
         key: imported.id,
@@ -599,6 +640,7 @@ export function SavedScreen({
   }, [
     artifacts,
     geoPdfBusy,
+    routes.data,
     geoPdfImports,
     handleResumeGeoPdf,
     imports,
@@ -608,7 +650,7 @@ export function SavedScreen({
   ]);
 
   const counts = useMemo(() => {
-    const byCategory = { region: 0, overlay: 0, geoPdf: 0, vector: 0, track: 0 };
+    const byCategory = { region: 0, overlay: 0, geoPdf: 0, route: 0, vector: 0, track: 0 };
     for (const item of items) byCategory[item.category] += 1;
     return byCategory;
   }, [items]);
@@ -981,8 +1023,17 @@ export function SavedScreen({
                 hue={theme.bonus1}
                 onPress={() => setMenuMode("rename")}
               />
+              {/* Every other saved asset IS a file on this handset, so "from
+                  device" is exactly right for them. A route is not: it is a
+                  synced record, and deleting it removes it from the ACCOUNT.
+                  "From device" would promise the copy on your other phone
+                  survives, and it does not. */}
               <Row
-                title="Delete from device"
+                title={
+                  menuItem?.category === "route"
+                    ? "Delete route"
+                    : "Delete from device"
+                }
                 icon="trash-2"
                 hue={theme.warning}
                 onPress={() => {
@@ -1016,6 +1067,10 @@ function EmptyPanel({
   // merely unused — so for the two account-backed categories it must say which.
   const isGuest = useAccountState().accountState === "guest";
   const copy: Record<Category | "all", { title: string; hint: string }> = {
+    route: {
+      title: "No routes yet",
+      hint: "Draw one on the map with the pen tool — the approach, the creek, the exit.",
+    },
     all: {
       title: "Nothing saved yet",
       hint: "Canyons need maps that work with no signal. Save a region before you leave town.",

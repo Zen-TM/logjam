@@ -1,17 +1,24 @@
-// Route draw HUD — running distance for the tapped points, plus undo/clear and
-// the save that turns them into an asset.
+// Route draw HUD.
 //
-// LAYOUT-FREE like MeasurePanel: the map owns where it sits (the top notice
-// stack), same surface treatment, so the chrome over the map reads as one
-// family.
+// A TOOLBAR, not a card. While the tool is armed it takes the SEARCH PILL'S
+// SLOT at the top of the screen — search is not reachable mid-draw anyway, and
+// on a phone the map is the thing being worked in, so the chrome should not eat
+// a third of it. Compact rows: what you have drawn, then what you can do about
+// it.
 //
 // This is the tool DESIGN.md §8 carves out: "a tool that produces something the
 // user would want to keep is a different thing and belongs in Saved". So unlike
-// measure, closing it does NOT silently bin the work — Save is the primary
-// action and Discard asks first (in the caller).
+// measure, leaving does NOT silently bin the work — Save is the primary action
+// and discarding asks first (in the caller).
 //
-// Gain/loss come from the DEM on demand, same as MeasurePanel, and are simply
-// absent offline — which is the case this tool is built for.
+// The two destructive controls are deliberately different verbs:
+//   Clear  — empty the points, stay in the tool. Start the line again.
+//   Trash  — discard the draft and leave. Confirms first.
+// They used to be the other way round, which read as "cancel throws my work
+// away" and left the trash looking like the safer of the two.
+//
+// Gain/loss come from the DEM on demand and are simply absent offline — which
+// is the case this tool is built for.
 import { StyleSheet, Text, View } from "react-native";
 import {
   formatDistanceM,
@@ -28,51 +35,58 @@ import { useElevationProfile } from "./useElevationProfile";
 
 export function RouteDrawPanel({
   points,
+  anchorCount,
+  canUndo,
+  atCap,
   editingName,
   saving,
   onUndo,
   onClear,
   onSave,
-  onCancel,
+  onDiscard,
   snapMode,
   onSnapModeChange,
 }: {
   points: readonly [number, number][];
+  /** User-placed vertices — what the count reports, never snapped filler. */
+  anchorCount: number;
+  canUndo: boolean;
+  atCap: boolean;
   /** Set when editing a saved route, so the HUD says which. */
   editingName: string | null;
   saving: boolean;
   onUndo: () => void;
   onClear: () => void;
   onSave: () => void;
-  onCancel: () => void;
+  onDiscard: () => void;
   snapMode: SnapMode;
   onSnapModeChange: (mode: SnapMode) => void;
 }) {
-  const atCap = points.length >= MAX_ROUTE_POINTS;
   const { profile, loading } = useElevationProfile(points);
+  const hasLine = points.length >= 2;
+
   return (
-    <View style={styles.panel}>
-      <View style={styles.readout}>
-        <View style={styles.headline}>
-          <Text style={styles.label} numberOfLines={1}>
-            {editingName ?? "New route"}
-          </Text>
-          <Text style={styles.distance}>
-            {points.length >= 2
-              ? formatDistanceM(routeLengthM(points as [number, number][]))
-              : "—"}
-          </Text>
-        </View>
-        <Text style={styles.hint}>
-          {points.length === 0
-            ? "Tap the map to start"
-            : `${points.length} point${points.length === 1 ? "" : "s"}`}
+    <View style={styles.bar}>
+      <View style={styles.readoutRow}>
+        <Text style={styles.distance}>
+          {hasLine
+            ? formatDistanceM(routeLengthM(points as [number, number][]))
+            : "—"}
         </Text>
+        <Text style={styles.meta} numberOfLines={1}>
+          {anchorCount === 0
+            ? "Tap the map to start"
+            : `${anchorCount} point${anchorCount === 1 ? "" : "s"}`}
+        </Text>
+        <View style={styles.spacer} />
+        <ElevationReadout profile={profile} loading={loading} />
       </View>
 
-      <ElevationReadout profile={profile} loading={loading} />
-
-      <SnapPicker mode={snapMode} onChange={onSnapModeChange} />
+      {editingName ? (
+        <Text style={styles.editing} numberOfLines={1}>
+          Editing “{editingName}”
+        </Text>
+      ) : null}
 
       {atCap ? (
         <Text style={styles.note}>
@@ -80,36 +94,36 @@ export function RouteDrawPanel({
         </Text>
       ) : null}
 
+      <SnapPicker mode={snapMode} onChange={onSnapModeChange} disabled={saving} />
+
       <View style={styles.actions}>
-        <Button
-          label="Undo"
+        <IconButton
           icon="corner-up-left"
-          variant="outlineAccent"
-          compact
-          disabled={points.length === 0 || saving}
+          accessibilityLabel="Undo the last change"
+          disabled={!canUndo || saving}
           onPress={onUndo}
         />
         <Button
-          label={saving ? "Saving…" : "Save"}
-          icon="check"
-          compact
-          disabled={points.length < 2 || saving}
-          onPress={onSave}
-        />
-        <Button
-          label="Cancel"
+          label="Clear"
           variant="outlineAccent"
           compact
-          disabled={saving}
-          onPress={onCancel}
+          disabled={points.length === 0 || saving}
+          onPress={onClear}
         />
         <View style={styles.spacer} />
         <IconButton
           icon="trash-2"
           color={theme.warning}
-          accessibilityLabel="Clear the route"
-          disabled={points.length === 0 || saving}
-          onPress={onClear}
+          accessibilityLabel="Discard this route and close the tool"
+          disabled={saving}
+          onPress={onDiscard}
+        />
+        <Button
+          label={saving ? "Saving…" : "Save"}
+          icon="check"
+          compact
+          disabled={!hasLine || saving}
+          onPress={onSave}
         />
       </View>
     </View>
@@ -117,37 +131,25 @@ export function RouteDrawPanel({
 }
 
 const styles = StyleSheet.create({
-  panel: {
+  bar: {
     backgroundColor: withAlpha(theme.primary, 0.94),
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: withAlpha(theme.accent, 0.4),
     paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(1.25),
-    gap: spacing(1),
+    paddingVertical: spacing(1),
+    gap: spacing(0.75),
   },
-  readout: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: spacing(1),
-  },
-  headline: { gap: spacing(0.25), flexShrink: 1 },
-  label: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
+  readoutRow: { flexDirection: "row", alignItems: "baseline", gap: spacing(1) },
   distance: {
     color: theme.textPrimary,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
     fontVariant: ["tabular-nums"],
   },
-  hint: { color: theme.textMuted, fontSize: fontSize.xs },
+  meta: { color: theme.textMuted, fontSize: fontSize.xs, flexShrink: 1 },
+  editing: { color: theme.textMuted, fontSize: fontSize.xs },
   note: { color: theme.warning, fontSize: fontSize.xs },
-  actions: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  actions: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
   spacer: { flex: 1 },
 });
