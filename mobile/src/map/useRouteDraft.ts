@@ -31,7 +31,8 @@ const MAX_HISTORY = 100;
 
 export type RouteDraftHandle = {
   draft: RouteDraft | null;
-  /** Full geometry, for drawing and saving. Empty when the tool is closed. */
+  /** Full geometry, for drawing and saving. Empty when the tool is closed.
+   *  Reflects an in-flight anchor drag, so the line follows the finger. */
   points: RoutePoint[];
   /** The user's own vertices — the draggable handles. */
   anchors: RoutePoint[];
@@ -43,6 +44,8 @@ export type RouteDraftHandle = {
   close: () => void;
   addAnchor: (point: RoutePoint) => void;
   applySnap: (from: RoutePoint, to: RoutePoint, between: RoutePoint[]) => void;
+  /** Where a drag currently has an anchor — drawn, not committed. */
+  previewAnchorAt: (index: number, point: RoutePoint) => void;
   moveAnchorAt: (index: number, point: RoutePoint) => void;
   deleteAnchorAt: (index: number) => void;
   insertAnchorAt: (segmentIndex: number, point: RoutePoint) => void;
@@ -57,6 +60,16 @@ export function useRouteDraft(): RouteDraftHandle {
   const [draft, setDraft] = useState<RouteDraft | null>(null);
   const history = useRef<RouteDraft[]>([]);
   const [canUndo, setCanUndo] = useState(false);
+  // Where a drag has the anchor RIGHT NOW. Kept apart from the draft so a
+  // gesture at frame rate neither fills the undo stack nor rewrites the
+  // persisted draft sixty times a second; the drop commits it once.
+  // ponytail: it is still screen state, so a drag re-renders the map screen per
+  // frame (the cost DESIGN.md's scale bar avoids with a ref). Move it to a ref
+  // + imperative shape update if a long route drags roughly.
+  const [dragging, setDragging] = useState<{
+    index: number;
+    point: RoutePoint;
+  } | null>(null);
 
   const commit = useCallback(
     (next: (current: RouteDraft) => RouteDraft) => {
@@ -77,6 +90,7 @@ export function useRouteDraft(): RouteDraftHandle {
     (route?: { points: RoutePoint[]; anchors?: number[] | null }) => {
       history.current = [];
       setCanUndo(false);
+      setDragging(null);
       setDraft(route ? draftFromRoute(route.points, route.anchors) : emptyDraft);
     },
     [],
@@ -85,14 +99,23 @@ export function useRouteDraft(): RouteDraftHandle {
   const close = useCallback(() => {
     history.current = [];
     setCanUndo(false);
+    setDragging(null);
     setDraft(null);
   }, []);
 
-  const points = useMemo(() => (draft ? draftPoints(draft) : []), [draft]);
+  // What is DRAWN: the committed draft with any live drag applied on top.
+  const shown = useMemo(
+    () => (draft && dragging ? moveAnchor(draft, dragging.index, dragging.point) : draft),
+    [draft, dragging],
+  );
+  const points = useMemo(() => (shown ? draftPoints(shown) : []), [shown]);
 
   return {
     draft,
     points,
+    // COMMITTED positions, deliberately: the handles are native annotations
+    // that move themselves under the finger, and rewriting the coordinate of
+    // the one being dragged fights the gesture.
     anchors: draft?.anchors ?? [],
     canUndo,
     atCap: draft ? draftPointCount(draft) >= MAX_ROUTE_POINTS : false,
@@ -122,9 +145,15 @@ export function useRouteDraft(): RouteDraftHandle {
         }),
       [],
     ),
+    previewAnchorAt: useCallback(
+      (index: number, point: RoutePoint) => setDragging({ index, point }),
+      [],
+    ),
     moveAnchorAt: useCallback(
-      (index: number, point: RoutePoint) =>
-        commit((current) => moveAnchor(current, index, point)),
+      (index: number, point: RoutePoint) => {
+        setDragging(null);
+        commit((current) => moveAnchor(current, index, point));
+      },
       [commit],
     ),
     deleteAnchorAt: useCallback(

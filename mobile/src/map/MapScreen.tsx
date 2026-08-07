@@ -28,7 +28,6 @@ import {
   FillLayer,
   Images,
   LineLayer,
-  PointAnnotation,
   MapView,
   RasterLayer,
   ShapeSource,
@@ -64,7 +63,7 @@ import {
   readRouteDraft,
   saveRouteDraft,
 } from "./routeDraftStore";
-import { useRouteDraft } from "./useRouteDraft";
+import { useRouteDraft, type RouteDraftHandle } from "./useRouteDraft";
 import { readSnapMode, writeSnapMode } from "./snapPreference";
 import { getVectorStyle, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
@@ -105,11 +104,14 @@ import { isCompassEnabled } from "./compassPreference";
 import { readBasemapPreference, setBasemapPreference } from "./basemapPreference";
 import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
 import { offlineCoverageMask } from "./offlineMask";
-import { MeasurePanel } from "./MeasurePanel";
-import { measureShape, type MeasurePoint } from "./measure";
+import { DraftToolPanel } from "./DraftToolPanel";
 import { MapToolGroup, type MapTool } from "./MapToolGroup";
-import { RouteDrawPanel } from "./RouteDrawPanel";
+import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
+import type { MirrorRoute } from "../sync/mirrorStore";
+import { RouteStatsSheet } from "../routes/RouteStatsSheet";
+import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
+import { LinkCanyonSheet } from "../routes/LinkCanyonSheet";
 import { BottomSheet } from "../ui/BottomSheet";
 import { Button } from "../ui/Button";
 import { TextField } from "../ui/TextField";
@@ -192,9 +194,6 @@ const PROTOMAPS_FLAVOR = "light" as const;
 /** Below this span an extent is a point, not an area (~1 m). */
 const DEGENERATE_BBOX_DEGREES = 1e-5;
 const SINGLE_POINT_ZOOM = 14;
-
-/** The measured line: the scheme accent, so it reads as chrome, not as data. */
-const MEASURE_COLOR = theme.accent;
 
 /** A bare lat/lng, as the map hands one back from a long press. */
 type MapPoint = { latitude: number; longitude: number };
@@ -380,15 +379,12 @@ export function MapScreen({
   const pendingCanyonPoint = useRef<MapPoint | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
-  // Measure tool: null = off, an array = armed and collecting taps. Ids come
-  // from a counter rather than the array length so a point stays identifiable
-  // across an undo.
-  const [measurePoints, setMeasurePoints] = useState<MeasurePoint[] | null>(null);
-  const measureId = useRef(0);
-  const measuring = measurePoints !== null;
-  // Route draw/edit: null = off, an array = armed. Unlike measure, leaving the
-  // tool asks before discarding — this one produces an asset (DESIGN.md §8).
+  // Both point tools run the SAME draft model — same anchors, same drag,
+  // delete and snapping. What differs is the exit (measure discards silently,
+  // route draw confirms and saves) and the ink (DESIGN.md §8).
+  const measureDraft = useRouteDraft();
   const routeDraft = useRouteDraft();
+  const measuring = measureDraft.active;
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [savingRoute, setSavingRoute] = useState(false);
   /** A drag ends with a tap that also fires onSelected; this tells the two
@@ -397,9 +393,25 @@ export function MapScreen({
   const [toolsOpen, setToolsOpen] = useState(false);
   const [namingRoute, setNamingRoute] = useState(false);
   const drawingRoute = routeDraft.active;
+  /** The draft the map's taps belong to, or null when no tool is armed. */
+  const activeDraft: RouteDraftHandle | null = drawingRoute
+    ? routeDraft
+    : measuring
+      ? measureDraft
+      : null;
   /** Either point-collecting tool is armed — the flag every tap surface reads. */
-  const collectingPoints = measuring || drawingRoute;
+  const collectingPoints = activeDraft !== null;
   const routes = useMirrorRoutes();
+  // The user's own drawn routes, on by default: they are few, they are theirs,
+  // and the map is where they are for. The switch lives in the layers sheet.
+  const [showRoutes, setShowRoutes] = useState(true);
+  // Tapping a route opens its stats; every verb sits one step further on, so a
+  // tap on the map can never begin an accidental edit. Three sheets, one at a
+  // time, each holding the id rather than the row — the row comes from the
+  // mirror so it stays current if a sync lands while a sheet is open.
+  const [statsRouteId, setStatsRouteId] = useState<string | null>(null);
+  const [optionsRouteId, setOptionsRouteId] = useState<string | null>(null);
+  const [linkingRouteId, setLinkingRouteId] = useState<string | null>(null);
   // "Canyon routes" layer (web parity), off by default: it is a lot of ink to
   // add to a map unasked, and the layers sheet is where it belongs.
   const [showCanyonRoutes, setShowCanyonRoutes] = useState(false);
@@ -697,32 +709,92 @@ export function MapScreen({
     [allowedCanyonIds, canyons.data],
   );
 
-  // Measure tool. A tap lands a point immediately; distance is pure maths over
-  // the tapped coordinates, so there is nothing to look up and nothing async.
-  const addMeasurePoint = useCallback((longitude: number, latitude: number) => {
-    measureId.current += 1;
-    const id = measureId.current;
-    setMeasurePoints((current) =>
-      current === null ? current : [...current, { id, longitude, latitude }],
-    );
-  }, []);
+  /** Follow a track between two anchors, if snapping is on and finds one.
+   *
+   *  Async by nature (a cold tile is a range request), and the draft may have
+   *  moved on by the time it answers — `applySnap` is guarded by the anchors it
+   *  was computed for, so a late run lands only on a segment that still
+   *  exists. */
+  const snapBetween = useCallback(
+    async (
+      handle: RouteDraftHandle,
+      from: [number, number],
+      to: [number, number],
+    ) => {
+      if (snapMode === "off") return;
+      const lines = await collectSnapLines(snapMode, from, to, artifacts);
+      const snapped = snapSegment(lines, from, to);
+      // The path includes the graph nodes nearest both ends; drop them, or the
+      // line jumps sideways onto the track at every tap.
+      if (!snapped || snapped.length <= 2) return;
+      handle.applySnap(from, to, snapped.slice(1, -1));
+    },
+    [artifacts, snapMode],
+  );
 
-  /** Splice a snapped run in behind the point just tapped. The tap lands
-   *  immediately so the tool feels responsive; the run arrives later and
-   *  belongs between the previous point and that one. */
-  const insertMeasurePointsBeforeLast = useCallback(
-    (between: readonly [number, number][]) => {
-      if (between.length === 0) return;
-      setMeasurePoints((current) => {
-        if (current === null || current.length === 0) return current;
-        const inserted = between.map(([longitude, latitude]) => {
-          measureId.current += 1;
-          return { id: measureId.current, longitude, latitude };
-        });
-        return [...current.slice(0, -1), ...inserted, current[current.length - 1]!];
-      });
+  /** Re-snap after a handle is dropped. An anchor in the middle of a line has a
+   *  segment on EITHER side of it, and both followed the track to where the
+   *  point used to be — re-running only one leaves the other straight. */
+  const snapAroundAnchor = useCallback(
+    (handle: RouteDraftHandle, index: number, moved: [number, number]) => {
+      const anchors = handle.anchors.map((anchor, i) =>
+        i === index ? moved : anchor,
+      );
+      const before = anchors[index - 1];
+      const after = anchors[index + 1];
+      if (before) void snapBetween(handle, before, moved).catch(console.error);
+      if (after) void snapBetween(handle, moved, after).catch(console.error);
+    },
+    [snapBetween],
+  );
+
+  /** A tap on a handle offers to remove it — it does not remove it. A drag ends
+   *  on the handle too, and losing a point to what felt like a drop is not a
+   *  mistake the user can see coming (DESIGN.md §7). */
+  const confirmDeleteAnchor = useCallback(
+    (handle: RouteDraftHandle, index: number) => {
+      Alert.alert("Remove this point?", "The line will join its neighbours.", [
+        { text: "Keep it", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => handle.deleteAnchorAt(index),
+        },
+      ]);
     },
     [],
+  );
+
+  /** Drag and tap wiring for one draft's handles.
+   *
+   *  The drag PREVIEWS on every frame (so the line follows the finger) and
+   *  COMMITS once on the drop — one undo step per gesture, one persisted write,
+   *  and one round of snapping rather than one per frame. */
+  const anchorHandlers = useCallback(
+    (handle: RouteDraftHandle) => ({
+      onAnchorDragStart: () => {
+        anchorDragged.current = false;
+      },
+      onAnchorDrag: (index: number, point: [number, number]) => {
+        anchorDragged.current = true;
+        handle.previewAnchorAt(index, point);
+      },
+      onAnchorDragEnd: (index: number, point: [number, number]) => {
+        handle.moveAnchorAt(index, point);
+        snapAroundAnchor(handle, index, point);
+        // The tap that ends a drag also fires onSelected; this keeps it from
+        // being read as "remove this point".
+        anchorDragged.current = true;
+      },
+      onAnchorPress: (index: number) => {
+        if (anchorDragged.current) {
+          anchorDragged.current = false;
+          return;
+        }
+        confirmDeleteAnchor(handle, index);
+      },
+    }),
+    [confirmDeleteAnchor, snapAroundAnchor],
   );
 
   /** Leaving route draw is NOT free the way leaving measure is — these points
@@ -750,12 +822,6 @@ export function MapScreen({
         { text: "Discard", style: "destructive", onPress: discard },
       ]);
     },
-    [routeDraft],
-  );
-
-  const addRoutePoint = useCallback(
-    (longitude: number, latitude: number) =>
-      routeDraft.addAnchor([longitude, latitude]),
     [routeDraft],
   );
 
@@ -862,29 +928,31 @@ export function MapScreen({
       // route draft, which left two HUDs stacked and every tap going to
       // whichever tool won the race.
       if (tool === "measure") {
-        if (measurePoints !== null) {
-          setMeasurePoints(null);
+        // Leaving measure bins its points without asking — a measurement is a
+        // question you asked once, not an asset (DESIGN.md §8).
+        if (measureDraft.active) {
+          measureDraft.close();
           return;
         }
         // Route draft holds work worth confirming before it is binned; the
         // confirm handler clears it, and measure arms once it has.
         if (routeDraft.active) {
-          handleCancelRouteDraw(() => setMeasurePoints([]));
+          handleCancelRouteDraw(() => measureDraft.open());
           return;
         }
-        setMeasurePoints([]);
+        measureDraft.open();
         return;
       }
       if (routeDraft.active) {
         handleCancelRouteDraw();
         return;
       }
-      setMeasurePoints(null);
+      measureDraft.close();
       setEditingRouteId(null);
       routeDraft.open();
     },
     // handleCancelRouteDraw is declared below and is stable; see its useCallback.
-    [measurePoints, routeDraft, handleCancelRouteDraw],
+    [measureDraft, routeDraft, handleCancelRouteDraw],
   );
 
   /** One entry point for both point-collecting tools, so every tap surface
@@ -896,73 +964,40 @@ export function MapScreen({
    *  dislikes costs one Undo rather than a guess at what they meant. */
   const addToolPoint = useCallback(
     async (longitude: number, latitude: number) => {
+      if (!activeDraft) return;
       const tapped: [number, number] = [longitude, latitude];
-      const lastMeasure = measurePoints?.at(-1);
-      const previousPoint: [number, number] | null = measuring
-        ? lastMeasure
-          ? [lastMeasure.longitude, lastMeasure.latitude]
-          : null
-        : (routeDraft.anchors.at(-1) ?? null);
+      const previousPoint = activeDraft.anchors.at(-1) ?? null;
 
       // The tapped point lands FIRST and always: reading the archive is a
       // network round trip on a cold tile, and making every tap wait on it
       // would feel broken. The snapped run fills in behind.
-      if (measuring) addMeasurePoint(longitude, latitude);
-      else if (drawingRoute) addRoutePoint(longitude, latitude);
+      activeDraft.addAnchor(tapped);
 
-      if (!previousPoint || snapMode === "off") return;
-      const lines = await collectSnapLines(
-        snapMode,
-        previousPoint,
-        tapped,
-        artifacts,
-      );
-      const snapped = snapSegment(lines, previousPoint, tapped);
-      // The path includes the graph nodes nearest both ends; drop them, or the
-      // line jumps sideways onto the track at every tap.
-      if (!snapped || snapped.length <= 2) return;
-      const between = snapped.slice(1, -1);
-      if (measuring) {
-        // Measure has no anchor model — it is a discardable question, not an
-        // asset — so its snapped run is just more points. They splice in BEFORE
-        // the tapped point, which has already landed.
-        insertMeasurePointsBeforeLast(between);
-      } else if (drawingRoute) {
-        routeDraft.applySnap(previousPoint, tapped, between);
-      }
+      if (!previousPoint) return;
+      await snapBetween(activeDraft, previousPoint, tapped);
     },
-    [
-      addMeasurePoint,
-      addRoutePoint,
-      artifacts,
-      drawingRoute,
-      insertMeasurePointsBeforeLast,
-      measurePoints,
-      measuring,
-      routeDraft,
-      snapMode,
-    ],
+    [activeDraft, snapBetween],
   );
 
   /** Long-press near the drawn line adds a point there.
    *
    *  Web does this by dragging the line itself; a touch map cannot spare that
    *  gesture (it is pan), so the press-and-hold is the mobile equivalent. It
-   *  only fires while the route tool is armed and only near the line, so it
+   *  only fires while a point tool is armed and only near the line, so it
    *  never competes with anything else. */
   const insertAnchorNear = useCallback(
     (lon: number, lat: number): boolean => {
-      if (!routeDraft.draft) return false;
-      const near = nearestSegment(routeDraft.draft, [lon, lat]);
+      if (!activeDraft?.draft) return false;
+      const near = nearestSegment(activeDraft.draft, [lon, lat]);
       if (!near) return false;
       // Tolerance in degrees, derived from the current zoom so the reach feels
       // the same however far in you are.
       const degreesPerPixel = 360 / (256 * 2 ** camera.zoom * PIXEL_RATIO);
       if (near.distanceDegrees > degreesPerPixel * LINE_GRAB_PIXELS) return false;
-      routeDraft.insertAnchorAt(near.index, [lon, lat]);
+      activeDraft.insertAnchorAt(near.index, [lon, lat]);
       return true;
     },
-    [camera.zoom, routeDraft],
+    [activeDraft, camera.zoom],
   );
 
   const handleMapPress = useCallback(
@@ -1067,9 +1102,9 @@ export function MapScreen({
     (feature: GeoJSON.Feature) => {
       if (feature.geometry.type !== "Point") return;
       const [lon, lat] = feature.geometry.coordinates as [number, number];
-      // While the route tool is armed, press-and-hold near the line means "add
-      // a point here" — the mobile stand-in for dragging the line on web. Only
-      // when it lands near the line; anywhere else still offers the sheet.
+      // While either point tool is armed, press-and-hold near the line means
+      // "add a point here" — the mobile stand-in for dragging the line on web.
+      // Only when it lands near the line; anywhere else still offers the sheet.
       if (insertAnchorNear(lon, lat)) return;
       setLongPressPoint({ latitude: lat, longitude: lon });
     },
@@ -1253,6 +1288,28 @@ export function MapScreen({
    *  either resurrect a discarded draft or bin the route the user asked for.
    *  An unsaved draft already in the tool goes through the same confirm as any
    *  other way of leaving it. Keyed on the nonce so asking twice re-arms. */
+  const openRouteForEditing = useCallback(
+    (target: MirrorRoute) => {
+      const arm = () => {
+        measureDraft.close();
+        routeDraft.open({ points: target.points, anchors: target.anchors });
+        setEditingRouteId(target.id);
+        const bbox = bboxOfPoints(
+          target.points.map(([lon, lat]) => ({ lon, lat })),
+        );
+        if (bbox) fitCameraToBbox(bbox);
+      };
+      // An unsaved draft already in the tool goes through the same confirm as
+      // any other way of leaving it.
+      if (routeDraft.active && routeDraft.points.length > 0) {
+        handleCancelRouteDraw(arm);
+      } else {
+        arm();
+      }
+    },
+    [fitCameraToBbox, handleCancelRouteDraw, measureDraft, routeDraft],
+  );
+
   const editRouteNonce = editRoute?.nonce ?? null;
   const handledEditNonce = useRef<number | null>(null);
   useEffect(() => {
@@ -1263,27 +1320,20 @@ export function MapScreen({
     // next render with rows tries again.
     if (!target) return;
     handledEditNonce.current = editRoute.nonce;
-    const arm = () => {
-      setMeasurePoints(null);
-      routeDraft.open({ points: target.points, anchors: target.anchors });
-      setEditingRouteId(target.id);
-      const bbox = bboxOfPoints(target.points.map(([lon, lat]) => ({ lon, lat })));
-      if (bbox) fitCameraToBbox(bbox);
-    };
-    if (routeDraft.active && routeDraft.points.length > 0) {
-      handleCancelRouteDraw(arm);
-    } else {
-      arm();
-    }
+    openRouteForEditing(target);
   }, [
     draftRestoreDone,
     editRoute,
     editRouteNonce,
-    fitCameraToBbox,
-    handleCancelRouteDraw,
-    routeDraft,
+    openRouteForEditing,
     routes.data,
   ]);
+
+  const findRoute = (id: string | null) =>
+    (id && routes.data?.find((route) => route.id === id)) || null;
+  const statsRoute = findRoute(statsRouteId);
+  const optionsRoute = findRoute(optionsRouteId);
+  const linkingRoute = findRoute(linkingRouteId);
 
   // Live camera → the scale bar only, at gesture rate. Coordinates stay in
   // component state only — never logged (privacy rule).
@@ -1933,107 +1983,36 @@ export function MapScreen({
           />
         </ShapeSource>
 
-        <RoutesLayer routes={routes.data ?? []} hiddenRouteId={editingRouteId} />
-
-        {/* The route being drawn. */}
-        {routeDraft.points.length > 0 ? (
-          <ShapeSource
-            id="route-draft"
-            shape={{
-              type: "FeatureCollection",
-              features:
-                routeDraft.points.length >= 2
-                  ? [
-                      {
-                        type: "Feature" as const,
-                        geometry: {
-                          type: "LineString" as const,
-                          coordinates: routeDraft.points as number[][],
-                        },
-                        properties: {},
-                      },
-                    ]
-                  : [],
-            }}
-          >
-            {/* SOLID. A route is a thing you are making; the ruler's dotted
-                line is a thing you are asking. Keeping them visually distinct
-                is how you can tell at a glance which tool has the taps. */}
-            <LineLayer
-              id="route-draft-line"
-              style={{
-                lineColor: theme.accent,
-                lineWidth: 3,
-                lineCap: "round",
-                lineJoin: "round",
-              }}
-            />
-          </ShapeSource>
+        {showRoutes ? (
+          <RoutesLayer
+            routes={routes.data ?? []}
+            hiddenRouteId={editingRouteId}
+            // While a tool is collecting points every tap belongs to the tool —
+            // opening a stats sheet mid-draw would steal the point being placed.
+            onPressRoute={collectingPoints ? undefined : setStatsRouteId}
+          />
         ) : null}
 
-        {/* One handle per ANCHOR — never per point. A snapped run is geometry
-            the tool produced, not vertices the user placed, so dotting every
-            one of them made 500 m of creek look like twenty-two decisions.
-            PointAnnotation rather than a CircleLayer because it is the only
-            thing in the wrapper that can be dragged. */}
-        {routeDraft.anchors.map((anchor, index) => (
-          <PointAnnotation
-            key={`route-anchor-${index}`}
-            id={`route-anchor-${index}`}
-            coordinate={anchor}
-            draggable
-            onDragStart={() => {
-              anchorDragged.current = false;
-            }}
-            onDrag={() => {
-              anchorDragged.current = true;
-            }}
-            onDragEnd={(payload: { geometry?: { coordinates?: number[] } }) => {
-              const moved = payload.geometry?.coordinates as
-                | [number, number]
-                | undefined;
-              if (moved) routeDraft.moveAnchorAt(index, moved);
-              // The tap that ends a drag also fires onSelected; this keeps it
-              // from being read as "delete this point".
-              anchorDragged.current = true;
-            }}
-            onSelected={() => {
-              if (anchorDragged.current) {
-                anchorDragged.current = false;
-                return;
-              }
-              routeDraft.deleteAnchorAt(index);
-            }}
-          >
-            <View style={styles.routeAnchor} />
-          </PointAnnotation>
-        ))}
+        {/* The route being drawn — solid. */}
+        {drawingRoute ? (
+          <RouteDraftLayer
+            idPrefix="route-draft"
+            points={routeDraft.points}
+            anchors={routeDraft.anchors}
+            dotted={false}
+            {...anchorHandlers(routeDraft)}
+          />
+        ) : null}
 
-        {/* Measured line: dotted, like a ruler laid over the map rather than
-            anything recorded. Unpinned (no layerIndex) so it sits above every
-            overlay — a measurement you can't see under a topo layer is
-            useless. */}
-        {measurePoints && measurePoints.length > 0 ? (
-          <ShapeSource id="measure" shape={measureShape(measurePoints)}>
-            <LineLayer
-              id="measure-line"
-              style={{
-                lineColor: MEASURE_COLOR,
-                lineWidth: 3,
-                lineDasharray: [1, 1.5],
-                lineCap: "round",
-              }}
-            />
-            <CircleLayer
-              id="measure-points"
-              style={{
-                circleRadius: 5,
-                circleColor: MEASURE_COLOR,
-                circleStrokeWidth: 2,
-                circleStrokeColor: theme.primary,
-              }}
-            />
-          </ShapeSource>
+        {/* The measured line — dotted, and otherwise the same tool. */}
+        {measuring ? (
+          <RouteDraftLayer
+            idPrefix="measure-draft"
+            points={measureDraft.points}
+            anchors={measureDraft.anchors}
+            dotted
+            {...anchorHandlers(measureDraft)}
+          />
         ) : null}
 
         {/* Own location marker (expo-location watcher). Unpinned ⇒ renders
@@ -2099,23 +2078,28 @@ export function MapScreen({
             with no other chrome (see mapChrome's CHROME_BOTTOM). */}
         {activeTrack ? <TrackRecordingControls activeTrack={activeTrack} /> : null}
 
-        {/* Measure HUD — only while the tool is armed. */}
-        {measurePoints ? (
-          <MeasurePanel
-            points={measurePoints}
-            onUndo={() =>
-              setMeasurePoints((current) => current && current.slice(0, -1))
-            }
-            onClear={() => setMeasurePoints([])}
-            onDone={() => setMeasurePoints(null)}
+        {/* Measure HUD — the same panel as route draw, minus Save. */}
+        {measuring ? (
+          <DraftToolPanel
+            tool="measure"
+            points={measureDraft.points}
+            anchorCount={measureDraft.anchors.length}
+            canUndo={measureDraft.canUndo}
+            atCap={measureDraft.atCap}
+            editingName={null}
+            saving={false}
+            onUndo={measureDraft.undo}
+            onClear={measureDraft.clear}
             snapMode={snapMode}
             onSnapModeChange={handleSnapModeChange}
+            onDiscard={measureDraft.close}
           />
         ) : null}
 
         {/* Route draw HUD — only while the tool is armed. */}
-        {routeDraft.active ? (
-          <RouteDrawPanel
+        {drawingRoute ? (
+          <DraftToolPanel
+            tool="route"
             points={routeDraft.points}
             anchorCount={routeDraft.anchors.length}
             canUndo={routeDraft.canUndo}
@@ -2387,6 +2371,54 @@ export function MapScreen({
         onFailed={(text) => notify(text, "error")}
       />
 
+      {/* Route sheets: stats → options → link, each opening the next and
+          closing itself, so only one is ever on screen. */}
+      <RouteStatsSheet
+        route={statsRoute}
+        visible={statsRoute !== null}
+        onClose={() => setStatsRouteId(null)}
+        onViewOptions={() => {
+          setOptionsRouteId(statsRouteId);
+          setStatsRouteId(null);
+        }}
+      />
+
+      <RouteOptionsSheet
+        route={optionsRoute}
+        visible={optionsRoute !== null}
+        onClose={() => setOptionsRouteId(null)}
+        onViewStats={() => {
+          setStatsRouteId(optionsRouteId);
+          setOptionsRouteId(null);
+        }}
+        onShowOnMap={() => {
+          const bbox =
+            optionsRoute &&
+            bboxOfPoints(optionsRoute.points.map(([lon, lat]) => ({ lon, lat })));
+          setOptionsRouteId(null);
+          if (bbox) fitCameraToBbox(bbox);
+        }}
+        onEdit={() => {
+          const target = optionsRoute;
+          setOptionsRouteId(null);
+          if (target) openRouteForEditing(target);
+        }}
+        onLinkCanyon={() => {
+          setLinkingRouteId(optionsRouteId);
+          setOptionsRouteId(null);
+        }}
+        onInfo={(text) => notify(text, "info")}
+        onError={(text) => notify(text, "error")}
+      />
+
+      <LinkCanyonSheet
+        route={linkingRoute}
+        visible={linkingRoute !== null}
+        onClose={() => setLinkingRouteId(null)}
+        onInfo={(text) => notify(text, "info")}
+        onError={(text) => notify(text, "error")}
+      />
+
       <Toast message={toast} onDismissed={() => setToast(null)} />
 
       <MapLayersSheet
@@ -2417,6 +2449,9 @@ export function MapScreen({
         onShowCanyonRoutesChange={setShowCanyonRoutes}
         routesStatus={routesStatus}
         canyonRouteHue={OWNED_CANYON_COLOR}
+        showRoutes={showRoutes}
+        onShowRoutesChange={setShowRoutes}
+        routeCount={routes.data?.length ?? 0}
         offlineOnly={offlineOnly}
         onOfflineOnlyChange={setOfflineOnly}
         onSaveArea={() => {
@@ -2608,16 +2643,4 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.regular,
   },
   deleteText: { color: theme.warning, fontSize: fontSize.sm, fontWeight: "600" },
-  // Bigger than it looks: the visible dot is 16px but the annotation's touch
-  // target is the whole view, and a 16px target is unhittable with a thumb.
-  routeAnchor: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: withAlpha(theme.accent, 0.25),
-    borderWidth: 2,
-    borderColor: theme.accent,
-  },
 });

@@ -3,6 +3,7 @@ import {
   Map,
   MapPin,
   Mountain,
+  Route,
   BookOpen,
   BarChart3,
   Users,
@@ -11,9 +12,10 @@ import {
 } from "lucide-react";
 import type { PanelId } from "./panels";
 
-/** Panels reachable from the nav. `canyon-detail` is opened programmatically
- *  (from the map / canyon list), never from a nav item, so it isn't one. */
-export type NavItemId = Exclude<PanelId, "canyon-detail">;
+/** Panels reachable from the nav. `canyon-detail` and `route-detail` are opened
+ *  programmatically (from the map / canyon list), never from a nav item, so
+ *  neither is one. */
+export type NavItemId = Exclude<PanelId, "canyon-detail" | "route-detail">;
 
 export type NavItem = {
   id: NavItemId;
@@ -36,6 +38,7 @@ const TOP_ITEMS: NavItem[] = [
   { id: "canyons", label: "Canyons", Icon: MapPin },
   { id: "geopdfs", label: "GeoPDFs", Icon: Map },
   { id: "lidar", label: "LiDAR", Icon: Mountain },
+  { id: "routes", label: "Routes", Icon: Route },
   { id: "trip-logs", label: "Trip Logs", Icon: BookOpen },
   { id: "analytics", label: "Analytics", Icon: BarChart3 },
   { id: "friends", label: "Friends", Icon: Users },
@@ -59,12 +62,15 @@ const MOBILE_RAIL_IDS: NavItemId[] = ["layers", "canyons", "trip-logs"];
  *  - `notifications` first: it is the only badged item today and the reason the
  *    sheet is acceptable at all — landing on it means More's badge pays off in
  *    one glance rather than a scan.
+ *  - `routes` next: the drawing tool and the lines you already have — a
+ *    planning surface, but one you reach for far more than a review one.
  *  - `friends` / `analytics` next: read-only review surfaces, cheap to open.
  *  - `geopdfs` / `lidar` last of the features: frontend/CLAUDE.md calls the
  *    heavy authoring tools desktop-first, so they rank lowest on a phone.
  *  - `account` last, preserving the desktop rail's bottom-group convention. */
 const MORE_ITEM_IDS: NavItemId[] = [
   "notifications",
+  "routes",
   "friends",
   "analytics",
   "geopdfs",

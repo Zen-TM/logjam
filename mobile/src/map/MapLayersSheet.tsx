@@ -105,6 +105,9 @@ export function MapLayersSheet({
   onShowCanyonRoutesChange,
   routesStatus,
   canyonRouteHue,
+  showRoutes,
+  onShowRoutesChange,
+  routeCount,
   offlineOnly,
   onOfflineOnlyChange,
   onSaveArea,
@@ -135,6 +138,10 @@ export function MapLayersSheet({
   routesStatus: CanyonRoutesStatus | null;
   /** The colour the routes are actually drawn in, so the row matches the map. */
   canyonRouteHue: string;
+  showRoutes: boolean;
+  onShowRoutesChange: (next: boolean) => void;
+  /** How many routes the user has drawn — the row's own tally. */
+  routeCount: number;
   offlineOnly: boolean;
   onOfflineOnlyChange: (next: boolean) => void;
   onSaveArea: () => void;
@@ -155,7 +162,8 @@ export function MapLayersSheet({
     readyGeoPdfs.filter((entry) => entry.visible).length +
     imports.filter((entry) => entry.visible).length +
     savedTracks.filter((track) => track.visible).length +
-    (showCanyonRoutes ? 1 : 0);
+    (showCanyonRoutes ? 1 : 0) +
+    (showRoutes && routeCount > 0 ? 1 : 0);
 
   // The sheet closing for any reason drops an open overflow: coming back to a
   // rename form for a layer you have since navigated away from is a stale
@@ -220,6 +228,9 @@ export function MapLayersSheet({
           onShowCanyonRoutesChange={onShowCanyonRoutesChange}
           routesStatus={routesStatus}
           canyonRouteHue={canyonRouteHue}
+          showRoutes={showRoutes}
+          onShowRoutesChange={onShowRoutesChange}
+          routeCount={routeCount}
           onOpenMenu={setMenu}
         />
       ) : null}
@@ -360,6 +371,9 @@ function LayersTab({
   onShowCanyonRoutesChange,
   routesStatus,
   canyonRouteHue,
+  showRoutes,
+  onShowRoutesChange,
+  routeCount,
   onOpenMenu,
 }: {
   overlays: OverlayEntry[];
@@ -377,6 +391,9 @@ function LayersTab({
   onShowCanyonRoutesChange: (next: boolean) => void;
   routesStatus: CanyonRoutesStatus | null;
   canyonRouteHue: string;
+  showRoutes: boolean;
+  onShowRoutesChange: (next: boolean) => void;
+  routeCount: number;
   onOpenMenu: (menu: ItemMenu) => void;
 }) {
   // Both axes have to agree before an overlay is on the map (TopoOverlayList).
@@ -414,6 +431,21 @@ function LayersTab({
         totalCount={1}
         onSetAll={onShowCanyonRoutesChange}
       />
+
+      {/* The user's OWN drawn routes — a different kind from the canyon files
+          above, and the one layer they made themselves, so it gets its own
+          switch rather than being permanently on. */}
+      {routeCount > 0 ? (
+        <LayerGroup
+          icon="pen-tool"
+          hue={assetHue.route}
+          title="My routes"
+          subtitle={`${routeCount} drawn`}
+          visibleCount={showRoutes ? 1 : 0}
+          totalCount={1}
+          onSetAll={onShowRoutesChange}
+        />
+      ) : null}
 
       {overlays.length > 0 ? (
         <LayerGroup

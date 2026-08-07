@@ -148,6 +148,11 @@ function App() {
     "off",
   );
   const [selectedRouteID, setSelectedRouteID] = useState<string | null>(null);
+  // Position along the selected route under the elevation-profile cursor, so
+  // the chart and the map point at the same place.
+  const [routeHoverPosition, setRouteHoverPosition] = useState<
+    [number, number] | null
+  >(null);
 
   // Coordinate picking mode for CanyonDialog
   const [pickingCoords, setPickingCoords] = useState(false);
@@ -395,6 +400,7 @@ function App() {
       canyons: "Canyons",
       geopdfs: "GeoPDFs",
       lidar: "LiDAR",
+      routes: "Routes",
       "trip-logs": "Trip Logs",
       analytics: "Analytics",
       friends: "Friends",
@@ -428,13 +434,14 @@ function App() {
   const { canyons, total: canyonsTotal, loaded: canyonsLoaded, error: canyonsError, refetch } = useCanyons(authenticated);
   const { canyons: sharedCanyons, error: sharedError, refetch: refetchShared } =
     useSharedCanyons(authenticated);
+  // Also fetched for the Routes panel, which lists the same track files.
   const { tracks: canyonTracks, refetch: refetchCanyonTracks } = useCanyonTracks(
-    authenticated && showCanyonTracks,
+    authenticated && (showCanyonTracks || activePanel === "routes"),
   );
   // Routes load whenever the layer is on OR a draw/edit session is live (the
   // editor needs the row it is editing even with the layer toggled off).
   const { routes, refetch: refetchRoutes } = useRoutes(
-    authenticated && (showRoutes || drawingRoute),
+    authenticated && (showRoutes || drawingRoute || activePanel === "routes"),
   );
   // A canyon list change (e.g. after a track upload) should refresh the layer.
   useEffect(() => {
@@ -1043,6 +1050,12 @@ function App() {
           onStartDrawingRoute={startDrawingRoute}
           selectedRoute={selectedRoute}
           allRoutes={routes}
+          canyonTracks={canyonTracks}
+          onSelectRoute={(id) => {
+            setSelectedRouteID(id);
+            setActivePanel("route-detail");
+          }}
+          onRouteHoverPosition={setRouteHoverPosition}
           currentUserId={currentUser?.id ?? null}
           onEditRoute={startEditingRoute}
           onRoutesChanged={refetchRoutes}
@@ -1157,6 +1170,7 @@ function App() {
         canyonTracks={canyonTracks}
         showRoutes={showRoutes}
         routes={routes}
+        routeHoverPosition={routeHoverPosition}
         selectRoute={(id) => {
           setSelectedRouteID(id);
           setActivePanel("route-detail");

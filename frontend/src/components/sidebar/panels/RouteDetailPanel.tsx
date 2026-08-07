@@ -4,7 +4,7 @@
 // A route reached through a canyon share is READ-ONLY here: the sharee can see
 // it and export it, but edit/delete/link belong to the owner. The API enforces
 // this with a 403; the UI just doesn't offer the controls.
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pencil, Trash2, Download, ArrowLeftRight, Link2Off } from "lucide-react";
 import classes from "./RouteDetailPanel.module.css";
 import shared from "../../../styles/shared.module.css";
@@ -21,10 +21,16 @@ import {
   type TCanyon,
 } from "../../../canyonUtils";
 import {
+  densifyLine,
   formatDistanceM,
   routeLengthM,
   reverseRoute,
-  trackPointsToGpx,
+  reverseRouteAnchors,
+  routeExportFilename,
+  routeToGpx,
+  routeToKml,
+  GPX_MIME_TYPE,
+  KML_MIME_TYPE,
 } from "@logjam/shared";
 
 type RouteDetailPanelProps = {
@@ -39,6 +45,9 @@ type RouteDetailPanelProps = {
   onEdit: (route: TRoute) => void;
   onChanged: () => void;
   onClose: () => void;
+  /** Where along the route the elevation-profile cursor sits, so the map can
+   * mark the same spot. Null when the cursor leaves the chart. */
+  onHoverPosition: (position: [number, number] | null) => void;
 };
 
 /** Trigger a client-side file download. Export never touches the server —
@@ -52,29 +61,6 @@ function downloadText(filename: string, text: string, mimeType: string): void {
   URL.revokeObjectURL(url);
 }
 
-/** Minimal KML document for one line. GPX has a shared writer already
- * (trackPointsToGpx); KML does not, and one <LineString> does not justify a
- * second serialiser in shared/. */
-function routeToKml(name: string, points: [number, number][]): string {
-  const escaped = name.replace(/[<>&"']/g, (c) =>
-    ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[c]!,
-  );
-  const coords = points
-    .map(([lon, lat]) => `${lon.toFixed(6)},${lat.toFixed(6)}`)
-    .join(" ");
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-  <Document>
-    <name>${escaped}</name>
-    <Placemark>
-      <name>${escaped}</name>
-      <LineString><coordinates>${coords}</coordinates></LineString>
-    </Placemark>
-  </Document>
-</kml>
-`;
-}
-
 export default function RouteDetailPanel({
   route,
   currentUserId,
@@ -83,6 +69,7 @@ export default function RouteDetailPanel({
   onEdit,
   onChanged,
   onClose,
+  onHoverPosition,
 }: RouteDetailPanelProps): React.JSX.Element {
   const toast = useToast();
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -100,6 +87,22 @@ export default function RouteDetailPanel({
     loading: profileLoading,
     error: profileError,
   } = useElevationProfile(route?.points ?? null);
+
+  // The SAME densification the server profiled, so a sample index maps straight
+  // back to a coordinate on the line — no second interpolation to drift.
+  const samplePositions = useMemo(
+    () => (route ? densifyLine(route.points) : []),
+    [route],
+  );
+  const handleHoverSample = useCallback(
+    (index: number | null) => {
+      const position = index == null ? null : samplePositions[index];
+      onHoverPosition(position ? [position.lon, position.lat] : null);
+    },
+    [samplePositions, onHoverPosition],
+  );
+  // Closing the panel mid-hover would otherwise strand the map marker.
+  useEffect(() => () => onHoverPosition(null), [onHoverPosition]);
 
   if (!route) {
     return <span className={classes.caption}>No route selected.</span>;
@@ -123,7 +126,15 @@ export default function RouteDetailPanel({
 
   const handleReverse = () =>
     run(
-      () => updateRoute(route.id, { points: reverseRoute(route.points) }),
+      () =>
+        updateRoute(route.id, {
+          points: reverseRoute(route.points),
+          // Anchors index INTO points, so flipping the geometry without
+          // remapping them silently reassigns which vertices the user placed.
+          ...(route.anchors
+            ? { anchors: reverseRouteAnchors(route.anchors, route.points.length) }
+            : {}),
+        }),
       "Couldn't reverse the route.",
     );
 
@@ -177,7 +188,6 @@ export default function RouteDetailPanel({
           <div className={classes.distance}>
             {formatDistanceM(routeLengthM(route.points))}
           </div>
-          <div className={classes.caption}>{route.points.length} points</div>
         </div>
       </div>
 
@@ -206,8 +216,9 @@ export default function RouteDetailPanel({
             minM={profile.minM}
             maxM={profile.maxM}
             color={route.color}
+            onHoverSampleChange={handleHoverSample}
           />
-          <span className={classes.caption}>{profile.attribution}</span>
+          <span className={classes.attribution}>{profile.attribution}</span>
         </>
       )}
 
@@ -255,19 +266,9 @@ export default function RouteDetailPanel({
           className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
           onClick={() =>
             downloadText(
-              `${route.name}.gpx`,
-              trackPointsToGpx(
-                route.name,
-                route.points.map(([lon, lat]) => ({
-                  lon,
-                  lat,
-                  altitudeM: null,
-                  accuracyM: null,
-                  timestampMs: 0,
-                  segment: 0,
-                })),
-              ),
-              "application/gpx+xml",
+              routeExportFilename(route.name, "gpx"),
+              routeToGpx(route.name, route.points),
+              GPX_MIME_TYPE,
             )
           }
         >
@@ -278,9 +279,9 @@ export default function RouteDetailPanel({
           className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
           onClick={() =>
             downloadText(
-              `${route.name}.kml`,
+              routeExportFilename(route.name, "kml"),
               routeToKml(route.name, route.points),
-              "application/vnd.google-earth.kml+xml",
+              KML_MIME_TYPE,
             )
           }
         >

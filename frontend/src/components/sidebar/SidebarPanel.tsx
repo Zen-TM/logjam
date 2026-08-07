@@ -14,6 +14,7 @@ import type {
   TAnalytics,
   TUser,
   TRoute,
+  CanyonTrack,
 } from "../../canyonUtils";
 import type { TripLogCustomFieldDef, VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
@@ -28,6 +29,7 @@ import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import CanyonDetailPanel from "./panels/CanyonDetailPanel";
 import RouteDetailPanel from "./panels/RouteDetailPanel";
+import RoutesPanel from "./panels/RoutesPanel";
 import AccountPanel from "./panels/AccountPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
@@ -37,6 +39,7 @@ const PANEL_TITLES: Record<PanelId, string> = {
   canyons: "Canyons",
   geopdfs: "GeoPDFs",
   lidar: "LiDAR Topos",
+  routes: "Routes",
   "trip-logs": "Trip Logs",
   analytics: "Analytics",
   friends: "Friends",
@@ -129,6 +132,9 @@ function SidebarPanel({
   isOwnedCanyon,
   selectedRoute,
   allRoutes,
+  canyonTracks,
+  onSelectRoute,
+  onRouteHoverPosition,
   currentUserId,
   onEditRoute,
   onRoutesChanged,
@@ -233,6 +239,9 @@ function SidebarPanel({
   onStartDrawingRoute: () => void;
   selectedRoute: TRoute | null;
   allRoutes: TRoute[];
+  canyonTracks: CanyonTrack[];
+  onSelectRoute: (id: string) => void;
+  onRouteHoverPosition: (position: [number, number] | null) => void;
   currentUserId: string | null;
   onEditRoute: (route: TRoute) => void;
   onRoutesChanged: () => void;
@@ -326,7 +335,6 @@ function SidebarPanel({
             setShowCanyonTracks={setShowCanyonTracks}
             showRoutes={showRoutes}
             setShowRoutes={setShowRoutes}
-            onStartDrawingRoute={onStartDrawingRoute}
             lidarEnabled={lidarEnabled}
             setLidarEnabled={setLidarEnabled}
             lidarLayerToggles={lidarLayerToggles}
@@ -479,6 +487,19 @@ function SidebarPanel({
             onEdit={onEditRoute}
             onChanged={onRoutesChanged}
             onClose={() => setActivePanel(null)}
+            onHoverPosition={onRouteHoverPosition}
+          />
+        )}
+        {activePanel === "routes" && (
+          <RoutesPanel
+            routes={allRoutes}
+            currentUserId={currentUserId}
+            canyonTracks={canyonTracks}
+            canyons={[...canyons, ...sharedCanyons]}
+            onStartDrawingRoute={onStartDrawingRoute}
+            onSelectRoute={onSelectRoute}
+            setSelectedCanyonID={setSelectedCanyonID}
+            setActivePanel={setActivePanel}
           />
         )}
       </div>

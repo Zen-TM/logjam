@@ -1,24 +1,24 @@
-// Route draw HUD.
+// HUD for both point-drawing map tools — route draw and measure.
 //
-// A TOOLBAR, not a card. While the tool is armed it takes the SEARCH PILL'S
-// SLOT at the top of the screen — search is not reachable mid-draw anyway, and
-// on a phone the map is the thing being worked in, so the chrome should not eat
-// a third of it. Compact rows: what you have drawn, then what you can do about
-// it.
+// ONE panel, because the two tools are one interaction: the same anchors, the
+// same drag/delete handles, the same snapping. They differ at the EXIT and in
+// the ink (DESIGN.md §8) — measure has no Save and draws dotted — and a second
+// component would have been a second place for the shared 90 % to rot.
 //
-// This is the tool DESIGN.md §8 carves out: "a tool that produces something the
-// user would want to keep is a different thing and belongs in Saved". So unlike
-// measure, leaving does NOT silently bin the work — Save is the primary action
-// and discarding asks first (in the caller).
+// A TOOLBAR, not a card. While a tool is armed it takes the SEARCH PILL'S SLOT
+// at the top of the screen — search is not reachable mid-draw anyway, and on a
+// phone the map is the thing being worked in, so the chrome should not eat a
+// third of it. Compact rows: what you have drawn, then what you can do about it.
 //
 // The two destructive controls are deliberately different verbs:
 //   Clear  — empty the points, stay in the tool. Start the line again.
-//   Trash  — discard the draft and leave. Confirms first.
+//   Trash  — discard and leave. Route draw confirms first (in the caller);
+//            measure does not, because a measurement is a question asked once.
 // They used to be the other way round, which read as "cancel throws my work
 // away" and left the trash looking like the safer of the two.
 //
 // Gain/loss come from the DEM on demand and are simply absent offline — which
-// is the case this tool is built for.
+// is the case these tools are built for.
 import { StyleSheet, Text, View } from "react-native";
 import {
   formatDistanceM,
@@ -33,7 +33,8 @@ import { ElevationReadout } from "./ElevationReadout";
 import { SnapPicker } from "./SnapPicker";
 import { useElevationProfile } from "./useElevationProfile";
 
-export function RouteDrawPanel({
+export function DraftToolPanel({
+  tool,
   points,
   anchorCount,
   canUndo,
@@ -47,6 +48,8 @@ export function RouteDrawPanel({
   snapMode,
   onSnapModeChange,
 }: {
+  /** Which tool owns the taps — the only thing that varies in this panel. */
+  tool: "route" | "measure";
   points: readonly [number, number][];
   /** User-placed vertices — what the count reports, never snapped filler. */
   anchorCount: number;
@@ -57,7 +60,8 @@ export function RouteDrawPanel({
   saving: boolean;
   onUndo: () => void;
   onClear: () => void;
-  onSave: () => void;
+  /** Absent for measure: its points are a question, not an asset. */
+  onSave?: () => void;
   onDiscard: () => void;
   snapMode: SnapMode;
   onSnapModeChange: (mode: SnapMode) => void;
@@ -75,7 +79,9 @@ export function RouteDrawPanel({
         </Text>
         <Text style={styles.meta} numberOfLines={1}>
           {anchorCount === 0
-            ? "Tap the map to start"
+            ? tool === "measure"
+              ? "Tap the map to measure"
+              : "Tap the map to start"
             : `${anchorCount} point${anchorCount === 1 ? "" : "s"}`}
         </Text>
         <View style={styles.spacer} />
@@ -114,17 +120,23 @@ export function RouteDrawPanel({
         <IconButton
           icon="trash-2"
           color={theme.warning}
-          accessibilityLabel="Discard this route and close the tool"
+          accessibilityLabel={
+            tool === "measure"
+              ? "Clear the measurement and close the tool"
+              : "Discard this route and close the tool"
+          }
           disabled={saving}
           onPress={onDiscard}
         />
-        <Button
-          label={saving ? "Saving…" : "Save"}
-          icon="check"
-          compact
-          disabled={!hasLine || saving}
-          onPress={onSave}
-        />
+        {onSave ? (
+          <Button
+            label={saving ? "Saving…" : "Save"}
+            icon="check"
+            compact
+            disabled={!hasLine || saving}
+            onPress={onSave}
+          />
+        ) : null}
       </View>
     </View>
   );

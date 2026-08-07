@@ -1,9 +1,8 @@
 /* Single-series area chart. Grid and axis stay recessive; the only saturated
    thing is the route's own colour, which carries identity. */
 .root {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25em;
+  /* Anchors the hover marker, which is positioned in chart coordinates. */
+  position: relative;
 }
 
 .chart {
@@ -18,20 +17,49 @@
 }
 
 .axis {
-  stroke: var(--theme-text-secondary);
+  stroke: var(--theme-text-muted);
   opacity: 0.4;
 }
 
 .crosshair {
-  stroke: var(--theme-text-secondary);
+  stroke: var(--theme-text-muted);
   stroke-dasharray: 3 3;
 }
 
-/* Text wears text tokens, never the series colour. */
-.footer {
+/* Hover readout: a dot on the line with its figures beside it. The dot is
+   8px wide, so shifting the row 4px left centres it on the sample. */
+.marker {
+  position: absolute;
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 0.35em;
+  transform: translate(-4px, -50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Past the midpoint the row grows leftwards instead, keeping the readout
+   inside the panel. */
+.markerFlipped {
+  flex-direction: row-reverse;
+  transform: translate(calc(-100% + 4px), -50%);
+}
+
+.markerDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--theme-primary);
+  flex-shrink: 0;
+}
+
+/* Text wears text tokens, never the series colour. The backdrop keeps it
+   legible where it crosses the filled area. */
+.markerLabel {
   font-size: var(--text-xs);
-  color: var(--theme-text-secondary);
   font-variant-numeric: tabular-nums;
+  color: var(--theme-text-primary);
+  background: color-mix(in srgb, var(--theme-primary) 82%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 0 0.25em;
 }

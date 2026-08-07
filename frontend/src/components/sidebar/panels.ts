@@ -3,6 +3,7 @@ export type PanelId =
   | "canyons"
   | "geopdfs"
   | "lidar"
+  | "routes"
   | "trip-logs"
   | "analytics"
   | "friends"

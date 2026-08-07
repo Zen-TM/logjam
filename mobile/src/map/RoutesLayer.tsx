@@ -12,6 +12,7 @@ import { CircleLayer, LineLayer, ShapeSource } from "@maplibre/maplibre-react-na
 
 import { theme } from "../theme";
 import type { MirrorRoute } from "../sync/mirrorStore";
+import { RouteDirectionArrows } from "./RouteDraftLayer";
 
 /** Colour for a route whose server-assigned palette entry hasn't arrived yet
  * (drawn offline, create still queued). */
@@ -21,9 +22,12 @@ export function RoutesLayer({
   routes,
   /** Hidden while its geometry is being edited — the draft layer draws it. */
   hiddenRouteId,
+  onPressRoute,
 }: {
   routes: readonly MirrorRoute[];
   hiddenRouteId: string | null;
+  /** Tapping a line opens its stats. Absent while a tool owns the map's taps. */
+  onPressRoute?: (routeId: string) => void;
 }) {
   const shape = useMemo<GeoJSON.FeatureCollection>(
     () => ({
@@ -47,8 +51,27 @@ export function RoutesLayer({
 
   if (shape.features.length === 0) return null;
 
+  const drawn = routes.filter(
+    (route) => route.id !== hiddenRouteId && route.points.length >= 2,
+  );
+
   return (
-    <ShapeSource id="saved-routes" shape={shape}>
+    <>
+    <ShapeSource
+      id="saved-routes"
+      shape={shape}
+      // A 3px line is far thinner than a fingertip; the hitbox is what makes
+      // tapping one a reasonable thing to ask. 44pt is the platform minimum
+      // touch target, and it is the right number here for the same reason.
+      hitbox={{ width: 44, height: 44 }}
+      onPress={
+        onPressRoute &&
+        ((event) => {
+          const routeId = event.features[0]?.properties?.routeId;
+          if (typeof routeId === "string") onPressRoute(routeId);
+        })
+      }
+    >
       {/* Casing first: a dark under-stroke keeps a mid-tone line legible over
           both the pale basemap and dark imagery. */}
       <LineLayer
@@ -81,5 +104,19 @@ export function RoutesLayer({
         }}
       />
     </ShapeSource>
+
+    {/* Arrows are markers, not a symbol layer (see RouteDraftLayer), so they
+        live outside the source and carry each route's own colour. Fewer per
+        route than the draft gets: several routes on screen at once is a lot of
+        chevrons, and here they only need to answer "which way does this run". */}
+    {drawn.map((route) => (
+      <RouteDirectionArrows
+        key={route.id}
+        points={route.points}
+        color={route.color ?? UNSYNCED_ROUTE_COLOR}
+        count={3}
+      />
+    ))}
+    </>
   );
 }

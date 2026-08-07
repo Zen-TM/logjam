@@ -102,7 +102,7 @@ BottomSheet(s)      acquisition + per-item actions
   never reappear over unrelated ground later. A tool that produces something the
   user would want to keep is a different thing and belongs in Saved.
 - **A tool's own settings belong in its HUD, not in the layers sheet.** The snap
-  picker (`SnapPicker.tsx`) sits in the measure and route-draw panels because it
+  picker (`SnapPicker.tsx`) sits in the tool panel because it
   governs what the NEXT TAP does — it is part of the tool's mode, not a property
   of the map. Layer visibility goes in the layers sheet; tool behaviour goes with
   the tool. Use the wrapped `SegmentedControl` from the kit for the choice (§9:
@@ -123,6 +123,25 @@ BottomSheet(s)      acquisition + per-item actions
   points silently (a question asked once), while leaving route draw confirms,
   because those points were meant to become something. Route draw ends in Save,
   and the result lands in Saved.
+- **The two point tools are ONE implementation, differing in exactly two
+  things.** They share the draft model (`@logjam/shared` `routeDraft.ts` behind
+  `useRouteDraft`), the HUD (`DraftToolPanel.tsx`) and the map layer
+  (`RouteDraftLayer.tsx`); measure has no Save, and its line is DOTTED where a
+  route is SOLID (a thing you are asking versus a thing you are making). They
+  were parallel implementations once, and the measure copy is what quietly
+  lacked draggable points. A third tool extends these, it does not fork them.
+- **A handle is dragged far more often than it is deleted, so a TAP on one only
+  offers.** Dropping a point ends on the same pixel as tapping it; removing a
+  vertex on what felt like a drop is a loss the user cannot see coming, so the
+  tap opens the §7 destructive confirm. The line follows the finger DURING the
+  drag (preview, no undo step) and commits once on release — which is also when
+  snapping re-runs, on BOTH segments touching a middle anchor.
+- **A drawn line says which way it runs.** Small arrows along it
+  (`RouteDirectionArrows`, a `symbol-placement: "line"` layer, so MapLibre
+  spaces and rotates them itself) on the draft and on saved routes, with a zoom
+  floor — at a low zoom a route is a few pixels of line and arrows are noise.
+  The FIRST and LAST anchors carry a quiet variation of the handle (filled and
+  hollow); a hint you read up close, not a badge competing at a glance.
 - **Feather is the icon family; a second family is allowed only for a glyph it
   lacks.** Feather has no ruler in its 286 glyphs and the near misses read as
   "resize" or "commit", so measure uses MaterialCommunityIcons `ruler` (already
@@ -188,8 +207,8 @@ whole kind off. Each kind is now ONE row — its glyph and hue, a live count
 ("4 of 4 shown"), a master switch, and a chevron that opens its files underneath.
 
 - The master switch's value is "any of them visible"; flipping it writes every
-  item in the kind. Kinds with exactly one thing behind them (canyon routes) are
-  the same row without the disclosure.
+  item in the kind. Kinds with exactly one thing behind them (canyon routes, and
+  the user's own drawn routes) are the same row without the disclosure.
 - **A control that is the same for every item in a kind belongs to the KIND.**
   GeoPDF opacity was five identical 5-step rails stacked; it is now one rail under
   the group, writing all of them.

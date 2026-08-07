@@ -93,6 +93,10 @@ import {
 } from "./assetActions";
 import { useTracks } from "../tracks/useTracks";
 import type { Bbox } from "./bboxOfPoints";
+import type { MirrorRoute } from "../sync/mirrorStore";
+import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
+import { RouteStatsSheet } from "../routes/RouteStatsSheet";
+import { LinkCanyonSheet } from "../routes/LinkCanyonSheet";
 
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
@@ -728,19 +732,6 @@ export function SavedScreen({
     [fail, refreshFreeSpace],
   );
 
-  const reverseItem = useCallback(
-    (item: SavedItem) => {
-      item.reverse?.().then(
-        () => info("Direction reversed."),
-        (err: unknown) => {
-          console.error(err);
-          fail("Couldn't reverse that route.");
-        },
-      );
-    },
-    [fail, info],
-  );
-
   /** Recording → route. Says how many points survived, because RDP always
    *  throws some away and silently handing back a coarser line is how the user
    *  concludes the app lost their track. */
@@ -778,6 +769,17 @@ export function SavedScreen({
   );
 
   const menuItem = items.find((item) => item.key === menuItemKey) ?? null;
+  // A route's overflow is the SAME sheet the map shows, so the two surfaces
+  // cannot offer different verbs for the same object (DESIGN.md §7). Rename is
+  // the exception: the form lives in the generic sheet, so choosing it hands
+  // back to that one.
+  const menuRoute =
+    menuItem?.category === "route"
+      ? ((routes.data ?? []).find((route) => route.id === menuItem.key) ?? null)
+      : null;
+  const showRouteSheet = menuRoute !== null && menuMode !== "rename";
+  const [statsRoute, setStatsRoute] = useState<MirrorRoute | null>(null);
+  const [linkingRoute, setLinkingRoute] = useState<MirrorRoute | null>(null);
 
   return (
     <View style={styles.screen}>
@@ -1026,7 +1028,7 @@ export function SavedScreen({
       </BottomSheet>
 
       <BottomSheet
-        visible={menuItem != null}
+        visible={menuItem != null && !showRouteSheet}
         onClose={closeItemSheet}
         title={
           menuItem == null
@@ -1057,30 +1059,6 @@ export function SavedScreen({
                   }}
                 />
               ) : null}
-              {menuItem.editableRouteId ? (
-                <Row
-                  title="Edit points"
-                  icon="edit-3"
-                  hue={assetHue.route}
-                  onPress={() => {
-                    const routeId = menuItem.editableRouteId!;
-                    closeItemSheet();
-                    onEditRoute(routeId);
-                  }}
-                />
-              ) : null}
-              {menuItem.reverse ? (
-                <Row
-                  title="Reverse direction"
-                  icon="repeat"
-                  hue={assetHue.route}
-                  onPress={() => {
-                    const target = menuItem;
-                    closeItemSheet();
-                    reverseItem(target);
-                  }}
-                />
-              ) : null}
               {menuItem.createRouteFrom ? (
                 <Row
                   title="Create route from this"
@@ -1099,17 +1077,12 @@ export function SavedScreen({
                 hue={theme.bonus1}
                 onPress={() => setMenuMode("rename")}
               />
-              {/* Every other saved asset IS a file on this handset, so "from
-                  device" is exactly right for them. A route is not: it is a
-                  synced record, and deleting it removes it from the ACCOUNT.
-                  "From device" would promise the copy on your other phone
-                  survives, and it does not. */}
+              {/* Every asset that reaches THIS sheet is a file on this
+                  handset. A route is not — it is a synced record whose delete
+                  removes it from the account — which is why routes get their
+                  own sheet rather than this label with a branch in it. */}
               <Row
-                title={
-                  menuItem?.category === "route"
-                    ? "Delete route"
-                    : "Delete from device"
-                }
+                title="Delete from device"
                 icon="trash-2"
                 hue={theme.warning}
                 onPress={() => {
@@ -1122,6 +1095,52 @@ export function SavedScreen({
           )}
         </View>
       </BottomSheet>
+
+      <RouteOptionsSheet
+        route={menuRoute}
+        visible={showRouteSheet}
+        onClose={closeItemSheet}
+        onViewStats={() => {
+          setStatsRoute(menuRoute);
+          closeItemSheet();
+        }}
+        onShowOnMap={() => {
+          const target = menuItem;
+          closeItemSheet();
+          if (target) showOnMap(target);
+        }}
+        onEdit={() => {
+          const routeId = menuRoute?.id;
+          closeItemSheet();
+          if (routeId) onEditRoute(routeId);
+        }}
+        onRename={() => setMenuMode("rename")}
+        onLinkCanyon={() => {
+          setLinkingRoute(menuRoute);
+          closeItemSheet();
+        }}
+        onInfo={info}
+        onError={fail}
+      />
+
+      <RouteStatsSheet
+        route={statsRoute}
+        visible={statsRoute !== null}
+        onClose={() => setStatsRoute(null)}
+        onViewOptions={() => {
+          const target = statsRoute;
+          setStatsRoute(null);
+          if (target) openItemSheet(target.id);
+        }}
+      />
+
+      <LinkCanyonSheet
+        route={linkingRoute}
+        visible={linkingRoute !== null}
+        onClose={() => setLinkingRoute(null)}
+        onInfo={info}
+        onError={fail}
+      />
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>

@@ -10,10 +10,14 @@ setWorkerUrl(maplibreWorkerUrl);
 import { Protocol } from "pmtiles";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
 import {
+  draftAnchorIndices,
+  draftPoints,
   fetchSnapLines,
+  moveAnchor,
   nearestSegment,
   snapSegment,
   type RouteDraft,
+  type RoutePoint,
   type SnapMode,
 } from "@logjam/shared";
 
@@ -412,6 +416,43 @@ function applyVectorPaint(
   }
 }
 
+/**
+ * Draft geometry as map features: the line, plus one point per ANCHOR carrying
+ * its `role` so the two ends can be told apart. Shared by the state-driven
+ * effect and the live drag preview, which must agree on what a draft looks like
+ * or the line would flicker between two renderings mid-drag.
+ */
+function draftFeatureCollection(
+  points: readonly RoutePoint[],
+  anchorIndices: readonly number[],
+): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  if (points.length >= 2) {
+    features.push({
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: points.map((p) => [...p]) },
+      properties: {},
+    });
+  }
+  anchorIndices.forEach((pointIndex, anchorIndex) => {
+    const point = points[pointIndex];
+    if (!point) return;
+    features.push({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [...point] },
+      properties: {
+        role:
+          anchorIndex === 0
+            ? "start"
+            : anchorIndex === anchorIndices.length - 1
+              ? "end"
+              : "middle",
+      },
+    });
+  });
+  return { type: "FeatureCollection", features };
+}
+
 function Map({
   filters,
   canyons,
@@ -427,6 +468,7 @@ function Map({
   showRoutes,
   routes,
   selectRoute,
+  routeHoverPosition,
   drawingRoute,
   drawPoints,
   drawAnchorIndices,
@@ -477,6 +519,9 @@ function Map({
   showRoutes: boolean;
   routes: TRoute[];
   selectRoute: (id: string) => void;
+  /** Position along a route under the elevation-profile cursor, marked on the
+   * map so the chart and the ground read as the same place. */
+  routeHoverPosition: [number, number] | null;
   // Draw/edit mode. The vertex list lives in App so the HUD can render the
   // running distance and drive undo; the map only reports gestures.
   drawingRoute: boolean;
@@ -639,6 +684,31 @@ function Map({
   useEffect(() => {
     onDrawPointMoveRef.current = onDrawPointMove;
   }, [onDrawPointMove]);
+
+  /**
+   * Snap one segment and hand the run back, fire-and-forget.
+   *
+   * Reading the archive is a network round trip on a cold tile, so nothing
+   * waits on it: the straight segment is already drawn, and `setFiller` behind
+   * `onDrawSnap` drops a run whose anchors have since moved — which is what
+   * makes a late result safe to apply to a draft the user has kept editing.
+   */
+  const snapBetweenRef = useRef((from: RoutePoint, to: RoutePoint) => {
+    if (snapModeRef.current === "off") return;
+    void fetchSnapLines(snapArchiveUrl(), snapModeRef.current, from, to)
+      .then((lines) => {
+        const between = snapSegment(lines, from, to);
+        // `between` includes the graph nodes nearest both ends; drop them, or
+        // the line jumps sideways onto the track at each end.
+        if (between && between.length > 2) {
+          onDrawSnapRef.current(from, to, between.slice(1, -1));
+        }
+      })
+      .catch(() => {
+        // Offline or unreachable archive: the straight line already drawn is
+        // the right answer, and a toast per gesture would be noise.
+      });
+  });
 
   const onMapViewChangeRef = useRef(onMapViewChange);
   useEffect(() => {
@@ -851,6 +921,21 @@ function Map({
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
+      // Invisible click/hover target. A 3px line is a near-pixel-precision
+      // gesture; this widens the hit area without widening what you see, which
+      // is the standard MapLibre answer. Beneath the visible line so it can
+      // never tint it.
+      map.addLayer({
+        id: "routes-hit",
+        type: "line",
+        source: "routes",
+        layout: {
+          visibility: "none",
+          "line-cap": "round",
+          "line-join": "round",
+        },
+        paint: { "line-color": "#000000", "line-opacity": 0, "line-width": 18 },
+      });
       map.addLayer({
         id: "routes-lines",
         type: "line",
@@ -864,6 +949,34 @@ function Map({
           "line-color": ["get", "color"],
           "line-width": ["interpolate", ["linear"], ["zoom"], 7, 2, 14, 4],
           "line-opacity": 0.9,
+        },
+      });
+      // Direction of travel, as chevrons riding the line itself. Symbol
+      // placement does the spacing and rotation natively — hand-placed markers
+      // would have to be recomputed on every pan. Held back to zoom 11+ and
+      // spaced generously so a screenful of routes doesn't turn into a hedge.
+      map.addLayer({
+        id: "routes-direction",
+        type: "symbol",
+        source: "routes",
+        minzoom: 11,
+        layout: {
+          visibility: "none",
+          "symbol-placement": "line",
+          "symbol-spacing": 90,
+          "text-field": "›",
+          "text-font": ["Noto Sans Medium"],
+          "text-size": 16,
+          "text-rotation-alignment": "map",
+          "text-keep-upright": false,
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+        },
+        paint: {
+          "text-color": ["get", "color"],
+          "text-halo-color": "#ffffff",
+          "text-halo-width": 1,
+          "text-opacity": 0.75,
         },
       });
 
@@ -886,15 +999,65 @@ function Map({
         },
       });
       map.addLayer({
+        id: "route-draft-direction",
+        type: "symbol",
+        source: "route-draft",
+        filter: ["==", ["geometry-type"], "LineString"],
+        layout: {
+          "symbol-placement": "line",
+          "symbol-spacing": 90,
+          "text-field": "›",
+          "text-font": ["Noto Sans Medium"],
+          "text-size": 16,
+          "text-rotation-alignment": "map",
+          "text-keep-upright": false,
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+        },
+        paint: {
+          "text-color": readCssVar("--theme-accent", "#3b82f6"),
+          "text-halo-color": "#ffffff",
+          "text-halo-width": 1,
+        },
+      });
+      // Ends read differently from the middle: START is filled, END is hollow
+      // with a heavier ring. A hint at which way the line runs, not a badge —
+      // the arrows above carry the direction, this just tells the two ends
+      // apart when you are dragging one of them.
+      map.addLayer({
         id: "route-draft-vertices",
         type: "circle",
         source: "route-draft",
         filter: ["==", ["geometry-type"], "Point"],
         paint: {
-          "circle-radius": 5,
-          "circle-color": "#ffffff",
-          "circle-stroke-width": 2,
+          "circle-radius": ["match", ["get", "role"], "middle", 4, 5.5],
+          "circle-color": [
+            "match",
+            ["get", "role"],
+            "start",
+            readCssVar("--theme-accent", "#3b82f6"),
+            "#ffffff",
+          ],
+          "circle-stroke-width": ["match", ["get", "role"], "middle", 2, 2.5],
           "circle-stroke-color": readCssVar("--theme-accent", "#3b82f6"),
+        },
+      });
+
+      // Where the elevation-profile cursor sits along a route. Its own source
+      // so moving it never re-uploads route geometry.
+      map.addSource("route-hover", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: "route-hover-point",
+        type: "circle",
+        source: "route-hover",
+        paint: {
+          "circle-radius": 6,
+          "circle-color": readCssVar("--theme-accent", "#3b82f6"),
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
         },
       });
 
@@ -1374,11 +1537,13 @@ function Map({
     );
     // The route being drawn stays visible even with the Routes layer off —
     // hiding your own in-progress work would read as the tool being broken.
-    mapRef.current.setLayoutProperty(
-      "routes-lines",
-      "visibility",
-      vis(showRoutes || drawingRoute),
-    );
+    for (const id of ["routes-hit", "routes-lines", "routes-direction"]) {
+      mapRef.current.setLayoutProperty(
+        id,
+        "visibility",
+        vis(showRoutes || drawingRoute),
+      );
+    }
   }, [
     showOwnedCanyons,
     showSharedCanyons,
@@ -1434,25 +1599,10 @@ function Map({
       // Snapping only ever ADDS intermediate points between the previous
       // vertex and this one — the user's own clicks stay exactly where they
       // put them, so a bad snap is undone by one Undo rather than by
-      // reconstructing what they meant.
-      //
-      // Reading the archive is a network round trip on a cold tile, so the
-      // tapped point lands immediately and the snapped run is filled in behind
-      // it. Waiting would make every click feel laggy.
+      // reconstructing what they meant. The tapped point lands immediately and
+      // the run fills in behind it; waiting would make every click feel laggy.
       onDrawPointAddRef.current(tapped);
-      void fetchSnapLines(snapArchiveUrl(), snapModeRef.current, previous, tapped)
-        .then((lines) => {
-          const between = snapSegment(lines, previous, tapped);
-          // `between` includes the graph nodes nearest both ends; drop them,
-          // or the line jumps sideways onto the track at each tap.
-          if (between && between.length > 2) {
-            onDrawSnapRef.current(previous, tapped, between.slice(1, -1));
-          }
-        })
-        .catch(() => {
-          // Offline or unreachable archive: the straight line already drawn is
-          // the right answer, and a toast per click would be noise.
-        });
+      snapBetweenRef.current(previous, tapped);
     };
     map.on("click", handleClick);
     return () => {
@@ -1469,36 +1619,11 @@ function Map({
       | maplibregl.GeoJSONSource
       | undefined;
     if (!source) return;
-    source.setData({
-      type: "FeatureCollection",
-      features: drawingRoute
-        ? [
-            ...(drawPoints.length >= 2
-              ? [
-                  {
-                    type: "Feature" as const,
-                    geometry: {
-                      type: "LineString" as const,
-                      coordinates: drawPoints,
-                    },
-                    properties: {},
-                  },
-                ]
-              : []),
-            // A dot per ANCHOR, not per point. The snapped filler is geometry
-            // the tool produced, and dotting every vertex of it made a snapped
-            // run look like fifty things the user had placed.
-            ...drawAnchorIndices
-              .map((index) => drawPoints[index])
-              .filter((point): point is [number, number] => point != null)
-              .map((point) => ({
-                type: "Feature" as const,
-                geometry: { type: "Point" as const, coordinates: point },
-                properties: {},
-              })),
-          ]
-        : [],
-    });
+    source.setData(
+      drawingRoute
+        ? draftFeatureCollection(drawPoints, drawAnchorIndices)
+        : { type: "FeatureCollection", features: [] },
+    );
   }, [drawPoints, drawAnchorIndices, drawingRoute, mapLoaded]);
 
   // Draggable vertex handles. MapLibre markers do the drag maths natively, so
@@ -1548,14 +1673,38 @@ function Map({
       marker.on("dragstart", () => {
         movedDuringDrag = false;
       });
+      // Repaint the line under the cursor on every frame. This bypasses React
+      // deliberately: routing each frame through the draft hook would push an
+      // undo entry per pixel moved. The preview is built with the same
+      // `moveAnchor` the drop commits, so what you drag is exactly what lands.
       marker.on("drag", () => {
         movedDuringDrag = true;
+        const source = map.getSource("route-draft") as
+          | maplibregl.GeoJSONSource
+          | undefined;
+        if (!source) return;
+        const { lng, lat } = marker.getLngLat();
+        const preview = moveAnchor(draftRef.current, anchorIndex, [lng, lat]);
+        source.setData(
+          draftFeatureCollection(draftPoints(preview), draftAnchorIndices(preview)),
+        );
       });
       marker.on("dragend", () => {
         handlePressedAt.current = Date.now();
         if (!movedDuringDrag) return;
         const { lng, lat } = marker.getLngLat();
-        onDrawPointMoveRef.current(anchorIndex, [lng, lat]);
+        const moved: RoutePoint = [lng, lat];
+        // Read the neighbours BEFORE committing — the commit is async through
+        // React state, and their own coordinates don't change either way.
+        const { anchors } = draftRef.current;
+        const before = anchors[anchorIndex - 1];
+        const after = anchors[anchorIndex + 1];
+        onDrawPointMoveRef.current(anchorIndex, moved);
+        // moveAnchor straightens both segments touching the anchor, so both
+        // need re-snapping — a middle anchor has two. On drop, not per frame:
+        // a drag is hundreds of frames and each one is an archive read.
+        if (before) snapBetweenRef.current(before, moved);
+        if (after) snapBetweenRef.current(moved, after);
       });
       vertexMarkersRef.current.push(marker);
     });
@@ -1626,7 +1775,8 @@ function Map({
   }, [drawingRoute, mapLoaded]);
 
   // Click a route line to open its detail panel — suppressed while a pick or
-  // draw mode owns the click.
+  // draw mode owns the click. Bound to the invisible buffer layer, not the
+  // drawn line, so the target is a fingertip rather than three pixels.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
@@ -1637,11 +1787,45 @@ function Map({
       const id = e.features?.[0]?.properties?.id;
       if (typeof id === "string") selectRouteRef.current(id);
     };
-    map.on("click", "routes-lines", handleClick);
+    // The pointer only changes over something that is actually clickable.
+    const handleEnter = () => {
+      if (pickModeRef.current || drawingRouteRef.current) return;
+      map.getCanvas().style.cursor = "pointer";
+    };
+    const handleLeave = () => {
+      if (pickModeRef.current || drawingRouteRef.current) return;
+      map.getCanvas().style.cursor = "";
+    };
+    map.on("click", "routes-hit", handleClick);
+    map.on("mouseenter", "routes-hit", handleEnter);
+    map.on("mouseleave", "routes-hit", handleLeave);
     return () => {
-      map.off("click", "routes-lines", handleClick);
+      map.off("click", "routes-hit", handleClick);
+      map.off("mouseenter", "routes-hit", handleEnter);
+      map.off("mouseleave", "routes-hit", handleLeave);
     };
   }, [mapLoaded]);
+
+  // Where the elevation profile's cursor sits along the selected route.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const source = mapRef.current.getSource("route-hover") as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+    source.setData({
+      type: "FeatureCollection",
+      features: routeHoverPosition
+        ? [
+            {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: routeHoverPosition },
+              properties: {},
+            },
+          ]
+        : [],
+    });
+  }, [routeHoverPosition, mapLoaded]);
 
   // Toggle base layer visibility
   useEffect(() => {

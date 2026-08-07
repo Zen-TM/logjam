@@ -30,6 +30,7 @@ export * from "./trackStats.js";
 export * from "./sync.js";
 export * from "./syncClient.js";
 export * from "./waypointValidation.js";
+export * from "./routeExport.js";
 export * from "./routeValidation.js";
 export * from "./elevation.js";
 export * from "./snapToPath.js";

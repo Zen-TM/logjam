@@ -16,8 +16,11 @@ import { formatDistanceM, type ElevationSample } from "@logjam/shared";
 /** Viewbox units. The SVG scales to its container; these only set the aspect. */
 const WIDTH = 300;
 const HEIGHT = 90;
-/** Room under the plot for the distance labels. */
+/** Room under the plot, so the axis line isn't flush with the panel below. */
 const AXIS_HEIGHT = 14;
+/** Past this fraction of the width the readout flips to the left of its dot,
+ *  or it would run off the panel. */
+const LABEL_FLIP_AT = 0.6;
 
 type ElevationProfileProps = {
   samples: ElevationSample[];
@@ -25,47 +28,60 @@ type ElevationProfileProps = {
   maxM: number | null;
   /** The route's map colour, so plot and map agree on identity. */
   color: string;
+  /** Index into `samples` under the cursor, or null on leave. Lets the caller
+   *  mark the same spot on the map — the samples are evenly spaced along the
+   *  route (densifyLine), so an index is a position. */
+  onHoverSampleChange?: (index: number | null) => void;
 };
 
-type PlotPoint = { x: number; y: number; sample: ElevationSample };
+type PlotPoint = { x: number; y: number; index: number; sample: ElevationSample };
 
 export default function ElevationProfile({
   samples,
   minM,
   maxM,
   color,
+  onHoverSampleChange,
 }: ElevationProfileProps): React.JSX.Element | null {
   const [hovered, setHovered] = useState<PlotPoint | null>(null);
 
-  const known = samples.filter((s) => s.elevationM != null);
+  const known: PlotPoint[] = [];
+  const totalM = samples[samples.length - 1]?.distanceM ?? 0;
+  // A flat route would divide by zero; give it a nominal band so the line
+  // lands mid-plot rather than at an edge.
+  const span = (maxM ?? 0) - (minM ?? 0) || 1;
+  const plotHeight = HEIGHT - AXIS_HEIGHT;
+  samples.forEach((sample, index) => {
+    if (sample.elevationM == null || minM == null) return;
+    known.push({
+      x: totalM === 0 ? 0 : (sample.distanceM / totalM) * WIDTH,
+      y: plotHeight - ((sample.elevationM - minM) / span) * (plotHeight - 4) - 2,
+      index,
+      sample,
+    });
+  });
+
   // Two known heights is the minimum that makes a line; below that there is
   // nothing to plot and the text figures above already say so.
   if (known.length < 2 || minM == null || maxM == null) return null;
 
-  const totalM = samples[samples.length - 1]!.distanceM;
-  // A flat route would divide by zero; give it a nominal band so the line
-  // lands mid-plot rather than at an edge.
-  const span = maxM - minM || 1;
-  const plotHeight = HEIGHT - AXIS_HEIGHT;
-
-  const plotted: PlotPoint[] = known.map((sample) => ({
-    x: totalM === 0 ? 0 : (sample.distanceM / totalM) * WIDTH,
-    y: plotHeight - ((sample.elevationM! - minM) / span) * (plotHeight - 4) - 2,
-    sample,
-  }));
-
-  const line = plotted.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
+  const line = known.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
   const area = `M0,${plotHeight} L${line.replace(/ /g, " L")} L${WIDTH},${plotHeight} Z`;
+
+  const hover = (point: PlotPoint | null) => {
+    setHovered(point);
+    onHoverSampleChange?.(point?.index ?? null);
+  };
 
   // Nearest sample to the pointer, in viewBox coordinates.
   const handleMove = (event: React.PointerEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width) * WIDTH;
-    let nearest = plotted[0]!;
-    for (const point of plotted) {
+    let nearest = known[0]!;
+    for (const point of known) {
       if (Math.abs(point.x - x) < Math.abs(nearest.x - x)) nearest = point;
     }
-    setHovered(nearest);
+    hover(nearest);
   };
 
   return (
@@ -77,7 +93,7 @@ export default function ElevationProfile({
         role="img"
         aria-label={`Elevation profile: ${Math.round(minM)} to ${Math.round(maxM)} metres over ${formatDistanceM(totalM)}`}
         onPointerMove={handleMove}
-        onPointerLeave={() => setHovered(null)}
+        onPointerLeave={() => hover(null)}
       >
         <path d={area} fill={color} className={classes.area} />
         <polyline
@@ -109,19 +125,23 @@ export default function ElevationProfile({
           />
         )}
       </svg>
-      <div className={classes.footer}>
-        {hovered ? (
-          <span>
+      {/* Dot and readout are HTML, not SVG: preserveAspectRatio="none" stretches
+          the viewBox horizontally, which would leave a circle elliptical and the
+          text squashed. The chart's height is fixed in CSS at HEIGHT px, so a
+          viewBox y maps straight to a pixel offset. */}
+      {hovered && (
+        <div
+          className={`${classes.marker} ${hovered.x > WIDTH * LABEL_FLIP_AT ? classes.markerFlipped : ""}`}
+          style={{ left: `${(hovered.x / WIDTH) * 100}%`, top: `${hovered.y}px` }}
+          aria-hidden="true"
+        >
+          <span className={classes.markerDot} style={{ background: color }} />
+          <span className={classes.markerLabel}>
             {formatDistanceM(hovered.sample.distanceM)} ·{" "}
             {Math.round(hovered.sample.elevationM!)} m
           </span>
-        ) : (
-          <>
-            <span>0</span>
-            <span>{formatDistanceM(totalM)}</span>
-          </>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

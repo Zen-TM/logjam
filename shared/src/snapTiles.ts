@@ -55,8 +55,26 @@ export const SNAP_BBOX_MARGIN_M = 400;
  */
 export const SNAP_MAX_TILES = 25;
 
-/** Protomaps schema: OSM paths/tracks, and flowing water. */
-const TRAIL_KINDS = ["path"];
+/**
+ * Protomaps schema kinds worth following.
+ *
+ * "Trails" INCLUDES ROADS, which reads oddly until you try to draw in a town:
+ * `path` alone is the whole OSM footpath/track world and nothing else, so
+ * snapping worked in the bush and silently did nothing the moment a route
+ * crossed a fire trail's gate onto a road. The approach to a canyon is very
+ * often a road walk, and the road is the correct line to follow there.
+ *
+ * Ordered coarse-last only for readability; the graph treats every way the
+ * same, and A* picks by distance rather than class — snapping is "follow the
+ * line that is actually there", not a routing preference.
+ */
+const TRAIL_KINDS = [
+  "path",
+  "minor_road",
+  "medium_road",
+  "major_road",
+  "highway",
+];
 const WATERWAY_KINDS = ["stream", "river", "canal"];
 
 export function snapKindsFor(mode: SnapMode): string[] {
@@ -75,6 +93,10 @@ export function snapKindsFor(mode: SnapMode): string[] {
 /** Which vector-tile layer each kind lives in. */
 const LAYER_FOR_KIND: Record<string, string> = {
   path: "roads",
+  minor_road: "roads",
+  medium_road: "roads",
+  major_road: "roads",
+  highway: "roads",
   stream: "water",
   river: "water",
   canal: "water",

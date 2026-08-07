@@ -191,11 +191,3 @@
 /* Entry point for the route draw tool. Low-emphasis ghost button, per the
    panels button table — drawing is an occasional authoring action, not the
    panel's primary purpose. */
-.drawRouteBtn {
-  composes: btn btnGhost btnSm btnFull from "../../../styles/shared.module.css";
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4em;
-  margin-top: 0.3em;
-}
