@@ -5,8 +5,36 @@ import classes from "./LayersPanel.module.css";
 import { previewUrlFor } from "./tilePreview";
 import type { TileLayer } from "./tilePreview";
 import { TOPO_LAYERS } from "../../../topoLayerTypes";
+import { PROTOMAPS_SWATCH } from "../../../basemapSwatch";
 
 type BaseLayer = TileLayer & { id: string; name: string };
+
+/**
+ * Stand-in thumbnail for the vector basemap: a scrap of map drawn from the
+ * style's real palette — land, a creek, a road and a lane. Not a screenshot,
+ * because a screenshot of one place is a worse answer than a legible sample of
+ * the cartography.
+ */
+function VectorSwatch(): React.JSX.Element {
+  return (
+    <svg
+      className={classes.tileImage}
+      viewBox="0 0 40 40"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <rect width="40" height="40" fill={PROTOMAPS_SWATCH.earth} />
+      <path
+        d="M-2 27 C 8 22, 12 32, 22 27 S 34 18, 42 22"
+        fill="none"
+        stroke={PROTOMAPS_SWATCH.water}
+        strokeWidth="3"
+      />
+      <path d="M-2 14 L 42 9" stroke={PROTOMAPS_SWATCH.road} strokeWidth="3.5" />
+      <path d="M14 -2 L 20 42" stroke={PROTOMAPS_SWATCH.minor} strokeWidth="2" />
+    </svg>
+  );
+}
 
 /** `previewUrlFor` needs an XYZ template; vector entries carry none. */
 function thumbnailFor(
@@ -284,9 +312,10 @@ function LayersPanel({
               onClick={() => onActiveLayerChange(layer.id)}
               aria-pressed={isActive}
             >
-              {/* Vector basemaps have no XYZ template to thumbnail from, so
-                  they show a captioned placeholder rather than a broken
-                  image. */}
+              {/* A vector basemap has no XYZ tile to thumbnail, so it gets a
+                  drawn swatch instead of an empty box. The colours come from
+                  the style's own flavor, so the tile can't drift from what the
+                  map actually renders. */}
               {thumbUrl ? (
                 <img
                   src={thumbUrl}
@@ -295,7 +324,7 @@ function LayersPanel({
                   draggable={false}
                 />
               ) : (
-                <div className={classes.tilePlaceholder} aria-hidden="true" />
+                <VectorSwatch />
               )}
               <div className={classes.tileCaption}>{layer.name}</div>
             </button>

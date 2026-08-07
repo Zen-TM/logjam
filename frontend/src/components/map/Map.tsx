@@ -9,7 +9,13 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-csp-worker?url";
 setWorkerUrl(maplibreWorkerUrl);
 import { Protocol } from "pmtiles";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
-import { snapSegment, type SnapLine, type SnapMode } from "@logjam/shared";
+import {
+  fetchSnapLines,
+  nearestSegment,
+  snapSegment,
+  type RouteDraft,
+  type SnapMode,
+} from "@logjam/shared";
 
 export type { SnapMode };
 
@@ -73,6 +79,14 @@ import {
   type OsmFeatureStyle,
   type VectorStyleSettings,
 } from "@logjam/shared";
+
+// How long after touching a vertex handle the map ignores its own click. Long
+// enough to cover the press-release of a deliberate click, short enough that a
+// genuine map click straight afterwards still registers.
+const HANDLE_CLICK_SUPPRESS_MS = 400;
+
+/** Movement below this is a click, not a drag, so it inserts nothing. */
+const DRAG_INSERT_MIN_PIXELS = 6;
 
 const SIDEBAR_TRANSITION_MS = 300;
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
@@ -210,53 +224,14 @@ function addProtomapsBasemap(
 }
 
 /**
- * Below this zoom the vector basemap serves simplified tiles with creeks and
- * paths dropped entirely (verified against the NSW extract: at z12 a canyoning
- * tile carries one "river" and no streams; at z14+ it carries several streams
- * and every path). Snapping there would silently do nothing, so the UI says so
- * instead.
+ * The Protomaps archive, read directly for snapping. Same origin in prod and
+ * proxied in dev (vite.config.ts), so this never leaves our own host — and it
+ * is independent of which basemap is showing or how far the map is zoomed.
  */
-export const SNAP_MIN_ZOOM = 14;
-
-/**
- * Candidate ways for snapping, read out of the loaded vector basemap tiles.
- *
- * Requires the Protomaps basemap to be the active one — the raster basemaps
- * have no queryable geometry at all. Returns [] otherwise, which the caller
- * renders as "no snap", i.e. the straight line.
- *
- * Features repeat across neighbouring tile buffers; that is not deduplicated
- * here because buildSnapGraph already collapses duplicate vertices onto one
- * node.
- */
-function collectSnapLines(map: maplibregl.Map, mode: SnapMode): SnapLine[] {
-  if (mode === "off" || !map.getSource(PROTOMAPS_SOURCE_ID)) return [];
-  const wanted: { sourceLayer: string; kinds: string[] }[] = [];
-  if (mode === "trails" || mode === "both") {
-    wanted.push({ sourceLayer: "roads", kinds: ["path"] });
-  }
-  if (mode === "waterways" || mode === "both") {
-    wanted.push({ sourceLayer: "water", kinds: ["stream", "river", "canal"] });
-  }
-
-  const lines: SnapLine[] = [];
-  for (const { sourceLayer, kinds } of wanted) {
-    const features = map.querySourceFeatures(PROTOMAPS_SOURCE_ID, {
-      sourceLayer,
-      filter: ["in", ["get", "kind"], ["literal", kinds]],
-    });
-    for (const feature of features) {
-      const geometry = feature.geometry;
-      if (geometry.type === "LineString") {
-        lines.push({ coords: geometry.coordinates as [number, number][] });
-      } else if (geometry.type === "MultiLineString") {
-        for (const part of geometry.coordinates) {
-          lines.push({ coords: part as [number, number][] });
-        }
-      }
-    }
-  }
-  return lines;
+function snapArchiveUrl(): string {
+  const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
+  if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
+  return `${window.location.origin}/${entry.urlTemplate}`;
 }
 
 /** Every layer id belonging to the Protomaps band, in style order. */
@@ -454,9 +429,14 @@ function Map({
   selectRoute,
   drawingRoute,
   drawPoints,
+  drawAnchorIndices,
+  draft,
   snapMode,
   editingRouteId,
   onDrawPointAdd,
+  onDrawSnap,
+  onDrawPointDelete,
+  onDrawPointInsert,
   onDrawPointMove,
   selectingArea,
   onAreaSelected,
@@ -501,14 +481,28 @@ function Map({
   // running distance and drive undo; the map only reports gestures.
   drawingRoute: boolean;
   drawPoints: [number, number][];
-  /** Whether new segments follow trails/creeks from the vector basemap. */
+  /** Which of drawPoints are the user's own vertices (the draggable handles). */
+  drawAnchorIndices: number[];
+  /** The anchor/filler split, for deciding which segment a line-drag splits. */
+  draft: RouteDraft;
+  /** Whether new segments follow trails/creeks. */
   snapMode: SnapMode;
   /** Route being edited; null while drawing a new one. The saved-routes layer
    * skips it so the draft layer isn't drawing over a stale copy. */
   editingRouteId: string | null;
   /** Appends one or more vertices — more than one when a segment snapped. */
-  onDrawPointAdd: (points: [number, number][]) => void;
+  onDrawPointAdd: (point: [number, number]) => void;
+  /** A snapped run arrived for the segment between these two anchors. */
+  onDrawSnap: (
+    from: [number, number],
+    to: [number, number],
+    between: [number, number][],
+  ) => void;
   onDrawPointMove: (index: number, lngLat: [number, number]) => void;
+  /** Click a handle to remove that vertex. */
+  onDrawPointDelete: (index: number) => void;
+  /** Drag the line between two anchors to introduce one there. */
+  onDrawPointInsert: (segmentIndex: number, lngLat: [number, number]) => void;
   selectingArea: boolean;
   onAreaSelected: (ids: string[]) => void;
   selectingBbox?: boolean;
@@ -601,6 +595,11 @@ function Map({
   // Read inside the click handler, which is installed once per draw session:
   // without refs it would close over the first render's points and snap every
   // segment from the same stale vertex.
+  // Read inside the map's one-shot load handler, which cannot see later props.
+  const activeLayerIdRef = useRef(activeLayerId);
+  useEffect(() => {
+    activeLayerIdRef.current = activeLayerId;
+  }, [activeLayerId]);
   const drawPointsRef = useRef(drawPoints);
   useEffect(() => {
     drawPointsRef.current = drawPoints;
@@ -609,6 +608,29 @@ function Map({
   useEffect(() => {
     snapModeRef.current = snapMode;
   }, [snapMode]);
+  const onDrawSnapRef = useRef(onDrawSnap);
+  useEffect(() => {
+    onDrawSnapRef.current = onDrawSnap;
+  }, [onDrawSnap]);
+  const onDrawPointDeleteRef = useRef(onDrawPointDelete);
+  useEffect(() => {
+    onDrawPointDeleteRef.current = onDrawPointDelete;
+  }, [onDrawPointDelete]);
+  const onDrawPointInsertRef = useRef(onDrawPointInsert);
+  useEffect(() => {
+    onDrawPointInsertRef.current = onDrawPointInsert;
+  }, [onDrawPointInsert]);
+  // When a vertex handle was last pressed. The map's click handler consults it
+  // to tell "the user interacted with a handle" from "the user clicked the
+  // map": MapLibre delivers the map click even when the press landed on a
+  // marker, and neither stopPropagation on the handle nor a target check on the
+  // event reliably suppressed it — so a click meant to delete a point appended
+  // one instead, and a drag appended one at the drop.
+  const handlePressedAt = useRef(0);
+  const draftRef = useRef(draft);
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
   const onDrawPointAddRef = useRef(onDrawPointAdd);
   useEffect(() => {
     onDrawPointAddRef.current = onDrawPointAdd;
@@ -757,8 +779,12 @@ function Map({
       // the Protomaps vector entry is one source plus the whole generated
       // style set, all added here so the basemap band sits below every canyon,
       // route and topo layer added later in this handler.
-      BASE_LAYERS.forEach((layer, i) => {
-        const visibility = i === 0 ? "visible" : "none";
+      BASE_LAYERS.forEach((layer) => {
+        // Follow the ACTIVE layer, not index 0. The toggle effect below would
+        // correct a mismatch a frame later, but the user would see the wrong
+        // basemap flash first.
+        const visibility =
+          layer.id === activeLayerIdRef.current ? "visible" : "none";
         if (layer.kind === "vector") {
           addProtomapsBasemap(map, visibility);
           return;
@@ -847,6 +873,8 @@ function Map({
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
+      // SOLID. A route is a thing you are making; the measure tool's dotted
+      // line is a thing you are asking.
       map.addLayer({
         id: "route-draft-line",
         type: "line",
@@ -855,7 +883,6 @@ function Map({
         paint: {
           "line-color": readCssVar("--theme-accent", "#3b82f6"),
           "line-width": 3,
-          "line-dasharray": [1, 1.5],
         },
       });
       map.addLayer({
@@ -1390,26 +1417,42 @@ function Map({
     const map = mapRef.current;
     map.getCanvas().style.cursor = "crosshair";
     const handleClick = (e: maplibregl.MapMouseEvent) => {
+      // A click that landed on a vertex handle belongs to that handle (move or
+      // remove), not to the map. stopPropagation on the handle is not enough:
+      // MapLibre binds its own listener on the container ahead of the marker's,
+      // so the map saw the click first and appended a point on top of the one
+      // the user was trying to delete.
+      if (Date.now() - handlePressedAt.current < HANDLE_CLICK_SUPPRESS_MS) return;
       const tapped: [number, number] = [e.lngLat.lng, e.lngLat.lat];
       const previous = drawPointsRef.current[drawPointsRef.current.length - 1];
+      // No snap to consider: place the point now rather than waiting on an
+      // async path that would do nothing.
+      if (!previous || snapModeRef.current === "off") {
+        onDrawPointAddRef.current(tapped);
+        return;
+      }
       // Snapping only ever ADDS intermediate points between the previous
       // vertex and this one — the user's own clicks stay exactly where they
       // put them, so a bad snap is undone by one Undo rather than by
       // reconstructing what they meant.
-      if (previous && snapModeRef.current !== "off" && map.getZoom() >= SNAP_MIN_ZOOM) {
-        const between = snapSegment(
-          collectSnapLines(map, snapModeRef.current),
-          previous,
-          tapped,
-        );
-        // `between` includes the graph nodes nearest both ends; drop them, or
-        // the line jumps sideways onto the track at each tap.
-        if (between && between.length > 2) {
-          onDrawPointAddRef.current([...between.slice(1, -1), tapped]);
-          return;
-        }
-      }
-      onDrawPointAddRef.current([tapped]);
+      //
+      // Reading the archive is a network round trip on a cold tile, so the
+      // tapped point lands immediately and the snapped run is filled in behind
+      // it. Waiting would make every click feel laggy.
+      onDrawPointAddRef.current(tapped);
+      void fetchSnapLines(snapArchiveUrl(), snapModeRef.current, previous, tapped)
+        .then((lines) => {
+          const between = snapSegment(lines, previous, tapped);
+          // `between` includes the graph nodes nearest both ends; drop them,
+          // or the line jumps sideways onto the track at each tap.
+          if (between && between.length > 2) {
+            onDrawSnapRef.current(previous, tapped, between.slice(1, -1));
+          }
+        })
+        .catch(() => {
+          // Offline or unreachable archive: the straight line already drawn is
+          // the right answer, and a toast per click would be noise.
+        });
     };
     map.on("click", handleClick);
     return () => {
@@ -1442,15 +1485,21 @@ function Map({
                   },
                 ]
               : []),
-            ...drawPoints.map((point) => ({
-              type: "Feature" as const,
-              geometry: { type: "Point" as const, coordinates: point },
-              properties: {},
-            })),
+            // A dot per ANCHOR, not per point. The snapped filler is geometry
+            // the tool produced, and dotting every vertex of it made a snapped
+            // run look like fifty things the user had placed.
+            ...drawAnchorIndices
+              .map((index) => drawPoints[index])
+              .filter((point): point is [number, number] => point != null)
+              .map((point) => ({
+                type: "Feature" as const,
+                geometry: { type: "Point" as const, coordinates: point },
+                properties: {},
+              })),
           ]
         : [],
     });
-  }, [drawPoints, drawingRoute, mapLoaded]);
+  }, [drawPoints, drawAnchorIndices, drawingRoute, mapLoaded]);
 
   // Draggable vertex handles. MapLibre markers do the drag maths natively, so
   // this only has to keep one marker per vertex alive and report the drop.
@@ -1464,16 +1513,49 @@ function Map({
     vertexMarkersRef.current = [];
     if (!drawingRoute) return;
 
-    drawPoints.forEach((point, index) => {
+    // ONE HANDLE PER ANCHOR. Snapped filler gets none: it is geometry the tool
+    // produced, not points the user placed, so a 1.5 km snapped run reads as
+    // one segment with two ends rather than fifty draggable dots.
+    drawAnchorIndices.forEach((pointIndex, anchorIndex) => {
+      const point = drawPoints[pointIndex];
+      if (!point) return;
       const el = document.createElement("div");
       el.className = classes.routeVertexHandle;
-      el.title = "Drag to move this point";
+      el.title = "Drag to move · click to remove";
       const marker = new maplibregl.Marker({ element: el, draggable: true })
         .setLngLat(point)
         .addTo(map);
+      // Delete rides an explicit click listener on the handle's own element,
+      // NOT a zero-distance drag: MapLibre does not reliably run the drag
+      // lifecycle for a plain click, so a click on a handle fell through to the
+      // map and appended a point instead of removing one. stopPropagation is
+      // what keeps it from reaching the map's own click handler.
+      let movedDuringDrag = false;
+      el.addEventListener("mousedown", () => {
+        handlePressedAt.current = Date.now();
+      });
+      el.addEventListener("click", (event) => {
+        event.stopPropagation();
+        handlePressedAt.current = Date.now();
+        // A drag ends with a click too; only a click that moved nothing means
+        // "remove this point".
+        if (movedDuringDrag) {
+          movedDuringDrag = false;
+          return;
+        }
+        onDrawPointDeleteRef.current(anchorIndex);
+      });
+      marker.on("dragstart", () => {
+        movedDuringDrag = false;
+      });
+      marker.on("drag", () => {
+        movedDuringDrag = true;
+      });
       marker.on("dragend", () => {
+        handlePressedAt.current = Date.now();
+        if (!movedDuringDrag) return;
         const { lng, lat } = marker.getLngLat();
-        onDrawPointMoveRef.current(index, [lng, lat]);
+        onDrawPointMoveRef.current(anchorIndex, [lng, lat]);
       });
       vertexMarkersRef.current.push(marker);
     });
@@ -1482,7 +1564,66 @@ function Map({
       for (const marker of vertexMarkersRef.current) marker.remove();
       vertexMarkersRef.current = [];
     };
-  }, [drawPoints, drawingRoute, mapLoaded]);
+  }, [drawPoints, drawAnchorIndices, drawingRoute, mapLoaded]);
+
+  // Drag the drawn line between two anchors to introduce one there. Distinct
+  // from clicking the map, which appends to the END of the route — this is how
+  // you add detail to a segment you already placed.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || !drawingRoute) return;
+    const map = mapRef.current;
+    // Where the press started, so a CLICK can be told from a DRAG. Without
+    // this the gesture fired on any press near the line — and a vertex handle
+    // sits exactly on the line, so clicking a handle to delete it inserted a
+    // point instead.
+    let dragging: { segmentIndex: number; startX: number; startY: number } | null =
+      null;
+
+    // Grab radius in pixels, converted to degrees at the current zoom so the
+    // hit test feels the same however far you are zoomed in.
+    const GRAB_PIXELS = 12;
+    function toleranceDegrees(): number {
+      const centre = map.getCenter();
+      const a = map.project(centre);
+      const b = map.unproject([a.x + GRAB_PIXELS, a.y]);
+      return Math.abs(b.lng - centre.lng);
+    }
+
+    const onDown = (e: maplibregl.MapMouseEvent) => {
+      // A press that landed on a vertex handle belongs to that handle.
+      if (Date.now() - handlePressedAt.current < HANDLE_CLICK_SUPPRESS_MS) return;
+      const near = nearestSegment(draftRef.current, [e.lngLat.lng, e.lngLat.lat]);
+      if (!near || near.distanceDegrees > toleranceDegrees()) return;
+      // Take the gesture off the map so the drag doesn't pan it.
+      e.preventDefault();
+      dragging = {
+        segmentIndex: near.index,
+        startX: e.point.x,
+        startY: e.point.y,
+      };
+      map.getCanvas().style.cursor = "grabbing";
+    };
+
+    const onUp = (e: maplibregl.MapMouseEvent) => {
+      if (!dragging) return;
+      const { segmentIndex, startX, startY } = dragging;
+      dragging = null;
+      map.getCanvas().style.cursor = "crosshair";
+      // Only a press that actually travelled is a drag. A click on the line is
+      // not a request for a new point.
+      if (Math.hypot(e.point.x - startX, e.point.y - startY) < DRAG_INSERT_MIN_PIXELS) {
+        return;
+      }
+      onDrawPointInsertRef.current(segmentIndex, [e.lngLat.lng, e.lngLat.lat]);
+    };
+
+    map.on("mousedown", onDown);
+    map.on("mouseup", onUp);
+    return () => {
+      map.off("mousedown", onDown);
+      map.off("mouseup", onUp);
+    };
+  }, [drawingRoute, mapLoaded]);
 
   // Click a route line to open its detail panel — suppressed while a pick or
   // draw mode owns the click.

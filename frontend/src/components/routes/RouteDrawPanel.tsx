@@ -11,6 +11,10 @@ import shared from "../../styles/shared.module.css";
 
 type RouteDrawPanelProps = {
   points: [number, number][];
+  /** User-placed vertices — what the hint should count, not the snapped filler. */
+  anchorCount: number;
+  canUndo: boolean;
+  atCap: boolean;
   /** Set when editing an existing route, so the panel can say which. */
   editingName: string | null;
   onUndo: () => void;
@@ -20,12 +24,13 @@ type RouteDrawPanelProps = {
   saving: boolean;
   snapMode: SnapMode;
   onSnapModeChange: (mode: SnapMode) => void;
-  /** True when the map is zoomed out past where the basemap carries ways. */
-  snapUnavailable: boolean;
 };
 
 export function RouteDrawPanel({
   points,
+  anchorCount,
+  canUndo,
+  atCap,
   editingName,
   onUndo,
   onClear,
@@ -34,10 +39,8 @@ export function RouteDrawPanel({
   saving,
   snapMode,
   onSnapModeChange,
-  snapUnavailable,
 }: RouteDrawPanelProps): React.JSX.Element {
   const canSave = points.length >= 2 && !saving;
-  const atCap = points.length >= MAX_ROUTE_POINTS;
 
   return (
     <div className={classes.panel} role="region" aria-label="Route drawing">
@@ -51,11 +54,11 @@ export function RouteDrawPanel({
       </div>
 
       <p className={classes.hint}>
-        {points.length === 0
+        {anchorCount === 0
           ? "Click the map to place the first point."
-          : points.length === 1
-            ? "Click again to extend the line. Drag a point to move it."
-            : `${points.length} points · drag to adjust`}
+          : anchorCount === 1
+            ? "Click again to extend the line."
+            : `${anchorCount} point${anchorCount === 1 ? "" : "s"} · drag to move, click to remove, drag the line to add`}
       </p>
 
       <label className={classes.snapRow}>
@@ -73,12 +76,6 @@ export function RouteDrawPanel({
         </select>
       </label>
 
-      {snapMode !== "off" && snapUnavailable && (
-        <p className={classes.warning}>
-          Zoom in to snap — tracks and creeks aren't in the map at this zoom.
-        </p>
-      )}
-
       {atCap && (
         <p className={classes.warning}>
           Maximum of {MAX_ROUTE_POINTS} points reached.
@@ -90,7 +87,7 @@ export function RouteDrawPanel({
           type="button"
           className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
           onClick={onUndo}
-          disabled={points.length === 0 || saving}
+          disabled={!canUndo || saving}
         >
           Undo
         </button>

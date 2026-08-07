@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import NavRail from "./sidebar/NavRail";
 import SidebarPanel from "./sidebar/SidebarPanel";
-import Map, { BASE_LAYERS, SNAP_MIN_ZOOM, type SnapMode } from "./map/Map";
+import Map, { BASE_LAYERS, type SnapMode } from "./map/Map";
+import { useRouteDraft } from "./routes/useRouteDraft";
 import SignIn from "./SignIn";
 import BrandMark from "./brand/BrandMark";
 import TopoDialog from "./dialogs/TopoDialog";
@@ -58,7 +59,7 @@ import ConsentGate from "./ConsentGate";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
-import { TOPO_OVERLAY_SOURCE, GEOPDF_OVERLAY_ATTRIBUTION, MAX_ROUTE_POINTS } from "@logjam/shared";
+import { TOPO_OVERLAY_SOURCE, GEOPDF_OVERLAY_ATTRIBUTION } from "@logjam/shared";
 import type { OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import { useStoredState } from "../useStoredState";
@@ -111,7 +112,13 @@ function App() {
   const [filtersAccordionSignal, setFiltersAccordionSignal] = useState(0);
   const [selectedCanyonID, setSelectedCanyonID] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
-  const [activeLayerId, setActiveLayerId] = useStoredState("logjam.activeLayerId", BASE_LAYERS[0].id);
+  // Vector by default: same OSM cartography as the old raster default, drawn
+  // locally rather than fetched as pictures, and it carries the labels at every
+  // zoom instead of stopping where the raster cache does.
+  const [activeLayerId, setActiveLayerId] = useStoredState(
+    "logjam.activeLayerId",
+    "protomaps",
+  );
 
   const [showAdd, setShowAdd] = useState(false);
   const [showUnifiedImport, setShowUnifiedImport] = useState(false);
@@ -131,7 +138,7 @@ function App() {
   // can show the running distance and drive undo. `editingRouteId` is null
   // while drawing a new route.
   const [drawingRoute, setDrawingRoute] = useState(false);
-  const [drawPoints, setDrawPoints] = useState<[number, number][]>([]);
+  const routeDraft = useRouteDraft();
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [savingRoute, setSavingRoute] = useState(false);
   const [namingRoute, setNamingRoute] = useState(false);
@@ -901,30 +908,37 @@ function App() {
 
   const startDrawingRoute = () => {
     setEditingRouteId(null);
-    setDrawPoints([]);
+    routeDraft.reset();
     setDrawingRoute(true);
     setActivePanel(null);
   };
 
   const startEditingRoute = (route: TRoute) => {
     setEditingRouteId(route.id);
-    setDrawPoints(route.points);
+    // Anchors come back with the route, so a snapped line reopens with the
+    // user's own handful of points rather than every snapped vertex.
+    routeDraft.reset({ points: route.points, anchors: route.anchors });
     setDrawingRoute(true);
     setActivePanel(null);
   };
 
   const cancelDrawingRoute = () => {
     setDrawingRoute(false);
-    setDrawPoints([]);
+    routeDraft.reset();
     setEditingRouteId(null);
   };
 
   const saveDrawnRoute = async (name: string) => {
     setSavingRoute(true);
     try {
+      const payload = {
+        name,
+        points: routeDraft.points,
+        anchors: routeDraft.anchorIndices,
+      };
       const result = editingRouteId
-        ? await updateRoute(editingRouteId, { name, points: drawPoints })
-        : await createRoute({ name, points: drawPoints });
+        ? await updateRoute(editingRouteId, payload)
+        : await createRoute(payload);
       setNamingRoute(false);
       cancelDrawingRoute();
       refetchRoutes();
@@ -1148,22 +1162,16 @@ function App() {
           setActivePanel("route-detail");
         }}
         drawingRoute={drawingRoute}
-        drawPoints={drawPoints}
+        drawPoints={routeDraft.points}
+        drawAnchorIndices={routeDraft.anchorIndices}
+        draft={routeDraft.draft}
         editingRouteId={editingRouteId}
         snapMode={snapMode}
-        onDrawPointAdd={(added) =>
-          setDrawPoints((current) =>
-            // Truncate rather than reject: a snapped segment arrives as many
-            // points at once, and dropping the whole segment because its tail
-            // crosses the cap would lose the click entirely.
-            [...current, ...added].slice(0, MAX_ROUTE_POINTS),
-          )
-        }
-        onDrawPointMove={(index, lngLat) =>
-          setDrawPoints((current) =>
-            current.map((point, i) => (i === index ? lngLat : point)),
-          )
-        }
+        onDrawPointAdd={routeDraft.addAnchor}
+        onDrawSnap={routeDraft.applySnap}
+        onDrawPointMove={routeDraft.moveAnchorAt}
+        onDrawPointDelete={routeDraft.deleteAnchorAt}
+        onDrawPointInsert={routeDraft.insertAnchorAt}
         selectCanyon={(id) => {
           setSelectedCanyonID(id);
           setActivePanel("canyon-detail");
@@ -1210,19 +1218,18 @@ function App() {
 
       {drawingRoute && (
         <RouteDrawPanel
-          points={drawPoints}
+          points={routeDraft.points}
+          anchorCount={routeDraft.draft.anchors.length}
+          canUndo={routeDraft.canUndo}
+          atCap={routeDraft.atCap}
           editingName={routes.find((r) => r.id === editingRouteId)?.name ?? null}
-          onUndo={() => setDrawPoints((current) => current.slice(0, -1))}
-          onClear={() => setDrawPoints([])}
+          onUndo={routeDraft.undo}
+          onClear={() => routeDraft.reset()}
           onSave={() => setNamingRoute(true)}
           onCancel={cancelDrawingRoute}
           saving={savingRoute}
           snapMode={snapMode}
           onSnapModeChange={setSnapMode}
-          snapUnavailable={
-            activeLayerId !== "protomaps" ||
-            (mapCenter?.zoom ?? 0) < SNAP_MIN_ZOOM
-          }
         />
       )}
 

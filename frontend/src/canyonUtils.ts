@@ -450,6 +450,12 @@ export type TRoute = {
   name: string;
   color: string;
   points: [number, number][];
+  /**
+   * Indices into `points` marking the vertices the USER placed, as opposed to
+   * the ones snapping filled in. Null on routes drawn before snapping existed,
+   * which reads as "every point is the user's".
+   */
+  anchors: number[] | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -466,6 +472,7 @@ export function getRoutes(): Promise<TRoute[]> {
 export function createRoute(data: {
   name: string;
   points: [number, number][];
+  anchors?: number[] | null;
   canyonId?: string | null;
 }): Promise<RouteWriteResult> {
   return apiFetch<RouteWriteResult>("/routes", { method: "POST", body: data });
@@ -473,7 +480,12 @@ export function createRoute(data: {
 
 export function updateRoute(
   id: string,
-  data: Partial<{ name: string; points: [number, number][]; canyonId: string | null }>,
+  data: Partial<{
+    name: string;
+    points: [number, number][];
+    anchors: number[] | null;
+    canyonId: string | null;
+  }>,
 ): Promise<RouteWriteResult> {
   return apiFetch<RouteWriteResult>(`/routes/${id}`, {
     method: "PATCH",

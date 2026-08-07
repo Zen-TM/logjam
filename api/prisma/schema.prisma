@@ -414,6 +414,13 @@ model Route {
   // raising it. No lengthM column: length is derived on read, and a stored one
   // goes stale the moment a vertex moves.
   points    Json
+  // Indices into `points` marking the vertices the USER placed, as opposed to
+  // the ones snapping filled in to follow a track. Nullable, and null is the
+  // honest reading for a route drawn before snapping existed: without a record
+  // we cannot know which vertices were chosen, so every one is treated as the
+  // user's. Kept as indices rather than a second coordinate list so `points`
+  // stays the single geometric truth and the two cannot disagree.
+  anchors   Json?
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)

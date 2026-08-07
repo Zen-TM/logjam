@@ -54,11 +54,13 @@ export const ROUTE_ERRORS = {
   tooManyPoints: `A route can have at most ${MAX_ROUTE_POINTS} points`,
   nameRequired: "name is required",
   nameTooLong: `name must be at most ${ROUTE_NAME_MAX_LENGTH} characters`,
+  anchorsShape: "anchors must be an array of point indices",
 } as const;
 
 export type RouteFieldPayload = {
   name?: unknown;
   points?: unknown;
+  anchors?: unknown;
 };
 
 /** Round to ROUTE_COORD_DECIMALS without string round-tripping. */
@@ -73,6 +75,45 @@ function roundCoord(value: number): number {
  * element (elevation, from an imported file) is dropped — a Route stores
  * geometry only, and elevation is derived on demand once a DEM exists.
  */
+/**
+ * Validate an anchor-index list against the points it indexes.
+ *
+ * Deliberately strict — ascending, in range, and spanning both ends — because a
+ * malformed list would silently mis-attribute which vertices the user placed,
+ * and the client would then let them drag a snapped vertex or refuse to let
+ * them drag their own. Callers treat a rejection as "no record" rather than an
+ * error, which degrades to every-point-is-an-anchor.
+ */
+export function parseRouteAnchors(
+  value: unknown,
+  pointCount: number,
+): { anchors: number[] | null } | { error: string } {
+  if (value === undefined || value === null) return { anchors: null };
+  if (!Array.isArray(value)) return { error: ROUTE_ERRORS.anchorsShape };
+  if (value.length < 2 || value.length > pointCount) {
+    return { error: ROUTE_ERRORS.anchorsShape };
+  }
+  const anchors: number[] = [];
+  for (const entry of value) {
+    if (
+      typeof entry !== "number" ||
+      !Number.isInteger(entry) ||
+      entry < 0 ||
+      entry >= pointCount
+    ) {
+      return { error: ROUTE_ERRORS.anchorsShape };
+    }
+    if (anchors.length > 0 && entry <= anchors[anchors.length - 1]!) {
+      return { error: ROUTE_ERRORS.anchorsShape };
+    }
+    anchors.push(entry);
+  }
+  if (anchors[0] !== 0 || anchors[anchors.length - 1] !== pointCount - 1) {
+    return { error: ROUTE_ERRORS.anchorsShape };
+  }
+  return { anchors };
+}
+
 export function parseRoutePoints(
   value: unknown,
 ): { points: RoutePoint[] } | { error: string } {
@@ -131,6 +172,16 @@ export function validateRoutePayload(
     if (points === undefined) return ROUTE_ERRORS.pointsRequired;
     const parsed = parseRoutePoints(points);
     if ("error" in parsed) return parsed.error;
+    // Anchors are only checkable against the points they index, so they are
+    // validated here rather than independently. A PATCH that moves points must
+    // therefore carry matching anchors or clear them.
+    if (payload.anchors !== undefined) {
+      const anchors = parseRouteAnchors(payload.anchors, parsed.points.length);
+      if ("error" in anchors) return anchors.error;
+    }
+  } else if (payload.anchors !== undefined && payload.anchors !== null) {
+    // Anchors without points would index geometry we cannot see from here.
+    return ROUTE_ERRORS.anchorsShape;
   }
   return null;
 }
@@ -349,7 +400,7 @@ export function simplifyToFit(
 
 // ── Import planning ──────────────────────────────────────────────────────────
 
-export type RouteDraft = {
+export type RouteImportDraft = {
   /** From the feature/document name; the UI may let the user rename. */
   name: string | null;
   points: RoutePoint[];
@@ -360,7 +411,7 @@ export type RouteDraft = {
 };
 
 export type RouteImportPlan = {
-  drafts: RouteDraft[];
+  drafts: RouteImportDraft[];
   /** Non-line geometry that cannot become a route, for the "we dropped X" notice. */
   dropped: { points: number; polygons: number };
 };
@@ -394,7 +445,7 @@ function lineStringsOf(
 function draftFrom(
   positions: ImportedPosition[],
   name: string | null,
-): RouteDraft | null {
+): RouteImportDraft | null {
   // Drop the elevation third element if present — geometry only.
   const points: RoutePoint[] = [];
   for (const position of positions) {
@@ -427,7 +478,7 @@ export function routesFromVectorImport(
   result: VectorImportResult,
 ): RouteImportPlan {
   const dropped = { points: 0, polygons: 0 };
-  const drafts: RouteDraft[] = [];
+  const drafts: RouteImportDraft[] = [];
 
   for (const feature of result.features as ImportedFeature[]) {
     const featureName = feature.properties?.name ?? null;

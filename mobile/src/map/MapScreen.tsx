@@ -690,20 +690,26 @@ export function MapScreen({
 
   /** Leaving route draw is NOT free the way leaving measure is — these points
    *  were meant to become something. Confirm before binning real work. */
-  const handleCancelRouteDraw = useCallback(() => {
-    const discard = () => {
-      setRoutePoints(null);
-      setEditingRouteId(null);
-    };
-    if ((routePoints?.length ?? 0) === 0) {
-      discard();
-      return;
-    }
-    Alert.alert("Discard this route?", "The points you placed will be lost.", [
-      { text: "Keep drawing", style: "cancel" },
-      { text: "Discard", style: "destructive", onPress: discard },
-    ]);
-  }, [routePoints]);
+  /** `then` runs only if the draft is actually discarded, so a caller can arm
+   *  another tool without racing the confirm. */
+  const handleCancelRouteDraw = useCallback(
+    (then?: () => void) => {
+      const discard = () => {
+        setRoutePoints(null);
+        setEditingRouteId(null);
+        then?.();
+      };
+      if ((routePoints?.length ?? 0) === 0) {
+        discard();
+        return;
+      }
+      Alert.alert("Discard this route?", "The points you placed will be lost.", [
+        { text: "Keep drawing", style: "cancel" },
+        { text: "Discard", style: "destructive", onPress: discard },
+      ]);
+    },
+    [routePoints],
+  );
 
   const addRoutePoint = useCallback((longitude: number, latitude: number) => {
     setRoutePoints((current) =>
@@ -747,21 +753,34 @@ export function MapScreen({
   const handlePickTool = useCallback(
     (tool: MapTool) => {
       setToolsOpen(false);
+      // Measure and route both want the map's taps, so arming one must disarm
+      // the other — in BOTH directions. Measure used to arm without clearing a
+      // route draft, which left two HUDs stacked and every tap going to
+      // whichever tool won the race.
       if (tool === "measure") {
-        setMeasurePoints((current) => (current ? null : []));
+        if (measurePoints !== null) {
+          setMeasurePoints(null);
+          return;
+        }
+        // Route draft holds work worth confirming before it is binned; the
+        // confirm handler clears it, and measure arms once it has.
+        if (routePoints !== null) {
+          handleCancelRouteDraw(() => setMeasurePoints([]));
+          return;
+        }
+        setMeasurePoints([]);
         return;
       }
       if (routePoints !== null) {
         handleCancelRouteDraw();
         return;
       }
-      // Measure and route both want the map's taps — only one can have them.
       setMeasurePoints(null);
       setEditingRouteId(null);
       setRoutePoints([]);
     },
     // handleCancelRouteDraw is declared below and is stable; see its useCallback.
-    [routePoints, handleCancelRouteDraw],
+    [measurePoints, routePoints, handleCancelRouteDraw],
   );
 
   /** One entry point for both point-collecting tools, so every tap surface
@@ -1761,13 +1780,16 @@ export function MapScreen({
               ],
             }}
           >
+            {/* SOLID. A route is a thing you are making; the ruler's dotted
+                line is a thing you are asking. Keeping them visually distinct
+                is how you can tell at a glance which tool has the taps. */}
             <LineLayer
               id="route-draft-line"
               style={{
                 lineColor: theme.accent,
                 lineWidth: 3,
-                lineDasharray: [1, 1.5],
                 lineCap: "round",
+                lineJoin: "round",
               }}
             />
             <CircleLayer

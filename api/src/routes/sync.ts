@@ -615,7 +615,7 @@ const WAYPOINT_FIELDS = new Set([
 ]);
 // `color` is deliberately absent: it is assigned server-side from
 // TRACK_COLORS at create, like track media.
-const ROUTE_FIELDS = new Set(["name", "points", "canyonId"]);
+const ROUTE_FIELDS = new Set(["name", "points", "anchors", "canyonId"]);
 
 function assertKnownFields(
   fields: Record<string, unknown>,

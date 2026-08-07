@@ -20,6 +20,7 @@ import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import {
   validateRoutePayload,
+  parseRouteAnchors,
   parseRoutePoints,
   randomTrackColor,
 } from "@logjam/shared";
@@ -109,6 +110,26 @@ router.get("/:id", requireAuth, async (req: AuthenticatedRequest, res: Response)
   res.json(route);
 });
 
+/**
+ * Anchor indices for a validated point list, or null.
+ *
+ * validateRoutePayload has already rejected a malformed list, so this only
+ * re-parses for the normalised numbers. Null means "no record", which is a
+ * legitimate state (routes drawn before snapping existed) rather than a
+ * failure, and the client reads it as every point being the user's own.
+ */
+function parseAnchorsOrNull(
+  value: unknown,
+  pointCount: number,
+): number[] | typeof Prisma.DbNull {
+  const parsed = parseRouteAnchors(value, pointCount);
+  const anchors = "error" in parsed ? null : parsed.anchors;
+  // DbNull, not JsonNull: "no anchor record" is the absence of a value, so it
+  // belongs in the column as SQL NULL rather than the JSON literal `null`.
+  // Postgres distinguishes the two and only the former reads back as null.
+  return anchors ?? Prisma.DbNull;
+}
+
 // ── POST /routes ──────────────────────────────────────────────
 router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const user = await resolveUser(req.user!.sub);
@@ -147,6 +168,7 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
           name: (body.name as string).trim(),
           color: randomTrackColor(),
           points: parsed.points,
+          anchors: parseAnchorsOrNull(body.anchors, parsed.points.length),
         },
       });
       if (canyonId === null) return { route, displacedRoute: null };
@@ -189,10 +211,15 @@ router.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res: Respons
   if (validationError) throw new AppError(400, validationError);
 
   let points: [number, number][] | undefined;
+  let anchors: number[] | typeof Prisma.DbNull | undefined;
   if (body.points !== undefined) {
     const parsed = parseRoutePoints(body.points);
     if ("error" in parsed) throw new AppError(400, parsed.error);
     points = parsed.points;
+    // Anchors travel with the geometry they index. A PATCH that moves points
+    // without sending anchors clears them, which reads as "no record" — never
+    // as stale indices into geometry that has changed underneath them.
+    anchors = parseAnchorsOrNull(body.anchors, parsed.points.length);
   }
   const resolvedCanyonId = await resolveRouteCanyonId(user.id, body.canyonId);
 
@@ -202,7 +229,7 @@ router.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res: Respons
         where: { id },
         data: {
           ...(body.name !== undefined && { name: (body.name as string).trim() }),
-          ...(points !== undefined && { points }),
+          ...(points !== undefined && { points, anchors }),
         },
       });
     }
