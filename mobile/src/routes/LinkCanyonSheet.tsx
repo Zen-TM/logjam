@@ -86,13 +86,21 @@ export function LinkCanyonSheet({
   };
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Link to a canyon">
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title="Link to a canyon"
+      // Pinned: the field that narrows the list must not scroll away with it.
+      header={
+        <View style={styles.header}>
+          <Text style={styles.hint}>
+            Anyone you share a canyon with can see linked routes.
+          </Text>
+          <TextField label="Find a canyon" value={query} onChangeText={setQuery} />
+        </View>
+      }
+    >
       <View style={styles.body}>
-        <Text style={styles.hint}>
-          A linked route is part of that canyon&rsquo;s record — anyone you share
-          the canyon with can see it.
-        </Text>
-
         {linkedCanyon ? (
           <Row
             title={`Unlink from ${linkedCanyon.name}`}
@@ -103,7 +111,6 @@ export function LinkCanyonSheet({
           />
         ) : null}
 
-        <TextField label="Find a canyon" value={query} onChangeText={setQuery} />
 
         {matches.length === 0 ? (
           <Text style={styles.hint}>
@@ -127,6 +134,7 @@ export function LinkCanyonSheet({
 }
 
 const styles = StyleSheet.create({
+  header: { gap: spacing(1) },
   body: { gap: spacing(1) },
   hint: { color: theme.textMuted, fontSize: fontSize.xs },
 });

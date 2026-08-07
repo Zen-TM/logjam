@@ -60,6 +60,8 @@ export function MediaStrip({
   limit,
   onFailed,
   onShowRoute,
+  onPickDrawnRoute,
+  onDrawRoute,
 }: {
   /**
    * Which family of attachment this strip owns. Photos/videos and route files
@@ -97,6 +99,10 @@ export function MediaStrip({
    * to read a GPX, and a full-screen "open it elsewhere" page is a dead end.
    */
   onShowRoute?: (item: MirrorMedia) => void;
+  /** Fill the canyon's route slot from an already-drawn route (canyon screen). */
+  onPickDrawnRoute?: () => void;
+  /** Open the map with the draw tool armed for this canyon (canyon screen). */
+  onDrawRoute?: () => void;
 }) {
   const [sourceMode, setSourceMode] = useState<SourceMode | null>(null);
   const [tracks, setTracks] = useState<Track[] | null>(null);
@@ -360,6 +366,26 @@ export function MediaStrip({
                   subtitle="A track you recorded in Logjam"
                   onPress={() => setSourceMode("tracks")}
                 />
+                {/* The other two ways a canyon's route slot gets filled. They
+                    are handled by the CANYON screen rather than here: a drawn
+                    route is a synced record with its own linking rule, not a
+                    file to upload, and this component only knows about media. */}
+                {onPickDrawnRoute ? (
+                  <Row
+                    icon="edit-3"
+                    title="Use a route you drew"
+                    subtitle="One of your saved routes"
+                    onPress={() => runAfterSheet(onPickDrawnRoute)}
+                  />
+                ) : null}
+                {onDrawRoute ? (
+                  <Row
+                    icon="pen-tool"
+                    title="Draw one on the map"
+                    subtitle="Opens the map with the pen ready"
+                    onPress={() => runAfterSheet(onDrawRoute)}
+                  />
+                ) : null}
               </>
             )}
             {busy ? <ActivityIndicator color={theme.accent} /> : null}

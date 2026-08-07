@@ -8,67 +8,64 @@
 //
 // Unpinned (no layerIndex) so it sits above every overlay — a line you can't
 // see under a topo layer is useless.
-import { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import {
   LineLayer,
-  MarkerView,
   PointAnnotation,
   ShapeSource,
+  SymbolLayer,
+  type SymbolLayerStyle,
 } from "@maplibre/maplibre-react-native";
 import type { RoutePoint } from "@logjam/shared";
 
 import { theme, withAlpha } from "../theme";
-import { routeArrows } from "./routeArrows";
 
-/**
- * Which way the line runs, as arrows along it.
- *
- * MarkerViews rather than a SymbolLayer: the declarative version renders
- * nothing at all in this MapLibre React Native setup (see routeArrows.ts for
- * what was ruled out on device). MarkerView is the same mechanism the anchor
- * handles already use, so it is known to work here.
- *
- * Deliberately few and non-interactive — `allowOverlap` so they never lose a
- * placement contest with a street label, and no press handler so a tap that
- * lands on one still reaches the route beneath it.
- */
+/** Below this a route is a few pixels of line and arrows on it are just noise. */
+export const ROUTE_ARROW_MIN_ZOOM = 12;
+
 const ARROW_GLYPH = "\u203A";
 
-export function RouteDirectionArrows({
-  points,
-  color,
-  count,
-}: {
-  points: readonly RoutePoint[];
-  color: string;
-  count?: number;
-}) {
-  const arrows = useMemo(() => routeArrows(points, count), [points, count]);
-  return (
-    <>
-      {arrows.map((arrow, index) => (
-        <MarkerView
-          key={`arrow-${index}`}
-          coordinate={arrow.coordinate as number[]}
-          allowOverlap
-          anchor={{ x: 0.5, y: 0.5 }}
-        >
-          {/* The glyph points east at 0deg, so it is rotated to the bearing
-              minus a quarter turn. */}
-          <View
-            style={[
-              styles.arrow,
-              { transform: [{ rotate: `${arrow.bearing - 90}deg` }] },
-            ]}
-            pointerEvents="none"
-          >
-            <Text style={[styles.arrowGlyph, { color }]}>{ARROW_GLYPH}</Text>
-          </View>
-        </MarkerView>
-      ))}
-    </>
-  );
+/**
+ * Which way the line runs, as arrows along it — MapLibre spaces and rotates
+ * them itself, so they re-space as you zoom and cost no React views (the
+ * markers this replaced were re-created on every drag frame, which is what made
+ * dragging an anchor stutter).
+ *
+ * A STYLE, not a component of ours, and two things here are load-bearing:
+ *
+ * - The layer has to be a DIRECT child of its `ShapeSource`. MLRN injects
+ *   `sourceID` onto the source's immediate children with `cloneElement`, so a
+ *   layer wrapped in a component of ours never learns which source it belongs
+ *   to, falls back to the default source id and draws nothing.
+ * - `textFont` has to name a stack we actually ship. The bundled glyph pack
+ *   (Protomaps basemap-assets, see `basemapAssets.ts`) carries Noto Sans only,
+ *   while MapLibre's default fontstack is Open Sans — a symbol layer that omits
+ *   the font asks for glyphs that 404 and renders no text at all, silently.
+ *   Every other SymbolLayer in the app names this same stack.
+ *
+ * Overlap allowed and placement ignored so an arrow never loses a contest with
+ * a street label, and `textKeepUpright` off because an arrow that flips itself
+ * to stay readable is then pointing the wrong way.
+ */
+export function routeArrowStyle(
+  color: SymbolLayerStyle["textColor"],
+  spacing = 90,
+): SymbolLayerStyle {
+  return {
+    symbolPlacement: "line",
+    symbolSpacing: spacing,
+    textField: ARROW_GLYPH,
+    textFont: ["Noto Sans Medium"],
+    textSize: 18,
+    textColor: color,
+    textHaloColor: theme.primary,
+    textHaloWidth: 1,
+    textAllowOverlap: true,
+    textIgnorePlacement: true,
+    textKeepUpright: false,
+    textRotationAlignment: "map",
+    textPitchAlignment: "map",
+  };
 }
 
 export function RouteDraftLayer({
@@ -117,11 +114,12 @@ export function RouteDraftLayer({
               ...(dotted ? { lineDasharray: [1, 1.5] } : {}),
             }}
           />
+          <SymbolLayer
+            id={`${idPrefix}-line-arrows`}
+            minZoomLevel={ROUTE_ARROW_MIN_ZOOM}
+            style={routeArrowStyle(theme.accent)}
+          />
         </ShapeSource>
-      ) : null}
-
-      {points.length >= 2 ? (
-        <RouteDirectionArrows points={points} color={theme.accent} />
       ) : null}
 
       {/* One handle per ANCHOR — never per point. A snapped run is geometry the
@@ -177,15 +175,4 @@ const styles = StyleSheet.create({
   },
   anchorStart: { backgroundColor: theme.accent },
   anchorEnd: { backgroundColor: withAlpha(theme.primary, 0.85) },
-  arrow: { alignItems: "center", justifyContent: "center", width: 18, height: 18 },
-  arrowGlyph: {
-    fontSize: 18,
-    fontWeight: "700",
-    // A halo the cheap way: the glyph sits on the line it describes, and
-    // without a light edge it disappears into it.
-    textShadowColor: theme.primary,
-    textShadowRadius: 2,
-    textShadowOffset: { width: 0, height: 0 },
-    lineHeight: 18,
-  },
 });

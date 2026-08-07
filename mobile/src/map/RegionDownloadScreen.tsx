@@ -285,9 +285,12 @@ export function RegionDownloadScreen({
     (job == null || job.totalTiles > 0 || includesVector);
 
   const centreLat = bbox ? (bbox.north + bbox.south) / 2 : 0;
-  const deepestZoom = job
-    ? Math.max(...job.perSource.map((source) => source.zMax))
-    : detailZoom;
+  // `perSource` is EMPTY for a vector-only selection (the clip is one file, not
+  // a tile pyramid), and Math.max() of nothing is -Infinity — which reached the
+  // caption as "z-Infinity · ≈ Infinity m per pixel".
+  const rasterZooms = job?.perSource.map((source) => source.zMax) ?? [];
+  const deepestZoom = rasterZooms.length > 0 ? Math.max(...rasterZooms) : detailZoom;
+  const vectorOnly = selected.length > 0 && pyramidIds.length === 0;
 
   const capNote = useMemo(() => {
     if (!caps || caps.ok) return null;
@@ -490,7 +493,13 @@ export function RegionDownloadScreen({
           <View style={styles.detailHeader}>
             <SectionHeader label="Detail" />
             <Text style={styles.detailCaption}>
-              {`z${deepestZoom} · ≈ ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m per pixel`}
+              {/* Metres-per-pixel describes a RASTER pyramid: fixed images at
+                  fixed scales. A vector clip has no pixels — it redraws sharp
+                  at any zoom, and the detail level only caps how much of the
+                  archive comes with you. */}
+              {vectorOnly
+                ? `z${deepestZoom} · sharp at any zoom`
+                : `z${deepestZoom} · ≈ ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m per pixel`}
             </Text>
           </View>
           <SegmentedControl

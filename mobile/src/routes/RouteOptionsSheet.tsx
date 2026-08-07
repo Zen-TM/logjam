@@ -137,12 +137,9 @@ export function RouteOptionsSheet({
         ) : null}
         {onLinkCanyon && actions.editableRouteId ? (
           <Row
+            // No subtitle: the sheet it opens says the same thing, and saying
+            // it twice makes the row taller for no new information.
             title={route.canyonId ? "Change linked canyon" : "Link to a canyon"}
-            subtitle={
-              route.canyonId
-                ? undefined
-                : "Sharing the canyon shares the route with it"
-            }
             icon="link"
             hue={assetHue.route}
             disabled={busy}

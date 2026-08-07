@@ -27,8 +27,10 @@ import {
   customFieldDisplayLabel,
   distinctTripTypes,
   formatCanyonGrade,
+  formatDistanceM,
   mediaCategory,
   messageFromError,
+  routeLengthM,
 } from "@logjam/shared";
 
 import {
@@ -45,13 +47,25 @@ import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityStatus, unavailableReasonText } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { MediaStrip } from "../media/MediaStrip";
-import { fontSize, fontWeight, lineHeight, radius, spacing, surface, theme } from "../theme";
+import { PickRouteSheet } from "../routes/PickRouteSheet";
+import { deleteMediaLocal } from "../sync/mediaUpload";
+import {
+  assetHue,
+  fontSize,
+  fontWeight,
+  lineHeight,
+  radius,
+  spacing,
+  surface,
+  theme,
+} from "../theme";
 import type { MirrorCanyon, MirrorTrip } from "../sync/mirrorStore";
 import { deleteCanyonLocal } from "../sync/outbox";
 import {
   useMirrorCanyon,
   useMirrorCanyons,
   useMirrorMedia,
+  useMirrorRoutes,
   useMirrorTrips,
 } from "../sync/useSyncQueries";
 import {
@@ -82,6 +96,8 @@ export function CanyonDetailScreen({
   onOpenTrip,
   onShowOnMap,
   onShowRoute,
+  onDrawRoute,
+  onShowRouteOnMap,
   onDeleted,
 }: {
   canyonId: string;
@@ -91,12 +107,17 @@ export function CanyonDetailScreen({
   onShowOnMap: (canyon: MirrorCanyon) => void;
   /** Opens the Map tab with this route attachment drawn on it. */
   onShowRoute: (mediaId: string, filename: string, localPath: string | null) => void;
+  /** Opens the Map tab with the draw tool armed, saving into this canyon's slot. */
+  onDrawRoute?: (canyonId: string) => void;
+  /** Frames a DRAWN route (not a media file) on the map. */
+  onShowRouteOnMap?: (route: { points: [number, number][] }) => void;
   /** The canyon this screen is showing is gone — leave, don't render a husk. */
   onDeleted: () => void;
 }) {
   const query = useMirrorCanyon(canyonId);
   const media = useMirrorMedia("canyon", canyonId);
   const trips = useMirrorTrips();
+  const routes = useMirrorRoutes();
   const canyonsQuery = useMirrorCanyons();
   const online = useConnectivity() === "online";
   // Custom-field DEFINITIONS live on the user record, so a guest has none —
@@ -119,6 +140,9 @@ export function CanyonDetailScreen({
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
   }, []);
+
+  // Above the early returns — hooks cannot be conditional.
+  const [pickingRoute, setPickingRoute] = useState(false);
 
   const canyon = query.data;
 
@@ -143,6 +167,15 @@ export function CanyonDetailScreen({
     const category = mediaCategory(item.mediaType);
     return category === "image" || category === "video";
   }).length;
+  // The canyon's route slot, as filled by a DRAWN route. It is a Route row,
+  // not media, so nothing in MediaStrip would ever show it — and a link that
+  // appears to do nothing is worse than no link at all.
+  const linkedRoute =
+    (routes.data ?? []).find((route) => route.canyonId === canyonId) ?? null;
+  // The canyon's route slot, as filled by a FILE. A drawn route can occupy the
+  // same slot, so the picker has to know about this one to say what it displaces.
+  const attachedTrack =
+    attachments.find((item) => mediaCategory(item.mediaType) === "track") ?? null;
   const routeCount = attachments.filter(
     (item) => mediaCategory(item.mediaType) === "track",
   ).length;
@@ -307,19 +340,40 @@ export function CanyonDetailScreen({
             draws this ONE route transiently. Belongs in the map-page redesign,
             where the layer sheet lives — the mirror already holds the files, so
             it can work offline. */}
-        <MediaStrip
-          kind="track"
-          online={online}
-          limit={1}
-          linkedType="canyon"
-          linkedId={canyonId}
-          media={attachments}
-          emptyHint="Attach a .gpx or .kml."
-          onFailed={(text) => notify(text, "error")}
-          onShowRoute={(item) =>
-            onShowRoute(item.id, item.filename ?? "Route", item.localDisplayPath)
-          }
-        />
+        {/* The slot is filled by a DRAWN route: show it, and skip the media
+            strip entirely rather than rendering an "add a file" affordance for
+            a slot that is taken. Swapping back to a file means unlinking the
+            route first, from its own options. */}
+        {linkedRoute ? (
+          <>
+            <Row
+              title={linkedRoute.name}
+              subtitle={`Drawn route · ${formatDistanceM(routeLengthM(linkedRoute.points))}`}
+              icon="edit-3"
+              hue={assetHue.route}
+              onPress={() => onShowRouteOnMap?.(linkedRoute)}
+            />
+            <Text style={styles.muted}>
+              One route per canyon. Unlink this one to attach a file instead.
+            </Text>
+          </>
+        ) : (
+          <MediaStrip
+            kind="track"
+            online={online}
+            limit={1}
+            linkedType="canyon"
+            linkedId={canyonId}
+            media={attachments}
+            emptyHint="Attach a .gpx or .kml."
+            onFailed={(text) => notify(text, "error")}
+            onShowRoute={(item) =>
+              onShowRoute(item.id, item.filename ?? "Route", item.localDisplayPath)
+            }
+            onPickDrawnRoute={isOwner ? () => setPickingRoute(true) : undefined}
+            onDrawRoute={isOwner && onDrawRoute ? () => onDrawRoute(canyonId) : undefined}
+          />
+        )}
 
         {/* Your own history here — the half a "done" badge can't tell you. Only
             ever your own trips: another person's visits to a canyon they shared
@@ -401,6 +455,19 @@ export function CanyonDetailScreen({
         onClose={() => setLogging(false)}
         onSaved={(text) => notify(text, "info")}
         onFailed={(text) => notify(text, "error")}
+      />
+
+      <PickRouteSheet
+        canyonId={canyonId}
+        canyonName={canyon.name}
+        attachedTrack={attachedTrack}
+        visible={pickingRoute}
+        onClose={() => setPickingRoute(false)}
+        onDeleteTrack={() =>
+          attachedTrack ? deleteMediaLocal(attachedTrack) : Promise.resolve()
+        }
+        onInfo={(text) => notify(text, "info")}
+        onError={(text) => notify(text, "error")}
       />
 
       <Toast message={toast} onDismissed={() => setToast(null)} />

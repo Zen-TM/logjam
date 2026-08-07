@@ -8,11 +8,26 @@
 // ONE ShapeSource for the same reason as CanyonRoutesLayer: per-feature colour
 // via a data-driven style beats N native sources.
 import { useMemo } from "react";
-import { CircleLayer, LineLayer, ShapeSource } from "@maplibre/maplibre-react-native";
+import {
+  CircleLayer,
+  LineLayer,
+  ShapeSource,
+  SymbolLayer,
+} from "@maplibre/maplibre-react-native";
 
 import { theme } from "../theme";
 import type { MirrorRoute } from "../sync/mirrorStore";
-import { RouteDirectionArrows } from "./RouteDraftLayer";
+import { ROUTE_ARROW_MIN_ZOOM, routeArrowStyle } from "./RouteDraftLayer";
+
+/**
+ * Zoom floor for SAVED routes. Zoomed out past this a route is a few pixels of
+ * line that says nothing about where it goes, and a state-wide view of every
+ * route you have ever drawn is just ink over the map.
+ *
+ * Matches the web's ROUTE_MIN_ZOOM. The route being DRAWN is exempt (the draft
+ * layer has no floor) — hiding what the user is working on would be absurd.
+ */
+export const SAVED_ROUTE_MIN_ZOOM = 7;
 
 /** Colour for a route whose server-assigned palette entry hasn't arrived yet
  * (drawn offline, create still queued). */
@@ -51,12 +66,7 @@ export function RoutesLayer({
 
   if (shape.features.length === 0) return null;
 
-  const drawn = routes.filter(
-    (route) => route.id !== hiddenRouteId && route.points.length >= 2,
-  );
-
   return (
-    <>
     <ShapeSource
       id="saved-routes"
       shape={shape}
@@ -76,6 +86,7 @@ export function RoutesLayer({
           both the pale basemap and dark imagery. */}
       <LineLayer
         id="saved-routes-casing"
+        minZoomLevel={SAVED_ROUTE_MIN_ZOOM}
         style={{
           lineColor: theme.primary,
           lineWidth: 6,
@@ -86,6 +97,7 @@ export function RoutesLayer({
       />
       <LineLayer
         id="saved-routes-line"
+        minZoomLevel={SAVED_ROUTE_MIN_ZOOM}
         style={{
           lineColor: ["get", "routeColor"],
           lineWidth: 3,
@@ -95,6 +107,7 @@ export function RoutesLayer({
       />
       <CircleLayer
         id="saved-routes-ends"
+        minZoomLevel={SAVED_ROUTE_MIN_ZOOM}
         filter={["==", ["geometry-type"], "Point"]}
         style={{
           circleRadius: 4,
@@ -103,20 +116,14 @@ export function RoutesLayer({
           circleStrokeColor: theme.primary,
         }}
       />
-    </ShapeSource>
-
-    {/* Arrows are markers, not a symbol layer (see RouteDraftLayer), so they
-        live outside the source and carry each route's own colour. Fewer per
-        route than the draft gets: several routes on screen at once is a lot of
-        chevrons, and here they only need to answer "which way does this run". */}
-    {drawn.map((route) => (
-      <RouteDirectionArrows
-        key={route.id}
-        points={route.points}
-        color={route.color ?? UNSYNCED_ROUTE_COLOR}
-        count={3}
+      {/* Spaced wider than the draft's: several routes on screen at once is a
+          lot of chevrons, and here they only answer "which way does this run".
+          Colour is data-driven, so all of them are still one native layer. */}
+      <SymbolLayer
+        id="saved-routes-arrows"
+        minZoomLevel={ROUTE_ARROW_MIN_ZOOM}
+        style={routeArrowStyle(["get", "routeColor"], 140)}
       />
-    ))}
-    </>
+    </ShapeSource>
   );
 }

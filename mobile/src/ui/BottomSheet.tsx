@@ -43,6 +43,7 @@ export function BottomSheet({
   title,
   footer,
   overlay,
+  header,
   children,
 }: {
   visible: boolean;
@@ -75,6 +76,13 @@ export function BottomSheet({
    * overlay content shorter than the list it covers.
    */
   overlay?: React.ReactNode;
+  /**
+   * Pinned ABOVE the scroll area — the mirror of `footer`. For a filter or
+   * search field that governs the list: scrolling the control that narrows the
+   * list out of reach is how you end up hunting a list you were given a way to
+   * search.
+   */
+  header?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -207,6 +215,7 @@ export function BottomSheet({
             <View style={styles.handle} />
           </View>
           <Text style={styles.title}>{title}</Text>
+          {header != null ? <View style={styles.header}>{header}</View> : null}
           {/* flexShrink so the scroll area yields to the pinned footer under
               the sheet's maxHeight cap. Without it this wrapper claims the
               full content height and pushes the footer off-screen. */}
@@ -230,6 +239,7 @@ export function BottomSheet({
 }
 
 const styles = StyleSheet.create({
+  header: { paddingBottom: spacing(1) },
   scrollArea: { flexShrink: 1 },
   // Opaque, so the list it covers doesn't ghost through.
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.primary },

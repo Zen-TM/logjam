@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  BackHandler,
   Linking,
   Pressable,
   StyleSheet,
@@ -57,6 +58,7 @@ import {
 
 import { apiFetch } from "../api/apiFetch";
 import { bboxOfPoints, type Bbox } from "../saved/bboxOfPoints";
+import { setRouteEditing } from "./routeEditLock";
 import { collectSnapLines } from "./snapLines";
 import {
   clearRouteDraft,
@@ -309,6 +311,7 @@ export function MapScreen({
   focus,
   route,
   editRoute,
+  drawRouteFor,
 }: {
   onOpenCanyon: (canyonId: string, name: string) => void;
   /**
@@ -332,6 +335,9 @@ export function MapScreen({
   // "Edit points" from the Saved tab: arm the draw tool on a saved route. An
   // id only — the geometry comes from the mirror.
   editRoute?: { routeId: string; nonce: number } | null;
+  // "Draw one on the map" from a canyon: arm the tool, and save into that
+  // canyon's route slot rather than as a standalone route.
+  drawRouteFor?: { canyonId: string; nonce: number } | null;
 }) {
   // A route arrives via navigation params; clearing its badge drops it, and a
   // fresh request (new nonce) replaces whatever was showing.
@@ -412,6 +418,8 @@ export function MapScreen({
   const [statsRouteId, setStatsRouteId] = useState<string | null>(null);
   const [optionsRouteId, setOptionsRouteId] = useState<string | null>(null);
   const [linkingRouteId, setLinkingRouteId] = useState<string | null>(null);
+  // Set when the draw was started from a canyon page; consumed by the save.
+  const [draftCanyonId, setDraftCanyonId] = useState<string | null>(null);
   // "Canyon routes" layer (web parity), off by default: it is a lot of ink to
   // add to a map unasked, and the layers sheet is where it belongs.
   const [showCanyonRoutes, setShowCanyonRoutes] = useState(false);
@@ -870,6 +878,25 @@ export function MapScreen({
   /** Persist every change to the draft. Cheap — a route is a handful of
    *  coordinate pairs — and it is the only thing standing between a killed app
    *  and twenty minutes of drawing. */
+  // Tell the tab bar there is unsaved work here (see routeEditLock). Cleared
+  // on unmount too: a screen that goes away with the flag still set would lock
+  // navigation with nothing on screen to explain it.
+  useEffect(() => {
+    setRouteEditing(routeDraft.active);
+    return () => setRouteEditing(false);
+  }, [routeDraft.active]);
+
+  // Android back while drawing = the same question the bin asks, rather than
+  // silently leaving the map with a draft armed.
+  useEffect(() => {
+    if (!routeDraft.active) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      handleCancelRouteDraw();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [handleCancelRouteDraw, routeDraft.active]);
+
   //  Keyed on the draft VALUE, not the hook handle: the handle is a fresh
   //  object every render, which would turn this into a write per frame.
   const draft = routeDraft.draft;
@@ -902,11 +929,17 @@ export function MapScreen({
         if (editingRouteId) {
           await updateRouteLocal(editingRouteId, { name, points, anchors });
         } else {
-          await createRouteLocal({ name, points, anchors });
+          await createRouteLocal({
+            name,
+            points,
+            anchors,
+            ...(draftCanyonId ? { canyonId: draftCanyonId } : {}),
+          });
         }
         setNamingRoute(false);
         routeDraft.close();
         setEditingRouteId(null);
+        setDraftCanyonId(null);
       } catch (err) {
         console.error(err);
         Alert.alert("Route error", "Couldn't save that route.");
@@ -914,7 +947,7 @@ export function MapScreen({
         setSavingRoute(false);
       }
     },
-    [editingRouteId, routeDraft],
+    [draftCanyonId, editingRouteId, routeDraft],
   );
 
   /** Arming a tool closes the tray: the HUD then says what mode you are in,
@@ -1309,6 +1342,33 @@ export function MapScreen({
     },
     [fitCameraToBbox, handleCancelRouteDraw, measureDraft, routeDraft],
   );
+
+  /** "Draw one on the map" arriving from a canyon page. */
+  const drawRouteNonce = drawRouteFor?.nonce ?? null;
+  const handledDrawNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!drawRouteFor || !draftRestoreDone) return;
+    if (handledDrawNonce.current === drawRouteFor.nonce) return;
+    handledDrawNonce.current = drawRouteFor.nonce;
+    const arm = () => {
+      measureDraft.close();
+      routeDraft.open();
+      setEditingRouteId(null);
+      setDraftCanyonId(drawRouteFor.canyonId);
+    };
+    if (routeDraft.active && routeDraft.points.length > 0) {
+      handleCancelRouteDraw(arm);
+    } else {
+      arm();
+    }
+  }, [
+    draftRestoreDone,
+    drawRouteFor,
+    drawRouteNonce,
+    handleCancelRouteDraw,
+    measureDraft,
+    routeDraft,
+  ]);
 
   const editRouteNonce = editRoute?.nonce ?? null;
   const handledEditNonce = useRef<number | null>(null);
@@ -2495,8 +2555,24 @@ function RouteNameForm({
 
   useEffect(() => {
     // autoFocus runs before the field is attached and is unreliable here.
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
+    // The rAF alone was not enough either: this form lives inside a Modal that
+    // slides in, and a focus landed mid-animation is dropped — so the sheet
+    // opened with no keyboard and the first tap went into raising it. Retry
+    // once the slide is done; focusing an already-focused field is a no-op.
+    // Retried rather than attempted once: the sheet is a Modal that slides in,
+    // and a focus landed before its window is attached is dropped silently —
+    // the sheet then opens with no keyboard and the first tap goes into raising
+    // one. Keeps trying until the field reports focus, then stops.
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      if (inputRef.current?.isFocused() || attempts > 12) {
+        clearInterval(timer);
+        return;
+      }
+      inputRef.current?.focus();
+    }, 120);
+    return () => clearInterval(timer);
   }, []);
 
   const trimmed = draft.trim();
@@ -2507,7 +2583,7 @@ function RouteNameForm({
   };
 
   return (
-    <>
+    <View style={styles.nameForm}>
       <TextField
         label="Name"
         value={draft}
@@ -2525,11 +2601,14 @@ function RouteNameForm({
         disabled={!trimmed || tooLong || saving}
         onPress={commit}
       />
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // The field and its Save button were flush against each other, which read as
+  // one control and put the button under the thumb aiming for the input.
+  nameForm: { gap: spacing(2) },
   root: { flex: 1, backgroundColor: theme.primary },
   map: { flex: 1 },
   noticeStack: {

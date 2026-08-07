@@ -62,11 +62,14 @@ export async function exportRoute(
     await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
   if (!permission.granted) return null;
 
-  // createFileAsync appends the extension itself from the mime type, so it is
-  // handed the BASE name — passing "route.gpx" yields "route.gpx.gpx".
+  // The FULL filename, extension included. SAF derives an extension from the
+  // mime type when the name lacks one — but Android's MimeTypeMap knows
+  // nothing about application/gpx+xml, so it derived none and wrote a file with
+  // no extension at all, which Gaia then refused to import. Passing the
+  // extension explicitly is the only way to be sure it is there.
   const target = await FileSystem.StorageAccessFramework.createFileAsync(
     permission.directoryUri,
-    filename.replace(/\.(gpx|kml)$/, ""),
+    filename,
     mimeType,
   );
   await FileSystem.writeAsStringAsync(target, content, {

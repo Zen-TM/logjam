@@ -13,6 +13,7 @@ import {
   draftAnchorIndices,
   draftPoints,
   fetchSnapLines,
+  insertAnchor,
   moveAnchor,
   nearestSegment,
   snapSegment,
@@ -91,6 +92,13 @@ const HANDLE_CLICK_SUPPRESS_MS = 400;
 
 /** Movement below this is a click, not a drag, so it inserts nothing. */
 const DRAG_INSERT_MIN_PIXELS = 6;
+
+/**
+ * Zoom below which saved routes stop drawing. 7 is where the route line-width
+ * ramp starts and is the app's initial zoom, so a first load still shows them
+ * while a state- or continent-wide view isn't hazed over with lines.
+ */
+const ROUTE_MIN_ZOOM = 7;
 
 const SIDEBAR_TRANSITION_MS = 300;
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
@@ -451,6 +459,23 @@ function draftFeatureCollection(
     });
   });
   return { type: "FeatureCollection", features };
+}
+
+/**
+ * Paint a draft straight into the map source, bypassing React.
+ *
+ * Deliberate: routing a frame per pixel through the draft hook would push an
+ * undo entry per pixel moved. Every live drag (moving an anchor, dragging a
+ * segment to insert one) previews through here so they can't diverge.
+ */
+function previewDraft(map: maplibregl.Map, draft: RouteDraft): void {
+  const source = map.getSource("route-draft") as
+    | maplibregl.GeoJSONSource
+    | undefined;
+  if (!source) return;
+  source.setData(
+    draftFeatureCollection(draftPoints(draft), draftAnchorIndices(draft)),
+  );
 }
 
 function Map({
@@ -925,10 +950,16 @@ function Map({
       // gesture; this widens the hit area without widening what you see, which
       // is the standard MapLibre answer. Beneath the visible line so it can
       // never tint it.
+      // Saved routes are local detail — a state-wide view of them is a smear of
+      // lines, not information — so every routes-* layer drops out below zoom
+      // ROUTE_MIN_ZOOM. The hit target carries the same floor as the line it
+      // targets: a clickable line you cannot see is a click that does nothing.
+      // The route being drawn/edited lives on route-draft and is never hidden.
       map.addLayer({
         id: "routes-hit",
         type: "line",
         source: "routes",
+        minzoom: ROUTE_MIN_ZOOM,
         layout: {
           visibility: "none",
           "line-cap": "round",
@@ -940,6 +971,7 @@ function Map({
         id: "routes-lines",
         type: "line",
         source: "routes",
+        minzoom: ROUTE_MIN_ZOOM,
         layout: {
           visibility: "none",
           "line-cap": "round",
@@ -1673,21 +1705,13 @@ function Map({
       marker.on("dragstart", () => {
         movedDuringDrag = false;
       });
-      // Repaint the line under the cursor on every frame. This bypasses React
-      // deliberately: routing each frame through the draft hook would push an
-      // undo entry per pixel moved. The preview is built with the same
-      // `moveAnchor` the drop commits, so what you drag is exactly what lands.
+      // Repaint the line under the cursor on every frame. The preview is built
+      // with the same `moveAnchor` the drop commits, so what you drag is
+      // exactly what lands.
       marker.on("drag", () => {
         movedDuringDrag = true;
-        const source = map.getSource("route-draft") as
-          | maplibregl.GeoJSONSource
-          | undefined;
-        if (!source) return;
         const { lng, lat } = marker.getLngLat();
-        const preview = moveAnchor(draftRef.current, anchorIndex, [lng, lat]);
-        source.setData(
-          draftFeatureCollection(draftPoints(preview), draftAnchorIndices(preview)),
-        );
+        previewDraft(map, moveAnchor(draftRef.current, anchorIndex, [lng, lat]));
       });
       marker.on("dragend", () => {
         handlePressedAt.current = Date.now();
@@ -1725,8 +1749,17 @@ function Map({
     // this the gesture fired on any press near the line — and a vertex handle
     // sits exactly on the line, so clicking a handle to delete it inserted a
     // point instead.
-    let dragging: { segmentIndex: number; startX: number; startY: number } | null =
-      null;
+    // `base` is the draft as it stood when the press began: every preview frame
+    // inserts into THAT, so the new anchor is placed once and merely follows the
+    // cursor rather than accumulating one insert per frame. `inserting` flips
+    // when the press passes the drag threshold — until then it is still a click.
+    let dragging: {
+      segmentIndex: number;
+      startX: number;
+      startY: number;
+      base: RouteDraft;
+      inserting: boolean;
+    } | null = null;
 
     // Grab radius in pixels, converted to degrees at the current zoom so the
     // hit test feels the same however far you are zoomed in.
@@ -1749,27 +1782,59 @@ function Map({
         segmentIndex: near.index,
         startX: e.point.x,
         startY: e.point.y,
+        base: draftRef.current,
+        inserting: false,
       };
       map.getCanvas().style.cursor = "grabbing";
     };
 
-    const onUp = (e: maplibregl.MapMouseEvent) => {
+    // Live preview, same as dragging an existing handle: the anchor appears as
+    // soon as the press becomes a drag and the line tracks the cursor from
+    // there. Committing per frame instead would push an undo entry per pixel.
+    const onMove = (e: maplibregl.MapMouseEvent) => {
       if (!dragging) return;
-      const { segmentIndex, startX, startY } = dragging;
-      dragging = null;
-      map.getCanvas().style.cursor = "crosshair";
       // Only a press that actually travelled is a drag. A click on the line is
       // not a request for a new point.
-      if (Math.hypot(e.point.x - startX, e.point.y - startY) < DRAG_INSERT_MIN_PIXELS) {
+      if (
+        !dragging.inserting &&
+        Math.hypot(e.point.x - dragging.startX, e.point.y - dragging.startY) <
+          DRAG_INSERT_MIN_PIXELS
+      ) {
         return;
       }
-      onDrawPointInsertRef.current(segmentIndex, [e.lngLat.lng, e.lngLat.lat]);
+      dragging.inserting = true;
+      previewDraft(
+        map,
+        insertAnchor(dragging.base, dragging.segmentIndex, [
+          e.lngLat.lng,
+          e.lngLat.lat,
+        ]),
+      );
+    };
+
+    const onUp = (e: maplibregl.MapMouseEvent) => {
+      if (!dragging) return;
+      const { segmentIndex, base, inserting } = dragging;
+      dragging = null;
+      map.getCanvas().style.cursor = "crosshair";
+      if (!inserting) return;
+      const inserted: RoutePoint = [e.lngLat.lng, e.lngLat.lat];
+      onDrawPointInsertRef.current(segmentIndex, inserted);
+      // insertAnchor splits the segment into two straight halves, exactly as
+      // moveAnchor straightens the two either side of a moved handle — so both
+      // need the same re-snap on drop that a handle drop does.
+      const before = base.anchors[segmentIndex];
+      const after = base.anchors[segmentIndex + 1];
+      if (before) snapBetweenRef.current(before, inserted);
+      if (after) snapBetweenRef.current(inserted, after);
     };
 
     map.on("mousedown", onDown);
+    map.on("mousemove", onMove);
     map.on("mouseup", onUp);
     return () => {
       map.off("mousedown", onDown);
+      map.off("mousemove", onMove);
       map.off("mouseup", onUp);
     };
   }, [drawingRoute, mapLoaded]);

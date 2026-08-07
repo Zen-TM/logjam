@@ -9,6 +9,7 @@
 // the mirror and still enqueue to the outbox, which is precisely what makes
 // linking an account later a flush rather than a migration.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
   DarkTheme,
@@ -16,6 +17,7 @@ import {
   type NavigationContainerRef,
 } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
+import { isRouteEditing } from "./map/routeEditLock";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { isThemeSchemeId, needsReconsent } from "@logjam/shared";
@@ -77,6 +79,9 @@ type MapStackParams = {
         // existing route. An id, never geometry — the map reads the points
         // from the mirror it already has.
         editRoute?: { routeId: string; nonce: number };
+        // `drawRouteFor` = "Draw one on the map" from a canyon page: arm the
+        // pen and save into that canyon's route slot.
+        drawRouteFor?: { canyonId: string; nonce: number };
       }
     | undefined;
   MapCanyonDetail: { canyonId: string; name: string };
@@ -136,6 +141,19 @@ const Tabs = createBottomTabNavigator();
  * is what `MapView`'s `focus` param takes. Built at navigation time and never
  * stored: a region of interest stays off the server (mobile/CLAUDE.md).
  */
+/** Extent of a drawn route, for "show it on the map". Built at navigation time
+ * and never stored — a region of interest stays off the server. */
+function routeBbox(points: [number, number][]): [number, number, number, number] {
+  const lons = points.map(([lon]) => lon);
+  const lats = points.map(([, lat]) => lat);
+  return [
+    Math.min(...lons),
+    Math.min(...lats),
+    Math.max(...lons),
+    Math.max(...lats),
+  ];
+}
+
 const CANYON_FOCUS_DEGREES = 0.005;
 function canyonFocus(canyon: { latitude: number; longitude: number }) {
   return {
@@ -176,6 +194,7 @@ function MapStackNav() {
             focus={route.params?.focus ?? null}
             route={route.params?.route ?? null}
             editRoute={route.params?.editRoute ?? null}
+            drawRouteFor={route.params?.drawRouteFor ?? null}
           />
         )}
       </MapStack.Screen>
@@ -204,6 +223,18 @@ function MapStackNav() {
             onShowRoute={(mediaId, filename, localPath) =>
               navigation.navigate("MapView", {
                 route: { mediaId, filename, localPath, nonce: Date.now() },
+              })
+            }
+            onShowRouteOnMap={(route) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { focus: { bbox: routeBbox(route.points), nonce: Date.now() } },
+              })
+            }
+            onDrawRoute={(id) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { drawRouteFor: { canyonId: id, nonce: Date.now() } },
               })
             }
             onDeleted={() => navigation.goBack()}
@@ -309,6 +340,18 @@ function CanyonsStackNav() {
                 params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
               })
             }
+            onShowRouteOnMap={(route) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { focus: { bbox: routeBbox(route.points), nonce: Date.now() } },
+              })
+            }
+            onDrawRoute={(id) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { drawRouteFor: { canyonId: id, nonce: Date.now() } },
+              })
+            }
             onDeleted={() => navigation.goBack()}
           />
         )}
@@ -377,6 +420,18 @@ function TripsStackNav() {
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
                 params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
+              })
+            }
+            onShowRouteOnMap={(route) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { focus: { bbox: routeBbox(route.points), nonce: Date.now() } },
+              })
+            }
+            onDrawRoute={(id) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { drawRouteFor: { canyonId: id, nonce: Date.now() } },
               })
             }
             onDeleted={() => navigation.goBack()}
@@ -548,6 +603,23 @@ export function AppShell({
     <AccountStateProvider accountState={accountState} linkAccount={onLinkAccount}>
     <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <Tabs.Navigator
+        // A route being drawn or edited owns the map's taps and has no home
+        // anywhere else, so the tab bar refuses to take you off it. The draft
+        // does survive (routeDraftStore), but nothing on another tab says so —
+        // leaving would read as losing the route.
+        screenListeners={{
+          tabPress: (event) => {
+            if (!isRouteEditing()) return;
+            const target = event.target ?? "";
+            if (target.startsWith("Map")) return;
+            event.preventDefault();
+            Alert.alert(
+              "Finish your route first",
+              "Save it, or discard it with the bin, before leaving the map.",
+              [{ text: "OK" }],
+            );
+          },
+        }}
         screenOptions={{
           headerShown: false,
           tabBarStyle: { backgroundColor: theme.secondary, borderTopColor: theme.secondary },
@@ -637,7 +709,19 @@ export function AppShell({
                         params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
                       })
                     }
-                    onDeleted={() => navigation.goBack()}
+                    onShowRouteOnMap={(route) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { focus: { bbox: routeBbox(route.points), nonce: Date.now() } },
+              })
+            }
+            onDrawRoute={(id) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { drawRouteFor: { canyonId: id, nonce: Date.now() } },
+              })
+            }
+            onDeleted={() => navigation.goBack()}
                   />
                 )}
               </MoreStack.Screen>
