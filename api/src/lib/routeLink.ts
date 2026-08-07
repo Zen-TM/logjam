@@ -16,9 +16,37 @@
 // handler both call it.
 
 import { Prisma } from "@prisma/client";
+import { parseRouteAnchors } from "@logjam/shared";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { writeTombstones, routeUnlinkTombstones } from "./syncTombstones";
+
+/**
+ * Anchor indices for a validated point list, or SQL NULL.
+ *
+ * Lives here rather than in the route handler because there are TWO write
+ * paths — PATCH /routes/:id and the sync push op — and only one of them used
+ * to apply this rule. The other accepted `anchors`, validated it, and then
+ * silently dropped it on the floor, so every route drawn on a phone lost the
+ * user's own vertices on the first pull after it flushed.
+ *
+ * validateRoutePayload has already rejected a malformed list, so this only
+ * re-parses for the normalised numbers. Null means "no record", which is a
+ * legitimate state (routes drawn before snapping existed) rather than a
+ * failure, and the client reads it as every point being the user's own.
+ *
+ * DbNull, not JsonNull: "no anchor record" is the absence of a value, so it
+ * belongs in the column as SQL NULL rather than the JSON literal `null`.
+ * Postgres distinguishes the two and only the former reads back as null.
+ */
+export function parseAnchorsOrNull(
+  value: unknown,
+  pointCount: number,
+): number[] | typeof Prisma.DbNull {
+  const parsed = parseRouteAnchors(value, pointCount);
+  const anchors = "error" in parsed ? null : parsed.anchors;
+  return anchors ?? Prisma.DbNull;
+}
 
 /** Sharee user ids for a canyon — who loses sight of a route unlinked from it. */
 export async function canyonShareeIds(

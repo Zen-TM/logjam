@@ -42,6 +42,9 @@ const OFFLINE_TABLES = [
   "waypoint",
   "overlay_enabled",
   "region_download",
+  // An unfinished route draft is coordinates through a canyon — the most
+  // sensitive shape of data this app holds.
+  "route_draft",
 ] as const;
 
 /** On-disk trees holding user content. `basemap-assets/` is deliberately absent:

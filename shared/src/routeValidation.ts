@@ -235,6 +235,22 @@ export function reverseRoute(points: readonly RoutePoint[]): RoutePoint[] {
   return points.map((p): RoutePoint => [p[0], p[1]]).reverse();
 }
 
+/**
+ * The anchor indices for a reversed route.
+ *
+ * Anchors are positions in `points`, so reversing the geometry without
+ * reversing them silently reassigns which vertices the user "placed" — on a
+ * snapped route that turns their handful of handles into arbitrary points on
+ * the trail. Ascending order is part of the contract (`parseRouteAnchors`),
+ * hence the sort rather than a bare reverse.
+ */
+export function reverseRouteAnchors(
+  anchors: readonly number[],
+  pointCount: number,
+): number[] {
+  return anchors.map((index) => pointCount - 1 - index).sort((a, b) => a - b);
+}
+
 // ── Simplification ───────────────────────────────────────────────────────────
 //
 // Ramer–Douglas–Peucker. Used by exactly two deliberate, user-visible actions:

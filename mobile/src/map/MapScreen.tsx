@@ -44,6 +44,8 @@ import {
   TOPO_LAYERS,
   VECTOR_STYLE_DEFAULTS,
   compassPointFor,
+  draftAnchorIndices,
+  draftPoints,
   formatDistanceM,
   haversineMeters,
   initialBearingDegrees,
@@ -55,7 +57,13 @@ import {
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
+import { bboxOfPoints, type Bbox } from "../saved/bboxOfPoints";
 import { collectSnapLines } from "./snapLines";
+import {
+  clearRouteDraft,
+  readRouteDraft,
+  saveRouteDraft,
+} from "./routeDraftStore";
 import { useRouteDraft } from "./useRouteDraft";
 import { readSnapMode, writeSnapMode } from "./snapPreference";
 import { getVectorStyle, useApiQuery } from "../api/queries";
@@ -301,6 +309,7 @@ export function MapScreen({
   onSaveMapsOffline,
   focus,
   route,
+  editRoute,
 }: {
   onOpenCanyon: (canyonId: string, name: string) => void;
   /**
@@ -321,6 +330,9 @@ export function MapScreen({
   // makes a repeat request for the same asset refocus instead of no-op.
   // Coordinates stay in navigation params + component state — never logged.
   focus?: { bbox: [number, number, number, number]; nonce: number } | null;
+  // "Edit points" from the Saved tab: arm the draw tool on a saved route. An
+  // id only — the geometry comes from the mirror.
+  editRoute?: { routeId: string; nonce: number } | null;
 }) {
   // A route arrives via navigation params; clearing its badge drops it, and a
   // fresh request (new nonce) replaces whatever was showing.
@@ -747,6 +759,67 @@ export function MapScreen({
     [routeDraft],
   );
 
+  /** Restore a draft the app was killed in the middle of.
+   *
+   *  Runs once, before anything is persisted (`draftRestored` gates the writer
+   *  below), or the empty first render would overwrite what we are about to
+   *  read back. Failure is silent: an unreadable draft means the tool opens
+   *  closed, which is where it would have been anyway. */
+  const draftRestored = useRef(false);
+  // Also state, because the "edit this route" request below must wait for it:
+  // the restore is async and would otherwise land on top of the route the user
+  // asked to edit.
+  const [draftRestoreDone, setDraftRestoreDone] = useState(false);
+  const [pendingDraftFit, setPendingDraftFit] = useState<Bbox | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    readRouteDraft()
+      .then((stored) => {
+        if (cancelled) return;
+        if (stored) {
+          routeDraft.open({ points: stored.points, anchors: stored.anchors });
+          setEditingRouteId(stored.editingRouteId);
+          // Frame it too. A HUD announcing 22 points over an empty map reads
+          // as "the app lost my route" — the camera is the confirmation that
+          // it came back. Handed to an effect below because fitCameraToBbox is
+          // declared after this one.
+          setPendingDraftFit(
+            bboxOfPoints(stored.points.map(([lon, lat]) => ({ lon, lat }))),
+          );
+        }
+      })
+      .catch(console.error)
+      .finally(() => {
+        if (cancelled) return;
+        draftRestored.current = true;
+        setDraftRestoreDone(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Mount only: re-running this would resurrect a draft the user just binned.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Persist every change to the draft. Cheap — a route is a handful of
+   *  coordinate pairs — and it is the only thing standing between a killed app
+   *  and twenty minutes of drawing. */
+  //  Keyed on the draft VALUE, not the hook handle: the handle is a fresh
+  //  object every render, which would turn this into a write per frame.
+  const draft = routeDraft.draft;
+  useEffect(() => {
+    if (!draftRestored.current) return;
+    if (!draft || draft.anchors.length === 0) {
+      clearRouteDraft().catch(console.error);
+      return;
+    }
+    saveRouteDraft({
+      points: draftPoints(draft),
+      anchors: draftAnchorIndices(draft),
+      editingRouteId,
+    }).catch(console.error);
+  }, [draft, editingRouteId]);
+
   /** Save the drawn points as a route. Offline is the expected case, not a
    *  degraded one: createRouteLocal writes the mirror and queues the op, so the
    *  route is on the map immediately and reaches the server whenever there is
@@ -838,7 +911,12 @@ export function MapScreen({
       else if (drawingRoute) addRoutePoint(longitude, latitude);
 
       if (!previousPoint || snapMode === "off") return;
-      const lines = await collectSnapLines(snapMode, previousPoint, tapped);
+      const lines = await collectSnapLines(
+        snapMode,
+        previousPoint,
+        tapped,
+        artifacts,
+      );
       const snapped = snapSegment(lines, previousPoint, tapped);
       // The path includes the graph nodes nearest both ends; drop them, or the
       // line jumps sideways onto the track at every tap.
@@ -856,6 +934,7 @@ export function MapScreen({
     [
       addMeasurePoint,
       addRoutePoint,
+      artifacts,
       drawingRoute,
       insertMeasurePointsBeforeLast,
       measurePoints,
@@ -1157,6 +1236,54 @@ export function MapScreen({
     if (!focus) return;
     fitCameraToBbox(focus.bbox);
   }, [focus?.nonce, focus, fitCameraToBbox]);
+
+  // Frame a draft restored from a killed session, once the map can take a
+  // camera stop. Cleared after one use — the user's own panning owns the
+  // camera from then on.
+  useEffect(() => {
+    if (!pendingDraftFit || !mapReady) return;
+    fitCameraToBbox(pendingDraftFit);
+    setPendingDraftFit(null);
+  }, [fitCameraToBbox, mapReady, pendingDraftFit]);
+
+  /** "Edit points" arrival from Saved: arm the draw tool on a saved route and
+   *  frame it.
+   *
+   *  Waits for the draft restore, which is async — landing on top of it would
+   *  either resurrect a discarded draft or bin the route the user asked for.
+   *  An unsaved draft already in the tool goes through the same confirm as any
+   *  other way of leaving it. Keyed on the nonce so asking twice re-arms. */
+  const editRouteNonce = editRoute?.nonce ?? null;
+  const handledEditNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!editRoute || !draftRestoreDone) return;
+    if (handledEditNonce.current === editRoute.nonce) return;
+    const target = routes.data?.find((r) => r.id === editRoute.routeId);
+    // The mirror may not have loaded yet; leave the request unhandled so the
+    // next render with rows tries again.
+    if (!target) return;
+    handledEditNonce.current = editRoute.nonce;
+    const arm = () => {
+      setMeasurePoints(null);
+      routeDraft.open({ points: target.points, anchors: target.anchors });
+      setEditingRouteId(target.id);
+      const bbox = bboxOfPoints(target.points.map(([lon, lat]) => ({ lon, lat })));
+      if (bbox) fitCameraToBbox(bbox);
+    };
+    if (routeDraft.active && routeDraft.points.length > 0) {
+      handleCancelRouteDraw(arm);
+    } else {
+      arm();
+    }
+  }, [
+    draftRestoreDone,
+    editRoute,
+    editRouteNonce,
+    fitCameraToBbox,
+    handleCancelRouteDraw,
+    routeDraft,
+    routes.data,
+  ]);
 
   // Live camera → the scale bar only, at gesture rate. Coordinates stay in
   // component state only — never logged (privacy rule).

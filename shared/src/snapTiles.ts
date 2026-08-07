@@ -25,7 +25,7 @@
 // as a query — it only selects which tiles to range-request from our own CDN,
 // and nothing here logs.
 
-import { PMTiles } from "pmtiles";
+import { PMTiles, type Source } from "pmtiles";
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 
@@ -93,18 +93,33 @@ function tileY(lat: number, zoom: number): number {
 }
 
 /**
- * Archives are cached per URL: the PMTiles object holds the header and
+ * Where to read the archive from: a URL, or any pmtiles `Source`.
+ *
+ * The Source form is what makes snapping work OFFLINE — mobile hands in a
+ * reader over a downloaded region's .pmtiles file, so the same decode path
+ * serves both without knowing which it got. Reading ranges out of a local file
+ * is exactly what the interface is for.
+ */
+export type SnapArchive = string | Source;
+
+function archiveKey(archive: SnapArchive): string {
+  return typeof archive === "string" ? archive : archive.getKey();
+}
+
+/**
+ * Archives are cached per key: the PMTiles object holds the header and
  * directory pages, so re-creating it per segment would re-fetch them on every
  * tap. This is the difference between one range request per tap and four.
  */
 const archives = new Map<string, PMTiles>();
 
-function archiveFor(url: string): PMTiles {
-  const existing = archives.get(url);
+function archiveFor(archive: SnapArchive): PMTiles {
+  const key = archiveKey(archive);
+  const existing = archives.get(key);
   if (existing) return existing;
-  const archive = new PMTiles(url);
-  archives.set(url, archive);
-  return archive;
+  const opened = new PMTiles(archive);
+  archives.set(key, opened);
+  return opened;
 }
 
 /**
@@ -133,15 +148,15 @@ export function clearSnapTileCache() {
 }
 
 async function linesInTile(
-  archiveUrl: string,
+  archive: SnapArchive,
   x: number,
   y: number,
 ): Promise<{ kind: string; coords: RoutePoint[] }[]> {
-  const key = `${archiveUrl}|${SNAP_TILE_ZOOM}/${x}/${y}`;
+  const key = `${archiveKey(archive)}|${SNAP_TILE_ZOOM}/${x}/${y}`;
   const cached = tileCache.get(key);
   if (cached) return cached;
 
-  const result = await archiveFor(archiveUrl).getZxy(SNAP_TILE_ZOOM, x, y);
+  const result = await archiveFor(archive).getZxy(SNAP_TILE_ZOOM, x, y);
   const lines: { kind: string; coords: RoutePoint[] }[] = [];
   if (result) {
     const tile = new VectorTile(new PbfReader(new Uint8Array(result.data)));
@@ -182,7 +197,7 @@ async function linesInTile(
  * have drawn anyway — never an error to surface mid-draw.
  */
 export async function fetchSnapLines(
-  archiveUrl: string,
+  archive: SnapArchive,
   mode: SnapMode,
   from: RoutePoint,
   to: RoutePoint,
@@ -213,7 +228,7 @@ export async function fetchSnapLines(
 
   try {
     const perTile = await Promise.all(
-      coordinates.map(({ x, y }) => linesInTile(archiveUrl, x, y)),
+      coordinates.map(({ x, y }) => linesInTile(archive, x, y)),
     );
     return perTile
       .flat()

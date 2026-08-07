@@ -20,13 +20,13 @@ import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import {
   validateRoutePayload,
-  parseRouteAnchors,
   parseRoutePoints,
   randomTrackColor,
 } from "@logjam/shared";
 import {
   applyRouteCanyonLink,
   canyonShareeIds,
+  parseAnchorsOrNull,
   resolveRouteCanyonId,
 } from "../lib/routeLink";
 import { routeDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
@@ -109,26 +109,6 @@ router.get("/:id", requireAuth, async (req: AuthenticatedRequest, res: Response)
   }
   res.json(route);
 });
-
-/**
- * Anchor indices for a validated point list, or null.
- *
- * validateRoutePayload has already rejected a malformed list, so this only
- * re-parses for the normalised numbers. Null means "no record", which is a
- * legitimate state (routes drawn before snapping existed) rather than a
- * failure, and the client reads it as every point being the user's own.
- */
-function parseAnchorsOrNull(
-  value: unknown,
-  pointCount: number,
-): number[] | typeof Prisma.DbNull {
-  const parsed = parseRouteAnchors(value, pointCount);
-  const anchors = "error" in parsed ? null : parsed.anchors;
-  // DbNull, not JsonNull: "no anchor record" is the absence of a value, so it
-  // belongs in the column as SQL NULL rather than the JSON literal `null`.
-  // Postgres distinguishes the two and only the former reads back as null.
-  return anchors ?? Prisma.DbNull;
-}
 
 // ── POST /routes ──────────────────────────────────────────────
 router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) => {

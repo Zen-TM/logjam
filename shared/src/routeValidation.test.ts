@@ -7,6 +7,7 @@ import {
   routeLengthM,
   routeToGeoJson,
   reverseRoute,
+  reverseRouteAnchors,
   simplifyRoute,
   simplifyToFit,
   routesFromVectorImport,
@@ -153,6 +154,18 @@ describe("routeToGeoJson / reverseRoute", () => {
     const reversed = reverseRoute(points);
     expect(reversed[0]).toEqual(points[2]);
     expect(points[0]).toEqual(CLAUSTRAL);
+  });
+
+  it("reverses anchor indices so they still point at the same vertices", () => {
+    const points = line(6);
+    // The user placed the ends and one middle vertex; the rest is snapped fill.
+    const anchors = [0, 2, 5];
+    const reversed = reverseRouteAnchors(anchors, points.length);
+    expect(reversed).toEqual([0, 3, 5]);
+    const reversedPoints = reverseRoute(points);
+    for (const [i, index] of reversed.entries()) {
+      expect(reversedPoints[index]).toEqual(points[anchors[anchors.length - 1 - i]!]);
+    }
   });
 });
 

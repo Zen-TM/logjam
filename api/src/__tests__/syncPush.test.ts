@@ -323,3 +323,71 @@ describe("sync push — notification markRead", () => {
     expect(res.body.results[0].status).toBe("alreadyApplied");
   });
 });
+
+describe("sync push — route anchors", () => {
+  // Regression: the push handler accepted `anchors`, validated it, and then
+  // dropped it — so every route drawn on a phone lost the user's own vertices
+  // on the first pull after it flushed, and reopening a snapped route gave
+  // back a handle on every snapped point. REST PATCH always applied the rule;
+  // only this path didn't.
+  it("persists anchors on create and update, and clears them when points move without anchors", async () => {
+    const routeId = randomUUID();
+    const points = [
+      [150.4, -33.5],
+      [150.41, -33.51],
+      [150.42, -33.52],
+      [150.43, -33.53],
+    ];
+
+    const created = await push(ALICE_SUB, [
+      {
+        opId: `anchors-c-${routeId}`,
+        entity: "route",
+        op: "create",
+        id: routeId,
+        fields: { name: "Anchors survive", points, anchors: [0, 3] },
+      },
+    ]);
+    expect(created.body.results[0].status).toBe("applied");
+
+    const afterCreate = await request(API_URL)
+      .get(`/routes/${routeId}`)
+      .set(as(ALICE_SUB));
+    expect(afterCreate.body.anchors).toEqual([0, 3]);
+
+    const updated = await push(ALICE_SUB, [
+      {
+        opId: `anchors-u-${routeId}`,
+        entity: "route",
+        op: "update",
+        id: routeId,
+        fields: { points, anchors: [0, 2, 3] },
+      },
+    ]);
+    expect(updated.body.results[0].status).toBe("applied");
+    const afterUpdate = await request(API_URL)
+      .get(`/routes/${routeId}`)
+      .set(as(ALICE_SUB));
+    expect(afterUpdate.body.anchors).toEqual([0, 2, 3]);
+
+    // Geometry without anchors clears them: stale indices into moved points
+    // would be worse than no record at all.
+    await push(ALICE_SUB, [
+      {
+        opId: `anchors-x-${routeId}`,
+        entity: "route",
+        op: "update",
+        id: routeId,
+        fields: { points: points.slice(0, 3) },
+      },
+    ]);
+    const afterClear = await request(API_URL)
+      .get(`/routes/${routeId}`)
+      .set(as(ALICE_SUB));
+    expect(afterClear.body.anchors).toBeNull();
+
+    await push(ALICE_SUB, [
+      { opId: `anchors-d-${routeId}`, entity: "route", op: "delete", id: routeId },
+    ]);
+  });
+});

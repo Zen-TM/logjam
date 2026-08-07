@@ -15,7 +15,19 @@ import { updateGeoPdfImport, type GeoPdfImport } from "../geopdf/geoPdfImportsDb
 import { renameVectorImport, type VectorImport } from "../imports/importsDb";
 import { deleteVectorImport } from "../imports/vectorImports";
 import { deleteTrack, listTrackPoints, updateTrack, type Track } from "../tracks/tracksDb";
-import { deleteRouteLocal, updateRouteLocal } from "../sync/outbox";
+import {
+  createRouteLocal,
+  deleteRouteLocal,
+  updateRouteLocal,
+} from "../sync/outbox";
+import {
+  MIN_ROUTE_POINTS,
+  ROUTE_NAME_MAX_LENGTH,
+  reverseRoute,
+  reverseRouteAnchors,
+  simplifyToFit,
+  type RoutePoint,
+} from "@logjam/shared";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import { bboxOfPoints, type Bbox } from "./bboxOfPoints";
 
@@ -27,6 +39,24 @@ export type AssetActions = {
   /** Display-only rename; resolution still keys off ids. */
   rename: (name: string) => Promise<unknown>;
   delete: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
+  /**
+   * Set on an editable route: the id the map's draw tool reopens. The action
+   * itself is navigation, which lives with the screen, not here.
+   */
+  editableRouteId?: string;
+  /**
+   * Flip vertex order. Only routes have it: direction is semantic on a route
+   * (approach vs exit, upstream vs downstream) and a recording's direction is
+   * a fact about what happened, not an editable property.
+   */
+  reverse?: () => Promise<unknown>;
+  /**
+   * Turn a recording into an editable route. Non-destructive — the recording
+   * is untouched — and simplifying is unavoidable: a real recording is
+   * thousands of fixes and the cap is MAX_ROUTE_POINTS. Resolves with the
+   * point count kept so the caller can say what happened.
+   */
+  createRouteFrom?: () => Promise<{ name: string; pointCount: number }>;
 };
 
 export function geoPdfActions(geoPdf: GeoPdfImport): AssetActions {
@@ -72,6 +102,27 @@ export function routeActions(route: MirrorRoute): AssetActions {
     rename: readOnly
       ? async () => undefined
       : (name) => updateRouteLocal(route.id, { name }),
+    ...(readOnly
+      ? {}
+      : {
+          editableRouteId: route.id,
+          reverse: () =>
+            updateRouteLocal(route.id, {
+              points: reverseRoute(route.points),
+              // Anchors are indices INTO points, so they have to be remapped
+              // or the user's own vertices land on arbitrary snapped ones. A
+              // route with none (an import) stays without: an empty list is
+              // not a valid anchor set, it is the absence of one.
+              ...(route.anchors
+                ? {
+                    anchors: reverseRouteAnchors(
+                      route.anchors,
+                      route.points.length,
+                    ),
+                  }
+                : {}),
+            }),
+        }),
     delete: {
       confirmTitle: "Delete route?",
       confirmBody:
@@ -87,6 +138,23 @@ export function trackActions(track: Track): AssetActions {
     // A track's extent isn't stored; derive it from its points on demand.
     resolveBbox: async () => bboxOfPoints(await listTrackPoints(track.id)),
     rename: (name) => updateTrack(track.id, { name }),
+    // A recording is an observation and stays immutable; this makes a SEPARATE
+    // route from it, which is the editable thing. Both exist afterwards.
+    ...(track.pointCount >= MIN_ROUTE_POINTS
+      ? {
+          createRouteFrom: async () => {
+            const fixes = await listTrackPoints(track.id);
+            const { points } = simplifyToFit(
+              fixes.map(({ lon, lat }): RoutePoint => [lon, lat]),
+            );
+            const name = `${track.name} (route)`.slice(0, ROUTE_NAME_MAX_LENGTH);
+            // No anchors: every vertex came from RDP, not from a finger, so
+            // there is no "the user placed these" subset to record.
+            await createRouteLocal({ name, points });
+            return { name, pointCount: points.length };
+          },
+        }
+      : {}),
     delete: {
       confirmTitle: "Delete track?",
       confirmBody: "The recorded points are deleted. This can't be undone.",

@@ -56,6 +56,7 @@ import {
 import {
   applyRouteCanyonLink,
   canyonShareeIds,
+  parseAnchorsOrNull,
   resolveRouteCanyonId,
 } from "../lib/routeLink";
 
@@ -1141,10 +1142,15 @@ async function applyRouteOp(
   if (validationError) throw new AppError(400, validationError);
 
   let points: [number, number][] | undefined;
+  // Anchors travel with the geometry they index, exactly as in PATCH
+  // /routes/:id — an op that moves points without sending anchors clears them,
+  // never leaves stale indices into geometry that changed underneath them.
+  let anchors: number[] | typeof Prisma.DbNull | undefined;
   if (fields.points !== undefined) {
     const parsed = parseRoutePoints(fields.points);
     if ("error" in parsed) throw new AppError(400, parsed.error);
     points = parsed.points;
+    anchors = parseAnchorsOrNull(fields.anchors, parsed.points.length);
   }
   const resolvedCanyonId = await resolveRouteCanyonId(userId, fields.canyonId);
 
@@ -1166,6 +1172,7 @@ async function applyRouteOp(
           name: (fields.name as string).trim(),
           color: randomTrackColor(),
           points: points!,
+          anchors: anchors!,
         },
       });
       // Link through the shared helper so displacement + its tombstones have
@@ -1202,7 +1209,7 @@ async function applyRouteOp(
           ...(fields.name !== undefined && {
             name: (fields.name as string).trim(),
           }),
-          ...(points !== undefined && { points }),
+          ...(points !== undefined && { points, anchors }),
         },
       });
     }

@@ -156,15 +156,25 @@ type SavedItem = {
   /** Persist a new display name. Every kind supports this. */
   rename: (name: string) => Promise<unknown>;
   delete: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
+  /** Present on an editable route — the map's draw tool reopens this id. */
+  editableRouteId?: string;
+  /** Present on an editable route: flip vertex order (direction is semantic). */
+  reverse?: () => Promise<unknown>;
+  /** Present on a recording: make an editable route from it, non-destructively. */
+  createRouteFrom?: () => Promise<{ name: string; pointCount: number }>;
 };
 
 export function SavedScreen({
   onOpenMap,
   onDownloadRegion,
+  onEditRoute,
   initialFilter,
 }: {
   onOpenMap: (bbox?: Bbox) => void;
   onDownloadRegion: () => void;
+  /** Open the map's draw tool on an existing route. Editing is a map gesture,
+   *  so this screen hands it over rather than growing an editor of its own. */
+  onEditRoute: (routeId: string) => void;
   /**
    * Land on one category rather than "All". The map's layer sheet points at
    * this screen for region management ("3 saved areas ›"), and dropping the
@@ -718,6 +728,36 @@ export function SavedScreen({
     [fail, refreshFreeSpace],
   );
 
+  const reverseItem = useCallback(
+    (item: SavedItem) => {
+      item.reverse?.().then(
+        () => info("Direction reversed."),
+        (err: unknown) => {
+          console.error(err);
+          fail("Couldn't reverse that route.");
+        },
+      );
+    },
+    [fail, info],
+  );
+
+  /** Recording → route. Says how many points survived, because RDP always
+   *  throws some away and silently handing back a coarser line is how the user
+   *  concludes the app lost their track. */
+  const createRouteFromItem = useCallback(
+    (item: SavedItem) => {
+      item.createRouteFrom?.().then(
+        ({ name, pointCount }) =>
+          info(`Saved “${name}” — ${pointCount} points. The recording is unchanged.`),
+        (err: unknown) => {
+          console.error(err);
+          fail(messageFromError(err, "Couldn't make a route from that."));
+        },
+      );
+    },
+    [fail, info],
+  );
+
   const showOnMap = useCallback(
     (item: SavedItem) => {
       item
@@ -1014,6 +1054,42 @@ export function SavedScreen({
                     const target = menuItem;
                     closeItemSheet();
                     showOnMap(target);
+                  }}
+                />
+              ) : null}
+              {menuItem.editableRouteId ? (
+                <Row
+                  title="Edit points"
+                  icon="edit-3"
+                  hue={assetHue.route}
+                  onPress={() => {
+                    const routeId = menuItem.editableRouteId!;
+                    closeItemSheet();
+                    onEditRoute(routeId);
+                  }}
+                />
+              ) : null}
+              {menuItem.reverse ? (
+                <Row
+                  title="Reverse direction"
+                  icon="repeat"
+                  hue={assetHue.route}
+                  onPress={() => {
+                    const target = menuItem;
+                    closeItemSheet();
+                    reverseItem(target);
+                  }}
+                />
+              ) : null}
+              {menuItem.createRouteFrom ? (
+                <Row
+                  title="Create route from this"
+                  icon="pen-tool"
+                  hue={assetHue.route}
+                  onPress={() => {
+                    const target = menuItem;
+                    closeItemSheet();
+                    createRouteFromItem(target);
                   }}
                 />
               ) : null}

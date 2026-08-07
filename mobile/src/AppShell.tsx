@@ -73,6 +73,10 @@ type MapStackParams = {
           localPath?: string | null;
           nonce: number;
         };
+        // `editRoute` = "Edit points" from Saved: arm the draw tool on an
+        // existing route. An id, never geometry — the map reads the points
+        // from the mirror it already has.
+        editRoute?: { routeId: string; nonce: number };
       }
     | undefined;
   MapCanyonDetail: { canyonId: string; name: string };
@@ -171,6 +175,7 @@ function MapStackNav() {
             }
             focus={route.params?.focus ?? null}
             route={route.params?.route ?? null}
+            editRoute={route.params?.editRoute ?? null}
           />
         )}
       </MapStack.Screen>
@@ -248,6 +253,12 @@ function SavedStackNav() {
             onDownloadRegion={() =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapRegionDownload",
+              })
+            }
+            onEditRoute={(routeId) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { editRoute: { routeId, nonce: Date.now() } },
               })
             }
           />

@@ -125,6 +125,18 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
         CREATE TABLE IF NOT EXISTS overlay_enabled (
           overlayKey TEXT PRIMARY KEY
         );
+        -- The route being drawn right now, so an OS kill mid-draw doesn't
+        -- lose it. At most one row (id = 1). Lives HERE rather than in
+        -- logjam-prefs.db because it holds coordinates: this database is
+        -- cleared by wipeLocalData on an account transition, and prefs
+        -- deliberately are not.
+        CREATE TABLE IF NOT EXISTS route_draft (
+          id             INTEGER PRIMARY KEY CHECK (id = 1),
+          pointsJson     TEXT NOT NULL,
+          anchorsJson    TEXT NOT NULL,
+          editingRouteId TEXT,
+          savedAt        TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS region_download (
           id            TEXT PRIMARY KEY,
           taskKind      TEXT NOT NULL,
