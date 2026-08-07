@@ -28,7 +28,6 @@ export function MeasurePanel({
   onDone,
   snapMode,
   onSnapModeChange,
-  snapUnavailable,
 }: {
   points: readonly MeasurePoint[];
   onUndo: () => void;
@@ -36,7 +35,6 @@ export function MeasurePanel({
   onDone: () => void;
   snapMode: SnapMode;
   onSnapModeChange: (mode: SnapMode) => void;
-  snapUnavailable: boolean;
 }) {
   const stats = measureStats(points);
   const line = points.map(
@@ -58,11 +56,7 @@ export function MeasurePanel({
 
       <ElevationReadout profile={profile} loading={loading} />
 
-      <SnapPicker
-        mode={snapMode}
-        onChange={onSnapModeChange}
-        unavailable={snapUnavailable}
-      />
+      <SnapPicker mode={snapMode} onChange={onSnapModeChange} />
 
       <View style={styles.actions}>
         <Button

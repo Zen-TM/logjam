@@ -23,13 +23,10 @@ const OPTIONS: { value: SnapMode; label: string }[] = [
 export function SnapPicker({
   mode,
   onChange,
-  unavailable,
   disabled,
 }: {
   mode: SnapMode;
   onChange: (mode: SnapMode) => void;
-  /** True when the basemap can't supply ways here (wrong basemap, or zoomed out). */
-  unavailable: boolean;
   disabled?: boolean;
 }) {
   return (
@@ -40,11 +37,6 @@ export function SnapPicker({
         value={mode}
         onChange={onChange}
       />
-      {mode !== "off" && unavailable ? (
-        <Text style={styles.note}>
-          Needs the OSM Default (vector) basemap, zoomed in.
-        </Text>
-      ) : null}
     </View>
   );
 }

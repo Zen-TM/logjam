@@ -53,7 +53,7 @@ import {
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
-import { SNAP_MIN_ZOOM, collectSnapLines } from "./snapLines";
+import { collectSnapLines } from "./snapLines";
 import { readSnapMode, writeSnapMode } from "./snapPreference";
 import { getVectorStyle, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
@@ -394,14 +394,10 @@ export function MapScreen({
   /** Set once the user has panned/zoomed themselves — see the open-on-location effect. */
   const userMovedCamera = useRef(false);
   const insets = useSafeAreaInsets();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth } = useWindowDimensions();
   // What new segments follow. Device-scoped and persisted, read once so the
   // tool is armed correctly on its first frame.
   const [snapMode, setSnapMode] = useState<SnapMode>(readSnapMode);
-  // Snapping reads geometry off the rendered vector basemap, so it needs that
-  // basemap, at a zoom where the extract still carries paths and creeks.
-  const snapUnavailable =
-    basemapId !== "protomaps" || camera.zoom < SNAP_MIN_ZOOM;
   const handleSnapModeChange = useCallback((mode: SnapMode) => {
     setSnapMode(mode);
     // Best-effort: a device that refuses to store the preference still gets
@@ -691,13 +687,18 @@ export function MapScreen({
   /** Leaving route draw is NOT free the way leaving measure is — these points
    *  were meant to become something. Confirm before binning real work. */
   /** `then` runs only if the draft is actually discarded, so a caller can arm
-   *  another tool without racing the confirm. */
+   *  another tool without racing the confirm.
+   *
+   *  Guarded with a typeof check because this is also wired to a button, and a
+   *  press handler is handed the gesture EVENT as its first argument — which
+   *  crashed the screen with "then is not a function (it is Object)" the moment
+   *  Cancel was pressed. Call sites that are event handlers wrap it. */
   const handleCancelRouteDraw = useCallback(
     (then?: () => void) => {
       const discard = () => {
         setRoutePoints(null);
         setEditingRouteId(null);
-        then?.();
+        if (typeof then === "function") then();
       };
       if ((routePoints?.length ?? 0) === 0) {
         discard();
@@ -801,18 +802,8 @@ export function MapScreen({
         : (routePoints?.at(-1) ?? null);
 
       let between: [number, number][] | null = null;
-      const query = mapRef.current?.queryRenderedFeaturesInRect;
-      if (
-        previousPoint &&
-        snapMode !== "off" &&
-        query &&
-        camera.zoom >= SNAP_MIN_ZOOM
-      ) {
-        const lines = await collectSnapLines(
-          query.bind(mapRef.current),
-          snapMode,
-          [0, windowWidth, windowHeight, 0],
-        );
+      if (previousPoint && snapMode !== "off") {
+        const lines = await collectSnapLines(snapMode, previousPoint, tapped);
         const snapped = snapSegment(lines, previousPoint, tapped);
         // The path includes the graph nodes nearest both ends; drop them, or
         // the line jumps sideways onto the track at every tap.
@@ -830,14 +821,11 @@ export function MapScreen({
     [
       addMeasurePoint,
       addRoutePoint,
-      camera.zoom,
       drawingRoute,
       measurePoints,
       measuring,
       routePoints,
       snapMode,
-      windowHeight,
-      windowWidth,
     ],
   );
 
@@ -1901,7 +1889,6 @@ export function MapScreen({
             onDone={() => setMeasurePoints(null)}
             snapMode={snapMode}
             onSnapModeChange={handleSnapModeChange}
-            snapUnavailable={snapUnavailable}
           />
         ) : null}
 
@@ -1919,9 +1906,8 @@ export function MapScreen({
             onClear={() => setRoutePoints([])}
             snapMode={snapMode}
             onSnapModeChange={handleSnapModeChange}
-            snapUnavailable={snapUnavailable}
             onSave={() => setNamingRoute(true)}
-            onCancel={handleCancelRouteDraw}
+            onCancel={() => handleCancelRouteDraw()}
           />
         ) : null}
 

@@ -36,7 +36,6 @@ export function RouteDrawPanel({
   onCancel,
   snapMode,
   onSnapModeChange,
-  snapUnavailable,
 }: {
   points: readonly [number, number][];
   /** Set when editing a saved route, so the HUD says which. */
@@ -48,7 +47,6 @@ export function RouteDrawPanel({
   onCancel: () => void;
   snapMode: SnapMode;
   onSnapModeChange: (mode: SnapMode) => void;
-  snapUnavailable: boolean;
 }) {
   const atCap = points.length >= MAX_ROUTE_POINTS;
   const { profile, loading } = useElevationProfile(points);
@@ -74,11 +72,7 @@ export function RouteDrawPanel({
 
       <ElevationReadout profile={profile} loading={loading} />
 
-      <SnapPicker
-        mode={snapMode}
-        onChange={onSnapModeChange}
-        unavailable={snapUnavailable}
-      />
+      <SnapPicker mode={snapMode} onChange={onSnapModeChange} />
 
       {atCap ? (
         <Text style={styles.note}>

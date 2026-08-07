@@ -1,95 +1,44 @@
-// Candidate ways for snapping, read off the rendered vector basemap.
+// Where the map tools get their snapping geometry.
 //
-// Mobile has no querySourceFeatures — the wrapper exposes only
-// queryRenderedFeaturesInRect — so this asks for what is DRAWN. Two
-// consequences, both deliberate rather than worked around:
+// Reads the Protomaps PMTiles archive directly (shared/src/snapTiles.ts), NOT
+// the rendered map. Asking the map what it had drawn tied snapping to the
+// active basemap and to being zoomed in far enough, and truncated any way that
+// continued off-screen — which is what made it refuse, and take silly routes,
+// depending on where you happened to be looking.
 //
-//  - Snapping needs the Protomaps vector basemap to be the active one. On a
-//    SIX or OSM raster basemap there is no geometry on the map to query, and
-//    this returns nothing, which the tools render as the straight line they
-//    would have drawn anyway.
-//  - Only what is on screen is available. That is exactly the segment being
-//    drawn, since both ends of it were just tapped.
+// OFFLINE: this is an HTTP range request, so with no signal it fails and the
+// tools fall back to the straight line they would have drawn anyway. The
+// downloaded basemap regions are PMTiles files in app-private storage, so
+// pointing the same reader at a local file is the way to make snapping work
+// offline — inside saved regions only, which is the same boundary the offline
+// basemap already draws.
 //
-// PRIVACY: the returned geometry is map data, not user data, but the query
-// rect describes where the user is looking. Nothing here logs.
-import type { SnapLine, SnapMode } from "@logjam/shared";
+// PRIVACY: the bbox comes from where the user is drawing. It selects tiles to
+// range-request from our own CDN and is never sent as a query. Nothing logs.
+import { BASEMAP_CATALOG, fetchSnapLines, type SnapLine, type SnapMode } from "@logjam/shared";
 
-/** Protomaps schema: OSM paths/tracks, and flowing water. */
-const TRAIL_KINDS = ["path"];
-const WATERWAY_KINDS = ["stream", "river", "canal"];
+import { config } from "../config";
 
 /**
- * Below this zoom the extract serves simplified tiles with creeks and paths
- * dropped, so snapping would silently do nothing. Matches the web constant.
+ * The archive to read. Same host the vector basemap itself streams from, so
+ * snapping needs no new network permission or endpoint.
  */
-export const SNAP_MIN_ZOOM = 14;
-
-// The wrapper types `filter` as its own FilterExpression tuple, which is
-// stricter than the expression below can be expressed as; `never` lets the
-// call site pass a plain expression without widening the wrapper's type.
-type QueryRect = (
-  bbox: GeoJSON.BBox,
-  filter: never,
-  layerIDs: string[],
-) => Promise<GeoJSON.FeatureCollection>;
-
-export function snapKindsFor(mode: SnapMode): string[] {
-  switch (mode) {
-    case "trails":
-      return TRAIL_KINDS;
-    case "waterways":
-      return WATERWAY_KINDS;
-    case "both":
-      return [...TRAIL_KINDS, ...WATERWAY_KINDS];
-    case "off":
-      return [];
-  }
+function archiveUrl(): string {
+  const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
+  // Fail loudly — a missing catalog entry is a programming error.
+  if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
+  return `${config.topoCdnBaseUrl}/${entry.urlTemplate}`;
 }
 
 /**
- * Pull snappable ways out of the rendered map.
- *
- * `bbox` is in SCREEN coordinates, which is what queryRenderedFeaturesInRect
- * takes despite the GeoJSON.BBox type — [top, right, bottom, left].
- *
- * Layer ids are deliberately not narrowed: the generated Protomaps style
- * splits paths and water across several layers whose ids would have to be kept
- * in lockstep with a regenerated style file. Filtering on `kind` and keeping
- * only line geometry is stabler, and drops water POLYGONS (lakes) for free —
- * a lake is not something to route along.
+ * Candidate ways for the segment between two points. Empty when snapping is
+ * off, or when the archive can't be reached — both normal outcomes the caller
+ * renders as a straight line.
  */
-export async function collectSnapLines(
-  queryRect: QueryRect,
+export function collectSnapLines(
   mode: SnapMode,
-  screenBbox: GeoJSON.BBox,
+  from: [number, number],
+  to: [number, number],
 ): Promise<SnapLine[]> {
-  const kinds = snapKindsFor(mode);
-  if (kinds.length === 0) return [];
-
-  let collection: GeoJSON.FeatureCollection;
-  try {
-    collection = await queryRect(
-      screenBbox,
-      ["in", ["get", "kind"], ["literal", kinds]] as never,
-      [],
-    );
-  } catch {
-    // A query against a basemap with nothing to match is not an error worth
-    // surfacing — the tool falls back to a straight line either way.
-    return [];
-  }
-
-  const lines: SnapLine[] = [];
-  for (const feature of collection.features ?? []) {
-    const geometry = feature.geometry;
-    if (geometry.type === "LineString") {
-      lines.push({ coords: geometry.coordinates as [number, number][] });
-    } else if (geometry.type === "MultiLineString") {
-      for (const part of geometry.coordinates) {
-        lines.push({ coords: part as [number, number][] });
-      }
-    }
-  }
-  return lines;
+  return fetchSnapLines(archiveUrl(), mode, from, to);
 }
