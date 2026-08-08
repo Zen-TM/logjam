@@ -9,10 +9,10 @@
 // Rename lives in the caller (Saved has a rename form; the map does not need a
 // second one), so it is passed in rather than assumed.
 import { useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
-import { messageFromError } from "@logjam/shared";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { messageFromError, TRACK_COLORS } from "@logjam/shared";
 
-import { assetHue, theme } from "../theme";
+import { assetHue, radius, spacing, theme } from "../theme";
 import { BottomSheet, Row } from "../ui";
 import { routeActions } from "../saved/assetActions";
 import type { MirrorRoute } from "../sync/mirrorStore";
@@ -43,6 +43,7 @@ export function RouteOptionsSheet({
   onError: (message: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [pickingColor, setPickingColor] = useState(false);
 
   if (!route) return null;
   const actions = routeActions(route);
@@ -146,6 +147,54 @@ export function RouteOptionsSheet({
             onPress={onLinkCanyon}
           />
         ) : null}
+        {actions.setColor ? (
+          <>
+            <Row
+              title="Colour"
+              icon="droplet"
+              hue={route.color ?? theme.accent}
+              disabled={busy}
+              onPress={() => setPickingColor((open) => !open)}
+              right={
+                <View
+                  style={[
+                    styles.currentSwatch,
+                    { backgroundColor: route.color ?? theme.accent },
+                  ]}
+                />
+              }
+            />
+            {pickingColor ? (
+              <View style={styles.palette}>
+                {TRACK_COLORS.map((color) => (
+                  <Pressable
+                    key={color}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Colour ${color}`}
+                    accessibilityState={{ selected: color === route.color }}
+                    disabled={busy}
+                    onPress={() => {
+                      setPickingColor(false);
+                      run(
+                        () => actions.setColor!(color),
+                        "Couldn't change the colour.",
+                      );
+                    }}
+                    style={[
+                      styles.swatch,
+                      { backgroundColor: color },
+                      color === route.color ? styles.swatchSelected : null,
+                    ]}
+                  >
+                    {color === route.color ? (
+                      <Text style={styles.swatchTick}>✓</Text>
+                    ) : null}
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+          </>
+        ) : null}
         <Row
           title="Save as GPX"
           icon="download"
@@ -185,4 +234,21 @@ export function RouteOptionsSheet({
 
 const styles = StyleSheet.create({
   body: { gap: 8 },
+  currentSwatch: { width: 22, height: 22, borderRadius: radius.sm },
+  palette: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing(1),
+    paddingHorizontal: spacing(1),
+    paddingBottom: spacing(0.5),
+  },
+  swatch: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  swatchSelected: { borderWidth: 2, borderColor: theme.textPrimary },
+  swatchTick: { color: theme.primary, fontWeight: "700" },
 });

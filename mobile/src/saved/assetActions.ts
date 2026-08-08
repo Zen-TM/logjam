@@ -57,6 +57,8 @@ export type AssetActions = {
    * point count kept so the caller can say what happened.
    */
   createRouteFrom?: () => Promise<{ name: string; pointCount: number }>;
+  /** Set a route's colour, from the shared TRACK_COLORS palette. */
+  setColor?: (color: string) => Promise<unknown>;
 };
 
 export function geoPdfActions(geoPdf: GeoPdfImport): AssetActions {
@@ -106,6 +108,7 @@ export function routeActions(route: MirrorRoute): AssetActions {
       ? {}
       : {
           editableRouteId: route.id,
+          setColor: (color: string) => updateRouteLocal(route.id, { color }),
           reverse: () =>
             updateRouteLocal(route.id, {
               points: reverseRoute(route.points),

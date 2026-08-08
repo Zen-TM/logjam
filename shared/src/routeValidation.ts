@@ -13,6 +13,7 @@
 // STATIC — it must never echo a coordinate or a file's contents.
 
 import { haversineMeters } from "./canyonGeo.js";
+import { TRACK_COLORS } from "./media.js";
 import {
   isValidLatitude,
   isValidLongitude,
@@ -55,13 +56,28 @@ export const ROUTE_ERRORS = {
   nameRequired: "name is required",
   nameTooLong: `name must be at most ${ROUTE_NAME_MAX_LENGTH} characters`,
   anchorsShape: "anchors must be an array of point indices",
+  colorUnknown: "color must be one of the track palette colours",
 } as const;
 
 export type RouteFieldPayload = {
   name?: unknown;
   points?: unknown;
   anchors?: unknown;
+  color?: unknown;
 };
+
+/**
+ * A colour the client may set, or null if it is not one of ours.
+ *
+ * Restricted to TRACK_COLORS rather than accepting any hex: routes and legacy
+ * track media share one palette so the map reads as one thing, and a free-text
+ * colour is also a small injection surface in every style expression it reaches.
+ */
+export function parseRouteColor(value: unknown): string | null {
+  return typeof value === "string" && (TRACK_COLORS as readonly string[]).includes(value)
+    ? value
+    : null;
+}
 
 /** Round to ROUTE_COORD_DECIMALS without string round-tripping. */
 function roundCoord(value: number): number {
@@ -182,6 +198,9 @@ export function validateRoutePayload(
   } else if (payload.anchors !== undefined && payload.anchors !== null) {
     // Anchors without points would index geometry we cannot see from here.
     return ROUTE_ERRORS.anchorsShape;
+  }
+  if (payload.color !== undefined && parseRouteColor(payload.color) === null) {
+    return ROUTE_ERRORS.colorUnknown;
   }
   return null;
 }

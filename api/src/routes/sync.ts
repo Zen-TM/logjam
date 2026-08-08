@@ -33,6 +33,7 @@ import {
   validateCanyonPayload,
   validateRoutePayload,
   validateWaypointPayload,
+  parseRouteColor,
   parseRoutePoints,
   randomTrackColor,
   type SyncCursor,
@@ -614,9 +615,11 @@ const WAYPOINT_FIELDS = new Set([
   "notes",
   "canyonId",
 ]);
-// `color` is deliberately absent: it is assigned server-side from
-// TRACK_COLORS at create, like track media.
-const ROUTE_FIELDS = new Set(["name", "points", "anchors", "canyonId"]);
+// `color` is client-settable, but only to a value from TRACK_COLORS (see
+// parseRouteColor): routes share one palette with legacy track media so the map
+// reads as one thing, and a free-text colour would reach every style expression
+// that draws a route.
+const ROUTE_FIELDS = new Set(["name", "points", "anchors", "canyonId", "color"]);
 
 function assertKnownFields(
   fields: Record<string, unknown>,
@@ -1145,6 +1148,7 @@ async function applyRouteOp(
   // Anchors travel with the geometry they index, exactly as in PATCH
   // /routes/:id — an op that moves points without sending anchors clears them,
   // never leaves stale indices into geometry that changed underneath them.
+  const color = parseRouteColor(fields.color) ?? undefined;
   let anchors: number[] | typeof Prisma.DbNull | undefined;
   if (fields.points !== undefined) {
     const parsed = parseRoutePoints(fields.points);
@@ -1170,7 +1174,7 @@ async function applyRouteOp(
           ownerId: userId,
           canyonId: null,
           name: (fields.name as string).trim(),
-          color: randomTrackColor(),
+          color: color ?? randomTrackColor(),
           points: points!,
           anchors: anchors!,
         },
@@ -1202,7 +1206,7 @@ async function applyRouteOp(
     route as unknown as Record<string, unknown>,
   );
   const updated = await prisma.$transaction(async (tx) => {
-    if (fields.name !== undefined || points !== undefined) {
+    if (fields.name !== undefined || points !== undefined || color !== undefined) {
       await tx.route.update({
         where: { id: op.id },
         data: {
@@ -1210,6 +1214,7 @@ async function applyRouteOp(
             name: (fields.name as string).trim(),
           }),
           ...(points !== undefined && { points, anchors }),
+          ...(color !== undefined && { color }),
         },
       });
     }

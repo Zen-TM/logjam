@@ -10,6 +10,63 @@
   gap: 0.7em;
 }
 
+/* Boxed so it reads as a control, not the decorative glyph it used to be. */
+.colorButton,
+.colorIndicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2em;
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+
+.colorButton {
+  cursor: pointer;
+}
+
+.colorButton:hover:not(:disabled) {
+  border-color: var(--theme-accent);
+}
+
+.colorButton:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+}
+
+.colorButton:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+}
+
+.swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--theme-text-primary) 30%, transparent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.swatch:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 2px;
+}
+
+/* The current colour, marked on the swatch itself — a tick would be invisible
+   on half this palette. */
+.swatch[aria-pressed="true"] {
+  border-color: var(--theme-text-primary);
+  box-shadow: 0 0 0 2px var(--theme-accent);
+}
+
 .distance {
   font-size: var(--text-lg);
   font-weight: 600;

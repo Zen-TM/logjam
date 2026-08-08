@@ -223,6 +223,10 @@ export function BottomSheet({
             <ScrollView
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
+              // Without this the FIRST tap on any control while the keyboard is
+              // up is swallowed dismissing it, and the button only fires on the
+              // second press — which read as "Save didn't save".
+              keyboardShouldPersistTaps="handled"
               // Frozen while a sub-mode covers it: a drag on the overlay must
               // not scroll the list hidden behind it.
               scrollEnabled={overlay == null}

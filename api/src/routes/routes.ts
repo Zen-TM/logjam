@@ -20,6 +20,7 @@ import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import {
   validateRoutePayload,
+  parseRouteColor,
   parseRoutePoints,
   randomTrackColor,
 } from "@logjam/shared";
@@ -146,7 +147,11 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
           ownerId: user.id,
           canyonId: null,
           name: (body.name as string).trim(),
-          color: randomTrackColor(),
+          // The client may choose from the shared palette; when it doesn't,
+          // the server picks. Mobile picks at draw time so the line is its
+          // final colour from the first frame rather than changing under the
+          // user when the create op comes back.
+          color: parseRouteColor(body.color) ?? randomTrackColor(),
           points: parsed.points,
           anchors: parseAnchorsOrNull(body.anchors, parsed.points.length),
         },
@@ -190,6 +195,7 @@ router.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res: Respons
   const validationError = validateRoutePayload(body, { requireCore: false });
   if (validationError) throw new AppError(400, validationError);
 
+  const color = parseRouteColor(body.color) ?? undefined;
   let points: [number, number][] | undefined;
   let anchors: number[] | typeof Prisma.DbNull | undefined;
   if (body.points !== undefined) {
@@ -204,12 +210,13 @@ router.patch("/:id", requireAuth, async (req: AuthenticatedRequest, res: Respons
   const resolvedCanyonId = await resolveRouteCanyonId(user.id, body.canyonId);
 
   const result = await prisma.$transaction(async (tx) => {
-    if (body.name !== undefined || points !== undefined) {
+    if (body.name !== undefined || points !== undefined || color !== undefined) {
       await tx.route.update({
         where: { id },
         data: {
           ...(body.name !== undefined && { name: (body.name as string).trim() }),
           ...(points !== undefined && { points, anchors }),
+          ...(color !== undefined && { color }),
         },
       });
     }

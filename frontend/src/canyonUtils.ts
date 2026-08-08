@@ -485,6 +485,7 @@ export function updateRoute(
     points: [number, number][];
     anchors: number[] | null;
     canyonId: string | null;
+    color: string;
   }>,
 ): Promise<RouteWriteResult> {
   return apiFetch<RouteWriteResult>(`/routes/${id}`, {

@@ -46,6 +46,7 @@ import {
   compassPointFor,
   draftAnchorIndices,
   draftPoints,
+  emptyDraft,
   formatDistanceM,
   haversineMeters,
   initialBearingDegrees,
@@ -2057,8 +2058,7 @@ export function MapScreen({
         {drawingRoute ? (
           <RouteDraftLayer
             idPrefix="route-draft"
-            points={routeDraft.points}
-            anchors={routeDraft.anchors}
+            draft={routeDraft.draft ?? emptyDraft}
             dotted={false}
             {...anchorHandlers(routeDraft)}
           />
@@ -2068,8 +2068,7 @@ export function MapScreen({
         {measuring ? (
           <RouteDraftLayer
             idPrefix="measure-draft"
-            points={measureDraft.points}
-            anchors={measureDraft.anchors}
+            draft={measureDraft.draft ?? emptyDraft}
             dotted
             {...anchorHandlers(measureDraft)}
           />

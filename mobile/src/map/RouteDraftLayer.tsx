@@ -18,7 +18,12 @@ import {
   SymbolLayer,
   type SymbolLayerStyle,
 } from "@maplibre/maplibre-react-native";
-import { moveAnchor, type RoutePoint } from "@logjam/shared";
+import {
+  draftPoints,
+  moveAnchor,
+  type RouteDraft,
+  type RoutePoint,
+} from "@logjam/shared";
 
 import { theme } from "../theme";
 
@@ -103,8 +108,7 @@ function anchorFeatures(
 
 export function RouteDraftLayer({
   idPrefix,
-  points,
-  anchors,
+  draft,
   dotted,
   onAnchorDragStart,
   onAnchorDrag,
@@ -112,10 +116,8 @@ export function RouteDraftLayer({
   onAnchorPress,
 }: {
   idPrefix: string;
-  /** Full geometry — anchors plus whatever snapping filled in between them. */
-  points: readonly RoutePoint[];
-  /** The user's own vertices, which are the only draggable things. */
-  anchors: readonly RoutePoint[];
+  /** The draft itself — anchors AND the snapped filler between them. */
+  draft: RouteDraft;
   dotted: boolean;
   onAnchorDragStart: (index: number) => void;
   onAnchorDrag: (index: number, point: RoutePoint) => void;
@@ -133,28 +135,31 @@ export function RouteDraftLayer({
     null,
   );
 
-  // The draft as it should look right now: committed geometry, with the drag
-  // applied on top. `moveAnchor` is the same helper the drop commits through,
-  // so the preview cannot disagree with the result.
-  const preview = useMemo(() => {
-    if (!drag) return { points, anchors };
-    const moved = moveAnchor({ anchors: [...anchors], filler: [] }, drag.index, drag.point);
-    // Filler is dropped while dragging: the snapped run between two anchors is
-    // no longer valid the moment one of them moves, and re-snapping happens on
-    // the drop. Straight segments are the honest preview.
-    return { points: moved.anchors, anchors: moved.anchors };
-  }, [anchors, drag, points]);
+  // The draft as it should look right now: the committed draft with the drag
+  // applied through `moveAnchor` — the SAME helper the drop commits through, so
+  // the preview cannot disagree with the result.
+  //
+  // Passing the real draft matters: an earlier version built a throwaway draft
+  // with no filler, which straightened the WHOLE route while one anchor moved.
+  // moveAnchor clears only the two runs either side of the anchor, which is
+  // exactly the pair that gets re-snapped on the drop.
+  const preview = useMemo(
+    () => (drag ? moveAnchor(draft, drag.index, drag.point) : draft),
+    [draft, drag],
+  );
+  const previewPoints = useMemo(() => draftPoints(preview), [preview]);
+  const anchors = preview.anchors;
 
   return (
     <>
-      {preview.points.length >= 2 ? (
+      {previewPoints.length >= 2 ? (
         <ShapeSource
           id={`${idPrefix}-line`}
           shape={{
             type: "Feature",
             geometry: {
               type: "LineString",
-              coordinates: preview.points.map((point: RoutePoint) => [...point]),
+              coordinates: previewPoints.map((point) => [...point]),
             },
             properties: {},
           }}
@@ -178,8 +183,8 @@ export function RouteDraftLayer({
       ) : null}
 
       {/* Declared after the line, so it paints above it. */}
-      {preview.anchors.length > 0 ? (
-        <ShapeSource id={`${idPrefix}-anchors`} shape={anchorFeatures(preview.anchors)}>
+      {anchors.length > 0 ? (
+        <ShapeSource id={`${idPrefix}-anchors`} shape={anchorFeatures(anchors)}>
           <CircleLayer
             id={`${idPrefix}-anchor-dots`}
             style={{
@@ -211,7 +216,7 @@ export function RouteDraftLayer({
           every one of them made 500 m of creek look like twenty-two decisions.
           PointAnnotation is the only thing in the wrapper that can be dragged;
           it carries no visuals now, just the touch target. */}
-      {anchors.map((anchor, index) => (
+      {draft.anchors.map((anchor, index) => (
         <PointAnnotation
           key={`${idPrefix}-anchor-${index}`}
           id={`${idPrefix}-anchor-${index}`}

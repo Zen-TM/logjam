@@ -31,6 +31,7 @@ import {
   routeToKml,
   GPX_MIME_TYPE,
   KML_MIME_TYPE,
+  TRACK_COLORS,
 } from "@logjam/shared";
 
 type RouteDetailPanelProps = {
@@ -80,6 +81,7 @@ export default function RouteDetailPanel({
     incumbentName: string;
   } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [colorOpen, setColorOpen] = useState(false);
   // Above the early return — hooks cannot be conditional. Null points mean no
   // request is made at all.
   const {
@@ -138,6 +140,14 @@ export default function RouteDetailPanel({
       "Couldn't reverse the route.",
     );
 
+  const handlePickColor = (color: string) => {
+    setColorOpen(false);
+    void run(
+      () => updateRoute(route.id, { color }),
+      "Couldn't change the route colour.",
+    );
+  };
+
   const handleUnlink = () =>
     run(
       () => updateRoute(route.id, { canyonId: null }),
@@ -183,13 +193,47 @@ export default function RouteDetailPanel({
   return (
     <div className={classes.root}>
       <div className={classes.summary}>
-        <TrackIcon color={route.color} size={20} />
+        {isOwner ? (
+          <button
+            type="button"
+            className={classes.colorButton}
+            onClick={() => setColorOpen((open) => !open)}
+            disabled={busy}
+            aria-expanded={colorOpen}
+            title="Change the route colour"
+          >
+            <TrackIcon color={route.color} size={20} />
+          </button>
+        ) : (
+          <span className={classes.colorIndicator}>
+            <TrackIcon color={route.color} size={20} />
+          </span>
+        )}
         <div>
           <div className={classes.distance}>
             {formatDistanceM(routeLengthM(route.points))}
           </div>
         </div>
       </div>
+
+      {colorOpen && isOwner && (
+        <div className={classes.palette} role="group" aria-label="Route colour">
+          {TRACK_COLORS.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className={classes.swatch}
+              // The colour IS the data here — it can't come from a token.
+              style={{ backgroundColor: color }}
+              onClick={() => handlePickColor(color)}
+              disabled={busy}
+              aria-pressed={color === route.color}
+              aria-label={color}
+              title={color}
+            />
+          ))}
+        </div>
+      )}
 
       {!isOwner && (
         <p className={classes.caption}>

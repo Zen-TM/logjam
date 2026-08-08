@@ -310,6 +310,68 @@ describe("sync push — ownership boundary", () => {
   });
 });
 
+describe("sync push — route colour", () => {
+  // Colour used to be assigned server-side and ignored on the wire, so a route
+  // drawn on a phone rendered in a fallback colour and then changed under the
+  // user when the create op came back.
+  it("honours a palette colour on create and update, and refuses one outside it", async () => {
+    const routeId = randomUUID();
+    const points = [
+      [150.4, -33.5],
+      [150.41, -33.51],
+    ];
+
+    const created = await push(ALICE_SUB, [
+      {
+        opId: `color-c-${routeId}`,
+        entity: "route",
+        op: "create",
+        id: routeId,
+        fields: { name: "Colour test", points, color: "#3cb44b" },
+      },
+    ]);
+    expect(created.body.results[0].status).toBe("applied");
+    const afterCreate = await request(API_URL)
+      .get(`/routes/${routeId}`)
+      .set(as(ALICE_SUB));
+    expect(afterCreate.body.color).toBe("#3cb44b");
+
+    await push(ALICE_SUB, [
+      {
+        opId: `color-u-${routeId}`,
+        entity: "route",
+        op: "update",
+        id: routeId,
+        fields: { color: "#e6194b" },
+      },
+    ]);
+    const afterUpdate = await request(API_URL)
+      .get(`/routes/${routeId}`)
+      .set(as(ALICE_SUB));
+    expect(afterUpdate.body.color).toBe("#e6194b");
+
+    // Anything off-palette is rejected outright rather than stored.
+    const bad = await push(ALICE_SUB, [
+      {
+        opId: `color-x-${routeId}`,
+        entity: "route",
+        op: "update",
+        id: routeId,
+        fields: { color: "javascript:alert(1)" },
+      },
+    ]);
+    expect(bad.body.results[0].status).toBe("rejected");
+    const unchanged = await request(API_URL)
+      .get(`/routes/${routeId}`)
+      .set(as(ALICE_SUB));
+    expect(unchanged.body.color).toBe("#e6194b");
+
+    await push(ALICE_SUB, [
+      { opId: `color-d-${routeId}`, entity: "route", op: "delete", id: routeId },
+    ]);
+  });
+});
+
 describe("sync push — notification markRead", () => {
   it("markRead on a purged/foreign notification is alreadyApplied (monotonic, no oracle)", async () => {
     const res = await push(ALICE_SUB, [

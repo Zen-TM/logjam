@@ -7,6 +7,7 @@ import * as Crypto from "expo-crypto";
 import {
   isUuidV4,
   planOutboxEnqueue,
+  randomTrackColor,
   validateCanyonPayload,
   type OutboxEntry,
   type SyncPushEntity,
@@ -181,30 +182,38 @@ export type RouteDraft = {
   /** Indices into `points` the user placed; the rest is snapped filler. */
   anchors?: number[] | null;
   canyonId?: string | null;
+  /** From TRACK_COLORS. Omitted means "pick one for me". */
+  color?: string;
 };
 
 export async function createRouteLocal(draft: RouteDraft): Promise<string> {
   const id = mintUuid();
   const now = new Date().toISOString();
+  // The colour is chosen HERE, not left to the server. Leaving it null meant
+  // every freshly drawn route rendered in the same fallback accent, and then
+  // changed to a random palette colour when the create op came back — so the
+  // route you had just finished appeared to recolour itself the moment you
+  // drew the next one. The server honours a palette colour it is given.
+  const color = draft.color ?? randomTrackColor();
   const fields: Record<string, unknown> = {
     name: draft.name,
     points: draft.points,
+    color,
     ...(draft.anchors != null && { anchors: draft.anchors }),
     ...(draft.canyonId != null && { canyonId: draft.canyonId }),
   };
 
   const db = await getSyncDb();
   await db.withTransactionAsync(async () => {
-    // color is null until the server assigns one from TRACK_COLORS; the map
-    // falls back to the accent so an unsynced route still draws.
     await db.runAsync(
       `INSERT INTO routes
          (id, owner_id, canyon_id, name, color, points_json, anchors_json,
           sync_role, created_at, updated_at, extra_json, dirty_fields_json)
-       VALUES (?, NULL, ?, ?, NULL, ?, ?, 'owner', ?, ?, NULL, ?)`,
+       VALUES (?, NULL, ?, ?, ?, ?, ?, 'owner', ?, ?, NULL, ?)`,
       id,
       draft.canyonId ?? null,
       draft.name,
+      color,
       JSON.stringify(draft.points),
       draft.anchors == null ? null : JSON.stringify(draft.anchors),
       now,
@@ -227,6 +236,7 @@ export async function createRouteLocal(draft: RouteDraft): Promise<string> {
 const ROUTE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   name: "name",
   canyonId: "canyon_id",
+  color: "color",
   // The mirror stores geometry as JSON text, so the value is encoded into the
   // column while the OUTBOX carries the real array — and decode reads the base
   // snapshot back in the op's shape, so a §6 conflict compares arrays against

@@ -125,7 +125,6 @@ export function ElevationProfileChart({ profile }: { profile: ElevationProfile }
   if (minM == null || maxM == null || profile.samples.length < 2) return null;
 
   const span = Math.max(1, maxM - minM);
-  const totalM = profile.samples[profile.samples.length - 1]!.distanceM;
   const scrubbed = scrubIndex == null ? null : columns[scrubIndex];
 
   return (
@@ -193,11 +192,6 @@ export function ElevationProfileChart({ profile }: { profile: ElevationProfile }
         />
       </View>
 
-      <View style={styles.axis}>
-        <Text style={styles.axisLabel}>{Math.round(minM)} m</Text>
-        <Text style={styles.axisLabel}>{formatDistanceM(totalM)}</Text>
-        <Text style={styles.axisLabel}>{Math.round(maxM)} m</Text>
-      </View>
     </View>
   );
 }
@@ -232,10 +226,4 @@ const styles = StyleSheet.create({
     backgroundColor: theme.textPrimary,
   },
   fade: { ...StyleSheet.absoluteFillObject, top: "55%" },
-  axis: { flexDirection: "row", justifyContent: "space-between" },
-  axisLabel: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    fontVariant: ["tabular-nums"],
-  },
 });
