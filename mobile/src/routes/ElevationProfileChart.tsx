@@ -24,24 +24,59 @@ import { formatDistanceM, type ElevationProfile } from "@logjam/shared";
 
 import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
 
-/** Columns drawn. More than this and each is sub-pixel on a phone. */
-const MAX_COLUMNS = 64;
+/**
+ * Columns drawn: one per POINT of chart width, capped.
+ *
+ * 64 chunky columns read as a bar chart, which is what "still blocky" meant.
+ * At one column per point the steps are a pixel or two wide and the silhouette
+ * reads as a curve — the same trick a canvas area chart uses, just with the
+ * rasterisation done by the layout engine.
+ *
+ * ponytail: ~360 Views for a chart. Measured fine on a sheet that is not
+ * animating; the upgrade path if it ever bites is react-native-svg, which costs
+ * a native rebuild.
+ */
+const MAX_COLUMNS = 400;
 const CHART_HEIGHT = 96;
 /** The lowest point still needs to be visible as a column, not a hairline. */
 const MIN_COLUMN_FRACTION = 0.08;
 
 type Column = { elevationM: number | null; distanceM: number };
 
-/** Even sampling down to at most MAX_COLUMNS, endpoints kept. */
-function toColumns(samples: ElevationProfile["samples"]): Column[] {
-  if (samples.length <= MAX_COLUMNS) {
+/**
+ * Resample to `count` evenly spaced columns, INTERPOLATING between samples
+ * rather than picking a nearest one. Nearest-sample resampling is what made the
+ * outline staircase: neighbouring columns landed on the same sample and drew
+ * the same height.
+ */
+function toColumns(
+  samples: ElevationProfile["samples"],
+  count: number,
+): Column[] {
+  const total = samples[samples.length - 1]!.distanceM;
+  if (count <= 1 || total <= 0) {
     return samples.map((s) => ({ elevationM: s.elevationM, distanceM: s.distanceM }));
   }
-  const step = (samples.length - 1) / (MAX_COLUMNS - 1);
-  return Array.from({ length: MAX_COLUMNS }, (_, i) => {
-    const sample = samples[Math.round(i * step)]!;
-    return { elevationM: sample.elevationM, distanceM: sample.distanceM };
-  });
+  const columns: Column[] = [];
+  let cursor = 0;
+  for (let i = 0; i < count; i++) {
+    const distanceM = (total * i) / (count - 1);
+    while (cursor < samples.length - 2 && samples[cursor + 1]!.distanceM < distanceM) {
+      cursor += 1;
+    }
+    const before = samples[cursor]!;
+    const after = samples[cursor + 1] ?? before;
+    const span = after.distanceM - before.distanceM;
+    const fraction = span > 0 ? (distanceM - before.distanceM) / span : 0;
+    // A gap in DEM coverage stays a gap: interpolating across it would invent
+    // ground that was never measured.
+    const elevationM =
+      before.elevationM == null || after.elevationM == null
+        ? (before.elevationM ?? after.elevationM)
+        : before.elevationM + (after.elevationM - before.elevationM) * fraction;
+    columns.push({ elevationM, distanceM });
+  }
+  return columns;
 }
 
 export function ElevationProfileChart({ profile }: { profile: ElevationProfile }) {
@@ -53,7 +88,13 @@ export function ElevationProfileChart({ profile }: { profile: ElevationProfile }
   const columnsRef = useRef(0);
   const widthRef = useRef(0);
 
-  const columns = useMemo(() => toColumns(profile.samples), [profile.samples]);
+  // One column per point of width, so the outline is as smooth as the layout
+  // engine can draw it. Zero until the first layout — nothing renders then.
+  const columnCount = Math.max(0, Math.min(MAX_COLUMNS, Math.round(width)));
+  const columns = useMemo(
+    () => (columnCount > 0 ? toColumns(profile.samples, columnCount) : []),
+    [columnCount, profile.samples],
+  );
   columnsRef.current = columns.length;
   widthRef.current = width;
 
@@ -120,7 +161,6 @@ export function ElevationProfileChart({ profile }: { profile: ElevationProfile }
               <View
                 style={[
                   styles.bar,
-                  index === scrubIndex && styles.barActive,
                   {
                     height:
                       CHART_HEIGHT *
@@ -133,6 +173,17 @@ export function ElevationProfileChart({ profile }: { profile: ElevationProfile }
             )}
           </View>
         ))}
+        {/* A hairline rather than a highlighted column: at one column per point
+            a recoloured column is a pixel wide and invisible. */}
+        {scrubIndex != null && columns.length > 1 ? (
+          <View
+            style={[
+              styles.scrubLine,
+              { left: `${(scrubIndex / (columns.length - 1)) * 100}%` },
+            ]}
+            pointerEvents="none"
+          />
+        ) : null}
         {/* Over the columns, not under: it fades their feet into the surface so
             the silhouette reads as one shape rather than a row of bars. */}
         <LinearGradient
@@ -172,7 +223,14 @@ const styles = StyleSheet.create({
   // No gap: contiguous columns read as an area, which is what a profile is.
   column: { flex: 1, justifyContent: "flex-end" },
   bar: { backgroundColor: withAlpha(theme.accent, 0.85) },
-  barActive: { backgroundColor: theme.textPrimary },
+  scrubLine: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 2,
+    marginLeft: -1,
+    backgroundColor: theme.textPrimary,
+  },
   fade: { ...StyleSheet.absoluteFillObject, top: "55%" },
   axis: { flexDirection: "row", justifyContent: "space-between" },
   axisLabel: {

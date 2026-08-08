@@ -60,7 +60,7 @@ import {
   theme,
 } from "../theme";
 import type { MirrorCanyon, MirrorTrip } from "../sync/mirrorStore";
-import { deleteCanyonLocal } from "../sync/outbox";
+import { deleteCanyonLocal, updateRouteLocal } from "../sync/outbox";
 import {
   useMirrorCanyon,
   useMirrorCanyons,
@@ -143,6 +143,7 @@ export function CanyonDetailScreen({
 
   // Above the early returns — hooks cannot be conditional.
   const [pickingRoute, setPickingRoute] = useState(false);
+  const [routeSlotMenu, setRouteSlotMenu] = useState(false);
 
   const canyon = query.data;
 
@@ -352,9 +353,18 @@ export function CanyonDetailScreen({
               icon="edit-3"
               hue={assetHue.route}
               onPress={() => onShowRouteOnMap?.(linkedRoute)}
+              right={
+                isOwner ? (
+                  <IconButton
+                    icon="more-horizontal"
+                    accessibilityLabel="Route options"
+                    onPress={() => setRouteSlotMenu(true)}
+                  />
+                ) : undefined
+              }
             />
             <Text style={styles.muted}>
-              One route per canyon. Unlink this one to attach a file instead.
+              One route per canyon.
             </Text>
           </>
         ) : (
@@ -456,6 +466,44 @@ export function CanyonDetailScreen({
         onSaved={(text) => notify(text, "info")}
         onFailed={(text) => notify(text, "error")}
       />
+
+      {/* Changing what fills the route slot, from the canyon it belongs to —
+          the same two verbs the route's own options offer, where the user is
+          looking at the slot rather than at the route. */}
+      <BottomSheet
+        visible={routeSlotMenu}
+        onClose={() => setRouteSlotMenu(false)}
+        title={linkedRoute?.name ?? "Route"}
+      >
+        <View style={styles.sheetBody}>
+          <Row
+            title="Replace with another route"
+            icon="repeat"
+            hue={assetHue.route}
+            onPress={() => {
+              setRouteSlotMenu(false);
+              setPickingRoute(true);
+            }}
+          />
+          <Row
+            title="Unlink from this canyon"
+            subtitle="The route itself is kept"
+            icon="link-2"
+            hue={theme.warning}
+            onPress={() => {
+              const target = linkedRoute;
+              setRouteSlotMenu(false);
+              if (!target) return;
+              updateRouteLocal(target.id, { canyonId: null })
+                .then(() => notify("Route unlinked.", "info"))
+                .catch((err: unknown) => {
+                  console.error(err);
+                  notify(messageFromError(err, "Couldn't unlink that route."), "error");
+                });
+            }}
+          />
+        </View>
+      </BottomSheet>
 
       <PickRouteSheet
         canyonId={canyonId}

@@ -98,7 +98,10 @@ const DRAG_INSERT_MIN_PIXELS = 6;
  * ramp starts and is the app's initial zoom, so a first load still shows them
  * while a state- or continent-wide view isn't hazed over with lines.
  */
-const ROUTE_MIN_ZOOM = 7;
+// Saved routes vanish below this. z7 is most of NSW — a threshold you had to
+// go looking for — where z10 is roughly a 50 km view, past the point a few
+// kilometres of route says anything about where it goes.
+const ROUTE_MIN_ZOOM = 10;
 
 const SIDEBAR_TRANSITION_MS = 300;
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];

@@ -24,10 +24,10 @@ import { ROUTE_ARROW_MIN_ZOOM, routeArrowStyle } from "./RouteDraftLayer";
  * line that says nothing about where it goes, and a state-wide view of every
  * route you have ever drawn is just ink over the map.
  *
- * Matches the web's ROUTE_MIN_ZOOM. The route being DRAWN is exempt (the draft
+ * Matches the web's ROUTE_MIN_ZOOM — roughly a 50 km view. The route being DRAWN is exempt (the draft
  * layer has no floor) — hiding what the user is working on would be absurd.
  */
-export const SAVED_ROUTE_MIN_ZOOM = 7;
+export const SAVED_ROUTE_MIN_ZOOM = 10;
 
 /** Colour for a route whose server-assigned palette entry hasn't arrived yet
  * (drawn offline, create still queued). */

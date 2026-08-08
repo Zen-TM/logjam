@@ -8,17 +8,19 @@
 //
 // Unpinned (no layerIndex) so it sits above every overlay — a line you can't
 // see under a topo layer is useless.
+import { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
+  CircleLayer,
   LineLayer,
   PointAnnotation,
   ShapeSource,
   SymbolLayer,
   type SymbolLayerStyle,
 } from "@maplibre/maplibre-react-native";
-import type { RoutePoint } from "@logjam/shared";
+import { moveAnchor, type RoutePoint } from "@logjam/shared";
 
-import { theme, withAlpha } from "../theme";
+import { theme } from "../theme";
 
 /** Below this a route is a few pixels of line and arrows on it are just noise. */
 export const ROUTE_ARROW_MIN_ZOOM = 12;
@@ -68,6 +70,37 @@ export function routeArrowStyle(
   };
 }
 
+/**
+ * Anchor sizes and fills.
+ *
+ * The ends are marked, the middles recede: a middle anchor is a small white dot
+ * (a handle), the first is filled accent and the last is dark. Everything is
+ * drawn by a CircleLayer rather than by the annotation's own child view for two
+ * reasons — a native layer declared AFTER the line always paints above it, and
+ * its styling is data-driven, so an anchor that stops being the last one
+ * changes appearance immediately. A PointAnnotation's child view does neither:
+ * MLRN rasterises it once, so the old last-anchor kept its dark fill until the
+ * draft was reopened.
+ */
+const ANCHOR_RADIUS_END = 7;
+const ANCHOR_RADIUS_MIDDLE = 5;
+
+function anchorFeatures(
+  anchors: readonly RoutePoint[],
+): GeoJSON.FeatureCollection {
+  const last = anchors.length - 1;
+  return {
+    type: "FeatureCollection",
+    features: anchors.map((anchor, index) => ({
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [...anchor] },
+      properties: {
+        role: index === 0 ? "start" : index === last && last > 0 ? "end" : "middle",
+      },
+    })),
+  };
+}
+
 export function RouteDraftLayer({
   idPrefix,
   points,
@@ -89,17 +122,39 @@ export function RouteDraftLayer({
   onAnchorDragEnd: (index: number, point: RoutePoint) => void;
   onAnchorPress: (index: number) => void;
 }) {
-  const last = anchors.length - 1;
+  /**
+   * The anchor being dragged, held HERE rather than in the screen's state.
+   *
+   * Routing every drag frame up to MapScreen re-rendered the whole map screen
+   * per frame, and the line visibly lagged the finger. Keeping it local means
+   * only this component re-renders, so the geometry keeps up.
+   */
+  const [drag, setDrag] = useState<{ index: number; point: RoutePoint } | null>(
+    null,
+  );
+
+  // The draft as it should look right now: committed geometry, with the drag
+  // applied on top. `moveAnchor` is the same helper the drop commits through,
+  // so the preview cannot disagree with the result.
+  const preview = useMemo(() => {
+    if (!drag) return { points, anchors };
+    const moved = moveAnchor({ anchors: [...anchors], filler: [] }, drag.index, drag.point);
+    // Filler is dropped while dragging: the snapped run between two anchors is
+    // no longer valid the moment one of them moves, and re-snapping happens on
+    // the drop. Straight segments are the honest preview.
+    return { points: moved.anchors, anchors: moved.anchors };
+  }, [anchors, drag, points]);
+
   return (
     <>
-      {points.length >= 2 ? (
+      {preview.points.length >= 2 ? (
         <ShapeSource
           id={`${idPrefix}-line`}
           shape={{
             type: "Feature",
             geometry: {
               type: "LineString",
-              coordinates: points.map((point) => [...point]),
+              coordinates: preview.points.map((point: RoutePoint) => [...point]),
             },
             properties: {},
           }}
@@ -122,38 +177,64 @@ export function RouteDraftLayer({
         </ShapeSource>
       ) : null}
 
-      {/* One handle per ANCHOR — never per point. A snapped run is geometry the
-          tool produced, not vertices the user placed, so dotting every one of
-          them made 500 m of creek look like twenty-two decisions.
-          PointAnnotation rather than a CircleLayer because it is the only thing
-          in the wrapper that can be dragged. */}
+      {/* Declared after the line, so it paints above it. */}
+      {preview.anchors.length > 0 ? (
+        <ShapeSource id={`${idPrefix}-anchors`} shape={anchorFeatures(preview.anchors)}>
+          <CircleLayer
+            id={`${idPrefix}-anchor-dots`}
+            style={{
+              circleRadius: [
+                "match",
+                ["get", "role"],
+                "middle",
+                ANCHOR_RADIUS_MIDDLE,
+                ANCHOR_RADIUS_END,
+              ],
+              circleColor: [
+                "match",
+                ["get", "role"],
+                "start",
+                theme.accent,
+                "end",
+                theme.primary,
+                theme.textPrimary,
+              ],
+              circleStrokeWidth: 2,
+              circleStrokeColor: theme.accent,
+            }}
+          />
+        </ShapeSource>
+      ) : null}
+
+      {/* One INVISIBLE handle per anchor — never per point. A snapped run is
+          geometry the tool produced, not vertices the user placed, so dotting
+          every one of them made 500 m of creek look like twenty-two decisions.
+          PointAnnotation is the only thing in the wrapper that can be dragged;
+          it carries no visuals now, just the touch target. */}
       {anchors.map((anchor, index) => (
         <PointAnnotation
           key={`${idPrefix}-anchor-${index}`}
           id={`${idPrefix}-anchor-${index}`}
           coordinate={anchor as number[]}
           draggable
-          onDragStart={() => onAnchorDragStart(index)}
+          onDragStart={() => {
+            setDrag({ index, point: anchor });
+            onAnchorDragStart(index);
+          }}
           onDrag={(payload: { geometry?: { coordinates?: number[] } }) => {
             const moved = payload.geometry?.coordinates as RoutePoint | undefined;
-            if (moved) onAnchorDrag(index, moved);
+            if (!moved) return;
+            setDrag({ index, point: moved });
+            onAnchorDrag(index, moved);
           }}
           onDragEnd={(payload: { geometry?: { coordinates?: number[] } }) => {
             const moved = payload.geometry?.coordinates as RoutePoint | undefined;
+            setDrag(null);
             if (moved) onAnchorDragEnd(index, moved);
           }}
           onSelected={() => onAnchorPress(index)}
         >
-          {/* Ends are marked, not badged: the first anchor is filled and the
-              last is hollow, which says which way the line runs up close
-              without adding a second thing to read at a glance. */}
-          <View
-            style={[
-              styles.anchor,
-              index === 0 ? styles.anchorStart : null,
-              index === last && last > 0 ? styles.anchorEnd : null,
-            ]}
-          />
+          <View style={styles.handle} />
         </PointAnnotation>
       ))}
     </>
@@ -161,18 +242,16 @@ export function RouteDraftLayer({
 }
 
 const styles = StyleSheet.create({
-  // Bigger than it looks: the visible dot is 16px but the annotation's touch
-  // target is the whole view, and a 16px target is unhittable with a thumb.
-  anchor: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: withAlpha(theme.accent, 0.25),
-    borderWidth: 2,
-    borderColor: theme.accent,
+  // Invisible, and deliberately far bigger than the dot it grabs: the visible
+  // anchor is ~14px and a 14px touch target is unhittable with a thumb.
+  //
+  // The alpha is 0.01 rather than 0: MLRN rasterises the child view, and a
+  // fully empty bitmap makes it fall back to its own red default pin. One
+  // percent of a colour is a bitmap.
+  handle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(255,255,255,0.01)",
   },
-  anchorStart: { backgroundColor: theme.accent },
-  anchorEnd: { backgroundColor: withAlpha(theme.primary, 0.85) },
 });
