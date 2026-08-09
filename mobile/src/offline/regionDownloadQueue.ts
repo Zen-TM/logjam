@@ -269,6 +269,13 @@ async function runProtomapsClip(
     if (err instanceof ApiError && err.status >= 500) {
       return { status: "failed", code: "source-unavailable" };
     }
+    // 4xx is the endpoint rejecting THIS AREA (outside the archive extract, or
+    // over the clip cap — see validateRegionClipRequest). Its own message is
+    // static and coordinate-free, but the copy the user reads is still ours
+    // (DESIGN.md §11), and what it has to say is "reframe", not "retry".
+    if (err instanceof ApiError && err.status >= 400) {
+      return { status: "failed", code: "region-rejected" };
+    }
     return { status: "failed", code: "unknown" };
   }
 }

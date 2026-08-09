@@ -107,9 +107,14 @@ export function GeoPdfImportProgress({
           </View>
 
           <Text style={styles.note}>
+            {/* A duration, not "a while". The screen behind this is frozen
+                during the blocking phases, and an unbounded wait in front of a
+                frozen screen reads as a hang — a couple of minutes reads as a
+                job. Deliberately the whole-import figure in both branches: the
+                user is waiting for the import, not for a phase. */}
             {blocking
-              ? "Reading a large map takes a while, and the app can't respond until it's done. Leave Logjam open."
-              : "Keep Logjam open. You can cancel and finish this later from Saved."}
+              ? "A large map takes a couple of minutes, and the app can't respond until this part is done. Leave Logjam open."
+              : "A couple of minutes for a large map. Keep Logjam open; you can cancel and finish this later from Saved."}
           </Text>
         </View>
 

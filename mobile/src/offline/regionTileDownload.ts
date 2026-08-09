@@ -97,6 +97,12 @@ export type RegionFailureCode =
    * wrong for an endpoint that will keep refusing until an operator fixes it.
    */
   | "source-unavailable"
+  /**
+   * The SERVER refused this area for the vector clip — outside the NSW archive
+   * extract, or larger than the clip cap. A 4xx, so retrying it unchanged can
+   * only fail again; the user has to reframe.
+   */
+  | "region-rejected"
   | "unknown";
 
 /**

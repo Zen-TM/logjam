@@ -10,7 +10,7 @@
 // pan and pinch: coarse positioning is done by moving the MAP, and the handles
 // only shape the box. The only touch targets on this overlay are the four bars.
 import { useMemo, useRef } from "react";
-import { PanResponder, StyleSheet, View } from "react-native";
+import { PanResponder, PixelRatio, StyleSheet, View } from "react-native";
 
 import { radius, theme, withAlpha } from "../theme";
 import { moveFrameEdge, type FrameEdge, type FrameInsets } from "./regionFrame";
@@ -78,35 +78,61 @@ export function SelectionFrame({
     };
   }, [width, height]);
 
-  const frameWidth = Math.max(0, width - insets.left - insets.right);
-  const frameHeight = Math.max(0, height - insets.top - insets.bottom);
-  const centreX = insets.left + frameWidth / 2;
-  const centreY = insets.top + frameHeight / 2;
+  // Snap every edge to a whole DEVICE pixel before anything is laid out from
+  // it. This is what keeps the four scrim panels from parting: Yoga rounds each
+  // node's frame to the physical pixel grid independently, so two panels that
+  // meet at a fractional coordinate can round to different sides of it and
+  // leave a hairline of undimmed map between them. Rounded first, they meet
+  // exactly and the rounding is a no-op.
+  //
+  // (The previous fix — one view whose BORDERS were the scrim — had no seam but
+  // two worse faults: its bounds covered the selection as well, so the map
+  // under it stopped panning and zooming, and RN miters adjacent borders, so
+  // the four translucent edges double-painted at the corners and the scrim came
+  // out darker there than along the sides.)
+  const snap = PixelRatio.roundToNearestPixel;
+  const boxWidth = snap(width);
+  const boxHeight = snap(height);
+  const insetTop = snap(insets.top);
+  const insetLeft = snap(insets.left);
+  const insetRight = snap(insets.right);
+  const insetBottom = snap(insets.bottom);
+  const frameWidth = Math.max(0, boxWidth - insetLeft - insetRight);
+  const frameHeight = Math.max(0, boxHeight - insetTop - insetBottom);
+  const frameBottom = insetTop + frameHeight;
+  const frameRight = insetLeft + frameWidth;
+  const centreX = insetLeft + frameWidth / 2;
+  const centreY = insetTop + frameHeight / 2;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* ONE view for the whole scrim, with the selection as its content box
-          and the dimmed surround as its BORDER. RN has no cut-out and stacking
-          a lighter view inside a dark one would dim the selection too — but a
-          border is a hole, drawn in a single pass.
+      {/* Four dim panels around the selection rather than one full-screen
+          overlay with a hole: RN has no cut-out, and stacking a lighter view
+          inside a dark one would dim the selection too.
 
-          It was four abutting panels, and abutting is the bug: the side panels
-          were positioned by `top` + `height` while the bottom one was pinned to
-          `bottom: 0`, so the two arrived at the frame's lower edge by different
-          arithmetic and rounded apart. The result was a hairline of UNDIMMED
-          map running the full width of the screen along the bottom edge of the
-          selection — brighter than the ground either side of it, and reading as
-          a line the selector had drawn. One node has no seams to round. */}
+          Every panel is positioned by left/top/width/height off the snapped
+          numbers above — never by `bottom: 0` or `right: 0`, which is how the
+          bottom panel used to reach the frame's lower edge by different
+          arithmetic from the side panels and round away from them. The
+          selection itself is covered by nothing, which is what leaves the map
+          under it free to pan and pinch. */}
+      <View style={[styles.dim, { left: 0, top: 0, width: boxWidth, height: insetTop }]} />
       <View
         style={[
-          StyleSheet.absoluteFill,
-          {
-            borderTopWidth: insets.top,
-            borderBottomWidth: insets.bottom,
-            borderLeftWidth: insets.left,
-            borderRightWidth: insets.right,
-          },
           styles.dim,
+          { left: 0, top: frameBottom, width: boxWidth, height: boxHeight - frameBottom },
+        ]}
+      />
+      <View
+        style={[
+          styles.dim,
+          { left: 0, top: insetTop, width: insetLeft, height: frameHeight },
+        ]}
+      />
+      <View
+        style={[
+          styles.dim,
+          { left: frameRight, top: insetTop, width: boxWidth - frameRight, height: frameHeight },
         ]}
       />
 
@@ -116,8 +142,8 @@ export function SelectionFrame({
         style={[
           styles.outline,
           {
-            left: insets.left,
-            top: insets.top,
+            left: insetLeft,
+            top: insetTop,
             width: frameWidth,
             height: frameHeight,
           },
@@ -130,7 +156,7 @@ export function SelectionFrame({
         accessibilityLabel="Drag to move the top edge of the area"
         style={[
           styles.handleH,
-          { left: centreX - HANDLE_LENGTH / 2, top: insets.top - HANDLE_TOUCH / 2 },
+          { left: centreX - HANDLE_LENGTH / 2, top: insetTop - HANDLE_TOUCH / 2 },
         ]}
       >
         <View style={styles.barH} />
@@ -143,7 +169,7 @@ export function SelectionFrame({
           styles.handleH,
           {
             left: centreX - HANDLE_LENGTH / 2,
-            top: height - insets.bottom - HANDLE_TOUCH / 2,
+            top: frameBottom - HANDLE_TOUCH / 2,
           },
         ]}
       >
@@ -155,7 +181,7 @@ export function SelectionFrame({
         accessibilityLabel="Drag to move the left edge of the area"
         style={[
           styles.handleV,
-          { top: centreY - HANDLE_LENGTH / 2, left: insets.left - HANDLE_TOUCH / 2 },
+          { top: centreY - HANDLE_LENGTH / 2, left: insetLeft - HANDLE_TOUCH / 2 },
         ]}
       >
         <View style={styles.barV} />
@@ -168,7 +194,7 @@ export function SelectionFrame({
           styles.handleV,
           {
             top: centreY - HANDLE_LENGTH / 2,
-            left: width - insets.right - HANDLE_TOUCH / 2,
+            left: frameRight - HANDLE_TOUCH / 2,
           },
         ]}
       >
@@ -180,10 +206,10 @@ export function SelectionFrame({
 
 const styles = StyleSheet.create({
   // Deliberately a black scrim, like the sheet scrims: the dimmed area is
-  // "not this", and a scheme tint over a map reads as a colour cast. It is the
-  // BORDER that paints it (see above); the content box stays transparent so
-  // the selection is drawn at full brightness.
-  dim: { borderColor: "rgba(0,0,0,0.45)", backgroundColor: "transparent" },
+  // "not this", and a scheme tint over a map reads as a colour cast. The four
+  // panels never overlap, so the alpha composites exactly once everywhere —
+  // any overlap would show as a darker band where two panels met.
+  dim: { position: "absolute", backgroundColor: "rgba(0,0,0,0.45)" },
   outline: {
     position: "absolute",
     borderWidth: 2,

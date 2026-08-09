@@ -34,3 +34,23 @@ variable "email_from" {
   type    = string
   default = "noreply@local"
 }
+
+# Protomaps basemap archive the region-clip endpoint extracts offline map
+# regions from (POST /basemap/region-clip runs `pmtiles extract` against it).
+#
+# EMPTY BY DEFAULT, and the endpoint answers 503 "Region clips are not
+# available" when it is — which is correct and was for a long time mistaken for
+# a bug in the mobile download. The archive is ~740 MB and machine-local, so it
+# is not something a checkout can carry: set this per machine in a gitignored
+# `*.auto.tfvars` beside this file, e.g.
+#
+#   protomaps_archive_uri = "/home/you/logjam-basemap/protomaps-nsw.pmtiles"
+#
+# Fetch it with `aws s3 cp s3://logjam-topo-jobs/master/basemap/protomaps-nsw.pmtiles .`
+# (profile logjam), and put the `pmtiles` binary on PATH — the API shells out to
+# it, and its absence is the OTHER cause of that same 503. Pin the same release
+# api/Dockerfile does.
+variable "protomaps_archive_uri" {
+  type    = string
+  default = ""
+}

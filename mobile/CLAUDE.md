@@ -110,6 +110,19 @@ into an on-device MBTiles (`regionTileDownload.ts` + `regionMbtiles.ts`), and
 (`regionDownloads.ts`). Both end in a `map_artifact` row, which is the only thing
 the map resolver ever sees.
 
+**The vector clip needs a local archive, and its absence is a 503 that reads as
+a client bug.** `POST /basemap/region-clip` shells out to `pmtiles extract`
+against `PROTOMAPS_ARCHIVE_URI`; with either the binary or the archive missing
+the endpoint answers 503 and the download screen reports the vector map as
+unavailable while the SIX rasters download fine. Local dev has neither by
+default. To fix a box: put the pinned `pmtiles` release on PATH (same version
+`api/Dockerfile` installs), fetch
+`s3://logjam-topo-jobs/master/basemap/protomaps-nsw.pmtiles` (~740 MB), and set
+`protomaps_archive_uri` in a gitignored `*.auto.tfvars` under
+`infra/terraform/envs/local/` so `make dev` renders it into `.env.local`. The
+archive stops at z15, which is also the endpoint's `MAX_CLIP_ZOOM` — a request
+above it is a 400, as is one outside the NSW extract.
+
 **The politeness envelope is not optional** (`regionTileDownload.ts` header):
 concurrency 2, a token bucket refilling 3 tiles/s with ±20 % jitter, no
 app-identifying headers on a provider request (never `x-logjam-client`, never an

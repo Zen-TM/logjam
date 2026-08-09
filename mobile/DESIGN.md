@@ -100,13 +100,18 @@ BottomSheet(s)      acquisition + per-item actions
   "navigate here" and "drop a waypoint" under them. Press-and-hold keeps its
   existing meaning, "something goes HERE", and its sheet offers the two things
   that can. Neither gesture ends follow mode: a tap is not a pan.
-- **Only a one-finger drag stops the map following you.** It is impossible to
-  pinch without also translating the map, so treating every user interaction as a
-  pan meant changing scale cost you the lock every time, with the locate button as
-  the only way back. The map counts fingers (capture-phase responder handlers that
-  never claim the responder — `gestureTouches` in `MapScreen.tsx`); two or more is
-  a zoom, which keeps follow and re-locks onto the user at the new scale when the
-  gesture settles.
+- **Only a one-finger drag stops the map following you, and a pinch while
+  following is drawn by US.** It is impossible to pinch without also translating
+  the map — MapLibre zooms about the midpoint between the fingers and MLRN
+  exposes no way to fix that focal point — so treating every user interaction as
+  a pan meant changing scale cost you the lock every time, and merely *keeping*
+  the lock meant letting the view drift and snapping it back on release, which
+  reads as the map fighting you. So while following, the map's root view CLAIMS
+  the two-finger gesture (capture-phase responder handlers, `handlePinchMove` in
+  `MapScreen.tsx`), MapLibre's own zoom is disabled, and the camera is written
+  directly: centre pinned to the latest fix, zoom from the ratio of finger
+  separation. Nothing translates and nothing snaps back. One finger is still a
+  pan, still MapLibre's, and still means "stop following".
 - **A map TOOL is a mode with a HUD, and closing it discards its work.** The
   measure tool arms from the action column (the button lights while it is on),
   collects taps, and reports through a panel in the top notice stack next to the

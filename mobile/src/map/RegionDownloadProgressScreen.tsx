@@ -143,6 +143,8 @@ export function DownloadRow({ job }: { job: RegionJob }) {
       switch (state.code) {
         case "provider-errors":
           return "Too many tiles wouldn't load. Try again later.";
+        case "region-rejected":
+          return "The vector map only covers NSW, up to 40 km across. Pick a smaller area inside NSW.";
         case "source-unavailable":
           // Not the phone's fault and not fixable by retrying, so it doesn't
           // say "try again" — this is the vector clip's 5xx.

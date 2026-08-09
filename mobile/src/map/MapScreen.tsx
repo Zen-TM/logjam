@@ -21,6 +21,7 @@ import {
   View,
   PixelRatio,
   useWindowDimensions,
+  type GestureResponderEvent,
   type TextInput,
 } from "react-native";
 import {
@@ -217,6 +218,14 @@ const CAMERA_DEFAULTS = {
  * same button do two different things depending on where the map happened to be.
  */
 const FOLLOW_ZOOM = 15;
+
+/**
+ * Zoom range the JS-driven pinch may reach. Not MapLibre's own 0-22: below ~2
+ * the whole world is on screen twice and above ~20 every source is overzoomed,
+ * and unlike a native gesture this one has no built-in stops of its own.
+ */
+const MIN_PINCH_ZOOM = 2;
+const MAX_PINCH_ZOOM = 20;
 
 /** How near the drawn line a press-and-hold must land to insert a point. */
 const LINE_GRAB_PIXELS = 24;
@@ -556,12 +565,14 @@ export function MapScreen({
   /**
    * Fingers down in the gesture the map is currently reacting to — the one
    * thing that tells a pinch from a pan, since MapLibre reports both as an
-   * undifferentiated "user interaction". Fed by capture-phase responder
-   * handlers on the root view (which observe every touch without ever claiming
-   * the responder, so the map's own gestures are untouched), and reset when the
-   * region settles.
+   * undifferentiated "user interaction". Fed by the capture-phase responder
+   * handlers on the root view, and reset when the region settles.
    */
   const gestureTouches = useRef(0);
+  /** Live zoom, so a pinch can start from the scale actually on screen. */
+  const zoomRef = useRef(DEFAULT_ZOOM);
+  /** Finger separation and zoom at the moment a followed pinch began. */
+  const pinchStart = useRef<{ distance: number; zoom: number } | null>(null);
   const [userCoord, setUserCoord] = useState<[number, number] | null>(null);
   const [userHeading, setUserHeading] = useState<number | null>(null);
   // Latest fix, in a ref as well as in state: entering a follow mode has to
@@ -1449,6 +1460,88 @@ export function MapScreen({
   const optionsRoute = findRoute(optionsRouteId);
   const linkingRoute = findRoute(linkingRouteId);
 
+  /**
+   * Pinch-to-zoom while following, driven from JS instead of by MapLibre.
+   *
+   * MapLibre zooms about the midpoint between the fingers, and there is no way
+   * to tell it otherwise from React Native: the focal point it uses is
+   * `constantFocalPoint` if the host app set one and the gesture's own focus
+   * otherwise, and MLRN exposes no way to set the former. So a pinch always
+   * translates the map, and "keep following" could only ever mean letting it
+   * drift and then yanking it back when the fingers lifted — which is what the
+   * first version did, and it read as the map fighting you: the view slid, then
+   * snapped, and the zoom it settled on was not always the one you had let go
+   * at, because the corrective stop and the gesture's own inertia both wrote
+   * the camera.
+   *
+   * Instead the root view CLAIMS the responder the moment a second finger lands
+   * while following. MapLibre gets an ACTION_CANCEL, never starts a scale
+   * gesture, and this drives the camera directly: centre pinned to the latest
+   * fix, zoom from the ratio of finger separation to where it started. Nothing
+   * translates, nothing snaps back, and the zoom on release is exactly the last
+   * one written.
+   *
+   * Only while following, and only for two fingers — everywhere else MapLibre
+   * keeps its gestures untouched.
+   */
+  const shouldDrivePinch = useCallback((touchCount: number): boolean => {
+    return (
+      followModeRef.current !== "off" && touchCount >= 2 && latestFix.current != null
+    );
+  }, []);
+
+  const touchSeparation = (
+    touches: { pageX: number; pageY: number }[],
+  ): number => {
+    const [a, b] = touches;
+    return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+  };
+
+  const observeTouches = useCallback(
+    (event: GestureResponderEvent): boolean => {
+      const { touches } = event.nativeEvent;
+      gestureTouches.current = Math.max(gestureTouches.current, touches.length);
+      if (!shouldDrivePinch(touches.length)) return false;
+      // Separation of zero (both fingers on the same pixel) would make every
+      // later ratio infinite; let MapLibre have that gesture instead.
+      const distance = touchSeparation(touches);
+      if (distance < 1) return false;
+      pinchStart.current = { distance, zoom: zoomRef.current };
+      return true;
+    },
+    [shouldDrivePinch],
+  );
+
+  const handlePinchMove = useCallback(
+    (event: GestureResponderEvent) => {
+      const start = pinchStart.current;
+      const { touches } = event.nativeEvent;
+      if (!start || touches.length < 2 || !latestFix.current) return;
+      const distance = touchSeparation(touches);
+      if (distance < 1) return;
+      // Doubling the separation is one zoom level, which is what the gesture
+      // means everywhere else on the phone.
+      const zoom = Math.min(
+        MAX_PINCH_ZOOM,
+        Math.max(MIN_PINCH_ZOOM, start.zoom + Math.log2(distance / start.distance)),
+      );
+      zoomRef.current = zoom;
+      setCameraStop({
+        centerCoordinate: latestFix.current,
+        zoomLevel: zoom,
+        // No animation: the fingers ARE the animation. Anything else lags the
+        // gesture and reads as the map resisting.
+        animationDuration: 0,
+      });
+    },
+    [setCameraStop],
+  );
+
+  const endPinch = useCallback(() => {
+    pinchStart.current = null;
+    gestureTouches.current = 0;
+  }, []);
+
   // Live camera → the scale bar only, at gesture rate. Coordinates stay in
   // component state only — never logged (privacy rule).
   //
@@ -1476,14 +1569,11 @@ export function MapScreen({
         // has moved the map themselves, a fix that arrives late must not take
         // the camera back off them.
         userMovedCamera.current = true;
-        // A PINCH is not a pan. Changing scale while following is a completely
-        // normal thing to want — "how far is the next drop" is a zoom, not a
-        // request to stop being followed — but there is no such thing as a
-        // pinch that doesn't also translate the map, so every zoom used to
-        // read as a pan and drop follow mode. Since it is impossible to zoom
-        // without panning, the button became the only way back, every time.
-        // Finger count is the honest signal MapLibre doesn't give us: two or
-        // more means scale, one means "take me somewhere else".
+        // Only a ONE-FINGER drag means "take me somewhere else". While
+        // following, a two-finger gesture never reaches MapLibre at all (the
+        // pinch handler below claims it), so this should not see one — the
+        // guard covers the frame or two between the second finger landing and
+        // the responder transfer completing.
         if (followModeRef.current !== "off" && gestureTouches.current < 2) {
           // The ref too, not just the state: this fires many times per gesture
           // and state only lands on the next render.
@@ -1513,24 +1603,9 @@ export function MapScreen({
         stopNeedsReset.current = false;
         cameraRef.current?.setCamera({ animationDuration: 0 });
       }
-      // A pinch that kept follow mode alive still slid the map off the user
-      // (the zoom pivots on the midpoint between the fingers, not on them), so
-      // put them back under the crosshair at whatever scale the gesture landed
-      // on. On settle rather than during: writing a camera stop at gesture rate
-      // is the fight this screen documents everywhere else.
-      //
-      // The recentre fires its own regionDidChange, but with
-      // `isUserInteraction` false and the touch count already reset, so it
-      // cannot re-enter here.
-      const wasPinch = gestureTouches.current >= 2;
       gestureTouches.current = 0;
-      if (wasPinch && followModeRef.current !== "off" && latestFix.current) {
-        setCameraStop({
-          centerCoordinate: latestFix.current,
-          zoomLevel,
-          animationDuration: 200,
-        });
-      }
+      // Running zoom, for the pinch handler to start its next gesture from.
+      zoomRef.current = zoomLevel;
       setCamera((prev) =>
         prev.zoom === zoomLevel &&
         prev.latitude === latitude &&
@@ -1546,7 +1621,7 @@ export function MapScreen({
             },
       );
     },
-    [setCameraStop],
+    [],
   );
 
   // Place search result: recentre without changing zoom intent drastically.
@@ -1838,24 +1913,18 @@ export function MapScreen({
   return (
     <View
       style={styles.root}
-      // Capture-phase only, and both always return false: this OBSERVES every
-      // touch on its way down to the map without ever becoming the responder,
-      // so MapLibre's own pan/pinch handling is completely unaffected. It is
-      // the only way to know how many fingers are down — see gestureTouches.
-      onStartShouldSetResponderCapture={(event) => {
-        gestureTouches.current = Math.max(
-          gestureTouches.current,
-          event.nativeEvent.touches.length,
-        );
-        return false;
-      }}
-      onMoveShouldSetResponderCapture={(event) => {
-        gestureTouches.current = Math.max(
-          gestureTouches.current,
-          event.nativeEvent.touches.length,
-        );
-        return false;
-      }}
+      // Capture phase, so every touch is counted on its way DOWN to the map
+      // (see gestureTouches). It returns false — declining the responder and
+      // leaving MapLibre's gestures untouched — in every case except a
+      // two-finger pinch while following, which it claims and drives itself
+      // (see handlePinchMove).
+      onStartShouldSetResponderCapture={observeTouches}
+      onMoveShouldSetResponderCapture={observeTouches}
+      onResponderMove={handlePinchMove}
+      onResponderRelease={endPinch}
+      onResponderTerminate={endPinch}
+      // Nothing takes a pinch off us halfway through.
+      onResponderTerminationRequest={() => false}
     >
       <MapView
         ref={mapRef}
@@ -1877,6 +1946,14 @@ export function MapScreen({
         compassEnabled
         compassViewPosition={2}
         compassViewMargins={{ x: CHROME_GAP, y: CHROME_BOTTOM + COMPASS_STRIP_HEIGHT }}
+        // MapLibre's own pinch is OFF while following, and this screen drives
+        // the zoom itself (see handlePinchMove). Belt and braces with the
+        // responder claim: if the claim ever failed to cancel the native
+        // gesture, MapLibre and the handler would both be zooming the same
+        // pinch, which is the fight this whole mechanism exists to end. Pan
+        // stays enabled — a one-finger drag still pans, and still means "stop
+        // following".
+        zoomEnabled={followMode === "off"}
         onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}
         onPress={handleMapPress}
