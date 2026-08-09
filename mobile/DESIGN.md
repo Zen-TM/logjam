@@ -108,10 +108,16 @@ BottomSheet(s)      acquisition + per-item actions
   the lock meant letting the view drift and snapping it back on release, which
   reads as the map fighting you. So while following, the map's root view CLAIMS
   the two-finger gesture (capture-phase responder handlers, `handlePinchMove` in
-  `MapScreen.tsx`), MapLibre's own zoom is disabled, and the camera is written
-  directly: centre pinned to the latest fix, zoom from the ratio of finger
-  separation. Nothing translates and nothing snaps back. One finger is still a
-  pan, still MapLibre's, and still means "stop following".
+  `MapScreen.tsx`), MapLibre's own zoom AND rotate are disabled, and the camera
+  is written directly: centre pinned to the latest fix, zoom from the ratio of
+  finger separation, heading from the angle between the fingers. Nothing
+  translates and nothing snaps back. **Drive both axes or neither** — leaving
+  rotation with MapLibre put a second driver on the same two fingers, and since
+  no real pinch is a pure scale, the incidental twist was enough to shake follow
+  mode loose. Course-up is the one exception: two fingers there scale only,
+  because its heading belongs to the compass, and turning the map by hand while
+  it is meant to face where you are looking is two answers to one question. One
+  finger is still a pan, still MapLibre's, and still means "stop following".
 - **A map TOOL is a mode with a HUD, and closing it discards its work.** The
   measure tool arms from the action column (the button lights while it is on),
   collects taps, and reports through a panel in the top notice stack next to the

@@ -6,9 +6,13 @@
 // one axis with nothing to anchor, so any aspect ratio is one drag away — tall
 // and narrow for a creek line, wide and short for a plateau.
 //
-// The interior is `pointerEvents="none"`, so the map underneath keeps its own
-// pan and pinch: coarse positioning is done by moving the MAP, and the handles
-// only shape the box. The only touch targets on this overlay are the four bars.
+// NOTHING on this overlay is a touch target except the four handle bars. The
+// scrim panels and the outline are all `pointerEvents="none"`, so the map keeps
+// its own pan and pinch EVERYWHERE, dimmed or not: coarse positioning is done
+// by moving the map, and the handles only shape the box. Getting this wrong is
+// subtle — the panels went a long time swallowing every touch outside the
+// selection, which left the map draggable only through the bright rectangle and
+// read as the screen being half frozen.
 import { useMemo, useRef } from "react";
 import { PanResponder, PixelRatio, StyleSheet, View } from "react-native";
 
@@ -113,23 +117,34 @@ export function SelectionFrame({
           Every panel is positioned by left/top/width/height off the snapped
           numbers above — never by `bottom: 0` or `right: 0`, which is how the
           bottom panel used to reach the frame's lower edge by different
-          arithmetic from the side panels and round away from them. The
-          selection itself is covered by nothing, which is what leaves the map
-          under it free to pan and pinch. */}
-      <View style={[styles.dim, { left: 0, top: 0, width: boxWidth, height: insetTop }]} />
+          arithmetic from the side panels and round away from them.
+
+          `pointerEvents="none"` on every one of them, and it is load-bearing.
+          The parent is `box-none`, which stops the parent being a touch target
+          but leaves its CHILDREN as targets — so the panels were eating every
+          touch that landed outside the selection, and the map could only be
+          panned and pinched through the small bright rectangle in the middle.
+          The scrim says "not this"; it should not also mean "not here". */}
       <View
+        pointerEvents="none"
+        style={[styles.dim, { left: 0, top: 0, width: boxWidth, height: insetTop }]}
+      />
+      <View
+        pointerEvents="none"
         style={[
           styles.dim,
           { left: 0, top: frameBottom, width: boxWidth, height: boxHeight - frameBottom },
         ]}
       />
       <View
+        pointerEvents="none"
         style={[
           styles.dim,
           { left: 0, top: insetTop, width: insetLeft, height: frameHeight },
         ]}
       />
       <View
+        pointerEvents="none"
         style={[
           styles.dim,
           { left: frameRight, top: insetTop, width: boxWidth - frameRight, height: frameHeight },

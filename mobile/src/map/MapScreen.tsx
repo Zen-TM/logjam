@@ -10,7 +10,14 @@
 // emulator detection (maplibre-native #3617) misses current AVD fingerprints.
 // Vulkan renders symbols correctly; don't revert to opengl without retesting
 // labels on the emulator AND a physical device.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Alert,
   BackHandler,
@@ -562,17 +569,26 @@ export function MapScreen({
   const [followMode, setFollowMode] = useState<FollowMode>("off");
   const followModeRef = useRef(followMode);
   followModeRef.current = followMode;
-  /**
-   * Fingers down in the gesture the map is currently reacting to — the one
-   * thing that tells a pinch from a pan, since MapLibre reports both as an
-   * undifferentiated "user interaction". Fed by the capture-phase responder
-   * handlers on the root view, and reset when the region settles.
-   */
-  const gestureTouches = useRef(0);
-  /** Live zoom, so a pinch can start from the scale actually on screen. */
+  /** Live zoom and heading, so a pinch starts from what is actually on screen. */
   const zoomRef = useRef(DEFAULT_ZOOM);
-  /** Finger separation and zoom at the moment a followed pinch began. */
-  const pinchStart = useRef<{ distance: number; zoom: number } | null>(null);
+  const headingRef = useRef(0);
+  /**
+   * The two-finger gesture this screen is currently driving, or null.
+   *
+   * Non-null IS the answer to "is the user scaling/rotating rather than
+   * panning", and it is the only thing the follow-mode guard consults. It is
+   * set the instant a second finger lands and cleared on release, so it cannot
+   * be confused by MapLibre's own event stream — which is what the old
+   * max-fingers counter was, and why follow kept dropping mid-pinch: the
+   * counter was reset by `onRegionDidChange`, and this handler's own camera
+   * writes fire that on every move.
+   */
+  const pinchStart = useRef<{
+    distance: number;
+    angleDeg: number;
+    zoom: number;
+    heading: number;
+  } | null>(null);
   const [userCoord, setUserCoord] = useState<[number, number] | null>(null);
   const [userHeading, setUserHeading] = useState<number | null>(null);
   // Latest fix, in a ref as well as in state: entering a follow mode has to
@@ -631,9 +647,29 @@ export function MapScreen({
     [connectivity, artifacts],
   );
 
+  /**
+   * What is actually DRAWN, as against what the user has picked.
+   *
+   * Mounting the vector basemap is ~70 MLRN layer components in one commit,
+   * and React cannot split a commit — so tapping "OSM Default (vector)" in the
+   * layers sheet froze everything for about a second before the row even
+   * showed a tick, which reads as the tap having missed. Deferring the value
+   * the MAP renders from lets the urgent half (the sheet's selection, its
+   * press feedback, its close animation) commit first at full priority, and
+   * the layer mount follow as a low-priority render. The freeze is not gone —
+   * the commit is still one lump of work — but it lands after the app has
+   * acknowledged the tap rather than in place of acknowledging it.
+   *
+   * Everything downstream of "what is on screen" reads THIS: the resolver, the
+   * layer-count arithmetic, the offline mask, the attribution and the offline
+   * notice. `basemapId` itself stays the user's choice, and is what the picker
+   * ticks and what the preference stores.
+   */
+  const renderedBasemapId = useDeferredValue(basemapId);
+
   const basemapResolved = useMemo(
-    () => resolveMapSource({ kind: "basemap", basemapId }, ctx),
-    [basemapId, ctx],
+    () => resolveMapSource({ kind: "basemap", basemapId: renderedBasemapId }, ctx),
+    [renderedBasemapId, ctx],
   );
 
   /**
@@ -651,8 +687,8 @@ export function MapScreen({
     () =>
       connectivity === "online"
         ? []
-        : basemapsDownloadedAt(artifacts, camera, MOBILE_BASEMAPS, basemapId),
-    [artifacts, basemapId, camera, connectivity],
+        : basemapsDownloadedAt(artifacts, camera, MOBILE_BASEMAPS, renderedBasemapId),
+    [artifacts, renderedBasemapId, camera, connectivity],
   );
 
   // Everywhere the phone has no saved tiles, blanked out — but only when the
@@ -686,7 +722,7 @@ export function MapScreen({
     basemapResolved.filter((r) => r.status === "ok").length,
   );
   const basemapLayerCount =
-    basemapId === "protomaps"
+    renderedBasemapId === "protomaps"
       ? protomapsLayerCount(PROTOMAPS_FLAVOR) * resolvedSourceCount
       : resolvedSourceCount;
 
@@ -1497,16 +1533,26 @@ export function MapScreen({
     return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
   };
 
+  /** Angle of the line between the two fingers, degrees, clockwise-positive. */
+  const touchAngleDeg = (touches: { pageX: number; pageY: number }[]): number => {
+    const [a, b] = touches;
+    return (Math.atan2(b.pageY - a.pageY, b.pageX - a.pageX) * 180) / Math.PI;
+  };
+
   const observeTouches = useCallback(
     (event: GestureResponderEvent): boolean => {
       const { touches } = event.nativeEvent;
-      gestureTouches.current = Math.max(gestureTouches.current, touches.length);
       if (!shouldDrivePinch(touches.length)) return false;
       // Separation of zero (both fingers on the same pixel) would make every
       // later ratio infinite; let MapLibre have that gesture instead.
       const distance = touchSeparation(touches);
       if (distance < 1) return false;
-      pinchStart.current = { distance, zoom: zoomRef.current };
+      pinchStart.current = {
+        distance,
+        angleDeg: touchAngleDeg(touches),
+        zoom: zoomRef.current,
+        heading: headingRef.current,
+      };
       return true;
     },
     [shouldDrivePinch],
@@ -1526,9 +1572,30 @@ export function MapScreen({
         Math.max(MIN_PINCH_ZOOM, start.zoom + Math.log2(distance / start.distance)),
       );
       zoomRef.current = zoom;
+      // ROTATION IS PART OF THE SAME GESTURE. No real pinch is a pure scale —
+      // fingers always turn a few degrees — and while MapLibre owned that
+      // rotation it was a second camera driver on the same two fingers, which
+      // is what made follow mode let go "sometimes": the pinch stayed locked,
+      // the incidental twist did not. Both axes are driven here now, from one
+      // start reference, so a twist is either applied or ignored on purpose.
+      //
+      // Screen y grows downward, so the finger angle increases CLOCKWISE and
+      // the camera bearing (which way the top of the screen faces) has to move
+      // the other way for the map to turn with the fingers.
+      //
+      // Course-up is the deliberate exception: its heading belongs to the
+      // compass, so two fingers there scale and nothing else. Turning the map
+      // by hand while it is meant to be facing where you are looking is two
+      // answers to one question.
+      const rotating = followModeRef.current === "follow";
+      const heading = rotating
+        ? normalizeBearing(start.heading - (touchAngleDeg(touches) - start.angleDeg))
+        : null;
+      if (heading != null) headingRef.current = heading;
       setCameraStop({
         centerCoordinate: latestFix.current,
         zoomLevel: zoom,
+        ...(heading != null ? { heading } : {}),
         // No animation: the fingers ARE the animation. Anything else lags the
         // gesture and reads as the map resisting.
         animationDuration: 0,
@@ -1539,7 +1606,6 @@ export function MapScreen({
 
   const endPinch = useCallback(() => {
     pinchStart.current = null;
-    gestureTouches.current = 0;
   }, []);
 
   // Live camera → the scale bar only, at gesture rate. Coordinates stay in
@@ -1569,12 +1635,16 @@ export function MapScreen({
         // has moved the map themselves, a fix that arrives late must not take
         // the camera back off them.
         userMovedCamera.current = true;
-        // Only a ONE-FINGER drag means "take me somewhere else". While
-        // following, a two-finger gesture never reaches MapLibre at all (the
-        // pinch handler below claims it), so this should not see one — the
-        // guard covers the frame or two between the second finger landing and
-        // the responder transfer completing.
-        if (followModeRef.current !== "off" && gestureTouches.current < 2) {
+        // Only a ONE-FINGER drag means "take me somewhere else". A two-finger
+        // gesture is scale and rotation, both of which this screen is driving
+        // itself, so it must not be read as a request to be let go of.
+        //
+        // The test is "am I driving a pinch right now", not a finger tally:
+        // the tally was reset by `onRegionDidChange`, and the pinch handler's
+        // own camera writes fire that on every move — so mid-pinch the counter
+        // was 0 and any interaction event MapLibre still emitted (an
+        // incidental rotation, most often) dropped follow.
+        if (followModeRef.current !== "off" && pinchStart.current === null) {
           // The ref too, not just the state: this fires many times per gesture
           // and state only lands on the next render.
           followModeRef.current = "off";
@@ -1603,9 +1673,12 @@ export function MapScreen({
         stopNeedsReset.current = false;
         cameraRef.current?.setCamera({ animationDuration: 0 });
       }
-      gestureTouches.current = 0;
-      // Running zoom, for the pinch handler to start its next gesture from.
+      // Running camera, for the next pinch to start its scale and rotation
+      // from whatever is actually on screen.
       zoomRef.current = zoomLevel;
+      if (Number.isFinite(feature.properties.heading)) {
+        headingRef.current = feature.properties.heading;
+      }
       setCamera((prev) =>
         prev.zoom === zoomLevel &&
         prev.latitude === latitude &&
@@ -1913,11 +1986,10 @@ export function MapScreen({
   return (
     <View
       style={styles.root}
-      // Capture phase, so every touch is counted on its way DOWN to the map
-      // (see gestureTouches). It returns false — declining the responder and
-      // leaving MapLibre's gestures untouched — in every case except a
-      // two-finger pinch while following, which it claims and drives itself
-      // (see handlePinchMove).
+      // Capture phase, so a touch is seen on its way DOWN to the map. It
+      // returns false — declining the responder and leaving MapLibre's
+      // gestures untouched — in every case except a two-finger gesture while
+      // following, which it claims and drives itself (see handlePinchMove).
       onStartShouldSetResponderCapture={observeTouches}
       onMoveShouldSetResponderCapture={observeTouches}
       onResponderMove={handlePinchMove}
@@ -1946,14 +2018,15 @@ export function MapScreen({
         compassEnabled
         compassViewPosition={2}
         compassViewMargins={{ x: CHROME_GAP, y: CHROME_BOTTOM + COMPASS_STRIP_HEIGHT }}
-        // MapLibre's own pinch is OFF while following, and this screen drives
-        // the zoom itself (see handlePinchMove). Belt and braces with the
-        // responder claim: if the claim ever failed to cancel the native
-        // gesture, MapLibre and the handler would both be zooming the same
-        // pinch, which is the fight this whole mechanism exists to end. Pan
-        // stays enabled — a one-finger drag still pans, and still means "stop
-        // following".
+        // BOTH two-finger gestures are MapLibre's only when nothing is being
+        // followed. While following, this screen drives scale and rotation
+        // together from one start reference (see handlePinchMove), and leaving
+        // either with MapLibre would put two drivers on the same two fingers —
+        // which is exactly how an incidental twist during a pinch used to
+        // shake follow mode loose. Pan stays MapLibre's throughout: a
+        // one-finger drag still pans, and still means "stop following".
         zoomEnabled={followMode === "off"}
+        rotateEnabled={followMode === "off"}
         onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}
         onPress={handleMapPress}
