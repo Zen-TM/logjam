@@ -92,7 +92,11 @@ BottomSheet(s)      acquisition + per-item actions
   The LEFT edge belongs to the map's own instruments — the native compass, the
   compass tape (which way the USER faces, as against the native ornament's which
   way the MAP faces) and the scale bar — and carries nothing you can press to
-  change the app. An instrument that runs a sensor gets a device-scoped switch in
+  change the app. The native compass is the exception that proves the rule: it
+  IS pressable (it resets north), so it is dropped entirely in course-up, where
+  that press fights the mode steering the map and where the ornament has nothing
+  to say anyway — map heading and user heading are the same thing there, and the
+  tape below already reports it. An instrument that runs a sensor gets a device-scoped switch in
   Settings → This phone rather than a control on the map (`compassPreference.ts`).
 - **A TAP asks, a PRESS-AND-HOLD commits.** Tapping the map drops a small ringed
   dot (a cursor, not a pin) and opens a sheet answering the four things a map can

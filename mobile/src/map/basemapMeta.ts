@@ -6,8 +6,10 @@
 // would be decoration. The identity that matters here is "basemap", which wears
 // the region hue — the class of asset a downloaded basemap becomes.
 //
-// The blurb is what a name can't say. "SIX Maps Topo" means nothing to someone
-// who has not used it; "the printed NSW topo sheets" does.
+// There is no blurb any more: the layer sheet leads each basemap with a real
+// sample tile, which says what the map looks like better than a sentence could,
+// and six sentences on six rows was a paragraph between the user and a choice
+// they make by eye.
 //
 // The glyph is now the FALLBACK identity: the layer sheet leads each basemap
 // with a real sample tile (`BasemapThumb`), which says more than any icon can,
@@ -18,19 +20,15 @@ import type { BasemapId } from "./sourceResolver";
 
 export type BasemapMeta = {
   icon: React.ComponentProps<typeof Feather>["name"];
-  blurb: string;
 };
 
 export const BASEMAP_META: Record<BasemapId, BasemapMeta> = {
-  "six-topo": { icon: "map", blurb: "The printed NSW topo sheets" },
-  "six-base": { icon: "git-branch", blurb: "Roads, tracks and labels" },
-  "six-imagery": { icon: "image", blurb: "Aerial photography" },
-  protomaps: {
-    icon: "layers",
-    blurb: "OpenStreetMap roads and tracks, drawn on the phone",
-  },
-  "osm-topo": { icon: "trending-up", blurb: "OpenTopoMap contours" },
-  "osm-cycle": { icon: "navigation-2", blurb: "CyclOSM tracks and trails" },
+  "six-topo": { icon: "map" },
+  "six-base": { icon: "git-branch" },
+  "six-imagery": { icon: "image" },
+  protomaps: { icon: "layers" },
+  "osm-topo": { icon: "trending-up" },
+  "osm-cycle": { icon: "navigation-2" },
 };
 
 /**

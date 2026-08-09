@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  basemapsDownloadedAt,
+  basemapsCoveringViewport,
   resolveMapSource,
   hashKey,
   type BasemapId,
@@ -223,9 +223,10 @@ describe("hashKey", () => {
   });
 });
 
-describe("basemapsDownloadedAt", () => {
+describe("basemapsCoveringViewport", () => {
   const CANDIDATES: BasemapId[] = ["protomaps", "six-topo", "six-base", "six-imagery"];
-  // Two saved regions over roughly the same ground, one basemap each.
+  // Two saved regions over roughly the same ground, one basemap each: a big
+  // six-topo area with a smaller protomaps clip inside it.
   const saved = [
     artifact({
       id: "r1",
@@ -240,35 +241,48 @@ describe("basemapsDownloadedAt", () => {
       bbox: [150.4, -33.6, 150.6, -33.4],
     }),
   ];
-  const inBoth = { longitude: 150.5, latitude: -33.5 };
-
-  it("names the other basemaps covering the point, never the current one", () => {
-    expect(basemapsDownloadedAt(saved, inBoth, CANDIDATES, "six-imagery")).toEqual([
-      "protomaps",
-      "six-topo",
-    ]);
-    // This is the whole point of the notice: standing on six-topo tiles with a
-    // vector region here too, the offer is the vector map and nothing else.
-    expect(basemapsDownloadedAt(saved, inBoth, CANDIDATES, "six-topo")).toEqual([
-      "protomaps",
-    ]);
+  const view = (west: number, south: number, east: number, north: number) => ({
+    west,
+    south,
+    east,
+    north,
   });
 
-  it("is empty when nothing is downloaded under the point", () => {
-    // Inside the six-topo region but outside the smaller protomaps clip — the
-    // case a bbox-overlap test would get wrong by offering a blank map.
-    const topoOnly = { longitude: 150.1, latitude: -33.9 };
-    expect(basemapsDownloadedAt(saved, topoOnly, CANDIDATES, "six-topo")).toEqual([]);
-    // Nowhere near either.
+  it("names every basemap with saved tiles on screen", () => {
     expect(
-      basemapsDownloadedAt(saved, { longitude: 145, latitude: -30 }, CANDIDATES, "six-topo"),
+      basemapsCoveringViewport(saved, view(150.45, -33.55, 150.55, -33.45), CANDIDATES),
+    ).toEqual(["protomaps", "six-topo"]);
+  });
+
+  it("drops a basemap whose region is off screen", () => {
+    // Inside the six-topo region, well clear of the protomaps clip. This is
+    // the case the old any-region-anywhere check got wrong: it reported the
+    // vector basemap as available over ground it has nothing for.
+    expect(
+      basemapsCoveringViewport(saved, view(150.05, -33.95, 150.15, -33.85), CANDIDATES),
+    ).toEqual(["six-topo"]);
+  });
+
+  it("is empty when the viewport is nowhere near anything saved", () => {
+    expect(
+      basemapsCoveringViewport(saved, view(145, -31, 146, -30), CANDIDATES),
     ).toEqual([]);
+  });
+
+  it("counts a viewport that only clips a region's corner", () => {
+    // Overlap, not containment: there IS saved map on screen, and telling the
+    // user to switch away from it would be wrong.
+    expect(
+      basemapsCoveringViewport(saved, view(150.9, -33.1, 151.5, -32.5), CANDIDATES),
+    ).toEqual(["six-topo"]);
   });
 
   it("ignores artifacts that are not basemap regions", () => {
     const overlay = [
       artifact({ kind: "topo-overlay", logicalKey: "six-topo", bbox: [150, -34, 151, -33] }),
     ];
-    expect(basemapsDownloadedAt(overlay, inBoth, CANDIDATES, "protomaps")).toEqual([]);
+    expect(
+      basemapsCoveringViewport(overlay, view(150.4, -33.6, 150.6, -33.4), CANDIDATES),
+    ).toEqual([]);
   });
 });

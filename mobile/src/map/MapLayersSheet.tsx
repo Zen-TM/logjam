@@ -58,7 +58,7 @@ import {
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
 import { BasemapThumb } from "./BasemapThumb";
-import { BASEMAP_META, MOBILE_BASEMAPS } from "./basemapMeta";
+import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { CanyonRoutesStatus } from "./CanyonRoutesLayer";
 import type { Connectivity } from "./connectivity";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
@@ -85,7 +85,6 @@ type ItemMenu = { title: string; actions: AssetActions };
 
 export function MapLayersSheet({
   visible,
-  focusTab,
   onClose,
   connectivity,
   basemapId,
@@ -149,14 +148,6 @@ export function MapLayersSheet({
   /** Fly the map to an asset's extent (and close the sheet). */
   onShowOnMap: (bbox: Bbox) => void;
   onOpenSaved: (category: "region") => void;
-  /**
-   * Tab to land on when the sheet is opened. The tab is otherwise sticky
-   * across opens, which is right when the user reached the sheet themselves
-   * and wrong when something else sent them here for a specific answer — the
-   * map's offline notice offers "switch to a basemap you saved" and has to
-   * arrive on the basemap list, not on whichever tab was last read.
-   */
-  focusTab?: Tab;
 }) {
   const [tab, setTab] = useState<Tab>("basemap");
   const [menu, setMenu] = useState<ItemMenu | null>(null);
@@ -180,12 +171,6 @@ export function MapLayersSheet({
   useEffect(() => {
     if (!visible) setMenu(null);
   }, [visible]);
-
-  // On OPEN only: re-applying it on every render would pin the tab and make
-  // the rail unusable for as long as the caller kept asking for one.
-  useEffect(() => {
-    if (visible && focusTab) setTab(focusTab);
-  }, [visible, focusTab]);
 
   return (
     <BottomSheet
@@ -292,8 +277,12 @@ function BasemapTab({
             key={entry.id}
             leading={<BasemapThumb basemapId={id} />}
             title={entry.name}
-            subtitle={unavailable ? "Needs a connection" : BASEMAP_META[id].blurb}
-            subtitleNumberOfLines={2}
+            // Name + sample tile only. The blurbs were a sentence each on six
+            // rows the user scrolls past every time, and the thumbnail already
+            // says what the map looks like far better than the words did. The
+            // subtitle now carries STATE and nothing else — which is why the
+            // one that survives is the offline reason (DESIGN.md §10).
+            subtitle={unavailable ? "Needs a connection" : undefined}
             disabled={unavailable}
             onPress={() => onBasemapChange(id)}
             // No "Showing" pill: the selection is a state of the row, not a

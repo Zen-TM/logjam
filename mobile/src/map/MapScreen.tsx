@@ -178,7 +178,7 @@ import { buildShellStyle } from "./basemap/shellStyle";
 import { useConnectivity } from "./connectivity";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
-  basemapsDownloadedAt,
+  basemapsCoveringViewport,
   resolveMapSource,
   type BasemapId,
   type ResolveContext,
@@ -404,8 +404,6 @@ export function MapScreen({
     setBasemapPreference(next);
   }, []);
   const [pickerOpen, setPickerOpen] = useState(false);
-  /** Set when the offline notice opened the sheet — it promises a basemap list. */
-  const [pickerOnBasemaps, setPickerOnBasemaps] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
   // Press-and-hold target, and the point handed to the canyon form once that
   // sheet has actually closed (never two sheets at once — DESIGN.md §6).
@@ -464,6 +462,21 @@ export function MapScreen({
     latitude: DEFAULT_CENTER[1],
     longitude: DEFAULT_CENTER[0],
   });
+  /**
+   * The ground actually on screen, read back from the map when a move settles.
+   *
+   * Asked of MapLibre rather than derived from centre + zoom + window size,
+   * because the map ROTATES: a course-up view's axis-aligned extent is up to
+   * √2 wider than the same camera facing north, and the offline notice would be
+   * wrong at exactly the moment (walking, map turning) it matters. Null until
+   * the first settle. Coordinates stay in component state — never logged.
+   */
+  const [viewportBbox, setViewportBbox] = useState<{
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+  } | null>(null);
   const scaleBarRef = useRef<ScaleBarHandle>(null);
   /** Set once the user has panned/zoomed themselves — see the open-on-location effect. */
   const userMovedCamera = useRef(false);
@@ -589,6 +602,12 @@ export function MapScreen({
     zoom: number;
     heading: number;
   } | null>(null);
+  /**
+   * True for as long as a driven two-finger gesture is running. State rather
+   * than a ref because it drives MapView props — one commit at the start of
+   * the gesture and one at the end, not one per frame.
+   */
+  const [twoFingerLock, setTwoFingerLock] = useState(false);
   const [userCoord, setUserCoord] = useState<[number, number] | null>(null);
   const [userHeading, setUserHeading] = useState<number | null>(null);
   // Latest fix, in a ref as well as in state: entering a follow mode has to
@@ -683,13 +702,31 @@ export function MapScreen({
    * The centre of the view is the honest test: it is the ground they are
    * actually looking at, not the corners of a bbox they may only be clipping.
    */
-  const downloadedBasemapsHere = useMemo(
-    () =>
-      connectivity === "online"
-        ? []
-        : basemapsDownloadedAt(artifacts, camera, MOBILE_BASEMAPS, renderedBasemapId),
-    [artifacts, renderedBasemapId, camera, connectivity],
-  );
+  /**
+   * What the offline notice knows: whether the basemap being drawn has saved
+   * tiles on screen, and whether any OTHER basemap does.
+   *
+   * Both answers come from the VIEWPORT. The notice used to be gated on the
+   * resolver instead, and the resolver reports a basemap as available the
+   * moment any region exists for it anywhere — so a phone with one saved
+   * Katoomba region stayed silent while showing blank ground three valleys
+   * away, which is precisely the case the notice exists for. It fired "rarely,
+   * and never for a basemap you had actually downloaded something for".
+   */
+  const coverageHere = useMemo(() => {
+    if (connectivity === "online" || viewportBbox == null) {
+      return { current: true, others: [] as BasemapId[] };
+    }
+    const covering = basemapsCoveringViewport(
+      artifacts,
+      viewportBbox,
+      MOBILE_BASEMAPS,
+    );
+    return {
+      current: covering.includes(renderedBasemapId),
+      others: covering.filter((id) => id !== renderedBasemapId),
+    };
+  }, [artifacts, renderedBasemapId, viewportBbox, connectivity]);
 
   // Everywhere the phone has no saved tiles, blanked out — but only when the
   // basemap is actually being drawn FROM those saved tiles. Online there is
@@ -1543,6 +1580,15 @@ export function MapScreen({
     (event: GestureResponderEvent): boolean => {
       const { touches } = event.nativeEvent;
       if (!shouldDrivePinch(touches.length)) return false;
+      // Take MapLibre's remaining two-finger gestures off it for the duration.
+      // Scale and rotate are already disabled while following, but its MOVE
+      // detector stays live for two pointers (it only stands down when a scale
+      // gesture begins, and there is no scale gesture any more) — so the
+      // centroid drift of a real pinch was being applied as a pan and then
+      // undone by this handler's own centre write, once per frame. That fight
+      // is what showed as jitter, and it was worst exactly where the centroid
+      // moved most: a pinch nowhere near the location marker.
+      setTwoFingerLock(true);
       // Separation of zero (both fingers on the same pixel) would make every
       // later ratio infinite; let MapLibre have that gesture instead.
       const distance = touchSeparation(touches);
@@ -1606,6 +1652,7 @@ export function MapScreen({
 
   const endPinch = useCallback(() => {
     pinchStart.current = null;
+    setTwoFingerLock(false);
   }, []);
 
   // Live camera → the scale bar only, at gesture rate. Coordinates stay in
@@ -1679,6 +1726,32 @@ export function MapScreen({
       if (Number.isFinite(feature.properties.heading)) {
         headingRef.current = feature.properties.heading;
       }
+      // MID-PINCH, STOP HERE. Every move this screen drives writes a camera
+      // stop, and every stop settles into this handler — so carrying on would
+      // re-render a 2700-line component on every frame of the gesture, which
+      // is the jitter that made a pinch feel like two things fighting. The
+      // scale bar is already fed from `onRegionIsChanging` through its ref;
+      // the readout and the viewport catch up on the settle after release.
+      if (pinchStart.current !== null) return;
+      // What is actually on screen, for the offline notice. Async, and asked
+      // of the map rather than derived, because a rotated view's extent is not
+      // its centre plus its zoom.
+      void mapRef.current
+        ?.getVisibleBounds()
+        .then((bounds) => {
+          if (!bounds) return;
+          const [[neLng, neLat], [swLng, swLat]] = bounds;
+          setViewportBbox((prev) =>
+            prev &&
+            prev.north === neLat &&
+            prev.east === neLng &&
+            prev.south === swLat &&
+            prev.west === swLng
+              ? prev
+              : { north: neLat, east: neLng, south: swLat, west: swLng },
+          );
+        })
+        .catch(console.error);
       setCamera((prev) =>
         prev.zoom === zoomLevel &&
         prev.latitude === latitude &&
@@ -1970,6 +2043,24 @@ export function MapScreen({
   // changes how many degrees a thumb-width represents. Only narrow screens
   // shrink it.
   const compassWidth = Math.min(scaleBarMaxWidth, COMPASS_STRIP_WIDTH);
+  /**
+   * The one sentence the map says about its own basemap, or null for silence.
+   *
+   * Silence is the common case and has to stay cheap to reach: online with a
+   * working source, or offline standing on tiles you saved.
+   */
+  const noticeText: string | null = (() => {
+    if (connectivity === "online") {
+      return basemapResolved.every((r) => r.status !== "ok")
+        ? "This basemap is unavailable."
+        : null;
+    }
+    if (coverageHere.current) return null;
+    return coverageHere.others.length > 0
+      ? "Offline — switch to a basemap you saved for this area."
+      : "Offline — no downloaded basemap for this area.";
+  })();
+
   const attributionText = basemapResolved
     .map((r) => (r.status === "ok" ? r.attribution : null))
     .filter(Boolean)
@@ -2015,7 +2106,13 @@ export function MapScreen({
         // one: an ornament margin that moves with a toggle re-commits a native
         // view prop for a 46 px gap nobody notices. There is still no native
         // scale bar in v10, so that one stays drawn in JS.
-        compassEnabled
+        // HIDDEN IN COURSE-UP, and not only because tapping it snapped the
+        // map back to north against the mode that was steering it — a fight
+        // the compass won for exactly as long as it took the next sensor
+        // sample to arrive. In that mode the map's heading IS the user's
+        // heading, which the compass tape along the bottom already reports, so
+        // the ornament has nothing left to say that isn't said better below.
+        compassEnabled={followMode !== "course-up"}
         compassViewPosition={2}
         compassViewMargins={{ x: CHROME_GAP, y: CHROME_BOTTOM + COMPASS_STRIP_HEIGHT }}
         // BOTH two-finger gestures are MapLibre's only when nothing is being
@@ -2027,6 +2124,12 @@ export function MapScreen({
         // one-finger drag still pans, and still means "stop following".
         zoomEnabled={followMode === "off"}
         rotateEnabled={followMode === "off"}
+        // Pan and tilt are MapLibre's right up until the second finger lands
+        // on a followed map, and are handed back the moment it lifts. A
+        // ONE-finger drag is untouched by this, so it still pans and still
+        // means "stop following".
+        scrollEnabled={!twoFingerLock}
+        pitchEnabled={!twoFingerLock}
         onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}
         onPress={handleMapPress}
@@ -2456,35 +2559,20 @@ export function MapScreen({
         ) : null}
 
         {/* Offline/unavailable basemap notice (fail visibly, never silently).
-            When another basemap IS downloaded here, the notice stops being a
-            dead end and becomes the way out of it: it says so and opens the
-            layers sheet on tap. */}
-        {basemapResolved.every((r) => r.status !== "ok") ? (
-          <Pressable
-            accessibilityRole={downloadedBasemapsHere.length > 0 ? "button" : undefined}
-            accessibilityLabel={
-              downloadedBasemapsHere.length > 0
-                ? "Choose a basemap you have downloaded for this area"
-                : undefined
-            }
-            style={styles.notice}
-            onPress={
-              downloadedBasemapsHere.length > 0
-                ? () => {
-                    setPickerOnBasemaps(true);
-                    setPickerOpen(true);
-                  }
-                : undefined
-            }
-          >
-            <Text style={styles.noticeText}>
-              {connectivity === "online"
-                ? "This basemap is unavailable."
-                : downloadedBasemapsHere.length > 0
-                  ? "Offline — tap to switch to a basemap you saved for this area."
-                  : "Offline — no downloaded basemap for this area."}
-            </Text>
-          </Pressable>
+
+            Three states, and which one shows is decided by what overlaps the
+            VIEWPORT, not by what the resolver managed to resolve — see
+            `coverageHere`. Online it can only mean the source itself is down.
+
+            A plain banner, not a button. It sat one tap from the layers sheet
+            and the layers sheet is one tap from anywhere, so the shortcut
+            bought nothing and cost the two words it took to advertise itself —
+            which wrapped the banner onto a second line — plus a mystery sheet
+            for anyone who brushed it while panning. */}
+        {noticeText ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>{noticeText}</Text>
+          </View>
         ) : null}
 
         {/* Error surfaces: background failures, non-blocking. */}
@@ -2560,10 +2648,7 @@ export function MapScreen({
           accessibilityRole="button"
           accessibilityLabel="Choose layers"
           style={styles.controlButton}
-          onPress={() => {
-            setPickerOnBasemaps(false);
-            setPickerOpen(true);
-          }}
+          onPress={() => setPickerOpen(true)}
         >
           <Feather name="layers" size={FAB_ICON} color={theme.textPrimary} />
         </Pressable>
@@ -2805,7 +2890,6 @@ export function MapScreen({
 
       <MapLayersSheet
         visible={pickerOpen}
-        focusTab={pickerOnBasemaps ? "basemap" : undefined}
         onClose={() => setPickerOpen(false)}
         connectivity={connectivity}
         basemapId={basemapId}

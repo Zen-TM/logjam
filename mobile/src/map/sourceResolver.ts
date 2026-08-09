@@ -277,39 +277,40 @@ function resolveImport(
 }
 
 /**
- * Which basemaps have downloaded tiles covering a point, other than `exclude`.
+ * Which of `candidates` have downloaded tiles overlapping the given viewport.
  *
- * The offline notice's evidence. Offline, the basemap preference is whatever
- * the user last chose, which is very often not one of the ones they saved for
- * the gorge they are standing in — so the map goes blank and the only message
- * on screen ("no downloaded basemap for this area") is false, and reads as the
- * download having failed. This is what makes it possible to say the true thing
- * instead.
+ * The offline notice's evidence, and the reason it is a VIEWPORT test rather
+ * than anything simpler. The resolver reports a basemap as available the moment
+ * ANY region exists for it, wherever on earth — which is right for the resolver
+ * (it is choosing a source, not judging coverage) and useless as a notice: a
+ * phone with one saved Katoomba region said nothing at all while showing blank
+ * ground in the Budawangs, because the basemap "resolved". Asking what overlaps
+ * the rectangle actually on screen is the only version of the question the user
+ * is asking.
  *
- * A point, not the viewport's bbox: the centre of the view is the ground the
- * user is actually looking at, whereas a bbox test would count a region they
- * are only clipping the corner of and then offer them a switch to a basemap
- * that is blank everywhere they can see.
+ * Overlap, not containment: if any part of a saved region is on screen there is
+ * real map under the mask, and telling someone to switch away from it would be
+ * wrong. The mask already draws where the data stops.
  */
-export function basemapsDownloadedAt(
+export function basemapsCoveringViewport(
   artifacts: readonly MapArtifact[],
-  point: { longitude: number; latitude: number },
+  viewport: { west: number; south: number; east: number; north: number },
   candidates: readonly BasemapId[],
-  exclude: BasemapId,
 ): BasemapId[] {
-  return candidates.filter(
-    (candidate) =>
-      candidate !== exclude &&
-      artifacts.some(
-        (artifact) =>
-          artifact.kind === "basemap-region" &&
-          artifact.logicalKey === candidate &&
-          artifact.bbox != null &&
-          point.longitude >= artifact.bbox[0] &&
-          point.longitude <= artifact.bbox[2] &&
-          point.latitude >= artifact.bbox[1] &&
-          point.latitude <= artifact.bbox[3],
-      ),
+  return candidates.filter((candidate) =>
+    artifacts.some((artifact) => {
+      if (artifact.kind !== "basemap-region") return false;
+      if (artifact.logicalKey !== candidate) return false;
+      const bbox = artifact.bbox;
+      if (bbox == null) return false;
+      const [west, south, east, north] = bbox;
+      return (
+        west <= viewport.east &&
+        east >= viewport.west &&
+        south <= viewport.north &&
+        north >= viewport.south
+      );
+    }),
   );
 }
 
