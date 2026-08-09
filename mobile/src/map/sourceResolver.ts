@@ -276,6 +276,43 @@ function resolveImport(
   ];
 }
 
+/**
+ * Which basemaps have downloaded tiles covering a point, other than `exclude`.
+ *
+ * The offline notice's evidence. Offline, the basemap preference is whatever
+ * the user last chose, which is very often not one of the ones they saved for
+ * the gorge they are standing in — so the map goes blank and the only message
+ * on screen ("no downloaded basemap for this area") is false, and reads as the
+ * download having failed. This is what makes it possible to say the true thing
+ * instead.
+ *
+ * A point, not the viewport's bbox: the centre of the view is the ground the
+ * user is actually looking at, whereas a bbox test would count a region they
+ * are only clipping the corner of and then offer them a switch to a basemap
+ * that is blank everywhere they can see.
+ */
+export function basemapsDownloadedAt(
+  artifacts: readonly MapArtifact[],
+  point: { longitude: number; latitude: number },
+  candidates: readonly BasemapId[],
+  exclude: BasemapId,
+): BasemapId[] {
+  return candidates.filter(
+    (candidate) =>
+      candidate !== exclude &&
+      artifacts.some(
+        (artifact) =>
+          artifact.kind === "basemap-region" &&
+          artifact.logicalKey === candidate &&
+          artifact.bbox != null &&
+          point.longitude >= artifact.bbox[0] &&
+          point.longitude <= artifact.bbox[2] &&
+          point.latitude >= artifact.bbox[1] &&
+          point.latitude <= artifact.bbox[3],
+      ),
+  );
+}
+
 export function resolveMapSource(
   ref: LogicalLayerRef,
   ctx: ResolveContext,

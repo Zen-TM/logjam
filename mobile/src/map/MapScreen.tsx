@@ -105,6 +105,7 @@ import {
 } from "./CompassStrip";
 import { isCompassEnabled } from "./compassPreference";
 import { readBasemapPreference, setBasemapPreference } from "./basemapPreference";
+import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
 import { offlineCoverageMask } from "./offlineMask";
 import { DraftToolPanel } from "./DraftToolPanel";
@@ -124,6 +125,7 @@ import { Toast, type ToastMessage } from "../ui/Toast";
 import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { CanyonRoutesLayer, type CanyonRoutesStatus } from "./CanyonRoutesLayer";
 import { MapLayersSheet } from "./MapLayersSheet";
+import { MapPointSheet, type MapPoint } from "./MapPointSheet";
 import { CanyonEditSheet } from "../canyons/CanyonEditSheet";
 import {
   isWithholdingCanyons,
@@ -168,6 +170,7 @@ import { buildShellStyle } from "./basemap/shellStyle";
 import { useConnectivity } from "./connectivity";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
+  basemapsDownloadedAt,
   resolveMapSource,
   type BasemapId,
   type ResolveContext,
@@ -197,9 +200,6 @@ const PROTOMAPS_FLAVOR = "light" as const;
 /** Below this span an extent is a point, not an area (~1 m). */
 const DEGENERATE_BBOX_DEGREES = 1e-5;
 const SINGLE_POINT_ZOOM = 14;
-
-/** A bare lat/lng, as the map hands one back from a long press. */
-type MapPoint = { latitude: number; longitude: number };
 
 const CAMERA_DEFAULTS = {
   centerCoordinate: DEFAULT_CENTER,
@@ -332,7 +332,17 @@ export function MapScreen({
   // "Show on map" from the Saved tab: fit this bbox once on arrival. `nonce`
   // makes a repeat request for the same asset refocus instead of no-op.
   // Coordinates stay in navigation params + component state — never logged.
-  focus?: { bbox: [number, number, number, number]; nonce: number } | null;
+  focus?: {
+    bbox: [number, number, number, number];
+    nonce: number;
+    /**
+     * Switch to this basemap on arrival. Set when the asset being shown IS a
+     * basemap's tiles (a downloaded region) — flying to one while a different
+     * basemap is selected shows a blank rectangle, which reads as a failed
+     * download rather than as the wrong layer.
+     */
+    basemapId?: BasemapId;
+  } | null;
   // "Edit points" from the Saved tab: arm the draw tool on a saved route. An
   // id only — the geometry comes from the mirror.
   editRoute?: { routeId: string; nonce: number } | null;
@@ -378,10 +388,14 @@ export function MapScreen({
     setBasemapPreference(next);
   }, []);
   const [pickerOpen, setPickerOpen] = useState(false);
+  /** Set when the offline notice opened the sheet — it promises a basemap list. */
+  const [pickerOnBasemaps, setPickerOnBasemaps] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
   // Press-and-hold target, and the point handed to the canyon form once that
   // sheet has actually closed (never two sheets at once — DESIGN.md §6).
   const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
+  /** Where the user last tapped — the point panel's subject, and its dot. */
+  const [tappedPoint, setTappedPoint] = useState<MapPoint | null>(null);
   const [addCanyonAt, setAddCanyonAt] = useState<MapPoint | null>(null);
   const pendingCanyonPoint = useRef<MapPoint | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -539,6 +553,15 @@ export function MapScreen({
   const [followMode, setFollowMode] = useState<FollowMode>("off");
   const followModeRef = useRef(followMode);
   followModeRef.current = followMode;
+  /**
+   * Fingers down in the gesture the map is currently reacting to — the one
+   * thing that tells a pinch from a pan, since MapLibre reports both as an
+   * undifferentiated "user interaction". Fed by capture-phase responder
+   * handlers on the root view (which observe every touch without ever claiming
+   * the responder, so the map's own gestures are untouched), and reset when the
+   * region settles.
+   */
+  const gestureTouches = useRef(0);
   const [userCoord, setUserCoord] = useState<[number, number] | null>(null);
   const [userHeading, setUserHeading] = useState<number | null>(null);
   // Latest fix, in a ref as well as in state: entering a follow mode has to
@@ -600,6 +623,25 @@ export function MapScreen({
   const basemapResolved = useMemo(
     () => resolveMapSource({ kind: "basemap", basemapId }, ctx),
     [basemapId, ctx],
+  );
+
+  /**
+   * Basemaps OTHER than the current one that have downloaded tiles covering
+   * where the camera is looking.
+   *
+   * Offline, the basemap preference is whatever the user last chose, and it is
+   * very often not one of the ones they saved for this gorge — so the map goes
+   * blank and the only thing on screen said "no downloaded basemap for this
+   * area", which is false and sends them away thinking the download failed.
+   * The centre of the view is the honest test: it is the ground they are
+   * actually looking at, not the corners of a bbox they may only be clipping.
+   */
+  const downloadedBasemapsHere = useMemo(
+    () =>
+      connectivity === "online"
+        ? []
+        : basemapsDownloadedAt(artifacts, camera, MOBILE_BASEMAPS, basemapId),
+    [artifacts, basemapId, camera, connectivity],
   );
 
   // Everywhere the phone has no saved tiles, blanked out — but only when the
@@ -1036,10 +1078,18 @@ export function MapScreen({
 
   const handleMapPress = useCallback(
     (feature: GeoJSON.Feature) => {
-      setFollowMode("off");
-      if (!collectingPoints || feature.geometry.type !== "Point") return;
+      if (feature.geometry.type !== "Point") return;
       const [lon, lat] = feature.geometry.coordinates as [number, number];
-      void addToolPoint(lon, lat);
+      // A tool armed owns every tap; nothing else on this handler runs.
+      if (collectingPoints) {
+        void addToolPoint(lon, lat);
+        return;
+      }
+      // A tap is not a pan, so it no longer stops follow mode. It used to,
+      // which meant looking at anything cost you the lock — and now that a tap
+      // opens the point panel, "what is that spot" would end with the map no
+      // longer following you.
+      setTappedPoint({ latitude: lat, longitude: lon });
     },
     [addToolPoint, collectingPoints],
   );
@@ -1303,8 +1353,11 @@ export function MapScreen({
   // same params doesn't fight the user's own panning.
   useEffect(() => {
     if (!focus) return;
+    // Basemap first, camera second: they commit in the same render either way,
+    // and the ordering says which one is the correction.
+    if (focus.basemapId) chooseBasemap(focus.basemapId);
     fitCameraToBbox(focus.bbox);
-  }, [focus?.nonce, focus, fitCameraToBbox]);
+  }, [focus?.nonce, focus, chooseBasemap, fitCameraToBbox]);
 
   // Frame a draft restored from a killed session, once the map can take a
   // camera stop. Cleared after one use — the user's own panning owns the
@@ -1423,7 +1476,15 @@ export function MapScreen({
         // has moved the map themselves, a fix that arrives late must not take
         // the camera back off them.
         userMovedCamera.current = true;
-        if (followModeRef.current !== "off") {
+        // A PINCH is not a pan. Changing scale while following is a completely
+        // normal thing to want — "how far is the next drop" is a zoom, not a
+        // request to stop being followed — but there is no such thing as a
+        // pinch that doesn't also translate the map, so every zoom used to
+        // read as a pan and drop follow mode. Since it is impossible to zoom
+        // without panning, the button became the only way back, every time.
+        // Finger count is the honest signal MapLibre doesn't give us: two or
+        // more means scale, one means "take me somewhere else".
+        if (followModeRef.current !== "off" && gestureTouches.current < 2) {
           // The ref too, not just the state: this fires many times per gesture
           // and state only lands on the next render.
           followModeRef.current = "off";
@@ -1452,6 +1513,24 @@ export function MapScreen({
         stopNeedsReset.current = false;
         cameraRef.current?.setCamera({ animationDuration: 0 });
       }
+      // A pinch that kept follow mode alive still slid the map off the user
+      // (the zoom pivots on the midpoint between the fingers, not on them), so
+      // put them back under the crosshair at whatever scale the gesture landed
+      // on. On settle rather than during: writing a camera stop at gesture rate
+      // is the fight this screen documents everywhere else.
+      //
+      // The recentre fires its own regionDidChange, but with
+      // `isUserInteraction` false and the touch count already reset, so it
+      // cannot re-enter here.
+      const wasPinch = gestureTouches.current >= 2;
+      gestureTouches.current = 0;
+      if (wasPinch && followModeRef.current !== "off" && latestFix.current) {
+        setCameraStop({
+          centerCoordinate: latestFix.current,
+          zoomLevel,
+          animationDuration: 200,
+        });
+      }
       setCamera((prev) =>
         prev.zoom === zoomLevel &&
         prev.latitude === latitude &&
@@ -1467,7 +1546,7 @@ export function MapScreen({
             },
       );
     },
-    [],
+    [setCameraStop],
   );
 
   // Place search result: recentre without changing zoom intent drastically.
@@ -1757,7 +1836,27 @@ export function MapScreen({
   }
 
   return (
-    <View style={styles.root}>
+    <View
+      style={styles.root}
+      // Capture-phase only, and both always return false: this OBSERVES every
+      // touch on its way down to the map without ever becoming the responder,
+      // so MapLibre's own pan/pinch handling is completely unaffected. It is
+      // the only way to know how many fingers are down — see gestureTouches.
+      onStartShouldSetResponderCapture={(event) => {
+        gestureTouches.current = Math.max(
+          gestureTouches.current,
+          event.nativeEvent.touches.length,
+        );
+        return false;
+      }}
+      onMoveShouldSetResponderCapture={(event) => {
+        gestureTouches.current = Math.max(
+          gestureTouches.current,
+          event.nativeEvent.touches.length,
+        );
+        return false;
+      }}
+    >
       <MapView
         ref={mapRef}
         style={styles.map}
@@ -2074,6 +2173,34 @@ export function MapScreen({
           />
         ) : null}
 
+        {/* The spot the user tapped. Deliberately NOT a waypoint pin: a
+            waypoint is a thing they created and kept, this is a cursor. A small
+            ringed dot reads as "here is where you pointed" and disappears the
+            moment the panel is dismissed. */}
+        {tappedPoint ? (
+          <ShapeSource
+            id="tapped-point"
+            shape={{
+              type: "Feature",
+              geometry: {
+                type: "Point",
+                coordinates: [tappedPoint.longitude, tappedPoint.latitude],
+              },
+              properties: {},
+            }}
+          >
+            <CircleLayer
+              id="tapped-point-dot"
+              style={{
+                circleRadius: 5,
+                circleColor: theme.accent,
+                circleStrokeColor: "#ffffff",
+                circleStrokeWidth: 2,
+              }}
+            />
+          </ShapeSource>
+        ) : null}
+
         {/* Own location marker (expo-location watcher). Unpinned ⇒ renders
             above everything, like the canyon layers. No accuracy halo: it was a
             translucent disc the size of a suburb that told the user nothing
@@ -2178,15 +2305,36 @@ export function MapScreen({
           />
         ) : null}
 
-        {/* Offline/unavailable basemap notice (fail visibly, never silently). */}
+        {/* Offline/unavailable basemap notice (fail visibly, never silently).
+            When another basemap IS downloaded here, the notice stops being a
+            dead end and becomes the way out of it: it says so and opens the
+            layers sheet on tap. */}
         {basemapResolved.every((r) => r.status !== "ok") ? (
-          <View style={styles.notice}>
+          <Pressable
+            accessibilityRole={downloadedBasemapsHere.length > 0 ? "button" : undefined}
+            accessibilityLabel={
+              downloadedBasemapsHere.length > 0
+                ? "Choose a basemap you have downloaded for this area"
+                : undefined
+            }
+            style={styles.notice}
+            onPress={
+              downloadedBasemapsHere.length > 0
+                ? () => {
+                    setPickerOnBasemaps(true);
+                    setPickerOpen(true);
+                  }
+                : undefined
+            }
+          >
             <Text style={styles.noticeText}>
               {connectivity === "online"
                 ? "This basemap is unavailable."
-                : "Offline — no downloaded basemap for this area."}
+                : downloadedBasemapsHere.length > 0
+                  ? "Offline — tap to switch to a basemap you saved for this area."
+                  : "Offline — no downloaded basemap for this area."}
             </Text>
-          </View>
+          </Pressable>
         ) : null}
 
         {/* Error surfaces: background failures, non-blocking. */}
@@ -2262,7 +2410,10 @@ export function MapScreen({
           accessibilityRole="button"
           accessibilityLabel="Choose layers"
           style={styles.controlButton}
-          onPress={() => setPickerOpen(true)}
+          onPress={() => {
+            setPickerOnBasemaps(false);
+            setPickerOpen(true);
+          }}
         >
           <Feather name="layers" size={FAB_ICON} color={theme.textPrimary} />
         </Pressable>
@@ -2387,6 +2538,28 @@ export function MapScreen({
         <Text style={styles.attributionText}>{BASEMAP_THUMB_CREDIT}</Text>
       </BottomSheet>
 
+      {/* Tap: "what's there?" — the question that comes before the long
+          press's "something goes here". */}
+      <MapPointSheet
+        point={tappedPoint}
+        userCoord={userCoord}
+        onClose={() => setTappedPoint(null)}
+        onNavigate={(point) => {
+          // A synthetic waypoint rather than a saved one: the navigate chip
+          // only ever reads name/lat/lon off its target, and inspecting a spot
+          // must not silently write a row to the user's synced waypoints.
+          setNavTarget({
+            id: `map-point-${Date.now()}`,
+            name: "Tapped point",
+            lon: point.longitude,
+            lat: point.latitude,
+            createdAt: new Date().toISOString(),
+          });
+          if (!locationWatch.current) handleLocateMe();
+        }}
+        onDropWaypoint={dropWaypointAt}
+      />
+
       {/* Press-and-hold: a waypoint is a scratch mark, a canyon is a record.
           The canyon form can't open from here directly — a second Modal over the
           first doesn't hold focus — so the point is parked and picked up in
@@ -2482,6 +2655,7 @@ export function MapScreen({
 
       <MapLayersSheet
         visible={pickerOpen}
+        focusTab={pickerOnBasemaps ? "basemap" : undefined}
         onClose={() => setPickerOpen(false)}
         connectivity={connectivity}
         basemapId={basemapId}

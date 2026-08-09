@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
+  basemapsDownloadedAt,
   resolveMapSource,
   hashKey,
+  type BasemapId,
   type MapArtifact,
   type ResolveContext,
 } from "./sourceResolver";
@@ -218,5 +220,55 @@ describe("hashKey", () => {
   it("is deterministic and distinguishes different URLs", () => {
     expect(hashKey("abc")).toBe(hashKey("abc"));
     expect(hashKey("abc")).not.toBe(hashKey("abd"));
+  });
+});
+
+describe("basemapsDownloadedAt", () => {
+  const CANDIDATES: BasemapId[] = ["protomaps", "six-topo", "six-base", "six-imagery"];
+  // Two saved regions over roughly the same ground, one basemap each.
+  const saved = [
+    artifact({
+      id: "r1",
+      kind: "basemap-region",
+      logicalKey: "six-topo",
+      bbox: [150, -34, 151, -33],
+    }),
+    artifact({
+      id: "r2",
+      kind: "basemap-region",
+      logicalKey: "protomaps",
+      bbox: [150.4, -33.6, 150.6, -33.4],
+    }),
+  ];
+  const inBoth = { longitude: 150.5, latitude: -33.5 };
+
+  it("names the other basemaps covering the point, never the current one", () => {
+    expect(basemapsDownloadedAt(saved, inBoth, CANDIDATES, "six-imagery")).toEqual([
+      "protomaps",
+      "six-topo",
+    ]);
+    // This is the whole point of the notice: standing on six-topo tiles with a
+    // vector region here too, the offer is the vector map and nothing else.
+    expect(basemapsDownloadedAt(saved, inBoth, CANDIDATES, "six-topo")).toEqual([
+      "protomaps",
+    ]);
+  });
+
+  it("is empty when nothing is downloaded under the point", () => {
+    // Inside the six-topo region but outside the smaller protomaps clip — the
+    // case a bbox-overlap test would get wrong by offering a blank map.
+    const topoOnly = { longitude: 150.1, latitude: -33.9 };
+    expect(basemapsDownloadedAt(saved, topoOnly, CANDIDATES, "six-topo")).toEqual([]);
+    // Nowhere near either.
+    expect(
+      basemapsDownloadedAt(saved, { longitude: 145, latitude: -30 }, CANDIDATES, "six-topo"),
+    ).toEqual([]);
+  });
+
+  it("ignores artifacts that are not basemap regions", () => {
+    const overlay = [
+      artifact({ kind: "topo-overlay", logicalKey: "six-topo", bbox: [150, -34, 151, -33] }),
+    ];
+    expect(basemapsDownloadedAt(overlay, inBoth, CANDIDATES, "protomaps")).toEqual([]);
   });
 });

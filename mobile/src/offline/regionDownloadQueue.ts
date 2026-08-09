@@ -13,7 +13,7 @@
 import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
-import type { OfflineBasemapId, RegionBbox } from "@logjam/shared";
+import { ApiError, type OfflineBasemapId, type RegionBbox } from "@logjam/shared";
 
 import type { PausedReason } from "./downloadMachine";
 import {
@@ -155,7 +155,14 @@ function installAutoResumeWatchers(): void {
 export function enqueueRegionDownloads(specs: RegionTaskSpec[]): void {
   installAutoResumeWatchers();
   jobs = [
-    ...jobs,
+    // Settled jobs from an earlier batch are dropped, not kept: the progress
+    // screen is about the download the user just started, and a failure from
+    // half an hour ago sitting in its list (counted in its "1 didn't finish")
+    // reads as this batch having failed. Anything still running or paused
+    // stays — that is live work, not history.
+    ...jobs.filter(
+      (job) => job.state.kind !== "ready" && job.state.kind !== "failed",
+    ),
     ...specs.map((spec) => ({
       spec,
       state: { kind: "queued" } as RegionJobState,
@@ -252,6 +259,16 @@ async function runProtomapsClip(
     return { status: "ready", artifact, gaps: 0, failed: 0 };
   } catch (err) {
     console.error(err);
+    // A 5xx from the clip endpoint is the SERVER saying it cannot cut this map
+    // — the archive isn't configured, the `pmtiles` binary isn't on the host,
+    // or the extract died. None of those get better by tapping Resume, and
+    // reporting them as the generic "That didn't finish. Try again." sent the
+    // user round that loop indefinitely. (It is also the whole of the 503 seen
+    // in local dev: PROTOMAPS_ARCHIVE_URI is unset there and no archive exists
+    // to cut from — see api/src/routes/basemap.ts.)
+    if (err instanceof ApiError && err.status >= 500) {
+      return { status: "failed", code: "source-unavailable" };
+    }
     return { status: "failed", code: "unknown" };
   }
 }
@@ -278,11 +295,6 @@ export function cancelRegionDownload(id: string): void {
   jobs = jobs.filter((job) => job.spec.id !== id);
   publish();
   void deleteAbandonedRegion(id);
-}
-
-export function clearFinishedRegionJobs(): void {
-  jobs = jobs.filter((job) => job.state.kind !== "ready");
-  publish();
 }
 
 async function deleteAbandonedRegion(id: string): Promise<void> {

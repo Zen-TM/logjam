@@ -99,7 +99,11 @@ extract/schema refresh.
 
 `src/map/RegionDownloadScreen.tsx` frames an area (edge-handle selector, pure maths
 in `regionFrame.ts`), prices it, and enqueues one job per selected map through
-`src/offline/regionDownloadQueue.ts`. Two task kinds share that queue
+`src/offline/regionDownloadQueue.ts`. It then REPLACES itself with
+`RegionDownloadProgressScreen.tsx`, which is where progress is reported and whose
+"Done" stays disabled until every job has settled — a download only advances while
+the app is foregrounded, so the screen the user waits on must not be the one they
+have every reason to leave. Two task kinds share that queue
 (stage4a §9): `tile-pyramid` fetches SIX raster tiles straight from the provider
 into an on-device MBTiles (`regionTileDownload.ts` + `regionMbtiles.ts`), and
 `http-file` pulls the self-hosted Protomaps clip through our API

@@ -85,21 +85,28 @@ export function SelectionFrame({
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* Four dim panels around the selection rather than one full-screen
-          overlay with a hole: RN has no cut-out, and stacking a lighter view
-          inside a dark one would dim the selection too. */}
-      <View style={[styles.dim, { left: 0, right: 0, top: 0, height: insets.top }]} />
-      <View style={[styles.dim, { left: 0, right: 0, bottom: 0, height: insets.bottom }]} />
+      {/* ONE view for the whole scrim, with the selection as its content box
+          and the dimmed surround as its BORDER. RN has no cut-out and stacking
+          a lighter view inside a dark one would dim the selection too — but a
+          border is a hole, drawn in a single pass.
+
+          It was four abutting panels, and abutting is the bug: the side panels
+          were positioned by `top` + `height` while the bottom one was pinned to
+          `bottom: 0`, so the two arrived at the frame's lower edge by different
+          arithmetic and rounded apart. The result was a hairline of UNDIMMED
+          map running the full width of the screen along the bottom edge of the
+          selection — brighter than the ground either side of it, and reading as
+          a line the selector had drawn. One node has no seams to round. */}
       <View
         style={[
+          StyleSheet.absoluteFill,
+          {
+            borderTopWidth: insets.top,
+            borderBottomWidth: insets.bottom,
+            borderLeftWidth: insets.left,
+            borderRightWidth: insets.right,
+          },
           styles.dim,
-          { left: 0, width: insets.left, top: insets.top, height: frameHeight },
-        ]}
-      />
-      <View
-        style={[
-          styles.dim,
-          { right: 0, width: insets.right, top: insets.top, height: frameHeight },
         ]}
       />
 
@@ -173,8 +180,10 @@ export function SelectionFrame({
 
 const styles = StyleSheet.create({
   // Deliberately a black scrim, like the sheet scrims: the dimmed area is
-  // "not this", and a scheme tint over a map reads as a colour cast.
-  dim: { position: "absolute", backgroundColor: "rgba(0,0,0,0.45)" },
+  // "not this", and a scheme tint over a map reads as a colour cast. It is the
+  // BORDER that paints it (see above); the content box stays transparent so
+  // the selection is drawn at full brightness.
+  dim: { borderColor: "rgba(0,0,0,0.45)", backgroundColor: "transparent" },
   outline: {
     position: "absolute",
     borderWidth: 2,

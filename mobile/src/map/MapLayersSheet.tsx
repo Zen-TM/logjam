@@ -85,6 +85,7 @@ type ItemMenu = { title: string; actions: AssetActions };
 
 export function MapLayersSheet({
   visible,
+  focusTab,
   onClose,
   connectivity,
   basemapId,
@@ -148,6 +149,14 @@ export function MapLayersSheet({
   /** Fly the map to an asset's extent (and close the sheet). */
   onShowOnMap: (bbox: Bbox) => void;
   onOpenSaved: (category: "region") => void;
+  /**
+   * Tab to land on when the sheet is opened. The tab is otherwise sticky
+   * across opens, which is right when the user reached the sheet themselves
+   * and wrong when something else sent them here for a specific answer — the
+   * map's offline notice offers "switch to a basemap you saved" and has to
+   * arrive on the basemap list, not on whichever tab was last read.
+   */
+  focusTab?: Tab;
 }) {
   const [tab, setTab] = useState<Tab>("basemap");
   const [menu, setMenu] = useState<ItemMenu | null>(null);
@@ -171,6 +180,12 @@ export function MapLayersSheet({
   useEffect(() => {
     if (!visible) setMenu(null);
   }, [visible]);
+
+  // On OPEN only: re-applying it on every render would pin the tab and make
+  // the rail unusable for as long as the caller kept asking for one.
+  useEffect(() => {
+    if (visible && focusTab) setTab(focusTab);
+  }, [visible, focusTab]);
 
   return (
     <BottomSheet

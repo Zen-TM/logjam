@@ -74,12 +74,15 @@ import {
   type GeoPdfCancelToken,
   type GeoPdfProgress,
 } from "../geopdf/importPipeline";
+import { GeoPdfImportProgress } from "../geopdf/GeoPdfImportProgress";
+import type { GeoPdfImportState } from "../geopdf/geoPdfImportsDb";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
 import { importVectorFileFromPicker } from "../imports/vectorImports";
 import { useVectorImports } from "../imports/useVectorImports";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityRowProps, capabilityStatus } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
+import type { BasemapId } from "../map/sourceResolver";
 import { mergeSavedOverlayJobs, type CompletedOverlaysResponse } from "../map/topoOverlays";
 import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import { deleteDownloadedArtifact } from "../offline/regionDownloads";
@@ -155,6 +158,14 @@ type SavedItem = {
   inlineAction?: { icon: "refresh-cw"; label: string; onPress: () => void };
   /** False when the asset has no geographic extent to fly to. */
   locatable: boolean;
+  /**
+   * Basemap to switch the map to when showing this asset. Set on a downloaded
+   * REGION: a region is tiles for one basemap, and flying to it while a
+   * different basemap is selected — the common case offline, since the map
+   * keeps whatever the user last chose — lands them on a blank rectangle that
+   * looks like the download failed.
+   */
+  focusBasemapId?: BasemapId;
   /** Resolved on tap — a track's extent needs its points read back. */
   resolveBbox: () => Promise<Bbox | null>;
   /** Persist a new display name. Every kind supports this. */
@@ -174,7 +185,7 @@ export function SavedScreen({
   onEditRoute,
   initialFilter,
 }: {
-  onOpenMap: (bbox?: Bbox) => void;
+  onOpenMap: (bbox?: Bbox, basemapId?: BasemapId) => void;
   onDownloadRegion: () => void;
   /** Open the map's draw tool on an existing route. Editing is a map gesture,
    *  so this screen hands it over rather than growing an editor of its own. */
@@ -269,12 +280,15 @@ export function SavedScreen({
 
   // Single in-flight operation banner: the pipelines here are exclusive (one
   // import / one overlay download at a time), so one row above the list
-  // carries label, progress and cancel for whichever is running.
+  // carries label and progress for whichever is running.
+  //
+  // GeoPDF imports are NOT one of them any more — they take the whole screen
+  // (see geoPdfOp below), because their opening phases block the JS thread and
+  // a progress row on a frozen list is a worse lie than no row.
   const [activeOp, setActiveOp] = useState<{
     label: string;
     category: Category;
     fraction: number | null;
-    cancellable: boolean;
   } | null>(null);
 
   // --- Downloaded regions + topo overlays (registry-backed) ---
@@ -334,7 +348,6 @@ export function SavedScreen({
           label: `Saving ${item.label}`,
           category: "overlay",
           fraction: null,
-          cancellable: false,
         });
         await downloadTopoOverlay(
           {
@@ -376,7 +389,6 @@ export function SavedScreen({
         label: "Importing file",
         category: "vector",
         fraction: null,
-        cancellable: false,
       });
       const outcome = await importVectorFileFromPicker(imports.length);
       if (outcome.status === "imported") {
@@ -400,10 +412,26 @@ export function SavedScreen({
   const [geoPdfBusy, setGeoPdfBusy] = useState(false);
   const geoPdfCancel = useRef<GeoPdfCancelToken | null>(null);
 
+  // A GeoPDF import takes the whole screen while it runs rather than a row in
+  // this list — its first phases block the JS thread outright, so a list the
+  // user can try to scroll and find frozen is the wrong surface for it. See
+  // GeoPdfImportProgress.
+  const [geoPdfOp, setGeoPdfOp] = useState<{
+    label: string;
+    phase: GeoPdfImportState;
+    fraction: number | null;
+  } | null>(null);
+
   const geoPdfProgress = useCallback((progress: GeoPdfProgress) => {
     const measurable = progress.phase === "rasterising" || progress.phase === "overviews";
-    setActiveOp((current) =>
-      current ? { ...current, fraction: measurable ? progress.fraction : null } : current,
+    setGeoPdfOp((current) =>
+      current
+        ? {
+            ...current,
+            phase: progress.phase,
+            fraction: measurable ? progress.fraction : null,
+          }
+        : current,
     );
   }, []);
 
@@ -411,13 +439,13 @@ export function SavedScreen({
     setGeoPdfBusy(true);
     const token: GeoPdfCancelToken = { cancelled: false };
     geoPdfCancel.current = token;
-    setActiveOp({ label, category: "geoPdf", fraction: null, cancellable: true });
+    setGeoPdfOp({ label, phase: "copying", fraction: null });
     return token;
   }, []);
 
   const endGeoPdfOp = useCallback(() => {
     setGeoPdfBusy(false);
-    setActiveOp(null);
+    setGeoPdfOp(null);
     geoPdfCancel.current = null;
   }, []);
 
@@ -535,6 +563,8 @@ export function SavedScreen({
         subtitle: `Basemap · saved ${formatDay(artifact.downloadedAt)}`,
         sizeBytes: artifact.sizeBytes,
         locatable: artifact.bbox != null,
+        // A basemap region's logicalKey IS the basemap it holds tiles for.
+        focusBasemapId: artifact.logicalKey as BasemapId,
         resolveBbox: async () => artifact.bbox,
         rename: (name) => renameArtifact(artifact.id, name),
         delete: {
@@ -758,7 +788,7 @@ export function SavedScreen({
             fail("This one has no saved location to show.");
             return;
           }
-          onOpenMap(bbox);
+          onOpenMap(bbox, item.focusBasemapId);
         })
         .catch((err: unknown) => {
           console.error(err);
@@ -824,18 +854,6 @@ export function SavedScreen({
             icon="download-cloud"
             hue={assetHue[activeOp.category]}
             progress={activeOp.fraction ?? 0}
-            right={
-              activeOp.cancellable ? (
-                <IconButton
-                  icon="x"
-                  accessibilityLabel="Cancel this import"
-                  color={theme.warning}
-                  onPress={() => {
-                    if (geoPdfCancel.current) geoPdfCancel.current.cancelled = true;
-                  }}
-                />
-              ) : undefined
-            }
           />
         ) : null}
 
@@ -1140,6 +1158,20 @@ export function SavedScreen({
         onClose={() => setLinkingRoute(null)}
         onInfo={info}
         onError={fail}
+      />
+
+      {/* Takes the whole screen for the duration — see the note on the
+          component. Mounted last so it covers the sheets too: an import can be
+          started from the Add sheet, and a modal underneath the one that
+          started it would be invisible. */}
+      <GeoPdfImportProgress
+        visible={geoPdfOp !== null}
+        label={geoPdfOp?.label ?? ""}
+        phase={geoPdfOp?.phase ?? "copying"}
+        fraction={geoPdfOp?.fraction ?? null}
+        onCancel={() => {
+          if (geoPdfCancel.current) geoPdfCancel.current.cancelled = true;
+        }}
       />
 
       <Toast message={toast} onDismissed={() => setToast(null)} />

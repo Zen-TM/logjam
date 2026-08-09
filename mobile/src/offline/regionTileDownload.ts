@@ -87,7 +87,17 @@ export type RegionRunOutcome =
   | { status: "cancelled" }
   | { status: "failed"; code: RegionFailureCode };
 
-export type RegionFailureCode = "provider-errors" | "verify-failed" | "unknown";
+export type RegionFailureCode =
+  | "provider-errors"
+  | "verify-failed"
+  /**
+   * The SERVER can't cut this map right now — the vector clip's 5xx, as
+   * against anything the phone did. Separate from `unknown` because the two
+   * deserve opposite advice: "try again" is right for a dropped connection and
+   * wrong for an endpoint that will keep refusing until an operator fixes it.
+   */
+  | "source-unavailable"
+  | "unknown";
 
 /**
  * How a caller stops a running job. The two are NOT the same outcome: a pause

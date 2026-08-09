@@ -31,6 +31,7 @@ import { registerSyncTriggers } from "./sync/syncEngine";
 import { activeThemeSchemeId, persistThemeSchemeId, theme } from "./theme";
 import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
+import { RegionDownloadProgressScreen } from "./map/RegionDownloadProgressScreen";
 import type { BasemapId } from "./map/sourceResolver";
 import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
@@ -68,7 +69,12 @@ type MapStackParams = {
   // transiently. Params only — never persisted or logged.
   MapView:
     | {
-        focus?: { bbox: [number, number, number, number]; nonce: number };
+        focus?: {
+          bbox: [number, number, number, number];
+          nonce: number;
+          /** Switch the map to this basemap on arrival — see SavedItem.focusBasemapId. */
+          basemapId?: BasemapId;
+        };
         route?: {
           mediaId: string;
           filename: string;
@@ -95,6 +101,11 @@ type MapStackParams = {
         zoom: number;
       }
     | undefined;
+  // Where a started download reports from. It reads the queue module directly,
+  // so it takes no params — and it REPLACES the framing screen in the stack,
+  // because going "back" to re-frame an area that is already downloading is
+  // not a step anyone wants.
+  MapRegionDownloadProgress: undefined;
 };
 
 type CanyonsStackParams = {
@@ -203,9 +214,22 @@ function MapStackNav() {
         {({ navigation, route }) => (
           <RegionDownloadScreen
             onBack={() => navigation.goBack()}
+            onStarted={() => navigation.replace("MapRegionDownloadProgress")}
             initialBasemapId={route.params?.basemapId}
             initialCenter={route.params?.center}
             initialZoom={route.params?.zoom}
+          />
+        )}
+      </MapStack.Screen>
+      {/* No swipe-back and no header: the screen's own Done button is the exit,
+          and it stays disabled until the downloads are finished. */}
+      <MapStack.Screen
+        name="MapRegionDownloadProgress"
+        options={{ headerShown: false, gestureEnabled: false }}
+      >
+        {({ navigation }) => (
+          <RegionDownloadProgressScreen
+            onDone={() => navigation.navigate("MapView")}
           />
         )}
       </MapStack.Screen>
@@ -273,10 +297,12 @@ function SavedStackNav() {
                 ? { category: route.params.filter, nonce: route.params.nonce ?? 0 }
                 : undefined
             }
-            onOpenMap={(bbox) =>
+            onOpenMap={(bbox, basemapId) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                params: bbox ? { focus: { bbox, nonce: Date.now() } } : undefined,
+                params: bbox
+                  ? { focus: { bbox, nonce: Date.now(), basemapId } }
+                  : undefined,
               })
             }
             // "Download a map region" used to drop the user on the map to find

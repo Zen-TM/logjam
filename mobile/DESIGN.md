@@ -94,6 +94,19 @@ BottomSheet(s)      acquisition + per-item actions
   way the MAP faces) and the scale bar — and carries nothing you can press to
   change the app. An instrument that runs a sensor gets a device-scoped switch in
   Settings → This phone rather than a control on the map (`compassPreference.ts`).
+- **A TAP asks, a PRESS-AND-HOLD commits.** Tapping the map drops a small ringed
+  dot (a cursor, not a pin) and opens a sheet answering the four things a map can
+  say about a spot — position, elevation, distance and bearing from you — with
+  "navigate here" and "drop a waypoint" under them. Press-and-hold keeps its
+  existing meaning, "something goes HERE", and its sheet offers the two things
+  that can. Neither gesture ends follow mode: a tap is not a pan.
+- **Only a one-finger drag stops the map following you.** It is impossible to
+  pinch without also translating the map, so treating every user interaction as a
+  pan meant changing scale cost you the lock every time, with the locate button as
+  the only way back. The map counts fingers (capture-phase responder handlers that
+  never claim the responder — `gestureTouches` in `MapScreen.tsx`); two or more is
+  a zoom, which keeps follow and re-locks onto the user at the new scale when the
+  gesture settles.
 - **A map TOOL is a mode with a HUD, and closing it discards its work.** The
   measure tool arms from the action column (the button lights while it is on),
   collects taps, and reports through a panel in the top notice stack next to the

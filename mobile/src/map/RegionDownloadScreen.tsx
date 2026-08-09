@@ -51,14 +51,7 @@ import {
   StatusPill,
   Toggle,
 } from "../ui";
-import {
-  cancelRegionDownload,
-  enqueueRegionDownloads,
-  pauseRegionDownload,
-  resumeRegionDownload,
-  useRegionDownloads,
-} from "../offline/regionDownloadQueue";
-import type { RegionJob } from "../offline/regionDownloadQueue";
+import { enqueueRegionDownloads } from "../offline/regionDownloadQueue";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { buildShellStyle } from "./basemap/shellStyle";
 import { BASEMAP_META } from "./basemapMeta";
@@ -157,11 +150,18 @@ function formatMinutes(seconds: number): string {
 
 export function RegionDownloadScreen({
   onBack,
+  onStarted,
   initialBasemapId = "six-topo",
   initialCenter = DEFAULT_CENTER,
   initialZoom = DEFAULT_ZOOM,
 }: {
   onBack: () => void;
+  /**
+   * The downloads are enqueued and the progress screen takes over. This screen
+   * deliberately does not report progress itself — see the note on
+   * RegionDownloadProgressScreen.
+   */
+  onStarted: () => void;
   /**
    * What the map screen was showing, so this opens on the same ground. Absent
    * when the screen is reached from Saved, which has no camera of its own —
@@ -204,7 +204,9 @@ export function RegionDownloadScreen({
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [frame, setFrame] = useState<FrameInsets | null>(null);
   const [viewport, setViewport] = useState<FrameViewport | null>(null);
-  const jobs = useRegionDownloads();
+  // Set while the free-space check is in flight, so a second tap can't enqueue
+  // the same area twice.
+  const [busy, setBusy] = useState(false);
 
   // Preview the map they will be saving: the first selected RASTER source (the
   // vector basemap needs its whole generated layer stack, which is not worth
@@ -345,24 +347,26 @@ export function RegionDownloadScreen({
     // and the job reports "That didn't finish. Try again." — no hint that the
     // phone is full, and nothing reclaimed. Check before starting; the p90 is
     // what actually lands, so that is what has to fit.
+    setBusy(true);
     void (async () => {
-      const freeBytes = await FileSystem.getFreeDiskStorageAsync().catch(
-        () => null,
-      );
-      if (freeBytes != null && job.p90Bytes > freeBytes * 0.9) {
-        Alert.alert(
-          "Not enough space",
-          `This needs about ${formatBytes(job.p90Bytes)} and the phone has ${formatBytes(freeBytes)} free. Free some space, or pick fewer maps.`,
+      try {
+        const freeBytes = await FileSystem.getFreeDiskStorageAsync().catch(
+          () => null,
         );
-        return;
+        if (freeBytes != null && job.p90Bytes > freeBytes * 0.9) {
+          Alert.alert(
+            "Not enough space",
+            `This needs about ${formatBytes(job.p90Bytes)} and the phone has ${formatBytes(freeBytes)} free. Free some space, or pick fewer maps.`,
+          );
+          return;
+        }
+        startDownloads();
+        onStarted();
+      } finally {
+        setBusy(false);
       }
-      startDownloads();
     })();
-  }, [bbox, job, onCellular, allowCellular, startDownloads]);
-
-
-  const running = jobs.filter((entry) => entry.state.kind !== "ready");
-  const finished = jobs.filter((entry) => entry.state.kind === "ready");
+  }, [bbox, job, onCellular, allowCellular, onStarted, startDownloads]);
 
   return (
     <View style={styles.root}>
@@ -529,105 +533,19 @@ export function RegionDownloadScreen({
           />
         ) : null}
 
-        {running.length === 0 ? (
-          <Button
-            label={selected.length > 1 ? `Save ${selected.length} maps` : "Save this area"}
-            icon="download"
-            onPress={handleSave}
-            disabled={!canDownload}
-          />
-        ) : (
-          running.map((entry) => (
-            <DownloadRow key={entry.spec.id} job={entry} />
-          ))
-        )}
-        {finished.length > 0 ? (
-          <Text style={styles.footnote}>
-            {finished.length === 1
-              ? "1 map saved — it works with no signal from now on."
-              : `${finished.length} maps saved — they work with no signal from now on.`}
-          </Text>
-        ) : null}
+        {/* Progress lives on its own screen from here (see
+            RegionDownloadProgressScreen): a download that only advances in the
+            foreground should not report from a screen whose whole job is to be
+            left. */}
+        <Button
+          label={selected.length > 1 ? `Save ${selected.length} maps` : "Save this area"}
+          icon="download"
+          onPress={handleSave}
+          disabled={!canDownload || busy}
+        />
         </ScrollView>
       </View>
     </View>
-  );
-}
-
-/** One in-flight (or stalled) download, with the action its state allows. */
-function DownloadRow({ job }: { job: RegionJob }) {
-  const { progress, state, spec } = job;
-  const fraction =
-    progress.tilesTotal > 0 ? progress.tilesDone / progress.tilesTotal : 0;
-
-  const subtitle = (() => {
-    if (state.kind === "queued") return "Waiting its turn";
-    if (state.kind === "failed") {
-      return state.code === "provider-errors"
-        ? "Too many tiles wouldn't load. Try again later."
-        : "That didn't finish. Try again.";
-    }
-    if (state.kind === "paused") {
-      switch (state.reason) {
-        case "connectivity":
-          return "Paused — waiting for Wi-Fi";
-        case "background":
-          return "Paused — Logjam has to stay open to download";
-        case "provider-backoff":
-          return "Paused — the map service asked us to slow down";
-        default:
-          return "Paused";
-      }
-    }
-    const gaps = progress.tilesGap > 0 ? ` · ${progress.tilesGap} not available` : "";
-    return `${progress.tilesDone.toLocaleString()} of ${progress.tilesTotal.toLocaleString()} tiles${gaps}`;
-  })();
-
-  return (
-    <Row
-      icon="download"
-      title={spec.label}
-      subtitle={subtitle}
-      progress={state.kind === "downloading" ? fraction : null}
-      right={
-        <View style={styles.rowActions}>
-          {state.kind === "downloading" ? (
-            <Button
-              label="Pause"
-              variant="ghost"
-              compact
-              onPress={() => pauseRegionDownload(spec.id)}
-            />
-          ) : (
-            <Button
-              label="Resume"
-              variant="outlineAccent"
-              compact
-              onPress={() => resumeRegionDownload(spec.id)}
-            />
-          )}
-          <Button
-            label="Stop"
-            variant="ghost"
-            compact
-            onPress={() =>
-              Alert.alert(
-                "Stop this download?",
-                "The tiles saved so far are deleted from this phone.",
-                [
-                  { text: "Keep going", style: "cancel" },
-                  {
-                    text: "Stop",
-                    style: "destructive",
-                    onPress: () => cancelRegionDownload(spec.id),
-                  },
-                ],
-              )
-            }
-          />
-        </View>
-      }
-    />
   );
 }
 
@@ -696,15 +614,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   detailCaption: { color: theme.textMuted, fontSize: fontSize.xs },
-  footnote: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    lineHeight: 16,
-  },
   capNote: {
     color: theme.warning,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },
-  rowActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
 });
