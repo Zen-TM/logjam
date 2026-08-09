@@ -96,7 +96,13 @@ BottomSheet(s)      acquisition + per-item actions
   IS pressable (it resets north), so it is dropped entirely in course-up, where
   that press fights the mode steering the map and where the ornament has nothing
   to say anyway — map heading and user heading are the same thing there, and the
-  tape below already reports it. An instrument that runs a sensor gets a device-scoped switch in
+  tape below already reports it. **Dropping a control and moving the camera are
+  two different mechanisms, so order them.** The ornament goes with a prop and
+  the rotation comes from an imperative camera stop; driving the rotation from
+  the tap handler ran it against the render that removes the ornament, so the
+  compass faded IN as the map turned and blinked out a beat later. Course-up's
+  opening rotation is fired from a layout effect for exactly that reason — after
+  the commit, before the paint. An instrument that runs a sensor gets a device-scoped switch in
   Settings → This phone rather than a control on the map (`compassPreference.ts`).
 - **A TAP asks, a PRESS-AND-HOLD commits.** Tapping the map drops a small ringed
   dot (a cursor, not a pin) and opens a sheet answering the four things a map can

@@ -14,6 +14,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -1802,6 +1803,35 @@ export function MapScreen({
   );
 
   /**
+   * Enter course-up's opening rotation, but not until React has committed.
+   *
+   * The rotation and the disappearance of the native compass ornament are
+   * driven by two different mechanisms — an imperative camera stop and a
+   * `compassEnabled` prop — and calling the first from the tap handler ran it
+   * against the second. From north the ornament is faded out, so it FADED IN
+   * as the map turned and then blinked away when the prop landed; from an
+   * already-rotated map it hung around, needle swinging, until the same commit.
+   * Either way the user sees a control appear or persist for a moment in the
+   * one mode where it must not exist.
+   *
+   * A layout effect is the ordering guarantee: React runs it after the commit
+   * that carries `compassEnabled={false}` to the native view, and before the
+   * frame is painted. The nonce (rather than keying on `followMode`) is what
+   * makes the slow path work too — a heading fetched from the sensor arrives
+   * after that commit has already happened, and needs its own trigger.
+   */
+  const pendingPovHeading = useRef<number | undefined>(undefined);
+  const [povRecentreNonce, setPovRecentreNonce] = useState(0);
+  const requestPovRecentre = useCallback((heading: number | undefined) => {
+    pendingPovHeading.current = heading;
+    setPovRecentreNonce((nonce) => nonce + 1);
+  }, []);
+  useLayoutEffect(() => {
+    if (povRecentreNonce === 0) return;
+    recentre(pendingPovHeading.current);
+  }, [povRecentreNonce, recentre]);
+
+  /**
    * Start the compass watcher if it isn't already running. Two independent
    * things want it — the location arrow / course-up camera, and the compass
    * tape, which runs with no fix at all — so ownership sits here rather than
@@ -1911,7 +1941,9 @@ export function MapScreen({
           if (heading != null) smoothedHeading.current = heading;
         }
         if (heading != null) lastPovBearing.current = heading;
-        recentre(heading ?? undefined);
+        // NOT recentre(heading) — see the layout effect below. Turning the map
+        // from here races the render that takes the compass ornament off it.
+        requestPovRecentre(heading ?? undefined);
         return;
       }
       // Third tap drops follow but KEEPS the dot and its watchers: "don't
@@ -1967,7 +1999,7 @@ export function MapScreen({
     );
 
     await ensureHeadingWatch();
-  }, [ensureHeadingWatch, recentre, setCameraStop]);
+  }, [ensureHeadingWatch, recentre, requestPovRecentre, setCameraStop]);
 
   const handleStartRecording = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
