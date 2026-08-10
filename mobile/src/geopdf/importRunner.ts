@@ -133,6 +133,19 @@ export async function runGeoPdfImport(
   current = { label, phase: "hashing", fraction: null, importId: null, token };
   notifyRun();
 
+  // Measures what the user actually feels: the longest the JS thread went
+  // without servicing a timer. Attributing a freeze from step durations alone
+  // is guesswork — a slow step that yields is fine, a fast one that doesn't
+  // isn't. Logged once per import, a number and nothing else.
+  const HEARTBEAT_MS = 100;
+  let lastBeat = Date.now();
+  let worstStallMs = 0;
+  const heartbeat = setInterval(() => {
+    const now = Date.now();
+    worstStallMs = Math.max(worstStallMs, now - lastBeat - HEARTBEAT_MS);
+    lastBeat = now;
+  }, HEARTBEAT_MS);
+
   const onProgress = (progress: GeoPdfProgress) => {
     if (!current) return;
     const measurable =
@@ -180,6 +193,8 @@ export async function runGeoPdfImport(
     );
     return null;
   } finally {
+    clearInterval(heartbeat);
+    console.log(`[geopdf] worst JS-thread stall ${worstStallMs} ms`);
     current = null;
     notifyRun();
   }

@@ -164,6 +164,21 @@ function importsRootDir(): Directory {
 }
 
 /**
+ * Time one step of the front half and log it. Durations and step names only —
+ * nothing about the file. The front phases are the ones that can hold the UI
+ * thread, so which of them costs what is the difference between a fix and a
+ * guess.
+ */
+async function step<T>(name: string, run: () => T | Promise<T>): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    return await run();
+  } finally {
+    console.log(`[geopdf] ${name} ${Date.now() - startedAt} ms`);
+  }
+}
+
+/**
  * Read and parse the copied source PDF.
  *
  * Its own function purely so the whole-file buffer is unreachable the moment it
@@ -172,8 +187,11 @@ function importsRootDir(): Directory {
  * for nothing — nothing downstream reads them, the native side works from the
  * file on disk.
  */
-function parseSourcePdf(dirPath: string) {
-  return parseGeoPdfGeoref(new File(`file://${dirPath}/source.pdf`).bytes());
+async function parseSourcePdf(dirPath: string) {
+  const bytes = await step("read-bytes", () =>
+    new File(`file://${dirPath}/source.pdf`).bytes(),
+  );
+  return step("pdf-parse", () => parseGeoPdfGeoref(bytes));
 }
 
 /**
@@ -278,7 +296,7 @@ async function importStagedFile(
   }
   const label = displayName.replace(/\.[^.]+$/, "");
   onProgress({ phase: "hashing", fraction: 0, label });
-  const sha256 = await LogjamPdfRenderer.sha256File(fileUri);
+  const sha256 = await step("hash", () => LogjamPdfRenderer.sha256File(fileUri));
 
   const existing = await findGeoPdfImportBySha256(sha256);
   if (existing) {
@@ -292,7 +310,7 @@ async function importStagedFile(
   if (!dir.exists) dir.create({ intermediates: true });
   const sourceFile = new File(dir, "source.pdf");
   if (sourceFile.exists) sourceFile.delete();
-  incoming.copy(sourceFile);
+  await step("copy", () => incoming.copy(sourceFile));
 
   const record: GeoPdfImport = {
     id: randomId(),

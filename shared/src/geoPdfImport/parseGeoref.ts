@@ -25,6 +25,8 @@ import {
 } from "@cantoo/pdf-lib";
 import type { PDFContext, PDFObject } from "@cantoo/pdf-lib";
 
+import { installFastStreamScan } from "./fastStreamScan.js";
+
 export interface GeoPdfControlPoint {
   /** PDF user space, points, origin bottom-left. */
   pagePt: { x: number; y: number };
@@ -314,6 +316,9 @@ function parseViewport(
 }
 
 export async function parseGeoPdfGeoref(bytes: Uint8Array): Promise<GeoPdfParseResult> {
+  // Before the first load, and the difference between a 35-second frozen app
+  // and a responsive one on a phone. See fastStreamScan.ts.
+  installFastStreamScan();
   let doc: PDFDocument;
   try {
     doc = await PDFDocument.load(bytes, {

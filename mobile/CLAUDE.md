@@ -163,6 +163,20 @@ before the first tile. Hashing is now native and streamed
 enter JS exactly once, for the pdf-lib parse, inside a function scoped so they
 become unreachable the moment it returns.
 
+**Hermes has no JIT, so a per-byte JS loop is ~70× slower than it profiles on a
+laptop, and that is where the import's freeze actually was.** pdf-lib scans
+forward for `endstream` one byte at a time whenever a stream's `/Length` is an
+indirect reference, which is 540 of the 541 streams in an NSW topo sheet: 480 ms
+of parse in Node became 35 SECONDS on device, one 3.9 MB stream of it a single
+unbroken 16.8-second block of the UI thread. `shared/src/geoPdfImport/
+fastStreamScan.ts` replaces that one method with the same algorithm driven by
+native `Uint8Array.indexOf` — parse 1.5 s, worst stall 228 ms — and
+`fastStreamScan.test.ts` runs pdf-lib's original and the replacement side by
+side over real files asserting every offset matches. **Never profile this
+pipeline in Node and believe the number**; the import logs its own phase
+timings and the worst JS-thread stall it caused, once per run, and that log is
+the measurement that counts.
+
 Every entry point (picker, account GeoPDF, share sheet, Wi-Fi auto-download)
 goes through `runGeoPdfImport` in `src/geopdf/importRunner.ts`, which is also
 the "one import at a time" guard — two at once would fight over the single
