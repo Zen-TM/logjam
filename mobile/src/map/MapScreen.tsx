@@ -142,7 +142,8 @@ import {
   useCanyonMapFilter,
 } from "../canyons/canyonMapFilter";
 import { updateGeoPdfImport } from "../geopdf/geoPdfImportsDb";
-import { GEOPDF_ERRORS, importGeoPdfBytes } from "../geopdf/importPipeline";
+import { GEOPDF_ERRORS, importGeoPdfFile } from "../geopdf/importPipeline";
+import { runGeoPdfImport } from "../geopdf/importRunner";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
 import { setVectorImportVisible } from "../imports/importsDb";
 import {
@@ -1298,11 +1299,9 @@ export function MapScreen({
 
   // "Open in Logjam": ACTION_VIEW / share-sheet delivers a content:// URI.
   // Kind is sniffed from leading bytes (content URIs carry no reliable name).
-  // Self-contained (no shared busy/status state with the sheet or Saved's
-  // import management — this is a background, no-UI-affordance import path):
-  // a successful import shows itself by re-centering the map; the atypical
-  // outcomes (already-imported / paused) get a one-off Alert since there's no
-  // sheet status line left on this screen to carry the message.
+  // A GeoPDF goes through the same background runner as every other import
+  // surface, so it gets the same progress card in Saved and the same toast; a
+  // successful one also re-centres the map, which the other surfaces can't do.
   const handleIncomingUrl = useCallback(
     async (url: string | null) => {
       if (!url || !isFileIntentUrl(url) || handledIntentUrls.has(url)) return;
@@ -1323,25 +1322,17 @@ export function MapScreen({
           return;
         }
         if (kind === "pdf") {
-          const fullB64 = await FileSystem.readAsStringAsync(url, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          const bytes = Uint8Array.from(atob(fullB64), (c) => c.charCodeAt(0));
-          const outcome = await importGeoPdfBytes(
-            "Shared map",
-            bytes,
-            () => {},
-            { cancelled: false },
+          // Through the shared background runner, exactly like the Saved tab's
+          // import: a progress card, a toast on the outcome, and the app usable
+          // throughout. This path used to read the whole file as base64 and
+          // decode it a character at a time on the UI thread, then run the
+          // import with an empty progress callback — minutes of frozen app with
+          // nothing on screen to say why.
+          const outcome = await runGeoPdfImport("Shared map", (onProgress, token) =>
+            importGeoPdfFile("Shared map", url, onProgress, token),
           );
-          if (outcome.status === "imported" && outcome.record.bbox) {
+          if (outcome?.status === "imported" && outcome.record.bbox) {
             fitCameraToBbox(outcome.record.bbox);
-          } else if (outcome.status === "existing") {
-            Alert.alert("Already imported", "This GeoPDF is already in Saved.");
-          } else if (outcome.status === "paused") {
-            Alert.alert(
-              "Import paused",
-              "Finish importing this GeoPDF from the Saved tab.",
-            );
           }
         } else {
           const record = await importVectorSource(

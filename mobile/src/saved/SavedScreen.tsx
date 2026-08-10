@@ -71,11 +71,14 @@ import {
   importGeoPdfFromPicker,
   importGeoPdfFromUrl,
   resumeGeoPdfImport,
-  type GeoPdfCancelToken,
-  type GeoPdfProgress,
 } from "../geopdf/importPipeline";
-import { GeoPdfImportProgress } from "../geopdf/GeoPdfImportProgress";
-import type { GeoPdfImportState } from "../geopdf/geoPdfImportsDb";
+import {
+  CANCELLABLE_PHASES,
+  GEOPDF_PHASE_LABEL,
+  cancelGeoPdfImportRun,
+  runGeoPdfImport,
+  useGeoPdfImportRun,
+} from "../geopdf/importRunner";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
 import { importVectorFileFromPicker } from "../imports/vectorImports";
 import { useVectorImports } from "../imports/useVectorImports";
@@ -409,96 +412,37 @@ export function SavedScreen({
 
   // --- GeoPDF imports ---
   const { geoPdfImports } = useGeoPdfImports();
-  const [geoPdfBusy, setGeoPdfBusy] = useState(false);
-  const geoPdfCancel = useRef<GeoPdfCancelToken | null>(null);
 
-  // A GeoPDF import takes the whole screen while it runs rather than a row in
-  // this list — its first phases block the JS thread outright, so a list the
-  // user can try to scroll and find frozen is the wrong surface for it. See
-  // GeoPdfImportProgress.
-  const [geoPdfOp, setGeoPdfOp] = useState<{
-    label: string;
-    phase: GeoPdfImportState;
-    fraction: number | null;
-  } | null>(null);
+  // A GeoPDF import runs in the BACKGROUND (geopdf/importRunner.ts): this
+  // screen starts it and shows a progress card, but does not own it. The user
+  // can leave, use the map, and get a toast when it lands. What this screen
+  // owns is the card and the "one at a time" affordance — `geoPdfBusy` greys
+  // the import buttons out while a run is up, wherever it was started from.
+  const importRun = useGeoPdfImportRun();
+  const geoPdfBusy = importRun !== null;
 
-  const geoPdfProgress = useCallback((progress: GeoPdfProgress) => {
-    const measurable = progress.phase === "rasterising" || progress.phase === "overviews";
-    setGeoPdfOp((current) =>
-      current
-        ? {
-            ...current,
-            phase: progress.phase,
-            fraction: measurable ? progress.fraction : null,
-          }
-        : current,
+  // The list is only refreshed by registry notifications, which fire before the
+  // artifact's size is known; a finished import changes what the capacity meter
+  // should read, so recompute when a run ends.
+  const runEnded = importRun === null;
+  useEffect(() => {
+    if (runEnded) refreshFreeSpace();
+  }, [runEnded, refreshFreeSpace]);
+
+  const handleImportGeoPdf = useCallback(() => {
+    void runGeoPdfImport("GeoPDF", (onProgress, token) =>
+      importGeoPdfFromPicker(onProgress, token),
+    );
+    // Land on the tab the new row will appear in, rather than making the user
+    // find it once the toast has been and gone.
+    setFilter("geoPdf");
+  }, []);
+
+  const handleResumeGeoPdf = useCallback((id: string, label: string) => {
+    void runGeoPdfImport(label, (onProgress, token) =>
+      resumeGeoPdfImport(id, onProgress, token),
     );
   }, []);
-
-  const startGeoPdfOp = useCallback((label: string): GeoPdfCancelToken => {
-    setGeoPdfBusy(true);
-    const token: GeoPdfCancelToken = { cancelled: false };
-    geoPdfCancel.current = token;
-    setGeoPdfOp({ label, phase: "copying", fraction: null });
-    return token;
-  }, []);
-
-  const endGeoPdfOp = useCallback(() => {
-    setGeoPdfBusy(false);
-    setGeoPdfOp(null);
-    geoPdfCancel.current = null;
-  }, []);
-
-  const finishGeoPdf = useCallback(
-    (outcome: Awaited<ReturnType<typeof importGeoPdfFromPicker>>) => {
-      if (outcome.status === "imported") {
-        info("GeoPDF imported.");
-        setFilter("geoPdf");
-        refreshFreeSpace();
-      } else if (outcome.status === "existing") {
-        info("Already imported.");
-        setFilter("geoPdf");
-      } else if (outcome.status === "paused") {
-        info("Import paused — resume it from the GeoPDFs list.");
-        setFilter("geoPdf");
-      }
-    },
-    [info, refreshFreeSpace],
-  );
-
-  const geoPdfFailure = useCallback(
-    (err: unknown, fallback: string) => {
-      console.error(err);
-      const code = (err as { code?: string }).code;
-      fail((code && GEOPDF_ERRORS[code]) ?? messageFromError(err, fallback));
-    },
-    [fail],
-  );
-
-  const handleImportGeoPdf = useCallback(async () => {
-    try {
-      const token = startGeoPdfOp("Importing GeoPDF");
-      finishGeoPdf(await importGeoPdfFromPicker(geoPdfProgress, token));
-    } catch (err) {
-      geoPdfFailure(err, "Couldn't import that PDF.");
-    } finally {
-      endGeoPdfOp();
-    }
-  }, [endGeoPdfOp, finishGeoPdf, geoPdfFailure, geoPdfProgress, startGeoPdfOp]);
-
-  const handleResumeGeoPdf = useCallback(
-    async (id: string, label: string) => {
-      try {
-        const token = startGeoPdfOp(`Resuming ${label}`);
-        finishGeoPdf(await resumeGeoPdfImport(id, geoPdfProgress, token));
-      } catch (err) {
-        geoPdfFailure(err, "Couldn't finish that import.");
-      } finally {
-        endGeoPdfOp();
-      }
-    },
-    [endGeoPdfOp, finishGeoPdf, geoPdfFailure, geoPdfProgress, startGeoPdfOp],
-  );
 
   // Import your own server-generated GeoPDFs: list the account's completed
   // jobs on demand (online-only), then stream a chosen one's presigned bytes
@@ -522,30 +466,22 @@ export function SavedScreen({
     }
   }, [fail, info]);
 
-  const handleImportAccountGeoPdf = useCallback(
-    async (job: GeoPdfJobView) => {
-      try {
-        const token = startGeoPdfOp(`Importing ${job.title ?? "GeoPDF"}`);
-        // Re-presign right before download — the listed URL may have expired
-        // while this list was open.
-        const fresh = await getGeoPdfJob(job.id);
-        if (!fresh.downloadUrl) throw new Error("This GeoPDF isn't ready to download.");
-        finishGeoPdf(
-          await importGeoPdfFromUrl(
-            fresh.title ?? "Logjam GeoPDF",
-            fresh.downloadUrl,
-            geoPdfProgress,
-            token,
-          ),
-        );
-      } catch (err) {
-        geoPdfFailure(err, "Couldn't import that GeoPDF.");
-      } finally {
-        endGeoPdfOp();
-      }
-    },
-    [endGeoPdfOp, finishGeoPdf, geoPdfFailure, geoPdfProgress, startGeoPdfOp],
-  );
+  const handleImportAccountGeoPdf = useCallback((job: GeoPdfJobView) => {
+    const label = job.title ?? "GeoPDF";
+    void runGeoPdfImport(label, async (onProgress, token) => {
+      // Re-presign right before download — the listed URL may have expired
+      // while this list was open.
+      const fresh = await getGeoPdfJob(job.id);
+      if (!fresh.downloadUrl) throw new Error("This GeoPDF isn't ready to download.");
+      return importGeoPdfFromUrl(
+        fresh.title ?? "Logjam GeoPDF",
+        fresh.downloadUrl,
+        onProgress,
+        token,
+      );
+    });
+    setFilter("geoPdf");
+  }, []);
 
   // --- Tracks ---
   const { tracks } = useTracks();
@@ -599,6 +535,12 @@ export function SavedScreen({
     }
 
     for (const geoPdf of geoPdfImports) {
+      // The row for the import that is running right now is suppressed: the
+      // progress card above the list is already showing it, and its registry
+      // state ("rasterising") would otherwise render here as "Unfinished" with
+      // a Resume button, i.e. an invitation to start a second run of the very
+      // import in progress.
+      if (importRun?.importId === geoPdf.id) continue;
       const failed = geoPdf.state === "failed";
       const incomplete = geoPdf.state !== "ready" && !failed;
       // An imported GeoPDF costs the source PDF *plus* the MBTiles rendered
@@ -684,6 +626,7 @@ export function SavedScreen({
   }, [
     artifacts,
     geoPdfBusy,
+    importRun?.importId,
     routes.data,
     geoPdfImports,
     handleResumeGeoPdf,
@@ -857,7 +800,36 @@ export function SavedScreen({
           />
         ) : null}
 
-        {visibleItems.length === 0 && !activeOp ? (
+        {/* A running GeoPDF import, as a card the user can walk away from.
+            Separate from `activeOp` above rather than folded into it: this one
+            is not owned by this screen, so it must survive the screen
+            unmounting and be here again when the user comes back. */}
+        {importRun ? (
+          <Row
+            title={importRun.label}
+            subtitle={
+              importRun.fraction != null
+                ? `${GEOPDF_PHASE_LABEL[importRun.phase]} · ${Math.round(importRun.fraction * 100)}%`
+                : GEOPDF_PHASE_LABEL[importRun.phase]
+            }
+            icon="file-text"
+            hue={assetHue.geoPdf}
+            progress={importRun.fraction ?? 0}
+            right={
+              <IconButton
+                icon="x"
+                // Honest about which half of the run this reaches: the token is
+                // read between rasteriser batches, so during the front phases
+                // there is nothing yet for it to interrupt.
+                accessibilityLabel="Cancel this import"
+                onPress={cancelGeoPdfImportRun}
+                disabled={!CANCELLABLE_PHASES.includes(importRun.phase)}
+              />
+            }
+          />
+        ) : null}
+
+        {visibleItems.length === 0 && !activeOp && !importRun ? (
           <EmptyPanel filter={filter} online={online} onAdd={() => setAddSheetOpen(true)} />
         ) : null}
 
@@ -1158,20 +1130,6 @@ export function SavedScreen({
         onClose={() => setLinkingRoute(null)}
         onInfo={info}
         onError={fail}
-      />
-
-      {/* Takes the whole screen for the duration — see the note on the
-          component. Mounted last so it covers the sheets too: an import can be
-          started from the Add sheet, and a modal underneath the one that
-          started it would be invisible. */}
-      <GeoPdfImportProgress
-        visible={geoPdfOp !== null}
-        label={geoPdfOp?.label ?? ""}
-        phase={geoPdfOp?.phase ?? "copying"}
-        fraction={geoPdfOp?.fraction ?? null}
-        onCancel={() => {
-          if (geoPdfCancel.current) geoPdfCancel.current.cancelled = true;
-        }}
       />
 
       <Toast message={toast} onDismissed={() => setToast(null)} />

@@ -46,6 +46,13 @@ declare class LogjamPdfRendererModule extends NativeModule {
   open(fileUri: string): Promise<OpenPdfResult>;
   close(handle: number): Promise<void>;
 
+  /**
+   * SHA-256 of a file as lowercase hex, streamed natively off the JS thread.
+   * The import's content-address, computed without the bytes ever entering the
+   * JS heap — see the Kotlin side for why that matters.
+   */
+  sha256File(fileUri: string): Promise<string>;
+
   /** Render a page region (PDF pts, origin bottom-left) to a PNG file. */
   renderRegion(
     handle: number,
@@ -60,7 +67,13 @@ declare class LogjamPdfRendererModule extends NativeModule {
   rasteriseBatch(
     handle: number,
     options: RasteriseBatchOptions,
-  ): Promise<{ written: number }>;
+  ): Promise<{
+    written: number;
+    /** Batch time inside pdfium's page render, milliseconds. */
+    renderMs: number;
+    /** Batch time inside PNG encoding, milliseconds. */
+    encodeMs: number;
+  }>;
   /** Downsample fromZ → fromZ−1 (4 children → 1 parent, bilinear 50 %). */
   downsampleLevel(
     mbtilesUri: string,

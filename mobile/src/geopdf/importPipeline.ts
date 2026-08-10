@@ -7,10 +7,19 @@
 // The tile plan is deterministic from the source bytes, so resume re-derives
 // it and skips completed work via the MBTiles logjam:build_state row.
 //
+// THE PIPELINE TAKES A FILE URI, NEVER BYTES, and that is a hard rule now.
+// Everything before rasterising used to run through the JS heap: a sync
+// whole-file read, a Uint8Array handed to expo-crypto (another full copy across
+// the bridge), then a sync write back out — and on the share-sheet path, a
+// base64 read plus a char-at-a-time `atob` over eight million elements. All of
+// it on the UI thread, all of it before the first tile. The bytes now enter JS
+// exactly once, for the pdf-lib parse, and become unreachable the moment it
+// returns (see `parseSourcePdf`). Hashing is native and streamed; copying is a
+// filesystem copy.
+//
 // PRIVACY: the whole flow is device-local — nothing about the file (including
 // its existence) touches the API. Errors surfaced to the UI are static
 // strings or parser error CODES; file-derived detail stays in-app.
-import * as Crypto from "expo-crypto";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import { Directory, File, Paths } from "expo-file-system/next";
@@ -118,6 +127,12 @@ export interface GeoPdfProgress {
   phase: GeoPdfImportState;
   /** 0–1 within the rasterising/overviews phases; 0 elsewhere. */
   fraction: number;
+  /**
+   * The registry row's id, once one exists — hashing and copying happen before
+   * the row is inserted. The Saved list needs it to tell which of its rows the
+   * running import belongs to.
+   */
+  importId?: string;
 }
 
 export interface GeoPdfCancelToken {
@@ -142,10 +157,32 @@ function importsRootDir(): Directory {
   return new Directory(Paths.document, "imports", "geopdf");
 }
 
-function sha256Hex(bytes: Uint8Array): Promise<string> {
-  return Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes).then((buf) =>
-    [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join(""),
-  );
+/**
+ * Read and parse the copied source PDF.
+ *
+ * Its own function purely so the whole-file buffer is unreachable the moment it
+ * returns. pdf-lib needs the bytes and there is no way around that, but holding
+ * 8–100 MB live through the minutes of rasterising that follow is GC pressure
+ * for nothing — nothing downstream reads them, the native side works from the
+ * file on disk.
+ */
+function parseSourcePdf(dirPath: string) {
+  return parseGeoPdfGeoref(new File(`file://${dirPath}/source.pdf`).bytes());
+}
+
+/**
+ * A `file://` URI for `uri`, staging a `content://` one into the cache first.
+ *
+ * The share sheet hands over a content URI, which neither the native hasher nor
+ * `expo-file-system/next` can open. The legacy `copyAsync` can, and does it
+ * natively; the alternative was reading the file as base64 into JS and decoding
+ * it by hand, which is what this replaces.
+ */
+async function stagedFileUri(uri: string): Promise<{ uri: string; scratch: string | null }> {
+  if (uri.startsWith("file://")) return { uri, scratch: null };
+  const scratch = `${FileSystem.cacheDirectory}geopdf-incoming-${randomId()}.pdf`;
+  await FileSystem.copyAsync({ from: uri, to: scratch });
+  return { uri: scratch, scratch };
 }
 
 function clipPolygonOf(viewport: GeoPdfViewport): XY[] {
@@ -199,25 +236,42 @@ export async function importGeoPdfFromPicker(
   if (asset.size != null && asset.size > MAX_GEOPDF_FILE_BYTES) {
     throw new Error(GEOPDF_ERRORS.FILE_TOO_LARGE);
   }
-  const bytes = new File(asset.uri).bytes();
-  return importGeoPdfBytes(asset.name, bytes, onProgress, token);
+  return importGeoPdfFile(asset.name, asset.uri, onProgress, token);
 }
 
 /**
- * Import a GeoPDF already read into memory. Shared by the picker flow and
- * the incoming-intent ("Open in Logjam") flow.
+ * Import a GeoPDF from a file the OS has given us — the picker, a share-sheet
+ * content URI, or a downloaded scratch file. Never takes bytes; see the header.
  */
-export async function importGeoPdfBytes(
+export async function importGeoPdfFile(
   displayName: string,
-  bytes: Uint8Array,
+  fileUri: string,
   onProgress: (progress: GeoPdfProgress) => void,
   token: GeoPdfCancelToken,
 ): Promise<GeoPdfImportOutcome> {
-  if (bytes.byteLength > MAX_GEOPDF_FILE_BYTES) {
+  const staged = await stagedFileUri(fileUri);
+  try {
+    return await importStagedFile(displayName, staged.uri, onProgress, token);
+  } finally {
+    if (staged.scratch) {
+      await FileSystem.deleteAsync(staged.scratch, { idempotent: true }).catch(() => {});
+    }
+  }
+}
+
+async function importStagedFile(
+  displayName: string,
+  fileUri: string,
+  onProgress: (progress: GeoPdfProgress) => void,
+  token: GeoPdfCancelToken,
+): Promise<GeoPdfImportOutcome> {
+  const incoming = new File(fileUri);
+  const sourceSizeBytes = incoming.size ?? 0;
+  if (sourceSizeBytes > MAX_GEOPDF_FILE_BYTES) {
     throw new Error(GEOPDF_ERRORS.FILE_TOO_LARGE);
   }
   onProgress({ phase: "hashing", fraction: 0 });
-  const sha256 = await sha256Hex(bytes);
+  const sha256 = await LogjamPdfRenderer.sha256File(fileUri);
 
   const existing = await findGeoPdfImportBySha256(sha256);
   if (existing) {
@@ -231,7 +285,7 @@ export async function importGeoPdfBytes(
   if (!dir.exists) dir.create({ intermediates: true });
   const sourceFile = new File(dir, "source.pdf");
   if (sourceFile.exists) sourceFile.delete();
-  sourceFile.write(bytes);
+  incoming.copy(sourceFile);
 
   const record: GeoPdfImport = {
     id: randomId(),
@@ -248,13 +302,13 @@ export async function importGeoPdfBytes(
     opacity: 0.8,
     visible: true,
     dirPath: dir.uri.replace(/^file:\/\//, ""),
-    sourceSizeBytes: bytes.byteLength,
+    sourceSizeBytes,
     quirks: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
   await insertGeoPdfImport(record);
-  return buildArtifact(record, bytes, onProgress, token);
+  return buildArtifact(record, onProgress, token);
 }
 
 /**
@@ -277,8 +331,7 @@ export async function importGeoPdfFromUrl(
     if (result.status !== 200) {
       throw new Error(`GeoPDF download failed (HTTP ${result.status})`);
     }
-    const bytes = new File(scratchUri).bytes();
-    return await importGeoPdfBytes(displayName, bytes, onProgress, token);
+    return await importGeoPdfFile(displayName, scratchUri, onProgress, token);
   } finally {
     await FileSystem.deleteAsync(scratchUri, { idempotent: true }).catch(() => {});
   }
@@ -293,24 +346,24 @@ export async function resumeGeoPdfImport(
   const imports = await listGeoPdfImports();
   const record = imports.find((row) => row.id === id);
   if (!record) throw new Error(GEOPDF_ERRORS.RENDER_FAILED);
-  const bytes = new File(`file://${record.dirPath}/source.pdf`).bytes();
-  return buildArtifact(record, bytes, onProgress, token);
+  return buildArtifact(record, onProgress, token);
 }
 
 async function buildArtifact(
   record: GeoPdfImport,
-  bytes: Uint8Array,
   onProgress: (progress: GeoPdfProgress) => void,
   token: GeoPdfCancelToken,
 ): Promise<GeoPdfImportOutcome> {
+  const report = (phase: GeoPdfImportState, fraction: number) =>
+    onProgress({ phase, fraction, importId: record.id });
   const setState = async (state: GeoPdfImportState) => {
     await updateGeoPdfImport(record.id, { state });
-    onProgress({ phase: state, fraction: 0 });
+    report(state, 0);
   };
 
   try {
     await setState("parsing");
-    const parsed = await parseGeoPdfGeoref(bytes);
+    const parsed = await parseSourcePdf(record.dirPath);
     const page = parsed.pages[0];
     const viewportIndex = chooseMainViewport(page);
     // Everything downstream of here — transform, clip polygon, tile plan, warp
@@ -373,17 +426,19 @@ async function buildArtifact(
       const startDownsampleZ =
         resume?.phase === "overviews" ? (resume.downsampleZ ?? plan.zMax - 1) : null;
 
+      const rasterise = { renderMs: 0, encodeMs: 0, tiles: 0 };
+      const rasteriseStartedAt = Date.now();
       if (startDownsampleZ === null) {
         await updateGeoPdfImport(record.id, { state: "rasterising" });
         for (let i = startTile ?? 0; i < plan.tiles.length; i += BATCH_SIZE) {
           if (token.cancelled) return await pause(record);
-          onProgress({ phase: "rasterising", fraction: i / plan.tiles.length });
+          report("rasterising", i / plan.tiles.length);
           const buildState: BuildState = {
             phase: "rasterising",
             zMax: plan.zMax,
             nextTileIndex: Math.min(i + BATCH_SIZE, plan.tiles.length),
           };
-          await LogjamPdfRenderer.rasteriseBatch(opened.handle, {
+          const batch = await LogjamPdfRenderer.rasteriseBatch(opened.handle, {
             page: page.pageIndex,
             mbtilesUri,
             tileSize: plan.tileSize,
@@ -391,17 +446,26 @@ async function buildArtifact(
             tiles: plan.tiles.slice(i, i + BATCH_SIZE),
             buildState: JSON.stringify(buildState),
           });
+          rasterise.renderMs += batch.renderMs;
+          rasterise.encodeMs += batch.encodeMs;
+          rasterise.tiles += batch.written;
         }
+        // Counts and milliseconds only — nothing about WHICH map this is. The
+        // split says whether the next optimisation belongs in how often the
+        // page is rendered or in how tiles are encoded; see the note in the
+        // native rasteriseBatch.
+        console.log(
+          `[geopdf] rasterised ${rasterise.tiles} tiles: render ${rasterise.renderMs} ms, encode ${rasterise.encodeMs} ms, other ${
+            Date.now() - rasteriseStartedAt - rasterise.renderMs - rasterise.encodeMs
+          } ms`,
+        );
       }
 
       await updateGeoPdfImport(record.id, { state: "overviews" });
       const firstZ = startDownsampleZ ?? plan.zMax - 1;
       for (let z = firstZ; z >= plan.zMin; z--) {
         if (token.cancelled) return await pause(record);
-        onProgress({
-          phase: "overviews",
-          fraction: (plan.zMax - 1 - z) / Math.max(1, plan.zMax - plan.zMin),
-        });
+        report("overviews", (plan.zMax - 1 - z) / Math.max(1, plan.zMax - plan.zMin));
         const buildState: BuildState = { phase: "overviews", zMax: plan.zMax, downsampleZ: z };
         await LogjamPdfRenderer.downsampleLevel(
           mbtilesUri,
@@ -441,7 +505,7 @@ async function buildArtifact(
       residualFraction: transform.maxResidualFractionOfWidth,
       quirks: viewport.quirks,
     };
-    onProgress({ phase: "ready", fraction: 1 });
+    report("ready", 1);
     return { status: "imported", record: done };
   } catch (err) {
     const code = err instanceof GeoPdfParseError ? err.code : "RENDER_FAILED";

@@ -28,6 +28,7 @@ import { fetchCurrentUser } from "../api/queries";
 import { getGeoPdfJob, listGeoPdfJobs } from "../api/geoPdfJobs";
 import { readPref, writePref } from "../prefsDb";
 import { importGeoPdfFromUrl } from "./importPipeline";
+import { runGeoPdfImport } from "./importRunner";
 
 const HANDLED_PREF_KEY = "autoDownloadedGeoPdfJobIds";
 
@@ -110,11 +111,18 @@ export async function runGeoPdfAutoDownload(): Promise<void> {
         // The listed URL may have expired while this ran; re-presign.
         const fresh = await getGeoPdfJob(job.id);
         if (!fresh.downloadUrl) continue;
-        await importGeoPdfFromUrl(
-          fresh.title ?? "Logjam GeoPDF",
-          fresh.downloadUrl,
-          () => {},
-          { cancelled: false },
+        // Through the shared runner, so an unasked auto-import can't collide
+        // with one the user started by hand — they would fight over the single
+        // native rasteriser, and for the same file over the same directory.
+        // The runner reports it like any other import: a card in Saved, a
+        // toast when it lands.
+        await runGeoPdfImport(fresh.title ?? "Logjam GeoPDF", (onProgress, token) =>
+          importGeoPdfFromUrl(
+            fresh.title ?? "Logjam GeoPDF",
+            fresh.downloadUrl as string,
+            onProgress,
+            token,
+          ),
         );
       } catch (err) {
         console.error(err);

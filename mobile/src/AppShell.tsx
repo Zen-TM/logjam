@@ -9,7 +9,7 @@
 // the mirror and still enqueue to the outbox, which is precisely what makes
 // linking an account later a flush rather than a migration.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert } from "react-native";
+import { Alert, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
   DarkTheme,
@@ -34,6 +34,7 @@ import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
 import { RegionDownloadProgressScreen } from "./map/RegionDownloadProgressScreen";
 import type { BasemapId } from "./map/sourceResolver";
 import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
+import { GeoPdfImportToast } from "./geopdf/GeoPdfImportToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { SavedScreen } from "./saved/SavedScreen";
 import { AccountScreen } from "./screens/AccountScreen";
@@ -627,6 +628,10 @@ export function AppShell({
 
   return (
     <AccountStateProvider accountState={accountState} linkAccount={onLinkAccount}>
+    {/* The GeoPDF import toast is a SIBLING of the whole navigator: the import
+        runs in the background and can finish on any tab, so its outcome has no
+        screen of its own to be announced from. */}
+    <View style={{ flex: 1 }}>
     <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <Tabs.Navigator
         // A route being drawn or edited owns the map's taps and has no home
@@ -793,6 +798,8 @@ export function AppShell({
         </Tabs.Screen>
       </Tabs.Navigator>
     </NavigationContainer>
+    <GeoPdfImportToast />
+    </View>
     </AccountStateProvider>
   );
 }

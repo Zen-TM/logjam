@@ -151,6 +151,33 @@ bush-only calibration read 40 % under for a Katoomba download) plus a measured 7
 MBTiles container overhead. Re-run the script and update both together; a test
 asserts the range still brackets a real 34-tile download.
 
+## GeoPDF import
+
+`src/geopdf/importPipeline.ts` takes a **file URI, never bytes**, and that is a
+hard rule. Every phase before rasterising used to run the whole file through the
+JS heap — a sync read, a `Uint8Array` handed to expo-crypto (a second full copy
+across the bridge), a sync write back out, and on the share-sheet path a base64
+read plus a hand-rolled `atob` over millions of elements — all on the UI thread
+before the first tile. Hashing is now native and streamed
+(`LogjamPdfRenderer.sha256File`), copying is a filesystem copy, and the bytes
+enter JS exactly once, for the pdf-lib parse, inside a function scoped so they
+become unreachable the moment it returns.
+
+Every entry point (picker, account GeoPDF, share sheet, Wi-Fi auto-download)
+goes through `runGeoPdfImport` in `src/geopdf/importRunner.ts`, which is also
+the "one import at a time" guard — two at once would fight over the single
+native executor and, for the same file, over the same directory. See DESIGN.md
+§6 for why it's a background card rather than a screen.
+
+**The rasteriser reports where its milliseconds went** (`renderMs`/`encodeMs`
+per batch, logged once per import as counts and durations only). Measured on the
+emulator for a 336-tile 1:25 000 sheet: render 60 s, PNG encode 24 s, everything
+else 15 s. pdfium re-walks the whole page's content on every `render()` call
+regardless of how small the region is, which is why render dominates and why
+sharing one render across a block of tiles is the available big win — it is not
+built, because it would have to move the mesh warp's lattice off each tile's own
+`srcRect`, and getting that wrong produces a confidently misplaced map.
+
 ## Privacy (design constraint — see root CLAUDE.md)
 
 Going offline puts canyon coords/names **on the device**. Every stage's privacy

@@ -1,0 +1,179 @@
+// The one GeoPDF import that may be running, and where the rest of the app
+// reads it from.
+//
+// WHY MODULE STATE AND NOT A SCREEN'S: an import takes minutes, and for all but
+// the first couple of seconds of that the JS thread is idle — the native
+// rasteriser is doing the work on its own executor. There is no reason to hold
+// the user on one screen for it, so the run outlives the screen that started
+// it: the Saved list shows a progress card, a toast announces the outcome
+// wherever the user has got to, and the import keeps going in between. (The
+// screen that started it used to be a full-screen modal for the whole run,
+// which is what actually made the app feel frozen for minutes.)
+//
+// ONE AT A TIME, and the guard lives here rather than in each caller. The
+// picker, the account-GeoPDF list, the share sheet and the Wi-Fi auto-download
+// can all fire independently; two imports at once would fight over the single
+// native executor and, for the same file twice, over the same directory.
+//
+// PRIVACY: labels are display strings shown in-app. Nothing here logs a file
+// name or a path — failures carry the pipeline's static message, error CODES
+// only, exactly as the pipeline promises.
+import { useSyncExternalStore } from "react";
+
+import type { ToastMessage } from "../ui/Toast";
+import type { GeoPdfImportState } from "./geoPdfImportsDb";
+import {
+  GEOPDF_ERRORS,
+  type GeoPdfCancelToken,
+  type GeoPdfImportOutcome,
+  type GeoPdfProgress,
+} from "./importPipeline";
+
+export type GeoPdfImportRun = {
+  label: string;
+  phase: GeoPdfImportState;
+  /** 0–1 in the measurable phases; null while a phase has no measure. */
+  fraction: number | null;
+  /** Registry row id once it exists — null through hashing and copying. */
+  importId: string | null;
+};
+
+/**
+ * What each phase is doing, in the user's terms. "Reading" covers the three
+ * front phases at once: they pass in a couple of seconds now that the file no
+ * longer travels through the JS heap, and naming them separately would only
+ * flicker three labels past too fast to read.
+ */
+export const GEOPDF_PHASE_LABEL: Record<GeoPdfImportState, string> = {
+  copying: "Reading the file",
+  hashing: "Reading the file",
+  parsing: "Reading the georeferencing",
+  planning: "Working out the tiles",
+  rasterising: "Rendering the map",
+  overviews: "Building the zoomed-out levels",
+  finalising: "Finishing up",
+  ready: "Done",
+  failed: "That didn't work",
+};
+
+/**
+ * Phases where cancelling actually does something. The token is only read
+ * between rasteriser batches, so a Cancel offered during the front phases would
+ * be a button that ignores you — they are short, and they end in a phase that
+ * listens.
+ */
+export const CANCELLABLE_PHASES: GeoPdfImportState[] = ["rasterising", "overviews"];
+
+let current: (GeoPdfImportRun & { token: GeoPdfCancelToken }) | null = null;
+
+const runListeners = new Set<() => void>();
+const toastListeners = new Set<(message: Omit<ToastMessage, "nonce">) => void>();
+
+function notifyRun(): void {
+  for (const listener of runListeners) listener();
+}
+
+function emitToast(text: string, tone: ToastMessage["tone"]): void {
+  for (const listener of toastListeners) listener({ text, tone });
+}
+
+function subscribeRun(listener: () => void): () => void {
+  runListeners.add(listener);
+  return () => runListeners.delete(listener);
+}
+
+export function getGeoPdfImportRun(): GeoPdfImportRun | null {
+  return current;
+}
+
+/** Subscribe to import outcomes — see GeoPdfImportToast, the only consumer. */
+export function onGeoPdfImportToast(
+  listener: (message: Omit<ToastMessage, "nonce">) => void,
+): () => void {
+  toastListeners.add(listener);
+  return () => toastListeners.delete(listener);
+}
+
+/** The running import, re-rendering the caller as it advances. */
+export function useGeoPdfImportRun(): GeoPdfImportRun | null {
+  return useSyncExternalStore(subscribeRun, getGeoPdfImportRun);
+}
+
+export function isGeoPdfImportRunning(): boolean {
+  return current !== null;
+}
+
+/**
+ * Ask the running import to stop at the next batch boundary. It pauses rather
+ * than aborts — the partial MBTiles carries its own checkpoint, so Saved offers
+ * Resume and no rendered tile is thrown away.
+ */
+export function cancelGeoPdfImportRun(): void {
+  if (current) current.token.cancelled = true;
+}
+
+/**
+ * Run an import in the background. Resolves when it finishes; the outcome is
+ * announced by toast, so callers that only want it started can ignore the
+ * promise. Never rejects — a failed import is a toast, not an unhandled
+ * rejection in whichever screen happened to start it.
+ */
+export async function runGeoPdfImport(
+  label: string,
+  start: (
+    onProgress: (progress: GeoPdfProgress) => void,
+    token: GeoPdfCancelToken,
+  ) => Promise<GeoPdfImportOutcome>,
+): Promise<GeoPdfImportOutcome | null> {
+  if (current) {
+    emitToast("One GeoPDF is already importing — this one can wait.", "error");
+    return null;
+  }
+  const token: GeoPdfCancelToken = { cancelled: false };
+  current = { label, phase: "hashing", fraction: null, importId: null, token };
+  notifyRun();
+
+  const onProgress = (progress: GeoPdfProgress) => {
+    if (!current) return;
+    const measurable =
+      progress.phase === "rasterising" || progress.phase === "overviews";
+    current = {
+      ...current,
+      phase: progress.phase,
+      fraction: measurable ? progress.fraction : null,
+      importId: progress.importId ?? current.importId,
+    };
+    notifyRun();
+  };
+
+  try {
+    const outcome = await start(onProgress, token);
+    switch (outcome.status) {
+      case "imported":
+        emitToast(`${label} imported.`, "info");
+        break;
+      case "existing":
+        emitToast(`${label} was already imported.`, "info");
+        break;
+      case "paused":
+        emitToast("Import paused — resume it from Saved.", "info");
+        break;
+      case "cancelled":
+        break;
+    }
+    return outcome;
+  } catch (err) {
+    console.error(err);
+    const code = (err as { code?: string }).code;
+    emitToast(
+      (code && GEOPDF_ERRORS[code]) ||
+        (err instanceof Error && err.message) ||
+        "Couldn't import that PDF.",
+      "error",
+    );
+    return null;
+  } finally {
+    current = null;
+    notifyRun();
+  }
+}

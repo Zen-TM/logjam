@@ -503,6 +503,24 @@ longer than confirmations. An error that is *state* rather than an event (a
 failed background fetch whose data the current filter needs) stays inline as a
 row with a retry — it persists because the problem persists.
 
+**Long work belongs in a card, not a screen — unless leaving would break it.**
+The two long jobs in the app are deliberately opposite, and the difference is
+whether the user can walk away without cost:
+
+- A **region download** only advances while the app is foregrounded, so it gets
+  `RegionDownloadProgressScreen`, whose Done stays disabled until every job has
+  settled. Holding the user there is the honest cost of the constraint.
+- A **GeoPDF import** hands its work to a native executor and needs nothing from
+  the JS thread, so it runs in the background (`geopdf/importRunner.ts`): a
+  progress card at the top of Saved with a cancel, and a toast at the app shell
+  when it lands. It used to take the whole screen for the whole run, which read
+  as the app being frozen for minutes when it was idle for all but the first two
+  seconds of them.
+
+The corollary: a background job's toast is mounted at the SHELL, not on the
+screen that started it, or it fires into an unmounted component the moment the
+user goes somewhere else — which is exactly what a background job is for.
+
 ## 7. Actions
 
 - **One primary acquisition affordance per screen** — a labelled compact

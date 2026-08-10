@@ -141,6 +141,31 @@ class LogjamPdfRendererModule : Module() {
       }
     }
 
+    // SHA-256 of a file, streamed. The import pipeline dedupes by content hash
+    // and names the artifact directory after it, so this runs before anything
+    // else — and it must not be the thing that reads the whole PDF into the JS
+    // heap to get there. Handing expo-crypto a Uint8Array costs a sync file
+    // read plus a bridge copy of every byte, on the UI thread, twice for a file
+    // that then has to be written back out again.
+    AsyncFunction("sha256File") { fileUri: String, promise: Promise ->
+      executor.execute {
+        try {
+          val digest = java.security.MessageDigest.getInstance("SHA-256")
+          File(pathFromUri(fileUri)).inputStream().use { stream ->
+            val buffer = ByteArray(1 shl 16)
+            while (true) {
+              val read = stream.read(buffer)
+              if (read <= 0) break
+              digest.update(buffer, 0, read)
+            }
+          }
+          promise.resolve(digest.digest().joinToString("") { "%02x".format(it) })
+        } catch (err: Throwable) {
+          promise.reject(CodedException("ERR_HASH", err.message, err))
+        }
+      }
+    }
+
     AsyncFunction("close") { handle: Int, promise: Promise ->
       executor.execute {
         documents.remove(handle)?.let {
@@ -207,12 +232,24 @@ class LogjamPdfRendererModule : Module() {
         try {
           val doc = documentOrThrow(handle)
           var written = 0
+          // Split timings, because the two halves of a tile want opposite
+          // fixes: pdfium re-walks the whole page's content per render() call
+          // regardless of how small the region is (which would make sharing one
+          // render across a block of tiles a large win), while PNG encoding is
+          // per-tile work that no amount of batching removes. Guessing which
+          // dominates is how you rewrite the wrong half of the georeferencing
+          // maths. Reported per batch and logged by the pipeline.
+          var renderMs = 0L
+          var encodeMs = 0L
           doc.renderer.openPage(options.page).use { page ->
             openMbtiles(options.mbtilesUri).use { db ->
               db.beginTransaction()
               try {
                 for (tile in options.tiles) {
-                  val png = rasteriseTile(page, tile, options.tileSize, options.clipPolygonPt)
+                  val timing = TileTiming()
+                  val png = rasteriseTile(page, tile, options.tileSize, options.clipPolygonPt, timing)
+                  renderMs += timing.renderMs
+                  encodeMs += timing.encodeMs
                   val tmsRow = (1 shl tile.z) - 1 - tile.y
                   db.execSQL(
                     "INSERT OR REPLACE INTO tiles (zoom_level, tile_column, tile_row, tile_data) VALUES (?, ?, ?, ?)",
@@ -227,7 +264,9 @@ class LogjamPdfRendererModule : Module() {
               }
             }
           }
-          promise.resolve(mapOf("written" to written))
+          promise.resolve(
+            mapOf("written" to written, "renderMs" to renderMs, "encodeMs" to encodeMs),
+          )
         } catch (err: CodedException) {
           promise.reject(err)
         } catch (err: Throwable) {
@@ -422,11 +461,18 @@ class LogjamPdfRendererModule : Module() {
     return max(sx, sy)
   }
 
+  /** Where one tile's milliseconds went. See the note in rasteriseBatch. */
+  private class TileTiming {
+    var renderMs = 0L
+    var encodeMs = 0L
+  }
+
   private fun rasteriseTile(
     page: PdfRenderer.Page,
     tile: TileJob,
     tileSize: Int,
     clipPolygonPt: List<PagePoint>?,
+    timing: TileTiming,
   ): ByteArray {
     val rect = tile.srcRect
     var s = warpScale(tile)
@@ -439,7 +485,9 @@ class LogjamPdfRendererModule : Module() {
       srcH = (srcH * shrink).toInt().coerceAtLeast(1)
     }
 
+    val renderStart = System.nanoTime()
     val source = renderPageRegion(page, rect, srcW, srcH)
+    timing.renderMs = (System.nanoTime() - renderStart) / 1_000_000
     val tileBitmap = Bitmap.createBitmap(tileSize, tileSize, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(tileBitmap)
     val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
@@ -500,7 +548,9 @@ class LogjamPdfRendererModule : Module() {
 
     if (clipPath != null) canvas.restore()
     source.recycle()
+    val encodeStart = System.nanoTime()
     val png = encodePng(tileBitmap)
+    timing.encodeMs = (System.nanoTime() - encodeStart) / 1_000_000
     tileBitmap.recycle()
     return png
   }
