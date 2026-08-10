@@ -133,6 +133,12 @@ export interface GeoPdfProgress {
    * running import belongs to.
    */
   importId?: string;
+  /**
+   * The file's own name, once known. The picker flow can't name the import
+   * until the user has chosen something, and a resume starts from an id, so
+   * the progress card opens on a placeholder and is corrected from here.
+   */
+  label?: string;
 }
 
 export interface GeoPdfCancelToken {
@@ -270,7 +276,8 @@ async function importStagedFile(
   if (sourceSizeBytes > MAX_GEOPDF_FILE_BYTES) {
     throw new Error(GEOPDF_ERRORS.FILE_TOO_LARGE);
   }
-  onProgress({ phase: "hashing", fraction: 0 });
+  const label = displayName.replace(/\.[^.]+$/, "");
+  onProgress({ phase: "hashing", fraction: 0, label });
   const sha256 = await LogjamPdfRenderer.sha256File(fileUri);
 
   const existing = await findGeoPdfImportBySha256(sha256);
@@ -280,7 +287,7 @@ async function importStagedFile(
     return resumeGeoPdfImport(existing.id, onProgress, token);
   }
 
-  onProgress({ phase: "copying", fraction: 0 });
+  onProgress({ phase: "copying", fraction: 0, label });
   const dir = new Directory(importsRootDir(), sha256);
   if (!dir.exists) dir.create({ intermediates: true });
   const sourceFile = new File(dir, "source.pdf");
@@ -289,7 +296,7 @@ async function importStagedFile(
 
   const record: GeoPdfImport = {
     id: randomId(),
-    label: displayName.replace(/\.[^.]+$/, ""),
+    label,
     sha256,
     pageIndex: 0,
     viewportIndex: 0,
@@ -355,7 +362,7 @@ async function buildArtifact(
   token: GeoPdfCancelToken,
 ): Promise<GeoPdfImportOutcome> {
   const report = (phase: GeoPdfImportState, fraction: number) =>
-    onProgress({ phase, fraction, importId: record.id });
+    onProgress({ phase, fraction, importId: record.id, label: record.label });
   const setState = async (state: GeoPdfImportState) => {
     await updateGeoPdfImport(record.id, { state });
     report(state, 0);

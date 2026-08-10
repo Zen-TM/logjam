@@ -142,18 +142,25 @@ export async function runGeoPdfImport(
       phase: progress.phase,
       fraction: measurable ? progress.fraction : null,
       importId: progress.importId ?? current.importId,
+      // The picker can't name the file until the user has chosen one, so the
+      // card opens on whatever the caller guessed and takes the real name here.
+      label: progress.label ?? current.label,
     };
     notifyRun();
   };
 
   try {
     const outcome = await start(onProgress, token);
+    // The live label, not the one this started with — by now the picker has
+    // told us the file's actual name, and the toast is the last place the user
+    // hears about it.
+    const named = current?.label ?? label;
     switch (outcome.status) {
       case "imported":
-        emitToast(`${label} imported.`, "info");
+        emitToast(`${named} imported.`, "info");
         break;
       case "existing":
-        emitToast(`${label} was already imported.`, "info");
+        emitToast(`${named} was already imported.`, "info");
         break;
       case "paused":
         emitToast("Import paused — resume it from Saved.", "info");
