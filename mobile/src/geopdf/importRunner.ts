@@ -19,6 +19,7 @@
 // name or a path — failures carry the pipeline's static message, error CODES
 // only, exactly as the pipeline promises.
 import { useSyncExternalStore } from "react";
+import { AppState } from "react-native";
 
 import type { ToastMessage } from "../ui/Toast";
 import type { GeoPdfImportState } from "./geoPdfImportsDb";
@@ -137,12 +138,30 @@ export async function runGeoPdfImport(
   // without servicing a timer. Attributing a freeze from step durations alone
   // is guesswork — a slow step that yields is fine, a fast one that doesn't
   // isn't. Logged once per import, a number and nothing else.
+  //
+  // ONLY FOREGROUND TIME COUNTS. Android stops a backgrounded app's timers, and
+  // the document picker is a different activity, so the gap while the user
+  // chooses a file is a gap in the MEASUREMENT, not a freeze — uncorrected it
+  // reported a 50-second stall on an 11-second import.
+  //
+  // The correction has to come from an AppState listener rather than a check
+  // inside the tick: while the app is backgrounded the tick does not run at
+  // all, so it can never observe the transition it needs to skip. Every
+  // transition also restarts the interval, so the first tick after a resume
+  // measures from the resume and not from whenever the app went away.
   const HEARTBEAT_MS = 100;
   let lastBeat = Date.now();
+  let foreground = AppState.currentState === "active";
   let worstStallMs = 0;
+  const appStateSubscription = AppState.addEventListener("change", (state) => {
+    foreground = state === "active";
+    lastBeat = Date.now();
+  });
   const heartbeat = setInterval(() => {
     const now = Date.now();
-    worstStallMs = Math.max(worstStallMs, now - lastBeat - HEARTBEAT_MS);
+    if (foreground) {
+      worstStallMs = Math.max(worstStallMs, now - lastBeat - HEARTBEAT_MS);
+    }
     lastBeat = now;
   }, HEARTBEAT_MS);
 
@@ -194,6 +213,7 @@ export async function runGeoPdfImport(
     return null;
   } finally {
     clearInterval(heartbeat);
+    appStateSubscription.remove();
     console.log(`[geopdf] worst JS-thread stall ${worstStallMs} ms`);
     current = null;
     notifyRun();
