@@ -23,11 +23,11 @@
 // PRIVACY: job ids and titles. The bytes land in app-private storage like every
 // other import, and arm the app lock the same way.
 import { AppState } from "react-native";
-import NetInfo from "@react-native-community/netinfo";
 
 import { fetchCurrentUser } from "../api/queries";
 import { getGeoPdfJob, listGeoPdfJobs } from "../api/geoPdfJobs";
 import { readPref, writePref } from "../prefsDb";
+import { subscribeReconnect } from "../map/connectivity";
 import { canRunNow } from "../offline/networkPolicy";
 import {
   isAutoDownloadEnabled,
@@ -154,12 +154,7 @@ export function registerGeoPdfAutoDownload(): () => void {
   });
 
   // Edge-triggered: offline → online, not every NetInfo event.
-  let wasConnected: boolean | null = null;
-  const netInfoUnsub = NetInfo.addEventListener((state) => {
-    const connected = state.isConnected === true;
-    if (connected && wasConnected === false) requestRun();
-    wasConnected = connected;
-  });
+  const netInfoUnsub = subscribeReconnect(requestRun);
 
   requestRun();
 

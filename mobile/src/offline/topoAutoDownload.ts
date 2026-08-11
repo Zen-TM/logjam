@@ -25,10 +25,10 @@
 // PRIVACY: job ids and layer names. The bundles land in the same app-private,
 // backup-excluded store as every other artifact, behind the app lock.
 import { AppState } from "react-native";
-import NetInfo from "@react-native-community/netinfo";
 
 import { apiFetch } from "../api/apiFetch";
 import { readPref, writePref } from "../prefsDb";
+import { subscribeReconnect } from "../map/connectivity";
 import type { CompletedOverlaysResponse } from "../map/topoOverlays";
 import { canRunNow } from "./networkPolicy";
 import { downloadTopoOverlay } from "./overlayDownloads";
@@ -160,12 +160,7 @@ export function registerTopoAutoDownload(): () => void {
   });
 
   // Edge-triggered: offline → online, not every NetInfo event.
-  let wasConnected: boolean | null = null;
-  const netInfoUnsub = NetInfo.addEventListener((state) => {
-    const connected = state.isConnected === true;
-    if (connected && wasConnected === false) requestRun();
-    wasConnected = connected;
-  });
+  const netInfoUnsub = subscribeReconnect(requestRun);
 
   requestRun();
 

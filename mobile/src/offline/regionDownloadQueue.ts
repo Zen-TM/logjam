@@ -12,9 +12,9 @@
 // them in parallel would triple the request rate at the same host.
 import { useSyncExternalStore } from "react";
 import { AppState } from "react-native";
-import NetInfo from "@react-native-community/netinfo";
 import { ApiError, type OfflineBasemapId, type RegionBbox } from "@logjam/shared";
 
+import { subscribeReconnect } from "../map/connectivity";
 import type { PausedReason } from "./downloadMachine";
 import {
   connectionAllows,
@@ -144,12 +144,7 @@ function installAutoResumeWatchers(): void {
     if (state === "active") resumeJobsPausedBy("background");
   });
   // Edge-triggered (offline → online), same shape as the sync engine's.
-  let wasConnected: boolean | null = null;
-  NetInfo.addEventListener((netState) => {
-    const connected = netState.isConnected === true;
-    if (connected && wasConnected === false) resumeJobsPausedBy("connectivity");
-    wasConnected = connected;
-  });
+  subscribeReconnect(() => resumeJobsPausedBy("connectivity"));
 }
 
 export function enqueueRegionDownloads(specs: RegionTaskSpec[]): void {

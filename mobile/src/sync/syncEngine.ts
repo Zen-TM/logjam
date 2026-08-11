@@ -4,8 +4,9 @@
 // mutation, manual pull-to-refresh. NEVER a background timer — battery is a
 // field resource.
 import { AppState } from "react-native";
-import NetInfo from "@react-native-community/netinfo";
 import { computeBackoffMs } from "@logjam/shared";
+
+import { subscribeReconnect } from "../map/connectivity";
 
 import { fetchCurrentUser } from "../api/queries";
 import { canRunNow } from "../offline/networkPolicy";
@@ -196,12 +197,7 @@ export function registerSyncTriggers(): () => void {
   });
 
   // Connectivity regained (edge-triggered: offline → online).
-  let wasConnected: boolean | null = null;
-  const netInfoUnsub = NetInfo.addEventListener((netState) => {
-    const connected = netState.isConnected === true;
-    if (connected && wasConnected === false) requestAutoSync();
-    wasConnected = connected;
-  });
+  const netInfoUnsub = subscribeReconnect(requestAutoSync);
 
   // Initial cycle on registration (fresh sign-in / app start).
   requestAutoSync();
