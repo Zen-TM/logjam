@@ -182,16 +182,42 @@ export function routeUnlinkTombstones(args: {
   );
 }
 
-/** DELETE /waypoints/:id: owner-private, no fan-out. */
+/** DELETE /waypoints/:id: the owner forgets it, and so does everyone who could
+ * see it through a canyon share (a linked waypoint follows canyon-level media
+ * visibility, exactly as a linked route does). `shareeIds` is empty for an
+ * unlinked waypoint, which is the owner-private case. */
 export function waypointDeleteTombstones(args: {
   ownerId: string;
   waypointId: string;
+  shareeIds: string[];
 }): TombstoneRow[] {
+  const { ownerId, waypointId, shareeIds } = args;
   return [
-    {
-      userId: args.ownerId,
-      entityType: "waypoint",
-      entityId: args.waypointId,
-    },
+    { userId: ownerId, entityType: "waypoint", entityId: waypointId },
+    ...shareeIds.map(
+      (userId): TombstoneRow => ({ userId, entityType: "waypoint", entityId: waypointId }),
+    ),
   ];
+}
+
+/** A waypoint that specific users can no longer see, with no delete anywhere:
+ * it was unlinked from the last canyon they shared, or that share was revoked,
+ * or the canyon was deleted. The OWNER keeps it — it survives as a standalone
+ * waypoint — so only the losing users appear here.
+ *
+ * `userIds` must come from waypointVisibilityLoss (lib/waypointLink.ts), never
+ * from "the sharees of the canyon we just left": the link is many-to-many, and
+ * a user still holding another shared path to the waypoint has lost nothing. */
+export function waypointRevokeTombstones(args: {
+  waypointId: string;
+  userIds: string[];
+}): TombstoneRow[] {
+  const { waypointId, userIds } = args;
+  return userIds.map(
+    (userId): TombstoneRow => ({
+      userId,
+      entityType: "waypoint",
+      entityId: waypointId,
+    }),
+  );
 }

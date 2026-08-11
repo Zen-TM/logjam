@@ -13,6 +13,10 @@ import {
   shareRevokeTombstones,
   writeTombstones,
 } from "../lib/syncTombstones";
+import {
+  snapshotWaypointVisibility,
+  writeWaypointVisibilityLoss,
+} from "../lib/waypointLink";
 
 async function wantsInAppNotification(
   userId: string,
@@ -355,38 +359,51 @@ router.delete(
       ),
     ];
 
-    await prisma.$transaction([
-      prisma.syncTombstone.createMany({ data: unfriendTombstones }),
+    // Interactive rather than array-form: the waypoint revocation has to READ
+    // the post-revoke world to know who actually lost sight of what, and that
+    // read must sit inside the same transaction as the deletes it measures.
+    await prisma.$transaction(async (tx) => {
+      const waypointVisibility = await snapshotWaypointVisibility(
+        tx,
+        (
+          await tx.canyonWaypoint.findMany({
+            where: { canyonId: { in: revokedCanyonIds } },
+            select: { waypointId: true },
+          })
+        ).map((link) => link.waypointId),
+      );
+      await tx.syncTombstone.createMany({ data: unfriendTombstones });
       // Revoke any canyons shared between these two users
-      prisma.canyonShare.deleteMany({
+      await tx.canyonShare.deleteMany({
         where: {
           OR: [
             { sharedById: user.id, sharedWithId: otherId },
             { sharedById: otherId, sharedWithId: user.id },
           ],
         },
-      }),
+      });
+      await writeWaypointVisibilityLoss(tx, waypointVisibility);
       // Drop the recipient's residual canyon_shared notifications for each
       // canyon whose share was just revoked.
-      ...revokedShares.map((s) =>
-        prisma.notification.deleteMany({
+      for (const s of revokedShares) {
+        await tx.notification.deleteMany({
           where: {
             userId: s.sharedWithId,
             type: "canyon_shared",
             payload: { path: ["canyonId"], equals: s.canyonId },
           },
-        }),
-      ),
+        });
+      }
       // Purge the friend_request / friend_request_accepted notifications that
       // referenced this friendship on either party's side.
-      prisma.notification.deleteMany({
+      await tx.notification.deleteMany({
         where: {
           type: { in: ["friend_request", "friend_request_accepted"] },
           payload: { path: ["friendshipId"], equals: id },
         },
-      }),
-      prisma.friendship.delete({ where: { id } }),
-    ]);
+      });
+      await tx.friendship.delete({ where: { id } });
+    });
 
     res.status(204).send();
   },
@@ -548,8 +565,19 @@ router.delete(
       const routeIdByCanyon = new Map(
         revokedRoutes.map((route) => [route.canyonId!, route.id]),
       );
-      await prisma.$transaction([
-        prisma.syncTombstone.createMany({
+      // Interactive: see the unfriend path above — the waypoint diff must read
+      // the world after the share rows are gone.
+      await prisma.$transaction(async (tx) => {
+        const waypointVisibility = await snapshotWaypointVisibility(
+          tx,
+          (
+            await tx.canyonWaypoint.findMany({
+              where: { canyonId: { in: revoked.map((r) => r.canyonId) } },
+              select: { waypointId: true },
+            })
+          ).map((link) => link.waypointId),
+        );
+        await tx.syncTombstone.createMany({
           data: revoked.flatMap((r) =>
             shareRevokeTombstones({
               canyonOwnerId: user.id,
@@ -560,20 +588,21 @@ router.delete(
               routeId: routeIdByCanyon.get(r.canyonId) ?? null,
             }),
           ),
-        }),
-        prisma.canyonShare.deleteMany({
+        });
+        await tx.canyonShare.deleteMany({
           where: { id: { in: revoked.map((r) => r.id) } },
-        }),
-        ...revoked.map((r) =>
-          prisma.notification.deleteMany({
+        });
+        await writeWaypointVisibilityLoss(tx, waypointVisibility);
+        for (const r of revoked) {
+          await tx.notification.deleteMany({
             where: {
               userId: friendId,
               type: "canyon_shared",
               payload: { path: ["canyonId"], equals: r.canyonId },
             },
-          }),
-        ),
-      ]);
+          });
+        }
+      });
     }
 
     // Count only — never the canyon names/coords that were revoked (PRIV-005).

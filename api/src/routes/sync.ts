@@ -32,6 +32,8 @@ import {
   pushOpDependencies,
   validateCanyonPayload,
   validateRoutePayload,
+  normalizeWaypointCanyonIds,
+  normalizeWaypointTags,
   validateWaypointPayload,
   parseRouteColor,
   parseRoutePoints,
@@ -60,6 +62,14 @@ import {
   parseAnchorsOrNull,
   resolveRouteCanyonId,
 } from "../lib/routeLink";
+import {
+  applyWaypointCanyonLinks,
+  resolveWaypointCanyonIds,
+  serializeOwnWaypoint,
+  serializeWaypointFor,
+  snapshotWaypointVisibility,
+  waypointInclude as waypointSyncInclude,
+} from "../lib/waypointLink";
 
 const router = Router();
 
@@ -292,15 +302,31 @@ router.get(
       (row) => row.updatedAt,
     );
 
+    // Own waypoints, plus waypoints LINKED to a canyon shared with me — the
+    // same visibility canyon-level media and linked routes have. An unlinked
+    // waypoint of another owner can never match.
     const waypoints = await fill(
       "waypoints",
       (after, take) =>
         prisma.waypoint.findMany({
           where: {
-            AND: [{ ownerId: user.id }, keysetWhere("updatedAt", since, after)],
+            AND: [
+              {
+                OR: [
+                  { ownerId: user.id },
+                  {
+                    canyonLinks: {
+                      some: { canyonId: { in: sharedCanyonIds } },
+                    },
+                  },
+                ],
+              },
+              keysetWhere("updatedAt", since, after),
+            ],
           },
           orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
           take,
+          include: waypointSyncInclude,
         }),
       (row) => row.updatedAt,
     );
@@ -512,7 +538,13 @@ router.get(
           ...canyon,
         })),
         tripLogs: tripLogs.map(serializeTrip),
-        waypoints,
+        // syncRole tells the client whether this is its own waypoint or one
+        // seen through a canyon share — a 'shared' waypoint is read-only there.
+        // canyonIds is SCOPED: a sharee given the carpark must not learn which
+        // other canyons the owner filed it under.
+        waypoints: waypoints.map((waypoint) =>
+          serializeWaypointFor(waypoint, user.id, new Set(sharedCanyonIds)),
+        ),
         // Geometry travels INLINE (no blob leg). syncRole tells the client
         // whether this is its own route or one seen through a canyon share —
         // a 'shared' route is read-only there.
@@ -613,6 +645,14 @@ const WAYPOINT_FIELDS = new Set([
   "elevation",
   "symbol",
   "notes",
+  "tags",
+  "canyonIds",
+  // Legacy single-link field from before waypoints went many-to-many. Still
+  // accepted because an outbox op can outlive the client that queued it: a
+  // phone that queued a waypoint offline, then took the app update before it
+  // ever regained signal, would otherwise have that op REJECTED on the first
+  // flush and land the user in the sync-issues shelf for a rename they made in
+  // a gorge. Normalised into canyonIds below; never written.
   "canyonId",
 ]);
 // `color` is client-settable, but only to a value from TRACK_COLORS (see
@@ -1013,14 +1053,21 @@ async function applyWaypointOp(
 ): Promise<PushOpResult> {
   if (op.op === "delete") {
     const waypoint = await prisma.waypoint.findUnique({ where: { id: op.id } });
+    // Non-owner (including a sharee, who can see it but not change it) gets the
+    // same alreadyApplied as a missing row — no existence oracle.
     if (!waypoint || waypoint.ownerId !== userId) {
       return { opId: op.opId, status: "alreadyApplied" };
     }
     await prisma.$transaction(async (tx) => {
+      const viewers = await snapshotWaypointVisibility(tx, [op.id]);
       await tx.waypoint.delete({ where: { id: op.id } });
       await writeTombstones(
         tx,
-        waypointDeleteTombstones({ ownerId: userId, waypointId: op.id }),
+        waypointDeleteTombstones({
+          ownerId: userId,
+          waypointId: op.id,
+          shareeIds: [...(viewers.get(op.id) ?? [])],
+        }),
       );
     });
     return { opId: op.opId, status: "applied" };
@@ -1034,26 +1081,39 @@ async function applyWaypointOp(
   if (validationError) throw new AppError(400, validationError);
 
   // Owner-scoped association — foreign canyon id ≡ nonexistent (same rule as
-  // routes/waypoints.ts).
-  let resolvedCanyonId: string | null | undefined;
-  if (fields.canyonId === undefined) resolvedCanyonId = undefined;
-  else if (fields.canyonId === null) resolvedCanyonId = null;
-  else if (typeof fields.canyonId === "string") {
-    const owned = await prisma.canyon.count({
-      where: { id: fields.canyonId, ownerId: userId },
-    });
-    if (owned !== 1) throw new AppError(400, "Canyon not found");
-    resolvedCanyonId = fields.canyonId;
-  } else {
-    throw new AppError(400, "canyonId must be a string or null");
-  }
+  // routes/waypoints.ts, which shares the resolver).
+  // A legacy op carries `canyonId` (string or null) where a current one carries
+  // `canyonIds`. null meant "unlink", which is the empty list.
+  const canyonIdsField =
+    fields.canyonIds !== undefined
+      ? fields.canyonIds
+      : fields.canyonId === undefined
+        ? undefined
+        : fields.canyonId === null
+          ? []
+          : [fields.canyonId];
+  const parsedCanyonIds = normalizeWaypointCanyonIds(canyonIdsField);
+  if ("error" in parsedCanyonIds) throw new AppError(400, parsedCanyonIds.error);
+  const resolvedCanyonIds =
+    parsedCanyonIds.canyonIds === undefined
+      ? undefined
+      : await resolveWaypointCanyonIds(userId, parsedCanyonIds.canyonIds);
+  const parsedTags = normalizeWaypointTags(fields.tags);
+  if ("error" in parsedTags) throw new AppError(400, parsedTags.error);
 
   if (op.op === "create") {
-    const existing = await prisma.waypoint.findUnique({ where: { id: op.id } });
+    const existing = await prisma.waypoint.findUnique({
+      where: { id: op.id },
+      include: waypointSyncInclude,
+    });
     if (existing) {
       if (existing.ownerId !== userId)
         throw new AppError(404, "Waypoint not found");
-      return { opId: op.opId, status: "alreadyApplied", row: existing };
+      return {
+        opId: op.opId,
+        status: "alreadyApplied",
+        row: serializeOwnWaypoint(existing),
+      };
     }
     if (await createAlreadyTombstoned(userId, "waypoint", op.id)) {
       return { opId: op.opId, status: "alreadyApplied" };
@@ -1062,20 +1122,31 @@ async function applyWaypointOp(
       data: {
         id: op.id,
         ownerId: userId,
-        canyonId: resolvedCanyonId ?? null,
         name: (fields.name as string).trim(),
         latitude: fields.latitude as number,
         longitude: fields.longitude as number,
         elevation: (fields.elevation as number | null | undefined) ?? null,
         symbol: (fields.symbol as string | null | undefined) ?? null,
         notes: (fields.notes as string | null | undefined) ?? null,
+        tags: parsedTags.tags ?? [],
+        // New row: linking can only ADD viewers, so no revocation is possible.
+        canyonLinks: {
+          create: (resolvedCanyonIds ?? []).map((canyonId) => ({ canyonId })),
+        },
       },
+      include: waypointSyncInclude,
     });
-    return { opId: op.opId, status: "applied", row: waypoint };
+    return {
+      opId: op.opId,
+      status: "applied",
+      row: serializeOwnWaypoint(waypoint),
+    };
   }
 
   // update
   const waypoint = await prisma.waypoint.findUnique({ where: { id: op.id } });
+  // A sharee may see this waypoint but never edit it — same 404 as a stranger,
+  // so the status is not an existence oracle either way.
   if (!waypoint || waypoint.ownerId !== userId)
     throw new AppError(404, "Waypoint not found");
   const conflicts = conflictReceipts(
@@ -1084,33 +1155,45 @@ async function applyWaypointOp(
     fields,
     waypoint as unknown as Record<string, unknown>,
   );
-  const updated = await prisma.waypoint.update({
-    where: { id: op.id },
-    data: {
-      ...(fields.name !== undefined && {
-        name: (fields.name as string).trim(),
-      }),
-      ...(fields.latitude !== undefined && {
-        latitude: fields.latitude as number,
-      }),
-      ...(fields.longitude !== undefined && {
-        longitude: fields.longitude as number,
-      }),
-      ...(fields.elevation !== undefined && {
-        elevation: fields.elevation as number | null,
-      }),
-      ...(fields.symbol !== undefined && {
-        symbol: fields.symbol as string | null,
-      }),
-      ...(fields.notes !== undefined && {
-        notes: fields.notes as string | null,
-      }),
-      ...(resolvedCanyonId !== undefined && { canyonId: resolvedCanyonId }),
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    // Same transaction as the field update: a link change is a visibility
+    // change and its tombstones must not be able to land without it.
+    if (resolvedCanyonIds !== undefined) {
+      await applyWaypointCanyonLinks(tx, {
+        waypointId: op.id,
+        canyonIds: resolvedCanyonIds,
+      });
+    }
+    return tx.waypoint.update({
+      where: { id: op.id },
+      data: {
+        ...(fields.name !== undefined && {
+          name: (fields.name as string).trim(),
+        }),
+        ...(fields.latitude !== undefined && {
+          latitude: fields.latitude as number,
+        }),
+        ...(fields.longitude !== undefined && {
+          longitude: fields.longitude as number,
+        }),
+        ...(fields.elevation !== undefined && {
+          elevation: fields.elevation as number | null,
+        }),
+        ...(fields.symbol !== undefined && {
+          symbol: fields.symbol as string | null,
+        }),
+        ...(fields.notes !== undefined && {
+          notes: fields.notes as string | null,
+        }),
+        ...(parsedTags.tags !== undefined && { tags: parsedTags.tags }),
+      },
+      include: waypointSyncInclude,
+    });
   });
+  const row = serializeOwnWaypoint(updated);
   return conflicts.length > 0
-    ? { opId: op.opId, status: "appliedWithConflict", row: updated, conflicts }
-    : { opId: op.opId, status: "applied", row: updated };
+    ? { opId: op.opId, status: "appliedWithConflict", row, conflicts }
+    : { opId: op.opId, status: "applied", row };
 }
 
 async function applyRouteOp(

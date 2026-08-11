@@ -16,6 +16,10 @@ import {
   tripDeleteTombstones,
   writeTombstones,
 } from "./syncTombstones";
+import {
+  snapshotWaypointVisibility,
+  writeWaypointVisibilityLoss,
+} from "./waypointLink";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -114,6 +118,17 @@ export async function deleteCanyonsCascade(
       where: { canyonId: { in: ownedIds } },
       select: { id: true, canyonId: true },
     });
+    // Linked waypoints survive the same way, but their m2m links mean the loss
+    // has to be measured across the delete rather than assumed.
+    const waypointVisibility = await snapshotWaypointVisibility(
+      tx,
+      (
+        await tx.canyonWaypoint.findMany({
+          where: { canyonId: { in: ownedIds } },
+          select: { waypointId: true },
+        })
+      ).map((link) => link.waypointId),
+    );
     const tombstones = ownedIds.flatMap((canyonId) =>
       canyonDeleteTombstones({
         ownerId: userId,
@@ -149,6 +164,7 @@ export async function deleteCanyonsCascade(
       data: { updatedAt: new Date() },
     });
     await tx.canyon.deleteMany({ where: { id: { in: ownedIds } } });
+    await writeWaypointVisibilityLoss(tx, waypointVisibility);
     await decrementStorageUsed(userId, totalBytes, tx);
   });
 

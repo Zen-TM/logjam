@@ -69,7 +69,9 @@ model Canyon {
   forks            Canyon[]        @relation("CanyonForks")
   owner            User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   tripLogLinks     TripLogCanyon[]
-  waypoints        Waypoint[]
+  waypointLinks    CanyonWaypoint[]
+  /// @deprecated Back-relation for the pending canyon_id contract — see Waypoint.
+  legacyWaypoints  Waypoint[]      @relation("LegacyWaypointCanyon")
   // At most one — the canyon's route slot. See Route.canyonId.
   route            Route?
 
@@ -358,26 +360,61 @@ model TopoTemplate {
 // NEVER visible through canyon shares — sharing a canyon shares the canyon
 // record, not your marked anchors/exits (privacy default; revisit only as an
 // explicit per-waypoint opt-in feature).
+// A marked point: a carpark, a campsite, an anchor, an exit. Authored on the
+// phone, synced like canyons and trips.
+//
+// Visibility follows canyon-level MEDIA, exactly as a linked Route does: an
+// UNLINKED waypoint is owner-private, and a waypoint linked to a shared canyon
+// is part of that shared record (sharees may view and export, never edit).
+// Unlike a route, the link is MANY-TO-MANY — one carpark legitimately serves
+// several canyons off the same trailhead — which makes revocation the trap:
+// a sharee can reach one waypoint through two shared canyons, so unlinking one
+// of them must NOT revoke sight of it. Every visibility change therefore goes
+// through lib/waypointLink.ts, never through an inline tombstone write.
+// CONTRACT PENDING: `canyonId` below is DEAD to this code — every link now
+// lives in CanyonWaypoint — but the column still exists so the previously
+// deployed image keeps working through the deploy swap window (expand/contract,
+// api/CLAUDE.md). Once a release carrying this comment is live, delete the
+// field, the `canyon` relation, and Canyon.legacyWaypoints in a follow-up
+// migration that drops the column.
 model Waypoint {
-  id        String   @id @default(uuid())
-  ownerId   String   @map("owner_id")
-  // Optional association; SetNull keeps waypoints when a canyon dies.
-  canyonId  String?  @map("canyon_id")
-  name      String
-  latitude  Float
-  longitude Float
-  elevation Float?
+  id          String           @id @default(uuid())
+  ownerId     String           @map("owner_id")
+  /// @deprecated Superseded by canyonLinks. Never read or written.
+  canyonId    String?          @map("canyon_id")
+  canyon      Canyon?          @relation("LegacyWaypointCanyon", fields: [canyonId], references: [id], onDelete: SetNull)
+  name        String
+  latitude    Float
+  longitude   Float
+  elevation   Float?
   // Client icon key; server treats as opaque (length-capped in the route).
-  symbol    String?
-  notes     String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  canyon    Canyon?  @relation(fields: [canyonId], references: [id], onDelete: SetNull)
+  symbol      String?
+  notes       String?
+  // Free-text labels, same shape as TripLog.types: a seed vocabulary the user
+  // extends by typing. No tag registry — the vocabulary IS the used values.
+  tags        String[]         @default([])
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  owner       User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  canyonLinks CanyonWaypoint[]
 
   @@index([ownerId])
-  @@index([canyonId])
   @@map("waypoints")
+}
+
+// Waypoint ↔ canyon, many-to-many. Cascade both ways deletes the LINK only:
+// deleting a canyon leaves its waypoints alive and standalone (what the old
+// SetNull canyon_id did), and deleting a waypoint leaves the canyon alone.
+// No `position` — unlike TripLogCanyon nothing derives from the order here.
+model CanyonWaypoint {
+  canyonId   String   @map("canyon_id")
+  waypointId String   @map("waypoint_id")
+  canyon     Canyon   @relation(fields: [canyonId], references: [id], onDelete: Cascade)
+  waypoint   Waypoint @relation(fields: [waypointId], references: [id], onDelete: Cascade)
+
+  @@id([canyonId, waypointId])
+  @@index([waypointId])
+  @@map("canyon_waypoints")
 }
 
 // User-authored routes: the line the user drew, imported, or derived from a

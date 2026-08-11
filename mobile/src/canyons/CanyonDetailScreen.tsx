@@ -66,6 +66,7 @@ import {
   useMirrorCanyons,
   useMirrorMedia,
   useMirrorRoutes,
+  useMirrorWaypoints,
   useMirrorTrips,
 } from "../sync/useSyncQueries";
 import {
@@ -88,6 +89,7 @@ import {
 import { formatTripDate } from "../logs/logbook";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { CanyonEditSheet } from "./CanyonEditSheet";
+import { waypointSymbol } from "../map/waypointSymbol";
 import { CANYON_STATUS_META, canyonStatus } from "./canyonMeta";
 
 export function CanyonDetailScreen({
@@ -98,6 +100,7 @@ export function CanyonDetailScreen({
   onShowRoute,
   onDrawRoute,
   onShowRouteOnMap,
+  onShowWaypointOnMap,
   onDeleted,
 }: {
   canyonId: string;
@@ -111,6 +114,8 @@ export function CanyonDetailScreen({
   onDrawRoute?: (canyonId: string) => void;
   /** Frames a DRAWN route (not a media file) on the map. */
   onShowRouteOnMap?: (route: { points: [number, number][] }) => void;
+  /** Centres the map on one of this canyon's linked waypoints. */
+  onShowWaypointOnMap?: (waypoint: { latitude: number; longitude: number }) => void;
   /** The canyon this screen is showing is gone — leave, don't render a husk. */
   onDeleted: () => void;
 }) {
@@ -118,6 +123,7 @@ export function CanyonDetailScreen({
   const media = useMirrorMedia("canyon", canyonId);
   const trips = useMirrorTrips();
   const routes = useMirrorRoutes();
+  const waypoints = useMirrorWaypoints();
   const canyonsQuery = useMirrorCanyons();
   const online = useConnectivity() === "online";
   // Custom-field DEFINITIONS live on the user record, so a guest has none —
@@ -173,6 +179,11 @@ export function CanyonDetailScreen({
   // appears to do nothing is worse than no link at all.
   const linkedRoute =
     (routes.data ?? []).find((route) => route.canyonId === canyonId) ?? null;
+  // Many-to-many, unlike the route slot: a carpark serving three canyons off
+  // one trailhead appears on all three.
+  const linkedWaypoints = (waypoints.data ?? [])
+    .filter((waypoint) => waypoint.canyonIds.includes(canyonId))
+    .sort((a, b) => a.name.localeCompare(b.name));
   // The canyon's route slot, as filled by a FILE. A drawn route can occupy the
   // same slot, so the picker has to know about this one to say what it displaces.
   const attachedTrack =
@@ -383,6 +394,42 @@ export function CanyonDetailScreen({
             onPickDrawnRoute={isOwner ? () => setPickingRoute(true) : undefined}
             onDrawRoute={isOwner && onDrawRoute ? () => onDrawRoute(canyonId) : undefined}
           />
+        )}
+
+        {/* Waypoints linked to this canyon — the carpark, the campsite, the
+            exit. Part of the SHARED record (a linked waypoint follows
+            canyon-level media), so unlike the trips below this section renders
+            for a recipient too; theirs are read-only, which their own detail
+            sheet says. Coordinates stay off the rows — this is a list. */}
+        <SectionHeader
+          label={
+            linkedWaypoints.length === 0
+              ? "Waypoints"
+              : `Waypoints · ${linkedWaypoints.length}`
+          }
+        />
+        {linkedWaypoints.length === 0 ? (
+          <Text style={styles.muted}>
+            {isOwner
+              ? "Link a waypoint to this canyon from the waypoint's own sheet on the map."
+              : "No waypoints on this canyon."}
+          </Text>
+        ) : (
+          linkedWaypoints.map((waypoint) => {
+            const symbol = waypointSymbol(waypoint);
+            return (
+              <Row
+                key={waypoint.id}
+                icon={symbol.icon}
+                hue={symbol.color}
+                title={waypoint.name}
+                subtitle={
+                  waypoint.tags.length > 0 ? waypoint.tags.join(" · ") : undefined
+                }
+                onPress={() => onShowWaypointOnMap?.(waypoint)}
+              />
+            );
+          })
         )}
 
         {/* Your own history here — the half a "done" badge can't tell you. Only

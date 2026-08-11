@@ -109,9 +109,14 @@ export async function getSyncDb(): Promise<SQLite.SQLiteDatabase> {
           extra_json TEXT,
           dirty_fields_json TEXT
         );
+        -- owner_id + sync_role mirror the routes table: a waypoint linked to a
+        -- canyon shared with this user arrives here read-only.
         CREATE TABLE IF NOT EXISTS waypoints (
           id TEXT PRIMARY KEY,
-          canyon_id TEXT,
+          owner_id TEXT,
+          canyon_ids_json TEXT,
+          tags_json TEXT,
+          sync_role TEXT,
           name TEXT NOT NULL,
           latitude REAL NOT NULL,
           longitude REAL NOT NULL,
@@ -207,6 +212,14 @@ export async function getSyncDb(): Promise<SQLite.SQLiteDatabase> {
 const ADDED_COLUMNS: { table: string; column: string; type: string }[] = [
   // Which vertices of a route the user placed, vs snapped filler.
   { table: "routes", column: "anchors_json", type: "TEXT" },
+  // Waypoints gained tags and many-to-many canyon links, and can now arrive
+  // through a canyon share (owner_id + sync_role, as routes already do). The
+  // old single canyon_id column stays where it is: dropping a column means
+  // rebuilding the table in SQLite, and a stale column costs nothing.
+  { table: "waypoints", column: "owner_id", type: "TEXT" },
+  { table: "waypoints", column: "canyon_ids_json", type: "TEXT" },
+  { table: "waypoints", column: "tags_json", type: "TEXT" },
+  { table: "waypoints", column: "sync_role", type: "TEXT" },
 ];
 
 async function addMissingColumns(db: SQLite.SQLiteDatabase): Promise<void> {

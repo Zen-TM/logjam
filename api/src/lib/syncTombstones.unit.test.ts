@@ -8,6 +8,7 @@ import {
   shareRevokeTombstones,
   tripDeleteTombstones,
   waypointDeleteTombstones,
+  waypointRevokeTombstones,
   type TombstoneRow,
 } from "./syncTombstones";
 
@@ -195,9 +196,41 @@ describe("friendshipDeleteTombstones", () => {
 });
 
 describe("waypointDeleteTombstones", () => {
-  it("owner-only", () => {
+  it("owner-only for an unlinked waypoint", () => {
     expect(
-      waypointDeleteTombstones({ ownerId: "alice", waypointId: "w1" }),
+      waypointDeleteTombstones({
+        ownerId: "alice",
+        waypointId: "w1",
+        shareeIds: [],
+      }),
     ).toEqual([{ userId: "alice", entityType: "waypoint", entityId: "w1" }]);
+  });
+
+  it("fans out to everyone who saw it through a canyon share", () => {
+    expect(
+      waypointDeleteTombstones({
+        ownerId: "alice",
+        waypointId: "w1",
+        shareeIds: ["bob", "carol"],
+      }),
+    ).toEqual([
+      { userId: "alice", entityType: "waypoint", entityId: "w1" },
+      { userId: "bob", entityType: "waypoint", entityId: "w1" },
+      { userId: "carol", entityType: "waypoint", entityId: "w1" },
+    ]);
+  });
+});
+
+describe("waypointRevokeTombstones", () => {
+  it("names only the losers — never the owner", () => {
+    expect(
+      waypointRevokeTombstones({ waypointId: "w1", userIds: ["bob"] }),
+    ).toEqual([{ userId: "bob", entityType: "waypoint", entityId: "w1" }]);
+  });
+
+  it("is empty when the change cost nobody their last path", () => {
+    expect(waypointRevokeTombstones({ waypointId: "w1", userIds: [] })).toEqual(
+      [],
+    );
   });
 });

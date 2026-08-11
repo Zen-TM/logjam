@@ -89,7 +89,8 @@ export type WaypointDraft = {
   elevation?: number | null;
   symbol?: string | null;
   notes?: string | null;
-  canyonId?: string | null;
+  tags?: string[];
+  canyonIds?: string[];
 };
 
 export async function createWaypointLocal(draft: WaypointDraft): Promise<string> {
@@ -102,20 +103,24 @@ export async function createWaypointLocal(draft: WaypointDraft): Promise<string>
     ...(draft.elevation != null && { elevation: draft.elevation }),
     ...(draft.symbol != null && { symbol: draft.symbol }),
     ...(draft.notes != null && { notes: draft.notes }),
-    ...(draft.canyonId != null && { canyonId: draft.canyonId }),
+    ...(draft.tags?.length && { tags: draft.tags }),
+    ...(draft.canyonIds?.length && { canyonIds: draft.canyonIds }),
   };
 
   const db = await getSyncDb();
   await db.withTransactionAsync(async () => {
     // Optimistic mirror row: every field is locally dirty until the create
     // flushes (timestamps are provisional; the server row replaces them).
+    // sync_role is 'owner' — you cannot create someone else's waypoint.
     await db.runAsync(
       `INSERT INTO waypoints
-         (id, canyon_id, name, latitude, longitude, elevation, symbol, notes,
-          created_at, updated_at, extra_json, dirty_fields_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+         (id, canyon_ids_json, tags_json, sync_role, name, latitude, longitude,
+          elevation, symbol, notes, created_at, updated_at, extra_json,
+          dirty_fields_json)
+       VALUES (?, ?, ?, 'owner', ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
       id,
-      draft.canyonId ?? null,
+      JSON.stringify(draft.canyonIds ?? []),
+      JSON.stringify(draft.tags ?? []),
       draft.name,
       draft.latitude,
       draft.longitude,
@@ -139,6 +144,24 @@ export async function createWaypointLocal(draft: WaypointDraft): Promise<string>
   return id;
 }
 
+// tags and canyonIds are lists: the mirror stores them as JSON text while the
+// OUTBOX carries the real array, exactly as route geometry does, so a §6
+// conflict compares arrays against the server's arrays rather than against our
+// JSON encoding.
+const stringListColumn = (column: string): ColumnSpec => ({
+  column,
+  encode: (value) => JSON.stringify(value ?? []),
+  decode: (raw) => {
+    if (typeof raw !== "string") return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  },
+});
+
 const WAYPOINT_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   name: "name",
   latitude: "latitude",
@@ -146,7 +169,8 @@ const WAYPOINT_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   elevation: "elevation",
   symbol: "symbol",
   notes: "notes",
-  canyonId: "canyon_id",
+  tags: stringListColumn("tags_json"),
+  canyonIds: stringListColumn("canyon_ids_json"),
 };
 
 export async function updateWaypointLocal(

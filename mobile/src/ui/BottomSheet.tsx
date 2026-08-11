@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "../theme";
+import { IconButton } from "./IconButton";
 
 // Slide-up modal sheet with a draggable handle + title, capped at 80% height
 // and scrolling within.
@@ -41,6 +42,7 @@ export function BottomSheet({
   onClose,
   onClosed,
   title,
+  onBack,
   footer,
   overlay,
   header,
@@ -49,6 +51,11 @@ export function BottomSheet({
   visible: boolean;
   onClose: () => void;
   title: string;
+  /**
+   * Renders a back arrow beside the title. Present only for a sheet showing a
+   * SUB-MODE — it returns to the parent mode, and is not a way to close.
+   */
+  onBack?: () => void;
   /**
    * Fired once the sheet has finished closing AND unmounted. Use it to run
    * anything that must not overlap the modal window — a permission request or a
@@ -214,7 +221,18 @@ export function BottomSheet({
           >
             <View style={styles.handle} />
           </View>
-          <Text style={styles.title}>{title}</Text>
+          {/* Back sits on the TITLE line, not in `header`: a sub-mode's title
+              IS what you are going back from, and a header slot may be empty
+              (the tag picker has no explainer), which left the arrow floating
+              on its own row looking like a stray control. */}
+          {onBack ? (
+            <View style={styles.titleRow}>
+              <IconButton icon="arrow-left" accessibilityLabel="Back" onPress={onBack} />
+              <Text style={[styles.title, styles.titleInRow]}>{title}</Text>
+            </View>
+          ) : (
+            <Text style={styles.title}>{title}</Text>
+          )}
           {header != null ? <View style={styles.header}>{header}</View> : null}
           {/* flexShrink so the scroll area yields to the pinned footer under
               the sheet's maxHeight cap. Without it this wrapper claims the
@@ -264,6 +282,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.bonus1,
     opacity: 0.5,
   },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  // The row owns the bottom gap when there is one, so the arrow and the words
+  // stay on a single baseline.
+  titleInRow: { marginBottom: 0, flexShrink: 1 },
   title: {
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,

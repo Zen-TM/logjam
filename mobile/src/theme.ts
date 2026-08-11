@@ -231,6 +231,10 @@ export const assetHue = {
   vector: "#86B5D4",
   /** Recorded tracks — heath flower. */
   track: "#B79EC0",
+  /** Marked points — waratah, the warmest hue here without leaving the muted
+   *  range the rest of the palette keeps. A waypoint is a thing you are trying
+   *  to FIND again, so it takes the most forward colour available. */
+  waypoint: "#D4715E",
 } as const;
 
 export type AssetHue = keyof typeof assetHue;

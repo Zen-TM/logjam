@@ -48,8 +48,8 @@ const TRIP_KNOWN = [
 ] as const;
 
 const WAYPOINT_KNOWN = [
-  "id", "canyonId", "name", "latitude", "longitude", "elevation",
-  "symbol", "notes", "createdAt", "updatedAt",
+  "id", "ownerId", "canyonIds", "tags", "syncRole", "name", "latitude",
+  "longitude", "elevation", "symbol", "notes", "createdAt", "updatedAt",
 ] as const;
 
 const ROUTE_KNOWN = [
@@ -172,11 +172,15 @@ export async function upsertWaypoint(
 ): Promise<void> {
   await db.runAsync(
     `INSERT OR REPLACE INTO waypoints
-       (id, canyon_id, name, latitude, longitude, elevation, symbol, notes,
-        created_at, updated_at, extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, owner_id, canyon_ids_json, tags_json, sync_role, name, latitude,
+        longitude, elevation, symbol, notes, created_at, updated_at,
+        extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
-    row.canyonId,
+    row.ownerId,
+    JSON.stringify(row.canyonIds ?? []),
+    JSON.stringify(row.tags ?? []),
+    row.syncRole,
     row.name,
     row.latitude,
     row.longitude,
@@ -665,7 +669,10 @@ export async function listCanyonTrackMedia(
 
 type WaypointRow = {
   id: string;
-  canyon_id: string | null;
+  owner_id: string | null;
+  canyon_ids_json: string | null;
+  tags_json: string | null;
+  sync_role: string | null;
   name: string;
   latitude: number;
   longitude: number;
@@ -678,7 +685,11 @@ type WaypointRow = {
 
 export type MirrorWaypoint = {
   id: string;
-  canyonId: string | null;
+  ownerId: string | null;
+  canyonIds: string[];
+  tags: string[];
+  /** 'shared' — arrived via a canyon share and is READ-ONLY on this device. */
+  syncRole: "owner" | "shared";
   name: string;
   latitude: number;
   longitude: number;
@@ -689,10 +700,29 @@ export type MirrorWaypoint = {
   updatedAt: string;
 };
 
+/** Tolerant of the pre-tags rows an upgraded install still holds (null column
+ * reads as an empty list, never as a crash on the map screen). */
+function parseStringList(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 function rowToWaypoint(row: WaypointRow): MirrorWaypoint {
   return {
     id: row.id,
-    canyonId: row.canyon_id,
+    ownerId: row.owner_id,
+    canyonIds: parseStringList(row.canyon_ids_json),
+    tags: parseStringList(row.tags_json),
+    // Absent on rows written before shared waypoints existed, and on every
+    // locally-created row — both are the user's own.
+    syncRole: row.sync_role === "shared" ? "shared" : "owner",
     name: row.name,
     latitude: row.latitude,
     longitude: row.longitude,

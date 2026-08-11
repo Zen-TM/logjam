@@ -30,13 +30,17 @@
 // through navigation params to MapScreen's camera; in memory only, never
 // logged, never persisted.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View, type TextInput } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
 
 import {
   formatDistanceM,
+  isValidLatitude,
+  isValidLongitude,
+  LATITUDE_RANGE,
+  LONGITUDE_RANGE,
   routeLengthM,
   messageFromError,
   type TopoLayerFormat,
@@ -47,7 +51,11 @@ import { apiFetch } from "../api/apiFetch";
 import { formatBytes } from "../format";
 import { getGeoPdfJob, listGeoPdfJobs, type GeoPdfJobView } from "../api/geoPdfJobs";
 import { useApiQuery } from "../api/queries";
-import { useMirrorRoutes, usePendingSyncCount } from "../sync/useSyncQueries";
+import {
+  useMirrorRoutes,
+  useMirrorWaypoints,
+  usePendingSyncCount,
+} from "../sync/useSyncQueries";
 import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
 import {
   BottomSheet,
@@ -55,6 +63,7 @@ import {
   CapacityBar,
   HeroHeader,
   IconButton,
+  RenameForm,
   Row,
   SectionHeader,
   SegmentedControl,
@@ -96,11 +105,19 @@ import {
   trackActions,
   routeActions,
   vectorImportActions,
+  waypointActions,
 } from "./assetActions";
 import { useTracks } from "../tracks/useTracks";
 import { ExportUnsupportedError, type ExportFormat } from "../fileExport";
 import type { Bbox } from "./bboxOfPoints";
 import type { MirrorRoute } from "../sync/mirrorStore";
+import { createWaypointLocal, updateWaypointLocal } from "../sync/outbox";
+import {
+  WaypointCanyonFilter,
+  WaypointCanyonsBody,
+  WaypointSubModeHeader,
+  WaypointTagsBody,
+} from "../waypoints/waypointSheetBodies";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import { RouteStatsSheet } from "../routes/RouteStatsSheet";
 import { LinkCanyonSheet } from "../routes/LinkCanyonSheet";
@@ -116,14 +133,28 @@ function formatDay(iso: string): string {
 // --- Category model -------------------------------------------------------
 // One entry per asset kind: the filter rail, the capacity meter and every
 // row's glyph/hue all read from here, so a new asset kind is one addition.
-type Category = "region" | "overlay" | "geoPdf" | "route" | "vector" | "track";
+type Category =
+  | "region"
+  | "overlay"
+  | "geoPdf"
+  | "route"
+  | "waypoint"
+  | "vector"
+  | "track";
 
 const CATEGORY_META: Record<
   Category,
   {
     label: string;
     plural: string;
-    icon: "map" | "layers" | "file-text" | "file-plus" | "activity" | "edit-3";
+    icon:
+      | "map"
+      | "layers"
+      | "file-text"
+      | "file-plus"
+      | "activity"
+      | "edit-3"
+      | "map-pin";
   }
 > = {
   region: { label: "Region", plural: "Regions", icon: "map" },
@@ -137,6 +168,10 @@ const CATEGORY_META: Record<
   // is editable and syncs; an import is an opaque file on this device), and a
   // list that mixes them would need to explain which rows can be edited.
   route: { label: "Route", plural: "Routes", icon: "edit-3" },
+  // Marked points. Like routes they are synced records rather than files on
+  // this device, and they are the one kind here that can be SEARCHED and
+  // filtered by tag — see the waypoint filter rail below.
+  waypoint: { label: "Waypoint", plural: "Waypoints", icon: "map-pin" },
   vector: { label: "GPX / KML", plural: "GPX & KML", icon: "file-plus" },
   track: { label: "Track", plural: "Tracks", icon: "activity" },
 };
@@ -146,6 +181,7 @@ const CATEGORY_ORDER: Category[] = [
   "overlay",
   "geoPdf",
   "route",
+  "waypoint",
   "vector",
   "track",
 ];
@@ -183,6 +219,12 @@ type SavedItem = {
   createRouteFrom?: () => Promise<{ name: string; pointCount: number }>;
   /** Present on a recording: save it out as a GPX or KML file. */
   exportFile?: (format: ExportFormat) => Promise<string | null>;
+  /**
+   * What the waypoint search matches against, and the tags its chip rail
+   * filters by. Only waypoints carry it — see the rail render below for why
+   * this is not a screen-wide search.
+   */
+  search?: { haystack: string; tags: string[] };
 };
 
 export function SavedScreen({
@@ -254,7 +296,11 @@ export function SavedScreen({
   // the first closes never gets window focus, so the field's keyboard silently
   // fails to rise, and the user sees the sheet settle then jump.
   const [menuItemKey, setMenuItemKey] = useState<string | null>(null);
-  const [menuMode, setMenuMode] = useState<"actions" | "rename">("actions");
+  const [menuMode, setMenuMode] = useState<
+    "actions" | "rename" | "tags" | "canyons"
+  >("actions");
+  // Filter text for the canyon sub-mode, pinned in the sheet header.
+  const [menuCanyonQuery, setMenuCanyonQuery] = useState("");
   const closeItemSheet = useCallback(() => {
     setMenuItemKey(null);
     setMenuMode("actions");
@@ -384,6 +430,14 @@ export function SavedScreen({
 
   // --- Drawn routes (synced records, not device files) ---
   const routes = useMirrorRoutes();
+  const waypoints = useMirrorWaypoints();
+  const [waypointQuery, setWaypointQuery] = useState("");
+  const [waypointTag, setWaypointTag] = useState<string | null>(null);
+  const [coordSheetOpen, setCoordSheetOpen] = useState(false);
+  const [coordName, setCoordName] = useState("");
+  const [coordLat, setCoordLat] = useState("");
+  const [coordLon, setCoordLon] = useState("");
+  const [coordError, setCoordError] = useState<string | null>(null);
 
   // --- Vector imports (GPX/KML/GeoJSON) ---
   const { imports } = useVectorImports();
@@ -601,6 +655,34 @@ export function SavedScreen({
       });
     }
 
+    for (const waypoint of waypoints.data ?? []) {
+      const shared = waypoint.syncRole === "shared";
+      rows.push({
+        key: waypoint.id,
+        category: "waypoint",
+        title: waypoint.name,
+        // Tags and provenance ONLY — never the coordinate. This is a list
+        // surface, and the position lives one tap away on the detail sheet
+        // (DESIGN.md 11).
+        subtitle: waypoint.tags.length
+          ? waypoint.tags.join(" · ")
+          : shared
+            ? "shared with you"
+            : `marked ${formatDay(waypoint.createdAt)}`,
+        // A synced row, not a file on this device — same treatment as routes
+        // and recordings, so it stays out of the capacity meter.
+        sizeBytes: 0,
+        ...(shared ? { pill: { label: "Shared", tone: "muted" as const } } : {}),
+        // Notes are searchable but never rendered in the row — a note can hold
+        // anything, and this is a list surface.
+        search: {
+          haystack: `${waypoint.name} ${waypoint.notes ?? ""} ${waypoint.tags.join(" ")}`.toLowerCase(),
+          tags: waypoint.tags,
+        },
+        ...waypointActions(waypoint),
+      });
+    }
+
     for (const imported of imports) {
       rows.push({
         key: imported.id,
@@ -631,6 +713,7 @@ export function SavedScreen({
     geoPdfBusy,
     importRun?.importId,
     routes.data,
+    waypoints.data,
     geoPdfImports,
     handleResumeGeoPdf,
     imports,
@@ -640,7 +723,15 @@ export function SavedScreen({
   ]);
 
   const counts = useMemo(() => {
-    const byCategory = { region: 0, overlay: 0, geoPdf: 0, route: 0, vector: 0, track: 0 };
+    const byCategory = {
+      region: 0,
+      overlay: 0,
+      geoPdf: 0,
+      route: 0,
+      waypoint: 0,
+      vector: 0,
+      track: 0,
+    };
     for (const item of items) byCategory[item.category] += 1;
     return byCategory;
   }, [items]);
@@ -676,15 +767,92 @@ export function SavedScreen({
   // "All" is size-descending — the order that answers "what is filling the
   // device". Within a category, insertion order (newest registry rows last)
   // is more useful than size.
-  const visibleItems =
+  // The tag rail is the vocabulary IN USE, so it shrinks as waypoints are
+  // deleted and never offers a tag that would match nothing.
+  const waypointTagOptions = useMemo<SegmentOption<string>[]>(() => {
+    const tally = new Map<string, number>();
+    for (const item of items) {
+      if (item.category !== "waypoint") continue;
+      for (const tag of item.search?.tags ?? []) {
+        tally.set(tag, (tally.get(tag) ?? 0) + 1);
+      }
+    }
+    if (tally.size === 0) return [];
+    return [
+      { value: "all", label: "All tags" },
+      ...[...tally.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([tag, count]) => ({
+          value: tag,
+          label: tag,
+          count,
+          hue: assetHue.waypoint,
+        })),
+    ];
+  }, [items]);
+
+  const inCategory =
     filter === "all"
       ? [...items].sort((a, b) => b.sizeBytes - a.sizeBytes)
       : items.filter((item) => item.category === filter);
+
+  // Narrowing only ever applies inside the waypoint filter, so leaving a stale
+  // query behind cannot silently hide another category's rows.
+  const needle = waypointQuery.trim().toLowerCase();
+  const visibleItems =
+    filter === "waypoint"
+      ? inCategory.filter(
+          (item) =>
+            (!needle || (item.search?.haystack ?? "").includes(needle)) &&
+            (!waypointTag || (item.search?.tags ?? []).includes(waypointTag)),
+        )
+      : inCategory;
 
   const availableOverlays = overlayCatalog.filter(
     (overlay) =>
       !artifacts.some((a) => a.kind === "topo-overlay" && a.logicalKey === overlay.key),
   );
+
+  const closeCoordSheet = useCallback(() => {
+    setCoordSheetOpen(false);
+    setCoordName("");
+    setCoordLat("");
+    setCoordLon("");
+    setCoordError(null);
+  }, []);
+
+  /** Validate with the SAME predicates the API uses, so a typo is caught here
+   *  rather than becoming a queued op that fails days later, offline. */
+  const saveCoordWaypoint = useCallback(() => {
+    const name = coordName.trim();
+    if (!name) {
+      setCoordError("Give it a name.");
+      return;
+    }
+    const latitude = Number(coordLat.trim());
+    const longitude = Number(coordLon.trim());
+    if (!coordLat.trim() || !isValidLatitude(latitude)) {
+      setCoordError(
+        `Latitude must be between ${LATITUDE_RANGE.min} and ${LATITUDE_RANGE.max}.`,
+      );
+      return;
+    }
+    if (!coordLon.trim() || !isValidLongitude(longitude)) {
+      setCoordError(
+        `Longitude must be between ${LONGITUDE_RANGE.min} and ${LONGITUDE_RANGE.max}.`,
+      );
+      return;
+    }
+    createWaypointLocal({ name, latitude, longitude })
+      .then(() => {
+        info(`Saved “${name}”.`);
+        closeCoordSheet();
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        fail(messageFromError(err, "Couldn't save that waypoint."));
+      });
+  }, [closeCoordSheet, coordLat, coordLon, coordName, fail, info]);
 
   const deleteItem = useCallback(
     (item: SavedItem) => {
@@ -776,6 +944,19 @@ export function SavedScreen({
       ? ((routes.data ?? []).find((route) => route.id === menuItem.key) ?? null)
       : null;
   const showRouteSheet = menuRoute !== null && menuMode !== "rename";
+  // A waypoint's overflow offers the same verbs its map sheet does — the bodies
+  // are shared (waypoints/waypointSheetBodies.tsx) so the two cannot drift.
+  const menuWaypoint =
+    menuItem?.category === "waypoint"
+      ? ((waypoints.data ?? []).find((row) => row.id === menuItem.key) ?? null)
+      : null;
+  const writeMenuWaypoint = (fields: Record<string, unknown>) => {
+    if (!menuWaypoint) return;
+    updateWaypointLocal(menuWaypoint.id, fields).catch((err: unknown) => {
+      console.error(err);
+      fail(messageFromError(err, "Couldn't save that change."));
+    });
+  };
   const [statsRoute, setStatsRoute] = useState<MirrorRoute | null>(null);
   const [linkingRoute, setLinkingRoute] = useState<MirrorRoute | null>(null);
 
@@ -802,6 +983,37 @@ export function SavedScreen({
           onChange={selectFilter}
           scroll
         />
+        {/* Search + tag chips belong to the WAYPOINT filter only. Every other
+            category here is a handful of large files you scan by eye; a
+            waypoint list is hundreds of small things you came looking for one
+            of. Both narrow the mirror on this device — no request, so it works
+            in a gorge. */}
+        {filter === "waypoint" ? (
+          <>
+            {/* The field carries its own right pad because the rail has none —
+                the category chips are meant to scroll off the edge, an input
+                running into it just looks clipped. */}
+            <View style={styles.waypointSearch}>
+              <TextField
+                label="Search waypoints"
+                value={waypointQuery}
+                onChangeText={setWaypointQuery}
+              />
+            </View>
+            {waypointTagOptions.length > 0 ? (
+              <View style={styles.waypointTags}>
+                <SegmentedControl
+                  options={waypointTagOptions}
+                  value={waypointTag ?? "all"}
+                  onChange={(value) =>
+                    setWaypointTag(value === "all" ? null : value)
+                  }
+                  scroll
+                />
+              </View>
+            ) : null}
+          </>
+        ) : null}
       </View>
 
       {/* Hero + rail stay pinned; only the inventory scrolls, so the filter
@@ -964,6 +1176,40 @@ export function SavedScreen({
         ) : null}
       </ScrollView>
 
+      {/* A waypoint you did not stand on: read off a printed guide, a trip
+          report, someone's message. The map's press-and-hold cannot express a
+          coordinate you were given rather than found. */}
+      <BottomSheet
+        visible={coordSheetOpen}
+        onClose={closeCoordSheet}
+        title="Waypoint from coordinates"
+      >
+        <View style={styles.sheetBody}>
+          <TextField
+            label="Name"
+            value={coordName}
+            onChangeText={setCoordName}
+            placeholder="Carpark"
+          />
+          <TextField
+            label="Latitude"
+            value={coordLat}
+            onChangeText={setCoordLat}
+            keyboardType="numbers-and-punctuation"
+            placeholder="-33.65"
+          />
+          <TextField
+            label="Longitude"
+            value={coordLon}
+            onChangeText={setCoordLon}
+            keyboardType="numbers-and-punctuation"
+            placeholder="150.25"
+          />
+          {coordError ? <Text style={styles.coordError}>{coordError}</Text> : null}
+          <Button label="Save waypoint" onPress={saveCoordWaypoint} />
+        </View>
+      </BottomSheet>
+
       <BottomSheet
         visible={addSheetOpen}
         onClose={() => setAddSheetOpen(false)}
@@ -983,6 +1229,16 @@ export function SavedScreen({
             onPress={() => {
               setAddSheetOpen(false);
               onDownloadRegion();
+            }}
+          />
+          <Row
+            title="Waypoint from coordinates"
+            subtitle="Type a latitude and longitude — for transcribing off a guide"
+            icon="map-pin"
+            hue={assetHue.waypoint}
+            onPress={() => {
+              setAddSheetOpen(false);
+              setCoordSheetOpen(true);
             }}
           />
           <Row
@@ -1049,16 +1305,64 @@ export function SavedScreen({
           menuItem == null
             ? ""
             : menuMode === "rename"
-              ? `Rename ${CATEGORY_META[menuItem.category].label.toLowerCase()}`
-              : menuItem.title
+              ? menuWaypoint
+                ? "Edit waypoint"
+                : `Rename ${CATEGORY_META[menuItem.category].label.toLowerCase()}`
+              : menuMode === "tags"
+                ? "Tags"
+                : menuMode === "canyons"
+                  ? "Linked canyons"
+                  : menuItem.title
+        }
+        // Only the waypoint sub-modes go BACK to an actions list; every other
+        // mode here (a plain rename) closes instead.
+        onBack={
+          menuWaypoint && (menuMode === "tags" || menuMode === "canyons")
+            ? () => setMenuMode("actions")
+            : undefined
+        }
+        header={
+          menuWaypoint && menuMode === "canyons" ? (
+            <WaypointSubModeHeader hint="Anyone you share a canyon with can see its waypoints.">
+              <WaypointCanyonFilter
+                value={menuCanyonQuery}
+                onChangeText={setMenuCanyonQuery}
+              />
+            </WaypointSubModeHeader>
+          ) : undefined
         }
       >
         <View style={styles.sheetBody}>
           {menuItem == null ? null : menuMode === "rename" ? (
             <RenameForm
-              item={menuItem}
-              onDone={closeItemSheet}
-              onError={fail}
+              initialName={menuItem.title}
+              // Only a waypoint carries notes; every other kind is a
+              // name-only rename and the field stays absent.
+              {...(menuWaypoint ? { initialNotes: menuWaypoint.notes } : {})}
+              onSubmit={(changed) => {
+                const target = menuItem;
+                if (menuWaypoint) {
+                  if (Object.keys(changed).length > 0) writeMenuWaypoint(changed);
+                } else if (changed.name) {
+                  target.rename(changed.name).catch((err: unknown) => {
+                    console.error(err);
+                    fail(messageFromError(err, "Couldn't rename that."));
+                  });
+                }
+                closeItemSheet();
+              }}
+            />
+          ) : menuMode === "tags" && menuWaypoint ? (
+            <WaypointTagsBody
+              waypoint={menuWaypoint}
+              allWaypoints={waypoints.data ?? []}
+              onWrite={writeMenuWaypoint}
+            />
+          ) : menuMode === "canyons" && menuWaypoint ? (
+            <WaypointCanyonsBody
+              waypoint={menuWaypoint}
+              query={menuCanyonQuery}
+              onWrite={writeMenuWaypoint}
             />
           ) : (
             <>
@@ -1111,17 +1415,46 @@ export function SavedScreen({
                 </>
               ) : null}
               <Row
-                title="Rename"
+                title={menuWaypoint ? "Edit name and notes" : "Rename"}
                 icon="edit-2"
                 hue={theme.bonus1}
                 onPress={() => setMenuMode("rename")}
               />
+              {/* The same two verbs the waypoint's map sheet offers, rendering
+                  the same bodies — a waypoint reached from Saved must not be a
+                  lesser object than one reached from the map (DESIGN.md §7). */}
+              {menuWaypoint && menuWaypoint.syncRole !== "shared" ? (
+                <>
+                  <Row
+                    title="Tags"
+                    subtitle={
+                      menuWaypoint.tags.length
+                        ? menuWaypoint.tags.join(", ")
+                        : "None yet"
+                    }
+                    icon="tag"
+                    hue={assetHue.track}
+                    onPress={() => setMenuMode("tags")}
+                  />
+                  <Row
+                    title="Linked canyons"
+                    subtitle={
+                      menuWaypoint.canyonIds.length
+                        ? `${menuWaypoint.canyonIds.length} linked`
+                        : "Not linked"
+                    }
+                    icon="link-2"
+                    hue={assetHue.route}
+                    onPress={() => setMenuMode("canyons")}
+                  />
+                </>
+              ) : null}
               {/* Every asset that reaches THIS sheet is a file on this
                   handset. A route is not — it is a synced record whose delete
                   removes it from the account — which is why routes get their
                   own sheet rather than this label with a branch in it. */}
               <Row
-                title="Delete from device"
+                title={menuWaypoint ? "Delete waypoint" : "Delete from device"}
                 icon="trash-2"
                 hue={theme.warning}
                 onPress={() => {
@@ -1205,6 +1538,10 @@ function EmptyPanel({
       title: "No routes yet",
       hint: "Draw one on the map with the pen tool — the approach, the creek, the exit.",
     },
+    waypoint: {
+      title: "No waypoints yet",
+      hint: "Press and hold anywhere on the map to mark a spot — the carpark, the exit, a good campsite.",
+    },
     all: {
       title: "Nothing saved yet",
       hint: "Canyons need maps that work with no signal. Save a region before you leave town.",
@@ -1248,62 +1585,15 @@ function EmptyPanel({
   );
 }
 
-// The rename form, rendered INSIDE the item sheet (never as its own Modal —
-// see the `menuMode` comment). Because the sheet is already open and focused
-// when this mounts, focus can be claimed on the first frame and the keyboard
-// rises together with the form appearing, instead of shoving a settled sheet
-// upwards a beat later.
-function RenameForm({
-  item,
-  onDone,
-  onError,
-}: {
-  item: SavedItem;
-  onDone: () => void;
-  onError: (message: string) => void;
-}) {
-  const [draft, setDraft] = useState(item.title);
-  const inputRef = useRef<TextInput>(null);
-
-  useEffect(() => {
-    // `autoFocus` runs before the field is attached and is unreliable here; an
-    // explicit focus on the next frame is not.
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
-  const commit = useCallback(() => {
-    const name = draft.trim();
-    if (!name || name === item.title) {
-      onDone();
-      return;
-    }
-    item.rename(name).catch((err: unknown) => {
-      console.error(err);
-      onError(messageFromError(err, "Couldn't rename that."));
-    });
-    onDone();
-  }, [draft, item, onDone, onError]);
-
-  return (
-    <>
-      <TextField
-        label="Name"
-        value={draft}
-        onChangeText={setDraft}
-        inputRef={inputRef}
-        returnKeyType="done"
-        onSubmitEditing={commit}
-      />
-      <Button label="Save" icon="check" onPress={commit} />
-    </>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.primary },
   // The rail's own bottom pad is the gap the list scrolls against — without it
   // rows slide flush into the chips.
+  coordError: { color: theme.warning, fontSize: fontSize.sm },
+  // Breathing room on both seams: category chips → search label, and search
+  // input → tag chips. Without it the three controls read as one dense block.
+  waypointSearch: { paddingTop: spacing(1.5), paddingRight: spacing(2) },
+  waypointTags: { paddingTop: spacing(1.5) },
   rail: { paddingLeft: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
   body: { paddingHorizontal: spacing(2), paddingBottom: spacing(4), gap: spacing(1) },
   rowActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },

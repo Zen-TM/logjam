@@ -21,6 +21,7 @@ type TextFieldProps = {
   | "autoCapitalize"
   | "autoComplete"
   | "keyboardType"
+  | "placeholder"
   | "textContentType"
   | "autoFocus"
   | "onSubmitEditing"

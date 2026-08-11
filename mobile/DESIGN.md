@@ -354,6 +354,17 @@ primary.
 `region` intentionally aliases the active scheme's `accent`, so the biggest and
 most common class always feels native to the chosen theme.
 
+### A category may add its own narrowing control, below the rail
+
+The filter rail picks a KIND; anything that narrows WITHIN one kind belongs
+under it, rendered only for that filter. Waypoints are the case that earns this
+(`SavedScreen`): every other saved kind is a handful of large files you scan by
+eye, while a waypoint list is hundreds of small things you arrived looking for
+one of, so the waypoint filter — and only it — grows a search field and a rail
+of its tags. The tag rail is the vocabulary IN USE, so it never offers a chip
+that would match nothing. Both narrow the on-device mirror, so both work with
+no signal; a narrowing control that needs the network does not belong here.
+
 **When a thing has no kinds, its STATE is the category.** Canyons are all the
 same sort of object, so `canyonHue` keys off done / to do / shared instead
 (`CANYON_STATUS_META` in `src/canyons/canyonMeta.ts`), and `done` takes the

@@ -43,6 +43,9 @@ export type Waypoint = {
   lon: number;
   lat: number;
   createdAt: string;
+  /** Marker hue, derived from the waypoint's tags by map/waypointSymbol.ts.
+   *  Optional so a caller with no tag context still renders. */
+  color?: string;
 };
 
 type Listener = () => void;

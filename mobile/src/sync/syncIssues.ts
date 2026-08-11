@@ -263,7 +263,14 @@ export async function recreateFromDeadRemote(seq: number): Promise<string | null
     elevation: typeof fields.elevation === "number" ? fields.elevation : null,
     symbol: typeof fields.symbol === "string" ? fields.symbol : null,
     notes: typeof fields.notes === "string" ? fields.notes : null,
-    canyonId: typeof fields.canyonId === "string" ? fields.canyonId : null,
+    tags: Array.isArray(fields.tags)
+      ? fields.tags.filter((tag): tag is string => typeof tag === "string")
+      : [],
+    // Links are deliberately NOT carried over: the parked op names canyons that
+    // may since have been deleted or unshared, and a recreate that silently
+    // re-published a coordinate would be the worst possible time to guess. The
+    // user re-links from the sheet, seeing what they are linking to.
+    canyonIds: [],
   };
   const newId = await createWaypointLocal(draft);
   const db = await getSyncDb();

@@ -279,6 +279,14 @@ function MapStackNav() {
                 params: { focus: { bbox: routeBbox(route.points), nonce: Date.now() } },
               })
             }
+            onShowWaypointOnMap={(waypoint) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                // canyonFocus, not routeBbox: a single point yields a
+                // zero-span bbox, which the camera reads as "fit nothing".
+                params: { focus: canyonFocus(waypoint) },
+              })
+            }
             onDrawRoute={(id) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
@@ -396,6 +404,14 @@ function CanyonsStackNav() {
                 params: { focus: { bbox: routeBbox(route.points), nonce: Date.now() } },
               })
             }
+            onShowWaypointOnMap={(waypoint) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                // canyonFocus, not routeBbox: a single point yields a
+                // zero-span bbox, which the camera reads as "fit nothing".
+                params: { focus: canyonFocus(waypoint) },
+              })
+            }
             onDrawRoute={(id) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
@@ -476,6 +492,14 @@ function TripsStackNav() {
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
                 params: { focus: { bbox: routeBbox(route.points), nonce: Date.now() } },
+              })
+            }
+            onShowWaypointOnMap={(waypoint) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                // canyonFocus, not routeBbox: a single point yields a
+                // zero-span bbox, which the camera reads as "fit nothing".
+                params: { focus: canyonFocus(waypoint) },
               })
             }
             onDrawRoute={(id) =>
@@ -776,6 +800,14 @@ export function AppShell({
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
                 params: { focus: { bbox: routeBbox(route.points), nonce: Date.now() } },
+              })
+            }
+            onShowWaypointOnMap={(waypoint) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                // canyonFocus, not routeBbox: a single point yields a
+                // zero-span bbox, which the camera reads as "fit nothing".
+                params: { focus: canyonFocus(waypoint) },
               })
             }
             onDrawRoute={(id) =>

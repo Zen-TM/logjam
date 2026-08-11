@@ -195,13 +195,24 @@ export type SyncDeltaTripRow = {
 export type SyncDeltaWaypointRow = {
   id: string;
   ownerId: string;
-  canyonId: string | null;
+  /**
+   * Mirrors SyncDeltaCanyonRow: 'shared' means the row arrives only because it
+   * is linked to a canyon shared with the caller, and is READ-ONLY there.
+   */
+  syncRole: "owner" | "shared";
+  /**
+   * Every canyon this waypoint is linked to THAT THE CALLER CAN SEE. A sharee
+   * never learns that an owner also filed the carpark under three canyons they
+   * were not shared on, so this list is scoped, not the raw link set.
+   */
+  canyonIds: string[];
   name: string;
   latitude: number;
   longitude: number;
   elevation: number | null;
   symbol: string | null;
   notes: string | null;
+  tags: string[];
   createdAt: string;
   updatedAt: string;
 };

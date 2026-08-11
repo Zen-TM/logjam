@@ -113,7 +113,13 @@ export function TrackMapLayers({
                 type: "Point" as const,
                 coordinates: [waypoint.lon, waypoint.lat],
               },
-              properties: { id: waypoint.id, name: waypoint.name },
+              properties: {
+                id: waypoint.id,
+                name: waypoint.name,
+                // Per-feature so one layer paints every tag; a match
+                // expression here would duplicate the lookup table.
+                color: waypoint.color ?? WAYPOINT_COLOR,
+              },
             })),
           }}
           onPress={(event) => {
@@ -126,7 +132,7 @@ export function TrackMapLayers({
             id="waypoint-markers"
             style={{
               circleRadius: 6,
-              circleColor: WAYPOINT_COLOR,
+              circleColor: ["get", "color"] as unknown as string,
               circleStrokeColor: "#ffffff",
               circleStrokeWidth: 2,
             }}

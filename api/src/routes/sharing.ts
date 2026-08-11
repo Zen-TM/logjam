@@ -8,6 +8,10 @@ import { resolveUser } from "../lib/resolveUser";
 import { sendPushToUser } from "../services/push";
 import { getCanyonRole, requireCanyonOwnerAccess } from "../lib/canyonAccess";
 import { shareRevokeTombstones, writeTombstones } from "../lib/syncTombstones";
+import {
+  snapshotCanyonWaypointVisibility,
+  writeWaypointVisibilityLoss,
+} from "../lib/waypointLink";
 
 const router = Router();
 
@@ -157,7 +161,12 @@ router.delete(
         where: { canyonId },
         select: { id: true },
       });
+      // Linked waypoints go the same way — but only those this recipient can no
+      // longer reach at all. A carpark they also see through a second shared
+      // canyon stays in their mirror (lib/waypointLink.ts).
+      const waypointVisibility = await snapshotCanyonWaypointVisibility(tx, canyonId);
       await tx.canyonShare.delete({ where: { id: share.id } });
+      await writeWaypointVisibilityLoss(tx, waypointVisibility);
       await tx.notification.deleteMany({
         where: {
           userId: targetUserId,

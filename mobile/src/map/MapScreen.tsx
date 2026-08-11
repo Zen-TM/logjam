@@ -150,6 +150,8 @@ import { Toast, type ToastMessage } from "../ui/Toast";
 import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { CanyonRoutesLayer, type CanyonRoutesStatus } from "./CanyonRoutesLayer";
 import { MapLayersSheet } from "./MapLayersSheet";
+import { waypointSymbol } from "./waypointSymbol";
+import { WaypointSheet } from "./WaypointSheet";
 import { MapPointSheet, type MapPoint } from "./MapPointSheet";
 import { CanyonEditSheet } from "../canyons/CanyonEditSheet";
 import {
@@ -174,7 +176,6 @@ import {
   createWaypointLocal,
   createRouteLocal,
   updateRouteLocal,
-  deleteWaypointLocal,
 } from "../sync/outbox";
 import {
   reconcileTrackRecordingOnLaunch,
@@ -1328,6 +1329,7 @@ export function MapScreen({
         lon: wp.longitude,
         lat: wp.latitude,
         createdAt: wp.createdAt,
+        color: waypointSymbol(wp).color,
       })),
     [mirrorWaypoints.data],
   );
@@ -1363,6 +1365,12 @@ export function MapScreen({
       deactivateKeepAwake(KEEP_AWAKE_TAG).catch(console.error);
     };
   }, [keepAwakeReason]);
+  // Which waypoint's sheet is open, and whether it should land on the edit
+  // form (a fresh drop) rather than the verb list (a tap on an existing pin).
+  const [openWaypoint, setOpenWaypoint] = useState<{
+    id: string;
+    autoEdit: boolean;
+  } | null>(null);
   const [navTarget, setNavTarget] = useState<Waypoint | null>(null);
   const navDistanceM =
     navTarget && userCoord
@@ -1393,13 +1401,18 @@ export function MapScreen({
     setToast({ text, tone, nonce: toastNonce.current });
   }, []);
 
+  // The drop itself never waits on a form: the waypoint is written first, then
+  // its sheet opens on the name field. Cancelling the form leaves a saved,
+  // auto-named waypoint rather than losing the mark.
   const dropWaypointAt = useCallback(
     (point: { latitude: number; longitude: number }) => {
       createWaypointLocal({
         name: `Waypoint ${waypoints.length + 1}`,
         latitude: point.latitude,
         longitude: point.longitude,
-      }).catch(console.error);
+      })
+        .then((id) => setOpenWaypoint({ id, autoEdit: true }))
+        .catch(console.error);
     },
     [waypoints.length],
   );
@@ -2318,28 +2331,9 @@ export function MapScreen({
         void addToolPoint(waypoint.lon, waypoint.lat);
         return;
       }
-      Alert.alert(waypoint.name, undefined, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            setNavTarget((current) =>
-              current?.id === waypoint.id ? null : current,
-            );
-            deleteWaypointLocal(waypoint.id).catch(console.error);
-          },
-        },
-        {
-          text: "Navigate",
-          onPress: () => {
-            setNavTarget(waypoint);
-            if (!locationWatch.current) handleLocateMe();
-          },
-        },
-      ]);
+      setOpenWaypoint({ id: waypoint.id, autoEdit: false });
     },
-    [addToolPoint, collectingPoints, handleLocateMe],
+    [addToolPoint, collectingPoints],
   );
 
   // The layer sheet groups these two ways at once — by layer across every area,
@@ -3181,6 +3175,35 @@ export function MapScreen({
             credit, so the credit lives here rather than nowhere. */}
         <Text style={styles.attributionText}>{BASEMAP_THUMB_CREDIT}</Text>
       </BottomSheet>
+
+      {/* One waypoint's verbs, tags and canyon links. Looked up from the
+          mirror by id rather than held as an object, so an edit made inside
+          the sheet re-renders it instead of showing the stale copy the pin
+          was tapped with. */}
+      <WaypointSheet
+        waypoint={
+          openWaypoint
+            ? ((mirrorWaypoints.data ?? []).find(
+                (row) => row.id === openWaypoint.id,
+              ) ?? null)
+            : null
+        }
+        userCoord={userCoord}
+        autoEdit={openWaypoint?.autoEdit ?? false}
+        onClose={() => setOpenWaypoint(null)}
+        onNavigate={(waypoint) => {
+          setNavTarget({
+            id: waypoint.id,
+            name: waypoint.name,
+            lon: waypoint.longitude,
+            lat: waypoint.latitude,
+            createdAt: waypoint.createdAt,
+          });
+          if (!locationWatch.current) handleLocateMe();
+        }}
+        onInfo={(message) => notify(message, "info")}
+        onError={(message) => notify(message, "error")}
+      />
 
       {/* Tap: "what's there?" — the question that comes before the long
           press's "something goes here". */}

@@ -12,6 +12,10 @@ import { requireCanyonAccess, requireCanyonOwnerAccess } from "../lib/canyonAcce
 import { resolveUser } from "../lib/resolveUser";
 import { canyonDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
 import {
+  snapshotCanyonWaypointVisibility,
+  writeWaypointVisibilityLoss,
+} from "../lib/waypointLink";
+import {
   assertClientIdReplayable,
   parseClientSuppliedId,
 } from "../lib/clientSuppliedId";
@@ -537,6 +541,11 @@ router.delete(
         where: { canyonId: id },
         select: { id: true },
       });
+      // Linked WAYPOINTS survive too (CanyonWaypoint cascades the link, not the
+      // waypoint), so this is the same revocation-without-a-delete as the route
+      // above — except the link is many-to-many, so which sharees actually lose
+      // sight of one can only be answered by diffing across the delete.
+      const waypointVisibility = await snapshotCanyonWaypointVisibility(tx, id);
       await writeTombstones(
         tx,
         canyonDeleteTombstones({
@@ -559,6 +568,9 @@ router.delete(
         },
       });
       await tx.canyon.delete({ where: { id } });
+      // After the delete: the link rows are gone, so this now sees the world as
+      // the sharees will.
+      await writeWaypointVisibilityLoss(tx, waypointVisibility);
       await decrementStorageUsed(user.id, totalBytes, tx);
     });
 

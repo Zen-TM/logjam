@@ -18,7 +18,9 @@ import { deleteTrack, listTrackPoints, updateTrack, type Track } from "../tracks
 import {
   createRouteLocal,
   deleteRouteLocal,
+  deleteWaypointLocal,
   updateRouteLocal,
+  updateWaypointLocal,
 } from "../sync/outbox";
 import {
   MIN_ROUTE_POINTS,
@@ -28,7 +30,7 @@ import {
   simplifyToFit,
   type RoutePoint,
 } from "@logjam/shared";
-import type { MirrorRoute } from "../sync/mirrorStore";
+import type { MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
 import { exportTrack, type ExportFormat } from "../fileExport";
 import { bboxOfPoints, type Bbox } from "./bboxOfPoints";
 
@@ -139,6 +141,26 @@ export function routeActions(route: MirrorRoute): AssetActions {
       confirmBody:
         "The route is removed from every device on your account. This can't be undone.",
       run: () => deleteRouteLocal(route.id),
+    },
+  };
+}
+
+export function waypointActions(waypoint: MirrorWaypoint): AssetActions {
+  const readOnly = waypoint.syncRole === "shared";
+  return {
+    locatable: true,
+    // A point has no extent; the caller's camera treats a degenerate bbox as
+    // "centre here", which is exactly what showing a waypoint means.
+    resolveBbox: async () =>
+      bboxOfPoints([{ lon: waypoint.longitude, lat: waypoint.latitude }]),
+    rename: readOnly
+      ? async () => undefined
+      : (name) => updateWaypointLocal(waypoint.id, { name }),
+    delete: {
+      confirmTitle: "Delete waypoint?",
+      confirmBody:
+        "The waypoint is removed from every device on your account, and from anyone you shared its canyons with. This can't be undone.",
+      run: () => deleteWaypointLocal(waypoint.id),
     },
   };
 }
