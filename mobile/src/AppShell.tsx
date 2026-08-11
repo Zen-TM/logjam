@@ -34,6 +34,7 @@ import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
 import { RegionDownloadProgressScreen } from "./map/RegionDownloadProgressScreen";
 import type { BasemapId } from "./map/sourceResolver";
 import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
+import { registerTopoAutoDownload } from "./offline/topoAutoDownload";
 import { GeoPdfImportToast } from "./geopdf/GeoPdfImportToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { SavedScreen } from "./saved/SavedScreen";
@@ -44,7 +45,12 @@ import { ConsentGate } from "./screens/ConsentGate";
 import { FriendsScreen } from "./screens/FriendsScreen";
 import { MoreScreen } from "./screens/MoreScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
-import { SettingsScreen } from "./screens/SettingsScreen";
+import { SettingsScreen, type SettingsPage } from "./screens/SettingsScreen";
+import { DisplaySettingsScreen } from "./screens/settings/DisplaySettingsScreen";
+import { MapSettingsScreen } from "./screens/settings/MapSettingsScreen";
+import { NotificationSettingsScreen } from "./screens/settings/NotificationSettingsScreen";
+import { OfflineSettingsScreen } from "./screens/settings/OfflineSettingsScreen";
+import { PrivacySettingsScreen } from "./screens/settings/PrivacySettingsScreen";
 import { SyncIssuesScreen } from "./screens/SyncIssuesScreen";
 import type { MirrorTrip } from "./sync/mirrorStore";
 import { LogsScreen } from "./logs/LogsScreen";
@@ -139,6 +145,23 @@ type MoreStackParams = {
   Friends: undefined;
   SyncIssues: undefined;
   Settings: undefined;
+  // Settings sub-pages. One route each rather than one parameterised route: a
+  // native header wants its own title per screen, and the back stack reads
+  // Settings › Map the way the user got there.
+  SettingsDisplay: undefined;
+  SettingsMap: undefined;
+  SettingsNotifications: undefined;
+  SettingsOffline: undefined;
+  SettingsPrivacy: undefined;
+};
+
+/** Settings root → the route that page lives at. */
+const SETTINGS_ROUTES: Record<SettingsPage, keyof MoreStackParams> = {
+  display: "SettingsDisplay",
+  map: "SettingsMap",
+  notifications: "SettingsNotifications",
+  offline: "SettingsOffline",
+  privacy: "SettingsPrivacy",
 };
 
 const MapStack = createNativeStackNavigator<MapStackParams>();
@@ -526,13 +549,22 @@ export function AppShell({
     return registerSyncTriggers();
   }, [isGuest]);
 
-  // "Auto-download finished GeoPDFs" (Settings → Downloads): app start,
-  // foreground, and connection regained — Wi-Fi only. See autoDownload.ts for
-  // why it checks then and not on a timer. GeoPDFs come from the user's web
-  // account, so there is nothing to download for a guest.
+  // "Auto-download finished GeoPDFs" (Settings → Offline and storage): app
+  // start, foreground, and connection regained — Wi-Fi by default. See
+  // autoDownload.ts for why it checks then and not on a timer. GeoPDFs come
+  // from the user's web account, so there is nothing to download for a guest.
   useEffect(() => {
     if (isGuest) return;
     return registerGeoPdfAutoDownload();
+  }, [isGuest]);
+
+  // The same feature over finished LiDAR topo overlays, on the same three
+  // moments and the same guest rule. Its own registration rather than a shared
+  // one: the two have separate switches and separate connection policies, and a
+  // combined runner would make one's failure the other's.
+  useEffect(() => {
+    if (isGuest) return;
+    return registerTopoAutoDownload();
   }, [isGuest]);
 
   // Mirror the account's theme choice onto this device, so a scheme picked in the
@@ -788,10 +820,43 @@ export function AppShell({
               <MoreStack.Screen name="SyncIssues" options={{ headerShown: false }}>
                 {({ navigation }) => <SyncIssuesScreen onBack={() => navigation.goBack()} />}
               </MoreStack.Screen>
+              {/* Settings and its sub-pages are plain preference lists, so they
+                  keep the native header and its back button (DESIGN.md §2). */}
+              <MoreStack.Screen name="Settings" options={{ title: "Settings" }}>
+                {({ navigation }) => (
+                  <SettingsScreen
+                    onOpenPage={(page) => navigation.navigate(SETTINGS_ROUTES[page])}
+                  />
+                )}
+              </MoreStack.Screen>
               <MoreStack.Screen
-                name="Settings"
-                component={SettingsScreen}
-                options={{ title: "Settings" }}
+                name="SettingsDisplay"
+                component={DisplaySettingsScreen}
+                options={{ title: "Display" }}
+              />
+              <MoreStack.Screen
+                name="SettingsMap"
+                component={MapSettingsScreen}
+                options={{ title: "Map" }}
+              />
+              <MoreStack.Screen
+                name="SettingsNotifications"
+                component={NotificationSettingsScreen}
+                options={{ title: "Notifications" }}
+              />
+              <MoreStack.Screen name="SettingsOffline" options={{ title: "Offline and storage" }}>
+                {({ navigation }) => (
+                  <OfflineSettingsScreen
+                    onOpenSaved={() =>
+                      navigation.getParent()?.navigate("Saved", { screen: "SavedHome" })
+                    }
+                  />
+                )}
+              </MoreStack.Screen>
+              <MoreStack.Screen
+                name="SettingsPrivacy"
+                component={PrivacySettingsScreen}
+                options={{ title: "Privacy and security" }}
               />
             </MoreStack.Navigator>
           )}

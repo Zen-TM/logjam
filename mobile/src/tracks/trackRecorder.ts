@@ -23,6 +23,11 @@ import {
 
 import { randomId } from "../imports/vectorImports";
 import {
+  FIX_RATE_OPTIONS,
+  readAccuracyLimitM,
+  readFixRate,
+} from "./recordingPreferences";
+import {
   appendTrackPoints,
   deleteTrack,
   findActiveTrack,
@@ -37,22 +42,24 @@ import {
 export const TRACK_RECORDING_TASK = "logjam-track-recording";
 
 // Battery posture from the plan: 5 m distance filter, no high-rate polling.
-// High = GPS-priority — correct for recording outdoors (Balanced is for the
-// indoor locate-me dot; a recorded track wants GPS fixes, not wifi centroids).
-const LOCATION_OPTIONS: Location.LocationTaskOptions = {
-  accuracy: Location.Accuracy.High,
-  distanceInterval: 5,
-  timeInterval: 3000,
-  // Let the OS batch deliveries while backgrounded instead of waking JS per fix.
-  deferredUpdatesInterval: 15_000,
-  showsBackgroundLocationIndicator: true,
-  activityType: Location.ActivityType.Fitness,
-  foregroundService: {
-    notificationTitle: "Recording track",
-    notificationBody: "Logjam is recording. Open the app to pause or finish.",
-    killServiceOnDestroy: false,
-  },
-};
+// High = GPS-priority in every preset — correct for recording outdoors
+// (Balanced is for the indoor locate-me dot; a recorded track wants GPS fixes,
+// not wifi centroids). What the user's "Track detail" choice moves is the RATE
+// (`FIX_RATE_OPTIONS`), and it is read at start/resume rather than cached: the
+// setting has to apply to the next track, and this module lives for the life of
+// the process.
+function locationOptions(): Location.LocationTaskOptions {
+  return {
+    ...FIX_RATE_OPTIONS[readFixRate()],
+    showsBackgroundLocationIndicator: true,
+    activityType: Location.ActivityType.Fitness,
+    foregroundService: {
+      notificationTitle: "Recording track",
+      notificationBody: "Logjam is recording. Open the app to pause or finish.",
+      killServiceOnDestroy: false,
+    },
+  };
+}
 
 const TRACK_COLOR = "#f59e0b"; // amber — distinct from the import palette
 
@@ -88,6 +95,10 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
   // paused.
   let prev =
     lastPoint && lastPoint.segment === track.currentSegment ? lastPoint : null;
+  // Read per batch, not per fix, and not cached in a module constant: this task
+  // is re-launched headless and outlives any screen, so the user's current
+  // setting is whatever `prefsDb` says right now.
+  const maxAccuracyM = readAccuracyLimitM();
   const accepted: RecordedTrackPoint[] = [];
   for (const location of locations) {
     const fix: CandidateFix = {
@@ -97,7 +108,7 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
       accuracyM: location.coords.accuracy,
       timestampMs: location.timestamp,
     };
-    if (rejectTrackFix(prev, fix) !== null) continue;
+    if (rejectTrackFix(prev, fix, maxAccuracyM) !== null) continue;
     const point: RecordedTrackPoint = { ...fix, segment: track.currentSegment };
     accepted.push(point);
     prev = point;
@@ -161,7 +172,7 @@ export async function startTrackRecording(): Promise<Track> {
   };
   await insertTrack(track);
   try {
-    await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, LOCATION_OPTIONS);
+    await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
   } catch (error) {
     // No half-armed state: if the service refuses to start, drop the row.
     await deleteTrack(track.id);
@@ -193,7 +204,7 @@ export async function resumeTrackRecording(track: Track): Promise<void> {
     pausedMs: track.pausedMs + pausedSinceMs,
     pausedAt: null,
   });
-  await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, LOCATION_OPTIONS);
+  await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
 }
 
 export async function finishTrackRecording(trackId: string): Promise<void> {

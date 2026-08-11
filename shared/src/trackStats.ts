@@ -30,6 +30,10 @@ export type CandidateFix = Omit<RecordedTrackPoint, "segment">;
 // Fixes worse than this are discarded — a 100 m-radius fix under a canyon
 // wall adds noise distance, not track. 50 m keeps degraded-but-usable fixes
 // (deep canyon GPS is routinely 20–40 m) while dropping cell-tower garbage.
+//
+// The DEFAULT, not the rule: the recorder passes the user's own limit
+// (Settings → Map → Recording), because in a slot 50 m can be the best fix
+// available for half an hour and the gate turns that stretch into a gap.
 export const MAX_ACCEPTED_ACCURACY_M = 50;
 
 // Floor for the movement gate below. A fix that moved less than this is a
@@ -75,10 +79,16 @@ export type FixRejection =
  * (null at track/segment start — a resumed segment must pass null, or the
  * first fix after the pause is measured against wherever the user was before
  * it). Returns null to accept, else the reason.
+ *
+ * `maxAccuracyM` is the user's accuracy gate; `0` disables it, which is the
+ * setting that lets a deep slot record at all. It does NOT disable the movement
+ * or speed gates below — those are what stop a stationary phone's drift being
+ * booked as distance walked, and no preference may switch them off.
  */
 export function rejectTrackFix(
   prev: RecordedTrackPoint | null,
   fix: CandidateFix,
+  maxAccuracyM: number = MAX_ACCEPTED_ACCURACY_M,
 ): FixRejection | null {
   if (
     !Number.isFinite(fix.lon) ||
@@ -89,7 +99,7 @@ export function rejectTrackFix(
   ) {
     return "invalid";
   }
-  if (fix.accuracyM != null && fix.accuracyM > MAX_ACCEPTED_ACCURACY_M) {
+  if (maxAccuracyM > 0 && fix.accuracyM != null && fix.accuracyM > maxAccuracyM) {
     return "inaccurate";
   }
   if (prev) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { assetHue, withAlpha } from "./theme";
+import { assetHue, clampTextScale, withAlpha } from "./theme";
 
 describe("withAlpha", () => {
   it("expands 3-digit and parses 6-digit hex", () => {
@@ -19,5 +19,25 @@ describe("withAlpha", () => {
     for (const hue of Object.values(assetHue)) {
       expect(withAlpha(hue, 0.16)).toMatch(/^rgba\(\d+,\d+,\d+,0\.16\)$/);
     }
+  });
+});
+
+describe("clampTextScale", () => {
+  it("applies the user's pick when the OS is not scaling", () => {
+    expect(clampTextScale(1.3, 1)).toBe(1.3);
+    expect(clampTextScale(0.9, 1)).toBe(0.9);
+  });
+
+  // The two knobs multiply, so the pair is what has to stay under the ceiling:
+  // OS 1.5 x our 1.5 would be 2.25, which is a row title in three lines.
+  it("gives up its own headroom to keep the COMBINED scale at or under 2", () => {
+    expect(clampTextScale(1.5, 1.5)).toBeCloseTo(2 / 1.5);
+    expect(clampTextScale(1.5, 2)).toBe(1);
+    // Already past the ceiling on its own: we shrink rather than add to it.
+    expect(clampTextScale(1.15, 4)).toBe(0.5);
+  });
+
+  it("treats a missing OS scale as 1 rather than dividing by zero", () => {
+    expect(clampTextScale(1.15, 0)).toBe(1.15);
   });
 });

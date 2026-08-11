@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { COMPASS_PX_PER_DEGREE, compassTicks } from "./compassTape";
+import { COMPASS_PX_PER_DEGREE, compassTicks, displayHeading } from "./compassTape";
+import { NSW_MAGNETIC_DECLINATION_DEG } from "./heading";
 
 const WIDTH = 260;
 
@@ -37,5 +38,26 @@ describe("compassTicks", () => {
   it("has nothing to draw without a width or a heading", () => {
     expect(compassTicks(0, 0)).toEqual([]);
     expect(compassTicks(Number.NaN, WIDTH)).toEqual([]);
+  });
+});
+
+describe("displayHeading", () => {
+  it("passes true headings through untouched", () => {
+    expect(displayHeading(0, "true")).toBe(0);
+    expect(displayHeading(237.4, "true")).toBe(237.4);
+  });
+
+  // The direction that matters. NSW's declination is EASTERLY, so magnetic
+  // north sits east of true north and the same direction takes a SMALLER
+  // number measured from it. Backwards here is 25° of error in where someone
+  // walks off a plateau.
+  it("subtracts the easterly declination for magnetic", () => {
+    expect(displayHeading(100, "magnetic")).toBeCloseTo(87.5);
+    expect(displayHeading(NSW_MAGNETIC_DECLINATION_DEG, "magnetic")).toBeCloseTo(0);
+  });
+
+  it("wraps below zero rather than going negative", () => {
+    expect(displayHeading(0, "magnetic")).toBeCloseTo(347.5);
+    expect(displayHeading(5, "magnetic")).toBeCloseTo(352.5);
   });
 });

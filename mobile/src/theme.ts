@@ -18,6 +18,7 @@ import {
 import { readPref, writePref } from "./prefsDb";
 
 const THEME_SCHEME_PREF_KEY = "themeSchemeId";
+const TEXT_SCALE_PREF_KEY = "textScale";
 
 function resolveSchemeId(): ThemeSchemeId {
   const stored = readPref(THEME_SCHEME_PREF_KEY);
@@ -44,17 +45,111 @@ export function persistThemeSchemeId(id: ThemeSchemeId): boolean {
   return writePref(THEME_SCHEME_PREF_KEY, id);
 }
 
+/**
+ * TEXT SIZE — the user's multiplier, ON TOP OF the OS font scale.
+ *
+ * Android already has a font-size slider and RN honours it (`allowFontScaling`
+ * is on by default), so this preference exists only for the gap that leaves:
+ * someone who wants Logjam's type bigger without enlarging every other app.
+ * Which means the two knobs MULTIPLY, and a user on OS 1.3 who picks 1.4 here
+ * would be asking for 1.8× — enough to break the row layouts this app is built
+ * out of. `resolveTextScale` therefore clamps the COMBINED figure to
+ * `MAX_COMBINED_TEXT_SCALE` and returns what is left for us to apply.
+ *
+ * Applied at launch, exactly like the scheme and for the same reason: these
+ * numbers are snapshotted by every `StyleSheet.create` in the app at import
+ * time (DESIGN.md §12).
+ */
+export const TEXT_SCALES = [0.9, 1, 1.15, 1.3, 1.5] as const;
+export type TextScale = (typeof TEXT_SCALES)[number];
+
+const DEFAULT_TEXT_SCALE: TextScale = 1;
+
+/** Ceiling on OS scale × ours. Past this, a two-line row title is three lines. */
+const MAX_COMBINED_TEXT_SCALE = 2;
+
+/** The multiplier the user picked, whatever the OS is doing. */
+export const chosenTextScale: TextScale = resolveChosenTextScale();
+
+function resolveChosenTextScale(): TextScale {
+  const stored = Number(readPref(TEXT_SCALE_PREF_KEY));
+  return (TEXT_SCALES as readonly number[]).includes(stored)
+    ? (stored as TextScale)
+    : DEFAULT_TEXT_SCALE;
+}
+
+/**
+ * What WE apply, given the user's pick and what the OS is already applying.
+ *
+ * `getFontScale()` is the OS setting and RN has already applied it to every
+ * `<Text>`, so the headroom left for us is the ceiling divided by it. Exported
+ * for its test — the clamp is the only part of this file with an edge case.
+ */
+export function clampTextScale(chosen: number, osScale: number): number {
+  return Math.min(chosen, MAX_COMBINED_TEXT_SCALE / (osScale || 1));
+}
+
+function resolveTextScale(): number {
+  return clampTextScale(chosenTextScale, osFontScale());
+}
+
+/**
+ * The OS font scale, or 1 where there is no OS to ask.
+ *
+ * Required lazily rather than imported, for the same reason `prefsDb` requires
+ * expo-sqlite lazily: this module is the root of the token graph and is reached
+ * by pure unit tests running in plain node, where `react-native`'s Flow source
+ * does not parse. There, 1 is the correct answer, not a failure.
+ */
+function osFontScale(): number {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { PixelRatio } = require("react-native") as typeof import("react-native");
+    return PixelRatio.getFontScale() || 1;
+  } catch {
+    return 1;
+  }
+}
+
+/**
+ * The multiplier actually applied to every type token below.
+ *
+ * Exported for the two INSTRUMENTS on the map (the compass tape and the scale
+ * bar), whose boxes are fixed geometry sized around their own labels: their
+ * type grows with everyone else's, so their label slots and heights have to
+ * grow with it or the bearing reads "24…". Layout code should reach for this
+ * only where a box is measured in text; everything else is `spacing`.
+ */
+export const textScale = resolveTextScale();
+
+/**
+ * Record the multiplier for the NEXT launch. Returns false when the device
+ * refused to store it, so the caller can say so rather than showing a selection
+ * that silently reverts.
+ */
+export function persistTextScale(scale: TextScale): boolean {
+  return writePref(TEXT_SCALE_PREF_KEY, String(scale));
+}
+
+// Rounded to whole pixels: RN takes fractional font sizes, but a 13.8 px label
+// beside a 13.8 px icon lands on a different subpixel on every device.
+const scaled = (px: number): number => Math.round(px * textScale);
+
 // Spacing/radius/type scale mirroring the web tokens (frontend/src/index.css).
 // `pill` is the fully-rounded end of the scale (chips, meters, badges).
+//
+// SPACING AND RADIUS DO NOT SCALE. Only type does: growing the padding with it
+// would push a row's content off the right edge instead of making its words
+// bigger, and the icon tiles are sized against `spacing`, not against text.
 export const radius = { sm: 4, md: 8, lg: 12, xl: 16, pill: 999 } as const;
 export const fontSize = {
-  xs: 12,
-  sm: 14,
-  base: 16,
-  lg: 20,
-  xl: 24,
+  xs: scaled(12),
+  sm: scaled(14),
+  base: scaled(16),
+  lg: scaled(20),
+  xl: scaled(24),
   /** Hero metric — one per screen, never body copy. */
-  display: 34,
+  display: scaled(34),
 } as const;
 export const spacing = (n: number): number => n * 8;
 
@@ -62,7 +157,7 @@ export const spacing = (n: number): number => n * 8;
 // (page title = xl/bold, body = base/regular at body line-height). RN wants
 // weights as strings.
 export const fontWeight = { regular: "400", medium: "600", bold: "700" } as const;
-export const lineHeight = { body: 22, tight: 18 } as const;
+export const lineHeight = { body: scaled(22), tight: scaled(18) } as const;
 
 // Modal/sheet scrims — the only intentional black-alpha overlays. Everything
 // else derives from the scheme. `light` for bottom sheets, `heavy` for

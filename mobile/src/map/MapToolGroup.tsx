@@ -39,12 +39,19 @@ const TOOLS: {
 export function MapToolGroup({
   open,
   activeTool,
+  side = "right",
   onToggleOpen,
   onPickTool,
 }: {
   open: boolean;
   /** The armed tool, if any — its button stays lit while it runs. */
   activeTool: MapTool | null;
+  /**
+   * Which edge the action column is on (Settings → Map). The tray opens AWAY
+   * from it — sideways is only free space in one direction, and a tray that
+   * opened off the screen edge would be a column with invisible tools.
+   */
+  side?: "right" | "left";
   onToggleOpen: () => void;
   onPickTool: (tool: MapTool) => void;
 }) {
@@ -67,7 +74,13 @@ export function MapToolGroup({
   return (
     <View style={styles.row}>
       <Animated.View
-        style={[styles.tray, { width: trayWidth, opacity: reveal }]}
+        style={[
+          styles.tray,
+          side === "left"
+            ? { left: FAB_SIZE + CHROME_GAP, justifyContent: "flex-start" }
+            : { right: FAB_SIZE + CHROME_GAP, justifyContent: "flex-end" },
+          { width: trayWidth, opacity: reveal },
+        ]}
         pointerEvents={open ? "auto" : "none"}
       >
         {TOOLS.map((tool) => (
@@ -126,12 +139,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // The edge it hangs off and the direction it fills come from `side` at the
+  // call site; everything else about it is fixed.
   tray: {
     position: "absolute",
-    right: FAB_SIZE + CHROME_GAP,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-end",
     gap: CHROME_GAP,
     overflow: "hidden",
   },

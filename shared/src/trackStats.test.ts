@@ -88,6 +88,34 @@ describe("rejectTrackFix", () => {
     ).toBeNull();
   });
 
+  it("takes the caller's accuracy ceiling, and 0 disables it", () => {
+    const rough = point({
+      lat: BASE_LAT + 0.001,
+      accuracyM: 80,
+      timestampMs: 1000 + WALK_MS,
+    });
+    // Tighter than the default: a fix the default would keep is dropped.
+    expect(rejectTrackFix(prev, rough, 20)).toBe("inaccurate");
+    // Looser: the same fix lands.
+    expect(rejectTrackFix(prev, rough, 100)).toBeNull();
+    // 0 = keep all, which is the whole point of the setting — a slot where
+    // nothing better than 80 m is on offer still records.
+    expect(rejectTrackFix(prev, rough, 0)).toBeNull();
+  });
+
+  it("keeps the movement gate whatever the accuracy ceiling is", () => {
+    // The drift gate scales with the fix's own accuracy, so a 200 m-accurate
+    // fix 1 m away is still drift — "keep all" must not turn a stationary
+    // phone's wander into distance walked.
+    expect(
+      rejectTrackFix(
+        prev,
+        point({ lat: BASE_LAT + 0.000005, accuracyM: 200, timestampMs: 5000 }),
+        0,
+      ),
+    ).toBe("too-close");
+  });
+
   it("rejects out-of-order and duplicate timestamps", () => {
     expect(
       rejectTrackFix(prev, point({ lat: BASE_LAT + 0.001, timestampMs: 1000 })),

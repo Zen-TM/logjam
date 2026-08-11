@@ -8,6 +8,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { computeBackoffMs } from "@logjam/shared";
 
 import { fetchCurrentUser } from "../api/queries";
+import { canRunNow } from "../offline/networkPolicy";
 import { runDeltaPull } from "./deltaPull";
 import { flushOutbox } from "./flush";
 import { syncThumbnailCache } from "./mediaCache";
@@ -137,7 +138,15 @@ export function scheduleMutationSync(): void {
   if (mutationTimer) clearTimeout(mutationTimer);
   mutationTimer = setTimeout(() => {
     mutationTimer = null;
-    void requestSync();
+    // Unasked, so it answers to the same connection policy as the other
+    // automatic triggers; the work stays in the outbox until one is allowed.
+    // NOT through `requestAutoSync`: this trigger is already debounced by ten
+    // seconds of quiet, and putting it behind the shared rate limit as well
+    // would silently drop the flush of an edit made just after a foreground
+    // cycle.
+    void canRunNow("sync").then((allowed) => {
+      if (allowed) void requestSync();
+    });
   }, MUTATION_SYNC_DEBOUNCE_MS);
 }
 
@@ -147,11 +156,24 @@ export function scheduleMutationSync(): void {
 const AUTO_SYNC_MIN_INTERVAL_MS = 10_000;
 let lastAutoSyncAt = 0;
 
+/**
+ * An UNASKED cycle. Everything the user asks for by hand goes through
+ * `requestSync` directly and is never gated — tapping "Sync now" on mobile data
+ * is the user saying they want it on mobile data, and a button that silently
+ * declines is worse than no button.
+ *
+ * Sync defaults to allowed on mobile data (`networkPolicy.ts`): a cycle is a
+ * few kilobytes of JSON, and a trip log that waits for Wi-Fi is a trip log that
+ * exists on one phone for the week it matters. The switch is for people
+ * roaming or on a hard cap.
+ */
 function requestAutoSync(): void {
   const now = Date.now();
   if (now - lastAutoSyncAt < AUTO_SYNC_MIN_INTERVAL_MS) return;
   lastAutoSyncAt = now;
-  void requestSync();
+  void canRunNow("sync").then((allowed) => {
+    if (allowed) void requestSync();
+  });
 }
 
 /**

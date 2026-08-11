@@ -40,8 +40,19 @@ export function Row({
   onPress,
   disabled = false,
   accessibilityLabel,
-  titleNumberOfLines = 1,
-  subtitleNumberOfLines = 1,
+  // TWO lines for the title, and that is a text-size rule rather than a taste
+  // one: at a large OS font setting (or a large in-app multiplier) a one-line
+  // cap turned "Auto-download finished GeoPDFs" into "Auto-download finis…"
+  // with no way to read the rest. A row that grows is legible; a row that
+  // truncates is a dead end. Two rather than unlimited, because a title is
+  // often a user-supplied NAME and a pasted paragraph should not become a
+  // screen-tall row. Pass 1 where a single line is load-bearing.
+  titleNumberOfLines = 2,
+  // The subtitle is UNCAPPED by default: it is our own copy, not user data, and
+  // it is where the explanations live ("Every layer of every finished job, once
+  // each"). Any fixed cap is a sentence that survives at one text size and is
+  // cut off at the next — two lines was simply a bigger size at which to fail.
+  subtitleNumberOfLines,
   style,
 }: {
   title: string;

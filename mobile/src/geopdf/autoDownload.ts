@@ -6,11 +6,12 @@
 // and never a background timer (battery is a field resource). Each firing lists
 // the account's completed jobs and imports any this phone hasn't taken yet.
 //
-// WHY WI-FI ONLY: a generated GeoPDF is tens of megabytes, and rendering it to
-// tiles is the expensive half. Doing that unasked over cellular — likely at a
-// trailhead, on the plan the user needs for the drive home — is not a favour. The
-// Settings copy says "on Wi-Fi" for that reason; the manual import on the Saved
-// tab is always available on any connection.
+// WHY WI-FI BY DEFAULT: a generated GeoPDF is tens of megabytes, and rendering
+// it to tiles is the expensive half. Doing that unasked over cellular — likely
+// at a trailhead, on the plan the user needs for the drive home — is not a
+// favour. It is a DEFAULT rather than a rule: `networkPolicy.ts` holds the
+// user's answer for this job, and the Settings copy tracks it. The manual
+// import on the Saved tab is always available on any connection.
 //
 // WHY A JOB-ID MARKER: the import pipeline dedupes by the SHA-256 of the file's
 // bytes, which it can only know after downloading them. Without a cheap
@@ -27,6 +28,11 @@ import NetInfo from "@react-native-community/netinfo";
 import { fetchCurrentUser } from "../api/queries";
 import { getGeoPdfJob, listGeoPdfJobs } from "../api/geoPdfJobs";
 import { readPref, writePref } from "../prefsDb";
+import { canRunNow } from "../offline/networkPolicy";
+import {
+  isAutoDownloadEnabled,
+  seedAutoDownloadFromAccount,
+} from "./autoDownloadPreference";
 import { importGeoPdfFromUrl } from "./importPipeline";
 import { runGeoPdfImport } from "./importRunner";
 
@@ -71,15 +77,6 @@ export function resetAutoDownloadedGeoPdfs(): void {
   writePref(HANDLED_PREF_KEY, "[]");
 }
 
-async function onUnmeteredConnection(): Promise<boolean> {
-  const state = await NetInfo.fetch();
-  if (state.isConnected !== true || state.isInternetReachable === false) return false;
-  // `isConnectionExpensive` is the platform's own answer and covers metered
-  // Wi-Fi and hotspots, which a bare `type === "wifi"` check would not.
-  const details = state.details as { isConnectionExpensive?: boolean } | null;
-  return details?.isConnectionExpensive !== true;
-}
-
 /**
  * One pass. Best-effort throughout: this runs unasked, so nothing it fails at is
  * worth a message — the Saved tab's manual import is the surface that reports.
@@ -88,10 +85,15 @@ export async function runGeoPdfAutoDownload(): Promise<void> {
   if (running) return;
   running = true;
   try {
-    if (!(await onUnmeteredConnection())) return;
+    if (!isAutoDownloadEnabled()) return;
+    if (!(await canRunNow("geoPdfDownload"))) return;
 
+    // The account's value only matters on a device that has never recorded one
+    // of its own — after that this phone's switch is the answer, and the fetch
+    // is here for the job list regardless.
     const user = await fetchCurrentUser();
-    if (user.uiPreferences?.autoDownloadGeoPdfs === false) return;
+    seedAutoDownloadFromAccount(user.uiPreferences?.autoDownloadGeoPdfs);
+    if (!isAutoDownloadEnabled()) return;
 
     const jobs = await listGeoPdfJobs();
     const handled = new Set(readHandled());
@@ -102,7 +104,7 @@ export async function runGeoPdfAutoDownload(): Promise<void> {
     for (const job of pending) {
       // Re-check between jobs: the user can walk out of Wi-Fi range mid-run, and
       // the next file is the expensive one.
-      if (!(await onUnmeteredConnection())) return;
+      if (!(await canRunNow("geoPdfDownload"))) return;
       // Marked BEFORE the attempt, so a job whose import keeps failing is tried
       // once rather than on every foreground for the life of the install. The
       // Saved tab can still import it by hand.
