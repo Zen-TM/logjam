@@ -16,7 +16,7 @@ import { assetHue, radius, spacing, theme } from "../theme";
 import { BottomSheet, Row } from "../ui";
 import { routeActions } from "../saved/assetActions";
 import type { MirrorRoute } from "../sync/mirrorStore";
-import { exportRoute, RouteExportUnsupportedError } from "./routeExport";
+import { exportRoute, ExportUnsupportedError } from "../fileExport";
 
 export function RouteOptionsSheet({
   route,
@@ -68,7 +68,7 @@ export function RouteOptionsSheet({
         if (filename) onInfo(`Saved ${filename}.`);
       })
       .catch((err: unknown) => {
-        if (err instanceof RouteExportUnsupportedError) {
+        if (err instanceof ExportUnsupportedError) {
           onError(err.message);
           return;
         }

@@ -26,7 +26,7 @@ import {
   routeLengthM,
   reverseRoute,
   reverseRouteAnchors,
-  routeExportFilename,
+  exportFilename,
   routeToGpx,
   routeToKml,
   GPX_MIME_TYPE,
@@ -310,7 +310,7 @@ export default function RouteDetailPanel({
           className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
           onClick={() =>
             downloadText(
-              routeExportFilename(route.name, "gpx"),
+              exportFilename(route.name, "gpx"),
               routeToGpx(route.name, route.points),
               GPX_MIME_TYPE,
             )
@@ -323,7 +323,7 @@ export default function RouteDetailPanel({
           className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
           onClick={() =>
             downloadText(
-              routeExportFilename(route.name, "kml"),
+              exportFilename(route.name, "kml"),
               routeToKml(route.name, route.points),
               KML_MIME_TYPE,
             )

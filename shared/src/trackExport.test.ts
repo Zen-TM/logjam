@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { trackPointsToGpx } from "./gpxWrite.js";
+import { trackPointsToGpx, trackPointsToKml } from "./trackExport.js";
 import { parseGpx } from "./vectorImport.js";
 import type { RecordedTrackPoint } from "./trackStats.js";
 
@@ -66,5 +66,50 @@ describe("trackPointsToGpx", () => {
     const coordinates = JSON.stringify(parsed.features.map((f) => f.geometry));
     expect(coordinates).toContain("150.1");
     expect(coordinates).toContain("150.3");
+  });
+});
+
+describe("trackPointsToKml", () => {
+  it("writes one gx:Track with a when per coord", () => {
+    const kml = trackPointsToKml("Claustral", [point(), point({ lon: 150.2 })]);
+    expect(kml).toContain('xmlns:gx="http://www.google.com/kml/ext/2.2"');
+    expect(kml).toContain("<gx:Track>");
+    expect(kml).not.toContain("<gx:MultiTrack>");
+    // gx:Track pairs the Nth <when> with the Nth <gx:coord> positionally, so
+    // an uneven count silently misdates the whole track.
+    expect(kml.match(/<when>/g)).toHaveLength(2);
+    expect(kml.match(/<gx:coord>/g)).toHaveLength(2);
+    expect(kml).toContain("<when>2026-03-15T01:02:03.000Z</when>");
+  });
+
+  it("writes gx:coord as space-separated lon lat alt", () => {
+    const kml = trackPointsToKml("Order", [
+      point({ lon: 150.5, lat: -33.5, altitudeM: 812.4 }),
+    ]);
+    expect(kml).toContain("<gx:coord>150.500000 -33.500000 812.4</gx:coord>");
+  });
+
+  it("omits altitude rather than writing 0 for a fix without one", () => {
+    const kml = trackPointsToKml("No alt", [
+      point({ lon: 150.5, lat: -33.5, altitudeM: null }),
+    ]);
+    expect(kml).toContain("<gx:coord>150.500000 -33.500000</gx:coord>");
+  });
+
+  it("splits segments into a non-interpolated MultiTrack", () => {
+    const kml = trackPointsToKml("Paused", [
+      point({ segment: 0 }),
+      point({ segment: 1 }),
+    ]);
+    expect(kml).toContain("<gx:MultiTrack>");
+    // 0 = do NOT draw a line across the pause gap.
+    expect(kml).toContain("<gx:interpolate>0</gx:interpolate>");
+    expect(kml.match(/<gx:Track>/g)).toHaveLength(2);
+  });
+
+  it("escapes the track name", () => {
+    const kml = trackPointsToKml('Bell & "Claustral" <fast>', [point()]);
+    expect(kml).toContain("<name>Bell &amp; &quot;Claustral&quot; &lt;fast&gt;</name>");
+    expect(kml).not.toContain('<name>Bell & "');
   });
 });

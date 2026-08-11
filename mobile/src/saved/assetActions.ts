@@ -29,6 +29,7 @@ import {
   type RoutePoint,
 } from "@logjam/shared";
 import type { MirrorRoute } from "../sync/mirrorStore";
+import { exportTrack, type ExportFormat } from "../fileExport";
 import { bboxOfPoints, type Bbox } from "./bboxOfPoints";
 
 export type AssetActions = {
@@ -59,6 +60,13 @@ export type AssetActions = {
   createRouteFrom?: () => Promise<{ name: string; pointCount: number }>;
   /** Set a route's colour, from the shared TRACK_COLORS palette. */
   setColor?: (color: string) => Promise<unknown>;
+  /**
+   * Write the asset out as a GPX or KML file the user keeps. Resolves with the
+   * filename written, or NULL when the user backed out of the folder picker —
+   * a cancel is not a failure. Routes have their own sheet and do not go
+   * through here; this is the recording's copy of that verb.
+   */
+  exportFile?: (format: ExportFormat) => Promise<string | null>;
 };
 
 export function geoPdfActions(geoPdf: GeoPdfImport): AssetActions {
@@ -156,6 +164,19 @@ export function trackActions(track: Track): AssetActions {
             await createRouteLocal({ name, points });
             return { name, pointCount: points.length };
           },
+        }
+      : {}),
+    // Exported from the STORED fixes, not the cached stats: the file is the
+    // recording, gaps and timestamps included, with nothing simplified away.
+    // Unlike createRouteFrom this needs no minimum — a one-point GPX is a
+    // legal, if dull, file.
+    ...(track.pointCount > 0
+      ? {
+          exportFile: async (format: ExportFormat) =>
+            exportTrack(
+              { name: track.name, points: await listTrackPoints(track.id) },
+              format,
+            ),
         }
       : {}),
     delete: {

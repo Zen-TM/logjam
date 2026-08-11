@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { routeToGpx, routeToKml, routeExportFilename } from "./routeExport.js";
+import { routeToGpx, routeToKml, exportFilename } from "./routeExport.js";
 import { parseVectorImport } from "./vectorImport.js";
 import type { RoutePoint } from "./routeValidation.js";
 
@@ -49,21 +49,21 @@ describe("routeToKml", () => {
   });
 });
 
-describe("routeExportFilename", () => {
+describe("exportFilename", () => {
   it("strips path separators and traversal", () => {
     // Separators become spaces and the leading dots are trimmed, so nothing
     // that reaches the filesystem can still read as a path.
-    expect(routeExportFilename("../../etc/passwd", "gpx")).toBe("etc passwd.gpx");
-    expect(routeExportFilename("a/b\\c", "kml")).toBe("a b c.kml");
+    expect(exportFilename("../../etc/passwd", "gpx")).toBe("etc passwd.gpx");
+    expect(exportFilename("a/b\\c", "kml")).toBe("a b c.kml");
   });
 
   it("never returns a name that is only an extension", () => {
-    expect(routeExportFilename("", "gpx")).toBe("route.gpx");
-    expect(routeExportFilename("   ", "gpx")).toBe("route.gpx");
-    expect(routeExportFilename("...", "gpx")).toBe("route.gpx");
+    expect(exportFilename("", "gpx")).toBe("route.gpx");
+    expect(exportFilename("   ", "gpx")).toBe("route.gpx");
+    expect(exportFilename("...", "gpx")).toBe("route.gpx");
   });
 
   it("keeps ordinary names intact", () => {
-    expect(routeExportFilename("Claustral exit", "gpx")).toBe("Claustral exit.gpx");
+    expect(exportFilename("Claustral exit", "gpx")).toBe("Claustral exit.gpx");
   });
 });

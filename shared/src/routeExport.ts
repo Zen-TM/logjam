@@ -67,19 +67,23 @@ export function routeToKml(name: string, points: readonly RoutePoint[]): string 
 }
 
 /**
- * A filename for a route export.
+ * A filename for a route or track export.
  *
- * Route names are free text and reach a real filesystem here, so anything that
- * could change what a path MEANS — separators, traversal, control characters,
- * a leading dot — is replaced rather than escaped. An empty result falls back
- * to "route": a file called ".gpx" is hidden on Unix and rejected on Android.
+ * Names are free text and reach a real filesystem here, so anything that could
+ * change what a path MEANS — separators, traversal, control characters, a
+ * leading dot — is replaced rather than escaped. An empty result falls back to
+ * `fallback`: a file called ".gpx" is hidden on Unix and rejected on Android.
  */
-export function routeExportFilename(name: string, extension: "gpx" | "kml"): string {
+export function exportFilename(
+  name: string,
+  extension: "gpx" | "kml",
+  fallback = "route",
+): string {
   const safe = name
     // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x1f<>:"/\\|?*]/g, " ")
     .replace(/\s+/g, " ")
     .replace(/^[.\s]+|[.\s]+$/g, "")
     .slice(0, 80);
-  return `${safe || "route"}.${extension}`;
+  return `${safe || fallback}.${extension}`;
 }

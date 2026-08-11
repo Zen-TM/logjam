@@ -98,6 +98,7 @@ import {
   vectorImportActions,
 } from "./assetActions";
 import { useTracks } from "../tracks/useTracks";
+import { ExportUnsupportedError, type ExportFormat } from "../fileExport";
 import type { Bbox } from "./bboxOfPoints";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
@@ -180,6 +181,8 @@ type SavedItem = {
   reverse?: () => Promise<unknown>;
   /** Present on a recording: make an editable route from it, non-destructively. */
   createRouteFrom?: () => Promise<{ name: string; pointCount: number }>;
+  /** Present on a recording: save it out as a GPX or KML file. */
+  exportFile?: (format: ExportFormat) => Promise<string | null>;
 };
 
 export function SavedScreen({
@@ -722,6 +725,28 @@ export function SavedScreen({
     [fail, info],
   );
 
+  /** Recording → file on the handset. Mirrors RouteOptionsSheet's save(). */
+  const exportItem = useCallback(
+    (item: SavedItem, format: ExportFormat) => {
+      item.exportFile?.(format).then(
+        (filename) => {
+          // Null = the user backed out of the folder picker. Not a failure,
+          // and a toast claiming success would be a lie.
+          if (filename) info(`Saved ${filename}.`);
+        },
+        (err: unknown) => {
+          if (err instanceof ExportUnsupportedError) {
+            fail(err.message);
+            return;
+          }
+          console.error(err);
+          fail("Couldn't save that file.");
+        },
+      );
+    },
+    [fail, info],
+  );
+
   const showOnMap = useCallback(
     (item: SavedItem) => {
       item
@@ -1060,6 +1085,30 @@ export function SavedScreen({
                     createRouteFromItem(target);
                   }}
                 />
+              ) : null}
+              {menuItem.exportFile ? (
+                <>
+                  <Row
+                    title="Save as GPX"
+                    icon="download"
+                    hue={theme.bonus1}
+                    onPress={() => {
+                      const target = menuItem;
+                      closeItemSheet();
+                      exportItem(target, "gpx");
+                    }}
+                  />
+                  <Row
+                    title="Save as KML"
+                    icon="download"
+                    hue={theme.bonus1}
+                    onPress={() => {
+                      const target = menuItem;
+                      closeItemSheet();
+                      exportItem(target, "kml");
+                    }}
+                  />
+                </>
               ) : null}
               <Row
                 title="Rename"
