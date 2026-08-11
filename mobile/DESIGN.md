@@ -69,9 +69,20 @@ BottomSheet(s)      acquisition + per-item actions
   as one.
 - Screens that are genuinely a plain form or a settings list keep
   `Screen`/`ScreenScroll` + the native header. Don't force a hero onto them.
-  `SettingsScreen` is the worked example: it is a list of switches with no
-  headline state, so a hero there could only say the word "Settings", which is
+  `SettingsScreen` is the worked example: it is a menu of preference pages with
+  no headline state, so a hero there could only say the word "Settings", which is
   the pattern the hero rule exists to replace.
+- **Settings is a menu of pages, split by STORAGE BACKEND.** It was one scroll of
+  six sections, which mixed device preferences (synchronous, no account, no
+  signal) with account ones (`PATCH /users/me`, dead for a guest, dead offline) —
+  so every account row had to carry its own §10 reason and the two kinds were
+  indistinguishable until you tapped one. The five pages are Display, Map,
+  Notifications, Offline and storage, and Privacy and security; every one of them
+  is device-backed except Notifications, which is entirely account-backed and
+  therefore states the reason ONCE. Adding a preference means picking the page its
+  backend already lives on — a page that needs two reasons is the wrong page.
+  Custom fields stay on the root as two rows rather than a sixth page: a page
+  whose whole content is the two rows above it is not a page.
 - **A HUB earns a hero if it can answer a real question, not otherwise.** More is
   a menu, and a menu is dull — but it is also the only screen in the app that can
   be about the app itself, so its hero is the §10 sync answer ("Everything's
@@ -86,10 +97,11 @@ BottomSheet(s)      acquisition + per-item actions
   layers sheet lives behind the layers sheet. A badge for a layer the user chose to
   leave ON is not that: the canyon-routes coverage note moved onto its own row in
   the sheet, because a permanent chip is a permanent tax on the thing the map is for.
-- **The map's two edges have different jobs.** The RIGHT edge is the action column
-  (layers, locate, the TOOL GROUP, record, and the small attribution button under
-  them).
-  The LEFT edge belongs to the map's own instruments — the native compass, the
+- **The map's two edges have different jobs, and WHICH edge is the user's.** One
+  edge is the action column (layers, locate, the TOOL GROUP, record, and the small
+  attribution button under them); it defaults to the RIGHT and moves to the left
+  from Settings → Map (`mapPreferences.ts`).
+  The other edge belongs to the map's own instruments — the native compass, the
   compass tape (which way the USER faces, as against the native ornament's which
   way the MAP faces) and the scale bar — and carries nothing you can press to
   change the app. The native compass is the exception that proves the rule: it
@@ -103,13 +115,18 @@ BottomSheet(s)      acquisition + per-item actions
   compass faded IN as the map turned and blinked out a beat later. Course-up's
   opening rotation is fired from a layout effect for exactly that reason — after
   the commit, before the paint. An instrument that runs a sensor gets a device-scoped switch in
-  Settings → This phone rather than a control on the map (`compassPreference.ts`).
+  Settings → Map rather than a control on the map (`compassPreference.ts`).
 - **A TAP asks, a PRESS-AND-HOLD commits.** Tapping the map drops a small ringed
   dot (a cursor, not a pin) and opens a sheet answering the four things a map can
   say about a spot — position, elevation, distance and bearing from you — with
   "navigate here" and "drop a waypoint" under them. Press-and-hold keeps its
-  existing meaning, "something goes HERE", and its sheet offers the two things
-  that can. Neither gesture ends follow mode: a tap is not a pan.
+  existing meaning, "something goes HERE", and its sheet offers the five things
+  that can — waypoint, navigate-to, route from here, measure from here, canyon.
+  **That sheet and the Settings → Map long-press preference are ONE vocabulary**:
+  the preference's options are the sheet's rows, with `Ask` meaning "show the
+  sheet". Adding an action means adding it in both places, or the setting is a
+  menu of a different app's features. Neither gesture ends follow mode: a tap is
+  not a pan.
 - **Only a one-finger drag stops the map following you, and a pinch while
   following is drawn by US.** It is impossible to pinch without also translating
   the map — MapLibre zooms about the midpoint between the fingers and MLRN
@@ -126,8 +143,32 @@ BottomSheet(s)      acquisition + per-item actions
   no real pinch is a pure scale, the incidental twist was enough to shake follow
   mode loose. Course-up is the one exception: two fingers there scale only,
   because its heading belongs to the compass, and turning the map by hand while
-  it is meant to face where you are looking is two answers to one question. One
-  finger is still a pan, still MapLibre's, and still means "stop following".
+  it is meant to face where you are looking is two answers to one question.
+- **While following, MapLibre has NO pan gesture, and this screen decides when a
+  drag has begun.** `scrollEnabled` is false for the whole of follow mode, not
+  merely for the duration of a pinch. MapLibre's move detector arms on the first
+  finger down and tracks the focal point of everything touching, so when a second
+  finger lands the focal point jumps to the midpoint of the two — half the finger
+  separation, in a single frame — and MapLibre applies that jump as a pan; the
+  pinch handler then writes the centre back to the fix, and that pair is a visible
+  pan-then-snap on every mistimed pinch. Disabling the gesture only for the
+  pinch cannot work: the flag is React state, so it reaches the native view
+  48-92 ms after the second finger lands (measured on a Pixel 9) and the jump is
+  already in the first frame. The detector has to be disarmed before the gesture
+  starts, which means for as long as the map is following. So the drag that means
+  "stop following" is recognised in `observeTouches` instead — one finger past
+  `PAN_SLOP_DP` (8dp, Android's own touch slop) drops follow, which re-enables
+  `scrollEnabled` and hands panning straight back to MapLibre. The cost is a
+  frame or two of deadband at the start of a drag-to-stop-following; that is the
+  gesture least able to notice it, and a pinch cannot absorb the same delay.
+  - **A pinch is ONE gesture until the LAST finger lifts.** Lifting one finger of
+    a pinch hands the responder back to the capture handlers with the other still
+    down, which looks exactly like a one-finger drag from an origin set where the
+    first finger landed — a guaranteed slop breach that dropped follow at the end
+    of nearly every pinch. `gestureHadTwoFingers` suppresses pan detection for the
+    rest of the gesture; only a one-finger touch START begins a new one. The
+    consequence is deliberate: lifting one finger and dragging the other does not
+    stop following, because it is indistinguishable from an uneven release.
 - **A map TOOL is a mode with a HUD, and closing it discards its work.** The
   measure tool arms from the action column (the button lights while it is on),
   collects taps, and reports through a panel in the top notice stack next to the
@@ -195,6 +236,22 @@ BottomSheet(s)      acquisition + per-item actions
   and it follows the camera through a ref (`ScaleBarHandle`), not through screen
   state, so gesture-rate updates re-render one small component instead of every
   layer on the map.
+- **A native ornament is positioned by a NUMBER, so it has to be told what is
+  under it.** MapLibre's compass sits outside the React tree, so its margin is
+  computed from what the instruments column actually draws — the tape only with
+  the compass switched on, the bar only with the scale bar switched on
+  (`ornamentMarginY` in `MapScreen`). This is a preference read, not an
+  `onLayout` measurement: `CHROME_BOTTOM`'s comment warns off measured offsets
+  because they stick when the thing they measured goes away, and these values are
+  known before the frame is drawn.
+- **The compass tape reads TRUE north by default and can be switched to
+  MAGNETIC — numbers only.** The map, the location arrow and the navigate-to chip
+  stay true in both settings, because they are drawn against a true-north map and
+  a magnetic arrow on a true map is simply a wrong arrow. The switch exists
+  because a canyoner transfers a bearing onto a plate compass, where true north is
+  the wrong number by ~12.5°. In magnetic the tape carries an "M": the default
+  gets no mark (every pixel of chrome is terrain), a non-default that silently
+  reads 12° low gets one.
 - **A hero on a pushed screen owns the back button** (`HeroHeader.onBack`).
   Turning off the native header removes the back affordance too, and the
   swipe/hardware gesture is not a visible way out.
@@ -455,6 +512,48 @@ own edges.** Along the bottom they land on a video's transport controls, which
 is the one place they must not be; and the row between them stays
 `pointerEvents="box-none"` so it doesn't steal taps from the page underneath.
 
+**One camera driver at a time, and the loser YIELDS.** The rule that took
+rotation off MapLibre during a pinch (above) has a second half, one axis over:
+the location watcher's recentre is a 600 ms ANIMATED stop, and the pinch writes
+0 ms stops at gesture rate from the same fix — so a fix landing mid-gesture
+starts an animation that the next finger frame overrides, and the map stutters
+for as long as that animation had left to run. The watcher skips its recentre
+while `pinchStart` is non-null (`applyFix` in `MapScreen`), which costs nothing:
+every pinch frame already carries the latest fix as its centre. Course-up never
+showed this because its own ~20 Hz driver was overwriting the animation
+continuously — smoothness there was luck, not design.
+
+**Don't ease a correction you can stop needing.** This used to say the opposite,
+and the reasoning is worth keeping because it was wrong in an instructive way.
+The pan-then-snap at the start of a mistimed pinch was read as "the first finger
+alone pans, then the second arrives and we yank the centre back", and answered by
+easing that correction over 600 ms (`pinchRecovery.ts`). It was also argued that
+stopping the pan instead would trade a rare cosmetic snap for a frequent dead
+gesture. Both halves were wrong, and only measuring the touch stream showed it:
+the first finger never moves at all (`firstFingerTravel` was 0.0dp on every
+gesture of a 40-gesture run) — what moves is MapLibre's focal point, jumping to
+the midpoint the instant the second finger lands. Easing from "where MapLibre
+left the map" was easing from a point derived from a pan that never happened, so
+the module was inert once the stale-centre bug behind it was fixed. Disabling the
+pan for the whole of follow mode turned out to cost a deadband nobody notices.
+The correction did not need to be smoother; it needed to not exist. When a
+correction keeps needing to be prettier, check whether the thing being corrected
+can simply be prevented.
+
+**While this screen drives the camera, its own record of zoom and heading is the
+TRUTH, and MapLibre's reports are ignored.** `onRegionDidChange` arrives late,
+coalesced and occasionally out of order, so a report describing a camera from
+early in the last gesture can land after it — and `zoomRef`/`headingRef` are
+what the NEXT pinch starts from, so one stale report made the map snap back a
+couple of zoom levels the moment two fingers touched down. `setCameraStop`
+records any zoom or heading it is given, and the settle handler only writes
+those refs when `followMode === "off"` (nothing else can move the camera while
+following: MapLibre's own zoom and rotate are disabled). The single exception is
+`fitCameraToBbox`, where MapLibre picks the zoom and the report back is the only
+way to learn it — it arms a one-shot flag for the next settle. **A stale report
+is strictly worse than no report**, which is why this is not merely an
+optimisation.
+
 **Fit the camera once per request, not once per load.** A map layer can
 re-resolve its source for reasons that have nothing to do with the user, and
 refitting on each one yanks the camera back mid-pan — the map becomes
@@ -554,7 +653,7 @@ user goes somewhere else — which is exactly what a background job is for.
   (`label` overrides the derived name; resolution still keys off ids), so it is
   cheap to extend to a new kind.
 - **A switch that LOWERS a guard costs an authentication; raising it is free.**
-  The app-lock toggle (Settings → This phone) is what stands between someone
+  The app-lock toggle (Settings → Privacy and security) is what stands between someone
   holding this unlocked phone and the canyon coordinates on it, so turning it off
   goes through the device authenticator and a cancelled prompt springs the switch
   back on (`appLockPreference.ts`, fail-closed on any error). Without that
@@ -746,11 +845,20 @@ driven by scroll offset — a fade on only one end still leaves a hard-sliced ch
 at the other, and a fade shown at rest dims a chip with nothing behind it. Use a
 real gradient for any fade; stacked alpha steps band visibly.
 
-`Row` takes `subtitleNumberOfLines` for the case where the subtitle is a short
-explanation rather than a status (Settings' app-lock row). Reach for it rarely: a
-subtitle that needs two lines is usually a sign the row wanted a section note. And
-drop the trailing pill when you do — the pill's width is what forced the
-ellipsis in the first place.
+**Labels wrap; they do not ellipsise.** `Row`'s title caps at TWO lines (it is
+often a user-supplied name, and a pasted paragraph must not become a screen-tall
+row) and its subtitle is UNCAPPED, because the subtitle is our own copy and any
+fixed cap is a sentence that survives at one text size and is cut off at the
+next. Pass `titleNumberOfLines={1}` where a single line is load-bearing. The
+same rule sent the map's badges to two lines: a warning that reads "Showing 5 of
+2…" is a warning nobody can act on. Drop a trailing pill beside a long subtitle
+— the pill's width is what forced the ellipsis in the first place.
+
+**The two map INSTRUMENTS size themselves in text.** The compass tape's label
+slot and height, and the scale bar's height, are computed from `textScale`
+(`theme.ts`) rather than fixed: their type grows with everyone else's, and a
+bearing that reads "24…" is an instrument that can't be used. This is the only
+layout code that should reach for `textScale`; everything else is `spacing`.
 
 **One visual, one component.** `Chip` is the single pill primitive behind both
 `SegmentedControl` (single-select rail) and `ChipPicker` (multi-select
@@ -818,8 +926,8 @@ which those are:
 | Picking a theme (device copy) | Data export (web only — needs a share sheet) |
 | Rendering a saved offline region | Saving a new region (Wi-Fi unless opted in) |
 | Canyon routes already cached | Canyon routes never opened on this phone |
-| Turning the app lock on/off | Auto-downloading a finished GeoPDF (Wi-Fi only) |
-| — | Notification prefs, auto-download, field DEFINITIONS |
+| Turning the app lock on/off | Fetching what an auto-download found (Wi-Fi by default) |
+| Every Display, Map, Offline and Privacy preference | Notification prefs, field DEFINITIONS |
 | — | Username, email, account deletion |
 
 **"Needs an account" outranks "Needs a connection".** The app runs without a
@@ -845,7 +953,7 @@ rather than greying out.
 | Everything in the "Works offline" column | Sharing, friends, the inbox |
 | Recording tracks, importing a local GeoPDF/GPX | LiDAR topo overlays, account GeoPDFs |
 | Downloading SIX raster regions (client-direct) | The Protomaps vector region clip |
-| Theme, app lock, compass, crash reports (device prefs) | Notification/download prefs, field DEFINITIONS |
+| Theme, text size, every Map preference, app lock, crash reports, auto-download (device prefs) | Notification prefs, field DEFINITIONS |
 
 **Say what is true, not what is optimistic.** A queued upload says "Uploading…"
 only when it can actually upload; offline it says "Waiting". A label that
@@ -853,15 +961,29 @@ implies progress and never finishes reads as a bug, not as a queue. Same for
 pull-to-refresh: offline it says so and reassures, rather than spinning into a
 silent failure.
 
-**Work that happens unasked names its own moment, and its own limit.**
-"Auto-download finished GeoPDFs" checks on app start, on return to the foreground,
-and when a connection is regained — the same three moments the sync engine uses,
-and never a background timer, because battery is a field resource. It runs on
-Wi-Fi only (`isConnectionExpensive`), because a GeoPDF is tens of megabytes and
-rendering it to tiles is the expensive half: doing that over cellular at a
-trailhead is not a favour. The subtitle says "Over Wi-Fi" for exactly that reason
-— a background feature whose conditions aren't stated reads as broken on the day
-it doesn't fire.
+**Work that happens unasked names its own moment, and its own limit.** The two
+auto-downloads — finished GeoPDFs and finished LiDAR topo overlays — check on app
+start, on return to the foreground, and when a connection is regained: the same
+three moments the sync engine uses, and never a background timer, because battery
+is a field resource. A background feature whose conditions aren't stated reads as
+broken on the day it doesn't fire, so the Settings copy states them.
+
+**Cost and consent are two switches, not one.** "Should this happen at all"
+lives with the feature (Settings → Offline and storage, top section) and "may it
+happen on my mobile plan" lives in `offline/networkPolicy.ts` (same page, second
+section), because a user who wants a GeoPDF the moment it is ready but only on
+Wi-Fi has nothing to pick if the two are fused into one three-way control. The
+policy asks `isConnectionExpensive` rather than `type === "cellular"` — a metered
+hotspot is Wi-Fi by type and mobile data by cost, and the person paying for it is
+who the switch is for. Per-job defaults, and they differ on purpose: the two
+downloads are Wi-Fi-only (tens of megabytes, and rendering to tiles is the
+expensive half), sync is allowed on mobile data (a few kilobytes, and a trip log
+that waits for Wi-Fi is a trip log on one phone for the week it matters).
+
+**A policy gates the UNASKED path only.** "Sync now" in the More hero calls
+`requestSync` directly and is never gated: tapping it on mobile data IS the user
+asking for mobile data, and a button that silently declines is worse than no
+button.
 
 **Content that isn't downloaded gets its own state**, not an error — "Not
 downloaded to this phone yet. It will appear once you have signal."
@@ -912,8 +1034,10 @@ for no benefit.
 
 ## 12. Theme: chosen at any time, applied at launch
 
-The four schemes live in `shared/src/themeSchemes.ts` and are picked in Settings.
-The mobile app applies a change **at the next launch**, and says so.
+The four schemes live in `shared/src/themeSchemes.ts` and are picked in
+Settings → Display. The mobile app applies a change **at the next launch**, and
+says so. The TEXT SIZE multiplier on the same page works the same way and for the
+same reason (`fontSize` is snapshotted by the same `StyleSheet.create` calls).
 
 That is a real limitation, chosen deliberately. `theme` is a module constant, and
 ~45 files snapshot it into `StyleSheet.create` at import time; repainting a running
@@ -942,3 +1066,9 @@ What the implementation must keep true:
 - A device that refuses the write says so (`persistThemeSchemeId` returns false →
   toast). A selection that silently reverts on the next launch is the one failure
   this must not have.
+- **The text multiplier is on top of the OS one, and the PAIR is capped.** Android
+  already scales every `<Text>` by its own font setting, so ours multiplies it;
+  `clampTextScale` gives up its own headroom to keep the combination at or under
+  2×, which is where the row layouts stop fitting. Type scales, spacing and radius
+  do not — growing the padding with the text pushes a row's content off the edge
+  instead of making its words bigger.

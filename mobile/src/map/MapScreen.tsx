@@ -44,10 +44,11 @@ import {
   SymbolLayer,
   type CameraStop,
 } from "@maplibre/maplibre-react-native";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as Location from "expo-location";
 import {
   TOPO_LAYERS,
@@ -88,7 +89,7 @@ import {
 import { config } from "../config";
 import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "../theme";
 import { MapSearchBar } from "./MapSearchBar";
-import { ScaleBar, type ScaleBarHandle } from "./ScaleBar";
+import { ScaleBar, SCALE_BAR_HEIGHT, type ScaleBarHandle } from "./ScaleBar";
 import { RouteMapLayer, ROUTE_COLOR, type RouteRequest } from "../media/RouteMapLayer";
 import {
   CHROME_BOTTOM,
@@ -113,6 +114,21 @@ import {
   COMPASS_STRIP_WIDTH,
 } from "./CompassStrip";
 import { isCompassEnabled } from "./compassPreference";
+import {
+  MARKER_COLORS,
+  isNorthUpLocked,
+  isScaleBarEnabled,
+  readKeepAwakeMode,
+  readLongPressAction,
+  readMapControlSide,
+  readMarkerColorId,
+  readNorthReference,
+  type KeepAwakeMode,
+  type LongPressAction,
+  type MapControlSide,
+  type MarkerColorId,
+  type NorthReference,
+} from "./mapPreferences";
 import { readBasemapPreference, setBasemapPreference } from "./basemapPreference";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
@@ -236,6 +252,17 @@ const FOLLOW_ZOOM = 15;
 const MIN_PINCH_ZOOM = 2;
 const MAX_PINCH_ZOOM = 20;
 
+/**
+ * How far one finger must travel before it counts as a pan rather than a tap —
+ * the drag that means "stop following".
+ *
+ * Android's own `ViewConfiguration` touch slop is 8dp, and matching it is the
+ * point: while following, MapLibre's pan is disabled and this screen decides
+ * when a drag has begun, so anything larger would feel like the map resisting
+ * and anything smaller would drop follow on the wobble in a tap.
+ */
+const PAN_SLOP_DP = 8;
+
 /** How near the drawn line a press-and-hold must land to insert a point. */
 const LINE_GRAB_PIXELS = 24;
 /** Screen pixels per CSS pixel, for converting a tolerance into degrees. */
@@ -266,6 +293,12 @@ async function currentHeading(): Promise<number | null> {
 }
 
 type FollowMode = "off" | "follow" | "course-up";
+
+/** Gap between the stacked instruments, and the same value their container uses. */
+const INSTRUMENT_GAP = spacing(0.75);
+
+/** Tag for this screen's wake lock, so releasing it can't release anyone else's. */
+const KEEP_AWAKE_TAG = "logjam-map";
 
 const LOCATE_ICON: Record<FollowMode, "navigation" | "crosshair" | "compass"> = {
   off: "navigation",
@@ -506,9 +539,32 @@ export function MapScreen({
   // The compass switch lives in Settings, on another tab, so its value is
   // re-read on focus alongside the overlays rather than only at mount.
   const [compassEnabled, setCompassEnabled] = useState(isCompassEnabled);
+  // The Map settings page writes these five and lives on another tab, so they
+  // are re-read on focus alongside the compass rather than only at mount. All
+  // five reads are synchronous (`prefsDb`), so the first frame after a change is
+  // already correct — a chrome column that slides across a beat later would be
+  // its own bug.
+  const [controlSide, setControlSide] = useState<MapControlSide>(readMapControlSide);
+  const [markerColorId, setMarkerColorId] = useState<MarkerColorId>(readMarkerColorId);
+  const [keepAwakeMode, setKeepAwakeMode] = useState<KeepAwakeMode>(readKeepAwakeMode);
+  const [northUpLocked, setNorthUpLocked] = useState(isNorthUpLocked);
+  // Mirror, for the gesture callbacks: they are memoised once and would
+  // otherwise close over the value this screen had when it mounted.
+  const northUpLockedRef = useRef(northUpLocked);
+  northUpLockedRef.current = northUpLocked;
+  const [longPressAction, setLongPressAction] = useState<LongPressAction>(readLongPressAction);
+  const [northReference, setNorthReference] = useState<NorthReference>(readNorthReference);
+  const [scaleBarEnabled, setScaleBarEnabled] = useState(isScaleBarEnabled);
   useFocusEffect(
     useCallback(() => {
       setCompassEnabled(isCompassEnabled());
+      setControlSide(readMapControlSide());
+      setMarkerColorId(readMarkerColorId());
+      setKeepAwakeMode(readKeepAwakeMode());
+      setNorthUpLocked(isNorthUpLocked());
+      setLongPressAction(readLongPressAction());
+      setNorthReference(readNorthReference());
+      setScaleBarEnabled(isScaleBarEnabled());
       listEnabledOverlayKeys()
         .then((keys) => setEnabledOverlays(new Set(keys)))
         .catch(console.error);
@@ -556,13 +612,31 @@ export function MapScreen({
   const setCameraStop = useCallback((stop: CameraStop) => {
     if (!cameraRef.current) return;
     stopNeedsReset.current = true;
+    // A stop that names a zoom or a heading IS the new truth for the running
+    // camera — recorded here rather than waiting for MapLibre to report it back,
+    // because the report comes late and can arrive out of order (see
+    // `handleRegionDidChange`).
+    if (typeof stop.zoomLevel === "number") zoomRef.current = stop.zoomLevel;
+    if (typeof stop.heading === "number") headingRef.current = stop.heading;
     cameraRef.current.setCamera(stop);
   }, []);
+  /**
+   * Let the next settled region report set the running camera even though this
+   * screen is driving.
+   *
+   * `fitCameraToBbox` is the one camera move whose zoom we cannot know in
+   * advance — MapLibre picks it from the bounds — so it is the one case where
+   * the report back is the only source of truth.
+   */
+  const acceptSettleCamera = useRef(false);
   const fitCameraToBbox = useCallback(
     (bbox: [number, number, number, number], padding = 40) => {
       if (!cameraRef.current) return;
       const [west, south, east, north] = bbox;
       stopNeedsReset.current = true;
+      // MapLibre chooses the zoom here, so the settle is the only place we can
+      // learn it — even if this screen is otherwise driving the camera.
+      acceptSettleCamera.current = true;
       // A route with a single point (a lone waypoint file) has a zero-area
       // bbox; fitting to it asks the camera for infinite zoom. Centre on the
       // point at a fixed close zoom instead.
@@ -598,6 +672,24 @@ export function MapScreen({
    * counter was reset by `onRegionDidChange`, and this handler's own camera
    * writes fire that on every move.
    */
+  /**
+   * Where the single finger now down first landed, or null when none is.
+   *
+   * While following, MapLibre has no pan gesture to detect a drag with, so the
+   * drag that means "stop following" is measured from here instead.
+   */
+  const panOrigin = useRef<{ x: number; y: number } | null>(null);
+  /**
+   * Whether the gesture in progress has had two fingers on it at any point.
+   *
+   * Lifting one finger of a pinch hands the responder back to the capture
+   * handlers with the OTHER finger still down, which arrives looking exactly
+   * like a one-finger drag — from an origin set where the first finger of the
+   * pinch landed, so a slop breach is guaranteed and follow mode was dropped at
+   * the end of nearly every pinch. A pinch is ONE gesture until the last finger
+   * lifts; its tail is not a pan.
+   */
+  const gestureHadTwoFingers = useRef(false);
   const pinchStart = useRef<{
     distance: number;
     angleDeg: number;
@@ -1243,6 +1335,34 @@ export function MapScreen({
     tracks.find(
       (track) => track.state === "recording" || track.state === "paused",
     ) ?? null;
+
+  // Locking north-up straightens a map that is already turned. Without this the
+  // setting reads as broken for as long as the user leaves the screen rotated:
+  // the gesture stops working, but the map stays askew with no way back to north
+  // except the compass ornament they may have turned off.
+  useEffect(() => {
+    if (!northUpLocked) return;
+    setCameraStop({ heading: 0, animationDuration: 300 });
+  }, [northUpLocked, setCameraStop]);
+
+  // KEEP AWAKE (Settings → Map). A wake lock is the most expensive preference in
+  // the app, so it is held for exactly as long as its reason is true and no
+  // longer: `map` while this screen is the focused one, `recording` while a
+  // track is actually running (a PAUSED track is a phone in a pack). Recording
+  // itself needs none of this — the foreground service keeps it alive with the
+  // screen off — which is why the default is `off`.
+  const mapFocused = useIsFocused();
+  const keepAwakeReason =
+    keepAwakeMode === "map"
+      ? mapFocused
+      : keepAwakeMode === "recording" && activeTrack?.state === "recording";
+  useEffect(() => {
+    if (!keepAwakeReason) return;
+    activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(console.error);
+    return () => {
+      deactivateKeepAwake(KEEP_AWAKE_TAG).catch(console.error);
+    };
+  }, [keepAwakeReason]);
   const [navTarget, setNavTarget] = useState<Waypoint | null>(null);
   const navDistanceM =
     navTarget && userCoord
@@ -1268,19 +1388,6 @@ export function MapScreen({
   // scratch mark) and a canyon (a real record). A sheet rather than an Alert now
   // that there is more than one — Android's Alert drops buttons past three, and
   // these entries carry glyphs and a subtitle (DESIGN.md §6).
-  const handleMapLongPress = useCallback(
-    (feature: GeoJSON.Feature) => {
-      if (feature.geometry.type !== "Point") return;
-      const [lon, lat] = feature.geometry.coordinates as [number, number];
-      // While either point tool is armed, press-and-hold near the line means
-      // "add a point here" — the mobile stand-in for dragging the line on web.
-      // Only when it lands near the line; anywhere else still offers the sheet.
-      if (insertAnchorNear(lon, lat)) return;
-      setLongPressPoint({ latitude: lat, longitude: lon });
-    },
-    [insertAnchorNear],
-  );
-
   const notify = useCallback((text: string, tone: "info" | "error") => {
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
@@ -1569,17 +1676,47 @@ export function MapScreen({
   };
 
   const observeTouches = useCallback(
-    (event: GestureResponderEvent): boolean => {
+    (event: GestureResponderEvent, isTouchStart: boolean): boolean => {
       const { touches } = event.nativeEvent;
+      // ONE FINGER: watch it for a drag, because while following MapLibre is not
+      // watching for one. Its pan is off (see `scrollEnabled`), so the drag that
+      // means "stop following" has to be recognised here and answered by
+      // handing pan back, rather than by MapLibre panning and this screen
+      // noticing afterwards.
+      //
+      // Anchored on a ONE-FINGER touch START, the only event that says "a new
+      // gesture begins". There is no matching end — these two capture props
+      // fire on start and move only, which is what left the old `firstTouchAt`
+      // holding a timestamp from a gesture several seconds back — so every
+      // reset here has to hang off a start.
+      if (touches.length > 1) gestureHadTwoFingers.current = true;
+      if (touches.length === 1) {
+        const [only] = touches;
+        // A touch start with exactly one finger down is the only thing that
+        // begins a gesture; everything else is a continuation of one.
+        if (isTouchStart) {
+          panOrigin.current = { x: only.pageX, y: only.pageY };
+          gestureHadTwoFingers.current = false;
+        } else if (
+          !gestureHadTwoFingers.current &&
+          panOrigin.current !== null &&
+          followModeRef.current !== "off" &&
+          Math.hypot(
+            only.pageX - panOrigin.current.x,
+            only.pageY - panOrigin.current.y,
+          ) > PAN_SLOP_DP
+        ) {
+          // The ref as well as the state: `scrollEnabled` needs the render, but
+          // everything else in this file reads the ref, and the next touch
+          // event arrives long before the commit.
+          followModeRef.current = "off";
+          setFollowMode("off");
+          userMovedCamera.current = true;
+        }
+      }
       if (!shouldDrivePinch(touches.length)) return false;
-      // Take MapLibre's remaining two-finger gestures off it for the duration.
-      // Scale and rotate are already disabled while following, but its MOVE
-      // detector stays live for two pointers (it only stands down when a scale
-      // gesture begins, and there is no scale gesture any more) — so the
-      // centroid drift of a real pinch was being applied as a pan and then
-      // undone by this handler's own centre write, once per frame. That fight
-      // is what showed as jitter, and it was worst exactly where the centroid
-      // moved most: a pinch nowhere near the location marker.
+      // Hands pitch back as well — the one two-finger gesture MapLibre still has
+      // while following. Scale, rotate and pan are already off it.
       setTwoFingerLock(true);
       // Separation of zero (both fingers on the same pixel) would make every
       // later ratio infinite; let MapLibre have that gesture instead.
@@ -1625,12 +1762,19 @@ export function MapScreen({
       // compass, so two fingers there scale and nothing else. Turning the map
       // by hand while it is meant to be facing where you are looking is two
       // answers to one question.
-      const rotating = followModeRef.current === "follow";
+      // A locked map scales and nothing else — the same shape as course-up's
+      // exception, for the opposite reason. Read through a ref: this callback is
+      // memoised for the life of the gesture handlers.
+      const rotating = followModeRef.current === "follow" && !northUpLockedRef.current;
       const heading = rotating
         ? normalizeBearing(start.heading - (touchAngleDeg(touches) - start.angleDeg))
         : null;
       if (heading != null) headingRef.current = heading;
       setCameraStop({
+        // The fix, unmoved — the whole point of following, and now the only
+        // thing that ever writes this screen's centre during a pinch. Nothing
+        // else can have moved the map to recover from: MapLibre's pan is off
+        // for the whole of follow mode.
         centerCoordinate: latestFix.current,
         zoomLevel: zoom,
         ...(heading != null ? { heading } : {}),
@@ -1712,12 +1856,6 @@ export function MapScreen({
         stopNeedsReset.current = false;
         cameraRef.current?.setCamera({ animationDuration: 0 });
       }
-      // Running camera, for the next pinch to start its scale and rotation
-      // from whatever is actually on screen.
-      zoomRef.current = zoomLevel;
-      if (Number.isFinite(feature.properties.heading)) {
-        headingRef.current = feature.properties.heading;
-      }
       // MID-PINCH, STOP HERE. Every move this screen drives writes a camera
       // stop, and every stop settles into this handler — so carrying on would
       // re-render a 2700-line component on every frame of the gesture, which
@@ -1725,6 +1863,30 @@ export function MapScreen({
       // scale bar is already fed from `onRegionIsChanging` through its ref;
       // the readout and the viewport catch up on the settle after release.
       if (pinchStart.current !== null) return;
+      // Running camera, for the NEXT pinch to start its scale and rotation from
+      // whatever is actually on screen — but ONLY when this screen is not the
+      // thing driving the camera.
+      //
+      // This is what made a second pinch jump back a couple of zoom levels
+      // before it started. Every frame of a gesture writes a camera stop, every
+      // stop settles into this handler, and those settles arrive late, coalesced
+      // and occasionally out of order — so one carrying a zoom from early in the
+      // last gesture could land here afterwards and overwrite the value the next
+      // `observeTouches` reads as its starting point. The first frame of that
+      // pinch then snapped the map back to it.
+      //
+      // While following, MapLibre's own zoom and rotate gestures are disabled,
+      // so nothing but this screen can change either — which makes our own
+      // record (kept by `setCameraStop`) authoritative and every report back
+      // redundant. Skipping them here is not an optimisation: a stale report is
+      // strictly worse than no report.
+      if (followModeRef.current === "off" || acceptSettleCamera.current) {
+        acceptSettleCamera.current = false;
+        zoomRef.current = zoomLevel;
+        if (Number.isFinite(feature.properties.heading)) {
+          headingRef.current = feature.properties.heading;
+        }
+      }
       // What is actually on screen, for the offline notice. Async, and asked
       // of the map rather than derived, because a rotated view's extent is not
       // its centre plus its zoom.
@@ -1914,6 +2076,13 @@ export function MapScreen({
         return;
       }
       if (followModeRef.current === "follow") {
+        // North-up locked means the map may not turn, and course-up is nothing
+        // but turning the map — so the cycle skips it rather than offering a
+        // mode that would have to ignore the lock to work.
+        if (northUpLockedRef.current) {
+          setFollowMode("off");
+          return;
+        }
         setFollowMode("course-up");
         // The ref too: the heading callback reads it, and state lands a render
         // later — a sample arriving in between would be dropped as "not
@@ -1964,6 +2133,18 @@ export function MapScreen({
           animationDuration: 1200,
         });
       } else if (mode !== "off") {
+        // NOT WHILE A PINCH IS DRIVING THE CAMERA. This is a 600 ms ANIMATED
+        // stop, and `handlePinchMove` writes 0 ms stops at gesture rate from the
+        // same latest fix — so a fix landing mid-gesture starts a half-second
+        // animation that the next finger frame overrides, then the one after,
+        // and the map stutters for as long as the animation had left to run.
+        // It is the same two-drivers-on-one-camera fault that took rotation off
+        // MapLibre (see handlePinchMove), one axis over.
+        //
+        // Nothing is lost by skipping it: every pinch frame carries
+        // `centerCoordinate: latestFix.current`, which this callback has already
+        // updated, so the map is pinned to the new fix within a frame anyway.
+        if (pinchStart.current) return;
         // Course-up rotation is driven by the COMPASS, not by the fix's course
         // over ground: the user wants the map to face where they are looking,
         // which on a scramble is often not where they last moved (and course
@@ -1991,6 +2172,130 @@ export function MapScreen({
 
     await ensureHeadingWatch();
   }, [ensureHeadingWatch, recentre, requestPovRecentre, setCameraStop]);
+
+  /**
+   * Navigate to a spot: distance + bearing from every new fix, in the chip at
+   * the top of the map.
+   *
+   * A SYNTHETIC waypoint rather than a saved one — the chip only ever reads
+   * name/lat/lon off its target, and pointing at a spot must not silently write
+   * a row into the user's synced waypoints. Shared by the tap sheet, the
+   * press-and-hold sheet and the press-and-hold shortcut, so all three produce
+   * the same thing.
+   */
+  const navigateToPoint = useCallback(
+    (point: { latitude: number; longitude: number }) => {
+      setNavTarget({
+        id: `map-point-${Date.now()}`,
+        name: "Tapped point",
+        lon: point.longitude,
+        lat: point.latitude,
+        createdAt: new Date().toISOString(),
+      });
+      // A bearing with nothing to measure it from is a dead chip.
+      if (!locationWatch.current) handleLocateMe();
+    },
+    [handleLocateMe],
+  );
+
+  /**
+   * Start drawing a route from a spot. An ALREADY-open draft is appended to
+   * rather than replaced: the alternative is a press-and-hold that silently
+   * bins a half-drawn route, which is the one thing the draft tool's own exit
+   * confirm exists to prevent.
+   */
+  const startRouteDrawAt = useCallback(
+    (point: { latitude: number; longitude: number }) => {
+      // A FRESH draft is opened already holding the point, not opened and then
+      // added to: `addToolPoint` reads `activeDraft`, which is derived state and
+      // is still null in this render — the tool armed and the point vanished.
+      // Seeding costs nothing else, because snapping only fills BETWEEN a
+      // previous vertex and this one and there is no previous vertex.
+      if (!routeDraft.active) {
+        measureDraft.close();
+        setEditingRouteId(null);
+        routeDraft.open({ points: [[point.longitude, point.latitude]] });
+        return;
+      }
+      void addToolPoint(point.longitude, point.latitude);
+    },
+    [addToolPoint, measureDraft, routeDraft],
+  );
+
+  /**
+   * Start measuring from a spot. Same shape as `startRouteDrawAt` — and the
+   * same seeding reason — differing only in which of the two point tools opens,
+   * because they are one implementation (DESIGN.md §2).
+   */
+  const startMeasureAt = useCallback(
+    (point: { latitude: number; longitude: number }) => {
+      if (!measureDraft.active) {
+        // Route draft holds work worth confirming before it is binned; measure
+        // arms once that confirm has resolved, exactly as the tool button does.
+        if (routeDraft.active) {
+          handleCancelRouteDraw(() =>
+            measureDraft.open({ points: [[point.longitude, point.latitude]] }),
+          );
+          return;
+        }
+        measureDraft.open({ points: [[point.longitude, point.latitude]] });
+        return;
+      }
+      void addToolPoint(point.longitude, point.latitude);
+    },
+    [addToolPoint, handleCancelRouteDraw, measureDraft, routeDraft],
+  );
+
+  /**
+   * Press-and-hold. `ask` opens the sheet that has always been here; the rest
+   * are the same four outcomes without it, for people who only ever pick one
+   * (Settings → Map).
+   *
+   * Declared down here, after the actions it dispatches to: every branch is one
+   * of them, and a dispatcher that has to be defined before its own targets ends
+   * up being a ref full of late-bound callbacks.
+   */
+  const handleMapLongPress = useCallback(
+    (feature: GeoJSON.Feature) => {
+      if (feature.geometry.type !== "Point") return;
+      const [lon, lat] = feature.geometry.coordinates as [number, number];
+      // While either point tool is armed, press-and-hold near the line means
+      // "add a point here" — the mobile stand-in for dragging the line on web.
+      // Only when it lands near the line; anywhere else follows the preference.
+      if (insertAnchorNear(lon, lat)) return;
+      const point = { latitude: lat, longitude: lon };
+      switch (longPressAction) {
+        case "waypoint":
+          dropWaypointAt(point);
+          return;
+        case "navigate":
+          navigateToPoint(point);
+          return;
+        case "route":
+          startRouteDrawAt(point);
+          return;
+        case "measure":
+          startMeasureAt(point);
+          return;
+        case "canyon":
+          // Straight to the form: with no sheet open there is no Modal to
+          // collide with, so this is the one branch that skips the park-and-
+          // reopen dance the sheet needs (DESIGN.md §6).
+          setAddCanyonAt(point);
+          return;
+        default:
+          setLongPressPoint(point);
+      }
+    },
+    [
+      dropWaypointAt,
+      insertAnchorNear,
+      longPressAction,
+      navigateToPoint,
+      startMeasureAt,
+      startRouteDrawAt,
+    ],
+  );
 
   const handleStartRecording = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
@@ -2061,6 +2366,34 @@ export function MapScreen({
     : insets.top + CHROME_GAP + SEARCH_SIZE + spacing(1);
   const scaleBarMaxWidth =
     windowWidth - FAB_SIZE - CHROME_GAP * 3 - spacing(1);
+  // The handedness swap, in three places that must agree: the JS action column,
+  // the JS instruments, and MapLibre's own compass ornament (position 2 is
+  // bottom-left, 3 is bottom-right). Absolute offsets rather than a flex
+  // direction because all three are absolutely positioned against the map.
+  const controlsOnLeft = controlSide === "left";
+  /**
+   * How high MapLibre's compass ornament has to sit to clear the instruments
+   * under it. Derived from what is actually DRAWN — the tape only renders with
+   * the compass on and a heading to show, the bar only with the scale bar on —
+   * rather than from a constant that assumes both. Turning either off used to
+   * leave the ornament floating above an empty gap.
+   *
+   * This is a preference read, NOT a measurement: `CHROME_BOTTOM`'s comment
+   * warns off `onLayout`-driven offsets because they stick when the thing they
+   * measured goes away. These are discrete values known before the frame is
+   * drawn, so there is nothing to get stuck.
+   */
+  const instrumentsBottom = spacing(1);
+  const ornamentMarginY =
+    instrumentsBottom +
+    (scaleBarEnabled ? SCALE_BAR_HEIGHT + INSTRUMENT_GAP : 0) +
+    (compassEnabled ? COMPASS_STRIP_HEIGHT + INSTRUMENT_GAP : 0);
+  const controlsEdge = controlsOnLeft
+    ? { left: CHROME_GAP, right: undefined }
+    : { right: CHROME_GAP, left: undefined };
+  const instrumentsEdge = controlsOnLeft
+    ? { right: CHROME_GAP, left: undefined, alignItems: "flex-end" as const }
+    : { left: CHROME_GAP, right: undefined, alignItems: "flex-start" as const };
   // Fixed rather than run to the button column: the tape is a glance-at
   // reference, not a ruler, and a strip that changes width with the phone
   // changes how many degrees a thumb-width represents. Only narrow screens
@@ -2104,8 +2437,8 @@ export function MapScreen({
       // returns false — declining the responder and leaving MapLibre's
       // gestures untouched — in every case except a two-finger gesture while
       // following, which it claims and drives itself (see handlePinchMove).
-      onStartShouldSetResponderCapture={observeTouches}
-      onMoveShouldSetResponderCapture={observeTouches}
+      onStartShouldSetResponderCapture={(event) => observeTouches(event, true)}
+      onMoveShouldSetResponderCapture={(event) => observeTouches(event, false)}
       onResponderMove={handlePinchMove}
       onResponderRelease={endPinch}
       onResponderTerminate={endPinch}
@@ -2136,8 +2469,10 @@ export function MapScreen({
         // heading, which the compass tape along the bottom already reports, so
         // the ornament has nothing left to say that isn't said better below.
         compassEnabled={followMode !== "course-up"}
-        compassViewPosition={2}
-        compassViewMargins={{ x: CHROME_GAP, y: CHROME_BOTTOM + COMPASS_STRIP_HEIGHT }}
+        // Follows the instruments to whichever edge they are on (see
+        // `instrumentsEdge`): 2 is bottom-left, 3 bottom-right.
+        compassViewPosition={controlsOnLeft ? 3 : 2}
+        compassViewMargins={{ x: CHROME_GAP, y: ornamentMarginY }}
         // BOTH two-finger gestures are MapLibre's only when nothing is being
         // followed. While following, this screen drives scale and rotation
         // together from one start reference (see handlePinchMove), and leaving
@@ -2146,12 +2481,30 @@ export function MapScreen({
         // shake follow mode loose. Pan stays MapLibre's throughout: a
         // one-finger drag still pans, and still means "stop following".
         zoomEnabled={followMode === "off"}
-        rotateEnabled={followMode === "off"}
-        // Pan and tilt are MapLibre's right up until the second finger lands
-        // on a followed map, and are handed back the moment it lifts. A
-        // ONE-finger drag is untouched by this, so it still pans and still
-        // means "stop following".
-        scrollEnabled={!twoFingerLock}
+        rotateEnabled={followMode === "off" && !northUpLocked}
+        // PAN IS OFF FOR THE WHOLE OF FOLLOW MODE, not just during a pinch.
+        //
+        // MapLibre's move detector arms on the FIRST finger down and tracks the
+        // focal point of whatever is touching; when a second finger lands, that
+        // focal point jumps from the first finger to the midpoint of the two —
+        // half the finger separation, in one frame — and MapLibre applies the
+        // jump as a pan. `handlePinchMove` then writes the centre back to the
+        // fix, and that pair IS the pan-then-snap a mistimed pinch showed.
+        // Measured: 3-7 MapLibre camera reports per mistimed pinch against 0
+        // for a clean one, which is the same split the eye sees.
+        //
+        // Taking the gesture away for the duration was tried first and cannot
+        // work: `twoFingerLock` is React state, so `scrollEnabled` reaches the
+        // native view 48-92 ms after the second finger lands (measured), and the
+        // jump is in the first frame. The detector has to be disarmed BEFORE the
+        // gesture starts, which means for as long as the map is following.
+        //
+        // The cost is that a one-finger drag no longer pans by itself while
+        // following — `observeTouches` recognises it and drops follow, which
+        // hands pan straight back. That costs a frame or two of deadband at the
+        // start of a drag-to-stop-following, on the gesture least able to
+        // notice it.
+        scrollEnabled={followMode === "off" && !twoFingerLock}
         pitchEnabled={!twoFingerLock}
         onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}
@@ -2164,11 +2517,21 @@ export function MapScreen({
         />
         {/* Bundled point-feature icons for vector overlays. */}
         <TopoIconImages />
-        {/* Locate-me sprites: the facing arrow, and the beam behind it. */}
+        {/* Locate-me sprites: the facing arrow, and the beam behind it.
+            The arrow is registered SDF, which is what makes `iconColor` (and
+            with it the Settings → Map colour choice) apply to it at all — a
+            plain image is drawn with its own pixels. SDF reads the alpha channel
+            as a shape, so the arrow's own blue is discarded and its white edge
+            comes back as `iconHaloColor` below; the beam stays a plain image,
+            because its whole substance is a soft alpha gradient that a distance
+            field would flatten into a hard triangle. */}
         <Images
           images={{
             "user-heading-beam": require("../../assets/user-heading.png"),
-            "user-arrow": require("../../assets/user-arrow.png"),
+            "user-arrow": {
+              source: require("../../assets/user-arrow.png"),
+              sdf: true,
+            },
           }}
         />
 
@@ -2518,6 +2881,15 @@ export function MapScreen({
                 iconRotationAlignment: "map",
                 iconAllowOverlap: true,
                 iconIgnorePlacement: true,
+                // The user's colour, and a white edge under it so no choice has
+                // to carry its own contrast — the arrow sits on imagery, rock
+                // and water, and "white" would vanish on a limestone slab
+                // without it.
+                iconColor: MARKER_COLORS[markerColorId],
+                // White on white is no edge at all, so the one achromatic
+                // choice takes a dark one instead.
+                iconHaloColor: markerColorId === "white" ? "#1A1A1A" : "#FFFFFF",
+                iconHaloWidth: 1.2,
               }}
             />
           </ShapeSource>
@@ -2617,7 +2989,9 @@ export function MapScreen({
         {withholdingCanyons ? (
           <View style={styles.filterBadge}>
             <Feather name="filter" size={14} color={theme.accent} />
-            <Text style={styles.filterBadgeText} numberOfLines={1}>
+            {/* Two lines: this sentence grows with the user's text size, and a
+                badge that says "Showing 5 of 2…" is a warning nobody can act on. */}
+            <Text style={styles.filterBadgeText} numberOfLines={2}>
               {`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} canyons`}
             </Text>
             <IconButton
@@ -2634,7 +3008,7 @@ export function MapScreen({
         {downloadJob ? (
           <View style={styles.filterBadge}>
             <Feather name="download" size={14} color={theme.accent} />
-            <Text style={styles.filterBadgeText} numberOfLines={1}>
+            <Text style={styles.filterBadgeText} numberOfLines={2}>
               {downloadJob.progress.tilesTotal > 0
                 ? `Saving maps · ${Math.round(
                     (downloadJob.progress.tilesDone /
@@ -2664,9 +3038,12 @@ export function MapScreen({
         ) : null}
       </View>
 
-      {/* One column of actions on the right; the left edge belongs to the map's
-          own instruments (native compass + scale bar). */}
-      <View style={styles.controls}>
+      {/* One column of actions on one edge; the OTHER edge belongs to the map's
+          own instruments (native compass + compass tape + scale bar). Which is
+          which is the user's (Settings → Map): the two swap as a pair, because
+          the point of the setting is which side the thumb reaches, and leaving
+          the instruments put would only move the buttons on top of them. */}
+      <View style={[styles.controls, controlsEdge]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Choose layers"
@@ -2698,6 +3075,7 @@ export function MapScreen({
             points — a measurement is a question you asked once, not an asset.
             Route draw is the opposite and asks before discarding. */}
         <MapToolGroup
+          side={controlsOnLeft ? "left" : "right"}
           open={toolsOpen}
           activeTool={measuring ? "measure" : drawingRoute ? "route" : null}
           onToggleOpen={() => setToolsOpen((open) => !open)}
@@ -2727,23 +3105,31 @@ export function MapScreen({
         </Pressable>
       </View>
 
-      {/* The map's own instruments, stacked along the bottom-left edge: which
-          way the user is facing, then how far things are. */}
-      <View style={styles.instruments} pointerEvents="none">
-        <CompassStrip heading={compassEnabled ? userHeading : null} width={compassWidth} />
-        <ScaleBar
-          ref={scaleBarRef}
-          latitude={camera.latitude}
-          zoom={camera.zoom}
-          maxWidth={scaleBarMaxWidth}
+      {/* The map's own instruments, stacked along the bottom edge opposite the
+          buttons: which way the user is facing, then how far things are. */}
+      <View style={[styles.instruments, instrumentsEdge]} pointerEvents="none">
+        <CompassStrip
+          heading={compassEnabled ? userHeading : null}
+          width={compassWidth}
+          reference={northReference}
         />
+        {scaleBarEnabled ? (
+          <ScaleBar
+            ref={scaleBarRef}
+            latitude={camera.latitude}
+            zoom={camera.zoom}
+            maxWidth={scaleBarMaxWidth}
+          />
+        ) : null}
       </View>
 
       {/* Navigate-to-waypoint readout: live distance + bearing from the
           latest fix. Static labels only — coordinates never rendered. */}
       {navTarget ? (
         <View style={[styles.navChip, { top: noticeTop }]}>
-          <Text style={styles.noticeText} numberOfLines={1}>
+          {/* The distance and bearing live at the end of this line, so a
+              one-line cap cuts off the half that changes. */}
+          <Text style={styles.noticeText} numberOfLines={2}>
             {navTarget.name}
             {navDistanceM != null && navBearingDeg != null
               ? ` · ${formatDistanceM(navDistanceM)} · ${compassPointFor(
@@ -2802,19 +3188,7 @@ export function MapScreen({
         point={tappedPoint}
         userCoord={userCoord}
         onClose={() => setTappedPoint(null)}
-        onNavigate={(point) => {
-          // A synthetic waypoint rather than a saved one: the navigate chip
-          // only ever reads name/lat/lon off its target, and inspecting a spot
-          // must not silently write a row to the user's synced waypoints.
-          setNavTarget({
-            id: `map-point-${Date.now()}`,
-            name: "Tapped point",
-            lon: point.longitude,
-            lat: point.latitude,
-            createdAt: new Date().toISOString(),
-          });
-          if (!locationWatch.current) handleLocateMe();
-        }}
+        onNavigate={navigateToPoint}
         onDropWaypoint={dropWaypointAt}
       />
 
@@ -2833,24 +3207,58 @@ export function MapScreen({
         }}
         title="What goes here?"
       >
-        <Row
-          icon="map-pin"
-          title="Drop a waypoint"
-          onPress={() => {
-            const point = longPressPoint;
-            setLongPressPoint(null);
-            if (point) dropWaypointAt(point);
-          }}
-        />
-        <Row
-          icon="plus-circle"
-          title="Add a canyon"
-          subtitle="With this position filled in"
-          onPress={() => {
-            pendingCanyonPoint.current = longPressPoint;
-            setLongPressPoint(null);
-          }}
-        />
+        {/* The gap is the sheet-list convention (MapPointSheet, SavedScreen):
+            rows flush against each other read as one slab rather than four
+            targets. */}
+        <View style={styles.sheetBody}>
+          <Row
+            icon="map-pin"
+            title="Drop a waypoint"
+            onPress={() => {
+              const point = longPressPoint;
+              setLongPressPoint(null);
+              if (point) dropWaypointAt(point);
+            }}
+          />
+          <Row
+            icon="navigation"
+            title="Navigate here"
+            onPress={() => {
+              const point = longPressPoint;
+              setLongPressPoint(null);
+              if (point) navigateToPoint(point);
+            }}
+          />
+          <Row
+            icon="pen-tool"
+            title="Draw a route from here"
+            onPress={() => {
+              const point = longPressPoint;
+              setLongPressPoint(null);
+              if (point) startRouteDrawAt(point);
+            }}
+          />
+          {/* MaterialCommunityIcons, as everywhere else measure appears: Feather
+              has no ruler, and the near misses read as "resize" (DESIGN.md §2). */}
+          <Row
+            leading={<MeasureGlyph />}
+            title="Measure from here"
+            onPress={() => {
+              const point = longPressPoint;
+              setLongPressPoint(null);
+              if (point) startMeasureAt(point);
+            }}
+          />
+          <Row
+            icon="plus-circle"
+            title="Add a canyon"
+            subtitle="With this position filled in"
+            onPress={() => {
+              pendingCanyonPoint.current = longPressPoint;
+              setLongPressPoint(null);
+            }}
+          />
+        </View>
       </BottomSheet>
 
       <CanyonEditSheet
@@ -3035,6 +3443,20 @@ function RouteNameForm({
   );
 }
 
+/**
+ * The measure tool's icon in a `Row`'s identity tile. Hand-built rather than
+ * passed as `Row.icon` because that prop takes a Feather name, and measure is
+ * the one glyph Feather doesn't have (DESIGN.md §2 — a second family is allowed
+ * only for a glyph it lacks). Mirrors `Row`'s own tile exactly.
+ */
+function MeasureGlyph() {
+  return (
+    <View style={styles.measureTile}>
+      <MaterialCommunityIcons name="ruler" size={20} color={theme.accent} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   // The field and its Save button were flush against each other, which read as
   // one control and put the button under the thumb aiming for the input.
@@ -3058,6 +3480,15 @@ const styles = StyleSheet.create({
   // Takes the slack so the dismiss sits at the pill's right edge rather than
   // floating next to the text.
   filterBadgeText: { flex: 1, color: theme.textPrimary, fontSize: fontSize.sm },
+  sheetBody: { gap: spacing(1) },
+  measureTile: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: withAlpha(theme.accent, 0.16),
+  },
   controls: {
     position: "absolute",
     right: CHROME_GAP,
@@ -3133,7 +3564,7 @@ const styles = StyleSheet.create({
     left: CHROME_GAP,
     bottom: spacing(1),
     alignItems: "flex-start",
-    gap: spacing(0.75),
+    gap: INSTRUMENT_GAP,
   },
   navChip: {
     position: "absolute",
