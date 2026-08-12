@@ -4,6 +4,7 @@ export type PanelId =
   | "geopdfs"
   | "lidar"
   | "routes"
+  | "waypoints"
   | "trip-logs"
   | "analytics"
   | "friends"

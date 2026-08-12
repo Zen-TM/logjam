@@ -10,27 +10,24 @@
 // default pin. That is the whole reason this is a lookup with a fallback and
 // not an enum.
 import type { Feather } from "@expo/vector-icons";
-
-import { assetHue } from "../theme";
+import { DEFAULT_WAYPOINT_COLOR, waypointColor } from "@logjam/shared";
 
 type Glyph = React.ComponentProps<typeof Feather>["name"];
 
-/** Tag (lowercased) → how it draws. Only the seeded vocabulary is here; a tag
- *  the user invents renders as the default pin until it earns an entry. */
-const TAG_SYMBOLS: Record<string, { icon: Glyph; color: string }> = {
-  carpark: { icon: "truck", color: "#86B5D4" },
-  campsite: { icon: "home", color: "#9DBE8B" },
-  water: { icon: "droplet", color: "#86B5D4" },
-  anchor: { icon: "anchor", color: "#C7B39A" },
-  abseil: { icon: "arrow-down", color: "#C7B39A" },
-  exit: { icon: "log-out", color: "#9DBE8B" },
-  hazard: { icon: "alert-triangle", color: "#D98F3D" },
-  lookout: { icon: "eye", color: "#B79EC0" },
+/** Tag (lowercased) → glyph. COLOURS ARE NOT HERE: they live in shared
+ *  (waypointTags.ts) so the phone and the browser paint a carpark the same,
+ *  which a screenshot comparison in the field would otherwise expose. Feather
+ *  names only resolve on this platform, so the glyph stays local. */
+const TAG_GLYPHS: Record<string, Glyph> = {
+  abseil: "arrow-down",
+  campsite: "home",
+  carpark: "truck",
+  exit: "log-out",
 };
 
 export const DEFAULT_WAYPOINT_SYMBOL = {
   icon: "map-pin" as Glyph,
-  color: assetHue.waypoint,
+  color: DEFAULT_WAYPOINT_COLOR,
 };
 
 /**
@@ -44,6 +41,9 @@ export function waypointSymbol(waypoint: {
   tags?: readonly string[];
 }): { icon: Glyph; color: string } {
   const key = waypoint.symbol ?? waypoint.tags?.[0];
-  if (!key) return DEFAULT_WAYPOINT_SYMBOL;
-  return TAG_SYMBOLS[key.toLowerCase()] ?? DEFAULT_WAYPOINT_SYMBOL;
+  const glyph = key ? TAG_GLYPHS[key.toLowerCase()] : undefined;
+  return {
+    icon: glyph ?? DEFAULT_WAYPOINT_SYMBOL.icon,
+    color: waypointColor(waypoint),
+  };
 }

@@ -1,0 +1,230 @@
+/* WaypointsPanel */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+}
+
+.sectionLabel {
+  composes: sectionLabel from '@styles/shared.module.css';
+  margin-top: 0.5em;
+}
+
+.divider {
+  composes: divider from '@styles/shared.module.css';
+}
+
+.caption {
+  color: var(--theme-text-muted);
+  font-size: var(--text-xs);
+}
+
+.input {
+  composes: input from '@styles/shared.module.css';
+  width: 100%;
+}
+
+.textarea {
+  composes: input from '@styles/shared.module.css';
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.search {
+  composes: input from '@styles/shared.module.css';
+  width: 100%;
+  margin-top: 0.3em;
+}
+
+.addButton {
+  composes: btn btnFilledAccent btnMd btnFull from '@styles/shared.module.css';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+}
+
+.addTagButton {
+  composes: btn btnOutlineAccent btnSm from '@styles/shared.module.css';
+  flex-shrink: 0;
+}
+
+.deleteButton {
+  composes: btn btnOutlineWarning btnSm btnFull from '@styles/shared.module.css';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+  margin-top: 0.4em;
+}
+
+.cancelButton {
+  composes: btn btnGhost btnSm from '@styles/shared.module.css';
+  flex-shrink: 0;
+  margin-top: 0.4em;
+}
+
+/* --- tag rail ---------------------------------------------------------- */
+/* Wraps rather than scrolls: the panel is only 280px wide, and a horizontal
+   scroller inside a vertical one is a gesture fight. */
+.tagRail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+}
+
+.tagChip {
+  padding: 0.15em 0.55em;
+  border: 1px solid var(--theme-bonus2);
+  border-radius: var(--radius-pill, 999px);
+  background: none;
+  color: var(--theme-text-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.tagChip:hover {
+  border-color: var(--theme-accent);
+  color: var(--theme-text-primary);
+}
+
+.tagChipActive {
+  composes: tagChip;
+  border-color: var(--theme-accent);
+  background: var(--theme-accent);
+  color: var(--theme-primary);
+}
+
+.tagCount {
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- rows -------------------------------------------------------------- */
+
+.item {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  width: 100%;
+  padding: 0.4em 0.3em;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--theme-text-primary);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: color-mix(in srgb, var(--theme-text-primary) 8%, transparent);
+}
+
+.rowName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  color: var(--theme-text-muted);
+  font-size: var(--text-xs);
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  flex-shrink: 0;
+  color: var(--theme-text-muted);
+  transition: transform 120ms ease;
+}
+
+.chevronOpen {
+  composes: chevron;
+  transform: rotate(180deg);
+}
+
+/* --- expanded detail --------------------------------------------------- */
+/* Indented and rule-marked so a long list still reads as rows with one open,
+   rather than as a form that lost its heading. */
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  padding: 0.3em 0 0.6em 0.6em;
+  margin-left: 0.45em;
+  border-left: 2px solid var(--theme-bonus2);
+}
+
+.detailRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.coordButton {
+  composes: btn btnGhost btnXs from '@styles/shared.module.css';
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  font-variant-numeric: tabular-nums;
+}
+
+.flyButton {
+  composes: btn btnOutlineAccent btnXs from '@styles/shared.module.css';
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.fieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  color: var(--theme-text-muted);
+  font-size: var(--text-xs);
+}
+
+.inlineAdd {
+  display: flex;
+  gap: 0.3em;
+  align-items: center;
+}
+
+/* Bounded so a big library doesn't push Delete off the bottom of the panel.
+   The panel body owns the page scroll; this is a local list, which is the one
+   place a nested scroller is the lesser evil. */
+.canyonList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  max-height: 9em;
+  overflow-y: auto;
+}
+
+.canyonRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: var(--text-xs);
+  color: var(--theme-text-primary);
+  cursor: pointer;
+}
+
+.canyonName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -439,6 +439,89 @@ export function useCanyonTracks(enabled: boolean) {
 }
 
 
+// ── Waypoints ────────────────────────────────────────────────────────────
+// Marked points: a carpark, a campsite, an anchor, an exit. Authored mostly on
+// the phone; the web lists, edits and links them.
+//
+// An UNLINKED waypoint is owner-private. One linked to a canyon shared with you
+// arrives here read-only (`syncRole: "shared"`) — same visibility rule as a
+// linked route. `canyonIds` is scoped by the server to canyons the caller can
+// see, so a sharee never learns the owner's other filing.
+
+export type TWaypoint = {
+  id: string;
+  ownerId: string;
+  syncRole: "owner" | "shared";
+  canyonIds: string[];
+  name: string;
+  latitude: number;
+  longitude: number;
+  elevation: number | null;
+  symbol: string | null;
+  notes: string | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function getWaypoints(): Promise<TWaypoint[]> {
+  return apiFetch<TWaypoint[]>("/waypoints");
+}
+
+export function createWaypoint(data: {
+  name: string;
+  latitude: number;
+  longitude: number;
+  notes?: string | null;
+  tags?: string[];
+  canyonIds?: string[];
+}): Promise<TWaypoint> {
+  return apiFetch<TWaypoint>("/waypoints", { method: "POST", body: data });
+}
+
+export function updateWaypoint(
+  id: string,
+  data: Partial<{
+    name: string;
+    latitude: number;
+    longitude: number;
+    notes: string | null;
+    tags: string[] | null;
+    canyonIds: string[] | null;
+  }>,
+): Promise<TWaypoint> {
+  return apiFetch<TWaypoint>(`/waypoints/${id}`, { method: "PATCH", body: data });
+}
+
+export function deleteWaypoint(id: string): Promise<void> {
+  return apiFetch<void>(`/waypoints/${id}`, { method: "DELETE" });
+}
+
+/** Fetches waypoints only while something is showing them, mirroring useRoutes.
+ *  Bump `refetch` after any write. */
+export function useWaypoints(enabled: boolean) {
+  const [waypoints, setWaypoints] = useState<TWaypoint[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fetchCount, setFetchCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    setLoading(true);
+    getWaypoints()
+      .then(setWaypoints)
+      .catch((err) => {
+        console.error(err);
+        setError(messageFromError(err, "Couldn't load waypoints."));
+      })
+      .finally(() => setLoading(false));
+  }, [enabled, fetchCount]);
+
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+
+  return { waypoints, loading, error, refetch };
+}
+
 // ── Routes ───────────────────────────────────────────────────────────────
 // User-authored lines. Unlike tracks, geometry arrives INLINE (no presigned
 // blob to fetch and parse) — see the Route model in the API schema.

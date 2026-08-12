@@ -8,9 +8,9 @@ describe("waypointSymbol", () => {
   });
 
   it("keeps the first tag's answer when later tags also match", () => {
-    // Stability: adding a lookup entry for `hazard` must not repaint every
-    // waypoint that happens to carry it as a second tag.
-    expect(waypointSymbol({ tags: ["water", "hazard"] }).icon).toBe("droplet");
+    // Stability: adding a lookup entry must not repaint every waypoint that
+    // happens to carry that tag in second place.
+    expect(waypointSymbol({ tags: ["campsite", "carpark"] }).icon).toBe("home");
   });
 
   it("is case-insensitive, because the tag vocabulary is free text", () => {
@@ -18,8 +18,8 @@ describe("waypointSymbol", () => {
   });
 
   it("lets an explicit symbol override the tags", () => {
-    expect(waypointSymbol({ symbol: "anchor", tags: ["carpark"] }).icon).toBe(
-      "anchor",
+    expect(waypointSymbol({ symbol: "exit", tags: ["carpark"] }).icon).toBe(
+      "log-out",
     );
   });
 

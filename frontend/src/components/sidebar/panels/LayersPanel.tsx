@@ -66,6 +66,8 @@ function LayersPanel({
   setShowCanyonTracks,
   showRoutes,
   setShowRoutes,
+  showWaypoints,
+  setShowWaypoints,
   lidarEnabled,
   setLidarEnabled,
   lidarLayerToggles,
@@ -87,6 +89,8 @@ function LayersPanel({
   setShowCanyonTracks: (v: boolean) => void;
   showRoutes: boolean;
   setShowRoutes: (v: boolean) => void;
+  showWaypoints: boolean;
+  setShowWaypoints: (v: boolean) => void;
   lidarEnabled: boolean;
   setLidarEnabled: (v: boolean) => void;
   lidarLayerToggles: Record<string, boolean>;
@@ -205,6 +209,16 @@ function LayersPanel({
           size="small"
           checked={showRoutes}
           onChange={(_, v) => setShowRoutes(v)}
+          sx={switchSx("var(--theme-accent)")}
+        />
+      </div>
+
+      <div className={classes.toggleRow}>
+        <span>Waypoints</span>
+        <Switch
+          size="small"
+          checked={showWaypoints}
+          onChange={(_, v) => setShowWaypoints(v)}
           sx={switchSx("var(--theme-accent)")}
         />
       </div>

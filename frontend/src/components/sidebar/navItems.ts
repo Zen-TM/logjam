@@ -4,6 +4,7 @@ import {
   MapPin,
   Mountain,
   Route,
+  Flag,
   BookOpen,
   BarChart3,
   Users,
@@ -39,6 +40,9 @@ const TOP_ITEMS: NavItem[] = [
   { id: "geopdfs", label: "GeoPDFs", Icon: Map },
   { id: "lidar", label: "LiDAR", Icon: Mountain },
   { id: "routes", label: "Routes", Icon: Route },
+  // Flag, not MapPin: canyons already own the pin, and two pin glyphs a row
+  // apart on the rail read as the same feature twice.
+  { id: "waypoints", label: "Waypoints", Icon: Flag },
   { id: "trip-logs", label: "Trip Logs", Icon: BookOpen },
   { id: "analytics", label: "Analytics", Icon: BarChart3 },
   { id: "friends", label: "Friends", Icon: Users },
@@ -71,6 +75,9 @@ const MOBILE_RAIL_IDS: NavItemId[] = ["layers", "canyons", "trip-logs"];
 const MORE_ITEM_IDS: NavItemId[] = [
   "notifications",
   "routes",
+  // Beside routes: both are "the lines and marks I already have", and both are
+  // consulted far more often on a phone than the authoring tools below.
+  "waypoints",
   "friends",
   "analytics",
   "geopdfs",

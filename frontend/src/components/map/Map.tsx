@@ -60,7 +60,13 @@ import { useMediaQuery } from "@mui/material";
 import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
 import { MOBILE_MAX_WIDTH_PX } from "../../useIsMobile";
-import type { TCanyon, TFilters, CanyonTrack, TRoute } from "../../canyonUtils";
+import type {
+  TCanyon,
+  TFilters,
+  CanyonTrack,
+  TRoute,
+  TWaypoint,
+} from "../../canyonUtils";
 import type { GeoJsonPolygonal } from "../../topoLayerTypes";
 import { passesFilters, isCanyonDoneByViewer } from "../../canyonUtils";
 import { fetchTrackGeoJSON } from "../media/trackGeo";
@@ -79,6 +85,7 @@ import {
   featureLineWidthStops,
   isValidLatitude,
   isValidLongitude,
+  waypointColor,
   type OsmFeatureKey,
   type OsmPointFeatureKey,
   type OsmFeatureStyle,
@@ -102,6 +109,8 @@ const DRAG_INSERT_MIN_PIXELS = 6;
 // go looking for — where z10 is roughly a 50 km view, past the point a few
 // kilometres of route says anything about where it goes.
 const ROUTE_MIN_ZOOM = 10;
+/** Waypoint names only once the view is local enough to read them. */
+const WAYPOINT_LABEL_MIN_ZOOM = 11;
 
 const SIDEBAR_TRANSITION_MS = 300;
 const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
@@ -487,6 +496,9 @@ function Map({
   sharedCanyons,
   selectCanyon,
   pickingCoords,
+  waypoints,
+  showWaypoints,
+  onSelectWaypoint,
   onCoordsPicked,
   onCancelPickCoords,
   showOwnedCanyons,
@@ -536,6 +548,10 @@ function Map({
   sharedCanyons: TCanyon[];
   selectCanyon: (id: string | null) => void;
   pickingCoords: boolean;
+  /** Marked points, drawn when the Waypoints layer is on. */
+  waypoints: TWaypoint[];
+  showWaypoints: boolean;
+  onSelectWaypoint: (id: string) => void;
   onCoordsPicked: (lat: number, lng: number) => void;
   onCancelPickCoords: () => void;
   showOwnedCanyons: boolean;
@@ -986,6 +1002,51 @@ function Map({
           "line-opacity": 0.9,
         },
       });
+      // Waypoints: the marked points. Circles rather than a symbol layer — the
+      // colour IS the information (waypointColor, shared with mobile so a
+      // carpark is the same blue on both), and an icon set would need sprite
+      // work for four tags. Above the route lines so a pin sitting on a line
+      // stays clickable, below the canyon markers so a canyon still wins.
+      map.addSource("waypoints", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: "waypoints-markers",
+        type: "circle",
+        source: "waypoints",
+        layout: { visibility: "none" },
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3.5, 14, 6],
+          "circle-color": ["get", "color"],
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+        },
+      });
+      // Labels only once the map is local enough for them to mean something —
+      // a state-wide view of every waypoint name is a smear, the same reason
+      // the route layers have a floor.
+      map.addLayer({
+        id: "waypoints-labels",
+        type: "symbol",
+        source: "waypoints",
+        minzoom: WAYPOINT_LABEL_MIN_ZOOM,
+        layout: {
+          visibility: "none",
+          "text-field": ["get", "name"],
+          "text-font": ["Noto Sans Medium"],
+          "text-size": 11,
+          "text-anchor": "top",
+          "text-offset": [0, 0.7],
+          "text-optional": true,
+        },
+        paint: {
+          "text-color": readCssVar("--theme-text-primary", "#ffffff"),
+          "text-halo-color": readCssVar("--theme-primary", "#000000"),
+          "text-halo-width": 1.2,
+        },
+      });
+
       // Direction of travel, as chevrons riding the line itself. Symbol
       // placement does the spacing and rotation natively — hand-placed markers
       // would have to be recomputed on every pan. Held back to zoom 11+ and
@@ -1579,7 +1640,11 @@ function Map({
         vis(showRoutes || drawingRoute),
       );
     }
+    for (const id of ["waypoints-markers", "waypoints-labels"]) {
+      mapRef.current.setLayoutProperty(id, "visibility", vis(showWaypoints));
+    }
   }, [
+    showWaypoints,
     showOwnedCanyons,
     showSharedCanyons,
     showCanyonTracks,
@@ -1608,6 +1673,63 @@ function Map({
         })),
     });
   }, [routes, mapLoaded, editingRouteId]);
+
+  // Push waypoints to the map. Colour is resolved here rather than in a style
+  // expression so the tag→colour rule has exactly one implementation, shared
+  // with the phone (shared/waypointTags.ts).
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const source = mapRef.current.getSource("waypoints") as
+      | maplibregl.GeoJSONSource
+      | undefined;
+    if (!source) return;
+    source.setData({
+      type: "FeatureCollection",
+      features: waypoints.map((waypoint) => ({
+        type: "Feature" as const,
+        geometry: {
+          type: "Point" as const,
+          coordinates: [waypoint.longitude, waypoint.latitude],
+        },
+        properties: {
+          id: waypoint.id,
+          name: waypoint.name,
+          color: waypointColor(waypoint),
+        },
+      })),
+    });
+  }, [waypoints, mapLoaded]);
+
+  // A marker click opens that waypoint in the panel — the map is the index,
+  // the panel is the detail.
+  const selectWaypointRef = useRef(onSelectWaypoint);
+  useEffect(() => {
+    selectWaypointRef.current = onSelectWaypoint;
+  }, [onSelectWaypoint]);
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+    const handleClick = (e: maplibregl.MapLayerMouseEvent) => {
+      const id = e.features?.[0]?.properties?.id;
+      if (typeof id === "string") selectWaypointRef.current(id);
+    };
+    const handleEnter = () => {
+      if (pickModeRef.current || drawingRouteRef.current) return;
+      map.getCanvas().style.cursor = "pointer";
+    };
+    const handleLeave = () => {
+      if (pickModeRef.current || drawingRouteRef.current) return;
+      map.getCanvas().style.cursor = "";
+    };
+    map.on("click", "waypoints-markers", handleClick);
+    map.on("mouseenter", "waypoints-markers", handleEnter);
+    map.on("mouseleave", "waypoints-markers", handleLeave);
+    return () => {
+      map.off("click", "waypoints-markers", handleClick);
+      map.off("mouseenter", "waypoints-markers", handleEnter);
+      map.off("mouseleave", "waypoints-markers", handleLeave);
+    };
+  }, [mapLoaded]);
 
   // Draw/edit mode: click appends a vertex. Follows the coord-pick idiom
   // (crosshair cursor, handler torn down on exit), except the listener is
