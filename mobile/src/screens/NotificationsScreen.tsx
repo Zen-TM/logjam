@@ -18,11 +18,13 @@
 // user-supplied text, allowed) and a timestamp. Never a coordinate. Tapping
 // through passes an opaque id and the detail screen fetches over the authed API,
 // so a share revoked since the notification lands on the 404-not-403 path.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
 import { messageFromError } from "@logjam/shared";
 
 import type { TNotification } from "../api/types";
+import { useAccountState } from "../auth/AccountStateContext";
+import { capabilityScreenBlock } from "../auth/capabilities";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 import { enqueueNotificationRead } from "../sync/outbox";
 import {
@@ -33,6 +35,7 @@ import {
 import { onMirrorChanged } from "../sync/syncDb";
 import {
   Button,
+  EmptyState,
   ErrorBanner,
   ErrorState,
   HeroHeader,
@@ -59,12 +62,18 @@ type NotificationsState = {
 // Cache-first inbox load: render the cache immediately, then live-fetch. A
 // failed fetch with a populated cache is silent (offline); only an empty
 // cache surfaces the error.
-function useNotifications(): NotificationsState {
+//
+// `blocked` is the guest gate: a guest has no inbox to fetch, and neither the
+// cache read nor the fetch may fire (mobile/CLAUDE.md — a guaranteed 401 per
+// screen open). It is a parameter rather than a hook read so this stays one
+// decision made by the screen.
+function useNotifications(blocked: boolean): NotificationsState {
   const [notifications, setNotifications] = useState<TNotification[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
   useEffect(() => {
+    if (blocked) return;
     let cancelled = false;
     (async () => {
       const cache = await readNotificationsCache().catch(() => null);
@@ -85,17 +94,18 @@ function useNotifications(): NotificationsState {
     return () => {
       cancelled = true;
     };
-  }, [fetchCount]);
+  }, [blocked, fetchCount]);
 
   // markRead patches the cache and fires notifyMirrorChanged; re-read it.
   useEffect(() => {
+    if (blocked) return;
     const unsubscribe = onMirrorChanged(() => {
       readNotificationsCache()
         .then((cache) => cache && setNotifications(cache.notifications))
         .catch(() => {});
     });
     return unsubscribe;
-  }, []);
+  }, [blocked]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
   return {
@@ -125,7 +135,12 @@ export function NotificationsScreen({
   onUnreadChanged?: () => void;
   onOpenCanyon: (canyonId: string) => void;
 }) {
-  const query = useNotifications();
+  const { accountState } = useAccountState();
+  const guestBlock = useMemo(
+    () => capabilityScreenBlock("inbox", accountState),
+    [accountState],
+  );
+  const query = useNotifications(guestBlock !== null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [bucket, setBucket] = useState<Bucket>("all");
   const notifications = query.notifications;
@@ -205,6 +220,17 @@ export function NotificationsScreen({
     { value: "read", label: "Read", count: readCount, disabled: readCount === 0 },
   ];
 
+  // Before the loading branch: with both effects gated off nothing ever
+  // resolves, so a guest would sit on a spinner. The hero keeps the back
+  // affordance.
+  if (guestBlock) {
+    return (
+      <View style={styles.root}>
+        <HeroHeader eyebrow="Inbox" title="Inbox" onBack={onBack} />
+        <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
+      </View>
+    );
+  }
   if (query.loading && notifications.length === 0) return <LoadingState />;
   if (query.error && notifications.length === 0) {
     return <ErrorState message={query.error} onRetry={query.refetch} />;
@@ -268,13 +294,13 @@ function keyExtractor(item: TNotification): string {
 
 // Memoised, with a callback that takes the item rather than closing over it —
 // §9, the whole reason the Logs list stopped re-rendering every mounted cell.
-const NotificationRow = ({
+const NotificationRow = memo(function NotificationRow({
   item,
   onPress,
 }: {
   item: TNotification;
   onPress: (item: TNotification) => void;
-}) => {
+}) {
   const label = notificationLabel(item);
   const meta = notificationMeta(item);
   const subtitle = [label.warning, formatTime(item.createdAt)].filter(Boolean).join(" · ");
@@ -290,7 +316,7 @@ const NotificationRow = ({
       style={!item.read ? styles.rowUnread : undefined}
     />
   );
-};
+});
 
 /** Per-bucket, and actionable where there is an action (§8). */
 function EmptyPanel({

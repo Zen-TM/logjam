@@ -102,6 +102,47 @@ export function unavailableReasonText(reason: UnavailableReason): string {
 }
 
 /**
+ * What a capability is CALLED, for copy that has to name it. Only spelled here,
+ * for the same reason the two reason strings are.
+ */
+const CAPABILITY_LABEL: Record<Capability, string> = {
+  sharing: "Sharing a canyon",
+  friends: "Friends",
+  inbox: "The inbox",
+  lidarOverlays: "LiDAR overlays",
+  accountGeoPdf: "Account GeoPDFs",
+  vectorRegionDownload: "The vector map download",
+  serverPrefs: "This preference",
+  customFieldDefs: "Custom fields",
+  pushNotifications: "Push notifications",
+  syncNow: "Syncing",
+};
+
+/**
+ * The screen-level counterpart of `capabilityRowProps`: copy for a whole screen
+ * a guest cannot use, and the signal that its mount-time fetches must not fire
+ * (mobile/CLAUDE.md — a guaranteed-401 per screen open is a battery cost and a
+ * permanently red sync health line). Null means "go ahead".
+ *
+ * Only `needs-account` blocks a whole screen. A linked user offline keeps the
+ * screen's own offline handling — the inbox reads its cache, Friends shows the
+ * failure with a retry — so `online` is not a parameter: passing `true` here
+ * leaves the account axis as the only one that can block.
+ */
+export function capabilityScreenBlock(
+  capability: Capability,
+  accountState: AccountState,
+): { title: string; hint: string } | null {
+  if (capabilityStatus(capability, accountState, true).status === "available") {
+    return null;
+  }
+  return {
+    title: unavailableReasonText("needs-account"),
+    hint: `${CAPABILITY_LABEL[capability]} lives on a Logjam account. Everything already on this phone keeps working without one.`,
+  };
+}
+
+/**
  * Convenience for the overwhelmingly common call site: a `Row` that wants a
  * `disabled` flag and a subtitle. `subtitle` is undefined when available, so it
  * can be spread over a row that has its own subtitle without clobbering it.

@@ -12,10 +12,15 @@
 // tombstones. The More hub disables the row when offline, and this screen still
 // reports the failure with a retry if it is reached another way.
 //
+// GUEST: gated HERE as well as on the More row that leads here. A guest has no
+// friends endpoint to call, so `load()` would be a guaranteed 401 on every open
+// — the More row is the only entry point today, but the gate belongs on the
+// screen so a second one (a deep link, a back-stack restore) can't reopen it.
+//
 // PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
 // `/friends/search` never return an email (root CLAUDE.md convention) and nothing
 // here would have somewhere to put one.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -39,10 +44,13 @@ import {
   type FriendRequest,
   type UserSearchResult,
 } from "../api/friends";
+import { useAccountState } from "../auth/AccountStateContext";
+import { capabilityScreenBlock } from "../auth/capabilities";
 import { canyonHue, fontSize, spacing, theme } from "../theme";
 import {
   BottomSheet,
   Button,
+  EmptyState,
   ErrorBanner,
   ErrorState,
   HeroHeader,
@@ -70,6 +78,11 @@ type FriendItem =
   | { kind: "request"; key: string; username: string; requestId: string };
 
 export function FriendsScreen({ onBack }: { onBack: () => void }) {
+  const { accountState } = useAccountState();
+  const guestBlock = useMemo(
+    () => capabilityScreenBlock("friends", accountState),
+    [accountState],
+  );
   const [friends, setFriends] = useState<Friend[] | null>(null);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -84,6 +97,7 @@ export function FriendsScreen({ onBack }: { onBack: () => void }) {
   }, []);
 
   const load = useCallback(async () => {
+    if (guestBlock) return;
     try {
       const [nextFriends, nextRequests] = await Promise.all([
         getFriends(),
@@ -98,7 +112,7 @@ export function FriendsScreen({ onBack }: { onBack: () => void }) {
       // refresh failure keeps the last-good lists on screen.
       setLoadError(messageFromError(err, "Couldn't load friends."));
     }
-  }, []);
+  }, [guestBlock]);
 
   useEffect(() => {
     void load();
@@ -154,6 +168,34 @@ export function FriendsScreen({ onBack }: { onBack: () => void }) {
     [runAction],
   );
 
+  // Stable identities so the memoised rows only re-render for a change that is
+  // actually theirs (DESIGN.md §9).
+  const acceptRequest = useCallback(
+    (item: FriendItem) => {
+      if (item.kind !== "request") return;
+      void runAction(
+        item.requestId,
+        () => acceptFriendRequest(item.requestId),
+        "Couldn't accept that request.",
+        `${item.username} is now a friend.`,
+      );
+    },
+    [runAction],
+  );
+  const openMenu = useCallback((item: FriendItem) => setMenuItem(item), []);
+  const keyExtractor = useCallback((item: FriendItem) => item.key, []);
+  const renderItem = useCallback(
+    ({ item }: { item: FriendItem }) => (
+      <FriendRow
+        item={item}
+        busy={busyId === (item.kind === "friend" ? item.friendshipId : item.requestId)}
+        onAccept={acceptRequest}
+        onMenu={openMenu}
+      />
+    ),
+    [acceptRequest, busyId, openMenu],
+  );
+
   const items = useMemo<FriendItem[]>(() => {
     const requestItems: FriendItem[] = requests.map((request) => ({
       kind: "request",
@@ -173,6 +215,17 @@ export function FriendsScreen({ onBack }: { onBack: () => void }) {
     return [...requestItems, ...friendItems];
   }, [bucket, friends, requests]);
 
+  // Before the loading branch: with the fetch gated off, `friends` stays null
+  // forever and a guest would otherwise sit on a spinner. The hero keeps the
+  // back affordance — a dead-end screen with no way out is worse than the gate.
+  if (guestBlock) {
+    return (
+      <View style={styles.root}>
+        <HeroHeader eyebrow="Friends" title="Friends" onBack={onBack} />
+        <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
+      </View>
+    );
+  }
   if (friends === null && loadError) {
     return <ErrorState message={loadError} onRetry={() => void load()} />;
   }
@@ -225,30 +278,11 @@ export function FriendsScreen({ onBack }: { onBack: () => void }) {
         style={styles.list}
         contentContainerStyle={styles.listContent}
         data={items}
-        keyExtractor={(item) => item.key}
+        keyExtractor={keyExtractor}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} />
         }
-        renderItem={({ item }) => (
-          <FriendRow
-            item={item}
-            busy={
-              busyId ===
-              (item.kind === "friend" ? item.friendshipId : item.requestId)
-            }
-            onAccept={() =>
-              item.kind === "request"
-                ? void runAction(
-                    item.requestId,
-                    () => acceptFriendRequest(item.requestId),
-                    "Couldn't accept that request.",
-                    `${item.username} is now a friend.`,
-                  )
-                : undefined
-            }
-            onMenu={() => setMenuItem(item)}
-          />
-        )}
+        renderItem={renderItem}
         ListEmptyComponent={
           <EmptyPanel bucket={bucket} onAdd={() => setAddOpen(true)} />
         }
@@ -324,8 +358,10 @@ export function FriendsScreen({ onBack }: { onBack: () => void }) {
  * One tap accepts, because that is the answer nearly every request gets; the
  * overflow carries the same accept plus decline, so "no" is never a mis-tap
  * away from "yes".
+ *
+ * Memoised, with callbacks that take the item rather than closing over it — §9.
  */
-function FriendRow({
+const FriendRow = memo(function FriendRow({
   item,
   busy,
   onAccept,
@@ -333,8 +369,8 @@ function FriendRow({
 }: {
   item: FriendItem;
   busy: boolean;
-  onAccept: () => void;
-  onMenu: () => void;
+  onAccept: (item: FriendItem) => void;
+  onMenu: (item: FriendItem) => void;
 }) {
   const request = item.kind === "request";
   return (
@@ -343,19 +379,24 @@ function FriendRow({
       hue={request ? canyonHue.shared : undefined}
       title={item.username}
       subtitle={request ? "Wants to be friends" : undefined}
-      onPress={onMenu}
+      onPress={() => onMenu(item)}
       right={
         busy ? (
           <ActivityIndicator color={theme.accent} />
         ) : request ? (
-          <Button label="Accept" variant="outlineAccent" compact onPress={onAccept} />
+          <Button
+            label="Accept"
+            variant="outlineAccent"
+            compact
+            onPress={() => onAccept(item)}
+          />
         ) : (
           <StatusPill label="Friend" tone="muted" />
         )
       }
     />
   );
-}
+});
 
 // Username search → send request. Already-friend / already-pending targets are
 // rejected server-side (409) and the message is worth showing. Sent targets are

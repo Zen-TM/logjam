@@ -14,7 +14,7 @@
 // appear (user-supplied text, allowed). Never a coordinate: `previewValue`
 // deliberately refuses to render latitude/longitude, which a canyon create op
 // carries (§11 — a list is what ends up in a screenshot).
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
 
 import { useConnectivity } from "../map/connectivity";
@@ -129,6 +129,15 @@ export function SyncIssuesScreen({ onBack }: { onBack: () => void }) {
     [load],
   );
 
+  // Stable identities so the memoised rows don't all re-render on an unrelated
+  // state change (DESIGN.md §9).
+  const openMenu = useCallback((item: Issue) => setMenuIssue(item), []);
+  const keyExtractor = useCallback((item: Issue) => item.key, []);
+  const renderItem = useCallback(
+    ({ item }: { item: Issue }) => <IssueRow item={item} onMenu={openMenu} />,
+    [openMenu],
+  );
+
   const items = useMemo<Issue[]>(() => {
     const parkedItems: Issue[] = parked.map((op) => ({
       kind: "parked",
@@ -198,10 +207,8 @@ export function SyncIssuesScreen({ onBack }: { onBack: () => void }) {
         style={styles.list}
         contentContainerStyle={styles.listContent}
         data={items}
-        keyExtractor={(item) => item.key}
-        renderItem={({ item }) => (
-          <IssueRow item={item} onMenu={() => setMenuIssue(item)} />
-        )}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         ListHeaderComponent={
           bucket === "shelved" && shelf.length > 0 ? (
             <Text style={styles.sectionHint}>
@@ -269,7 +276,15 @@ function issueTitle(issue: Issue): string {
   return shelfTitle(issue.entry);
 }
 
-function IssueRow({ item, onMenu }: { item: Issue; onMenu: () => void }) {
+// Memoised, with a callback that takes the item rather than closing over it —
+// DESIGN.md §9.
+const IssueRow = memo(function IssueRow({
+  item,
+  onMenu,
+}: {
+  item: Issue;
+  onMenu: (item: Issue) => void;
+}) {
   if (item.kind === "parked") {
     const dead = item.op.state === "deadRemote";
     return (
@@ -279,7 +294,7 @@ function IssueRow({ item, onMenu }: { item: Issue; onMenu: () => void }) {
         title={opTitle(item.op)}
         subtitle={opCause(item.op)}
         titleNumberOfLines={2}
-        onPress={onMenu}
+        onPress={() => onMenu(item)}
         right={<StatusPill label={dead ? "Gone" : "Rejected"} tone="warning" />}
       />
     );
@@ -289,11 +304,11 @@ function IssueRow({ item, onMenu }: { item: Issue; onMenu: () => void }) {
       icon="archive"
       title={shelfTitle(item.entry)}
       subtitle={`Kept: ${previewValue(item.entry.field, item.entry.serverValue)}`}
-      onPress={onMenu}
+      onPress={() => onMenu(item)}
       right={<StatusPill label="Shelved" tone="muted" />}
     />
   );
-}
+});
 
 function EmptyPanel({ bucket }: { bucket: Bucket }) {
   return (

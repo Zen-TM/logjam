@@ -438,7 +438,10 @@ from the other axes.
 **Radius:** `md` (8) for icon tiles and inline surfaces · `lg` (12) for content
 cards and rows · `xl` (16) for sheets and the hero's bottom corners · `pill`
 for everything text-shaped that isn't a card — buttons, chips, status pills,
-meters, badges. Do not introduce a fourth card radius.
+meters, badges. Do not introduce a fourth card radius. `sm` (4) exists for small
+DECORATIVE chips only — colour swatches and preview squares in Settings — and
+never for a content surface; a row, card or sheet reaching for it is the fourth
+card radius arriving under another name.
 
 **Depth (no shadows, no white-alpha overlays — everything from scheme tokens):**
 
@@ -482,7 +485,20 @@ because each was a bug once:
   `insets.bottom` so its surface runs to the physical bottom edge. A sheet that
   stops on the tab bar leaves a stripe of the wrong colour.
 - **The handle drags.** Down past ~120pt (or a flick) dismisses; less springs
-  back. A grab handle that ignores a grab is worse than no handle.
+  back. A grab handle that ignores a grab is worse than no handle. A TAP on it
+  does nothing on purpose: dragging is *discard*, and a stray tap on the top
+  edge of a half-filled form must not throw it away.
+- **The BACKDROP is the screen-reader dismiss, and the handle is hidden from
+  assistive tech.** A one-finger drag is a gesture TalkBack and VoiceOver claim
+  for their own navigation, so it never reaches the handle — the handle used to
+  announce itself as "Drag down to close", an instruction the user being given
+  it cannot carry out. It is now `accessibilityElementsHidden` /
+  `importantForAccessibility="no-hide-descendants"`, and the backdrop `Pressable`
+  carries `accessibilityRole="button"` with the label `Close <sheet title>`. That
+  makes every sheet in the app closable by a screen reader without relying on the
+  OS back gesture, and it means the sheet's title is load-bearing copy: it is
+  read aloud as part of the way out. Same rule as `ActivitySpark` in §7, read the
+  other way — don't announce an action that cannot be performed.
 - The sheet is **keyboard-aware** (`KeyboardAvoidingView`, and it drops its
   bottom safe-area inset while the keyboard is up — the keyboard already covers
   the nav bar, so keeping it leaves a dead band under the form). That makes a
@@ -679,6 +695,16 @@ user goes somewhere else — which is exactly what a background job is for.
 - **Destructive actions confirm in a dialog**, which carries the explanation.
   The sheet entry itself is just the verb ("Delete from device") — consequence
   copy in a menu row only ellipsises.
+- **The confirm copy for an entity is written ONCE, as a
+  `{ confirmTitle, confirmBody }` descriptor, and every surface offering the verb
+  reads it from there.** `saved/assetActions.ts` holds it for the saved kinds,
+  `canyons/canyonDeleteConfirm.ts` for a canyon (it takes the linked-trip count,
+  because that sentence is per-instance). This is the enforcement of the rule
+  above it: the canyon copy was duplicated byte-for-byte across the list and the
+  detail screen, and the map's waypoint sheet had *drifted* — it said only
+  "Delete this waypoint?" while Saved said the delete reaches every device on the
+  account and everyone the linked canyons are shared with. A second surface for
+  an existing verb imports the descriptor; it never retypes the sentence.
 - **A navigation row's subtitle is live STATE, never an explanation.** More's rows
   used to read "Notifications, shares and requests" and "Conflicts that need your
   attention" — copy that told the user nothing the title didn't. They now carry
@@ -895,13 +921,20 @@ picker for one date and for both ends of a range: the OS dialog can't be tinted
 to the scheme and would put two or three different-looking pickers on one
 screen. One themed surface, reused three times, no native dependency.
 
+**A second modal implementation is not a kit component.** `EntityEditForm` — a
+field-spec-driven `Modal` edit form, never installed anywhere — was deleted
+(2026-08-13) rather than kept "in case": sitting in the barrel, it offered a
+future screen author a 50/50 choice between it and the sheet-based forms every
+current screen uses, against §6's one-modal-surface rule. `CanyonEditSheet` and
+`TripEditSheet` are the worked examples of an entity form.
+
 The kit is presentation only. A shared component that owns permissions, file
 IO or outbox writes is a FEATURE component and lives with its feature
 (`src/media/MediaStrip.tsx`), even when two screens use it — otherwise `src/ui`
 slowly becomes the place everything shared goes.
 
 Current kit: `ActivitySpark` · `BottomSheet` · `Button` · `CapacityBar` ·
-`Card` · `Chip` · `ChipPicker` · `DatePicker` · `EntityEditForm` ·
+`Card` · `Chip` · `ChipPicker` · `DatePicker` ·
 `ErrorBanner` · `HeroHeader` · `IconButton` · `RangePills` · `Row` ·
 `Screen`/`ScreenScroll` · `ScreenStates` · `SectionHeader` ·
 `SegmentedControl` · `StatGrid` · `StatusPill` · `TextField` · `Toast` ·
@@ -958,6 +991,21 @@ worse than no chip; a *row* has a subtitle to explain itself, so rows stay.
 Never disable the way IN. The Account row and its screen are the one thing a
 guest most needs, so they stay live and change wording ("Create an account")
 rather than greying out.
+
+**A gated SCREEN gates itself, not only the row that leads to it.** Disabling
+the entry row is the affordance; it is not the guard. Friends and the Inbox
+fetched on mount with no account check of their own, so any second way in — a
+notification deep link, a share shortcut, a restored back stack — was one
+guaranteed 401 per open, which is a battery cost and a permanently red sync
+health line. A screen whose data needs an account reads `accountState` from
+`auth/AccountStateContext` (never the preference: that read wouldn't re-render
+when a guest links) and calls `capabilityScreenBlock` from
+`auth/capabilities.ts`, which is where the copy is spelled. Blocked, it renders
+the hero — the back affordance has to survive, or the gate is a trap — over an
+`EmptyState`, and every fetch behind it stays unfired. Only "needs an account"
+blocks a whole screen: a linked user offline keeps the screen and its own
+offline handling (the inbox has a cache, Friends reports the failure with a
+retry).
 
 | Guest can | Needs an account |
 |---|---|

@@ -17,9 +17,7 @@ import { assetHue, fontSize, spacing, theme } from "../theme";
 import { ChipPicker, Row, TextField, type ChipOption } from "../ui";
 import { useMirrorCanyons, useMirrorShareCounts } from "../sync/useSyncQueries";
 import type { MirrorWaypoint } from "../sync/mirrorStore";
-
-/** Beyond this the list is a scroll-hunt; the filter is the way through. */
-const VISIBLE_CANYONS = 40;
+import { linkableCanyons, truncationHint } from "./linkableCanyons";
 
 /**
  * The pinned header for a sub-mode: its explainer and any filter field.
@@ -110,15 +108,11 @@ export function WaypointCanyonsBody({
   const canyons = useMirrorCanyons();
   const shareCounts = useMirrorShareCounts();
 
-  const owned = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return (canyons.data ?? [])
-      // Only canyons the user OWNS can take a link — the API refuses the rest,
-      // so offering them would be a 400 waiting to happen.
-      .filter((canyon) => canyon.syncRole !== "shared")
-      .filter((canyon) => !needle || canyon.name.toLowerCase().includes(needle))
-      .slice(0, VISIBLE_CANYONS);
-  }, [canyons.data, query]);
+  const { visible: owned, hiddenCount } = useMemo(
+    () => linkableCanyons(canyons.data ?? [], query),
+    [canyons.data, query],
+  );
+  const truncated = truncationHint(owned.length, hiddenCount);
 
   const toggle = (canyonId: string, canyonName: string) => {
     const linked = waypoint.canyonIds.includes(canyonId);
@@ -150,21 +144,26 @@ export function WaypointCanyonsBody({
           {query ? "No canyon of yours matches that." : "You have no canyons yet."}
         </Text>
       ) : (
-        owned.map((canyon) => {
-          const linked = waypoint.canyonIds.includes(canyon.id);
-          return (
-            <Row
-              key={canyon.id}
-              title={canyon.name}
-              subtitle={
-                (shareCounts.data?.[canyon.id] ?? 0) > 0 ? "Shared" : undefined
-              }
-              icon={linked ? "check" : "map-pin"}
-              hue={linked ? theme.accent : assetHue.route}
-              onPress={() => toggle(canyon.id, canyon.name)}
-            />
-          );
-        })
+        <>
+          {owned.map((canyon) => {
+            const linked = waypoint.canyonIds.includes(canyon.id);
+            return (
+              <Row
+                key={canyon.id}
+                title={canyon.name}
+                subtitle={
+                  (shareCounts.data?.[canyon.id] ?? 0) > 0 ? "Shared" : undefined
+                }
+                icon={linked ? "check" : "map-pin"}
+                hue={linked ? theme.accent : assetHue.route}
+                onPress={() => toggle(canyon.id, canyon.name)}
+              />
+            );
+          })}
+          {/* The list is capped and has no scroll of its own, so it says when
+              it stopped short rather than just ending. */}
+          {truncated ? <Text style={styles.hint}>{truncated}</Text> : null}
+        </>
       )}
     </View>
   );

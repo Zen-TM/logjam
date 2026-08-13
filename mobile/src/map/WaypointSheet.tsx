@@ -31,6 +31,7 @@ import {
 import { assetHue, fontSize, spacing, theme } from "../theme";
 import { BottomSheet, RenameForm, Row, StatGrid, type Stat } from "../ui";
 import { deleteWaypointLocal, updateWaypointLocal } from "../sync/outbox";
+import { waypointActions } from "../saved/assetActions";
 import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
 import {
   WaypointCanyonFilter,
@@ -112,7 +113,12 @@ export function WaypointSheet({
   };
 
   const confirmDelete = () => {
-    Alert.alert(waypoint.name, "Delete this waypoint?", [
+    // The copy comes from the same descriptor the Saved tab's sheet uses
+    // (DESIGN.md §7): this surface used to say only "Delete this waypoint?",
+    // which left out that the delete reaches every device on the account and
+    // anyone the linked canyons are shared with.
+    const { confirmTitle, confirmBody } = waypointActions(waypoint).delete;
+    Alert.alert(confirmTitle, confirmBody, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",

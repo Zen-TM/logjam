@@ -51,7 +51,14 @@ export function TextField({
         multiline={multiline}
         {...inputProps}
       />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {/* Announced when it appears: a validation message that only exists on
+          screen is a message a screen-reader user has to go hunting for after
+          the fact. */}
+      {error ? (
+        <Text style={styles.error} accessibilityLiveRegion="polite">
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 }

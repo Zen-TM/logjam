@@ -89,6 +89,7 @@ import {
 import { formatTripDate } from "../logs/logbook";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { CanyonEditSheet } from "./CanyonEditSheet";
+import { canyonDeleteConfirm } from "./canyonDeleteConfirm";
 import { waypointSymbol } from "../map/waypointSymbol";
 import { CANYON_STATUS_META, canyonStatus } from "./canyonMeta";
 
@@ -233,17 +234,10 @@ export function CanyonDetailScreen({
   };
 
   const confirmDelete = () => {
+    const confirm = canyonDeleteConfirm(canyon.name, linkedTrips.length);
     Alert.alert(
-      `Delete ${canyon.name}?`,
-      [
-        "The canyon, its notes and its photos are removed from this device and from your account.",
-        linkedTrips.length > 0
-          ? `${linkedTrips.length} logged ${linkedTrips.length === 1 ? "trip" : "trips"} will stay, but lose the link to it.`
-          : null,
-        "This can't be undone.",
-      ]
-        .filter(Boolean)
-        .join(" "),
+      confirm.confirmTitle,
+      confirm.confirmBody,
       [
         { text: "Cancel", style: "cancel" },
         {

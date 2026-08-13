@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   capabilityRowProps,
+  capabilityScreenBlock,
   capabilityStatus,
   unavailableReasonText,
   type Capability,
@@ -70,6 +71,24 @@ describe("unavailableReasonText", () => {
   it("uses the canonical strings", () => {
     expect(unavailableReasonText("needs-account")).toBe("Needs an account");
     expect(unavailableReasonText("needs-connection")).toBe("Needs a connection");
+  });
+});
+
+describe("capabilityScreenBlock", () => {
+  it("blocks every gated screen for a guest, and names the reason canonically", () => {
+    for (const capability of ALL_CAPABILITIES) {
+      const block = capabilityScreenBlock(capability, "guest");
+      expect(block?.title).toBe("Needs an account");
+      expect(block?.hint).toBeTruthy();
+    }
+  });
+
+  // A linked user offline keeps the screen: the inbox has a cache and Friends
+  // reports the failure with a retry. Blocking them here would be a regression.
+  it("never blocks a linked user, connection-dependent or not", () => {
+    for (const capability of ALL_CAPABILITIES) {
+      expect(capabilityScreenBlock(capability, "linked")).toBeNull();
+    }
   });
 });
 

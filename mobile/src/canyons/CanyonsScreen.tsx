@@ -70,6 +70,7 @@ import {
 } from "../ui";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { CanyonEditSheet } from "./CanyonEditSheet";
+import { canyonDeleteConfirm } from "./canyonDeleteConfirm";
 import { CanyonFilterSheet, sortLabel } from "./CanyonFilterSheet";
 import {
   publishVisibleCanyons,
@@ -291,18 +292,10 @@ export function CanyonsScreen({
   const confirmDelete = useCallback(
     (canyon: MirrorCanyon) => {
       setMenuCanyonId(null);
-      const linked = tripCounts.get(canyon.id) ?? 0;
+      const confirm = canyonDeleteConfirm(canyon.name, tripCounts.get(canyon.id) ?? 0);
       Alert.alert(
-        `Delete ${canyon.name}?`,
-        [
-          "The canyon, its notes and its photos are removed from this device and from your account.",
-          linked > 0
-            ? `${linked} logged ${linked === 1 ? "trip" : "trips"} will stay, but lose the link to it.`
-            : null,
-          "This can't be undone.",
-        ]
-          .filter(Boolean)
-          .join(" "),
+        confirm.confirmTitle,
+        confirm.confirmBody,
         [
           { text: "Cancel", style: "cancel" },
           {

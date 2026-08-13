@@ -189,7 +189,16 @@ export function BottomSheet({
       onRequestClose={onClose}
     >
       <Animated.View style={[styles.backdrop, { opacity: progress }]}>
-        <Pressable style={styles.backdropPress} onPress={onClose} />
+        {/* The screen-reader dismiss. A one-finger drag is a gesture TalkBack
+            and VoiceOver claim for their own navigation, so the handle below is
+            not operable by either — this labelled Pressable is, and it is the
+            only announced way out of a sheet apart from the OS back gesture. */}
+        <Pressable
+          style={styles.backdropPress}
+          accessibilityRole="button"
+          accessibilityLabel={`Close ${title}`}
+          onPress={onClose}
+        />
       </Animated.View>
       {/* Keyboard-aware: a sheet containing a TextInput must ride above the
           keyboard, or the field it exists to expose is the one thing hidden.
@@ -213,10 +222,15 @@ export function BottomSheet({
             },
           ]}
         >
+          {/* Hidden from assistive tech rather than labelled: it used to
+              announce "Drag down to close", which is an instruction a screen
+              reader cannot carry out — the one-finger drag never reaches this
+              view. Announcing an action that cannot be performed is worse than
+              announcing nothing; the backdrop above carries the real one. */}
           <View
             style={styles.handleHit}
-            accessibilityRole="adjustable"
-            accessibilityLabel="Drag down to close"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
             {...handlePan.panHandlers}
           >
             <View style={styles.handle} />
