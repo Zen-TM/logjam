@@ -80,3 +80,13 @@ export function resolveTrueHeading(sample: {
     (((sample.magHeading + NSW_MAGNETIC_DECLINATION_DEG) % 360) + 360) % 360
   );
 }
+
+/**
+ * A bearing folded into 0..360, so "is the map facing north" is a single
+ * comparison. A non-finite input reads as north rather than propagating NaN
+ * into a camera stop, which MapLibre answers by not moving at all.
+ */
+export function normalizeBearing(heading: number): number {
+  if (!Number.isFinite(heading)) return 0;
+  return ((heading % 360) + 360) % 360;
+}

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveTrueHeading, shortestAngleDelta, smoothHeading } from "./heading";
+import {
+  normalizeBearing,
+  resolveTrueHeading,
+  shortestAngleDelta,
+  smoothHeading,
+} from "./heading";
 
 describe("shortestAngleDelta", () => {
   it("takes the short way across north", () => {
@@ -74,5 +79,19 @@ describe("resolveTrueHeading", () => {
 
   it("returns null when the device has no usable heading at all", () => {
     expect(resolveTrueHeading({ trueHeading: -1, magHeading: -1 })).toBeNull();
+  });
+});
+
+describe("normalizeBearing", () => {
+  it("folds any bearing into 0..360", () => {
+    expect(normalizeBearing(0)).toBe(0);
+    expect(normalizeBearing(370)).toBe(10);
+    expect(normalizeBearing(-10)).toBe(350);
+    expect(normalizeBearing(-370)).toBe(350);
+  });
+
+  it("reads a non-finite bearing as north rather than poisoning a camera stop", () => {
+    expect(normalizeBearing(NaN)).toBe(0);
+    expect(normalizeBearing(Infinity)).toBe(0);
   });
 });
