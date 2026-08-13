@@ -206,7 +206,9 @@ export function useSyncIssueCount(): number {
         .then((n) => {
           if (!cancelled) setCount(n);
         })
-        .catch(() => {});
+        // Not best-effort cleanup: a failure here is a local SQLite read that
+        // broke, and the badge silently freezing is the only symptom.
+        .catch(console.error);
     };
     refresh();
     const unsubscribe = onMirrorChanged(refresh);

@@ -102,7 +102,9 @@ function useNotifications(blocked: boolean): NotificationsState {
     const unsubscribe = onMirrorChanged(() => {
       readNotificationsCache()
         .then((cache) => cache && setNotifications(cache.notifications))
-        .catch(() => {});
+        // A failed cache read leaves a stale list on screen; say so somewhere
+        // rather than losing the only trace of it.
+        .catch(console.error);
     });
     return unsubscribe;
   }, [blocked]);
