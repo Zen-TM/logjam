@@ -15,10 +15,10 @@ import { AppState } from "react-native";
 import { ApiError, type OfflineBasemapId, type RegionBbox } from "@logjam/shared";
 
 import { subscribeReconnect } from "../map/connectivity";
-import type { PausedReason } from "./downloadMachine";
 import {
   connectionAllows,
   runRegionDownload,
+  type PausedReason,
   type RegionCancelToken,
   type RegionFailureCode,
   type RegionJobProgress,
@@ -237,7 +237,7 @@ async function runProtomapsClip(
   }
   try {
     const artifact = await downloadProtomapsRegion(
-      spec.bbox,
+      { id: spec.id, label: spec.label, bbox: spec.bbox, zMax: spec.zMax },
       (progress) =>
         onProgress({
           tilesDone: 0,
@@ -247,7 +247,6 @@ async function runProtomapsClip(
           bytesDone: progress.bytesDone,
           bytesTotal: progress.bytesTotal,
         }),
-      spec.zMax,
     );
     // A clip is one request: there is no mid-flight stop, so a cancel that
     // arrives while it runs is honoured by undoing it.
@@ -329,9 +328,17 @@ export async function cancelAllRegionDownloads(): Promise<void> {
   publish();
 }
 
+/**
+ * Clean up after a job cancelled before it ever ran. Both task kinds use the
+ * job's own id for their file now, so this covers either: the tile pyramid's
+ * `<id>.mbtiles` (plus WAL sidecars) and the clip's `<id>.pmtiles` with its
+ * registry row, if one somehow landed. Both are no-ops when nothing is there.
+ */
 async function deleteAbandonedRegion(id: string): Promise<void> {
   const { deleteRegionFile } = await import("./regionMbtiles");
+  const { deleteDownloadedArtifact } = await import("./regionDownloads");
   await deleteRegionFile(id);
+  await deleteDownloadedArtifact(id);
 }
 
 export type { OfflineBasemapId };

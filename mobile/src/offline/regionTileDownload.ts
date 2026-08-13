@@ -32,8 +32,8 @@ import {
 } from "@logjam/shared";
 
 import type { MapArtifact } from "../map/sourceResolver";
+import { connectionAllowsMetered } from "./networkPolicy";
 import { insertArtifact } from "./registryDb";
-import type { PausedReason } from "./downloadMachine";
 import {
   classifyTileResponse,
   deadTileBudget,
@@ -56,6 +56,21 @@ import {
   type RegionBuildState,
   type RegionTile,
 } from "./regionMbtiles";
+
+/**
+ * Why a job stopped without failing. `user` and `provider-backoff` are the two
+ * nobody else may overturn — see `resumeJobsPausedBy` in the queue.
+ *
+ * (It used to live in `downloadMachine.ts`, a state machine from the original
+ * plan that nothing ever installed: the queue shipped with its own state union
+ * and the SIXMaps engine landed with a third. The machine and its 97-line test
+ * suite are deleted; this type was the only part of the file with a consumer.)
+ */
+export type PausedReason =
+  | "user"
+  | "connectivity"
+  | "background"
+  | "provider-backoff";
 
 export type RegionJobSpec = {
   /** uuid — also the MBTiles filename, and the artifact id on success. */
@@ -152,11 +167,16 @@ class TokenBucket {
   }
 }
 
+/**
+ * Region downloads answer to the same metered rule as every other job
+ * (`networkPolicy.ts`), not to `type === "wifi"`: a tethered hotspot is Wi-Fi by
+ * type and mobile data by cost, and this is the largest data cost in the app.
+ * The per-job opt-in (§5.6) takes the place of the stored preference.
+ */
 export async function connectionAllows(allowCellular: boolean): Promise<boolean> {
   const state = await NetInfo.fetch();
   if (state.isConnected !== true) return false;
-  if (allowCellular) return true;
-  return state.type === "wifi" || state.type === "ethernet";
+  return connectionAllowsMetered(state, allowCellular);
 }
 
 // ── The engine ───────────────────────────────────────────────────────────────

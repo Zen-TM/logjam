@@ -42,9 +42,7 @@ import { WIPED_DIRS } from "./localStores";
 import { cancelAllRegionDownloads } from "./regionDownloadQueue";
 import { getOfflineDb, notifyRegistryChanged } from "./registryDb";
 
-/** Every table in `logjam-offline.db`. `region_download` is dead schema (see
- * mobile/CLAUDE.md) but is cleared anyway — it costs one statement and leaving
- * a known-unused table out of a privacy wipe is how it comes back to bite. */
+/** Every table in `logjam-offline.db`. */
 const OFFLINE_TABLES = [
   "map_artifact",
   "vector_import",
@@ -53,7 +51,6 @@ const OFFLINE_TABLES = [
   "track",
   "waypoint",
   "overlay_enabled",
-  "region_download",
   // An unfinished route draft is coordinates through a canyon — the most
   // sensitive shape of data this app holds.
   "route_draft",

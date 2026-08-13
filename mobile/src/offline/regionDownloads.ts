@@ -12,19 +12,10 @@ import { apiFetch, getAuthedRequestHeaders } from "../api/apiFetch";
 import { config } from "../config";
 import type { MapArtifact } from "../map/sourceResolver";
 import { insertArtifact, deleteArtifact } from "./registryDb";
+import { assertSpaceFor } from "./freeSpace";
 import { REGION_DIR } from "./localStores";
 
 const PMTILES_MAGIC = "PMTiles";
-
-function randomId(): string {
-  // uuid-shaped id from the polyfilled crypto.getRandomValues (index.ts).
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
 
 export type RegionClipResponse = {
   token: string;
@@ -43,23 +34,40 @@ export type RegionDownloadProgress = {
  * partial file registered.
  */
 export async function downloadProtomapsRegion(
-  bbox: { west: number; south: number; east: number; north: number },
-  onProgress?: (progress: RegionDownloadProgress) => void,
   /**
-   * Detail ceiling, so the download screen's detail rail means the same thing
-   * for the vector basemap as for the raster ones. Clamped server-side to the
-   * archive's own z15.
+   * The QUEUE's job, id and label included. This used to mint its own id and
+   * take no label at all: the Saved list then showed the clip as "Offline map
+   * region" instead of the name the download screen had composed, and cancelling
+   * a still-QUEUED clip job asked `deleteAbandonedRegion(spec.id)` to delete a
+   * `<spec.id>.mbtiles` that could never exist under that id. One id, both ends.
    */
-  maxzoom?: number,
+  spec: {
+    id: string;
+    label: string;
+    bbox: { west: number; south: number; east: number; north: number };
+    /**
+     * Detail ceiling, so the download screen's detail rail means the same thing
+     * for the vector basemap as for the raster ones. Clamped server-side to the
+     * archive's own z15.
+     */
+    zMax?: number;
+  },
+  onProgress?: (progress: RegionDownloadProgress) => void,
 ): Promise<MapArtifact> {
+  const { bbox, id } = spec;
+  const maxzoom = spec.zMax;
   const clip = await apiFetch<RegionClipResponse>("/basemap/region-clip", {
     method: "POST",
     body: maxzoom != null ? { ...bbox, maxzoom } : bbox,
   });
 
+  // The server has now told us exactly how big this is (up to 80 MB), and this
+  // is the last moment the answer is free. Without it a full phone failed
+  // mid-write and reported "That didn't finish. Try again."
+  await assertSpaceFor(clip.sizeBytes);
+
   const dir = REGION_DIR;
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-  const id = randomId();
   const fileUri = `${dir}${id}.pmtiles`;
 
   try {
@@ -108,6 +116,7 @@ export async function downloadProtomapsRegion(
       maxzoom: Math.min(maxzoom ?? 15, 15),
       sizeBytes: clip.sizeBytes,
       downloadedAt: new Date().toISOString(),
+      label: spec.label,
     };
     await insertArtifact(artifact);
     return artifact;

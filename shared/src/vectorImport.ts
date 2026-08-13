@@ -42,6 +42,9 @@ export const IMPORT_ERRORS = {
   invalidCoordinates: "File contains invalid coordinates",
   noFeatures: "No mappable features found in the file",
   tooManyPositions: "File has too many points to import",
+  // Checked before the file is read, not after: the whole file goes into one JS
+  // string, so "too big" has to be answerable from a stat.
+  tooLarge: "File is too large to import",
   unsupportedExtension: "Unsupported file type — use GPX, KML, or GeoJSON",
 } as const;
 

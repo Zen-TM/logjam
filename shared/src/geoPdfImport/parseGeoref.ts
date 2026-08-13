@@ -80,7 +80,9 @@ export type GeoPdfParseErrorCode =
   | "NO_GEOREF"
   | "LGIDICT_ONLY"
   | "MALFORMED_GEOREF"
-  | "UNSUPPORTED_CRS";
+  | "UNSUPPORTED_CRS"
+  /** The plan wants more tiles than one import may render — see MAX_GEOPDF_TILES. */
+  | "TOO_MANY_TILES";
 
 export class GeoPdfParseError extends Error {
   code: GeoPdfParseErrorCode;

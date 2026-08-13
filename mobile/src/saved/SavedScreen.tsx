@@ -48,7 +48,7 @@ import {
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
-import { formatBytes } from "../format";
+import { formatBytes, formatMinutes } from "../format";
 import { getGeoPdfJob, listGeoPdfJobs, type GeoPdfJobView } from "../api/geoPdfJobs";
 import { useApiQuery } from "../api/queries";
 import {
@@ -1044,11 +1044,20 @@ export function SavedScreen({
         {importRun ? (
           <Row
             title={importRun.label}
-            subtitle={
+            subtitle={[
+              GEOPDF_PHASE_LABEL[importRun.phase],
               importRun.fraction != null
-                ? `${GEOPDF_PHASE_LABEL[importRun.phase]} · ${Math.round(importRun.fraction * 100)}%`
-                : GEOPDF_PHASE_LABEL[importRun.phase]
-            }
+                ? `${Math.round(importRun.fraction * 100)}%`
+                : null,
+              // What the run is going to cost, as soon as planning knows —
+              // a GeoPDF import is minutes of rendering and used to quote no
+              // number at all before starting them.
+              importRun.estimate
+                ? `${importRun.estimate.tiles.toLocaleString()} tiles · ${formatMinutes(importRun.estimate.seconds)}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
             icon="file-text"
             hue={assetHue.geoPdf}
             progress={importRun.fraction ?? 0}

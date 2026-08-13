@@ -17,3 +17,17 @@ export function formatBytes(bytes: number): string {
   if (bytes <= 0) return "0 KB";
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
+
+/**
+ * "How long will this take", in the words the download screen has always used.
+ * Lives here because the GeoPDF import now quotes a duration too, and two
+ * surfaces phrasing the same wait differently is how a user learns to distrust
+ * both numbers.
+ */
+export function formatMinutes(seconds: number): string {
+  if (seconds < 90) return "under a minute";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `about ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  return `about ${hours} h ${minutes % 60} min`;
+}

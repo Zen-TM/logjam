@@ -137,23 +137,11 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
           editingRouteId TEXT,
           savedAt        TEXT NOT NULL
         );
-        CREATE TABLE IF NOT EXISTS region_download (
-          id            TEXT PRIMARY KEY,
-          taskKind      TEXT NOT NULL,
-          basemapId     TEXT NOT NULL,
-          west REAL NOT NULL, south REAL NOT NULL,
-          east REAL NOT NULL, north REAL NOT NULL,
-          minzoom INTEGER NOT NULL, maxzoom INTEGER NOT NULL,
-          state         TEXT NOT NULL,
-          pausedReason  TEXT,
-          tilesPlanned  INTEGER, tilesDone INTEGER, tilesGap INTEGER,
-          bytesDone     INTEGER,
-          allowCellular INTEGER NOT NULL DEFAULT 0,
-          errorCode     TEXT,
-          filePath      TEXT NOT NULL,
-          createdAt     TEXT NOT NULL,
-          updatedAt     TEXT NOT NULL
-        );
+        -- (There was a region_download progress table here, from the original
+        -- plan. Nothing ever wrote to it: the file IS the checkpoint, and
+        -- unfinished downloads are discovered by reading the region directory.
+        -- Dropped rather than left as schema nobody can explain.)
+        DROP TABLE IF EXISTS region_download;
       `);
       await addMissingColumns(db);
       return db;

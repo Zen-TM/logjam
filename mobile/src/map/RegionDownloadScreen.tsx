@@ -36,9 +36,7 @@ import {
   type RegionBbox,
 } from "@logjam/shared";
 
-import * as FileSystem from "expo-file-system";
-
-import { formatBytes } from "../format";
+import { formatBytes, formatMinutes } from "../format";
 import { useAccountState } from "../auth/AccountStateContext";
 import { fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
 import {
@@ -52,6 +50,8 @@ import {
   Toggle,
 } from "../ui";
 import { enqueueRegionDownloads } from "../offline/regionDownloadQueue";
+import { isExpensive } from "../offline/networkPolicy";
+import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { buildShellStyle } from "./basemap/shellStyle";
 import { BASEMAP_META } from "./basemapMeta";
@@ -140,14 +140,6 @@ const HERO_OVERLAP = 16;
  */
 const MIN_TOP_INSET = HERO_OVERLAP + 22;
 
-function formatMinutes(seconds: number): string {
-  if (seconds < 90) return "under a minute";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `about ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  return `about ${hours} h ${minutes % 60} min`;
-}
-
 export function RegionDownloadScreen({
   onBack,
   onStarted,
@@ -200,7 +192,11 @@ export function RegionDownloadScreen({
   );
   const [detailZoom, setDetailZoom] = useState(DEFAULT_DETAIL_ZOOM);
   const [allowCellular, setAllowCellular] = useState(false);
-  const [onCellular, setOnCellular] = useState(false);
+  // "Is this connection going to cost them?" — the platform's own answer, the
+  // same one networkPolicy.ts asks. `type === "cellular"` hid the toggle
+  // entirely on a metered hotspot, which is precisely the connection it exists
+  // to protect.
+  const [onMetered, setOnMetered] = useState(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [frame, setFrame] = useState<FrameInsets | null>(null);
   const [viewport, setViewport] = useState<FrameViewport | null>(null);
@@ -223,7 +219,7 @@ export function RegionDownloadScreen({
 
   useEffect(() => {
     NetInfo.fetch()
-      .then((state) => setOnCellular(state.type === "cellular"))
+      .then((state) => setOnMetered(isExpensive(state)))
       .catch(console.error);
   }, []);
 
@@ -335,7 +331,7 @@ export function RegionDownloadScreen({
 
   const handleSave = useCallback(() => {
     if (!bbox || !job) return;
-    if (onCellular && !allowCellular) {
+    if (onMetered && !allowCellular) {
       Alert.alert(
         "You're on mobile data",
         "Turn on “Use mobile data” to download without Wi-Fi.",
@@ -347,26 +343,24 @@ export function RegionDownloadScreen({
     // and the job reports "That didn't finish. Try again." — no hint that the
     // phone is full, and nothing reclaimed. Check before starting; the p90 is
     // what actually lands, so that is what has to fit.
+    //
+    // This covers the RASTER pyramids only — `p90Bytes` has no entry for the
+    // vector clip, whose size the server reports at request time. That one is
+    // checked inside `downloadProtomapsRegion`, through the same helper.
     setBusy(true);
     void (async () => {
       try {
-        const freeBytes = await FileSystem.getFreeDiskStorageAsync().catch(
-          () => null,
-        );
-        if (freeBytes != null && job.p90Bytes > freeBytes * 0.9) {
-          Alert.alert(
-            "Not enough space",
-            `This needs about ${formatBytes(job.p90Bytes)} and the phone has ${formatBytes(freeBytes)} free. Free some space, or pick fewer maps.`,
-          );
-          return;
-        }
+        await assertSpaceFor(job.p90Bytes);
         startDownloads();
         onStarted();
+      } catch (err) {
+        if (!(err instanceof NotEnoughSpaceError)) throw err;
+        Alert.alert("Not enough space", `${err.message} Or pick fewer maps.`);
       } finally {
         setBusy(false);
       }
     })();
-  }, [bbox, job, onCellular, allowCellular, onStarted, startDownloads]);
+  }, [bbox, job, onMetered, allowCellular, onStarted, startDownloads]);
 
   return (
     <View style={styles.root}>
@@ -517,12 +511,14 @@ export function RegionDownloadScreen({
           />
         </View>
 
-        {onCellular ? (
+        {onMetered ? (
           <Row
             icon="wifi-off"
             hue={theme.warning}
             title="Use mobile data"
-            subtitle="Downloads wait for Wi-Fi otherwise"
+            // Says "this connection", not "Wi-Fi": the row now appears on a
+            // metered hotspot too, which IS Wi-Fi and still costs money.
+            subtitle="This connection charges for data — downloads wait otherwise"
             right={
               <Toggle
                 value={allowCellular}

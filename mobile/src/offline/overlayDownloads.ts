@@ -19,6 +19,7 @@ import type { TopoLayerFormat, TopoLayerKey } from "@logjam/shared";
 
 import type { MapArtifact } from "../map/sourceResolver";
 import { insertArtifact } from "./registryDb";
+import { assertSpaceFor, hasSpaceFor } from "./freeSpace";
 import { OVERLAY_DIR } from "./localStores";
 
 const PMTILES_MAGIC = "PMTiles";
@@ -59,6 +60,13 @@ export async function downloadTopoOverlay(
   const fileUri = `${dir}${id}.pmtiles`;
 
   let expectedBytes = 0;
+  // An overlay bundle's size is only knowable from the transfer itself (the
+  // presigned URL is signed for GET, so a HEAD would fail the signature). So
+  // the check rides the first progress tick and cancels the download rather
+  // than filling the phone: this writer, and both auto-downloaders behind it,
+  // had no space check at all and simply wrote until SQLite failed.
+  let spaceChecked = false;
+  let outOfSpace = false;
   try {
     // Presigned URL: auth lives in the query string — adding an Authorization
     // header would make S3 reject the request (two auth mechanisms).
@@ -68,6 +76,14 @@ export async function downloadTopoOverlay(
       {},
       (p: FileSystem.DownloadProgressData) => {
         expectedBytes = p.totalBytesExpectedToWrite;
+        if (!spaceChecked && expectedBytes > 0) {
+          spaceChecked = true;
+          void hasSpaceFor(expectedBytes).then((fits) => {
+            if (fits) return;
+            outOfSpace = true;
+            void resumable.cancelAsync().catch(() => {});
+          });
+        }
         onProgress?.({
           bytesDone: p.totalBytesWritten,
           bytesTotal: Math.max(0, p.totalBytesExpectedToWrite),
@@ -75,6 +91,10 @@ export async function downloadTopoOverlay(
       },
     );
     const result = await resumable.downloadAsync();
+    if (outOfSpace) {
+      // Re-asked so the message carries the real numbers; it always throws here.
+      await assertSpaceFor(expectedBytes);
+    }
     if (!result || result.status !== 200) {
       throw new Error(`Overlay download failed (HTTP ${result?.status ?? "?"})`);
     }

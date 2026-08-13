@@ -49,6 +49,38 @@ export function setMeteredAllowed(job: MeteredJob, allowed: boolean): boolean {
   return writePref(KEYS[job], allowed ? "on" : "off");
 }
 
+/** The shape of a NetInfo state this module's rule actually reads. */
+export type ConnectionState = {
+  isConnected?: boolean | null;
+  type?: string;
+  details?: unknown;
+};
+
+/** True when the platform says this connection costs the user money. */
+export function isExpensive(state: ConnectionState): boolean {
+  const details = state.details as { isConnectionExpensive?: boolean } | null;
+  return details?.isConnectionExpensive === true;
+}
+
+/**
+ * THE RULE, as a pure function of the state — the one every metered job asks.
+ *
+ * It is a function rather than four copies of the same `if` because it was four
+ * copies of the same `if` and one of them said something else: the region
+ * downloader — the single largest data cost in the app — gated on
+ * `type === "wifi"`, so a metered hotspot (Wi-Fi by type, mobile data by cost)
+ * downloaded tens of megabytes at full pace with the "Use mobile data" toggle
+ * never even shown.
+ */
+export function connectionAllowsMetered(
+  state: ConnectionState,
+  allowMetered: boolean,
+): boolean {
+  if (state.isConnected === false) return false;
+  if (allowMetered) return true;
+  return !isExpensive(state);
+}
+
 /**
  * May this job use the connection the phone is on right now?
  *
@@ -59,11 +91,7 @@ export function setMeteredAllowed(job: MeteredJob, allowed: boolean): boolean {
  */
 export async function canRunNow(job: MeteredJob): Promise<boolean> {
   try {
-    const state = await NetInfo.fetch();
-    if (state.isConnected === false) return false;
-    if (isMeteredAllowed(job)) return true;
-    const details = state.details as { isConnectionExpensive?: boolean } | null;
-    return details?.isConnectionExpensive !== true;
+    return connectionAllowsMetered(await NetInfo.fetch(), isMeteredAllowed(job));
   } catch (err) {
     console.error(err);
     return false;

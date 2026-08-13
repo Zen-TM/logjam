@@ -23,6 +23,8 @@ import { AppState } from "react-native";
 
 import type { ToastMessage } from "../ui/Toast";
 import type { GeoPdfImportState } from "./geoPdfImportsDb";
+import type { GeoPdfImportEstimate } from "@logjam/shared/dist/geoPdfImport/tilePlan.js";
+
 import {
   GEOPDF_ERRORS,
   type GeoPdfCancelToken,
@@ -37,6 +39,8 @@ export type GeoPdfImportRun = {
   fraction: number | null;
   /** Registry row id once it exists — null through hashing and copying. */
   importId: string | null;
+  /** What the run is going to cost, once planning has said. Null before that. */
+  estimate: GeoPdfImportEstimate | null;
 };
 
 /**
@@ -58,12 +62,22 @@ export const GEOPDF_PHASE_LABEL: Record<GeoPdfImportState, string> = {
 };
 
 /**
- * Phases where cancelling actually does something. The token is only read
- * between rasteriser batches, so a Cancel offered during the front phases would
- * be a button that ignores you — they are short, and they end in a phase that
- * listens.
+ * Phases where cancelling actually does something.
+ *
+ * It used to be the two rasteriser phases only, because the token was read
+ * between batches and nowhere else — so a large sheet's parse, plan and copy
+ * (the front half, which on a big file is the part that looks hung) offered a
+ * button that ignored you. The pipeline now checks the token at each front-phase
+ * boundary too. `hashing` stays out: it is a single native call with nothing to
+ * interrupt inside it.
  */
-export const CANCELLABLE_PHASES: GeoPdfImportState[] = ["rasterising", "overviews"];
+export const CANCELLABLE_PHASES: GeoPdfImportState[] = [
+  "copying",
+  "parsing",
+  "planning",
+  "rasterising",
+  "overviews",
+];
 
 let current: (GeoPdfImportRun & { token: GeoPdfCancelToken }) | null = null;
 /** Resolves when the run in `current` has finished unwinding — what an
@@ -150,7 +164,14 @@ export async function runGeoPdfImport(
     return null;
   }
   const token: GeoPdfCancelToken = { cancelled: false };
-  current = { label, phase: "hashing", fraction: null, importId: null, token };
+  current = {
+    label,
+    phase: "hashing",
+    fraction: null,
+    importId: null,
+    estimate: null,
+    token,
+  };
   let markSettled = (): void => {};
   currentSettled = new Promise<void>((resolve) => {
     markSettled = resolve;
@@ -197,6 +218,7 @@ export async function runGeoPdfImport(
       phase: progress.phase,
       fraction: measurable ? progress.fraction : null,
       importId: progress.importId ?? current.importId,
+      estimate: progress.estimate ?? current.estimate,
       // The picker can't name the file until the user has chosen one, so the
       // card opens on whatever the caller guessed and takes the real name here.
       label: progress.label ?? current.label,

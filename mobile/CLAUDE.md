@@ -133,7 +133,29 @@ not disguise — do not "optimise" the pace.
 (plan hash + the 404 gap list) and is never registered as usable; resume diffs the
 plan against the tiles present, and unfinished downloads are discovered by reading
 the region directory (`listUnfinishedRegions`), not from a progress table. The
-`region_download` table in `registryDb.ts` is from the original plan and is unused.
+`region_download` table and `downloadMachine.ts` were the original plan's version
+of this and were **deleted** (2026-08-13): nothing ever installed either — the
+queue shipped its own `RegionJobState` union and `PausedReason` now lives in
+`regionTileDownload.ts`. Don't reintroduce a progress table.
+
+**Metered means expensive, not cellular.** Region downloads answer to the same
+rule as every other metered job — `connectionAllowsMetered` in
+`networkPolicy.ts`, which reads the platform's `isConnectionExpensive`. A
+tethered hotspot is Wi-Fi by type and mobile data by cost. The download screen's
+"Use mobile data" row appears on the same answer.
+
+**Nothing large is written without asking whether it fits.** `assertSpaceFor` /
+`hasSpaceFor` (`offline/freeSpace.ts`) gate the region clip (after the POST
+reports its size), the overlay bundle (from the first progress tick — a presigned
+GET URL can't be HEADed), the GeoPDF pyramid (from its plan estimate) and, via
+those, both auto-downloaders. There is still **no eviction** anywhere: nothing
+reclaims an artifact by age or pressure, which is why the precheck matters.
+
+**Pause is a tile-pyramid affordance only** (`offline/regionJobStatus.ts`). The
+clip is one `expo-file-system` transfer with no mid-flight stop. The same file
+owns the progress screen's Done gate: a job paused by `user` or
+`provider-backoff` is *settled* (nothing auto-resumes those, by design) even
+though it is not *finished*, so the screen is not a dead end.
 
 **The offline map is drawn to its own edges.** With "Offline maps only" on (or no
 signal), `src/map/offlineMask.ts` fills everywhere outside the downloaded regions
@@ -176,6 +198,27 @@ side over real files asserting every offset matches. **Never profile this
 pipeline in Node and believe the number**; the import logs its own phase
 timings and the worst JS-thread stall it caused, once per run, and that log is
 the measurement that counts.
+
+**Guards come before the expensive step, not after.** Every incoming file is
+staged through `imports/stagedFile.ts`, which stats it and refuses it BEFORE the
+copy (the 300 MB GeoPDF cap used to be checked after a full copy into
+app-private storage, and the vector cap existed only in the picker path while
+the share sheet read the whole file into one JS string). The GeoPDF ceiling is
+**64 MB**, not 300: `parseSourcePdf` is the surviving whole-file read and an
+Android app heap is 256-512 MB, so a higher cap only bought an OOM kill.
+`buildTilePlan` caps the plan at `MAX_GEOPDF_TILES` by stepping zMax down, and
+`estimateGeoPdfImport` prices the run before the first tile.
+
+**A resume must describe the same plan.** `resumableFrom` (shared, beside the
+planner) compares `GEOPDF_PARSER_VERSION`, `zMax` and `plan.tiles.length` before
+honouring a checkpoint's cursor — zMax alone let a planner change replay half of
+a *different* tile list and register the holed map as ready. **Bump
+`GEOPDF_PARSER_VERSION` whenever anything in `tilePlan.ts` moves the tile list.**
+
+**The registry row is written before the file.** `imports/geopdf/<sha>/` is
+created after `insertGeoPdfImport`, so a kill mid-copy leaves a row with no file
+(which the resume path reports and the user can discard) rather than a full-size
+orphan PDF nothing sweeps.
 
 Every entry point (picker, account GeoPDF, share sheet, Wi-Fi auto-download)
 goes through `runGeoPdfImport` in `src/geopdf/importRunner.ts`, which is also

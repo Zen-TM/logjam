@@ -8,6 +8,7 @@
 // generic transport messages; never file content.
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
+import { File } from "expo-file-system/next";
 import { unzipSync } from "fflate";
 
 import { parseVectorImport, IMPORT_ERRORS } from "@logjam/shared";
@@ -18,6 +19,7 @@ import {
   type VectorImport,
 } from "./importsDb";
 import { IMPORTS_DIR } from "../offline/localStores";
+import { stageIncomingFile } from "./stagedFile";
 
 // A phone-realistic ceiling; the parser's MAX_IMPORT_POSITIONS is the real
 // complexity guard, this just refuses to read absurd files into memory.
@@ -48,13 +50,18 @@ export function randomId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-/** KMZ = zip with a KML inside (canonically doc.kml). Returns the KML text. */
-function kmlFromKmz(base64: string): { fileName: string; text: string } {
+/**
+ * KMZ = zip with a KML inside (canonically doc.kml). Returns the KML text.
+ *
+ * Takes BYTES, not base64. It used to read the file as a base64 string and
+ * decode it with `for (i…) bytes[i] = binary.charCodeAt(i)` — the per-byte JS
+ * loop the GeoPDF work was written to eliminate. Hermes has no JIT, so that
+ * costs ~70× what it profiles at on a laptop: a 20 MB KMZ froze the UI thread
+ * for seconds with nothing on screen. `new File(uri).bytes()` is native.
+ */
+function kmlFromKmz(bytes: Uint8Array): { fileName: string; text: string } {
   let entries: Record<string, Uint8Array>;
   try {
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     entries = unzipSync(bytes);
   } catch {
     throw new Error(IMPORT_ERRORS.unparseable);
@@ -82,13 +89,39 @@ export async function importVectorSource(
   displayName: string,
   existingCount: number,
 ): Promise<VectorImport> {
+  // THE SIZE CHECK LIVES HERE, not in the picker. `importVectorFileFromPicker`
+  // was the only caller that checked, and the share sheet ("Open in Logjam")
+  // calls this one directly — so a large or hostile `.geojson` went straight
+  // into `readAsStringAsync`, i.e. the whole file into one JS string, and OOM
+  // -killed the app before any guard fired. It is also the one input path an
+  // outside party controls. Staging additionally gives the KMZ reader a real
+  // file to take bytes from (share-sheet URIs are `content://`).
+  const staged = await stageIncomingFile({
+    uri: sourceUri,
+    maxBytes: MAX_IMPORT_FILE_BYTES,
+    tooLargeMessage: IMPORT_ERRORS.tooLarge,
+    scratchName: `vector-incoming-${randomId()}`,
+  });
+  try {
+    return await parseAndStore(staged.uri, displayName, existingCount);
+  } finally {
+    if (staged.scratch) {
+      await FileSystem.deleteAsync(staged.scratch, { idempotent: true }).catch(
+        () => {},
+      );
+    }
+  }
+}
+
+async function parseAndStore(
+  sourceUri: string,
+  displayName: string,
+  existingCount: number,
+): Promise<VectorImport> {
   let sourceName = displayName;
   let text: string;
   if (sourceName.toLowerCase().endsWith(".kmz")) {
-    const base64 = await FileSystem.readAsStringAsync(sourceUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    ({ fileName: sourceName, text } = kmlFromKmz(base64));
+    ({ fileName: sourceName, text } = kmlFromKmz(new File(sourceUri).bytes()));
   } else {
     text = await FileSystem.readAsStringAsync(sourceUri);
   }
@@ -146,9 +179,6 @@ export async function importVectorFileFromPicker(
     return { status: "cancelled" };
   }
   const asset = picked.assets[0];
-  if (asset.size != null && asset.size > MAX_IMPORT_FILE_BYTES) {
-    throw new Error(IMPORT_ERRORS.tooManyPositions);
-  }
   const record = await importVectorSource(asset.uri, asset.name, existingCount);
   return { status: "imported", record };
 }

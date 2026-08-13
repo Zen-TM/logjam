@@ -4,7 +4,16 @@ import { describe, expect, it } from "vitest";
 
 import { parseGeoPdfGeoref } from "./parseGeoref";
 import { buildGeoTransform, type GeoTransform, type XY } from "./transform";
-import { buildTilePlan } from "./tilePlan";
+import {
+  GEOPDF_PARSER_VERSION,
+  GEOPDF_SECONDS_PER_TILE,
+  MAX_GEOPDF_TILES,
+  buildTilePlan,
+  estimateGeoPdfImport,
+  resumableFrom,
+  type GeoPdfBuildState,
+  type TilePlan,
+} from "./tilePlan";
 
 const fixture = (name: string) =>
   new Uint8Array(readFileSync(join(__dirname, "__fixtures__", name)));
@@ -191,5 +200,73 @@ describe("buildTilePlan — estimate", () => {
   it("estimates base tiles + third for the pyramid", async () => {
     const { plan } = await logjamPlan();
     expect(plan.estimatedTotalTiles).toBe(Math.ceil((plan.tiles.length * 4) / 3));
+  });
+});
+
+describe("the tile budget", () => {
+  it("steps zMax down until the plan fits, rather than planning 20 000 tiles", async () => {
+    const { transform, plan } = await gdalPlan();
+    // A clip far larger than the fixture's own neatline: tiles scale ×4 per
+    // level, which is what a large-format or large-scale sheet does to the
+    // list. Uncapped this planned into the thousands with no ceiling anywhere.
+    const wide = buildTilePlan(
+      transform,
+      bboxClip({ x0: -20000, y0: -20000, x1: 20000, y1: 20000 }),
+    );
+    expect(wide.tiles.length).toBeGreaterThan(0);
+    expect(wide.tiles.length).toBeLessThanOrEqual(MAX_GEOPDF_TILES);
+    expect(wide.zMax).toBeLessThan(plan.zMax);
+  });
+
+  it("prices the run from the plan", async () => {
+    const { plan } = await logjamPlan();
+    const estimate = estimateGeoPdfImport(plan);
+    expect(estimate.tiles).toBe(plan.estimatedTotalTiles);
+    expect(estimate.seconds).toBe(
+      Math.ceil(plan.tiles.length * GEOPDF_SECONDS_PER_TILE),
+    );
+    expect(estimate.bytes).toBeGreaterThan(0);
+  });
+});
+
+describe("resumableFrom — the checkpoint guard", () => {
+  // The bug: `zMax` was the whole validity test, and zMax is the LAST thing a
+  // planner change moves. A resume then skipped the first nextTileIndex entries
+  // of a different tile list and registered the holed map as ready.
+  const planOf = (tiles: number, zMax = 14) =>
+    ({ zMin: 10, zMax, tileSize: 512, tiles: Array.from({ length: tiles }), estimatedTotalTiles: tiles }) as unknown as TilePlan;
+
+  const checkpoint = (over: Partial<GeoPdfBuildState> = {}): GeoPdfBuildState => ({
+    phase: "rasterising",
+    zMax: 14,
+    parserVersion: GEOPDF_PARSER_VERSION,
+    tileCount: 100,
+    nextTileIndex: 32,
+    ...over,
+  });
+
+  it("honours a checkpoint describing this exact plan", () => {
+    expect(resumableFrom(checkpoint(), planOf(100))).not.toBeNull();
+  });
+
+  it("refuses one from another parser version", () => {
+    expect(
+      resumableFrom(checkpoint({ parserVersion: GEOPDF_PARSER_VERSION - 1 }), planOf(100)),
+    ).toBeNull();
+    expect(resumableFrom(checkpoint({ parserVersion: undefined }), planOf(100))).toBeNull();
+  });
+
+  it("refuses one whose tile list is a different length at the same zMax", () => {
+    expect(resumableFrom(checkpoint({ tileCount: 99 }), planOf(100))).toBeNull();
+    expect(resumableFrom(checkpoint(), planOf(101))).toBeNull();
+  });
+
+  it("refuses a cursor outside the plan", () => {
+    expect(resumableFrom(checkpoint({ nextTileIndex: 101 }), planOf(100))).toBeNull();
+    expect(resumableFrom(checkpoint({ nextTileIndex: -1 }), planOf(100))).toBeNull();
+  });
+
+  it("refuses nothing at all", () => {
+    expect(resumableFrom(null, planOf(100))).toBeNull();
   });
 });

@@ -34,7 +34,7 @@ import {
   seedAutoDownloadFromAccount,
 } from "./autoDownloadPreference";
 import { importGeoPdfFromUrl } from "./importPipeline";
-import { runGeoPdfImport } from "./importRunner";
+import { isGeoPdfImportRunning, runGeoPdfImport } from "./importRunner";
 
 const HANDLED_PREF_KEY = "autoDownloadedGeoPdfJobIds";
 
@@ -105,14 +105,22 @@ export async function runGeoPdfAutoDownload(): Promise<void> {
       // Re-check between jobs: the user can walk out of Wi-Fi range mid-run, and
       // the next file is the expensive one.
       if (!(await canRunNow("geoPdfDownload"))) return;
-      // Marked BEFORE the attempt, so a job whose import keeps failing is tried
-      // once rather than on every foreground for the life of the install. The
-      // Saved tab can still import it by hand.
-      markHandled(job.id);
       try {
         // The listed URL may have expired while this ran; re-presign.
         const fresh = await getGeoPdfJob(job.id);
         if (!fresh.downloadUrl) continue;
+        // A busy runner is NOT an attempt. `markHandled` used to run before
+        // `runGeoPdfImport`, which returns immediately when another import is
+        // in flight — so one unlucky overlap with a manual import put the job
+        // on the permanent skip list without ever having downloaded it, and no
+        // later foreground would try again for the life of the install.
+        // Checked immediately before the call, with no await in between: the
+        // runner claims its slot synchronously, so nothing can slip through.
+        if (isGeoPdfImportRunning()) return;
+        // Marked BEFORE the attempt ITSELF, so a job whose import keeps failing
+        // is tried once rather than on every foreground. The Saved tab can
+        // still import it by hand.
+        markHandled(job.id);
         // Through the shared runner, so an unasked auto-import can't collide
         // with one the user started by hand — they would fight over the single
         // native rasteriser, and for the same file over the same directory.

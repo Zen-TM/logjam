@@ -30,21 +30,24 @@ import {
   useRegionDownloads,
   type RegionJob,
 } from "../offline/regionDownloadQueue";
-
-/** Nothing more will happen to this job unless the user asks. */
-function isSettled(job: RegionJob): boolean {
-  return job.state.kind === "ready" || job.state.kind === "failed";
-}
+import {
+  canPause,
+  isJobFinished,
+  isJobSettled,
+  isJobStalled,
+} from "../offline/regionJobStatus";
 
 export function RegionDownloadProgressScreen({ onDone }: { onDone: () => void }) {
   const jobs = useRegionDownloads();
   const insets = useSafeAreaInsets();
-  // Settled means "finished, one way or the other" — a failure is a finished
-  // download too, and gating Done on SUCCESS would trap a user whose vector
-  // clip 503'd on a screen with no way out.
-  const allSettled = jobs.length > 0 && jobs.every(isSettled);
-  const outstanding = jobs.filter((job) => !isSettled(job)).length;
+  // Settled means "nothing more will happen unless the user asks" — a failure
+  // is a finished download too (gating Done on SUCCESS would trap a user whose
+  // vector clip 503'd), and so is a job parked on a reason nothing auto-resumes
+  // (see regionJobStatus.ts).
+  const allSettled = jobs.length > 0 && jobs.every(isJobSettled);
+  const outstanding = jobs.filter((job) => !isJobSettled(job)).length;
   const failed = jobs.filter((job) => job.state.kind === "failed").length;
+  const stalled = jobs.filter(isJobStalled).length;
   const ready = jobs.filter((job) => job.state.kind === "ready").length;
 
   // Hardware back while work is outstanding asks first, rather than silently
@@ -87,12 +90,12 @@ export function RegionDownloadProgressScreen({ onDone }: { onDone: () => void })
           {allSettled ? (
             <StatusPill
               label={
-                failed > 0
-                  ? `${ready} saved · ${failed} didn't finish`
+                failed + stalled > 0
+                  ? `${ready} saved · ${failed + stalled} didn't finish`
                   : "These maps work with no signal from now on"
               }
-              tone={failed > 0 ? "warning" : "accent"}
-              icon={failed > 0 ? "alert-triangle" : "check"}
+              tone={failed + stalled > 0 ? "warning" : "accent"}
+              icon={failed + stalled > 0 ? "alert-triangle" : "check"}
             />
           ) : (
             <StatusPill
@@ -197,15 +200,17 @@ export function DownloadRow({ job }: { job: RegionJob }) {
       subtitleNumberOfLines={2}
       progress={barFraction}
       right={
-        isSettled(job) ? null : (
+        isJobFinished(job) ? null : (
           <View style={styles.rowActions}>
             {state.kind === "downloading" ? (
-              <Button
-                label="Pause"
-                variant="ghost"
-                compact
-                onPress={() => pauseRegionDownload(spec.id)}
-              />
+              canPause(job) ? (
+                <Button
+                  label="Pause"
+                  variant="ghost"
+                  compact
+                  onPress={() => pauseRegionDownload(spec.id)}
+                />
+              ) : null
             ) : (
               <Button
                 label="Resume"

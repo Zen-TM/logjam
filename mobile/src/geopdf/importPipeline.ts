@@ -38,14 +38,21 @@ import {
   type XY,
 } from "@logjam/shared/dist/geoPdfImport/transform.js";
 import {
+  GEOPDF_PARSER_VERSION,
   buildTilePlan,
+  estimateGeoPdfImport,
+  resumableFrom,
+  type GeoPdfBuildState,
+  type GeoPdfImportEstimate,
   type TilePlan,
 } from "@logjam/shared/dist/geoPdfImport/tilePlan.js";
 
 import LogjamPdfRenderer from "../../modules/logjam-pdf-renderer/src/LogjamPdfRendererModule";
 import { IMPORTS_DIR, scratchFileUri } from "../offline/localStores";
+import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
 import { insertArtifact, deleteArtifact } from "../offline/registryDb";
 import { randomId } from "../imports/vectorImports";
+import { stageIncomingFile } from "../imports/stagedFile";
 import {
   deleteGeoPdfImportRow,
   findGeoPdfImportBySha256,
@@ -56,11 +63,20 @@ import {
   type GeoPdfImportState,
 } from "./geoPdfImportsDb";
 
-/** Reject absurd files before loading them into memory (spec §2.1). */
-const MAX_GEOPDF_FILE_BYTES = 300 * 1024 * 1024;
+/**
+ * Reject absurd files before loading them into memory (spec §2.1).
+ *
+ * 64 MB, not the 300 MB this used to be. `parseSourcePdf` reads the WHOLE file
+ * into the Hermes heap — that is the one surviving whole-file read and there is
+ * no way around it, pdf-lib needs the bytes — while an Android app heap is
+ * typically 256-512 MB. A 300 MB ceiling was a number no phone can hold: it
+ * bought an OOM kill where the user should have got a sentence. The measured
+ * NSW 1:25 000 sheet is ~8 MB, so 64 MB is still generous, and a cap that fails
+ * loudly beats a higher one that crashes.
+ */
+const MAX_GEOPDF_FILE_BYTES = 64 * 1024 * 1024;
 /** Tiles per native call — the progress/cancel granularity (spec §4.1). */
 const BATCH_SIZE = 32;
-const PARSER_VERSION = 1;
 
 export { RESIDUAL_WARN_FRACTION };
 
@@ -120,8 +136,13 @@ export const GEOPDF_ERRORS: Record<string, string> = {
   UNSUPPORTED_PAGE_BOX:
     "This PDF's page is rotated in a way Logjam can't place accurately.",
   UNSUPPORTED_CRS: "This PDF uses a map projection that isn't supported.",
-  FILE_TOO_LARGE: "This PDF is too large to import (300 MB limit).",
+  FILE_TOO_LARGE: `This PDF is too large to import (${Math.round(MAX_GEOPDF_FILE_BYTES / 1024 / 1024)} MB limit).`,
   RENDER_FAILED: "Rendering this PDF failed.",
+  // The planner refused before rendering: a sheet this large at this scale is
+  // tens of minutes of work. It steps the zoom down first, so reaching this
+  // means the georeferencing is implausible rather than the map merely big.
+  TOO_MANY_TILES: "This map covers too much ground to import.",
+  NO_SPACE: "There isn't enough free space on this phone for this map.",
 };
 
 export interface GeoPdfProgress {
@@ -140,6 +161,8 @@ export interface GeoPdfProgress {
    * the progress card opens on a placeholder and is corrected from here.
    */
   label?: string;
+  /** Tiles/bytes/seconds, once planning has worked them out. */
+  estimate?: GeoPdfImportEstimate;
 }
 
 export interface GeoPdfCancelToken {
@@ -151,14 +174,6 @@ export type GeoPdfImportOutcome =
   | { status: "existing"; record: GeoPdfImport }
   | { status: "paused"; record: GeoPdfImport }
   | { status: "cancelled" };
-
-interface BuildState {
-  phase: "rasterising" | "overviews";
-  zMax: number;
-  nextTileIndex?: number;
-  /** Next zoom to downsample INTO (fromZ = downsampleZ + 1). */
-  downsampleZ?: number;
-}
 
 function importsRootDir(): Directory {
   return new Directory(IMPORTS_DIR, "geopdf");
@@ -195,21 +210,6 @@ async function parseSourcePdf(dirPath: string) {
   return step("pdf-parse", () => parseGeoPdfGeoref(bytes));
 }
 
-/**
- * A `file://` URI for `uri`, staging a `content://` one into the cache first.
- *
- * The share sheet hands over a content URI, which neither the native hasher nor
- * `expo-file-system/next` can open. The legacy `copyAsync` can, and does it
- * natively; the alternative was reading the file as base64 into JS and decoding
- * it by hand, which is what this replaces.
- */
-async function stagedFileUri(uri: string): Promise<{ uri: string; scratch: string | null }> {
-  if (uri.startsWith("file://")) return { uri, scratch: null };
-  const scratch = await scratchFileUri(`geopdf-incoming-${randomId()}.pdf`);
-  await FileSystem.copyAsync({ from: uri, to: scratch });
-  return { uri: scratch, scratch };
-}
-
 function clipPolygonOf(viewport: GeoPdfViewport): XY[] {
   return (
     viewport.boundsPolygonPt ?? [
@@ -229,7 +229,7 @@ function georefDiagnostics(
   // Everything needed to diagnose a placement bug from the artifact alone.
   // Lives inside the app-private MBTiles — same privacy class as the PDF.
   return JSON.stringify({
-    parserVersion: PARSER_VERSION,
+    parserVersion: GEOPDF_PARSER_VERSION,
     controlPoints: viewport.controlPoints,
     crs: viewport.crs,
     quirks: viewport.quirks,
@@ -258,9 +258,7 @@ export async function importGeoPdfFromPicker(
   });
   if (picked.canceled || picked.assets.length === 0) return { status: "cancelled" };
   const asset = picked.assets[0];
-  if (asset.size != null && asset.size > MAX_GEOPDF_FILE_BYTES) {
-    throw new Error(GEOPDF_ERRORS.FILE_TOO_LARGE);
-  }
+  // Size is checked once, in the staging step every entry point goes through.
   return importGeoPdfFile(asset.name, asset.uri, onProgress, token);
 }
 
@@ -274,7 +272,15 @@ export async function importGeoPdfFile(
   onProgress: (progress: GeoPdfProgress) => void,
   token: GeoPdfCancelToken,
 ): Promise<GeoPdfImportOutcome> {
-  const staged = await stagedFileUri(fileUri);
+  // Stat-then-copy: the size test used to run AFTER the full copy into
+  // app-private storage, so a 2 GB share-sheet "PDF" filled the phone up before
+  // being refused (see imports/stagedFile.ts).
+  const staged = await stageIncomingFile({
+    uri: fileUri,
+    maxBytes: MAX_GEOPDF_FILE_BYTES,
+    tooLargeMessage: GEOPDF_ERRORS.FILE_TOO_LARGE,
+    scratchName: `geopdf-incoming-${randomId()}.pdf`,
+  });
   try {
     return await importStagedFile(displayName, staged.uri, onProgress, token);
   } finally {
@@ -292,9 +298,6 @@ async function importStagedFile(
 ): Promise<GeoPdfImportOutcome> {
   const incoming = new File(fileUri);
   const sourceSizeBytes = incoming.size ?? 0;
-  if (sourceSizeBytes > MAX_GEOPDF_FILE_BYTES) {
-    throw new Error(GEOPDF_ERRORS.FILE_TOO_LARGE);
-  }
   const label = displayName.replace(/\.[^.]+$/, "");
   onProgress({ phase: "hashing", fraction: 0, label });
   const sha256 = await step("hash", () => LogjamPdfRenderer.sha256File(fileUri));
@@ -306,20 +309,25 @@ async function importStagedFile(
     return resumeGeoPdfImport(existing.id, onProgress, token);
   }
 
+  if (token.cancelled) return { status: "cancelled" };
+
   onProgress({ phase: "copying", fraction: 0, label });
   const dir = new Directory(importsRootDir(), sha256);
-  if (!dir.exists) dir.create({ intermediates: true });
-  const sourceFile = new File(dir, "source.pdf");
-  if (sourceFile.exists) sourceFile.delete();
-  await step("copy", () => incoming.copy(sourceFile));
 
+  // ROW FIRST, THEN THE FILE. The copy used to come first, so a process kill
+  // (or a throw out of `incoming.copy`) in between left a full-size source.pdf
+  // on disk with no row pointing at it: absent from Saved, absent from the
+  // capacity meter, unreachable by any delete, and only ever cleared by a
+  // sign-out. Nothing sweeps `imports/geopdf/`. Inserting first flips the
+  // failure mode to a row whose file is missing, which the resume path already
+  // reports and the user can discard.
   const record: GeoPdfImport = {
     id: randomId(),
     label,
     sha256,
     pageIndex: 0,
     viewportIndex: 0,
-    state: "parsing",
+    state: "copying",
     errorCode: null,
     bbox: null,
     minzoom: null,
@@ -334,6 +342,12 @@ async function importStagedFile(
     updatedAt: new Date().toISOString(),
   };
   await insertGeoPdfImport(record);
+
+  if (!dir.exists) dir.create({ intermediates: true });
+  const sourceFile = new File(dir, "source.pdf");
+  if (sourceFile.exists) sourceFile.delete();
+  await step("copy", () => incoming.copy(sourceFile));
+
   return buildArtifact(record, onProgress, token);
 }
 
@@ -380,14 +394,22 @@ async function buildArtifact(
   onProgress: (progress: GeoPdfProgress) => void,
   token: GeoPdfCancelToken,
 ): Promise<GeoPdfImportOutcome> {
+  let estimate: GeoPdfImportEstimate | null = null;
   const report = (phase: GeoPdfImportState, fraction: number) =>
-    onProgress({ phase, fraction, importId: record.id, label: record.label });
+    onProgress({
+      phase,
+      fraction,
+      importId: record.id,
+      label: record.label,
+      estimate: estimate ?? undefined,
+    });
   const setState = async (state: GeoPdfImportState) => {
     await updateGeoPdfImport(record.id, { state });
     report(state, 0);
   };
 
   try {
+    if (token.cancelled) return await pause(record);
     await setState("parsing");
     const parsed = await parseSourcePdf(record.dirPath);
     const page = parsed.pages[0];
@@ -401,10 +423,24 @@ async function buildArtifact(
       page.renderBoxPt,
     );
 
+    if (token.cancelled) return await pause(record);
     await setState("planning");
     const transform = buildGeoTransform(viewport);
     const clip = clipPolygonOf(viewport);
     const plan = buildTilePlan(transform, clip);
+
+    // What this is about to cost, worked out BEFORE a tile is rendered: the
+    // region downloader prices its job in tiles, bytes and minutes for exactly
+    // this reason, and the GeoPDF path — the slower of the two per tile —
+    // offered no number at all. `buildTilePlan` has already stepped zMax down
+    // to fit MAX_GEOPDF_TILES; this reports what survived and refuses a phone
+    // that cannot hold it. (The estimate rides on to the progress card.)
+    estimate = estimateGeoPdfImport(plan);
+    console.log(
+      `[geopdf] plan z${plan.zMin}-${plan.zMax}: ${plan.tiles.length} base tiles, ~${estimate.seconds}s`,
+    );
+    await assertSpaceFor(estimate.bytes);
+
     const { north, south, east, west } = transform.wgs84Bounds;
     await updateGeoPdfImport(record.id, {
       bbox: [west, south, east, north],
@@ -441,12 +477,16 @@ async function buildArtifact(
         mbtilesUri,
         "logjam:build_state",
       );
-      let resume: BuildState | null = savedState
-        ? (JSON.parse(savedState) as BuildState)
-        : null;
-      // A checkpoint from a different plan (parser/planner change between
-      // sessions) is unusable — replay from scratch; inserts are idempotent.
-      if (resume && resume.zMax !== plan.zMax) resume = null;
+      // A checkpoint is only honoured when it describes THIS plan: same parser
+      // version, same zMax, same tile count, cursor inside the list. `zMax`
+      // alone used to be the whole test, and zMax is the LAST thing a planner
+      // change moves — a resume then skipped the first nextTileIndex entries of
+      // a DIFFERENT tile list and registered the holed map as ready. The rule
+      // lives with the planner it validates (shared/geoPdfImport/tilePlan.ts).
+      const resume = resumableFrom(
+        savedState ? (JSON.parse(savedState) as GeoPdfBuildState) : null,
+        plan,
+      );
       const startTile =
         resume?.phase === "rasterising" ? (resume.nextTileIndex ?? 0) : null;
       const startDownsampleZ =
@@ -459,9 +499,11 @@ async function buildArtifact(
         for (let i = startTile ?? 0; i < plan.tiles.length; i += BATCH_SIZE) {
           if (token.cancelled) return await pause(record);
           report("rasterising", i / plan.tiles.length);
-          const buildState: BuildState = {
+          const buildState: GeoPdfBuildState = {
             phase: "rasterising",
             zMax: plan.zMax,
+            parserVersion: GEOPDF_PARSER_VERSION,
+            tileCount: plan.tiles.length,
             nextTileIndex: Math.min(i + BATCH_SIZE, plan.tiles.length),
           };
           const batch = await LogjamPdfRenderer.rasteriseBatch(opened.handle, {
@@ -492,7 +534,13 @@ async function buildArtifact(
       for (let z = firstZ; z >= plan.zMin; z--) {
         if (token.cancelled) return await pause(record);
         report("overviews", (plan.zMax - 1 - z) / Math.max(1, plan.zMax - plan.zMin));
-        const buildState: BuildState = { phase: "overviews", zMax: plan.zMax, downsampleZ: z };
+        const buildState: GeoPdfBuildState = {
+          phase: "overviews",
+          zMax: plan.zMax,
+          parserVersion: GEOPDF_PARSER_VERSION,
+          tileCount: plan.tiles.length,
+          downsampleZ: z,
+        };
         await LogjamPdfRenderer.downsampleLevel(
           mbtilesUri,
           z + 1,
@@ -534,7 +582,12 @@ async function buildArtifact(
     report("ready", 1);
     return { status: "imported", record: done };
   } catch (err) {
-    const code = err instanceof GeoPdfParseError ? err.code : "RENDER_FAILED";
+    const code =
+      err instanceof GeoPdfParseError
+        ? err.code
+        : err instanceof NotEnoughSpaceError
+          ? "NO_SPACE"
+          : "RENDER_FAILED";
     await updateGeoPdfImport(record.id, { state: "failed", errorCode: code });
     throw err;
   }
