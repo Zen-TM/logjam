@@ -631,6 +631,7 @@ function Map({
         type: "raster-dem",
         tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
         encoding: "terrarium",
+        attribution: 'Terrain data: <a href="https://registry.opendata.aws/terrain-tiles">Terrain Tiles</a> (Mapzen / Tilezen).',
       });
 
       // Owned canyon GeoJSON source (starts empty)
