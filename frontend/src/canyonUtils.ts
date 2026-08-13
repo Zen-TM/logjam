@@ -5,81 +5,24 @@ import { formatTripCanyonNames } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
 
-export type TCanyonAttributes = {
-  sources?: [string, string][];
-  customFields?: Record<string, unknown>;
-};
-
-export type TCanyon = {
-  id: string;
-  ownerId: string;
-  name: string;
-  altNames: string[];
-  latitude: number;
-  longitude: number;
-  numAbseils: number | null;
-  longestAbseil: number | null;
-  vGrade: number | null;
-  aGrade: number | null;
-  commitment: number | null;
-  quality: number | null;
-  hours: number | null;
-  notes: string | null;
-  attributes: TCanyonAttributes;
-  ropeWikiId: number | null;
-  createdAt: string;
-  updatedAt: string;
-  // Populated only by the canyon-detail endpoint (GET /canyons/:id), not the list.
-  media?: MediaItem[];
-  // Populated only by the OWNED list (GET /canyons) — never by GET /canyons/shared
-  // and never by the detail endpoint. `shares` powers the "shared by me" filter +
-  // the card badge; `tripLogLinks` the completion filter + per-row trip count.
-  //
-  // Optional because on a canyon shared WITH you these counts are absent by
-  // design, not zero: the trip tally is the owner's private trip-list
-  // cardinality and `shares` is their fan-out to other people, so the API
-  // withholds both (see canyonListInclude in api/src/routes/canyons.ts). Absent
-  // means "not yours to know" — so never coalesce it to 0 and present that as an
-  // answer about a shared canyon. Gate every read on ownership, as passesFilters
-  // and the CanyonsPanel row both do.
-  _count?: { tripLogLinks: number; shares: number };
-};
-
-export type TUser = {
-  id: string;
-  username: string;
-  email: string;
-  storageUsedBytes: number;
-  storageQuotaBytes: number;
-  monthlyTileQuota: number;
-  monthlyTileUsage: number;
-  monthlyTileResetAt: string;
-  consentedAt: string | null;
-  consentVersion: string | null;
-  uiPreferences?: {
-    themeSchemeId?: ThemeSchemeId;
-    tripLogCustomFields?: TripLogCustomFieldDef[];
-    canyonCustomFields?: TripLogCustomFieldDef[];
-    notifications?: NotificationPreferences;
-    autoDownloadGeoPdfs?: boolean;
-    importMergePolicy?: CanyonMergePolicy;
-  } | null;
-};
-
-export type TTripLog = {
-  id: string;
-  // Ordered — order is meaningful, drives the derived title (see tripTitle).
-  canyons: { id: string; name: string }[];
-  userId: string;
-  date: string;
-  displayName: string | null;
-  types: string[];
-  notes: string | null;
-  customFields: Record<string, unknown>;
-  createdAt: string;
-  // Populated by the per-canyon trip endpoints (GET /canyons/:id/trips[/:id]).
-  media?: MediaItem[];
-};
+// The server's REST response shapes are declared ONCE in shared/ and
+// re-exported here, so the mobile client (mobile/src/api/types.ts) and this
+// file cannot drift — they used to be two hand-maintained copies kept in step
+// by a comment. Every existing `from "./canyonUtils"` import still resolves.
+export type {
+  TCanyon,
+  TCanyonAttributes,
+  TNotification,
+  TTripLog,
+  TUser,
+} from "@logjam/shared";
+import type {
+  TCanyon,
+  TCanyonAttributes,
+  TNotification,
+  TTripLog,
+  TUser,
+} from "@logjam/shared";
 
 // A trip's title: an explicit displayName always wins; otherwise it's the
 // joined names of its linked canyons; otherwise a generic fallback. Every
@@ -115,13 +58,6 @@ export type TCanyonShare = {
   sharedWith: { id: string; username: string };
 };
 
-export type TNotification = {
-  id: string;
-  type: string;
-  payload: Record<string, unknown>;
-  read: boolean;
-  createdAt: string;
-};
 
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
