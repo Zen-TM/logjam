@@ -20,11 +20,10 @@ import * as FileSystem from "expo-file-system";
 import * as SQLite from "expo-sqlite";
 import { xyzToTmsRow, type OfflineBasemapId, type RegionBbox } from "@logjam/shared";
 
-/** Directory holding both region kinds (Protomaps clips + these pyramids). */
-export const REGION_DIR_URI = `${FileSystem.documentDirectory}offline/regions/`;
+import { REGION_DIR } from "./localStores";
 
 /** expo-sqlite's `directory` argument is a plain path, not a file:// URI. */
-const REGION_DIR_PATH = REGION_DIR_URI.replace(/^file:\/\//, "");
+const REGION_DIR_PATH = REGION_DIR.replace(/^file:\/\//, "");
 
 export type RegionTile = { z: number; x: number; y: number; bytes: Uint8Array };
 
@@ -57,7 +56,7 @@ export function regionFileName(id: string): string {
 
 /** Open (creating if absent) the MBTiles for a region job. */
 export async function openRegionMbtiles(id: string): Promise<RegionMbtiles> {
-  await FileSystem.makeDirectoryAsync(REGION_DIR_URI, { intermediates: true });
+  await FileSystem.makeDirectoryAsync(REGION_DIR, { intermediates: true });
   const fileName = regionFileName(id);
   const db = await SQLite.openDatabaseAsync(fileName, {}, REGION_DIR_PATH);
   // WAL + NORMAL while building: many small insert batches. `finalize` flips the
@@ -77,7 +76,7 @@ export async function openRegionMbtiles(id: string): Promise<RegionMbtiles> {
   return {
     db,
     path: `${REGION_DIR_PATH}${fileName}`,
-    uri: `${REGION_DIR_URI}${fileName}`,
+    uri: `${REGION_DIR}${fileName}`,
   };
 }
 
@@ -286,9 +285,9 @@ export type UnfinishedRegion = {
  * `region_download` row to keep in step with the disk.
  */
 export async function listUnfinishedRegions(): Promise<UnfinishedRegion[]> {
-  const dir = await FileSystem.getInfoAsync(REGION_DIR_URI);
+  const dir = await FileSystem.getInfoAsync(REGION_DIR);
   if (!dir.exists) return [];
-  const names = await FileSystem.readDirectoryAsync(REGION_DIR_URI);
+  const names = await FileSystem.readDirectoryAsync(REGION_DIR);
   const unfinished: UnfinishedRegion[] = [];
   for (const name of names) {
     if (!name.endsWith(".mbtiles")) continue;
@@ -326,7 +325,7 @@ export async function deleteRegionFile(id: string): Promise<void> {
   // listUnfinishedRegions filters on `.endsWith(".mbtiles")` they were
   // invisible to the UI and uncounted in the storage total — tens of MB of
   // orphan for a half-done imagery region.
-  const base = `${REGION_DIR_URI}${regionFileName(id)}`;
+  const base = `${REGION_DIR}${regionFileName(id)}`;
   for (const uri of [base, `${base}-wal`, `${base}-shm`]) {
     await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
   }

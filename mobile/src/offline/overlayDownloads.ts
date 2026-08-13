@@ -19,6 +19,7 @@ import type { TopoLayerFormat, TopoLayerKey } from "@logjam/shared";
 
 import type { MapArtifact } from "../map/sourceResolver";
 import { insertArtifact } from "./registryDb";
+import { OVERLAY_DIR } from "./localStores";
 
 const PMTILES_MAGIC = "PMTiles";
 
@@ -52,7 +53,7 @@ export async function downloadTopoOverlay(
   },
   onProgress?: (progress: OverlayDownloadProgress) => void,
 ): Promise<MapArtifact> {
-  const dir = `${FileSystem.documentDirectory}offline/overlays/`;
+  const dir = OVERLAY_DIR;
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
   const id = randomId();
   const fileUri = `${dir}${id}.pmtiles`;

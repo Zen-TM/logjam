@@ -24,6 +24,7 @@
 // canyon names and coordinates from the moment the user signs in, so "there is
 // nothing to protect yet" was never true (see AppLockGate).
 import * as LocalAuthentication from "expo-local-authentication";
+import * as ScreenCapture from "expo-screen-capture";
 
 import { readPref, writePref } from "../prefsDb";
 
@@ -68,8 +69,38 @@ export async function setAppLockEnabled(enabled: boolean): Promise<AppLockChange
   if (!writePref(APP_LOCK_PREF_KEY, enabled ? "on" : "off")) {
     return { status: "failed", message: "This phone wouldn't store that setting." };
   }
+  // Logged, not fatal: the lock itself is the guard and it is now set either
+  // way; FLAG_SECURE is the thumbnail hardening on top of it, and failing the
+  // whole toggle over it would leave the switch disagreeing with the pref.
+  await applyScreenCapturePolicy().catch(console.error);
   for (const listener of listeners) listener();
   return { status: "changed", enabled };
+}
+
+/** The tag scoping our FLAG_SECURE claim, so a future caller (a secrets screen,
+ * say) can raise and drop its own without clearing this one. */
+const SCREEN_CAPTURE_TAG = "app-lock";
+
+/**
+ * FLAG_SECURE follows the lock, and only the lock.
+ *
+ * Android captures the task-switcher thumbnail BEFORE the `AppState` change
+ * that re-locks the app fires, so backgrounding from the map left a recents
+ * thumbnail of canyon markers — or of a detail screen printing the
+ * coordinates — readable in front of the lock by exactly the person the lock
+ * exists to stop (someone holding the unlocked phone).
+ *
+ * Deliberately NOT app-wide (operator decision): screenshotting a map is a
+ * legitimate field workflow, and a user who declined the lock declined this
+ * threat model with it. Call on every startup as well as on every toggle —
+ * FLAG_SECURE is per-process state, and the preference is what persists.
+ */
+export async function applyScreenCapturePolicy(): Promise<void> {
+  if (isAppLockEnabled()) {
+    await ScreenCapture.preventScreenCaptureAsync(SCREEN_CAPTURE_TAG);
+  } else {
+    await ScreenCapture.allowScreenCaptureAsync(SCREEN_CAPTURE_TAG);
+  }
 }
 
 type AuthOutcome = { status: "ok" } | { status: "no"; result: AppLockChange };

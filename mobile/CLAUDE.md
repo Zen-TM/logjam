@@ -213,6 +213,23 @@ note is mandatory. Non-negotiables:
     field friction outweighed the guard. Don't "fix" this back to on without the
     operator; do keep the off-requires-auth asymmetry, which is what still makes
     the switch safe once raised.
+- **Every on-disk store is declared in `offline/localStores.ts`, and nowhere else
+  may name `documentDirectory`/`cacheDirectory`** (`localStores.test.ts` fails
+  the build if one does). The producers import their directory from it and the
+  wipe iterates `WIPED_DIRS`, so a new store cannot exist without joining the
+  wipe — the same medicine `sync/mirrorSchema.ts` applies to mirror tables.
+  Scratch files go in `SCRATCH_DIR` via `scratchFileUri()`, never loose in the
+  cache directory.
+- **The wipe stops the producers before it deletes.** `cancelAllRegionDownloads()`
+  and `stopGeoPdfImportRun()` are awaited first: a job still running re-created
+  the directory the wipe had deleted and re-inserted its `map_artifact` row (the
+  departing user's bbox) after the wipe reported success, and their module-level
+  state outlived sign-out. MapLibre's ambient tile cache is cleared there too
+  (`OfflineManager.resetDatabase()`) — the z/x/y rows ARE the browsed area.
+- **FLAG_SECURE follows the app-lock preference** (`applyScreenCapturePolicy()`,
+  called on every toggle and at startup — it is per-process state). Not app-wide:
+  screenshotting a map is a legitimate field workflow, and a user who declined
+  the lock declined this with it.
 - **One wipe path for account transitions:** `offline/wipeLocalData.ts`. Sign-out
   and a DIFFERENT user signing in both call it, and it clears `logjam.db`,
   `logjam-offline.db`, the MBTiles regions, the overlay bundles, the imports and

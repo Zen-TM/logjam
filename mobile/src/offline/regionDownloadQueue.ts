@@ -69,7 +69,9 @@ const EMPTY_PROGRESS: RegionJobProgress = {
 
 let jobs: RegionJob[] = [];
 let snapshot: RegionJob[] = jobs;
-let pumping = false;
+/** The in-flight drain, so a caller that needs the workers STOPPED can await
+ * it (see `cancelAllRegionDownloads`). Null when nothing is running. */
+let pumping: Promise<void> | null = null;
 const tokens = new Map<string, RegionCancelToken>();
 const listeners = new Set<() => void>();
 
@@ -131,7 +133,7 @@ function resumeJobsPausedBy(reason: Extract<PausedReason, "background" | "connec
   });
   if (!changed) return;
   publish();
-  void pump();
+  pump();
 }
 
 // Installed on first enqueue rather than at import: a user who never downloads
@@ -165,48 +167,50 @@ export function enqueueRegionDownloads(specs: RegionTaskSpec[]): void {
     })),
   ];
   publish();
-  void pump();
+  pump();
 }
 
 /**
  * Run queued jobs one after another. Re-entrant-safe: `pumping` is the single
  * active slot, and every path that could make a job runnable calls back in.
  */
-async function pump(): Promise<void> {
+function pump(): void {
   if (pumping) return;
-  pumping = true;
-  try {
-    for (;;) {
-      const next = jobs.find((job) => job.state.kind === "queued");
-      if (!next) return;
-      const token: RegionCancelToken = { stop: null };
-      tokens.set(next.spec.id, token);
-      patch(next.spec.id, { state: { kind: "downloading" } });
+  const run = drain().finally(() => {
+    if (pumping === run) pumping = null;
+  });
+  pumping = run;
+}
 
-      const report = (progress: RegionJobProgress) =>
-        patch(next.spec.id, { progress });
-      const outcome =
-        next.spec.taskKind === "tile-pyramid"
-          ? await runRegionDownload(next.spec, report, token)
-          : await runProtomapsClip(next.spec, report, token);
-      tokens.delete(next.spec.id);
+async function drain(): Promise<void> {
+  for (;;) {
+    const next = jobs.find((job) => job.state.kind === "queued");
+    if (!next) return;
+    const token: RegionCancelToken = { stop: null };
+    tokens.set(next.spec.id, token);
+    patch(next.spec.id, { state: { kind: "downloading" } });
 
-      if (outcome.status === "cancelled") {
-        jobs = jobs.filter((job) => job.spec.id !== next.spec.id);
-        publish();
-        continue;
-      }
-      patch(next.spec.id, {
-        state:
-          outcome.status === "ready"
-            ? { kind: "ready", gaps: outcome.gaps, failed: outcome.failed }
-            : outcome.status === "paused"
-              ? { kind: "paused", reason: outcome.reason }
-              : { kind: "failed", code: outcome.code },
-      });
+    const report = (progress: RegionJobProgress) =>
+      patch(next.spec.id, { progress });
+    const outcome =
+      next.spec.taskKind === "tile-pyramid"
+        ? await runRegionDownload(next.spec, report, token)
+        : await runProtomapsClip(next.spec, report, token);
+    tokens.delete(next.spec.id);
+
+    if (outcome.status === "cancelled") {
+      jobs = jobs.filter((job) => job.spec.id !== next.spec.id);
+      publish();
+      continue;
     }
-  } finally {
-    pumping = false;
+    patch(next.spec.id, {
+      state:
+        outcome.status === "ready"
+          ? { kind: "ready", gaps: outcome.gaps, failed: outcome.failed }
+          : outcome.status === "paused"
+            ? { kind: "paused", reason: outcome.reason }
+            : { kind: "failed", code: outcome.code },
+    });
   }
 }
 
@@ -284,7 +288,7 @@ export function pauseRegionDownload(id: string): void {
 
 export function resumeRegionDownload(id: string): void {
   patch(id, { state: { kind: "queued" } });
-  void pump();
+  pump();
 }
 
 /** Give up on a job: drop it from the queue and delete its partial file. */
@@ -297,6 +301,32 @@ export function cancelRegionDownload(id: string): void {
   jobs = jobs.filter((job) => job.spec.id !== id);
   publish();
   void deleteAbandonedRegion(id);
+}
+
+/**
+ * Stop EVERYTHING and forget it — the account-transition contract, called by
+ * `wipeAllLocalData` before it deletes a byte.
+ *
+ * Two things had to be true and neither was. (1) A run still going when the
+ * wipe deleted `offline/regions/` re-created the directory and re-inserted its
+ * `map_artifact` row — the departing user's bounding box, re-materialised into
+ * the next user's install after the wipe reported success. So this awaits the
+ * pump's drain rather than just asking it to stop. (2) `jobs` holds user-typed
+ * region LABELS and bboxes at module scope, which outlive a sign-out for the
+ * life of the JS context and rendered on the next account's progress surfaces.
+ *
+ * Resolves when the worker has actually stopped; the caller decides how long
+ * it is prepared to wait (a paused-but-resumable job stops immediately, a
+ * running one at its next tile).
+ */
+export async function cancelAllRegionDownloads(): Promise<void> {
+  for (const token of tokens.values()) token.stop = "cancel";
+  jobs = [];
+  publish();
+  await pumping;
+  jobs = [];
+  tokens.clear();
+  publish();
 }
 
 async function deleteAbandonedRegion(id: string): Promise<void> {

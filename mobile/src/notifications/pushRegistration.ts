@@ -45,13 +45,20 @@ export async function registerForPushNotifications(): Promise<void> {
 }
 
 export async function unregisterPushNotifications(): Promise<void> {
+  let token: string | null = null;
   try {
-    const token = await SecureStore.getItemAsync(PUSH_TOKEN_KEY);
+    token = await SecureStore.getItemAsync(PUSH_TOKEN_KEY);
     if (!token) return;
     await apiFetch(`/devices/${encodeURIComponent(token)}`, { method: "DELETE" });
-    await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY);
   } catch (err) {
     // Best-effort: server-side pruning (DeviceNotRegistered) is the backstop.
     console.error(err);
+  } finally {
+    // Unconditionally, even when the DELETE never reached the server: a token
+    // we can no longer revoke is one this install must stop claiming to own.
+    // Keeping it meant an offline sign-out left the departing user's binding
+    // in SecureStore, and the next user's re-registration is what would have
+    // moved it — a step that never runs if they decline notifications.
+    if (token) await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY).catch(console.error);
   }
 }

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Alert, StyleSheet, Text } from "react-native";
 // SystemBars (react-native-edge-to-edge) rather than expo-status-bar: with
 // android.edgeToEdgeEnabled the app draws behind BOTH system bars, so the
@@ -16,12 +17,23 @@ import { AuthFlow } from "./src/screens/AuthFlow";
 import { EntryChooser } from "./src/screens/EntryChooser";
 import { AppShell } from "./src/AppShell";
 import { AppLockGate } from "./src/offline/AppLockGate";
+import { applyScreenCapturePolicy } from "./src/offline/appLockPreference";
+import { excludeLocalDataFromBackup } from "./src/offline/localStores";
 import { LoadingState } from "./src/ui/ScreenStates";
 import { fontSize, spacing, theme } from "./src/theme";
 
 export default function App() {
   const minVersionGate = useMinVersionGate();
   const auth = useAuth();
+
+  // Two process-scoped privacy settings that have to be re-applied on every
+  // launch because neither survives one: FLAG_SECURE (follows the app-lock
+  // preference — see applyScreenCapturePolicy) and the iOS backup exclusion
+  // on the documents tree (a no-op on Android, which has allowBackup=false).
+  useEffect(() => {
+    void applyScreenCapturePolicy().catch(console.error);
+    void excludeLocalDataFromBackup().catch(console.error);
+  }, []);
 
   if (minVersionGate.status === "upgradeRequired") {
     return (

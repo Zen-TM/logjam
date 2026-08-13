@@ -22,7 +22,7 @@
 // strings or parser error CODES; file-derived detail stays in-app.
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
-import { Directory, File, Paths } from "expo-file-system/next";
+import { Directory, File } from "expo-file-system/next";
 
 import {
   GeoPdfParseError,
@@ -43,6 +43,7 @@ import {
 } from "@logjam/shared/dist/geoPdfImport/tilePlan.js";
 
 import LogjamPdfRenderer from "../../modules/logjam-pdf-renderer/src/LogjamPdfRendererModule";
+import { IMPORTS_DIR, scratchFileUri } from "../offline/localStores";
 import { insertArtifact, deleteArtifact } from "../offline/registryDb";
 import { randomId } from "../imports/vectorImports";
 import {
@@ -160,7 +161,7 @@ interface BuildState {
 }
 
 function importsRootDir(): Directory {
-  return new Directory(Paths.document, "imports", "geopdf");
+  return new Directory(IMPORTS_DIR, "geopdf");
 }
 
 /**
@@ -204,7 +205,7 @@ async function parseSourcePdf(dirPath: string) {
  */
 async function stagedFileUri(uri: string): Promise<{ uri: string; scratch: string | null }> {
   if (uri.startsWith("file://")) return { uri, scratch: null };
-  const scratch = `${FileSystem.cacheDirectory}geopdf-incoming-${randomId()}.pdf`;
+  const scratch = await scratchFileUri(`geopdf-incoming-${randomId()}.pdf`);
   await FileSystem.copyAsync({ from: uri, to: scratch });
   return { uri: scratch, scratch };
 }
@@ -350,7 +351,7 @@ export async function importGeoPdfFromUrl(
   onProgress: (progress: GeoPdfProgress) => void,
   token: GeoPdfCancelToken,
 ): Promise<GeoPdfImportOutcome> {
-  const scratchUri = `${FileSystem.cacheDirectory}geopdf-download-${randomId()}.pdf`;
+  const scratchUri = await scratchFileUri(`geopdf-download-${randomId()}.pdf`);
   try {
     const result = await FileSystem.downloadAsync(downloadUrl, scratchUri);
     if (result.status !== 200) {

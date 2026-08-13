@@ -23,8 +23,7 @@ import { apiFetch } from "../api/apiFetch";
 import type { MirrorMedia } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
-
-const CACHE_DIR = `${FileSystem.documentDirectory}media-cache/`;
+import { MEDIA_CACHE_DIR as CACHE_DIR } from "../offline/localStores";
 
 // Client thumbnail contract (mirrors the web): a downscaled JPEG. The server
 // only bounds thumbnailSizeBytes, not dimensions.

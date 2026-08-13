@@ -11,8 +11,7 @@ import { categoryHasThumbnail, mediaCategory } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
-
-const CACHE_DIR = `${FileSystem.documentDirectory}media-cache/`;
+import { MEDIA_CACHE_DIR as CACHE_DIR } from "../offline/localStores";
 
 const DOWNLOAD_URLS_BATCH = 100;
 

@@ -12,6 +12,7 @@ import { apiFetch, getAuthedRequestHeaders } from "../api/apiFetch";
 import { config } from "../config";
 import type { MapArtifact } from "../map/sourceResolver";
 import { insertArtifact, deleteArtifact } from "./registryDb";
+import { REGION_DIR } from "./localStores";
 
 const PMTILES_MAGIC = "PMTiles";
 
@@ -56,7 +57,7 @@ export async function downloadProtomapsRegion(
     body: maxzoom != null ? { ...bbox, maxzoom } : bbox,
   });
 
-  const dir = `${FileSystem.documentDirectory}offline/regions/`;
+  const dir = REGION_DIR;
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
   const id = randomId();
   const fileUri = `${dir}${id}.pmtiles`;

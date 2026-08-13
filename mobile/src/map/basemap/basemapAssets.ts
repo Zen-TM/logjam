@@ -12,15 +12,16 @@
 import { useEffect, useState } from "react";
 import { Asset } from "expo-asset";
 import { unzipSync } from "fflate";
-import { Directory, File, Paths } from "expo-file-system/next";
+import { Directory, File } from "expo-file-system/next";
+
+import { BASEMAP_ASSETS_DIR } from "../../offline/localStores";
 
 import { BASEMAP_ASSETS_COMMIT } from "./basemapAssetsVersion";
 
-const INSTALL_DIR_NAME = "basemap-assets";
 const VERSION_MARKER_NAME = ".version";
 
 async function installBasemapAssets(): Promise<string> {
-  const root = new Directory(Paths.document, INSTALL_DIR_NAME);
+  const root = new Directory(BASEMAP_ASSETS_DIR);
   const marker = new File(root, VERSION_MARKER_NAME);
   if (marker.exists && marker.text() === BASEMAP_ASSETS_COMMIT) {
     return root.uri;

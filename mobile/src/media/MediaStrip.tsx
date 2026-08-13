@@ -23,6 +23,7 @@ import {
 import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "../theme";
 import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
 import type { MirrorMedia } from "../sync/mirrorStore";
+import { scratchFileUri } from "../offline/localStores";
 import { listTrackPoints, listTracks, type Track } from "../tracks/tracksDb";
 import { BottomSheet, Row, SectionHeader } from "../ui";
 import { MediaViewer } from "./MediaViewer";
@@ -204,6 +205,12 @@ export function MediaStrip({
   const attachRecordedTrack = useCallback(
     async (track: Track) => {
       setBusy(true);
+      // A GPX of a recorded track is the densest coordinate artefact this app
+      // produces — a timestamped trace of a whole descent. It is scratch: it
+      // exists only until `attachMediaLocal` has copied it into media-cache/,
+      // so it goes in the wiped scratch dir AND is deleted here (the GeoPDF
+      // pipeline's contract, which this path never had).
+      let scratch: string | null = null;
       try {
         const points = await listTrackPoints(track.id);
         if (points.length < 2) {
@@ -214,10 +221,10 @@ export function MediaStrip({
         // attachment shows on the web trip and on the map, and the file is one
         // the user can open anywhere. The local recording is left untouched.
         const gpx = trackPointsToGpx(track.name, points);
-        const path = `${FileSystem.cacheDirectory}${track.id}.gpx`;
-        await FileSystem.writeAsStringAsync(path, gpx);
+        scratch = await scratchFileUri(`${track.id}.gpx`);
+        await FileSystem.writeAsStringAsync(scratch, gpx);
         await attachMediaLocal(linkedType, linkedId, {
-          uri: path,
+          uri: scratch,
           mimeType: "application/gpx+xml",
           fileName: `${track.name}.gpx`,
         });
@@ -225,6 +232,11 @@ export function MediaStrip({
         console.error(err);
         fail("That track couldn't be attached. Please try again.");
       } finally {
+        if (scratch) {
+          await FileSystem.deleteAsync(scratch, { idempotent: true }).catch(
+            console.error,
+          );
+        }
         setBusy(false);
       }
     },

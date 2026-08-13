@@ -41,6 +41,7 @@ import { config } from "../config";
 import { apiFetch, setSessionRejectedHandler } from "../api/apiFetch";
 import { grandfatherCrashReports } from "../sentry/initSentry";
 import { wipeAllLocalData } from "../offline/wipeLocalData";
+import { unregisterPushNotifications } from "../notifications/pushRegistration";
 import { classifySessionError } from "./sessionErrors";
 import type { AccountState } from "./capabilities";
 import {
@@ -207,6 +208,14 @@ export function useAuth() {
             // account now signing in. Everything goes before the new identity
             // lands. Note a GUEST reaches here with `previous === null` and is
             // therefore untouched: linking keeps the local data, by design.
+            //
+            // The push binding goes first, while the DEPARTING user's session
+            // is still what apiFetch will send: without this the device stayed
+            // bound to their account, and re-binding depended entirely on the
+            // arriving user granting notifications — decline the prompt, and
+            // user A's notifications keep landing on this phone. (Sign-out has
+            // always unregistered; this branch never did.)
+            await unregisterPushNotifications();
             const wiped = await wipeAllLocalData();
             if (wiped.failed.length > 0) {
               // Fail loudly rather than sign in over a half-cleared device:

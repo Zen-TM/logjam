@@ -53,6 +53,14 @@ declare class LogjamPdfRendererModule extends NativeModule {
    */
   sha256File(fileUri: string): Promise<string>;
 
+  /**
+   * iOS ONLY — set `NSURLIsExcludedFromBackupKey` on a directory (applies to
+   * everything inside it). The counterpart to Android's `allowBackup=false`,
+   * which is why there is no Android implementation: calling it there throws.
+   * See `offline/localStores.ts`, the only caller.
+   */
+  excludeFromBackup(fileUri: string): Promise<void>;
+
   /** Render a page region (PDF pts, origin bottom-left) to a PNG file. */
   renderRegion(
     handle: number,

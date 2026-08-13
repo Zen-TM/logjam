@@ -17,6 +17,7 @@ import {
   insertVectorImport,
   type VectorImport,
 } from "./importsDb";
+import { IMPORTS_DIR } from "../offline/localStores";
 
 // A phone-realistic ceiling; the parser's MAX_IMPORT_POSITIONS is the real
 // complexity guard, this just refuses to read absurd files into memory.
@@ -94,7 +95,7 @@ export async function importVectorSource(
 
   const parsed = parseVectorImport(sourceName, text);
 
-  const dir = `${FileSystem.documentDirectory}imports/`;
+  const dir = IMPORTS_DIR;
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
   const id = randomId();
   const fileUri = `${dir}${id}.geojson`;

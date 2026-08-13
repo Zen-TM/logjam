@@ -66,6 +66,9 @@ export const GEOPDF_PHASE_LABEL: Record<GeoPdfImportState, string> = {
 export const CANCELLABLE_PHASES: GeoPdfImportState[] = ["rasterising", "overviews"];
 
 let current: (GeoPdfImportRun & { token: GeoPdfCancelToken }) | null = null;
+/** Resolves when the run in `current` has finished unwinding — what an
+ * account wipe awaits before deleting the directory the run writes into. */
+let currentSettled: Promise<void> | null = null;
 
 const runListeners = new Set<() => void>();
 const toastListeners = new Set<(message: Omit<ToastMessage, "nonce">) => void>();
@@ -114,6 +117,22 @@ export function cancelGeoPdfImportRun(): void {
 }
 
 /**
+ * Cancel and WAIT — the account-transition contract, called by
+ * `wipeAllLocalData` before it deletes anything.
+ *
+ * An import still unwinding while the wipe ran re-created `imports/geopdf/`
+ * and re-registered its row after the wipe reported success, and `current`'s
+ * label (a map sheet name) outlived the sign-out for the life of the JS
+ * context. Cancelling alone doesn't fix either: cancellation lands at the next
+ * rasteriser batch, and the caller has to know when that has happened.
+ */
+export async function stopGeoPdfImportRun(): Promise<void> {
+  if (!current) return;
+  current.token.cancelled = true;
+  await currentSettled;
+}
+
+/**
  * Run an import in the background. Resolves when it finishes; the outcome is
  * announced by toast, so callers that only want it started can ignore the
  * promise. Never rejects — a failed import is a toast, not an unhandled
@@ -132,6 +151,10 @@ export async function runGeoPdfImport(
   }
   const token: GeoPdfCancelToken = { cancelled: false };
   current = { label, phase: "hashing", fraction: null, importId: null, token };
+  let markSettled = (): void => {};
+  currentSettled = new Promise<void>((resolve) => {
+    markSettled = resolve;
+  });
   notifyRun();
 
   // Measures what the user actually feels: the longest the JS thread went
@@ -216,6 +239,8 @@ export async function runGeoPdfImport(
     appStateSubscription.remove();
     console.log(`[geopdf] worst JS-thread stall ${worstStallMs} ms`);
     current = null;
+    currentSettled = null;
+    markSettled();
     notifyRun();
   }
 }

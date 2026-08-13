@@ -27,6 +27,10 @@
     "android": {
       "package": "com.logjamnsw.mobile",
       "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.DETECT_SCREEN_CAPTURE"
+      ],
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -85,7 +89,8 @@
         "expo-image-picker",
         {
           "photosPermission": "Logjam attaches photos from your library to canyons and trips.",
-          "cameraPermission": "Logjam lets you take photos to attach to canyons and trips."
+          "cameraPermission": "Logjam lets you take photos to attach to canyons and trips.",
+          "microphonePermission": false
         }
       ],
       "expo-video",
