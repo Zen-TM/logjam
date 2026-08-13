@@ -92,6 +92,12 @@ extract/schema refresh.
     a guest has no account for telemetry to "stay within", so `initSentry()`
     no-ops until the chooser's toggle (default OFF) is answered. Installs that
     predate the toggle are grandfathered by `grandfatherCrashReports()`.
+- **A second caller inherits the first one's guards.** Grep every caller before
+  changing a guarded function, and every sibling entry point when adding one:
+  the share sheet skipped the picker's size cap, `resumeTrackRecording` skipped
+  `startTrackRecording`'s rollback, the camera path skipped
+  `locationPermission.ts`'s denial handling. Same bug, three times, all found in
+  one audit.
 - **Client-version header on every request** (`x-logjam-client: mobile/<semver>`,
   `src/config.ts`). The forced-upgrade lever depends on it — do not drop it.
 
@@ -337,6 +343,15 @@ EAS-managed (`appVersionSource: "remote"` + `autoIncrement`) — don't hand-set 
 
 - `npm run typecheck` + `npm run lint` gate every change (wire into CI alongside the
   other packages).
+- **Date tests run under a non-Sydney TZ.** Dev, tests and users all sit in NSW,
+  so a UTC-vs-local bucket bug is invisible here — the activity spark shipped
+  wrong for ~10 h/day. Pin the zone in the test (see `logbook.test.ts`, which
+  asserts under both Australia/Sydney and America/Los_Angeles).
+- **Nothing in CI bundles.** `typecheck`, `lint` and vitest all passed on a tree
+  Metro could not bundle at all (an unhoisted `babel-preset-expo` after the SDK
+  54 bump — the app died at the dev launcher). A resolution or plugin break only
+  shows up in a real bundle: `npx expo export --platform android`, or install the
+  APK.
 - Runtime verify: `npm run dev:android` (add `--emulator` for the AVD), then the
   screenshot loop via `adb exec-out screencap -p`; mock GPS via `adb emu geo fix`;
   Maestro flows in `e2e/`. iOS = EAS build + real device (no local iOS on the
