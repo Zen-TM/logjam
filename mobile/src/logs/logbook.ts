@@ -2,9 +2,13 @@
  * Pure derivations for the Logs screen — grouping, tallies and date labels.
  * RN-free so it is unit-testable.
  *
- * Every date read here is UTC: trip dates are stored as UTC-midnight date-only
+ * Every STORED date read here is UTC: trip dates are UTC-midnight date-only
  * values, and formatting or bucketing them in local time renders the previous
- * calendar day for anyone east of Greenwich (CH-001).
+ * calendar day for anyone east of Greenwich (CH-001). The exception is a `now`
+ * argument, which is a real-clock instant and is read in local fields — see
+ * `currentCalendarMonth`. Reading UTC fields off the wall clock is the same
+ * bug in the other direction, and `logbook.test.ts` pins both under a non-UTC
+ * timezone.
  */
 
 export type LogbookTrip = {
@@ -68,17 +72,33 @@ export function distinctCanyonCount(trips: LogbookTrip[]): number {
 export type MonthBucket = { label: string; count: number; current: boolean };
 
 /**
+ * The calendar month the user is actually in, from a real-clock instant.
+ *
+ * `now` is the ONE value in this module that is an instant rather than a stored
+ * date-only value, so it is the one value read in LOCAL fields: east of
+ * Greenwich `now.getUTCMonth()` still says yesterday for the first 10-11 hours
+ * of every local day, which put the spark's "current" bucket — and the start of
+ * the recent-trips window — on the wrong month for the whole of the 1st of the
+ * month, every month. Stored trip dates are UTC midnight OF THE USER'S LOCAL
+ * DAY (see `fromDateKey`/`todayDateKey` in ui/monthGrid.ts), so their UTC month
+ * and this local month are the same calendar month, which is what makes the
+ * comparison below sound.
+ */
+function currentCalendarMonth(now: Date): { year: number; month: number } {
+  return { year: now.getFullYear(), month: now.getMonth() };
+}
+
+/**
  * Trips per month over the `months` calendar months ending with the one `now`
  * falls in — the activity spark's input. Labels are the month's initial, which
  * repeats (J/J, M/M); the axis is a shape, and the caption carries the range.
  */
 export function monthlyTripCounts(
   trips: { date: string }[],
-  now: Date,
+  now: Date = new Date(),
   months = 12,
 ): MonthBucket[] {
-  const endYear = now.getUTCFullYear();
-  const endMonth = now.getUTCMonth();
+  const { year: endYear, month: endMonth } = currentCalendarMonth(now);
   const counts = new Map<string, number>();
   for (const trip of trips) {
     const date = new Date(trip.date);
@@ -105,10 +125,11 @@ export function monthlyTripCounts(
 /** Trips whose date falls in the window the spark covers. */
 export function countTripsInLastMonths(
   trips: { date: string }[],
-  now: Date,
+  now: Date = new Date(),
   months = 12,
 ): number {
-  const total = now.getUTCFullYear() * 12 + now.getUTCMonth() - (months - 1);
+  const { year, month } = currentCalendarMonth(now);
+  const total = year * 12 + month - (months - 1);
   const start = Date.UTC(Math.floor(total / 12), ((total % 12) + 12) % 12, 1);
   return trips.filter((trip) => new Date(trip.date).getTime() >= start).length;
 }
