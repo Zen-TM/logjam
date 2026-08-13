@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SYNC_PUSH_OPS_BY_ENTITY } from "@logjam/shared";
 
 // The offline write path for routes: a route drawn with no signal has to land
 // in the mirror (so it draws immediately) AND in the outbox (so it reaches the
@@ -22,15 +23,17 @@ const db = {
   },
   getFirstAsync: () => Promise.resolve(null),
   getAllAsync: () => Promise.resolve([]),
-  withTransactionAsync: async (fn: () => Promise<void>) => {
-    transactionRan = true;
-    await fn();
-  },
 };
 
 vi.mock("./syncDb", () => ({
   getSyncDb: () => Promise.resolve(db),
   notifyMirrorChanged: () => {},
+  // Every sync write goes through the single-writer lock, not the raw
+  // connection — see syncDb.test.ts.
+  withSyncTransaction: async (_db: unknown, task: () => Promise<void>) => {
+    transactionRan = true;
+    await task();
+  },
 }));
 // scheduleMutationSync lives in mediaSyncBridge, which reaches into
 // react-native (Flow syntax vitest can't parse) — stub the module, not the
@@ -44,7 +47,7 @@ vi.mock("expo-crypto", () => ({
     }),
 }));
 
-const { createRouteLocal, deleteRouteLocal } = await import("./outbox");
+const { createRouteLocal, deleteRouteLocal, UPDATE_TARGETS } = await import("./outbox");
 
 /** The mirror INSERT/DELETE, and the outbox append, out of the recorded calls. */
 function find(fragment: string): Call | undefined {
@@ -154,5 +157,30 @@ describe("deleteRouteLocal", () => {
     const op = find("INSERT INTO outbox")!;
     expect(op.args).toContain("route");
     expect(op.args).toContain("delete");
+  });
+});
+
+describe("UPDATE_TARGETS", () => {
+  // `route` was missing, so discarding a rejected route edit reverted nothing:
+  // the geometry the server refused stayed on the map, and — the durable half —
+  // its fields stayed in dirty_fields_json, so every later pull replayed them
+  // over the server row and the mirror never converged again. The map is now
+  // total over the push entities, so a new entity can't repeat it silently.
+  it("answers for every push entity", () => {
+    for (const entity of Object.keys(SYNC_PUSH_OPS_BY_ENTITY)) {
+      expect(entity in UPDATE_TARGETS).toBe(true);
+    }
+  });
+
+  it("reverts a route into the routes table, geometry included", () => {
+    const target = UPDATE_TARGETS.route!;
+    expect(target.table).toBe("routes");
+    expect(Object.keys(target.columns)).toEqual(
+      expect.arrayContaining(["name", "points", "canyonId", "color", "anchors"]),
+    );
+  });
+
+  it("has nothing to revert for a notification markRead", () => {
+    expect(UPDATE_TARGETS.notification).toBeNull();
   });
 });

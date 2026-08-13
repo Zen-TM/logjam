@@ -14,8 +14,13 @@ import {
   type SyncPushOp,
 } from "@logjam/shared";
 
-import { getSyncDb, notifyMirrorChanged } from "./syncDb";
+import type { TripCanyonLink } from "./canyonLinks";
+import { scrubCanyonLinks } from "./mirrorStore";
+import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
+
+/** A trip's canyon links, ordered — order drives the derived title. */
+export type { TripCanyonLink };
 
 export type OutboxRow = {
   seq: number;
@@ -71,6 +76,24 @@ export async function loadOutboxRows(): Promise<OutboxRow[]> {
   return db.getAllAsync<OutboxRow>("SELECT * FROM outbox ORDER BY seq ASC");
 }
 
+/**
+ * One row's ops. The rebase after a confirmed push needs the pending ops for
+ * that entity and nothing else — it used to re-read and re-parse the ENTIRE
+ * outbox once per applied op, i.e. fifty full-table scans per push batch, with
+ * route geometry in the rows. Indexed by `outbox(entity, entity_id)`.
+ */
+export async function loadOutboxRowsFor(
+  entity: string,
+  entityId: string,
+): Promise<OutboxRow[]> {
+  const db = await getSyncDb();
+  return db.getAllAsync<OutboxRow>(
+    "SELECT * FROM outbox WHERE entity = ? AND entity_id = ? ORDER BY seq ASC",
+    entity,
+    entityId,
+  );
+}
+
 function mintUuid(): string {
   const id = Crypto.randomUUID();
   if (!isUuidV4(id)) throw new Error("UUID mint produced a non-v4 id");
@@ -108,7 +131,7 @@ export async function createWaypointLocal(draft: WaypointDraft): Promise<string>
   };
 
   const db = await getSyncDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     // Optimistic mirror row: every field is locally dirty until the create
     // flushes (timestamps are provisional; the server row replaces them).
     // sync_role is 'owner' — you cannot create someone else's waypoint.
@@ -182,7 +205,7 @@ export async function updateWaypointLocal(
 
 export async function deleteWaypointLocal(id: string): Promise<void> {
   const db = await getSyncDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     await db.runAsync("DELETE FROM waypoints WHERE id = ?", id);
     await appendOp(db, {
       opId: mintUuid(),
@@ -228,7 +251,7 @@ export async function createRouteLocal(draft: RouteDraft): Promise<string> {
   };
 
   const db = await getSyncDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     await db.runAsync(
       `INSERT INTO routes
          (id, owner_id, canyon_id, name, color, points_json, anchors_json,
@@ -302,7 +325,7 @@ export async function updateRouteLocal(
 
 export async function deleteRouteLocal(id: string): Promise<void> {
   const db = await getSyncDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     await db.runAsync("DELETE FROM routes WHERE id = ?", id);
     await appendOp(db, {
       opId: mintUuid(),
@@ -393,7 +416,7 @@ export async function createCanyonLocal(draft: CanyonDraftFields): Promise<strin
   if (invalid) throw new Error(invalid);
 
   const db = await getSyncDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     await db.runAsync(
       `INSERT INTO canyons
          (id, sync_role, name, latitude, longitude, alt_names_json, num_abseils,
@@ -455,27 +478,16 @@ function optionalNumbers(draft: CanyonDraftFields): Record<string, number> {
  * Delete a canyon offline. Owner-only (the caller gates on syncRole): a
  * sharee's delete would 404 server-side and park deadRemote.
  *
- * Trip links to it go with it server-side, so the mirror's trip rows are
- * scrubbed of the link here too — otherwise a trip keeps rendering a title
- * built from a canyon that no longer exists until the next delta pull.
+ * Trip and waypoint links to it go with it server-side, so the mirror's rows
+ * are scrubbed of the link here too — otherwise a trip keeps rendering a title
+ * built from a canyon that no longer exists, and a waypoint keeps a dead id in
+ * its link list, until the next delta pull. Same cascade the server tombstone
+ * runs (`scrubCanyonLinks`), so the two paths cannot diverge again.
  */
 export async function deleteCanyonLocal(id: string): Promise<void> {
   const db = await getSyncDb();
-  await db.withTransactionAsync(async () => {
-    const trips = await db.getAllAsync<{ id: string; canyons_json: string }>(
-      "SELECT id, canyons_json FROM trip_logs WHERE canyons_json LIKE ?",
-      `%${id}%`,
-    );
-    for (const trip of trips) {
-      const links = JSON.parse(trip.canyons_json ?? "[]") as TripCanyonLink[];
-      const kept = links.filter((link) => link.id !== id);
-      if (kept.length === links.length) continue; // LIKE matched a substring only
-      await db.runAsync(
-        "UPDATE trip_logs SET canyons_json = ? WHERE id = ?",
-        JSON.stringify(kept),
-        trip.id,
-      );
-    }
+  await withSyncTransaction(db, async () => {
+    await scrubCanyonLinks(db, id);
     await db.runAsync("DELETE FROM canyons WHERE id = ?", id);
     await db.runAsync(
       "DELETE FROM canyon_shares WHERE canyon_id = ?",
@@ -507,9 +519,6 @@ const TRIP_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
     decode: (raw) => JSON.parse((raw as string | null) ?? "{}"),
   },
 };
-
-/** A trip's canyon links, ordered — order drives the derived title. */
-export type TripCanyonLink = { id: string; name: string };
 
 export type TripDraftFields = {
   /** UTC-midnight ISO instant for a date-only value (CH-001). */
@@ -594,7 +603,7 @@ export async function createTripLocal(draft: TripDraftFields): Promise<string> {
   };
 
   const db = await getSyncDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     await db.runAsync(
       `INSERT INTO trip_logs
          (id, date, display_name, types_json, notes, custom_fields_json,
@@ -626,7 +635,7 @@ export async function createTripLocal(draft: TripDraftFields): Promise<string> {
 
 export async function deleteTripLocal(id: string): Promise<void> {
   const db = await getSyncDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     await db.runAsync("DELETE FROM trip_logs WHERE id = ?", id);
     await appendOp(db, {
       opId: mintUuid(),
@@ -651,7 +660,7 @@ export async function deleteTripLocal(id: string): Promise<void> {
 export async function enqueueNotificationRead(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   const db = await getSyncDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     for (const id of ids) {
       await appendOp(db, {
         opId: mintUuid(),
@@ -671,8 +680,19 @@ type Db = Awaited<ReturnType<typeof getSyncDb>>;
 /** Run the shared coalescing planner and apply its plan. Caller owns the
  * transaction and the mirror-side materialization. */
 async function appendOp(db: Db, incoming: SyncPushOp): Promise<void> {
+  // planOutboxEnqueue inspects exactly two things: the incoming row's own
+  // queued ops, and the queue TAIL (an update merges into an adjacent update
+  // only — merging into anything earlier would reorder the queue). Reading the
+  // whole outbox on every enqueue, JSON-parsing each row, made the guest→link
+  // drain quadratic: a season of account-less use is thousands of ops, and a
+  // route op carries its whole geometry.
   const rows = await db.getAllAsync<OutboxRow>(
-    "SELECT * FROM outbox ORDER BY seq ASC",
+    `SELECT * FROM outbox WHERE entity = ? AND entity_id = ?
+     UNION
+     SELECT * FROM outbox WHERE seq = (SELECT MAX(seq) FROM outbox)
+     ORDER BY seq ASC`,
+    incoming.entity,
+    incoming.id,
   );
   const plan = planOutboxEnqueue(rows.map(rowToEntry), incoming);
 
@@ -750,7 +770,7 @@ async function enqueueUpdate(
   columnByField: Record<string, ColumnSpec>,
 ): Promise<void> {
   const db = await getSyncDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     const current = await db.getFirstAsync<Record<string, unknown>>(
       `SELECT * FROM ${table} WHERE id = ?`,
       id,
@@ -840,12 +860,21 @@ export async function migrateLegacyWaypoints(): Promise<void> {
 
 // ── discard-an-update revert ────────────────────────────────────────────────
 
-const UPDATE_TARGETS: Partial<
-  Record<SyncPushEntity, { table: string; columns: Record<string, ColumnSpec> }>
-> = {
+type UpdateTarget = { table: string; columns: Record<string, ColumnSpec> };
+
+/**
+ * TOTAL over the push entities on purpose — `Partial<Record<…>>` let `route`
+ * be forgotten, so discarding a rejected route edit left the refused geometry
+ * on the map and the fields permanently dirty (every later pull replayed them
+ * over the server row). A new entity now fails to compile until it answers
+ * here; `notification` answers null because a markRead materializes nothing.
+ */
+export const UPDATE_TARGETS: Record<SyncPushEntity, UpdateTarget | null> = {
   canyon: { table: "canyons", columns: CANYON_UPDATE_COLUMNS },
   tripLog: { table: "trip_logs", columns: TRIP_UPDATE_COLUMNS },
   waypoint: { table: "waypoints", columns: WAYPOINT_UPDATE_COLUMNS },
+  route: { table: "routes", columns: ROUTE_UPDATE_COLUMNS },
+  notification: null,
 };
 
 /**

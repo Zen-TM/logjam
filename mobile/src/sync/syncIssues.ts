@@ -24,8 +24,14 @@ import {
   shelvesDiscardedFields,
   type OutboxEntity,
 } from "./outboxTables";
-import { getSyncDb, notifyMirrorChanged } from "./syncDb";
-import { requestSync } from "./syncEngine";
+import {
+  getSyncDb,
+  getSyncStateValue,
+  notifyMirrorChanged,
+  wipeMirror,
+  withSyncTransaction,
+} from "./syncDb";
+import { APPLY_FAILED_KEY, requestSync } from "./syncEngine";
 
 export type ParkedOp = {
   seq: number;
@@ -115,7 +121,15 @@ export async function listShelfEntries(): Promise<ShelfEntry[]> {
   }));
 }
 
-/** Badge count for the "Sync issues (N)" row: parked ops + shelf entries. */
+/**
+ * Badge count for the "Sync issues (N)" row: parked ops + shelf entries + an
+ * unapplicable delta page.
+ *
+ * The last one is why this isn't just two COUNTs: a page this app version
+ * can't apply stops the mirror dead, and the only thing that used to say so
+ * was a line claiming the account was unreachable and that it would keep
+ * retrying. A permanent failure belongs on the screen for permanent failures.
+ */
 export async function countSyncIssues(): Promise<number> {
   const db = await getSyncDb();
   const parked = await db.getFirstAsync<{ n: number }>(
@@ -124,7 +138,24 @@ export async function countSyncIssues(): Promise<number> {
   const shelf = await db.getFirstAsync<{ n: number }>(
     "SELECT COUNT(*) AS n FROM conflict_shelf",
   );
-  return (parked?.n ?? 0) + (shelf?.n ?? 0);
+  const applyFailed = await getApplyFailureAt();
+  return (parked?.n ?? 0) + (shelf?.n ?? 0) + (applyFailed ? 1 : 0);
+}
+
+/** When the last delta page failed to apply locally, or null. */
+export async function getApplyFailureAt(): Promise<string | null> {
+  return getSyncStateValue(APPLY_FAILED_KEY);
+}
+
+/**
+ * The recovery for an unapplicable page: throw the mirror away and pull it
+ * again from cursor zero. The mirror is a cache of the server, so this costs
+ * bandwidth and nothing else — the outbox, which holds work the server has
+ * never seen, is deliberately untouched.
+ */
+export async function resyncFromScratch(): Promise<void> {
+  await wipeMirror();
+  await requestSync();
 }
 
 /** Retry a parked op: requeue it and kick a sync. A blocker that was fixed
@@ -147,7 +178,7 @@ export async function discardParkedOp(seq: number): Promise<void> {
   const db = await getSyncDb();
   // Cache files whose owning row this discard removes; unlinked after the commit.
   const orphanedFiles: string[] = [];
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     const row = await db.getFirstAsync<ParkedRow>(
       "SELECT * FROM outbox WHERE seq = ?",
       seq,

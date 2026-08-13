@@ -21,7 +21,7 @@ import {
 
 import { apiFetch } from "../api/apiFetch";
 import type { MirrorMedia } from "./mirrorStore";
-import { getSyncDb, notifyMirrorChanged } from "./syncDb";
+import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
 
 const CACHE_DIR = `${FileSystem.documentDirectory}media-cache/`;
@@ -129,7 +129,7 @@ export async function attachMediaLocal(
   const thumbnailSizeBytes = thumbPath === null ? null : await fileSize(thumbPath);
 
   const db = await getSyncDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     await db.runAsync(
       `INSERT INTO media
          (id, linked_type, linked_id, media_type, filename, file_size_bytes,
@@ -180,6 +180,8 @@ export type MediaOpRow = {
   op: string;
   fields_json: string | null;
   media_phase: string | null;
+  /** Failed runs so far — the flush parks an op that keeps failing. */
+  attempts: number;
 };
 
 /** Terminal outcome of running one media op. `blocked` = a quota/track-slot
@@ -197,6 +199,16 @@ type MediaFields = {
   localDisplayPath: string;
   localThumbPath: string | null;
 };
+
+/** The first of the op's local blobs that has gone missing, or null. */
+async function firstMissingFile(fields: MediaFields): Promise<string | null> {
+  for (const path of [fields.localDisplayPath, fields.localThumbPath]) {
+    if (!path) continue;
+    const info = await FileSystem.getInfoAsync(path);
+    if (!info.exists) return path;
+  }
+  return null;
+}
 
 async function putFile(
   url: string,
@@ -249,6 +261,24 @@ const PERMANENT_PRESIGN_STATUSES = new Set([400, 403, 404, 409, 413, 422, 507]);
 export async function runMediaCreateOp(row: MediaOpRow): Promise<MediaOpOutcome> {
   const db = await getSyncDb();
   const fields = JSON.parse(row.fields_json ?? "{}") as MediaFields;
+
+  // Phase 0: the bytes still have to be here. If the OS reclaimed the cache
+  // dir — or a sibling op's discard unlinked them — `uploadAsync` throws a
+  // filesystem error with NO status, which no status classification can ever
+  // call permanent, so the op retried forever without ever parking. It is a
+  // terminal condition: park it where the user can see and discard it.
+  const missing = await firstMissingFile(fields);
+  if (missing) {
+    await db.runAsync(
+      "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
+      JSON.stringify({
+        code: 0,
+        message: "This file is no longer on this phone. Discard this upload.",
+      }),
+      row.seq,
+    );
+    return "blocked";
+  }
 
   // Phase 1: presign. Quota (507) / track-slot (409) → park blocked.
   let presign: PresignResponse | ConfirmedMedia;
@@ -352,7 +382,7 @@ function messageForBlock(status: number): string {
 /** Enqueue a media delete (used by the detail UI). */
 export async function deleteMediaLocal(media: MirrorMedia): Promise<void> {
   const db = await getSyncDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     // Optimistic: hide the row immediately; the op reconciles server + blobs.
     await db.runAsync(
       "UPDATE media SET sync_state = 'pendingDelete' WHERE id = ?",

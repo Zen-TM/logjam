@@ -16,6 +16,7 @@ import type {
 } from "@logjam/shared";
 
 import type { TCanyon, TTripLog } from "../api/types";
+import { withoutCanyonId, withoutCanyonLink } from "./canyonLinks";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
 
 // ── extras split ─────────────────────────────────────────────────────────────
@@ -299,6 +300,57 @@ export async function upsertFriendship(
   );
 }
 
+// ── canyon link cascade ──────────────────────────────────────────────────────
+
+/**
+ * Take a dead canyon out of the mirror's JSON link columns.
+ *
+ * Waypoints have linked to canyons MANY-TO-MANY since the m2m change; the
+ * cascade here used to null a `waypoints.canyon_id` column that no longer
+ * exists on any fresh install, which threw inside the delta transaction, took
+ * the cursor write down with the rollback, and froze the whole pull loop on
+ * the first canyon delete the account ever saw. Trips carry the link with its
+ * name (the derived title is built offline), so they need the same scrub in
+ * their own shape.
+ *
+ * Both the server tombstone and the local delete route through here — the two
+ * used to differ, which is how waypoints kept dead links while trips didn't.
+ */
+export async function scrubCanyonLinks(
+  db: SQLiteDatabase,
+  canyonId: string,
+): Promise<void> {
+  // LIKE narrows the rewrite to candidate rows (it matches substrings too, so
+  // the helpers decide); the alternative is parsing every waypoint on the phone.
+  const waypoints = await db.getAllAsync<{ id: string; canyon_ids_json: string | null }>(
+    "SELECT id, canyon_ids_json FROM waypoints WHERE canyon_ids_json LIKE ?",
+    `%${canyonId}%`,
+  );
+  for (const waypoint of waypoints) {
+    const next = withoutCanyonId(waypoint.canyon_ids_json, canyonId);
+    if (next === null) continue;
+    await db.runAsync(
+      "UPDATE waypoints SET canyon_ids_json = ? WHERE id = ?",
+      next,
+      waypoint.id,
+    );
+  }
+
+  const trips = await db.getAllAsync<{ id: string; canyons_json: string | null }>(
+    "SELECT id, canyons_json FROM trip_logs WHERE canyons_json LIKE ?",
+    `%${canyonId}%`,
+  );
+  for (const trip of trips) {
+    const next = withoutCanyonLink(trip.canyons_json, canyonId);
+    if (next === null) continue;
+    await db.runAsync(
+      "UPDATE trip_logs SET canyons_json = ? WHERE id = ?",
+      next,
+      trip.id,
+    );
+  }
+}
+
 // ── tombstone apply (§9 local cascade) ───────────────────────────────────────
 //
 // Returns local file paths of cached media blobs the caller must delete
@@ -337,15 +389,13 @@ export async function applyTombstone(
         tombstone.id,
       );
       await db.runAsync("DELETE FROM canyons WHERE id = ?", tombstone.id);
-      // Waypoint canyon links are SetNull server-side; mirror matches.
+      await db.runAsync("DELETE FROM canyon_shares WHERE canyon_id = ?", tombstone.id);
+      // Route canyon links are SetNull server-side; mirror matches.
       await db.runAsync(
         "UPDATE routes SET canyon_id = NULL WHERE canyon_id = ?",
         tombstone.id,
       );
-      await db.runAsync(
-        "UPDATE waypoints SET canyon_id = NULL WHERE canyon_id = ?",
-        tombstone.id,
-      );
+      await scrubCanyonLinks(db, tombstone.id);
       break;
     }
     case "tripLog": {

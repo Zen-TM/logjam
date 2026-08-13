@@ -28,6 +28,12 @@ export type SyncHealthInput = {
   pendingCount: number;
   /** Parked ops + shelved conflicts — things only the user can resolve. */
   issueCount: number;
+  /**
+   * Why the last cycle failed, when it did. `applyFailed` means the server
+   * answered and this app couldn't apply what it sent — a different sentence
+   * entirely from "no signal", and the difference is what the user acts on.
+   */
+  errorKind?: "unreachable" | "applyFailed" | null;
   /** No account: nothing syncs, and the honest answer is a different sentence. */
   accountState?: "guest" | "linked";
   /** Injectable for tests. */
@@ -102,6 +108,21 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
 
   // Order is a priority ranking, most serious first. Only one headline gets to
   // be the answer, so the worst true statement wins.
+
+  // 0.5. The server answered and the app couldn't apply it. Above everything
+  //      else because NOTHING new reaches this phone until it is resolved, and
+  //      because the two things the other branches would say — that the account
+  //      is unreachable, that it will keep retrying — are both false. Naming
+  //      the network here is worse than saying nothing: it sends a user with
+  //      full bars to go looking for signal.
+  if (input.errorKind === "applyFailed") {
+    return {
+      headline: "This phone couldn't apply an update",
+      detail:
+        "Retrying won't fix it. Open Sync issues to get a fresh copy of your data.",
+      tone: "problem",
+    };
+  }
 
   // 1. Something is stuck on a decision only the user can make. This outranks
   //    everything because retrying will never clear it.

@@ -16,6 +16,7 @@ import {
 import * as FileSystem from "expo-file-system";
 
 import { apiFetch } from "../api/apiFetch";
+import { loadOutboxRows, rowToEntry } from "./outbox";
 import {
   applyTombstone,
   notifyMirrorChanged,
@@ -33,38 +34,44 @@ import {
   getSyncStateValue,
   setSyncStateValue,
   wipeMirror,
+  withSyncTransaction,
 } from "./syncDb";
 
-type OutboxRow = {
-  seq: number;
-  entity: string;
-  op: string;
-  entity_id: string;
-  fields_json: string | null;
-  state: string;
-  attempts: number;
-};
-
+/** Every pending op, in the shape the shared rebase helpers take. One mapper
+ * for the whole app (`rowToEntry`): the near-duplicate that used to live here
+ * synthesised `opId` from the seq instead of reading `op_id`. */
 export async function loadOutboxEntries(): Promise<OutboxEntry[]> {
-  const db = await getSyncDb();
-  const rows = await db.getAllAsync<OutboxRow>(
-    `SELECT seq, entity, op, entity_id, fields_json, state, attempts
-       FROM outbox ORDER BY seq ASC`,
-  );
-  return rows.map((row) => ({
-    seq: row.seq,
-    state: row.state as OutboxEntry["state"],
-    attempts: row.attempts,
-    op: {
-      opId: String(row.seq),
-      entity: row.entity,
-      op: row.op,
-      id: row.entity_id,
-      ...(row.fields_json != null && {
-        fields: JSON.parse(row.fields_json) as Record<string, unknown>,
-      }),
-    } as SyncPushOp,
-  }));
+  return (await loadOutboxRows()).map(rowToEntry);
+}
+
+/**
+ * The server answered, and applying what it sent to the local mirror threw.
+ *
+ * A distinct failure MODE, not a distinct failure: retrying re-fetches the
+ * same page and fails the same way, forever, while the health line blames the
+ * network and promises a retry that cannot work. That is exactly what a
+ * cascade writing a dropped column did — 200 from the server, rollback on the
+ * phone, cursor frozen, "Can't reach your account" on screen.
+ */
+export class SyncApplyError extends Error {
+  constructor(cause: unknown) {
+    super("The app could not apply the update the server sent");
+    this.name = "SyncApplyError";
+    this.cause = cause;
+  }
+}
+
+/** One delta page as one transaction, with local-apply failures marked as
+ * such. The cursor write is inside it, so nothing here half-applies. */
+async function applyPage(
+  db: Awaited<ReturnType<typeof getSyncDb>>,
+  task: () => Promise<void>,
+): Promise<void> {
+  try {
+    await withSyncTransaction(db, task);
+  } catch (err) {
+    throw new SyncApplyError(err);
+  }
 }
 
 /** Rebase-on-pull (§8.5): server row + pending dirty fields replayed over
@@ -117,7 +124,7 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
     const outbox = await loadOutboxEntries();
     const orphanedPaths: string[] = [];
     const db = await getSyncDb();
-    await db.withTransactionAsync(async () => {
+    await applyPage(db, async () => {
       const { changes, tombstones } = response;
       for (const row of changes.canyons) {
         const { effective, dirtyNames } = rebase(row, "canyon", outbox);

@@ -17,7 +17,12 @@ import {
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
-import { loadOutboxRows, rowToEntry, type OutboxRow } from "./outbox";
+import {
+  loadOutboxRows,
+  loadOutboxRowsFor,
+  rowToEntry,
+  type OutboxRow,
+} from "./outbox";
 import {
   runMediaCreateOp,
   runMediaDeleteOp,
@@ -55,60 +60,93 @@ export async function flushOutbox(): Promise<void> {
       return;
     }
 
-    const seqs = ready.map((entry) => entry.seq);
-    await db.runAsync(
-      `UPDATE outbox SET state = 'inflight', attempts = attempts + 1
-       WHERE seq IN (${seqs.map(() => "?").join(",")})`,
-      ...seqs,
-    );
+    await sendBatch(db, ready, byOpId);
+  }
+}
 
-    let response: SyncPushResponse;
-    try {
-      response = await apiFetch<SyncPushResponse>("/sync/push", {
-        method: "POST",
-        body: { protocol: SYNC_PROTOCOL, ops: ready.map((entry) => entry.op) },
-      });
-    } catch (err) {
-      const status = (err as { status?: number }).status;
-      // A permanent 4xx (malformed envelope/op — bad protocol, unknown entity,
-      // non-v4 id, oversized batch) will NEVER succeed on retry. Requeuing it
-      // head-of-line-blocks the whole outbox forever and never surfaces to the
-      // user. Park the batch's ops as blocked so they appear in Sync Issues
-      // (Retry / Discard) and the rest of the outbox keeps draining. 401/403
-      // (token) and 429 (rate limit) are transient — requeue + back off.
-      if (status === 400 || status === 413) {
-        await db.runAsync(
-          `UPDATE outbox SET state = 'blocked', error_json = ? WHERE state = 'inflight'`,
-          JSON.stringify({
-            code: status,
-            message: "The server rejected this change. Retry or discard it.",
-          }),
-        );
-        notifyMirrorChanged();
-        continue;
-      }
-      // Network / 5xx / 401 / 403 / 429: requeue the batch; the engine owns backoff.
+/**
+ * Post one batch and apply its per-op results.
+ *
+ * An envelope-level 400/413 is the whole REQUEST refused, which the server
+ * does for a single structurally-bad op (`parsePushOp` throws before the
+ * per-op loop even begins). Parking the batch turned one malformed op into up
+ * to fifty separate Sync Issues, forty-nine of them telling the user the
+ * server rejected an edit it never saw. Bisect instead: halve until the batch
+ * is one op, and park exactly that op. Costs O(log n) extra requests on a
+ * fault that should never happen, and nothing at all when it doesn't.
+ */
+async function sendBatch(
+  db: Awaited<ReturnType<typeof getSyncDb>>,
+  batch: OutboxEntry[],
+  byOpId: Map<string, OutboxRow>,
+): Promise<void> {
+  const seqs = batch.map((entry) => entry.seq);
+  const placeholders = seqs.map(() => "?").join(",");
+  await db.runAsync(
+    `UPDATE outbox SET state = 'inflight', attempts = attempts + 1
+     WHERE seq IN (${placeholders})`,
+    ...seqs,
+  );
+
+  let response: SyncPushResponse;
+  try {
+    response = await apiFetch<SyncPushResponse>("/sync/push", {
+      method: "POST",
+      body: { protocol: SYNC_PROTOCOL, ops: batch.map((entry) => entry.op) },
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    // 401/403 (token) and 429 (rate limit) and 5xx and network are transient —
+    // requeue the batch and let the engine back off.
+    if (status !== 400 && status !== 413) {
       await db.runAsync(
-        "UPDATE outbox SET state = 'queued' WHERE state = 'inflight'",
+        `UPDATE outbox SET state = 'queued' WHERE seq IN (${placeholders})`,
+        ...seqs,
       );
       throw err;
     }
-
-    let mirrorTouched = false;
-    for (const [index, result] of response.results.entries()) {
-      const entry = ready[index];
-      if (entry.op.opId !== result.opId) {
-        // Results are positional per the contract; a mismatch means the
-        // server and client disagree about the batch — stop, resync later.
-        throw new Error("push result correlation mismatch");
-      }
-      const row = byOpId.get(result.opId);
-      if (!row) continue;
-      mirrorTouched =
-        (await applyOpResult(db, row, entry, result)) || mirrorTouched;
+    if (status === 413) {
+      // The client caps at SYNC_PUSH_MAX_OPS, so an oversized batch is OUR
+      // bug, not the user's. Say so where a developer will see it; the op
+      // still parks below so nothing is lost.
+      console.error(`sync push rejected as too large (${batch.length} ops)`);
     }
-    if (mirrorTouched) notifyMirrorChanged();
+    if (batch.length === 1) {
+      await db.runAsync(
+        "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
+        JSON.stringify({
+          code: status,
+          message: "The server rejected this change. Retry or discard it.",
+        }),
+        seqs[0],
+      );
+      notifyMirrorChanged();
+      return;
+    }
+    await db.runAsync(
+      `UPDATE outbox SET state = 'queued' WHERE seq IN (${placeholders})`,
+      ...seqs,
+    );
+    const mid = Math.ceil(batch.length / 2);
+    await sendBatch(db, batch.slice(0, mid), byOpId);
+    await sendBatch(db, batch.slice(mid), byOpId);
+    return;
   }
+
+  let mirrorTouched = false;
+  for (const [index, result] of response.results.entries()) {
+    const entry = batch[index];
+    if (entry.op.opId !== result.opId) {
+      // Results are positional per the contract; a mismatch means the
+      // server and client disagree about the batch — stop, resync later.
+      throw new Error("push result correlation mismatch");
+    }
+    const row = byOpId.get(result.opId);
+    if (!row) continue;
+    mirrorTouched =
+      (await applyOpResult(db, row, entry, result)) || mirrorTouched;
+  }
+  if (mirrorTouched) notifyMirrorChanged();
 }
 
 async function applyOpResult(
@@ -188,7 +226,11 @@ async function applyConfirmedRow(
   entry: OutboxEntry,
   serverRow: unknown,
 ): Promise<void> {
-  const remaining = (await loadOutboxRows()).map(rowToEntry);
+  // Only this row's ops matter to the rebase, and this runs once per applied
+  // op — reading the whole outbox here was fifty full-table scans per batch.
+  const remaining = (
+    await loadOutboxRowsFor(entry.op.entity, entry.op.id)
+  ).map(rowToEntry);
   const rebased = (base: Record<string, unknown>) => {
     const dirty = collectDirtyFields(remaining, entry.op.entity, entry.op.id);
     return {
@@ -243,19 +285,34 @@ async function applyConfirmedRow(
 // dependency): a still-queued or blocked canyon/trip create for the same
 // linkedId would send the upload into a guaranteed 404.
 
+/**
+ * After this many failed attempts a media op is parked rather than retried.
+ *
+ * Not every permanent failure carries an HTTP status — a filesystem error on a
+ * reclaimed cache file has none at all — so status classification alone can
+ * never be complete. The counter is the backstop: anything that fails this
+ * often is not going to succeed, and belongs in front of the user instead of
+ * in a five-minute retry loop forever.
+ */
+const MEDIA_MAX_ATTEMPTS = 5;
+
 async function flushMediaOps(): Promise<boolean> {
   const db = await getSyncDb();
   const rows = await db.getAllAsync<MediaOpRow & { op: string }>(
-    `SELECT seq, entity_id, op, fields_json, media_phase FROM outbox
+    `SELECT seq, entity_id, op, fields_json, media_phase, attempts FROM outbox
      WHERE entity = 'media' AND state = 'queued' ORDER BY seq ASC`,
   );
   let progressed = false;
   let mirrorTouched = false;
+  let firstError: unknown = null;
 
   for (const row of rows) {
     if (row.op === "create" && (await isLinkPending(db, row))) continue;
 
-    await db.runAsync("UPDATE outbox SET state = 'inflight' WHERE seq = ?", row.seq);
+    await db.runAsync(
+      "UPDATE outbox SET state = 'inflight', attempts = attempts + 1 WHERE seq = ?",
+      row.seq,
+    );
     try {
       const outcome =
         row.op === "delete"
@@ -267,17 +324,35 @@ async function flushMediaOps(): Promise<boolean> {
       }
       // 'blocked' already set its own state inside the op runner.
     } catch (err) {
-      // Network / 5xx: requeue and defer to the engine's backoff.
-      await db.runAsync(
-        "UPDATE outbox SET state = 'queued' WHERE seq = ? AND state = 'inflight'",
-        row.seq,
-      );
-      if (mirrorTouched) notifyMirrorChanged();
-      throw err;
+      // Per-op, NOT per-pass. Aborting the loop here let one unreadable photo
+      // head-of-line-block every other upload on the device permanently: the
+      // next pass hit the same op first and threw again, and because the op
+      // never parked it never appeared in Sync Issues either.
+      firstError ??= err;
+      const attempts = row.attempts + 1;
+      if (attempts >= MEDIA_MAX_ATTEMPTS) {
+        await db.runAsync(
+          "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
+          JSON.stringify({
+            code: 0,
+            message: "This upload keeps failing on this phone. Retry or discard it.",
+          }),
+          row.seq,
+        );
+        mirrorTouched = true;
+      } else {
+        await db.runAsync(
+          "UPDATE outbox SET state = 'queued' WHERE seq = ? AND state = 'inflight'",
+          row.seq,
+        );
+      }
     }
   }
 
   if (mirrorTouched) notifyMirrorChanged();
+  // The cycle still failed — the engine's backoff is what retries a genuinely
+  // transient outage — but every op got its turn first.
+  if (firstError) throw firstError;
   return progressed;
 }
 

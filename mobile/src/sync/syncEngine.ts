@@ -10,11 +10,25 @@ import { subscribeReconnect } from "../map/connectivity";
 
 import { fetchCurrentUser } from "../api/queries";
 import { canRunNow } from "../offline/networkPolicy";
-import { runDeltaPull } from "./deltaPull";
+import { runDeltaPull, SyncApplyError } from "./deltaPull";
 import { flushOutbox } from "./flush";
 import { syncThumbnailCache } from "./mediaCache";
 import { setMutationSyncHandler } from "./mediaSyncBridge";
-import { getSyncStateValue, setSyncStateValue } from "./syncDb";
+import {
+  clearSyncStateValue,
+  getSyncStateValue,
+  setSyncStateValue,
+} from "./syncDb";
+
+/**
+ * Why the last cycle failed. `unreachable` is the network — offline, a 5xx, an
+ * expired token — and a retry is a real promise. `applyFailed` is the server
+ * answering fine and THIS APP failing to apply what it sent: a retry re-fetches
+ * the same page and fails identically, so the copy must not blame the link or
+ * promise a retry, and the failure has to reach the screen built to list sync
+ * problems instead of hiding behind a self-healing message.
+ */
+export type SyncErrorKind = "unreachable" | "applyFailed";
 
 export type SyncStatus = {
   state: "idle" | "syncing" | "error";
@@ -22,9 +36,15 @@ export type SyncStatus = {
   lastSyncAt: string | null;
   /** User-safe message for the error state (no row contents). */
   errorMessage: string | null;
+  errorKind: SyncErrorKind | null;
 };
 
-let status: SyncStatus = { state: "idle", lastSyncAt: null, errorMessage: null };
+let status: SyncStatus = {
+  state: "idle",
+  lastSyncAt: null,
+  errorMessage: null,
+  errorKind: null,
+};
 const statusListeners = new Set<(status: SyncStatus) => void>();
 
 export function getSyncStatus(): SyncStatus {
@@ -81,19 +101,28 @@ async function runCycleOnce(): Promise<void> {
   // must not mark the whole cycle failed (rows retry next pass).
   await syncThumbnailCache().catch(() => {});
   retryAttempt = 0;
+  await clearSyncStateValue(APPLY_FAILED_KEY);
   setStatus({
     state: "idle",
     lastSyncAt: new Date().toISOString(),
     errorMessage: null,
+    errorKind: null,
   });
 }
+
+/** sync_state key recording an unapplicable delta page, so the failure
+ * survives a restart and can be counted as a sync issue. */
+export const APPLY_FAILED_KEY = "applyFailedAt";
 
 export function requestSync(): Promise<void> {
   if (running) {
     followUpRequested = true;
     return running;
   }
-  setStatus({ state: "syncing", errorMessage: null });
+  // Triggers are unregistered but an in-flight promise can still resolve into
+  // one: refuse to start after the shell handed the engine back.
+  if (stopped) return Promise.resolve();
+  setStatus({ state: "syncing", errorMessage: null, errorKind: null });
   running = (async () => {
     try {
       await runCycleOnce();
@@ -101,12 +130,31 @@ export function requestSync(): Promise<void> {
         followUpRequested = false;
         await runCycleOnce();
       }
-    } catch {
+    } catch (err) {
+      followUpRequested = false;
+      if (err instanceof SyncApplyError) {
+        // Nothing about waiting changes the outcome, so do not schedule a
+        // retry the user is then told about. The recovery is a fresh mirror
+        // (or a new app version), offered from Sync issues.
+        console.error("sync: delta page could not be applied", err.cause);
+        await setSyncStateValue(APPLY_FAILED_KEY, new Date().toISOString()).catch(
+          () => {},
+        );
+        setStatus({
+          state: "error",
+          errorMessage: "This phone couldn't apply an update.",
+          errorKind: "applyFailed",
+        });
+        return;
+      }
       // Offline or server trouble: quiet failure — the mirror keeps serving.
       // Exponential-backoff retry (§8.3, 1 s..5 min jitter) on top of the
       // event triggers, so a flaky link recovers without user action.
-      followUpRequested = false;
-      setStatus({ state: "error", errorMessage: "Couldn't sync. Will retry." });
+      setStatus({
+        state: "error",
+        errorMessage: "Couldn't sync. Will retry.",
+        errorKind: "unreachable",
+      });
       scheduleBackoffRetry();
     } finally {
       running = null;
@@ -117,9 +165,15 @@ export function requestSync(): Promise<void> {
 
 let retryAttempt = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
+/** Set by the trigger cleanup: no cycle and no timer may outlive sign-out. */
+let stopped = false;
 
 function scheduleBackoffRetry(): void {
-  if (retryTimer) return;
+  // A cycle already in flight when the shell unmounted still lands here on
+  // failure, and used to install a fresh timer AFTER the cleanup ran — a
+  // self-sustaining loop issuing authenticated requests with no owner and no
+  // way to stop it short of a process restart.
+  if (stopped || retryTimer) return;
   const delay = computeBackoffMs(retryAttempt);
   retryAttempt += 1;
   retryTimer = setTimeout(() => {
@@ -182,6 +236,13 @@ function requestAutoSync(): void {
  * returns a cleanup for sign-out.
  */
 export function registerSyncTriggers(): () => void {
+  // A previous registration's cleanup left the engine stopped; a fresh sign-in
+  // starts from clean module state rather than inheriting the old one's.
+  stopped = false;
+  retryAttempt = 0;
+  lastAutoSyncAt = 0;
+  followUpRequested = false;
+
   // Wire the post-enqueue trigger (outbox + media paths call it via the
   // bridge), then run the one-time Stage 7 → Stage 8 promotion of legacy
   // local-only waypoints into the synced mirror (best-effort; retried next
@@ -203,6 +264,8 @@ export function registerSyncTriggers(): () => void {
   requestAutoSync();
 
   return () => {
+    stopped = true;
+    followUpRequested = false;
     setMutationSyncHandler(null);
     appStateSub.remove();
     netInfoUnsub();

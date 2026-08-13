@@ -85,6 +85,7 @@ export function MoreScreen({
     lastSyncAt: syncStatus.lastSyncAt,
     pendingCount,
     issueCount,
+    errorKind: syncStatus.errorKind,
     accountState,
   });
   const tone = TONE_STYLE[health.tone];

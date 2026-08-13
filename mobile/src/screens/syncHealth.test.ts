@@ -102,6 +102,46 @@ describe("syncHealth", () => {
     expect(health.detail).toBe("Last synced 2 min ago. It will keep retrying.");
   });
 
+  describe("a failure the network is not to blame for", () => {
+    // Observed on device: the server answered 200 to every request while the
+    // app failed to apply the page locally, and the hero said "Can't reach your
+    // account … It will keep retrying." Both halves were false, and the true
+    // one — that nothing new will ever arrive until this is fixed — was nowhere.
+    it("does not blame the connection", () => {
+      const health = syncHealth(input({ state: "error", errorKind: "applyFailed" }));
+      expect(health.headline).toBe("This phone couldn't apply an update");
+      expect(health.headline).not.toMatch(/reach/i);
+      expect(health.tone).toBe("problem");
+    });
+
+    it("promises no retry, and points at the thing that does fix it", () => {
+      const health = syncHealth(input({ state: "error", errorKind: "applyFailed" }));
+      expect(health.detail).not.toMatch(/keep retrying/i);
+      expect(health.detail).toContain("Sync issues");
+    });
+
+    it("outranks the queue and the issue list", () => {
+      // Nothing incoming works until it is resolved, so it is the answer.
+      const health = syncHealth(
+        input({ state: "error", errorKind: "applyFailed", issueCount: 3, pendingCount: 9 }),
+      );
+      expect(health.headline).toBe("This phone couldn't apply an update");
+    });
+
+    it("still says 'unreachable' when that is what happened", () => {
+      const health = syncHealth(input({ state: "error", errorKind: "unreachable" }));
+      expect(health.headline).toBe("Can't reach your account");
+      expect(health.detail).toContain("It will keep retrying.");
+    });
+
+    it("leaves a guest out of it — they have no account either way", () => {
+      const health = syncHealth(
+        input({ accountState: "guest", state: "error", errorKind: "applyFailed" }),
+      );
+      expect(health.headline).toBe("Saved on this phone");
+    });
+  });
+
   it("says so when nothing has ever synced", () => {
     const health = syncHealth(input({ lastSyncAt: null }));
     expect(health.detail).toBe("Nothing has reached your account yet.");

@@ -31,9 +31,11 @@ import { onMirrorChanged } from "../sync/syncDb";
 import {
   discardParkedOp,
   dismissShelfEntry,
+  getApplyFailureAt,
   listParkedOps,
   listShelfEntries,
   recreateFromDeadRemote,
+  resyncFromScratch,
   retryParkedOp,
   type ParkedOp,
   type ShelfEntry,
@@ -55,6 +57,10 @@ type Issue =
 export function SyncIssuesScreen({ onBack }: { onBack: () => void }) {
   const [parked, setParked] = useState<ParkedOp[]>([]);
   const [shelf, setShelf] = useState<ShelfEntry[]>([]);
+  // Not an outbox row: the server sent something this app version can't apply,
+  // which stops every incoming change until it is resolved. It has no Retry —
+  // retrying re-fetches the same page — so it gets its own affordance.
+  const [applyFailedAt, setApplyFailedAt] = useState<string | null>(null);
   const [bucket, setBucket] = useState<Bucket>("all");
   const [menuIssue, setMenuIssue] = useState<Issue | null>(null);
   // Nothing on this screen is disabled offline, and that is deliberate: every
@@ -64,13 +70,32 @@ export function SyncIssuesScreen({ onBack }: { onBack: () => void }) {
   const online = useConnectivity() === "online";
 
   const load = useCallback(() => {
-    Promise.all([listParkedOps(), listShelfEntries()])
-      .then(([parkedOps, shelfEntries]) => {
+    Promise.all([listParkedOps(), listShelfEntries(), getApplyFailureAt()])
+      .then(([parkedOps, shelfEntries, failedAt]) => {
         setParked(parkedOps);
         setShelf(shelfEntries);
+        setApplyFailedAt(failedAt);
       })
       .catch((err: unknown) => console.error(err));
   }, []);
+
+  const confirmResync = useCallback(() => {
+    Alert.alert(
+      "Get a fresh copy?",
+      "The app downloads your canyons, trips and photos again from scratch. " +
+        "Changes still waiting to upload are kept.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Download again",
+          onPress: () =>
+            void resyncFromScratch()
+              .then(load)
+              .catch((err: unknown) => console.error(err)),
+        },
+      ],
+    );
+  }, [load]);
 
   useEffect(() => {
     load();
@@ -121,7 +146,7 @@ export function SyncIssuesScreen({ onBack }: { onBack: () => void }) {
     return [...parkedItems, ...shelvedItems];
   }, [bucket, parked, shelf]);
 
-  const total = parked.length + shelf.length;
+  const total = parked.length + shelf.length + (applyFailedAt ? 1 : 0);
   const buckets: SegmentOption<Bucket>[] = [
     { value: "all", label: "All", count: total },
     { value: "parked", label: "Parked", count: parked.length, disabled: parked.length === 0 },
@@ -137,7 +162,13 @@ export function SyncIssuesScreen({ onBack }: { onBack: () => void }) {
     <View style={styles.root}>
       <HeroHeader
         eyebrow="Sync issues"
-        title={parked.length > 0 ? "Needs a decision" : total > 0 ? "Nothing blocked" : "All clear"}
+        title={
+          parked.length > 0 || applyFailedAt
+            ? "Needs a decision"
+            : total > 0
+              ? "Nothing blocked"
+              : "All clear"
+        }
         onBack={onBack}
         value={String(total)}
         valueSuffix={total === 1 ? "entry" : "entries"}
@@ -146,6 +177,20 @@ export function SyncIssuesScreen({ onBack }: { onBack: () => void }) {
       {total > 0 ? (
         <View style={styles.rail}>
           <SegmentedControl options={buckets} value={bucket} onChange={setBucket} scroll />
+        </View>
+      ) : null}
+
+      {applyFailedAt ? (
+        <View style={styles.rail}>
+          <Row
+            icon="alert-octagon"
+            hue={theme.warning}
+            title="This phone couldn't apply an update"
+            subtitle="Nothing new is arriving. Download a fresh copy to fix it."
+            titleNumberOfLines={2}
+            onPress={confirmResync}
+            right={<StatusPill label="Stuck" tone="warning" />}
+          />
         </View>
       ) : null}
 

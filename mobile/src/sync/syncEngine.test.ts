@@ -1,0 +1,138 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Two lifecycle bugs, both of which only appear when a cycle FAILS:
+//
+//  - a cycle already in flight when the shell unmounts lands in the catch,
+//    schedules a backoff retry AFTER the cleanup ran, fails again (no session)
+//    and schedules again — authenticated requests forever, with no owner and no
+//    way to stop it short of a process restart;
+//  - a page the app cannot APPLY was reported as an unreachable account with a
+//    promise to keep retrying, which is two lies and a retry storm.
+
+class ApplyError extends Error {
+  constructor() {
+    super("apply failed");
+    this.name = "SyncApplyError";
+  }
+}
+
+let pullError: Error | null = null;
+let pulls = 0;
+const stateWrites: Record<string, string> = {};
+
+vi.mock("react-native", () => ({
+  AppState: { addEventListener: () => ({ remove: () => {} }) },
+}));
+vi.mock("../map/connectivity", () => ({ subscribeReconnect: () => () => {} }));
+vi.mock("../api/queries", () => ({
+  fetchCurrentUser: () => Promise.resolve({ id: "user-1" }),
+}));
+vi.mock("../offline/networkPolicy", () => ({ canRunNow: () => Promise.resolve(true) }));
+vi.mock("./flush", () => ({ flushOutbox: () => Promise.resolve() }));
+vi.mock("./mediaCache", () => ({ syncThumbnailCache: () => Promise.resolve() }));
+vi.mock("./mediaSyncBridge", () => ({ setMutationSyncHandler: () => {} }));
+vi.mock("./outbox", () => ({ migrateLegacyWaypoints: () => Promise.resolve() }));
+vi.mock("./deltaPull", () => ({
+  SyncApplyError: ApplyError,
+  runDeltaPull: () => {
+    pulls += 1;
+    return pullError ? Promise.reject(pullError) : Promise.resolve({ pages: 1 });
+  },
+}));
+vi.mock("./syncDb", () => ({
+  getSyncStateValue: (key: string) => Promise.resolve(stateWrites[key] ?? "user-1"),
+  setSyncStateValue: (key: string, value: string) => {
+    stateWrites[key] = value;
+    return Promise.resolve();
+  },
+  clearSyncStateValue: (key: string) => {
+    delete stateWrites[key];
+    return Promise.resolve();
+  },
+}));
+
+const { APPLY_FAILED_KEY, getSyncStatus, registerSyncTriggers, requestSync } =
+  await import("./syncEngine");
+
+/** Let the engine's promise chain settle without waiting on real timers. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 12; i += 1) await Promise.resolve();
+}
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  pullError = null;
+  pulls = 0;
+  delete stateWrites[APPLY_FAILED_KEY];
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("failure classification", () => {
+  it("calls a network failure unreachable and retries it", async () => {
+    const stop = registerSyncTriggers();
+    pullError = new Error("Network request failed");
+    await settle();
+    expect(getSyncStatus().errorKind).toBe("unreachable");
+    expect(getSyncStatus().errorMessage).toContain("retry");
+
+    const before = pulls;
+    await vi.advanceTimersByTimeAsync(400_000);
+    expect(pulls).toBeGreaterThan(before);
+    stop();
+  });
+
+  it("calls a local apply failure what it is, and does NOT retry it", async () => {
+    const stop = registerSyncTriggers();
+    pullError = new ApplyError();
+    await settle();
+
+    expect(getSyncStatus().errorKind).toBe("applyFailed");
+    expect(getSyncStatus().errorMessage).not.toMatch(/reach/i);
+    // Retrying re-fetches the same page and fails the same way; the recovery is
+    // a fresh mirror, offered from Sync issues.
+    expect(stateWrites[APPLY_FAILED_KEY]).toBeDefined();
+
+    const before = pulls;
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(pulls).toBe(before);
+    stop();
+  });
+
+  it("clears the marker once a cycle succeeds", async () => {
+    stateWrites[APPLY_FAILED_KEY] = "2026-08-13T00:00:00.000Z";
+    const stop = registerSyncTriggers();
+    await settle();
+    expect(getSyncStatus().state).toBe("idle");
+    expect(stateWrites[APPLY_FAILED_KEY]).toBeUndefined();
+    stop();
+  });
+});
+
+describe("stopping", () => {
+  it("does not start a cycle after the shell handed the engine back", async () => {
+    const stop = registerSyncTriggers();
+    await settle();
+    stop();
+
+    const before = pulls;
+    await requestSync();
+    await settle();
+    expect(pulls).toBe(before);
+  });
+
+  it("does not let an in-flight failure resurrect the retry loop", async () => {
+    // The window: the cycle is running when the user signs out, so cleanup has
+    // already cleared the timer by the time the failure schedules a new one.
+    const stop = registerSyncTriggers();
+    pullError = new Error("offline");
+    stop();
+    await settle();
+
+    const before = pulls;
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(pulls).toBe(before);
+  });
+});
