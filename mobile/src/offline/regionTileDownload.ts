@@ -21,7 +21,7 @@
 // catalog stays the single source of which sources may be downloaded at all.
 import { AppState } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { fetch as expoFetch } from "expo/fetch";
 import {
   BASEMAP_CATALOG,
@@ -423,7 +423,7 @@ export async function runRegionDownload(
     // The real cost on disk, not this session's byte counter — a resumed job
     // only counted the tiles IT fetched, and Saved reports storage from this
     // number (DESIGN.md §8: report the true cost of a thing).
-    const info = await FileSystem.getInfoAsync(target.uri, { size: true });
+    const info = await FileSystem.getInfoAsync(target.uri);
     const artifact: MapArtifact = {
       id: spec.id,
       kind: "basemap-region",

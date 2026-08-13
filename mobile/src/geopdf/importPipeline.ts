@@ -21,8 +21,8 @@
 // its existence) touches the API. Errors surfaced to the UI are static
 // strings or parser error CODES; file-derived detail stays in-app.
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
-import { Directory, File } from "expo-file-system/next";
+import * as FileSystem from "expo-file-system/legacy";
+import { Directory, File } from "expo-file-system";
 
 import {
   GeoPdfParseError,

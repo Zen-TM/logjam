@@ -13,7 +13,7 @@ import {
   type SyncDeltaResponse,
   type SyncPushOp,
 } from "@logjam/shared";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { apiFetch } from "../api/apiFetch";
 import { loadOutboxRows, rowToEntry } from "./outbox";

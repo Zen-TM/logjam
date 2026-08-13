@@ -6,7 +6,7 @@
 //
 // PRIVACY: the bbox rides the authed POST body only; progress/errors are
 // logged (console) as state words and counts, never coordinates or paths.
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { apiFetch, getAuthedRequestHeaders } from "../api/apiFetch";
 import { config } from "../config";
@@ -88,7 +88,7 @@ export async function downloadProtomapsRegion(
     }
 
     // Verify: exact size + PMTiles magic bytes (stage4a §9 http-file verify).
-    const info = await FileSystem.getInfoAsync(fileUri, { size: true });
+    const info = await FileSystem.getInfoAsync(fileUri);
     if (!info.exists || info.size !== clip.sizeBytes) {
       throw new Error("Region download incomplete");
     }

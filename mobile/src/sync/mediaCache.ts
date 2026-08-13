@@ -6,7 +6,7 @@
 // PRIVACY: cached blobs are canyon photos — app-private storage only
 // (documentDirectory, covered by allowBackup=false), paths tracked in the
 // mirror so tombstone apply deletes them with their rows.
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { categoryHasThumbnail, mediaCategory } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";

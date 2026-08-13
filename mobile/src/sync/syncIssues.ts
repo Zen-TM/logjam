@@ -5,7 +5,7 @@
 //
 // PRIVACY: parked ops and shelf entries carry canyon field values (names,
 // coords). Rendered only behind the app lock; never logged.
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 import {
   collectDirtyFields,

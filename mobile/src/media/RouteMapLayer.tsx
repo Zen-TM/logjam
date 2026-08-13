@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { CircleLayer, LineLayer, ShapeSource } from "@maplibre/maplibre-react-native";
 import { parseVectorImport, type ImportedFeature } from "@logjam/shared";
 

@@ -16,7 +16,7 @@
 // as a `Uint8Array` instead of decoding base64 a character at a time.
 //
 // PRIVACY: file names and paths stay in-app; nothing here logs either.
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { scratchFileUri } from "../offline/localStores";
 
@@ -26,7 +26,7 @@ import { scratchFileUri } from "../offline/localStores";
  * at all — a caller that can't measure a file must not go on to read it.
  */
 export async function fileSizeBytes(uri: string): Promise<number> {
-  const info = await FileSystem.getInfoAsync(uri, { size: true });
+  const info = await FileSystem.getInfoAsync(uri);
   if (!info.exists) throw new Error("Logjam couldn't open that file.");
   return info.size ?? 0;
 }

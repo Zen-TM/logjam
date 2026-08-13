@@ -11,7 +11,7 @@ import {
 // a full phone failed mid-write and reported "That didn't finish. Try again."
 
 const getFreeDiskStorageAsync = vi.fn();
-vi.mock("expo-file-system", () => ({
+vi.mock("expo-file-system/legacy", () => ({
   getFreeDiskStorageAsync: () => getFreeDiskStorageAsync(),
 }));
 

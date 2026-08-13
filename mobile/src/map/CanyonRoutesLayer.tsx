@@ -14,7 +14,7 @@
 // for files this phone has actually fetched. It reports how many it could not
 // read rather than quietly drawing a partial picture.
 import { useEffect, useState } from "react";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { CircleLayer, LineLayer, ShapeSource } from "@maplibre/maplibre-react-native";
 import { TRACK_MIME_TYPES, parseVectorImport } from "@logjam/shared";
 

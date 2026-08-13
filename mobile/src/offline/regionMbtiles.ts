@@ -16,7 +16,7 @@
 // PRIVACY: these files hold canyon-area coordinates in their `bounds` metadata
 // and live in app-private, backup-excluded storage behind the app lock. Never
 // log a path or a bbox from here — progress logging is counts and state words.
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as SQLite from "expo-sqlite";
 import { xyzToTmsRow, type OfflineBasemapId, type RegionBbox } from "@logjam/shared";
 

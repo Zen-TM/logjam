@@ -10,7 +10,7 @@ import { fileSizeBytes, stageIncomingFile } from "./stagedFile";
 
 const getInfoAsync = vi.fn();
 const copyAsync = vi.fn(async (_options: unknown) => {});
-vi.mock("expo-file-system", () => ({
+vi.mock("expo-file-system/legacy", () => ({
   getInfoAsync: (uri: string, options?: unknown) => getInfoAsync(uri, options),
   copyAsync: (options: unknown) => copyAsync(options),
 }));

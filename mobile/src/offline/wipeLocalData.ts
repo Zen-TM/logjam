@@ -33,7 +33,7 @@
 // failure to delete is worth surfacing, so per-store failures are collected and
 // returned rather than swallowed — but one failing store never prevents the
 // others from being cleared.
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { stopGeoPdfImportRun } from "../geopdf/importRunner";
 import { wipeAllSyncData } from "../sync/syncDb";

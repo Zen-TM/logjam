@@ -12,7 +12,7 @@
 import { useEffect, useState } from "react";
 import { Asset } from "expo-asset";
 import { unzipSync } from "fflate";
-import { Directory, File } from "expo-file-system/next";
+import { Directory, File } from "expo-file-system";
 
 import { BASEMAP_ASSETS_DIR } from "../../offline/localStores";
 
@@ -23,7 +23,7 @@ const VERSION_MARKER_NAME = ".version";
 async function installBasemapAssets(): Promise<string> {
   const root = new Directory(BASEMAP_ASSETS_DIR);
   const marker = new File(root, VERSION_MARKER_NAME);
-  if (marker.exists && marker.text() === BASEMAP_ASSETS_COMMIT) {
+  if (marker.exists && marker.textSync() === BASEMAP_ASSETS_COMMIT) {
     return root.uri;
   }
 
@@ -41,7 +41,7 @@ async function installBasemapAssets(): Promise<string> {
     throw new Error("basemap-assets.zip missing localUri after downloadAsync");
   }
 
-  const entries = unzipSync(new File(zipAsset.localUri).bytes());
+  const entries = unzipSync(new File(zipAsset.localUri).bytesSync());
   const filePaths = Object.keys(entries).filter((p) => !p.endsWith("/"));
 
   // Parents first (create is not recursive across missing intermediates

@@ -13,7 +13,7 @@
 // This module only makes sure they are asked before the bytes start, not after.
 //
 // PRIVACY: byte counts about this handset. Nothing here names a file.
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 /**
  * Headroom the write must leave. A phone at literally zero free bytes cannot

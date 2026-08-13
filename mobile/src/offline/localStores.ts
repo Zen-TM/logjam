@@ -16,7 +16,7 @@
 // PRIVACY: these trees hold canyon coordinates (regions, imports, route/track
 // exports) and photos. `wipeAllLocalData` deleting all of them IS the privacy
 // boundary between two users of one phone (mobile/CLAUDE.md).
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { Platform } from "react-native";
 
 /** Photos and videos, both cached server media and not-yet-uploaded originals. */

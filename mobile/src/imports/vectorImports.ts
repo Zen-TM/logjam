@@ -7,8 +7,8 @@
 // there). Errors surfaced to the UI are the shared parser's static strings or
 // generic transport messages; never file content.
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
-import { File } from "expo-file-system/next";
+import * as FileSystem from "expo-file-system/legacy";
+import { File } from "expo-file-system";
 import { unzipSync } from "fflate";
 
 import { parseVectorImport, IMPORT_ERRORS } from "@logjam/shared";
@@ -121,7 +121,7 @@ async function parseAndStore(
   let sourceName = displayName;
   let text: string;
   if (sourceName.toLowerCase().endsWith(".kmz")) {
-    ({ fileName: sourceName, text } = kmlFromKmz(new File(sourceUri).bytes()));
+    ({ fileName: sourceName, text } = kmlFromKmz(new File(sourceUri).bytesSync()));
   } else {
     text = await FileSystem.readAsStringAsync(sourceUri);
   }

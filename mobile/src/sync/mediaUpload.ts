@@ -9,7 +9,7 @@
 // (allowBackup=false), never logged. The three-phase flow reuses the same
 // authed endpoints + anti-oracle as the web client.
 import * as Crypto from "expo-crypto";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { getThumbnailAsync } from "expo-video-thumbnails";
 import {

@@ -13,7 +13,7 @@
 // in the same app-private, backup-excluded store as basemap regions, behind
 // the app lock (any artifact row arms it). Progress/errors are surfaced as
 // state words and counts — never paths or job/layer labels.
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 import type { TopoLayerFormat, TopoLayerKey } from "@logjam/shared";
 
@@ -101,7 +101,7 @@ export async function downloadTopoOverlay(
 
     // Verify: content-length match when known + PMTiles magic bytes
     // (stage4a §9 http-file verify).
-    const info = await FileSystem.getInfoAsync(fileUri, { size: true });
+    const info = await FileSystem.getInfoAsync(fileUri);
     if (!info.exists || info.size === 0 || (expectedBytes > 0 && info.size !== expectedBytes)) {
       throw new Error("Overlay download incomplete");
     }

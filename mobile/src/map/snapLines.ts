@@ -17,7 +17,7 @@
 // PRIVACY: the bbox comes from where the user is drawing. It selects tiles to
 // range-request from our own CDN — or, offline, byte ranges of a local file —
 // and is never sent as a query. Nothing logs.
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import {
   BASEMAP_CATALOG,
   fetchSnapLines,

@@ -23,7 +23,7 @@
 // it is precise timestamped location history. It goes only to the folder the
 // user chose; nothing here logs the name, the path, or the geometry.
 import { Platform } from "react-native";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import {
   exportFilename,
   GPX_MIME_TYPE,
