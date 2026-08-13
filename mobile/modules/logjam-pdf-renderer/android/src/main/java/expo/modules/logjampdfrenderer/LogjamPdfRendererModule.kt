@@ -11,6 +11,7 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import android.view.WindowManager
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
@@ -107,6 +108,27 @@ class LogjamPdfRendererModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("LogjamPdfRenderer")
+
+    // FLAG_SECURE for the app lock (see offline/appLockPreference.ts). Lives
+    // here rather than in expo-screen-capture because that library registers a
+    // screenshot observer at import time, which on Android 14+ throws without
+    // DETECT_SCREEN_CAPTURE — a permission this app would have to declare and
+    // never use, to get a window flag that is three lines of Kotlin.
+    AsyncFunction("setSecureFlag") { enabled: Boolean, promise: Promise ->
+      val activity = appContext.activityProvider?.currentActivity
+      if (activity == null) {
+        promise.reject(CodedException("ERR_NO_ACTIVITY", "No current activity", null))
+      } else {
+        activity.runOnUiThread {
+          if (enabled) {
+            activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+          } else {
+            activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+          }
+          promise.resolve(null)
+        }
+      }
+    }
 
     AsyncFunction("open") { fileUri: String, promise: Promise ->
       executor.execute {

@@ -24,22 +24,20 @@ vi.mock("expo-local-authentication", () => ({
   authenticateAsync: (...args: unknown[]) => authenticate(...(args as [])),
 }));
 
-const preventScreenCaptureAsync = vi.fn(async () => {});
-const allowScreenCaptureAsync = vi.fn(async () => {});
-vi.mock("expo-screen-capture", () => ({
-  preventScreenCaptureAsync: (...args: unknown[]) =>
-    preventScreenCaptureAsync(...(args as [])),
-  allowScreenCaptureAsync: (...args: unknown[]) =>
-    allowScreenCaptureAsync(...(args as [])),
+// FLAG_SECURE is set through our own native module, not expo-screen-capture —
+// see applyScreenCapturePolicy for why.
+const setSecureFlag = vi.fn(async (_enabled: boolean) => {});
+vi.mock("../../modules/logjam-pdf-renderer/src/LogjamPdfRendererModule", () => ({
+  default: { setSecureFlag: (...args: unknown[]) => setSecureFlag(...(args as [boolean])) },
 }));
+vi.mock("react-native", () => ({ Platform: { OS: "android" } }));
 
 const { applyScreenCapturePolicy, isAppLockEnabled, setAppLockEnabled } =
   await import("./appLockPreference");
 
 beforeEach(() => {
   storedValue = null;
-  preventScreenCaptureAsync.mockClear();
-  allowScreenCaptureAsync.mockClear();
+  setSecureFlag.mockClear();
   authenticate.mockClear();
   authenticate.mockResolvedValue({ success: true });
 });
@@ -48,30 +46,27 @@ describe("FLAG_SECURE follows the app lock", () => {
   it("blocks screen capture when the lock is turned on", async () => {
     const result = await setAppLockEnabled(true);
     expect(result).toEqual({ status: "changed", enabled: true });
-    expect(preventScreenCaptureAsync).toHaveBeenCalledTimes(1);
-    expect(allowScreenCaptureAsync).not.toHaveBeenCalled();
+    expect(setSecureFlag).toHaveBeenCalledExactlyOnceWith(true);
   });
 
   it("releases it when the lock is turned off", async () => {
     await setAppLockEnabled(true);
-    preventScreenCaptureAsync.mockClear();
+    setSecureFlag.mockClear();
     await setAppLockEnabled(false);
-    expect(allowScreenCaptureAsync).toHaveBeenCalledTimes(1);
-    expect(preventScreenCaptureAsync).not.toHaveBeenCalled();
+    expect(setSecureFlag).toHaveBeenCalledExactlyOnceWith(false);
   });
 
   it("re-applies the stored preference at startup", async () => {
     // FLAG_SECURE is per-process; the preference is what persists.
     storedValue = "on";
     await applyScreenCapturePolicy();
-    expect(preventScreenCaptureAsync).toHaveBeenCalledTimes(1);
+    expect(setSecureFlag).toHaveBeenCalledExactlyOnceWith(true);
   });
 
   it("leaves capture alone for the default-off install", async () => {
     storedValue = null;
     await applyScreenCapturePolicy();
-    expect(preventScreenCaptureAsync).not.toHaveBeenCalled();
-    expect(allowScreenCaptureAsync).toHaveBeenCalledTimes(1);
+    expect(setSecureFlag).toHaveBeenCalledExactlyOnceWith(false);
   });
 });
 
@@ -83,7 +78,7 @@ describe("the off-requires-auth asymmetry still holds", () => {
     expect(result.status).toBe("cancelled");
     expect(isAppLockEnabled()).toBe(true);
     // …and screen capture stays blocked, because the lock is still on.
-    expect(allowScreenCaptureAsync).not.toHaveBeenCalled();
+    expect(setSecureFlag).not.toHaveBeenCalledWith(false);
   });
 
   it("turning it on needs no authentication", async () => {

@@ -47,6 +47,14 @@ declare class LogjamPdfRendererModule extends NativeModule {
   close(handle: number): Promise<void>;
 
   /**
+   * ANDROID ONLY — add/clear `FLAG_SECURE` on the activity window, which blocks
+   * screenshots and blanks the task-switcher thumbnail. Driven by the app-lock
+   * preference (`offline/appLockPreference.ts`, the only caller); see the Kotlin
+   * side for why this is not `expo-screen-capture`.
+   */
+  setSecureFlag(enabled: boolean): Promise<void>;
+
+  /**
    * SHA-256 of a file as lowercase hex, streamed natively off the JS thread.
    * The import's content-address, computed without the bytes ever entering the
    * JS heap — see the Kotlin side for why that matters.

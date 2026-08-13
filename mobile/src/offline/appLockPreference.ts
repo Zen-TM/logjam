@@ -24,7 +24,9 @@
 // canyon names and coordinates from the moment the user signs in, so "there is
 // nothing to protect yet" was never true (see AppLockGate).
 import * as LocalAuthentication from "expo-local-authentication";
-import * as ScreenCapture from "expo-screen-capture";
+import { Platform } from "react-native";
+
+import LogjamPdfRenderer from "../../modules/logjam-pdf-renderer/src/LogjamPdfRendererModule";
 
 import { readPref, writePref } from "../prefsDb";
 
@@ -77,10 +79,6 @@ export async function setAppLockEnabled(enabled: boolean): Promise<AppLockChange
   return { status: "changed", enabled };
 }
 
-/** The tag scoping our FLAG_SECURE claim, so a future caller (a secrets screen,
- * say) can raise and drop its own without clearing this one. */
-const SCREEN_CAPTURE_TAG = "app-lock";
-
 /**
  * FLAG_SECURE follows the lock, and only the lock.
  *
@@ -94,13 +92,18 @@ const SCREEN_CAPTURE_TAG = "app-lock";
  * legitimate field workflow, and a user who declined the lock declined this
  * threat model with it. Call on every startup as well as on every toggle —
  * FLAG_SECURE is per-process state, and the preference is what persists.
+ *
+ * Android-only, via our own native module. `expo-screen-capture` would be the
+ * obvious library, but it registers a screenshot observer when its module is
+ * constructed, which on Android 14+ throws `Permission Denial:
+ * registerScreenCaptureObserver` unless the app declares
+ * DETECT_SCREEN_CAPTURE — a permission this app would ship, show in the Play
+ * listing, and never use, to reach a window flag that is three lines of Kotlin.
+ * iOS has no equivalent flag; the lock's own gate is the guard there.
  */
 export async function applyScreenCapturePolicy(): Promise<void> {
-  if (isAppLockEnabled()) {
-    await ScreenCapture.preventScreenCaptureAsync(SCREEN_CAPTURE_TAG);
-  } else {
-    await ScreenCapture.allowScreenCaptureAsync(SCREEN_CAPTURE_TAG);
-  }
+  if (Platform.OS !== "android") return;
+  await LogjamPdfRenderer.setSecureFlag(isAppLockEnabled());
 }
 
 type AuthOutcome = { status: "ok" } | { status: "no"; result: AppLockChange };
