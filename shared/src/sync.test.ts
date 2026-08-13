@@ -3,7 +3,11 @@ import {
   decodeSyncCursor,
   encodeSyncCursor,
   isUuidV4,
+  parseSyncDeltaCanyonRow,
+  parseSyncDeltaTripRow,
+  parseSyncDeltaWaypointRow,
   SYNC_ENTITY_TYPES,
+  SyncRowError,
 } from "./sync";
 
 describe("isUuidV4", () => {
@@ -102,5 +106,105 @@ describe("SYNC_ENTITY_TYPES", () => {
       "waypoint",
       "route",
     ]);
+  });
+});
+
+describe("delta row parsers", () => {
+  const canyon = {
+    id: "c1",
+    ownerId: "u1",
+    syncRole: "owner",
+    name: "Claustral",
+    altNames: [],
+    latitude: -33.5,
+    longitude: 150.4,
+    numAbseils: 6,
+    longestAbseil: null,
+    vGrade: 4,
+    aGrade: 3,
+    commitment: 3,
+    quality: null,
+    hours: 7,
+    notes: null,
+    attributes: {},
+    ropeWikiId: null,
+    forkedFromId: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.000Z",
+  };
+  const trip = {
+    id: "t1",
+    userId: "u1",
+    date: "2026-01-01T00:00:00.000Z",
+    displayName: null,
+    types: ["canyon"],
+    notes: null,
+    customFields: {},
+    canyons: [{ id: "c1", name: "Claustral" }],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const waypoint = {
+    id: "w1",
+    ownerId: "u1",
+    syncRole: "shared",
+    canyonIds: ["c1"],
+    name: "Carpark",
+    latitude: -33.5,
+    longitude: 150.4,
+    elevation: null,
+    symbol: null,
+    notes: null,
+    tags: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  it("accepts well-formed rows and preserves unknown extra keys", () => {
+    expect(parseSyncDeltaCanyonRow({ ...canyon, futureField: 1 })).toMatchObject({
+      id: "c1",
+      futureField: 1,
+    });
+    expect(parseSyncDeltaTripRow(trip).id).toBe("t1");
+    expect(parseSyncDeltaWaypointRow(waypoint).id).toBe("w1");
+  });
+
+  it("rejects non-objects", () => {
+    for (const value of [null, undefined, 7, "row", []]) {
+      expect(() => parseSyncDeltaCanyonRow(value)).toThrow(SyncRowError);
+    }
+  });
+
+  it("rejects a missing or wrongly-typed field, naming it", () => {
+    expect(() =>
+      parseSyncDeltaCanyonRow({ ...canyon, latitude: "-33.5" }),
+    ).toThrow(/latitude/);
+    const { name: _dropped, ...noName } = canyon;
+    expect(() => parseSyncDeltaCanyonRow(noName)).toThrow(/name/);
+    // Required-but-nullable stays required: undefined is not null.
+    expect(() => parseSyncDeltaCanyonRow({ ...canyon, notes: undefined })).toThrow(
+      /notes/,
+    );
+    expect(() => parseSyncDeltaTripRow({ ...trip, canyons: [{ id: "c1" }] })).toThrow(
+      /canyons/,
+    );
+    expect(() =>
+      parseSyncDeltaWaypointRow({ ...waypoint, syncRole: "editor" }),
+    ).toThrow(/syncRole/);
+    expect(() => parseSyncDeltaWaypointRow({ ...waypoint, tags: [1] })).toThrow(
+      /tags/,
+    );
+  });
+
+  it("never puts field VALUES in the message (they are names and coords)", () => {
+    try {
+      parseSyncDeltaCanyonRow({ ...canyon, latitude: "-33.5", name: 7 });
+      throw new Error("expected a throw");
+    } catch (err) {
+      const message = (err as Error).message;
+      expect(message).toContain("latitude");
+      expect(message).not.toContain("-33.5");
+      expect(message).not.toContain("Claustral");
+    }
   });
 });

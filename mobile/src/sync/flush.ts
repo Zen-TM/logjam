@@ -5,13 +5,13 @@
 import {
   collectDirtyFields,
   filterSelfConflicts,
+  parseSyncDeltaCanyonRow,
+  parseSyncDeltaTripRow,
+  parseSyncDeltaWaypointRow,
   selectFlushBatch,
   SYNC_PROTOCOL,
   SYNC_PUSH_MAX_OPS,
   type OutboxEntry,
-  type SyncDeltaCanyonRow,
-  type SyncDeltaTripRow,
-  type SyncDeltaWaypointRow,
   type SyncPushOpResult,
   type SyncPushResponse,
 } from "@logjam/shared";
@@ -231,10 +231,10 @@ async function applyConfirmedRow(
   const remaining = (
     await loadOutboxRowsFor(entry.op.entity, entry.op.id)
   ).map(rowToEntry);
-  const rebased = (base: Record<string, unknown>) => {
+  const rebased = <Row extends object>(base: Row) => {
     const dirty = collectDirtyFields(remaining, entry.op.entity, entry.op.id);
     return {
-      effective: { ...base, ...dirty },
+      effective: { ...base, ...dirty } as Row,
       dirtyNames: Object.keys(dirty),
     };
   };
@@ -243,32 +243,25 @@ async function applyConfirmedRow(
     case "canyon": {
       // Push results return the raw row (no syncRole); only own rows are
       // pushable, so the caller is the owner.
-      const base = {
-        syncRole: "owner",
-        ...(serverRow as object),
-      } as SyncDeltaCanyonRow;
-      const { effective, dirtyNames } = rebased(
-        base as unknown as Record<string, unknown>,
+      const base = parseSyncDeltaCanyonRow(
+        typeof serverRow === "object" && serverRow !== null
+          ? { syncRole: "owner", ...serverRow }
+          : serverRow,
       );
-      await upsertCanyon(db, effective as unknown as SyncDeltaCanyonRow, dirtyNames);
+      const { effective, dirtyNames } = rebased(base);
+      await upsertCanyon(db, effective, dirtyNames);
       break;
     }
     case "tripLog": {
-      const { effective, dirtyNames } = rebased(
-        serverRow as Record<string, unknown>,
-      );
-      await upsertTrip(db, effective as unknown as SyncDeltaTripRow, dirtyNames);
+      const base = parseSyncDeltaTripRow(serverRow);
+      const { effective, dirtyNames } = rebased(base);
+      await upsertTrip(db, effective, dirtyNames);
       break;
     }
     case "waypoint": {
-      const { effective, dirtyNames } = rebased(
-        serverRow as Record<string, unknown>,
-      );
-      await upsertWaypoint(
-        db,
-        effective as unknown as SyncDeltaWaypointRow,
-        dirtyNames,
-      );
+      const base = parseSyncDeltaWaypointRow(serverRow);
+      const { effective, dirtyNames } = rebased(base);
+      await upsertWaypoint(db, effective, dirtyNames);
       break;
     }
     case "notification":

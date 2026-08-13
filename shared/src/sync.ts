@@ -297,6 +297,130 @@ export type SyncDeltaResponse = {
   tombstones: SyncDeltaTombstone[];
 };
 
+// ── Delta row validation (trust boundary) ────────────────────────────────────
+//
+// The rows above are a hand-mirrored view of what the server sends: TypeScript
+// asserts nothing at runtime, so a renamed or newly-nullable field lands in a
+// client's local mirror as corruption that no compiler ever saw. These parsers
+// are the boundary check — call them before writing a server row into local
+// storage. They throw rather than coerce: a mirror is a rebuildable cache, so
+// failing the apply and re-pulling is always cheaper than storing junk.
+//
+// PRIVACY: messages name FIELDS ONLY, never values — a row carries canyon
+// names and coordinates and these messages reach logs.
+// Unknown extra keys are ALLOWED (protocol §10.3 is additive-only).
+
+export class SyncRowError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SyncRowError";
+  }
+}
+
+type FieldCheck = (value: unknown) => boolean;
+
+const isString: FieldCheck = (value) => typeof value === "string";
+const isNumber: FieldCheck = (value) =>
+  typeof value === "number" && Number.isFinite(value);
+const isPlainObject: FieldCheck = (value) =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+const isSyncRole: FieldCheck = (value) =>
+  value === "owner" || value === "shared";
+const nullable =
+  (check: FieldCheck): FieldCheck =>
+  (value) =>
+    value === null || check(value);
+const arrayOf =
+  (check: FieldCheck): FieldCheck =>
+  (value) =>
+    Array.isArray(value) && value.every(check);
+const isCanyonRef: FieldCheck = (value) =>
+  isPlainObject(value) &&
+  isString((value as Record<string, unknown>).id) &&
+  isString((value as Record<string, unknown>).name);
+
+const CANYON_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  ownerId: isString,
+  syncRole: isSyncRole,
+  name: isString,
+  altNames: arrayOf(isString),
+  latitude: isNumber,
+  longitude: isNumber,
+  numAbseils: nullable(isNumber),
+  longestAbseil: nullable(isNumber),
+  vGrade: nullable(isNumber),
+  aGrade: nullable(isNumber),
+  commitment: nullable(isNumber),
+  quality: nullable(isNumber),
+  hours: nullable(isNumber),
+  notes: nullable(isString),
+  attributes: isPlainObject,
+  ropeWikiId: nullable(isNumber),
+  forkedFromId: nullable(isString),
+  createdAt: isString,
+  updatedAt: isString,
+};
+
+const TRIP_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  userId: isString,
+  date: isString,
+  displayName: nullable(isString),
+  types: arrayOf(isString),
+  notes: nullable(isString),
+  customFields: isPlainObject,
+  canyons: arrayOf(isCanyonRef),
+  createdAt: isString,
+  updatedAt: isString,
+};
+
+const WAYPOINT_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  ownerId: isString,
+  syncRole: isSyncRole,
+  canyonIds: arrayOf(isString),
+  name: isString,
+  latitude: isNumber,
+  longitude: isNumber,
+  elevation: nullable(isNumber),
+  symbol: nullable(isString),
+  notes: nullable(isString),
+  tags: arrayOf(isString),
+  createdAt: isString,
+  updatedAt: isString,
+};
+
+function parseRow<Row>(
+  entity: string,
+  value: unknown,
+  spec: Record<string, FieldCheck>,
+): Row {
+  if (!isPlainObject(value)) {
+    throw new SyncRowError(`sync ${entity} row is not an object`);
+  }
+  const row = value as Record<string, unknown>;
+  const bad = Object.keys(spec).filter((field) => !spec[field](row[field]));
+  if (bad.length > 0) {
+    throw new SyncRowError(
+      `sync ${entity} row has missing or invalid fields: ${bad.join(", ")}`,
+    );
+  }
+  return value as Row;
+}
+
+export function parseSyncDeltaCanyonRow(value: unknown): SyncDeltaCanyonRow {
+  return parseRow<SyncDeltaCanyonRow>("canyon", value, CANYON_ROW_SPEC);
+}
+
+export function parseSyncDeltaTripRow(value: unknown): SyncDeltaTripRow {
+  return parseRow<SyncDeltaTripRow>("tripLog", value, TRIP_ROW_SPEC);
+}
+
+export function parseSyncDeltaWaypointRow(value: unknown): SyncDeltaWaypointRow {
+  return parseRow<SyncDeltaWaypointRow>("waypoint", value, WAYPOINT_ROW_SPEC);
+}
+
 // ── Cursor codec (§4.2) ──────────────────────────────────────────────────────
 //
 // The cursor is server-minted and opaque to the client (stored + returned
