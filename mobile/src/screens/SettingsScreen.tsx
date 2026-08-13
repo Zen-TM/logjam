@@ -94,11 +94,25 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
   const [sheet, setSheet] = useState<SheetMode>({ kind: "closed" });
   const [tripFieldDefs, setTripFieldDefs] = useState<TripLogCustomFieldDef[]>([]);
   const [canyonFieldDefs, setCanyonFieldDefs] = useState<TripLogCustomFieldDef[]>([]);
+  // Re-seed on the VALUE, not on `user.id` — which never changes for a signed-in
+  // user, so defs edited on another device and pulled in by a refetch while this
+  // screen stayed mounted were silently dropped. The serialized value is the key
+  // because a refetch mints a fresh object every time even when nothing moved.
+  const serverFieldDefsKey = user
+    ? JSON.stringify({
+        tripLog: customFieldDefsOf(user, "tripLog"),
+        canyon: customFieldDefsOf(user, "canyon"),
+      })
+    : null;
   useEffect(() => {
-    if (!user) return;
-    setTripFieldDefs(customFieldDefsOf(user, "tripLog"));
-    setCanyonFieldDefs(customFieldDefsOf(user, "canyon"));
-  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!serverFieldDefsKey) return;
+    const defs = JSON.parse(serverFieldDefsKey) as Record<
+      CustomFieldEntity,
+      TripLogCustomFieldDef[]
+    >;
+    setTripFieldDefs(defs.tripLog);
+    setCanyonFieldDefs(defs.canyon);
+  }, [serverFieldDefsKey]);
 
   const defsFor = (entity: CustomFieldEntity) =>
     entity === "tripLog" ? tripFieldDefs : canyonFieldDefs;

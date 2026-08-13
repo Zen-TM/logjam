@@ -74,13 +74,22 @@ export function NotificationSettingsScreen() {
   // Optimistic with rollback: a switch that waits for a round trip feels broken,
   // and a switch that lies about a failed save is worse.
   const [notifications, setNotifications] = useState<NotificationPreferences | null>(null);
+  // Re-seed on the VALUE, not on `user.id` — which never changes for a signed-in
+  // user, so a preference edited on another device and pulled in by a refetch
+  // while this screen stayed mounted was silently dropped. Keying on the
+  // serialized value (rather than the object, which a refetch mints fresh every
+  // time) is also what keeps an in-flight optimistic toggle from being clobbered
+  // by an identical server answer.
+  const serverNotificationsKey = user
+    ? JSON.stringify({
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        ...(user.uiPreferences?.notifications ?? {}),
+      })
+    : null;
   useEffect(() => {
-    if (!user) return;
-    setNotifications({
-      ...DEFAULT_NOTIFICATION_PREFERENCES,
-      ...(user.uiPreferences?.notifications ?? {}),
-    });
-  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!serverNotificationsKey) return;
+    setNotifications(JSON.parse(serverNotificationsKey) as NotificationPreferences);
+  }, [serverNotificationsKey]);
 
   const toggleNotification = useCallback(
     (key: keyof NotificationPreferences) => {
