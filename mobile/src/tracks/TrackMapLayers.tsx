@@ -1,7 +1,7 @@
 // Map layers for recorded tracks + waypoints (Stage 7). Rendered inside
 // MapView; sources are unpinned so they draw above the basemap/overlay bands —
 // mount this BEFORE the canyon sources so canyons stay on top.
-import { useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   CircleLayer,
   LineLayer,
@@ -16,7 +16,67 @@ import { trackPointsToFeature } from "./trackGeoJson";
 
 const WAYPOINT_COLOR = "#f97316"; // matches the owned-canyon orange family
 
-export function TrackMapLayers({
+// Stable identity for "no points loaded yet" — a fresh [] per render would
+// defeat TrackLine's memo.
+const EMPTY_POINTS: RecordedTrackPoint[] = [];
+
+/**
+ * One track's line. Memoised, and so is the geometry inside it: MapScreen
+ * re-renders at the compass cadence (~20 Hz while the tape or locate-me runs),
+ * and rebuilding a growing MultiLineString per render handed the native source
+ * a new `shape` object 20 times a second on the screen the user carries while
+ * walking (MLIFE-003). Now the geometry is rebuilt only when the stored points,
+ * the live tail or the segment actually change.
+ */
+const TrackLine = memo(function TrackLine({
+  track,
+  stored,
+  liveCoord,
+}: {
+  track: Track;
+  stored: RecordedTrackPoint[];
+  liveCoord: [number, number] | null;
+}) {
+  const tail = track.state === "recording" ? liveCoord : null;
+  const shape = useMemo(() => {
+    const points = tail
+      ? [
+          ...stored,
+          {
+            lon: tail[0],
+            lat: tail[1],
+            altitudeM: null,
+            accuracyM: null,
+            timestampMs: Date.now(),
+            segment: track.currentSegment,
+          },
+        ]
+      : stored;
+    return trackPointsToFeature(points);
+  }, [stored, tail, track.currentSegment]);
+
+  if (shape.geometry.coordinates.length === 0) return null;
+  return (
+    <ShapeSource id={`track-${track.id}`} shape={shape}>
+      <LineLayer
+        id={`track-line-${track.id}`}
+        style={{
+          lineColor: track.color,
+          lineWidth: 3,
+          lineOpacity: 0.9,
+          lineJoin: "round",
+          lineCap: "round",
+        }}
+      />
+    </ShapeSource>
+  );
+});
+
+// Memoised: every prop is stable across a compass-driven re-render of
+// MapScreen (tracks/waypoints come from useTracks' state, liveCoord from a
+// fix, onWaypointPress is a useCallback), so the whole subtree is skipped
+// instead of re-walking every visible track 20 times a second.
+export const TrackMapLayers = memo(function TrackMapLayers({
   tracks,
   waypoints,
   liveCoord,
@@ -63,65 +123,44 @@ export function TrackMapLayers({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadKey]);
 
+  // Same reason as TrackLine: rebuilt when the waypoints change, not on every
+  // compass tick.
+  const waypointShape = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features: waypoints.map((waypoint) => ({
+        type: "Feature" as const,
+        id: waypoint.id,
+        geometry: {
+          type: "Point" as const,
+          coordinates: [waypoint.lon, waypoint.lat],
+        },
+        properties: {
+          id: waypoint.id,
+          name: waypoint.name,
+          // Per-feature so one layer paints every tag; a match
+          // expression here would duplicate the lookup table.
+          color: waypoint.color ?? WAYPOINT_COLOR,
+        },
+      })),
+    }),
+    [waypoints],
+  );
+
   return (
     <>
-      {visibleTracks.map((track) => {
-        const stored = pointsById.get(track.id) ?? [];
-        const points =
-          liveCoord && track.state === "recording"
-            ? [
-                ...stored,
-                {
-                  lon: liveCoord[0],
-                  lat: liveCoord[1],
-                  altitudeM: null,
-                  accuracyM: null,
-                  timestampMs: Date.now(),
-                  segment: track.currentSegment,
-                },
-              ]
-            : stored;
-        if (points.length < 2) return null;
-        return (
-          <ShapeSource
-            key={track.id}
-            id={`track-${track.id}`}
-            shape={trackPointsToFeature(points)}
-          >
-            <LineLayer
-              id={`track-line-${track.id}`}
-              style={{
-                lineColor: track.color,
-                lineWidth: 3,
-                lineOpacity: 0.9,
-                lineJoin: "round",
-                lineCap: "round",
-              }}
-            />
-          </ShapeSource>
-        );
-      })}
+      {visibleTracks.map((track) => (
+        <TrackLine
+          key={track.id}
+          track={track}
+          stored={pointsById.get(track.id) ?? EMPTY_POINTS}
+          liveCoord={liveCoord}
+        />
+      ))}
       {waypoints.length > 0 ? (
         <ShapeSource
           id="waypoints"
-          shape={{
-            type: "FeatureCollection",
-            features: waypoints.map((waypoint) => ({
-              type: "Feature" as const,
-              id: waypoint.id,
-              geometry: {
-                type: "Point" as const,
-                coordinates: [waypoint.lon, waypoint.lat],
-              },
-              properties: {
-                id: waypoint.id,
-                name: waypoint.name,
-                // Per-feature so one layer paints every tag; a match
-                // expression here would duplicate the lookup table.
-                color: waypoint.color ?? WAYPOINT_COLOR,
-              },
-            })),
-          }}
+          shape={waypointShape}
           onPress={(event) => {
             const id = event.features[0]?.properties?.id as string | undefined;
             const waypoint = waypoints.find((w) => w.id === id);
@@ -154,4 +193,4 @@ export function TrackMapLayers({
       ) : null}
     </>
   );
-}
+});

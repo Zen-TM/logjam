@@ -605,7 +605,10 @@ export function AppShell({
     // No account, no device row to register the push token against. The tap
     // listener still mounts — it costs nothing and keeps this effect's shape
     // identical either way.
-    if (!isGuest) registerForPushNotifications();
+    //
+    // This registers the token only when notification permission is ALREADY
+    // granted; it never prompts (MRUN-004 — Settings → Notifications asks).
+    if (!isGuest) void registerForPushNotifications();
     const subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
         const data = response.notification.request.content.data as {

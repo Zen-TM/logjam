@@ -37,6 +37,7 @@ import * as FileSystem from "expo-file-system";
 
 import { stopGeoPdfImportRun } from "../geopdf/importRunner";
 import { wipeAllSyncData } from "../sync/syncDb";
+import { stopTrackRecordingForWipe } from "../tracks/trackRecorder";
 import { WIPED_DIRS } from "./localStores";
 import { cancelAllRegionDownloads } from "./regionDownloadQueue";
 import { getOfflineDb, notifyRegistryChanged } from "./registryDb";
@@ -89,9 +90,14 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   // Both calls also clear the module-level job state (region labels, bboxes,
   // the import's sheet name), which otherwise outlived sign-out for the life
   // of the JS context and rendered on the next account's Saved screen.
+  //
+  // A live track recording is a producer too: its foreground service keeps
+  // delivering fixes into a `track` row this wipe is about to delete, and its
+  // in-memory point series is the departing user's location history.
   const stopped = await Promise.all([
     stoppedInTime(cancelAllRegionDownloads()),
     stoppedInTime(stopGeoPdfImportRun()),
+    stoppedInTime(stopTrackRecordingForWipe()),
   ]);
   if (stopped.some((ok) => !ok)) failed.push("a download that wouldn't stop");
 

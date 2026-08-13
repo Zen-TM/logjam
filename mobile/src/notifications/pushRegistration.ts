@@ -14,7 +14,39 @@ import { apiFetch } from "../api/apiFetch";
 
 const PUSH_TOKEN_KEY = "logjam_push_token";
 
+/**
+ * App-start registration. NEVER prompts: on Android a POST_NOTIFICATIONS dialog
+ * fired from a mount effect lands over a blank screen before the user has seen
+ * the app, and a denial there can't be re-prompted — that install loses push
+ * permanently (MRUN-004). Asking is `requestPushPermission()`'s job, from a
+ * screen where the user knows what they are answering.
+ */
 export async function registerForPushNotifications(): Promise<void> {
+  const permission = await Notifications.getPermissionsAsync().catch(
+    (err: unknown) => {
+      console.error(err);
+      return null;
+    },
+  );
+  if (!permission?.granted) return;
+  await registerGrantedDevice();
+}
+
+/**
+ * Ask for notification permission and register if it is given. Call this only
+ * from a context where the user has just asked for notifications — the
+ * Notifications settings screen.
+ *
+ * Returns the permission state so the caller can report it.
+ */
+export async function requestPushPermission(): Promise<boolean> {
+  const permission = await Notifications.requestPermissionsAsync();
+  if (!permission.granted) return false; // said no — respect it, no retry nag
+  await registerGrantedDevice();
+  return true;
+}
+
+async function registerGrantedDevice(): Promise<void> {
   try {
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {
@@ -22,8 +54,6 @@ export async function registerForPushNotifications(): Promise<void> {
         importance: Notifications.AndroidImportance.DEFAULT,
       });
     }
-    const permission = await Notifications.requestPermissionsAsync();
-    if (!permission.granted) return; // user said no — respect it, no retry nag
 
     const projectId: string | undefined =
       Constants.expoConfig?.extra?.eas?.projectId;

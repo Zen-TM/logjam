@@ -11,10 +11,11 @@
 // while walking), distance and ascent ride beside it as labelled stats, and the
 // three controls sit on their own row so none of them is a mis-tap away from
 // another.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import { formatDistanceM, formatDurationMs } from "@logjam/shared";
 
+import { ensureForegroundLocationPermission } from "../map/locationPermission";
 import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
 import { Button, IconButton } from "../ui";
 import {
@@ -25,9 +26,21 @@ import {
   trackDurationMs,
 } from "./trackRecorder";
 import type { Track } from "./tracksDb";
+import {
+  isRecordingWriteFailing,
+  onTrackWriteHealthChanged,
+} from "./trackWriteQueue";
 
 export function TrackRecordingControls({ activeTrack }: { activeTrack: Track }) {
   const recording = activeTrack.state === "recording";
+
+  // A recorder that cannot write must not present as one that is writing: the
+  // clock keeps ticking off the wall clock whether or not points reach SQLite,
+  // so a run of failed batch writes is said out loud here (MLIFE-001).
+  const writeFailing = useSyncExternalStore(
+    onTrackWriteHealthChanged,
+    isRecordingWriteFailing,
+  );
 
   // The clock ticks on its own second, not on the arrival of a fix batch. The
   // stored durationMs only moves when a batch lands, so on good GPS while
@@ -46,10 +59,20 @@ export function TrackRecordingControls({ activeTrack }: { activeTrack: Track }) 
   }, [activeTrack, recording]);
 
   const handlePauseResume = useCallback(() => {
-    (recording
-      ? pauseTrackRecording(activeTrack.id)
-      : resumeTrackRecording(activeTrack)
-    ).catch((err) => {
+    const work = async () => {
+      if (recording) {
+        await pauseTrackRecording(activeTrack.id);
+        return;
+      }
+      // Resuming arms the location service again, and the permission can have
+      // been revoked while the recording was paused (Android 12+ auto-revoke,
+      // or the user changing it in settings). Ask the same way starting does —
+      // that alert names the problem and offers system settings, where the
+      // generic error below reads as "the pause button glitched".
+      if (!(await ensureForegroundLocationPermission())) return;
+      await resumeTrackRecording(activeTrack);
+    };
+    work().catch((err: unknown) => {
       console.error(err);
       Alert.alert("Recording error", "Couldn't change the recording state.");
     });
@@ -106,6 +129,12 @@ export function TrackRecordingControls({ activeTrack }: { activeTrack: Track }) 
           <Stat label="Ascent" value={`${Math.round(activeTrack.elevationGainM)} m`} />
         </View>
       </View>
+      {writeFailing ? (
+        <Text style={styles.writeWarning}>
+          Points aren&apos;t being saved — this phone&apos;s storage is refusing
+          writes. Finish and check free space.
+        </Text>
+      ) : null}
       <View style={styles.actions}>
         <Button
           label={recording ? "Pause" : "Resume"}
@@ -189,6 +218,11 @@ const styles = StyleSheet.create({
   statValue: {
     color: theme.textPrimary,
     fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
+  writeWarning: {
+    color: theme.warning,
+    fontSize: fontSize.xs,
     fontWeight: fontWeight.medium,
   },
   actions: { flexDirection: "row", alignItems: "center", gap: spacing(1) },

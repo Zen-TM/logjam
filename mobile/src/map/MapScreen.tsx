@@ -21,6 +21,7 @@ import {
 } from "react";
 import {
   Alert,
+  AppState,
   BackHandler,
   Linking,
   Pressable,
@@ -178,7 +179,7 @@ import {
   updateRouteLocal,
 } from "../sync/outbox";
 import {
-  reconcileTrackRecordingOnLaunch,
+  reconcileTrackRecording,
   startTrackRecording,
 } from "../tracks/trackRecorder";
 import { TrackMapLayers } from "../tracks/TrackMapLayers";
@@ -721,9 +722,19 @@ export function MapScreen({
   const lastPovBearing = useRef<number | null>(null);
   const firstFix = useRef(true);
 
+  // Both watchers are assigned from an `await`, so an unmount landing between
+  // the call and its resolution runs the cleanup against null refs and the
+  // subscription then installs itself into a dead component with nothing left
+  // to remove it — a sensor held for the life of the process (MLIFE-007). The
+  // flag is checked at every assignment below; AppLockGate unmounts the whole
+  // tree on a background→foreground cycle, which is how the window is entered.
+  const unmounted = useRef(false);
+
   // Stop the position/heading watchers when the screen unmounts.
   useEffect(() => {
+    unmounted.current = false;
     return () => {
+      unmounted.current = true;
       locationWatch.current?.remove();
       locationWatch.current = null;
       headingWatch.current?.remove();
@@ -1388,8 +1399,20 @@ export function MapScreen({
 
   // Reconcile a recording that outlived the app (kill/reboot) — marks it
   // paused when the platform task died, stops an orphaned task.
+  //
+  // On every return to the foreground, not only on mount: this screen mounts
+  // once per process (bottom-tab navigator), so a service killed by an OEM
+  // battery manager or by Doze while the app stayed mounted left the HUD
+  // claiming to record until the next cold launch (MLIFE-006).
   useEffect(() => {
-    reconcileTrackRecordingOnLaunch().catch(console.error);
+    const reconcile = () => {
+      reconcileTrackRecording().catch(console.error);
+    };
+    reconcile();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") reconcile();
+    });
+    return () => subscription.remove();
   }, []);
 
   // A press-and-hold is "something goes here". Two things can: a waypoint (a
@@ -2017,7 +2040,7 @@ export function MapScreen({
       // corrects the magnetic reading rather than passing it off as true —
       // everything else on this screen, including the navigate-to chip and the
       // tape's labels, is true north.
-      headingWatch.current = await Location.watchHeadingAsync((heading) => {
+      const subscription = await Location.watchHeadingAsync((heading) => {
         const raw = resolveTrueHeading(heading);
         if (raw == null) return;
         const next = smoothHeading(smoothedHeading.current, raw);
@@ -2046,6 +2069,10 @@ export function MapScreen({
           animationDuration: HEADING_RENDER_MS,
         });
       });
+      // Resolved into an unmounted screen: nothing will ever remove it, so
+      // remove it here.
+      if (unmounted.current) subscription.remove();
+      else headingWatch.current = subscription;
     } finally {
       headingWatchStarting.current = false;
     }
@@ -2174,7 +2201,7 @@ export function MapScreen({
 
     // Balanced = fused wifi/cell + GPS. High (GPS-priority) starves indoors
     // and the callback never fires — the original silent-failure mode.
-    locationWatch.current = await Location.watchPositionAsync(
+    const subscription = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.Balanced,
         timeInterval: 3000,
@@ -2182,6 +2209,13 @@ export function MapScreen({
       },
       (position) => applyFix(position, true),
     );
+    // See `unmounted` above: a watch that resolves after teardown has to remove
+    // itself, or the GPS request outlives the screen.
+    if (unmounted.current) {
+      subscription.remove();
+      return;
+    }
+    locationWatch.current = subscription;
 
     await ensureHeadingWatch();
   }, [ensureHeadingWatch, recentre, requestPovRecentre, setCameraStop]);

@@ -24,6 +24,7 @@ import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "
 import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { scratchFileUri } from "../offline/localStores";
+import { alertPermissionDenied } from "../permissionAlert";
 import { listTrackPoints, listTracks, type Track } from "../tracks/tracksDb";
 import { BottomSheet, Row, SectionHeader } from "../ui";
 import { MediaViewer } from "./MediaViewer";
@@ -161,19 +162,45 @@ export function MediaStrip({
           ? existing
           : await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!permission.granted) {
-          Alert.alert(
-            "Photo access needed",
-            "Allow photo library access to attach photos and videos.",
-          );
+          alertPermissionDenied({
+            title: "Photo access needed",
+            askAgainMessage:
+              "Allow photo library access to attach photos and videos.",
+            settingsMessage:
+              "Photo access was previously denied. Enable it for Logjam in system settings.",
+            canAskAgain: permission.canAskAgain,
+          });
           return;
         }
       }
       const mediaTypes: ImagePicker.MediaType[] =
         kind === "video" ? ["videos"] : source === "camera" ? ["images"] : ["images", "videos"];
-      const result =
-        source === "camera"
-          ? await ImagePicker.launchCameraAsync({ mediaTypes, quality: 1 })
-          : await ImagePicker.launchImageLibraryAsync({ mediaTypes, quality: 1 });
+      let result: ImagePicker.ImagePickerResult;
+      try {
+        result =
+          source === "camera"
+            ? await ImagePicker.launchCameraAsync({ mediaTypes, quality: 1 })
+            : await ImagePicker.launchImageLibraryAsync({ mediaTypes, quality: 1 });
+      } catch (err) {
+        // launchCameraAsync REJECTS when CAMERA is denied (its own native
+        // ensureCameraPermissionsAreGranted), so a denial used to close the
+        // sheet and do nothing at all, forever. READ the status here — don't
+        // ask for it, per the comment above.
+        if (source === "camera") {
+          const permission = await ImagePicker.getCameraPermissionsAsync();
+          if (!permission.granted) {
+            alertPermissionDenied({
+              title: "Camera permission needed",
+              askAgainMessage: "Allow camera access to take a photo here.",
+              settingsMessage:
+                "The camera was previously denied. Enable it for Logjam in system settings.",
+              canAskAgain: permission.canAskAgain,
+            });
+            return;
+          }
+        }
+        throw err;
+      }
       if (result.canceled || result.assets.length === 0) return;
       const asset = result.assets[0];
       await attach({
@@ -334,7 +361,13 @@ export function MediaStrip({
           const job = pending;
           if (!job) return;
           setPending(null);
-          void job();
+          // The job is a picker flow that can reject (a denied camera, a
+          // document picker that failed): unhandled here, it was an unhandled
+          // promise rejection and the button looked dead.
+          void Promise.resolve(job()).catch((err: unknown) => {
+            console.error(err);
+            fail("That didn't work. Please try again.");
+          });
         }}
         title={
           sourceMode === "tracks"

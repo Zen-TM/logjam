@@ -28,6 +28,10 @@ import {
   readFixRate,
 } from "./recordingPreferences";
 import {
+  enqueueTrackWrite,
+  resetTrackWriteHealth,
+} from "./trackWriteQueue";
+import {
   appendTrackPoints,
   deleteTrack,
   findActiveTrack,
@@ -63,9 +67,30 @@ function locationOptions(): Location.LocationTaskOptions {
 
 const TRACK_COLOR = "#f59e0b"; // amber — distinct from the import palette
 
-// Serialise batch writes: deliveries can arrive faster than a write completes,
-// and two interleaved handlers would both read the same lastTrackPoint.
-let writeChain: Promise<void> = Promise.resolve();
+// The active track's point series, held between batches so a fix does not cost
+// two full-table reads (MLIFE-004: the read was O(points) per batch, quadratic
+// over a recording). This module's task handler is the only writer of
+// `track_point`, so the cache can only go stale by losing a write — which the
+// `pointCount` check below catches, falling back to the DB.
+//
+// PRIVACY: this is precise location history in memory. It is dropped at every
+// lifecycle transition (start/pause/resume/finish/discard/reconcile), so
+// nothing outlives the recording it belongs to.
+let pointCache: { trackId: string; points: RecordedTrackPoint[] } | null = null;
+
+function dropPointCache(): void {
+  pointCache = null;
+}
+
+/** The stored series, from cache when it provably matches the row's count. */
+async function trackPointsForStats(track: Track): Promise<RecordedTrackPoint[]> {
+  if (pointCache?.trackId === track.id && pointCache.points.length === track.pointCount) {
+    return pointCache.points;
+  }
+  const points = await listTrackPoints(track.id);
+  pointCache = { trackId: track.id, points };
+  return points;
+}
 
 /**
  * Elapsed recording time from the wall clock. The point-derived duration in
@@ -88,7 +113,10 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
   // Fixes can trail in after pause/finish (queued deliveries) — drop them.
   if (!track || track.state !== "recording") return;
 
-  const lastPoint = await lastTrackPoint(track.id);
+  // The whole stored series, cached across batches; it also supplies the
+  // acceptance filter's `prev` without a second query.
+  const stored = await trackPointsForStats(track);
+  const lastPoint = stored.length > 0 ? stored[stored.length - 1] : null;
   // A resumed segment starts fresh: measured against the PREVIOUS segment's
   // last point, every fix after a resume-in-place reads "too-close" and the
   // new segment records nothing until the user walks away from where they
@@ -115,8 +143,13 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
   }
   if (accepted.length === 0) return;
   await appendTrackPoints(track.id, accepted);
-  // O(points) per batch — fine at canyon scale (a full day ≈ thousands).
-  const stats = computeTrackStats(await listTrackPoints(track.id));
+  const all = stored.concat(accepted);
+  pointCache = { trackId: track.id, points: all };
+  // ponytail: stats are still recomputed over the whole series per batch —
+  // O(points) of pure JS, no I/O. Make it incremental (settled prefix + tail,
+  // both smoothing windows carry state) only if a device profile says the
+  // arithmetic itself costs; the two full-table reads were the expensive part.
+  const stats = computeTrackStats(all);
   await updateTrack(track.id, {
     stats: { ...stats, durationMs: trackDurationMs(track, null) },
   });
@@ -133,8 +166,9 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
       return;
     }
     if (!data?.locations?.length) return;
-    writeChain = writeChain.then(() => handleLocationBatch(data.locations));
-    await writeChain;
+    // Never rejects, and never skips the write because an earlier one failed —
+    // see trackWriteQueue.ts.
+    await enqueueTrackWrite(() => handleLocationBatch(data.locations));
   },
 );
 
@@ -171,6 +205,8 @@ export async function startTrackRecording(): Promise<Track> {
     updatedAt: now.toISOString(),
   };
   await insertTrack(track);
+  dropPointCache();
+  resetTrackWriteHealth();
   try {
     await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
   } catch (error) {
@@ -183,6 +219,7 @@ export async function startTrackRecording(): Promise<Track> {
 
 export async function pauseTrackRecording(trackId: string): Promise<void> {
   await stopLocationUpdatesIfRunning();
+  dropPointCache();
   // The pause clock starts at the TAP, not at the last fix — a user who stood
   // still for ten minutes before pausing was otherwise credited with them.
   await updateTrack(trackId, {
@@ -198,17 +235,35 @@ export async function resumeTrackRecording(track: Track): Promise<void> {
     track.pausedAt == null
       ? 0
       : Math.max(0, Date.now() - Date.parse(track.pausedAt));
+  dropPointCache();
   await updateTrack(track.id, {
     state: "recording",
     currentSegment: track.currentSegment + 1,
     pausedMs: track.pausedMs + pausedSinceMs,
     pausedAt: null,
   });
-  await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
+  try {
+    await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
+  } catch (error) {
+    // No half-armed state, same rule as startTrackRecording: the row was
+    // already flipped to `recording` and the pause closed out, so a refused
+    // start (permission revoked while paused, location services off) would
+    // leave a live-looking dead recorder that nothing corrects until the next
+    // cold launch. Put the pause back exactly as it was.
+    await updateTrack(track.id, {
+      state: "paused",
+      currentSegment: track.currentSegment,
+      pausedMs: track.pausedMs,
+      pausedAt: track.pausedAt ?? new Date().toISOString(),
+    });
+    throw error;
+  }
+  resetTrackWriteHealth();
 }
 
 export async function finishTrackRecording(trackId: string): Promise<void> {
   await stopLocationUpdatesIfRunning();
+  dropPointCache();
   const track = await getTrack(trackId);
   if (!track) throw new Error(`finishTrackRecording: no track ${trackId}`);
   const endedAt = new Date();
@@ -220,24 +275,44 @@ export async function finishTrackRecording(trackId: string): Promise<void> {
   });
 }
 
+/**
+ * Stop the recorder for a local-data wipe. The wipe deletes the `track` rows
+ * out from under a live recording, and a foreground service that keeps
+ * delivering fixes is a producer writing the departing user's positions after
+ * the wipe reported success — the same rule the region downloader and the
+ * GeoPDF import already follow. Also drops the in-memory point cache.
+ */
+export async function stopTrackRecordingForWipe(): Promise<void> {
+  await stopLocationUpdatesIfRunning();
+  dropPointCache();
+}
+
 export async function discardTrackRecording(trackId: string): Promise<void> {
   await stopLocationUpdatesIfRunning();
+  dropPointCache();
   await deleteTrack(trackId);
 }
 
 /**
- * App-launch reconciliation. Three cases:
+ * Reconciliation. Three cases:
  *  - active row + task running: recording survived a kill — leave it alone.
  *  - active row + task NOT running (reboot, force-stop): mark it paused —
  *    an honest gap the user resumes manually, never a silently dead recorder.
  *  - task running + no active row (crash between stop and delete): stop it.
+ *
+ * Called on mount AND on every return to the foreground: an OEM battery
+ * manager, a Doze-time kill or a swiped-away notification stops the location
+ * task while the JS process survives, and a mount-only check never re-runs
+ * inside a process that stayed alive (MLIFE-006). It is also the backstop for
+ * a recorder that died any other way.
  */
-export async function reconcileTrackRecordingOnLaunch(): Promise<void> {
+export async function reconcileTrackRecording(): Promise<void> {
   const active = await findActiveTrack();
   const taskRunning = await Location.hasStartedLocationUpdatesAsync(
     TRACK_RECORDING_TASK,
   );
   if (active?.state === "recording" && !taskRunning) {
+    dropPointCache();
     // The recorder died at some unknown moment; everything from the last fix
     // to now is a gap, not recording time, so open a pause at that fix rather
     // than at launch.

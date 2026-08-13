@@ -28,6 +28,7 @@ import { fetchCurrentUser, useApiQuery } from "../../api/queries";
 import { useAccountState } from "../../auth/AccountStateContext";
 import { capabilityStatus, unavailableReasonText } from "../../auth/capabilities";
 import { useConnectivity } from "../../map/connectivity";
+import { requestPushPermission } from "../../notifications/pushRegistration";
 import type { TUser } from "../../api/types";
 import {
   ErrorBanner,
@@ -103,10 +104,17 @@ export function NotificationSettingsScreen() {
   // The OS permission, re-read when the user comes back from Android's settings
   // — which is the only place it can change, and the whole point of the row.
   const [pushAllowed, setPushAllowed] = useState<boolean | null>(null);
+  // Whether Android will still show its dialog. This screen is the one place
+  // that asks: a POST_NOTIFICATIONS prompt at cold start lands over a blank
+  // screen, and a denial there is permanent for the install (MRUN-004).
+  const [canAskPush, setCanAskPush] = useState(false);
   useEffect(() => {
     const read = () => {
       Notifications.getPermissionsAsync()
-        .then((status) => setPushAllowed(status.granted))
+        .then((status) => {
+          setPushAllowed(status.granted);
+          setCanAskPush(status.canAskAgain);
+        })
         .catch(console.error);
     };
     read();
@@ -158,8 +166,9 @@ export function NotificationSettingsScreen() {
         ))}
 
         <SectionHeader label="This phone" />
-        {/* Not a switch: Android owns this one, so the row reports it and opens
-            the place it can be changed. A toggle here would be a lie. */}
+        {/* Not a switch: Android owns this one, so the row reports it and
+            either asks (the one place in the app that does) or opens the place
+            it can be changed. A toggle here would be a lie. */}
         <Row
           icon="smartphone"
           title="Notifications from Logjam"
@@ -168,9 +177,22 @@ export function NotificationSettingsScreen() {
               ? undefined
               : pushAllowed
                 ? "Allowed"
-                : "Blocked in your phone's settings"
+                : canAskPush
+                  ? "Not allowed yet — tap to allow"
+                  : "Blocked in your phone's settings"
           }
-          onPress={() => void Linking.openSettings()}
+          onPress={() => {
+            if (!pushAllowed && canAskPush) {
+              requestPushPermission()
+                .then((granted) => {
+                  setPushAllowed(granted);
+                  if (!granted) setCanAskPush(false);
+                })
+                .catch(console.error);
+              return;
+            }
+            void Linking.openSettings();
+          }}
         />
       </ScreenScroll>
 
