@@ -108,6 +108,17 @@ jobs:
       - name: Unit tests
         working-directory: mobile
         run: npm test
+      # The only step here that runs Metro. Typecheck, lint and vitest all
+      # passed on a tree that could not bundle at all (SDK 54 left
+      # babel-preset-expo unhoisted, so every bundle request 500'd and the app
+      # never started) — a resolver, babel or plugin break is invisible to tsc
+      # by construction. ~1 min. The API URL is a placeholder: config.ts throws
+      # on a missing one, and nothing here runs the bundle.
+      - name: Bundle (Metro must be able to build the app)
+        working-directory: mobile
+        env:
+          EXPO_PUBLIC_API_URL: https://example.invalid
+        run: npx expo export --platform android --output-dir "$RUNNER_TEMP/expo-export"
 
   migrations:
     # Apply every committed migration to a fresh ephemeral Postgres, so a
