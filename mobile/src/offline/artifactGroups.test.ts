@@ -79,3 +79,41 @@ describe("groupArtifacts", () => {
     expect(anonymous.label).toBeNull();
   });
 });
+
+describe("a resumed download rejoins its run", () => {
+  // The case this exists for: three maps for one area, one fails, the user
+  // resumes it later. The map it saves must join the card its two siblings are
+  // already on — a second "Region 7" card would read as a duplicate download.
+  const of = (id: string, groupId: string | null): MapArtifact =>
+    ({
+      id,
+      kind: "basemap-region",
+      logicalKey: "six-topo",
+      format: "mbtiles",
+      sourceType: "raster",
+      path: `/regions/${id}.mbtiles`,
+      bbox: [150, -34, 151, -33],
+      minzoom: 8,
+      maxzoom: 16,
+      sizeBytes: 1000,
+      downloadedAt: "2026-08-16T00:00:00.000Z",
+      groupId,
+      groupLabel: groupId ? "Region 7" : null,
+    }) as MapArtifact;
+
+  it("merges the late arrival into the existing card", () => {
+    const groups = groupArtifacts(
+      [of("a", "G"), of("b", "G"), of("resumed-late", "G")],
+      regionGroupKey,
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0].members).toHaveLength(3);
+    expect(groups[0].label).toBe("Region 7");
+    expect(groups[0].sizeBytes).toBe(3000);
+  });
+
+  it("keeps a group-less legacy row on its own card", () => {
+    const groups = groupArtifacts([of("a", "G"), of("old", null)], regionGroupKey);
+    expect(groups).toHaveLength(2);
+  });
+});

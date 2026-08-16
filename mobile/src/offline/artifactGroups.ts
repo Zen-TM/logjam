@@ -26,7 +26,16 @@ export type ArtifactGroup = {
   members: MapArtifact[];
 };
 
-/** Legacy rows predate grouping and stand alone under their own id. */
+/**
+ * Which card an artifact belongs to.
+ *
+ * This is what makes a RESUME land back in the run it came from: the resumed
+ * job carries the original `groupId` (from its queue spec, or recovered from
+ * the region file's metadata), so the map it finally saves joins the maps its
+ * siblings already saved instead of opening a second card with the same name.
+ *
+ * Legacy rows predate grouping and stand alone under their own id.
+ */
 export function regionGroupKey(artifact: MapArtifact): string {
   return artifact.groupId ?? artifact.id;
 }
