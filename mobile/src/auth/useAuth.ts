@@ -404,9 +404,25 @@ export function useAuth() {
 
   const accountState: AccountState = state === "guest" ? "guest" : "linked";
 
+  /**
+   * May this screen still offer "continue without an account"?
+   *
+   * Keyed on the recorded entry choice, NOT on the auth state, because the
+   * landing screen renders for both `chooser` and `signIn` and the two are the
+   * same screen: keying on the state offered "Back" to anyone who reached
+   * sign-in from the sign-up form, and Back went to `chooser`, which IS that
+   * screen — a button whose only visible effect was to relabel itself.
+   *
+   * A guest linking an account is the one case where Back means something: it
+   * returns them to their app, with their data. Everyone else has somewhere to
+   * go without an account, so they are offered that instead.
+   */
+  const offersGuestEntry = readEntryChoice() !== "guest";
+
   return {
     state,
     accountState,
+    offersGuestEntry,
     error,
     pendingUsername,
     signIn: handleSignIn,

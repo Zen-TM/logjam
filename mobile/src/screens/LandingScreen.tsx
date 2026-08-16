@@ -41,10 +41,12 @@ import { Button, ErrorBanner, TextField } from "../ui";
 type Auth = ReturnType<typeof useAuth>;
 
 export function LandingScreen({ auth }: { auth: Auth }) {
-  // Only a fresh install is offered guest mode. Someone who reached this screen
-  // from inside the app (a guest linking, a rejected session, an install that
-  // already has an account) gets a way back instead.
-  const offersGuest = auth.state === "chooser";
+  // A guest LINKING an account is the only visitor with somewhere else to go,
+  // so they get "Back"; everyone else can still go on without an account.
+  // Not `auth.state === "chooser"`: this screen renders for `signIn` too, and
+  // keying on the state showed a "Back" that went to the screen it was already
+  // on (see useAuth.offersGuestEntry).
+  const offersGuest = auth.offersGuestEntry;
   const [mode, setMode] = useState<"signIn" | "guestExplainer">("signIn");
 
   return (

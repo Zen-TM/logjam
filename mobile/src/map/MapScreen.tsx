@@ -191,9 +191,9 @@ import { useTracks } from "../tracks/useTracks";
 import { ensureForegroundLocationPermission } from "./locationPermission";
 import { listEnabledOverlayKeys, setOverlayEnabled } from "../offline/registryDb";
 import {
-  activeRegionJob,
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
+import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers, protomapsLayerCount } from "./basemap/ProtomapsLayers";
@@ -552,9 +552,15 @@ export function MapScreen({
   const [longPressAction, setLongPressAction] = useState<LongPressAction>(readLongPressAction);
   const [northReference, setNorthReference] = useState<NorthReference>(readNorthReference);
   const [scaleBarEnabled, setScaleBarEnabled] = useState(isScaleBarEnabled);
+  // Bumped whenever this screen regains focus: see the compass-tape effect.
+  const [permissionNonce, setPermissionNonce] = useState(0);
   useFocusEffect(
     useCallback(() => {
       setCompassEnabled(isCompassEnabled());
+      // A location grant made on another screen (Settings' compass switch asks
+      // for it) is invisible from here — re-checking on focus is what starts
+      // the compass tape without the map ever prompting for location itself.
+      setPermissionNonce((current) => current + 1);
       setControlSide(readMapControlSide());
       setMarkerColorId(readMarkerColorId());
       setKeepAwakeMode(readKeepAwakeMode());
@@ -1385,7 +1391,16 @@ export function MapScreen({
   // handleLocateMe — they depend on it.)
   const { tracks } = useTracks();
   // Live region downloads, so the map can report one that is still running.
-  const downloadJob = activeRegionJob(useRegionDownloads());
+  // The whole queue, not just the active job: what the user wants to know is
+  // how much of the RUN they asked for is left (see the banner below).
+  const regionJobs = useRegionDownloads();
+  const downloadProgress = useMemo(() => {
+    const live = groupRegionJobs(regionJobs).filter((group) => !group.settled);
+    if (live.length === 0) return null;
+    const total = live.reduce((sum, group) => sum + group.jobs.length, 0);
+    const ready = live.reduce((sum, group) => sum + group.ready, 0);
+    return `Downloading maps · ${Math.min(ready + 1, total)} of ${total}`;
+  }, [regionJobs]);
   // Waypoints are a synced entity since Stage 8: mirror-backed, offline
   // writes queue through the outbox. TrackMapLayers keeps its lon/lat shape.
   const mirrorWaypoints = useMirrorWaypoints();
@@ -2012,6 +2027,13 @@ export function MapScreen({
   // here — a map that asks for location the moment it opens is the prompt every
   // user learns to deny. Settings does the asking when the switch goes on, and
   // locate-me does it on demand; until then the tape simply doesn't draw.
+  //
+  // `permissionNonce` is what re-runs it after a grant that happened somewhere
+  // else. The tape is ON by default and silently draws nothing until location
+  // is granted, so on a fresh install it is simply absent — and nothing here
+  // noticed when the user granted location later (via locate-me, or Settings'
+  // own switch), because `compassEnabled` had not changed. The map bumps the
+  // nonce on focus, so coming back to it picks the sensor up.
   useEffect(() => {
     if (compassEnabled) {
       Location.getForegroundPermissionsAsync()
@@ -2027,7 +2049,7 @@ export function MapScreen({
     headingWatch.current = null;
     setUserHeading(null);
     smoothedHeading.current = null;
-  }, [compassEnabled, ensureHeadingWatch]);
+  }, [compassEnabled, ensureHeadingWatch, permissionNonce]);
 
   const handleLocateMe = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
@@ -2976,19 +2998,17 @@ export function MapScreen({
         ) : null}
 
         {/* A download keeps running while the user walks around the map, so it
-            reports here rather than only on the screen that started it. */}
-        {downloadJob ? (
-          <View style={styles.filterBadge}>
-            <Feather name="download" size={14} color={theme.accent} />
-            <Text style={styles.filterBadgeText} numberOfLines={2}>
-              {downloadJob.progress.tilesTotal > 0
-                ? `Saving maps · ${Math.round(
-                    (downloadJob.progress.tilesDone /
-                      downloadJob.progress.tilesTotal) *
-                      100,
-                  )}%`
-                : "Saving maps…"}
-            </Text>
+            reports here rather than only from the Saved tab.
+
+            Counts finished MAPS, not a percentage: the queue runs one job per
+            basemap in sequence, so a percentage crossed 100 % and restarted at
+            zero once per chosen map — which reads as the download failing and
+            starting over. "2 of 4" only ever goes up. Same banner as the other
+            map notices; it used to be an accent-outlined pill that matched
+            nothing else on the screen. */}
+        {downloadProgress ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>{downloadProgress}</Text>
           </View>
         ) : null}
 

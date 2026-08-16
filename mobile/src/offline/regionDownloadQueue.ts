@@ -1,11 +1,11 @@
 // The one place a region download's live state lives, for every screen that
-// shows it: the download screen that started it, the map's progress chip, and
-// the layers sheet's offline section.
+// shows it: the Saved tab's progress cards, the map's "Downloading maps"
+// banner, and the layers sheet's offline section.
 //
 // A module store rather than a context (same choice as `canyonMapFilter`): a
-// download outlives the screen that started it — the whole point of the chip on
-// the map is that you can leave the download screen and keep walking around the
-// map while tiles land.
+// download outlives the screen that started it — the whole point of the banner
+// on the map is that you can leave the download screen and keep walking around
+// the map while tiles land.
 //
 // ONE AT A TIME (§3.3). Selecting three basemaps enqueues three jobs and they
 // run in sequence, because the politeness envelope is per-provider and running
@@ -139,11 +139,6 @@ export function useRegionDownloads(): RegionJob[] {
     },
     () => snapshot,
   );
-}
-
-/** The job the user is waiting on right now, if any. */
-export function activeRegionJob(list: RegionJob[]): RegionJob | null {
-  return list.find((job) => job.state.kind === "downloading") ?? null;
 }
 
 export function pendingRegionJobCount(list: RegionJob[]): number {

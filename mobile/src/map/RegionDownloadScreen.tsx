@@ -48,18 +48,16 @@ import {
   Button,
   Chip,
   HeroHeader,
-  Row,
   SectionHeader,
   SegmentedControl,
   TextField,
-  Toggle,
 } from "../ui";
 import {
   enqueueRegionDownloads,
   setRegionGroupLabel,
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
-import { connectionAllowsMetered, isExpensive } from "../offline/networkPolicy";
+import { isExpensive } from "../offline/networkPolicy";
 import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
@@ -153,6 +151,25 @@ const HERO_OVERLAP = 16;
  */
 const MIN_TOP_INSET = HERO_OVERLAP + 22;
 
+/**
+ * The controls panel's height, fixed so the MAP never resizes under a frame the
+ * user is mid-drag. Nothing inside it changes size any more: the "use mobile
+ * data" toggle that used to appear and disappear with the connection is now a
+ * dialog at the Save tap, and the warning moved onto the map. What is left —
+ * the map-layer chips, the detail rail, the Save button — is always the same
+ * shape, so the panel does not scroll.
+ *
+ * A guest gets one extra line explaining why there is no vector chip. That is
+ * decided before the screen mounts and cannot change while it is open, so it is
+ * a second constant rather than a reason to make the panel elastic.
+ *
+ * ponytail: fixed pixels, so a very large OS font setting will clip the last
+ * row rather than scroll it. Measure and raise these two numbers if that turns
+ * up in the field; making the panel scrollable again just hides the Save button.
+ */
+const PANEL_HEIGHT = 208;
+const PANEL_HEIGHT_GUEST = 250;
+
 /** Same flavor MapScreen mounts — the paper-topo look of the SIX rasters. */
 const PROTOMAPS_FLAVOR = "light" as const;
 
@@ -216,12 +233,6 @@ export function RegionDownloadScreen({
       : ["six-topo"],
   );
   const [detailZoom, setDetailZoom] = useState(DEFAULT_DETAIL_ZOOM);
-  const [allowCellular, setAllowCellular] = useState(false);
-  // "Is this connection going to cost them?" — the platform's own answer, the
-  // same one networkPolicy.ts asks. `type === "cellular"` hid the toggle
-  // entirely on a metered hotspot, which is precisely the connection it exists
-  // to protect.
-  const [onMetered, setOnMetered] = useState(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [frame, setFrame] = useState<FrameInsets | null>(null);
   const [viewport, setViewport] = useState<FrameViewport | null>(null);
@@ -279,18 +290,6 @@ export function RegionDownloadScreen({
       ),
     [previewBasemap],
   );
-
-  // Subscribed for the life of the screen, not fetched once on mount: a user
-  // who joins Wi-Fi while framing an area was told they were on mobile data
-  // for the rest of the session, and the "Use mobile data" row stayed up with
-  // it. Save re-reads the connection anyway (see handleSave) — this keeps the
-  // UI honest in the meantime.
-  useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) =>
-      setOnMetered(isExpensive(state)),
-    );
-    return unsubscribe;
-  }, []);
 
   // Stable identity: the frame's gesture handlers are rebuilt whenever this
   // changes, and rebuilding one mid-drag kills the drag (see SelectionFrame).
@@ -365,7 +364,8 @@ export function RegionDownloadScreen({
   // sentences in a hero band cost more map than they ever bought.
   const overCap = caps != null && !caps.ok;
 
-  const startDownloads = useCallback((groupId: string, groupLabel: string) => {
+  const startDownloads = useCallback(
+    (groupId: string, groupLabel: string, allowCellular: boolean) => {
     if (!bbox || !job) return;
     enqueueRegionDownloads([
       ...job.perSource.map((source) => ({
@@ -395,28 +395,45 @@ export function RegionDownloadScreen({
           ]
         : []),
     ]);
-  }, [allowCellular, bbox, detailZoom, includesVector, job]);
+    },
+    [bbox, detailZoom, includesVector, job],
+  );
 
   const handleSave = useCallback(() => {
     if (!bbox || !job) return;
     setBusy(true);
     void (async () => {
       try {
-        // Asked again HERE rather than trusting the subscription's last value:
-        // the answer decides whether tens of megabytes go on someone's plan,
-        // and the connection can change between the last event and the tap.
+        // Asked HERE, at the tap, rather than from a subscription's last
+        // value: the answer decides whether tens of megabytes go on someone's
+        // plan, and the connection can change between the last event and the
+        // tap. It is also why there is no "use mobile data" toggle any more —
+        // a switch set before the walk out of Wi-Fi range answers a question
+        // about a connection the phone is no longer on.
         const connection = await NetInfo.fetch();
-        setOnMetered(isExpensive(connection));
-        if (!connectionAllowsMetered(connection, allowCellular)) {
+        if (connection.isConnected === false) {
           Alert.alert(
-            connection.isConnected === false
-              ? "No connection"
-              : "You're on mobile data",
-            connection.isConnected === false
-              ? "Saving maps needs a connection. Try again once you have one."
-              : "Turn on “Use mobile data” to download without Wi-Fi.",
+            "No connection",
+            "Saving maps needs a connection. Try again once you have one.",
           );
           return;
+        }
+        // Metered: ask, once, about THIS download. Declining is a cancel, not
+        // a setting to go and find.
+        let allowCellular = false;
+        if (isExpensive(connection)) {
+          allowCellular = await new Promise<boolean>((resolve) => {
+            Alert.alert(
+              "Use mobile data?",
+              "You're not on Wi-Fi. This download will use your mobile data.",
+              [
+                { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+                { text: "Download", onPress: () => resolve(true) },
+              ],
+              { cancelable: true, onDismiss: () => resolve(false) },
+            );
+          });
+          if (!allowCellular) return;
         }
         // The screen computes and shows a size estimate and then never compared
         // it to the space available. On a full phone the SQLite insert fails
@@ -437,7 +454,7 @@ export function RegionDownloadScreen({
         // tiles do not wait on the keyboard. The default name is written with
         // the jobs, so dismissing the prompt is a complete answer.
         const groupId = uuid();
-        startDownloads(groupId, defaultName);
+        startDownloads(groupId, defaultName, allowCellular);
         setNaming({ groupId, name: defaultName });
       } catch (err) {
         if (!(err instanceof NotEnoughSpaceError)) throw err;
@@ -446,7 +463,7 @@ export function RegionDownloadScreen({
         setBusy(false);
       }
     })();
-  }, [bbox, job, allowCellular, defaultName, startDownloads]);
+  }, [bbox, job, defaultName, startDownloads]);
 
   // Confirm and dismiss do the same thing: the field starts on the default, so
   // an untouched dismissal rewrites the label the jobs already carry. Leaving
@@ -557,8 +574,8 @@ export function RegionDownloadScreen({
         {overCap ? (
           <View style={styles.mapWarning} pointerEvents="none">
             <Text style={styles.mapWarningText}>
-              Area too large — drag an edge in, lower the detail, or pick fewer
-              maps
+              Download too large. Reduce the area or detail, or pick fewer map
+              layers.
             </Text>
           </View>
         ) : null}
@@ -569,7 +586,7 @@ export function RegionDownloadScreen({
         </View>
       </View>
 
-      <View style={styles.panel}>
+      <View style={[styles.panel, isGuest && styles.panelGuest]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -607,10 +624,7 @@ export function RegionDownloadScreen({
           </Text>
         ) : null}
 
-        <ScrollView
-          style={styles.panelScroll}
-          contentContainerStyle={styles.panelScrollContent}
-        >
+        <View style={styles.panelBody}>
         <View style={styles.detailBlock}>
           <View style={styles.detailHeader}>
             <SectionHeader label="Detail" />
@@ -635,24 +649,6 @@ export function RegionDownloadScreen({
           />
         </View>
 
-        {onMetered ? (
-          <Row
-            icon="wifi-off"
-            hue={theme.warning}
-            title="Use mobile data"
-            // Says "this connection", not "Wi-Fi": the row now appears on a
-            // metered hotspot too, which IS Wi-Fi and still costs money.
-            subtitle="This connection charges for data — downloads wait otherwise"
-            right={
-              <Toggle
-                value={allowCellular}
-                onValueChange={setAllowCellular}
-                accessibilityLabel="Use mobile data for this download"
-              />
-            }
-          />
-        ) : null}
-
         {/* Progress lives as cards in the Saved tab's Regions filter from
             here: the download outlives this screen, and a screen whose whole
             job is to be left is the wrong place to report from. */}
@@ -662,7 +658,7 @@ export function RegionDownloadScreen({
           onPress={handleSave}
           disabled={!canDownload || busy}
         />
-        </ScrollView>
+        </View>
       </View>
 
       {/* Opens AFTER the jobs are enqueued — the tiles are landing behind it.
@@ -694,8 +690,7 @@ export function RegionDownloadScreen({
           {/* The honesty the progress screen's back-press warning used to
               carry, in the one place every download now passes through. */}
           <Text style={styles.namingNote}>
-            Downloading now — it keeps going while Logjam is open, and pauses if
-            you close the app. Watch it in Saved.
+            Downloads pause when the app is closed. Watch them in Saved.
           </Text>
         </View>
       </BottomSheet>
@@ -729,28 +724,36 @@ const styles = StyleSheet.create({
   // the hero so that it costs no layout: the hero and the panel are what the
   // map is measured against, and a band appearing or clearing there resized
   // the map mid-gesture and moved the frame the user was dragging.
+  // Clear of the hero, which overlaps the map's top strip: at two lines the
+  // pill used to slide up behind it and lose its first line. `HERO_OVERLAP`
+  // is that strip; the rest is air.
   mapWarning: {
     position: "absolute",
     left: spacing(2),
     right: spacing(2),
-    top: spacing(1),
+    top: HERO_OVERLAP + spacing(1),
     alignItems: "center",
   },
+  // Outlined in the warning colour over a wash of it, rather than the page
+  // colour: over a map, a pill painted in the page's own brown reads as a gap
+  // in the map. The border is what holds it together at two lines.
   mapWarningText: {
     color: theme.warning,
     fontSize: fontSize.xs,
     fontWeight: fontWeight.medium,
     textAlign: "center",
-    backgroundColor: withAlpha(theme.primary, 0.85),
-    borderRadius: radius.pill,
+    backgroundColor: withAlpha(theme.warning, 0.16),
+    borderWidth: 1,
+    borderColor: theme.warning,
+    borderRadius: radius.lg,
     paddingHorizontal: spacing(1.5),
-    paddingVertical: spacing(0.5),
+    paddingVertical: spacing(0.75),
     overflow: "hidden",
   },
   namingBody: { gap: spacing(1.5) },
   namingNote: { color: theme.textMuted, fontSize: fontSize.sm },
   panel: {
-    height: 208,
+    height: PANEL_HEIGHT,
     backgroundColor: theme.primary,
     paddingTop: spacing(1.25),
     paddingBottom: spacing(1.5),
@@ -758,8 +761,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: surface.border,
   },
-  panelScroll: { flex: 1 },
-  panelScrollContent: {
+  panelGuest: { height: PANEL_HEIGHT_GUEST },
+  panelBody: {
+    flex: 1,
     paddingHorizontal: spacing(2),
     paddingBottom: spacing(1),
     gap: spacing(1.25),
