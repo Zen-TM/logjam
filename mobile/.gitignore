@@ -24,5 +24,12 @@ e2e/.env.maestro
 # the GOOGLE_SERVICES_JSON file env variable — see app.config.ts.
 google-services.json
 
+# expo-updates code signing: the PRIVATE key never leaves this machine / the EAS
+# secret. The certificate under certs/ is public by design — it is embedded in
+# every build and is what the client checks signatures against — so it IS
+# committed. Losing the private key means no further OTA updates until a new
+# certificate ships in a store build; see mobile/CLAUDE.md.
+keys/
+
 # Metro / RN caches
 .metro-health-check*

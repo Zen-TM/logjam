@@ -334,6 +334,18 @@ profile). JS-only fixes ship with `eas update --branch preview`; anything native
 (a new Expo module, a plugin change) needs a fresh build, because the runtime
 version moves with `app.json` `version`.
 
+**OTA updates are code-signed, and the private key is not in this repo.**
+`certs/certificate.pem` IS committed — it ships inside every build and is what
+the client checks against. `keys/` is gitignored and holds the RSA private key;
+it must also live in an EAS secret (`EXPO_UPDATES_PRIVATE_KEY`) so
+`eas update --private-key-path` can sign. Without signing, every launch would run
+whatever JS the Expo account served — the app's largest remote-code path, inside
+the app lock and on top of the canyon mirror. Two consequences that bite later:
+the certificate is embedded at BUILD time, so rotating it needs a new build and
+reinstall, not an update; and **losing the private key means no OTA at all until
+a fresh build ships a new certificate.** Back it up where you back up the
+keystore.
+
 **`version` lives in three places that must move together:** `app.json` `version`,
 `package.json` `version`, and `CLIENT_SEMVER` in `src/config.ts` (the
 `x-logjam-client` header the min-version lever reads). Android `versionCode` is
