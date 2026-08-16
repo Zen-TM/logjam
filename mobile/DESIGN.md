@@ -736,7 +736,31 @@ which subsystem is talking.
   border, accent tint, a filled check). One row looking different is read before any
   word is. Same pass killed an "Offline" pill on basemaps with a downloaded region —
   three square kilometres of saved tiles is not an offline basemap, and the pill
-  claimed it was.
+  claimed it was. It is one declaration — `Row`'s `selected` prop — so the active
+  basemap and a multi-selected saved asset cannot drift into two looks.
+- **A multi-select starts with press-and-hold, and its bar TAKES the rail's slot.**
+  Hold any row to enter the mode with that row picked, tap to toggle the rest,
+  and the last row deselected leaves the mode — no separate "done". While it is
+  running, the contextual bar replaces the filter rail rather than stacking a
+  second bar above the tab bar: two rows of chrome eat the list, and the tabs
+  themselves are the way out of the mode. The bar reads `× | N selected · size |
+  select-all · delete`, and it carries only verbs that are BETTER in bulk than
+  one at a time. "Show on map" was in the first cut and came out: flying to the
+  union of five extents is not what any of the five meant, and the single-item
+  verb already does the thing the user wanted. Reference: `saved/SavedScreen.tsx`.
+  - **Filter and selection are exclusive.** The rail is gone while picking, and
+    any programmatic filter change clears the selection: a bulk delete that
+    reaches rows scrolled behind another category is one the user never saw.
+  - **A bulk confirm counts BOTH consequences, and reads as English in every
+    combination.** A mixed selection of files and synced records is two different
+    deletes ("deleted from this phone" vs "removed from every device on your
+    account, and from anyone you shared their canyons with"), so the dialog says
+    each with its own count rather than picking the sentence that is true for the
+    majority. Counts that vary independently make copy assembled from clauses
+    read like a filled-in template ("1 item is… 4 of them are…"), so the whole
+    body is ONE function over the counts — `saved/bulkDeleteConfirm.ts`, with
+    every combination pinned in its test — and a single-kind selection takes a
+    pronoun back to the title instead of restating the count.
 - **Show the thing, not a glyph standing in for it.** Three of the basemaps are
   renderings of the same NSW ground, and no icon vocabulary can say how "SIX Maps
   Topo" differs from "SIX Maps Base Map" — so each row leads with a real 44pt tile

@@ -25,7 +25,7 @@ import { Alert, StyleSheet, Text, TextInput, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { BASEMAP_CATALOG, formatDistanceM, messageFromError } from "@logjam/shared";
 
-import { assetHue, fontSize, fontWeight, spacing, theme, withAlpha } from "../theme";
+import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -284,7 +284,7 @@ function BasemapTab({
                 <Feather name="check-circle" size={22} color={theme.accent} />
               ) : null
             }
-            style={active ? styles.activeRow : undefined}
+            selected={active}
           />
         );
       })}
@@ -925,11 +925,6 @@ const styles = StyleSheet.create({
   itemRow: { minHeight: 48, paddingVertical: spacing(1) },
   dot: { width: 12, height: 12, borderRadius: 6 },
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-  activeRow: {
-    borderWidth: 1,
-    borderColor: theme.accent,
-    backgroundColor: withAlpha(theme.accent, 0.12),
-  },
   menu: { gap: spacing(1), backgroundColor: theme.primary },
   menuError: { color: theme.warning, fontSize: fontSize.sm },
   note: { color: theme.textMuted, fontSize: fontSize.xs, lineHeight: 16 },

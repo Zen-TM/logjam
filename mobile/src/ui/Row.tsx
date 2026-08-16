@@ -38,6 +38,8 @@ export function Row({
   right,
   progress,
   onPress,
+  onLongPress,
+  selected = false,
   disabled = false,
   accessibilityLabel,
   // TWO lines for the title, and that is a text-size rule rather than a taste
@@ -63,6 +65,14 @@ export function Row({
   right?: React.ReactNode;
   progress?: number | null;
   onPress?: () => void;
+  /** Press-and-hold — the way a multi-select starts (DESIGN.md §7). */
+  onLongPress?: () => void;
+  /**
+   * Picked: accent border + accent tint over the whole card. The canonical
+   * "a selection is a STATE of the row, not a label on it" treatment — the
+   * active basemap and a multi-selected saved asset are the same thing.
+   */
+  selected?: boolean;
   /**
    * Unavailable right now, with the reason in the subtitle. Dims the row AND
    * stops it responding — dropping `onPress` alone leaves a row that looks
@@ -114,19 +124,29 @@ export function Row({
     </>
   );
 
-  if (!onPress || disabled) {
+  if ((!onPress && !onLongPress) || disabled) {
     return (
-      <View style={[styles.row, disabled && styles.disabled, style]}>{body}</View>
+      <View
+        style={[styles.row, selected && styles.selected, disabled && styles.disabled, style]}
+      >
+        {body}
+      </View>
     );
   }
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? title}
-      accessibilityState={{ disabled }}
+      accessibilityState={{ disabled, selected }}
       onPress={onPress}
+      onLongPress={onLongPress}
       hitSlop={hitSlop}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed, style]}
+      style={({ pressed }) => [
+        styles.row,
+        selected && styles.selected,
+        pressed && styles.pressed,
+        style,
+      ]}
     >
       {body}
     </Pressable>
@@ -147,6 +167,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   pressed: { backgroundColor: surface.cardPressed },
+  selected: {
+    borderColor: theme.accent,
+    backgroundColor: withAlpha(theme.accent, 0.12),
+  },
   disabled: { opacity: 0.45 },
   leading: { alignItems: "center", justifyContent: "center" },
   iconTile: {

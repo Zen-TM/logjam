@@ -12,7 +12,9 @@
 //     list of everything on device, which is what "reclaim space" wants.
 //   Rows — one Row per asset with its kind's hue + glyph, and an overflow
 //     sheet carrying the three things you can do to any asset: show it on the
-//     map, rename it, delete it.
+//     map, rename it, delete it. Press and hold one to start a multi-select;
+//     the contextual bar then takes the filter rail's slot and offers the
+//     group verbs (show on map, select all, delete).
 // Not-yet-downloaded topo overlays are the one non-on-device list: they live
 // under the LiDAR Topos filter below the saved ones, never in "All".
 //
@@ -31,6 +33,7 @@
 // logged, never persisted.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import NetInfo from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
@@ -129,6 +132,7 @@ import {
 import { useTracks } from "../tracks/useTracks";
 import { ExportUnsupportedError, type ExportFormat } from "../fileExport";
 import type { Bbox } from "./bboxOfPoints";
+import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import { createWaypointLocal, updateWaypointLocal } from "../sync/outbox";
 import {
@@ -365,24 +369,47 @@ export function SavedScreen({
     setMenuItemKey(key);
   }, []);
 
+  // --- Multi-select ---------------------------------------------------------
+  // Press and hold any row to start picking; a tap then toggles. Held as KEYS,
+  // not items: the list is rebuilt on every registry/mirror notification, and a
+  // key whose row has since been deleted simply stops matching (below), so a
+  // bulk delete can't leave the bar counting things that are gone.
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const clearSelection = useCallback(() => setSelectedKeys([]), []);
+  const toggleSelected = useCallback((key: string) => {
+    setSelectedKeys((keys) =>
+      keys.includes(key) ? keys.filter((other) => other !== key) : [...keys, key],
+    );
+  }, []);
+
   // Leaving the tab drops any open per-item sheet: coming back to a rename form
   // for a row you have since navigated away from is a stale prompt, not a
   // resumed task.
   useFocusEffect(
     useCallback(() => {
       refreshFreeSpace();
-      return closeItemSheet;
-    }, [closeItemSheet, refreshFreeSpace]),
+      return () => {
+        closeItemSheet();
+        // A selection is a transient mode over rows you can see. Coming back to
+        // the tab holding a pending "delete these five" you no longer remember
+        // making is the same stale prompt an abandoned rename would be.
+        clearSelection();
+      };
+    }, [clearSelection, closeItemSheet, refreshFreeSpace]),
   );
 
   // Changing category is changing subject — abandon an in-progress rename with
   // it rather than leaving a form floating over a list it no longer belongs to.
+  // Same for a selection: its bar replaces the rail, so this only fires from a
+  // navigation handoff, and carrying invisible rows into a bulk delete is how
+  // someone deletes a region they cannot see.
   const selectFilter = useCallback(
     (next: Category | "all") => {
       closeItemSheet();
+      clearSelection();
       setFilter(next);
     },
-    [closeItemSheet],
+    [clearSelection, closeItemSheet],
   );
 
   // Single in-flight operation banner: the pipelines here are exclusive (one
@@ -1062,6 +1089,55 @@ export function SavedScreen({
       });
   }, [closeCoordSheet, coordLat, coordLon, coordName, fail, info]);
 
+  // Everything picked that is still in the list, in list order.
+  const selectedItems = useMemo(
+    () => visibleItems.filter((item) => selectedKeys.includes(item.key)),
+    [selectedKeys, visibleItems],
+  );
+  const selecting = selectedItems.length > 0;
+  const selectedBytes = selectedItems.reduce((sum, item) => sum + item.sizeBytes, 0);
+
+  /** One confirm for the whole batch; the sentence itself is
+   *  `bulkDeleteConfirmBody`, which owns every count/kind combination. */
+  const deleteSelected = useCallback(() => {
+    const targets = selectedItems;
+    const syncedCount = targets.filter(
+      (item) => item.category === "route" || item.category === "waypoint",
+    ).length;
+    const body = bulkDeleteConfirmBody({
+      onDeviceCount: targets.length - syncedCount,
+      syncedCount,
+      onDeviceBytes: selectedBytes,
+    });
+    Alert.alert(`Delete ${countOf(targets.length, "item")}?`, body, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            // Sequential, and a failure does not abandon the rest: these are
+            // independent deletes and stopping at the first one leaves the user
+            // guessing which half happened.
+            let failures = 0;
+            for (const item of targets) {
+              try {
+                await item.delete.run();
+              } catch (err) {
+                console.error(err);
+                failures += 1;
+              }
+            }
+            clearSelection();
+            refreshFreeSpace();
+            if (failures === 0) info(`Deleted ${countOf(targets.length, "item")}.`);
+            else fail(`${failures} of ${targets.length} couldn't be deleted.`);
+          })();
+        },
+      },
+    ]);
+  }, [clearSelection, fail, info, refreshFreeSpace, selectedBytes, selectedItems]);
+
   const deleteItem = useCallback(
     (item: SavedItem) => {
       Alert.alert(item.delete.confirmTitle, item.delete.confirmBody, [
@@ -1211,6 +1287,38 @@ export function SavedScreen({
         <SyncStatusPills online={online} pendingCount={pendingCount} />
       </HeroHeader>
 
+      {/* While picking, the contextual bar TAKES the rail's slot rather than
+          stacking a second bar over the tab bar: two rows of chrome above the
+          thumb, and the tabs are the escape hatch out of the mode. Changing
+          category mid-selection is impossible for the same reason it is
+          cleared on a handoff — see selectFilter. */}
+      {selecting ? (
+        <View style={[styles.rail, styles.selectionBar]}>
+          <IconButton
+            icon="x"
+            accessibilityLabel="Clear selection"
+            onPress={clearSelection}
+          />
+          <Text style={styles.selectionCount} numberOfLines={1}>
+            {countOf(selectedItems.length, "item")} selected
+            {selectedBytes > 0 ? ` · ${formatBytes(selectedBytes)}` : ""}
+          </Text>
+          {selectedItems.length < visibleItems.length ? (
+            <IconButton
+              icon="check-square"
+              accessibilityLabel="Select everything in this list"
+              onPress={() => setSelectedKeys(visibleItems.map((item) => item.key))}
+            />
+          ) : null}
+          <IconButton
+            icon="trash-2"
+            accessibilityLabel="Delete the selected items"
+            color={theme.warning}
+            filled
+            onPress={deleteSelected}
+          />
+        </View>
+      ) : (
       <View style={styles.rail}>
         <SegmentedControl
           options={filterOptions}
@@ -1255,6 +1363,7 @@ export function SavedScreen({
           </>
         ) : null}
       </View>
+      )}
 
       {/* Hero + rail stay pinned; only the inventory scrolls, so the filter
           you are working in never scrolls out of reach. */}
@@ -1392,14 +1501,35 @@ export function SavedScreen({
           <EmptyPanel filter={filter} online={online} onAdd={() => setAddSheetOpen(true)} />
         ) : null}
 
-        {visibleItems.map((item) => (
+        {visibleItems.map((item) => {
+          const picked = selectedKeys.includes(item.key);
+          return (
           <Row
             key={item.key}
             title={item.title}
             subtitle={item.subtitle}
             icon={CATEGORY_META[item.category].icon}
             hue={assetHue[item.category]}
+            selected={picked}
+            // Press and hold starts a selection anywhere; once one is running a
+            // plain tap toggles. Outside the mode a row still has no onPress —
+            // its verbs live in the ⋯ sheet, and a whole-row tap that did one
+            // of them would be a mis-tap waiting to happen (DESIGN.md §7).
+            onLongPress={() => toggleSelected(item.key)}
+            onPress={selecting ? () => toggleSelected(item.key) : undefined}
             right={
+              selecting ? (
+                <View style={styles.rowActions}>
+                  {item.sizeBytes > 0 ? (
+                    <Text style={styles.size}>{formatBytes(item.sizeBytes)}</Text>
+                  ) : null}
+                  <Feather
+                    name={picked ? "check-circle" : "circle"}
+                    size={22}
+                    color={picked ? theme.accent : theme.textMuted}
+                  />
+                </View>
+              ) : (
               <View style={styles.rowActions}>
                 {item.sizeBytes > 0 ? (
                   <Text style={styles.size}>{formatBytes(item.sizeBytes)}</Text>
@@ -1431,9 +1561,11 @@ export function SavedScreen({
                   onPress={() => openItemSheet(item.key)}
                 />
               </View>
+              )
             }
           />
-        ))}
+          );
+        })}
 
         {/* The account's overlay catalogue is a background fetch, so its
             failure is only worth reporting inside the filter that needs it. */}
@@ -1987,6 +2119,21 @@ const styles = StyleSheet.create({
   waypointSearch: { paddingTop: spacing(1.5), paddingRight: spacing(2) },
   waypointTags: { paddingTop: spacing(1.5) },
   rail: { paddingLeft: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
+  // Same vertical metrics as the rail it replaces, so nothing below it jumps
+  // when a selection starts.
+  selectionBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(0.5),
+    paddingLeft: spacing(0.5),
+    paddingRight: spacing(1.5),
+  },
+  selectionCount: {
+    flex: 1,
+    color: theme.textPrimary,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
   body: { paddingHorizontal: spacing(2), paddingBottom: spacing(4), gap: spacing(1) },
   rowActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
   size: { color: theme.textMuted, fontSize: fontSize.xs, fontWeight: fontWeight.medium },
