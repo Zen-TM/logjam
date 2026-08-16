@@ -334,6 +334,13 @@ profile). JS-only fixes ship with `eas update --branch preview`; anything native
 (a new Expo module, a plugin change) needs a fresh build, because the runtime
 version moves with `app.json` `version`.
 
+**Publish updates with `npm run update:preview` / `update:production`, not bare
+`eas update`.** `--private-key-path` defaults to `private-key.pem` *in the
+certificate's directory* — i.e. `certs/`, which is committed. The key lives in
+the fully-gitignored `keys/` instead (a file-level exception inside a committed
+directory is one typo away from publishing a signing key in a public repo), so
+the path has to be passed every time; the scripts do it.
+
 **OTA updates are code-signed, and the private key is not in this repo.**
 `certs/certificate.pem` IS committed — it ships inside every build and is what
 the client checks against. `keys/` is gitignored and holds the RSA private key;

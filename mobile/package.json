@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
+    "update:preview": "eas update --branch preview --private-key-path keys/private-key.pem",
+    "update:production": "eas update --branch production --private-key-path keys/private-key.pem",
     "postinstall": "patch-package",
     "eas-build-post-install": "cd ../shared && npm ci && npm run build"
   },
