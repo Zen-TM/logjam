@@ -12,7 +12,7 @@
 // three controls sit on their own row so none of them is a mis-tap away from
 // another.
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, AppState, StyleSheet, Text, View } from "react-native";
 import { formatDistanceM, formatDurationMs } from "@logjam/shared";
 
 import { ensureForegroundLocationPermission } from "../map/locationPermission";
@@ -48,14 +48,35 @@ export function TrackRecordingControls({ activeTrack }: { activeTrack: Track }) 
   const [elapsedMs, setElapsedMs] = useState(() =>
     trackDurationMs(activeTrack, null),
   );
+  // The clock runs only while the app is in the FOREGROUND. It is derived from
+  // the wall clock, so nothing is lost by stopping it — the recomputation on
+  // return is exact — and a recording is the one thing in this app that runs
+  // for hours with the screen off: a 1 Hz timer through all of it is thousands
+  // of wakeups nobody can see the result of.
   useEffect(() => {
-    setElapsedMs(trackDurationMs(activeTrack, null));
+    const tick = () => setElapsedMs(trackDurationMs(activeTrack, null));
+    tick();
     if (!recording) return;
-    const timer = setInterval(
-      () => setElapsedMs(trackDurationMs(activeTrack, null)),
-      1000,
-    );
-    return () => clearInterval(timer);
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (timer !== null) return;
+      tick();
+      timer = setInterval(tick, 1000);
+    };
+    const stop = () => {
+      if (timer === null) return;
+      clearInterval(timer);
+      timer = null;
+    };
+    if (AppState.currentState === "active") start();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") start();
+      else stop();
+    });
+    return () => {
+      subscription.remove();
+      stop();
+    };
   }, [activeTrack, recording]);
 
   const handlePauseResume = useCallback(() => {

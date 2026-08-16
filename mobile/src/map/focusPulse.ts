@@ -12,7 +12,7 @@ export const FOCUS_PULSE_COUNT = 3;
 /**
  * How often the pulse re-renders itself. ~31 renders over the whole animation,
  * of ONE small memoised component — MapScreen re-renders at compass cadence
- * (~20 Hz) and must not gain a second reason to, which is why this is a local
+ * (up to ~5/s) and must not gain a second reason to, which is why this is a local
  * interval rather than a value threaded through its render.
  */
 export const FOCUS_PULSE_FRAME_MS = 80;

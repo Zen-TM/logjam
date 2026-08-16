@@ -266,6 +266,70 @@ sharing one render across a block of tiles is the available big win — it is no
 built, because it would have to move the mesh warp's lattice off each tile's own
 `srcRect`, and getting that wrong produces a confidently misplaced map.
 
+## Battery (field constraint — a flat phone is a navigation failure)
+
+The 2026-08-17 pass. Every rule below is a rule because the code broke it. Where
+a check exists it is named; the two that have none are marked, and both are
+inside `MapScreen`'s effects, which nothing can reach without a renderer in the
+test setup — the honest statement is that they are guarded by this file and by
+review, not by CI.
+
+- **A sensor runs only while the map tab is FOCUSED and the app is in the
+  FOREGROUND.** `MapScreen` mounts once per process and in practice never
+  unmounts, so nothing else ever stops one: a single locate-me tap used to leave
+  a 3 s GPS watcher and the compass running for the life of the process, on
+  other tabs and with the phone asleep in a pack. Both watchers are owned by
+  effects keyed on `sensorsActive = mapFocused && appActive` — never by
+  imperative start/stop helpers, which is how the old code ended up with four
+  "am I already starting" flags that disagreed about whether the dot was on. The
+  user's *intention* (`dotWanted`) is separate state from the subscription
+  handle; anything asking "is the dot on" must read the intention. The RECORDER
+  is exempt and must stay exempt: it is a foreground service and running in the
+  background is its whole job. **No executable check** — see the note above.
+- **The compass heading never goes back into a screen's state.** It lives in
+  `map/heading.ts` behind `publishHeading`/`useLiveHeading` and is read by
+  exactly two memoised components (`UserLocationMarker`, `LiveCompassStrip`).
+  In `MapScreen`'s `useState` every sample re-rendered the whole map — MLRN
+  memoises none of its layer components and re-commits props per layer per
+  render, and the Protomaps band alone is ~71 layers (more with saved regions).
+  Anything else wanting the heading subscribes; it does not lift it back up.
+  **No executable check** — see the note above.
+- **What the platform gives us, since several constants depend on it:**
+  expo-location registers the accelerometer and magnetometer at
+  `SENSOR_DELAY_NORMAL` and emits only past a **2° / 50 ms** gate
+  (`LocationModule.kt`). Neither is settable from JS. So the heading stream is
+  an irregular ~5 Hz staircase, and smoothing it is `heading.ts`'s job, not the
+  platform's — `smoothHeading` is time-aware (`HEADING_TAU_MS`) plus
+  rate-limited (`HEADING_MAX_SLEW_DEG_PER_S`), pinned by `heading.test.ts`.
+- **A backgrounded recorder appends points and nothing else.** Track stats are
+  display-only, so they are recomputed while the app is in front of someone and
+  on return to the foreground (`refreshTrackStats` / `refreshActiveTrackStats`),
+  never in the headless task — it was a full read of the series plus O(points)
+  of arithmetic per fix, all night, getting worse the longer the trip ran.
+  `appendTrackPoints` therefore carries `pointCount` in its own transaction.
+  Guarded by `trackRecorder.test.ts` ("a backgrounded recorder only writes
+  points").
+- **The `/users/me` cache is a privacy boundary, not just a battery one**
+  (`api/apiFetch.ts`): 60 s, invalidated by any non-GET to that path and by
+  `wipeAllLocalData`, which is what both sign-out (`App.tsx`) and a different
+  user signing in (`useAuth.ts`) go through. `GET /users/me` also PROVISIONS the
+  row on first sign-in, so a hit on the wrong side of an account change would
+  skip creating the new account. Pinned by `api/apiFetch.test.ts`.
+- **Nothing automatic may wake the radio from the background.** The sync backoff
+  ladder only arms in the foreground (`syncEngine.ts`; `syncEngine.test.ts`
+  pins it) — the foreground edge and the offline→online edge already recover
+  it, and a ladder behind a dark screen is a wakeup every few minutes for a
+  whole trip. Do NOT "improve" that retry by putting `canRunNow` in front of it:
+  a metered-disallowed link would decline, nothing would re-arm it, and the sync
+  status would promise a retry forever.
+- **The recording fix rate (`recordingPreferences.ts`) defaults to `battery`
+  (30 s), and its slowest preset is `maxSaver` (120 s).** Only `timeInterval`
+  moves the power bill: `distanceInterval` and `deferredUpdatesInterval` are
+  delivery filters, and the latter costs data loss on a kill. Note the honest
+  limit — the map's own 3 s dot watcher is a second client of one fused
+  provider, which serves both at the faster rate, so the setting governs the
+  recording's cost only while the map is NOT on screen.
+
 ## Privacy (design constraint — see root CLAUDE.md)
 
 Going offline puts canyon coords/names **on the device**. Every stage's privacy

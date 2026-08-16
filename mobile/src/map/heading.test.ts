@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  HEADING_MAX_SLEW_DEG_PER_S,
   normalizeBearing,
   resolveTrueHeading,
   shortestAngleDelta,
@@ -31,7 +32,7 @@ describe("smoothHeading", () => {
 
   it("converges on a steady bearing instead of snapping to it", () => {
     let heading = smoothHeading(null, 0);
-    for (let i = 0; i < 3; i++) heading = smoothHeading(heading, 30);
+    heading = smoothHeading(heading, 30);
     expect(heading).toBeGreaterThan(0);
     expect(heading).toBeLessThan(30);
     for (let i = 0; i < 40; i++) heading = smoothHeading(heading, 30);
@@ -39,7 +40,8 @@ describe("smoothHeading", () => {
   });
 
   it("flattens standstill wobble", () => {
-    // ±3° noise around 90° must not move the output more than a degree.
+    // The platform reports in steps of at least 2°, so this is what a phone
+    // lying still on a rock actually sends. It must not move the arrow a degree.
     let heading = 90;
     for (const sample of [93, 87, 92, 88, 91, 89]) {
       heading = smoothHeading(heading, sample);
@@ -47,8 +49,34 @@ describe("smoothHeading", () => {
     expect(Math.abs(shortestAngleDelta(90, heading))).toBeLessThan(1);
   });
 
-  it("follows a real turn immediately rather than crawling", () => {
-    expect(smoothHeading(10, 190)).toBe(190);
+  it("is the same filter whether the platform reports fast or slow", () => {
+    // The delivery rate is not ours to choose and is not steady. Ten samples
+    // 50 ms apart must land in the same place as one 500 ms apart, or the
+    // compass feels different depending on how fast the user happens to be
+    // turning. (A small delta, so the slew ceiling — which is a rate and so
+    // legitimately depends on the gap — is not what is being measured here.)
+    let fast = 0;
+    for (let i = 0; i < 10; i++) fast = smoothHeading(fast, 10, 50);
+    const slow = smoothHeading(0, 10, 500);
+    expect(fast).toBeCloseTo(slow, 1);
+  });
+
+  it("never turns the display faster than the slew ceiling", () => {
+    // THE JITTER FIX: a magnetometer spike is a 180° delta arriving in one
+    // sample, and it used to be passed straight through as a snap.
+    const step = smoothHeading(0, 180, 200);
+    const perSecond = (Math.abs(shortestAngleDelta(0, step)) * 1000) / 200;
+    expect(perSecond).toBeLessThanOrEqual(HEADING_MAX_SLEW_DEG_PER_S + 0.001);
+  });
+
+  it("still keeps up with a real turn", () => {
+    // The other half of the trade: damping that stops the jitter must not turn
+    // the compass into something you wait for. 200 ms samples, the platform's
+    // own cadence — a half-turn of the body, settled within a few degrees in
+    // two seconds.
+    let heading = 0;
+    for (let i = 0; i < 10; i++) heading = smoothHeading(heading, 180, 200);
+    expect(Math.abs(shortestAngleDelta(180, heading))).toBeLessThan(5);
   });
 });
 

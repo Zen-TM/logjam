@@ -22,11 +22,13 @@ export type Track = {
   visible: boolean;
   /** Increments on resume so the polyline breaks across pause gaps. */
   currentSegment: number;
-  /** Cached stats — recomputed after each written batch and on finish. */
+  /** Cached stats — recomputed while the app is in the foreground and on
+   *  finish, never in the background (see trackRecorder.refreshTrackStats). */
   distanceM: number;
   durationMs: number;
   elevationGainM: number;
   elevationLossM: number;
+  /** Rows in `track_point`. Written ONLY by `appendTrackPoints`. */
   pointCount: number;
   startedAt: string;
   endedAt: string | null;
@@ -200,15 +202,21 @@ export async function updateTrack(
     args.push(patch.pausedAt);
   }
   if (patch.stats !== undefined) {
+    // `pointCount` is deliberately NOT written here, even though TrackStats
+    // carries one. `appendTrackPoints` owns that column and maintains it in the
+    // same transaction as the insert; a stats write is a read-then-write from
+    // outside the recorder's serialised queue, so an absolute value computed
+    // before a batch landed would clobber the increment and leave the row
+    // claiming fewer points than the table holds — which the map layer reads as
+    // "the series was rewritten" and answers with a full reload.
     sets.push(
-      "distanceM = ?, durationMs = ?, elevationGainM = ?, elevationLossM = ?, pointCount = ?",
+      "distanceM = ?, durationMs = ?, elevationGainM = ?, elevationLossM = ?",
     );
     args.push(
       patch.stats.distanceM,
       patch.stats.durationMs,
       patch.stats.elevationGainM,
       patch.stats.elevationLossM,
-      patch.stats.pointCount,
     );
   }
   await db.runAsync(`UPDATE track SET ${sets.join(", ")} WHERE id = ?`, ...args, id);
@@ -222,14 +230,25 @@ export async function deleteTrack(id: string): Promise<void> {
   notifyChanged();
 }
 
+/**
+ * A track's points, optionally only those from `fromSeq` on.
+ *
+ * `seq` is dense and starts at 0 (see `appendTrackPoints`), so a caller holding
+ * N points asks for `fromSeq = N` to get exactly what it is missing. The map
+ * layer uses that to follow a live recording without re-reading the whole
+ * series on every written batch — which is O(points) of I/O per fix, and
+ * quadratic over a recording, on the screen that is open for the whole trip.
+ */
 export async function listTrackPoints(
   trackId: string,
+  fromSeq = 0,
 ): Promise<RecordedTrackPoint[]> {
   const db = await getOfflineDb();
   return db.getAllAsync<RecordedTrackPoint>(
     `SELECT segment, lon, lat, altitudeM, accuracyM, timestampMs
-       FROM track_point WHERE trackId = ? ORDER BY seq`,
+       FROM track_point WHERE trackId = ? AND seq >= ? ORDER BY seq`,
     trackId,
+    fromSeq,
   );
 }
 
@@ -246,7 +265,16 @@ export async function lastTrackPoint(
   return rows.length > 0 ? rows[0] : null;
 }
 
-/** Append a batch in one transaction. Seq continues from the stored max. */
+/**
+ * Append a batch in one transaction. Seq continues from the stored max.
+ *
+ * It carries `pointCount` and `updatedAt` with it, in the SAME transaction.
+ * That used to ride on the stats write that followed every batch, and the stats
+ * write is now a foreground-only job (see `refreshTrackStats`) — so without this
+ * a recording made with the screen off would grow its points while the row went
+ * on claiming it had none, and the map layer, which reloads on `pointCount`,
+ * would never draw them.
+ */
 export async function appendTrackPoints(
   trackId: string,
   points: RecordedTrackPoint[],
@@ -274,6 +302,12 @@ export async function appendTrackPoints(
         p.timestampMs,
       );
     }
+    await db.runAsync(
+      "UPDATE track SET pointCount = pointCount + ?, updatedAt = ? WHERE id = ?",
+      points.length,
+      new Date().toISOString(),
+      trackId,
+    );
   });
   notifyChanged();
 }

@@ -85,13 +85,24 @@ const FIX_RATE_LABELS: Record<FixRate, string> = {
   high: "Detailed",
   balanced: "Balanced",
   battery: "Battery saver",
+  maxSaver: "Max saver",
 };
 
-/** The actual rate: three words the labels can only gesture at. */
+/**
+ * The actual rate: two words the labels can only gesture at.
+ *
+ * It describes the RECORDED LINE, not the marker on the map — the map keeps its
+ * own faster watcher for the marker while it is on screen (see MapScreen's
+ * position effect), so the saving these presets buy is the one that accrues for
+ * the rest of the trip, with the phone in a pack. Saying otherwise on this
+ * screen would be a promise the map breaks the moment the user looks at it.
+ */
 const FIX_RATE_HINTS: Record<FixRate, string> = {
-  high: "A position every 3 seconds.",
-  balanced: "A position every 10 seconds.",
-  battery: "A position every 30 seconds. Longest battery life.",
+  high: "A recorded position every 3 seconds.",
+  balanced: "A recorded position every 10 seconds.",
+  battery: "A recorded position every 30 seconds. The default.",
+  maxSaver:
+    "A recorded position every 2 minutes. Longest battery life, roughest line.",
 };
 
 function accuracyLabel(limit: AccuracyLimitM): string {

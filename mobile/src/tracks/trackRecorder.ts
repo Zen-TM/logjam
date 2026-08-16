@@ -8,9 +8,16 @@
 // survives app kill — expo-task-manager re-launches the JS task headless and
 // this module's defineTask handler keeps appending to SQLite.
 //
+// A BACKGROUNDED RECORDER DOES ONE THING: append the accepted fixes. The
+// derived stats (distance, ascent, duration) are display-only, so they are
+// recomputed when the app is in front of someone — per batch while it is, and
+// once on return to the foreground — never in the headless task. See
+// `refreshTrackStats`.
+//
 // PRIVACY: no coordinates in the service notification, logs, or errors —
 // static strings and counts only. Points land in the app-private, app-locked
-// offline DB (see tracksDb.ts).
+// offline DB (see tracksDb.ts), and no copy of the series is held in memory.
+import { AppState } from "react-native";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import {
@@ -67,31 +74,6 @@ function locationOptions(): Location.LocationTaskOptions {
 
 const TRACK_COLOR = "#f59e0b"; // amber — distinct from the import palette
 
-// The active track's point series, held between batches so a fix does not cost
-// two full-table reads (MLIFE-004: the read was O(points) per batch, quadratic
-// over a recording). This module's task handler is the only writer of
-// `track_point`, so the cache can only go stale by losing a write — which the
-// `pointCount` check below catches, falling back to the DB.
-//
-// PRIVACY: this is precise location history in memory. It is dropped at every
-// lifecycle transition (start/pause/resume/finish/discard/reconcile), so
-// nothing outlives the recording it belongs to.
-let pointCache: { trackId: string; points: RecordedTrackPoint[] } | null = null;
-
-function dropPointCache(): void {
-  pointCache = null;
-}
-
-/** The stored series, from cache when it provably matches the row's count. */
-async function trackPointsForStats(track: Track): Promise<RecordedTrackPoint[]> {
-  if (pointCache?.trackId === track.id && pointCache.points.length === track.pointCount) {
-    return pointCache.points;
-  }
-  const points = await listTrackPoints(track.id);
-  pointCache = { trackId: track.id, points };
-  return points;
-}
-
 /**
  * Elapsed recording time from the wall clock. The point-derived duration in
  * TrackStats stops at the last accepted fix, so standing still froze the
@@ -108,15 +90,59 @@ export function trackDurationMs(track: Track, endedAtMs: number | null): number 
   });
 }
 
+/**
+ * Recompute a track's cached stats (distance, gain, loss, duration, count) from
+ * its stored points.
+ *
+ * SEPARATE FROM RECORDING ON PURPOSE. These numbers exist to be displayed —
+ * nothing in the app acts on them — so they are computed when something can
+ * display them, not on the arrival of every batch. Recomputing per batch meant
+ * a full read of the series plus O(points) of arithmetic for every fix, all
+ * night, in a headless task nobody was looking at, and it got more expensive
+ * the longer the trip ran.
+ *
+ * ponytail: still a full recompute rather than an incremental one. That is
+ * cheap now that it runs only while the app is open (and at the shipped 30 s
+ * fix rate); make it incremental if a device profile says otherwise.
+ */
+async function refreshTrackStats(trackId: string): Promise<void> {
+  const track = await getTrack(trackId);
+  if (!track) return;
+  const stats = computeTrackStats(await listTrackPoints(trackId));
+  await updateTrack(trackId, {
+    // `endedAt`, not null, so this is safe to call on a finished track: with a
+    // null the duration would be recomputed from the wall clock and a track
+    // saved yesterday would report a day long.
+    stats: {
+      ...stats,
+      durationMs: trackDurationMs(
+        track,
+        track.endedAt == null ? null : Date.parse(track.endedAt),
+      ),
+    },
+  });
+}
+
+/** The live recording's stats, brought up to date. Called on every return to
+ *  the foreground, which is where the batches that skipped the computation are
+ *  paid for — once, rather than one at a time. Paused counts too: a recording
+ *  paused while the app was away holds points nothing has added up yet. */
+export async function refreshActiveTrackStats(): Promise<void> {
+  const active = await findActiveTrack();
+  if (active) await refreshTrackStats(active.id);
+}
+
 async function handleLocationBatch(locations: Location.LocationObject[]) {
   const track = await findActiveTrack();
   // Fixes can trail in after pause/finish (queued deliveries) — drop them.
   if (!track || track.state !== "recording") return;
 
-  // The whole stored series, cached across batches; it also supplies the
-  // acceptance filter's `prev` without a second query.
-  const stored = await trackPointsForStats(track);
-  const lastPoint = stored.length > 0 ? stored[stored.length - 1] : null;
+  // Only the LAST stored point, not the series: it is all the acceptance filter
+  // needs for `prev`, and it is one indexed row rather than a read that grows
+  // with the recording (MLIFE-004 — the in-memory series that used to stand in
+  // for this is gone, and with it a copy of the user's location history that
+  // lived in the process for the whole trip).
+  const lastPoint = await lastTrackPoint(track.id);
   // A resumed segment starts fresh: measured against the PREVIOUS segment's
   // last point, every fix after a resume-in-place reads "too-close" and the
   // new segment records nothing until the user walks away from where they
@@ -142,17 +168,11 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
     prev = point;
   }
   if (accepted.length === 0) return;
+  // The whole job of a backgrounded recorder: write the points. The append
+  // carries `pointCount` with it, so the row stays truthful about what is
+  // stored even though nothing recomputes the stats until someone looks.
   await appendTrackPoints(track.id, accepted);
-  const all = stored.concat(accepted);
-  pointCache = { trackId: track.id, points: all };
-  // ponytail: stats are still recomputed over the whole series per batch —
-  // O(points) of pure JS, no I/O. Make it incremental (settled prefix + tail,
-  // both smoothing windows carry state) only if a device profile says the
-  // arithmetic itself costs; the two full-table reads were the expensive part.
-  const stats = computeTrackStats(all);
-  await updateTrack(track.id, {
-    stats: { ...stats, durationMs: trackDurationMs(track, null) },
-  });
+  if (AppState.currentState === "active") await refreshTrackStats(track.id);
 }
 
 // Module scope, imported from the app entry — required so the handler exists
@@ -205,7 +225,6 @@ export async function startTrackRecording(): Promise<Track> {
     updatedAt: now.toISOString(),
   };
   await insertTrack(track);
-  dropPointCache();
   resetTrackWriteHealth();
   try {
     await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
@@ -219,7 +238,6 @@ export async function startTrackRecording(): Promise<Track> {
 
 export async function pauseTrackRecording(trackId: string): Promise<void> {
   await stopLocationUpdatesIfRunning();
-  dropPointCache();
   // The pause clock starts at the TAP, not at the last fix — a user who stood
   // still for ten minutes before pausing was otherwise credited with them.
   await updateTrack(trackId, {
@@ -235,7 +253,6 @@ export async function resumeTrackRecording(track: Track): Promise<void> {
     track.pausedAt == null
       ? 0
       : Math.max(0, Date.now() - Date.parse(track.pausedAt));
-  dropPointCache();
   await updateTrack(track.id, {
     state: "recording",
     currentSegment: track.currentSegment + 1,
@@ -263,7 +280,6 @@ export async function resumeTrackRecording(track: Track): Promise<void> {
 
 export async function finishTrackRecording(trackId: string): Promise<void> {
   await stopLocationUpdatesIfRunning();
-  dropPointCache();
   const track = await getTrack(trackId);
   if (!track) throw new Error(`finishTrackRecording: no track ${trackId}`);
   const endedAt = new Date();
@@ -280,16 +296,14 @@ export async function finishTrackRecording(trackId: string): Promise<void> {
  * out from under a live recording, and a foreground service that keeps
  * delivering fixes is a producer writing the departing user's positions after
  * the wipe reported success — the same rule the region downloader and the
- * GeoPDF import already follow. Also drops the in-memory point cache.
+ * GeoPDF import already follow.
  */
 export async function stopTrackRecordingForWipe(): Promise<void> {
   await stopLocationUpdatesIfRunning();
-  dropPointCache();
 }
 
 export async function discardTrackRecording(trackId: string): Promise<void> {
   await stopLocationUpdatesIfRunning();
-  dropPointCache();
   await deleteTrack(trackId);
 }
 
@@ -312,7 +326,6 @@ export async function reconcileTrackRecording(): Promise<void> {
     TRACK_RECORDING_TASK,
   );
   if (active?.state === "recording" && !taskRunning) {
-    dropPointCache();
     // The recorder died at some unknown moment; everything from the last fix
     // to now is a gap, not recording time, so open a pause at that fix rather
     // than at launch.

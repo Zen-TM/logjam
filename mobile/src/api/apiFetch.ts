@@ -87,12 +87,43 @@ async function throwApiError(res: Response, path: string, method: string): Promi
   throw new ApiError(res.status, path, method, serverMessage);
 }
 
+// ── the user record, cached for a minute ─────────────────────────────────────
+//
+// Eight screens fetch `/users/me` on mount with nothing between them and no
+// cache of any kind, so opening five canyons was five identical round-trips —
+// each one a radio wakeup, an Amplify token check and a 15 s timeout's worth of
+// hang when there is no signal. The record only changes through a PATCH from
+// this device (which lands its own response in the cache below) or from another
+// device (a minute late is fine for a username and a theme).
+//
+// It lives HERE, not beside `fetchCurrentUser`, because six modules PATCH this
+// path: an invalidation each caller has to remember is one a caller forgets.
+const CURRENT_USER_PATH = "/users/me";
+const CURRENT_USER_TTL_MS = 60_000;
+let currentUser: { value: unknown; atMs: number } | null = null;
+
+/** Drop the cached user record. Called from `wipeAllLocalData`, which is the
+ *  one path both sign-out and a DIFFERENT user signing in go through — the next
+ *  person to use this phone must not read the last one's name out of memory. */
+export function invalidateCurrentUser(): void {
+  currentUser = null;
+}
+
 export async function apiFetch<T>(
   path: string,
   options?: { method?: string; body?: unknown },
 ): Promise<T> {
-  const token = await getIdToken();
   const method = options?.method ?? "GET";
+  const cacheable = path === CURRENT_USER_PATH;
+  if (
+    cacheable &&
+    method === "GET" &&
+    currentUser !== null &&
+    Date.now() - currentUser.atMs < CURRENT_USER_TTL_MS
+  ) {
+    return currentUser.value as T;
+  }
+  const token = await getIdToken();
   const res = await fetchWithTimeout(`${config.apiUrl}${path}`, {
     method,
     headers: {
@@ -107,8 +138,22 @@ export async function apiFetch<T>(
     // already fired the handler above.
     await throwApiError(res, path, method);
   }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  if (res.status === 204) {
+    if (cacheable) invalidateCurrentUser();
+    return undefined as T;
+  }
+  const value = (await res.json()) as T;
+  if (cacheable) {
+    // A PATCH answers with the updated record, so the write refreshes the cache
+    // instead of merely dropping it. Anything else (a DELETE with a body, a
+    // future verb) drops it — the safe direction.
+    if (method === "GET" || method === "PATCH") {
+      currentUser = { value, atMs: Date.now() };
+    } else {
+      invalidateCurrentUser();
+    }
+  }
+  return value;
 }
 
 // Like apiFetch but also surfaces the X-Total-Count header (true owner-

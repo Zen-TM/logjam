@@ -176,10 +176,34 @@ function scheduleBackoffRetry(): void {
   // self-sustaining loop issuing authenticated requests with no owner and no
   // way to stop it short of a process restart.
   if (stopped || retryTimer) return;
+  // The ladder is for a flaky link, not for a phone with no signal and a screen
+  // that has been off for six hours. A backgrounded app has two triggers that
+  // already recover it — the foreground edge and the offline→online edge — so a
+  // retry there can only wake the radio to fail again, and on a trip that is one
+  // wakeup every few minutes for the whole day (the recorder's foreground
+  // service keeps this process alive the entire time).
+  //
+  // `=== "background"`, not `!== "active"`: Android reports `"unknown"` until
+  // the first AppState event, and the very first cycle of a launch runs inside
+  // that window — testing for active would drop the ladder for the one failure
+  // most likely to need it.
+  //
+  // The counter resets rather than carrying over, so the cycle the next
+  // foreground fires starts at the bottom of the ladder instead of at the
+  // five-minute cap.
+  if (AppState.currentState === "background") {
+    retryAttempt = 0;
+    return;
+  }
   const delay = computeBackoffMs(retryAttempt);
   retryAttempt += 1;
   retryTimer = setTimeout(() => {
     retryTimer = null;
+    // NOT behind `canRunNow`. It reads as the obvious battery guard and is a
+    // trap: a metered-disallowed connection would decline, the ladder would end
+    // with nothing to restart it (`subscribeReconnect` is edge-triggered on
+    // reachability, and cellular→Wi-Fi is not that edge), and the status line
+    // would sit on "Couldn't sync. Will retry." forever.
     void requestSync();
   }, delay);
 }

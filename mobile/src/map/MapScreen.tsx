@@ -11,6 +11,7 @@
 // Vulkan renders symbols correctly; don't revert to opengl without retesting
 // labels on the emulator AND a physical device.
 import {
+  memo,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -106,10 +107,14 @@ import {
 } from "./mapChrome";
 import {
   HEADING_RENDER_MS,
+  POV_CAMERA_MS,
+  POV_DEADBAND_DEG,
   normalizeBearing,
+  publishHeading,
   resolveTrueHeading,
   shortestAngleDelta,
   smoothHeading,
+  useLiveHeading,
 } from "./heading";
 import {
   CompassStrip,
@@ -183,6 +188,7 @@ import {
 } from "../sync/outbox";
 import {
   reconcileTrackRecording,
+  refreshActiveTrackStats,
   startTrackRecording,
 } from "../tracks/trackRecorder";
 import { TrackMapLayers } from "../tracks/TrackMapLayers";
@@ -239,6 +245,14 @@ const PROTOMAPS_FLAVOR = "light" as const;
 /** Below this span an extent is a point, not an area (~1 m). */
 const DEGENERATE_BBOX_DEGREES = 1e-5;
 const SINGLE_POINT_ZOOM = 14;
+
+/**
+ * Frame-rate ceiling for the map. See the prop on <MapView> for why.
+ *
+ * If this ever needs to be a user choice, it is the first thing a "battery
+ * saver" mode would take — along with the dot's 3 s watcher and the compass.
+ */
+const MAP_MAX_FPS = 30;
 
 const CAMERA_DEFAULTS = {
   centerCoordinate: DEFAULT_CENTER,
@@ -337,11 +351,145 @@ function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
 }
 
+/** Stable empty list: `?? []` in the JSX handed RoutesLayer a fresh array on
+ *  every render until the query resolved, which is exactly when its memo would
+ *  have helped most. */
+const EMPTY_ROUTES: MirrorRoute[] = [];
+
 // Contour layers get contour styling; every other vector layer is the OSM
 // features set (web parity: `id.includes("contours")`).
 function overlayKind(ref: TopoOverlayRef): "contours" | "features" {
   return ref.layer === "contours" ? "contours" : "features";
 }
+
+/**
+ * The user's own position marker.
+ *
+ * Its own memoised component, subscribed to the live heading (heading.ts)
+ * rather than taking it as a prop, because it is one of exactly two things that
+ * redraw at compass rate. Inside MapScreen's body a sample re-rendered the
+ * whole map — see the note on `publishHeading`.
+ *
+ * Unpinned ⇒ renders above everything, like the canyon layers. No accuracy
+ * halo: it was a translucent disc the size of a suburb that told the user
+ * nothing actionable and hid the map under itself.
+ */
+const UserLocationMarker = memo(function UserLocationMarker({
+  coord,
+  markerColorId,
+}: {
+  coord: [number, number];
+  markerColorId: MarkerColorId;
+}) {
+  const heading = useLiveHeading();
+  // MLRN's ShapeSource JSON.stringifies `shape` on every render it lets
+  // through, so this must not be an object literal in the JSX.
+  const shape = useMemo(
+    () =>
+      ({
+        type: "Feature" as const,
+        geometry: { type: "Point" as const, coordinates: coord },
+        properties: {},
+      }) as GeoJSON.Feature<GeoJSON.Point>,
+    [coord],
+  );
+  return (
+    <ShapeSource id="user-location" shape={shape}>
+      {heading != null ? (
+        // Direction beam under the arrow. Map-aligned, so it points at
+        // real-world bearings even when the map itself is rotated.
+        <SymbolLayer
+          id="user-location-heading"
+          style={{
+            iconImage: "user-heading-beam",
+            iconRotate: heading,
+            iconRotationAlignment: "map",
+            iconAllowOverlap: true,
+            iconIgnorePlacement: true,
+          }}
+        />
+      ) : null}
+      {/* An arrow, not a dot: a dot says where you are and a compass says which
+          way north is, and the user is left to combine them while standing on a
+          ledge. The arrow answers both at once — which is why the heading
+          watcher runs for as long as the marker is on screen, not only in
+          course-up. */}
+      <SymbolLayer
+        id="user-location-dot"
+        style={{
+          iconImage: "user-arrow",
+          iconSize: 0.28,
+          iconRotate: heading ?? 0,
+          iconRotationAlignment: "map",
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
+          // The user's colour, and a white edge under it so no choice has to
+          // carry its own contrast — the arrow sits on imagery, rock and water,
+          // and "white" would vanish on a limestone slab without it.
+          iconColor: MARKER_COLORS[markerColorId],
+          // White on white is no edge at all, so the one achromatic choice
+          // takes a dark one instead.
+          iconHaloColor: markerColorId === "white" ? "#1A1A1A" : "#FFFFFF",
+          iconHaloWidth: 1.2,
+        }}
+      />
+    </ShapeSource>
+  );
+});
+
+/**
+ * Locate-me sprites: the facing arrow, and the beam behind it.
+ *
+ * The arrow is registered SDF, which is what makes `iconColor` (and with it the
+ * Settings → Map colour choice) apply to it at all — a plain image is drawn with
+ * its own pixels. SDF reads the alpha channel as a shape, so the arrow's own
+ * blue is discarded and its white edge comes back as `iconHaloColor`; the beam
+ * stays a plain image, because its whole substance is a soft alpha gradient
+ * that a distance field would flatten into a hard triangle.
+ *
+ * Module constant + memo: as an inline object literal this re-registered two
+ * images with the native map on every render of the screen.
+ */
+const USER_MARKER_IMAGES = {
+  "user-heading-beam": require("../../assets/user-heading.png"),
+  "user-arrow": {
+    source: require("../../assets/user-arrow.png"),
+    sdf: true,
+  },
+};
+
+const UserMarkerImages = memo(function UserMarkerImages() {
+  return <Images images={USER_MARKER_IMAGES} />;
+});
+
+/** The compass tape, on the same subscription and for the same reason. */
+const SubscribedCompassStrip = memo(function SubscribedCompassStrip({
+  width,
+  reference,
+}: {
+  width: number;
+  reference: NorthReference;
+}) {
+  const heading = useLiveHeading();
+  return <CompassStrip heading={heading} width={width} reference={reference} />;
+});
+
+/**
+ * The switch sits OUTSIDE the subscription, so a tape that is turned off (the
+ * default) is not re-rendered by every sample just to throw the value away.
+ */
+const LiveCompassStrip = memo(function LiveCompassStrip({
+  enabled,
+  width,
+  reference,
+}: {
+  enabled: boolean;
+  width: number;
+  reference: NorthReference;
+}) {
+  if (!enabled) return <CompassStrip heading={null} width={width} reference={reference} />;
+  return <SubscribedCompassStrip width={width} reference={reference} />;
+});
 
 export function MapScreen({
   onOpenCanyon,
@@ -666,42 +814,30 @@ export function MapScreen({
   const zoomRef = useRef(DEFAULT_ZOOM);
   const headingRef = useRef(0);
   const [userCoord, setUserCoord] = useState<[number, number] | null>(null);
-  const [userHeading, setUserHeading] = useState<number | null>(null);
+  // The heading itself is NOT state here: it is published to heading.ts and
+  // read by the two components that draw it (see `publishHeading`). Keeping it
+  // in this screen's state re-rendered the whole map on every compass sample.
   // Latest fix, in a ref as well as in state: entering a follow mode has to
   // recentre NOW, from the sensor callback's own value, not on the next render.
   const latestFix = useRef<[number, number] | null>(null);
-  const locationWatch = useRef<Location.LocationSubscription | null>(null);
-  const headingWatch = useRef<Location.LocationSubscription | null>(null);
-  // Set between "asked for the compass" and "have the subscription" — see
-  // ensureHeadingWatch.
-  const headingWatchStarting = useRef(false);
   // Running smoothed heading, kept in a ref as well as in state: the POV
   // camera writes from the sensor callback, which must not close over a stale
   // render's value.
   const smoothedHeading = useRef<number | null>(null);
   const lastHeadingRender = useRef(0);
+  /** When the previous compass sample arrived — the filter is time-aware. */
+  const lastHeadingSampleAt = useRef(0);
   const lastPovBearing = useRef<number | null>(null);
+  /** Throttle for the course-up camera — see handleHeadingSample. */
+  const lastPovWriteAt = useRef(0);
   const firstFix = useRef(true);
 
-  // Both watchers are assigned from an `await`, so an unmount landing between
-  // the call and its resolution runs the cleanup against null refs and the
-  // subscription then installs itself into a dead component with nothing left
-  // to remove it — a sensor held for the life of the process (MLIFE-007). The
-  // flag is checked at every assignment below; AppLockGate unmounts the whole
-  // tree on a background→foreground cycle, which is how the window is entered.
-  const unmounted = useRef(false);
-
-  // Stop the position/heading watchers when the screen unmounts.
-  useEffect(() => {
-    unmounted.current = false;
-    return () => {
-      unmounted.current = true;
-      locationWatch.current?.remove();
-      locationWatch.current = null;
-      headingWatch.current?.remove();
-      headingWatch.current = null;
-    };
-  }, []);
+  // Unmount teardown for the sensors is the effects' own cleanup below. It used
+  // to be a screen-level effect plus an `unmounted` flag checked at every
+  // assignment, because both subscriptions are assigned from an `await` and one
+  // resolving after teardown is a sensor held for the life of the process
+  // (MLIFE-007). Each effect now carries that guard itself, for its own
+  // teardown — which is a blur or a background as well as an unmount.
 
   // Canyon overlay reads the offline mirror (Stage 8): instant, and the map
   // keeps its pins in airplane mode.
@@ -1470,6 +1606,40 @@ export function MapScreen({
         )
       : null;
 
+  // MLRN's ShapeSource JSON.stringifies `shape` on every render it lets
+  // through, and an object literal in the JSX defeats its memo outright — so
+  // both of these small sources were re-serialised and re-committed to the
+  // native map on every render of this screen. They change when their inputs
+  // do, and not otherwise.
+  const navLineShape = useMemo(
+    () =>
+      navTarget && userCoord
+        ? ({
+            type: "Feature",
+            geometry: {
+              type: "LineString",
+              coordinates: [userCoord, [navTarget.lon, navTarget.lat]],
+            },
+            properties: {},
+          } as GeoJSON.Feature<GeoJSON.LineString>)
+        : null,
+    [navTarget, userCoord],
+  );
+  const tappedPointShape = useMemo(
+    () =>
+      tappedPoint
+        ? ({
+            type: "Feature",
+            geometry: {
+              type: "Point",
+              coordinates: [tappedPoint.longitude, tappedPoint.latitude],
+            },
+            properties: {},
+          } as GeoJSON.Feature<GeoJSON.Point>)
+        : null,
+    [tappedPoint],
+  );
+
   // Reconcile a recording that outlived the app (kill/reboot) — marks it
   // paused when the platform task died, stops an orphaned task.
   //
@@ -1477,9 +1647,15 @@ export function MapScreen({
   // once per process (bottom-tab navigator), so a service killed by an OEM
   // battery manager or by Doze while the app stayed mounted left the HUD
   // claiming to record until the next cold launch (MLIFE-006).
+  //
+  // It also settles the stats the backgrounded recorder deliberately did not
+  // compute (see refreshTrackStats): the HUD's distance and ascent are right by
+  // the time the user has finished looking at the screen unlock.
   useEffect(() => {
     const reconcile = () => {
-      reconcileTrackRecording().catch(console.error);
+      reconcileTrackRecording()
+        .then(() => refreshActiveTrackStats())
+        .catch(console.error);
     };
     reconcile();
     const subscription = AppState.addEventListener("change", (state) => {
@@ -1778,7 +1954,7 @@ export function MapScreen({
   //
   // This is also where a follow mode ends. Panning while the camera is being
   // driven is a fight the user cannot win: every fix (and, in course-up, every
-  // compass sample at ~20 Hz) writes a camera stop that snaps the map back
+  // compass sample) writes a camera stop that snaps the map back
   // mid-gesture, so the map reads as broken rather than as locked. The gesture
   // wins — `isUserInteraction` is false for our own stops, so the recentres
   // and rotations this screen asks for can't cancel themselves.
@@ -1967,102 +2143,267 @@ export function MapScreen({
   }, [povRecentreNonce, recentre]);
 
   /**
-   * Start the compass watcher if it isn't already running. Two independent
-   * things want it — the location arrow / course-up camera, and the compass
-   * tape, which runs with no fix at all — so ownership sits here rather than
-   * inside the locate-me flow.
+   * Fold one fix into the dot and, in a follow mode, into the camera.
    */
-  const ensureHeadingWatch = useCallback(async () => {
-    // `watchHeadingAsync` is awaited, so a second caller arriving during that
-    // await would subscribe a second time and never be able to remove it.
-    if (headingWatch.current || headingWatchStarting.current) return;
-    headingWatchStarting.current = true;
-    try {
-      // Compass heading — which way the user is FACING. It orients the location
-      // arrow, the compass tape and, in course-up, the whole map, so it is
-      // smoothed rather than gated (see heading.ts: the old ≥3° deadband turned
-      // a wobble into a staircase). trueHeading needs a location fix for
-      // declination; when it is unavailable (reported as -1) resolveTrueHeading
-      // corrects the magnetic reading rather than passing it off as true —
-      // everything else on this screen, including the navigate-to chip and the
-      // tape's labels, is true north.
-      const subscription = await Location.watchHeadingAsync((heading) => {
-        const raw = resolveTrueHeading(heading);
-        if (raw == null) return;
-        const next = smoothHeading(smoothedHeading.current, raw);
-        smoothedHeading.current = next;
-
-        // The sensor runs ~10 Hz; the arrow only needs ~20 fps of it, and every
-        // update re-renders this screen.
-        const now = Date.now();
-        if (now - lastHeadingRender.current >= HEADING_RENDER_MS) {
-          lastHeadingRender.current = now;
-          setUserHeading(next);
-        }
-
-        // Course-up: turn the map with them. Below a degree of change this is
-        // sensor noise, and a camera commit per sample makes the map seasick.
-        if (followModeRef.current !== "course-up") return;
-        const previous = lastPovBearing.current;
-        if (previous != null && Math.abs(shortestAngleDelta(previous, next)) < 1) return;
-        lastPovBearing.current = next;
+  const applyFix = useCallback(
+    (coord: [number, number]) => {
+      setUserCoord(coord);
+      latestFix.current = coord;
+      const mode = followModeRef.current;
+      if (firstFix.current) {
+        firstFix.current = false;
         setCameraStop({
-          heading: normalizeBearing(next),
-          // Carry the position too: this stop REPLACES whatever the last one was,
-          // and at ~20 writes a second it would otherwise cancel every recentre
-          // the location watcher asked for.
-          ...(latestFix.current ? { centerCoordinate: latestFix.current } : {}),
-          animationDuration: HEADING_RENDER_MS,
+          centerCoordinate: coord,
+          zoomLevel: FOLLOW_ZOOM,
+          animationDuration: 1200,
         });
-      });
-      // Resolved into an unmounted screen: nothing will ever remove it, so
-      // remove it here.
-      if (unmounted.current) subscription.remove();
-      else headingWatch.current = subscription;
-    } finally {
-      headingWatchStarting.current = false;
-    }
-  }, [setCameraStop]);
+      } else if (mode !== "off") {
+        // NOT WHILE A PINCH IS DRIVING THE CAMERA. This is a 600 ms ANIMATED
+        // stop, and `handlePinchMove` writes 0 ms stops at gesture rate from the
+        // same latest fix — so a fix landing mid-gesture starts a half-second
+        // animation that the next finger frame overrides, then the one after,
+        // and the map stutters for as long as the animation had left to run.
+        // It is the same two-drivers-on-one-camera fault that took rotation off
+        // MapLibre (see handlePinchMove), one axis over.
+        //
+        // Nothing is lost by skipping it: every pinch frame carries
+        // `centerCoordinate: latestFix.current`, which this callback has already
+        // updated, so the map is pinned to the new fix within a frame anyway.
+        if (pinchStart.current) return;
+        // Course-up rotation is driven by the COMPASS, not by the fix's course
+        // over ground: the user wants the map to face where they are looking,
+        // which on a scramble is often not where they last moved (and course
+        // is reported as -1 whenever they stand still). The heading sample
+        // handler owns that rotation; this only recentres.
+        setCameraStop({ centerCoordinate: coord, animationDuration: 600 });
+      }
+    },
+    [setCameraStop, pinchStart],
+  );
 
-  // The compass tape's own subscription. Permission is CHECKED, never requested
-  // here — a map that asks for location the moment it opens is the prompt every
-  // user learns to deny. Settings does the asking when the switch goes on, and
-  // locate-me does it on demand; until then the tape simply doesn't draw.
+  /**
+   * One compass sample: smooth it, publish it, and in course-up turn the map.
+   *
+   * The heading orients the location arrow, the compass tape and, in course-up,
+   * the whole map, so it is smoothed rather than gated (see heading.ts: the old
+   * ≥3° deadband turned a wobble into a staircase). `trueHeading` needs a
+   * location fix for declination; when it is unavailable (reported as -1)
+   * `resolveTrueHeading` corrects the magnetic reading rather than passing it
+   * off as true — everything else on this screen, including the navigate-to
+   * chip and the tape's labels, is true north.
+   */
+  const handleHeadingSample = useCallback(
+    (sample: Location.LocationHeadingObject) => {
+      const raw = resolveTrueHeading(sample);
+      if (raw == null) return;
+      const now = Date.now();
+      // Both filters in `smoothHeading` are defined per second, and the
+      // platform's delivery is neither fast nor regular (see heading.ts), so
+      // the gap has to be measured rather than assumed.
+      const sinceLastSample =
+        lastHeadingSampleAt.current === 0
+          ? undefined
+          : now - lastHeadingSampleAt.current;
+      lastHeadingSampleAt.current = now;
+      const next = smoothHeading(smoothedHeading.current, raw, sinceLastSample);
+      smoothedHeading.current = next;
+
+      // A floor on how often the arrow and the tape redraw. This no longer
+      // re-renders the screen — it re-renders those two (see publishHeading).
+      if (now - lastHeadingRender.current >= HEADING_RENDER_MS) {
+        lastHeadingRender.current = now;
+        publishHeading(next);
+      }
+
+      // Course-up: turn the map with them. THROTTLED, and behind a deadband:
+      // a camera stop per sample, each starting a 50 ms animation the next one
+      // replaced, meant the renderer never went idle for as long as course-up
+      // was on — the single most expensive thing on this screen. The stop now
+      // lasts exactly as long as the gap to the next one, and a phone held
+      // still no longer crosses the deadband at all (see POV_DEADBAND_DEG, and
+      // the smoothing that makes a sub-2° deadband safe).
+      if (followModeRef.current !== "course-up") return;
+      if (now - lastPovWriteAt.current < POV_CAMERA_MS) return;
+      const previous = lastPovBearing.current;
+      if (
+        previous != null &&
+        Math.abs(shortestAngleDelta(previous, next)) < POV_DEADBAND_DEG
+      ) {
+        return;
+      }
+      lastPovWriteAt.current = now;
+      lastPovBearing.current = next;
+      setCameraStop({
+        heading: normalizeBearing(next),
+        // Carry the position too: this stop REPLACES whatever the last one was,
+        // and it would otherwise cancel every recentre a fix asked for.
+        ...(latestFix.current ? { centerCoordinate: latestFix.current } : {}),
+        animationDuration: POV_CAMERA_MS,
+      });
+    },
+    [setCameraStop],
+  );
+
+  // ── sensor lifecycle ───────────────────────────────────────────────────────
   //
-  // `permissionNonce` is what re-runs it after a grant that happened somewhere
-  // else. The tape is ON by default and silently draws nothing until location
-  // is granted, so on a fresh install it is simply absent — and nothing here
-  // noticed when the user granted location later (via locate-me, or Settings'
-  // own switch), because `compassEnabled` had not changed. The map bumps the
-  // nonce on focus, so coming back to it picks the sensor up.
+  // THE SENSORS RUN ONLY WHILE THIS TAB IS FOCUSED AND THE APP IS IN THE
+  // FOREGROUND. This screen mounts once per process (bottom tabs) and in
+  // practice never unmounts, and nothing used to stop either watcher: one
+  // locate-me tap left a GPS fix every 3 s, and the magnetometer and
+  // accelerometer behind it, running for the rest of the process — on every
+  // other tab, and with the phone asleep in a pack all day. That is the idle
+  // drain, and neither sensor can draw anything the user can see while it is
+  // happening.
+  //
+  // Both are owned by effects rather than by imperative start/stop helpers with
+  // their own "already starting" flags. That is not a style choice: the
+  // subscriptions are awaited, so every hand-rolled version of this has to
+  // invent its own guard for a watcher that resolves after the reason for it
+  // went away, and the ones here kept disagreeing with each other about whether
+  // "the dot is on" meant a subscription object or a user's intention.
+  // `!== "background"`, not `=== "active"`: Android reports `"unknown"` until
+  // the first AppState event, and the bundle can evaluate before the activity
+  // resumes. Reading that as inactive would leave `sensorsActive` false for the
+  // whole launch if the resume event had already fired before this mounted — no
+  // dot, no compass, no course-up, self-healing only after a real background
+  // cycle. Fail open, the same direction syncEngine's retry gate chose.
+  const [appActive, setAppActive] = useState(
+    () => AppState.currentState !== "background",
+  );
   useEffect(() => {
-    if (compassEnabled) {
-      Location.getForegroundPermissionsAsync()
-        .then(({ status }) => {
-          if (status === "granted") return ensureHeadingWatch();
-        })
-        .catch(console.error);
-      return;
-    }
-    // Switched off: drop the sensor unless the location marker still needs it.
-    if (locationWatch.current) return;
-    headingWatch.current?.remove();
-    headingWatch.current = null;
-    setUserHeading(null);
-    smoothedHeading.current = null;
-  }, [compassEnabled, ensureHeadingWatch, permissionNonce]);
+    const subscription = AppState.addEventListener("change", (state) =>
+      setAppActive(state === "active"),
+    );
+    return () => subscription.remove();
+  }, []);
+  const sensorsActive = mapFocused && appActive;
+
+  /**
+   * The user has asked to see themselves. State, not a subscription handle:
+   * "show me where I am" outlives any one watcher, and the follow-mode cycle
+   * and the recording flow both need to ask the question during the window
+   * where a watcher is being replaced.
+   */
+  const [dotWanted, setDotWanted] = useState(false);
+
+  // The dot's own position watcher.
+  //
+  // It stays at 3 s whether or not a track is recording, deliberately. The
+  // recording fix rate does NOT govern it: this is the marker a person reads to
+  // answer "where am I", and a marker that is two minutes stale is answering a
+  // different question. The cost is bounded by the lifecycle above — the
+  // watcher only exists while the map tab is focused AND the app is in the
+  // foreground, which is the phone out of the pack with the screen on, and the
+  // screen dominates the power bill in that state anyway.
+  //
+  // What that costs during a recording, stated plainly: Android's fused
+  // provider serves concurrent clients at the fastest interval any of them
+  // asked for, so while the map is open the recording runs at 3 s too,
+  // whatever the fix rate says. The fix-rate setting therefore governs the
+  // recording's battery cost for the (large) majority of a trip when the map
+  // is not on screen, and not while the user is looking at it.
+  useEffect(() => {
+    if (!sensorsActive || !dotWanted) return;
+    let subscription: Location.LocationSubscription | null = null;
+    let cancelled = false;
+    void (async () => {
+      // Instant feedback from the OS's cached fix (the fused provider keeps a
+      // recent network/wifi position even indoors) — the watcher then refines.
+      const lastKnown = await Location.getLastKnownPositionAsync().catch(
+        () => null,
+      );
+      if (cancelled) return;
+      if (lastKnown) {
+        applyFix([lastKnown.coords.longitude, lastKnown.coords.latitude]);
+      }
+      // Balanced = fused wifi/cell + GPS. High (GPS-priority) starves indoors
+      // and the callback never fires — the original silent-failure mode.
+      const started = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 3000,
+          distanceInterval: 5,
+        },
+        (position) =>
+          applyFix([position.coords.longitude, position.coords.latitude]),
+      ).catch((err: unknown) => {
+        console.error(err);
+        return null;
+      });
+      // Resolved after the effect was torn down: nothing else will ever remove
+      // it, so the GPS request would outlive the screen (MLIFE-007).
+      if (!started) return;
+      if (cancelled) started.remove();
+      else subscription = started;
+    })();
+    return () => {
+      cancelled = true;
+      subscription?.remove();
+      subscription = null;
+    };
+  }, [sensorsActive, dotWanted, applyFix]);
+
+  // The compass. Wanted by the tape (which runs with no fix at all) and by the
+  // location arrow.
+  //
+  // Permission is CHECKED, never requested here — a map that asks for location
+  // the moment it opens is the prompt every user learns to deny. Settings does
+  // the asking when the compass switch goes on, and locate-me does it on
+  // demand; until then the tape simply doesn't draw. `permissionNonce` is
+  // bumped on every focus, which is what picks the sensor up after a grant that
+  // happened on another screen.
+  const headingWanted = compassEnabled || dotWanted;
+  useEffect(() => {
+    if (!sensorsActive || !headingWanted) return;
+    let subscription: Location.LocationSubscription | null = null;
+    let cancelled = false;
+    void (async () => {
+      const { status } = await Location.getForegroundPermissionsAsync().catch(
+        () => ({ status: "denied" as const }),
+      );
+      if (cancelled || status !== "granted") return;
+      const started = await Location.watchHeadingAsync(
+        handleHeadingSample,
+      ).catch((err: unknown) => {
+        console.error(err);
+        return null;
+      });
+      if (!started) return;
+      if (cancelled) started.remove();
+      else subscription = started;
+    })();
+    return () => {
+      cancelled = true;
+      subscription?.remove();
+      subscription = null;
+      // Drop the reading with the sensor. A heading is a claim about which way
+      // the phone is pointing RIGHT NOW; kept across a suspend it draws the
+      // arrow and the tape at the bearing the user was facing when they put the
+      // phone away, and `handleLocateMe` would rotate the map into course-up
+      // from that stale value rather than reading the sensor afresh.
+      smoothedHeading.current = null;
+      lastPovBearing.current = null;
+      lastHeadingSampleAt.current = 0;
+      publishHeading(null);
+    };
+  }, [sensorsActive, headingWanted, handleHeadingSample, permissionNonce]);
 
   const handleLocateMe = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
     // Drive the dot from expo-location directly — MLRN's built-in
     // UserLocation engine produced no updates on-device (silent), and we
     // need expo-location's watcher for Stage 7 track recording anyway.
-    if (locationWatch.current) {
-      // Cycle the follow mode; the last step stops the watchers.
-      // Every mode change also RECENTRES. Fixes only arrive every few seconds
-      // (and only after 5 m of movement), so without this the map stayed
-      // wherever the user had panned it until they walked somewhere — which
-      // reads as the follow button doing nothing at all.
+    //
+    // The test is the user's INTENTION, not whether a subscription object
+    // happens to exist: the watcher is torn down and rebuilt whenever the tab
+    // blurs, the app backgrounds or a recording starts, and a tap landing in
+    // one of those windows used to take the cold-start branch — flying the
+    // camera to FOLLOW_ZOOM and throwing away the zoom the user had set.
+    if (dotWanted) {
+      // Cycle the follow mode. Every mode change also RECENTRES: fixes arrive
+      // seconds to minutes apart, so without this the map stayed wherever the
+      // user had panned it until they walked somewhere — which reads as the
+      // follow button doing nothing at all.
       if (followModeRef.current === "off") {
         setFollowMode("follow");
         recentre();
@@ -2109,69 +2450,10 @@ export function MapScreen({
     }
     setFollowMode("follow");
     firstFix.current = true;
-
-    const applyFix = (position: Location.LocationObject, fly: boolean) => {
-      const coord: [number, number] = [
-        position.coords.longitude,
-        position.coords.latitude,
-      ];
-      setUserCoord(coord);
-      latestFix.current = coord;
-      const mode = followModeRef.current;
-      if (fly && firstFix.current) {
-        firstFix.current = false;
-        setCameraStop({
-          centerCoordinate: coord,
-          zoomLevel: FOLLOW_ZOOM,
-          animationDuration: 1200,
-        });
-      } else if (mode !== "off") {
-        // NOT WHILE A PINCH IS DRIVING THE CAMERA. This is a 600 ms ANIMATED
-        // stop, and `handlePinchMove` writes 0 ms stops at gesture rate from the
-        // same latest fix — so a fix landing mid-gesture starts a half-second
-        // animation that the next finger frame overrides, then the one after,
-        // and the map stutters for as long as the animation had left to run.
-        // It is the same two-drivers-on-one-camera fault that took rotation off
-        // MapLibre (see handlePinchMove), one axis over.
-        //
-        // Nothing is lost by skipping it: every pinch frame carries
-        // `centerCoordinate: latestFix.current`, which this callback has already
-        // updated, so the map is pinned to the new fix within a frame anyway.
-        if (pinchStart.current) return;
-        // Course-up rotation is driven by the COMPASS, not by the fix's course
-        // over ground: the user wants the map to face where they are looking,
-        // which on a scramble is often not where they last moved (and course
-        // is reported as -1 whenever they stand still). The heading watcher
-        // below owns that rotation; this only recentres.
-        setCameraStop({ centerCoordinate: coord, animationDuration: 600 });
-      }
-    };
-
-    // Instant feedback from the OS's cached fix (fused provider keeps a
-    // recent network/wifi position even indoors) — the watcher then refines.
-    const lastKnown = await Location.getLastKnownPositionAsync();
-    if (lastKnown) applyFix(lastKnown, true);
-
-    // Balanced = fused wifi/cell + GPS. High (GPS-priority) starves indoors
-    // and the callback never fires — the original silent-failure mode.
-    const subscription = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: 3000,
-        distanceInterval: 5,
-      },
-      (position) => applyFix(position, true),
-    );
-    // See `unmounted` above: a watch that resolves after teardown has to remove
-    // itself, or the GPS request outlives the screen.
-    if (unmounted.current) {
-      subscription.remove();
-      return;
-    }
-    locationWatch.current = subscription;
-
-    await ensureHeadingWatch();
-  }, [ensureHeadingWatch, recentre, requestPovRecentre, setCameraStop, pinchStart]);
+    // The effects above own the subscriptions; this is the request they answer.
+    // The compass comes with it — the arrow is a heading as much as a position.
+    setDotWanted(true);
+  }, [dotWanted, recentre, requestPovRecentre, setCameraStop]);
 
   /**
    * Navigate to a spot: distance + bearing from every new fix, in the chip at
@@ -2193,9 +2475,9 @@ export function MapScreen({
         createdAt: new Date().toISOString(),
       });
       // A bearing with nothing to measure it from is a dead chip.
-      if (!locationWatch.current) handleLocateMe();
+      if (!dotWanted) handleLocateMe();
     },
-    [handleLocateMe],
+    [dotWanted, handleLocateMe],
   );
 
   /**
@@ -2303,12 +2585,12 @@ export function MapScreen({
       await startTrackRecording();
       // Recording without seeing yourself is disorienting — start the dot +
       // follow if it isn't already running.
-      if (!locationWatch.current) handleLocateMe();
+      if (!dotWanted) handleLocateMe();
     } catch (err) {
       console.error(err);
       Alert.alert("Recording error", "Couldn't start recording.");
     }
-  }, [handleLocateMe]);
+  }, [dotWanted, handleLocateMe]);
 
   const handleWaypointPress = useCallback(
     (waypoint: Waypoint) => {
@@ -2493,6 +2775,13 @@ export function MapScreen({
         // notice it.
         scrollEnabled={followMode === "off" && !twoFingerLock}
         pitchEnabled={!twoFingerLock}
+        // The renderer's ceiling, not its target: MapLibre only draws when
+        // something invalidates it, and this caps how often that may become a
+        // frame. Uncapped it follows the display — 120 Hz on a modern phone —
+        // so every pan, every follow recentre and every course-up rotation cost
+        // four times what they need to on a map whose content is contour lines.
+        // 30 is the lowest rate a moving map still reads as moving.
+        preferredFramesPerSecond={MAP_MAX_FPS}
         onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}
         onPress={handleMapPress}
@@ -2512,15 +2801,7 @@ export function MapScreen({
             comes back as `iconHaloColor` below; the beam stays a plain image,
             because its whole substance is a soft alpha gradient that a distance
             field would flatten into a hard triangle. */}
-        <Images
-          images={{
-            "user-heading-beam": require("../../assets/user-heading.png"),
-            "user-arrow": {
-              source: require("../../assets/user-arrow.png"),
-              sdf: true,
-            },
-          }}
-        />
+        <UserMarkerImages />
 
         {/* layerIndex pins z-order across remounts: a swapped basemap source
             re-adds its layer at the TOP of the stack, burying the canyon
@@ -2695,18 +2976,8 @@ export function MapScreen({
         />
 
         {/* Navigate-to-waypoint sight line: latest fix → target. */}
-        {navTarget && userCoord ? (
-          <ShapeSource
-            id="nav-line"
-            shape={{
-              type: "Feature",
-              geometry: {
-                type: "LineString",
-                coordinates: [userCoord, [navTarget.lon, navTarget.lat]],
-              },
-              properties: {},
-            }}
-          >
+        {navLineShape ? (
+          <ShapeSource id="nav-line" shape={navLineShape}>
             <LineLayer
               id="nav-line-layer"
               style={{
@@ -2772,7 +3043,7 @@ export function MapScreen({
 
         {showRoutes ? (
           <RoutesLayer
-            routes={routes.data ?? []}
+            routes={routes.data ?? EMPTY_ROUTES}
             hiddenRouteId={editingRouteId}
             // While a tool is collecting points every tap belongs to the tool —
             // opening a stats sheet mid-draw would steal the point being placed.
@@ -2804,18 +3075,8 @@ export function MapScreen({
             waypoint is a thing they created and kept, this is a cursor. A small
             ringed dot reads as "here is where you pointed" and disappears the
             moment the panel is dismissed. */}
-        {tappedPoint ? (
-          <ShapeSource
-            id="tapped-point"
-            shape={{
-              type: "Feature",
-              geometry: {
-                type: "Point",
-                coordinates: [tappedPoint.longitude, tappedPoint.latitude],
-              },
-              properties: {},
-            }}
-          >
+        {tappedPointShape ? (
+          <ShapeSource id="tapped-point" shape={tappedPointShape}>
             <CircleLayer
               id="tapped-point-dot"
               style={{
@@ -2828,59 +3089,10 @@ export function MapScreen({
           </ShapeSource>
         ) : null}
 
-        {/* Own location marker (expo-location watcher). Unpinned ⇒ renders
-            above everything, like the canyon layers. No accuracy halo: it was a
-            translucent disc the size of a suburb that told the user nothing
-            actionable and hid the map under itself. */}
+        {/* Own location marker (expo-location watcher) — see UserLocationMarker
+            above for why it is its own component. */}
         {userCoord ? (
-          <ShapeSource
-            id="user-location"
-            shape={{
-              type: "Feature",
-              geometry: { type: "Point", coordinates: userCoord },
-              properties: {},
-            }}
-          >
-            {userHeading != null ? (
-              // Direction beam under the arrow. Map-aligned, so it points at
-              // real-world bearings even when the map itself is rotated.
-              <SymbolLayer
-                id="user-location-heading"
-                style={{
-                  iconImage: "user-heading-beam",
-                  iconRotate: userHeading,
-                  iconRotationAlignment: "map",
-                  iconAllowOverlap: true,
-                  iconIgnorePlacement: true,
-                }}
-              />
-            ) : null}
-            {/* An arrow, not a dot: a dot says where you are and a compass
-                says which way north is, and the user is left to combine them
-                while standing on a ledge. The arrow answers both at once —
-                which is why the heading watcher now runs for as long as the
-                marker is on screen, not only in course-up. */}
-            <SymbolLayer
-              id="user-location-dot"
-              style={{
-                iconImage: "user-arrow",
-                iconSize: 0.28,
-                iconRotate: userHeading ?? 0,
-                iconRotationAlignment: "map",
-                iconAllowOverlap: true,
-                iconIgnorePlacement: true,
-                // The user's colour, and a white edge under it so no choice has
-                // to carry its own contrast — the arrow sits on imagery, rock
-                // and water, and "white" would vanish on a limestone slab
-                // without it.
-                iconColor: MARKER_COLORS[markerColorId],
-                // White on white is no edge at all, so the one achromatic
-                // choice takes a dark one instead.
-                iconHaloColor: markerColorId === "white" ? "#1A1A1A" : "#FFFFFF",
-                iconHaloWidth: 1.2,
-              }}
-            />
-          </ShapeSource>
+          <UserLocationMarker coord={userCoord} markerColorId={markerColorId} />
         ) : null}
 
         {/* The extent a "show on map" sent us to, outlined for ~2.5 s. Mounted
@@ -3101,8 +3313,8 @@ export function MapScreen({
       {/* The map's own instruments, stacked along the bottom edge opposite the
           buttons: which way the user is facing, then how far things are. */}
       <View style={[styles.instruments, instrumentsEdge]} pointerEvents="none">
-        <CompassStrip
-          heading={compassEnabled ? userHeading : null}
+        <LiveCompassStrip
+          enabled={compassEnabled}
           width={compassWidth}
           reference={northReference}
         />
@@ -3203,7 +3415,7 @@ export function MapScreen({
             lat: waypoint.latitude,
             createdAt: waypoint.createdAt,
           });
-          if (!locationWatch.current) handleLocateMe();
+          if (!dotWanted) handleLocateMe();
         }}
         onInfo={(message) => notify(message, "info")}
         onError={(message) => notify(message, "error")}

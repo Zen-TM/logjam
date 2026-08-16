@@ -5,6 +5,7 @@
 // The generated set's `background` layer mounts at the bottom of the band
 // (land colour under the tiles), above the shell's own background at index 0,
 // and unmounts cleanly with the rest on basemap swap.
+import { memo } from "react";
 import {
   BackgroundLayer,
   FillLayer,
@@ -89,7 +90,13 @@ function layerComponent(
  * at layerIndex `startIndex..startIndex+count-1` (keeps the basemap band
  * below topo overlays and canyon layers across source remounts).
  */
-export function ProtomapsLayers({
+// MEMOISED, and it matters more here than anywhere else on the map: MLRN
+// memoises none of its layer components, and each one re-runs `transformStyle`
+// and re-commits props to the native layer on every render it sees. This stack
+// is ~71 layers wide (and mounts once PER downloaded region offline), sitting
+// inside a screen that re-renders on every camera settle, every fix and every
+// state flip. Its props are primitives, so the memo actually holds.
+export const ProtomapsLayers = memo(function ProtomapsLayers({
   flavor,
   sourceID,
   startIndex,
@@ -111,4 +118,4 @@ export function ProtomapsLayers({
       )}
     </>
   );
-}
+});

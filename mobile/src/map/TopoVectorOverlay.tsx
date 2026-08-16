@@ -1,7 +1,7 @@
 // Renders one vector topo overlay's layer stack (contours or OSM features)
 // against a resolved PMTiles source — the mobile counterpart of the web's
 // structural layer creation, driven entirely by buildTopoVectorLayerDefs.
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import {
   FillLayer,
   Images,
@@ -31,9 +31,9 @@ export const TOPO_ICON_IMAGES: Record<string, ReturnType<typeof require>> = {
 };
 
 // One <Images> registration for every point icon — mount once per MapView.
-export function TopoIconImages() {
+export const TopoIconImages = memo(function TopoIconImages() {
   return <Images images={TOPO_ICON_IMAGES} />;
-}
+});
 
 // Compile-time-ish guard: every OSM point icon key must have a require entry.
 // (Fails loudly at module load in dev rather than rendering blank icons.)
@@ -80,7 +80,7 @@ function layerFor(
 /** Worst-case layer count for one vector overlay — used for index spacing. */
 export const TOPO_VECTOR_MAX_LAYERS = 32;
 
-export function TopoVectorOverlay({
+export const TopoVectorOverlay = memo(function TopoVectorOverlay({
   kind,
   idPrefix,
   sourceID,
@@ -101,4 +101,4 @@ export function TopoVectorOverlay({
   return (
     <>{defs.map((def, i) => layerFor(def, idPrefix, sourceID, startIndex + i))}</>
   );
-}
+});

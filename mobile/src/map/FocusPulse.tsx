@@ -7,7 +7,7 @@
 // draws it for ~2.5 s and then removes itself.
 //
 // MEMOISED WITH ITS OWN STATE, on purpose. MapScreen re-renders at compass
-// cadence (~20 Hz with the tape or locate-me running) and the same rule that
+// cadence (up to ~5/s with the tape or locate-me running) and the same rule that
 // keeps TrackLine's geometry out of that render applies here: the animation
 // clock lives in this component, so a pulse costs ~31 renders of one small
 // subtree instead of adding a second 12 Hz driver to the whole map.

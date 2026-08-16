@@ -13,7 +13,7 @@
 // It reads the MIRROR and the media cache, so it works with no signal — but only
 // for files this phone has actually fetched. It reports how many it could not
 // read rather than quietly drawing a partial picture.
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import * as FileSystem from "expo-file-system/legacy";
 import { CircleLayer, LineLayer, ShapeSource } from "@maplibre/maplibre-react-native";
 import { TRACK_MIME_TYPES, parseVectorImport } from "@logjam/shared";
@@ -25,7 +25,7 @@ import { ROUTE_COLOR } from "../media/RouteMapLayer";
 
 export type CanyonRoutesStatus = { drawn: number; unavailable: number };
 
-export function CanyonRoutesLayer({
+export const CanyonRoutesLayer = memo(function CanyonRoutesLayer({
   onStatus,
 }: {
   /** Drawn/unavailable counts, so the map can say when it is showing less than
@@ -124,4 +124,4 @@ export function CanyonRoutesLayer({
       />
     </ShapeSource>
   );
-}
+});

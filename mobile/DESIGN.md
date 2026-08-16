@@ -115,7 +115,11 @@ BottomSheet(s)      acquisition + per-item actions
   compass faded IN as the map turned and blinked out a beat later. Course-up's
   opening rotation is fired from a layout effect for exactly that reason — after
   the commit, before the paint. An instrument that runs a sensor gets a device-scoped switch in
-  Settings → Map rather than a control on the map (`compassPreference.ts`).
+  Settings → Map rather than a control on the map (`compassPreference.ts`), and
+  it defaults OFF (2026-08-17): the tape holds the magnetometer and the
+  accelerometer open for as long as the map tab is, and most trips never read
+  it. The location arrow turns the same sensor on for as long as the arrow is up,
+  so "which way am I facing" stays one locate-me tap away with the tape off.
 - **A TAP asks, a PRESS-AND-HOLD commits.** Tapping the map drops a small ringed
   dot (a cursor, not a pin) and opens a sheet answering the four things a map can
   say about a spot — position, elevation, distance and bearing from you — with

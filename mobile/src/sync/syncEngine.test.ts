@@ -20,8 +20,17 @@ let pullError: Error | null = null;
 let pulls = 0;
 const stateWrites: Record<string, string> = {};
 
+// `currentState` is load-bearing: the backoff ladder only re-arms in the
+// foreground (a backgrounded phone with no signal was retrying every few
+// minutes all day, waking the radio to fail).
+const appState = { currentState: "active" as string };
 vi.mock("react-native", () => ({
-  AppState: { addEventListener: () => ({ remove: () => {} }) },
+  AppState: {
+    addEventListener: () => ({ remove: () => {} }),
+    get currentState() {
+      return appState.currentState;
+    },
+  },
 }));
 vi.mock("../map/connectivity", () => ({ subscribeReconnect: () => () => {} }));
 vi.mock("../api/queries", () => ({
@@ -62,6 +71,7 @@ async function settle(): Promise<void> {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  appState.currentState = "active";
   pullError = null;
   pulls = 0;
   delete stateWrites[APPLY_FAILED_KEY];
@@ -82,6 +92,23 @@ describe("failure classification", () => {
     const before = pulls;
     await vi.advanceTimersByTimeAsync(400_000);
     expect(pulls).toBeGreaterThan(before);
+    stop();
+  });
+
+  it("does not arm the retry ladder while backgrounded", async () => {
+    // The foreground edge and the reconnect edge both re-trigger a cycle, so a
+    // ladder running behind a dark screen can only wake the radio to fail —
+    // once every few minutes, for a whole trip, on the recorder's foreground
+    // service keeping the process alive.
+    appState.currentState = "background";
+    const stop = registerSyncTriggers();
+    pullError = new Error("Network request failed");
+    await settle();
+    expect(getSyncStatus().errorKind).toBe("unreachable");
+
+    const before = pulls;
+    await vi.advanceTimersByTimeAsync(400_000);
+    expect(pulls).toBe(before);
     stop();
   });
 

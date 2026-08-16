@@ -7,7 +7,7 @@
 //
 // ONE ShapeSource for the same reason as CanyonRoutesLayer: per-feature colour
 // via a data-driven style beats N native sources.
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import {
   CircleLayer,
   LineLayer,
@@ -33,7 +33,7 @@ export const SAVED_ROUTE_MIN_ZOOM = 10;
  * (drawn offline, create still queued). */
 const UNSYNCED_ROUTE_COLOR = theme.accent;
 
-export function RoutesLayer({
+export const RoutesLayer = memo(function RoutesLayer({
   routes,
   /** Hidden while its geometry is being edited — the draft layer draws it. */
   hiddenRouteId,
@@ -126,4 +126,4 @@ export function RoutesLayer({
       />
     </ShapeSource>
   );
-}
+});

@@ -35,6 +35,7 @@
 // others from being cleared.
 import * as FileSystem from "expo-file-system/legacy";
 
+import { invalidateCurrentUser } from "../api/apiFetch";
 import { stopGeoPdfImportRun } from "../geopdf/importRunner";
 import { wipeAllSyncData } from "../sync/syncDb";
 import { stopTrackRecordingForWipe } from "../tracks/trackRecorder";
@@ -103,6 +104,11 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   // saved areas. The files go with the region directory below; this is the copy
   // that would otherwise outlive them in the process.
   clearOfflineDemCache();
+
+  // The in-memory `/users/me` record (username, email, preferences). Cached for
+  // a minute to stop eight screens re-fetching it; a minute is long enough for
+  // the next account to read the departing one's name off a settings screen.
+  invalidateCurrentUser();
 
   // MapLibre's own ambient cache. Every ONLINE basemap and topo tile the
   // previous user browsed is in there keyed by z/x/y — which IS the area they

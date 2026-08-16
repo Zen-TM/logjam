@@ -16,6 +16,17 @@ type TaskHandler = (event: {
 
 let taskHandler: TaskHandler | null = null;
 
+// The stats recompute is foreground-only now, so the batch handler reads
+// AppState. Default to active: the existing tests assert the stats write.
+const appState = { currentState: "active" as string };
+vi.mock("react-native", () => ({
+  AppState: {
+    get currentState() {
+      return appState.currentState;
+    },
+  },
+}));
+
 vi.mock("expo-task-manager", () => ({
   defineTask: (_name: string, handler: TaskHandler) => {
     taskHandler = handler;
@@ -104,7 +115,35 @@ beforeEach(() => {
   appendTrackPoints.mockResolvedValue(undefined);
   activeTrack = null;
   storedPoints = [];
+  appState.currentState = "active";
   resetTrackWriteHealth();
+});
+
+describe("a backgrounded recorder only writes points", () => {
+  // The stats are display-only. Recomputing them per batch meant a full read of
+  // the series plus O(points) of arithmetic for every fix of a trip, in a
+  // headless task nobody was looking at — and it got more expensive the longer
+  // the recording ran. They are settled on return to the foreground instead
+  // (refreshActiveTrackStats), so the only thing this may cost is a HUD that is
+  // one batch stale at the moment the screen comes back on.
+  it("appends without recomputing stats while backgrounded", async () => {
+    activeTrack = recordingTrack();
+    appState.currentState = "background";
+
+    await taskHandler!({ data: { locations: [fixAt(0), fixAt(1)] } });
+
+    expect(appendTrackPoints).toHaveBeenCalledTimes(1);
+    expect(updateTrack).not.toHaveBeenCalled();
+  });
+
+  it("does recompute them while the app is in front of someone", async () => {
+    activeTrack = recordingTrack();
+
+    await taskHandler!({ data: { locations: [fixAt(0), fixAt(1)] } });
+
+    expect(appendTrackPoints).toHaveBeenCalledTimes(1);
+    expect(updateTrack).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("location batch write chain (MLIFE-001)", () => {

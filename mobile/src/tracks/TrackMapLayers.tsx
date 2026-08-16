@@ -1,7 +1,7 @@
 // Map layers for recorded tracks + waypoints (Stage 7). Rendered inside
 // MapView; sources are unpinned so they draw above the basemap/overlay bands —
 // mount this BEFORE the canyon sources so canyons stay on top.
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   CircleLayer,
   LineLayer,
@@ -26,9 +26,9 @@ const EMPTY_POINTS: RecordedTrackPoint[] = [];
 
 /**
  * One track's line. Memoised, and so is the geometry inside it: MapScreen
- * re-renders at the compass cadence (~20 Hz while the tape or locate-me runs),
+ * re-renders at the compass cadence (up to ~5/s while the tape or locate-me runs),
  * and rebuilding a growing MultiLineString per render handed the native source
- * a new `shape` object 20 times a second on the screen the user carries while
+ * a new `shape` object several times a second on the screen the user carries while
  * walking (MLIFE-003). Now the geometry is rebuilt only when the stored points,
  * the live tail or the segment actually change.
  */
@@ -90,7 +90,7 @@ const TrackLine = memo(function TrackLine({
 // Memoised: every prop is stable across a compass-driven re-render of
 // MapScreen (tracks/waypoints come from useTracks' state, liveCoord from a
 // fix, onWaypointPress is a useCallback), so the whole subtree is skipped
-// instead of re-walking every visible track 20 times a second.
+// instead of re-walking every visible track on every compass sample.
 export const TrackMapLayers = memo(function TrackMapLayers({
   tracks,
   waypoints,
@@ -125,12 +125,32 @@ export const TrackMapLayers = memo(function TrackMapLayers({
   const reloadKey = visibleTracks
     .map((track) => `${track.id}:${track.pointCount}`)
     .join("|");
+  // Read without re-subscribing: the effect below wants the points it already
+  // holds, but depending on them would make every load trigger the next one.
+  const heldPoints = useRef(pointsById);
+  heldPoints.current = pointsById;
   useEffect(() => {
     let mounted = true;
+    const held = heldPoints.current;
     Promise.all(
-      visibleTracks.map(
-        async (track) => [track.id, await listTrackPoints(track.id)] as const,
-      ),
+      visibleTracks.map(async (track) => {
+        // INCREMENTAL. This used to re-read every point of every visible track
+        // on each written batch, then rebuild and re-serialise the whole
+        // MultiLineString — O(points) of SQLite and JSON per fix, quadratic
+        // over a recording, on the screen that stays open for the trip. It is
+        // the same fault `trackRecorder`'s point cache was built to fix
+        // (MLIFE-004), on the render side.
+        const have = held.get(track.id) ?? EMPTY_POINTS;
+        // Fewer stored than held means the series was rewritten underneath us
+        // (a discarded track, a wipe) — start again rather than concatenate
+        // onto points that no longer exist.
+        const from = have.length <= track.pointCount ? have.length : 0;
+        const fresh = await listTrackPoints(track.id, from);
+        if (from === 0) return [track.id, fresh] as const;
+        // Identity matters: an unchanged track must hand TrackLine the SAME
+        // array, or its memo (and the geometry inside it) rebuilds anyway.
+        return [track.id, fresh.length === 0 ? have : have.concat(fresh)] as const;
+      }),
     )
       .then((entries) => {
         if (mounted) setPointsById(new Map(entries));
