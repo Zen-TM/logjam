@@ -30,6 +30,7 @@ import {
   View,
   PixelRatio,
   useWindowDimensions,
+  type GestureResponderEvent,
   type TextInput,
 } from "react-native";
 import {
@@ -135,6 +136,7 @@ import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
 import { offlineCoverageMask } from "./offlineMask";
 import { DraftToolPanel } from "./DraftToolPanel";
+import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, type MapTool } from "./MapToolGroup";
 import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
@@ -172,7 +174,7 @@ import {
 } from "../imports/incomingIntent";
 import { useVectorImports } from "../imports/useVectorImports";
 import { importVectorSource } from "../imports/vectorImports";
-import { updateTrack, type Waypoint } from "../tracks/tracksDb";
+import { updateTrack, type Track, type Waypoint } from "../tracks/tracksDb";
 import {
   createWaypointLocal,
   createRouteLocal,
@@ -183,6 +185,7 @@ import {
   startTrackRecording,
 } from "../tracks/trackRecorder";
 import { TrackMapLayers } from "../tracks/TrackMapLayers";
+import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
 import { TrackRecordingControls } from "../tracks/TrackRecordingControls";
 import { useTracks } from "../tracks/useTracks";
 import { ensureForegroundLocationPermission } from "./locationPermission";
@@ -211,7 +214,12 @@ import {
   type TopoOverlayRef,
 } from "./topoOverlays";
 import { buildTopoVectorLayerDefs } from "./topoVectorLayers";
-import { useMapPinchGesture, type FollowMode } from "./useMapPinchGesture";
+import {
+  MAX_PINCH_ZOOM,
+  useMapPinchGesture,
+  type FollowMode,
+} from "./useMapPinchGesture";
+import { isDoubleTap, type TapSample } from "./doubleTap";
 import { TopoIconImages, TopoVectorOverlay } from "./TopoVectorOverlay";
 
 // Shell style (glyphs/sprite) lives in basemap/shellStyle.ts — bundled
@@ -1212,10 +1220,23 @@ export function MapScreen({
     [activeDraft, camera.zoom],
   );
 
+  const lastTap = useRef<TapSample | null>(null);
+  /** Set when the SECOND tap of a double tap is still to arrive at
+   *  `handleMapPress` — see the retroactive dismissal below. */
+  const swallowNextPress = useRef(false);
+
   const handleMapPress = useCallback(
     (feature: GeoJSON.Feature) => {
       if (feature.geometry.type !== "Point") return;
       const [lon, lat] = feature.geometry.coordinates as [number, number];
+      // The second tap of a double tap already did its work (it zoomed); it
+      // must not also ask what is under the finger. Cleared here rather than on
+      // a timer, so exactly one press is swallowed however long MapLibre takes
+      // to deliver it.
+      if (swallowNextPress.current) {
+        swallowNextPress.current = false;
+        return;
+      }
       // A tool armed owns every tap; nothing else on this handler runs.
       if (collectingPoints) {
         void addToolPoint(lon, lat);
@@ -1251,6 +1272,96 @@ export function MapScreen({
       }
     },
     [addToolPoint, collectingPoints, onOpenCanyon],
+  );
+
+  /** A recorded line's own verbs, from the map (DESIGN.md §7: the same object
+   *  wherever it is listed). Held as an id, so an edit made inside the sheet
+   *  re-renders it rather than showing the copy the line was tapped with. */
+  const [optionsTrackId, setOptionsTrackId] = useState<string | null>(null);
+  const handleTrackPress = useCallback(
+    (track: Track, coordinates?: { latitude: number; longitude: number }) => {
+      // Same rule as a canyon pin: the line swallows the press before the map
+      // sees it, so while a tool is collecting points it has to place the point
+      // itself — otherwise tapping near a track does nothing and reads as
+      // broken.
+      if (collectingPoints) {
+        if (coordinates) {
+          void addToolPoint(coordinates.longitude, coordinates.latitude);
+        }
+        return;
+      }
+      setOptionsTrackId(track.id);
+    },
+    [addToolPoint, collectingPoints],
+  );
+
+  /**
+   * DOUBLE-TAP TO ZOOM, WHILE FOLLOWING — the gesture MapLibre lost when this
+   * screen took its zoom away.
+   *
+   * `zoomEnabled` is false for the whole of follow mode (the pinch is ours; two
+   * drivers on the same two fingers is what used to shake follow loose), and
+   * double-tap is one of MapLibre's zoom gestures rather than a separate press
+   * handler — so it went with it, and the only way to zoom in without a second
+   * finger was to leave the mode. Recognised here instead, from the same
+   * capture-phase touch stream the pan detector uses: this claims nothing (the
+   * capture handler still returns `observeTouches`' answer, so MapLibre's own
+   * gestures are untouched) and it drops no follow mode — a double tap is not
+   * a pan, exactly as a single tap is not.
+   *
+   * Off while a point-collecting tool is armed: two taps there are two points,
+   * and the tool owns every tap on the map (see `handleMapPress`).
+   */
+  const observeDoubleTap = useCallback(
+    (event: GestureResponderEvent) => {
+      const { touches } = event.nativeEvent;
+      // A pinch is not two taps, and the tail of one must not become the first
+      // half of the next: only a lone finger landing starts or completes this.
+      if (touches.length !== 1) {
+        lastTap.current = null;
+        return;
+      }
+      const [only] = touches;
+      const tap: TapSample = {
+        x: only.pageX,
+        y: only.pageY,
+        timeMs: Date.now(),
+      };
+      if (
+        followModeRef.current === "off" ||
+        collectingPoints ||
+        !latestFix.current
+      ) {
+        lastTap.current = tap;
+        return;
+      }
+      if (!isDoubleTap(lastTap.current, tap)) {
+        lastTap.current = tap;
+        return;
+      }
+      // A third tap must start a fresh pair, not extend this one.
+      lastTap.current = null;
+      // The first tap already opened the point sheet (a tap-up fires
+      // `onPress` well inside the 300 ms window), so the double tap has to
+      // take it back — the alternative, holding every single tap for 300 ms to
+      // see whether a second arrives, puts a visible lag on the commonest
+      // gesture on the screen to pay for the rarer one. The sheet closes with
+      // its own animation, which is what the user reads as "no, the other
+      // thing".
+      setTappedPoint(null);
+      swallowNextPress.current = true;
+      // One level, about the followed position — the centre is pinned to the
+      // fix for the same reason the pinch pins it (nothing may translate while
+      // following), and through `setCameraStop` so `zoomRef` stays the truth
+      // the next pinch starts from. Short animation: a step this size reads as
+      // a jump cut with no animation at all.
+      setCameraStop({
+        centerCoordinate: latestFix.current,
+        zoomLevel: Math.min(MAX_PINCH_ZOOM, zoomRef.current + 1),
+        animationDuration: 200,
+      });
+    },
+    [collectingPoints, followModeRef, latestFix, setCameraStop, zoomRef],
   );
 
   // Stage 4b topo overlays + Stage 5 vector-import file management (save
@@ -1513,6 +1624,13 @@ export function MapScreen({
     };
   }, [mapReady, setCameraStop]);
 
+  /** The extent to outline on arrival, and the request it came from. Component
+   *  state, never logged (privacy rule). */
+  const [focusPulse, setFocusPulse] = useState<{
+    bbox: [number, number, number, number];
+    nonce: number;
+  } | null>(null);
+
   // "Show on map" arrival: fit the requested asset's bbox. Keyed on the nonce
   // so tapping the same asset again refocuses, and so a re-render with the
   // same params doesn't fight the user's own panning.
@@ -1522,6 +1640,17 @@ export function MapScreen({
     // and the ordering says which one is the correction.
     if (focus.basemapId) chooseBasemap(focus.basemapId);
     fitCameraToBbox(focus.bbox);
+    // …and say WHICH rectangle. A camera that has finished flying leaves the
+    // user to guess what they were sent to; the pulse answers that and removes
+    // itself (FocusPulse.tsx). Held as this screen's own state rather than read
+    // off the `focus` prop, so the pulse re-arms on the nonce and not on a
+    // parent re-render handing back an equal object.
+    //
+    // `basemapId` is deliberately not consulted: a topo overlay's "show on map"
+    // arrives through the same param with no basemap to switch to, and a pulse
+    // that only fired for a downloaded region would be missing on exactly the
+    // assets that look least like themselves.
+    setFocusPulse({ bbox: focus.bbox, nonce: focus.nonce });
   }, [focus?.nonce, focus, chooseBasemap, fitCameraToBbox]);
 
   // Frame a draft restored from a killed session, once the map can take a
@@ -2266,7 +2395,13 @@ export function MapScreen({
       // returns false — declining the responder and leaving MapLibre's
       // gestures untouched — in every case except a two-finger gesture while
       // following, which it claims and drives itself (see handlePinchMove).
-      onStartShouldSetResponderCapture={(event) => observeTouches(event, true)}
+      // The double-tap detector reads the same stream and claims nothing — the
+      // answer handed back is still `observeTouches`', so MapLibre keeps every
+      // gesture it would otherwise have had.
+      onStartShouldSetResponderCapture={(event) => {
+        observeDoubleTap(event);
+        return observeTouches(event, true);
+      }}
       onMoveShouldSetResponderCapture={(event) => observeTouches(event, false)}
       onResponderMove={handlePinchMove}
       onResponderRelease={endPinch}
@@ -2533,6 +2668,7 @@ export function MapScreen({
           waypoints={waypoints}
           liveCoord={userCoord}
           onWaypointPress={handleWaypointPress}
+          onTrackPress={handleTrackPress}
         />
 
         {/* Navigate-to-waypoint sight line: latest fix → target. */}
@@ -2722,6 +2858,13 @@ export function MapScreen({
               }}
             />
           </ShapeSource>
+        ) : null}
+
+        {/* The extent a "show on map" sent us to, outlined for ~2.5 s. Mounted
+            last so it is over the basemap band and everything above it; it owns
+            its own animation clock, so nothing here re-renders with it. */}
+        {focusPulse ? (
+          <FocusPulse bbox={focusPulse.bbox} nonce={focusPulse.nonce} />
         ) : null}
       </MapView>
 
@@ -3163,6 +3306,17 @@ export function MapScreen({
           setLinkingRouteId(optionsRouteId);
           setOptionsRouteId(null);
         }}
+        onInfo={(text) => notify(text, "info")}
+        onError={(text) => notify(text, "error")}
+      />
+
+      {/* One recorded track's verbs — the same list Saved offers, from the
+          line the user actually tapped. */}
+      <TrackOptionsSheet
+        track={tracks.find((track) => track.id === optionsTrackId) ?? null}
+        visible={optionsTrackId !== null}
+        onClose={() => setOptionsTrackId(null)}
+        onShowOnMap={(bbox) => fitCameraToBbox(bbox)}
         onInfo={(text) => notify(text, "info")}
         onError={(text) => notify(text, "error")}
       />

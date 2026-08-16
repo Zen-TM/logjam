@@ -22,6 +22,7 @@ import {
   type MirrorWaypoint,
   type MirrorRoute,
 } from "./mirrorStore";
+import { mirrorQueryError } from "./mirrorQueryError";
 import { onMirrorChanged } from "./syncDb";
 import { countPendingOps } from "./outbox";
 import { countSyncIssues } from "./syncIssues";
@@ -43,7 +44,10 @@ export type MirrorQueryState<T> = {
   /** True only before the FIRST successful read+sync — mirror data renders
    * immediately on later loads even while a refresh runs. */
   loading: boolean;
-  /** Sync failure with an empty mirror (first sync offline). */
+  /**
+   * An ACTIONABLE first-sync failure. Null for a never-synced offline user —
+   * see `mirrorQueryError`.
+   */
   error: string | null;
   refresh: () => void;
 };
@@ -89,8 +93,7 @@ function useMirrorQuery<T>(read: () => Promise<T>): MirrorQueryState<T> {
   return {
     data,
     loading: data === null || (neverSynced && syncStatus.state === "syncing"),
-    error:
-      neverSynced && syncStatus.state === "error" ? syncStatus.errorMessage : null,
+    error: mirrorQueryError(neverSynced, syncStatus),
     refresh,
   };
 }

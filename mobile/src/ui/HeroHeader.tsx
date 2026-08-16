@@ -20,6 +20,7 @@ export function HeroHeader({
   title,
   titleNumberOfLines = 1,
   value,
+  secondaryValue,
   valueSuffix,
   action,
   onBack,
@@ -29,6 +30,13 @@ export function HeroHeader({
   title: string;
   titleNumberOfLines?: number;
   value?: string;
+  /**
+   * A second stat of EQUAL weight beside `value`, middot-separated. The
+   * download screen's estimated size and estimated time are peers — the time
+   * is not supporting detail of the size, and rendering it as `valueSuffix`
+   * (a smaller, muted font) said that it was.
+   */
+  secondaryValue?: string;
   valueSuffix?: string;
   action?: React.ReactNode;
   /**
@@ -62,8 +70,8 @@ export function HeroHeader({
         {action}
       </View>
       {value ? (
-        <Text style={styles.value}>
-          {value}
+        <Text style={styles.value} numberOfLines={1}>
+          {secondaryValue ? `${value} · ${secondaryValue}` : value}
           {valueSuffix ? <Text style={styles.valueSuffix}> {valueSuffix}</Text> : null}
         </Text>
       ) : null}

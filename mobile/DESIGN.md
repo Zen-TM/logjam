@@ -39,7 +39,7 @@ answer, and answers it before any list appears.
 - Map → nothing. The map IS the answer, and it gets the whole screen (below).
 - Map layers → "what is my map made of, what is drawn on it, and what works with
   no signal?" — three questions, so three tabs, not one long scroll
-- Save maps offline → "what is this going to cost me?" (a size, a tile count and
+- Save maps offline → "what is this going to cost me?" (a size and
   a duration, updating as the area, the maps and the detail change)
 
 That answer is the **hero**, not a title bar. A screen whose top edge is a
@@ -341,6 +341,31 @@ whole kind off. Each kind is now ONE row — its glyph and hue, a live count
   tile belongs to the group row above them, and repeating it flattens the
   hierarchy the disclosure just created.
 
+### An inventory row is one thing the USER asked for, not one file we wrote
+
+The layers-sheet rule above ("one row per KIND, not per file") read one level
+down, for Saved. One "Save maps offline" run writes a basemap file per selected
+map and a generated LiDAR topo job writes one file per layer — eight cards for
+two things the user did, none of which could be deleted as a unit. Each is now
+one card: title from the name the user gave it (`groupLabel`, else a rename,
+else the generic label), size summed, extent unioned, and the group's three
+verbs — show on map, rename, delete — acting on all of it. The files it is made
+of are listed inside the `⋯` sheet under "Includes", each with its own size and
+its own delete, because reclaiming one basemap must not cost the area.
+
+The grouping is a pure module with a test (`offline/artifactGroups.ts`,
+`regionDownloadGroups.ts`): a card that sums sizes and unions extents is
+arithmetic, and arithmetic in a render is arithmetic nobody checks.
+
+### A subtitle earns its line or it isn't there
+
+A row's subtitle says something the user cannot already see. It never restates
+the filter they are standing in ("LiDAR topo · on device" under the LiDAR Topos
+filter), never restates the section header above it ("Not on this device" under
+"Available to download"), and never repeats the pill beside it ("import
+unfinished" next to an `Unfinished` pill). Dates, sizes, counts and failure
+reasons stay — they are the reason the slot exists.
+
 ### Chronological lists group by time
 
 Filters replace *category* sections (above), not date headers. A record list
@@ -396,7 +421,9 @@ under it, rendered only for that filter. Waypoints are the case that earns this
 eye, while a waypoint list is hundreds of small things you arrived looking for
 one of, so the waypoint filter — and only it — grows a search field and a rail
 of its tags. The tag rail is the vocabulary IN USE, so it never offers a chip
-that would match nothing. Both narrow the on-device mirror, so both work with
+that would match nothing, and the search field follows the same rule one step
+further out: with no waypoints at all there is nothing to narrow, so it is
+absent and the empty panel gets the whole body. Both narrow the on-device mirror, so both work with
 no signal; a narrowing control that needs the network does not belong here.
 
 **When a thing has no kinds, its STATE is the category.** Canyons are all the
@@ -667,9 +694,14 @@ row with a retry — it persists because the problem persists.
 The two long jobs in the app are deliberately opposite, and the difference is
 whether the user can walk away without cost:
 
-- A **region download** only advances while the app is foregrounded, so it gets
-  `RegionDownloadProgressScreen`, whose Done stays disabled until every job has
-  settled. Holding the user there is the honest cost of the constraint.
+- A **region download** only advances while the app is foregrounded, and it used
+  to get a whole screen whose Done stayed shut until every job settled. That
+  screen covered the map — the thing the user downloaded the tiles FOR — to
+  enforce a constraint one small line of copy can state, so it is gone: the run
+  is a progress card at the top of Saved's Regions filter (one card per run,
+  per-job detail behind its `⋯`), the warning is a footnote under the cards, and
+  a toast at the shell says how it went. Say the cost, don't imprison the user
+  to enforce it.
 - A **GeoPDF import** hands its work to a native executor and needs nothing from
   the JS thread, so it runs in the background (`geopdf/importRunner.ts`): a
   progress card at the top of Saved with a cancel, and a toast at the app shell
@@ -679,7 +711,11 @@ whether the user can walk away without cost:
 
 The corollary: a background job's toast is mounted at the SHELL, not on the
 screen that started it, or it fires into an unmounted component the moment the
-user goes somewhere else — which is exactly what a background job is for.
+user goes somewhere else — which is exactly what a background job is for. ONE
+component carries every background source (`BackgroundToast.tsx`, subscribing to
+the GeoPDF import runner and the region download queue): a second mounted dock
+would let two of them land on top of each other, and the user does not care
+which subsystem is talking.
 
 ## 7. Actions
 
@@ -764,16 +800,35 @@ user goes somewhere else — which is exactly what a background job is for.
   `CanyonEditSheet` are each the same component in both modes: same fields, same
   validation, with only the sheet title and the submit label differing. Two forms
   drift, and the one the user reaches less often is the one that rots.
+- **Name a thing OVER the work, not in front of it.** The region download asks
+  for a name in a sheet that opens once the jobs are already enqueued and
+  running, pre-filled with a default ("Region 3" — see the privacy note in
+  `map/regionName.ts`: a default name may not need the network or say where the
+  area is). Confirm and dismiss are the same answer, because the default is
+  already the label the jobs carry. A naming prompt that gates the start makes
+  the user's typing speed part of the download.
 - **Work the user pays for in time and disk is priced BEFORE they commit, and the
   price updates as they change the inputs.** The download screen's hero is the
-  estimate ("≈ 41 MB · up to 68 MB · 2,140 tiles · about 12 min"), recomputed on
-  every edge drag and detail change, because the whole decision is the tradeoff
-  between area, detail and how many maps. Two rules follow: the range is derived
-  from MEASURED per-zoom tile sizes (`mapRegionEstimate.ts`, calibrated by a
-  committed script over both bush and town — a bush-only sample read 40 % under for
-  a real download), and the caps are enforced in the hero as a sentence naming the
-  way out ("Lower the detail, shrink the area, or pick fewer maps"), never as a
-  silently dead button.
+  estimate ("≈ 41 MB · about 12 min"), recomputed on every edge drag and detail
+  change, because the whole decision is the tradeoff between area, detail and how
+  many maps. Three rules follow:
+  - **TWO stats, equal weight, fixed height.** The two things the decision turns
+    on are what it costs in disk and what it costs in time, so they are peers
+    (`HeroHeader.secondaryValue`) — a time in the small muted `valueSuffix` font
+    said it was a footnote to the size. The tile count and the p90 spread were
+    the third and fourth stats, they overflowed the line, and neither changes
+    what the user does next. The hero's height never changes, because the map
+    below it is being dragged while these numbers move.
+  - The numbers are derived from MEASURED per-zoom tile sizes
+    (`mapRegionEstimate.ts`, calibrated by a committed script over both bush and
+    town — a bush-only sample read 40 % under for a real download).
+  - **A cap is ONE warning, over the map, not a band in the hero.** The three cap
+    reasons (edge, area, tile count) are one message to the user and have the
+    same ways out, so they are one semi-transparent chip pinned at the top of the
+    map — the same overlay treatment as the hint along its bottom. A warning that
+    takes layout space takes it from the map, and one that appears and clears
+    resizes the map under a frame the user is dragging. The Save button still
+    disables, but never silently: the chip is why.
 - **An area selector uses EDGE handles, not corners.** Each edge is a
   one-dimensional drag with nothing to anchor, so any aspect ratio is one gesture
   away — a tall strip for a creek line, a wide one for a plateau — where a corner
@@ -915,6 +970,14 @@ colour when there is content past it (`SegmentedControl`'s `EdgeFade`, an
 driven by scroll offset — a fade on only one end still leaves a hard-sliced chip
 at the other, and a fade shown at rest dims a chip with nothing behind it. Use a
 real gradient for any fade; stacked alpha steps band visibly.
+
+**A primitive's `alignSelf` belongs to the primitive; fix the AXIS at the usage
+site.** `StatusPill` sets `alignSelf: "flex-start"` so it never stretches to the
+width of the column it usually sits in — correct there, and wrong in a
+row-direction trailing group, where the cross axis is vertical and flex-start is
+the TOP edge (the "Offline" pill floated above the size text next to it). Wrap
+it in a plain `View`, which takes the container's `alignItems`; do not change
+the primitive to suit one caller.
 
 **Labels wrap; they do not ellipsise.** `Row`'s title caps at TWO lines (it is
 often a user-supplied name, and a pasted paragraph must not become a screen-tall

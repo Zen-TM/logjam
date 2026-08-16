@@ -31,11 +31,10 @@ import { registerSyncTriggers } from "./sync/syncEngine";
 import { activeThemeSchemeId, persistThemeSchemeId, theme } from "./theme";
 import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
-import { RegionDownloadProgressScreen } from "./map/RegionDownloadProgressScreen";
 import type { BasemapId } from "./map/sourceResolver";
 import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
 import { registerTopoAutoDownload } from "./offline/topoAutoDownload";
-import { GeoPdfImportToast } from "./geopdf/GeoPdfImportToast";
+import { BackgroundToast as GeoPdfImportToast } from "./BackgroundToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { SavedScreen } from "./saved/SavedScreen";
 import { AccountScreen } from "./screens/AccountScreen";
@@ -108,11 +107,6 @@ type MapStackParams = {
         zoom: number;
       }
     | undefined;
-  // Where a started download reports from. It reads the queue module directly,
-  // so it takes no params — and it REPLACES the framing screen in the stack,
-  // because going "back" to re-frame an area that is already downloading is
-  // not a step anyone wants.
-  MapRegionDownloadProgress: undefined;
 };
 
 type CanyonsStackParams = {
@@ -238,22 +232,21 @@ function MapStackNav() {
         {({ navigation, route }) => (
           <RegionDownloadScreen
             onBack={() => navigation.goBack()}
-            onStarted={() => navigation.replace("MapRegionDownloadProgress")}
+            // The download is already running by now: it reports as a card in
+            // the Saved tab's Regions filter, which is also where it lives
+            // once it lands.
+            onStarted={() => {
+              // Popped as well as left: without it, coming back to the Map tab
+              // lands on the framing screen for an area already downloading.
+              navigation.goBack();
+              navigation.getParent()?.navigate("Saved", {
+                screen: "SavedHome",
+                params: { filter: "region", nonce: Date.now() },
+              });
+            }}
             initialBasemapId={route.params?.basemapId}
             initialCenter={route.params?.center}
             initialZoom={route.params?.zoom}
-          />
-        )}
-      </MapStack.Screen>
-      {/* No swipe-back and no header: the screen's own Done button is the exit,
-          and it stays disabled until the downloads are finished. */}
-      <MapStack.Screen
-        name="MapRegionDownloadProgress"
-        options={{ headerShown: false, gestureEnabled: false }}
-      >
-        {({ navigation }) => (
-          <RegionDownloadProgressScreen
-            onDone={() => navigation.navigate("MapView")}
           />
         )}
       </MapStack.Screen>

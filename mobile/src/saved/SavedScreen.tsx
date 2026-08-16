@@ -36,6 +36,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 
 import {
+  BASEMAP_CATALOG,
+  TOPO_LAYERS,
   formatDistanceM,
   isValidLatitude,
   isValidLongitude,
@@ -98,8 +100,19 @@ import type { BasemapId } from "../map/sourceResolver";
 import { mergeSavedOverlayJobs, type CompletedOverlaysResponse } from "../map/topoOverlays";
 import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import { deleteDownloadedArtifact } from "../offline/regionDownloads";
-import { renameArtifact } from "../offline/registryDb";
+import { renameArtifact, renameArtifactGroup } from "../offline/registryDb";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
+import {
+  groupArtifacts,
+  overlayJobId,
+  regionGroupKey,
+} from "../offline/artifactGroups";
+import { groupRegionJobs } from "../offline/regionDownloadGroups";
+import {
+  cancelRegionDownload,
+  useRegionDownloads,
+} from "../offline/regionDownloadQueue";
+import { RegionDownloadRow } from "../offline/RegionDownloadRow";
 import {
   geoPdfActions,
   trackActions,
@@ -128,6 +141,21 @@ function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
 
 function formatDay(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+/** A basemap-region artifact's logicalKey IS the basemap it holds tiles for. */
+function basemapName(logicalKey: string): string {
+  return BASEMAP_CATALOG.find((entry) => entry.id === logicalKey)?.name ?? "Basemap";
+}
+
+/** A topo-overlay artifact's logicalKey is `<jobId>/<layer>`. */
+function topoLayerLabel(logicalKey: string): string {
+  const layer = logicalKey.slice(logicalKey.indexOf("/") + 1);
+  return TOPO_LAYERS.find((meta) => meta.name === layer)?.label ?? layer;
+}
+
+function countOf(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 // --- Category model -------------------------------------------------------
@@ -191,7 +219,8 @@ type SavedItem = {
   key: string;
   category: Category;
   title: string;
-  subtitle: string;
+  /** Absent where a subtitle would only restate the filter or the pill. */
+  subtitle?: string;
   sizeBytes: number;
   pill?: { label: string; tone: "accent" | "outline" | "warning" | "muted" };
   /** Recovery/primary inline action shown left of the overflow button. */
@@ -210,6 +239,19 @@ type SavedItem = {
   resolveBbox: () => Promise<Bbox | null>;
   /** Persist a new display name. Every kind supports this. */
   rename: (name: string) => Promise<unknown>;
+  /**
+   * The files behind ONE card. A region download writes one artifact per
+   * basemap and a LiDAR topo job one per layer; the card is the thing the user
+   * asked for, and this is what it is made of — listed in the ⋯ sheet with a
+   * size each and a delete each, so a single basemap can go without losing the
+   * area.
+   */
+  members?: {
+    id: string;
+    title: string;
+    sizeBytes: number;
+    delete: () => Promise<unknown>;
+  }[];
   delete: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
   /** Present on an editable route — the map's draw tool reopens this id. */
   editableRouteId?: string;
@@ -347,22 +389,67 @@ export function SavedScreen({
   const { artifacts } = useMapArtifacts();
   const regionArtifacts = artifacts.filter((a) => a.kind === "basemap-region");
 
+  // A region download in flight, as one card per run at the top of the Regions
+  // filter. It is background work — the queue keeps running while the user is
+  // anywhere in the app — so this screen watches it rather than owning it, the
+  // same shape as the GeoPDF import card below. A run whose every job is saved
+  // drops off: its artifacts are in the list underneath by then.
+  const downloadGroups = groupRegionJobs(useRegionDownloads()).filter(
+    (group) => !group.done,
+  );
+  // Per-job detail (which basemap, pause/resume/stop, failure copy) lives in
+  // the card's ⋯ sheet rather than expanded under it: four states' worth of
+  // copy and up to three buttons per job is a panel, and unfolding it would
+  // push the saved regions off the screen while the user watches.
+  const [downloadSheetId, setDownloadSheetId] = useState<string | null>(null);
+  const downloadSheetGroup =
+    downloadGroups.find((group) => group.groupId === downloadSheetId) ?? null;
+  const confirmStopGroup = useCallback(
+    (group: { label: string; jobs: { spec: { id: string } }[] }) => {
+      Alert.alert(
+        "Stop saving these maps?",
+        "The tiles saved so far are deleted from this phone.",
+        [
+          { text: "Keep going", style: "cancel" },
+          {
+            text: "Stop",
+            style: "destructive",
+            onPress: () => {
+              for (const job of group.jobs) cancelRegionDownload(job.spec.id);
+            },
+          },
+        ],
+      );
+    },
+    [],
+  );
+
   const overlaysQuery = useApiQuery(
     getCompletedOverlays,
     "Couldn't load topo overlays.",
     accountState !== "guest",
   );
   const mergedOverlays = mergeSavedOverlayJobs(overlaysQuery.data, artifacts);
-  const overlayCatalog = mergedOverlays.jobs.flatMap((job) =>
-    job.layers.map((layer) => ({
-      key: `${job.jobId}/${layer.name}`,
-      label: `${job.name ?? job.jobId.slice(0, 8)} — ${layer.name}`,
+  const savedOverlayArtifacts = artifacts.filter((a) => a.kind === "topo-overlay");
+  // "Available to download" is one row per JOB, not per layer: a job's five
+  // layers are one thing the user generated, and five near-identical rows with
+  // five download buttons is a chore, not a choice. The per-layer
+  // `downloadTopoOverlay` calls run underneath, in sequence.
+  const downloadableJobs = mergedOverlays.jobs
+    .map((job) => ({
       jobId: job.jobId,
-      layer: layer.name,
-      format: layer.format,
-      pmtilesUrl: layer.pmtilesUrl,
-    })),
-  );
+      label: job.name ?? `Topo ${job.jobId.slice(0, 8)}`,
+      // A synthetic job (built from what is on disk when the account list is
+      // unreachable) carries no URL, so there is nothing to offer.
+      missing: job.layers.filter(
+        (layer) =>
+          layer.pmtilesUrl !== "" &&
+          !savedOverlayArtifacts.some(
+            (a) => a.logicalKey === `${job.jobId}/${layer.name}`,
+          ),
+      ),
+    }))
+    .filter((job) => job.missing.length > 0);
 
   // Wi-Fi-only download default (stage4a §5.6 policy) — same confirm as the
   // map's "download current area", recreated here since overlay saves are
@@ -384,38 +471,39 @@ export function SavedScreen({
   }, []);
 
   const [overlayBusyKey, setOverlayBusyKey] = useState<string | null>(null);
-  const handleSaveOverlay = useCallback(
+  /** Save a whole topo job: its missing layers, one after another (the pipeline
+   *  is exclusive), reported through the single activeOp row. */
+  const handleSaveOverlayJob = useCallback(
     async (item: {
-      key: string;
-      label: string;
       jobId: string;
-      layer: TopoLayerName;
-      format: TopoLayerFormat;
-      pmtilesUrl: string;
+      label: string;
+      missing: { name: TopoLayerName; format: TopoLayerFormat; pmtilesUrl: string }[];
     }) => {
       try {
         if (!(await confirmCellularOk())) return;
-        setOverlayBusyKey(item.key);
-        setActiveOp({
-          label: `Saving ${item.label}`,
-          category: "overlay",
-          fraction: null,
-        });
-        await downloadTopoOverlay(
-          {
-            jobId: item.jobId,
-            layer: item.layer,
-            format: item.format,
-            pmtilesUrl: item.pmtilesUrl,
-          },
-          (p) =>
-            setActiveOp((current) =>
-              current
-                ? { ...current, fraction: p.bytesTotal > 0 ? p.bytesDone / p.bytesTotal : null }
-                : current,
-            ),
-        );
-        info("Overlay saved for offline use.");
+        setOverlayBusyKey(item.jobId);
+        for (const [index, layer] of item.missing.entries()) {
+          setActiveOp({
+            label: `Saving ${item.label} — ${index + 1} of ${item.missing.length} layers`,
+            category: "overlay",
+            fraction: null,
+          });
+          await downloadTopoOverlay(
+            {
+              jobId: item.jobId,
+              layer: layer.name,
+              format: layer.format,
+              pmtilesUrl: layer.pmtilesUrl,
+            },
+            (p) =>
+              setActiveOp((current) =>
+                current
+                  ? { ...current, fraction: p.bytesTotal > 0 ? p.bytesDone / p.bytesTotal : null }
+                  : current,
+              ),
+          );
+        }
+        info("Topo saved for offline use.");
         refreshFreeSpace();
       } catch (err) {
         console.error(err);
@@ -548,45 +636,77 @@ export function SavedScreen({
   const items = useMemo<SavedItem[]>(() => {
     const rows: SavedItem[] = [];
 
-    for (const artifact of regionArtifacts) {
+    // ONE card per saved AREA, not per basemap: a "Save maps offline" run
+    // downloads a file per selected map and used to land as that many unrelated
+    // rows, so deleting "the region" meant finding all of them. Legacy rows
+    // (no groupId) group under their own id and stand alone, unchanged.
+    for (const group of groupArtifacts(regionArtifacts, regionGroupKey)) {
+      const first = group.members[0];
       rows.push({
-        key: artifact.id,
+        key: `region:${group.key}`,
         category: "region",
-        title: artifact.label ?? "Offline map region",
-        subtitle: `Basemap · saved ${formatDay(artifact.downloadedAt)}`,
-        sizeBytes: artifact.sizeBytes,
-        locatable: artifact.bbox != null,
-        // A basemap region's logicalKey IS the basemap it holds tiles for.
-        focusBasemapId: artifact.logicalKey as BasemapId,
-        resolveBbox: async () => artifact.bbox,
-        rename: (name) => renameArtifact(artifact.id, name),
+        title: group.label ?? "Offline map region",
+        subtitle: `${countOf(group.members.length, "map")} · saved ${formatDay(first.downloadedAt)}`,
+        sizeBytes: group.sizeBytes,
+        locatable: group.bbox != null,
+        // Which basemap to switch the map to on "Show on map" — the first of
+        // the area's maps; the others cover the same ground.
+        focusBasemapId: first.logicalKey as BasemapId,
+        resolveBbox: async () => group.bbox,
+        // A rename is the name of the AREA, so it reaches every row of the run.
+        rename: (name) =>
+          first.groupId
+            ? renameArtifactGroup(first.groupId, name)
+            : renameArtifact(first.id, name),
+        members: group.members.map((artifact) => ({
+          id: artifact.id,
+          title: basemapName(artifact.logicalKey),
+          sizeBytes: artifact.sizeBytes,
+          delete: () => deleteDownloadedArtifact(artifact.id),
+        })),
         delete: {
           confirmTitle: "Delete this region?",
-          confirmBody: "The offline basemap tiles for this area are removed from the device.",
-          run: () => deleteDownloadedArtifact(artifact.id),
+          confirmBody: `The offline tiles for this area (${countOf(group.members.length, "map")}) are removed from the device.`,
+          run: async () => {
+            for (const artifact of group.members) {
+              await deleteDownloadedArtifact(artifact.id);
+            }
+          },
         },
       });
     }
 
-    for (const overlay of overlayCatalog) {
-      const saved = artifacts.find(
-        (a) => a.kind === "topo-overlay" && a.logicalKey === overlay.key,
-      );
-      if (!saved) continue;
+    // Same treatment for a generated topo job: five layers, one job, one card.
+    for (const group of groupArtifacts(savedOverlayArtifacts, overlayJobId)) {
+      const job = mergedOverlays.jobs.find((candidate) => candidate.jobId === group.key);
       rows.push({
-        key: saved.id,
+        key: `overlay:${group.key}`,
         category: "overlay",
-        title: saved.label ?? overlay.label,
-        subtitle: "LiDAR topo · on device",
-        sizeBytes: saved.sizeBytes,
+        title: group.label ?? job?.name ?? `Topo ${group.key.slice(0, 8)}`,
+        subtitle: countOf(group.members.length, "layer"),
+        sizeBytes: group.sizeBytes,
         pill: { label: "Offline", tone: "accent" },
-        locatable: saved.bbox != null,
-        resolveBbox: async () => saved.bbox,
-        rename: (name) => renameArtifact(saved.id, name),
+        locatable: group.bbox != null,
+        resolveBbox: async () => group.bbox,
+        // Topo artifacts carry no groupId (they are written a layer at a time
+        // by the overlay downloader), so the group rename writes each row's
+        // own display label. Display only, as everywhere else.
+        rename: (name) =>
+          Promise.all(group.members.map((artifact) => renameArtifact(artifact.id, name))),
+        members: group.members.map((artifact) => ({
+          id: artifact.id,
+          title: topoLayerLabel(artifact.logicalKey),
+          sizeBytes: artifact.sizeBytes,
+          delete: () => deleteDownloadedArtifact(artifact.id),
+        })),
         delete: {
-          confirmTitle: "Delete this overlay?",
-          confirmBody: "The overlay is removed from the device. You can download it again later.",
-          run: () => deleteDownloadedArtifact(saved.id),
+          confirmTitle: "Delete this topo?",
+          confirmBody: `Its ${countOf(group.members.length, "layer")} are removed from the device. You can download them again later.`,
+          run: async () => {
+            for (const artifact of group.members) {
+              await deleteDownloadedArtifact(artifact.id);
+            }
+          },
         },
       });
     }
@@ -611,11 +731,13 @@ export function SavedScreen({
         key: geoPdf.id,
         category: "geoPdf",
         title: geoPdf.label,
+        // No "GeoPDF ·" prefix and nothing restating the pill: the row's glyph
+        // and hue say the kind, and "Unfinished" is already a pill.
         subtitle: failed
           ? (geoPdf.errorCode && GEOPDF_ERRORS[geoPdf.errorCode]) || "Import failed."
           : incomplete
-            ? "GeoPDF · import unfinished"
-            : `GeoPDF · imported ${formatDay(geoPdf.createdAt)}`,
+            ? undefined
+            : `Imported ${formatDay(geoPdf.createdAt)}`,
         sizeBytes: geoPdf.sourceSizeBytes + (tiles?.sizeBytes ?? 0),
         ...(failed
           ? { pill: { label: "Failed", tone: "warning" as const } }
@@ -717,7 +839,8 @@ export function SavedScreen({
     geoPdfImports,
     handleResumeGeoPdf,
     imports,
-    overlayCatalog,
+    mergedOverlays,
+    savedOverlayArtifacts,
     regionArtifacts,
     savedTracks,
   ]);
@@ -808,11 +931,6 @@ export function SavedScreen({
         )
       : inCategory;
 
-  const availableOverlays = overlayCatalog.filter(
-    (overlay) =>
-      !artifacts.some((a) => a.kind === "topo-overlay" && a.logicalKey === overlay.key),
-  );
-
   const closeCoordSheet = useCallback(() => {
     setCoordSheetOpen(false);
     setCoordName("");
@@ -872,6 +990,33 @@ export function SavedScreen({
           },
         },
       ]);
+    },
+    [fail, refreshFreeSpace],
+  );
+
+  /** Delete ONE file out of a grouped card (a basemap, a topo layer). */
+  const deleteMember = useCallback(
+    (member: { title: string; delete: () => Promise<unknown> }) => {
+      Alert.alert(
+        `Delete ${member.title}?`,
+        "This map is removed from the device. The rest of this one stays.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: () => {
+              member
+                .delete()
+                .then(refreshFreeSpace)
+                .catch((err: unknown) => {
+                  console.error(err);
+                  fail(messageFromError(err, "Couldn't delete that."));
+                });
+            },
+          },
+        ],
+      );
     },
     [fail, refreshFreeSpace],
   );
@@ -990,16 +1135,21 @@ export function SavedScreen({
             in a gorge. */}
         {filter === "waypoint" ? (
           <>
-            {/* The field carries its own right pad because the rail has none —
-                the category chips are meant to scroll off the edge, an input
-                running into it just looks clipped. */}
-            <View style={styles.waypointSearch}>
-              <TextField
-                label="Search waypoints"
-                value={waypointQuery}
-                onChangeText={setWaypointQuery}
-              />
-            </View>
+            {/* Nothing to search: the field is hidden with nothing on the
+                phone, same rule the tag rail already follows, and the empty
+                panel gets the whole screen body. */}
+            {counts.waypoint > 0 ? (
+              // The field carries its own right pad because the rail has none —
+              // the category chips are meant to scroll off the edge, an input
+              // running into it just looks clipped.
+              <View style={styles.waypointSearch}>
+                <TextField
+                  label="Search waypoints"
+                  value={waypointQuery}
+                  onChangeText={setWaypointQuery}
+                />
+              </View>
+            ) : null}
             {waypointTagOptions.length > 0 ? (
               <View style={styles.waypointTags}>
                 <SegmentedControl
@@ -1075,7 +1225,50 @@ export function SavedScreen({
           />
         ) : null}
 
-        {visibleItems.length === 0 && !activeOp && !importRun ? (
+        {/* Downloading regions, one card per run, at the top of the Regions
+            filter and nowhere else — "All" is an inventory of what is actually
+            on the device, and these are not there yet. Same rule the GeoPDF
+            import card follows. */}
+        {filter === "region" && downloadGroups.length > 0 ? (
+          <>
+            {downloadGroups.map((group) => (
+              <Row
+                key={group.groupId}
+                title={group.label || "Saving maps"}
+                subtitle={
+                  group.settled
+                    ? `${countOf(group.unfinished, "map")} didn't finish`
+                    : `${group.ready} of ${countOf(group.jobs.length, "map")} saved`
+                }
+                icon="download-cloud"
+                hue={group.settled ? theme.warning : assetHue.region}
+                progress={group.fraction}
+                right={
+                  <View style={styles.rowActions}>
+                    <IconButton
+                      icon="x"
+                      accessibilityLabel="Stop saving these maps"
+                      onPress={() => confirmStopGroup(group)}
+                    />
+                    <IconButton
+                      icon="more-vertical"
+                      accessibilityLabel={`Maps in ${group.label || "this download"}`}
+                      onPress={() => setDownloadSheetId(group.groupId)}
+                    />
+                  </View>
+                }
+              />
+            ))}
+            <Text style={styles.downloadNote}>
+              Downloads only run while Logjam is open.
+            </Text>
+          </>
+        ) : null}
+
+        {visibleItems.length === 0 &&
+        !activeOp &&
+        !importRun &&
+        (filter !== "region" || downloadGroups.length === 0) ? (
           <EmptyPanel filter={filter} online={online} onAdd={() => setAddSheetOpen(true)} />
         ) : null}
 
@@ -1091,7 +1284,19 @@ export function SavedScreen({
                 {item.sizeBytes > 0 ? (
                   <Text style={styles.size}>{formatBytes(item.sizeBytes)}</Text>
                 ) : null}
-                {item.pill ? <StatusPill label={item.pill.label} tone={item.pill.tone} /> : null}
+                {/* The pill is wrapped because its own base style carries
+                    `alignSelf: "flex-start"` — right in the COLUMN contexts it
+                    is used in elsewhere (the hero notes, a detail header),
+                    where it stops the pill stretching the full width, but in
+                    this row-direction container flex-start is the TOP edge and
+                    the pill floated above the size text beside it. The wrapper
+                    takes the container's `alignItems: center` and the pill
+                    aligns inside it. */}
+                {item.pill ? (
+                  <View>
+                    <StatusPill label={item.pill.label} tone={item.pill.tone} />
+                  </View>
+                ) : null}
                 {item.inlineAction ? (
                   <IconButton
                     icon={item.inlineAction.icon}
@@ -1132,23 +1337,29 @@ export function SavedScreen({
         {/* The one list of things NOT on the device: server-side LiDAR topo
             overlays this account can pull down. Scoped to this filter so "All"
             stays an inventory of what is actually here. */}
-        {filter === "overlay" && availableOverlays.length > 0 ? (
+        {filter === "overlay" && downloadableJobs.length > 0 ? (
           <>
             <SectionHeader label="Available to download" />
-            {availableOverlays.map((overlay) => (
+            {downloadableJobs.map((job) => (
               <Row
-                key={overlay.key}
-                title={overlay.label}
-                subtitle={lidarReady ? "Not on this device" : "Connect to download"}
+                key={job.jobId}
+                title={job.label}
+                // "Not on this device" restated the section header it sits
+                // under; the layer count does not.
+                subtitle={
+                  lidarReady
+                    ? countOf(job.missing.length, "layer")
+                    : "Connect to download"
+                }
                 icon="layers"
                 hue={assetHue.overlay}
                 right={
                   <IconButton
                     icon="download"
-                    accessibilityLabel={`Save ${overlay.label} for offline use`}
+                    accessibilityLabel={`Save ${job.label} for offline use`}
                     color={theme.accent}
                     disabled={!lidarReady || overlayBusyKey != null}
-                    onPress={() => handleSaveOverlay(overlay)}
+                    onPress={() => handleSaveOverlayJob(job)}
                   />
                 }
               />
@@ -1164,9 +1375,7 @@ export function SavedScreen({
                 key={job.id}
                 title={job.title ?? "Untitled GeoPDF"}
                 subtitle={
-                  job.resultBytes != null
-                    ? `${formatBytes(job.resultBytes)} · not on this device`
-                    : "Not on this device"
+                  job.resultBytes != null ? formatBytes(job.resultBytes) : undefined
                 }
                 icon="file-text"
                 hue={assetHue.geoPdf}
@@ -1463,7 +1672,13 @@ export function SavedScreen({
                   removes it from the account — which is why routes get their
                   own sheet rather than this label with a branch in it. */}
               <Row
-                title={menuWaypoint ? "Delete waypoint" : "Delete from device"}
+                title={
+                  menuWaypoint
+                    ? "Delete waypoint"
+                    : menuItem.members && menuItem.members.length > 1
+                      ? "Delete all from device"
+                      : "Delete from device"
+                }
                 icon="trash-2"
                 hue={theme.warning}
                 onPress={() => {
@@ -1472,6 +1687,36 @@ export function SavedScreen({
                   deleteItem(target);
                 }}
               />
+              {/* What this card is actually made of — the area's basemaps, the
+                  topo job's layers — each with its own size and its own
+                  delete, so one map can go without losing the rest. */}
+              {menuItem.members && menuItem.members.length > 1 ? (
+                <>
+                  <SectionHeader label="Includes" />
+                  {menuItem.members.map((member) => (
+                    <Row
+                      key={member.id}
+                      title={member.title}
+                      icon={CATEGORY_META[menuItem.category].icon}
+                      hue={assetHue[menuItem.category]}
+                      right={
+                        <View style={styles.rowActions}>
+                          <Text style={styles.size}>{formatBytes(member.sizeBytes)}</Text>
+                          <IconButton
+                            icon="trash-2"
+                            accessibilityLabel={`Delete ${member.title} from device`}
+                            color={theme.warning}
+                            onPress={() => {
+                              closeItemSheet();
+                              deleteMember(member);
+                            }}
+                          />
+                        </View>
+                      }
+                    />
+                  ))}
+                </>
+              ) : null}
             </>
           )}
         </View>
@@ -1522,6 +1767,24 @@ export function SavedScreen({
         onInfo={info}
         onError={fail}
       />
+
+      {/* The run's jobs, one row each: which basemap, how far in, and
+          pause/resume/stop. Kept behind the card's ⋯ rather than expanded
+          under it — see the comment on `downloadSheetId`. */}
+      <BottomSheet
+        visible={downloadSheetGroup != null}
+        onClose={() => setDownloadSheetId(null)}
+        title={downloadSheetGroup?.label || "Saving maps"}
+      >
+        <View style={styles.sheetBody}>
+          {downloadSheetGroup?.jobs.map((job) => (
+            <RegionDownloadRow key={job.spec.id} job={job} />
+          ))}
+          <Text style={styles.downloadNote}>
+            Downloads only run while Logjam is open.
+          </Text>
+        </View>
+      </BottomSheet>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
@@ -1608,6 +1871,13 @@ const styles = StyleSheet.create({
   rowActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
   size: { color: theme.textMuted, fontSize: fontSize.xs, fontWeight: fontWeight.medium },
   sheetBody: { gap: spacing(1) },
+  // Small and honest: the constraint is real, but it is a footnote to the
+  // cards above it, not a warning banner.
+  downloadNote: {
+    color: theme.textMuted,
+    fontSize: fontSize.xs,
+    paddingHorizontal: spacing(0.5),
+  },
   empty: {
     alignItems: "center",
     gap: spacing(1),

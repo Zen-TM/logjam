@@ -15,6 +15,8 @@ import { AppState } from "react-native";
 import { ApiError, type OfflineBasemapId, type RegionBbox } from "@logjam/shared";
 
 import { subscribeReconnect } from "../map/connectivity";
+import type { ToastMessage } from "../ui/Toast";
+import { groupRegionJobs, regionGroupToastText } from "./regionDownloadGroups";
 import {
   connectionAllows,
   runRegionDownload,
@@ -81,6 +83,47 @@ function publish(): void {
   // New array identity per change — useSyncExternalStore compares by reference.
   snapshot = [...jobs];
   for (const listener of listeners) listener();
+  announceSettledGroups();
+}
+
+// --- Finish toast ---------------------------------------------------------
+// A region download is background work now (the progress SCREEN is gone; Saved
+// shows a card), so it announces itself the way a GeoPDF import does — one
+// toast at the app shell, wherever the user has got to. Mirrors
+// `onGeoPdfImportToast` in geopdf/importRunner.ts deliberately: one shape for
+// both, one component subscribing to both (BackgroundToast.tsx).
+const toastListeners = new Set<(message: Omit<ToastMessage, "nonce">) => void>();
+
+/** Subscribe to run outcomes — see BackgroundToast, the only consumer. */
+export function onRegionDownloadToast(
+  listener: (message: Omit<ToastMessage, "nonce">) => void,
+): () => void {
+  toastListeners.add(listener);
+  return () => toastListeners.delete(listener);
+}
+
+/** Groups already announced, so a later publish doesn't repeat the toast. */
+const announcedGroups = new Set<string>();
+
+// Driven off `publish` rather than off the pump's tail: a group also settles
+// when the last live job is paused by the user or halted by the provider, and
+// those never pass through the pump's completion path.
+function announceSettledGroups(): void {
+  for (const group of groupRegionJobs(jobs)) {
+    if (!group.settled) {
+      // Live again (resumed, or a second run reusing the id): eligible to
+      // announce once more.
+      announcedGroups.delete(group.groupId);
+      continue;
+    }
+    if (announcedGroups.has(group.groupId)) continue;
+    announcedGroups.add(group.groupId);
+    const message = {
+      text: regionGroupToastText(group),
+      tone: group.unfinished > 0 ? ("error" as const) : ("info" as const),
+    };
+    for (const listener of toastListeners) listener(message);
+  }
 }
 
 function patch(id: string, change: Partial<RegionJob>): void {
@@ -367,6 +410,8 @@ export async function cancelAllRegionDownloads(): Promise<void> {
   await pumping;
   jobs = [];
   tokens.clear();
+  // Module state must not outlive a sign-out (see the note above).
+  announcedGroups.clear();
   publish();
 }
 

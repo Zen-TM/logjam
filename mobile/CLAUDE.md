@@ -114,11 +114,13 @@ extract/schema refresh.
 
 `src/map/RegionDownloadScreen.tsx` frames an area (edge-handle selector, pure maths
 in `regionFrame.ts`), prices it, and enqueues one job per selected map through
-`src/offline/regionDownloadQueue.ts`. It then REPLACES itself with
-`RegionDownloadProgressScreen.tsx`, which is where progress is reported and whose
-"Done" stays disabled until every job has settled — a download only advances while
-the app is foregrounded, so the screen the user waits on must not be the one they
-have every reason to leave. Two task kinds share that queue
+`src/offline/regionDownloadQueue.ts`. Enqueue happens on the Save tap and the
+naming prompt (a sheet, defaulting to "Region N" from `regionName.ts` — no
+geocoding, no coordinates) opens OVER a download already running; the screen then
+leaves for the Saved tab's Regions filter, which is where progress is reported as
+cards. `RegionDownloadProgressScreen.tsx` was deleted (2026-08-16) with its Done
+gate: a run outlives the screen that started it, and a screen whose only job is
+to be waited on is one the user leaves anyway. Two task kinds share that queue
 (stage4a §9): `tile-pyramid` fetches SIX raster tiles straight from the provider
 into an on-device MBTiles (`regionTileDownload.ts` + `regionMbtiles.ts`), and
 `http-file` pulls the self-hosted Protomaps clip through our API
@@ -168,9 +170,9 @@ reclaims an artifact by age or pressure, which is why the precheck matters.
 
 **Pause is a tile-pyramid affordance only** (`offline/regionJobStatus.ts`). The
 clip is one `expo-file-system` transfer with no mid-flight stop. The same file
-owns the progress screen's Done gate: a job paused by `user` or
+owns the "is this run over?" answer Saved's cards read: a job paused by `user` or
 `provider-backoff` is *settled* (nothing auto-resumes those, by design) even
-though it is not *finished*, so the screen is not a dead end.
+though it is not *finished*, so a card never reports work that will never move.
 
 **The offline map is drawn to its own edges.** With "Offline maps only" on (or no
 signal), `src/map/offlineMask.ts` fills everywhere outside the downloaded regions
