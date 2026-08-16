@@ -32,6 +32,7 @@ import {
 } from "@logjam/shared";
 
 import type { MapArtifact } from "../map/sourceResolver";
+import { failureDetail } from "./failureDetail";
 import { connectionAllowsMetered } from "./networkPolicy";
 import { insertArtifact } from "./registryDb";
 import {
@@ -104,7 +105,7 @@ export type RegionRunOutcome =
   | { status: "ready"; artifact: MapArtifact; gaps: number; failed: number }
   | { status: "paused"; reason: PausedReason }
   | { status: "cancelled" }
-  | { status: "failed"; code: RegionFailureCode };
+  | { status: "failed"; code: RegionFailureCode; detail?: string };
 
 export type RegionFailureCode =
   | "provider-errors"
@@ -213,6 +214,8 @@ export async function runRegionDownload(
   try {
     await initRegionMbtiles(target, {
       label: spec.label,
+      groupId: spec.groupId,
+      groupLabel: spec.groupLabel,
       basemapId: spec.basemapId,
       bbox: spec.bbox,
       zMin: REGION_MIN_ZOOM,
@@ -459,7 +462,14 @@ export async function runRegionDownload(
     await closeRegionMbtiles(target);
     // The file stays: it is a valid resume point, and a failed job is offered
     // as resumable rather than silently discarded.
+    //
+    // The message travels WITH the failure. `unknown` is the catch-all, and it
+    // used to be the whole story the user and the developer got: the row said
+    // "That didn't finish. Try again." and the cause went to `console.error`,
+    // which in a release build is a logcat line nobody is attached to. The
+    // first real one to show up this way was SQLITE_BUSY on a region file
+    // ("database is locked"), and it cost a device repro to name.
     console.error(err);
-    return { status: "failed", code: "unknown" };
+    return { status: "failed", code: "unknown", detail: failureDetail(err) };
   }
 }

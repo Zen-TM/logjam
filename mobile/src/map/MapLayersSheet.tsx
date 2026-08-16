@@ -33,7 +33,6 @@ import {
   Row,
   SectionHeader,
   SegmentedControl,
-  StatusPill,
   TextField,
   Toggle,
 } from "../ui";
@@ -48,15 +47,6 @@ import {
   type AssetActions,
 } from "../saved/assetActions";
 import type { Bbox } from "../saved/bboxOfPoints";
-import {
-  listUnfinishedRegions,
-  deleteRegionFile,
-  type UnfinishedRegion,
-} from "../offline/regionMbtiles";
-import {
-  enqueueRegionDownloads,
-  useRegionDownloads,
-} from "../offline/regionDownloadQueue";
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { CanyonRoutesStatus } from "./CanyonRoutesLayer";
@@ -862,22 +852,6 @@ function OfflineTab({
   artifacts: MapArtifact[];
   visible: boolean;
 }) {
-  const [unfinished, setUnfinished] = useState<UnfinishedRegion[]>([]);
-  const jobs = useRegionDownloads();
-  const activeIds = useMemo(() => new Set(jobs.map((job) => job.spec.id)), [jobs]);
-
-  // Read the half-written files each time the sheet opens: a download that died
-  // with the app is only discoverable from disk (regionMbtiles.ts).
-  useEffect(() => {
-    if (!visible) return;
-    listUnfinishedRegions()
-      .then((rows) => setUnfinished(rows.filter((row) => !activeIds.has(row.id))))
-      .catch(console.error);
-    // `activeIds` changes identity every render; the queue's own state drives
-    // the filter below instead.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, jobs.length]);
-
   const savedRegions = artifacts.filter(
     (artifact) => artifact.kind === "basemap-region",
   );
@@ -914,77 +888,6 @@ function OfflineTab({
           />
         }
       />
-
-      {unfinished.length > 0 ? (
-        <>
-          <SectionHeader label="Unfinished" />
-          {unfinished.map((region) => (
-            <Row
-              key={region.id}
-              icon="pause-circle"
-              hue={theme.warning}
-              title={region.label}
-              subtitle={
-                online
-                  ? `${region.tilesStored.toLocaleString()} tiles already saved`
-                  : "Needs a connection to finish"
-              }
-              // Trailing order per §5: state, then the inline recovery action.
-              right={
-                <View style={styles.trailing}>
-                  {online ? <StatusPill label="Resume" tone="accent" /> : null}
-                  <IconButton
-                    icon="trash-2"
-                    color={theme.warning}
-                    accessibilityLabel={`Discard the unfinished download ${region.label}`}
-                    onPress={() =>
-                      Alert.alert(
-                        "Discard this download?",
-                        "The tiles saved so far are deleted from this phone.",
-                        [
-                          { text: "Keep it", style: "cancel" },
-                          {
-                            text: "Discard",
-                            style: "destructive",
-                            onPress: () => {
-                              void deleteRegionFile(region.id);
-                              setUnfinished((current) =>
-                                current.filter((row) => row.id !== region.id),
-                              );
-                            },
-                          },
-                        ],
-                      )
-                    }
-                  />
-                </View>
-              }
-              disabled={!online}
-              onPress={() => {
-                enqueueRegionDownloads([
-                  {
-                    taskKind: "tile-pyramid",
-                    id: region.id,
-                    basemapId: region.basemapId,
-                    label: region.label,
-                    // An unfinished region is discovered by reading the region
-                    // directory, which carries no group — it resumes as a card
-                    // of its own, which is what it already looked like.
-                    groupId: region.id,
-                    groupLabel: region.label,
-                    bbox: region.bbox,
-                    zMax: region.zMax,
-                    allowCellular: false,
-                  },
-                ]);
-                setUnfinished((current) =>
-                  current.filter((row) => row.id !== region.id),
-                );
-              }}
-            />
-          ))}
-        </>
-      ) : null}
 
       <SectionHeader label="On this phone" />
       <Row

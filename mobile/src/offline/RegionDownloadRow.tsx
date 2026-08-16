@@ -18,7 +18,7 @@ import {
   resumeRegionDownload,
   type RegionJob,
 } from "./regionDownloadQueue";
-import { canPause, isJobFinished } from "./regionJobStatus";
+import { canPause, isRetryableFailure } from "./regionJobStatus";
 
 export function RegionDownloadRow({ job }: { job: RegionJob }) {
   const { progress, state, spec } = job;
@@ -41,7 +41,13 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
           // say "try again" — this is the vector clip's 5xx.
           return "Logjam can't cut this map right now. The other maps still work.";
         default:
-          return "That didn't finish. Try again.";
+          // The detail is the message from the exception that ended the run,
+          // scrubbed (see failureDetail). Without it this row said only "that
+          // didn't finish", which told the user nothing to act on and left a
+          // developer with a logcat line nobody was attached to.
+          return state.detail
+            ? `That didn't finish: ${state.detail}`
+            : "That didn't finish. Try again.";
       }
     }
     if (state.kind === "paused") {
@@ -88,7 +94,11 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
       subtitleNumberOfLines={2}
       progress={barFraction}
       right={
-        isJobFinished(job) ? null : (
+        // A SAVED job is done with. Everything else — running, paused, and a
+        // failure worth another go — keeps its actions here, which is where
+        // resuming a failed download now lives: the partial file is a lossless
+        // checkpoint, and the run that owns it is the honest place to offer it.
+        state.kind === "ready" ? null : (
           <View style={styles.rowActions}>
             {state.kind === "downloading" ? (
               canPause(job) ? (
@@ -99,6 +109,10 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
                   onPress={() => pauseRegionDownload(spec.id)}
                 />
               ) : null
+            ) : state.kind === "failed" && !isRetryableFailure(state.code) ? (
+              // Retrying a rejected area, or an endpoint that is down, repeats
+              // the same failure; the row's sentence says what to do instead.
+              null
             ) : (
               <Button
                 label="Resume"
@@ -108,17 +122,19 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
               />
             )}
             <Button
-              label="Stop"
+              label={state.kind === "failed" ? "Discard" : "Stop"}
               variant="ghost"
               compact
               onPress={() =>
                 Alert.alert(
-                  "Stop this download?",
+                  state.kind === "failed"
+                    ? "Discard this download?"
+                    : "Stop this download?",
                   "The tiles saved so far are deleted from this phone.",
                   [
-                    { text: "Keep going", style: "cancel" },
+                    { text: "Keep it", style: "cancel" },
                     {
-                      text: "Stop",
+                      text: state.kind === "failed" ? "Discard" : "Stop",
                       style: "destructive",
                       onPress: () => cancelRegionDownload(spec.id),
                     },

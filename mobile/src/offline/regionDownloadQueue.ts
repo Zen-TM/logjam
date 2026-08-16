@@ -17,6 +17,7 @@ import { ApiError, type OfflineBasemapId, type RegionBbox } from "@logjam/shared
 import { subscribeReconnect } from "../map/connectivity";
 import type { ToastMessage } from "../ui/Toast";
 import { groupRegionJobs, regionGroupToastText } from "./regionDownloadGroups";
+import { failureDetail } from "./failureDetail";
 import {
   connectionAllows,
   runRegionDownload,
@@ -53,7 +54,7 @@ export type RegionJobState =
   | { kind: "queued" }
   | { kind: "downloading" }
   | { kind: "paused"; reason: PausedReason }
-  | { kind: "failed"; code: RegionFailureCode }
+  | { kind: "failed"; code: RegionFailureCode; detail?: string }
   | { kind: "ready"; gaps: number; failed: number };
 
 export type RegionJob = {
@@ -255,7 +256,7 @@ async function drain(): Promise<void> {
           ? { kind: "ready", gaps: outcome.gaps, failed: outcome.failed }
           : outcome.status === "paused"
             ? { kind: "paused", reason: outcome.reason }
-            : { kind: "failed", code: outcome.code },
+            : { kind: "failed", code: outcome.code, detail: outcome.detail },
     });
   }
 }
@@ -327,7 +328,7 @@ async function runProtomapsClip(
     if (err instanceof ApiError && err.status >= 400) {
       return { status: "failed", code: "region-rejected" };
     }
-    return { status: "failed", code: "unknown" };
+    return { status: "failed", code: "unknown", detail: failureDetail(err) };
   }
 }
 

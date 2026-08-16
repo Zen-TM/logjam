@@ -13,6 +13,7 @@
 // layers sheet's Unfinished list, so leaving a stalled job is safe — it just
 // must not be called "saved".
 import type { RegionJob } from "./regionDownloadQueue";
+import type { RegionFailureCode } from "./regionTileDownload";
 
 /** Finished, one way or the other. A failure is a finished download too. */
 export function isJobFinished(job: RegionJob): boolean {
@@ -29,6 +30,20 @@ export function isJobStalled(job: RegionJob): boolean {
     job.state.kind === "paused" &&
     (job.state.reason === "user" || job.state.reason === "provider-backoff")
   );
+}
+
+/**
+ * Is another attempt at this failure worth offering?
+ *
+ * `region-rejected` is the server refusing THIS AREA, and `source-unavailable`
+ * an endpoint that will keep refusing until an operator fixes it — Resume on
+ * either repeats the same failure and teaches the user the button is a lie.
+ * Everything else (a dropped connection, a locked database, a batch of tiles
+ * that wouldn't load) is worth another go against the partial file, which is a
+ * lossless checkpoint.
+ */
+export function isRetryableFailure(code: RegionFailureCode): boolean {
+  return code !== "region-rejected" && code !== "source-unavailable";
 }
 
 /** Nothing more will happen unless the user asks — the "may I leave?" gate. */

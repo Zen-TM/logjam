@@ -59,11 +59,30 @@ export async function openRegionMbtiles(id: string): Promise<RegionMbtiles> {
   await FileSystem.makeDirectoryAsync(REGION_DIR, { intermediates: true });
   const fileName = regionFileName(id);
   const db = await SQLite.openDatabaseAsync(fileName, {}, REGION_DIR_PATH);
-  // WAL + NORMAL while building: many small insert batches. `finalize` flips the
+  // Wait for a lock rather than throwing at the first contended moment.
+  //
+  // `PRAGMA journal_mode` takes an EXCLUSIVE lock, and more than one thing in
+  // this app opens a region file: the queue writing it, and anything scanning
+  // the region directory for unfinished downloads. When those overlapped the
+  // pragma failed with SQLITE_BUSY ("database is locked"), which surfaced as a
+  // download that "didn't finish" for no stated reason — measured on a Pixel 9,
+  // resuming a failed job from the layers sheet, whose own scan had the file
+  // open. Five seconds is far longer than any of these reads take.
+  await db.execAsync("PRAGMA busy_timeout = 5000;");
+  // Only SET the journal mode when it is not already what we want: the read is
+  // cheap and lock-free, the write is exclusive, and on a resume the file is
+  // already in WAL. Not a substitute for the timeout above — both, because the
+  // first open of a fresh file still has to take the lock.
+  const journal = await db.getFirstAsync<{ journal_mode: string }>(
+    "PRAGMA journal_mode",
+  );
+  if (journal?.journal_mode?.toLowerCase() !== "wal") {
+    await db.execAsync("PRAGMA journal_mode = WAL;");
+  }
+  // NORMAL sync while building: many small insert batches. `finalize` flips the
   // journal to DELETE so the finished artifact is a single file with no sidecars
   // for the native MapLibre reader to trip on.
   await db.execAsync(`
-    PRAGMA journal_mode = WAL;
     PRAGMA synchronous = NORMAL;
     CREATE TABLE IF NOT EXISTS metadata (name TEXT, value TEXT);
     CREATE TABLE IF NOT EXISTS tiles (
@@ -112,6 +131,9 @@ export async function initRegionMbtiles(
   target: RegionMbtiles,
   spec: {
     label: string;
+    /** The download run, so a resume from disk recovers the user's area name. */
+    groupId: string;
+    groupLabel: string;
     basemapId: OfflineBasemapId;
     bbox: RegionBbox;
     zMin: number;
@@ -136,6 +158,8 @@ export async function initRegionMbtiles(
     "logjam:schema": "1",
     "logjam:kind": "basemap-region",
     "logjam:source": spec.basemapId,
+    "logjam:group": spec.groupId,
+    "logjam:groupLabel": spec.groupLabel,
   });
   const existing = await readRegionBuildState(target.db);
   if (existing?.planHash !== spec.planHash) {
@@ -270,6 +294,16 @@ export async function closeRegionMbtiles(target: RegionMbtiles): Promise<void> {
 export type UnfinishedRegion = {
   id: string;
   label: string;
+  /**
+   * The run this file belonged to, and the name the USER gave that area.
+   *
+   * Recorded in the file because the queue is memory only: after a relaunch,
+   * a resumed download rebuilt its group from the per-basemap label and the
+   * area came back into Saved calling itself "SIX Maps Topo region" instead of
+   * the name its owner typed. Absent on files written before this row existed.
+   */
+  groupId?: string;
+  groupLabel?: string;
   basemapId: OfflineBasemapId;
   bbox: RegionBbox;
   zMax: number;
@@ -294,6 +328,9 @@ export async function listUnfinishedRegions(): Promise<UnfinishedRegion[]> {
     const id = name.replace(/\.mbtiles$/, "");
     const db = await SQLite.openDatabaseAsync(name, {}, REGION_DIR_PATH);
     try {
+      // Read-only scan, but it still has to queue behind a writer's lock
+      // rather than throw — this runs over files the queue may be writing.
+      await db.execAsync("PRAGMA busy_timeout = 5000;");
       if (!(await readRegionBuildState(db))) continue;
       const bounds = await readRegionMetadata(db, "bounds");
       const source = await readRegionMetadata(db, "logjam:source");
@@ -303,6 +340,9 @@ export async function listUnfinishedRegions(): Promise<UnfinishedRegion[]> {
       unfinished.push({
         id,
         label: (await readRegionMetadata(db, "name")) ?? "Offline map region",
+        groupId: (await readRegionMetadata(db, "logjam:group")) ?? undefined,
+        groupLabel:
+          (await readRegionMetadata(db, "logjam:groupLabel")) ?? undefined,
         basemapId: source as OfflineBasemapId,
         bbox: { west, south, east, north },
         zMax: Number(maxzoom),

@@ -109,7 +109,13 @@ import {
 } from "../offline/artifactGroups";
 import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import {
+  deleteRegionFile,
+  listUnfinishedRegions,
+  type UnfinishedRegion,
+} from "../offline/regionMbtiles";
+import {
   cancelRegionDownload,
+  enqueueRegionDownloads,
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
 import { RegionDownloadRow } from "../offline/RegionDownloadRow";
@@ -394,9 +400,71 @@ export function SavedScreen({
   // anywhere in the app — so this screen watches it rather than owning it, the
   // same shape as the GeoPDF import card below. A run whose every job is saved
   // drops off: its artifacts are in the list underneath by then.
-  const downloadGroups = groupRegionJobs(useRegionDownloads()).filter(
+  const regionJobs = useRegionDownloads();
+  const downloadGroups = groupRegionJobs(regionJobs).filter(
     (group) => !group.done,
   );
+
+  // Half-written regions with NO job in the queue — a download the app was
+  // killed during. The queue is memory only, so after a relaunch the file on
+  // disk is the sole evidence it ever started (regionMbtiles.ts).
+  //
+  // This used to live in the map's layers sheet, which was a strange place to
+  // look for it and, worse, opened every region file to do the scan — racing
+  // the queue for the same SQLite lock and failing the very download it was
+  // offering to resume. Recovery belongs beside the runs it recovers.
+  const [orphans, setOrphans] = useState<UnfinishedRegion[]>([]);
+  const queuedIds = regionJobs.map((job) => job.spec.id).join(",");
+  const refreshOrphans = useCallback(() => {
+    listUnfinishedRegions()
+      .then((rows) => {
+        const live = new Set(queuedIds.split(","));
+        setOrphans(rows.filter((row) => !live.has(row.id)));
+      })
+      .catch(console.error);
+  }, [queuedIds]);
+  useEffect(refreshOrphans, [refreshOrphans]);
+
+  const resumeOrphan = useCallback(
+    (region: UnfinishedRegion) => {
+      enqueueRegionDownloads([
+        {
+          taskKind: "tile-pyramid",
+          id: region.id,
+          basemapId: region.basemapId,
+          label: region.label,
+          // The file remembers the run it belonged to, so a resume keeps the
+          // name the user gave the area. Files written before that row existed
+          // fall back to standing alone under their own label.
+          groupId: region.groupId ?? region.id,
+          groupLabel: region.groupLabel ?? region.label,
+          bbox: region.bbox,
+          zMax: region.zMax,
+          allowCellular: false,
+        },
+      ]);
+      setOrphans((current) => current.filter((row) => row.id !== region.id));
+    },
+    [],
+  );
+
+  const discardOrphan = useCallback((region: UnfinishedRegion) => {
+    Alert.alert(
+      "Discard this download?",
+      "The tiles saved so far are deleted from this phone.",
+      [
+        { text: "Keep it", style: "cancel" },
+        {
+          text: "Discard",
+          style: "destructive",
+          onPress: () => {
+            void deleteRegionFile(region.id);
+            setOrphans((current) => current.filter((row) => row.id !== region.id));
+          },
+        },
+      ],
+    );
+  }, []);
   // Per-job detail (which basemap, pause/resume/stop, failure copy) lives in
   // the card's ⋯ sheet rather than expanded under it: four states' worth of
   // copy and up to three buttons per job is a panel, and unfolding it would
@@ -1262,6 +1330,36 @@ export function SavedScreen({
             <Text style={styles.downloadNote}>
               Downloads only run while Logjam is open.
             </Text>
+          </>
+        ) : null}
+
+        {filter === "region" && orphans.length > 0 ? (
+          <>
+            {orphans.map((region) => (
+              <Row
+                key={region.id}
+                title={region.groupLabel ?? region.label}
+                subtitle={`Didn't finish · ${region.tilesStored.toLocaleString()} tiles already saved`}
+                icon="download-cloud"
+                hue={theme.warning}
+                right={
+                  <View style={styles.rowActions}>
+                    <Button
+                      label="Resume"
+                      variant="outlineAccent"
+                      compact
+                      onPress={() => resumeOrphan(region)}
+                    />
+                    <IconButton
+                      icon="trash-2"
+                      color={theme.warning}
+                      accessibilityLabel={`Discard the unfinished download ${region.label}`}
+                      onPress={() => discardOrphan(region)}
+                    />
+                  </View>
+                }
+              />
+            ))}
           </>
         ) : null}
 
