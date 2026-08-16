@@ -34,14 +34,40 @@ import type { MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
 import { exportTrack, type ExportFormat } from "../fileExport";
 import { bboxOfPoints, type Bbox } from "./bboxOfPoints";
 
+/**
+ * Why a shared asset's write verbs are missing, in one sentence — the map's
+ * waypoint sheet and the Saved tab's overflow both say it, and the ownership
+ * rule is not something two surfaces should word differently (DESIGN.md §7).
+ */
+export const SHARED_READ_ONLY_HINT =
+  "Shared with you through a canyon — you can view it, but only its owner can change it.";
+
 export type AssetActions = {
   /** False when the asset has no geographic extent to fly to. */
   locatable: boolean;
   /** Resolved on tap — a track's extent needs its points read back. */
   resolveBbox: () => Promise<Bbox | null>;
-  /** Display-only rename; resolution still keys off ids. */
-  rename: (name: string) => Promise<unknown>;
-  delete: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
+  /**
+   * Display-only rename; resolution still keys off ids. ABSENT for the same
+   * reason `delete` is: a shared route or waypoint is read-only, and the API
+   * refuses the write. It used to be an `async () => undefined` stub, which
+   * meant the surfaces offering Rename accepted the user's typing and threw it
+   * away without a word.
+   */
+  rename?: (name: string) => Promise<unknown>;
+  /**
+   * ABSENT where the user may not delete this asset — today, a route or
+   * waypoint shared with them through someone else's canyon. The API's delete
+   * is owner-only (`requireOwnedRoute` / `requireWaypointOwner`), so offering
+   * the verb removes the row from this phone, parks the push in the outbox as
+   * `blocked`, and the next delta pull brings the row back: a destructive
+   * action that fails loudly in Sync issues and quietly does nothing.
+   *
+   * Optional rather than a `readOnly` flag beside it, because the type is then
+   * what stops a surface offering the verb — the map's waypoint sheet was the
+   * only one of three that remembered the guard.
+   */
+  delete?: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
   /**
    * Set on an editable route: the id the map's draw tool reopens. The action
    * itself is navigation, which lives with the screen, not here.
@@ -111,12 +137,13 @@ export function routeActions(route: MirrorRoute): AssetActions {
     locatable: route.points.length > 0,
     resolveBbox: async () =>
       bboxOfPoints(route.points.map(([lon, lat]) => ({ lon, lat }))),
-    rename: readOnly
-      ? async () => undefined
-      : (name) => updateRouteLocal(route.id, { name }),
+    // One gate for every write verb: a shared route is read-only, so rename,
+    // edit, colour, reverse and delete are all ABSENT rather than present and
+    // refused (see AssetActions.delete).
     ...(readOnly
       ? {}
       : {
+          rename: (name: string) => updateRouteLocal(route.id, { name }),
           editableRouteId: route.id,
           setColor: (color: string) => updateRouteLocal(route.id, { color }),
           reverse: () =>
@@ -135,13 +162,13 @@ export function routeActions(route: MirrorRoute): AssetActions {
                   }
                 : {}),
             }),
+          delete: {
+            confirmTitle: "Delete route?",
+            confirmBody:
+              "The route is removed from every device on your account. This can't be undone.",
+            run: () => deleteRouteLocal(route.id),
+          },
         }),
-    delete: {
-      confirmTitle: "Delete route?",
-      confirmBody:
-        "The route is removed from every device on your account. This can't be undone.",
-      run: () => deleteRouteLocal(route.id),
-    },
   };
 }
 
@@ -153,15 +180,18 @@ export function waypointActions(waypoint: MirrorWaypoint): AssetActions {
     // "centre here", which is exactly what showing a waypoint means.
     resolveBbox: async () =>
       bboxOfPoints([{ lon: waypoint.longitude, lat: waypoint.latitude }]),
-    rename: readOnly
-      ? async () => undefined
-      : (name) => updateWaypointLocal(waypoint.id, { name }),
-    delete: {
-      confirmTitle: "Delete waypoint?",
-      confirmBody:
-        "The waypoint is removed from every device on your account, and from anyone you shared its canyons with. This can't be undone.",
-      run: () => deleteWaypointLocal(waypoint.id),
-    },
+    // Same one gate as a route's: shared means every write verb is absent.
+    ...(readOnly
+      ? {}
+      : {
+          rename: (name: string) => updateWaypointLocal(waypoint.id, { name }),
+          delete: {
+            confirmTitle: "Delete waypoint?",
+            confirmBody:
+              "The waypoint is removed from every device on your account, and from anyone you shared its canyons with. This can't be undone.",
+            run: () => deleteWaypointLocal(waypoint.id),
+          },
+        }),
   };
 }
 

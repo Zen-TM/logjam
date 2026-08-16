@@ -117,8 +117,11 @@ export function WaypointSheet({
     // (DESIGN.md §7): this surface used to say only "Delete this waypoint?",
     // which left out that the delete reaches every device on the account and
     // anyone the linked canyons are shared with.
-    const { confirmTitle, confirmBody } = waypointActions(waypoint).delete;
-    Alert.alert(confirmTitle, confirmBody, [
+    // Absent on a waypoint shared with this user, which is exactly when the
+    // button below is not rendered — this guard is the type-level half of that.
+    const removal = waypointActions(waypoint).delete;
+    if (!removal) return;
+    Alert.alert(removal.confirmTitle, removal.confirmBody, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",

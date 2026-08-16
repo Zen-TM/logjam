@@ -12,9 +12,9 @@ import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { messageFromError, TRACK_COLORS } from "@logjam/shared";
 
-import { assetHue, radius, spacing, theme } from "../theme";
+import { assetHue, fontSize, radius, spacing, theme } from "../theme";
 import { BottomSheet, Row } from "../ui";
-import { routeActions } from "../saved/assetActions";
+import { SHARED_READ_ONLY_HINT, routeActions } from "../saved/assetActions";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import { exportRoute, ExportUnsupportedError } from "../fileExport";
 
@@ -79,14 +79,16 @@ export function RouteOptionsSheet({
   };
 
   const confirmDelete = () => {
+    const removal = actions.delete;
+    if (!removal) return;
     onClose();
-    Alert.alert(actions.delete.confirmTitle, actions.delete.confirmBody, [
+    Alert.alert(removal.confirmTitle, removal.confirmBody, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
         onPress: () =>
-          actions.delete.run().catch((err: unknown) => {
+          removal.run().catch((err: unknown) => {
             console.error(err);
             onError("Couldn't delete that route.");
           }),
@@ -209,7 +211,10 @@ export function RouteOptionsSheet({
           disabled={busy}
           onPress={() => save("kml")}
         />
-        {onRename ? (
+        {/* Both halves matter: the caller has to HAVE a rename form (the map
+            does not), and the route has to be renameable at all — a shared one
+            is not, and the form would have swallowed the new name. */}
+        {onRename && actions.rename ? (
           <Row
             title="Rename"
             icon="edit-2"
@@ -219,14 +224,21 @@ export function RouteOptionsSheet({
           />
         ) : null}
         {/* A route is a synced record, so this removes it from the ACCOUNT —
-            "from device" would promise the copy on another phone survives. */}
-        <Row
-          title="Delete route"
-          icon="trash-2"
-          hue={theme.warning}
-          disabled={busy}
-          onPress={confirmDelete}
-        />
+            "from device" would promise the copy on another phone survives.
+            A route shared through someone else's canyon carries no delete
+            descriptor at all (the API's delete is owner-only), so the verb is
+            absent rather than offered and refused. */}
+        {actions.delete ? (
+          <Row
+            title="Delete route"
+            icon="trash-2"
+            hue={theme.warning}
+            disabled={busy}
+            onPress={confirmDelete}
+          />
+        ) : (
+          <Text style={styles.sharedHint}>{SHARED_READ_ONLY_HINT}</Text>
+        )}
       </View>
     </BottomSheet>
   );
@@ -234,6 +246,7 @@ export function RouteOptionsSheet({
 
 const styles = StyleSheet.create({
   body: { gap: 8 },
+  sharedHint: { color: theme.textMuted, fontSize: fontSize.xs },
   currentSwatch: { width: 22, height: 22, borderRadius: radius.sm },
   palette: {
     flexDirection: "row",

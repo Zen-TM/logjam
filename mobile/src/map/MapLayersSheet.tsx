@@ -745,6 +745,10 @@ function ItemMenuPanel({
   const [draft, setDraft] = useState(menu.title);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
+  // Everything reaching this sheet today is a file on the handset, so both are
+  // present; they are optional because the descriptor withholds them on assets
+  // this user does not own (`AssetActions.delete`).
+  const removal = menu.actions.delete;
 
   // The sheet is already open and focused, so focusing on the next frame is
   // what actually raises the keyboard (DESIGN.md §6 — `autoFocus` runs before
@@ -774,8 +778,8 @@ function ItemMenuPanel({
               setError("Give it a name.");
               return;
             }
-            menu.actions
-              .rename(name)
+            // Only rows whose asset can be renamed reach this form.
+            (menu.actions.rename ?? (async () => undefined))(name)
               .then(onDone)
               .catch((err: unknown) => {
                 console.error(err);
@@ -812,25 +816,31 @@ function ItemMenuPanel({
         }
         disabled={!menu.actions.locatable}
       />
-      <Row icon="edit-2" title="Rename" onPress={() => setRenaming(true)} />
-      <Row
-        icon="trash-2"
-        hue={theme.warning}
-        title="Delete from device"
-        onPress={() =>
-          Alert.alert(menu.actions.delete.confirmTitle, menu.actions.delete.confirmBody, [
-            { text: "Keep it", style: "cancel" },
-            {
-              text: "Delete",
-              style: "destructive",
-              onPress: () => {
-                menu.actions.delete.run().catch(console.error);
-                onDone();
+      {/* Absent, not disabled, where the asset is not this user's to change —
+          the same rule "Show on map" follows above. */}
+      {menu.actions.rename ? (
+        <Row icon="edit-2" title="Rename" onPress={() => setRenaming(true)} />
+      ) : null}
+      {removal ? (
+        <Row
+          icon="trash-2"
+          hue={theme.warning}
+          title="Delete from device"
+          onPress={() =>
+            Alert.alert(removal.confirmTitle, removal.confirmBody, [
+              { text: "Keep it", style: "cancel" },
+              {
+                text: "Delete",
+                style: "destructive",
+                onPress: () => {
+                  removal.run().catch(console.error);
+                  onDone();
+                },
               },
-            },
-          ])
-        }
-      />
+            ])
+          }
+        />
+      ) : null}
     </View>
   );
 }

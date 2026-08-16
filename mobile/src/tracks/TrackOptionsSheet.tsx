@@ -85,8 +85,10 @@ export function TrackOptionsSheet({
                 return;
               }
               setBusy(true);
-              actions
-                .rename(changed.name)
+              // A recording is always this device's own, so both verbs are
+              // present; the descriptor types them optional because it also
+              // describes assets shared from another account.
+              (actions.rename ?? (async () => undefined))(changed.name)
                 .then(() => close())
                 .catch((err: unknown) => {
                   console.error(err);
@@ -187,13 +189,15 @@ export function TrackOptionsSheet({
             disabled={busy}
             onPress={() => {
               close();
-              Alert.alert(actions.delete.confirmTitle, actions.delete.confirmBody, [
+              if (!actions.delete) return;
+              const removal = actions.delete;
+              Alert.alert(removal.confirmTitle, removal.confirmBody, [
                 { text: "Keep it", style: "cancel" },
                 {
                   text: "Delete",
                   style: "destructive",
                   onPress: () =>
-                    actions.delete.run().catch((err: unknown) => {
+                    removal.run().catch((err: unknown) => {
                       console.error(err);
                       onError("Couldn't delete that track.");
                     }),

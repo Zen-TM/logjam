@@ -748,6 +748,11 @@ which subsystem is talking.
   one at a time. "Show on map" was in the first cut and came out: flying to the
   union of five extents is not what any of the five meant, and the single-item
   verb already does the thing the user wanted. Reference: `saved/SavedScreen.tsx`.
+  - **A row the group verb cannot act on is not selectable.** Deleting is all a
+    selection does, so a shared route or waypoint (no `delete` descriptor) is
+    skipped by select-all and answers a long press with the reason instead of a
+    checkbox — silently ignoring the press reads as a missed tap, and picking it
+    would only teach the count to lie.
   - **Filter and selection are exclusive.** The rail is gone while picking, and
     any programmatic filter change clears the selection: a bulk delete that
     reaches rows scrolled behind another category is one the user never saw.
@@ -773,6 +778,17 @@ which subsystem is talking.
   learn which kinds happen to support which action. Renaming is display-only
   (`label` overrides the derived name; resolution still keys off ids), so it is
   cheap to extend to a new kind.
+- **A verb the API would refuse is ABSENT from the descriptor, not disabled in
+  the screen.** `AssetActions.rename` and `.delete` are optional and omitted for
+  a route or waypoint shared through someone else's canyon (the API's writes are
+  owner-only), so a surface cannot offer them: rendering branches on the verb
+  existing, and the multi-select refuses to pick a row with no delete. Before
+  this, `rename` was an `async () => undefined` stub and `delete` was always
+  present, so three of the four surfaces offered both — a shared route's Delete
+  removed the row from the phone, parked the push as `blocked`, and the next
+  delta pull brought it back. The guard belongs where the verbs are declared;
+  every surface then inherits it (`assetActions.test.ts` pins it). Copy for the
+  absence is `SHARED_READ_ONLY_HINT`, written once.
 - **A switch that LOWERS a guard costs an authentication; raising it is free.**
   The app-lock toggle (Settings → Privacy and security) is what stands between someone
   holding this unlocked phone and the canyon coordinates on it, so turning it off

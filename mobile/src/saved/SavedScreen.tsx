@@ -123,6 +123,7 @@ import {
 } from "../offline/regionDownloadQueue";
 import { RegionDownloadRow } from "../offline/RegionDownloadRow";
 import {
+  SHARED_READ_ONLY_HINT,
   geoPdfActions,
   trackActions,
   routeActions,
@@ -254,8 +255,9 @@ type SavedItem = {
   focusBasemapId?: BasemapId;
   /** Resolved on tap — a track's extent needs its points read back. */
   resolveBbox: () => Promise<Bbox | null>;
-  /** Persist a new display name. Every kind supports this. */
-  rename: (name: string) => Promise<unknown>;
+  /** Persist a new display name. Absent on a shared route or waypoint, which
+   *  is read-only — see `AssetActions.rename`. */
+  rename?: (name: string) => Promise<unknown>;
   /**
    * The files behind ONE card. A region download writes one artifact per
    * basemap and a LiDAR topo job one per layer; the card is the thing the user
@@ -269,7 +271,10 @@ type SavedItem = {
     sizeBytes: number;
     delete: () => Promise<unknown>;
   }[];
-  delete: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
+  /** Absent on an asset this user may not delete — see `AssetActions.delete`.
+   *  Such a row offers no Delete in its sheet and cannot be multi-selected,
+   *  because deleting is the only thing a selection does. */
+  delete?: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
   /** Present on an editable route — the map's draw tool reopens this id. */
   editableRouteId?: string;
   /** Present on an editable route: flip vertex order (direction is semantic). */
@@ -381,6 +386,23 @@ export function SavedScreen({
       keys.includes(key) ? keys.filter((other) => other !== key) : [...keys, key],
     );
   }, []);
+  /**
+   * Deleting is the only thing a selection does, so an asset the user may not
+   * delete — a route or waypoint shared with them — has nothing to be picked
+   * for, and picking it would only teach the count to lie. The press still
+   * ANSWERS, with the reason: a row that ignores a long press reads as a
+   * missed tap, and the user would keep trying.
+   */
+  const selectItem = useCallback(
+    (item: SavedItem) => {
+      if (!item.delete) {
+        info("Shared with you — only its owner can delete it.");
+        return;
+      }
+      toggleSelected(item.key);
+    },
+    [info, toggleSelected],
+  );
 
   // Leaving the tab drops any open per-item sheet: coming back to a rename form
   // for a row you have since navigated away from is a stale prompt, not a
@@ -1096,6 +1118,7 @@ export function SavedScreen({
   );
   const selecting = selectedItems.length > 0;
   const selectedBytes = selectedItems.reduce((sum, item) => sum + item.sizeBytes, 0);
+  const selectableItems = visibleItems.filter((item) => item.delete);
 
   /** One confirm for the whole batch; the sentence itself is
    *  `bulkDeleteConfirmBody`, which owns every count/kind combination. */
@@ -1120,9 +1143,13 @@ export function SavedScreen({
             // independent deletes and stopping at the first one leaves the user
             // guessing which half happened.
             let failures = 0;
-            for (const item of targets) {
+            // An item with no delete descriptor cannot be selected in the
+            // first place; filtering rather than asserting keeps that true by
+            // construction if the selection rule ever changes.
+            const removals = targets.flatMap((item) => item.delete ?? []);
+            for (const removal of removals) {
               try {
-                await item.delete.run();
+                await removal.run();
               } catch (err) {
                 console.error(err);
                 failures += 1;
@@ -1140,13 +1167,15 @@ export function SavedScreen({
 
   const deleteItem = useCallback(
     (item: SavedItem) => {
-      Alert.alert(item.delete.confirmTitle, item.delete.confirmBody, [
+      const removal = item.delete;
+      if (!removal) return;
+      Alert.alert(removal.confirmTitle, removal.confirmBody, [
         { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
           style: "destructive",
           onPress: () => {
-            item.delete
+            removal
               .run()
               .then(refreshFreeSpace)
               .catch((err: unknown) => {
@@ -1303,11 +1332,13 @@ export function SavedScreen({
             {countOf(selectedItems.length, "item")} selected
             {selectedBytes > 0 ? ` · ${formatBytes(selectedBytes)}` : ""}
           </Text>
-          {selectedItems.length < visibleItems.length ? (
+          {/* "Everything" means everything a selection can act on — a shared
+              route or waypoint is skipped rather than picked and then refused. */}
+          {selectedItems.length < selectableItems.length ? (
             <IconButton
               icon="check-square"
               accessibilityLabel="Select everything in this list"
-              onPress={() => setSelectedKeys(visibleItems.map((item) => item.key))}
+              onPress={() => setSelectedKeys(selectableItems.map((item) => item.key))}
             />
           ) : null}
           <IconButton
@@ -1515,19 +1546,24 @@ export function SavedScreen({
             // plain tap toggles. Outside the mode a row still has no onPress —
             // its verbs live in the ⋯ sheet, and a whole-row tap that did one
             // of them would be a mis-tap waiting to happen (DESIGN.md §7).
-            onLongPress={() => toggleSelected(item.key)}
-            onPress={selecting ? () => toggleSelected(item.key) : undefined}
+            onLongPress={() => selectItem(item)}
+            onPress={selecting ? () => selectItem(item) : undefined}
             right={
               selecting ? (
                 <View style={styles.rowActions}>
                   {item.sizeBytes > 0 ? (
                     <Text style={styles.size}>{formatBytes(item.sizeBytes)}</Text>
                   ) : null}
-                  <Feather
-                    name={picked ? "check-circle" : "circle"}
-                    size={22}
-                    color={picked ? theme.accent : theme.textMuted}
-                  />
+                  {/* No circle at all on a row that cannot be picked: an
+                      empty checkbox is a promise that tapping it does
+                      something. */}
+                  {item.delete ? (
+                    <Feather
+                      name={picked ? "check-circle" : "circle"}
+                      size={22}
+                      color={picked ? theme.accent : theme.textMuted}
+                    />
+                  ) : null}
                 </View>
               ) : (
               <View style={styles.rowActions}>
@@ -1813,7 +1849,7 @@ export function SavedScreen({
                 const target = menuItem;
                 if (menuWaypoint) {
                   if (Object.keys(changed).length > 0) writeMenuWaypoint(changed);
-                } else if (changed.name) {
+                } else if (changed.name && target.rename) {
                   target.rename(changed.name).catch((err: unknown) => {
                     console.error(err);
                     fail(messageFromError(err, "Couldn't rename that."));
@@ -1836,6 +1872,11 @@ export function SavedScreen({
             />
           ) : (
             <>
+              {/* Says why the write verbs below are missing, in the same words
+                  the map's waypoint sheet uses. */}
+              {menuItem.delete ? null : (
+                <Text style={styles.sharedHint}>{SHARED_READ_ONLY_HINT}</Text>
+              )}
               {menuItem.locatable ? (
                 <Row
                   title="Show on map"
@@ -1884,12 +1925,17 @@ export function SavedScreen({
                   />
                 </>
               ) : null}
-              <Row
-                title={menuWaypoint ? "Edit name and notes" : "Rename"}
-                icon="edit-2"
-                hue={theme.bonus1}
-                onPress={() => setMenuMode("rename")}
-              />
+              {/* Absent on a shared route or waypoint: the rename used to be
+                  offered, take the user's typing and drop it (the descriptor's
+                  stub resolved without writing anything). */}
+              {menuItem.rename ? (
+                <Row
+                  title={menuWaypoint ? "Edit name and notes" : "Rename"}
+                  icon="edit-2"
+                  hue={theme.bonus1}
+                  onPress={() => setMenuMode("rename")}
+                />
+              ) : null}
               {/* The same two verbs the waypoint's map sheet offers, rendering
                   the same bodies — a waypoint reached from Saved must not be a
                   lesser object than one reached from the map (DESIGN.md §7). */}
@@ -1922,23 +1968,28 @@ export function SavedScreen({
               {/* Every asset that reaches THIS sheet is a file on this
                   handset. A route is not — it is a synced record whose delete
                   removes it from the account — which is why routes get their
-                  own sheet rather than this label with a branch in it. */}
-              <Row
-                title={
-                  menuWaypoint
-                    ? "Delete waypoint"
-                    : menuItem.members && menuItem.members.length > 1
-                      ? "Delete all from device"
-                      : "Delete from device"
-                }
-                icon="trash-2"
-                hue={theme.warning}
-                onPress={() => {
-                  const target = menuItem;
-                  closeItemSheet();
-                  deleteItem(target);
-                }}
-              />
+                  own sheet rather than this label with a branch in it.
+                  No descriptor = not this user's to delete (a shared
+                  waypoint): the verb is absent rather than shown and refused,
+                  and the hint above says why. */}
+              {menuItem.delete ? (
+                <Row
+                  title={
+                    menuWaypoint
+                      ? "Delete waypoint"
+                      : menuItem.members && menuItem.members.length > 1
+                        ? "Delete all from device"
+                        : "Delete from device"
+                  }
+                  icon="trash-2"
+                  hue={theme.warning}
+                  onPress={() => {
+                    const target = menuItem;
+                    closeItemSheet();
+                    deleteItem(target);
+                  }}
+                />
+              ) : null}
               {/* What this card is actually made of — the area's basemaps, the
                   topo job's layers — each with its own size and its own
                   delete, so one map can go without losing the rest. */}
@@ -2138,6 +2189,9 @@ const styles = StyleSheet.create({
   rowActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
   size: { color: theme.textMuted, fontSize: fontSize.xs, fontWeight: fontWeight.medium },
   sheetBody: { gap: spacing(1) },
+  // Same treatment as the map's waypoint sheet hint: a footnote above the
+  // verbs, not a warning.
+  sharedHint: { color: theme.textMuted, fontSize: fontSize.xs },
   // Small and honest: the constraint is real, but it is a footnote to the
   // cards above it, not a warning banner.
   downloadNote: {
