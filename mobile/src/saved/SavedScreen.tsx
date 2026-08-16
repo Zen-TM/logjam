@@ -96,7 +96,7 @@ import { useVectorImports } from "../imports/useVectorImports";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityRowProps, capabilityStatus } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
-import type { BasemapId } from "../map/sourceResolver";
+import type { BasemapId, MapArtifact } from "../map/sourceResolver";
 import { mergeSavedOverlayJobs, type CompletedOverlaysResponse } from "../map/topoOverlays";
 import { downloadTopoOverlay } from "../offline/overlayDownloads";
 import { deleteDownloadedArtifact } from "../offline/regionDownloads";
@@ -152,6 +152,13 @@ function formatDay(iso: string): string {
 /** A basemap-region artifact's logicalKey IS the basemap it holds tiles for. */
 function basemapName(logicalKey: string): string {
   return BASEMAP_CATALOG.find((entry) => entry.id === logicalKey)?.name ?? "Basemap";
+}
+
+/** What one row of a region card is, listed under the ⋯ sheet. */
+function regionMemberName(artifact: MapArtifact): string {
+  return artifact.kind === "dem-region"
+    ? "Elevation data"
+    : basemapName(artifact.logicalKey);
 }
 
 /** A topo-overlay artifact's logicalKey is `<jobId>/<layer>`. */
@@ -393,7 +400,12 @@ export function SavedScreen({
 
   // --- Downloaded regions + topo overlays (registry-backed) ---
   const { artifacts } = useMapArtifacts();
-  const regionArtifacts = artifacts.filter((a) => a.kind === "basemap-region");
+  // The DEM saved with a run belongs to that run's card: its bytes are part of
+  // what the area cost, and deleting the area has to take it with it. It is not
+  // one of the "maps", though — see `basemapMembers`.
+  const regionArtifacts = artifacts.filter(
+    (a) => a.kind === "basemap-region" || a.kind === "dem-region",
+  );
 
   // A region download in flight, as one card per run at the top of the Regions
   // filter. It is background work — the queue keeps running while the user is
@@ -439,6 +451,11 @@ export function SavedScreen({
           groupId: region.groupId ?? region.id,
           groupLabel: region.groupLabel ?? region.label,
           bbox: region.bbox,
+          // Both ends of the zoom range come off the file, so a resumed DEM
+          // (one flat level) is re-planned as one flat level rather than as a
+          // basemap pyramid — which would hash to a different plan and throw
+          // the checkpoint's gap list away.
+          zMin: region.zMin,
           zMax: region.zMax,
           allowCellular: false,
         },
@@ -710,16 +727,21 @@ export function SavedScreen({
     // (no groupId) group under their own id and stand alone, unchanged.
     for (const group of groupArtifacts(regionArtifacts, regionGroupKey)) {
       const first = group.members[0];
+      // The DEM saved with the run is a member (its bytes and its deletion
+      // belong to this card) but it is not a MAP: it is never drawn, never
+      // switched to, and counting it would tell the user they saved three maps
+      // when they picked two.
+      const basemapMembers = group.members.filter((a) => a.kind !== "dem-region");
       rows.push({
         key: `region:${group.key}`,
         category: "region",
         title: group.label ?? "Offline map region",
-        subtitle: `${countOf(group.members.length, "map")} · saved ${formatDay(first.downloadedAt)}`,
+        subtitle: `${countOf(basemapMembers.length, "map")} · saved ${formatDay(first.downloadedAt)}`,
         sizeBytes: group.sizeBytes,
         locatable: group.bbox != null,
         // Which basemap to switch the map to on "Show on map" — the first of
         // the area's maps; the others cover the same ground.
-        focusBasemapId: first.logicalKey as BasemapId,
+        focusBasemapId: basemapMembers[0]?.logicalKey as BasemapId | undefined,
         resolveBbox: async () => group.bbox,
         // A rename is the name of the AREA, so it reaches every row of the run.
         rename: (name) =>
@@ -728,13 +750,13 @@ export function SavedScreen({
             : renameArtifact(first.id, name),
         members: group.members.map((artifact) => ({
           id: artifact.id,
-          title: basemapName(artifact.logicalKey),
+          title: regionMemberName(artifact),
           sizeBytes: artifact.sizeBytes,
           delete: () => deleteDownloadedArtifact(artifact.id),
         })),
         delete: {
           confirmTitle: "Delete this region?",
-          confirmBody: `The offline tiles for this area (${countOf(group.members.length, "map")}) are removed from the device.`,
+          confirmBody: `The offline tiles for this area (${countOf(basemapMembers.length, "map")}) are removed from the device.`,
           run: async () => {
             for (const artifact of group.members) {
               await deleteDownloadedArtifact(artifact.id);
@@ -1306,7 +1328,7 @@ export function SavedScreen({
                 subtitle={
                   group.settled
                     ? `${countOf(group.unfinished, "map")} didn't finish`
-                    : `${group.ready} of ${countOf(group.jobs.length, "map")} saved`
+                    : `${group.ready} of ${countOf(group.mapCount, "map")} saved`
                 }
                 icon="download-cloud"
                 hue={group.settled ? theme.warning : assetHue.region}

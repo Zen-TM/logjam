@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { DEM_TILE_ZOOM } from "./demTiles.js";
 import {
+  DEM_SOURCE_ID,
   MAX_REGION_TILES,
   REGION_MIN_ZOOM,
   SOFT_WARN_TILES,
@@ -183,9 +185,13 @@ describe("planRegionForBasemaps", () => {
   const maxZoomFor = (id: OfflineBasemapId) =>
     ({ "six-topo": 16, "six-base": 18, "six-imagery": 18 })[id];
 
+  /** The basemap pyramids only — every plan also carries the DEM (see below). */
+  const basemapSources = (job: ReturnType<typeof planRegionForBasemaps>) =>
+    job.perSource.filter((s) => s.basemapId !== DEM_SOURCE_ID);
+
   it("clamps each source to its own deepest served level", () => {
     const job = planRegionForBasemaps(TEN_KM, ["six-topo", "six-base"], 18, maxZoomFor);
-    expect(job.perSource.map((s) => s.zMax)).toEqual([16, 18]);
+    expect(basemapSources(job).map((s) => s.zMax)).toEqual([16, 18]);
   });
 
   it("totals tiles and bytes across sources — three maps is three downloads", () => {
@@ -196,9 +202,43 @@ describe("planRegionForBasemaps", () => {
       16,
       maxZoomFor,
     );
-    expect(two.totalTiles).toBe(one.totalTiles * 2);
+    const dem = one.perSource.find((s) => s.basemapId === DEM_SOURCE_ID)!;
+    // The DEM is in both plans once, so it cancels out of the doubling.
+    expect(two.totalTiles - dem.plan.totalTiles).toBe(
+      (one.totalTiles - dem.plan.totalTiles) * 2,
+    );
     expect(two.meanBytes).toBeGreaterThan(one.meanBytes);
     expect(two.seconds).toBe(estimateRegionSeconds(two.totalTiles));
+  });
+
+  // The DEM rides along unasked (that is the feature), so the two things that
+  // could quietly go wrong are: it stops riding along, or it starts scaling
+  // with the detail rail and blows out a download the user sized by eye.
+  it("saves the DEM with every region, at one flat level, whatever is selected", () => {
+    for (const ids of [[], ["six-topo"], ["six-topo", "six-imagery"]] as const) {
+      const job = planRegionForBasemaps(TEN_KM, [...ids], 16, maxZoomFor);
+      const dem = job.perSource.filter((s) => s.basemapId === DEM_SOURCE_ID);
+      expect(dem).toHaveLength(1);
+      expect(dem[0].plan.perZoom.map((level) => level.z)).toEqual([DEM_TILE_ZOOM]);
+    }
+  });
+
+  it("does not deepen the DEM when the detail rail moves", () => {
+    const demAt = (zMax: number) =>
+      planRegionForBasemaps(TEN_KM, ["six-base"], zMax, maxZoomFor).perSource.find(
+        (s) => s.basemapId === DEM_SOURCE_ID,
+      )!;
+    expect(demAt(18).plan.totalTiles).toBe(demAt(12).plan.totalTiles);
+    expect(demAt(18).size.p90Bytes).toBe(demAt(12).size.p90Bytes);
+  });
+
+  it("counts the DEM in the totals the caps and the space check read", () => {
+    const job = planRegionForBasemaps(TEN_KM, ["six-topo"], 16, maxZoomFor);
+    const dem = job.perSource.find((s) => s.basemapId === DEM_SOURCE_ID)!;
+    expect(job.totalTiles).toBe(
+      job.perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0),
+    );
+    expect(job.p90Bytes).toBeGreaterThanOrEqual(dem.size.p90Bytes);
   });
 
   it("starts every pyramid at REGION_MIN_ZOOM so a zoomed-out offline map is not blank", () => {

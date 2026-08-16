@@ -24,10 +24,23 @@ const BBOXES = [
 ];
 const SAMPLES_PER_ZOOM_PER_BBOX = 7;
 
+const six = (service) => (z, x, y) =>
+  `https://maps.six.nsw.gov.au/arcgis/rest/services/public/${service}/MapServer/tile/${z}/${y}/${x}`;
+
 const SOURCES = [
-  { id: "six-topo", service: "NSW_Topo_Map", maxZoom: 16 },
-  { id: "six-base", service: "NSW_Base_Map", maxZoom: 18 },
-  { id: "six-imagery", service: "NSW_Imagery", maxZoom: 18 },
+  { id: "six-topo", url: six("NSW_Topo_Map"), minZoom: 12, maxZoom: 16 },
+  { id: "six-base", url: six("NSW_Base_Map"), minZoom: 12, maxZoom: 18 },
+  { id: "six-imagery", url: six("NSW_Imagery"), minZoom: 12, maxZoom: 18 },
+  // The DEM the offline elevation download saves. ONE zoom, because that is the
+  // only level anything reads it at (DEM_TILE_ZOOM in src/demTiles.ts) — a
+  // pyramid would be tiles nothing ever opens.
+  {
+    id: "terrarium",
+    url: (z, x, y) =>
+      `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`,
+    minZoom: 13,
+    maxZoom: 13,
+  },
 ];
 
 function lonLatToTile(lon, lat, z) {
@@ -44,19 +57,23 @@ function percentile(sorted, p) {
   return sorted[index];
 }
 
-async function tileBytes(service, z, x, y) {
-  const url = `https://maps.six.nsw.gov.au/arcgis/rest/services/public/${service}/MapServer/tile/${z}/${y}/${x}`;
-  const response = await fetch(url);
+async function tileBytes(source, z, x, y) {
+  const response = await fetch(source.url(z, x, y));
   if (response.status === 404) return null; // uncached area — a "gap", not a size
-  if (!response.ok) throw new Error(`${service} z${z} HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`${source.id} z${z} HTTP ${response.status}`);
   const buffer = await response.arrayBuffer();
   return buffer.byteLength;
 }
 
+// Optional id filter, so re-measuring one source doesn't re-poll the others'
+// caches for twenty minutes: `node ... calibrate-basemap-tile-sizes.mjs terrarium`
+const only = process.argv.slice(2);
+
 for (const source of SOURCES) {
+  if (only.length > 0 && !only.includes(source.id)) continue;
   const perZoom = [];
   const all = [];
-  for (let z = 12; z <= source.maxZoom; z++) {
+  for (let z = source.minZoom; z <= source.maxZoom; z++) {
     const sizes = [];
     let gaps = 0;
     for (const bbox of BBOXES) {
@@ -65,7 +82,7 @@ for (const source of SOURCES) {
       for (let i = 0; i < SAMPLES_PER_ZOOM_PER_BBOX; i++) {
         const x = min.x + Math.floor(Math.random() * (max.x - min.x + 1));
         const y = min.y + Math.floor(Math.random() * (max.y - min.y + 1));
-        const bytes = await tileBytes(source.service, z, x, y);
+        const bytes = await tileBytes(source, z, x, y);
         if (bytes == null) gaps++;
         else {
           sizes.push(bytes);

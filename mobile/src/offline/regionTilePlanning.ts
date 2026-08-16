@@ -5,7 +5,7 @@
 //
 // The response classifier is the one worth reading twice — it is what stops a
 // 200 carrying an error page being written into the archive as a tile.
-import { REGION_MIN_ZOOM, type RegionBbox, type RegionTilePlan } from "@logjam/shared";
+import type { RegionBbox, RegionTilePlan } from "@logjam/shared";
 
 import { hashKey } from "../map/sourceResolver";
 
@@ -28,11 +28,15 @@ export function regionTileSequence(plan: RegionTilePlan): [number, number, numbe
 export function regionPlanHash(spec: {
   basemapId: string;
   bbox: RegionBbox;
+  /** Shallowest planned level — part of the premise since the DEM's pyramid
+   * starts at its own zoom rather than REGION_MIN_ZOOM. Hashing only zMax would
+   * make two genuinely different plans compare equal. */
+  zMin: number;
   zMax: number;
 }): string {
   const { west, south, east, north } = spec.bbox;
   return hashKey(
-    `${spec.basemapId}|${west.toFixed(6)},${south.toFixed(6)},${east.toFixed(6)},${north.toFixed(6)}|${REGION_MIN_ZOOM}-${spec.zMax}|1`,
+    `${spec.basemapId}|${west.toFixed(6)},${south.toFixed(6)},${east.toFixed(6)},${north.toFixed(6)}|${spec.zMin}-${spec.zMax}|1`,
   );
 }
 

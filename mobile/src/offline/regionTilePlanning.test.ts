@@ -25,22 +25,28 @@ describe("regionTileSequence", () => {
 });
 
 describe("regionPlanHash", () => {
+  const SPEC = { basemapId: "six-topo", bbox: BBOX, zMin: 8, zMax: 16 };
+
   it("is stable for the same premise", () => {
-    const spec = { basemapId: "six-topo", bbox: BBOX, zMax: 16 };
-    expect(regionPlanHash(spec)).toBe(regionPlanHash({ ...spec }));
+    expect(regionPlanHash(SPEC)).toBe(regionPlanHash({ ...SPEC }));
   });
 
   it("changes when the source, the area or the depth changes", () => {
-    const base = regionPlanHash({ basemapId: "six-topo", bbox: BBOX, zMax: 16 });
-    expect(regionPlanHash({ basemapId: "six-base", bbox: BBOX, zMax: 16 })).not.toBe(base);
-    expect(regionPlanHash({ basemapId: "six-topo", bbox: BBOX, zMax: 15 })).not.toBe(base);
+    const base = regionPlanHash(SPEC);
+    expect(regionPlanHash({ ...SPEC, basemapId: "six-base" })).not.toBe(base);
+    expect(regionPlanHash({ ...SPEC, zMax: 15 })).not.toBe(base);
     expect(
-      regionPlanHash({
-        basemapId: "six-topo",
-        bbox: { ...BBOX, north: -33.6 },
-        zMax: 16,
-      }),
+      regionPlanHash({ ...SPEC, bbox: { ...BBOX, north: -33.6 } }),
     ).not.toBe(base);
+  });
+
+  // The DEM plans one flat level over the same area a basemap plans a whole
+  // pyramid over. Without zMin in the hash those two premises collide, and a
+  // resume would diff the wrong plan against the file.
+  it("changes when only the shallowest level changes", () => {
+    expect(regionPlanHash({ ...SPEC, zMin: 13, zMax: 13 })).not.toBe(
+      regionPlanHash({ ...SPEC, zMin: 8, zMax: 13 }),
+    );
   });
 });
 

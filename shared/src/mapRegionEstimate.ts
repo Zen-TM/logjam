@@ -2,6 +2,8 @@
 // estimator UI, the download caps, the tile-pyramid downloader, and resume:
 // all derive from the same deterministic plan so they can never disagree.
 
+import { DEM_TILE_ZOOM } from "./demTiles.js";
+
 export type RegionBbox = {
   west: number;
   south: number;
@@ -150,6 +152,17 @@ export function checkRegionCaps(
 export type OfflineBasemapId = "six-topo" | "six-base" | "six-imagery";
 
 /**
+ * The DEM saved alongside every region, so elevation profiles, point heights
+ * and route gain/loss survive going offline. NOT a basemap: nothing draws it,
+ * it never appears in the layer picker, and it is deliberately outside
+ * `OfflineBasemapId` so it cannot leak into one.
+ */
+export const DEM_SOURCE_ID = "terrarium";
+
+/** Anything the tile-pyramid downloader can fetch — basemaps plus the DEM. */
+export type DownloadableTileSourceId = OfflineBasemapId | typeof DEM_SOURCE_ID;
+
+/**
  * The pyramid always starts here: z8–z9 context costs ~10 tiles in total and is
  * what stops a zoomed-out offline map being a blank screen (deviation DV2 — the
  * user picks only the detail end).
@@ -181,7 +194,7 @@ export const REGION_MIN_ZOOM = 8;
  * errors — the downloader records them and the UI counts them separately.
  */
 const TILE_BYTES: Record<
-  OfflineBasemapId,
+  DownloadableTileSourceId,
   Record<number, { meanBytes: number; p90Bytes: number }>
 > = {
   "six-topo": {
@@ -199,6 +212,13 @@ const TILE_BYTES: Record<
     16: { meanBytes: 18_518, p90Bytes: 25_044 },
     17: { meanBytes: 9_113, p90Bytes: 15_942 },
     18: { meanBytes: 5_720, p90Bytes: 8_066 },
+  },
+  // ONE zoom, because DEM_TILE_ZOOM is the only level anything reads
+  // (shared/src/demTiles.ts). Measured 2026-08-16, same script, 14 tiles over
+  // the same two bboxes: terrarium PNGs are noise-like height fields, so town
+  // and bush cost the same and the spread is narrow.
+  terrarium: {
+    13: { meanBytes: 34_495, p90Bytes: 38_109 },
   },
   "six-imagery": {
     12: { meanBytes: 15_885, p90Bytes: 21_250 },
@@ -223,11 +243,11 @@ const CONTAINER_OVERHEAD = 1.071;
 
 /** Nearest measured zoom's figures — z8–z11 ride the shallowest measurement. */
 function tileBytesAt(
-  basemapId: OfflineBasemapId,
+  sourceId: DownloadableTileSourceId,
   z: number,
 ): { meanBytes: number; p90Bytes: number } {
-  const table = TILE_BYTES[basemapId];
-  if (!table) throw new Error(`Unknown offline basemap id: ${basemapId}`);
+  const table = TILE_BYTES[sourceId];
+  if (!table) throw new Error(`Unknown offline tile source id: ${sourceId}`);
   const measured = Object.keys(table).map(Number);
   const nearest = measured.reduce((best, candidate) =>
     Math.abs(candidate - z) < Math.abs(best - z) ? candidate : best,
@@ -248,12 +268,12 @@ export interface RegionSizeEstimate {
  */
 export function estimateRegionSize(
   plan: RegionTilePlan,
-  basemapId: OfflineBasemapId,
+  sourceId: DownloadableTileSourceId,
 ): RegionSizeEstimate {
   let meanBytes = 0;
   let p90Bytes = 0;
   for (const level of plan.perZoom) {
-    const perTile = tileBytesAt(basemapId, level.z);
+    const perTile = tileBytesAt(sourceId, level.z);
     meanBytes += level.count * perTile.meanBytes;
     p90Bytes += level.count * perTile.p90Bytes;
   }
@@ -276,7 +296,9 @@ export function estimateRegionSeconds(totalTiles: number): number {
 
 export interface MultiSourceRegionPlan {
   perSource: {
-    basemapId: OfflineBasemapId;
+    basemapId: DownloadableTileSourceId;
+    /** Shallowest level of this source's pyramid. Flat sources set it to zMax. */
+    zMin: number;
     /** zMax after clamping to what this source actually serves. */
     zMax: number;
     plan: RegionTilePlan;
@@ -293,6 +315,13 @@ export interface MultiSourceRegionPlan {
  * source, each clamped to its own deepest served level, plus the totals the
  * caps and the estimator UI both read. Selecting three sources at z16 is three
  * downloads and three times the bytes — the figure has to say so.
+ *
+ * The DEM rides along with EVERY region, unasked. It is a single flat level and
+ * a few percent of one basemap's bytes, and without it a saved area loses its
+ * elevation profiles, point heights and route gain/loss the moment the phone
+ * goes offline — which is the trip the download exists for. Costing it into
+ * these totals (rather than adding it silently later) is what keeps the size
+ * estimate, the tile cap and the free-space check honest.
  */
 export function planRegionForBasemaps(
   bbox: RegionBbox,
@@ -300,16 +329,27 @@ export function planRegionForBasemaps(
   zMax: number,
   maxZoomFor: (basemapId: OfflineBasemapId) => number,
 ): MultiSourceRegionPlan {
-  const perSource = basemapIds.map((basemapId) => {
-    const clamped = Math.min(zMax, maxZoomFor(basemapId));
-    const plan = planRegionTiles(bbox, REGION_MIN_ZOOM, clamped);
-    return {
-      basemapId,
-      zMax: clamped,
-      plan,
-      size: estimateRegionSize(plan, basemapId),
-    };
-  });
+  const demPlan = planRegionTiles(bbox, DEM_TILE_ZOOM, DEM_TILE_ZOOM);
+  const perSource = [
+    ...basemapIds.map((basemapId) => {
+      const clamped = Math.min(zMax, maxZoomFor(basemapId));
+      const plan = planRegionTiles(bbox, REGION_MIN_ZOOM, clamped);
+      return {
+        basemapId: basemapId as DownloadableTileSourceId,
+        zMin: REGION_MIN_ZOOM,
+        zMax: clamped,
+        plan,
+        size: estimateRegionSize(plan, basemapId),
+      };
+    }),
+    {
+      basemapId: DEM_SOURCE_ID as DownloadableTileSourceId,
+      zMin: DEM_TILE_ZOOM,
+      zMax: DEM_TILE_ZOOM,
+      plan: demPlan,
+      size: estimateRegionSize(demPlan, DEM_SOURCE_ID),
+    },
+  ];
   const totalTiles = perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0);
   return {
     perSource,

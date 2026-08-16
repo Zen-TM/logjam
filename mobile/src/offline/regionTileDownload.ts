@@ -25,9 +25,12 @@ import * as FileSystem from "expo-file-system/legacy";
 import { fetch as expoFetch } from "expo/fetch";
 import {
   BASEMAP_CATALOG,
+  DEM_ATTRIBUTION,
+  DEM_SOURCE_ID,
+  DEM_TILE_URL_TEMPLATE,
   REGION_MIN_ZOOM,
   planRegionTiles,
-  type OfflineBasemapId,
+  type DownloadableTileSourceId,
   type RegionBbox,
 } from "@logjam/shared";
 
@@ -76,7 +79,8 @@ export type PausedReason =
 export type RegionJobSpec = {
   /** uuid — also the MBTiles filename, and the artifact id on success. */
   id: string;
-  basemapId: OfflineBasemapId;
+  /** A basemap, or the DEM that rides along with every region. */
+  basemapId: DownloadableTileSourceId;
   /** User-facing name; goes in the MBTiles `name` row and the Saved list. */
   label: string;
   /** The download run this job belongs to — see MapArtifact.groupId. */
@@ -84,6 +88,13 @@ export type RegionJobSpec = {
   /** The name the user gave that run's area, live-editable while it downloads. */
   groupLabel: string;
   bbox: RegionBbox;
+  /**
+   * Shallowest level to fetch. Defaults to `REGION_MIN_ZOOM` — a basemap needs
+   * the zoomed-out context levels or the offline map is blank when you pinch
+   * out. The DEM sets it equal to `zMax`: it is read at exactly one zoom, so
+   * every other level would be tiles nothing ever opens.
+   */
+  zMin?: number;
   zMax: number;
   /** Per-job opt-in; Wi-Fi-only otherwise (§5.6). */
   allowCellular: boolean;
@@ -184,6 +195,41 @@ export async function connectionAllows(allowCellular: boolean): Promise<boolean>
   return connectionAllowsMetered(state, allowCellular);
 }
 
+/**
+ * Where a downloadable source's tiles come from, what to credit, and what the
+ * finished file IS.
+ *
+ * The DEM is not in `BASEMAP_CATALOG` and must not be: the catalog is the list
+ * of maps the layer picker offers, and nothing draws terrarium tiles. It is
+ * still fetched by this same engine under the same politeness envelope, so the
+ * only thing that differs is these three fields.
+ */
+function tileSourceFor(sourceId: DownloadableTileSourceId): {
+  urlTemplate: string;
+  attribution: string;
+  kind: MapArtifact["kind"];
+} {
+  if (sourceId === DEM_SOURCE_ID) {
+    return {
+      urlTemplate: DEM_TILE_URL_TEMPLATE,
+      attribution: DEM_ATTRIBUTION,
+      kind: "dem-region",
+    };
+  }
+  const entry = BASEMAP_CATALOG.find((candidate) => candidate.id === sourceId);
+  if (!entry) throw new Error(`Unknown basemap id: ${sourceId}`);
+  if (!entry.offlineCapable) {
+    // A programming error: the picker must never offer a source the catalog
+    // marks online-only.
+    throw new Error(`Basemap ${sourceId} is not offline-capable`);
+  }
+  return {
+    urlTemplate: entry.urlTemplate,
+    attribution: entry.attribution,
+    kind: "basemap-region",
+  };
+}
+
 // ── The engine ───────────────────────────────────────────────────────────────
 
 /**
@@ -199,16 +245,10 @@ export async function runRegionDownload(
   onProgress: (progress: RegionJobProgress) => void,
   token: RegionCancelToken,
 ): Promise<RegionRunOutcome> {
-  const entry = BASEMAP_CATALOG.find((candidate) => candidate.id === spec.basemapId);
-  if (!entry) throw new Error(`Unknown basemap id: ${spec.basemapId}`);
-  if (!entry.offlineCapable) {
-    // A programming error: the picker must never offer a source the catalog
-    // marks online-only.
-    throw new Error(`Basemap ${spec.basemapId} is not offline-capable`);
-  }
-
-  const plan = planRegionTiles(spec.bbox, REGION_MIN_ZOOM, spec.zMax);
-  const planHash = regionPlanHash(spec);
+  const source = tileSourceFor(spec.basemapId);
+  const zMin = spec.zMin ?? REGION_MIN_ZOOM;
+  const plan = planRegionTiles(spec.bbox, zMin, spec.zMax);
+  const planHash = regionPlanHash({ ...spec, zMin });
   const target = await openRegionMbtiles(spec.id);
 
   try {
@@ -217,10 +257,11 @@ export async function runRegionDownload(
       groupId: spec.groupId,
       groupLabel: spec.groupLabel,
       basemapId: spec.basemapId,
+      kind: source.kind,
       bbox: spec.bbox,
-      zMin: REGION_MIN_ZOOM,
+      zMin,
       zMax: spec.zMax,
-      attribution: entry.attribution,
+      attribution: source.attribution,
       planHash,
     });
 
@@ -312,7 +353,7 @@ export async function runRegionDownload(
       try {
         // No headers at all: the platform default User-Agent and nothing else.
         const response = await expoFetch(
-          tileUrlFrom(entry.urlTemplate, z, x, y),
+          tileUrlFrom(source.urlTemplate, z, x, y),
           { signal: controller.signal },
         );
         if (response.status !== 200) {
@@ -433,13 +474,13 @@ export async function runRegionDownload(
     const info = await FileSystem.getInfoAsync(target.uri);
     const artifact: MapArtifact = {
       id: spec.id,
-      kind: "basemap-region",
+      kind: source.kind,
       logicalKey: spec.basemapId,
       format: "mbtiles",
       sourceType: "raster",
       path: target.path,
       bbox: [spec.bbox.west, spec.bbox.south, spec.bbox.east, spec.bbox.north],
-      minzoom: REGION_MIN_ZOOM,
+      minzoom: zMin,
       maxzoom: spec.zMax,
       sizeBytes: info.exists ? (info.size ?? bytesDone) : bytesDone,
       downloadedAt: new Date().toISOString(),

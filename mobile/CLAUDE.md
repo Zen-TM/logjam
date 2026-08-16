@@ -183,6 +183,20 @@ and its `layerIndex` is `1 + basemapLayerCount` — an offline basemap mounts on
 raster layer *per region*, all asking for index 1, so assuming a single basemap
 layer buries the mask under one of them and it renders half the screen.
 
+**Every region download also saves the DEM, and that is not optional.** The
+plan in `shared/src/mapRegionEstimate.ts` appends a `terrarium` source
+(`DEM_SOURCE_ID`) to every run: one flat level at `DEM_TILE_ZOOM`, priced into
+the same size estimate, tile cap and free-space check as the basemaps, and
+enqueued as an ordinary `tile-pyramid` job whose `zMin === zMax`. It lands as a
+`dem-region` artifact — same group id as the run, so Saved shows it inside the
+area's card and deleting the area takes it — which the resolver never draws.
+Without it, elevation profiles, point heights and route gain/loss die the moment
+the phone loses signal, which is the trip the download exists for. The reader is
+`offline/demLookup.ts` (MBTiles → `demPng.ts` → the shared pixel maths), wired
+into `useElevationProfile` LOCAL FIRST: saved regions answer, and only a line
+nothing on disk covers goes to the API. That also gives a guest elevation, which
+the API path never could.
+
 **Size estimates are measured, not guessed.** `shared/src/mapRegionEstimate.ts`
 holds per-source, per-zoom tile sizes calibrated by
 `shared/scripts/calibrate-basemap-tile-sizes.mjs` (bush AND town samples — a
@@ -306,7 +320,11 @@ note is mandatory. Non-negotiables:
 - No new public/unauth endpoints. Reuse the authed API + its 404-not-403 anti-oracle
   (surface "not found", never "exists but hidden").
 - Region-of-interest bboxes stay off the server (SIXMaps client-direct; Protomaps
-  clip endpoint must not log bboxes). The tile-pyramid path contains **no**
+  clip endpoint must not log bboxes). The DEM download is on that same
+  client-direct path — terrarium tiles come straight from S3 to the phone, so a
+  saved area's coarse location is exposed to that host exactly as the SIX tiles
+  already are, and to no one else. Reading them back afterwards leaves the
+  device entirely. The tile-pyramid path contains **no**
   `apiFetch` — that absence is the privacy property, so keep it out of any new code
   on that path.
 

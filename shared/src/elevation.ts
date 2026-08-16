@@ -1,8 +1,10 @@
 // Elevation profiles for drawn routes and the measure tool.
 //
-// The pure half lives here; the DEM sampling itself is server-side
-// (api/src/services/elevation.ts) so there is one implementation for web and
-// mobile, one tile cache, and no DEM tile requests leaving the user's device.
+// The pure half lives here. The sampling itself has two readers, agreeing by
+// construction because both address tiles through `demTiles.ts`:
+// api/src/services/elevation.ts fetches them (the online path, one warm cache
+// for web and mobile), and mobile/src/offline/demLookup.ts reads them out of a
+// downloaded region, so heights survive going offline.
 //
 // NOTHING HERE IS PERSISTED. Elevation is derived on demand from the point
 // list plus the DEM, never stored on a Route or a point: a stored profile goes

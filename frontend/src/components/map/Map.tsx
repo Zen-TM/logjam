@@ -83,6 +83,8 @@ import {
   rgbaCssFromHex,
   contourWidthStops,
   featureLineWidthStops,
+  DEM_ATTRIBUTION_HTML,
+  DEM_TILE_URL_TEMPLATE,
   isValidLatitude,
   isValidLongitude,
   waypointColor,
@@ -921,9 +923,11 @@ function Map({
       // 3D Terrain - Soruce DEM for 3d Terrain
       map.addSource("3d-terrain-dem", {
         type: "raster-dem",
-        tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+        // Same tile set, same credit, as the elevation profiles and the
+        // mobile offline DEM — one definition in shared/src/demTiles.ts.
+        tiles: [DEM_TILE_URL_TEMPLATE],
         encoding: "terrarium",
-        attribution: 'Terrain data: <a href="https://registry.opendata.aws/terrain-tiles">Terrain Tiles</a> (Mapzen / Tilezen).',
+        attribution: DEM_ATTRIBUTION_HTML,
       });
 
       // Owned canyon GeoJSON source (starts empty)

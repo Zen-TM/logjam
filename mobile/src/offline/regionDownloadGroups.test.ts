@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { DEM_SOURCE_ID, type DownloadableTileSourceId } from "@logjam/shared";
+
 import { groupRegionJobs, regionGroupToastText } from "./regionDownloadGroups";
 import type { RegionJob, RegionJobState } from "./regionDownloadQueue";
 
@@ -8,12 +10,13 @@ function job(
   groupId: string,
   state: RegionJobState,
   progress: Partial<RegionJob["progress"]> = {},
+  basemapId: DownloadableTileSourceId = "six-topo",
 ): RegionJob {
   return {
     spec: {
       taskKind: "tile-pyramid",
       id,
-      basemapId: "six-topo",
+      basemapId,
       label: "SIX Maps Topo",
       groupId,
       groupLabel: "Blue Gum Forest",
@@ -66,6 +69,49 @@ describe("groupRegionJobs", () => {
     // A park the app clears by itself is NOT settled — the run is still live.
     const [live] = groupRegionJobs([job("a", "run-1", { kind: "paused", reason: "background" })]);
     expect(live.settled).toBe(false);
+  });
+});
+
+describe("the DEM that rides along with every run", () => {
+  const demJob = (state: RegionJobState) =>
+    job("dem", "run-1", state, {}, DEM_SOURCE_ID);
+
+  it("finishing every map is not finishing the run", () => {
+    const [group] = groupRegionJobs([
+      job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
+      demJob({ kind: "downloading" }),
+    ]);
+    expect(group.unfinished).toBe(0);
+    expect(group.done).toBe(false);
+    const [finished] = groupRegionJobs([
+      job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
+      demJob({ kind: "ready", gaps: 0, failed: 0 }),
+    ]);
+    expect(finished.done).toBe(true);
+  });
+
+  it("is work, but is not one of the maps", () => {
+    const [group] = groupRegionJobs([
+      job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
+      demJob({ kind: "downloading" }),
+    ]);
+    expect(group.mapCount).toBe(1);
+    expect(group.ready).toBe(1);
+    expect(group.unfinished).toBe(0);
+    // Still half the run's progress, and still not finished.
+    expect(group.fraction).toBeCloseTo(0.5);
+    expect(group.done).toBe(false);
+  });
+
+  it("says so when the maps landed and the elevation data didn't", () => {
+    const [group] = groupRegionJobs([
+      job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
+      demJob({ kind: "failed", code: "unknown" }),
+    ]);
+    expect(group.demUnfinished).toBe(true);
+    expect(regionGroupToastText(group)).toBe(
+      "Blue Gum Forest saved · 1 map · no elevation data",
+    );
   });
 });
 

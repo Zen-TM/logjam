@@ -66,7 +66,18 @@ export type ResolvedTileSource =
 
 export interface MapArtifact {
   id: string;
-  kind: "basemap-region" | "topo-overlay" | "geopdf-import" | "vector-import";
+  /**
+   * `dem-region` is the odd one out: it is never resolved to a tile source,
+   * because nothing draws it. It holds the terrarium tiles the elevation
+   * sampler reads offline (`offline/demLookup.ts`), and exists here so it is
+   * registered, sized, grouped and deleted like every other downloaded file.
+   */
+  kind:
+    | "basemap-region"
+    | "dem-region"
+    | "topo-overlay"
+    | "geopdf-import"
+    | "vector-import";
   /** basemapId | "<jobId>/<layer>" | importId */
   logicalKey: string;
   format: "pmtiles" | "mbtiles";

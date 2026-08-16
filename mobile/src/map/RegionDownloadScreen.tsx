@@ -34,6 +34,7 @@ import NetInfo from "@react-native-community/netinfo";
 import {
   BASEMAP_CATALOG,
   checkRegionCaps,
+  DEM_SOURCE_ID,
   planRegionForBasemaps,
   type OfflineBasemapId,
   type RegionBbox,
@@ -138,6 +139,9 @@ function uuid(): string {
 }
 
 function regionLabelFor(basemapId: string): string {
+  // The DEM is not a map in the catalog and is not one to the user either —
+  // it is what keeps elevation profiles and point heights working out there.
+  if (basemapId === DEM_SOURCE_ID) return "Elevation data";
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
   return `${name ?? "Map"} region`;
 }
@@ -351,10 +355,15 @@ export function RegionDownloadScreen({
     (job == null || job.totalTiles > 0 || includesVector);
 
   const centreLat = bbox ? (bbox.north + bbox.south) / 2 : 0;
-  // `perSource` is EMPTY for a vector-only selection (the clip is one file, not
-  // a tile pyramid), and Math.max() of nothing is -Infinity — which reached the
-  // caption as "z-Infinity · ≈ Infinity m per pixel".
-  const rasterZooms = job?.perSource.map((source) => source.zMax) ?? [];
+  // BASEMAP pyramids only. The DEM is in `perSource` too but its zoom is a
+  // fixed internal detail, and the caption is about what the user will see.
+  // (This list is EMPTY for a vector-only selection — the clip is one file, not
+  // a tile pyramid — and Math.max() of nothing is -Infinity, which reached the
+  // caption as "z-Infinity · ≈ Infinity m per pixel".)
+  const rasterZooms =
+    job?.perSource
+      .filter((source) => source.basemapId !== DEM_SOURCE_ID)
+      .map((source) => source.zMax) ?? [];
   const deepestZoom = rasterZooms.length > 0 ? Math.max(...rasterZooms) : detailZoom;
   const vectorOnly = selected.length > 0 && pyramidIds.length === 0;
 
@@ -376,6 +385,7 @@ export function RegionDownloadScreen({
         groupId,
         groupLabel,
         bbox,
+        zMin: source.zMin,
         zMax: source.zMax,
         allowCellular,
       })),

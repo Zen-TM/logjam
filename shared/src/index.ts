@@ -35,6 +35,7 @@ export * from "./waypointValidation.js";
 export * from "./routeExport.js";
 export * from "./routeValidation.js";
 export * from "./elevation.js";
+export * from "./demTiles.js";
 export * from "./snapToPath.js";
 export * from "./snapTiles.js";
 export * from "./routeDraft.js";

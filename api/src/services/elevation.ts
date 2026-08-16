@@ -1,39 +1,36 @@
-// DEM sampling for route/measure elevation profiles.
+// DEM sampling for route/measure elevation profiles — the ONLINE reader.
 //
-// WHY SERVER-SIDE. The alternative is each client reading the DEM itself, and
-// that costs more than it saves: React Native has no canvas to decode a PNG
-// with, MapLibre's queryTerrainElevation only answers for tiles already loaded
-// in the viewport (so a route running off-screen reads null), and every device
-// would re-fetch the same tiles uncached. Sampling here gives one
-// implementation for web and mobile, one warm tile cache, and keeps DEM tile
-// requests — which trace out where the user is drawing — on our own
-// infrastructure rather than fanning out from their device to a third party.
+// WHY SERVER-SIDE WHEN ONLINE. MapLibre's queryTerrainElevation only answers
+// for tiles already loaded in the viewport (so a route running off-screen reads
+// null), and every device would otherwise re-fetch the same tiles uncached.
+// Sampling here gives one warm tile cache for web and mobile alike, and keeps
+// DEM tile requests — which trace out where the user is drawing — off the
+// user's own connection while they have ours to use.
+//
+// It is no longer the only reader. A phone with a downloaded region samples the
+// same tiles locally, out of the MBTiles the region download wrote
+// (mobile/src/offline/demLookup.ts); that path fetches the tiles direct from S3
+// at download time, exactly as the raster basemap download already does. The
+// pixel maths, the zoom and the no-data rule are shared so the two agree —
+// see shared/src/demTiles.ts.
 //
 // The DEM is the AWS Open Data terrarium tile set, the same source the web
 // map's 3D terrain uses, so a profile agrees with the hills drawn under it.
-// Heights are decoded as (R * 256 + G + B / 256) - 32768 metres.
 //
 // PRIVACY: positions passed in are precise wilderness coordinates. Nothing
 // here logs a coordinate, a tile URL, or a tile index — an upstream failure is
 // reported by status alone.
 import { loadImage, createCanvas } from "canvas";
-import type { SamplePosition } from "@logjam/shared";
+import {
+  DEM_TILE_URL_TEMPLATE,
+  DEM_TILE_ZOOM,
+  demMetresFromRgb,
+  demSampleValue,
+  resolveDemSamples,
+  type SamplePosition,
+} from "@logjam/shared";
 
-/**
- * Zoom to read the DEM at. The underlying data over Australia is ~30 m
- * (1-arcsec SRTM), and a z13 tile is ~4.9 km across at this latitude, so its
- * 256 px grid lands near 19 m/px: a little finer than the source, which
- * captures ridge detail without sampling zoom levels that only interpolate.
- * Deeper zooms would also multiply the tile count for no extra truth.
- */
-export const DEM_TILE_ZOOM = 13;
-const DEM_TILE_SIZE = 256;
-const DEM_TILE_URL_BASE =
-  "https://s3.amazonaws.com/elevation-tiles-prod/terrarium";
-
-/** Public-domain sources behind the tile set; surfaced with any profile. */
-export const DEM_ATTRIBUTION =
-  "Elevation: AWS Open Data Terrain Tiles (SRTM, and national datasets)";
+export { DEM_ATTRIBUTION, DEM_TILE_ZOOM } from "@logjam/shared";
 
 const TILE_FETCH_TIMEOUT_MS = 8_000;
 
@@ -57,18 +54,6 @@ function cacheTile(key: string, tile: Float32Array) {
   tileCache.set(key, tile);
 }
 
-/** Fractional tile coordinates (Web Mercator / XYZ) for a position. */
-function tileCoordinates(lon: number, lat: number, zoom: number) {
-  const scale = 2 ** zoom;
-  const latRad = (lat * Math.PI) / 180;
-  return {
-    x: ((lon + 180) / 360) * scale,
-    y:
-      ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) *
-      scale,
-  };
-}
-
 /**
  * Fetch and decode one DEM tile into a flat row-major array of metres.
  *
@@ -82,10 +67,12 @@ async function fetchTile(
   tileX: number,
   tileY: number,
 ): Promise<Float32Array | null> {
-  const response = await fetch(
-    `${DEM_TILE_URL_BASE}/${zoom}/${tileX}/${tileY}.png`,
-    { signal: AbortSignal.timeout(TILE_FETCH_TIMEOUT_MS) },
-  );
+  const url = DEM_TILE_URL_TEMPLATE.replace("{z}", String(zoom))
+    .replace("{x}", String(tileX))
+    .replace("{y}", String(tileY));
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(TILE_FETCH_TIMEOUT_MS),
+  });
   if (response.status === 404) return null;
   if (!response.ok) {
     // Status only — never the URL, which carries the tile index and so the
@@ -102,8 +89,11 @@ async function fetchTile(
   const elevations = new Float32Array(image.width * image.height);
   for (let i = 0; i < elevations.length; i++) {
     const offset = i * 4;
-    elevations[i] =
-      data[offset]! * 256 + data[offset + 1]! + data[offset + 2]! / 256 - 32768;
+    elevations[i] = demMetresFromRgb(
+      data[offset]!,
+      data[offset + 1]!,
+      data[offset + 2]!,
+    );
   }
   return elevations;
 }
@@ -137,22 +127,7 @@ export async function sampleElevations(
 
   // Resolve every position to its tile and in-tile pixel first, so the fetch
   // set is known before any network work starts.
-  const resolved = positions.map((position) => {
-    const { x, y } = tileCoordinates(position.lon, position.lat, DEM_TILE_ZOOM);
-    const tileX = Math.floor(x);
-    const tileY = Math.floor(y);
-    // Clamp: a position exactly on a tile's far edge floors to size, which
-    // would read the first pixel of the next row.
-    const pixelX = Math.min(
-      DEM_TILE_SIZE - 1,
-      Math.floor((x - tileX) * DEM_TILE_SIZE),
-    );
-    const pixelY = Math.min(
-      DEM_TILE_SIZE - 1,
-      Math.floor((y - tileY) * DEM_TILE_SIZE),
-    );
-    return { tileX, tileY, index: pixelY * DEM_TILE_SIZE + pixelX };
-  });
+  const resolved = resolveDemSamples(positions);
 
   const uniqueKeys = [
     ...new Set(resolved.map((r) => `${r.tileX}/${r.tileY}`)),
@@ -165,14 +140,9 @@ export async function sampleElevations(
     }),
   );
 
-  return resolved.map(({ tileX, tileY, index }) => {
-    const tile = tiles.get(`${tileX}/${tileY}`);
-    if (!tile) return null;
-    const value = tile[index];
-    // Terrarium encodes "no data" as the extreme low of the range; a genuine
-    // -32768 m does not exist on Earth.
-    return value == null || value <= -32000 ? null : value;
-  });
+  return resolved.map(({ tileX, tileY, index }) =>
+    demSampleValue(tiles.get(`${tileX}/${tileY}`), index),
+  );
 }
 
 /** Test seam — the cache is process-wide and would otherwise leak between tests. */

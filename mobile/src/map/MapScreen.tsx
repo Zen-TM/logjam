@@ -52,6 +52,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as Location from "expo-location";
 import {
+  DEM_ATTRIBUTION,
   TOPO_LAYERS,
   VECTOR_STYLE_DEFAULTS,
   compassPointFor,
@@ -3172,6 +3173,11 @@ export function MapScreen({
             ones that aren't currently drawn — their licences permit that with
             credit, so the credit lives here rather than nowhere. */}
         <Text style={styles.attributionText}>{BASEMAP_THUMB_CREDIT}</Text>
+        {/* Elevation is derived from a DIFFERENT source than whatever basemap
+            is drawn — every height in the app (point readout, route profile,
+            gain/loss) comes from it, online or off, so its credit is
+            unconditional rather than tied to the active layer. */}
+        <Text style={styles.attributionText}>{DEM_ATTRIBUTION}</Text>
       </BottomSheet>
 
       {/* One waypoint's verbs, tags and canyon links. Looked up from the

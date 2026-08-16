@@ -39,6 +39,7 @@ import { stopGeoPdfImportRun } from "../geopdf/importRunner";
 import { wipeAllSyncData } from "../sync/syncDb";
 import { stopTrackRecordingForWipe } from "../tracks/trackRecorder";
 import { WIPED_DIRS } from "./localStores";
+import { clearOfflineDemCache } from "./demLookup";
 import { cancelAllRegionDownloads } from "./regionDownloadQueue";
 import { getOfflineDb, notifyRegistryChanged } from "./registryDb";
 
@@ -97,6 +98,11 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
     stoppedInTime(stopTrackRecordingForWipe()),
   ]);
   if (stopped.some((ok) => !ok)) failed.push("a download that wouldn't stop");
+
+  // In-memory DEM tiles, which are the terrain around the departing user's
+  // saved areas. The files go with the region directory below; this is the copy
+  // that would otherwise outlive them in the process.
+  clearOfflineDemCache();
 
   // MapLibre's own ambient cache. Every ONLINE basemap and topo tile the
   // previous user browsed is in there keyed by z/x/y — which IS the area they

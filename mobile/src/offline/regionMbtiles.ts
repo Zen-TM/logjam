@@ -18,7 +18,13 @@
 // log a path or a bbox from here — progress logging is counts and state words.
 import * as FileSystem from "expo-file-system/legacy";
 import * as SQLite from "expo-sqlite";
-import { xyzToTmsRow, type OfflineBasemapId, type RegionBbox } from "@logjam/shared";
+import {
+  xyzToTmsRow,
+  type DownloadableTileSourceId,
+  type RegionBbox,
+} from "@logjam/shared";
+
+import type { MapArtifact } from "../map/sourceResolver";
 
 import { REGION_DIR } from "./localStores";
 
@@ -134,7 +140,9 @@ export async function initRegionMbtiles(
     /** The download run, so a resume from disk recovers the user's area name. */
     groupId: string;
     groupLabel: string;
-    basemapId: OfflineBasemapId;
+    basemapId: DownloadableTileSourceId;
+    /** What this file IS — a drawable basemap, or the DEM behind elevation. */
+    kind: MapArtifact["kind"];
     bbox: RegionBbox;
     zMin: number;
     zMax: number;
@@ -156,7 +164,7 @@ export async function initRegionMbtiles(
     maxzoom: String(spec.zMax),
     attribution: spec.attribution,
     "logjam:schema": "1",
-    "logjam:kind": "basemap-region",
+    "logjam:kind": spec.kind,
     "logjam:source": spec.basemapId,
     "logjam:group": spec.groupId,
     "logjam:groupLabel": spec.groupLabel,
@@ -304,8 +312,9 @@ export type UnfinishedRegion = {
    */
   groupId?: string;
   groupLabel?: string;
-  basemapId: OfflineBasemapId;
+  basemapId: DownloadableTileSourceId;
   bbox: RegionBbox;
+  zMin: number;
   zMax: number;
   tilesStored: number;
 };
@@ -335,7 +344,8 @@ export async function listUnfinishedRegions(): Promise<UnfinishedRegion[]> {
       const bounds = await readRegionMetadata(db, "bounds");
       const source = await readRegionMetadata(db, "logjam:source");
       const maxzoom = await readRegionMetadata(db, "maxzoom");
-      if (!bounds || !source || !maxzoom) continue;
+      const minzoom = await readRegionMetadata(db, "minzoom");
+      if (!bounds || !source || !maxzoom || !minzoom) continue;
       const [west, south, east, north] = bounds.split(",").map(Number);
       unfinished.push({
         id,
@@ -343,8 +353,9 @@ export async function listUnfinishedRegions(): Promise<UnfinishedRegion[]> {
         groupId: (await readRegionMetadata(db, "logjam:group")) ?? undefined,
         groupLabel:
           (await readRegionMetadata(db, "logjam:groupLabel")) ?? undefined,
-        basemapId: source as OfflineBasemapId,
+        basemapId: source as DownloadableTileSourceId,
         bbox: { west, south, east, north },
+        zMin: Number(minzoom),
         zMax: Number(maxzoom),
         tilesStored: await countRegionTiles(db),
       });
