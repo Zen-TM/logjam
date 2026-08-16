@@ -256,6 +256,40 @@ BottomSheet(s)      acquisition + per-item actions
   Turning off the native header removes the back affordance too, and the
   swipe/hardware gesture is not a visible way out.
 
+### The first screen is the sign-in screen, and everything else is subdued
+
+`src/screens/LandingScreen.tsx` is the skeleton for an unauthenticated screen:
+centred column on the page colour, `KeyboardAvoidingView` + a `flexGrow: 1`
+scroll container (the keyboard covers a form otherwise), and, top to bottom:
+
+```
+mark          app icon at 88pt, radius.xl · title · one-line tagline
+ErrorBanner   only when there is one
+form          TextField · TextField · Button(filledAccent) · one FooterLink
+secondary     Button(outlineAccent) · Button(ghost)   ← never competes above
+```
+
+- **No menu in front of the form.** The screen a fresh install lands on carries
+  the email and password fields themselves; a chooser whose options are "sign
+  in" and "don't" put the app's most common action one tap behind a decision
+  most people had already made. The `chooser` and `signIn` auth states render
+  the same screen for that reason — two screens meant two sign-in forms, and
+  DESIGN's one-form-per-entity rule applies to auth like anything else.
+- **One filled action.** Sign in is `filledAccent`; create-an-account is
+  `outlineAccent` and continue-without is `ghost`. Weight is the whole hierarchy
+  here — three equal buttons is the pattern being replaced.
+- **A choice with consequences is a STATE of this screen, not a card under it.**
+  "Continue without an account" swaps the form for the explainer (what stays on
+  this phone, what needs an account) with three ways out — back, create an
+  account, and the actual commit. An explainer rendered permanently below the
+  buttons is read by nobody, and the consequence is unrecoverable a season
+  later.
+- **One question per arrival.** Consent questions that are not about getting in
+  (crash reports) are not on this screen; they are asked once, as a sheet, after
+  the user is inside (`CrashReportConsent`, mounted from `App.tsx`). A one-time
+  question stores an answer for BOTH of its buttons — a "not now" that stores
+  nothing is a dialog on every launch.
+
 ### Chrome stays constant; secondary filters stay collapsed
 
 Pinned chrome is a tax on every scroll, so a screen gets ONE pinned filter axis

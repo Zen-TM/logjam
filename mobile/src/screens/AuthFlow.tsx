@@ -1,4 +1,9 @@
-// Unauthenticated flow: sign in / sign up / confirm code / forgot password.
+// The auth forms BEHIND the landing screen: sign up / confirm code / forgot
+// password. Sign-in itself is on the landing screen (`LandingScreen.tsx`) — it
+// is the first thing a fresh install sees, not a tap away — so there is no
+// sign-in form here; a second copy of it is exactly the drift DESIGN.md §7's
+// "one form per entity" rule exists to stop.
+//
 // State machine lives in useAuth (port of web useAuth.ts); this renders the
 // screen for the current AuthState. All Cognito errors arrive pre-mapped to
 // user-friendly strings via messageFromError/mapAuthError — never raw.
@@ -32,52 +37,12 @@ export function AuthFlow({ auth }: { auth: Auth }) {
             <ErrorBanner message={auth.error} />
           </View>
         ) : null}
-        {auth.state === "signIn" && <SignInForm auth={auth} />}
         {auth.state === "signUp" && <SignUpForm auth={auth} />}
         {auth.state === "confirmSignUp" && <ConfirmSignUpForm auth={auth} />}
         {auth.state === "forgotPassword" && <ForgotPasswordForm auth={auth} />}
         {auth.state === "confirmForgotPassword" && <ConfirmForgotPasswordForm auth={auth} />}
       </ScrollView>
     </KeyboardAvoidingView>
-  );
-}
-
-function SignInForm({ auth }: { auth: Auth }) {
-  const [email, setEmail] = useState(auth.pendingUsername);
-  const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const submit = async () => {
-    setSubmitting(true);
-    await auth.signIn(email.trim(), password);
-    setSubmitting(false);
-  };
-
-  return (
-    <View style={styles.form}>
-      <Text style={styles.heading}>Sign in</Text>
-      <TextField
-        label="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        autoComplete="email"
-        keyboardType="email-address"
-        textContentType="emailAddress"
-      />
-      <TextField
-        label="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        autoCapitalize="none"
-        textContentType="password"
-      />
-      <Button label="Sign in" onPress={submit} loading={submitting} />
-      <FooterLink label="Forgot password?" onPress={auth.goToForgotPassword} />
-      <FooterLink label="No account? Sign up" onPress={auth.goToSignUp} />
-      <FooterLink label="Back" onPress={auth.backToChooser} />
-    </View>
   );
 }
 

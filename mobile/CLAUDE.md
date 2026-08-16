@@ -69,8 +69,11 @@ extract/schema refresh.
   the reference flow). Tokens in `expo-secure-store` (Keychain/Keystore) — never
   AsyncStorage, never plain SQLite.
 - **Guest mode: the app runs without an account.** A fresh install lands on the
-  entry chooser (`screens/EntryChooser.tsx`); "continue without an account" sets a
-  `prefsDb` flag and mounts the same `AppShell` with `accountState: "guest"`.
+  landing screen (`screens/LandingScreen.tsx` — sign-in form, with "create an
+  account" and "continue without an account" subdued beneath it); "continue
+  without an account" first shows the storage explainer as a state of that
+  screen, and only "Continue anyway" sets the `prefsDb` flag and mounts the same
+  `AppShell` with `accountState: "guest"`.
   - **The mechanism is "don't sync yet", not a separate storage path.** Guest
     mutations write the mirror and enqueue to the outbox exactly as they always
     do — `AppShell` simply never calls `registerSyncTriggers()`, so the mutation
@@ -90,8 +93,14 @@ extract/schema refresh.
     open is a battery cost and a permanently red sync health line.
   - **Crash reports are consent-gated** (`sentry/crashReportPreference.ts`):
     a guest has no account for telemetry to "stay within", so `initSentry()`
-    no-ops until the chooser's toggle (default OFF) is answered. Installs that
-    predate the toggle are grandfathered by `grandfatherCrashReports()`.
+    no-ops until the question is answered (default OFF). It is asked ONCE, as a
+    sheet mounted from `App.tsx` beside `AppShell` (`screens/CrashReportConsent
+    .tsx`), on the first arrival into the app — guest or signed in. Both answers
+    (including "Not now", an explicit off) store a choice, which is what stops it
+    nagging; `needsCrashReportChoice()` is the whole decision and is tested in
+    `sentry/crashReportPreference.test.ts`. Installs that predate the toggle are
+    grandfathered by `grandfatherCrashReports()`, and an explicit no is never
+    overwritten.
 - **A second caller inherits the first one's guards.** Grep every caller before
   changing a guarded function, and every sibling entry point when adding one:
   the share sheet skipped the picker's size cap, `resumeTrackRecording` skipped

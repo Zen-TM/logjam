@@ -14,7 +14,8 @@ import { countUnsyncedChanges } from "./src/sync/syncDb";
 import { wipeAllLocalData } from "./src/offline/wipeLocalData";
 import { unregisterPushNotifications } from "./src/notifications/pushRegistration";
 import { AuthFlow } from "./src/screens/AuthFlow";
-import { EntryChooser } from "./src/screens/EntryChooser";
+import { LandingScreen } from "./src/screens/LandingScreen";
+import { CrashReportConsent } from "./src/screens/CrashReportConsent";
 import { AppShell } from "./src/AppShell";
 import { AppLockGate } from "./src/offline/AppLockGate";
 import { applyScreenCapturePolicy } from "./src/offline/appLockPreference";
@@ -59,6 +60,11 @@ export default function App() {
       {auth.state === "loading" ? (
         <LoadingState />
       ) : mountsAppShell(auth.state) ? (
+        <>
+        {/* Asked once, on the first arrival INTO the app — guest or signed in.
+            It sits beside the shell rather than inside it so the question is
+            not owned by any one screen. */}
+        <CrashReportConsent />
         <AppShell
           accountState={auth.accountState}
           onLinkAccount={auth.linkAccount}
@@ -96,13 +102,13 @@ export default function App() {
             await auth.signOut();
           }}
         />
-      ) : auth.state === "chooser" ? (
+        </>
+      ) : auth.state === "chooser" || auth.state === "signIn" ? (
+        // One screen for both: the landing screen IS the sign-in screen, and
+        // the only thing the two states change is whether "continue without an
+        // account" is on offer.
         <SafeAreaView style={styles.authSafeArea}>
-          <EntryChooser
-            onContinueAsGuest={auth.chooseGuest}
-            onSignIn={auth.goToSignIn}
-            error={auth.error}
-          />
+          <LandingScreen auth={auth} />
         </SafeAreaView>
       ) : (
         <SafeAreaView style={styles.authSafeArea}>

@@ -2,8 +2,9 @@
 //
 // Root CLAUDE.md: "No analytics/telemetry leaving user account." A guest has no
 // account, so shipping their crashes to Sentry has nothing to leave *to* — the
-// rule can only be honoured by asking. The entry chooser carries one toggle,
-// **defaulting to off**, and Sentry does not initialise until it is answered.
+// rule can only be honoured by asking. `CrashReportConsent` asks ONCE, the first
+// time the app itself is reached (guest or signed in), **defaulting to off**,
+// and Sentry does not initialise until it is answered.
 //
 // An install that already has a local identity is treated as having consented:
 // those users signed up under the previous behaviour where the reporter was
@@ -38,6 +39,19 @@ export function readCrashReportChoice(): CrashReportChoice {
  */
 export function areCrashReportsEnabled(): boolean {
   return readCrashReportChoice() === "on";
+}
+
+/**
+ * Whether to put the one-time consent dialog in front of the user.
+ *
+ * "Never asked" is the only state that asks — which is what keeps the dialog
+ * from being a nag: both of its answers (including "Not now", which stores an
+ * explicit off) leave a stored choice behind, and Settings → Privacy and
+ * security owns it from then on. Grandfathered installs read "on" here and are
+ * never asked either.
+ */
+export function needsCrashReportChoice(): boolean {
+  return readCrashReportChoice() === "unset";
 }
 
 /** Returns false when the preference could not be stored. */
