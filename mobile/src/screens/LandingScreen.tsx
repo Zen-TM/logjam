@@ -54,7 +54,7 @@ export function LandingScreen({ auth }: { auth: Auth }) {
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.mark}>
-          <Image source={require("../../assets/icon.png")} style={styles.logo} accessibilityIgnoresInvertColors />
+          <Image source={require("../../assets/logo.png")} style={styles.logo} accessibilityIgnoresInvertColors />
           <Text style={styles.appTitle}>Logjam</Text>
           <Text style={styles.tagline}>Your canyoning logbook and offline maps.</Text>
         </View>
@@ -191,6 +191,14 @@ const styles = StyleSheet.create({
   // The app icon is a mark, not a wordmark: it carries its own dark ground, so
   // it needs the rounded-square crop the launcher gives it to stop reading as a
   // stray photo on the page.
+  //
+  // It is its OWN COPY of that file (assets/logo.png), not `assets/icon.png`,
+  // and that is load-bearing rather than untidy: app.json claims icon.png as
+  // the launcher icon, so the icon pipeline consumes it and expo-updates never
+  // registers it in the embedded asset map. The drawable ships, the runtime
+  // cannot resolve it, and the Image renders 88pt of nothing — which is
+  // exactly what a release build did, silently, while debug was fine. Do not
+  // "de-duplicate" these two files.
   logo: { width: 88, height: 88, borderRadius: radius.xl, marginBottom: spacing(1) },
   appTitle: {
     fontSize: fontSize.xl,
