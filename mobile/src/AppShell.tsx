@@ -34,7 +34,7 @@ import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
 import type { BasemapId } from "./map/sourceResolver";
 import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
 import { registerTopoAutoDownload } from "./offline/topoAutoDownload";
-import { BackgroundToast as GeoPdfImportToast } from "./BackgroundToast";
+import { BackgroundToast } from "./BackgroundToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { SavedScreen } from "./saved/SavedScreen";
 import { AccountScreen } from "./screens/AccountScreen";
@@ -680,9 +680,10 @@ export function AppShell({
 
   return (
     <AccountStateProvider accountState={accountState} linkAccount={onLinkAccount}>
-    {/* The GeoPDF import toast is a SIBLING of the whole navigator: the import
-        runs in the background and can finish on any tab, so its outcome has no
-        screen of its own to be announced from. */}
+    {/* The background toast is a SIBLING of the whole navigator: a GeoPDF
+        import and a region download both run in the background and can finish
+        on any tab, so their outcome has no screen of its own to be announced
+        from. */}
     <View style={{ flex: 1 }}>
     <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <Tabs.Navigator
@@ -891,7 +892,7 @@ export function AppShell({
         </Tabs.Screen>
       </Tabs.Navigator>
     </NavigationContainer>
-    <GeoPdfImportToast />
+    <BackgroundToast />
     </View>
     </AccountStateProvider>
   );
