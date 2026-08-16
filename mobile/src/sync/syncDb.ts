@@ -142,6 +142,12 @@ export async function withSyncTransaction<T>(
 
 // ── sync_state key/value helpers ─────────────────────────────────────────────
 
+/** sync_state key recording a delta page this client could not fully apply —
+ * a whole page that threw, or individual rows dropped as unreadable. Survives
+ * a restart and is counted as a sync issue. Written by both `syncEngine` and
+ * `deltaPull`, which is why it lives here rather than in either of them. */
+export const APPLY_FAILED_KEY = "applyFailedAt";
+
 export async function getSyncStateValue(key: string): Promise<string | null> {
   const db = await getSyncDb();
   const row = await db.getFirstAsync<{ value: string }>(

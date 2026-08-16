@@ -15,6 +15,7 @@ import { flushOutbox } from "./flush";
 import { syncThumbnailCache } from "./mediaCache";
 import { setMutationSyncHandler } from "./mediaSyncBridge";
 import {
+  APPLY_FAILED_KEY,
   clearSyncStateValue,
   getSyncStateValue,
   setSyncStateValue,
@@ -110,9 +111,10 @@ async function runCycleOnce(): Promise<void> {
   });
 }
 
-/** sync_state key recording an unapplicable delta page, so the failure
- * survives a restart and can be counted as a sync issue. */
-export const APPLY_FAILED_KEY = "applyFailedAt";
+// APPLY_FAILED_KEY lives in syncDb (with the other sync_state keys) because
+// deltaPull writes it too, and importing it from here would close an
+// engine → pull → engine cycle. Re-exported so existing callers are unaffected.
+export { APPLY_FAILED_KEY };
 
 export function requestSync(): Promise<void> {
   if (running) {

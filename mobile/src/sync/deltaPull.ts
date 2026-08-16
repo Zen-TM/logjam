@@ -8,7 +8,16 @@
 // engine as thrown exceptions and the Sentry scrubber owns redaction.
 import {
   collectDirtyFields,
+  parseSyncDeltaCanyonRow,
+  parseSyncDeltaFriendshipRow,
+  parseSyncDeltaMediaRow,
+  parseSyncDeltaRouteRow,
+  parseSyncDeltaShareRow,
+  parseSyncDeltaTombstone,
+  parseSyncDeltaTripRow,
+  parseSyncDeltaWaypointRow,
   SYNC_PROTOCOL,
+  SyncRowError,
   type OutboxEntry,
   type SyncDeltaResponse,
   type SyncPushOp,
@@ -30,6 +39,7 @@ import {
   upsertRoute,
 } from "./mirrorStore";
 import {
+  APPLY_FAILED_KEY,
   getSyncDb,
   getSyncStateValue,
   setSyncStateValue,
@@ -42,6 +52,41 @@ import {
  * synthesised `opId` from the seq instead of reading `op_id`. */
 export async function loadOutboxEntries(): Promise<OutboxEntry[]> {
   return (await loadOutboxRows()).map(rowToEntry);
+}
+
+/**
+ * Validate every row the server sends before it reaches the mirror — and SKIP
+ * the ones that fail rather than throwing.
+ *
+ * The push path (`flush.ts`) can afford to throw: it has already deleted the
+ * outbox row, so the local value stands and the next pull corrects it. The pull
+ * path cannot. A throw here aborts `applyPage`, which rolls back the cursor
+ * write with it, so every later pull re-fetches the same bad page forever —
+ * byte for byte the MSYNC-001 failure that started the audit, just triggered by
+ * the server instead of by our own schema.
+ *
+ * So a bad row is dropped, named (fields only — never values; these rows carry
+ * canyon names and coordinates), and the rest of the page applies. The cursor
+ * advances past it, which means a dropped row is not retried: that is the
+ * deliberate trade. A row the client cannot read is a server-side defect, and
+ * one unreadable canyon is a far better outcome than a device that never syncs
+ * again.
+ */
+function parsedRows<Row>(
+  rows: unknown[],
+  parse: (value: unknown) => Row,
+  skipped: string[],
+): Row[] {
+  const out: Row[] = [];
+  for (const row of rows) {
+    try {
+      out.push(parse(row));
+    } catch (err) {
+      if (!(err instanceof SyncRowError)) throw err;
+      skipped.push(err.message);
+    }
+  }
+  return out;
 }
 
 /**
@@ -123,9 +168,36 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
 
     const outbox = await loadOutboxEntries();
     const orphanedPaths: string[] = [];
+    const skipped: string[] = [];
+    const raw = response.changes as unknown as Record<string, unknown[]>;
+    const changes = {
+      canyons: parsedRows(raw.canyons ?? [], parseSyncDeltaCanyonRow, skipped),
+      tripLogs: parsedRows(raw.tripLogs ?? [], parseSyncDeltaTripRow, skipped),
+      waypoints: parsedRows(
+        raw.waypoints ?? [],
+        parseSyncDeltaWaypointRow,
+        skipped,
+      ),
+      routes: parsedRows(raw.routes ?? [], parseSyncDeltaRouteRow, skipped),
+      media: parsedRows(raw.media ?? [], parseSyncDeltaMediaRow, skipped),
+      canyonShares: parsedRows(
+        raw.canyonShares ?? [],
+        parseSyncDeltaShareRow,
+        skipped,
+      ),
+      friendships: parsedRows(
+        raw.friendships ?? [],
+        parseSyncDeltaFriendshipRow,
+        skipped,
+      ),
+    };
+    const tombstones = parsedRows(
+      (response.tombstones ?? []) as unknown[],
+      parseSyncDeltaTombstone,
+      skipped,
+    );
     const db = await getSyncDb();
     await applyPage(db, async () => {
-      const { changes, tombstones } = response;
       for (const row of changes.canyons) {
         const { effective, dirtyNames } = rebase(row, "canyon", outbox);
         await upsertCanyon(db, effective, dirtyNames);
@@ -172,6 +244,23 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
         response.cursor,
       );
     });
+
+    if (skipped.length > 0) {
+      // Field-name detail only — these rows carry canyon names and coordinates.
+      console.error(
+        `sync: dropped ${skipped.length} unreadable row(s) from a delta page`,
+        skipped,
+      );
+      // Counted as a sync issue so the user sees a number rather than nothing.
+      // It reuses the apply-failure marker deliberately: "this phone couldn't
+      // apply an update" is exactly what happened, just to part of a page
+      // instead of all of it. A resync re-fetches and re-drops the same row,
+      // which is honest — a row this client cannot read is a server defect,
+      // not something the user can clear.
+      await setSyncStateValue(APPLY_FAILED_KEY, new Date().toISOString()).catch(
+        () => {},
+      );
+    }
 
     // Cached blobs of tombstoned media: best-effort cleanup outside the tx.
     for (const path of orphanedPaths) {

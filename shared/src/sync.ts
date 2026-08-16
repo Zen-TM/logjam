@@ -391,6 +391,60 @@ const WAYPOINT_ROW_SPEC: Record<string, FieldCheck> = {
   updatedAt: isString,
 };
 
+const isUserRef: FieldCheck = (value) =>
+  isPlainObject(value) &&
+  isString((value as Record<string, unknown>).id) &&
+  isString((value as Record<string, unknown>).username);
+
+/** A [lon, lat] pair — the shape every route point must have to be drawable. */
+const isLonLatPair: FieldCheck = (value) =>
+  Array.isArray(value) && value.length === 2 && value.every(isNumber);
+
+const ROUTE_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  ownerId: isString,
+  syncRole: isSyncRole,
+  canyonId: nullable(isString),
+  name: isString,
+  color: isString,
+  points: arrayOf(isLonLatPair),
+  anchors: nullable(arrayOf(isNumber)),
+  createdAt: isString,
+  updatedAt: isString,
+};
+
+const MEDIA_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  linkedType: isString,
+  linkedId: isString,
+  mediaType: isString,
+  filename: nullable(isString),
+  // A string, not a number: it is a BigInt on the server and JSON-encoded as
+  // text so it survives the round trip.
+  fileSizeBytes: isString,
+  color: nullable(isString),
+  createdAt: isString,
+};
+
+const SHARE_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  canyonId: isString,
+  sharedById: isString,
+  sharedWithId: isString,
+  createdAt: isString,
+  sharedBy: isUserRef,
+  sharedWith: isUserRef,
+};
+
+const FRIENDSHIP_ROW_SPEC: Record<string, FieldCheck> = {
+  id: isString,
+  status: isString,
+  createdAt: isString,
+  updatedAt: isString,
+  counterpart: isUserRef,
+  direction: (value) => value === "sent" || value === "received",
+};
+
 function parseRow<Row>(
   entity: string,
   value: unknown,
@@ -419,6 +473,39 @@ export function parseSyncDeltaTripRow(value: unknown): SyncDeltaTripRow {
 
 export function parseSyncDeltaWaypointRow(value: unknown): SyncDeltaWaypointRow {
   return parseRow<SyncDeltaWaypointRow>("waypoint", value, WAYPOINT_ROW_SPEC);
+}
+
+export function parseSyncDeltaRouteRow(value: unknown): SyncDeltaRouteRow {
+  return parseRow<SyncDeltaRouteRow>("route", value, ROUTE_ROW_SPEC);
+}
+
+export function parseSyncDeltaMediaRow(value: unknown): SyncDeltaMediaRow {
+  return parseRow<SyncDeltaMediaRow>("media", value, MEDIA_ROW_SPEC);
+}
+
+export function parseSyncDeltaShareRow(value: unknown): SyncDeltaShareRow {
+  return parseRow<SyncDeltaShareRow>("canyonShare", value, SHARE_ROW_SPEC);
+}
+
+export function parseSyncDeltaFriendshipRow(
+  value: unknown,
+): SyncDeltaFriendshipRow {
+  return parseRow<SyncDeltaFriendshipRow>(
+    "friendship",
+    value,
+    FRIENDSHIP_ROW_SPEC,
+  );
+}
+
+/**
+ * A tombstone names a row to delete, so a malformed one is as dangerous as a
+ * malformed row — `type` decides WHICH table the delete cascades through.
+ */
+export function parseSyncDeltaTombstone(value: unknown): SyncDeltaTombstone {
+  return parseRow<SyncDeltaTombstone>("tombstone", value, {
+    type: (v) => SYNC_ENTITY_TYPES.includes(v as SyncEntityType),
+    id: isString,
+  });
 }
 
 // ── Cursor codec (§4.2) ──────────────────────────────────────────────────────

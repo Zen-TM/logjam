@@ -40,6 +40,7 @@ vi.mock("./deltaPull", () => ({
   },
 }));
 vi.mock("./syncDb", () => ({
+  APPLY_FAILED_KEY: "applyFailedAt",
   getSyncStateValue: (key: string) => Promise.resolve(stateWrites[key] ?? "user-1"),
   setSyncStateValue: (key: string, value: string) => {
     stateWrites[key] = value;
