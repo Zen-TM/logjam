@@ -428,11 +428,11 @@ export function SavedScreen({
   const [orphans, setOrphans] = useState<UnfinishedRegion[]>([]);
   const queuedIds = regionJobs.map((job) => job.spec.id).join(",");
   const refreshOrphans = useCallback(() => {
-    listUnfinishedRegions()
-      .then((rows) => {
-        const live = new Set(queuedIds.split(","));
-        setOrphans(rows.filter((row) => !live.has(row.id)));
-      })
+    // The live ids go IN, rather than filtering the result: opening a file the
+    // queue is writing is what cost a download its finalize.
+    const live = new Set(queuedIds.split(","));
+    listUnfinishedRegions(live)
+      .then(setOrphans)
       .catch(console.error);
   }, [queuedIds]);
   useEffect(refreshOrphans, [refreshOrphans]);

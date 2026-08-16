@@ -265,6 +265,24 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
   notifyChanged();
 }
 
+/**
+ * Correct a row's size once the file it describes has settled.
+ *
+ * Exists for the tile-pyramid path: the registry row is written BEFORE the
+ * MBTiles is finalized (deliberately — see runRegionDownload), and until the
+ * journal flips out of WAL the tiles are in the `-wal` sidecar rather than the
+ * file that gets stat'd. Every saved region reported ~4 KB.
+ */
+export async function setArtifactSize(id: string, sizeBytes: number): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    "UPDATE map_artifact SET sizeBytes = ? WHERE id = ?",
+    sizeBytes,
+    id,
+  );
+  notifyChanged();
+}
+
 /** Rename a downloaded region/overlay for display in Saved. */
 export async function renameArtifact(id: string, label: string): Promise<void> {
   const db = await getDb();

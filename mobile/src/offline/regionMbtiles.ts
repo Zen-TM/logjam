@@ -292,7 +292,34 @@ export async function finalizeRegionMbtiles(
   await putMetadata(target.db, { "logjam:gap_count": String(gapCount) });
   await target.db.runAsync("DELETE FROM metadata WHERE name = ?", BUILD_STATE_KEY);
   // No VACUUM: an insert-only database has nothing to reclaim.
-  await target.db.execAsync("PRAGMA journal_mode = DELETE; PRAGMA optimize;");
+  //
+  // The journal flip is the one statement here that can lose a race, and it is
+  // also the one that must not be skipped (a finished region left in WAL keeps
+  // its sidecars, which the native MapLibre reader trips on, and its size on
+  // disk reads as ~4 KB because the tiles are all in the -wal). Measured on a
+  // Pixel 9 while two jobs of one run overlapped: "cannot change out of wal
+  // mode from within a transaction", which failed an otherwise complete
+  // download. So: its own statement (not bundled with `optimize`, whose
+  // failure is harmless), and retried rather than fatal.
+  await checkpointOutOfWal(target.db);
+  await target.db.execAsync("PRAGMA optimize;").catch(() => {});
+}
+
+const JOURNAL_FLIP_ATTEMPTS = 5;
+const JOURNAL_FLIP_BACKOFF_MS = 250;
+
+async function checkpointOutOfWal(db: SQLite.SQLiteDatabase): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await db.execAsync("PRAGMA journal_mode = DELETE;");
+      return;
+    } catch (err) {
+      if (attempt >= JOURNAL_FLIP_ATTEMPTS) throw err;
+      await new Promise((resolve) =>
+        setTimeout(resolve, JOURNAL_FLIP_BACKOFF_MS * attempt),
+      );
+    }
+  }
 }
 
 export async function closeRegionMbtiles(target: RegionMbtiles): Promise<void> {
@@ -327,7 +354,16 @@ export type UnfinishedRegion = {
  * which source, area and depth it was for. That is why there is no
  * `region_download` row to keep in step with the disk.
  */
-export async function listUnfinishedRegions(): Promise<UnfinishedRegion[]> {
+export async function listUnfinishedRegions(
+  /**
+   * Ids the queue is working on right now. Their files are unfinished BY
+   * DEFINITION and the caller drops them from the result anyway — but opening
+   * them to find that out puts a second connection on a file being written,
+   * which is how a job's finalize lost the race for its journal flip. Skipped
+   * before the open, not after.
+   */
+  liveIds: ReadonlySet<string> = new Set(),
+): Promise<UnfinishedRegion[]> {
   const dir = await FileSystem.getInfoAsync(REGION_DIR);
   if (!dir.exists) return [];
   const names = await FileSystem.readDirectoryAsync(REGION_DIR);
@@ -335,6 +371,7 @@ export async function listUnfinishedRegions(): Promise<UnfinishedRegion[]> {
   for (const name of names) {
     if (!name.endsWith(".mbtiles")) continue;
     const id = name.replace(/\.mbtiles$/, "");
+    if (liveIds.has(id)) continue;
     const db = await SQLite.openDatabaseAsync(name, {}, REGION_DIR_PATH);
     try {
       // Read-only scan, but it still has to queue behind a writer's lock

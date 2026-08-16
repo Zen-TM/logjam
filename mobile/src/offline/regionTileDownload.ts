@@ -37,7 +37,7 @@ import {
 import type { MapArtifact } from "../map/sourceResolver";
 import { failureDetail } from "./failureDetail";
 import { connectionAllowsMetered } from "./networkPolicy";
-import { insertArtifact } from "./registryDb";
+import { insertArtifact, setArtifactSize } from "./registryDb";
 import {
   classifyTileResponse,
   deadTileBudget,
@@ -471,6 +471,12 @@ export async function runRegionDownload(
     // The real cost on disk, not this session's byte counter — a resumed job
     // only counted the tiles IT fetched, and Saved reports storage from this
     // number (DESIGN.md §8: report the true cost of a thing).
+    //
+    // Read TWICE, because right now the file is still in WAL and almost all of
+    // its bytes are in the `-wal` sidecar: this first stat is a placeholder so
+    // the row is never written with a null size, and `settledSizeBytes` below
+    // replaces it with the truth once the journal has been flipped. Without the
+    // second read every saved region reported ~4 KB, whatever it held.
     const info = await FileSystem.getInfoAsync(target.uri);
     const artifact: MapArtifact = {
       id: spec.id,
@@ -498,6 +504,17 @@ export async function runRegionDownload(
     await insertArtifact(artifact);
     await finalizeRegionMbtiles(target, gaps.size);
     await closeRegionMbtiles(target);
+
+    // Now the WAL has been checkpointed into the file and the sidecars are
+    // gone, so this is what the region actually costs the user. A failure to
+    // re-stat leaves the placeholder rather than the job — the region is
+    // downloaded and usable either way.
+    const settled = await FileSystem.getInfoAsync(target.uri).catch(() => null);
+    const settledSizeBytes = settled?.exists ? (settled.size ?? null) : null;
+    if (settledSizeBytes != null && settledSizeBytes !== artifact.sizeBytes) {
+      await setArtifactSize(spec.id, settledSizeBytes);
+      artifact.sizeBytes = settledSizeBytes;
+    }
     return { status: "ready", artifact, gaps: gaps.size, failed: dead };
   } catch (err) {
     await closeRegionMbtiles(target);
