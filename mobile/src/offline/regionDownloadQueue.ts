@@ -141,12 +141,6 @@ export function useRegionDownloads(): RegionJob[] {
   );
 }
 
-export function pendingRegionJobCount(list: RegionJob[]): number {
-  return list.filter(
-    (job) => job.state.kind === "queued" || job.state.kind === "downloading",
-  ).length;
-}
-
 /**
  * Re-queue jobs the WORKER parked on its own, once the condition that parked
  * them has cleared.
