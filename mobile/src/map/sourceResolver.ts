@@ -84,6 +84,15 @@ export interface MapArtifact {
    * `logicalKey`, never this.
    */
   label?: string | null;
+  /**
+   * The download run this came from — one "Save maps offline" tap covering one
+   * area with several basemaps. Saved groups its cards by this; `groupLabel` is
+   * the name the user gave that area. Both absent on artifacts that predate
+   * grouping (and on imports), which then stand alone. Display only, like
+   * `label`: resolution keys off `logicalKey`.
+   */
+  groupId?: string | null;
+  groupLabel?: string | null;
 }
 
 export interface ResolveContext {

@@ -44,6 +44,9 @@ export async function downloadProtomapsRegion(
   spec: {
     id: string;
     label: string;
+    /** The download run this belongs to — see MapArtifact.groupId. */
+    groupId: string;
+    groupLabel: string;
     bbox: { west: number; south: number; east: number; north: number };
     /**
      * Detail ceiling, so the download screen's detail rail means the same thing
@@ -117,6 +120,8 @@ export async function downloadProtomapsRegion(
       sizeBytes: clip.sizeBytes,
       downloadedAt: new Date().toISOString(),
       label: spec.label,
+      groupId: spec.groupId,
+      groupLabel: spec.groupLabel,
     };
     await insertArtifact(artifact);
     return artifact;

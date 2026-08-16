@@ -78,6 +78,10 @@ export type RegionJobSpec = {
   basemapId: OfflineBasemapId;
   /** User-facing name; goes in the MBTiles `name` row and the Saved list. */
   label: string;
+  /** The download run this job belongs to — see MapArtifact.groupId. */
+  groupId: string;
+  /** The name the user gave that run's area, live-editable while it downloads. */
+  groupLabel: string;
   bbox: RegionBbox;
   zMax: number;
   /** Per-job opt-in; Wi-Fi-only otherwise (§5.6). */
@@ -437,6 +441,8 @@ export async function runRegionDownload(
       sizeBytes: info.exists ? (info.size ?? bytesDone) : bytesDone,
       downloadedAt: new Date().toISOString(),
       label: spec.label,
+      groupId: spec.groupId,
+      groupLabel: spec.groupLabel,
     };
     // Registry row FIRST, then drop the build-state marker. Finalizing first
     // opened a window in which the file had neither: listUnfinishedRegions

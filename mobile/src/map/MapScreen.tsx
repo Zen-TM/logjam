@@ -196,6 +196,7 @@ import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers, protomapsLayerCount } from "./basemap/ProtomapsLayers";
 import { buildShellStyle } from "./basemap/shellStyle";
 import { useConnectivity } from "./connectivity";
+import { rememberMapCamera } from "./lastCamera";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
   basemapsCoveringViewport,
@@ -474,6 +475,17 @@ export function MapScreen({
     latitude: DEFAULT_CENTER[1],
     longitude: DEFAULT_CENTER[0],
   });
+  // Hand the settled camera to the module store the offline-download screen
+  // reads, so it opens on this ground whether it was reached from here or from
+  // the Saved tab (which has no camera of its own). Memory only — see
+  // lastCamera.ts.
+  useEffect(() => {
+    rememberMapCamera({
+      center: [camera.longitude, camera.latitude],
+      zoom: camera.zoom,
+      basemapId,
+    });
+  }, [camera, basemapId]);
   /**
    * The ground actually on screen, read back from the map when a move settles.
    *

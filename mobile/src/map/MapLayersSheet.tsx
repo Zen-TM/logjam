@@ -967,6 +967,11 @@ function OfflineTab({
                     id: region.id,
                     basemapId: region.basemapId,
                     label: region.label,
+                    // An unfinished region is discovered by reading the region
+                    // directory, which carries no group — it resumes as a card
+                    // of its own, which is what it already looked like.
+                    groupId: region.id,
+                    groupLabel: region.label,
                     bbox: region.bbox,
                     zMax: region.zMax,
                     allowCellular: false,

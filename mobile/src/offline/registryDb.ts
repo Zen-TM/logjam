@@ -53,7 +53,9 @@ async function getDb(): Promise<SQLite.SQLiteDatabase> {
           sizeBytes    INTEGER NOT NULL,
           downloadedAt TEXT NOT NULL,
           verifiedAt   TEXT,
-          label        TEXT
+          label        TEXT,
+          groupId      TEXT,
+          groupLabel   TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_map_artifact_lookup
           ON map_artifact(kind, logicalKey);
@@ -158,6 +160,13 @@ const ADDED_COLUMNS: { table: string; column: string; definition: string }[] = [
   // User-facing rename of a downloaded region/overlay (Saved tab). Display
   // only — resolution still keys off `logicalKey`.
   { table: "map_artifact", column: "label", definition: "TEXT" },
+  // One "Save maps offline" run picks several basemaps for ONE area and used
+  // to land as one unrelated card per basemap. The group is that run: every
+  // artifact from it shares a groupId, and `groupLabel` is the name the user
+  // gave the area (Saved shows one card per group). Legacy rows have neither
+  // and group by their own id, which is exactly the old one-card-each shape.
+  { table: "map_artifact", column: "groupId", definition: "TEXT" },
+  { table: "map_artifact", column: "groupLabel", definition: "TEXT" },
   // Wall-clock recording time. The elapsed clock used to be derived from the
   // stored fix series, which stops at the last accepted fix — so the time
   // between the last fix and the Finish tap vanished from the saved track.
@@ -192,6 +201,8 @@ type ArtifactRow = {
   sizeBytes: number;
   downloadedAt: string;
   label: string | null;
+  groupId: string | null;
+  groupLabel: string | null;
 };
 
 function rowToArtifact(row: ArtifactRow): MapArtifact {
@@ -211,6 +222,8 @@ function rowToArtifact(row: ArtifactRow): MapArtifact {
     sizeBytes: row.sizeBytes,
     downloadedAt: row.downloadedAt,
     label: row.label,
+    groupId: row.groupId,
+    groupLabel: row.groupLabel,
   };
 }
 
@@ -228,8 +241,8 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
     `INSERT OR REPLACE INTO map_artifact
        (id, kind, logicalKey, format, sourceType, path,
         west, south, east, north, minzoom, maxzoom,
-        sizeBytes, downloadedAt, verifiedAt, label)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sizeBytes, downloadedAt, verifiedAt, label, groupId, groupLabel)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     artifact.id,
     artifact.kind,
     artifact.logicalKey,
@@ -246,6 +259,8 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
     artifact.downloadedAt,
     new Date().toISOString(),
     artifact.label ?? null,
+    artifact.groupId ?? null,
+    artifact.groupLabel ?? null,
   );
   notifyChanged();
 }
@@ -254,6 +269,25 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
 export async function renameArtifact(id: string, label: string): Promise<void> {
   const db = await getDb();
   await db.runAsync("UPDATE map_artifact SET label = ? WHERE id = ?", label, id);
+  notifyChanged();
+}
+
+/**
+ * Rename every artifact from one download run (Saved shows them as one card,
+ * so the rename has to reach all of them). Also the write behind the "name
+ * this region" prompt, which runs WHILE the download is in flight — rows that
+ * land afterwards carry the label through their own spec.
+ */
+export async function renameArtifactGroup(
+  groupId: string,
+  groupLabel: string,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    "UPDATE map_artifact SET groupLabel = ? WHERE groupId = ?",
+    groupLabel,
+    groupId,
+  );
   notifyChanged();
 }
 

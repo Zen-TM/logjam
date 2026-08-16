@@ -40,6 +40,8 @@ export type RegionTaskSpec =
       id: string;
       basemapId: "protomaps";
       label: string;
+      groupId: string;
+      groupLabel: string;
       bbox: RegionBbox;
       zMax: number;
       allowCellular: boolean;
@@ -198,6 +200,18 @@ async function drain(): Promise<void> {
         : await runProtomapsClip(next.spec, report, token);
     tokens.delete(next.spec.id);
 
+    // The spec was snapshotted before the run; the user may have renamed the
+    // area while it was in flight (the naming prompt is deliberately non-
+    // blocking). Re-apply whatever the name is NOW to the row just written.
+    if (outcome.status === "ready") {
+      const current = jobs.find((job) => job.spec.id === next.spec.id);
+      const label = current?.spec.groupLabel ?? next.spec.groupLabel;
+      if (label !== next.spec.groupLabel) {
+        const registry = await import("./registryDb");
+        await registry.renameArtifactGroup(next.spec.groupId, label);
+      }
+    }
+
     if (outcome.status === "cancelled") {
       jobs = jobs.filter((job) => job.spec.id !== next.spec.id);
       publish();
@@ -237,7 +251,14 @@ async function runProtomapsClip(
   }
   try {
     const artifact = await downloadProtomapsRegion(
-      { id: spec.id, label: spec.label, bbox: spec.bbox, zMax: spec.zMax },
+      {
+        id: spec.id,
+        label: spec.label,
+        groupId: spec.groupId,
+        groupLabel: spec.groupLabel,
+        bbox: spec.bbox,
+        zMax: spec.zMax,
+      },
       (progress) =>
         onProgress({
           tilesDone: 0,
@@ -276,6 +297,27 @@ async function runProtomapsClip(
     }
     return { status: "failed", code: "unknown" };
   }
+}
+
+/**
+ * Name the area a run is downloading, while it downloads.
+ *
+ * The prompt goes up the moment the jobs are enqueued (the download must not
+ * wait on typing), so the name can arrive before, during or after any given
+ * job finishes. Both halves are covered: queued/running jobs carry the new
+ * label into the artifact they write, and rows already written are updated in
+ * place.
+ */
+export function setRegionGroupLabel(groupId: string, groupLabel: string): void {
+  jobs = jobs.map((job) =>
+    job.spec.groupId === groupId
+      ? { ...job, spec: { ...job.spec, groupLabel } }
+      : job,
+  );
+  publish();
+  void import("./registryDb").then((registry) =>
+    registry.renameArtifactGroup(groupId, groupLabel),
+  );
 }
 
 /** Stop for now; the partial MBTiles keeps every tile already fetched. */

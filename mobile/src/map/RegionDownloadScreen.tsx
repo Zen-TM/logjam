@@ -303,12 +303,18 @@ export function RegionDownloadScreen({
 
   const startDownloads = useCallback(() => {
     if (!bbox || !job) return;
+    // One id for the whole run: every map chosen here covers the SAME area, so
+    // Saved shows them as one card (see MapArtifact.groupId).
+    const groupId = uuid();
+    const groupLabel = "Saved area";
     enqueueRegionDownloads([
       ...job.perSource.map((source) => ({
         taskKind: "tile-pyramid" as const,
         id: uuid(),
         basemapId: source.basemapId,
         label: regionLabelFor(source.basemapId),
+        groupId,
+        groupLabel,
         bbox,
         zMax: source.zMax,
         allowCellular,
@@ -320,6 +326,8 @@ export function RegionDownloadScreen({
               id: uuid(),
               basemapId: "protomaps" as const,
               label: regionLabelFor("protomaps"),
+              groupId,
+              groupLabel,
               bbox,
               zMax: Math.min(detailZoom, catalogMaxZoom("protomaps")),
               allowCellular,
