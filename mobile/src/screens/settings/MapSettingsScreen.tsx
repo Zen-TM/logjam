@@ -82,10 +82,10 @@ const KEEP_AWAKE_LABELS: Record<KeepAwakeMode, string> = {
 };
 
 const FIX_RATE_LABELS: Record<FixRate, string> = {
-  high: "Detailed",
+  finest: "Finest",
+  detailed: "Detailed",
   balanced: "Balanced",
-  battery: "Battery saver",
-  maxSaver: "Max saver",
+  batterySaver: "Battery saver",
 };
 
 /**
@@ -98,10 +98,10 @@ const FIX_RATE_LABELS: Record<FixRate, string> = {
  * screen would be a promise the map breaks the moment the user looks at it.
  */
 const FIX_RATE_HINTS: Record<FixRate, string> = {
-  high: "A recorded position every 3 seconds.",
-  balanced: "A recorded position every 10 seconds.",
-  battery: "A recorded position every 30 seconds. The default.",
-  maxSaver:
+  finest: "A recorded position every 3 seconds. Shortest battery life.",
+  detailed: "A recorded position every 10 seconds.",
+  balanced: "A recorded position every 30 seconds. The default.",
+  batterySaver:
     "A recorded position every 2 minutes. Longest battery life, roughest line.",
 };
 

@@ -64,34 +64,38 @@ export const HEADING_TAU_MS = 450;
  * average back, while a real turn of the body still completes in about a
  * second.
  *
- * 180°/s is about as fast as a person turns on the spot, so it costs a real
- * turn almost nothing: measured against the platform's own 200 ms cadence, a
- * half-turn lands within 8° at 1.6 s and within 3° at 2 s, while a phone lying
- * still drifts 0.3°.
+ * It is set ABOVE a person's fastest turn on purpose. At 180°/s — roughly a
+ * brisk turn — a 90° flick of the wrist needed three camera writes to catch up
+ * in course-up, and three writes read as three bursts rather than one movement.
+ * The exponential filter above is what handles noise; this only has to catch
+ * the deltas no wrist produces (a recalibration, a magnetic anomaly, a wrap
+ * glitch near north), so it can sit well clear of real motion.
  */
-export const HEADING_MAX_SLEW_DEG_PER_S = 180;
+export const HEADING_MAX_SLEW_DEG_PER_S = 360;
 
 /** Assumed gap when a caller does not know how long it has been. Roughly the
  *  platform's own delivery period. */
 const DEFAULT_SAMPLE_GAP_MS = 200;
 
 /**
- * How often course-up may write a camera stop, and how big a turn has to be
- * before it does.
+ * Course-up's camera: how often it may write a stop, and how long each stop
+ * animates for.
  *
- * These are the two numbers that decide whether the map renderer ever goes
- * idle. Course-up used to write a stop per sample (up to ~5/s) with a 1° deadband
- * and a 50 ms animation, so each animation was replaced by the next before it
- * finished and MapLibre repainted continuously, at the display's full refresh
- * rate, for as long as the mode was on — with the map facing the same way the
- * whole time. A phone held in a hand crosses 1° constantly, so the deadband
- * never closed.
+ * THE DURATION IS DELIBERATELY LONGER THAN THE INTERVAL. Matching them looks
+ * right on paper — each stop finishing exactly as the next arrives — and is
+ * wrong in practice: sample delivery is irregular, so an animation that is
+ * merely long enough finishes early and the map SITS STILL until the next write.
+ * Over a fast turn that reads as a series of bursts rather than one movement.
+ * At roughly twice the interval every stop is interrupted mid-flight by the
+ * next, and the camera never stops moving while the user is turning.
  *
- * At 200 ms and 2° a real turn still tracks smoothly (the animation duration
- * matches the throttle, so stops meet end to end) and a phone being held still
- * stops writing altogether.
+ * The cost is bounded by the deadband below, not by these: a phone held still
+ * writes nothing at all, so the renderer still goes idle. That is what stops
+ * course-up being the most expensive thing on the screen, which it was when it
+ * wrote a stop per sample.
  */
-export const POV_CAMERA_MS = 200;
+export const POV_CAMERA_MS = 150;
+export const POV_ANIMATION_MS = 320;
 /**
  * 1.5°, which is below the platform's own 2° reporting step: the smoothing
  * above is what makes that safe. The filtered bearing of a phone held still

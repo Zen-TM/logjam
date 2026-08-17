@@ -107,6 +107,7 @@ import {
 } from "./mapChrome";
 import {
   HEADING_RENDER_MS,
+  POV_ANIMATION_MS,
   POV_CAMERA_MS,
   POV_DEADBAND_DEG,
   normalizeBearing,
@@ -247,12 +248,19 @@ const DEGENERATE_BBOX_DEGREES = 1e-5;
 const SINGLE_POINT_ZOOM = 14;
 
 /**
- * Frame-rate ceiling for the map. See the prop on <MapView> for why.
+ * Frame-rate ceiling for the map.
  *
- * If this ever needs to be a user choice, it is the first thing a "battery
- * saver" mode would take — along with the dot's 3 s watcher and the compass.
+ * 60, not the display's own 120: the second 60 frames buy nothing on a map of
+ * contour lines and cost the GPU the same as the first. 30 was tried and read
+ * as laggy under a fast pan, which is the one moment the map has to feel
+ * attached to the finger.
+ *
+ * This is a smoothness knob, not really a battery one. MapLibre draws only when
+ * something invalidates it, so the cap does nothing at all while the map sits
+ * still, and only halves the cost of the seconds in which the user is actually
+ * moving it — a rounding error next to the screen being lit at all.
  */
-const MAP_MAX_FPS = 30;
+const MAP_MAX_FPS = 60;
 
 const CAMERA_DEFAULTS = {
   centerCoordinate: DEFAULT_CENTER,
@@ -2238,7 +2246,7 @@ export function MapScreen({
         // Carry the position too: this stop REPLACES whatever the last one was,
         // and it would otherwise cancel every recentre a fix asked for.
         ...(latestFix.current ? { centerCoordinate: latestFix.current } : {}),
-        animationDuration: POV_CAMERA_MS,
+        animationDuration: POV_ANIMATION_MS,
       });
     },
     [setCameraStop],
@@ -2635,22 +2643,28 @@ export function MapScreen({
   // direction because all three are absolutely positioned against the map.
   const controlsOnLeft = controlSide === "left";
   /**
-   * How high MapLibre's compass ornament has to sit to clear the instruments
-   * under it. Derived from what is actually DRAWN — the tape only renders with
-   * the compass on and a heading to show, the bar only with the scale bar on —
-   * rather than from a constant that assumes both. Turning either off used to
-   * leave the ornament floating above an empty gap.
+   * How high MapLibre's compass ornament sits, clearing the instruments below
+   * it in the same corner.
    *
-   * This is a preference read, NOT a measurement: `CHROME_BOTTOM`'s comment
-   * warns off `onLayout`-driven offsets because they stick when the thing they
-   * measured goes away. These are discrete values known before the frame is
-   * drawn, so there is nothing to get stuck.
+   * IT RESERVES BOTH INSTRUMENTS WHETHER OR NOT THEY ARE DRAWN, and that is the
+   * fix rather than the compromise. It used to be derived from the two
+   * preferences, which is correct arithmetic and the wrong side of a native
+   * boundary: the ornament is not a React view, and MapLibre lays its margins
+   * out when the view is attached — a margin that grows because the user just
+   * switched the tape on does not necessarily move the ornament that is already
+   * on screen, so the tape drew straight through it. Reserving unconditionally
+   * makes the number one the native side only ever sees once.
+   *
+   * The cost is a ~44 dp float above empty space when both instruments are off,
+   * which `CHROME_BOTTOM`'s own comment already calls a gap nobody notices.
    */
   const instrumentsBottom = spacing(1);
   const ornamentMarginY =
     instrumentsBottom +
-    (scaleBarEnabled ? SCALE_BAR_HEIGHT + INSTRUMENT_GAP : 0) +
-    (compassEnabled ? COMPASS_STRIP_HEIGHT + INSTRUMENT_GAP : 0);
+    SCALE_BAR_HEIGHT +
+    INSTRUMENT_GAP +
+    COMPASS_STRIP_HEIGHT +
+    INSTRUMENT_GAP;
   const controlsEdge = controlsOnLeft
     ? { left: CHROME_GAP, right: undefined }
     : { right: CHROME_GAP, left: undefined };
@@ -2778,9 +2792,7 @@ export function MapScreen({
         // The renderer's ceiling, not its target: MapLibre only draws when
         // something invalidates it, and this caps how often that may become a
         // frame. Uncapped it follows the display — 120 Hz on a modern phone —
-        // so every pan, every follow recentre and every course-up rotation cost
-        // four times what they need to on a map whose content is contour lines.
-        // 30 is the lowest rate a moving map still reads as moving.
+        // so a pan costs twice what it needs to on a map of contour lines.
         preferredFramesPerSecond={MAP_MAX_FPS}
         onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}

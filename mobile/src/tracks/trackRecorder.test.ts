@@ -46,8 +46,8 @@ vi.mock("expo-location", () => ({
 vi.mock("../imports/vectorImports", () => ({ randomId: () => "track-1" }));
 
 vi.mock("./recordingPreferences", () => ({
-  FIX_RATE_OPTIONS: { high: {} },
-  readFixRate: () => "high",
+  FIX_RATE_OPTIONS: { balanced: {} },
+  readFixRate: () => "balanced",
   readAccuracyLimitM: () => 0,
 }));
 

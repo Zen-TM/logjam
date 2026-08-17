@@ -322,13 +322,19 @@ review, not by CI.
   whole trip. Do NOT "improve" that retry by putting `canRunNow` in front of it:
   a metered-disallowed link would decline, nothing would re-arm it, and the sync
   status would promise a retry forever.
-- **The recording fix rate (`recordingPreferences.ts`) defaults to `battery`
-  (30 s), and its slowest preset is `maxSaver` (120 s).** Only `timeInterval`
-  moves the power bill: `distanceInterval` and `deferredUpdatesInterval` are
-  delivery filters, and the latter costs data loss on a kill. Note the honest
-  limit — the map's own 3 s dot watcher is a second client of one fused
-  provider, which serves both at the faster rate, so the setting governs the
-  recording's cost only while the map is NOT on screen.
+- **The recording fix rate (`recordingPreferences.ts`) defaults to `balanced`
+  (30 s); the presets run `finest` 3 s / `detailed` 10 s / `balanced` 30 s /
+  `batterySaver` 120 s.** Only `timeInterval` moves the power bill:
+  `distanceInterval` and `deferredUpdatesInterval` are delivery filters, and the
+  latter costs data loss on a kill. Note the honest limit — the map's own 3 s
+  dot watcher is a second client of one fused provider, which serves both at the
+  faster rate, so the setting governs the recording's cost only while the map is
+  NOT on screen.
+  - **The names moved under the rates on 2026-08-17, and `balanced` means
+    something different either side of that.** The preference therefore lives
+    under a NEW key (`recordingFixRateV2`) and the old one is translated on read
+    by rate, never by name; `recordingPreferences.test.ts` pins every mapping.
+    Any future renaming needs the same treatment.
 
 ## Privacy (design constraint — see root CLAUDE.md)
 

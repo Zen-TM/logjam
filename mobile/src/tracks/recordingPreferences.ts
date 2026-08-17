@@ -26,7 +26,24 @@ import * as Location from "expo-location";
 import { readPref, writePref } from "../prefsDb";
 
 const ACCURACY_KEY = "recordingAccuracyLimit";
-const FIX_RATE_KEY = "recordingFixRate";
+/**
+ * V2 because the names moved under the rates (2026-08-17): what used to be
+ * called `battery` is 30 s and is now the middle of the range, called
+ * `balanced` — and `balanced` used to mean 10 s. Reading the old key through
+ * the new names would silently make a user's recording four times finer than
+ * the one they chose, so the new scheme gets its own key and the old one is
+ * translated on read.
+ */
+const FIX_RATE_KEY = "recordingFixRateV2";
+const LEGACY_FIX_RATE_KEY = "recordingFixRate";
+
+/** Old name → the preset with the SAME RATE under the new names. */
+const LEGACY_FIX_RATES: Record<string, FixRate> = {
+  high: "finest",
+  balanced: "detailed",
+  battery: "balanced",
+  maxSaver: "batterySaver",
+};
 
 /**
  * Metres of reported accuracy past which a fix is dropped. `0` means keep every
@@ -39,7 +56,7 @@ export type AccuracyLimitM = (typeof ACCURACY_LIMITS)[number];
 /** The shipped default, and `shared`'s own constant. */
 const DEFAULT_ACCURACY_LIMIT: AccuracyLimitM = 50;
 
-export type FixRate = "high" | "balanced" | "battery" | "maxSaver";
+export type FixRate = "finest" | "detailed" | "balanced" | "batterySaver";
 
 /**
  * Platform request parameters per rate. `accuracy` stays `High` (GPS-priority)
@@ -66,19 +83,19 @@ export const FIX_RATE_OPTIONS: Record<
     "accuracy" | "distanceInterval" | "timeInterval" | "deferredUpdatesInterval"
   >
 > = {
-  high: {
+  finest: {
     accuracy: Location.Accuracy.High,
     distanceInterval: 5,
     timeInterval: 3000,
     deferredUpdatesInterval: 15_000,
   },
-  balanced: {
+  detailed: {
     accuracy: Location.Accuracy.High,
     distanceInterval: 10,
     timeInterval: 10_000,
     deferredUpdatesInterval: 30_000,
   },
-  battery: {
+  balanced: {
     accuracy: Location.Accuracy.High,
     distanceInterval: 20,
     timeInterval: 30_000,
@@ -96,7 +113,7 @@ export const FIX_RATE_OPTIONS: Record<
   // Deferred delivery is held to one interval, not scaled with it: at 240 s the
   // buffer would hold three fixes — six minutes of walking living only in
   // process memory, lost to any kill.
-  maxSaver: {
+  batterySaver: {
     accuracy: Location.Accuracy.High,
     distanceInterval: 10,
     timeInterval: 120_000,
@@ -120,14 +137,19 @@ export function writeAccuracyLimitM(limit: AccuracyLimitM): boolean {
 }
 
 /**
- * Defaults to `battery` (a fix every 30 s), not the finest rate. A recording is
- * the one thing in the app that runs for the whole trip, and the shipped
- * `high` default spent a phone's day drawing detail nobody asked for; a user who
- * wants the fine line can say so, and can't recharge a flat phone in a canyon.
+ * Defaults to `balanced` (a fix every 30 s), not the finest rate. A recording is
+ * the one thing in the app that runs for the whole trip, and the original
+ * finest-by-default spent a phone's day drawing detail nobody asked for; a user
+ * who wants the fine line can say so, and can't recharge a flat phone in a
+ * canyon.
  */
 export function readFixRate(): FixRate {
   const stored = readPref(FIX_RATE_KEY);
-  return FIX_RATES.includes(stored as FixRate) ? (stored as FixRate) : "battery";
+  if (FIX_RATES.includes(stored as FixRate)) return stored as FixRate;
+  // Nothing under the new key: honour a choice made under the old names, by
+  // RATE rather than by name.
+  const legacy = LEGACY_FIX_RATES[readPref(LEGACY_FIX_RATE_KEY) ?? ""];
+  return legacy ?? "balanced";
 }
 
 export function writeFixRate(rate: FixRate): boolean {
