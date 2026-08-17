@@ -470,9 +470,33 @@ review, not by CI.
     90° wrong if that lock is ever lifted on a landscape-natural device), and
     past 90° of pitch the azimuth flips 180° (MapLibre's own engine re-remaps
     at ±45°; we do not). Tilt also amplifies orientation noise by 1/cos(pitch).
-  - **Whether a declination was ever learned is unobservable in the field.**
-    Nothing logs it and nothing shows it, so "the app is running on 12.5°" and
-    "the app has Android's WMM value" look identical.
+  - Whether a declination was learned is reported in Settings → Map, as the
+    hint under "Compass bearings from" (`declinationHint`) — that control IS the
+    difference between the two norths, so the number belongs there rather than
+    in a row of its own, where it would read as a setting instead of a fact
+    about where the user is standing.
+- **A miscalibrated magnetometer is the one compass fault we cannot correct, so
+  we say so.** Every app on the handset reads the same sensor, so "the other map
+  app agrees" is not reassurance — three apps agreeing and all disagreeing with
+  the terrain is the signature. `compassNeedsCalibration` drives a banner in the
+  map's own notice stack whenever accuracy is LOW or UNRELIABLE.
+  - **The accuracy is only reachable through `expo-location`.** `expo-sensors`
+    discards it (`onAccuracyChanged` is `= Unit` in `DeviceMotionModule.kt` and
+    `SensorProxy.kt`); expo-location keeps it (`LocationModule.kt:851-852`) and
+    ships it on every heading event (`:583`). So it is SAMPLED in a 2 s probe
+    every 2 min, not watched — leaving `watchHeadingAsync` running would
+    re-register the magnetometer for the session, which is part of what the
+    DeviceMotion swap bought back.
+  - **The probe takes the BEST accuracy in its window, not the first.** Expo's
+    `mAccuracy` starts at 0 (`unreliable`) and is only corrected when Android
+    fires `onAccuracyChanged`, which can land after the first heading event — so
+    a first-sample reading reports a false fault on a healthy compass.
+  - **No reading is not a fault.** A still phone emits no heading events at all
+    (2° gate), so silence must fail open or every user who sets their phone down
+    gets a permanent banner. Pinned by `heading.test.ts` ("says nothing when it
+    has heard nothing").
+  - It needs location permission, which the compass otherwise does not. Denied
+    means no reading and no banner: the map is no worse off, it just cannot warn.
 - **A backgrounded recorder appends points and nothing else.** Track stats are
   display-only, so they are recomputed while the app is in front of someone and
   on return to the foreground (`refreshTrackStats` / `refreshActiveTrackStats`),

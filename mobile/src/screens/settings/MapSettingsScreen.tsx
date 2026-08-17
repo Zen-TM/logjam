@@ -20,6 +20,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
 import { isCompassEnabled, setCompassEnabled } from "../../map/compassPreference";
+import { currentDeclinationDeg, isDeclinationLearned } from "../../map/heading";
 import { ensureForegroundLocationPermission } from "../../map/locationPermission";
 import {
   MARKER_COLORS,
@@ -74,6 +75,29 @@ const LONG_PRESS_LABELS: Record<LongPressAction, string> = {
 const NORTH_REFERENCE_HINTS: Partial<Record<NorthReference, string>> = {
   magnetic: "Applies only to the compass — the map is always oriented true north.",
 };
+
+/**
+ * The declination in force, spelled out under the control it explains.
+ *
+ * It is the whole of the difference between the two options above, so this is
+ * where it belongs — not in a row of its own, where it would read as a setting
+ * rather than as a fact about where the user is standing. Deliberately at the
+ * bottom of the hint and in plain words: nobody needs it, and the one person
+ * who does is transferring a bearing onto a paper topo and wants the number.
+ *
+ * It also says whether the value is REAL or the fallback, which is otherwise
+ * unobservable — the app derives the true declination from a location fix
+ * (heading.ts, `learnDeclination`) and quietly uses a single NSW constant until
+ * it gets one. "Which of those am I on" was a question nothing on the device
+ * could answer.
+ */
+function declinationHint(): string {
+  const degrees = Math.abs(currentDeclinationDeg()).toFixed(1);
+  const side = currentDeclinationDeg() >= 0 ? "east" : "west";
+  return isDeclinationLearned()
+    ? `Magnetic north is ${degrees}° ${side} of true north where you are.`
+    : `Assuming ${degrees}° ${side} for NSW — the map has not had a location fix to work it out from yet.`;
+}
 
 const KEEP_AWAKE_LABELS: Record<KeepAwakeMode, string> = {
   off: "Never",
@@ -226,7 +250,9 @@ export function MapSettingsScreen() {
             { value: "magnetic", label: "Magnetic north" },
           ]}
           value={northReference}
-          hint={NORTH_REFERENCE_HINTS[northReference]}
+          hint={[NORTH_REFERENCE_HINTS[northReference], declinationHint()]
+            .filter(Boolean)
+            .join(" ")}
           disabledReason={compassEnabled ? undefined : "Needs the compass"}
           onChange={(next) => {
             const reference = next as NorthReference;

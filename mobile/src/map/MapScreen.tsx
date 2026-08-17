@@ -113,6 +113,7 @@ import {
   POV_ANIMATION_MAX_MS,
   POV_ANIMATION_MIN_MS,
   POV_DEADBAND_DEG,
+  compassNeedsCalibration,
   createHeadingFilter,
   declinationNeedsRefresh,
   deviceSampleTimeMs,
@@ -328,6 +329,24 @@ const INSTRUMENT_GAP = spacing(0.75);
  * phones without a gyroscope.
  */
 const ROTATION_VECTOR_GRACE_MS = 1500;
+
+/**
+ * The compass-calibration probe: how long each one listens, and how often it
+ * runs while the compass is in use.
+ *
+ * A PROBE RATHER THAN A WATCH, because the accuracy is only reachable through
+ * `expo-location`'s heading watcher (see heading.ts) and leaving that running
+ * would re-register the magnetometer for the whole session — the cost the
+ * DeviceMotion swap was partly meant to avoid. Two seconds every two minutes is
+ * nothing, and calibration does not degrade faster than that.
+ *
+ * The window takes the BEST accuracy it sees rather than the first: expo's
+ * `mAccuracy` starts at 0 (`unreliable`) and is only corrected when Android
+ * fires `onAccuracyChanged`, which can land after the first heading event. The
+ * first sample would therefore report a false fault on a healthy compass.
+ */
+const COMPASS_PROBE_WINDOW_MS = 2000;
+const COMPASS_PROBE_INTERVAL_MS = 120_000;
 
 /** Tag for this screen's wake lock, so releasing it can't release anyone else's. */
 const KEEP_AWAKE_TAG = "logjam-map";
@@ -2613,6 +2632,69 @@ export function MapScreen({
     stopHeadingTicker,
   ]);
 
+  /**
+   * Is the phone's compass calibrated? Sampled, not watched — see
+   * COMPASS_PROBE_WINDOW_MS for why, and heading.ts for why this is the only
+   * place the answer exists.
+   *
+   * State rather than the heading store: it changes a few times an hour, so a
+   * screen re-render is the right cost, unlike the bearing itself.
+   *
+   * Needs location permission, which the compass otherwise does not. Without it
+   * there is simply no reading and no banner — the map is no worse off than it
+   * was, it just cannot warn.
+   */
+  const [compassAccuracy, setCompassAccuracy] = useState<number | null>(null);
+  useEffect(() => {
+    if (!sensorsActive || !headingWanted) return;
+    let live = true;
+    let subscription: Location.LocationSubscription | null = null;
+    let closeAt: ReturnType<typeof setTimeout> | undefined;
+
+    const probe = () => {
+      // Never two at once, and never one left open: each probe closes its own
+      // watcher on a timer rather than waiting for a sample that a still phone
+      // will never send.
+      if (subscription) return;
+      let best: number | null = null;
+      void (async () => {
+        const { status } = await Location.getForegroundPermissionsAsync().catch(
+          () => ({ status: "denied" as const }),
+        );
+        if (!live || status !== "granted") return;
+        const started = await Location.watchHeadingAsync((sample) => {
+          best = Math.max(best ?? sample.accuracy, sample.accuracy);
+        }).catch((err: unknown) => {
+          console.error(err);
+          return null;
+        });
+        if (!started) return;
+        if (!live) {
+          started.remove();
+          return;
+        }
+        subscription = started;
+        closeAt = setTimeout(() => {
+          subscription?.remove();
+          subscription = null;
+          // Heard nothing at all? Say nothing. A phone lying still emits no
+          // heading events, and silence is not a fault.
+          if (live && best != null) setCompassAccuracy(best);
+        }, COMPASS_PROBE_WINDOW_MS);
+      })();
+    };
+
+    probe();
+    const repeat = setInterval(probe, COMPASS_PROBE_INTERVAL_MS);
+    return () => {
+      live = false;
+      clearInterval(repeat);
+      clearTimeout(closeAt);
+      subscription?.remove();
+      subscription = null;
+    };
+  }, [sensorsActive, headingWanted]);
+
   const handleLocateMe = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
     // Drive the dot from expo-location directly — MLRN's built-in
@@ -3414,6 +3496,20 @@ export function MapScreen({
         {noticeText ? (
           <View style={styles.notice}>
             <Text style={styles.noticeText}>{noticeText}</Text>
+          </View>
+        ) : null}
+
+        {/* The compass is confidently wrong and nothing else on screen would
+            say so — every app on the phone reads the same miscalibrated
+            magnetometer, so "the other map app agrees" is not reassurance. The
+            arrow, the tape and course-up are all as wrong as each other, which
+            is why this sits with the map's own notices rather than next to any
+            one of them. Clears itself on the next probe that reads clean. */}
+        {compassNeedsCalibration(compassAccuracy) && headingWanted ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>
+              Compass needs calibrating — wave the phone in a figure 8
+            </Text>
           </View>
         ) : null}
 

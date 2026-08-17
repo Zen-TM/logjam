@@ -3,19 +3,22 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   HEADING_HYSTERESIS_DEG,
   HEADING_MAX_SLEW_DEG_PER_S,
-  declinationNeedsRefresh,
-  deviceSampleTimeMs,
-  learnDeclination,
-  noteDeclinationFix,
-  resetDeclination,
   HEADING_SETTLED_DEG,
   HEADING_TICK_MS,
   POV_USER_SCREEN_FRACTION,
+  compassNeedsCalibration,
   createHeadingFilter,
+  currentDeclinationDeg,
+  declinationNeedsRefresh,
+  deviceSampleTimeMs,
   headingSettled,
-  noteHeadingSample,
+  isDeclinationLearned,
+  learnDeclination,
   normalizeBearing,
+  noteDeclinationFix,
+  noteHeadingSample,
   povCameraCenter,
+  resetDeclination,
   resolveTrueHeading,
   shortestAngleDelta,
   stepHeadingFilter,
@@ -437,6 +440,40 @@ describe("deviceSampleTimeMs", () => {
   it("falls back to arrival time when a platform omits the timestamp", () => {
     const filter = createHeadingFilter();
     expect(deviceSampleTimeMs(filter, undefined, 12_345)).toBe(12_345);
+  });
+});
+
+describe("compassNeedsCalibration", () => {
+  it("warns at low accuracy or worse, like Google Maps does", () => {
+    // Android SENSOR_STATUS_ACCURACY_*: 0 unreliable, 1 low, 2 medium, 3 high.
+    expect(compassNeedsCalibration(0)).toBe(true);
+    expect(compassNeedsCalibration(1)).toBe(true);
+    expect(compassNeedsCalibration(2)).toBe(false);
+    expect(compassNeedsCalibration(3)).toBe(false);
+  });
+
+  it("says nothing when it has heard nothing", () => {
+    // FAILS OPEN, and that is the whole reason this is a named function. A
+    // phone lying still emits no heading events at all (LocationModule.kt gates
+    // on 2 degrees of movement), so "no reading" is the normal state of a phone
+    // on a rock. Treating it as unreliable would put a permanent fault banner
+    // on the map of every user who set their phone down.
+    expect(compassNeedsCalibration(null)).toBe(false);
+  });
+});
+
+describe("isDeclinationLearned", () => {
+  it("distinguishes Android's real value from the NSW fallback", () => {
+    // Otherwise indistinguishable from outside, which is what the settings
+    // hint exists to fix.
+    resetDeclination();
+    expect(isDeclinationLearned()).toBe(false);
+    learnDeclination({ magHeading: 100, trueHeading: 112.4 });
+    // Learning the value is not the same as knowing where it applies — the
+    // position is what lets it be re-derived after travel.
+    noteDeclinationFix(-33.56, 150.4);
+    expect(isDeclinationLearned()).toBe(true);
+    expect(currentDeclinationDeg()).toBeCloseTo(12.4, 6);
   });
 });
 

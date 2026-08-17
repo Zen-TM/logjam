@@ -726,6 +726,11 @@ export function currentDeclinationDeg(): number {
   return declinationDeg;
 }
 
+/** Whether that is Android's real value for here, or still the NSW fallback. */
+export function isDeclinationLearned(): boolean {
+  return declinationAt != null;
+}
+
 /** Test seam, and the sign-out reset: forget what was learned. */
 export function resetDeclination(): void {
   declinationDeg = NSW_MAGNETIC_DECLINATION_DEG;
@@ -790,6 +795,47 @@ export function resolveTrueHeading(sample: {
 export function normalizeBearing(heading: number): number {
   if (!Number.isFinite(heading)) return 0;
   return ((heading % 360) + 360) % 360;
+}
+
+// ── compass calibration ──────────────────────────────────────────────────────
+//
+// A magnetometer accumulates a hard-iron offset — from the handset's own
+// magnets, a case clasp, whatever it has been sitting next to — and Android
+// estimates and subtracts it. When that estimate is stale the compass is
+// confidently wrong, typically by 10-20°, and EVERY app on the phone is wrong
+// by the same amount because they all read the same sensor. Which is exactly
+// what a user sees: three mapping apps agreeing with each other and disagreeing
+// with the terrain.
+//
+// We cannot correct it. We can refuse to hide it — the difference between a map
+// that is wrong and a map that says it is wrong is the difference between
+// walking off the wrong spur and waving the phone in a figure of eight.
+//
+// THE VALUE IS ONLY REACHABLE THROUGH `expo-location`. `expo-sensors` discards
+// it (`onAccuracyChanged` is `= Unit` in both DeviceMotionModule.kt and
+// SensorProxy.kt), while expo-location keeps it (`LocationModule.kt:851-852`)
+// and ships it on every heading event (`:583`). So reading it costs a brief
+// `watchHeadingAsync`, which is why it is sampled in short probes rather than
+// watched continuously — see the probe in MapScreen.
+
+/**
+ * Android's `SENSOR_STATUS_ACCURACY_*`: 0 unreliable, 1 low, 2 medium, 3 high.
+ * Warn at low or worse, which is where Google Maps puts its own prompt.
+ */
+export const COMPASS_ACCURACY_WARN_AT = 1;
+
+/**
+ * Whether a probe's reading means "tell the user to calibrate".
+ *
+ * `null` — no reading yet, or none of the probe's samples arrived — is NOT a
+ * warning. It has to fail open: a phone lying still emits no heading events at
+ * all (`LocationModule.kt:571` gates on 2° of movement), so "we heard nothing"
+ * is the normal state of a phone on a rock and must not put a fault banner on
+ * the map.
+ */
+export function compassNeedsCalibration(accuracy: number | null): boolean {
+  if (accuracy == null) return false;
+  return accuracy <= COMPASS_ACCURACY_WARN_AT;
 }
 
 // ── the live heading, deliberately outside React state ───────────────────────
