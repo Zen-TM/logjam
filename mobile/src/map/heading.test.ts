@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   HEADING_HYSTERESIS_DEG,
@@ -20,6 +20,7 @@ import {
   shortestAngleDelta,
   stepHeadingFilter,
 } from "./heading";
+import { displayHeading } from "./compassTape";
 
 /**
  * Drive the whole pipeline the way the screen does: samples in at their own
@@ -251,6 +252,61 @@ describe("the heading chase, end to end", () => {
   });
 });
 
+describe("overshoot off a fast flick", () => {
+  /**
+   * Peak degrees past the bearing the phone actually stopped on, and how long
+   * it takes to come back within 3° of it.
+   */
+  function flick(rateDegPerS: number, durationMs: number) {
+    const settledAt = (durationMs * rateDegPerS) / 1000;
+    const played = playHeading(
+      spun((t) => (Math.min(t, durationMs) * rateDegPerS) / 1000, 5_000),
+      5_000,
+    ).filter((p) => p.atMs > durationMs);
+    const peak = Math.max(...played.map((p) => shortestAngleDelta(settledAt, p.deg)));
+    const recovered = played.find(
+      (p) => Math.abs(shortestAngleDelta(settledAt, p.deg)) < 3,
+    );
+    return { peak, recoveredMs: (recovered?.atMs ?? Infinity) - durationMs };
+  }
+
+  it("stays within a few degrees however hard the phone is turned", () => {
+    // THE BUG HEADING_LEAD_MAX_DEG EXISTS FOR. The lead cap is `base + rate ×
+    // HEADING_LEAD_MS`, which had no ceiling — so the bound on overshoot scaled
+    // with the rate it was bounding, and a hard wrist flick (~700-1000°/s) ran
+    // the map tens of degrees past the bearing the phone had stopped on and
+    // then crawled back over a second. It was signed off on a 110°/s turn,
+    // where the same formula gives 5°.
+    for (const [rate, duration] of [
+      [200, 600],
+      [400, 450],
+      [700, 350],
+    ] as const) {
+      const { peak, recoveredMs } = flick(rate, duration);
+      expect(peak, `${rate}°/s overshoot`).toBeLessThan(9);
+      // The tail from the peak back to dead-on is HEADING_CATCHUP_TAU_MS by
+      // design and is deliberately slow; what matters is that it starts from a
+      // few degrees rather than from tens.
+      expect(recoveredMs, `${rate}°/s recovery`).toBeLessThan(900);
+    }
+  });
+
+  it("never dead-reckons faster than the display may turn", () => {
+    // The rate estimate feeds the lead cap, so an unclamped one is a second
+    // route to the same overshoot.
+    const filter = createHeadingFilter();
+    let at = 0;
+    for (let i = 0; i < 20; i += 1) {
+      // 1500°/s: faster than any wrist, and faster than the display's ceiling.
+      noteHeadingSample(filter, (at * 1500) / 1000, at);
+      at += 100;
+    }
+    expect(Math.abs(filter.rateDegPerS)).toBeLessThanOrEqual(
+      HEADING_MAX_SLEW_DEG_PER_S,
+    );
+  });
+});
+
 describe("the ticker's idle guarantee", () => {
   /**
    * Run the pipeline exactly as the screen does and count how much of the time
@@ -324,6 +380,47 @@ describe("declination", () => {
   });
 });
 
+describe("declination west of the agonic line", () => {
+  it("reads a negative true heading as real, not as the no-fix sentinel", () => {
+    // `calcTrueNorth` is `(magNorth + declination) % 360` in Kotlin, whose `%`
+    // keeps the sign, so anywhere declination is WESTERN the real answer comes
+    // back negative. A `>= 0` test reads that as "no fix" and pins the app to
+    // the NSW constant — silently wrong by up to the local declination, which
+    // is the one number this whole path exists to get right.
+    resetDeclination();
+    // Christchurch NZ: about 23° EAST... use a western case, Vancouver ~15°E of
+    // grid but the sign that matters here is the arithmetic one: mag 10, true
+    // -5 means 15° WEST.
+    expect(learnDeclination({ magHeading: 10, trueHeading: -5 })).toBe(true);
+    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 0 })).toBeCloseTo(345, 6);
+  });
+
+  it("still treats the exact sentinel as no fix", () => {
+    resetDeclination();
+    expect(learnDeclination({ magHeading: 10, trueHeading: -1 })).toBe(false);
+  });
+
+  it("normalises a negative true heading rather than passing it through", () => {
+    // It reaches the camera as a bearing; -5 would be a stop MapLibre reads as
+    // 355 anyway, but the arrow and the tape read the same number.
+    expect(resolveTrueHeading({ trueHeading: -5, magHeading: 10 })).toBeCloseTo(355, 6);
+  });
+});
+
+describe("the tape's magnetic mode", () => {
+  it("subtracts exactly what the forward path added", () => {
+    // Two sources for one constant: the tape subtracted the NSW literal while
+    // resolveTrueHeading added the LEARNED value, so the labels drifted from
+    // the map by `learned - 12.5` once a fix supplied one.
+    resetDeclination();
+    learnDeclination({ magHeading: 100, trueHeading: 118 });
+    const trueBearing = resolveTrueHeading({ trueHeading: -1, magHeading: 40 });
+    expect(trueBearing).toBeCloseTo(58, 6);
+    // What a baseplate compass would read at that true bearing: back to 40.
+    expect(displayHeading(trueBearing!, "magnetic")).toBeCloseTo(40, 6);
+  });
+});
+
 describe("deviceSampleTimeMs", () => {
   it("puts the sensor's monotonic clock into the Date.now() domain", () => {
     // The rate estimate divides by these gaps, so they have to be the sensor's
@@ -366,6 +463,10 @@ describe("povCameraCenter", () => {
 });
 
 describe("resolveTrueHeading", () => {
+  // The declination is module state, deliberately — it describes where the user
+  // is, not any one screen. So it survives between tests unless reset.
+  beforeEach(resetDeclination);
+
   it("passes a real true heading through untouched", () => {
     expect(resolveTrueHeading({ trueHeading: 42, magHeading: 30 })).toBe(42);
     expect(resolveTrueHeading({ trueHeading: 0, magHeading: 350 })).toBe(0);

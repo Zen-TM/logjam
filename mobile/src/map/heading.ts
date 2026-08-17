@@ -214,15 +214,34 @@ export const HEADING_CATCHUP_TAU_MS = 1000;
  */
 export const HEADING_LEAD_DEG = 3;
 export const HEADING_LEAD_MS = 60;
+/**
+ * ...AND A HARD CEILING ON THE WHOLE THING, which is the part that was missing.
+ *
+ * The rate-scaled term above has no bound of its own, so the cap meant to LIMIT
+ * overshoot grew with the very quantity it was limiting: a wrist flick at
+ * ~1000°/s produced `3 + 1000 × 0.06` = 63° of permitted lead, and the map
+ * duly ran 60° past where the phone was pointing and then crawled back. The
+ * measured "under 5°" that this was signed off on came from a 110°/s turn and
+ * did not generalise.
+ *
+ * 8° is the knee: overshoot off a hard flick drops from tens of degrees to ~7°
+ * at every rate from 200 to 700°/s, with no measurable cost to the ripple at
+ * 8/25/60°/s. Tightening to 6° buys 5° of overshoot and starts costing
+ * smoothness at 60°/s (ripple 15 % → 21 %), because the cap then binds during
+ * ordinary turns rather than only during flicks.
+ */
+export const HEADING_LEAD_MAX_DEG = 8;
 
 /**
  * The rate estimate is only fed when the target MOVES, so after this long
- * without one — three of its own gaps, or 150 ms, whichever is longer — the
- * turn is treated as over and the estimate decays. Relative to the observed
+ * without one — two of its own gaps, or 150 ms, whichever is longer — the
+ * turn is treated as over and the estimate decays. Two rather than three
+ * because this delay is how long the display keeps dead-reckoning after the
+ * phone has actually stopped, and that is overshoot the user sees. Relative to the observed
  * cadence rather than absolute, because that cadence runs from ~50 ms during a
  * fast turn to seconds during a slow one.
  */
-const HEADING_RATE_STALL_MULTIPLE = 3;
+const HEADING_RATE_STALL_MULTIPLE = 2;
 const HEADING_RATE_STALL_FLOOR_MS = 150;
 
 /**
@@ -483,9 +502,15 @@ export function noteHeadingSample(
     // interval is the start of a turn rather than a measurement of one, and a
     // gap too short is not a measurement at all.
     if (gapMs >= HEADING_RATE_MIN_GAP_MS && gapMs <= HEADING_RATE_MAX_GAP_MS) {
+      // Clamped to the ceiling the DISPLAY obeys: a rate faster than the
+      // display may ever turn is not something to dead-reckon on, it is just a
+      // bigger lead cap and a longer overshoot.
+      const instant = Math.max(
+        -HEADING_MAX_SLEW_DEG_PER_S,
+        Math.min(HEADING_MAX_SLEW_DEG_PER_S, (moved * 1000) / gapMs),
+      );
       filter.rateDegPerS +=
-        lowPassAlpha(HEADING_RATE_TAU_MS, gapMs) *
-        ((moved * 1000) / gapMs - filter.rateDegPerS);
+        lowPassAlpha(HEADING_RATE_TAU_MS, gapMs) * (instant - filter.rateDegPerS);
     }
   }
   filter.target = normalizeBearing(filter.target + moved);
@@ -560,8 +585,10 @@ export function stepHeadingFilter(
   // snap — a display 25° behind was yanked to within a degree of the target in
   // a single tick, which is precisely the "jumped, then came back" the slow
   // catch-up term exists to prevent.
-  const leadCap =
-    HEADING_LEAD_DEG + (Math.abs(filter.rateDegPerS) * HEADING_LEAD_MS) / 1000;
+  const leadCap = Math.min(
+    HEADING_LEAD_DEG + (Math.abs(filter.rateDegPerS) * HEADING_LEAD_MS) / 1000,
+    HEADING_LEAD_MAX_DEG,
+  );
   const heading =
     Math.sign(filter.rateDegPerS) ||
     Math.sign(shortestAngleDelta(filter.value, next));
@@ -613,6 +640,21 @@ export function headingSettled(filter: HeadingFilter): boolean {
 export const NSW_MAGNETIC_DECLINATION_DEG = 12.5;
 
 /**
+ * Does this sample carry a real true heading, or the no-fix sentinel?
+ *
+ * NOT `>= 0`, which is the obvious test and is wrong west of the agonic line.
+ * `calcTrueNorth` is `(magNorth + declination) % 360` in Kotlin
+ * (`LocationModule.kt:603-607`), and Kotlin's `%` keeps the sign — so anywhere
+ * declination is WESTERN the real answer comes back negative and a `>= 0` test
+ * silently reads it as "no fix" and pins the app to the NSW constant. Only the
+ * exact -1 is the sentinel. (A genuine -1.0 is indistinguishable and costs one
+ * ignored sample, which the next one replaces.)
+ */
+function hasTrueHeading(trueHeading: number): boolean {
+  return Number.isFinite(trueHeading) && trueHeading !== -1;
+}
+
+/**
  * The declination actually in force, degrees east of true north.
  *
  * Defaults to the NSW constant and is replaced by the real thing as soon as a
@@ -641,7 +683,7 @@ export function learnDeclination(sample: {
   trueHeading: number;
   magHeading: number;
 }): boolean {
-  if (!(sample.trueHeading >= 0) || !(sample.magHeading >= 0)) return false;
+  if (!hasTrueHeading(sample.trueHeading) || !(sample.magHeading >= 0)) return false;
   declinationDeg = shortestAngleDelta(sample.magHeading, sample.trueHeading);
   return true;
 }
@@ -670,6 +712,18 @@ export function declinationNeedsRefresh(
     Math.abs(latitude - declinationAt.latitude) > DECLINATION_REFRESH_DEG ||
     Math.abs(longitude - declinationAt.longitude) > DECLINATION_REFRESH_DEG
   );
+}
+
+/**
+ * The declination in force, degrees east of true north.
+ *
+ * Exported because the compass tape's magnetic mode has to subtract exactly
+ * what the forward path added — it was subtracting the NSW constant while
+ * `resolveTrueHeading` added the learned value, which is two sources for one
+ * number and the tape's labels drifting from the map by `learned − 12.5`.
+ */
+export function currentDeclinationDeg(): number {
+  return declinationDeg;
 }
 
 /** Test seam, and the sign-out reset: forget what was learned. */
@@ -721,7 +775,9 @@ export function resolveTrueHeading(sample: {
   trueHeading: number;
   magHeading: number;
 }): number | null {
-  if (sample.trueHeading >= 0) return sample.trueHeading;
+  if (hasTrueHeading(sample.trueHeading)) {
+    return normalizeBearing(sample.trueHeading);
+  }
   if (!(sample.magHeading >= 0)) return null;
   return normalizeBearing(sample.magHeading + declinationDeg);
 }

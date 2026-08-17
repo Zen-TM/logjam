@@ -420,6 +420,17 @@ review, not by CI.
   on `DeviceMotion.isAvailableAsync()`: that probe demands all five sensors,
   four of which the framework synthesises, so it can answer false on hardware
   that would have worked.
+- **Overshoot is bounded by an absolute ceiling, not by a formula in the thing
+  it bounds.** `HEADING_LEAD_DEG + rate × HEADING_LEAD_MS` had no ceiling, so
+  the cap meant to limit overshoot grew with the rate it was limiting: a ~1000°/s
+  wrist flick permitted 63° of lead and the map ran that far past the phone and
+  crawled back. `HEADING_LEAD_MAX_DEG` (8°) caps it, the rate estimate itself is
+  clamped to `HEADING_MAX_SLEW_DEG_PER_S` (a rate the display can never turn at
+  is not something to predict on), and the stall multiple is 2 not 3 because
+  that delay IS the overshoot. Pinned by `heading.test.ts` ("stays within a few
+  degrees however hard the phone is turned"), which tests 200/400/700°/s —
+  **the original "under 5°" was measured at 110°/s and did not generalise; test
+  the flick, not the turn.**
 - **Declination is derived, not assumed.** `expo-location` builds `trueHeading`
   as `magHeading + GeomagneticField.declination` (`LocationModule.kt:603-607`),
   so one `getHeadingAsync` and a subtraction give Android's own WMM value with
@@ -428,7 +439,40 @@ review, not by CI.
   declination is a function of position and drifts ~0.1°/year — a TTL would
   refresh a phone sitting in one valley all week and still miss a drive.
   `NSW_MAGNETIC_DECLINATION_DEG` is now only the pre-first-fix fallback and what
-  a guest with location denied keeps using.
+  a guest with location denied keeps using. Three traps in that path, all found
+  by the 2026-08-17 accuracy audit and all now guarded:
+  - **`trueHeading >= 0` is the wrong test.** `calcTrueNorth` is
+    `(magNorth + declination) % 360` in Kotlin, whose `%` keeps the sign, so
+    west of the agonic line the REAL answer is negative and `>= 0` reads it as
+    the no-fix sentinel — pinning the app to the NSW constant exactly where it
+    is most wrong. Only the exact `-1` is the sentinel (`hasTrueHeading`).
+  - **`getHeadingAsync` can never resolve.** It waits for a sample with better
+    than low accuracy, or six samples, and samples need 2° of movement — so a
+    still phone holds an accel+magnetometer registration open indefinitely.
+    `refreshDeclination` therefore allows only ONE outstanding read and records
+    the position only on success, which is what makes retrying safe.
+  - **The tape's magnetic mode must subtract what the forward path added.** It
+    subtracted the NSW literal while `resolveTrueHeading` added the learned
+    value; use `currentDeclinationDeg()`. One constant, one source.
+- **The bearing pipeline was audited end to end on 2026-08-17 and is correct**
+  — sign and reference frame through `getRotationMatrixFromVector` →
+  `getOrientation` → `alpha` → our negation, declination sign and
+  single-application on both call paths, and MapLibre's camera `heading` as
+  degrees-clockwise with no unit or sign change from JS to `nativeEaseTo`. The
+  rotation vector is MAGNETIC-referenced (MapLibre's own compass engine never
+  touches `GeomagneticField`), so adding declination is right and is not a
+  double correction. Total standing offset we contribute is **≤1.4°** (1.0° of
+  hysteresis drag, which reverses with turn direction, plus ≤0.4° of constant
+  before a declination is learned) — so a consistent one-directional offset in
+  the field is a device or environment problem, not this code.
+  - Two known gaps, deliberately not fixed: the display rotation in every
+    `DeviceMotion` event is ignored (harmless under the portrait lock, silently
+    90° wrong if that lock is ever lifted on a landscape-natural device), and
+    past 90° of pitch the azimuth flips 180° (MapLibre's own engine re-remaps
+    at ±45°; we do not). Tilt also amplifies orientation noise by 1/cos(pitch).
+  - **Whether a declination was ever learned is unobservable in the field.**
+    Nothing logs it and nothing shows it, so "the app is running on 12.5°" and
+    "the app has Android's WMM value" look identical.
 - **A backgrounded recorder appends points and nothing else.** Track stats are
   display-only, so they are recomputed while the app is in front of someone and
   on return to the foreground (`refreshTrackStats` / `refreshActiveTrackStats`),

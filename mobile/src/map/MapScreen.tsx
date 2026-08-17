@@ -2252,13 +2252,31 @@ export function MapScreen({
    * `noteDeclinationFix` records the position first so a failed or
    * permission-denied read does not retry on every one of the 3 s fixes.
    */
+  const declinationInFlight = useRef(false);
   const refreshDeclination = useCallback((coord: [number, number]) => {
     const [longitude, latitude] = coord;
     if (!declinationNeedsRefresh(latitude, longitude)) return;
-    noteDeclinationFix(latitude, longitude);
+    // ONE OUTSTANDING READ, AND THE POSITION IS RECORDED ONLY ON SUCCESS.
+    // `getHeadingAsync` does not resolve until a sample arrives with better
+    // than low accuracy or six have been seen (expo-location's Location.js),
+    // and samples need 2° of movement — so on a phone sitting still it can
+    // simply never return, holding an accelerometer + magnetometer
+    // registration open while it waits. Recording the position up front (the
+    // first version of this) meant one such stall pinned the app to the NSW
+    // constant until the user travelled 55 km. Recording on success instead
+    // would retry on every 3 s fix and stack up those registrations, so the
+    // in-flight guard is what makes retrying safe: at most one ever exists,
+    // and the first one to resolve wins.
+    if (declinationInFlight.current) return;
+    declinationInFlight.current = true;
     void Location.getHeadingAsync()
-      .then(learnDeclination)
-      .catch((err: unknown) => console.error(err));
+      .then((sample) => {
+        if (learnDeclination(sample)) noteDeclinationFix(latitude, longitude);
+      })
+      .catch((err: unknown) => console.error(err))
+      .finally(() => {
+        declinationInFlight.current = false;
+      });
   }, []);
 
   /**

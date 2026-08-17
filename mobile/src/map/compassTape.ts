@@ -5,7 +5,7 @@
 // pxPerDegree` to the right of the centre line. Pure maths, because the tape is
 // the one part of the instrument that can be wrong in a way a screenshot won't
 // show — a tick at the wrong side of north is a compass that lies.
-import { NSW_MAGNETIC_DECLINATION_DEG, shortestAngleDelta } from "./heading";
+import { currentDeclinationDeg, shortestAngleDelta } from "./heading";
 import type { NorthReference } from "./mapPreferences";
 
 /**
@@ -70,7 +70,8 @@ export function compassTicks(
  *
  * Declination is degrees EAST of true north, so the magnetic bearing of a fixed
  * direction is that much SMALLER — 000° true is 347.5° magnetic in NSW, not
- * 012.5°. Getting that sign backwards is a 25° error in the direction people
+ * 012.5°. The value used is whatever `heading.ts` is currently correcting BY,
+ * so the tape and the map can never disagree about it. Getting that sign backwards is a 25° error in the direction people
  * walk, which is why it is a named function with a test rather than an
  * expression inside the view.
  */
@@ -79,5 +80,9 @@ export function displayHeading(
   reference: NorthReference,
 ): number {
   if (reference !== "magnetic") return trueHeading;
-  return (((trueHeading - NSW_MAGNETIC_DECLINATION_DEG) % 360) + 360) % 360;
+  // Exactly what the forward path added, not a second copy of the constant:
+  // `resolveTrueHeading` adds the LEARNED declination once a fix has supplied
+  // one, so subtracting the NSW literal here left the tape's labels adrift from
+  // the map by `learned - 12.5` — small in NSW, unbounded outside it.
+  return (((trueHeading - currentDeclinationDeg()) % 360) + 360) % 360;
 }
