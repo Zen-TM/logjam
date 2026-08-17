@@ -821,9 +821,16 @@ export function normalizeBearing(heading: number): number {
 /**
  * Android's `SENSOR_STATUS_ACCURACY_*`: 0 unreliable, 1 low, 2 medium, 3 high.
  *
- * ONLY 0. Google Maps warns at low, and so did this at first, and it was wrong
- * often enough to be noise — the banner sat there while the system compass app
- * reported HIGH, and came back within seconds of a successful figure-of-eight.
+ * BACK TO 1 (LOW), which is where Android's own compass app prompts, and where
+ * the user expects us to agree with it: after a reboot the system app said LOW
+ * and asked for a calibration while this said nothing at all.
+ *
+ * It was briefly 0, because warning at LOW with no confirmation put a banner up
+ * more or less permanently. Requiring COMPASS_BAD_PROBES_TO_WARN consecutive
+ * probes is the better answer to that: a transient is filtered, a real LOW
+ * persists. Which of those the noise actually was is still unproven — see the
+ * diagnostics line in Settings → Map, which exists so the next change to this
+ * constant is made from numbers rather than from guesses.
  *
  * The reason is that the number is not what it appears to be.
  * `LocationModule.kt:851-853` is
@@ -844,7 +851,7 @@ export function normalizeBearing(heading: number): number {
  * not usable". Combined with COMPASS_BAD_PROBES_TO_WARN, a false banner needs
  * the contamination to repeat several times in a row.
  */
-export const COMPASS_ACCURACY_WARN_AT = 0;
+export const COMPASS_ACCURACY_WARN_AT = 1;
 
 /**
  * How many consecutive bad probes before the banner appears. ONE GOOD PROBE
@@ -900,6 +907,158 @@ export function foldCompassProbe(
  */
 export function compassProbeIsUrgent(state: CompassCalibration): boolean {
   return state.warning || state.badProbes > 0;
+}
+
+// ── the magnetic environment ─────────────────────────────────────────────────
+//
+// WHY THE ACCURACY FLAG IS NOT ENOUGH, and this exists beside it. Android's
+// accuracy is a CALIBRATION-CONFIDENCE number: the sensor hub fits a sphere to
+// recent magnetometer samples, whose centre is the hard-iron offset and whose
+// radius is the local field strength, and reports how well-conditioned that fit
+// is. A magnet held against the phone does not spoil the fit — it just moves the
+// sphere's centre, and once the calibrator has re-converged it reports HIGH and
+// the bearing is right again. The dangerous window is the one BEFORE it
+// re-converges, where the compass is wrong and every indicator says it is fine.
+// That window is what a user sees as "the map is 90° out and all three map apps
+// agree with each other".
+//
+// The check that survives all of it: the field's STRENGTH has a known correct
+// answer, and direction does not. Whatever the phone is pointing at, a
+// correctly-calibrated magnetometer in an undisturbed place measures the local
+// geomagnetic intensity — about 57 µT in NSW. Read something far from that and
+// either the calibration is wrong or there is a field present that is not the
+// Earth's, and in both cases the bearing cannot be trusted.
+
+/** Total geomagnetic intensity across the operating area (Sydney ≈ 57 µT). */
+export const NSW_FIELD_STRENGTH_UT = 57;
+
+/**
+ * How far from that we tolerate before saying something is interfering.
+ *
+ * PROVISIONAL, and deliberately generous. A bias big enough to swing the
+ * bearing by 45° is comparable to the horizontal component (~24 µT here), so a
+ * tighter band would catch more — but every false positive trains the user to
+ * ignore the banner, which is worse than missing some. Widen or narrow it from
+ * the readings in Settings → Map, not from arithmetic.
+ */
+export const FIELD_STRENGTH_TOLERANCE_UT = 20;
+
+/** Magnitude of a magnetometer reading, in µT. */
+export function fieldStrengthUt(sample: {
+  x: number;
+  y: number;
+  z: number;
+}): number {
+  return Math.hypot(sample.x, sample.y, sample.z);
+}
+
+/**
+ * What one probe window saw of the field. `spreadUt` is the part that does not
+ * need a model of the Earth: a correct calibration makes the measured strength
+ * INDEPENDENT of which way the phone is pointing, so if it swings about while
+ * the user turns, the hard-iron estimate is wrong by roughly half the swing —
+ * whatever the local field happens to be.
+ */
+export type FieldWindow = {
+  minUt: number;
+  maxUt: number;
+  samples: number;
+};
+
+export const EMPTY_FIELD_WINDOW: FieldWindow = {
+  minUt: Infinity,
+  maxUt: -Infinity,
+  samples: 0,
+};
+
+export function addFieldSample(window: FieldWindow, strengthUt: number): FieldWindow {
+  if (!Number.isFinite(strengthUt)) return window;
+  return {
+    minUt: Math.min(window.minUt, strengthUt),
+    maxUt: Math.max(window.maxUt, strengthUt),
+    samples: window.samples + 1,
+  };
+}
+
+/** Mid-strength seen, or null if the window heard nothing. */
+export function fieldStrength(window: FieldWindow): number | null {
+  if (window.samples === 0) return null;
+  return (window.minUt + window.maxUt) / 2;
+}
+
+export function fieldSpread(window: FieldWindow): number {
+  if (window.samples === 0) return 0;
+  return window.maxUt - window.minUt;
+}
+
+/**
+ * Is something magnetic near the phone?
+ *
+ * Two ways to fail, either sufficient: the strength is nowhere near the local
+ * geomagnetic intensity, or it MOVED while the phone turned — which a real
+ * geomagnetic field cannot do, and which catches a disturbance whose magnitude
+ * happens to land in the plausible band.
+ *
+ * An empty window is not a verdict, for the same reason a missing accuracy
+ * reading is not: no data is not evidence of a fault.
+ */
+export function magneticInterference(window: FieldWindow): boolean {
+  const strength = fieldStrength(window);
+  if (strength == null) return false;
+  return (
+    Math.abs(strength - NSW_FIELD_STRENGTH_UT) > FIELD_STRENGTH_TOLERANCE_UT ||
+    fieldSpread(window) > FIELD_STRENGTH_TOLERANCE_UT
+  );
+}
+
+/**
+ * The compass's own state, in the plainest words that are still true, for the
+ * diagnostics line in Settings → Map.
+ *
+ * It exists because none of this was observable. "Is my compass all right"
+ * could not be answered on the device, which made every threshold in here a
+ * guess and left a user with a wrong bearing no way to tell whether the app
+ * knew. For a navigation app that is the wrong way round.
+ */
+export function compassDiagnostics(
+  accuracy: number | null,
+  window: FieldWindow,
+): string {
+  const strength = fieldStrength(window);
+  const field =
+    strength == null
+      ? "field not read"
+      : `field ${strength.toFixed(0)} µT (± ${(fieldSpread(window) / 2).toFixed(0)}, expect ~${NSW_FIELD_STRENGTH_UT})`;
+  const status =
+    accuracy == null
+      ? "accuracy unknown"
+      : `accuracy ${["unreliable", "low", "medium", "high"][accuracy] ?? accuracy}`;
+  return `${status}, ${field}.`;
+}
+
+/**
+ * The last probe's readings, so a screen that is not the map can report them.
+ *
+ * Module state, written by the map's probe and read by Settings → Map. Not a
+ * subscription: it is a diagnostics line the user reads once, not something
+ * that has to update under them, and a stale answer is still a true statement
+ * about the last time the compass ran.
+ */
+let lastProbe: { accuracy: number | null; window: FieldWindow } = {
+  accuracy: null,
+  window: EMPTY_FIELD_WINDOW,
+};
+
+export function publishCompassProbe(
+  accuracy: number | null,
+  window: FieldWindow,
+): void {
+  lastProbe = { accuracy, window };
+}
+
+/** The diagnostics line for the last probe the map ran. */
+export function lastCompassDiagnostics(): string {
+  return compassDiagnostics(lastProbe.accuracy, lastProbe.window);
 }
 
 // ── the live heading, deliberately outside React state ───────────────────────

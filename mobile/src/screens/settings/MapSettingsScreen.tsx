@@ -20,7 +20,11 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
 import { isCompassEnabled, setCompassEnabled } from "../../map/compassPreference";
-import { currentDeclinationDeg, isDeclinationLearned } from "../../map/heading";
+import {
+  currentDeclinationDeg,
+  isDeclinationLearned,
+  lastCompassDiagnostics,
+} from "../../map/heading";
 import { ensureForegroundLocationPermission } from "../../map/locationPermission";
 import {
   MARKER_COLORS,
@@ -91,6 +95,18 @@ const NORTH_REFERENCE_HINTS: Partial<Record<NorthReference, string>> = {
  * it gets one. "Which of those am I on" was a question nothing on the device
  * could answer.
  */
+/**
+ * What the compass itself is reporting, under the control that depends on it.
+ *
+ * Provisional in the sense that every threshold above it was set from very
+ * little data — this line is how that gets fixed. It is also the only place a
+ * user can find out whether the app thinks their compass is healthy, which for
+ * a navigation app should not have been missing.
+ */
+function compassHint(): string {
+  return `Compass: ${lastCompassDiagnostics()}`;
+}
+
 function declinationHint(): string {
   const degrees = Math.abs(currentDeclinationDeg()).toFixed(1);
   const side = currentDeclinationDeg() >= 0 ? "east" : "west";
@@ -250,7 +266,7 @@ export function MapSettingsScreen() {
             { value: "magnetic", label: "Magnetic north" },
           ]}
           value={northReference}
-          hint={[NORTH_REFERENCE_HINTS[northReference], declinationHint()]
+          hint={[NORTH_REFERENCE_HINTS[northReference], declinationHint(), compassHint()]
             .filter(Boolean)
             .join(" ")}
           disabledReason={compassEnabled ? undefined : "Needs the compass"}

@@ -515,6 +515,35 @@ review, not by CI.
     reading as no information, in both directions").
   - It needs location permission, which the compass otherwise does not. Denied
     means no reading and no banner: the map is no worse off, it just cannot warn.
+- **The accuracy flag cannot see the fault that actually bites, so there is a
+  second check beside it.** Android's accuracy is CALIBRATION CONFIDENCE: the
+  hub fits a sphere to recent magnetometer samples, centre = hard-iron offset,
+  radius = local field strength, and reports how well-conditioned the fit is. A
+  magnet held against the phone does not spoil that fit — it moves the sphere's
+  centre — so once the calibrator re-converges it reports HIGH and the bearing
+  is right again. The dangerous window is the one BEFORE it re-converges, where
+  the compass is wrong and every indicator says fine. Verified in the field: a
+  magnet threw the bearing ~90° while both our banner and the system compass app
+  reported high accuracy.
+  - The check that survives it is field STRENGTH, because direction has no known
+    correct answer and magnitude does (`magneticInterference`): about 57 µT in
+    NSW (`NSW_FIELD_STRENGTH_UT`), from `expo-sensors`' `Magnetometer` in the
+    same probe window — one sensor, and NO location permission, unlike the
+    accuracy probe beside it.
+  - **The window keeps a min and a max, not an average**, because the second
+    test is orientation-independence: a correct calibration reads the same
+    strength whichever way the phone points, so a strength that SWINGS while the
+    user turns is a fault even when every individual reading is plausible. That
+    catches a disturbance whose magnitude happens to land in the band.
+  - `FIELD_STRENGTH_TOLERANCE_UT` is provisional and deliberately generous —
+    every false positive trains the user to ignore the banner. Tune it from the
+    diagnostics line, not from arithmetic.
+- **Settings → Map reports what the compass is actually doing**
+  (`compassDiagnostics`, published by the map's probe through
+  `publishCompassProbe`). None of this was observable before: "is my compass all
+  right" had no answer on the device, which made every threshold above a guess
+  and left a user with a wrong bearing no way to tell whether the app knew. Any
+  future change to a compass threshold should be made from that line.
 - **A backgrounded recorder appends points and nothing else.** Track stats are
   display-only, so they are recomputed while the app is in front of someone and
   on return to the foreground (`refreshTrackStats` / `refreshActiveTrackStats`),

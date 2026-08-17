@@ -6,16 +6,24 @@ import {
   HEADING_SETTLED_DEG,
   HEADING_TICK_MS,
   POV_USER_SCREEN_FRACTION,
+  EMPTY_FIELD_WINDOW,
   NO_COMPASS_CALIBRATION,
+  NSW_FIELD_STRENGTH_UT,
+  addFieldSample,
+  compassDiagnostics,
   compassProbeIsUrgent,
   createHeadingFilter,
   currentDeclinationDeg,
   declinationNeedsRefresh,
   deviceSampleTimeMs,
+  fieldSpread,
+  fieldStrength,
+  fieldStrengthUt,
   foldCompassProbe,
   headingSettled,
   isDeclinationLearned,
   learnDeclination,
+  magneticInterference,
   normalizeBearing,
   noteDeclinationFix,
   noteHeadingSample,
@@ -24,6 +32,7 @@ import {
   resolveTrueHeading,
   shortestAngleDelta,
   stepHeadingFilter,
+  type FieldWindow,
 } from "./heading";
 import { displayHeading } from "./compassTape";
 
@@ -453,14 +462,16 @@ describe("the compass calibration verdict", () => {
     return readings.reduce(foldCompassProbe, NO_COMPASS_CALIBRATION);
   }
 
-  it("warns only on UNRELIABLE, not on low", () => {
-    // The reading is contaminated: expo-location's `onAccuracyChanged` does not
-    // filter by sensor and the same listener is registered for the
-    // accelerometer as well as the magnetometer, so "low" can be the
-    // accelerometer talking about itself. Warning on it put a banner up while
-    // the system compass app reported HIGH.
-    expect(fold([1, 1, 1, 1, 1]).warning).toBe(false);
+  it("warns where the system compass app does — at LOW", () => {
+    // Agreeing with the phone's own compass app is the requirement: after a
+    // reboot it said LOW and asked for a calibration while this said nothing.
+    // The reading IS contaminated (expo-location's `onAccuracyChanged` does not
+    // filter by sensor, and the same listener covers the accelerometer), which
+    // is why confirmation over consecutive probes carries the noise rejection
+    // rather than the threshold doing it.
+    expect(fold([3, 3, 3]).warning).toBe(false);
     expect(fold([2, 2, 2]).warning).toBe(false);
+    expect(fold([1, 1, 1]).warning).toBe(true);
     expect(fold([bad, bad, bad]).warning).toBe(true);
   });
 
@@ -492,6 +503,65 @@ describe("the compass calibration verdict", () => {
     expect(compassProbeIsUrgent(fold([bad]))).toBe(true);
     expect(compassProbeIsUrgent(fold([bad, bad, bad]))).toBe(true);
     expect(compassProbeIsUrgent(fold([bad, bad, bad, good]))).toBe(false);
+  });
+});
+
+describe("the magnetic environment", () => {
+  const undisturbed = (n = 6) =>
+    Array.from({ length: n }).reduce<FieldWindow>(
+      (w) => addFieldSample(w, NSW_FIELD_STRENGTH_UT),
+      EMPTY_FIELD_WINDOW,
+    );
+
+  it("measures a field's strength regardless of which way it points", () => {
+    // The whole basis of this check: direction has no known correct answer and
+    // magnitude does.
+    expect(fieldStrengthUt({ x: NSW_FIELD_STRENGTH_UT, y: 0, z: 0 })).toBeCloseTo(57, 6);
+    expect(fieldStrengthUt({ x: 0, y: 0, z: -NSW_FIELD_STRENGTH_UT })).toBeCloseTo(57, 6);
+    expect(fieldStrengthUt({ x: 3, y: 4, z: 0 })).toBeCloseTo(5, 6);
+  });
+
+  it("passes an undisturbed field", () => {
+    expect(magneticInterference(undisturbed())).toBe(false);
+    // Real readings wobble; the tolerance has to cover that.
+    let window = EMPTY_FIELD_WINDOW;
+    for (const ut of [55, 57, 58, 56, 57]) window = addFieldSample(window, ut);
+    expect(magneticInterference(window)).toBe(false);
+  });
+
+  it("catches a magnet by its strength", () => {
+    // THE CASE THE ACCURACY FLAG CANNOT SEE. A magnet against the phone is
+    // hard iron: it moves the calibration sphere's centre rather than spoiling
+    // its fit, so Android goes on reporting HIGH while the bearing is wrong.
+    let window = EMPTY_FIELD_WINDOW;
+    for (const ut of [340, 355, 349]) window = addFieldSample(window, ut);
+    expect(magneticInterference(window)).toBe(true);
+  });
+
+  it("catches a disturbance whose strength happens to look plausible", () => {
+    // Second test, and the reason the window keeps a min and a max rather than
+    // an average: a correctly-calibrated compass reads the SAME strength
+    // whichever way the phone points, so a strength that swings while the user
+    // turns is a fault even when every individual reading is believable.
+    let window = EMPTY_FIELD_WINDOW;
+    for (const ut of [45, 70, 48, 68]) window = addFieldSample(window, ut);
+    expect(fieldStrength(window)).toBeCloseTo(57.5, 6);
+    expect(fieldSpread(window)).toBeCloseTo(25, 6);
+    expect(magneticInterference(window)).toBe(true);
+  });
+
+  it("says nothing about a window that read nothing", () => {
+    expect(fieldStrength(EMPTY_FIELD_WINDOW)).toBeNull();
+    expect(fieldSpread(EMPTY_FIELD_WINDOW)).toBe(0);
+    expect(magneticInterference(EMPTY_FIELD_WINDOW)).toBe(false);
+  });
+
+  it("reports what it saw in words a person can act on", () => {
+    expect(compassDiagnostics(3, undisturbed())).toContain("accuracy high");
+    expect(compassDiagnostics(3, undisturbed())).toContain("57 µT");
+    expect(compassDiagnostics(0, EMPTY_FIELD_WINDOW)).toContain("unreliable");
+    expect(compassDiagnostics(null, EMPTY_FIELD_WINDOW)).toContain("unknown");
+    expect(compassDiagnostics(null, EMPTY_FIELD_WINDOW)).toContain("not read");
   });
 });
 

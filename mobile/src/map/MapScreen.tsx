@@ -52,7 +52,7 @@ import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as Location from "expo-location";
-import { DeviceMotion, type DeviceMotionMeasurement } from "expo-sensors";
+import { DeviceMotion, Magnetometer, type DeviceMotionMeasurement } from "expo-sensors";
 import {
   DEM_ATTRIBUTION,
   TOPO_LAYERS,
@@ -113,13 +113,18 @@ import {
   POV_ANIMATION_MAX_MS,
   POV_ANIMATION_MIN_MS,
   POV_DEADBAND_DEG,
+  EMPTY_FIELD_WINDOW,
   NO_COMPASS_CALIBRATION,
+  addFieldSample,
   compassProbeIsUrgent,
   createHeadingFilter,
   declinationNeedsRefresh,
   deviceSampleTimeMs,
+  fieldStrengthUt,
   foldCompassProbe,
   headingFromDeviceRotation,
+  magneticInterference,
+  publishCompassProbe,
   headingSettled,
   learnDeclination,
   noteDeclinationFix,
@@ -2654,6 +2659,7 @@ export function MapScreen({
    * was, it just cannot warn.
    */
   const [compassCalibration, setCompassCalibration] = useState(NO_COMPASS_CALIBRATION);
+  const [fieldWindow, setFieldWindow] = useState(EMPTY_FIELD_WINDOW);
   // In the dep array so the cadence changes with the verdict. It flips at most
   // once per transition, and the restart's immediate probe is exactly what a
   // transition wants.
@@ -2662,14 +2668,41 @@ export function MapScreen({
     if (!sensorsActive || !headingWanted) return;
     let live = true;
     let subscription: Location.LocationSubscription | null = null;
+    let fieldProbe: { remove: () => void } | null = null;
     let closeAt: ReturnType<typeof setTimeout> | undefined;
 
     const probe = () => {
       // Never two at once, and never one left open: each probe closes its own
       // watcher on a timer rather than waiting for a sample that a still phone
       // will never send.
-      if (subscription) return;
+      if (fieldProbe) return;
       let best: number | null = null;
+      // The magnetic environment, over the same window. Needs no permission and
+      // no heading events, so unlike the accuracy flag it still reports on a
+      // phone sitting perfectly still.
+      let field = EMPTY_FIELD_WINDOW;
+      const magnetometer = Magnetometer.addListener((sample) => {
+        field = addFieldSample(field, fieldStrengthUt(sample));
+      });
+      fieldProbe = magnetometer;
+      // Closes on the clock whatever the heading watcher managed, because the
+      // magnetometer half does not depend on it: location permission can be
+      // denied and `watchHeadingAsync` can report nothing, and the field
+      // reading is still worth having.
+      closeAt = setTimeout(() => {
+        subscription?.remove();
+        subscription = null;
+        magnetometer.remove();
+        fieldProbe = null;
+        if (!live) return;
+        // Heard nothing at all? Say nothing. A phone lying still emits no
+        // heading events, and silence is not a fault.
+        setCompassCalibration((current) => foldCompassProbe(current, best));
+        setFieldWindow(field);
+        // ...and where Settings can read it, so "is my compass all right" has
+        // an answer somewhere on the device.
+        publishCompassProbe(best, field);
+      }, COMPASS_PROBE_WINDOW_MS);
       void (async () => {
         const { status } = await Location.getForegroundPermissionsAsync().catch(
           () => ({ status: "denied" as const }),
@@ -2687,13 +2720,6 @@ export function MapScreen({
           return;
         }
         subscription = started;
-        closeAt = setTimeout(() => {
-          subscription?.remove();
-          subscription = null;
-          // Heard nothing at all? Say nothing. A phone lying still emits no
-          // heading events, and silence is not a fault.
-          if (live) setCompassCalibration((current) => foldCompassProbe(current, best));
-        }, COMPASS_PROBE_WINDOW_MS);
       })();
     };
 
@@ -2708,6 +2734,8 @@ export function MapScreen({
       clearTimeout(closeAt);
       subscription?.remove();
       subscription = null;
+      fieldProbe?.remove();
+      fieldProbe = null;
     };
   }, [sensorsActive, headingWanted, compassProbeUrgent]);
 
@@ -3521,7 +3549,14 @@ export function MapScreen({
             arrow, the tape and course-up are all as wrong as each other, which
             is why this sits with the map's own notices rather than next to any
             one of them. Clears itself on the next probe that reads clean. */}
-        {compassCalibration.warning && headingWanted ? (
+        {headingWanted && magneticInterference(fieldWindow) ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>
+              Something magnetic is affecting the compass — move the phone away
+              from metal
+            </Text>
+          </View>
+        ) : headingWanted && compassCalibration.warning ? (
           <View style={styles.notice}>
             <Text style={styles.noticeText}>
               Compass needs calibrating — wave the phone in a figure 8
