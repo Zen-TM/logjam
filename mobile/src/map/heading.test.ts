@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   HEADING_HYSTERESIS_DEG,
   HEADING_MAX_SLEW_DEG_PER_S,
-  HEADING_SENSOR_MS,
+  declinationNeedsRefresh,
+  deviceSampleTimeMs,
+  learnDeclination,
+  noteDeclinationFix,
+  resetDeclination,
   HEADING_SETTLED_DEG,
   HEADING_TICK_MS,
   POV_USER_SCREEN_FRACTION,
@@ -53,14 +57,21 @@ function playHeading(
  * actually has. Tests that feed a tidy noiseless stream measure a signal the
  * phone never sends.
  *
- * `SENSOR_NOISE_DEG` is deliberately deterministic rather than random — a
- * flaky smoothness test is worse than none — but it is the same size and
- * changes every sample, which is what the filters have to cope with.
+ * BOTH NUMBERS ARE MEASURED, not guessed (Pixel 9, `HDGPROBE` log, 35 s at
+ * rest, 2026-08-17): distinct readings arrive every 133 ms median, and a phone
+ * lying still wanders 0.053° peak-to-peak. Note that the cadence is NOT
+ * `HEADING_SENSOR_MS` — that is only how often we ask to be handed the latest
+ * value, and modelling the stream at that rate flatters every filter in here.
+ *
+ * The noise is deliberately deterministic rather than random — a flaky
+ * smoothness test is worse than none — but it is the right size and it moves
+ * every sample, which is what the filters have to cope with.
  */
-const SENSOR_NOISE_DEG = 0.3;
+const SENSOR_GAP_MS = 133;
+const SENSOR_NOISE_DEG = 0.053 / 2;
 function spun(trueHeadingAt: (atMs: number) => number, totalMs: number) {
   const samples: { atMs: number; deg: number }[] = [];
-  for (let atMs = 0; atMs <= totalMs; atMs += HEADING_SENSOR_MS) {
+  for (let atMs = 0; atMs <= totalMs; atMs += SENSOR_GAP_MS) {
     const jitter = SENSOR_NOISE_DEG * Math.sin(atMs / 37) * Math.cos(atMs / 11);
     samples.push({ atMs, deg: trueHeadingAt(atMs) + jitter });
   }
@@ -139,7 +150,7 @@ describe("the heading chase, end to end", () => {
   it("settles on a bearing it is given and then stops", () => {
     // Arrival matters twice over: the ticker has to be able to stop, and the
     // display must not park several degrees short of where the phone points.
-    const played = playHeading([{ atMs: 0, deg: 0 }, { atMs: 100, deg: 90 }], 4_000);
+    const played = playHeading([{ atMs: 0, deg: 0 }, { atMs: 100, deg: 90 }], 8_000);
     const last = played[played.length - 1]!;
     // Within the hysteresis, which is the whole of the standing error.
     expect(Math.abs(shortestAngleDelta(90, last.deg))).toBeLessThanOrEqual(
@@ -158,7 +169,7 @@ describe("the heading chase, end to end", () => {
     for (const at of [300, 500, 700]) {
       const truth = Math.min(at, 800) * (90 / 800);
       const shown = played.find((p) => p.atMs >= at)!;
-      expect(Math.abs(shortestAngleDelta(truth, shown.deg))).toBeLessThan(12);
+      expect(Math.abs(shortestAngleDelta(truth, shown.deg))).toBeLessThan(25);
     }
   });
 
@@ -171,14 +182,18 @@ describe("the heading chase, end to end", () => {
     //
     // Measured as the spread of the per-tick angular velocity around its own
     // mean. The one-euro filter this replaced scored ±16.3°/s on the 25°/s case
-    // below (±65 % of the mean); a plain exponential was worse again.
+    // below (±65 % of the mean); a plain exponential was worse again; and the
+    // rate-tracking version scored the same ±99 % for as long as
+    // HEADING_RATE_MAX_GAP_MS sat below the sensor's real cadence and quietly
+    // rejected every rate measurement. Tolerances are ~1.3× what the constants
+    // currently achieve, so a regression of that kind fails here.
     for (const [rateDegPerS, tolerance] of [
-      [8, 3],
+      [8, 2],
       [25, 5],
-      [60, 9],
+      [60, 11],
     ] as const) {
-      const played = playHeading(spun((t) => (t * rateDegPerS) / 1000, 6_000), 6_000);
-      const settled = played.filter((p) => p.atMs > 1_500 && p.atMs < 5_000);
+      const played = playHeading(spun((t) => (t * rateDegPerS) / 1000, 8_000), 8_000);
+      const settled = played.filter((p) => p.atMs > 1_500 && p.atMs < 6_000);
       const rates = settled
         .slice(1)
         .map(
@@ -196,7 +211,7 @@ describe("the heading chase, end to end", () => {
   it("does not sail past a turn that stops between samples", () => {
     // The price of dead reckoning, and what HEADING_LEAD_DEG/MS bound. Without
     // the lead cap this overshot by tens of degrees and swung back.
-    const played = playHeading(spun((t) => Math.min(t, 800) * 0.11, 5_000), 5_000);
+    const played = playHeading(spun((t) => Math.min(t, 800) * 0.11, 8_000), 8_000);
     const after = played.filter((p) => p.atMs > 800);
     const overshoot = Math.max(...after.map((p) => shortestAngleDelta(88, p.deg)));
     expect(overshoot).toBeLessThan(7);
@@ -225,14 +240,106 @@ describe("the heading chase, end to end", () => {
     // still produce an outlier. One sample of it must not reach the map: the
     // hysteresis absorbs most of it and the slow position term bleeds in the
     // rest over most of a second, by which time it has been contradicted.
-    const samples = spun(() => 0, 2_000);
-    samples[20] = { atMs: samples[20]!.atMs, deg: -25 };
-    const played = playHeading(samples, 2_000);
+    const samples = spun(() => 0, 4_000);
+    samples[10] = { atMs: samples[10]!.atMs, deg: -25 };
+    const played = playHeading(samples, 4_000);
     const worst = Math.min(...played.map((p) => shortestAngleDelta(0, p.deg)));
     // A fifth of it, for one tick. Not zero — nothing can tell an outlier from
     // the start of a real turn until the sample after it — but bounded, and
     // small enough not to read as movement.
     expect(worst).toBeGreaterThan(-5);
+  });
+});
+
+describe("the ticker's idle guarantee", () => {
+  /**
+   * Run the pipeline exactly as the screen does and count how much of the time
+   * the ticker would be RUNNING. That is the battery number: while it ticks,
+   * the screen re-renders two components ~31 times a second and course-up
+   * writes a camera stop per tick.
+   */
+  function dutyCycle(noiseDeg: number, totalMs = 20_000): number {
+    const filter = createHeadingFilter();
+    let ticking = false;
+    let ticks = 0;
+    let frames = 0;
+    let nextSample = 0;
+    for (let now = 0; now <= totalMs; now += HEADING_TICK_MS) {
+      while (nextSample <= now) {
+        const wobble = noiseDeg * Math.sin(nextSample / 37) * Math.cos(nextSample / 11);
+        if (noteHeadingSample(filter, 90 + wobble, nextSample)) ticking = true;
+        nextSample += SENSOR_GAP_MS;
+      }
+      frames += 1;
+      if (!ticking) continue;
+      ticks += 1;
+      stepHeadingFilter(filter, now);
+      if (headingSettled(filter)) ticking = false;
+    }
+    return ticks / frames;
+  }
+
+  it("stops ticking below the hysteresis, and only below it", () => {
+    // THE WHOLE BATTERY ARGUMENT, and it is a cliff rather than a slope. The
+    // target is dragged to sit HEADING_HYSTERESIS_DEG behind the sample, so
+    // noise wider than that band moves it 1:1; the display cannot catch a
+    // target oscillating at sample rate, so `headingSettled` never fires and
+    // the ticker runs for as long as the map is open. Measured either side:
+    //   ±1.0° -> 0.2 %      ±1.3° -> 23 %      ±2.0° -> 82 %
+    // A Pixel 9 lying still wanders 0.053° peak-to-peak, which is where
+    // SENSOR_NOISE_DEG comes from — twenty times inside the band.
+    expect(dutyCycle(SENSOR_NOISE_DEG)).toBeLessThan(0.01);
+    expect(dutyCycle(HEADING_HYSTERESIS_DEG * 0.9)).toBeLessThan(0.01);
+    // ...and the other side, so nobody "simplifies" the hysteresis away and
+    // leaves this test passing.
+    expect(dutyCycle(HEADING_HYSTERESIS_DEG * 2)).toBeGreaterThan(0.5);
+  });
+});
+
+describe("declination", () => {
+  it("derives the real value by differencing the two norths", () => {
+    // expo-location builds trueHeading as magHeading + GeomagneticField
+    // .declination (LocationModule.kt:603-607), so the difference IS Android's
+    // own value and we need no model of our own.
+    resetDeclination();
+    expect(learnDeclination({ magHeading: 100, trueHeading: 112.4 })).toBe(true);
+    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 0 })).toBeCloseTo(12.4, 6);
+  });
+
+  it("keeps the NSW fallback when there is no fix to derive one from", () => {
+    resetDeclination();
+    // trueHeading is -1 whenever expo-location has no fix.
+    expect(learnDeclination({ magHeading: 100, trueHeading: -1 })).toBe(false);
+    expect(resolveTrueHeading({ trueHeading: -1, magHeading: 347.5 })).toBeCloseTo(0, 6);
+  });
+
+  it("refreshes on travel, not on a clock", () => {
+    resetDeclination();
+    expect(declinationNeedsRefresh(-33.56, 150.4)).toBe(true);
+    noteDeclinationFix(-33.56, 150.4);
+    // Same valley all week: no refresh, however long the app stays open.
+    expect(declinationNeedsRefresh(-33.57, 150.41)).toBe(false);
+    // A drive down the coast: refresh.
+    expect(declinationNeedsRefresh(-34.6, 150.4)).toBe(true);
+  });
+});
+
+describe("deviceSampleTimeMs", () => {
+  it("puts the sensor's monotonic clock into the Date.now() domain", () => {
+    // The rate estimate divides by these gaps, so they have to be the sensor's
+    // own spacing and not our dispatch interval.
+    const filter = createHeadingFilter();
+    const bootSeconds = 4_321.5;
+    const first = deviceSampleTimeMs(filter, bootSeconds, 1_700_000_000_000);
+    expect(first).toBe(1_700_000_000_000);
+    // A reading 133 ms later by the sensor's clock, handed over 40 ms late.
+    const second = deviceSampleTimeMs(filter, bootSeconds + 0.133, 1_700_000_000_173);
+    expect(second - first).toBeCloseTo(133, 6);
+  });
+
+  it("falls back to arrival time when a platform omits the timestamp", () => {
+    const filter = createHeadingFilter();
+    expect(deviceSampleTimeMs(filter, undefined, 12_345)).toBe(12_345);
   });
 });
 

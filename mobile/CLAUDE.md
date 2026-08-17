@@ -289,6 +289,13 @@ review, not by CI.
 - **The compass heading never goes back into a screen's state.** It lives in
   `map/heading.ts` behind `publishHeading`/`useLiveHeading` and is read by
   exactly two memoised components (`UserLocationMarker`, `LiveCompassStrip`).
+  A component that only needs part of the heading subscribes to part of it:
+  `useHasLiveHeading` (course-up draws the arrow at a constant, so the value is
+  not on screen) and `useQuantisedLiveHeading` (the tape moves 2.2 px per
+  degree and rebuilds ~30 native views per render, so a quarter-degree snapshot
+  is half a pixel and `useSyncExternalStore` bails out of most renders). The
+  sensor itself is gated on `userCoord`, not `dotWanted` — the arrow does not
+  mount until there is a fix, and indoors that can be never.
   Course-up also draws the arrow VIEWPORT-aligned and pointing straight up
   (`lockUpright`), because in that mode the camera's rotation is a native ramp
   and `iconRotate` is a per-tick prop — two animators on one angle, which reads
@@ -372,10 +379,56 @@ review, not by CI.
   - It needs NO permission, so the compass tape and the arrow's bearing now work
     with location denied. `permissionNonce` existed only to re-check that
     permission and is gone.
-  - `DeviceMotion` registers five sensors at `SENSOR_DELAY_FASTEST` and we read
-    one. Only while the map tab is focused and foregrounded, i.e. only with the
-    screen lit. The upgrade path if that ever shows up in a field battery
-    number: our own Expo module exposing `TYPE_ROTATION_VECTOR` alone.
+  - `DeviceMotion` registers five sensors and we read one. Only while the map
+    tab is focused and foregrounded, i.e. only with the screen lit. The upgrade
+    path if that ever shows up in a field battery number: our own Expo module
+    exposing `TYPE_ROTATION_VECTOR` alone.
+- **The sensor's real cadence is MEASURED, and the constants are derived from
+  the measurement — not from what we asked for.** `setUpdateInterval` is a
+  dispatch throttle; the native registration rate is `SENSOR_DELAY_NORMAL`
+  unless the app declares `HIGH_SAMPLING_RATE_SENSORS`
+  (`SensorSubscription.kt:21-26`), which we deliberately do not — on a Pixel 9
+  that permission means five sensors at 200 Hz for a compass that needs eight.
+  Measured at rest over 35 s (`HDGPROBE`, 2026-08-17): **distinct readings every
+  133 ms (8 Hz)**, and **0.053° peak-to-peak of wander**. Both numbers are
+  load-bearing:
+  - `HEADING_RATE_MAX_GAP_MS` was derived from `HEADING_SENSOR_MS` and landed at
+    120 ms — *below* the 133 ms cadence — so it rejected nearly every rate
+    measurement and the rate tracker was silently inert, leaving a pure position
+    chaser with 320 ms of lag. It is a measured constant now. There is a floor
+    too (`HEADING_RATE_MIN_GAP_MS`): a gap far shorter than the cadence is
+    delivery jitter, and dividing a real angle by it manufactures a rate the
+    display then dead-reckons off at.
+  - Gaps are timed from `rotation.timestamp` (the sensor's own monotonic clock,
+    converted once by `deviceSampleTimeMs`), NOT from arrival. Arrival timing
+    quantises a 133 ms gap to the dispatch grid and puts ±25 % of noise into the
+    one number the tracker integrates — and it is what forced a 30 ms dispatch.
+    With sensor timing the dispatch can be 60 ms, halving bridge traffic that
+    was ~22 duplicate events per second.
+  - `HEADING_HYSTERESIS_DEG` is sized by HAND TREMOR, not sensor noise, and the
+    "still phone stops the ticker" property is a CLIFF at exactly that value:
+    duty cycle runs 0.2 % at ±1.0° of wander and 82 % at ±2.0°, because past the
+    band the drag follower ratchets 1:1 and the display can never catch a target
+    oscillating at sample rate. `heading.test.ts` ("stops ticking below the
+    hysteresis, and only below it") pins both sides. Don't lower it without
+    re-measuring on hardware.
+- **A device with no gyroscope has no rotation vector, and must fall back.**
+  `DeviceMotion` still dispatches (the accelerometer is universal) but never
+  carries `rotation`, so the compass would simply never appear. The map waits
+  `ROTATION_VECTOR_GRACE_MS` for a reading and then starts
+  `watchHeadingAsync` instead. The fallback triggers on the ABSENCE OF DATA, not
+  on `DeviceMotion.isAvailableAsync()`: that probe demands all five sensors,
+  four of which the framework synthesises, so it can answer false on hardware
+  that would have worked.
+- **Declination is derived, not assumed.** `expo-location` builds `trueHeading`
+  as `magHeading + GeomagneticField.declination` (`LocationModule.kt:603-607`),
+  so one `getHeadingAsync` and a subtraction give Android's own WMM value with
+  no native module and no offline model (`learnDeclination`). Refreshed on
+  TRAVEL (`declinationNeedsRefresh`, ~55 km) rather than on a timer, because
+  declination is a function of position and drifts ~0.1°/year — a TTL would
+  refresh a phone sitting in one valley all week and still miss a drive.
+  `NSW_MAGNETIC_DECLINATION_DEG` is now only the pre-first-fix fallback and what
+  a guest with location denied keeps using.
 - **A backgrounded recorder appends points and nothing else.** Track stats are
   display-only, so they are recomputed while the app is in front of someone and
   on return to the foreground (`refreshTrackStats` / `refreshActiveTrackStats`),

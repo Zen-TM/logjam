@@ -114,8 +114,14 @@ import {
   POV_ANIMATION_MIN_MS,
   POV_DEADBAND_DEG,
   createHeadingFilter,
+  declinationNeedsRefresh,
+  deviceSampleTimeMs,
   headingFromDeviceRotation,
   headingSettled,
+  learnDeclination,
+  noteDeclinationFix,
+  useHasLiveHeading,
+  useQuantisedLiveHeading,
   noteHeadingSample,
   normalizeBearing,
   povCameraCenter,
@@ -314,6 +320,15 @@ async function currentHeading(): Promise<number | null> {
 /** Gap between the stacked instruments, and the same value their container uses. */
 const INSTRUMENT_GAP = spacing(0.75);
 
+/**
+ * How long to wait for a `rotation` reading before deciding the device has no
+ * rotation vector. Generous next to the ~133 ms the sensor actually reports at:
+ * a false positive here costs a phone the good sensor for the rest of the
+ * session, and a false negative costs a second of no compass on the handful of
+ * phones without a gyroscope.
+ */
+const ROTATION_VECTOR_GRACE_MS = 1500;
+
 /** Tag for this screen's wake lock, so releasing it can't release anyone else's. */
 const KEEP_AWAKE_TAG = "logjam-map";
 
@@ -412,9 +427,36 @@ const UserLocationMarker = memo(function UserLocationMarker({
    */
   lockUpright: boolean;
 }) {
-  const liveHeading = useLiveHeading();
-  const heading = lockUpright ? 0 : liveHeading;
-  const rotationAlignment = lockUpright ? ("viewport" as const) : ("map" as const);
+  // Course-up draws a constant, so it must not subscribe to the VALUE — the
+  // ticker publishes ~30 times a second and this component commits a
+  // ShapeSource plus two SymbolLayers to MLRN on every render. Same split as
+  // LiveCompassStrip below, for the same reason.
+  return lockUpright ? (
+    <UprightUserMarker coord={coord} markerColorId={markerColorId} />
+  ) : (
+    <BearingUserMarker coord={coord} markerColorId={markerColorId} />
+  );
+});
+
+const UprightUserMarker = memo(function UprightUserMarker(props: UserMarkerProps) {
+  // Only "is there a heading at all" can change here, which is twice a session.
+  return <UserMarkerLayers {...props} heading={useHasLiveHeading() ? 0 : null} upright />;
+});
+
+const BearingUserMarker = memo(function BearingUserMarker(props: UserMarkerProps) {
+  return <UserMarkerLayers {...props} heading={useLiveHeading()} upright={false} />;
+});
+
+type UserMarkerProps = { coord: [number, number]; markerColorId: MarkerColorId };
+
+function UserMarkerLayers({
+  coord,
+  markerColorId,
+  heading,
+  upright,
+}: UserMarkerProps & { heading: number | null; upright: boolean }) {
+  const rotationAlignment = upright ? ("viewport" as const) : ("map" as const);
+  const liveHeading = heading;
   // MLRN's ShapeSource JSON.stringifies `shape` on every render it lets
   // through, so this must not be an object literal in the JSX.
   const shape = useMemo(
@@ -468,7 +510,7 @@ const UserLocationMarker = memo(function UserLocationMarker({
       />
     </ShapeSource>
   );
-});
+}
 
 /**
  * Locate-me sprites: the facing arrow, and the beam behind it.
@@ -503,7 +545,7 @@ const SubscribedCompassStrip = memo(function SubscribedCompassStrip({
   width: number;
   reference: NorthReference;
 }) {
-  const heading = useLiveHeading();
+  const heading = useQuantisedLiveHeading();
   return <CompassStrip heading={heading} width={width} reference={reference} />;
 });
 
@@ -2196,12 +2238,37 @@ export function MapScreen({
   }, [povRecentreNonce, recentre]);
 
   /**
+   * Derive the real magnetic declination for where the user actually is.
+   *
+   * `DeviceMotion` reports against MAGNETIC north and knows nothing about
+   * location, so without this the heading is corrected by a single constant
+   * good only inside NSW. One `getHeadingAsync` gives both norths and their
+   * difference is Android's own `GeomagneticField` value — see
+   * `learnDeclination`.
+   *
+   * Triggered by TRAVEL, not by a clock: declination is a function of position,
+   * and its drift over time is ~0.1°/year, so there is no staleness a TTL would
+   * catch and no reason to refresh a phone sitting in one valley all week.
+   * `noteDeclinationFix` records the position first so a failed or
+   * permission-denied read does not retry on every one of the 3 s fixes.
+   */
+  const refreshDeclination = useCallback((coord: [number, number]) => {
+    const [longitude, latitude] = coord;
+    if (!declinationNeedsRefresh(latitude, longitude)) return;
+    noteDeclinationFix(latitude, longitude);
+    void Location.getHeadingAsync()
+      .then(learnDeclination)
+      .catch((err: unknown) => console.error(err));
+  }, []);
+
+  /**
    * Fold one fix into the dot and, in a follow mode, into the camera.
    */
   const applyFix = useCallback(
     (coord: [number, number]) => {
       setUserCoord(coord);
       latestFix.current = coord;
+      refreshDeclination(coord);
       const mode = followModeRef.current;
       if (firstFix.current) {
         firstFix.current = false;
@@ -2231,7 +2298,7 @@ export function MapScreen({
         setCameraStop({ centerCoordinate: coord, animationDuration: 600 });
       }
     },
-    [setCameraStop, pinchStart],
+    [setCameraStop, pinchStart, refreshDeclination],
   );
 
   /**
@@ -2310,6 +2377,33 @@ export function MapScreen({
   const handleHeadingSample = useCallback(
     (rotation: DeviceMotionMeasurement["rotation"] | null) => {
       const raw = headingFromDeviceRotation(rotation);
+      if (raw == null) return;
+      // Timed by the SENSOR, not by arrival — see `deviceSampleTimeMs`. The
+      // dispatch interval is a throttle we chose and would otherwise quantise
+      // every gap the rate estimate is built from.
+      const at = deviceSampleTimeMs(
+        headingFilter.current,
+        rotation?.timestamp,
+        Date.now(),
+      );
+      if (!noteHeadingSample(headingFilter.current, raw, at)) return;
+      startHeadingTicker();
+    },
+    [startHeadingTicker],
+  );
+
+  /**
+   * The same thing off `expo-location`'s heading watcher, for a phone with no
+   * gyroscope (see the sensor effect). Everything downstream is identical; only
+   * the source and its timing differ, and that watcher has no sample timestamp
+   * to offer, so arrival time is all there is.
+   */
+  const handleLegacyHeadingSample = useCallback(
+    (sample: Location.LocationHeadingObject) => {
+      // This source DOES know true north when it has a fix, so take the real
+      // declination from it while we are here (see `learnDeclination`).
+      learnDeclination(sample);
+      const raw = resolveTrueHeading(sample);
       if (raw == null) return;
       if (!noteHeadingSample(headingFilter.current, raw, Date.now())) return;
       startHeadingTicker();
@@ -2430,14 +2524,54 @@ export function MapScreen({
   // to re-run that check after a grant made on another screen. The tape and the
   // arrow's bearing now work on a fresh install with location denied — only the
   // DOT needs a fix, and its own watcher above still asks for one.
-  const headingWanted = compassEnabled || dotWanted;
+  //
+  // `userCoord`, not `dotWanted`: the arrow does not mount until there is a
+  // position (see the marker in the JSX), so between the locate-me tap and the
+  // first fix — which indoors can be never — the sensors, the bridge traffic
+  // and the ticker would all run with nothing on screen consuming any of it.
+  const headingWanted = compassEnabled || (dotWanted && userCoord != null);
   useEffect(() => {
     if (!sensorsActive || !headingWanted) return;
     DeviceMotion.setUpdateInterval(HEADING_SENSOR_MS);
+    let live = true;
+    // NO ROTATION VECTOR MEANS NO GYROSCOPE, and there are Android phones
+    // without one. `DeviceMotion` still dispatches (the accelerometer is
+    // universal) but never carries `rotation`, so the compass would simply
+    // never appear — a regression against the expo-location watcher, which
+    // managed accelerometer+magnetometer alone. Falling back on the ABSENCE OF
+    // DATA rather than on `isAvailableAsync` is deliberate: that probe demands
+    // all five of DeviceMotion's sensors, four of which the framework
+    // synthesises, so it can answer false on hardware that would have worked.
+    // Waiting for the thing we actually need cannot be wrong, and costs a
+    // second of no compass on the phones that need the fallback.
+    let sawRotation = false;
+    let fallback: Location.LocationSubscription | null = null;
     const subscription = DeviceMotion.addListener((motion) => {
+      if (motion.rotation) sawRotation = true;
       handleHeadingSample(motion.rotation);
     });
+    const probe = setTimeout(() => {
+      if (!live || sawRotation) return;
+      void Location.getForegroundPermissionsAsync()
+        .then(async ({ status }) => {
+          if (!live || status !== "granted") return;
+          const started = await Location.watchHeadingAsync((sample) => {
+            handleLegacyHeadingSample(sample);
+          }).catch((err: unknown) => {
+            console.error(err);
+            return null;
+          });
+          if (!started) return;
+          if (live) fallback = started;
+          else started.remove();
+        })
+        .catch((err: unknown) => console.error(err));
+    }, ROTATION_VECTOR_GRACE_MS);
     return () => {
+      live = false;
+      clearTimeout(probe);
+      fallback?.remove();
+      fallback = null;
       subscription.remove();
       // Drop the reading with the sensor. A heading is a claim about which way
       // the phone is pointing RIGHT NOW; kept across a suspend it draws the
@@ -2453,7 +2587,13 @@ export function MapScreen({
       lastPovWriteAt.current = 0;
       publishHeading(null);
     };
-  }, [sensorsActive, headingWanted, handleHeadingSample, stopHeadingTicker]);
+  }, [
+    sensorsActive,
+    headingWanted,
+    handleHeadingSample,
+    handleLegacyHeadingSample,
+    stopHeadingTicker,
+  ]);
 
   const handleLocateMe = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;

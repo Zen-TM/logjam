@@ -93,21 +93,32 @@ import { metersPerPixel } from "./scaleBar";
 export const HEADING_TICK_MS = 32;
 
 /**
- * How often the sensor itself is asked to report, in ms.
+ * How often `DeviceMotion` is asked to DISPATCH, in ms. It is not the rate the
+ * orientation actually changes at, and the difference matters.
  *
- * Faster than the ticker on purpose, so every tick has something newer than the
- * last one to work with. ~33 Hz — six times what `expo-location` allowed, and
- * the reason the constants below could be tightened so far: the display now
- * interpolates across a 30 ms gap instead of a 200 ms one.
+ * MEASURED ON A PIXEL 9 (2026-08-17, `HDGPROBE` log over 35 s at rest):
+ * dispatches arrive at the interval asked for, but distinct `rotation` values
+ * arrive at **8 Hz — a 133 ms median gap**. `setUpdateInterval` is a dispatch
+ * throttle only; the native registration rate is chosen in
+ * `SensorSubscription.kt:21-26` and is `SENSOR_DELAY_NORMAL` unless the app
+ * declares `HIGH_SAMPLING_RATE_SENSORS`, which we deliberately do not — on this
+ * device that permission would mean five sensors at 200 Hz (`dumpsys
+ * sensorservice`: rotation vector maxRate 200 Hz) for a compass that needs
+ * about eight. There is no middle setting reachable from JS.
+ *
+ * So this is set to comfortably beat the data rate and no more. At 30 ms it
+ * was, and 22 of every 30 dispatches carried a byte-identical bearing across
+ * the bridge; 60 ms halves that traffic and still cannot miss a value.
+ * TIMING IS NOT LOST BY SLOWING IT DOWN, because gaps are measured from the
+ * sensor's own timestamp (`deviceSampleTimeMs`) rather than from arrival.
  *
  * ponytail: `DeviceMotion` registers five sensors (gyro, accel, linear accel,
- * rotation vector, gravity) at `SENSOR_DELAY_FASTEST` and we read one of them.
- * That is the price of not writing a native module; the upgrade path, if the
- * field battery numbers ever object, is our own Expo module exposing
- * `TYPE_ROTATION_VECTOR` alone at exactly this rate. It only runs while the map
- * tab is focused and foregrounded, i.e. only with the screen lit.
+ * rotation vector, gravity) and we read one. That is the price of not writing a
+ * native module; the upgrade path, if a field battery day ever objects, is our
+ * own Expo module exposing `TYPE_ROTATION_VECTOR` alone. It only runs while the
+ * map tab is focused and foregrounded, i.e. only with the screen lit.
  */
-export const HEADING_SENSOR_MS = 30;
+export const HEADING_SENSOR_MS = 60;
 
 /**
  * Below this much left to travel — with the rate estimate also spent — the
@@ -129,15 +140,23 @@ export const HEADING_SETTLED_RATE_DEG_PER_S = 2;
 /**
  * Time constant of the RATE estimate, over target moves. THE SMOOTHNESS KNOB.
  *
- * Long, because a steady turn's samples all imply the same rate and the whole
- * point is to average the staircase away. Too short and the rate inherits the
- * quantisation and the motion stutters again; too long and the display takes
- * that long to believe a turn has started.
+ * Averages the sample-to-sample variation away so a steady turn produces a
+ * steady rate. Too short and the rate inherits that variation and the motion
+ * stutters; too long and the display takes that long to believe a turn has
+ * started. At the measured 8 Hz this covers about two samples.
  */
-export const HEADING_RATE_TAU_MS = 250;
+export const HEADING_RATE_TAU_MS = 150;
 
 /**
  * Longest gap between two target moves that may still be read as a turn rate.
+ *
+ * IT MUST CLEAR THE REAL SAMPLE CADENCE WITH ROOM TO SPARE, and briefly did
+ * not: it was derived from HEADING_SENSOR_MS (120 ms) while the measured gap
+ * between distinct readings is 133 ms median / 135 ms p90, so it rejected most
+ * genuine moves and the rate estimator — the whole point of the design — was
+ * silently inert, leaving a pure position chaser with 320 ms of lag. Pinned to
+ * a measured number now, not to a dispatch interval that has nothing to do with
+ * it: three times the observed cadence.
  *
  * A move that arrives after a long quiet spell is the FIRST move of a new turn,
  * not evidence of one already running: the phone was still for most of that
@@ -146,7 +165,18 @@ export const HEADING_RATE_TAU_MS = 250;
  * whatever direction that one sample pointed. The rate is left where it is
  * (zero, after the stall decay) and the next few moves build it honestly.
  */
-const HEADING_RATE_MAX_GAP_MS = 4 * HEADING_SENSOR_MS;
+const HEADING_RATE_MAX_GAP_MS = 400;
+
+/**
+ * ...and the shortest. A gap well under the sensor's own cadence cannot be a
+ * measurement of how fast the phone is turning; it is delivery jitter, or two
+ * readings arriving in one batch after a stall. Dividing a real angle by it
+ * manufactures an enormous rate, and the display then dead-reckons off at that
+ * speed until the next sample contradicts it — a lurch tens of degrees past
+ * where the phone is pointing, which the lead cap widens rather than stops
+ * (the cap scales WITH the rate). Half the measured 133 ms cadence.
+ */
+const HEADING_RATE_MIN_GAP_MS = 60;
 
 /**
  * Time constant of the POSITION correction — how fast the display closes drift
@@ -158,8 +188,13 @@ const HEADING_RATE_MAX_GAP_MS = 4 * HEADING_SENSOR_MS;
  * a real turn the rate estimate is already doing the tracking, and this is only
  * mopping up. It IS what handles a jump the rate cannot explain (a magnetic
  * anomaly, a recalibration), and handling those slowly is correct.
+ *
+ * A SECOND is not a typo. Simulated against the measured 8 Hz cadence, moving
+ * from 300 ms to 1000 ms takes per-tick angular velocity ripple from 27 % of
+ * the mean to 14 % at every turn rate, and costs nothing in lag, because the
+ * rate term is what carries the tracking.
  */
-export const HEADING_CATCHUP_TAU_MS = 300;
+export const HEADING_CATCHUP_TAU_MS = 1000;
 
 /**
  * How far the display may run AHEAD of the target: a fixed part, plus this many
@@ -168,13 +203,17 @@ export const HEADING_CATCHUP_TAU_MS = 300;
  * Dead reckoning has to be allowed to lead — that is the interpolation across
  * the gap between samples, and clamping it to zero would put the staircase
  * straight back. But an unbounded lead is an unbounded overshoot when the phone
- * stops between samples, so it is capped at roughly one sample gap of travel.
- * The rate-scaled part is what keeps a fast turn smooth (its target steps are
- * ~6°, so a 3° cap would bind on every one of them) without letting a slow one
- * drift.
+ * stops between samples, and nothing can know it stopped until the next one.
+ *
+ * HEADING_LEAD_MS is therefore HALF the measured 133 ms gap between readings:
+ * enough to interpolate across most of a gap, so the cap stops binding on every
+ * sample of a fast turn (at 30 ms it bound constantly and the ripple at 60°/s
+ * was 99 % of the mean), while bounding the worst-case overshoot at half a gap
+ * of travel. Raising it trades overshoot for smoothness at high turn rates.
+ * That is the whole of the trade, and it is the honest cost of an 8 Hz sensor.
  */
-export const HEADING_LEAD_DEG = 1;
-export const HEADING_LEAD_MS = 30;
+export const HEADING_LEAD_DEG = 3;
+export const HEADING_LEAD_MS = 60;
 
 /**
  * The rate estimate is only fed when the target MOVES, so after this long
@@ -196,10 +235,22 @@ const HEADING_RATE_STALL_FLOOR_MS = 150;
  * there is no staircase — which is what killed the old ≥3° gate.
  *
  * IT WAS 2.5° AGAINST THE OLD SENSOR, sized to the 2.03° quantum
- * `expo-location` reported in. The rotation vector is continuous and far
- * quieter, so it is 1° now — less standing bias, and less of a dead zone at the
- * very start of a turn. THIS IS THE FIRST KNOB TO RAISE if a phone lying still
- * ever creeps again.
+ * `expo-location` reported in. It is 1° now, and what sizes it is HAND TREMOR,
+ * not sensor noise: a Pixel 9 lying still measures 0.053° peak-to-peak of
+ * wander (`HDGPROBE`, 35 s, 2026-08-17), twenty times inside this band, so the
+ * gyro-fused source contributes essentially nothing towards moving the target.
+ * A phone being HELD wanders far more than that, and that is real rotation
+ * rather than noise — absorbing it is this constant's actual job.
+ *
+ * THAT MARGIN IS THE BATTERY ARGUMENT, and it is narrower than it looks. The
+ * "a still phone stops the ticker" property holds only while the wander stays
+ * inside this band: past it the drag follower ratchets 1:1 with the noise, the
+ * display can never catch a target oscillating at sample rate, and the ticker
+ * runs for as long as the map is open. Measured duty cycle goes from 0.2 % at
+ * ±1.0° to 82 % at ±2.0°, a cliff sitting exactly at this constant.
+ * `heading.test.ts` ("stops ticking below the hysteresis, and only below it")
+ * pins both sides of it — do not lower this without moving that test's floor
+ * and re-measuring on hardware.
  *
  * The cost is a standing bias of up to this much in whichever direction the
  * user last turned.
@@ -348,6 +399,9 @@ export type HeadingFilter = {
    *  rate term. */
   lastTargetMoveAt: number | null;
   lastStepAt: number | null;
+  /** `Date.now()` minus the sensor clock, fixed at the first sample. See
+   *  `deviceSampleTimeMs`. */
+  sensorClockOffsetMs: number | null;
 };
 
 export function createHeadingFilter(): HeadingFilter {
@@ -358,12 +412,43 @@ export function createHeadingFilter(): HeadingFilter {
     lastTargetGapMs: 0,
     lastTargetMoveAt: null,
     lastStepAt: null,
+    sensorClockOffsetMs: null,
   };
 }
 
 /** Fraction of the remaining distance a first-order low-pass closes in `dtMs`. */
 function lowPassAlpha(tauMs: number, dtMs: number): number {
   return dtMs / (tauMs + dtMs);
+}
+
+/**
+ * When a `DeviceMotion` reading was actually TAKEN, in the `Date.now()` domain.
+ *
+ * `rotation.timestamp` is the Android `SensorEvent` timestamp — nanoseconds on
+ * a monotonic clock, converted to seconds by `DeviceMotionModule.kt:253`. Using
+ * it rather than arrival time is what makes the rate estimate trustworthy: the
+ * dispatch interval is a throttle we chose (HEADING_SENSOR_MS) and has nothing
+ * to do with when the sensor sampled, so measuring gaps on arrival quantises a
+ * 133 ms interval to the dispatch grid and puts ±25 % of noise straight into
+ * the one number the whole tracker integrates.
+ *
+ * The two clocks differ by a constant (one counts from boot), so one offset
+ * captured at the first sample converts between them. Session-scoped, and it
+ * dies with the filter; the drift between Android's monotonic and wall clocks
+ * over a map session is far below a millisecond.
+ *
+ * Falls back to `nowMs` when a reading carries no timestamp, so a device or a
+ * platform that omits it degrades to arrival timing rather than breaking.
+ */
+export function deviceSampleTimeMs(
+  filter: HeadingFilter,
+  timestampSeconds: number | undefined,
+  nowMs: number,
+): number {
+  if (timestampSeconds == null || !Number.isFinite(timestampSeconds)) return nowMs;
+  const sensorMs = timestampSeconds * 1000;
+  filter.sensorClockOffsetMs ??= nowMs - sensorMs;
+  return sensorMs + filter.sensorClockOffsetMs;
 }
 
 /**
@@ -395,8 +480,9 @@ export function noteHeadingSample(
     filter.lastTargetGapMs = Math.min(gapMs, HEADING_RATE_MAX_GAP_MS);
     // Averaged over the REAL gap, not per sample: the same turn reported twice
     // as often must not read as twice the rate. A gap too long to be a sampling
-    // interval is the start of a turn, not a measurement of one.
-    if (gapMs <= HEADING_RATE_MAX_GAP_MS) {
+    // interval is the start of a turn rather than a measurement of one, and a
+    // gap too short is not a measurement at all.
+    if (gapMs >= HEADING_RATE_MIN_GAP_MS && gapMs <= HEADING_RATE_MAX_GAP_MS) {
       filter.rateDegPerS +=
         lowPassAlpha(HEADING_RATE_TAU_MS, gapMs) *
         ((moved * 1000) / gapMs - filter.rateDegPerS);
@@ -518,12 +604,79 @@ export function headingSettled(filter: HeadingFilter): boolean {
  * (Blue Mountains / Wollemi ≈ +12.4°, Kanangra ≈ +12.2°, the far south coast
  * ≈ +12.9°).
  *
- * ponytail: one constant for the whole operating area, worth ≤1° of error
- * inside NSW and wrong outside it. The upgrade path is Android's
- * `GeomagneticField` (or a WMM port) through a tiny native call, keyed on the
- * user's own fix — worth doing the day the app is used outside this state.
+ * THE FALLBACK, not the only source. `learnDeclination` derives the real value
+ * from Android's own `GeomagneticField` as soon as there is a fix (see there
+ * for the trick), so this is what a guest with location denied gets, and what
+ * everyone gets for the seconds before the first fix. Worth ≤1° inside NSW and
+ * wrong outside it — which now only matters until a fix arrives.
  */
 export const NSW_MAGNETIC_DECLINATION_DEG = 12.5;
+
+/**
+ * The declination actually in force, degrees east of true north.
+ *
+ * Defaults to the NSW constant and is replaced by the real thing as soon as a
+ * fix makes one available — see `learnDeclination`. Module state rather than
+ * filter state because it describes WHERE THE USER IS, which outlives any one
+ * screen's sensor subscription; the fallback is what a guest with location
+ * denied keeps using.
+ */
+let declinationDeg = NSW_MAGNETIC_DECLINATION_DEG;
+
+/** Where `declinationDeg` was computed, so it can be recomputed on travel. */
+let declinationAt: { latitude: number; longitude: number } | null = null;
+
+/**
+ * Adopt a real declination, derived rather than computed.
+ *
+ * `expo-location`'s heading sample carries both norths, and
+ * `LocationModule.kt:603-607` builds the true one as
+ * `magHeading + GeomagneticField.declination`. So their difference IS Android's
+ * own WMM declination for the device's current fix, and subtracting it gets us
+ * the exact value with no native module, no offline model and no new
+ * dependency. `trueHeading` is -1 whenever there is no fix to compute it from,
+ * which is the case this returns false for.
+ */
+export function learnDeclination(sample: {
+  trueHeading: number;
+  magHeading: number;
+}): boolean {
+  if (!(sample.trueHeading >= 0) || !(sample.magHeading >= 0)) return false;
+  declinationDeg = shortestAngleDelta(sample.magHeading, sample.trueHeading);
+  return true;
+}
+
+/** Remember where that was learned, so travel can invalidate it. */
+export function noteDeclinationFix(latitude: number, longitude: number): void {
+  declinationAt = { latitude, longitude };
+}
+
+/**
+ * Far enough from the last one to be worth re-deriving, in degrees of latitude
+ * or longitude. Declination moves with POSITION, not with time — its secular
+ * drift is about 0.1°/year — so distance is the only trigger that matters and
+ * no TTL is needed. Half a degree is ~55 km, which is worth well under a degree
+ * of declination anywhere in the operating area.
+ */
+const DECLINATION_REFRESH_DEG = 0.5;
+
+/** Whether a fix has moved far enough that the declination should be re-derived. */
+export function declinationNeedsRefresh(
+  latitude: number,
+  longitude: number,
+): boolean {
+  if (declinationAt == null) return true;
+  return (
+    Math.abs(latitude - declinationAt.latitude) > DECLINATION_REFRESH_DEG ||
+    Math.abs(longitude - declinationAt.longitude) > DECLINATION_REFRESH_DEG
+  );
+}
+
+/** Test seam, and the sign-out reset: forget what was learned. */
+export function resetDeclination(): void {
+  declinationDeg = NSW_MAGNETIC_DECLINATION_DEG;
+  declinationAt = null;
+}
 
 /**
  * Compass bearing from `DeviceMotion`'s `rotation.alpha`, in degrees, or null
@@ -553,6 +706,9 @@ export function headingFromDeviceRotation(
  * True-north heading from an expo-location heading sample, or null when the
  * device has nothing usable.
  *
+ * The correction is `declinationDeg` — the real one once `learnDeclination`
+ * has had a fix to derive it from, and the NSW constant until then.
+ *
  * `trueHeading` is -1 whenever expo-location has no location fix to compute
  * declination from — which is the norm on a cold start in the bush, exactly
  * where this matters. The old code silently fell back to `magHeading` and drew
@@ -567,9 +723,7 @@ export function resolveTrueHeading(sample: {
 }): number | null {
   if (sample.trueHeading >= 0) return sample.trueHeading;
   if (!(sample.magHeading >= 0)) return null;
-  return (
-    (((sample.magHeading + NSW_MAGNETIC_DECLINATION_DEG) % 360) + 360) % 360
-  );
+  return normalizeBearing(sample.magHeading + declinationDeg);
 }
 
 /**
@@ -622,4 +776,41 @@ function subscribeHeading(listener: () => void): () => void {
 /** The live smoothed heading, re-rendering only the component that reads it. */
 export function useLiveHeading(): number | null {
   return useSyncExternalStore(subscribeHeading, getLiveHeading);
+}
+
+/**
+ * Whether there is a heading at all, without subscribing to its VALUE.
+ *
+ * For the parts that only branch on "is the compass working" — course-up draws
+ * the arrow straight up the screen, so the bearing is not on screen at all and
+ * re-rendering it thirty times a second redraws a constant. `useSyncExternalStore`
+ * bails out when the snapshot is unchanged, so this re-renders twice a session.
+ */
+export function useHasLiveHeading(): boolean {
+  return useSyncExternalStore(subscribeHeading, hasLiveHeading);
+}
+
+function hasLiveHeading(): boolean {
+  return liveHeading != null;
+}
+
+/**
+ * The live heading rounded to `HEADING_DISPLAY_STEP_DEG`.
+ *
+ * For the compass tape, which rebuilds ~30 native views per render and moves
+ * them by 2.2 px per degree. A quarter of a degree is half a pixel there — below
+ * anything a reader can see — so quantising collapses most of the re-renders at
+ * slow turn rates for free, again through `useSyncExternalStore`'s bail-out.
+ * The MAP is not quantised: it animates natively between camera stops and wants
+ * every bit of resolution it can get.
+ */
+export const HEADING_DISPLAY_STEP_DEG = 0.25;
+
+export function useQuantisedLiveHeading(): number | null {
+  return useSyncExternalStore(subscribeHeading, getQuantisedLiveHeading);
+}
+
+function getQuantisedLiveHeading(): number | null {
+  if (liveHeading == null) return null;
+  return Math.round(liveHeading / HEADING_DISPLAY_STEP_DEG) * HEADING_DISPLAY_STEP_DEG;
 }
