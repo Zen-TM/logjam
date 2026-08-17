@@ -820,22 +820,86 @@ export function normalizeBearing(heading: number): number {
 
 /**
  * Android's `SENSOR_STATUS_ACCURACY_*`: 0 unreliable, 1 low, 2 medium, 3 high.
- * Warn at low or worse, which is where Google Maps puts its own prompt.
+ *
+ * ONLY 0. Google Maps warns at low, and so did this at first, and it was wrong
+ * often enough to be noise — the banner sat there while the system compass app
+ * reported HIGH, and came back within seconds of a successful figure-of-eight.
+ *
+ * The reason is that the number is not what it appears to be.
+ * `LocationModule.kt:851-853` is
+ *
+ *     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+ *       mAccuracy = accuracy
+ *     }
+ *
+ * — no filter on `sensor`, and the same listener is registered for BOTH
+ * `TYPE_MAGNETIC_FIELD` (`:551`) and `TYPE_ACCELEROMETER` (`:557`). So the
+ * `accuracy` on a heading sample is whichever of the two sensors last happened
+ * to report, and an accelerometer saying "low" is not a statement about the
+ * compass at all. We cannot separate them from JS.
+ *
+ * Given a contaminated signal, the answer is to act only on the reading that is
+ * unambiguous. UNRELIABLE is the one the accelerometer essentially never sends
+ * while healthy, and it is also the one that actually means "this bearing is
+ * not usable". Combined with COMPASS_BAD_PROBES_TO_WARN, a false banner needs
+ * the contamination to repeat several times in a row.
  */
-export const COMPASS_ACCURACY_WARN_AT = 1;
+export const COMPASS_ACCURACY_WARN_AT = 0;
 
 /**
- * Whether a probe's reading means "tell the user to calibrate".
+ * How many consecutive bad probes before the banner appears. ONE GOOD PROBE
+ * CLEARS IT.
  *
- * `null` — no reading yet, or none of the probe's samples arrived — is NOT a
- * warning. It has to fail open: a phone lying still emits no heading events at
- * all (`LocationModule.kt:571` gates on 2° of movement), so "we heard nothing"
- * is the normal state of a phone on a rock and must not put a fault banner on
- * the map.
+ * The asymmetry is the point, and it is a UX rule rather than a signal-
+ * processing one: a warning that is slow to appear costs the user nothing,
+ * because the compass was already wrong while it was making its mind up. A
+ * warning that is slow to GO is actively bad — the user has just waved the
+ * phone in a figure of eight and is staring at the banner wondering whether it
+ * worked. So confirmation is required in one direction only.
  */
-export function compassNeedsCalibration(accuracy: number | null): boolean {
-  if (accuracy == null) return false;
-  return accuracy <= COMPASS_ACCURACY_WARN_AT;
+export const COMPASS_BAD_PROBES_TO_WARN = 3;
+
+export type CompassCalibration = {
+  /** Consecutive probes that came back unreliable. */
+  badProbes: number;
+  /** Whether to tell the user. */
+  warning: boolean;
+};
+
+export const NO_COMPASS_CALIBRATION: CompassCalibration = {
+  badProbes: 0,
+  warning: false,
+};
+
+/**
+ * Fold one probe's reading into the calibration verdict.
+ *
+ * `null` — no reading, because none of the probe's samples arrived — carries no
+ * information and changes nothing. It has to fail open: a phone lying still
+ * emits no heading events at all (`LocationModule.kt:571` gates on 2° of
+ * movement), so "we heard nothing" is the normal state of a phone on a rock and
+ * must not put a fault banner on the map. It equally must not CLEAR one.
+ */
+export function foldCompassProbe(
+  state: CompassCalibration,
+  accuracy: number | null,
+): CompassCalibration {
+  if (accuracy == null) return state;
+  if (accuracy > COMPASS_ACCURACY_WARN_AT) return NO_COMPASS_CALIBRATION;
+  const badProbes = state.badProbes + 1;
+  return { badProbes, warning: badProbes >= COMPASS_BAD_PROBES_TO_WARN };
+}
+
+/**
+ * Should the next probe come quickly?
+ *
+ * Yes while a warning is up (the user may be calibrating right now and wants
+ * the banner gone the moment it works) and yes while one is being confirmed, so
+ * "slow to appear" is a couple of probes rather than a couple of probe
+ * INTERVALS. Otherwise the slow cadence, which is almost always.
+ */
+export function compassProbeIsUrgent(state: CompassCalibration): boolean {
+  return state.warning || state.badProbes > 0;
 }
 
 // ── the live heading, deliberately outside React state ───────────────────────

@@ -480,6 +480,22 @@ review, not by CI.
   app agrees" is not reassurance — three apps agreeing and all disagreeing with
   the terrain is the signature. `compassNeedsCalibration` drives a banner in the
   map's own notice stack whenever accuracy is LOW or UNRELIABLE.
+  - **THE ACCURACY VALUE IS CONTAMINATED, and that is why the bar is set at
+    UNRELIABLE rather than at LOW where Google Maps puts it.**
+    `LocationModule.kt:851-853`'s `onAccuracyChanged` does not filter by sensor,
+    and the same listener is registered for `TYPE_ACCELEROMETER` (`:557`) as
+    well as `TYPE_MAGNETIC_FIELD` (`:551`) — so a heading sample's `accuracy` is
+    whichever of the two last reported, and an accelerometer saying "low" is not
+    a statement about the compass. Warning at LOW put a banner up while the
+    system compass app reported HIGH. It cannot be separated from JS, so the
+    only defence is to act on the one reading that is unambiguous.
+  - **Confirmation is required to APPEAR and not to CLEAR**
+    (`foldCompassProbe`, `COMPASS_BAD_PROBES_TO_WARN`). A warning slow to
+    appear costs nothing — the compass was already wrong while we decided. One
+    slow to GO is the actual bug: the user has just waved the phone in a figure
+    of eight and is watching to see whether it worked. The probe cadence follows
+    the same rule (`compassProbeIsUrgent`): seconds while a warning is up or
+    being confirmed, two minutes otherwise.
   - **The accuracy is only reachable through `expo-location`.** `expo-sensors`
     discards it (`onAccuracyChanged` is `= Unit` in `DeviceMotionModule.kt` and
     `SensorProxy.kt`); expo-location keeps it (`LocationModule.kt:851-852`) and
@@ -491,10 +507,12 @@ review, not by CI.
     `mAccuracy` starts at 0 (`unreliable`) and is only corrected when Android
     fires `onAccuracyChanged`, which can land after the first heading event — so
     a first-sample reading reports a false fault on a healthy compass.
-  - **No reading is not a fault.** A still phone emits no heading events at all
-    (2° gate), so silence must fail open or every user who sets their phone down
-    gets a permanent banner. Pinned by `heading.test.ts` ("says nothing when it
-    has heard nothing").
+  - **No reading is no information, in BOTH directions.** A still phone emits no
+    heading events at all (2° gate), so silence must not raise a warning — or
+    every user who sets their phone down gets a permanent banner — and must not
+    clear one either, or a phone set down mid-fault quietly drops the banner
+    while still pointing the wrong way. Pinned by `heading.test.ts` ("treats no
+    reading as no information, in both directions").
   - It needs location permission, which the compass otherwise does not. Denied
     means no reading and no banner: the map is no worse off, it just cannot warn.
 - **A backgrounded recorder appends points and nothing else.** Track stats are

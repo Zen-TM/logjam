@@ -113,10 +113,12 @@ import {
   POV_ANIMATION_MAX_MS,
   POV_ANIMATION_MIN_MS,
   POV_DEADBAND_DEG,
-  compassNeedsCalibration,
+  NO_COMPASS_CALIBRATION,
+  compassProbeIsUrgent,
   createHeadingFilter,
   declinationNeedsRefresh,
   deviceSampleTimeMs,
+  foldCompassProbe,
   headingFromDeviceRotation,
   headingSettled,
   learnDeclination,
@@ -346,7 +348,14 @@ const ROTATION_VECTOR_GRACE_MS = 1500;
  * first sample would therefore report a false fault on a healthy compass.
  */
 const COMPASS_PROBE_WINDOW_MS = 2000;
+/**
+ * Two cadences. The slow one is the resting cost; the urgent one applies while
+ * a warning is up or being confirmed (`compassProbeIsUrgent`), so a successful
+ * figure-of-eight clears the banner in seconds rather than in minutes — which
+ * is the half of the timing the user actually notices.
+ */
 const COMPASS_PROBE_INTERVAL_MS = 120_000;
+const COMPASS_PROBE_URGENT_MS = 6_000;
 
 /** Tag for this screen's wake lock, so releasing it can't release anyone else's. */
 const KEEP_AWAKE_TAG = "logjam-map";
@@ -2644,7 +2653,11 @@ export function MapScreen({
    * there is simply no reading and no banner — the map is no worse off than it
    * was, it just cannot warn.
    */
-  const [compassAccuracy, setCompassAccuracy] = useState<number | null>(null);
+  const [compassCalibration, setCompassCalibration] = useState(NO_COMPASS_CALIBRATION);
+  // In the dep array so the cadence changes with the verdict. It flips at most
+  // once per transition, and the restart's immediate probe is exactly what a
+  // transition wants.
+  const compassProbeUrgent = compassProbeIsUrgent(compassCalibration);
   useEffect(() => {
     if (!sensorsActive || !headingWanted) return;
     let live = true;
@@ -2679,13 +2692,16 @@ export function MapScreen({
           subscription = null;
           // Heard nothing at all? Say nothing. A phone lying still emits no
           // heading events, and silence is not a fault.
-          if (live && best != null) setCompassAccuracy(best);
+          if (live) setCompassCalibration((current) => foldCompassProbe(current, best));
         }, COMPASS_PROBE_WINDOW_MS);
       })();
     };
 
     probe();
-    const repeat = setInterval(probe, COMPASS_PROBE_INTERVAL_MS);
+    const repeat = setInterval(
+      probe,
+      compassProbeUrgent ? COMPASS_PROBE_URGENT_MS : COMPASS_PROBE_INTERVAL_MS,
+    );
     return () => {
       live = false;
       clearInterval(repeat);
@@ -2693,7 +2709,7 @@ export function MapScreen({
       subscription?.remove();
       subscription = null;
     };
-  }, [sensorsActive, headingWanted]);
+  }, [sensorsActive, headingWanted, compassProbeUrgent]);
 
   const handleLocateMe = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
@@ -3505,7 +3521,7 @@ export function MapScreen({
             arrow, the tape and course-up are all as wrong as each other, which
             is why this sits with the map's own notices rather than next to any
             one of them. Clears itself on the next probe that reads clean. */}
-        {compassNeedsCalibration(compassAccuracy) && headingWanted ? (
+        {compassCalibration.warning && headingWanted ? (
           <View style={styles.notice}>
             <Text style={styles.noticeText}>
               Compass needs calibrating — wave the phone in a figure 8
@@ -4062,7 +4078,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(1),
   },
-  noticeText: { color: theme.textPrimary, fontSize: fontSize.sm },
+  // Centred, because the banner is centre-anchored (`alignSelf`) and grows
+  // around its own midline — left-aligned text in a box that moves under it
+  // reads as drifting, and these wrap to two lines at large text sizes.
+  noticeText: { color: theme.textPrimary, fontSize: fontSize.sm, textAlign: "center" },
   // Takes the slack so the dismiss sits at the pill's right edge rather than
   // floating next to the text.
   filterBadgeText: { flex: 1, color: theme.textPrimary, fontSize: fontSize.sm },

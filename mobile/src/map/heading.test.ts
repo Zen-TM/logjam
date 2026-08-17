@@ -6,11 +6,13 @@ import {
   HEADING_SETTLED_DEG,
   HEADING_TICK_MS,
   POV_USER_SCREEN_FRACTION,
-  compassNeedsCalibration,
+  NO_COMPASS_CALIBRATION,
+  compassProbeIsUrgent,
   createHeadingFilter,
   currentDeclinationDeg,
   declinationNeedsRefresh,
   deviceSampleTimeMs,
+  foldCompassProbe,
   headingSettled,
   isDeclinationLearned,
   learnDeclination,
@@ -443,22 +445,53 @@ describe("deviceSampleTimeMs", () => {
   });
 });
 
-describe("compassNeedsCalibration", () => {
-  it("warns at low accuracy or worse, like Google Maps does", () => {
-    // Android SENSOR_STATUS_ACCURACY_*: 0 unreliable, 1 low, 2 medium, 3 high.
-    expect(compassNeedsCalibration(0)).toBe(true);
-    expect(compassNeedsCalibration(1)).toBe(true);
-    expect(compassNeedsCalibration(2)).toBe(false);
-    expect(compassNeedsCalibration(3)).toBe(false);
+describe("the compass calibration verdict", () => {
+  const bad = 0; // SENSOR_STATUS_ACCURACY_UNRELIABLE
+  const good = 3; // ...HIGH
+
+  function fold(readings: (number | null)[]) {
+    return readings.reduce(foldCompassProbe, NO_COMPASS_CALIBRATION);
+  }
+
+  it("warns only on UNRELIABLE, not on low", () => {
+    // The reading is contaminated: expo-location's `onAccuracyChanged` does not
+    // filter by sensor and the same listener is registered for the
+    // accelerometer as well as the magnetometer, so "low" can be the
+    // accelerometer talking about itself. Warning on it put a banner up while
+    // the system compass app reported HIGH.
+    expect(fold([1, 1, 1, 1, 1]).warning).toBe(false);
+    expect(fold([2, 2, 2]).warning).toBe(false);
+    expect(fold([bad, bad, bad]).warning).toBe(true);
   });
 
-  it("says nothing when it has heard nothing", () => {
-    // FAILS OPEN, and that is the whole reason this is a named function. A
-    // phone lying still emits no heading events at all (LocationModule.kt gates
-    // on 2 degrees of movement), so "no reading" is the normal state of a phone
-    // on a rock. Treating it as unreliable would put a permanent fault banner
-    // on the map of every user who set their phone down.
-    expect(compassNeedsCalibration(null)).toBe(false);
+  it("needs confirmation to appear and none to clear", () => {
+    // THE ASYMMETRY IS DELIBERATE. Slow to appear costs nothing — the compass
+    // was already wrong while we made our mind up. Slow to CLEAR is the bug:
+    // the user has just waved the phone in a figure of eight and is staring at
+    // the banner wondering whether it worked.
+    expect(fold([bad, bad]).warning).toBe(false);
+    expect(fold([bad, bad, bad]).warning).toBe(true);
+    expect(fold([bad, bad, bad, good]).warning).toBe(false);
+    // ...and one good reading resets the count, so it is CONSECUTIVE bad
+    // probes, not bad probes in total.
+    expect(fold([bad, bad, good, bad, bad]).warning).toBe(false);
+  });
+
+  it("treats no reading as no information, in both directions", () => {
+    // A phone lying still emits no heading events at all (2 degree gate), so
+    // silence is the normal state of a phone on a rock. It must not raise a
+    // warning...
+    expect(fold([null, null, null, null]).warning).toBe(false);
+    // ...and it must not clear one either, or a phone set down mid-fault would
+    // quietly drop the banner while still pointing the wrong way.
+    expect(fold([bad, bad, bad, null, null]).warning).toBe(true);
+  });
+
+  it("probes urgently while a warning is up or being confirmed", () => {
+    expect(compassProbeIsUrgent(NO_COMPASS_CALIBRATION)).toBe(false);
+    expect(compassProbeIsUrgent(fold([bad]))).toBe(true);
+    expect(compassProbeIsUrgent(fold([bad, bad, bad]))).toBe(true);
+    expect(compassProbeIsUrgent(fold([bad, bad, bad, good]))).toBe(false);
   });
 });
 
