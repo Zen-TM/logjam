@@ -50,8 +50,18 @@ export function shortestAngleDelta(from: number, to: number): number {
  * is not ours to choose and is not even steady — the same weight applied to an
  * irregular stream makes the compass feel different depending on how fast the
  * user happens to be turning, which is exactly the "over-sensitive" complaint.
+ *
+ * IT IS DELIBERATELY SHORT, because it is no longer the thing doing the
+ * smoothing. Once the camera interpolates linearly over each interval
+ * (POV_CAMERA_MS), the native ramp is the smoother and this only has to kill
+ * sensor noise. Left long, the two compound: an exponential tail reaches the
+ * camera as a geometrically decaying series of ever-smaller deltas, the last of
+ * which fall under the deadband and are dropped — a rotation that lurches twice
+ * and then stops several degrees short of where the phone is actually pointing.
+ * MapLibre's own compass follower damps about this hard
+ * (`LocationComponentCompassEngine`, ALPHA 0.45 at 10 Hz) for the same reason.
  */
-export const HEADING_TAU_MS = 450;
+export const HEADING_TAU_MS = 250;
 
 /**
  * Ceiling on how fast the DISPLAYED bearing may turn, in degrees per second.
@@ -78,32 +88,57 @@ export const HEADING_MAX_SLEW_DEG_PER_S = 360;
 const DEFAULT_SAMPLE_GAP_MS = 200;
 
 /**
- * Course-up's camera: how often it may write a stop, and how long each stop
- * animates for.
+ * Course-up's camera.
  *
- * THE DURATION IS DELIBERATELY LONGER THAN THE INTERVAL. Matching them looks
- * right on paper — each stop finishing exactly as the next arrives — and is
- * wrong in practice: sample delivery is irregular, so an animation that is
- * merely long enough finishes early and the map SITS STILL until the next write.
- * Over a fast turn that reads as a series of bursts rather than one movement.
- * At roughly twice the interval every stop is interrupted mid-flight by the
- * next, and the camera never stops moving while the user is turning.
+ * THE ANIMATION MUST BE LINEAR, AND THAT IS THE WHOLE TRICK. MLRN sends no
+ * animation mode unless you ask for one, and the Android side defaults to
+ * `CameraMode.EASE` → `easeCamera(update, duration, true)`, whose `true` is an
+ * accelerate-decelerate interpolator (`CameraUpdateItem.java`). Every stop
+ * therefore STARTS FROM REST. Issue one per sensor sample and the camera spends
+ * its whole life in the slow opening of an ease it never finishes: the map
+ * lurches, pauses, lurches. A small turn producing two stops reads as exactly
+ * two jumps, which is what it was doing.
  *
- * The cost is bounded by the deadband below, not by these: a phone held still
- * writes nothing at all, so the renderer still goes idle. That is what stops
- * course-up being the most expensive thing on the screen, which it was when it
- * wrote a stop per sample.
+ * `linearTo` maps to `easeCamera(update, duration, false)` — constant angular
+ * velocity — so consecutive stops hand over without either of them braking, and
+ * a turn reads as one movement however many stops it took.
+ *
+ * With the curve fixed, the remaining requirement is that each stop take
+ * exactly as long as the gap it is covering: animate over the MEASURED interval
+ * since the last write and the on-screen rotation runs at the same speed as the
+ * phone. A fixed duration cannot do that, because sample delivery is irregular
+ * (see the platform note at the top of this file).
+ *
+ * The throttle is now only a ceiling on write frequency — the platform's own
+ * 50 ms gate does most of the limiting — and the deadband is what keeps a phone
+ * held still from writing at all, so the renderer still goes idle.
  */
-export const POV_CAMERA_MS = 150;
-export const POV_ANIMATION_MS = 320;
+export const POV_CAMERA_MS = 80;
 /**
- * 1.5°, which is below the platform's own 2° reporting step: the smoothing
- * above is what makes that safe. The filtered bearing of a phone held still
- * wanders well under a degree, so the deadband still closes and the renderer
- * still goes idle — while a real turn crosses it on the first sample instead of
- * waiting for the second, which is what a wider deadband made POV feel like.
+ * The measured interval gets a little headroom before becoming the duration.
+ *
+ * `easeCamera` CANCELS the animation in flight rather than blending into it
+ * (`Transform.easeCamera` calls `cancelTransitions()` first), so a stop that
+ * ends exactly when the next arrives will sometimes end a few milliseconds
+ * early and stall. A quarter more than the interval means the cancel always
+ * lands inside the segment — and because the segment is linear, being cancelled
+ * part-way through costs nothing: the velocity there is the same as anywhere
+ * else in it.
  */
-export const POV_DEADBAND_DEG = 1.5;
+export const POV_ANIMATION_HEADROOM = 1.25;
+/** Clamp, so one late sample cannot produce a long glide and a burst of them
+ *  cannot produce a stutter. */
+export const POV_ANIMATION_MIN_MS = 80;
+export const POV_ANIMATION_MAX_MS = 400;
+/**
+ * Small on purpose, and only there to let a still phone stop writing at all —
+ * NOT to shape the motion. A deadband wide enough to be felt truncates the
+ * filter's tail (see HEADING_TAU_MS) and leaves the map settled short of the
+ * true heading, which reads as the rotation giving up early. MapLibre's own
+ * follower has no deadband whatsoever and rate-limits instead; this keeps a
+ * token one so course-up on a phone lying on a rock costs nothing.
+ */
+export const POV_DEADBAND_DEG = 0.5;
 
 /**
  * Fold one sample into the running average, the long way round never taken:

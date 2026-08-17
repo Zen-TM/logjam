@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   HEADING_MAX_SLEW_DEG_PER_S,
+  POV_DEADBAND_DEG,
   normalizeBearing,
   resolveTrueHeading,
   shortestAngleDelta,
@@ -67,6 +68,22 @@ describe("smoothHeading", () => {
     const step = smoothHeading(0, 180, 200);
     const perSecond = (Math.abs(shortestAngleDelta(0, step)) * 1000) / 200;
     expect(perSecond).toBeLessThanOrEqual(HEADING_MAX_SLEW_DEG_PER_S + 0.001);
+  });
+
+  it("arrives before its own steps fall under the camera's deadband", () => {
+    // THE STALL-SHORT BUG. The camera only writes when the heading moved more
+    // than POV_DEADBAND_DEG, and an exponential filter's steps shrink
+    // geometrically — so if the filter is damped hard enough relative to the
+    // deadband, the writes stop while the map is still pointing somewhere else
+    // and the rotation reads as giving up part-way. The two constants are only
+    // safe together, which is what this measures.
+    let heading = 0;
+    for (let i = 0; i < 60; i += 1) {
+      const next = smoothHeading(heading, 90, 200);
+      if (Math.abs(shortestAngleDelta(heading, next)) < POV_DEADBAND_DEG) break;
+      heading = next;
+    }
+    expect(Math.abs(shortestAngleDelta(90, heading))).toBeLessThan(2);
   });
 
   it("still keeps up with a real turn", () => {

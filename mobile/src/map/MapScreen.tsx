@@ -107,7 +107,9 @@ import {
 } from "./mapChrome";
 import {
   HEADING_RENDER_MS,
-  POV_ANIMATION_MS,
+  POV_ANIMATION_HEADROOM,
+  POV_ANIMATION_MAX_MS,
+  POV_ANIMATION_MIN_MS,
   POV_CAMERA_MS,
   POV_DEADBAND_DEG,
   normalizeBearing,
@@ -2223,13 +2225,10 @@ export function MapScreen({
         publishHeading(next);
       }
 
-      // Course-up: turn the map with them. THROTTLED, and behind a deadband:
-      // a camera stop per sample, each starting a 50 ms animation the next one
-      // replaced, meant the renderer never went idle for as long as course-up
-      // was on — the single most expensive thing on this screen. The stop now
-      // lasts exactly as long as the gap to the next one, and a phone held
-      // still no longer crosses the deadband at all (see POV_DEADBAND_DEG, and
-      // the smoothing that makes a sub-2° deadband safe).
+      // Course-up: turn the map with them, LINEARLY and over the interval this
+      // stop actually covers. See POV_CAMERA_MS for why the curve is the whole
+      // problem. The deadband is what lets a phone held still write nothing at
+      // all, which is what keeps the renderer idle in this mode.
       if (followModeRef.current !== "course-up") return;
       if (now - lastPovWriteAt.current < POV_CAMERA_MS) return;
       const previous = lastPovBearing.current;
@@ -2239,6 +2238,10 @@ export function MapScreen({
       ) {
         return;
       }
+      // The real gap, so the map turns at the speed the phone is turning. The
+      // first write of a turn has no gap to measure and takes the floor.
+      const sinceLastWrite =
+        lastPovWriteAt.current === 0 ? POV_ANIMATION_MIN_MS : now - lastPovWriteAt.current;
       lastPovWriteAt.current = now;
       lastPovBearing.current = next;
       setCameraStop({
@@ -2246,7 +2249,11 @@ export function MapScreen({
         // Carry the position too: this stop REPLACES whatever the last one was,
         // and it would otherwise cancel every recentre a fix asked for.
         ...(latestFix.current ? { centerCoordinate: latestFix.current } : {}),
-        animationDuration: POV_ANIMATION_MS,
+        animationDuration: Math.min(
+          Math.max(sinceLastWrite * POV_ANIMATION_HEADROOM, POV_ANIMATION_MIN_MS),
+          POV_ANIMATION_MAX_MS,
+        ),
+        animationMode: "linearTo",
       });
     },
     [setCameraStop],
@@ -2431,6 +2438,10 @@ export function MapScreen({
         // course-up" and the map would wait for the one after it.
         followModeRef.current = "course-up";
         lastPovBearing.current = null;
+        // No gap to measure yet: without this the first stop of a new
+        // course-up session would animate over however long ago the last one
+        // was, which is the whole session for anyone re-entering the mode.
+        lastPovWriteAt.current = 0;
         // Rotate from a heading we ALREADY have rather than waiting to be told
         // one. Android's heading watcher reports on change, so a phone lying
         // still on a rock emits nothing for seconds after the user asks to face

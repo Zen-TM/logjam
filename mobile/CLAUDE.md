@@ -294,6 +294,27 @@ review, not by CI.
   render, and the Protomaps band alone is ~71 layers (more with saved regions).
   Anything else wanting the heading subscribes; it does not lift it back up.
   **No executable check** — see the note above.
+- **A camera stop with no `animationMode` EASES, and that is a trap for
+  anything continuous.** MLRN only sends a mode when you pass one, and the
+  Android side then defaults to `CameraMode.EASE` →
+  `easeCamera(update, duration, true)`, an accelerate-decelerate curve
+  (`CameraUpdateItem.java`). A stream of those never leaves the slow opening of
+  an ease it never finishes, so the map lurches once per stop — course-up read
+  as one jump per camera write. Anything driven from a sensor at rate wants
+  `animationMode: "linearTo"` (`easeCamera(..., false)`, constant velocity) and
+  a duration equal to the interval it is covering. One-shot moves — a recentre,
+  a fit — are the case ease was built for; leave those alone.
+  - **A second stop does not blend into the one in flight, it cancels it**
+    (`Transform.easeCamera` calls `cancelTransitions()` first), so "make the
+    animation longer so they overlap" does not smooth anything — with an ease
+    curve it just restarts the slow opening, forever.
+  - **Filter damping and the camera deadband are one decision, not two.** An
+    exponential filter's steps shrink geometrically; damp hard enough relative
+    to the deadband and the writes stop while the map is still pointing
+    somewhere else, which reads as the rotation giving up part-way. Once the
+    camera ramps linearly it IS the smoother, so the filter wants to be short
+    and the deadband small (`heading.test.ts`, "arrives before its own steps
+    fall under the camera's deadband").
 - **What the platform gives us, since several constants depend on it:**
   expo-location registers the accelerometer and magnetometer at
   `SENSOR_DELAY_NORMAL` and emits only past a **2° / 50 ms** gate
