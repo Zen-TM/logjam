@@ -289,6 +289,14 @@ review, not by CI.
 - **The compass heading never goes back into a screen's state.** It lives in
   `map/heading.ts` behind `publishHeading`/`useLiveHeading` and is read by
   exactly two memoised components (`UserLocationMarker`, `LiveCompassStrip`).
+  Course-up also draws the arrow VIEWPORT-aligned and pointing straight up
+  (`lockUpright`), because in that mode the camera's rotation is a native ramp
+  and `iconRotate` is a per-tick prop — two animators on one angle, which reads
+  as the arrow twitching against a gliding map. Course-up additionally offsets
+  the camera target FORWARD along the heading so the user sits three quarters
+  down the screen (`povCameraCenter`, applied in `setCameraStop`); MapLibre's
+  camera padding cannot be used for that, because Android only applies padding
+  on a stop that carries a target, so it outlives the mode.
   In `MapScreen`'s `useState` every sample re-rendered the whole map — MLRN
   memoises none of its layer components and re-commits props per layer per
   render, and the Protomaps band alone is ~71 layers (more with saved regions).
@@ -308,20 +316,66 @@ review, not by CI.
     (`Transform.easeCamera` calls `cancelTransitions()` first), so "make the
     animation longer so they overlap" does not smooth anything — with an ease
     curve it just restarts the slow opening, forever.
-  - **Filter damping and the camera deadband are one decision, not two.** An
-    exponential filter's steps shrink geometrically; damp hard enough relative
-    to the deadband and the writes stop while the map is still pointing
-    somewhere else, which reads as the rotation giving up part-way. Once the
-    camera ramps linearly it IS the smoother, so the filter wants to be short
-    and the deadband small (`heading.test.ts`, "arrives before its own steps
-    fall under the camera's deadband").
-- **What the platform gives us, since several constants depend on it:**
-  expo-location registers the accelerometer and magnetometer at
-  `SENSOR_DELAY_NORMAL` and emits only past a **2° / 50 ms** gate
-  (`LocationModule.kt`). Neither is settable from JS. So the heading stream is
-  an irregular ~5 Hz staircase, and smoothing it is `heading.ts`'s job, not the
-  platform's — `smoothHeading` is time-aware (`HEADING_TAU_MS`) plus
-  rate-limited (`HEADING_MAX_SLEW_DEG_PER_S`), pinned by `heading.test.ts`.
+  - **The display runs on its own clock, not the sensor's.** A sample moves a
+    TARGET (`noteHeadingSample`); a fixed 31 Hz ticker in `MapScreen`
+    (`tickHeading`) walks the shown bearing towards it, publishes it and writes
+    the camera stop. Driving the camera straight off samples made every segment
+    a different length and so a different angular velocity — the rotation
+    visibly surged and sagged inside one turn. The ticker STOPS on arrival
+    (`headingSettled`) and restarts on the next sample that moves the target,
+    which is what replaces the old "a still phone writes nothing" deadband;
+    `HEADING_TICK_MS` is the one knob for both the redraw and the camera rate.
+  - **Still-phone noise is killed at the TARGET, by a drag follower, not by a
+    gate.** `HEADING_HYSTERESIS_DEG` (2.5°) keeps the target within that much of
+    the sample, so the 2.03° quantum the platform flips between while the phone
+    lies still moves nothing at all, while a real turn drags the target
+    continuously and never staircases (the ≥3° gate that did staircase is the
+    thing this replaces). It costs a standing bias of up to 2.5°. Pinned by
+    `heading.test.ts` ("holds a still phone perfectly still, and stops ticking",
+    "drags rather than gates").
+  - **The display TRACKS A RATE; it does not chase a position, and no
+    position filter can do this job.** The input is a 2° staircase ~200 ms
+    apart, so anything computing its output from the current position error
+    answers every step with its own small acceleration — visible stutter, worst
+    at slow turn rates, and damping it only buys lag. Both a plain exponential
+    and (2026-08-17) a one-euro filter failed exactly there. `stepHeadingFilter`
+    instead averages the rate implied by each target move
+    (`HEADING_RATE_TAU_MS`), dead-reckons the display forward on it, and lets a
+    deliberately SLOW position term (`HEADING_CATCHUP_TAU_MS`) mop up the drift
+    — do not speed that one up, it is the term that can see the staircase.
+    Dead reckoning's own failure is overshoot when the phone stops between
+    samples, bounded by `HEADING_LEAD_DEG`/`HEADING_LEAD_MS` capping how far the
+    display may lead the target — IN THE DIRECTION OF TRAVEL ONLY. Clamping a
+    display that is BEHIND the target turns the cap into a snap; that bug and a
+    stale-`dt` one (the first tick after the ticker had been stopped billed
+    itself for the whole idle period, so the first movement of a rested phone
+    lurched) were the two things actually behind "it jumps, then comes back".
+    `HEADING_MAX_STEP_MS` bounds the second: this is an animation clock, and
+    missing frames means drawing the frames you got, not covering the gap in
+    one. Pinned by `heading.test.ts` ("turns at a CONSTANT rate, which is the
+    whole point", measuring per-tick angular velocity ripple at 8/25/60°/s,
+    "does not sail past a turn that stops", "does not follow one bad sample").
+- **The heading comes from `expo-sensors`' `DeviceMotion`, NOT
+  `expo-location`'s `watchHeadingAsync`, and that swap fixed more than any
+  filter did** (2026-08-17). `rotation.alpha` is Android's `TYPE_ROTATION_VECTOR`
+  — gyro-fused — read at `HEADING_SENSOR_MS` (30 ms). `expo-location` registers
+  bare `TYPE_ACCELEROMETER` + `TYPE_MAGNETIC_FIELD` at `SENSOR_DELAY_NORMAL`
+  past a 2° / 50 ms gate (`LocationModule.kt:549-571`), hardcoded and not
+  settable from JS: ~5 Hz in 2° steps, and — because the accelerometer cannot
+  tell gravity from a hand accelerating — a genuinely BACKWARDS azimuth for a
+  sample or two at the start of a real turn. No filter can remove that; the
+  reading is wrong, not noisy. Two consequences to keep in mind:
+  - The rotation vector is referenced to MAGNETIC north, so
+    `headingFromDeviceRotation` always applies `NSW_MAGNETIC_DECLINATION_DEG`.
+    We no longer get expo-location's `GeomagneticField`-derived true heading on
+    the occasions it had a fix; the constant is worth ≤1° inside NSW.
+  - It needs NO permission, so the compass tape and the arrow's bearing now work
+    with location denied. `permissionNonce` existed only to re-check that
+    permission and is gone.
+  - `DeviceMotion` registers five sensors at `SENSOR_DELAY_FASTEST` and we read
+    one. Only while the map tab is focused and foregrounded, i.e. only with the
+    screen lit. The upgrade path if that ever shows up in a field battery
+    number: our own Expo module exposing `TYPE_ROTATION_VECTOR` alone.
 - **A backgrounded recorder appends points and nothing else.** Track stats are
   display-only, so they are recomputed while the app is in front of someone and
   on return to the foreground (`refreshTrackStats` / `refreshActiveTrackStats`),

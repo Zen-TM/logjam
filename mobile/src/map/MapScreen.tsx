@@ -52,6 +52,7 @@ import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as Location from "expo-location";
+import { DeviceMotion, type DeviceMotionMeasurement } from "expo-sensors";
 import {
   DEM_ATTRIBUTION,
   TOPO_LAYERS,
@@ -106,17 +107,22 @@ import {
   SEARCH_SIZE,
 } from "./mapChrome";
 import {
-  HEADING_RENDER_MS,
+  HEADING_SENSOR_MS,
+  HEADING_TICK_MS,
   POV_ANIMATION_HEADROOM,
   POV_ANIMATION_MAX_MS,
   POV_ANIMATION_MIN_MS,
-  POV_CAMERA_MS,
   POV_DEADBAND_DEG,
+  createHeadingFilter,
+  headingFromDeviceRotation,
+  headingSettled,
+  noteHeadingSample,
   normalizeBearing,
+  povCameraCenter,
   publishHeading,
   resolveTrueHeading,
   shortestAngleDelta,
-  smoothHeading,
+  stepHeadingFilter,
   useLiveHeading,
 } from "./heading";
 import {
@@ -387,11 +393,28 @@ function overlayKind(ref: TopoOverlayRef): "contours" | "features" {
 const UserLocationMarker = memo(function UserLocationMarker({
   coord,
   markerColorId,
+  lockUpright,
 }: {
   coord: [number, number];
   markerColorId: MarkerColorId;
+  /**
+   * Course-up: draw the arrow straight up the SCREEN instead of at its bearing
+   * on the map.
+   *
+   * In this mode the two are the same thing — the map is turned to the heading,
+   * so a map-aligned arrow at that heading points up anyway — except that they
+   * are driven by two different animators. The camera's rotation is a native
+   * linear ramp between ticks; the icon's `iconRotate` is a discrete prop that
+   * lands once per tick. The arrow therefore twitches against a map that is
+   * gliding under it, which is exactly the mode in which the arrow is being
+   * stared at. Pinning it to the viewport removes the disagreement rather than
+   * trying to synchronise two clocks.
+   */
+  lockUpright: boolean;
 }) {
-  const heading = useLiveHeading();
+  const liveHeading = useLiveHeading();
+  const heading = lockUpright ? 0 : liveHeading;
+  const rotationAlignment = lockUpright ? ("viewport" as const) : ("map" as const);
   // MLRN's ShapeSource JSON.stringifies `shape` on every render it lets
   // through, so this must not be an object literal in the JSX.
   const shape = useMemo(
@@ -405,15 +428,15 @@ const UserLocationMarker = memo(function UserLocationMarker({
   );
   return (
     <ShapeSource id="user-location" shape={shape}>
-      {heading != null ? (
+      {liveHeading != null ? (
         // Direction beam under the arrow. Map-aligned, so it points at
         // real-world bearings even when the map itself is rotated.
         <SymbolLayer
           id="user-location-heading"
           style={{
             iconImage: "user-heading-beam",
-            iconRotate: heading,
-            iconRotationAlignment: "map",
+            iconRotate: heading ?? 0,
+            iconRotationAlignment: rotationAlignment,
             iconAllowOverlap: true,
             iconIgnorePlacement: true,
           }}
@@ -430,7 +453,7 @@ const UserLocationMarker = memo(function UserLocationMarker({
           iconImage: "user-arrow",
           iconSize: 0.28,
           iconRotate: heading ?? 0,
-          iconRotationAlignment: "map",
+          iconRotationAlignment: rotationAlignment,
           iconAllowOverlap: true,
           iconIgnorePlacement: true,
           // The user's colour, and a white edge under it so no choice has to
@@ -672,7 +695,14 @@ export function MapScreen({
   /** Set once the user has panned/zoomed themselves — see the open-on-location effect. */
   const userMovedCamera = useRef(false);
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  /**
+   * How tall the map is, for course-up's forward camera offset. The window,
+   * not a measured view: the MapView is the whole screen behind the chrome, and
+   * a ref rather than a dep so `setCameraStop` stays stable.
+   */
+  const mapHeight = useRef(windowHeight);
+  mapHeight.current = windowHeight;
   // What new segments follow. Device-scoped and persisted, read once so the
   // tool is armed correctly on its first frame.
   const [snapMode, setSnapMode] = useState<SnapMode>(readSnapMode);
@@ -711,15 +741,9 @@ export function MapScreen({
   const [longPressAction, setLongPressAction] = useState<LongPressAction>(readLongPressAction);
   const [northReference, setNorthReference] = useState<NorthReference>(readNorthReference);
   const [scaleBarEnabled, setScaleBarEnabled] = useState(isScaleBarEnabled);
-  // Bumped whenever this screen regains focus: see the compass-tape effect.
-  const [permissionNonce, setPermissionNonce] = useState(0);
   useFocusEffect(
     useCallback(() => {
       setCompassEnabled(isCompassEnabled());
-      // A location grant made on another screen (Settings' compass switch asks
-      // for it) is invisible from here — re-checking on focus is what starts
-      // the compass tape without the map ever prompting for location itself.
-      setPermissionNonce((current) => current + 1);
       setControlSide(readMapControlSide());
       setMarkerColorId(readMarkerColorId());
       setKeepAwakeMode(readKeepAwakeMode());
@@ -780,7 +804,28 @@ export function MapScreen({
     // `handleRegionDidChange`).
     if (typeof stop.zoomLevel === "number") zoomRef.current = stop.zoomLevel;
     if (typeof stop.heading === "number") headingRef.current = stop.heading;
-    cameraRef.current.setCamera(stop);
+    // Course-up puts the user three quarters of the way down the screen, by
+    // looking at a point AHEAD of them rather than at them (heading.ts,
+    // POV_USER_SCREEN_FRACTION). Applied here so it covers every stop that
+    // carries a target — the rotation ticker's, the fix recentre, a pinch frame
+    // — and, more to the point, so leaving the mode un-does it everywhere at
+    // once. MapLibre's camera padding would have been the obvious tool and is
+    // not usable: Android only applies it on a stop that has a target, so it
+    // survives the ones that don't and the map stays offset after course-up.
+    const target = stop.centerCoordinate;
+    cameraRef.current.setCamera(
+      followModeRef.current === "course-up" && target
+        ? {
+            ...stop,
+            centerCoordinate: povCameraCenter(
+              target as [number, number],
+              stop.heading ?? headingRef.current,
+              stop.zoomLevel ?? zoomRef.current,
+              mapHeight.current,
+            ),
+          }
+        : stop,
+    );
   }, []);
   /**
    * Let the next settled region report set the running camera even though this
@@ -830,15 +875,13 @@ export function MapScreen({
   // Latest fix, in a ref as well as in state: entering a follow mode has to
   // recentre NOW, from the sensor callback's own value, not on the next render.
   const latestFix = useRef<[number, number] | null>(null);
-  // Running smoothed heading, kept in a ref as well as in state: the POV
-  // camera writes from the sensor callback, which must not close over a stale
-  // render's value.
-  const smoothedHeading = useRef<number | null>(null);
-  const lastHeadingRender = useRef(0);
-  /** When the previous compass sample arrived — the filter is time-aware. */
-  const lastHeadingSampleAt = useRef(0);
+  // The heading chase (heading.ts). Samples go in from the sensor callback, the
+  // display comes out of a fixed-rate ticker; both live in refs because both
+  // run outside React's render cycle.
+  const headingFilter = useRef(createHeadingFilter());
+  const headingTicker = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastPovBearing = useRef<number | null>(null);
-  /** Throttle for the course-up camera — see handleHeadingSample. */
+  /** When the last course-up camera stop was written, for its duration. */
   const lastPovWriteAt = useRef(0);
   const firstFix = useRef(true);
 
@@ -2192,71 +2235,86 @@ export function MapScreen({
   );
 
   /**
-   * One compass sample: smooth it, publish it, and in course-up turn the map.
+   * One frame of the compass: advance the chase, publish it, and in course-up
+   * turn the map.
    *
-   * The heading orients the location arrow, the compass tape and, in course-up,
-   * the whole map, so it is smoothed rather than gated (see heading.ts: the old
-   * ≥3° deadband turned a wobble into a staircase). `trueHeading` needs a
-   * location fix for declination; when it is unavailable (reported as -1)
-   * `resolveTrueHeading` corrects the magnetic reading rather than passing it
-   * off as true — everything else on this screen, including the navigate-to
-   * chip and the tape's labels, is true north.
+   * THE DISPLAY RUNS ON THIS CLOCK, NOT THE SENSOR'S. Sensor samples are
+   * irregular (see heading.ts), and driving the camera off them made the
+   * rotation speed up and slow down inside a single turn — every segment was a
+   * different length, so every segment ran at a different angular velocity. A
+   * fixed tick makes every camera segment identical, which is what a constant
+   * rotation actually requires, and it drives the tape off the same value in
+   * the same frame so the two agree.
    */
-  const handleHeadingSample = useCallback(
-    (sample: Location.LocationHeadingObject) => {
-      const raw = resolveTrueHeading(sample);
-      if (raw == null) return;
-      const now = Date.now();
-      // Both filters in `smoothHeading` are defined per second, and the
-      // platform's delivery is neither fast nor regular (see heading.ts), so
-      // the gap has to be measured rather than assumed.
-      const sinceLastSample =
-        lastHeadingSampleAt.current === 0
-          ? undefined
-          : now - lastHeadingSampleAt.current;
-      lastHeadingSampleAt.current = now;
-      const next = smoothHeading(smoothedHeading.current, raw, sinceLastSample);
-      smoothedHeading.current = next;
+  const stopHeadingTicker = useCallback(() => {
+    if (headingTicker.current == null) return;
+    clearInterval(headingTicker.current);
+    headingTicker.current = null;
+  }, []);
+  const tickHeading = useCallback(() => {
+    const now = Date.now();
+    const next = stepHeadingFilter(headingFilter.current, now);
+    if (next == null) return;
+    publishHeading(next);
 
-      // A floor on how often the arrow and the tape redraw. This no longer
-      // re-renders the screen — it re-renders those two (see publishHeading).
-      if (now - lastHeadingRender.current >= HEADING_RENDER_MS) {
-        lastHeadingRender.current = now;
-        publishHeading(next);
-      }
-
-      // Course-up: turn the map with them, LINEARLY and over the interval this
-      // stop actually covers. See POV_CAMERA_MS for why the curve is the whole
-      // problem. The deadband is what lets a phone held still write nothing at
-      // all, which is what keeps the renderer idle in this mode.
-      if (followModeRef.current !== "course-up") return;
-      if (now - lastPovWriteAt.current < POV_CAMERA_MS) return;
+    // Course-up: turn the map with them, LINEARLY and over exactly one tick.
+    // See the camera note in heading.ts for why the curve is the whole problem.
+    // The deadband is what lets a phone held still write nothing at all, and
+    // the ticker stopping below is what keeps the renderer idle in this mode.
+    if (followModeRef.current === "course-up") {
       const previous = lastPovBearing.current;
       if (
-        previous != null &&
-        Math.abs(shortestAngleDelta(previous, next)) < POV_DEADBAND_DEG
+        previous == null ||
+        Math.abs(shortestAngleDelta(previous, next)) >= POV_DEADBAND_DEG
       ) {
-        return;
+        const sinceLastWrite =
+          lastPovWriteAt.current === 0 ? HEADING_TICK_MS : now - lastPovWriteAt.current;
+        lastPovWriteAt.current = now;
+        lastPovBearing.current = next;
+        setCameraStop({
+          heading: normalizeBearing(next),
+          // Carry the position too: this stop REPLACES whatever the last one
+          // was, and it would otherwise cancel every recentre a fix asked for.
+          ...(latestFix.current ? { centerCoordinate: latestFix.current } : {}),
+          animationDuration: Math.min(
+            Math.max(sinceLastWrite * POV_ANIMATION_HEADROOM, POV_ANIMATION_MIN_MS),
+            POV_ANIMATION_MAX_MS,
+          ),
+          animationMode: "linearTo",
+        });
       }
-      // The real gap, so the map turns at the speed the phone is turning. The
-      // first write of a turn has no gap to measure and takes the floor.
-      const sinceLastWrite =
-        lastPovWriteAt.current === 0 ? POV_ANIMATION_MIN_MS : now - lastPovWriteAt.current;
-      lastPovWriteAt.current = now;
-      lastPovBearing.current = next;
-      setCameraStop({
-        heading: normalizeBearing(next),
-        // Carry the position too: this stop REPLACES whatever the last one was,
-        // and it would otherwise cancel every recentre a fix asked for.
-        ...(latestFix.current ? { centerCoordinate: latestFix.current } : {}),
-        animationDuration: Math.min(
-          Math.max(sinceLastWrite * POV_ANIMATION_HEADROOM, POV_ANIMATION_MIN_MS),
-          POV_ANIMATION_MAX_MS,
-        ),
-        animationMode: "linearTo",
-      });
+    }
+
+    // Arrived. Stop the timer rather than keep waking to move nothing — the
+    // next sample that moves the target starts it again.
+    if (headingSettled(headingFilter.current)) stopHeadingTicker();
+  }, [setCameraStop, stopHeadingTicker]);
+  const startHeadingTicker = useCallback(() => {
+    if (headingTicker.current != null) return;
+    // Run one immediately: the first sample of a session should reach the arrow
+    // now, not a tick from now.
+    tickHeading();
+    if (headingSettled(headingFilter.current)) return;
+    headingTicker.current = setInterval(tickHeading, HEADING_TICK_MS);
+  }, [tickHeading]);
+
+  /**
+   * One compass sample. It moves the TARGET only — see `tickHeading` for the
+   * display.
+   *
+   * The rotation vector is referenced to MAGNETIC north, so the reading is
+   * declination-corrected on the way in (`headingFromDeviceRotation`) —
+   * everything else on this screen, including the navigate-to chip and the
+   * tape's labels, is true north.
+   */
+  const handleHeadingSample = useCallback(
+    (rotation: DeviceMotionMeasurement["rotation"] | null) => {
+      const raw = headingFromDeviceRotation(rotation);
+      if (raw == null) return;
+      if (!noteHeadingSample(headingFilter.current, raw, Date.now())) return;
+      startHeadingTicker();
     },
-    [setCameraStop],
+    [startHeadingTicker],
   );
 
   // ── sensor lifecycle ───────────────────────────────────────────────────────
@@ -2361,47 +2419,41 @@ export function MapScreen({
   // The compass. Wanted by the tape (which runs with no fix at all) and by the
   // location arrow.
   //
-  // Permission is CHECKED, never requested here — a map that asks for location
-  // the moment it opens is the prompt every user learns to deny. Settings does
-  // the asking when the compass switch goes on, and locate-me does it on
-  // demand; until then the tape simply doesn't draw. `permissionNonce` is
-  // bumped on every focus, which is what picks the sensor up after a grant that
-  // happened on another screen.
+  // DEVICE MOTION, NOT LOCATION. `rotation.alpha` is Android's gyro-fused
+  // TYPE_ROTATION_VECTOR (see heading.ts) — six times the sample rate of
+  // `expo-location`'s heading watcher and, more importantly, immune to the hand
+  // acceleration that made the old accelerometer+magnetometer fusion report a
+  // backwards turn at the start of a real one.
+  //
+  // It also needs NO PERMISSION, so the location-permission check this effect
+  // used to carry is gone, and with it the `permissionNonce` that existed only
+  // to re-run that check after a grant made on another screen. The tape and the
+  // arrow's bearing now work on a fresh install with location denied — only the
+  // DOT needs a fix, and its own watcher above still asks for one.
   const headingWanted = compassEnabled || dotWanted;
   useEffect(() => {
     if (!sensorsActive || !headingWanted) return;
-    let subscription: Location.LocationSubscription | null = null;
-    let cancelled = false;
-    void (async () => {
-      const { status } = await Location.getForegroundPermissionsAsync().catch(
-        () => ({ status: "denied" as const }),
-      );
-      if (cancelled || status !== "granted") return;
-      const started = await Location.watchHeadingAsync(
-        handleHeadingSample,
-      ).catch((err: unknown) => {
-        console.error(err);
-        return null;
-      });
-      if (!started) return;
-      if (cancelled) started.remove();
-      else subscription = started;
-    })();
+    DeviceMotion.setUpdateInterval(HEADING_SENSOR_MS);
+    const subscription = DeviceMotion.addListener((motion) => {
+      handleHeadingSample(motion.rotation);
+    });
     return () => {
-      cancelled = true;
-      subscription?.remove();
-      subscription = null;
+      subscription.remove();
       // Drop the reading with the sensor. A heading is a claim about which way
       // the phone is pointing RIGHT NOW; kept across a suspend it draws the
       // arrow and the tape at the bearing the user was facing when they put the
       // phone away, and `handleLocateMe` would rotate the map into course-up
       // from that stale value rather than reading the sensor afresh.
-      smoothedHeading.current = null;
+      //
+      // The ticker goes with it — it is a 31 Hz timer, and one left running
+      // behind a blurred tab is the same fault as a live sensor.
+      stopHeadingTicker();
+      headingFilter.current = createHeadingFilter();
       lastPovBearing.current = null;
-      lastHeadingSampleAt.current = 0;
+      lastPovWriteAt.current = 0;
       publishHeading(null);
     };
-  }, [sensorsActive, headingWanted, handleHeadingSample, permissionNonce]);
+  }, [sensorsActive, headingWanted, handleHeadingSample, stopHeadingTicker]);
 
   const handleLocateMe = useCallback(async () => {
     if (!(await ensureForegroundLocationPermission())) return;
@@ -2448,10 +2500,13 @@ export function MapScreen({
         // their direction — the map just sat north-up, which reads as the mode
         // not working. Last smoothed sample first, a one-shot sensor read if
         // there has never been one, and only then fall through to the watcher.
-        let heading = smoothedHeading.current;
+        let heading = headingFilter.current.value;
         if (heading == null) {
           heading = await currentHeading();
-          if (heading != null) smoothedHeading.current = heading;
+          if (heading != null) {
+            noteHeadingSample(headingFilter.current, heading, Date.now());
+            headingFilter.current.value = normalizeBearing(heading);
+          }
         }
         if (heading != null) lastPovBearing.current = heading;
         // NOT recentre(heading) — see the layout effect below. Turning the map
@@ -3115,7 +3170,11 @@ export function MapScreen({
         {/* Own location marker (expo-location watcher) — see UserLocationMarker
             above for why it is its own component. */}
         {userCoord ? (
-          <UserLocationMarker coord={userCoord} markerColorId={markerColorId} />
+          <UserLocationMarker
+            coord={userCoord}
+            markerColorId={markerColorId}
+            lockUpright={followMode === "course-up"}
+          />
         ) : null}
 
         {/* The extent a "show on map" sent us to, outlined for ~2.5 s. Mounted
