@@ -5,7 +5,7 @@
 // standing layer version, and it lives behind a toggle in the layers sheet
 // because it is a lot of ink to add to a map unasked.
 //
-// ONE ShapeSource, not one per route: each parsed file's features are merged into
+// ONE GeoJSONSource, not one per route: each parsed file's features are merged into
 // a single collection carrying a `routeColor` property, and the line layers read
 // that with a data-driven style. Fifty sources would be fifty native layer
 // commits every time the collection changed.
@@ -15,7 +15,7 @@
 // read rather than quietly drawing a partial picture.
 import { memo, useEffect, useState } from "react";
 import * as FileSystem from "expo-file-system/legacy";
-import { CircleLayer, LineLayer, ShapeSource } from "@maplibre/maplibre-react-native";
+import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 import { TRACK_MIME_TYPES, parseVectorImport } from "@logjam/shared";
 
 import { theme } from "../theme";
@@ -89,10 +89,11 @@ export const CanyonRoutesLayer = memo(function CanyonRoutesLayer({
   if (!collection || collection.features.length === 0) return null;
 
   return (
-    <ShapeSource id="canyon-routes" shape={collection as never}>
+    <GeoJSONSource id="canyon-routes" data={collection as never}>
       {/* Casing first: these lines cross both a pale topo basemap and dark
           imagery, and an uncased line disappears into one of them. */}
-      <LineLayer
+      <Layer
+        type="line"
         id="canyon-routes-casing"
         style={{
           lineColor: theme.primary,
@@ -102,7 +103,8 @@ export const CanyonRoutesLayer = memo(function CanyonRoutesLayer({
           lineJoin: "round",
         }}
       />
-      <LineLayer
+      <Layer
+        type="line"
         id="canyon-routes-line"
         style={{
           lineColor: ["get", "routeColor"] as unknown as string,
@@ -112,7 +114,8 @@ export const CanyonRoutesLayer = memo(function CanyonRoutesLayer({
           lineJoin: "round",
         }}
       />
-      <CircleLayer
+      <Layer
+        type="circle"
         id="canyon-routes-points"
         filter={["==", ["geometry-type"], "Point"] as never}
         style={{
@@ -122,6 +125,6 @@ export const CanyonRoutesLayer = memo(function CanyonRoutesLayer({
           circleStrokeColor: theme.primary,
         }}
       />
-    </ShapeSource>
+    </GeoJSONSource>
   );
 });

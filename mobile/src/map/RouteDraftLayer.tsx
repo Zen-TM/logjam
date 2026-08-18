@@ -11,13 +11,13 @@
 import { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
-  CircleLayer,
-  LineLayer,
-  PointAnnotation,
-  ShapeSource,
-  SymbolLayer,
+  GeoJSONSource,
+  Layer,
+  ViewAnnotation,
   type SymbolLayerStyle,
+  type ViewAnnotationEvent,
 } from "@maplibre/maplibre-react-native";
+import type { NativeSyntheticEvent } from "react-native";
 import {
   draftPoints,
   moveAnchor,
@@ -40,15 +40,15 @@ const ARROW_GLYPH = "\u203A";
  *
  * A STYLE, not a component of ours, and two things here are load-bearing:
  *
- * - The layer has to be a DIRECT child of its `ShapeSource`. MLRN injects
- *   `sourceID` onto the source's immediate children with `cloneElement`, so a
+ * - The layer has to be a DIRECT child of its `GeoJSONSource`. MLRN injects
+ *   `source` onto the source's immediate children with `cloneElement`, so a
  *   layer wrapped in a component of ours never learns which source it belongs
  *   to, falls back to the default source id and draws nothing.
  * - `textFont` has to name a stack we actually ship. The bundled glyph pack
  *   (Protomaps basemap-assets, see `basemapAssets.ts`) carries Noto Sans only,
  *   while MapLibre's default fontstack is Open Sans — a symbol layer that omits
  *   the font asks for glyphs that 404 and renders no text at all, silently.
- *   Every other SymbolLayer in the app names this same stack.
+ *   Every other symbol layer in the app names this same stack.
  *
  * Overlap allowed and placement ignored so an arrow never loses a contest with
  * a street label, and `textKeepUpright` off because an arrow that flips itself
@@ -80,10 +80,10 @@ export function routeArrowStyle(
  *
  * The ends are marked, the middles recede: a middle anchor is a small white dot
  * (a handle), the first is filled accent and the last is dark. Everything is
- * drawn by a CircleLayer rather than by the annotation's own child view for two
+ * drawn by a circle layer rather than by the annotation's own child view for two
  * reasons — a native layer declared AFTER the line always paints above it, and
  * its styling is data-driven, so an anchor that stops being the last one
- * changes appearance immediately. A PointAnnotation's child view does neither:
+ * changes appearance immediately. A ViewAnnotation's child view does neither:
  * MLRN rasterises it once, so the old last-anchor kept its dark fill until the
  * draft was reopened.
  */
@@ -153,9 +153,9 @@ export function RouteDraftLayer({
   return (
     <>
       {previewPoints.length >= 2 ? (
-        <ShapeSource
+        <GeoJSONSource
           id={`${idPrefix}-line`}
-          shape={{
+          data={{
             type: "Feature",
             geometry: {
               type: "LineString",
@@ -164,7 +164,8 @@ export function RouteDraftLayer({
             properties: {},
           }}
         >
-          <LineLayer
+          <Layer
+            type="line"
             id={`${idPrefix}-line-stroke`}
             style={{
               lineColor: theme.accent,
@@ -174,18 +175,20 @@ export function RouteDraftLayer({
               ...(dotted ? { lineDasharray: [1, 1.5] } : {}),
             }}
           />
-          <SymbolLayer
+          <Layer
+            type="symbol"
             id={`${idPrefix}-line-arrows`}
-            minZoomLevel={ROUTE_ARROW_MIN_ZOOM}
+            minzoom={ROUTE_ARROW_MIN_ZOOM}
             style={routeArrowStyle(theme.accent)}
           />
-        </ShapeSource>
+        </GeoJSONSource>
       ) : null}
 
       {/* Declared after the line, so it paints above it. */}
       {anchors.length > 0 ? (
-        <ShapeSource id={`${idPrefix}-anchors`} shape={anchorFeatures(anchors)}>
-          <CircleLayer
+        <GeoJSONSource id={`${idPrefix}-anchors`} data={anchorFeatures(anchors)}>
+          <Layer
+            type="circle"
             id={`${idPrefix}-anchor-dots`}
             style={{
               circleRadius: [
@@ -208,39 +211,39 @@ export function RouteDraftLayer({
               circleStrokeColor: theme.accent,
             }}
           />
-        </ShapeSource>
+        </GeoJSONSource>
       ) : null}
 
       {/* One INVISIBLE handle per anchor — never per point. A snapped run is
           geometry the tool produced, not vertices the user placed, so dotting
           every one of them made 500 m of creek look like twenty-two decisions.
-          PointAnnotation is the only thing in the wrapper that can be dragged;
+          ViewAnnotation is the only thing in the wrapper that can be dragged;
           it carries no visuals now, just the touch target. */}
       {draft.anchors.map((anchor, index) => (
-        <PointAnnotation
+        <ViewAnnotation
           key={`${idPrefix}-anchor-${index}`}
           id={`${idPrefix}-anchor-${index}`}
-          coordinate={anchor as number[]}
+          lngLat={anchor as [number, number]}
           draggable
           onDragStart={() => {
             setDrag({ index, point: anchor });
             onAnchorDragStart(index);
           }}
-          onDrag={(payload: { geometry?: { coordinates?: number[] } }) => {
-            const moved = payload.geometry?.coordinates as RoutePoint | undefined;
+          onDrag={(event: NativeSyntheticEvent<ViewAnnotationEvent>) => {
+            const moved = event.nativeEvent.lngLat as RoutePoint | undefined;
             if (!moved) return;
             setDrag({ index, point: moved });
             onAnchorDrag(index, moved);
           }}
-          onDragEnd={(payload: { geometry?: { coordinates?: number[] } }) => {
-            const moved = payload.geometry?.coordinates as RoutePoint | undefined;
+          onDragEnd={(event: NativeSyntheticEvent<ViewAnnotationEvent>) => {
+            const moved = event.nativeEvent.lngLat as RoutePoint | undefined;
             setDrag(null);
             if (moved) onAnchorDragEnd(index, moved);
           }}
-          onSelected={() => onAnchorPress(index)}
+          onSelect={() => onAnchorPress(index)}
         >
           <View style={styles.handle} />
-        </PointAnnotation>
+        </ViewAnnotation>
       ))}
     </>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import * as FileSystem from "expo-file-system/legacy";
-import { CircleLayer, LineLayer, ShapeSource } from "@maplibre/maplibre-react-native";
+import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 import { parseVectorImport, type ImportedFeature } from "@logjam/shared";
 
 import { theme } from "../theme";
@@ -71,13 +71,14 @@ export function RouteMapLayer({
   if (features === null || features.length === 0) return null;
 
   return (
-    <ShapeSource
+    <GeoJSONSource
       id="trip-route"
-      shape={{ type: "FeatureCollection", features: features as never }}
+      data={{ type: "FeatureCollection", features: features as never }}
     >
       {/* A casing under the line so it stays readable over both the pale topo
           basemap and dark satellite imagery. */}
-      <LineLayer
+      <Layer
+        type="line"
         id="trip-route-casing"
         style={{
           lineColor: theme.primary,
@@ -87,7 +88,8 @@ export function RouteMapLayer({
           lineJoin: "round",
         }}
       />
-      <LineLayer
+      <Layer
+        type="line"
         id="trip-route-line"
         style={{
           lineColor: ROUTE_COLOR,
@@ -100,7 +102,8 @@ export function RouteMapLayer({
           waypoints with no track at all, and drawing only lines left the map
           empty at a place the camera had just flown to — which reads as the
           app being broken rather than as the file having no route in it. */}
-      <CircleLayer
+      <Layer
+        type="circle"
         id="trip-route-points"
         filter={["==", ["geometry-type"], "Point"]}
         style={{
@@ -110,7 +113,7 @@ export function RouteMapLayer({
           circleStrokeColor: theme.primary,
         }}
       />
-    </ShapeSource>
+    </GeoJSONSource>
   );
 }
 

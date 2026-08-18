@@ -1,13 +1,8 @@
 // Map layers for recorded tracks + waypoints (Stage 7). Rendered inside
-// MapView; sources are unpinned so they draw above the basemap/overlay bands —
+// Map; sources are unpinned so they draw above the basemap/overlay bands —
 // mount this BEFORE the canyon sources so canyons stay on top.
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import {
-  CircleLayer,
-  LineLayer,
-  ShapeSource,
-  SymbolLayer,
-} from "@maplibre/maplibre-react-native";
+import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 import type { RecordedTrackPoint } from "@logjam/shared";
 
 import { theme } from "../theme";
@@ -63,17 +58,20 @@ const TrackLine = memo(function TrackLine({
 
   if (shape.geometry.coordinates.length === 0) return null;
   return (
-    <ShapeSource
+    <GeoJSONSource
       id={`track-${track.id}`}
-      shape={shape}
+      data={shape}
       // A 3px line is far thinner than a fingertip, so without a hitbox the
-      // line is technically tappable and practically not. 44pt is the platform
-      // minimum touch target, and it is the right number here for the same
-      // reason it is on the saved routes (RoutesLayer.tsx).
-      hitbox={{ width: 44, height: 44 }}
-      onPress={(event) => onPress(track, event.coordinates)}
+      // line is technically tappable and practically not. MLRN defaults it to
+      // 44pt — the platform minimum touch target, and the right number here
+      // for the same reason it is on the saved routes (RoutesLayer.tsx).
+      onPress={(event) => {
+        const [longitude, latitude] = event.nativeEvent.lngLat;
+        onPress(track, { latitude, longitude });
+      }}
     >
-      <LineLayer
+      <Layer
+        type="line"
         id={`track-line-${track.id}`}
         style={{
           lineColor: track.color,
@@ -83,7 +81,7 @@ const TrackLine = memo(function TrackLine({
           lineCap: "round",
         }}
       />
-    </ShapeSource>
+    </GeoJSONSource>
   );
 });
 
@@ -198,16 +196,19 @@ export const TrackMapLayers = memo(function TrackMapLayers({
         />
       ))}
       {waypoints.length > 0 ? (
-        <ShapeSource
+        <GeoJSONSource
           id="waypoints"
-          shape={waypointShape}
+          data={waypointShape}
           onPress={(event) => {
-            const id = event.features[0]?.properties?.id as string | undefined;
+            const id = event.nativeEvent.features[0]?.properties?.id as
+              | string
+              | undefined;
             const waypoint = waypoints.find((w) => w.id === id);
             if (waypoint) onWaypointPress(waypoint);
           }}
         >
-          <CircleLayer
+          <Layer
+            type="circle"
             id="waypoint-markers"
             style={{
               circleRadius: 6,
@@ -216,7 +217,8 @@ export const TrackMapLayers = memo(function TrackMapLayers({
               circleStrokeWidth: 2,
             }}
           />
-          <SymbolLayer
+          <Layer
+            type="symbol"
             id="waypoint-labels"
             style={{
               textField: ["get", "name"] as unknown as string,
@@ -229,7 +231,7 @@ export const TrackMapLayers = memo(function TrackMapLayers({
               textOffset: [0, 0.8],
             }}
           />
-        </ShapeSource>
+        </GeoJSONSource>
       ) : null}
     </>
   );

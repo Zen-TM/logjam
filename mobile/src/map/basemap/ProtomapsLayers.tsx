@@ -6,16 +6,7 @@
 // (land colour under the tiles), above the shell's own background at index 0,
 // and unmounts cleanly with the rest on basemap swap.
 import { memo } from "react";
-import {
-  BackgroundLayer,
-  FillLayer,
-  LineLayer,
-  SymbolLayer,
-  type BackgroundLayerStyle,
-  type FillLayerStyle,
-  type LineLayerStyle,
-  type SymbolLayerStyle,
-} from "@maplibre/maplibre-react-native";
+import { Layer, type LayerProps } from "@maplibre/maplibre-react-native";
 
 import {
   protomapsLayerDefs,
@@ -34,55 +25,31 @@ function layerComponent(
   layerIndex: number,
   idPrefix: string,
 ) {
-  const shared = {
-    id: `${idPrefix}-${def.id}`,
+  const id = `${idPrefix}-${def.id}`;
+  // One cast for the whole prop bag. The generated defs carry a merged
+  // camelCase style object rather than the spec's paint/layout split, so they
+  // go in through MLRN's legacy `style` prop — a different arm of LayerProps
+  // than the spec-shaped one, which is why the bag can't be typed piecewise.
+  // The generator (scripts/basemap/generate-style.mjs) and this call have to
+  // move together when that prop goes in MLRN v12. The filter is `as never`
+  // for the same reason it always was: FilterSpecification is a stricter tuple
+  // type than the generated JSON can express, and the values come straight
+  // from @protomaps/basemaps.
+  const props = {
+    id,
     layerIndex,
-    ...(def.sourceLayer && { sourceLayerID: def.sourceLayer }),
-    // MLRN's FilterExpression is a stricter tuple type than the generated
-    // JSON can express; values come straight from @protomaps/basemaps.
-    ...(def.filter && { filter: def.filter as never }),
-    ...(def.minzoom !== undefined && { minZoomLevel: def.minzoom }),
-    ...(def.maxzoom !== undefined && { maxZoomLevel: def.maxzoom }),
-  };
-  switch (def.type) {
-    case "background":
-      // Backgrounds have no source; give it the flavor colour at the bottom
-      // of the protomaps band.
-      return (
-        <BackgroundLayer
-          key={shared.id}
-          {...shared}
-          style={def.style as BackgroundLayerStyle}
-        />
-      );
-    case "fill":
-      return (
-        <FillLayer
-          key={shared.id}
-          {...shared}
-          sourceID={sourceID}
-          style={def.style as FillLayerStyle}
-        />
-      );
-    case "line":
-      return (
-        <LineLayer
-          key={shared.id}
-          {...shared}
-          sourceID={sourceID}
-          style={def.style as LineLayerStyle}
-        />
-      );
-    case "symbol":
-      return (
-        <SymbolLayer
-          key={shared.id}
-          {...shared}
-          sourceID={sourceID}
-          style={def.style as SymbolLayerStyle}
-        />
-      );
-  }
+    type: def.type,
+    style: def.style,
+    // A background layer has no source; everything else binds to the one the
+    // resolver mounted.
+    ...(def.type === "background"
+      ? {}
+      : { source: sourceID, "source-layer": def.sourceLayer }),
+    ...(def.filter && { filter: def.filter }),
+    ...(def.minzoom !== undefined && { minzoom: def.minzoom }),
+    ...(def.maxzoom !== undefined && { maxzoom: def.maxzoom }),
+  } as LayerProps;
+  return <Layer key={id} {...props} />;
 }
 
 /**

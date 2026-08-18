@@ -15,7 +15,7 @@
 // PRIVACY: the bbox arrives as a prop, stays in this component, and is never
 // logged.
 import { memo, useEffect, useMemo, useState } from "react";
-import { CircleLayer, LineLayer, ShapeSource } from "@maplibre/maplibre-react-native";
+import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 
 import { theme } from "../theme";
 import {
@@ -89,9 +89,10 @@ export const FocusPulse = memo(function FocusPulse({
     // above the basemap band and above everything else for the two seconds it
     // exists. Claiming an index inside the overlay band would mean shifting
     // every overlay's index as it mounts and unmounts, for a transient marker.
-    <ShapeSource id="focus-pulse" shape={shape}>
+    <GeoJSONSource id="focus-pulse" data={shape}>
       {degenerate ? (
-        <CircleLayer
+        <Layer
+          type="circle"
           id="focus-pulse-point"
           style={{
             circleRadius: POINT_RADIUS,
@@ -102,7 +103,8 @@ export const FocusPulse = memo(function FocusPulse({
           }}
         />
       ) : (
-        <LineLayer
+        <Layer
+          type="line"
           id="focus-pulse-outline"
           style={{
             lineColor: theme.accent,
@@ -112,6 +114,6 @@ export const FocusPulse = memo(function FocusPulse({
           }}
         />
       )}
-    </ShapeSource>
+    </GeoJSONSource>
   );
 });

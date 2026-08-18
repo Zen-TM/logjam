@@ -5,15 +5,10 @@
 // synced row — so there is nothing to fetch, nothing to parse, and no
 // "unavailable" count to report. It works offline the moment the delta lands.
 //
-// ONE ShapeSource for the same reason as CanyonRoutesLayer: per-feature colour
+// ONE GeoJSONSource for the same reason as CanyonRoutesLayer: per-feature colour
 // via a data-driven style beats N native sources.
 import { memo, useMemo } from "react";
-import {
-  CircleLayer,
-  LineLayer,
-  ShapeSource,
-  SymbolLayer,
-} from "@maplibre/maplibre-react-native";
+import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 
 import { theme } from "../theme";
 import type { MirrorRoute } from "../sync/mirrorStore";
@@ -67,26 +62,27 @@ export const RoutesLayer = memo(function RoutesLayer({
   if (shape.features.length === 0) return null;
 
   return (
-    <ShapeSource
+    <GeoJSONSource
       id="saved-routes"
-      shape={shape}
+      data={shape}
       // A 3px line is far thinner than a fingertip; the hitbox is what makes
-      // tapping one a reasonable thing to ask. 44pt is the platform minimum
-      // touch target, and it is the right number here for the same reason.
-      hitbox={{ width: 44, height: 44 }}
+      // tapping one a reasonable thing to ask. MLRN's default is 44pt — the
+      // platform minimum touch target, and the right number here for the same
+      // reason — so this no longer sets one.
       onPress={
         onPressRoute &&
         ((event) => {
-          const routeId = event.features[0]?.properties?.routeId;
+          const routeId = event.nativeEvent.features[0]?.properties?.routeId;
           if (typeof routeId === "string") onPressRoute(routeId);
         })
       }
     >
       {/* Casing first: a dark under-stroke keeps a mid-tone line legible over
           both the pale basemap and dark imagery. */}
-      <LineLayer
+      <Layer
+        type="line"
         id="saved-routes-casing"
-        minZoomLevel={SAVED_ROUTE_MIN_ZOOM}
+        minzoom={SAVED_ROUTE_MIN_ZOOM}
         style={{
           lineColor: theme.primary,
           lineWidth: 6,
@@ -95,9 +91,10 @@ export const RoutesLayer = memo(function RoutesLayer({
           lineOpacity: 0.7,
         }}
       />
-      <LineLayer
+      <Layer
+        type="line"
         id="saved-routes-line"
-        minZoomLevel={SAVED_ROUTE_MIN_ZOOM}
+        minzoom={SAVED_ROUTE_MIN_ZOOM}
         style={{
           lineColor: ["get", "routeColor"],
           lineWidth: 3,
@@ -105,9 +102,10 @@ export const RoutesLayer = memo(function RoutesLayer({
           lineJoin: "round",
         }}
       />
-      <CircleLayer
+      <Layer
+        type="circle"
         id="saved-routes-ends"
-        minZoomLevel={SAVED_ROUTE_MIN_ZOOM}
+        minzoom={SAVED_ROUTE_MIN_ZOOM}
         filter={["==", ["geometry-type"], "Point"]}
         style={{
           circleRadius: 4,
@@ -119,11 +117,12 @@ export const RoutesLayer = memo(function RoutesLayer({
       {/* Spaced wider than the draft's: several routes on screen at once is a
           lot of chevrons, and here they only answer "which way does this run".
           Colour is data-driven, so all of them are still one native layer. */}
-      <SymbolLayer
+      <Layer
+        type="symbol"
         id="saved-routes-arrows"
-        minZoomLevel={ROUTE_ARROW_MIN_ZOOM}
+        minzoom={ROUTE_ARROW_MIN_ZOOM}
         style={routeArrowStyle(["get", "routeColor"], 140)}
       />
-    </ShapeSource>
+    </GeoJSONSource>
   );
 });

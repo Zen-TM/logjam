@@ -1,6 +1,6 @@
 // Vector file import flow (Stage 5): document picker → shared parser →
 // GeoJSON file in app-private storage → vector_import row. The map renders
-// rows as ShapeSources; everything works offline from the moment of import.
+// rows as GeoJSON sources; everything works offline from the moment of import.
 //
 // PRIVACY: importing a file must never implicitly upload coordinates
 // anywhere — the whole flow is device-local (account sync is Stage 8, opt-in

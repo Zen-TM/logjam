@@ -32,19 +32,20 @@ import {
   PixelRatio,
   useWindowDimensions,
   type GestureResponderEvent,
+  type NativeSyntheticEvent,
   type TextInput,
 } from "react-native";
 import {
   Camera,
-  CircleLayer,
-  FillLayer,
+  GeoJSONSource,
   Images,
-  LineLayer,
-  MapView,
-  RasterLayer,
-  ShapeSource,
-  SymbolLayer,
+  Layer,
+  Map,
   type CameraStop,
+  type MapRef,
+  type PressEvent,
+  type PressEventWithFeatures,
+  type ViewStateChangeEvent,
 } from "@maplibre/maplibre-react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -285,8 +286,8 @@ const SINGLE_POINT_ZOOM = 14;
 const MAP_MAX_FPS = 60;
 
 const CAMERA_DEFAULTS = {
-  centerCoordinate: DEFAULT_CENTER,
-  zoomLevel: DEFAULT_ZOOM,
+  center: DEFAULT_CENTER,
+  zoom: DEFAULT_ZOOM,
 };
 
 /**
@@ -462,7 +463,7 @@ const UserLocationMarker = memo(function UserLocationMarker({
 }) {
   // Course-up draws a constant, so it must not subscribe to the VALUE — the
   // ticker publishes ~30 times a second and this component commits a
-  // ShapeSource plus two SymbolLayers to MLRN on every render. Same split as
+  // GeoJSONSource plus two symbol layers to MLRN on every render. Same split as
   // LiveCompassStrip below, for the same reason.
   return lockUpright ? (
     <UprightUserMarker coord={coord} markerColorId={markerColorId} />
@@ -490,7 +491,7 @@ function UserMarkerLayers({
 }: UserMarkerProps & { heading: number | null; upright: boolean }) {
   const rotationAlignment = upright ? ("viewport" as const) : ("map" as const);
   const liveHeading = heading;
-  // MLRN's ShapeSource JSON.stringifies `shape` on every render it lets
+  // MLRN's GeoJSONSource JSON.stringifies `data` on every render it lets
   // through, so this must not be an object literal in the JSX.
   const shape = useMemo(
     () =>
@@ -502,11 +503,12 @@ function UserMarkerLayers({
     [coord],
   );
   return (
-    <ShapeSource id="user-location" shape={shape}>
+    <GeoJSONSource id="user-location" data={shape}>
       {liveHeading != null ? (
         // Direction beam under the arrow. Map-aligned, so it points at
         // real-world bearings even when the map itself is rotated.
-        <SymbolLayer
+        <Layer
+          type="symbol"
           id="user-location-heading"
           style={{
             iconImage: "user-heading-beam",
@@ -522,7 +524,8 @@ function UserMarkerLayers({
           ledge. The arrow answers both at once — which is why the heading
           watcher runs for as long as the marker is on screen, not only in
           course-up. */}
-      <SymbolLayer
+      <Layer
+        type="symbol"
         id="user-location-dot"
         style={{
           iconImage: "user-arrow",
@@ -541,7 +544,7 @@ function UserMarkerLayers({
           iconHaloWidth: 1.2,
         }}
       />
-    </ShapeSource>
+    </GeoJSONSource>
   );
 }
 
@@ -670,7 +673,7 @@ export function MapScreen({
     () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
     [basemapAssets.localBaseUrl],
   );
-  // Whether the MapView (and therefore the camera) is mounted at all — the same
+  // Whether the Map (and therefore the camera) is mounted at all — the same
   // condition as the render gate at the bottom of this component. Anything that
   // drives the camera from an effect has to wait for this.
   const mapReady = basemapAssets.localBaseUrl != null || basemapAssets.failed;
@@ -773,7 +776,7 @@ export function MapScreen({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   /**
    * How tall the map is, for course-up's forward camera offset. The window,
-   * not a measured view: the MapView is the whole screen behind the chrome, and
+   * not a measured view: the Map is the whole screen behind the chrome, and
    * a ref rather than a dep so `setCameraStop` stays stable.
    */
   const mapHeight = useRef(windowHeight);
@@ -787,7 +790,7 @@ export function MapScreen({
     // the behaviour for this session.
     writeSnapMode(mode);
   }, []);
-  const mapRef = useRef<React.ComponentRef<typeof MapView>>(null);
+  const mapRef = useRef<MapRef>(null);
   // Enabled topo overlays. Seeded from the persisted set (registryDb) so a
   // downloaded overlay stays visible across a cold offline launch; toggles
   // write through. Saved overlays are auto-enabled on download.
@@ -877,8 +880,11 @@ export function MapScreen({
     // camera — recorded here rather than waiting for MapLibre to report it back,
     // because the report comes late and can arrive out of order (see
     // `handleRegionDidChange`).
-    if (typeof stop.zoomLevel === "number") zoomRef.current = stop.zoomLevel;
-    if (typeof stop.heading === "number") headingRef.current = stop.heading;
+    if (typeof stop.zoom === "number") zoomRef.current = stop.zoom;
+    if (typeof stop.bearing === "number") headingRef.current = stop.bearing;
+    // Nothing on this screen writes a bounds stop (`fitCameraToBbox` calls
+    // fitBounds directly), but CameraStop covers both shapes, so the centre
+    // has to be narrowed out of the union before it can be read.
     // Course-up puts the user three quarters of the way down the screen, by
     // looking at a point AHEAD of them rather than at them (heading.ts,
     // POV_USER_SCREEN_FRACTION). Applied here so it covers every stop that
@@ -887,18 +893,18 @@ export function MapScreen({
     // once. MapLibre's camera padding would have been the obvious tool and is
     // not usable: Android only applies it on a stop that has a target, so it
     // survives the ones that don't and the map stays offset after course-up.
-    const target = stop.centerCoordinate;
-    cameraRef.current.setCamera(
+    const target = "center" in stop ? stop.center : undefined;
+    void cameraRef.current.setStop(
       followModeRef.current === "course-up" && target
-        ? {
+        ? ({
             ...stop,
-            centerCoordinate: povCameraCenter(
+            center: povCameraCenter(
               target as [number, number],
-              stop.heading ?? headingRef.current,
-              stop.zoomLevel ?? zoomRef.current,
+              stop.bearing ?? headingRef.current,
+              stop.zoom ?? zoomRef.current,
               mapHeight.current,
             ),
-          }
+          } as CameraStop)
         : stop,
     );
   }, []);
@@ -923,14 +929,19 @@ export function MapScreen({
       // bbox; fitting to it asks the camera for infinite zoom. Centre on the
       // point at a fixed close zoom instead.
       if (east - west < DEGENERATE_BBOX_DEGREES && north - south < DEGENERATE_BBOX_DEGREES) {
-        cameraRef.current.setCamera({
-          centerCoordinate: [(west + east) / 2, (south + north) / 2],
-          zoomLevel: SINGLE_POINT_ZOOM,
-          animationDuration: 600,
+        void cameraRef.current.setStop({
+          center: [(west + east) / 2, (south + north) / 2],
+          zoom: SINGLE_POINT_ZOOM,
+          duration: 600,
         });
         return;
       }
-      cameraRef.current.fitBounds([east, north], [west, south], padding, 600);
+      // Bounds are west, south, east, north (GeoJSON order) in MLRN 11 — the
+      // same numbers this function already takes as its bbox.
+      cameraRef.current.fitBounds(bbox, {
+        padding: { top: padding, right: padding, bottom: padding, left: padding },
+        duration: 600,
+      });
     },
     [],
   );
@@ -1497,9 +1508,8 @@ export function MapScreen({
   const swallowNextPress = useRef(false);
 
   const handleMapPress = useCallback(
-    (feature: GeoJSON.Feature) => {
-      if (feature.geometry.type !== "Point") return;
-      const [lon, lat] = feature.geometry.coordinates as [number, number];
+    (event: NativeSyntheticEvent<PressEvent>) => {
+      const [lon, lat] = event.nativeEvent.lngLat;
       // The second tap of a double tap already did its work (it zoomed); it
       // must not also ask what is under the finger. Cleared here rather than on
       // a timer, so exactly one press is swallowed however long MapLibre takes
@@ -1523,21 +1533,16 @@ export function MapScreen({
   );
 
   const handleCanyonPress = useCallback(
-    (event: {
-      features?: { properties?: Record<string, unknown> | null }[];
-      coordinates?: { latitude: number; longitude: number };
-      point?: { x: number; y: number };
-    }) => {
+    (event: NativeSyntheticEvent<PressEventWithFeatures>) => {
       // A pin swallows the press before the map sees it, so while a
       // point-collecting tool is armed it has to place the point itself —
       // otherwise tapping near a canyon does nothing and reads as broken.
       if (collectingPoints) {
-        if (event.coordinates) {
-          void addToolPoint(event.coordinates.longitude, event.coordinates.latitude);
-        }
+        const [lon, lat] = event.nativeEvent.lngLat;
+        void addToolPoint(lon, lat);
         return;
       }
-      const props = event.features?.[0]?.properties;
+      const props = event.nativeEvent.features[0]?.properties;
       if (props && typeof props.id === "string" && typeof props.name === "string") {
         onOpenCanyon(props.id, props.name);
       }
@@ -1570,7 +1575,7 @@ export function MapScreen({
    * DOUBLE-TAP TO ZOOM, WHILE FOLLOWING — the gesture MapLibre lost when this
    * screen took its zoom away.
    *
-   * `zoomEnabled` is false for the whole of follow mode (the pinch is ours; two
+   * `touchZoom` is false for the whole of follow mode (the pinch is ours; two
    * drivers on the same two fingers is what used to shake follow loose), and
    * double-tap is one of MapLibre's zoom gestures rather than a separate press
    * handler — so it went with it, and the only way to zoom in without a second
@@ -1627,9 +1632,9 @@ export function MapScreen({
       // the next pinch starts from. Short animation: a step this size reads as
       // a jump cut with no animation at all.
       setCameraStop({
-        centerCoordinate: latestFix.current,
-        zoomLevel: Math.min(MAX_PINCH_ZOOM, zoomRef.current + 1),
-        animationDuration: 200,
+        center: latestFix.current,
+        zoom: Math.min(MAX_PINCH_ZOOM, zoomRef.current + 1),
+        duration: 200,
       });
     },
     [collectingPoints, followModeRef, latestFix, setCameraStop, zoomRef],
@@ -1692,7 +1697,7 @@ export function MapScreen({
   // except the compass ornament they may have turned off.
   useEffect(() => {
     if (!northUpLocked) return;
-    setCameraStop({ heading: 0, animationDuration: 300 });
+    setCameraStop({ bearing: 0, duration: 300 });
   }, [northUpLocked, setCameraStop]);
 
   // KEEP AWAKE (Settings → Map). A wake lock is the most expensive preference in
@@ -1734,7 +1739,7 @@ export function MapScreen({
         )
       : null;
 
-  // MLRN's ShapeSource JSON.stringifies `shape` on every render it lets
+  // MLRN's GeoJSONSource JSON.stringifies `data` on every render it lets
   // through, and an object literal in the JSX defeats its memo outright — so
   // both of these small sources were re-serialised and re-committed to the
   // native map on every render of this screen. They change when their inputs
@@ -1927,11 +1932,11 @@ export function MapScreen({
         // is worse than opening in the wrong place.
         if (!position || cancelled || userMovedCamera.current) return;
         setCameraStop({
-          centerCoordinate: [position.coords.longitude, position.coords.latitude],
-          zoomLevel: FOLLOW_ZOOM,
+          center: [position.coords.longitude, position.coords.latitude],
+          zoom: FOLLOW_ZOOM,
           // Instant when it came from the cache; a fetched fix animates in so
           // the jump reads as the map answering, not as a glitch.
-          animationDuration: 0,
+          duration: 0,
         });
       } catch (err) {
         // Never blocks the map: an unavailable provider just leaves the
@@ -2091,15 +2096,10 @@ export function MapScreen({
   // a thumb that is mid-pan is a second unrequested camera move. The native
   // compass ornament resets north on tap.
   const handleRegionIsChanging = useCallback(
-    (feature: {
-      geometry: { coordinates: number[] };
-      properties: { zoomLevel: number; isUserInteraction: boolean };
-    }) => {
-      scaleBarRef.current?.update(
-        feature.geometry.coordinates[1],
-        feature.properties.zoomLevel,
-      );
-      if (feature.properties.isUserInteraction) {
+    (event: NativeSyntheticEvent<ViewStateChangeEvent>) => {
+      const { center, zoom, userInteraction } = event.nativeEvent;
+      scaleBarRef.current?.update(center[1], zoom);
+      if (userInteraction) {
         // Also the open-on-your-location effect's stop signal: once the user
         // has moved the map themselves, a fix that arrives late must not take
         // the camera back off them.
@@ -2127,20 +2127,16 @@ export function MapScreen({
   // Settled camera readout. Coordinates stay in component state only — never
   // logged (privacy rule).
   const handleRegionDidChange = useCallback(
-    (feature: {
-      geometry: { coordinates: number[] };
-      properties: { zoomLevel: number; heading: number };
-    }) => {
-      const latitude = feature.geometry.coordinates[1];
-      const longitude = feature.geometry.coordinates[0];
-      const { zoomLevel } = feature.properties;
-      if (!Number.isFinite(latitude) || !Number.isFinite(zoomLevel)) return;
-      scaleBarRef.current?.update(latitude, zoomLevel);
+    (event: NativeSyntheticEvent<ViewStateChangeEvent>) => {
+      const { center, zoom, bearing, bounds } = event.nativeEvent;
+      const [longitude, latitude] = center;
+      if (!Number.isFinite(latitude) || !Number.isFinite(zoom)) return;
+      scaleBarRef.current?.update(latitude, zoom);
       // The move that just settled is done with; drop its stop so a re-render
       // can't replay it (see stopNeedsReset).
       if (stopNeedsReset.current) {
         stopNeedsReset.current = false;
-        cameraRef.current?.setCamera({ animationDuration: 0 });
+        void cameraRef.current?.setStop({ duration: 0 });
       }
       // MID-PINCH, STOP HERE. Every move this screen drives writes a camera
       // stop, and every stop settles into this handler — so carrying on would
@@ -2168,32 +2164,25 @@ export function MapScreen({
       // strictly worse than no report.
       if (followModeRef.current === "off" || acceptSettleCamera.current) {
         acceptSettleCamera.current = false;
-        zoomRef.current = zoomLevel;
-        if (Number.isFinite(feature.properties.heading)) {
-          headingRef.current = feature.properties.heading;
-        }
+        zoomRef.current = zoom;
+        if (Number.isFinite(bearing)) headingRef.current = bearing;
       }
-      // What is actually on screen, for the offline notice. Async, and asked
-      // of the map rather than derived, because a rotated view's extent is not
-      // its centre plus its zoom.
-      void mapRef.current
-        ?.getVisibleBounds()
-        .then((bounds) => {
-          if (!bounds) return;
-          const [[neLng, neLat], [swLng, swLat]] = bounds;
-          setViewportBbox((prev) =>
-            prev &&
-            prev.north === neLat &&
-            prev.east === neLng &&
-            prev.south === swLat &&
-            prev.west === swLng
-              ? prev
-              : { north: neLat, east: neLng, south: swLat, west: swLng },
-          );
-        })
-        .catch(console.error);
+      // What is actually on screen, for the offline notice. Carried on the
+      // settle event itself rather than derived, because a rotated view's
+      // extent is not its centre plus its zoom. (Under MLRN 10 this was an
+      // async getVisibleBounds() round trip per settle; the event brings it.)
+      const [west, south, east, north] = bounds;
+      setViewportBbox((prev) =>
+        prev &&
+        prev.north === north &&
+        prev.east === east &&
+        prev.south === south &&
+        prev.west === west
+          ? prev
+          : { north, east, south, west },
+      );
       setCamera((prev) =>
-        prev.zoom === zoomLevel &&
+        prev.zoom === zoom &&
         prev.latitude === latitude &&
         prev.longitude === longitude
           ? // Same readout ⇒ same render output. Bailing keeps a stop replay
@@ -2201,7 +2190,7 @@ export function MapScreen({
             // replaying forever.
             prev
           : {
-              zoom: zoomLevel,
+              zoom,
               latitude: latitude as number,
               longitude: longitude as number,
             },
@@ -2214,9 +2203,9 @@ export function MapScreen({
   const handleSelectPlace = useCallback((latitude: number, longitude: number) => {
     setFollowMode("off");
     setCameraStop({
-      centerCoordinate: [longitude, latitude],
-      zoomLevel: 13,
-      animationDuration: 800,
+      center: [longitude, latitude],
+      zoom: 13,
+      duration: 800,
     });
   }, [setCameraStop]);
 
@@ -2232,10 +2221,10 @@ export function MapScreen({
     (heading?: number) => {
       if (!latestFix.current) return;
       setCameraStop({
-        centerCoordinate: latestFix.current,
-        zoomLevel: FOLLOW_ZOOM,
-        ...(heading != null ? { heading: normalizeBearing(heading) } : {}),
-        animationDuration: 600,
+        center: latestFix.current,
+        zoom: FOLLOW_ZOOM,
+        ...(heading != null ? { bearing: normalizeBearing(heading) } : {}),
+        duration: 600,
       });
     },
     [setCameraStop],
@@ -2324,9 +2313,9 @@ export function MapScreen({
       if (firstFix.current) {
         firstFix.current = false;
         setCameraStop({
-          centerCoordinate: coord,
-          zoomLevel: FOLLOW_ZOOM,
-          animationDuration: 1200,
+          center: coord,
+          zoom: FOLLOW_ZOOM,
+          duration: 1200,
         });
       } else if (mode !== "off") {
         // NOT WHILE A PINCH IS DRIVING THE CAMERA. This is a 600 ms ANIMATED
@@ -2338,7 +2327,7 @@ export function MapScreen({
         // MapLibre (see handlePinchMove), one axis over.
         //
         // Nothing is lost by skipping it: every pinch frame carries
-        // `centerCoordinate: latestFix.current`, which this callback has already
+        // `center: latestFix.current`, which this callback has already
         // updated, so the map is pinned to the new fix within a frame anyway.
         if (pinchStart.current) return;
         // Course-up rotation is driven by the COMPASS, not by the fix's course
@@ -2346,7 +2335,7 @@ export function MapScreen({
         // which on a scramble is often not where they last moved (and course
         // is reported as -1 whenever they stand still). The heading sample
         // handler owns that rotation; this only recentres.
-        setCameraStop({ centerCoordinate: coord, animationDuration: 600 });
+        setCameraStop({ center: coord, duration: 600 });
       }
     },
     [setCameraStop, pinchStart, refreshDeclination],
@@ -2390,15 +2379,15 @@ export function MapScreen({
         lastPovWriteAt.current = now;
         lastPovBearing.current = next;
         setCameraStop({
-          heading: normalizeBearing(next),
+          bearing: normalizeBearing(next),
           // Carry the position too: this stop REPLACES whatever the last one
           // was, and it would otherwise cancel every recentre a fix asked for.
-          ...(latestFix.current ? { centerCoordinate: latestFix.current } : {}),
-          animationDuration: Math.min(
+          ...(latestFix.current ? { center: latestFix.current } : {}),
+          duration: Math.min(
             Math.max(sinceLastWrite * POV_ANIMATION_HEADROOM, POV_ANIMATION_MIN_MS),
             POV_ANIMATION_MAX_MS,
           ),
-          animationMode: "linearTo",
+          easing: "linear",
         });
       }
     }
@@ -2803,7 +2792,7 @@ export function MapScreen({
       // canyoner who wants to look at the next drop still wants to see where
       // they are. Stopping the watchers is what leaving the screen does.
       setFollowMode("off");
-      setCameraStop({ heading: 0, animationDuration: 300 });
+      setCameraStop({ bearing: 0, duration: 300 });
       return;
     }
     setFollowMode("follow");
@@ -2896,9 +2885,8 @@ export function MapScreen({
    * up being a ref full of late-bound callbacks.
    */
   const handleMapLongPress = useCallback(
-    (feature: GeoJSON.Feature) => {
-      if (feature.geometry.type !== "Point") return;
-      const [lon, lat] = feature.geometry.coordinates as [number, number];
+    (event: NativeSyntheticEvent<PressEvent>) => {
+      const [lon, lat] = event.nativeEvent.lngLat;
       // While either point tool is armed, press-and-hold near the line means
       // "add a point here" — the mobile stand-in for dragging the line on web.
       // Only when it lands near the line; anywhere else follows the preference.
@@ -3078,12 +3066,12 @@ export function MapScreen({
       // Nothing takes a pinch off us halfway through.
       onResponderTerminationRequest={() => false}
     >
-      <MapView
+      <Map
         ref={mapRef}
         style={styles.map}
         mapStyle={shellStyle}
-        attributionEnabled={false}
-        logoEnabled={false}
+        attribution={false}
+        logo={false}
         // The compass is the NATIVE ornament: it tracks the camera frame by
         // frame, fades itself out at north, and resets north on tap — all
         // things the JS button did badly or not at all (it only redrew once a
@@ -3093,19 +3081,23 @@ export function MapScreen({
         // which way the USER does), so both are on screen at once. The margin is
         // a static clearance for the tape + scale bar rather than a measured
         // one: an ornament margin that moves with a toggle re-commits a native
-        // view prop for a 46 px gap nobody notices. There is still no native
-        // scale bar in v10, so that one stays drawn in JS.
+        // view prop for a 46 px gap nobody notices. MLRN 11 does have a native
+        // scale bar, but Android only puts it top-left, so ours stays drawn in JS.
         // HIDDEN IN COURSE-UP, and not only because tapping it snapped the
         // map back to north against the mode that was steering it — a fight
         // the compass won for exactly as long as it took the next sensor
         // sample to arrive. In that mode the map's heading IS the user's
         // heading, which the compass tape along the bottom already reports, so
         // the ornament has nothing left to say that isn't said better below.
-        compassEnabled={followMode !== "course-up"}
+        compass={followMode !== "course-up"}
         // Follows the instruments to whichever edge they are on (see
-        // `instrumentsEdge`): 2 is bottom-left, 3 bottom-right.
-        compassViewPosition={controlsOnLeft ? 3 : 2}
-        compassViewMargins={{ x: CHROME_GAP, y: ornamentMarginY }}
+        // `instrumentsEdge`) — the position IS the margin in MLRN 11, which
+        // takes corner insets rather than a corner index plus an x/y pair.
+        compassPosition={
+          controlsOnLeft
+            ? { bottom: ornamentMarginY, right: CHROME_GAP }
+            : { bottom: ornamentMarginY, left: CHROME_GAP }
+        }
         // BOTH two-finger gestures are MapLibre's only when nothing is being
         // followed. While following, this screen drives scale and rotation
         // together from one start reference (see handlePinchMove), and leaving
@@ -3113,8 +3105,8 @@ export function MapScreen({
         // which is exactly how an incidental twist during a pinch used to
         // shake follow mode loose. Pan stays MapLibre's throughout: a
         // one-finger drag still pans, and still means "stop following".
-        zoomEnabled={followMode === "off"}
-        rotateEnabled={followMode === "off" && !northUpLocked}
+        touchZoom={followMode === "off"}
+        touchRotate={followMode === "off" && !northUpLocked}
         // PAN IS OFF FOR THE WHOLE OF FOLLOW MODE, not just during a pinch.
         //
         // MapLibre's move detector arms on the FIRST finger down and tracks the
@@ -3127,7 +3119,7 @@ export function MapScreen({
         // for a clean one, which is the same split the eye sees.
         //
         // Taking the gesture away for the duration was tried first and cannot
-        // work: `twoFingerLock` is React state, so `scrollEnabled` reaches the
+        // work: `twoFingerLock` is React state, so `dragPan` reaches the
         // native view 48-92 ms after the second finger lands (measured), and the
         // jump is in the first frame. The detector has to be disarmed BEFORE the
         // gesture starts, which means for as long as the map is following.
@@ -3137,8 +3129,8 @@ export function MapScreen({
         // hands pan straight back. That costs a frame or two of deadband at the
         // start of a drag-to-stop-following, on the gesture least able to
         // notice it.
-        scrollEnabled={followMode === "off" && !twoFingerLock}
-        pitchEnabled={!twoFingerLock}
+        dragPan={followMode === "off" && !twoFingerLock}
+        touchPitch={!twoFingerLock}
         // The renderer's ceiling, not its target: MapLibre only draws when
         // something invalidates it, and this caps how often that may become a
         // frame. Uncapped it follows the display — 120 Hz on a modern phone —
@@ -3151,7 +3143,7 @@ export function MapScreen({
       >
         <Camera
           ref={cameraRef}
-          defaultSettings={CAMERA_DEFAULTS}
+          initialViewState={CAMERA_DEFAULTS}
         />
         {/* Bundled point-feature icons for vector overlays. */}
         <TopoIconImages />
@@ -3181,7 +3173,8 @@ export function MapScreen({
                   startIndex={1}
                 />
               ) : (
-                <RasterLayer
+                <Layer
+                  type="raster"
                   id={`basemap-layer-${resolved.key}`}
                   layerIndex={1}
                   style={{ rasterOpacity: 1 }}
@@ -3195,13 +3188,14 @@ export function MapScreen({
             and below everything else, so canyon pins, tracks and imports stay
             visible over the blanked ground. */}
         {offlineMask ? (
-          <ShapeSource id="offline-mask" shape={offlineMask}>
-            <FillLayer
+          <GeoJSONSource id="offline-mask" data={offlineMask}>
+            <Layer
+              type="fill"
               id="offline-mask-fill"
               layerIndex={maskLayerIndex}
               style={{ fillColor: theme.primary, fillOpacity: 1 }}
             />
-          </ShapeSource>
+          </GeoJSONSource>
         ) : null}
 
         {/* Topo overlays: raster = one translucent RasterLayer; vector =
@@ -3220,7 +3214,8 @@ export function MapScreen({
                     vectorStyle={vectorStyle}
                   />
                 ) : (
-                  <RasterLayer
+                  <Layer
+                    type="raster"
                     id={`topo-layer-${resolved.key}`}
                     layerIndex={start}
                     style={{ rasterOpacity: 0.8 }}
@@ -3241,7 +3236,8 @@ export function MapScreen({
           ).map((resolved) =>
             resolved.status === "ok" ? (
               <ResolvedSource key={resolved.key} resolved={resolved}>
-                <RasterLayer
+                <Layer
+                  type="raster"
                   id={`geopdf-layer-${geoPdf.id}`}
                   layerIndex={overlayRenderPlan.nextIndex + geoPdfPosition}
                   style={{ rasterOpacity: geoPdf.opacity }}
@@ -3253,25 +3249,27 @@ export function MapScreen({
 
         {/* Vector imports (Stage 5): device-local GeoJSON from user files,
             pinned above the overlay band, below the canyon layers. Each
-            import is one ShapeSource read straight off disk. */}
+            import is one GeoJSONSource read straight off disk. */}
         {visibleImports.map((imported, importPosition) => {
           const base =
             overlayRenderPlan.nextIndex +
             readyGeoPdfImports.length +
             importPosition * 3;
           return (
-            <ShapeSource
+            <GeoJSONSource
               key={imported.id}
               id={`import-${imported.id}`}
-              url={`file://${imported.path}`}
+              data={`file://${imported.path}`}
             >
-              <FillLayer
+              <Layer
+                type="fill"
                 id={`import-fill-${imported.id}`}
                 layerIndex={base}
                 filter={["==", "$type", "Polygon"] as never}
                 style={{ fillColor: imported.color, fillOpacity: 0.2 }}
               />
-              <LineLayer
+              <Layer
+                type="line"
                 id={`import-line-${imported.id}`}
                 layerIndex={base + 1}
                 filter={
@@ -3285,7 +3283,8 @@ export function MapScreen({
                   lineCap: "round",
                 }}
               />
-              <CircleLayer
+              <Layer
+                type="circle"
                 id={`import-point-${imported.id}`}
                 layerIndex={base + 2}
                 filter={["==", "$type", "Point"] as never}
@@ -3296,7 +3295,7 @@ export function MapScreen({
                   circleStrokeWidth: 1.5,
                 }}
               />
-            </ShapeSource>
+            </GeoJSONSource>
           );
         })}
 
@@ -3339,8 +3338,9 @@ export function MapScreen({
 
         {/* Navigate-to-waypoint sight line: latest fix → target. */}
         {navLineShape ? (
-          <ShapeSource id="nav-line" shape={navLineShape}>
-            <LineLayer
+          <GeoJSONSource id="nav-line" data={navLineShape}>
+            <Layer
+              type="line"
               id="nav-line-layer"
               style={{
                 lineColor: "#4285F4",
@@ -3349,13 +3349,14 @@ export function MapScreen({
                 lineDasharray: [2, 2],
               }}
             />
-          </ShapeSource>
+          </GeoJSONSource>
         ) : null}
 
         {/* Canyon overlays: authed API GeoJSON — never baked into tiles
             (privacy rule). Shared first so owned draws on top. */}
-        <ShapeSource id="shared-canyons" shape={sharedFc} onPress={handleCanyonPress}>
-          <CircleLayer
+        <GeoJSONSource id="shared-canyons" data={sharedFc} onPress={handleCanyonPress}>
+          <Layer
+            type="circle"
             id="shared-canyon-circles"
             style={{
               circleRadius: 6,
@@ -3364,7 +3365,8 @@ export function MapScreen({
               circleStrokeWidth: 1.5,
             }}
           />
-          <SymbolLayer
+          <Layer
+            type="symbol"
             id="shared-canyon-labels"
             style={{
               textField: CANYON_LABEL_EXPR as unknown as string,
@@ -3377,9 +3379,10 @@ export function MapScreen({
               textOffset: [0, 0.8],
             }}
           />
-        </ShapeSource>
-        <ShapeSource id="owned-canyons" shape={ownedFc} onPress={handleCanyonPress}>
-          <CircleLayer
+        </GeoJSONSource>
+        <GeoJSONSource id="owned-canyons" data={ownedFc} onPress={handleCanyonPress}>
+          <Layer
+            type="circle"
             id="canyon-circles"
             style={{
               circleRadius: 6,
@@ -3388,7 +3391,8 @@ export function MapScreen({
               circleStrokeWidth: 1.5,
             }}
           />
-          <SymbolLayer
+          <Layer
+            type="symbol"
             id="canyon-labels"
             style={{
               textField: CANYON_LABEL_EXPR as unknown as string,
@@ -3401,7 +3405,7 @@ export function MapScreen({
               textOffset: [0, 0.8],
             }}
           />
-        </ShapeSource>
+        </GeoJSONSource>
 
         {showRoutes ? (
           <RoutesLayer
@@ -3438,8 +3442,9 @@ export function MapScreen({
             ringed dot reads as "here is where you pointed" and disappears the
             moment the panel is dismissed. */}
         {tappedPointShape ? (
-          <ShapeSource id="tapped-point" shape={tappedPointShape}>
-            <CircleLayer
+          <GeoJSONSource id="tapped-point" data={tappedPointShape}>
+            <Layer
+              type="circle"
               id="tapped-point-dot"
               style={{
                 circleRadius: 5,
@@ -3448,7 +3453,7 @@ export function MapScreen({
                 circleStrokeWidth: 2,
               }}
             />
-          </ShapeSource>
+          </GeoJSONSource>
         ) : null}
 
         {/* Own location marker (expo-location watcher) — see UserLocationMarker
@@ -3467,7 +3472,7 @@ export function MapScreen({
         {focusPulse ? (
           <FocusPulse bbox={focusPulse.bbox} nonce={focusPulse.nonce} />
         ) : null}
-      </MapView>
+      </Map>
 
       {/* Place search: collapsed button top-left, expands to a full-width bar.
           Hidden while a point-collecting tool is armed — search is not usable

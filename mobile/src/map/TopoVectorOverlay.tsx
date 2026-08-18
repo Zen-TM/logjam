@@ -2,15 +2,7 @@
 // against a resolved PMTiles source — the mobile counterpart of the web's
 // structural layer creation, driven entirely by buildTopoVectorLayerDefs.
 import { memo, useMemo } from "react";
-import {
-  FillLayer,
-  Images,
-  LineLayer,
-  SymbolLayer,
-  type FillLayerStyle,
-  type LineLayerStyle,
-  type SymbolLayerStyle,
-} from "@maplibre/maplibre-react-native";
+import { Images, Layer, type LayerProps } from "@maplibre/maplibre-react-native";
 import { OSM_POINT_ICON, type VectorStyleSettings } from "@logjam/shared";
 
 import { buildTopoVectorLayerDefs, type TopoVectorLayerDef } from "./topoVectorLayers";
@@ -30,7 +22,7 @@ export const TOPO_ICON_IMAGES: Record<string, ReturnType<typeof require>> = {
   "topo-icon-hut": require("../../assets/topo-icons/hut.png"),
 };
 
-// One <Images> registration for every point icon — mount once per MapView.
+// One <Images> registration for every point icon — mount once per Map.
 export const TopoIconImages = memo(function TopoIconImages() {
   return <Images images={TOPO_ICON_IMAGES} />;
 });
@@ -49,32 +41,23 @@ function layerFor(
   sourceID: string,
   layerIndex: number,
 ) {
-  const shared = {
-    id: `${idPrefix}-${def.suffix}`,
+  const id = `${idPrefix}-${def.suffix}`;
+  // One cast for the whole prop bag: buildTopoVectorLayerDefs emits one merged
+  // camelCase style object (web parity), not the spec's paint/layout split, so
+  // it goes in through MLRN's legacy `style` prop — which types as a different
+  // arm of LayerProps than the spec-shaped one. See ProtomapsLayers for the
+  // v12 note.
+  const props = {
+    id,
     layerIndex,
-    sourceID,
-    sourceLayerID: def.sourceLayer,
-    ...(def.filter && { filter: def.filter as never }),
-    ...(def.minzoom !== undefined && { minZoomLevel: def.minzoom }),
-  };
-  switch (def.type) {
-    case "line":
-      return (
-        <LineLayer key={shared.id} {...shared} style={def.style as LineLayerStyle} />
-      );
-    case "fill":
-      return (
-        <FillLayer key={shared.id} {...shared} style={def.style as FillLayerStyle} />
-      );
-    case "symbol":
-      return (
-        <SymbolLayer
-          key={shared.id}
-          {...shared}
-          style={def.style as SymbolLayerStyle}
-        />
-      );
-  }
+    source: sourceID,
+    "source-layer": def.sourceLayer,
+    type: def.type,
+    style: def.style,
+    ...(def.filter && { filter: def.filter }),
+    ...(def.minzoom !== undefined && { minzoom: def.minzoom }),
+  } as LayerProps;
+  return <Layer key={id} {...props} />;
 }
 
 /** Worst-case layer count for one vector overlay — used for index spacing. */

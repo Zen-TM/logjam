@@ -282,12 +282,12 @@ export function useMapPinchGesture(params: {
         // thing that ever writes this screen's centre during a pinch. Nothing
         // else can have moved the map to recover from: MapLibre's pan is off
         // for the whole of follow mode.
-        centerCoordinate: latestFix.current,
-        zoomLevel: zoom,
-        ...(heading != null ? { heading } : {}),
+        center: latestFix.current,
+        zoom: zoom,
+        ...(heading != null ? { bearing: heading } : {}),
         // No animation: the fingers ARE the animation. Anything else lags the
         // gesture and reads as the map resisting.
-        animationDuration: 0,
+        duration: 0,
       });
     },
     [followModeRef, headingRef, latestFix, northUpLockedRef, setCameraStop, zoomRef],

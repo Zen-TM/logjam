@@ -2,13 +2,15 @@
 // empty style + glyphs/sprite only; every source and layer is declarative on
 // top. Must be an OBJECT — a JSON string is treated as a style URL by the
 // native side, which drops the glyphs entry and silently kills every
-// SymbolLayer's text.
+// symbol layer's text.
 //
 // Glyphs + sprite resolve to the bundled copy under file:// ALWAYS (online
 // too) once the first-launch install completes (basemapAssets.ts): zero glyph
 // fetches, and offline regions render labels with zero network — the Stage 4a
 // requirement. The remote host is only the fallback while installing on first
 // launch or if the install fails. No user data rides these requests either way.
+import type { StyleSpecification } from "@maplibre/maplibre-react-native";
+
 import { theme } from "../../theme";
 
 export const BASEMAP_ASSETS_REMOTE_BASE =
@@ -19,7 +21,7 @@ export type ProtomapsFlavor = "light" | "dark";
 export function buildShellStyle(
   localAssetsBaseUrl: string | null,
   flavor: ProtomapsFlavor,
-) {
+): StyleSpecification {
   const base = (localAssetsBaseUrl ?? BASEMAP_ASSETS_REMOTE_BASE).replace(
     /\/+$/,
     "",

@@ -21,9 +21,9 @@ export function ResolvedSource({
   const common = {
     id: sourceIdFor(resolved.key),
     ...(resolved.url != null && { url: resolved.url }),
-    ...(resolved.tiles != null && { tileUrlTemplates: resolved.tiles }),
-    ...(resolved.minZoom != null && { minZoomLevel: resolved.minZoom }),
-    ...(resolved.maxZoom != null && { maxZoomLevel: resolved.maxZoom }),
+    ...(resolved.tiles != null && { tiles: resolved.tiles }),
+    ...(resolved.minZoom != null && { minzoom: resolved.minZoom }),
+    ...(resolved.maxZoom != null && { maxzoom: resolved.maxZoom }),
     ...(resolved.attribution != null && { attribution: resolved.attribution }),
   };
   return resolved.sourceType === "vector" ? (

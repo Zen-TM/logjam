@@ -29,7 +29,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Camera, MapView, RasterLayer } from "@maplibre/maplibre-react-native";
+import { Camera, Layer, Map, type MapRef } from "@maplibre/maplibre-react-native";
 import NetInfo from "@react-native-community/netinfo";
 import {
   BASEMAP_CATALOG,
@@ -201,7 +201,7 @@ export function RegionDownloadScreen({
   initialCenter?: [number, number];
   initialZoom?: number;
 }) {
-  // Read once: `defaultSettings` below is only honoured on the first render,
+  // Read once: `initialViewState` below is only honoured on the first render,
   // and re-reading a module store mid-session would move the frame the user is
   // already dragging.
   const lastCamera = useRef(readLastMapCamera()).current;
@@ -214,7 +214,7 @@ export function RegionDownloadScreen({
     () => buildShellStyle(basemapAssets.localBaseUrl, PROTOMAPS_FLAVOR),
     [basemapAssets.localBaseUrl],
   );
-  const mapRef = useRef<React.ComponentRef<typeof MapView>>(null);
+  const mapRef = useRef<MapRef>(null);
 
   // The vector clip is cut server-side (POST /basemap/region-clip) and streamed
   // back over an authenticated request, so it is the one map source a guest
@@ -313,9 +313,9 @@ export function RegionDownloadScreen({
   // against. Refreshed when a gesture settles; the frame maths in between is
   // synchronous, so the estimate keeps up with a drag.
   const refreshViewport = useCallback(async () => {
-    const bounds = await mapRef.current?.getVisibleBounds();
+    const bounds = await mapRef.current?.getBounds();
     if (!bounds || size.width === 0) return;
-    const [[neLng, neLat], [swLng, swLat]] = bounds;
+    const [swLng, swLat, neLng, neLat] = bounds;
     setViewport({
       north: neLat,
       south: swLat,
@@ -535,22 +535,22 @@ export function RegionDownloadScreen({
           clamped to the same overlap, or the top edge handle can be dragged in
           behind the hero and become ungrabbable. */}
       <View style={styles.mapWrap} onLayout={handleLayout}>
-        <MapView
+        <Map
           ref={mapRef}
           style={StyleSheet.absoluteFill}
           mapStyle={shellStyle}
-          attributionEnabled={false}
-          logoEnabled={false}
-          compassEnabled={false}
+          attribution={false}
+          logo={false}
+          compass={false}
           // North-up only: the frame maths reads axis-aligned bounds.
-          rotateEnabled={false}
-          pitchEnabled={false}
+          touchRotate={false}
+          touchPitch={false}
           onRegionDidChange={() => void refreshViewport()}
         >
           <Camera
-            defaultSettings={{
-              centerCoordinate: startCenter,
-              zoomLevel: startZoom,
+            initialViewState={{
+              center: startCenter,
+              zoom: startZoom,
             }}
           />
           {previewResolved.map((resolved) =>
@@ -565,7 +565,8 @@ export function RegionDownloadScreen({
                     startIndex={1}
                   />
                 ) : (
-                  <RasterLayer
+                  <Layer
+                    type="raster"
                     id={`region-preview-${resolved.key}`}
                     layerIndex={1}
                     style={{ rasterOpacity: 1 }}
@@ -574,7 +575,7 @@ export function RegionDownloadScreen({
               </ResolvedSource>
             ) : null,
           )}
-        </MapView>
+        </Map>
         {frame && size.width > 0 ? (
           <SelectionFrame insets={frame} size={size} onChange={handleFrameChange} />
         ) : null}
