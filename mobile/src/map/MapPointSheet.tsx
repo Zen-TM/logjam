@@ -20,7 +20,6 @@ import {
   initialBearingDegrees,
 } from "@logjam/shared";
 
-import { useAccountState } from "../auth/AccountStateContext";
 import { fontSize, spacing, theme } from "../theme";
 import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { useElevationProfile } from "./useElevationProfile";
@@ -88,9 +87,6 @@ function PointDetail({
   );
   const { profile, loading } = useElevationProfile(profilePoints);
   const elevationM = profile?.samples[0]?.elevationM ?? null;
-  // "Needs an account" outranks "needs a connection" (DESIGN.md §10): the DEM
-  // is served by our API, so telling a guest to find signal is a dead end.
-  const isGuest = useAccountState().accountState === "guest";
 
   const distanceM = userCoord
     ? haversineMeters(userCoord[1], userCoord[0], point.latitude, point.longitude)
@@ -116,12 +112,11 @@ function PointDetail({
           ? `${Math.round(elevationM)} m`
           : loading
             ? "Checking…"
-            : isGuest
-              ? "Needs an account"
-              : // Says which of the reasons it is, because "—" on a screen you
-                // opened in a gorge reads as a bug rather than as the DEM
-                // being a network away.
-                "Needs a connection",
+            : // Says which of the reasons it is, because "—" on a screen you
+              // opened in a gorge reads as a bug rather than as the DEM being
+              // a network away. No longer ever "Needs an account": the tiles
+              // are public, so a guest with signal gets a height like anyone.
+              "Needs a connection",
     },
     ...(distanceM != null && bearingDeg != null
       ? [

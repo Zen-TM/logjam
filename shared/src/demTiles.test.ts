@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEM_TILE_SIZE,
   DEM_TILE_ZOOM,
+  demTileUrl,
   demMetresFromRgb,
   demSampleValue,
   resolveDemSamples,
@@ -53,5 +54,22 @@ describe("terrarium decoding", () => {
     expect(demSampleValue(new Float32Array([-32768]), 0)).toBeNull();
     expect(demSampleValue(null, 0)).toBeNull();
     expect(demSampleValue(new Float32Array([0]), 0)).toBe(0);
+  });
+});
+
+describe("demTileUrl", () => {
+  // The mobile repo commits a REAL terrarium tile as a decode fixture, named
+  // for its address: z13, x=7516, y=4911 (Blue Gum Forest / Grose Valley).
+  // That makes it the one address whose correct URL is independently known.
+  it("addresses the tile the committed decode fixture came from", () => {
+    expect(demTileUrl(7516, 4911)).toBe(
+      "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/13/7516/4911.png",
+    );
+  });
+
+  it("uses the XYZ row, not the TMS row an MBTiles store flips to", () => {
+    // Silent failure guard: the TMS row at z13 (8191 - 4911 = 3280) is also a
+    // real tile, so the wrong one returns heights rather than an error.
+    expect(demTileUrl(7516, 4911)).not.toContain("3280");
   });
 });

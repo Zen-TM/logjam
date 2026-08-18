@@ -37,6 +37,19 @@ export const DEM_TILE_URL_TEMPLATE =
  * Two spellings of one credit — MapLibre renders HTML in a source's
  * `attribution`, React Native and JSON responses do not.
  */
+/**
+ * The tile URL for an address in the public set.
+ *
+ * The y is the XYZ row, NOT the TMS row an MBTiles store flips to. Getting
+ * that wrong does not error: it returns a valid tile for somewhere else, and
+ * the caller shows a confident height from the wrong place.
+ */
+export function demTileUrl(tileX: number, tileY: number): string {
+  return DEM_TILE_URL_TEMPLATE.replace("{z}", String(DEM_TILE_ZOOM))
+    .replace("{x}", String(tileX))
+    .replace("{y}", String(tileY));
+}
+
 export const DEM_ATTRIBUTION =
   "Terrain data: Terrain Tiles (Mapzen / Tilezen), via AWS Open Data.";
 

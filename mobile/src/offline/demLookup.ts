@@ -1,5 +1,5 @@
-// Elevation from the DEM saved on this phone — the offline half of
-// `useElevationProfile`.
+// Elevation from the DEM: the tiles saved on this phone first, then the public
+// tile set over the network.
 //
 // Every "save maps offline" run writes a `dem-region` MBTiles of terrarium
 // tiles at DEM_TILE_ZOOM (regionTileDownload.ts). This reads them back, so a
@@ -10,13 +10,24 @@
 // (shared/src/demTiles.ts): same zoom, same pixel address, same no-data rule,
 // so a profile drawn offline matches the one drawn online over the same line.
 //
-// PRIVACY: the positions are precise wilderness coordinates and the tile
-// indices are a coarse location. Nothing here logs either — an unreadable
-// region is reported as "no height", by returning nulls.
+// PRIVACY. The positions are precise wilderness coordinates and the tile
+// indices are a coarse location (a z13 tile is ~4.9 km across). Nothing here
+// logs either — an unreadable region or a failed fetch is reported as "no
+// height", by returning nulls, and a fetch failure is deliberately NOT logged
+// because the URL carries the tile indices.
+//
+// The network path asks AWS's public `elevation-tiles-prod` bucket directly,
+// which is the same bucket a region download already fetches from, and it
+// needs no account. What it does newly reveal is WHEN you looked: an
+// in-the-field tap now maps to a request naming a ~4.9 km cell. That was an
+// explicit product decision (2026-08-18) in exchange for elevation working
+// outside saved regions and for guests; the local hit is tried first and the
+// tile is cached, so a session in one area is one request.
 import * as SQLite from "expo-sqlite";
 import {
   DEM_TILE_ZOOM,
   demSampleValue,
+  demTileUrl,
   resolveDemSamples,
   xyzToTmsRow,
   type SamplePosition,
@@ -91,13 +102,52 @@ async function readTilesFrom(
   return found;
 }
 
+/** A tile is ~100 KB; this is a tap on a map, not a download. */
+const TILE_FETCH_TIMEOUT_MS = 10_000;
+
 /**
- * Read the DEM at each position from what is stored on this device. Null where
- * no saved region covers the point — the same answer the online sampler gives
- * outside the DEM's coverage, and never a zero.
+ * How many tiles one lookup may fetch.
+ *
+ * A point needs one and a drawn route a handful, but a long imported line
+ * could address dozens, and this is an enrichment nobody asked to pay for.
+ * Over the cap the uncovered part simply has no height, which is a state the
+ * profile already renders.
+ *
+ * ponytail: fixed cap, no queue. Raise it if real routes turn out to straddle
+ * more than this.
  */
-export async function sampleElevationsOffline(
+const MAX_TILES_PER_FETCH = 6;
+
+async function fetchDemTile(
+  tileX: number,
+  tileY: number,
+): Promise<Float32Array | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TILE_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(demTileUrl(tileX, tileY), {
+      signal: controller.signal,
+    });
+    if (!response.ok) return null;
+    return decodeDemPng(new Uint8Array(await response.arrayBuffer()));
+  } catch {
+    // No signal, a 404 over ocean, a truncated body. All mean "no height",
+    // and none is worth a log line that would carry the tile indices.
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Read the DEM at each position: saved regions first, then the public tiles
+ * when `allowNetwork` and nothing on disk covers the point. Null where neither
+ * can answer — the same answer the server's sampler gives outside the DEM's
+ * coverage, and never a zero.
+ */
+export async function sampleElevations(
   positions: readonly SamplePosition[],
+  { allowNetwork = false }: { allowNetwork?: boolean } = {},
 ): Promise<(number | null)[]> {
   if (positions.length === 0) return [];
 
@@ -127,9 +177,29 @@ export async function sampleElevationsOffline(
     }
   }
 
+  // Whatever the device could not answer, ask the network for — but only what
+  // is still missing, so a partly-covered line costs only its uncovered tiles.
+  if (allowNetwork && needed.size > 0) {
+    const batch = [...needed.values()].slice(0, MAX_TILES_PER_FETCH);
+    const fetched = await Promise.all(
+      batch.map(async ({ tileX, tileY }) => ({
+        key: `${tileX}/${tileY}`,
+        tile: await fetchDemTile(tileX, tileY),
+      })),
+    );
+    for (const { key, tile } of fetched) if (tile) cacheTile(key, tile);
+  }
+
   return addresses.map(({ tileX, tileY, index }) =>
     demSampleValue(tileCache.get(`${tileX}/${tileY}`), index),
   );
+}
+
+/** Saved regions only — the guaranteed-no-network read. */
+export async function sampleElevationsOffline(
+  positions: readonly SamplePosition[],
+): Promise<(number | null)[]> {
+  return sampleElevations(positions);
 }
 
 /** Dropped on wipe/sign-out: the cache holds terrain around the user's area. */
