@@ -230,6 +230,7 @@ import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers, protomapsLayerCount } from "./basemap/ProtomapsLayers";
 import { buildShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
+import { pressIsOnAnchor } from "./anchorHit";
 import { useConnectivity } from "./connectivity";
 import { rememberMapCamera } from "./lastCamera";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
@@ -1499,11 +1500,18 @@ export function MapScreen({
   const insertAnchorNear = useCallback(
     (lon: number, lat: number): boolean => {
       if (!activeDraft?.draft) return false;
-      const near = nearestSegment(activeDraft.draft, [lon, lat]);
-      if (!near) return false;
       // Tolerance in degrees, derived from the current zoom so the reach feels
       // the same however far in you are.
       const degreesPerPixel = 360 / (256 * 2 ** camera.zoom * PIXEL_RATIO);
+      // A press-and-hold ON an anchor is the start of a DRAG, and MLRN 11
+      // delivers it here as well as to the annotation (see anchorHit.ts).
+      // Consume it: returning true stops the long-press falling through to the
+      // waypoint/navigate/route actions as well as skipping the insert.
+      if (pressIsOnAnchor(activeDraft.draft.anchors, [lon, lat], degreesPerPixel)) {
+        return true;
+      }
+      const near = nearestSegment(activeDraft.draft, [lon, lat]);
+      if (!near) return false;
       if (near.distanceDegrees > degreesPerPixel * LINE_GRAB_PIXELS) return false;
       activeDraft.insertAnchorAt(near.index, [lon, lat]);
       return true;

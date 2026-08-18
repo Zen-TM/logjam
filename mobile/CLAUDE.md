@@ -81,6 +81,26 @@ being a heading, so pressing locate and then leaving the map crashed the app.
 Guarded by `src/map/layerKeys.test.ts`, which scans every `.tsx` for a `<Layer>`
 without a key.
 
+**Never call an imperative map command before the map exists.** MLRN 11's
+native side is written with non-null assertions — `MLRNMapView.kt` alone has 32
+`mapLibreMap!!`, including `getBounds()`. Calling one before the map is created
+throws a Kotlin NPE, which React Native promotes to a HOST exception and tears
+down the whole React instance: the screen goes blank and the app has to be
+killed, and because it is not a JS error the root error boundary never sees it.
+`RegionDownloadScreen` asked for `getBounds()` on mount and so raced the map —
+"save maps offline" worked or blanked the app depending on who won. Gate any
+such call on `onDidFinishLoadingMap`, and prefer the bounds carried on
+`onRegionDidChange` over asking at all.
+
+**A press-and-hold on an anchor reaches the MAP as well as the annotation.**
+MLRN 10's `PointAnnotation` consumed the touch that starts a drag; MLRN 11's
+`ViewAnnotation` does not, so the map's `onLongPress` also fires and the
+route tool inserted a point where the finger went down — dragging an anchor
+left a spare one behind. `insertAnchorNear` now bails on a press that lands on
+an existing anchor (`src/map/anchorHit.ts`, tested). It is a hit test rather
+than an "is a drag running" flag because the native long-press and the
+drag-start callback race, and position cannot arrive too late.
+
 **An omitted `easing` is a JUMP in MLRN 11.** MLRN 10's `animationMode`
 defaulted to EASE; the native prop now declares
 `WithDefault<NativeEasingMode, "none">`, so a stop naming only a duration

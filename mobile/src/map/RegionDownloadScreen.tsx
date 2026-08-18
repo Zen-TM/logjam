@@ -29,7 +29,13 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Camera, Layer, Map, type MapRef } from "@maplibre/maplibre-react-native";
+import {
+  Camera,
+  Layer,
+  Map,
+  type LngLatBounds,
+  type MapRef,
+} from "@maplibre/maplibre-react-native";
 import NetInfo from "@react-native-community/netinfo";
 import {
   BASEMAP_CATALOG,
@@ -310,26 +316,51 @@ export function RegionDownloadScreen({
   }, []);
 
   // The map's own bounds are the reference rectangle the frame is measured
-  // against. Refreshed when a gesture settles; the frame maths in between is
-  // synchronous, so the estimate keeps up with a drag.
+  // against. The frame maths in between is synchronous, so the estimate keeps
+  // up with a drag.
+  const applyBounds = useCallback(
+    (bounds: LngLatBounds) => {
+      if (size.width === 0) return;
+      const [west, south, east, north] = bounds;
+      setViewport({
+        north,
+        south,
+        east,
+        west,
+        width: size.width,
+        height: size.height,
+      });
+    },
+    [size.width, size.height],
+  );
+
+  /**
+   * THE FIRST READING HAS TO WAIT FOR THE MAP TO EXIST.
+   *
+   * MLRN 11's native getBounds is `mapLibreMap!!.projection.visibleRegion` — a
+   * non-null assertion on a field that is null until the map is created. Asking
+   * on mount therefore raced the map: winning it gave a viewport, losing it
+   * threw a Kotlin NPE that React Native promotes to a HOST exception, which
+   * tears down the whole React instance. That is not a JS error, so the root
+   * error boundary never sees it — the screen just goes blank and the app has
+   * to be killed and reopened. Observed as "save maps offline sometimes works".
+   *
+   * Gated on `onDidFinishLoadingMap` below, which cannot fire before the map
+   * exists. Every later reading comes off the region event instead (see
+   * `onRegionDidChange`), so this is the only native call left.
+   */
+  const [mapReady, setMapReady] = useState(false);
   const refreshViewport = useCallback(async () => {
     const bounds = await mapRef.current?.getBounds();
-    if (!bounds || size.width === 0) return;
-    const [swLng, swLat, neLng, neLat] = bounds;
-    setViewport({
-      north: neLat,
-      south: swLat,
-      east: neLng,
-      west: swLng,
-      width: size.width,
-      height: size.height,
-    });
-  }, [size.width, size.height]);
+    if (bounds) applyBounds(bounds);
+  }, [applyBounds]);
 
   useEffect(() => {
-    // Also once on mount, so the estimate is there before the first gesture.
+    // `size` arrives from onLayout, which can land either side of the map
+    // finishing its load; both have to be in before the first reading.
+    if (!mapReady || size.width === 0) return;
     void refreshViewport();
-  }, [refreshViewport]);
+  }, [mapReady, size.width, refreshViewport]);
 
   const bbox: RegionBbox | null =
     viewport && frame ? frameToBbox(viewport, frame) : null;
@@ -545,7 +576,9 @@ export function RegionDownloadScreen({
           // North-up only: the frame maths reads axis-aligned bounds.
           touchRotate={false}
           touchPitch={false}
-          onRegionDidChange={() => void refreshViewport()}
+          // The settled bounds ride the event, so no native call and no race.
+          onRegionDidChange={(event) => applyBounds(event.nativeEvent.bounds)}
+          onDidFinishLoadingMap={() => setMapReady(true)}
         >
           <Camera
             initialViewState={{
