@@ -41,31 +41,13 @@ import {
 } from "@logjam/shared";
 
 import { decodeDemPng } from "./demPng";
+import { cacheTile, cachedTile, clearDemTileCache } from "./demTileCache";
 import { REGION_DIR } from "./localStores";
 import { listArtifacts } from "./registryDb";
 import { regionFileName } from "./regionMbtiles";
 
 /** expo-sqlite's `directory` argument is a plain path, not a file:// URI. */
 const REGION_DIR_PATH = REGION_DIR.replace(/^file:\/\//, "");
-
-/**
- * Decoded tiles, keyed "x/y" (the zoom is fixed). One is 256 KB of float
- * metres, and a profile re-samples the same handful of tiles on every vertex
- * drag, so this is what keeps dragging a route cheap.
- *
- * Insertion-ordered eviction, like the API's cache: the access pattern is a
- * burst over neighbouring tiles, where true LRU would barely differ.
- */
-const MAX_CACHED_TILES = 8;
-const tileCache = new Map<string, Float32Array>();
-
-function cacheTile(key: string, tile: Float32Array) {
-  if (tileCache.size >= MAX_CACHED_TILES) {
-    const oldest = tileCache.keys().next();
-    if (!oldest.done) tileCache.delete(oldest.value);
-  }
-  tileCache.set(key, tile);
-}
 
 /** Registry rows are the index of what is on disk; the files are the data. */
 async function demArtifactIds(): Promise<string[]> {
@@ -162,7 +144,9 @@ export async function sampleElevations(
   const needed = new Map<string, { tileX: number; tileY: number }>();
   for (const { tileX, tileY } of addresses) {
     const key = `${tileX}/${tileY}`;
-    if (!tileCache.has(key)) needed.set(key, { tileX, tileY });
+    // A network tile held in memory is not usable while simulating offline, so
+    // it counts as missing and the saved regions get asked for it instead.
+    if (!cachedTile(key, { allowNetwork })) needed.set(key, { tileX, tileY });
   }
 
   if (needed.size > 0) {
@@ -178,7 +162,7 @@ export async function sampleElevations(
         continue;
       }
       for (const [key, tile] of found) {
-        cacheTile(key, tile);
+        cacheTile(key, tile, "saved");
         needed.delete(key);
       }
     }
@@ -194,11 +178,11 @@ export async function sampleElevations(
         tile: await fetchDemTile(tileX, tileY),
       })),
     );
-    for (const { key, tile } of fetched) if (tile) cacheTile(key, tile);
+    for (const { key, tile } of fetched) if (tile) cacheTile(key, tile, "network");
   }
 
   return addresses.map(({ tileX, tileY, index }) =>
-    demSampleValue(tileCache.get(`${tileX}/${tileY}`), index),
+    demSampleValue(cachedTile(`${tileX}/${tileY}`, { allowNetwork }), index),
   );
 }
 
@@ -211,5 +195,5 @@ export async function sampleElevationsOffline(
 
 /** Dropped on wipe/sign-out: the cache holds terrain around the user's area. */
 export function clearOfflineDemCache(): void {
-  tileCache.clear();
+  clearDemTileCache();
 }
