@@ -3526,6 +3526,7 @@ export function MapScreen({
         {/* Measure HUD — the same panel as route draw, minus Save. */}
         {measuring ? (
           <DraftToolPanel
+            allowNetwork={!offlineOnly}
             tool="measure"
             points={measureDraft.points}
             anchorCount={measureDraft.anchors.length}
@@ -3544,6 +3545,7 @@ export function MapScreen({
         {/* Route draw HUD — only while the tool is armed. */}
         {drawingRoute ? (
           <DraftToolPanel
+            allowNetwork={!offlineOnly}
             tool="route"
             points={routeDraft.points}
             anchorCount={routeDraft.anchors.length}
@@ -3575,6 +3577,21 @@ export function MapScreen({
             bought nothing and cost the two words it took to advertise itself —
             which wrapped the banner onto a second line — plus a mystery sheet
             for anyone who brushed it while panning. */}
+        {/* SAY THAT THE MODE IS ON, because everything it causes looks like a
+            fault otherwise: the basemap notice below says "Offline" on a phone
+            with full bars, and elevation stops answering outside saved areas.
+            Sits above that notice so the cause is read before the consequence.
+
+            Deliberately worded as SIMULATING: the phone is not offline, we are
+            pretending, and the user is the one who asked us to. */}
+        {offlineOnly ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>
+              Simulating offline mode — using only what is saved on this phone
+            </Text>
+          </View>
+        ) : null}
+
         {noticeText ? (
           <View style={styles.notice}>
             <Text style={styles.noticeText}>{noticeText}</Text>
@@ -3849,6 +3866,7 @@ export function MapScreen({
       {/* Tap: "what's there?" — the question that comes before the long
           press's "something goes here". */}
       <MapPointSheet
+        allowNetwork={!offlineOnly}
         point={tappedPoint}
         userCoord={userCoord}
         onClose={() => setTappedPoint(null)}
@@ -3936,6 +3954,7 @@ export function MapScreen({
       {/* Route sheets: stats → options → link, each opening the next and
           closing itself, so only one is ever on screen. */}
       <RouteStatsSheet
+        allowNetwork={!offlineOnly}
         route={statsRoute}
         visible={statsRoute !== null}
         onClose={() => setStatsRouteId(null)}

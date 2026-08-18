@@ -18,11 +18,18 @@
 //
 // The network path asks AWS's public `elevation-tiles-prod` bucket directly,
 // which is the same bucket a region download already fetches from, and it
-// needs no account. What it does newly reveal is WHEN you looked: an
-// in-the-field tap now maps to a request naming a ~4.9 km cell. That was an
-// explicit product decision (2026-08-18) in exchange for elevation working
-// outside saved regions and for guests; the local hit is tried first and the
-// tile is cached, so a session in one area is one request.
+// needs no account. It is the LAST resort, not the first: `useElevationProfile`
+// prefers our own API when signed in, precisely so the tile requests — which
+// trace where the user is drawing — go out on the server's connection rather
+// than the user's (api/src/services/elevation.ts says the same from the other
+// side). This path exists for a guest, who cannot authenticate that call, and
+// for a deployed API too old to have the route.
+//
+// What it reveals when it does run: WHEN you looked, and a ~4.9 km cell.
+// Accepted deliberately (operator decision, 2026-08-18) in exchange for
+// elevation outside saved regions; the local hit is tried first and tiles are
+// cached, so a session in one area is one request. The map's offline-only mode
+// suppresses it entirely.
 import * as SQLite from "expo-sqlite";
 import {
   DEM_TILE_ZOOM,

@@ -22,14 +22,20 @@ export function RouteStatsSheet({
   visible,
   onClose,
   onViewOptions,
+  allowNetwork = true,
 }: {
   route: MirrorRoute | null;
   visible: boolean;
   onClose: () => void;
   onViewOptions: () => void;
+  /**
+   * False in "Simulating offline mode": elevation then comes only from tiles
+   * already on the phone, and nothing goes out.
+   */
+  allowNetwork?: boolean;
 }) {
   // Hooks run before the early return — an empty point list makes no request.
-  const { profile, loading } = useElevationProfile(route?.points ?? []);
+  const { profile, loading } = useElevationProfile(route?.points ?? [], { allowNetwork });
   if (!route) return null;
 
   return (

@@ -47,6 +47,7 @@ export function DraftToolPanel({
   onDiscard,
   snapMode,
   onSnapModeChange,
+  allowNetwork = true,
 }: {
   /** Which tool owns the taps — the only thing that varies in this panel. */
   tool: "route" | "measure";
@@ -65,8 +66,13 @@ export function DraftToolPanel({
   onDiscard: () => void;
   snapMode: SnapMode;
   onSnapModeChange: (mode: SnapMode) => void;
+  /**
+   * False in "Simulating offline mode": elevation then comes only from tiles
+   * already on the phone, and nothing goes out.
+   */
+  allowNetwork?: boolean;
 }) {
-  const { profile, loading } = useElevationProfile(points);
+  const { profile, loading } = useElevationProfile(points, { allowNetwork });
   const hasLine = points.length >= 2;
 
   return (

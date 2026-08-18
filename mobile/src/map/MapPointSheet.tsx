@@ -33,6 +33,7 @@ export function MapPointSheet({
   onClose,
   onNavigate,
   onDropWaypoint,
+  allowNetwork,
 }: {
   point: MapPoint | null;
   /** Latest fix as [lon, lat], or null when the dot isn't running. */
@@ -40,6 +41,11 @@ export function MapPointSheet({
   onClose: () => void;
   onNavigate: (point: MapPoint) => void;
   onDropWaypoint: (point: MapPoint) => void;
+  /**
+   * False in "Simulating offline mode": elevation then comes only from tiles
+   * already on the phone, and nothing goes out.
+   */
+  allowNetwork?: boolean;
 }) {
   return (
     <BottomSheet visible={point !== null} onClose={onClose} title="This point">
@@ -53,6 +59,7 @@ export function MapPointSheet({
           onClose={onClose}
           onNavigate={onNavigate}
           onDropWaypoint={onDropWaypoint}
+          allowNetwork={allowNetwork}
         />
       ) : null}
     </BottomSheet>
@@ -65,12 +72,14 @@ function PointDetail({
   onClose,
   onNavigate,
   onDropWaypoint,
+  allowNetwork = true,
 }: {
   point: MapPoint;
   userCoord: [number, number] | null;
   onClose: () => void;
   onNavigate: (point: MapPoint) => void;
   onDropWaypoint: (point: MapPoint) => void;
+  allowNetwork?: boolean;
 }) {
   // The elevation endpoint profiles a LINE, and the shortest legal one is two
   // points (MIN_ROUTE_POINTS). A degenerate line would divide by zero in
@@ -85,7 +94,7 @@ function PointDetail({
     ],
     [point.latitude, point.longitude],
   );
-  const { profile, loading } = useElevationProfile(profilePoints);
+  const { profile, loading } = useElevationProfile(profilePoints, { allowNetwork });
   const elevationM = profile?.samples[0]?.elevationM ?? null;
 
   const distanceM = userCoord
