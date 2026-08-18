@@ -8,6 +8,7 @@ import type { RecordedTrackPoint } from "@logjam/shared";
 import { theme } from "../theme";
 import { listTrackPoints, type Track, type Waypoint } from "./tracksDb";
 import { trackPointsToFeature } from "./trackGeoJson";
+import { stopSourcePress } from "../map/sourcePress";
 
 const WAYPOINT_COLOR = "#f97316"; // matches the owned-canyon orange family
 
@@ -66,6 +67,7 @@ const TrackLine = memo(function TrackLine({
       // 44pt — the platform minimum touch target, and the right number here
       // for the same reason it is on the saved routes (RoutesLayer.tsx).
       onPress={(event) => {
+        stopSourcePress(event);
         const [longitude, latitude] = event.nativeEvent.lngLat;
         onPress(track, { latitude, longitude });
       }}
@@ -201,6 +203,7 @@ export const TrackMapLayers = memo(function TrackMapLayers({
           id="waypoints"
           data={waypointShape}
           onPress={(event) => {
+            stopSourcePress(event);
             const id = event.nativeEvent.features[0]?.properties?.id as
               | string
               | undefined;

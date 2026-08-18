@@ -231,6 +231,7 @@ import { ProtomapsLayers, protomapsLayerCount } from "./basemap/ProtomapsLayers"
 import { buildShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
 import { pressIsOnAnchor } from "./anchorHit";
+import { stopSourcePress } from "./sourcePress";
 import { useConnectivity } from "./connectivity";
 import { rememberMapCamera } from "./lastCamera";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
@@ -1551,9 +1552,11 @@ export function MapScreen({
 
   const handleCanyonPress = useCallback(
     (event: NativeSyntheticEvent<PressEventWithFeatures>) => {
-      // A pin swallows the press before the map sees it, so while a
-      // point-collecting tool is armed it has to place the point itself —
-      // otherwise tapping near a canyon does nothing and reads as broken.
+      stopSourcePress(event);
+      // The pin no longer swallows the press for us (MLRN 11 bubbles it), so
+      // while a point-collecting tool is armed this has to place the point
+      // itself — otherwise tapping near a canyon does nothing and reads as
+      // broken.
       if (collectingPoints) {
         const [lon, lat] = event.nativeEvent.lngLat;
         void addToolPoint(lon, lat);

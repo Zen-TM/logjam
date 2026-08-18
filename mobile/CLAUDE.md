@@ -92,6 +92,17 @@ killed, and because it is not a JS error the root error boundary never sees it.
 such call on `onDidFinishLoadingMap`, and prefer the bounds carried on
 `onRegionDidChange` over asking at all.
 
+**A source's press bubbles to the MAP in MLRN 11.** MLRN 10 let a source's
+`onPress` consume the tap; MLRN 11 emits it on the source AND on the `Map`
+(documented on `MapProps.onPress`). Tapping a canyon, route, track or waypoint
+therefore also ran the map's handler and opened the "This point" sheet on top
+of the one the user asked for — and with a point tool armed it placed a point
+at the same tap. Every pressable source handler calls `stopSourcePress(event)`
+(`src/map/sourcePress.ts`) FIRST, before any early return: a handler that bails
+without calling it still leaks the tap. Not enforced by a test — the handlers
+are passed by reference, so a source scan cannot see them — so it is a
+convention to check when adding a pressable source.
+
 **A press-and-hold on an anchor reaches the MAP as well as the annotation.**
 MLRN 10's `PointAnnotation` consumed the touch that starts a drag; MLRN 11's
 `ViewAnnotation` does not, so the map's `onLongPress` also fires and the

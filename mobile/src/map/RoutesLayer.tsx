@@ -13,6 +13,7 @@ import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 import { theme } from "../theme";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import { ROUTE_ARROW_MIN_ZOOM, routeArrowStyle } from "./RouteDraftLayer";
+import { stopSourcePress } from "./sourcePress";
 
 /**
  * Zoom floor for SAVED routes. Zoomed out past this a route is a few pixels of
@@ -72,6 +73,7 @@ export const RoutesLayer = memo(function RoutesLayer({
       onPress={
         onPressRoute &&
         ((event) => {
+          stopSourcePress(event);
           const routeId = event.nativeEvent.features[0]?.properties?.routeId;
           if (typeof routeId === "string") onPressRoute(routeId);
         })
