@@ -80,6 +80,7 @@ export const RoutesLayer = memo(function RoutesLayer({
       {/* Casing first: a dark under-stroke keeps a mid-tone line legible over
           both the pale basemap and dark imagery. */}
       <Layer
+        key="saved-routes-casing"
         type="line"
         id="saved-routes-casing"
         minzoom={SAVED_ROUTE_MIN_ZOOM}
@@ -92,6 +93,7 @@ export const RoutesLayer = memo(function RoutesLayer({
         }}
       />
       <Layer
+        key="saved-routes-line"
         type="line"
         id="saved-routes-line"
         minzoom={SAVED_ROUTE_MIN_ZOOM}
@@ -103,6 +105,7 @@ export const RoutesLayer = memo(function RoutesLayer({
         }}
       />
       <Layer
+        key="saved-routes-ends"
         type="circle"
         id="saved-routes-ends"
         minzoom={SAVED_ROUTE_MIN_ZOOM}
@@ -118,6 +121,7 @@ export const RoutesLayer = memo(function RoutesLayer({
           lot of chevrons, and here they only answer "which way does this run".
           Colour is data-driven, so all of them are still one native layer. */}
       <Layer
+        key="saved-routes-arrows"
         type="symbol"
         id="saved-routes-arrows"
         minzoom={ROUTE_ARROW_MIN_ZOOM}

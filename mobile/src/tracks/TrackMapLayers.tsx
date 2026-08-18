@@ -71,6 +71,7 @@ const TrackLine = memo(function TrackLine({
       }}
     >
       <Layer
+        key={`track-line-${track.id}`}
         type="line"
         id={`track-line-${track.id}`}
         style={{
@@ -208,6 +209,7 @@ export const TrackMapLayers = memo(function TrackMapLayers({
           }}
         >
           <Layer
+            key="waypoint-markers"
             type="circle"
             id="waypoint-markers"
             style={{
@@ -218,6 +220,7 @@ export const TrackMapLayers = memo(function TrackMapLayers({
             }}
           />
           <Layer
+            key="waypoint-labels"
             type="symbol"
             id="waypoint-labels"
             style={{

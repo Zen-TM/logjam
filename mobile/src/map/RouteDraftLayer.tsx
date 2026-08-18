@@ -165,6 +165,7 @@ export function RouteDraftLayer({
           }}
         >
           <Layer
+            key={`${idPrefix}-line-stroke`}
             type="line"
             id={`${idPrefix}-line-stroke`}
             style={{
@@ -176,6 +177,7 @@ export function RouteDraftLayer({
             }}
           />
           <Layer
+            key={`${idPrefix}-line-arrows`}
             type="symbol"
             id={`${idPrefix}-line-arrows`}
             minzoom={ROUTE_ARROW_MIN_ZOOM}
@@ -188,6 +190,7 @@ export function RouteDraftLayer({
       {anchors.length > 0 ? (
         <GeoJSONSource id={`${idPrefix}-anchors`} data={anchorFeatures(anchors)}>
           <Layer
+            key={`${idPrefix}-anchor-dots`}
             type="circle"
             id={`${idPrefix}-anchor-dots`}
             style={{

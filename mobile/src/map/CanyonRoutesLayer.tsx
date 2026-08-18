@@ -93,6 +93,7 @@ export const CanyonRoutesLayer = memo(function CanyonRoutesLayer({
       {/* Casing first: these lines cross both a pale topo basemap and dark
           imagery, and an uncased line disappears into one of them. */}
       <Layer
+        key="canyon-routes-casing"
         type="line"
         id="canyon-routes-casing"
         style={{
@@ -104,6 +105,7 @@ export const CanyonRoutesLayer = memo(function CanyonRoutesLayer({
         }}
       />
       <Layer
+        key="canyon-routes-line"
         type="line"
         id="canyon-routes-line"
         style={{
@@ -115,6 +117,7 @@ export const CanyonRoutesLayer = memo(function CanyonRoutesLayer({
         }}
       />
       <Layer
+        key="canyon-routes-points"
         type="circle"
         id="canyon-routes-points"
         filter={["==", ["geometry-type"], "Point"] as never}

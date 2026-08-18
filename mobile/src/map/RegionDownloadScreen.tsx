@@ -566,6 +566,7 @@ export function RegionDownloadScreen({
                   />
                 ) : (
                   <Layer
+                    key={`region-preview-${resolved.key}`}
                     type="raster"
                     id={`region-preview-${resolved.key}`}
                     layerIndex={1}

@@ -229,6 +229,7 @@ import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers, protomapsLayerCount } from "./basemap/ProtomapsLayers";
 import { buildShellStyle } from "./basemap/shellStyle";
+import { withDefaultEasing } from "./cameraStop";
 import { useConnectivity } from "./connectivity";
 import { rememberMapCamera } from "./lastCamera";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
@@ -508,6 +509,7 @@ function UserMarkerLayers({
         // Direction beam under the arrow. Map-aligned, so it points at
         // real-world bearings even when the map itself is rotated.
         <Layer
+          key="user-location-heading"
           type="symbol"
           id="user-location-heading"
           style={{
@@ -525,6 +527,7 @@ function UserMarkerLayers({
           watcher runs for as long as the marker is on screen, not only in
           course-up. */}
       <Layer
+        key="user-location-dot"
         type="symbol"
         id="user-location-dot"
         style={{
@@ -882,6 +885,9 @@ export function MapScreen({
     // `handleRegionDidChange`).
     if (typeof stop.zoom === "number") zoomRef.current = stop.zoom;
     if (typeof stop.bearing === "number") headingRef.current = stop.bearing;
+    // Restores MLRN 10's implicit ease, which MLRN 11 turned into a jump —
+    // applied here rather than at ~15 call sites. See `cameraStop.ts`.
+    const eased = withDefaultEasing(stop);
     // Nothing on this screen writes a bounds stop (`fitCameraToBbox` calls
     // fitBounds directly), but CameraStop covers both shapes, so the centre
     // has to be narrowed out of the union before it can be read.
@@ -893,19 +899,19 @@ export function MapScreen({
     // once. MapLibre's camera padding would have been the obvious tool and is
     // not usable: Android only applies it on a stop that has a target, so it
     // survives the ones that don't and the map stays offset after course-up.
-    const target = "center" in stop ? stop.center : undefined;
+    const target = "center" in eased ? eased.center : undefined;
     void cameraRef.current.setStop(
       followModeRef.current === "course-up" && target
         ? ({
-            ...stop,
+            ...eased,
             center: povCameraCenter(
               target as [number, number],
-              stop.bearing ?? headingRef.current,
-              stop.zoom ?? zoomRef.current,
+              eased.bearing ?? headingRef.current,
+              eased.zoom ?? zoomRef.current,
               mapHeight.current,
             ),
           } as CameraStop)
-        : stop,
+        : eased,
     );
   }, []);
   /**
@@ -933,6 +939,9 @@ export function MapScreen({
           center: [(west + east) / 2, (south + north) / 2],
           zoom: SINGLE_POINT_ZOOM,
           duration: 600,
+          // Explicit for the same reason as `setCameraStop`'s default: this
+          // call bypasses that helper, and an omitted easing is a jump.
+          easing: "ease",
         });
         return;
       }
@@ -3174,6 +3183,7 @@ export function MapScreen({
                 />
               ) : (
                 <Layer
+                  key={`basemap-layer-${resolved.key}`}
                   type="raster"
                   id={`basemap-layer-${resolved.key}`}
                   layerIndex={1}
@@ -3190,6 +3200,7 @@ export function MapScreen({
         {offlineMask ? (
           <GeoJSONSource id="offline-mask" data={offlineMask}>
             <Layer
+              key="offline-mask-fill"
               type="fill"
               id="offline-mask-fill"
               layerIndex={maskLayerIndex}
@@ -3215,6 +3226,7 @@ export function MapScreen({
                   />
                 ) : (
                   <Layer
+                    key={`topo-layer-${resolved.key}`}
                     type="raster"
                     id={`topo-layer-${resolved.key}`}
                     layerIndex={start}
@@ -3237,6 +3249,7 @@ export function MapScreen({
             resolved.status === "ok" ? (
               <ResolvedSource key={resolved.key} resolved={resolved}>
                 <Layer
+                  key={`geopdf-layer-${geoPdf.id}`}
                   type="raster"
                   id={`geopdf-layer-${geoPdf.id}`}
                   layerIndex={overlayRenderPlan.nextIndex + geoPdfPosition}
@@ -3262,6 +3275,7 @@ export function MapScreen({
               data={`file://${imported.path}`}
             >
               <Layer
+                key={`import-fill-${imported.id}`}
                 type="fill"
                 id={`import-fill-${imported.id}`}
                 layerIndex={base}
@@ -3269,6 +3283,7 @@ export function MapScreen({
                 style={{ fillColor: imported.color, fillOpacity: 0.2 }}
               />
               <Layer
+                key={`import-line-${imported.id}`}
                 type="line"
                 id={`import-line-${imported.id}`}
                 layerIndex={base + 1}
@@ -3284,6 +3299,7 @@ export function MapScreen({
                 }}
               />
               <Layer
+                key={`import-point-${imported.id}`}
                 type="circle"
                 id={`import-point-${imported.id}`}
                 layerIndex={base + 2}
@@ -3340,6 +3356,7 @@ export function MapScreen({
         {navLineShape ? (
           <GeoJSONSource id="nav-line" data={navLineShape}>
             <Layer
+              key="nav-line-layer"
               type="line"
               id="nav-line-layer"
               style={{
@@ -3356,6 +3373,7 @@ export function MapScreen({
             (privacy rule). Shared first so owned draws on top. */}
         <GeoJSONSource id="shared-canyons" data={sharedFc} onPress={handleCanyonPress}>
           <Layer
+            key="shared-canyon-circles"
             type="circle"
             id="shared-canyon-circles"
             style={{
@@ -3366,6 +3384,7 @@ export function MapScreen({
             }}
           />
           <Layer
+            key="shared-canyon-labels"
             type="symbol"
             id="shared-canyon-labels"
             style={{
@@ -3382,6 +3401,7 @@ export function MapScreen({
         </GeoJSONSource>
         <GeoJSONSource id="owned-canyons" data={ownedFc} onPress={handleCanyonPress}>
           <Layer
+            key="canyon-circles"
             type="circle"
             id="canyon-circles"
             style={{
@@ -3392,6 +3412,7 @@ export function MapScreen({
             }}
           />
           <Layer
+            key="canyon-labels"
             type="symbol"
             id="canyon-labels"
             style={{
@@ -3444,6 +3465,7 @@ export function MapScreen({
         {tappedPointShape ? (
           <GeoJSONSource id="tapped-point" data={tappedPointShape}>
             <Layer
+              key="tapped-point-dot"
               type="circle"
               id="tapped-point-dot"
               style={{

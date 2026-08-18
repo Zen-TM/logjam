@@ -78,6 +78,7 @@ export function RouteMapLayer({
       {/* A casing under the line so it stays readable over both the pale topo
           basemap and dark satellite imagery. */}
       <Layer
+        key="trip-route-casing"
         type="line"
         id="trip-route-casing"
         style={{
@@ -89,6 +90,7 @@ export function RouteMapLayer({
         }}
       />
       <Layer
+        key="trip-route-line"
         type="line"
         id="trip-route-line"
         style={{
@@ -103,6 +105,7 @@ export function RouteMapLayer({
           empty at a place the camera had just flown to — which reads as the
           app being broken rather than as the file having no route in it. */}
       <Layer
+        key="trip-route-points"
         type="circle"
         id="trip-route-points"
         filter={["==", ["geometry-type"], "Point"]}

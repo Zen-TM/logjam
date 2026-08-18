@@ -92,6 +92,7 @@ export const FocusPulse = memo(function FocusPulse({
     <GeoJSONSource id="focus-pulse" data={shape}>
       {degenerate ? (
         <Layer
+          key="focus-pulse-point"
           type="circle"
           id="focus-pulse-point"
           style={{
@@ -104,6 +105,7 @@ export const FocusPulse = memo(function FocusPulse({
         />
       ) : (
         <Layer
+          key="focus-pulse-outline"
           type="line"
           id="focus-pulse-outline"
           style={{
