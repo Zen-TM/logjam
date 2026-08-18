@@ -122,6 +122,9 @@ import {
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
 import { RegionDownloadRow } from "../offline/RegionDownloadRow";
+import { TrackStatsBody } from "../tracks/TrackStatsBody";
+import { useTrackDetail } from "../tracks/useTrackDetail";
+import { useImportedTrackDetail } from "../imports/useImportedTrackDetail";
 import {
   SHARED_READ_ONLY_HINT,
   geoPdfActions,
@@ -361,7 +364,7 @@ export function SavedScreen({
   // fails to rise, and the user sees the sheet settle then jump.
   const [menuItemKey, setMenuItemKey] = useState<string | null>(null);
   const [menuMode, setMenuMode] = useState<
-    "actions" | "rename" | "tags" | "canyons"
+    "actions" | "rename" | "tags" | "canyons" | "stats"
   >("actions");
   // Filter text for the canyon sub-mode, pinned in the sheet header.
   const [menuCanyonQuery, setMenuCanyonQuery] = useState("");
@@ -1290,6 +1293,21 @@ export function SavedScreen({
     menuItem?.category === "waypoint"
       ? ((waypoints.data ?? []).find((row) => row.id === menuItem.key) ?? null)
       : null;
+  // A recorded track and an imported line both answer the same question — what
+  // IS this — with the same panel the map shows (DESIGN.md §7). The import's
+  // series is read out of its stored GeoJSON; the track's out of SQLite.
+  const menuTrack =
+    menuItem?.category === "track"
+      ? (savedTracks.find((track) => track.id === menuItem.key) ?? null)
+      : null;
+  const menuImport =
+    menuItem?.category === "vector"
+      ? (imports.find((imported) => imported.id === menuItem.key) ?? null)
+      : null;
+  const statsOpen = menuMode === "stats";
+  const trackStats = useTrackDetail(menuTrack?.id ?? null, statsOpen);
+  const importStats = useImportedTrackDetail(menuImport, statsOpen);
+
   const writeMenuWaypoint = (fields: Record<string, unknown>) => {
     if (!menuWaypoint) return;
     updateWaypointLocal(menuWaypoint.id, fields).catch((err: unknown) => {
@@ -1823,7 +1841,8 @@ export function SavedScreen({
         // Only the waypoint sub-modes go BACK to an actions list; every other
         // mode here (a plain rename) closes instead.
         onBack={
-          menuWaypoint && (menuMode === "tags" || menuMode === "canyons")
+          (menuWaypoint && (menuMode === "tags" || menuMode === "canyons")) ||
+          menuMode === "stats"
             ? () => setMenuMode("actions")
             : undefined
         }
@@ -1858,6 +1877,25 @@ export function SavedScreen({
                 closeItemSheet();
               }}
             />
+          ) : menuMode === "stats" ? (
+            menuImport ? (
+              <TrackStatsBody
+                detail={importStats.detail}
+                loading={importStats.loading}
+                emptyMessage={
+                  importStats.error ??
+                  "No lines in this file — stats describe a walked line."
+                }
+              />
+            ) : (
+              // A finished track's time is the stored wall-clock span minus
+              // pauses, not the span between its first and last fix.
+              <TrackStatsBody
+                detail={trackStats.detail}
+                loading={trackStats.loading}
+                elapsedMs={menuTrack?.durationMs}
+              />
+            )
           ) : menuMode === "tags" && menuWaypoint ? (
             <WaypointTagsBody
               waypoint={menuWaypoint}
@@ -1887,6 +1925,17 @@ export function SavedScreen({
                     closeItemSheet();
                     showOnMap(target);
                   }}
+                />
+              ) : null}
+              {/* Only for the two categories that ARE a line someone walked.
+                  A region, a GeoPDF or a waypoint has no distance to report. */}
+              {menuTrack || menuImport ? (
+                <Row
+                  title="Stats"
+                  subtitle="Distance, climb, pace and profiles"
+                  icon="bar-chart-2"
+                  hue={assetHue[menuItem.category]}
+                  onPress={() => setMenuMode("stats")}
                 />
               ) : null}
               {menuItem.createRouteFrom ? (

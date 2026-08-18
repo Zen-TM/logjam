@@ -26,4 +26,10 @@ export { RenameForm } from "./RenameForm";
 export { Screen, ScreenScroll } from "./Screen";
 export { Row } from "./Row";
 export { StatGrid, type Stat } from "./StatGrid";
+export {
+  ProfileChart,
+  elevationSeries,
+  speedSeries,
+  type ProfileSeries,
+} from "./ProfileChart";
 export { Toast, type ToastMessage } from "./Toast";

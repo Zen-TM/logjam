@@ -20,7 +20,21 @@ export type ImportedGeometry =
 export type ImportedFeature = {
   type: "Feature";
   geometry: ImportedGeometry;
-  properties: { name?: string };
+  properties: {
+    name?: string;
+    /**
+     * Per-vertex times, ISO 8601, parallel to a line's `coordinates`. The
+     * `coordTimes` name is the togeojson/Mapbox convention rather than
+     * anything in the GeoJSON spec — the spec has no place for them, and
+     * inventing a third name would only make the file less readable elsewhere.
+     *
+     * Present ONLY when every vertex of the line carried a `<time>`. A
+     * part-timed line is worse than an untimed one: it yields a duration over
+     * the timed stretch and a distance over all of it, and any speed derived
+     * from the pair belongs to neither (see computeTrackDetail).
+     */
+    coordTimes?: string[];
+  };
 };
 
 export type VectorImportResult = {
@@ -163,7 +177,12 @@ function makeXmlParser(): XMLParser {
 
 // ── GPX ─────────────────────────────────────────────────────────────────────
 
-type GpxPoint = { "@_lat"?: string; "@_lon"?: string; ele?: string };
+type GpxPoint = {
+  "@_lat"?: string;
+  "@_lon"?: string;
+  ele?: string;
+  time?: string;
+};
 
 function gpxPosition(pt: GpxPoint): ImportedPosition {
   const lon = Number(pt["@_lon"]);
@@ -173,6 +192,34 @@ function gpxPosition(pt: GpxPoint): ImportedPosition {
     ele != null && Number.isFinite(ele) ? [lon, lat, ele] : [lon, lat];
   assertValidPosition(position);
   return position;
+}
+
+/**
+ * A trkpt's `<time>`, normalised to ISO 8601, or null.
+ *
+ * Round-tripped through Date rather than passed along verbatim: GPX in the
+ * wild carries local-offset stamps ("2026-08-17T09:14:03+10:00") and the
+ * occasional unparseable one, and a consumer that does `Date.parse` on the
+ * stored string should never be the first thing to discover that. A bad or
+ * missing stamp drops the whole line's times (see `gpxCoordTimes`) rather
+ * than producing a series with a hole in it.
+ */
+function gpxTime(pt: GpxPoint): string | null {
+  if (pt.time == null) return null;
+  const parsed = Date.parse(String(pt.time));
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+/** The line's per-vertex times, or undefined unless EVERY vertex had one. */
+function gpxCoordTimes(pts: GpxPoint[]): string[] | undefined {
+  if (pts.length === 0) return undefined;
+  const times: string[] = [];
+  for (const pt of pts) {
+    const time = gpxTime(pt);
+    if (time == null) return undefined;
+    times.push(time);
+  }
+  return times;
 }
 
 /**
@@ -214,12 +261,20 @@ export function parseGpx(text: string): VectorImportResult {
   for (const trk of asArray(gpx.trk as GpxTrk | GpxTrk[])) {
     const name = textOf(trk.name);
     for (const seg of asArray(trk.trkseg as Record<string, unknown>[])) {
-      const pts = asArray(seg?.trkpt as GpxPoint | GpxPoint[]).map(gpxPosition);
+      const trkpts = asArray(seg?.trkpt as GpxPoint | GpxPoint[]);
+      const pts = trkpts.map(gpxPosition);
       if (pts.length === 0) continue;
+      // A recorded track is the one import that can carry a clock, so it is
+      // the one that keeps it: with times the importer's stats gain moving
+      // time and pace, without them it still has distance and climb.
+      const coordTimes = gpxCoordTimes(trkpts);
       features.push({
         type: "Feature",
         geometry: { type: "LineString", coordinates: pts },
-        properties: name ? { name } : {},
+        properties: {
+          ...(name ? { name } : {}),
+          ...(coordTimes ? { coordTimes } : {}),
+        },
       });
     }
   }

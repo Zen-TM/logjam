@@ -1,4 +1,11 @@
-// Elevation profile, with a scrubber.
+// A profile chart with a scrubber: some value against distance along a line.
+//
+// Elevation is what it was built for and still the main reader (a drawn
+// route's height profile), but a recorded track's SPEED is the same picture of
+// a different quantity, so the component takes a plain series plus a
+// formatter rather than an ElevationProfile. `elevationSeries` and
+// `speedSeries` below are the two adapters; anything else with a value per
+// metre travelled can add a third.
 //
 // Still built from plain Views rather than SVG: react-native-svg is a NATIVE
 // module, so adding it means a new dev-client build and a reinstall on every
@@ -20,7 +27,7 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { formatDistanceM, type ElevationProfile } from "@logjam/shared";
+import type { ElevationProfile, SpeedProfile } from "@logjam/shared";
 
 import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
 
@@ -41,7 +48,51 @@ const CHART_HEIGHT = 96;
 /** The lowest point still needs to be visible as a column, not a hairline. */
 const MIN_COLUMN_FRACTION = 0.08;
 
-type Column = { elevationM: number | null; distanceM: number };
+/**
+ * One drawn point: a value (null = no data here) at a position along the
+ * chart's own x axis. What x MEANS is the series' business — distance along the
+ * line for a height profile, elapsed time for a speed one — so the chart only
+ * ever sorts and interpolates it, and hands it back to `formatX` to be read out.
+ */
+export type ProfilePoint = { x: number; value: number | null };
+
+/**
+ * What the chart draws. `min`/`max` are the SCALE, not the data's extremes —
+ * a speed chart wants a floor of 0 (a stop must read as the bottom of the
+ * chart) where an elevation chart scales between its own ends, because a
+ * canyon between 700 and 840 m drawn from sea level is a flat bar.
+ */
+export type ProfileSeries = {
+  points: ProfilePoint[];
+  min: number | null;
+  max: number | null;
+};
+
+/** A DEM or GPS height profile over DISTANCE, scaled between its own ends. */
+export function elevationSeries(profile: ElevationProfile): ProfileSeries {
+  return {
+    points: profile.samples.map((sample) => ({
+      x: sample.distanceM,
+      value: sample.elevationM,
+    })),
+    min: profile.minM,
+    max: profile.maxM,
+  };
+}
+
+/** A recorded speed series over TIME, scaled from a standstill up. */
+export function speedSeries(profile: SpeedProfile): ProfileSeries {
+  return {
+    points: profile.samples.map((sample) => ({
+      x: sample.atMs,
+      value: sample.speedMps,
+    })),
+    min: 0,
+    max: profile.maxMps,
+  };
+}
+
+type Column = { value: number | null; x: number };
 
 /**
  * Resample to `count` evenly spaced columns, INTERPOLATING between samples
@@ -49,38 +100,50 @@ type Column = { elevationM: number | null; distanceM: number };
  * outline staircase: neighbouring columns landed on the same sample and drew
  * the same height.
  */
-function toColumns(
-  samples: ElevationProfile["samples"],
-  count: number,
-): Column[] {
-  const total = samples[samples.length - 1]!.distanceM;
+function toColumns(samples: readonly ProfilePoint[], count: number): Column[] {
+  const total = samples[samples.length - 1]!.x;
   if (count <= 1 || total <= 0) {
-    return samples.map((s) => ({ elevationM: s.elevationM, distanceM: s.distanceM }));
+    return samples.map((s) => ({ value: s.value, x: s.x }));
   }
   const columns: Column[] = [];
   let cursor = 0;
   for (let i = 0; i < count; i++) {
-    const distanceM = (total * i) / (count - 1);
-    while (cursor < samples.length - 2 && samples[cursor + 1]!.distanceM < distanceM) {
+    const x = (total * i) / (count - 1);
+    while (cursor < samples.length - 2 && samples[cursor + 1]!.x < x) {
       cursor += 1;
     }
     const before = samples[cursor]!;
     const after = samples[cursor + 1] ?? before;
-    const span = after.distanceM - before.distanceM;
-    const fraction = span > 0 ? (distanceM - before.distanceM) / span : 0;
-    // A gap in DEM coverage stays a gap: interpolating across it would invent
+    const span = after.x - before.x;
+    const fraction = span > 0 ? (x - before.x) / span : 0;
+    // A gap in coverage stays a gap: interpolating across it would invent
     // ground that was never measured.
-    const elevationM =
-      before.elevationM == null || after.elevationM == null
-        ? (before.elevationM ?? after.elevationM)
-        : before.elevationM + (after.elevationM - before.elevationM) * fraction;
-    columns.push({ elevationM, distanceM });
+    const value =
+      before.value == null || after.value == null
+        ? (before.value ?? after.value)
+        : before.value + (after.value - before.value) * fraction;
+    columns.push({ value, x });
   }
   return columns;
 }
 
-export function ElevationProfileChart({ profile }: { profile: ElevationProfile }) {
-  const { minM, maxM } = profile;
+export function ProfileChart({
+  series,
+  formatValue,
+  formatX,
+  hint,
+  accessibilityLabel,
+}: {
+  series: ProfileSeries;
+  /** Renders the scrubbed value — the chart knows no units. */
+  formatValue: (value: number) => string;
+  /** Renders the scrubbed position: metres along, or time into the recording. */
+  formatX: (x: number) => string;
+  /** Shown until the first scrub, in place of the readout. */
+  hint: string;
+  accessibilityLabel: string;
+}) {
+  const { min, max } = series;
   const [width, setWidth] = useState(0);
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   // The responder is created once; it reads the live column count and width
@@ -92,19 +155,25 @@ export function ElevationProfileChart({ profile }: { profile: ElevationProfile }
   // engine can draw it. Zero until the first layout — nothing renders then.
   const columnCount = Math.max(0, Math.min(MAX_COLUMNS, Math.round(width)));
   const columns = useMemo(
-    () => (columnCount > 0 ? toColumns(profile.samples, columnCount) : []),
-    [columnCount, profile.samples],
+    () => (columnCount > 0 ? toColumns(series.points, columnCount) : []),
+    [columnCount, series.points],
   );
   columnsRef.current = columns.length;
   widthRef.current = width;
 
+  // The chart lives inside a sheet's ScrollView, and the two gestures it must
+  // tell apart share a finger: ACROSS is a scrub, UP/DOWN is the user trying to
+  // scroll the panel. It claims on touch-down so a plain press still reads a
+  // value, then hands the gesture back the moment the movement is vertical —
+  // refusing to release (which is what it used to do) made the chart a dead
+  // zone the panel could not be scrolled through.
   const responder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      // The chart lives inside a sheet's ScrollView; claiming the gesture here
-      // is what stops a horizontal scrub from scrolling the sheet instead.
-      onPanResponderTerminationRequest: () => false,
+      onMoveShouldSetPanResponder: (_event, gesture) =>
+        Math.abs(gesture.dx) > Math.abs(gesture.dy),
+      onPanResponderTerminationRequest: (_event, gesture) =>
+        Math.abs(gesture.dy) > Math.abs(gesture.dx),
       onPanResponderGrant: (event) => track(event.nativeEvent.locationX),
       onPanResponderMove: (event) => track(event.nativeEvent.locationX),
       onPanResponderRelease: () => setScrubIndex(null),
@@ -121,10 +190,10 @@ export function ElevationProfileChart({ profile }: { profile: ElevationProfile }
   }
 
   // No coverage anywhere means there is no chart to draw — the stats above it
-  // already say the DEM had nothing here.
-  if (minM == null || maxM == null || profile.samples.length < 2) return null;
+  // already say the data had nothing here.
+  if (min == null || max == null || series.points.length < 2) return null;
 
-  const span = Math.max(1, maxM - minM);
+  const span = Math.max(1, max - min);
   const scrubbed = scrubIndex == null ? null : columns[scrubIndex];
 
   return (
@@ -134,11 +203,11 @@ export function ElevationProfileChart({ profile }: { profile: ElevationProfile }
       <View style={styles.readoutRow}>
         {scrubbed ? (
           <Text style={styles.readout}>
-            {formatDistanceM(scrubbed.distanceM)}
-            {scrubbed.elevationM != null ? `  ·  ${Math.round(scrubbed.elevationM)} m` : ""}
+            {formatX(scrubbed.x)}
+            {scrubbed.value != null ? `  ·  ${formatValue(scrubbed.value)}` : ""}
           </Text>
         ) : (
-          <Text style={styles.readoutHint}>Drag across for heights</Text>
+          <Text style={styles.readoutHint}>{hint}</Text>
         )}
       </View>
 
@@ -147,7 +216,7 @@ export function ElevationProfileChart({ profile }: { profile: ElevationProfile }
         onLayout={(event: LayoutChangeEvent) =>
           setWidth(event.nativeEvent.layout.width)
         }
-        accessibilityLabel="Elevation profile"
+        accessibilityLabel={accessibilityLabel}
         {...responder.panHandlers}
       >
         {columns.map((column, index) => (
@@ -156,7 +225,7 @@ export function ElevationProfileChart({ profile }: { profile: ElevationProfile }
           // reports a locationX near zero — which read as "you are at the start
           // of the route" wherever you actually pressed.
           <View key={index} style={styles.column} pointerEvents="none">
-            {column.elevationM == null ? null : (
+            {column.value == null ? null : (
               <View
                 style={[
                   styles.bar,
@@ -164,8 +233,7 @@ export function ElevationProfileChart({ profile }: { profile: ElevationProfile }
                     height:
                       CHART_HEIGHT *
                       (MIN_COLUMN_FRACTION +
-                        (1 - MIN_COLUMN_FRACTION) *
-                          ((column.elevationM - minM) / span)),
+                        (1 - MIN_COLUMN_FRACTION) * ((column.value - min) / span)),
                   },
                 ]}
               />

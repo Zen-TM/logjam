@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 
+import { ELEVATION_PROFILE_MAX_SAMPLES } from "./elevation.js";
 import {
   ELEVATION_HYSTERESIS_M,
   MAX_ACCEPTED_ACCURACY_M,
   compassPointFor,
+  computeTrackDetail,
   computeTrackStats,
   formatDistanceM,
   formatDurationMs,
+  formatSpeedMps,
   initialBearingDegrees,
   recordedDurationMs,
   rejectTrackFix,
@@ -416,6 +419,52 @@ describe("rejectTrackFix drift and plausibility gates", () => {
     ).toBe("implausible");
   });
 
+  it("allows vehicle speed FROM PRECISE FIXES — the drive in is a recording too", () => {
+    // 60 km/h (16.7 m/s) for 3 s, from two 5 m fixes. Under the flat 5 m/s
+    // ceiling this was rejected, and because a rejection leaves `prev` behind,
+    // the next fix was measured over a longer baseline and rejected as well — a
+    // bus recorded a chorded route whose speed could not exceed 18 km/h.
+    expect(
+      rejectTrackFix(
+        point({ timestampMs: 0, accuracyM: 5 }),
+        point({
+          lat: BASE_LAT + 50 / M_PER_DEG_LAT,
+          accuracyM: 5,
+          timestampMs: 3_000,
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("refuses the same speed from fixes too coarse to demonstrate it", () => {
+    // The identical movement, measured by two 30 m fixes: at canyon-grade
+    // accuracy that is a jittering phone, not a vehicle, and this is what stops
+    // the vehicle allowance from becoming a drift allowance.
+    expect(
+      rejectTrackFix(
+        point({ timestampMs: 0, accuracyM: 30 }),
+        point({
+          lat: BASE_LAT + 50 / M_PER_DEG_LAT,
+          accuracyM: 30,
+          timestampMs: 3_000,
+        }),
+      ),
+    ).toBe("implausible");
+  });
+
+  it("does not extend the vehicle ceiling to a fix with no accuracy at all", () => {
+    expect(
+      rejectTrackFix(
+        point({ timestampMs: 0, accuracyM: null }),
+        point({
+          lat: BASE_LAT + 50 / M_PER_DEG_LAT,
+          accuracyM: null,
+          timestampMs: 3_000,
+        }),
+      ),
+    ).toBe("implausible");
+  });
+
   it("allows a long gap to cover a long distance (pocket, lost signal)", () => {
     // Same 500 m, but an hour later — 0.14 m/s, entirely plausible.
     expect(
@@ -480,5 +529,180 @@ describe("recordedDurationMs", () => {
         nowMs: startedAtMs - 60_000,
       }),
     ).toBe(0);
+  });
+});
+
+describe("computeTrackDetail", () => {
+  // A straight walk north: `count` points, `stepMilliDeg` of latitude apart,
+  // `stepMs` between them. The position smoothing is symmetric, so a straight
+  // line passes through it untouched and the distance is exact.
+  function walk(input: {
+    count: number;
+    stepMilliDeg: number;
+    stepMs: number;
+    startMs?: number;
+    altitudeStepM?: number;
+    segment?: number;
+  }): RecordedTrackPoint[] {
+    const { count, stepMilliDeg, stepMs, startMs = 0, altitudeStepM } = input;
+    return Array.from({ length: count }, (_, i) =>
+      point({
+        lat: BASE_LAT + i * stepMilliDeg * 0.001,
+        timestampMs: startMs + i * stepMs,
+        segment: input.segment ?? 0,
+        altitudeM: altitudeStepM == null ? null : 700 + i * altitudeStepM,
+      }),
+    );
+  }
+
+  it("is all zeros and all nulls on an empty series", () => {
+    const detail = computeTrackDetail([]);
+    expect(detail.distanceM).toBe(0);
+    expect(detail.pointCount).toBe(0);
+    expect(detail.movingMs).toBeNull();
+    expect(detail.averageSpeedMps).toBeNull();
+    expect(detail.elevation).toBeNull();
+    expect(detail.speed).toBeNull();
+  });
+
+  it("reports average speed over the whole recording", () => {
+    // 10 points, 1 milli-degree (111.19 m) apart, 100 s apart: 1.1119 m/s.
+    const detail = computeTrackDetail(walk({ count: 10, stepMilliDeg: 1, stepMs: 100_000 }));
+    expect(detail.distanceM).toBeCloseTo(9 * LAT_STEP_M_PER_MILLIDEG, 0);
+    expect(detail.durationMs).toBe(900_000);
+    expect(detail.averageSpeedMps).toBeCloseTo(1.1119, 3);
+  });
+
+  it("counts a long slow gap as stopped time, and keeps it out of moving pace", () => {
+    // Walk, then one interval covering 11 m in an hour (0.003 m/s — the shape
+    // a stationary phone makes once the drift gate has dropped its fixes),
+    // then walk on at the original pace.
+    const walked = walk({ count: 5, stepMilliDeg: 1, stepMs: 100_000 });
+    const last = walked[walked.length - 1]!;
+    const afterStop = point({
+      lat: last.lat + 0.0001,
+      timestampMs: last.timestampMs + 3_600_000,
+    });
+    const detail = computeTrackDetail([...walked, afterStop]);
+
+    expect(detail.durationMs).toBe(400_000 + 3_600_000);
+    expect(detail.movingMs).toBe(400_000);
+    expect(detail.stoppedMs).toBe(3_600_000);
+    // Including the stop: ~0.11 m/s. Excluding it: the walking pace.
+    expect(detail.averageSpeedMps!).toBeLessThan(0.2);
+    expect(detail.movingSpeedMps!).toBeGreaterThan(1.1);
+  });
+
+  it("has no time-derived stat at all when the series carries no timestamps", () => {
+    // An imported GPX without <time>: real distance, real climb, no speed.
+    const untimed = walk({ count: 10, stepMilliDeg: 1, stepMs: 0, altitudeStepM: 20 }).map(
+      (p) => ({ ...p, timestampMs: null }),
+    );
+    const detail = computeTrackDetail(untimed);
+
+    expect(detail.distanceM).toBeCloseTo(9 * LAT_STEP_M_PER_MILLIDEG, 0);
+    expect(detail.elevationGainM).toBeGreaterThan(0);
+    expect(detail.durationMs).toBe(0);
+    expect(detail.movingMs).toBeNull();
+    expect(detail.stoppedMs).toBeNull();
+    expect(detail.averageSpeedMps).toBeNull();
+    expect(detail.movingSpeedMps).toBeNull();
+    expect(detail.speed).toBeNull();
+    // The half that needs no clock still arrives.
+    expect(detail.elevation).not.toBeNull();
+  });
+
+  it("puts the elevation profile's last sample at the track's own distance", () => {
+    const detail = computeTrackDetail(
+      walk({ count: 12, stepMilliDeg: 1, stepMs: 60_000, altitudeStepM: 10 }),
+    );
+    const samples = detail.elevation!.samples;
+    expect(samples[0]!.distanceM).toBe(0);
+    expect(samples[samples.length - 1]!.distanceM).toBeCloseTo(detail.distanceM, 6);
+    expect(detail.minAltitudeM).toBeLessThan(detail.maxAltitudeM!);
+  });
+
+  it("excludes the pause gap from distance, duration and speed", () => {
+    const first = walk({ count: 5, stepMilliDeg: 1, stepMs: 100_000, segment: 0 });
+    // Segment 1 restarts a kilometre away, an hour later: neither the jump nor
+    // the hour is the party's.
+    const second = walk({
+      count: 5,
+      stepMilliDeg: 1,
+      stepMs: 100_000,
+      startMs: 3_600_000 + 400_000,
+      segment: 1,
+    }).map((p) => ({ ...p, lat: p.lat + 0.01 }));
+    const detail = computeTrackDetail([...first, ...second]);
+
+    expect(detail.durationMs).toBe(800_000);
+    expect(detail.distanceM).toBeCloseTo(8 * LAT_STEP_M_PER_MILLIDEG, 0);
+    expect(detail.averageSpeedMps).toBeCloseTo(1.1119, 3);
+  });
+
+  it("thins a long series down to the chart's cap", () => {
+    const detail = computeTrackDetail(
+      walk({ count: 2000, stepMilliDeg: 0.1, stepMs: 3000, altitudeStepM: 0.5 }),
+    );
+    expect(detail.elevation!.samples.length).toBe(ELEVATION_PROFILE_MAX_SAMPLES);
+    expect(detail.speed!.samples.length).toBe(ELEVATION_PROFILE_MAX_SAMPLES);
+    // Thinning keeps the ends: the chart must still start at 0 and finish at
+    // the track's full length.
+    expect(detail.elevation!.samples[0]!.distanceM).toBe(0);
+    expect(
+      detail.elevation!.samples[ELEVATION_PROFILE_MAX_SAMPLES - 1]!.distanceM,
+    ).toBeCloseTo(detail.distanceM, 6);
+  });
+
+  it("plots speed against elapsed recording time, not distance", () => {
+    const detail = computeTrackDetail(
+      walk({ count: 20, stepMilliDeg: 1, stepMs: 100_000 }),
+    );
+    const samples = detail.speed!.samples;
+    // Monotonic in time, ending at the recording's own length — a chart drawn
+    // from these has the clock as its x axis.
+    for (let i = 1; i < samples.length; i++) {
+      expect(samples[i]!.atMs).toBeGreaterThan(samples[i - 1]!.atMs);
+    }
+    expect(samples[samples.length - 1]!.atMs).toBe(detail.durationMs);
+  });
+
+  it("gives a long stop its full width on the speed series", () => {
+    // The reason the x axis is time: an hour standing still covers no ground,
+    // so against DISTANCE the rest is one column wide and reads as a glitch.
+    const walked = walk({ count: 5, stepMilliDeg: 1, stepMs: 100_000 });
+    const last = walked[walked.length - 1]!;
+    const detail = computeTrackDetail([
+      ...walked,
+      point({ lat: last.lat + 0.0001, timestampMs: last.timestampMs + 3_600_000 }),
+    ]);
+    const samples = detail.speed!.samples;
+    const stopSpan =
+      samples[samples.length - 1]!.atMs - samples[samples.length - 2]!.atMs;
+    expect(stopSpan).toBe(3_600_000);
+  });
+
+  it("agrees with the cached stats the recorder writes", () => {
+    const points = walk({ count: 20, stepMilliDeg: 1, stepMs: 60_000, altitudeStepM: 8 });
+    const detail = computeTrackDetail(points);
+    expect(computeTrackStats(points)).toEqual({
+      distanceM: detail.distanceM,
+      durationMs: detail.durationMs,
+      elevationGainM: detail.elevationGainM,
+      elevationLossM: detail.elevationLossM,
+      pointCount: detail.pointCount,
+    });
+  });
+});
+
+describe("formatSpeedMps", () => {
+  it("reads in km/h", () => {
+    expect(formatSpeedMps(1.1119)).toBe("4.0 km/h");
+    expect(formatSpeedMps(0)).toBe("0.0 km/h");
+  });
+
+  it("says unknown rather than zero when there is no speed", () => {
+    expect(formatSpeedMps(null)).toBe("—");
+    expect(formatSpeedMps(Number.NaN)).toBe("—");
   });
 });

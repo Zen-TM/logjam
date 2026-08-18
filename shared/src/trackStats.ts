@@ -8,7 +8,12 @@
 // reports (root privacy rules).
 
 import { haversineMeters } from "./canyonGeo.js";
-import { elevationGainLoss } from "./elevation.js";
+import {
+  ELEVATION_PROFILE_MAX_SAMPLES,
+  elevationGainLoss,
+  type ElevationProfile,
+  type ElevationSample,
+} from "./elevation.js";
 
 /** One stored track point. `segment` increments across pause/resume gaps so
  * renderers break the polyline instead of drawing a teleport line. */
@@ -42,10 +47,50 @@ export const MAX_ACCEPTED_ACCURACY_M = 50;
 // batches can re-deliver the last fix.
 export const MIN_POINT_DISTANCE_M = 5;
 
-// Ground-speed ceiling for a plausible fix. Canyoning tops out around 2 m/s on
-// good track; 5 m/s (18 km/h) leaves headroom for a scramble or a jog while
-// still rejecting the multi-hundred-metre teleport a re-acquired fix makes.
+// Ground-speed ceiling for a plausible fix.
+//
+// It was 5 m/s (18 km/h) — "a scramble or a jog", sized for walking pace. That
+// is the speed of the PARTY, and a recorder does not get to assume the phone is
+// walking: a track recorded on the drive in, on a bus, or on a bike is above it
+// continuously, and the failure is silent and self-sustaining. Measured on a
+// real bus trip (2026-08-18, 30 accepted points over 23 min): every fix
+// implying more than 5 m/s was rejected, which leaves `prev` pointing at the
+// last accepted fix, so the NEXT fix is measured over a longer baseline and is
+// rejected too — the gate only re-opens when the vehicle slows enough for the
+// average since `prev` to fall under the ceiling. The recorded result was a
+// series whose median gap was 27 s (max 217 s) with implied speeds pinned just
+// below the ceiling at 4.84 m/s, i.e. a chorded route that under-reads distance
+// and a speed profile that cannot exceed 18 km/h by construction.
+//
+// But it cannot simply be raised, and the repo's own noise tests are what say
+// so: at 30 m accuracy a STATIONARY phone hops ~30 m between samples, which at
+// 3 s is 10 m/s — so the low ceiling was quietly doing half the anti-drift job,
+// and lifting it let a still phone record a kilometre it never walked.
+//
+// A single fix cannot tell a bus from a jittering phone by distance alone. What
+// it CAN tell is whether the fix is good enough for the claim: 30 m of movement
+// measured by two fixes that are themselves 30 m uncertain demonstrates
+// nothing, while the same movement from a pair of 5 m fixes is real. So the
+// ceiling is chosen by fix quality — the vehicle allowance is only extended to
+// fixes precise enough to earn it, and a degraded fix keeps the walking-pace
+// ceiling it always had.
+//
+// The bus trip above ran at a median accuracy of 6.3 m, so it gets the vehicle
+// ceiling; the canyon-noise tests run at 30 m and keep the walking one.
 export const MAX_TRACK_SPEED_MPS = 5;
+
+/** Ceiling for a fix precise enough to demonstrate vehicle speed. 126 km/h
+ *  covers any approach drive; the re-acquired fix this gate exists to reject
+ *  (500 m between consecutive samples, 50 m/s) is still refused. */
+export const MAX_VEHICLE_SPEED_MPS = 35;
+
+/**
+ * How precise both fixes must be before the vehicle ceiling applies.
+ *
+ * A fix with no reported accuracy is NOT trusted with it: unknown precision is
+ * not good precision, and the walking ceiling is the safe side of that guess.
+ */
+export const TRUSTED_SPEED_ACCURACY_M = 10;
 
 // GPS altitude jitters ±5–15 m standing still, and that jitter is a RANDOM
 // WALK, not a sawtooth: any per-sample threshold leaks it, because the walk
@@ -117,7 +162,15 @@ export function rejectTrackFix(
     if (moved < driftRadiusM) return "too-close";
     // dt > 0 is guaranteed by the out-of-order check above.
     const dtSeconds = (fix.timestampMs - prev.timestampMs) / 1000;
-    if (moved / dtSeconds > MAX_TRACK_SPEED_MPS) return "implausible";
+    const bothFixesPrecise =
+      fix.accuracyM != null &&
+      prev.accuracyM != null &&
+      fix.accuracyM <= TRUSTED_SPEED_ACCURACY_M &&
+      prev.accuracyM <= TRUSTED_SPEED_ACCURACY_M;
+    const speedCeilingMps = bothFixesPrecise
+      ? MAX_VEHICLE_SPEED_MPS
+      : MAX_TRACK_SPEED_MPS;
+    if (moved / dtSeconds > speedCeilingMps) return "implausible";
   }
   return null;
 }
@@ -162,16 +215,140 @@ export type TrackStats = {
 };
 
 /**
- * Compute stats from the stored series (assumed already acceptance-filtered
- * and ordered by timestamp). Distance and duration accumulate within a
- * segment only — the gap across a pause is not walked distance and not
- * recording time. Elevation runs across the WHOLE series (a climb made while
- * paused is still a climb the altitude record shows), through a hysteresis
- * filter so idle jitter below ELEVATION_HYSTERESIS_M never accumulates.
+ * A point of any track series — recorded here, or read out of an imported
+ * file. `RecordedTrackPoint` satisfies it; an import that carried no times
+ * passes `timestampMs: null` and gets the distance/elevation half of the
+ * answer, which is the half that does not need a clock.
  */
-export function computeTrackStats(points: RecordedTrackPoint[]): TrackStats {
+export type TrackSeriesPoint = {
+  lon: number;
+  lat: number;
+  altitudeM: number | null;
+  /** null = the source carried no time for this point. */
+  timestampMs: number | null;
+  segment: number;
+};
+
+/**
+ * Below this, an interval is time spent STOPPED rather than travelling.
+ *
+ * Read it against the acceptance filter, not on its own: `rejectTrackFix`
+ * DROPS a fix that moved less than the drift radius, so standing still does
+ * not produce slow points — it produces a long gap between two accepted ones,
+ * whose implied speed is tiny. That is what this classifies. The consequence
+ * is that stopped time is quantised to the gap between accepted fixes, so a
+ * two-minute breather at the 30 s rate is counted to the nearest fix, and a
+ * stop shorter than one interval can vanish entirely.
+ *
+ * ponytail: 0.3 m/s (1.1 km/h) is a judgement, not a measurement — slower than
+ * any party that is actually walking, faster than a drift-radius hop. It is
+ * the knob to turn if moving time reads long (raise it) or short (lower it)
+ * against a trip you remember.
+ */
+export const MOVING_SPEED_THRESHOLD_MPS = 0.3;
+
+/**
+ * Odd, centred window for the speed series — the CHART's smoothing, never the
+ * stats'. Per-interval GPS speed is d/dt of two positions each carrying metres
+ * of error, so the raw series is spiky enough to be unreadable. Moving and
+ * stopped time are classified from the RAW speed regardless: smoothing across
+ * the moment someone stops is exactly what would blur the boundary being
+ * measured.
+ */
+export const SPEED_SMOOTHING_WINDOW = 5;
+
+/**
+ * One point on the speed series: how fast, how far into the recording.
+ *
+ * Against TIME, not distance — unlike the elevation profile beside it, and the
+ * difference is not cosmetic. A speed series plotted against distance devotes
+ * almost no width to the part of the day you stood still (no distance passes
+ * while stopped) and stretches the fast sections out, which is exactly
+ * backwards: the question a speed profile answers is "when was I moving", and
+ * "when" is a clock. Distance-based x also collapses a rest into a single
+ * column that reads as a glitch rather than a break.
+ */
+export type SpeedSample = { atMs: number; speedMps: number };
+
+export type SpeedProfile = {
+  samples: SpeedSample[];
+  maxMps: number;
+  averageMps: number;
+};
+
+/**
+ * Everything derivable from a stored series, in one pass.
+ *
+ * Time-dependent fields are null when the series carries no timestamps — an
+ * imported GPX without `<time>` has a real distance and a real climb, and no
+ * honest speed. A caller must render the null as absent, never as zero.
+ */
+export type TrackDetail = TrackStats & {
+  /** Time spent above MOVING_SPEED_THRESHOLD_MPS. */
+  movingMs: number | null;
+  /** Recording time that was not moving time. */
+  stoppedMs: number | null;
+  /** Distance over recording time — the "including stops" number. */
+  averageSpeedMps: number | null;
+  /** Distance over moving time — the pace actually walked. */
+  movingSpeedMps: number | null;
+  minAltitudeM: number | null;
+  maxAltitudeM: number | null;
+  /** Null when no point in the series carried an altitude. */
+  elevation: ElevationProfile | null;
+  /** Null when the series carries no timestamps. */
+  speed: SpeedProfile | null;
+};
+
+/**
+ * Thin an over-long series to `max` entries, keeping the first and the last.
+ *
+ * A six-hour recording is thousands of points and a chart is a few hundred
+ * pixels; handing the renderer the whole series costs memory and layout for
+ * detail below one pixel. Stride sampling (not averaging) because the chart
+ * interpolates between whatever it is given.
+ */
+function decimate<T>(samples: T[], max: number): T[] {
+  if (samples.length <= max || max < 2) return samples;
+  const out: T[] = [];
+  for (let i = 0; i < max; i++) {
+    out.push(samples[Math.round((i * (samples.length - 1)) / (max - 1))]!);
+  }
+  return out;
+}
+
+/**
+ * Compute everything from the stored series (assumed already
+ * acceptance-filtered and ordered by timestamp).
+ *
+ * Distance and duration accumulate within a segment only — the gap across a
+ * pause is not walked distance and not recording time. Elevation runs across
+ * the WHOLE series (a climb made while paused is still a climb the altitude
+ * record shows), through a hysteresis filter so idle jitter below
+ * ELEVATION_HYSTERESIS_M never accumulates.
+ */
+export function computeTrackDetail(
+  points: readonly TrackSeriesPoint[],
+): TrackDetail {
+  // One missing timestamp makes the whole series untimed. A part-timed series
+  // would report a duration over the timed stretch and a distance over all of
+  // it, and divide one by the other to produce a speed for neither.
+  const timed =
+    points.length > 0 &&
+    points.every(
+      (point) =>
+        point.timestampMs != null && Number.isFinite(point.timestampMs),
+    );
+
   let distanceM = 0;
   let durationMs = 0;
+  let movingMs = 0;
+  const rawSpeeds: SpeedSample[] = [];
+  // Distance along the line at each POINT, for the profiles' x axis. It shares
+  // the smoothed positions the distance total is built from, so the chart's
+  // last x and the headline distance are the same number.
+  const distanceAt: number[] = new Array(points.length).fill(0);
+
   // Distance walks a position-SMOOTHED copy of each segment: summing raw
   // fix-to-fix hops integrates the error circle as travel, which over-reads a
   // 4.3 km walk as 32 km on 30 m-accurate canyon fixes. Smoothing is per
@@ -190,9 +367,37 @@ export function computeTrackStats(points: RecordedTrackPoint[]): TrackStats {
       segment.map((point) => point.lon),
       DISTANCE_SMOOTHING_WINDOW,
     );
+    const segmentSpeeds: number[] = [];
+    const segmentTimes: number[] = [];
+    distanceAt[start] = distanceM;
     for (let i = 1; i < segment.length; i++) {
-      distanceM += haversineMeters(lats[i - 1]!, lons[i - 1]!, lats[i]!, lons[i]!);
-      durationMs += segment[i]!.timestampMs - segment[i - 1]!.timestampMs;
+      const stepM = haversineMeters(lats[i - 1]!, lons[i - 1]!, lats[i]!, lons[i]!);
+      distanceM += stepM;
+      distanceAt[start + i] = distanceM;
+      if (!timed) continue;
+      // An imported file can carry times that go backwards or repeat; a
+      // recorded series cannot (the acceptance filter rejects both). Either
+      // way a non-positive step contributes no time and no speed rather than
+      // a negative duration or a division by zero.
+      const stepMs = segment[i]!.timestampMs! - segment[i - 1]!.timestampMs!;
+      if (stepMs <= 0) continue;
+      durationMs += stepMs;
+      const speedMps = stepM / (stepMs / 1000);
+      if (speedMps >= MOVING_SPEED_THRESHOLD_MPS) movingMs += stepMs;
+      segmentSpeeds.push(speedMps);
+      // Elapsed RECORDING time at the end of this interval — the running
+      // durationMs, so the series' last x is the recording's own length and a
+      // pause contributes no width to it.
+      segmentTimes.push(durationMs);
+    }
+    // Smoothed per segment, so a pause gap's own long slow interval never
+    // averages into the walking on either side of it.
+    const smoothedSpeeds = movingMean(segmentSpeeds, SPEED_SMOOTHING_WINDOW);
+    for (let i = 0; i < smoothedSpeeds.length; i++) {
+      rawSpeeds.push({
+        atMs: segmentTimes[i]!,
+        speedMps: smoothedSpeeds[i]!,
+      });
     }
     start = end;
   }
@@ -202,16 +407,39 @@ export function computeTrackStats(points: RecordedTrackPoint[]): TrackStats {
   // altitude needs a wide one to survive its random walk, a DEM surface does
   // not. The median smoothing below stays here, because it exists to fight
   // that same GPS jitter and a DEM has none to fight.
-  const altitudes = movingMedian(
-    points
-      .map((point) => point.altitudeM)
-      .filter((alt): alt is number => alt != null && Number.isFinite(alt)),
-    ELEVATION_SMOOTHING_WINDOW,
-  );
+  //
+  // `withAltitude` keeps each smoothed height's own point index, so the
+  // profile's x axis is the distance measured AT that height rather than at
+  // whatever position shares its place in a compacted array.
+  const withAltitude: number[] = [];
+  const rawAltitudes: number[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const altitudeM = points[i]!.altitudeM;
+    if (altitudeM == null || !Number.isFinite(altitudeM)) continue;
+    withAltitude.push(i);
+    rawAltitudes.push(altitudeM);
+  }
+  const altitudes = movingMedian(rawAltitudes, ELEVATION_SMOOTHING_WINDOW);
   const { gainM: elevationGainM, lossM: elevationLossM } = elevationGainLoss(
     altitudes,
     ELEVATION_HYSTERESIS_M,
   );
+
+  let minAltitudeM: number | null = null;
+  let maxAltitudeM: number | null = null;
+  const elevationSamples: ElevationSample[] = [];
+  for (let k = 0; k < altitudes.length; k++) {
+    const elevationM = altitudes[k]!;
+    if (minAltitudeM == null || elevationM < minAltitudeM) minAltitudeM = elevationM;
+    if (maxAltitudeM == null || elevationM > maxAltitudeM) maxAltitudeM = elevationM;
+    elevationSamples.push({
+      distanceM: distanceAt[withAltitude[k]!]!,
+      elevationM,
+    });
+  }
+
+  const stoppedMs = timed ? Math.max(0, durationMs - movingMs) : null;
+  const speedSamples = decimate(rawSpeeds, ELEVATION_PROFILE_MAX_SAMPLES);
 
   return {
     distanceM,
@@ -219,6 +447,55 @@ export function computeTrackStats(points: RecordedTrackPoint[]): TrackStats {
     elevationGainM,
     elevationLossM,
     pointCount: points.length,
+    movingMs: timed ? movingMs : null,
+    stoppedMs,
+    // Speed over a zero span is not 0 m/s, it is unknown — a track with one
+    // point must not claim the party stood still.
+    averageSpeedMps: timed && durationMs > 0 ? distanceM / (durationMs / 1000) : null,
+    movingSpeedMps: timed && movingMs > 0 ? distanceM / (movingMs / 1000) : null,
+    minAltitudeM,
+    maxAltitudeM,
+    elevation:
+      elevationSamples.length >= 2
+        ? {
+            samples: decimate(elevationSamples, ELEVATION_PROFILE_MAX_SAMPLES),
+            gainM: elevationGainM,
+            lossM: elevationLossM,
+            minM: minAltitudeM,
+            maxM: maxAltitudeM,
+          }
+        : null,
+    speed:
+      speedSamples.length >= 2
+        ? {
+            samples: speedSamples,
+            maxMps: speedSamples.reduce((max, s) => Math.max(max, s.speedMps), 0),
+            // The series' own mean, which is NOT distance/duration: it weights
+            // every interval equally where the headline average weights them
+            // by time. The chart's own baseline, and nothing else's.
+            averageMps:
+              speedSamples.reduce((sum, s) => sum + s.speedMps, 0) /
+              speedSamples.length,
+          }
+        : null,
+  };
+}
+
+/**
+ * The four cached columns, for the recorder's write path.
+ *
+ * A thin pick over `computeTrackDetail` — the stats a track ROW stores. The
+ * rest of the detail is derived on demand when something wants to show it, so
+ * a new stat never means a migration.
+ */
+export function computeTrackStats(points: readonly TrackSeriesPoint[]): TrackStats {
+  const detail = computeTrackDetail(points);
+  return {
+    distanceM: detail.distanceM,
+    durationMs: detail.durationMs,
+    elevationGainM: detail.elevationGainM,
+    elevationLossM: detail.elevationLossM,
+    pointCount: detail.pointCount,
   };
 }
 
@@ -287,6 +564,12 @@ export function formatDistanceM(distanceM: number): string {
   if (!Number.isFinite(distanceM)) return "—";
   if (distanceM < 1000) return `${Math.round(distanceM)} m`;
   return `${(distanceM / 1000).toFixed(1)} km`;
+}
+
+/** Human speed: km/h with one decimal. Null (no timestamps) reads as unknown. */
+export function formatSpeedMps(speedMps: number | null): string {
+  if (speedMps == null || !Number.isFinite(speedMps) || speedMps < 0) return "—";
+  return `${(speedMps * 3.6).toFixed(1)} km/h`;
 }
 
 /** Human duration: "47 min", "3 h 12 min". */

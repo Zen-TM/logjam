@@ -97,6 +97,25 @@ BottomSheet(s)      acquisition + per-item actions
   layers sheet lives behind the layers sheet. A badge for a layer the user chose to
   leave ON is not that: the canyon-routes coverage note moved onto its own row in
   the sheet, because a permanent chip is a permanent tax on the thing the map is for.
+- **Chrome for a RUNNING JOB is a light, not a readout — and the top edge is a
+  PAIR.** Track recording used to pin a four-number card to the top notice stack
+  for the whole trip. What a person reads while walking is one bit — is it still
+  recording — and a card is an expensive way to say a bit. The record button now
+  holds the top corner on the ACTION COLUMN'S edge, pulses slowly while a
+  recording runs (a hollow ring idle, a filled ring holding still when paused),
+  and opens the numbers in a sheet on tap (`tracks/RecordButton.tsx`,
+  `tracks/RecordingSheet.tsx`). The search pill holds the opposite corner and
+  expands into the space between them, reserving the button's width; both corners
+  flip together with the Settings → Map handedness, or the two controls end up
+  stacked in one corner. Freed of the map-space budget the sheet carries far more
+  than the card did — moving and stopped time, both average speeds, two profiles.
+  Two obligations come with the pattern and neither is optional. **The one urgent
+  line stays on the map**: a recorder that is not saving points says so in the
+  notice stack without being asked, because a warning behind a tap is a warning
+  the user finds after the trip. And **the way to STOP keeps a one-gesture path**:
+  long-press the button to finish, same confirm as the sheet's own button
+  (`tracks/finishRecordingPrompt.ts` — one wording, two callers). Cold hands do
+  not go looking for a panel.
 - **The map's two edges have different jobs, and WHICH edge is the user's.** One
   edge is the action column (layers, locate, the TOOL GROUP, record, and the small
   attribution button under them); it defaults to the RIGHT and moves to the left
@@ -735,6 +754,19 @@ which subsystem is talking.
   Two places offering "Delete" with two descriptions of what is deleted is how one
   of them goes stale. Inside a sheet it opens as an `overlay` sub-mode, not a second
   sheet (§6).
+- **A tapped LINE answers "what is this" before it offers verbs.** A route opened
+  its stats sheet; a recorded track went straight to its verb list, and an
+  imported file had no answer anywhere. All three now render ONE body
+  (`tracks/TrackStatsBody.tsx`) from ONE derivation (`computeTrackDetail` in
+  shared) — distance, ascent and descent, moving and stopped time, average and
+  moving speed, the height band, and the elevation and speed profiles — with the
+  verbs behind "View options" (map) or a `stats` sub-mode (Saved). Two rules hold
+  it together. The stats are **derived on demand, never stored**: the recorder
+  caches four columns because it writes them as it goes, and everything else is
+  computed when something is looking at it, so a new stat is never a migration.
+  And a series with **no timestamps renders no time-derived cell at all** — an
+  imported GPX without `<time>` has a real distance and a real climb and no
+  honest pace, so those cells are absent rather than zero.
 - **A selection is a STATE of the row, not a label on it.** The basemap list used
   to hang a "Showing" pill off the active row; it now lights the whole card (accent
   border, accent tint, a filled check). One row looking different is read before any

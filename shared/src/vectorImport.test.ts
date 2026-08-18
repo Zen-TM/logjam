@@ -48,6 +48,40 @@ describe("parseGpx", () => {
     ]);
   });
 
+  it("leaves coordTimes off a track whose points carry no <time>", () => {
+    expect(result.features[1].properties.coordTimes).toBeUndefined();
+  });
+
+  it("carries per-vertex times, normalised to UTC, when every trkpt has one", () => {
+    const timed = parseGpx(`<?xml version="1.0"?>
+<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Timed</name><trkseg>
+    <trkpt lat="-33.002" lon="150.002"><time>2026-08-17T09:14:03+10:00</time></trkpt>
+    <trkpt lat="-33.003" lon="150.003"><time>2026-08-17T09:15:03+10:00</time></trkpt>
+  </trkseg></trk>
+</gpx>`);
+    expect(timed.features[0].properties.coordTimes).toEqual([
+      "2026-08-16T23:14:03.000Z",
+      "2026-08-16T23:15:03.000Z",
+    ]);
+  });
+
+  it("drops the whole line's times when one trkpt is missing or unparseable", () => {
+    // Part-timed is worse than untimed: a duration over the timed stretch and
+    // a distance over all of it produce a speed belonging to neither.
+    const partial = parseGpx(`<?xml version="1.0"?>
+<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="-33.002" lon="150.002"><time>2026-08-17T09:14:03Z</time></trkpt>
+    <trkpt lat="-33.003" lon="150.003"/>
+    <trkpt lat="-33.004" lon="150.004"><time>not a date</time></trkpt>
+  </trkseg></trk>
+</gpx>`);
+    expect(partial.features[0].properties.coordTimes).toBeUndefined();
+    // The geometry is untouched — an unusable clock is not an unusable track.
+    expect(partial.features[0].geometry.coordinates).toHaveLength(3);
+  });
+
   it("computes the bbox over every position", () => {
     expect(result.bbox).toEqual([150.001, -33.01, 150.01, -33.001]);
   });

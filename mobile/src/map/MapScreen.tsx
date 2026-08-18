@@ -19,6 +19,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import {
   Alert,
@@ -217,7 +218,14 @@ import {
 } from "../tracks/trackRecorder";
 import { TrackMapLayers } from "../tracks/TrackMapLayers";
 import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
-import { TrackRecordingControls } from "../tracks/TrackRecordingControls";
+import { confirmFinishRecording } from "../tracks/finishRecordingPrompt";
+import { RecordButton } from "../tracks/RecordButton";
+import { RecordingSheet } from "../tracks/RecordingSheet";
+import { TrackStatsSheet } from "../tracks/TrackStatsSheet";
+import {
+  isRecordingWriteFailing,
+  onTrackWriteHealthChanged,
+} from "../tracks/trackWriteQueue";
 import { useTracks } from "../tracks/useTracks";
 import { ensureForegroundLocationPermission } from "./locationPermission";
 import { listEnabledOverlayKeys, setOverlayEnabled } from "../offline/registryDb";
@@ -1574,6 +1582,11 @@ export function MapScreen({
    *  wherever it is listed). Held as an id, so an edit made inside the sheet
    *  re-renders it rather than showing the copy the line was tapped with. */
   const [optionsTrackId, setOptionsTrackId] = useState<string | null>(null);
+  // Tapping a line asks what it IS; the verbs are one tap further on, behind
+  // the stats sheet's "View options" — the same two-step a route already has
+  // (DESIGN.md §7), so neither line type is a lesser object than the other.
+  const [statsTrackId, setStatsTrackId] = useState<string | null>(null);
+  const [recordingSheetOpen, setRecordingSheetOpen] = useState(false);
   const handleTrackPress = useCallback(
     (track: Track, coordinates?: { latitude: number; longitude: number }) => {
       // Same rule as a canyon pin: the line swallows the press before the map
@@ -1586,7 +1599,7 @@ export function MapScreen({
         }
         return;
       }
-      setOptionsTrackId(track.id);
+      setStatsTrackId(track.id);
     },
     [addToolPoint, collectingPoints],
   );
@@ -2952,11 +2965,14 @@ export function MapScreen({
       // Recording without seeing yourself is disorienting — start the dot +
       // follow if it isn't already running.
       if (!dotWanted) handleLocateMe();
+      // A pulsing dot is not a discoverable button. Said once, at the only
+      // moment it is useful, rather than left as chrome for the whole trip.
+      notify("Recording — tap the dot for stats.", "info");
     } catch (err) {
       console.error(err);
       Alert.alert("Recording error", "Couldn't start recording.");
     }
-  }, [dotWanted, handleLocateMe]);
+  }, [dotWanted, handleLocateMe, notify]);
 
   const handleWaypointPress = useCallback(
     (waypoint: Waypoint) => {
@@ -2988,11 +3004,14 @@ export function MapScreen({
   // Chrome geometry. Notices clear the search row so an expanded search bar
   // never covers them; the scale bar runs from the left edge up to the floating
   // button column on the right.
-  // With a tool armed the search pill is gone, so the stack starts in its
-  // place rather than below where it would have been.
-  const noticeTop = collectingPoints
-    ? insets.top + CHROME_GAP
-    : insets.top + CHROME_GAP + SEARCH_SIZE + spacing(1);
+  // The top row is occupied whether or not the search pill is in it: the
+  // record button sits in the opposite corner and stays through a tool, a
+  // recording being the one thing that must remain stoppable while measuring.
+  const noticeTop = insets.top + CHROME_GAP + SEARCH_SIZE + spacing(1);
+  const recordingWriteFailing = useSyncExternalStore(
+    onTrackWriteHealthChanged,
+    isRecordingWriteFailing,
+  );
   const scaleBarMaxWidth =
     windowWidth - FAB_SIZE - CHROME_GAP * 3 - spacing(1);
   // The handedness swap, in three places that must agree: the JS action column,
@@ -3512,16 +3531,66 @@ export function MapScreen({
           mid-draw, and its slot is where the tool's own toolbar goes, which is
           what keeps the HUD from eating a third of the map. */}
       {!collectingPoints ? (
-        <MapSearchBar topInset={insets.top} onSelectPlace={handleSelectPlace} />
+        <MapSearchBar
+          topInset={insets.top}
+          // Opposite the action column: the two top-corner controls flip with
+          // the user's handedness together, or they end up in the same corner.
+          side={controlsOnLeft ? "right" : "left"}
+          reservedWidth={SEARCH_SIZE + CHROME_GAP}
+          onSelectPlace={handleSelectPlace}
+        />
       ) : null}
+
+      {/* The record button holds the corner the search pill does not. Present
+          whether or not anything is recording — it is the start button, the
+          "still going" light and the way into the numbers, and a control that
+          disappeared the moment it mattered was the old layout's worst habit. */}
+      <View
+        style={[
+          styles.recordSlot,
+          { top: insets.top + CHROME_GAP },
+          controlsOnLeft ? { left: CHROME_GAP } : { right: CHROME_GAP },
+        ]}
+      >
+        <RecordButton
+          state={activeTrack?.state === "done" ? null : (activeTrack?.state ?? null)}
+          // The same gate the sensors run behind: no frames for a screen
+          // nobody is looking at (mobile/CLAUDE.md, Battery).
+          animate={sensorsActive}
+          onPress={() => {
+            if (activeTrack) {
+              setRecordingSheetOpen(true);
+              return;
+            }
+            // Explicitly closed, not merely left alone: a recording discarded
+            // from inside the sheet unmounts it while this flag is still true,
+            // and the next one would then open onto a panel nobody asked for.
+            setRecordingSheetOpen(false);
+            void handleStartRecording();
+          }}
+          // Finishing must never require finding the panel first — cold hands,
+          // wet phone, a party waiting. Same confirm as the sheet's button.
+          onLongPress={
+            activeTrack ? () => confirmFinishRecording(activeTrack.id) : undefined
+          }
+        />
+      </View>
 
       {/* Everything that talks to the user from the top of the map stacks in
           one column, so a second message can never land on top of the first. */}
       <View style={[styles.noticeStack, { top: noticeTop }]} pointerEvents="box-none">
-        {/* The recording panel leads the stack: while a track is running it is
-            the most important thing on the screen, and up here it competes
-            with no other chrome (see mapChrome's CHROME_BOTTOM). */}
-        {activeTrack ? <TrackRecordingControls activeTrack={activeTrack} /> : null}
+        {/* The recording's numbers live behind the record button now, but this
+            one line cannot: a recorder that is not saving points must say so
+            without being asked (MLIFE-001). Everything else about a running
+            recording is a tap away; this is the exception. */}
+        {activeTrack && recordingWriteFailing ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>
+              Points aren&apos;t being saved — finish the recording and check
+              free space.
+            </Text>
+          </View>
+        ) : null}
 
         {/* Measure HUD — the same panel as route draw, minus Save. */}
         {measuring ? (
@@ -3728,20 +3797,6 @@ export function MapScreen({
           onToggleOpen={() => setToolsOpen((open) => !open)}
           onPickTool={handlePickTool}
         />
-        {!activeTrack ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Record track"
-            style={styles.controlButton}
-            onPress={handleStartRecording}
-          >
-            {/* Drawn rather than a Feather glyph: the icon font gives no
-                control over ring thickness or a nested fill. */}
-            <View style={styles.recordRing}>
-              <View style={styles.recordCore} />
-            </View>
-          </Pressable>
-        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Map data attribution"
@@ -3994,6 +4049,27 @@ export function MapScreen({
 
       {/* One recorded track's verbs — the same list Saved offers, from the
           line the user actually tapped. */}
+      {/* The live recording's numbers and verbs. It renders nothing at all
+          without an active track, so finishing from inside it takes the sheet
+          with it — the alert has already confirmed, and there is nothing left
+          to slide away from. */}
+      <RecordingSheet
+        activeTrack={activeTrack ?? null}
+        visible={recordingSheetOpen && activeTrack != null}
+        onClose={() => setRecordingSheetOpen(false)}
+      />
+
+      {/* A finished track's stats, and the way through to its verbs. */}
+      <TrackStatsSheet
+        track={tracks.find((track) => track.id === statsTrackId) ?? null}
+        visible={statsTrackId !== null}
+        onClose={() => setStatsTrackId(null)}
+        onViewOptions={() => {
+          setOptionsTrackId(statsTrackId);
+          setStatsTrackId(null);
+        }}
+      />
+
       <TrackOptionsSheet
         track={tracks.find((track) => track.id === optionsTrackId) ?? null}
         visible={optionsTrackId !== null}
@@ -4193,6 +4269,10 @@ const styles = StyleSheet.create({
     gap: spacing(1),
     alignItems: "center",
   },
+  // Top corner, on the action column's edge. It is the one control that has to
+  // be findable while a recording runs, so it does not live in the column that
+  // scrolls tools sideways over itself.
+  recordSlot: { position: "absolute" },
   controlButton: {
     width: FAB_SIZE,
     height: FAB_SIZE,
@@ -4211,21 +4291,6 @@ const styles = StyleSheet.create({
   },
   controlActive: { backgroundColor: theme.accent },
   locateIcon: { marginTop: 3, marginLeft: -3 },
-  recordRing: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 4,
-    borderColor: theme.warning,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  recordCore: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: theme.warning,
-  },
   // Same pill shape as the route badge, in the accent rather than the route
   // colour — both are "something is being done to this map".
   filterBadge: {

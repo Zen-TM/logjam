@@ -12,10 +12,9 @@ import { StyleSheet, Text, View } from "react-native";
 import { formatDistanceM, routeLengthM } from "@logjam/shared";
 
 import { fontSize, fontWeight, spacing, theme } from "../theme";
-import { BottomSheet, Button } from "../ui";
+import { BottomSheet, Button, ProfileChart, elevationSeries } from "../ui";
 import { useElevationProfile } from "../map/useElevationProfile";
 import type { MirrorRoute } from "../sync/mirrorStore";
-import { ElevationProfileChart } from "./ElevationProfileChart";
 
 export function RouteStatsSheet({
   route,
@@ -60,7 +59,13 @@ export function RouteStatsSheet({
         ) : null}
 
         {profile ? (
-          <ElevationProfileChart profile={profile} />
+          <ProfileChart
+            series={elevationSeries(profile)}
+            formatValue={(elevationM) => `${Math.round(elevationM)} m`}
+            formatX={formatDistanceM}
+            hint="Drag across for heights"
+            accessibilityLabel="Elevation profile"
+          />
         ) : (
           <Text style={styles.pending}>
             {loading

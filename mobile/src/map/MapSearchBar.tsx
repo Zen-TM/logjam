@@ -40,10 +40,25 @@ const EXPAND_MS = 220;
 
 export function MapSearchBar({
   topInset,
+  side = "left",
+  reservedWidth = 0,
   onSelectPlace,
 }: {
   /** Status-bar inset — chrome must never sit under the camera cutout. */
   topInset: number;
+  /**
+   * Which top corner it collapses into — the one the action column is NOT on
+   * (Settings → Map). Search and the record button are a pair at the two ends
+   * of the top edge, and the pair has to flip with the user's handedness or
+   * the two related controls end up at opposite corners.
+   */
+  side?: "left" | "right";
+  /**
+   * Width to leave free at the other end when expanded — the record button and
+   * its gap. Without it the bar grows straight over the top of a control that
+   * has to stay reachable while a recording runs.
+   */
+  reservedWidth?: number;
   onSelectPlace: (latitude: number, longitude: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -122,20 +137,40 @@ export function MapSearchBar({
 
   const width = grow.interpolate({
     inputRange: [0, 1],
-    outputRange: [SEARCH_SIZE, windowWidth - CHROME_GAP * 2],
+    outputRange: [SEARCH_SIZE, windowWidth - CHROME_GAP * 2 - reservedWidth],
   });
   const showPanel = expanded && (loading || error !== null || results.length > 0);
 
   return (
-    <View style={[styles.root, { top: topInset + CHROME_GAP }]} pointerEvents="box-none">
-      <Animated.View style={[styles.pill, { width }]}>
+    <View
+      style={[
+        styles.root,
+        { top: topInset + CHROME_GAP },
+        side === "right" && styles.rootRight,
+      ]}
+      pointerEvents="box-none"
+    >
+      {/* Mirrored on the right: the pill grows out of the corner it sits in,
+          so the glyph has to be anchored to the edge that does NOT move. Laid
+          out left-to-right on the right side, the growing left edge drags the
+          glyph across the screen and the expansion stops reading as one shape
+          growing. */}
+      <Animated.View
+        style={[styles.pill, side === "right" && styles.pillRight, { width }]}
+      >
         <Feather
           name="search"
           size={GLYPH}
           color={expanded ? theme.textMuted : theme.textPrimary}
-          style={styles.glyph}
+          style={side === "right" ? styles.glyphRight : styles.glyph}
         />
-        <Animated.View style={[styles.field, { opacity: grow }]}>
+        <Animated.View
+          style={[
+            styles.field,
+            side === "right" && styles.fieldRight,
+            { opacity: grow },
+          ]}
+        >
           <TextInput
             ref={inputRef}
             style={styles.input}
@@ -209,6 +244,10 @@ const styles = StyleSheet.create({
     gap: spacing(1),
     alignItems: "flex-start",
   },
+  // Collapsed, the circle sits in the right corner and the bar grows leftward
+  // out of it — the glyph stays put either way, which is what makes the
+  // expansion read as one shape growing rather than a swap.
+  rootRight: { alignItems: "flex-end" },
   pill: {
     flexDirection: "row",
     alignItems: "center",
@@ -218,7 +257,9 @@ const styles = StyleSheet.create({
     // The field is clipped by the growing circle rather than spilling past it.
     overflow: "hidden",
   },
+  pillRight: { flexDirection: "row-reverse" },
   glyph: { marginLeft: GLYPH_INSET },
+  glyphRight: { marginRight: GLYPH_INSET },
   field: {
     flex: 1,
     flexDirection: "row",
@@ -226,6 +267,11 @@ const styles = StyleSheet.create({
     gap: spacing(1),
     paddingLeft: spacing(1.5),
     paddingRight: GLYPH_INSET,
+  },
+  fieldRight: {
+    flexDirection: "row-reverse",
+    paddingLeft: GLYPH_INSET,
+    paddingRight: spacing(1.5),
   },
   input: {
     flex: 1,
