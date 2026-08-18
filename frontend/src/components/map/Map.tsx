@@ -517,6 +517,8 @@ function Map({
       zoom: initialView?.zoom ?? INITIAL_ZOOM,
       bearing: initialView?.bearing ?? 0,
       pitch: initialView?.pitch ?? 0,
+      touchPitch: false, // pinch-rotate is enough for 3D; touch-pitch is a nuisance
+      maxPitch: 0,
       attributionControl: false,
     });
 
@@ -1989,6 +1991,8 @@ function Map({
     if (is3D) {
       // Turning off — nothing to wait for, flatten immediately
       map.setTerrain(null);
+      map.setMaxPitch(0);
+      map.touchPitch.disable();
       map.easeTo({ pitch: 0, duration: 1000 });
     } else {
       // Toast to inform user about movement controls in 3D mode
@@ -1997,6 +2001,8 @@ function Map({
       } else {
         toast.info("Use right-click + drag (OR Ctrl + drag) to pan and scroll to zoom in 3D mode.");
       }
+      map.setMaxPitch(60);
+      map.touchPitch.enable();
       // Turning on — wait for the terrain tiles to actually load before tilting
       map.setTerrain({ source: "3d-terrain-dem", exaggeration: 1.5 });
       map.once("idle", () => {
