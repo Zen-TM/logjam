@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "@logjam/shared";
 
 // Two lifecycle bugs, both of which only appear when a cycle FAILS:
 //
@@ -126,6 +127,36 @@ describe("failure classification", () => {
     const before = pulls;
     await vi.advanceTimersByTimeAsync(600_000);
     expect(pulls).toBe(before);
+    stop();
+  });
+
+  it("stops retrying when the server has no sync endpoints", async () => {
+    // The field case: the deployed API predated /sync, so every cycle drew a
+    // 404 and the ladder kept climbing — 166 of one day's 284 requests were
+    // this, each a radio wakeup, under a status line promising a retry.
+    const stop = registerSyncTriggers();
+    pullError = new ApiError(404, "/sync/delta", "GET");
+    await settle();
+
+    expect(getSyncStatus().errorKind).toBe("unsupported");
+    expect(getSyncStatus().errorMessage).not.toMatch(/retry/i);
+
+    const before = pulls;
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(pulls).toBe(before);
+    stop();
+  });
+
+  it("still treats a 5xx as unreachable and retries it", async () => {
+    // Guard the boundary of the branch above: only 404 means "no such route".
+    const stop = registerSyncTriggers();
+    pullError = new ApiError(503, "/sync/delta", "GET");
+    await settle();
+    expect(getSyncStatus().errorKind).toBe("unreachable");
+
+    const before = pulls;
+    await vi.advanceTimersByTimeAsync(400_000);
+    expect(pulls).toBeGreaterThan(before);
     stop();
   });
 

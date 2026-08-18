@@ -8,10 +8,10 @@
 //    any 401/refresh failure; here that would brick the app mid-trip. The
 //    session-rejected handler fires ONLY when Cognito actively rejects the
 //    refresh while online (classifySessionError), never on network failure.
-import { fetchAuthSession } from "aws-amplify/auth";
 import { ApiError } from "@logjam/shared";
 
 import { config, CLIENT_VERSION, CLIENT_VERSION_HEADER } from "../config";
+import { fetchAuthSessionWithTimeout } from "../auth/authSession";
 import { classifySessionError } from "../auth/sessionErrors";
 
 // useAuth registers a handler so the UI can drop to the sign-in screen (with
@@ -28,9 +28,11 @@ function notifySessionRejected(): void {
 async function getIdToken(): Promise<string> {
   if (config.authMode === "fake") return "fake-token";
   // Amplify refreshes automatically via the refresh token when the ID token
-  // (1 h) has expired.
+  // (1 h) has expired. Timed out (authSession.ts) rather than bare: this runs
+  // BEFORE fetchWithTimeout below, so a hang here hangs the request no matter
+  // what REQUEST_TIMEOUT_MS says.
   try {
-    const session = await fetchAuthSession();
+    const session = await fetchAuthSessionWithTimeout();
     const token = session.tokens?.idToken?.toString();
     if (!token) {
       // No token and no throw: no session exists at all (signed out).

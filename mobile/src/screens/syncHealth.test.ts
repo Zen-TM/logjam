@@ -134,6 +134,28 @@ describe("syncHealth", () => {
       expect(health.detail).toContain("It will keep retrying.");
     });
 
+    // The server is older than the app: /sync/push and /sync/delta 404. The
+    // connection is fine, the queue is fine, and the one true statement is
+    // that nothing can move until the server catches up.
+    it("names a server that has no sync endpoints, and promises no retry", () => {
+      const health = syncHealth(input({ state: "error", errorKind: "unsupported" }));
+      expect(health.headline).toBe("This server can't sync yet");
+      expect(health.headline).not.toMatch(/reach/i);
+      expect(health.detail).not.toMatch(/retry/i);
+      expect(health.tone).toBe("problem");
+    });
+
+    it("outranks a queue it cannot drain, and yields to an apply failure", () => {
+      expect(
+        syncHealth(input({ state: "error", errorKind: "unsupported", pendingCount: 9 }))
+          .headline,
+      ).toBe("This server can't sync yet");
+      // applyFailed has a repair; this doesn't, so that one stays the answer.
+      expect(
+        syncHealth(input({ state: "error", errorKind: "applyFailed" })).headline,
+      ).toBe("This phone couldn't apply an update");
+    });
+
     it("leaves a guest out of it — they have no account either way", () => {
       const health = syncHealth(
         input({ accountState: "guest", state: "error", errorKind: "applyFailed" }),

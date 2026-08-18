@@ -77,7 +77,7 @@
         {
           "android": {
             "nativeVariant": "vulkan",
-            "nativeVersion": "12.3.1"
+            "nativeVersion": "13.5.0"
           }
         }
       ],

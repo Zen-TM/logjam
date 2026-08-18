@@ -4,7 +4,7 @@
 // mutation, manual pull-to-refresh. NEVER a background timer — battery is a
 // field resource.
 import { AppState } from "react-native";
-import { computeBackoffMs } from "@logjam/shared";
+import { ApiError, computeBackoffMs } from "@logjam/shared";
 
 import { subscribeReconnect } from "../map/connectivity";
 
@@ -28,8 +28,17 @@ import {
  * the same page and fails identically, so the copy must not blame the link or
  * promise a retry, and the failure has to reach the screen built to list sync
  * problems instead of hiding behind a self-healing message.
+ *
+ * `unsupported` is the server not having the sync endpoints at all (404). Same
+ * shape as `applyFailed` — a retry re-sends the same request to the same absent
+ * route — but the cause is a server older than this app, so there is nothing on
+ * the phone to repair and nothing for the user to decide. It exists because the
+ * alternative was the backoff ladder retrying a 404 forever: 166 of the 284
+ * requests one field day produced were `POST /sync/push` and `GET /sync/delta`
+ * against routes the deployed API did not have, each one a radio wakeup, under
+ * a status line promising a retry that could never work.
  */
-export type SyncErrorKind = "unreachable" | "applyFailed";
+export type SyncErrorKind = "unreachable" | "applyFailed" | "unsupported";
 
 export type SyncStatus = {
   state: "idle" | "syncing" | "error";
@@ -146,6 +155,23 @@ export function requestSync(): Promise<void> {
           state: "error",
           errorMessage: "This phone couldn't apply an update.",
           errorKind: "applyFailed",
+        });
+        return;
+      }
+      if (err instanceof ApiError && err.status === 404) {
+        // The route is missing, not the resource: /sync/push and /sync/delta
+        // are the only paths this cycle calls, so a 404 means the server has
+        // no sync endpoints. Retrying cannot conjure them, so no ladder — the
+        // ordinary triggers (foreground, reconnect) still try again later, for
+        // free, which is what recovers this once the API catches up.
+        //
+        // The outbox is untouched on purpose: the ops stay queued and flush
+        // when the server does have the route.
+        console.error(`sync: server has no ${err.method} ${err.path}`);
+        setStatus({
+          state: "error",
+          errorMessage: "This server doesn't support sync yet.",
+          errorKind: "unsupported",
         });
         return;
       }

@@ -28,7 +28,6 @@ import { AppState } from "react-native";
 import {
   confirmResetPassword as amplifyConfirmResetPassword,
   confirmSignUp as amplifyConfirmSignUp,
-  fetchAuthSession,
   resendSignUpCode as amplifyResendSignUpCode,
   resetPassword as amplifyResetPassword,
   signIn as amplifySignIn,
@@ -39,6 +38,7 @@ import { mapAuthNextStep, messageFromError } from "@logjam/shared";
 
 import { config } from "../config";
 import { apiFetch, setSessionRejectedHandler } from "../api/apiFetch";
+import { fetchAuthSessionWithTimeout } from "./authSession";
 import { grandfatherCrashReports } from "../sentry/initSentry";
 import { wipeAllLocalData } from "../offline/wipeLocalData";
 import { unregisterPushNotifications } from "../notifications/pushRegistration";
@@ -126,7 +126,11 @@ export function useAuth() {
       // absent preference rather than silently turning the reporter off.
       if (localIdentity) grandfatherCrashReports();
       try {
-        const session = await fetchAuthSession();
+        // Timed out: until this settles `App` shows its loading screen, and a
+        // hang here IS the "stuck on the logo screen" a cold start produced in
+        // the field. A timeout classifies transient, so the branch below keeps
+        // a known user signed in against local data.
+        const session = await fetchAuthSessionWithTimeout();
         if (cancelled) return;
         if (session.tokens?.idToken) {
           setState("authenticated");
@@ -172,7 +176,7 @@ export function useAuth() {
     if (config.authMode === "fake") return;
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active") {
-        fetchAuthSession().catch((err: unknown) => {
+        fetchAuthSessionWithTimeout().catch((err: unknown) => {
           if (classifySessionError(err) === "rejected") {
             setState((prev) => {
               if (prev !== "authenticated") return prev;
@@ -197,7 +201,7 @@ export function useAuth() {
         }
         // Persist the local identity for offline cold-starts. A DIFFERENT
         // user signing in wipes prior local data first.
-        const session = await fetchAuthSession();
+        const session = await fetchAuthSessionWithTimeout();
         const idToken = session.tokens?.idToken?.toString();
         const sub = idToken ? decodeSubFromIdToken(idToken) : null;
         if (sub) {

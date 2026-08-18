@@ -33,7 +33,7 @@ export type SyncHealthInput = {
    * answered and this app couldn't apply what it sent — a different sentence
    * entirely from "no signal", and the difference is what the user acts on.
    */
-  errorKind?: "unreachable" | "applyFailed" | null;
+  errorKind?: "unreachable" | "applyFailed" | "unsupported" | null;
   /** No account: nothing syncs, and the honest answer is a different sentence. */
   accountState?: "guest" | "linked";
   /** Injectable for tests. */
@@ -120,6 +120,20 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
       headline: "This phone couldn't apply an update",
       detail:
         "Retrying won't fix it. Open Sync issues to get a fresh copy of your data.",
+      tone: "problem",
+    };
+  }
+
+  // 0.6. The server has no sync endpoints — it is older than this app. Ranked
+  //      beside `applyFailed` for the same reason: nothing new will ever reach
+  //      this phone, and "will keep retrying" is false. It sits BELOW it
+  //      because there is a repair for that one and none for this, and above
+  //      everything else because a queue that cannot drain is not "queued".
+  if (input.errorKind === "unsupported") {
+    return {
+      headline: "This server can't sync yet",
+      detail:
+        "Your changes are safe on this phone and will upload once the server is updated.",
       tone: "problem",
     };
   }
