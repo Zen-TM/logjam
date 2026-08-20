@@ -96,6 +96,7 @@ export const TrackMapLayers = memo(function TrackMapLayers({
   tracks,
   waypoints,
   liveCoord,
+  showTracks,
   onWaypointPress,
   onTrackPress,
 }: {
@@ -111,12 +112,17 @@ export const TrackMapLayers = memo(function TrackMapLayers({
    * the batch that follows replaces it with the real points.
    */
   liveCoord: [number, number] | null;
+  /** The Tracks master switch. A live recording/paused track still draws even
+   *  when this is off — the layer sheet's switch governs saved tracks. */
+  showTracks: boolean;
   onWaypointPress: (waypoint: Waypoint) => void;
   /** Tapping a recorded line opens its options. Stable identity required —
    *  TrackLine is memoised against MapScreen's compass-rate re-render. */
   onTrackPress: (track: Track, coordinates?: TrackPressCoordinates) => void;
 }) {
-  const visibleTracks = tracks.filter((track) => track.visible);
+  const visibleTracks = tracks.filter(
+    (track) => track.visible && (track.state !== "done" || showTracks),
+  );
   // Point sets per visible track, reloaded whenever the tracks list changes
   // (appendTrackPoints bumps the track row, so live recording re-renders on
   // each written batch).

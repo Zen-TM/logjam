@@ -12,7 +12,7 @@
 // The list rule is unaffected, and nothing here is logged or persisted: the
 // point lives in the map screen's state until the sheet is dismissed.
 import { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Clipboard, StyleSheet, Text, View } from "react-native";
 import {
   compassPointFor,
   formatDistanceM,
@@ -33,6 +33,7 @@ export function MapPointSheet({
   onClose,
   onNavigate,
   onDropWaypoint,
+  onInfo,
   allowNetwork,
 }: {
   point: MapPoint | null;
@@ -41,6 +42,8 @@ export function MapPointSheet({
   onClose: () => void;
   onNavigate: (point: MapPoint) => void;
   onDropWaypoint: (point: MapPoint) => void;
+  /** Transient feedback channel — the map's own toast. */
+  onInfo: (message: string) => void;
   /**
    * False in "Simulating offline mode": elevation then comes only from tiles
    * already on the phone, and nothing goes out.
@@ -59,6 +62,7 @@ export function MapPointSheet({
           onClose={onClose}
           onNavigate={onNavigate}
           onDropWaypoint={onDropWaypoint}
+          onInfo={onInfo}
           allowNetwork={allowNetwork}
         />
       ) : null}
@@ -72,6 +76,7 @@ function PointDetail({
   onClose,
   onNavigate,
   onDropWaypoint,
+  onInfo,
   allowNetwork = true,
 }: {
   point: MapPoint;
@@ -79,6 +84,7 @@ function PointDetail({
   onClose: () => void;
   onNavigate: (point: MapPoint) => void;
   onDropWaypoint: (point: MapPoint) => void;
+  onInfo: (message: string) => void;
   allowNetwork?: boolean;
 }) {
   // The elevation endpoint profiles a LINE, and the shortest legal one is two
@@ -109,11 +115,13 @@ function PointDetail({
       )
     : null;
 
+  const position = `${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`;
+  const copyPosition = () => {
+    Clipboard.setString(position);
+    onInfo("Coordinates copied.");
+  };
   const stats: Stat[] = [
-    {
-      label: "Position",
-      value: `${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`,
-    },
+    { label: "Position", value: position, wide: true, onPress: copyPosition },
     {
       label: "Elevation",
       value:

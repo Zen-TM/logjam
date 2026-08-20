@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import {
+  CANYONING_TRIP_TYPE,
   coerceFieldValue,
   customFieldDisplayLabel,
   enforceCanyoningTag,
@@ -54,6 +55,10 @@ import { tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
  * gets reclaimed).
  */
 type Mode = "form" | "date" | "canyons" | "fields" | "fieldForm";
+
+/** The `canyoning` tag is locked on while a canyon is linked — the server
+ *  force-adds it, so the picker shows it selected and not toggleable. */
+const CANYONING_LOCKED = new Set([CANYONING_TRIP_TYPE]);
 
 /** Which date the picker mode is editing: the trip's, or a custom date field. */
 type DateTarget = { kind: "trip" } | { kind: "field"; key: string };
@@ -155,6 +160,19 @@ export function TripEditSheet({
     // form under the user mid-edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trip, visible]);
+
+  // Linking a canyon means "I did that canyon", so the API force-tags
+  // `canyoning` on save. Mirror that into the selection so the chip reads
+  // SELECTED the moment a canyon is linked — and it is LOCKED (see
+  // CANYONING_LOCKED) rather than toggleable, because the server re-adds it on
+  // save anyway, so a chip the user could "deselect" would be a lie.
+  // enforceCanyoningTag only ever force-ADDS, so unlinking the last canyon
+  // leaves an existing `canyoning` alone (a canyon-less trip can still be
+  // canyoning) — and with no canyon linked the chip is a normal toggle.
+  const hasLinkedCanyon = selected.length > 0;
+  useEffect(() => {
+    setTypes((prev) => enforceCanyoningTag(prev, hasLinkedCanyon));
+  }, [hasLinkedCanyon]);
 
   const typeOptions: ChipOption[] = useMemo(() => {
     const vocabulary = [
@@ -423,6 +441,7 @@ export function TripEditSheet({
             onToggle={toggleType}
             onAdd={addType}
             addPlaceholder="Other"
+            disabledValues={hasLinkedCanyon ? CANYONING_LOCKED : undefined}
           />
 
           <View style={styles.field}>

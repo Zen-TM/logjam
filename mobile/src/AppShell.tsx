@@ -36,7 +36,7 @@ import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
 import { registerTopoAutoDownload } from "./offline/topoAutoDownload";
 import { BackgroundToast } from "./BackgroundToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
-import { SavedScreen } from "./saved/SavedScreen";
+import { SavedScreen, type SavedItemReveal } from "./saved/SavedScreen";
 import { AccountScreen } from "./screens/AccountScreen";
 import { CanyonDetailScreen } from "./canyons/CanyonDetailScreen";
 import { CanyonsScreen } from "./canyons/CanyonsScreen";
@@ -80,6 +80,8 @@ type MapStackParams = {
           nonce: number;
           /** Switch the map to this basemap on arrival — see SavedItem.focusBasemapId. */
           basemapId?: BasemapId;
+          /** Which saved item this is, to toggle its layer on before flying. */
+          reveal?: SavedItemReveal;
         };
         route?: {
           mediaId: string;
@@ -322,11 +324,11 @@ function SavedStackNav() {
                 ? { category: route.params.filter, nonce: route.params.nonce ?? 0 }
                 : undefined
             }
-            onOpenMap={(bbox, basemapId) =>
+            onOpenMap={(bbox, basemapId, reveal) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
                 params: bbox
-                  ? { focus: { bbox, nonce: Date.now(), basemapId } }
+                  ? { focus: { bbox, nonce: Date.now(), basemapId, reveal } }
                   : undefined,
               })
             }

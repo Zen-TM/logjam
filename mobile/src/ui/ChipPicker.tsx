@@ -28,6 +28,7 @@ export function ChipPicker({
   onToggle,
   onAdd,
   addPlaceholder = "Add",
+  disabledValues,
 }: {
   label: string;
   options: ChipOption[];
@@ -35,6 +36,10 @@ export function ChipPicker({
   onToggle: (value: string) => void;
   onAdd?: (label: string) => void;
   addPlaceholder?: string;
+  /** Values rendered locked — selected and not toggleable. The implied
+   *  `canyoning` tag on a canyon-linked trip is the case (the server force-adds
+   *  it, so letting the user "deselect" it would be a lie). */
+  disabledValues?: ReadonlySet<string>;
 }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -67,6 +72,7 @@ export function ChipPicker({
             key={option.value}
             label={option.label}
             active={isSelected.has(option.value)}
+            disabled={disabledValues?.has(option.value) ?? false}
             hue={option.hue}
             icon={option.icon}
             onPress={() => onToggle(option.value)}

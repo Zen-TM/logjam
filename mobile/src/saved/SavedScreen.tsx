@@ -182,7 +182,7 @@ function countOf(count: number, noun: string): string {
 // --- Category model -------------------------------------------------------
 // One entry per asset kind: the filter rail, the capacity meter and every
 // row's glyph/hue all read from here, so a new asset kind is one addition.
-type Category =
+export type Category =
   | "region"
   | "overlay"
   | "geoPdf"
@@ -190,6 +190,13 @@ type Category =
   | "waypoint"
   | "vector"
   | "track";
+
+/** Enough to turn a saved item's layer on when it is shown on the map. */
+export type SavedItemReveal = {
+  category: Category;
+  /** The item's key: its id, or `region:<id>` / `overlay:<id>` for registry rows. */
+  key: string;
+};
 
 const CATEGORY_META: Record<
   Category,
@@ -300,7 +307,7 @@ export function SavedScreen({
   onEditRoute,
   initialFilter,
 }: {
-  onOpenMap: (bbox?: Bbox, basemapId?: BasemapId) => void;
+  onOpenMap: (bbox?: Bbox, basemapId?: BasemapId, reveal?: SavedItemReveal) => void;
   onDownloadRegion: () => void;
   /** Open the map's draw tool on an existing route. Editing is a map gesture,
    *  so this screen hands it over rather than growing an editor of its own. */
@@ -392,19 +399,15 @@ export function SavedScreen({
   /**
    * Deleting is the only thing a selection does, so an asset the user may not
    * delete — a route or waypoint shared with them — has nothing to be picked
-   * for, and picking it would only teach the count to lie. The press still
-   * ANSWERS, with the reason: a row that ignores a long press reads as a
-   * missed tap, and the user would keep trying.
+   * for. The row is greyed out while selecting instead of toasting: a dead row
+   * says "not pickable" at a glance, which a toast only said after the tap.
    */
   const selectItem = useCallback(
     (item: SavedItem) => {
-      if (!item.delete) {
-        info("Shared with you — only its owner can delete it.");
-        return;
-      }
+      if (!item.delete) return;
       toggleSelected(item.key);
     },
-    [info, toggleSelected],
+    [toggleSelected],
   );
 
   // Leaving the tab drops any open per-item sheet: coming back to a rename form
@@ -1267,7 +1270,7 @@ export function SavedScreen({
             fail("This one has no saved location to show.");
             return;
           }
-          onOpenMap(bbox, item.focusBasemapId);
+          onOpenMap(bbox, item.focusBasemapId, { category: item.category, key: item.key });
         })
         .catch((err: unknown) => {
           console.error(err);
@@ -1560,6 +1563,10 @@ export function SavedScreen({
             icon={CATEGORY_META[item.category].icon}
             hue={assetHue[item.category]}
             selected={picked}
+            // While selecting, an asset this user may not delete (a shared
+            // route or waypoint) is greyed out — the same dead look an
+            // account-gated row gets — rather than offered and then refused.
+            disabled={selecting && !item.delete}
             // Press and hold starts a selection anywhere; once one is running a
             // plain tap toggles. Outside the mode a row still has no onPress —
             // its verbs live in the ⋯ sheet, and a whole-row tap that did one

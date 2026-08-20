@@ -19,6 +19,7 @@ const ALL_CAPABILITIES: Capability[] = [
   "customFieldDefs",
   "pushNotifications",
   "syncNow",
+  "offlineSettings",
 ];
 
 describe("capabilityStatus", () => {
@@ -50,7 +51,9 @@ describe("capabilityStatus", () => {
   });
 
   it("blocks connection-dependent capabilities for a linked user offline", () => {
-    for (const capability of ALL_CAPABILITIES.filter((c) => c !== "inbox")) {
+    for (const capability of ALL_CAPABILITIES.filter(
+      (c) => c !== "inbox" && c !== "offlineSettings",
+    )) {
       expect(capabilityStatus(capability, "linked", false)).toEqual({
         status: "unavailable",
         reason: "needs-connection",

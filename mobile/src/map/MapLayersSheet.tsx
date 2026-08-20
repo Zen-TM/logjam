@@ -91,6 +91,8 @@ export function MapLayersSheet({
   onImportVisibility,
   tracks,
   onTrackVisibility,
+  showTracks,
+  onShowTracksChange,
   showCanyonRoutes,
   onShowCanyonRoutesChange,
   routesStatus,
@@ -122,6 +124,10 @@ export function MapLayersSheet({
   onImportVisibility: (id: string, visible: boolean) => void;
   tracks: Track[];
   onTrackVisibility: (id: string, visible: boolean) => void;
+  /** Master switch for the whole tracks kind — a boolean so it toggles even
+   *  with zero tracks, and so the switch never derives from async DB writes. */
+  showTracks: boolean;
+  onShowTracksChange: (next: boolean) => void;
   showCanyonRoutes: boolean;
   onShowCanyonRoutesChange: (next: boolean) => void;
   /** What the routes layer actually managed to draw, reported on its own row. */
@@ -144,16 +150,6 @@ export function MapLayersSheet({
   const online = connectivity === "online";
   const readyGeoPdfs = geoPdfImports.filter((entry) => entry.state === "ready");
   const savedTracks = tracks.filter((track) => track.state === "done");
-
-  const visibleLayerCount =
-    overlays.filter(
-      (overlay) => enabledOverlays.has(overlay.key) && !mutedAreas.has(overlay.areaId),
-    ).length +
-    readyGeoPdfs.filter((entry) => entry.visible).length +
-    imports.filter((entry) => entry.visible).length +
-    savedTracks.filter((track) => track.visible).length +
-    (showCanyonRoutes ? 1 : 0) +
-    (showRoutes && routeCount > 0 ? 1 : 0);
 
   // The sheet closing for any reason drops an open overflow: coming back to a
   // rename form for a layer you have since navigated away from is a stale
@@ -185,7 +181,7 @@ export function MapLayersSheet({
         <SegmentedControl
           options={[
             { value: "basemap", label: "Basemap" },
-            { value: "layers", label: "Layers", count: visibleLayerCount },
+            { value: "layers", label: "Layers" },
             { value: "offline", label: "Offline" },
           ]}
           value={tab}
@@ -214,6 +210,8 @@ export function MapLayersSheet({
           onImportVisibility={onImportVisibility}
           tracks={savedTracks}
           onTrackVisibility={onTrackVisibility}
+          showTracks={showTracks}
+          onShowTracksChange={onShowTracksChange}
           showCanyonRoutes={showCanyonRoutes}
           onShowCanyonRoutesChange={onShowCanyonRoutesChange}
           routesStatus={routesStatus}
@@ -305,6 +303,7 @@ function LayerGroup({
   totalCount,
   onSetAll,
   children,
+  value,
 }: {
   icon: React.ComponentProps<typeof Feather>["name"];
   hue: string;
@@ -314,6 +313,9 @@ function LayerGroup({
   totalCount: number;
   onSetAll: (next: boolean) => void;
   children?: React.ReactNode;
+  /** Explicit toggle value for a master switch that is a boolean, not a count
+   *  — Tracks uses one so it toggles even when there are no tracks yet. */
+  value?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const expandable = totalCount > 0 && children != null;
@@ -330,7 +332,7 @@ function LayerGroup({
         right={
           <View style={styles.trailing}>
             <Toggle
-              value={visibleCount > 0}
+              value={value ?? visibleCount > 0}
               onValueChange={onSetAll}
               accessibilityLabel={`Show ${title}`}
             />
@@ -361,6 +363,8 @@ function LayersTab({
   onImportVisibility,
   tracks,
   onTrackVisibility,
+  showTracks,
+  onShowTracksChange,
   showCanyonRoutes,
   onShowCanyonRoutesChange,
   routesStatus,
@@ -381,6 +385,10 @@ function LayersTab({
   onImportVisibility: (id: string, visible: boolean) => void;
   tracks: Track[];
   onTrackVisibility: (id: string, visible: boolean) => void;
+  /** Master switch for the whole tracks kind — a boolean so it toggles even
+   *  with zero tracks, and so the switch never derives from async DB writes. */
+  showTracks: boolean;
+  onShowTracksChange: (next: boolean) => void;
   showCanyonRoutes: boolean;
   onShowCanyonRoutesChange: (next: boolean) => void;
   routesStatus: CanyonRoutesStatus | null;
@@ -565,13 +573,14 @@ function LayersTab({
         subtitle={
           tracks.length === 0
             ? "The record button on the map starts one"
-            : `${tracks.filter((track) => track.visible).length} of ${tracks.length} shown`
+            : showTracks
+              ? `${tracks.filter((track) => track.visible).length} of ${tracks.length} shown`
+              : "Hidden"
         }
         visibleCount={tracks.filter((track) => track.visible).length}
         totalCount={tracks.length}
-        onSetAll={(next) => {
-          for (const track of tracks) onTrackVisibility(track.id, next);
-        }}
+        value={showTracks}
+        onSetAll={onShowTracksChange}
       >
         {tracks.map((track) => (
           <ItemRow

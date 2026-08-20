@@ -85,7 +85,7 @@ export function TrackStatsBody({
       value: formatSpeedMps(detail.averageSpeedMps),
     });
     stats.push({
-      label: "Moving speed",
+      label: "Avg moving speed",
       value: formatSpeedMps(detail.movingSpeedMps),
     });
   }

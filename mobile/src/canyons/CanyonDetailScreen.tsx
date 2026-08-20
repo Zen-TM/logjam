@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Clipboard,
   Linking,
   Platform,
   ScrollView,
@@ -217,10 +218,14 @@ export function CanyonDetailScreen({
     stats.push({ label: "Longest drop", value: `${canyon.longestAbseil} m` });
   }
   if (canyon.hours != null) stats.push({ label: "Hours", value: String(canyon.hours) });
-  stats.push({
-    label: "Position",
-    value: `${canyon.latitude.toFixed(5)}, ${canyon.longitude.toFixed(5)}`,
-  });
+  const position = `${canyon.latitude.toFixed(5)}, ${canyon.longitude.toFixed(5)}`;
+  const copyPosition = () => {
+    // RN core Clipboard: deprecated upstream but still shipped, and it needs no
+    // native module — the same copy the waypoint and tapped-point sheets use.
+    Clipboard.setString(position);
+    notify("Coordinates copied.", "info");
+  };
+  stats.push({ label: "Position", value: position, wide: true, onPress: copyPosition });
 
   const openInMapsApp = () => {
     const label = encodeURIComponent(canyon.name);

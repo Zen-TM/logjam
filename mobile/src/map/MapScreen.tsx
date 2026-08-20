@@ -75,6 +75,7 @@ import {
 
 import { apiFetch } from "../api/apiFetch";
 import { bboxOfPoints, type Bbox } from "../saved/bboxOfPoints";
+import type { SavedItemReveal } from "../saved/SavedScreen";
 import { setRouteEditing } from "./routeEditLock";
 import { collectSnapLines } from "./snapLines";
 import {
@@ -148,7 +149,6 @@ import {
 } from "./CompassStrip";
 import { isCompassEnabled } from "./compassPreference";
 import {
-  MARKER_COLORS,
   isNorthUpLocked,
   isScaleBarEnabled,
   readKeepAwakeMode,
@@ -501,7 +501,6 @@ function UserMarkerLayers({
   upright,
 }: UserMarkerProps & { heading: number | null; upright: boolean }) {
   const rotationAlignment = upright ? ("viewport" as const) : ("map" as const);
-  const liveHeading = heading;
   // MLRN's GeoJSONSource JSON.stringifies `data` on every render it lets
   // through, so this must not be an object literal in the JSX.
   const shape = useMemo(
@@ -515,22 +514,6 @@ function UserMarkerLayers({
   );
   return (
     <GeoJSONSource id="user-location" data={shape}>
-      {liveHeading != null ? (
-        // Direction beam under the arrow. Map-aligned, so it points at
-        // real-world bearings even when the map itself is rotated.
-        <Layer
-          key="user-location-heading"
-          type="symbol"
-          id="user-location-heading"
-          style={{
-            iconImage: "user-heading-beam",
-            iconRotate: heading ?? 0,
-            iconRotationAlignment: rotationAlignment,
-            iconAllowOverlap: true,
-            iconIgnorePlacement: true,
-          }}
-        />
-      ) : null}
       {/* An arrow, not a dot: a dot says where you are and a compass says which
           way north is, and the user is left to combine them while standing on a
           ledge. The arrow answers both at once — which is why the heading
@@ -541,20 +524,15 @@ function UserMarkerLayers({
         type="symbol"
         id="user-location-dot"
         style={{
-          iconImage: "user-arrow",
-          iconSize: 0.28,
+          // One baked PNG per colour (USER_MARKER_IMAGES) rather than a
+          // single SDF sprite recoloured via iconColor — see that constant
+          // for why.
+          iconImage: `user-arrow-${markerColorId}`,
+          iconSize: 0.42,
           iconRotate: heading ?? 0,
           iconRotationAlignment: rotationAlignment,
           iconAllowOverlap: true,
           iconIgnorePlacement: true,
-          // The user's colour, and a white edge under it so no choice has to
-          // carry its own contrast — the arrow sits on imagery, rock and water,
-          // and "white" would vanish on a limestone slab without it.
-          iconColor: MARKER_COLORS[markerColorId],
-          // White on white is no edge at all, so the one achromatic choice
-          // takes a dark one instead.
-          iconHaloColor: markerColorId === "white" ? "#1A1A1A" : "#FFFFFF",
-          iconHaloWidth: 1.2,
         }}
       />
     </GeoJSONSource>
@@ -562,24 +540,38 @@ function UserMarkerLayers({
 }
 
 /**
- * Locate-me sprites: the facing arrow, and the beam behind it.
+ * Locate-me sprite: one baked PNG per Settings → Map colour (MARKER_COLORS),
+ * picked by `iconImage` — not a single image recoloured at runtime via SDF.
  *
- * The arrow is registered SDF, which is what makes `iconColor` (and with it the
- * Settings → Map colour choice) apply to it at all — a plain image is drawn with
- * its own pixels. SDF reads the alpha channel as a shape, so the arrow's own
- * blue is discarded and its white edge comes back as `iconHaloColor`; the beam
- * stays a plain image, because its whole substance is a soft alpha gradient
- * that a distance field would flatten into a hard triangle.
+ * SDF was the first approach (one image, `sdf: true`, `iconColor`/
+ * `iconHaloColor` at the layer) and it rendered wrong: MapLibre's SDF path
+ * expects the source alpha channel to encode a genuine distance field with a
+ * broad gradient, and `user-arrow.png` was a normal icon with an ordinary
+ * ~1px anti-aliased edge — fed through the SDF renderer that edge came back
+ * as a ragged, semi-transparent fringe rather than a clean halo (worse at
+ * the larger 0.42 iconSize than it was at 0.28). The colour set is small and
+ * fixed (six entries, `mapPreferences.ts`), so baking each one — fill plus a
+ * properly anti-aliased outline, generated once and committed as a PNG — is
+ * both simpler and correct, at the cost of one extra registered image per
+ * colour instead of one.
  *
- * Module constant + memo: as an inline object literal this re-registered two
- * images with the native map on every render of the screen.
+ * Module constant + memo: as an inline object literal this re-registered
+ * every image with the native map on every render of the screen.
+ *
+ * The `require` calls have to stay static string literals — Metro resolves
+ * assets at bundle time and can't follow a templated path — so this can't be
+ * built by mapping over MARKER_COLOR_ORDER; a new colour needs a line here
+ * too. The `Record<...MarkerColorId>` annotation is the check that catches a
+ * forgotten one: a colour missing its `user-arrow-<id>` entry fails
+ * typecheck rather than falling back to nothing at runtime.
  */
-const USER_MARKER_IMAGES = {
-  "user-heading-beam": require("../../assets/user-heading.png"),
-  "user-arrow": {
-    source: require("../../assets/user-arrow.png"),
-    sdf: true,
-  },
+const USER_MARKER_IMAGES: Record<`user-arrow-${MarkerColorId}`, { source: number }> = {
+  "user-arrow-blue": { source: require("../../assets/user-arrow-blue.png") },
+  "user-arrow-amber": { source: require("../../assets/user-arrow-amber.png") },
+  "user-arrow-red": { source: require("../../assets/user-arrow-red.png") },
+  "user-arrow-green": { source: require("../../assets/user-arrow-green.png") },
+  "user-arrow-violet": { source: require("../../assets/user-arrow-violet.png") },
+  "user-arrow-white": { source: require("../../assets/user-arrow-white.png") },
 };
 
 const UserMarkerImages = memo(function UserMarkerImages() {
@@ -652,6 +644,8 @@ export function MapScreen({
      * download rather than as the wrong layer.
      */
     basemapId?: BasemapId;
+    /** Which saved item this is, to toggle its layer on before flying. */
+    reveal?: SavedItemReveal;
   } | null;
   // "Edit points" from the Saved tab: arm the draw tool on a saved route. An
   // id only — the geometry comes from the mirror.
@@ -734,6 +728,10 @@ export function MapScreen({
   // The user's own drawn routes, on by default: they are few, they are theirs,
   // and the map is where they are for. The switch lives in the layers sheet.
   const [showRoutes, setShowRoutes] = useState(true);
+  // Tracks master switch, on by default. A boolean (not derived from the track
+  // rows' `visible`) so it toggles smoothly and stays toggleable with zero
+  // tracks — the layer sheet's Tracks switch drives this directly.
+  const [showTracks, setShowTracks] = useState(true);
   // Tapping a route opens its stats; every verb sits one step further on, so a
   // tap on the map can never begin an accidental edit. Three sheets, one at a
   // time, each holding the id rather than the row — the row comes from the
@@ -1997,19 +1995,60 @@ export function MapScreen({
     // Basemap first, camera second: they commit in the same render either way,
     // and the ordering says which one is the correction.
     if (focus.basemapId) chooseBasemap(focus.basemapId);
+    // Make the asset's layer visible before flying to it, or the camera lands
+    // on an empty patch. A region's "layer" IS the basemap (handled above);
+    // everything else toggles its own kind on.
+    if (focus.reveal) {
+      switch (focus.reveal.category) {
+        case "track":
+          // The item's own visible flag is necessary but not sufficient — a
+          // saved track also needs the Tracks master switch on (bug 6's
+          // showTracks), or it stays hidden regardless.
+          setShowTracks(true);
+          updateTrack(focus.reveal.key, { visible: true }).catch(console.error);
+          break;
+        case "route":
+          setShowRoutes(true);
+          break;
+        case "geoPdf":
+          updateGeoPdfImport(focus.reveal.key, { visible: true }).catch(console.error);
+          break;
+        case "vector":
+          setVectorImportVisible(focus.reveal.key, true).catch(console.error);
+          break;
+        case "overlay": {
+          // Reveal the whole job: every layer enabled and the area unmuted.
+          // SavedScreen's item key for this category is `overlay:<jobId>`
+          // (SavedScreen.tsx's registry-row prefix) — strip it back to the raw
+          // jobId that mergedOverlays.jobs and setAreasMuted both key on.
+          const jobId = focus.reveal.key.replace(/^overlay:/, "");
+          for (const job of mergedOverlays.jobs) {
+            if (job.jobId !== jobId) continue;
+            for (const layer of job.layers) {
+              const key = `${job.jobId}/${layer.name}`;
+              setEnabledOverlays((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+              setOverlayEnabled(key, true).catch(console.error);
+            }
+          }
+          setAreasMuted([jobId], false);
+          break;
+        }
+        case "region":
+        case "waypoint":
+          // A region's layer is the basemap (above); a waypoint always draws.
+          break;
+      }
+    }
     fitCameraToBbox(focus.bbox);
-    // …and say WHICH rectangle. A camera that has finished flying leaves the
-    // user to guess what they were sent to; the pulse answers that and removes
-    // itself (FocusPulse.tsx). Held as this screen's own state rather than read
-    // off the `focus` prop, so the pulse re-arms on the nonce and not on a
-    // parent re-render handing back an equal object.
-    //
-    // `basemapId` is deliberately not consulted: a topo overlay's "show on map"
-    // arrives through the same param with no basemap to switch to, and a pulse
-    // that only fired for a downloaded region would be missing on exactly the
-    // assets that look least like themselves.
-    setFocusPulse({ bbox: focus.bbox, nonce: focus.nonce });
-  }, [focus?.nonce, focus, chooseBasemap, fitCameraToBbox]);
+    // …and say WHICH rectangle — but only for a saved REGION, the one asset
+    // whose extent is a meaningful box. A pulsing rectangle around a pin, a
+    // line or a canyon point is noise (the asset itself is already the shape).
+    // `basemapId` is the region signal: Saved only sets it on a downloaded
+    // region (SavedItem.focusBasemapId).
+    if (focus.basemapId) {
+      setFocusPulse({ bbox: focus.bbox, nonce: focus.nonce });
+    }
+  }, [focus?.nonce, focus, chooseBasemap, fitCameraToBbox, mergedOverlays, setAreasMuted]);
 
   // Frame a draft restored from a killed session, once the map can take a
   // camera stop. Cleared after one use — the user's own panning owns the
@@ -2825,7 +2864,16 @@ export function MapScreen({
       // canyoner who wants to look at the next drop still wants to see where
       // they are. Stopping the watchers is what leaving the screen does.
       setFollowMode("off");
-      setCameraStop({ bearing: 0, duration: 300 });
+      // The ref too, and BEFORE recentre(): setCameraStop reads
+      // followModeRef (not the state) to decide whether to re-apply the
+      // course-up forward offset, and the ref only follows state on the next
+      // render — recentre() runs synchronously against the stale "course-up"
+      // value otherwise, re-offsetting the very stop meant to undo it.
+      followModeRef.current = "off";
+      // Leaving course-up also drops its forward camera offset: recentre on the
+      // fix AND re-orient north, so the map isn't left pointing north at a spot
+      // three quarters of the way past the user.
+      recentre(0);
       return;
     }
     setFollowMode("follow");
@@ -2833,7 +2881,7 @@ export function MapScreen({
     // The effects above own the subscriptions; this is the request they answer.
     // The compass comes with it — the arrow is a heading as much as a position.
     setDotWanted(true);
-  }, [dotWanted, recentre, requestPovRecentre, setCameraStop]);
+  }, [dotWanted, recentre, requestPovRecentre]);
 
   /**
    * Navigate to a spot: distance + bearing from every new fix, in the chip at
@@ -3186,14 +3234,9 @@ export function MapScreen({
         />
         {/* Bundled point-feature icons for vector overlays. */}
         <TopoIconImages />
-        {/* Locate-me sprites: the facing arrow, and the beam behind it.
-            The arrow is registered SDF, which is what makes `iconColor` (and
-            with it the Settings → Map colour choice) apply to it at all — a
-            plain image is drawn with its own pixels. SDF reads the alpha channel
-            as a shape, so the arrow's own blue is discarded and its white edge
-            comes back as `iconHaloColor` below; the beam stays a plain image,
-            because its whole substance is a soft alpha gradient that a distance
-            field would flatten into a hard triangle. */}
+        {/* Locate-me sprite: one baked PNG per Settings → Map colour choice
+            (see UserMarkerImages) — picked by iconImage, not recoloured at
+            runtime. */}
         <UserMarkerImages />
 
         {/* layerIndex pins z-order across remounts: a swapped basemap source
@@ -3378,6 +3421,7 @@ export function MapScreen({
           tracks={tracks}
           waypoints={waypoints}
           liveCoord={userCoord}
+          showTracks={showTracks}
           onWaypointPress={handleWaypointPress}
           onTrackPress={handleTrackPress}
         />
@@ -3927,6 +3971,7 @@ export function MapScreen({
         onClose={() => setTappedPoint(null)}
         onNavigate={navigateToPoint}
         onDropWaypoint={dropWaypointAt}
+        onInfo={(text) => notify(text, "info")}
       />
 
       {/* Press-and-hold: a waypoint is a scratch mark, a canyon is a record.
@@ -4113,6 +4158,8 @@ export function MapScreen({
         onTrackVisibility={(id, visible) => {
           updateTrack(id, { visible }).catch(console.error);
         }}
+        showTracks={showTracks}
+        onShowTracksChange={setShowTracks}
         showCanyonRoutes={showCanyonRoutes}
         onShowCanyonRoutesChange={setShowCanyonRoutes}
         routesStatus={routesStatus}

@@ -12,7 +12,7 @@
 // then the thing telling the user what mode they are in, and leaving an open
 // tray behind it would be two answers to the same question.
 import { useEffect, useRef } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 
 import { FAB_ICON, FAB_SIZE, CHROME_GAP } from "./mapChrome";
@@ -36,6 +36,9 @@ const TOOLS: {
   { id: "route", label: "Draw a route", family: "feather", icon: "pen-tool" },
 ];
 
+/** Time to slide one tool across one button + gap. */
+const SLOT_MS = 100;
+
 export function MapToolGroup({
   open,
   activeTool,
@@ -55,61 +58,102 @@ export function MapToolGroup({
   onToggleOpen: () => void;
   onPickTool: (tool: MapTool) => void;
 }) {
-  // Width, not opacity: the collapsed tray must not eat taps meant for the map.
-  const reveal = useRef(new Animated.Value(open ? 1 : 0)).current;
+  // Each tool slides out from directly UNDER the + button, one after the
+  // next, and translateX runs on the native driver — no width animation, no
+  // fade.
+  //
+  // k is MOVE ORDER, not final position: TOOLS[0] (measure) is always the
+  // one that starts moving first, in both directions — first to slide out,
+  // first to retreat. Because it leads, it also travels the farthest: it
+  // doesn't stop when it draws level with where a single tool would rest, it
+  // carries on outward while the next tool sets off k slots' worth of time
+  // behind it, and the two land in their final slots together. A tool's
+  // final rest slot is therefore the REVERSE of k (restSlot, below) — the
+  // one that led the whole way out ends up farthest from the +, not
+  // nearest — and its travel distance/duration follows the slot it's
+  // actually going to, not its move order.
+  const values = useRef(TOOLS.map(() => new Animated.Value(0))).current;
+  const dir = side === "right" ? 1 : -1;
   useEffect(() => {
-    Animated.timing(reveal, {
-      toValue: open ? 1 : 0,
-      duration: 160,
-      // Width can't run on the native driver.
-      useNativeDriver: false,
-    }).start();
-  }, [open, reveal]);
+    const anims = TOOLS.map((_, k) =>
+      Animated.timing(values[k], {
+        toValue: open ? 1 : 0,
+        duration: (TOOLS.length - k) * SLOT_MS,
+        // Same delay either direction — see the comment above: TOOLS[0]
+        // leads the motion whether the group is opening or closing.
+        delay: k * SLOT_MS,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    );
+    Animated.parallel(anims).start();
+  }, [open, values]);
 
-  const trayWidth = reveal.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, TOOLS.length * (FAB_SIZE + CHROME_GAP)],
+  // restSlot is where a tool actually RESTS when open (0 = nearest the +) —
+  // the reverse of k, per the move-order comment above. Both the tray's DOM
+  // order (below: a flex-packed row rests each child at its natural flex
+  // position, since translateX resolves to 0 there) and how far this value
+  // has to travel to hide fully behind the + (outputRange) come from it.
+  const rendered = TOOLS.map((tool, k) => {
+    const restSlot = TOOLS.length - 1 - k;
+    return {
+      ...tool,
+      k,
+      translateX: values[k].interpolate({
+        inputRange: [0, 1],
+        outputRange: [dir * (restSlot + 1) * (FAB_SIZE + CHROME_GAP), 0],
+      }),
+    };
   });
+  // DOM order is what actually places a tool in its resting slot — flex-end
+  // (side="right") packs the LAST array item nearest the +, flex-start
+  // (side="left") packs the FIRST item nearest the + — so whichever side
+  // packs toward the +, leave TOOLS order as-is (measure, the farthest-
+  // resting tool, first/outermost); the other side reverses it.
+  const ordered = side === "right" ? rendered : [...rendered].reverse();
 
   return (
     <View style={styles.row}>
-      <Animated.View
+      <View
         style={[
           styles.tray,
           side === "left"
             ? { left: FAB_SIZE + CHROME_GAP, justifyContent: "flex-start" }
             : { right: FAB_SIZE + CHROME_GAP, justifyContent: "flex-end" },
-          { width: trayWidth, opacity: reveal },
         ]}
         pointerEvents={open ? "auto" : "none"}
       >
-        {TOOLS.map((tool) => (
-          <Pressable
+        {ordered.map((tool) => (
+          <Animated.View
             key={tool.id}
-            accessibilityRole="button"
-            accessibilityLabel={tool.label}
-            style={[
-              styles.controlButton,
-              activeTool === tool.id && styles.controlActive,
-            ]}
-            onPress={() => onPickTool(tool.id)}
+            style={{ transform: [{ translateX: tool.translateX }] }}
           >
-            {tool.family === "material" ? (
-              <MaterialCommunityIcons
-                name={tool.icon as never}
-                size={FAB_ICON}
-                color={theme.textPrimary}
-              />
-            ) : (
-              <Feather
-                name={tool.icon as never}
-                size={FAB_ICON}
-                color={theme.textPrimary}
-              />
-            )}
-          </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={tool.label}
+              style={[
+                styles.controlButton,
+                activeTool === tool.id && styles.controlActive,
+              ]}
+              onPress={() => onPickTool(tool.id)}
+            >
+              {tool.family === "material" ? (
+                <MaterialCommunityIcons
+                  name={tool.icon as never}
+                  size={FAB_ICON}
+                  color={theme.textPrimary}
+                />
+              ) : (
+                <Feather
+                  name={tool.icon as never}
+                  size={FAB_ICON}
+                  color={theme.textPrimary}
+                />
+              )}
+            </Pressable>
+          </Animated.View>
         ))}
-      </Animated.View>
+      </View>
 
       <Pressable
         accessibilityRole="button"
@@ -146,7 +190,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: CHROME_GAP,
-    overflow: "hidden",
+    width: TOOLS.length * FAB_SIZE + (TOOLS.length - 1) * CHROME_GAP,
+    // No overflow:hidden: a closed tool's translateX target lands it exactly
+    // on the + button's own box (outside the tray, which stops one gap
+    // short of it), and it's the + — rendered after this tray, so painted on
+    // top — that hides it, not a clip. Clipping at the tray's edge used to
+    // cut a tool off a full gap short of the +, which is what made the slide
+    // look like it started from empty space instead of from under the +.
   },
   // Mirrors MapScreen's controlButton/controlActive exactly — the tray has to
   // read as the same column, not a lookalike.

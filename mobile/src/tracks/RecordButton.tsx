@@ -58,20 +58,15 @@ export function RecordButton({
       return;
     }
     const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: PULSE_MS / 2,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 0,
-          duration: PULSE_MS / 2,
-          easing: Easing.in(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]),
+      // Outward only: one breath to full spread, then the loop snaps the halo
+      // back to its start and breathes out again — no "in" leg, so the ring
+      // reads as a beat rather than a breathing circle.
+      Animated.timing(pulse, {
+        toValue: 1,
+        duration: PULSE_MS,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
     );
     loop.start();
     return () => {
@@ -103,7 +98,7 @@ export function RecordButton({
             {
               opacity: pulse.interpolate({
                 inputRange: [0, 1],
-                outputRange: [0.45, 0],
+                outputRange: [0.6, 0],
               }),
               transform: [
                 {

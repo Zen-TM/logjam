@@ -52,7 +52,13 @@ export type Capability =
   /** Push-token registration (POST /devices). */
   | "pushNotifications"
   /** Manually running a sync cycle. */
-  | "syncNow";
+  | "syncNow"
+  /**
+   * The Offline & Storage settings tab. The switches are device prefs, but they
+   * govern account-backed downloads (finished GeoPDFs, LiDAR topos) and sync —
+   * none of which a guest has — so the whole tab is account-gated.
+   */
+  | "offlineSettings";
 
 export type CapabilityStatus =
   | { status: "available" }
@@ -76,6 +82,7 @@ const NEEDS_CONNECTION: Record<Capability, boolean> = {
   customFieldDefs: true,
   pushNotifications: true,
   syncNow: true,
+  offlineSettings: false,
 };
 
 export function capabilityStatus(
@@ -116,6 +123,7 @@ const CAPABILITY_LABEL: Record<Capability, string> = {
   customFieldDefs: "Custom fields",
   pushNotifications: "Push notifications",
   syncNow: "Syncing",
+  offlineSettings: "Offline and storage settings",
 };
 
 /**

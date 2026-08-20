@@ -140,11 +140,15 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
             key={page}
             icon={icon}
             title={title}
-            // Notifications is the one page that is entirely account-backed, so
-            // it says so on the way in rather than after the tap (§10).
+            // Notifications and Offline & Storage are account-backed pages, so
+            // they say so on the way in rather than after the tap (§10). The
+            // offline tab's switches all govern account-backed downloads or
+            // sync, none of which a guest has.
             {...(page === "notifications"
               ? capabilityRowProps("serverPrefs", accountState, online)
-              : {})}
+              : page === "offline"
+                ? capabilityRowProps("offlineSettings", accountState, online)
+                : {})}
             onPress={() => onOpenPage(page)}
             right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
           />
