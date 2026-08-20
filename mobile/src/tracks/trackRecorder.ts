@@ -39,6 +39,7 @@ import {
   resetTrackWriteHealth,
 } from "./trackWriteQueue";
 import {
+  addTrackPointSuppression,
   appendTrackPoints,
   deleteTrack,
   findActiveTrack,
@@ -70,6 +71,31 @@ function locationOptions(): Location.LocationTaskOptions {
       killServiceOnDestroy: false,
     },
   };
+}
+
+/**
+ * Push the current recording preferences at a recorder that is ALREADY running.
+ * Returns false when nothing was recording, which is not an error.
+ *
+ * Changing "Track detail" mid-trip used to do nothing at all — the preference
+ * was written and `locationOptions()` was only ever read at start/resume — so a
+ * user who dropped to the finest rate for one tricky navigation got the coarse
+ * rate anyway, and the setting silently lied for the rest of the recording.
+ *
+ * Re-registering the SAME task is the whole mechanism, and it is not a
+ * stop/start: expo-task-manager's `registerTask` recognises the existing task
+ * and updates its options in place (TaskService.java), which reaches
+ * `LocationTaskConsumer.setOptions` — that stops and re-requests the platform's
+ * location updates itself. So there is no window with no recorder in it, and no
+ * way to end up with a live-looking row and a dead service, which is exactly
+ * what a stop-then-start here could leave behind if the start refused.
+ */
+export async function applyRecordingOptionsToActiveTrack(): Promise<boolean> {
+  if (!(await Location.hasStartedLocationUpdatesAsync(TRACK_RECORDING_TASK))) {
+    return false;
+  }
+  await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
+  return true;
 }
 
 const TRACK_COLOR = "#f59e0b"; // amber — distinct from the import palette
@@ -154,6 +180,37 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
   // setting is whatever `prefsDb` says right now.
   const maxAccuracyM = readAccuracyLimitM();
   const accepted: RecordedTrackPoint[] = [];
+
+  // A fix refused for being too close to the last one is not noise to be
+  // dropped — it is the recorder watching someone stand still, and it is the
+  // only evidence that separates a stop from slow travel once the gap between
+  // accepted points is long (shared/trackStats.ts, `demonstratedStoppedMs`).
+  // The platform used to swallow these natively via `distanceInterval`; it no
+  // longer does, so they are counted here.
+  //
+  // The count belongs to the point they were measured AGAINST, which is very
+  // often already in the database — a whole delivery can be nothing but
+  // refusals, and waiting for a point that may never come would lose it.
+  let pendingCount = 0;
+  let pendingUntilMs = 0;
+  let storedCount = 0;
+  let storedStationaryMs = 0;
+  const creditSuppression = () => {
+    if (pendingCount === 0 || prev == null) return;
+    const stationaryMs = Math.max(0, pendingUntilMs - prev.timestampMs);
+    if (accepted.length > 0) {
+      // `prev` is the tail of this batch — still unwritten, so set it directly.
+      const target = accepted[accepted.length - 1]!;
+      target.suppressedCount = (target.suppressedCount ?? 0) + pendingCount;
+      target.stationaryMs = Math.max(target.stationaryMs ?? 0, stationaryMs);
+    } else {
+      storedCount += pendingCount;
+      storedStationaryMs = Math.max(storedStationaryMs, stationaryMs);
+    }
+    pendingCount = 0;
+    pendingUntilMs = 0;
+  };
+
   for (const location of locations) {
     const fix: CandidateFix = {
       lon: location.coords.longitude,
@@ -162,16 +219,30 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
       accuracyM: location.coords.accuracy,
       timestampMs: location.timestamp,
     };
-    if (rejectTrackFix(prev, fix, maxAccuracyM) !== null) continue;
+    const rejection = rejectTrackFix(prev, fix, maxAccuracyM);
+    if (rejection === "too-close") {
+      pendingCount += 1;
+      pendingUntilMs = Math.max(pendingUntilMs, fix.timestampMs);
+      continue;
+    }
+    if (rejection !== null) continue;
+    // Before `prev` moves: the refusals so far were measured against the point
+    // it still points at.
+    creditSuppression();
     const point: RecordedTrackPoint = { ...fix, segment: track.currentSegment };
     accepted.push(point);
     prev = point;
   }
-  if (accepted.length === 0) return;
+  creditSuppression();
+
+  if (storedCount > 0) {
+    await addTrackPointSuppression(track.id, storedCount, storedStationaryMs);
+  }
   // The whole job of a backgrounded recorder: write the points. The append
   // carries `pointCount` with it, so the row stays truthful about what is
   // stored even though nothing recomputes the stats until someone looks.
-  await appendTrackPoints(track.id, accepted);
+  if (accepted.length > 0) await appendTrackPoints(track.id, accepted);
+  if (accepted.length === 0 && storedCount === 0) return;
   if (AppState.currentState === "active") await refreshTrackStats(track.id);
 }
 

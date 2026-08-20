@@ -593,6 +593,60 @@ describe("computeTrackDetail", () => {
     expect(detail.movingSpeedMps!).toBeGreaterThan(1.1);
   });
 
+  // Suppressed-fix evidence. Two points 111 m and 90 s apart imply 1.24 m/s —
+  // well over the moving threshold, so the average-speed fallback books the
+  // whole interval as moving and every case below is a departure from that.
+  function pausedInterval(
+    overrides: Partial<RecordedTrackPoint>,
+  ): RecordedTrackPoint[] {
+    return [
+      point({ timestampMs: 0, accuracyM: 5, ...overrides }),
+      point({ timestampMs: 90_000, lat: BASE_LAT + 0.001, accuracyM: 5 }),
+    ];
+  }
+
+  it("credits the stop the recorder proved, not the interval's average speed", () => {
+    // 60 s of fixes refused for being inside a 5 m radius bounds the speed at
+    // 0.083 m/s — a stop, whatever the endpoints average out to.
+    const detail = computeTrackDetail(pausedInterval({ stationaryMs: 60_000 }));
+    expect(detail.durationMs).toBe(90_000);
+    expect(detail.stoppedMs).toBe(60_000);
+    expect(detail.movingMs).toBe(30_000);
+  });
+
+  it("proves nothing from a suppression too short to bound the speed", () => {
+    // One 3 s refusal at the finest rate: a 5 km/h walker covers 4.2 m and is
+    // suppressed too, so 5 m over 3 s (1.7 m/s) must not read as a stop.
+    const detail = computeTrackDetail(pausedInterval({ stationaryMs: 3_000 }));
+    expect(detail.stoppedMs).toBe(0);
+    expect(detail.movingMs).toBe(90_000);
+  });
+
+  it("needs longer evidence from a less accurate point", () => {
+    // Same 60 s, but the fixes could have wandered 30 m inside it: 0.5 m/s
+    // bounds nothing useful.
+    const detail = computeTrackDetail(
+      pausedInterval({ stationaryMs: 60_000, accuracyM: 30 }),
+    );
+    expect(detail.stoppedMs).toBe(0);
+  });
+
+  it("never credits more stopped time than the interval holds", () => {
+    // A stop straddling a delivery boundary can carry a span longer than the
+    // gap to the next accepted point; the surplus belongs to nobody.
+    const detail = computeTrackDetail(pausedInterval({ stationaryMs: 200_000 }));
+    expect(detail.stoppedMs).toBe(90_000);
+    expect(detail.movingMs).toBe(0);
+  });
+
+  it("falls back to average speed on a series that never measured suppression", () => {
+    // Imported files and rows written before the recorder counted: null is
+    // "not measured", and must not read as "nothing was suppressed".
+    const detail = computeTrackDetail(pausedInterval({ stationaryMs: null }));
+    expect(detail.stoppedMs).toBe(0);
+    expect(detail.movingMs).toBe(90_000);
+  });
+
   it("has no time-derived stat at all when the series carries no timestamps", () => {
     // An imported GPX without <time>: real distance, real climb, no speed.
     const untimed = walk({ count: 10, stepMilliDeg: 1, stepMs: 0, altitudeStepM: 20 }).map(

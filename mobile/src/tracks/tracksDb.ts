@@ -245,7 +245,8 @@ export async function listTrackPoints(
 ): Promise<RecordedTrackPoint[]> {
   const db = await getOfflineDb();
   return db.getAllAsync<RecordedTrackPoint>(
-    `SELECT segment, lon, lat, altitudeM, accuracyM, timestampMs
+    `SELECT segment, lon, lat, altitudeM, accuracyM, timestampMs,
+            suppressedCount, stationaryMs
        FROM track_point WHERE trackId = ? AND seq >= ? ORDER BY seq`,
     trackId,
     fromSeq,
@@ -258,7 +259,8 @@ export async function lastTrackPoint(
 ): Promise<RecordedTrackPoint | null> {
   const db = await getOfflineDb();
   const rows = await db.getAllAsync<RecordedTrackPoint>(
-    `SELECT segment, lon, lat, altitudeM, accuracyM, timestampMs
+    `SELECT segment, lon, lat, altitudeM, accuracyM, timestampMs,
+            suppressedCount, stationaryMs
        FROM track_point WHERE trackId = ? ORDER BY seq DESC LIMIT 1`,
     trackId,
   );
@@ -290,8 +292,9 @@ export async function appendTrackPoints(
     for (const p of points) {
       await db.runAsync(
         `INSERT INTO track_point
-           (trackId, seq, segment, lon, lat, altitudeM, accuracyM, timestampMs)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           (trackId, seq, segment, lon, lat, altitudeM, accuracyM, timestampMs,
+            suppressedCount, stationaryMs)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         trackId,
         seq++,
         p.segment,
@@ -300,6 +303,8 @@ export async function appendTrackPoints(
         p.altitudeM,
         p.accuracyM,
         p.timestampMs,
+        p.suppressedCount ?? null,
+        p.stationaryMs ?? null,
       );
     }
     await db.runAsync(
@@ -309,6 +314,43 @@ export async function appendTrackPoints(
       trackId,
     );
   });
+  notifyChanged();
+}
+
+/**
+ * Add suppression evidence to a track's LAST stored point.
+ *
+ * The recorder learns that someone stood still by the fixes it refuses, and a
+ * whole delivery can be nothing but refusals — so the evidence has to attach
+ * to the point it was measured against, which is already written, rather than
+ * to a point that may never arrive.
+ *
+ * Accumulating, not replacing, because that same point can collect refusals
+ * across several deliveries: the count sums, and the span is a MAX because it
+ * is measured from that point's own timestamp and only ever grows.
+ *
+ * Callers must be inside the recorder's write queue — this is a read-modify-
+ * write against whatever row is last, and a batch landing between the two
+ * halves would move the target.
+ */
+export async function addTrackPointSuppression(
+  trackId: string,
+  suppressedCount: number,
+  stationaryMs: number,
+): Promise<void> {
+  if (suppressedCount <= 0) return;
+  const db = await getOfflineDb();
+  await db.runAsync(
+    `UPDATE track_point
+        SET suppressedCount = COALESCE(suppressedCount, 0) + ?,
+            stationaryMs    = MAX(COALESCE(stationaryMs, 0), ?)
+      WHERE trackId = ?
+        AND seq = (SELECT MAX(seq) FROM track_point WHERE trackId = ?)`,
+    suppressedCount,
+    stationaryMs,
+    trackId,
+    trackId,
+  );
   notifyChanged();
 }
 

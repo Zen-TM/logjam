@@ -657,6 +657,25 @@ review, not by CI.
   dot watcher is a second client of one fused provider, which serves both at the
   faster rate, so the setting governs the recording's cost only while the map is
   NOT on screen.
+  - **`distanceInterval` is 0 in every preset, deliberately** (2026-08-20). It
+    saved nothing (it is ANDed with the interval, so it only discarded fixes the
+    GNSS engine had already been woken to produce) and it threw away the most
+    informative fixes in the batch: a fix refused for being too close to the
+    last one is the recorder WATCHING SOMEONE STAND STILL, and it is the only
+    thing that separates a two-minute rest from two minutes of very slow walking
+    once the gap between accepted points is long. Those refusals are now counted
+    against the point they were measured against (`track_point.suppressedCount`
+    / `stationaryMs`) and spent by `demonstratedStoppedMs` in
+    `shared/src/trackStats.ts`. The same movement gate still runs in
+    `rejectTrackFix`, adaptively, so nothing extra is stored.
+  - **A "Track detail" change now reaches the recording in progress**
+    (`applyRecordingOptionsToActiveTrack`). It did not before: the preference
+    was written and `locationOptions()` was read only at start/resume, so the
+    setting silently lied for the rest of the trip. Re-registering the same task
+    is an options UPDATE, not a stop/start (`TaskService.registerTask` →
+    `LocationTaskConsumer.setOptions`), so there is no window with no recorder
+    in it — which a stop-then-start could leave permanently if the start
+    refused. Pinned by `trackRecorder.test.ts`.
   - **The names moved under the rates on 2026-08-17, and `balanced` means
     something different either side of that.** The preference therefore lives
     under a NEW key (`recordingFixRateV2`) and the old one is translated on read

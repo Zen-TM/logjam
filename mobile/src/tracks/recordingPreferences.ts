@@ -72,9 +72,16 @@ export type FixRate = "finest" | "detailed" | "balanced" | "batterySaver";
  * interval — so a kill mid-buffer loses roughly that much recording. Keep it at
  * or below twice `timeInterval` for that reason, not to save power.
  *
- * `distanceInterval` is a DELIVERY filter too (FLP's minimum update distance) —
- * it saves nothing at all, and it is ANDed with the interval, so raising it on
- * a slow preset is purely a way to lose the fixes a canyon party does produce.
+ * `distanceInterval` is a DELIVERY filter too (FLP's minimum update distance),
+ * and it is **0 in every preset now**. It never saved any power — it is ANDed
+ * with the interval, so it only ever threw away fixes the GNSS engine had
+ * already been woken to produce — and the fixes it threw away turned out to be
+ * the most useful ones in the batch. A fix refused for being too close to the
+ * last is the recorder watching someone stand still, and dropping it natively
+ * meant the JS side could not tell a two-minute rest from two minutes of very
+ * slow walking (see `RecordedTrackPoint.stationaryMs`). The same gate still
+ * runs in `rejectTrackFix`, adaptively and against the fix's own accuracy, so
+ * nothing extra is STORED — the refusals are counted instead of vanishing.
  */
 export const FIX_RATE_OPTIONS: Record<
   FixRate,
@@ -85,19 +92,19 @@ export const FIX_RATE_OPTIONS: Record<
 > = {
   finest: {
     accuracy: Location.Accuracy.High,
-    distanceInterval: 5,
+    distanceInterval: 0,
     timeInterval: 3000,
     deferredUpdatesInterval: 15_000,
   },
   detailed: {
     accuracy: Location.Accuracy.High,
-    distanceInterval: 10,
+    distanceInterval: 0,
     timeInterval: 10_000,
     deferredUpdatesInterval: 30_000,
   },
   balanced: {
     accuracy: Location.Accuracy.High,
-    distanceInterval: 20,
+    distanceInterval: 0,
     timeInterval: 30_000,
     deferredUpdatesInterval: 60_000,
   },
@@ -105,17 +112,12 @@ export const FIX_RATE_OPTIONS: Record<
   // that still draws a line you would recognise, and the GNSS engine sleeps
   // through nearly all of it.
   //
-  // The distance gate DROPS to 10 m here rather than following the interval up.
-  // The two are ANDed, so at 120 s / 20 m a party moving at canyon pace records
-  // nothing at all — the slow preset is exactly where a distance filter does
-  // the most damage and the least good (it saves no power at any setting).
-  //
   // Deferred delivery is held to one interval, not scaled with it: at 240 s the
   // buffer would hold three fixes — six minutes of walking living only in
   // process memory, lost to any kill.
   batterySaver: {
     accuracy: Location.Accuracy.High,
-    distanceInterval: 10,
+    distanceInterval: 0,
     timeInterval: 120_000,
     deferredUpdatesInterval: 120_000,
   },

@@ -34,11 +34,12 @@ vi.mock("expo-task-manager", () => ({
 }));
 
 const startLocationUpdatesAsync = vi.fn(async () => {});
+const hasStartedLocationUpdatesAsync = vi.fn(async () => false);
 vi.mock("expo-location", () => ({
   startLocationUpdatesAsync: (...args: unknown[]) =>
     startLocationUpdatesAsync(...(args as [])),
   stopLocationUpdatesAsync: vi.fn(async () => {}),
-  hasStartedLocationUpdatesAsync: vi.fn(async () => false),
+  hasStartedLocationUpdatesAsync: () => hasStartedLocationUpdatesAsync(),
   ActivityType: { Fitness: 1 },
   Accuracy: { High: 5, Balanced: 3 },
 }));
@@ -46,12 +47,13 @@ vi.mock("expo-location", () => ({
 vi.mock("../imports/vectorImports", () => ({ randomId: () => "track-1" }));
 
 vi.mock("./recordingPreferences", () => ({
-  FIX_RATE_OPTIONS: { balanced: {} },
+  FIX_RATE_OPTIONS: { balanced: { timeInterval: 30_000 } },
   readFixRate: () => "balanced",
   readAccuracyLimitM: () => 0,
 }));
 
 const appendTrackPoints = vi.fn(async () => {});
+const addTrackPointSuppression = vi.fn(async () => {});
 const updateTrack = vi.fn(async () => {});
 const deleteTrack = vi.fn(async () => {});
 let activeTrack: Record<string, unknown> | null = null;
@@ -59,6 +61,8 @@ let storedPoints: RecordedTrackPoint[] = [];
 
 vi.mock("./tracksDb", () => ({
   appendTrackPoints: (...args: unknown[]) => appendTrackPoints(...(args as [])),
+  addTrackPointSuppression: (...args: unknown[]) =>
+    addTrackPointSuppression(...(args as [])),
   updateTrack: (...args: unknown[]) => updateTrack(...(args as [])),
   deleteTrack: (...args: unknown[]) => deleteTrack(...(args as [])),
   insertTrack: vi.fn(async () => {}),
@@ -69,6 +73,7 @@ vi.mock("./tracksDb", () => ({
 }));
 
 const {
+  applyRecordingOptionsToActiveTrack,
   resumeTrackRecording,
   startTrackRecording,
 } = await import("./trackRecorder");
@@ -84,6 +89,15 @@ function fixAt(index: number) {
       altitude: 500,
       accuracy: 5,
     },
+    timestamp: 1_700_000_000_000 + index * 10_000,
+  };
+}
+
+/** A fix in the SAME place as `fixAt(0)` — inside the drift radius, so the
+ *  acceptance filter refuses it as "too-close". */
+function stillAt(index: number) {
+  return {
+    coords: { longitude: 150.4, latitude: -33.5, altitude: 500, accuracy: 5 },
     timestamp: 1_700_000_000_000 + index * 10_000,
   };
 }
@@ -116,7 +130,74 @@ beforeEach(() => {
   activeTrack = null;
   storedPoints = [];
   appState.currentState = "active";
+  hasStartedLocationUpdatesAsync.mockResolvedValue(false);
   resetTrackWriteHealth();
+});
+
+// The fixes the recorder REFUSES are the only positive evidence that anyone
+// stood still — a stop and a very slow walk look identical from the accepted
+// points alone. Losing them is what the platform `distanceInterval` used to do.
+describe("counting the fixes it refuses", () => {
+  it("credits a run of too-close fixes to the point they were measured against", async () => {
+    activeTrack = recordingTrack();
+
+    await taskHandler!({
+      data: { locations: [fixAt(0), stillAt(1), stillAt(2), fixAt(3)] },
+    });
+
+    // The mocks are declared without argument types, so the recorded call has
+    // to be read back through `unknown`.
+    const [, written] = appendTrackPoints.mock.calls[0] as unknown as [
+      string,
+      RecordedTrackPoint[],
+    ];
+    expect(written).toHaveLength(2);
+    expect(written[0]!.suppressedCount).toBe(2);
+    // The last refusal landed 20 s after the point it was measured against.
+    expect(written[0]!.stationaryMs).toBe(20_000);
+    // Nothing was refused after the second point, and null is "not measured".
+    expect(written[1]!.suppressedCount ?? null).toBeNull();
+  });
+
+  it("credits them to the STORED point when a whole delivery is refusals", async () => {
+    // Standing still at the 30 s rate does exactly this: every fix in the
+    // batch is inside the last accepted point's drift radius, so waiting for
+    // an accepted point to hang the count on would lose the whole stop.
+    activeTrack = recordingTrack();
+    storedPoints = [
+      {
+        lon: 150.4,
+        lat: -33.5,
+        altitudeM: 500,
+        accuracyM: 5,
+        timestampMs: 1_700_000_000_000,
+        segment: 0,
+      },
+    ];
+
+    await taskHandler!({ data: { locations: [stillAt(1), stillAt(2)] } });
+
+    expect(appendTrackPoints).not.toHaveBeenCalled();
+    expect(addTrackPointSuppression).toHaveBeenCalledWith("track-1", 2, 20_000);
+  });
+});
+
+describe("a setting change reaches the recording in progress", () => {
+  it("re-registers the running task with the new options", async () => {
+    hasStartedLocationUpdatesAsync.mockResolvedValue(true);
+    await expect(applyRecordingOptionsToActiveTrack()).resolves.toBe(true);
+    expect(startLocationUpdatesAsync).toHaveBeenCalledTimes(1);
+    const [, options] = startLocationUpdatesAsync.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>,
+    ];
+    expect(options).toMatchObject({ timeInterval: 30_000 });
+  });
+
+  it("does nothing when no recording is running", async () => {
+    await expect(applyRecordingOptionsToActiveTrack()).resolves.toBe(false);
+    expect(startLocationUpdatesAsync).not.toHaveBeenCalled();
+  });
 });
 
 describe("a backgrounded recorder only writes points", () => {

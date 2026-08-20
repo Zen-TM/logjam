@@ -58,9 +58,10 @@ import {
   type AccuracyLimitM,
   type FixRate,
 } from "../../tracks/recordingPreferences";
+import { applyRecordingOptionsToActiveTrack } from "../../tracks/trackRecorder";
 import { radius, spacing, surface, theme, withAlpha } from "../../theme";
 import { ScreenScroll, SectionHeader, Toast, type ToastMessage } from "../../ui";
-import { ChoiceGroup, Hint, PreferenceRow } from "./settingsKit";
+import { ChoiceGroup, PreferenceRow } from "./settingsKit";
 
 const LONG_PRESS_LABELS: Record<LongPressAction, string> = {
   ask: "Ask",
@@ -318,6 +319,17 @@ export function MapSettingsScreen() {
             const rate = next as FixRate;
             if (!stored(writeFixRate(rate))) return;
             setFixRate(rate);
+            // A recording in progress takes the new rate now, rather than at
+            // the next one — a user drops to the finest rate FOR a tricky
+            // stretch, and getting it on the following trip is no use.
+            applyRecordingOptionsToActiveTrack()
+              .then((applied) => {
+                if (applied) notify("Recording now at the new detail.", "info");
+              })
+              .catch((error: unknown) => {
+                console.error(error);
+                notify("Couldn't change the recording in progress.");
+              });
           }}
         />
 
@@ -334,7 +346,6 @@ export function MapSettingsScreen() {
             setAccuracyLimit(limit);
           }}
         />
-        <Hint text="Applies to your next recording." />
       </ScreenScroll>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />

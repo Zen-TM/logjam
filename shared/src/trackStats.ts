@@ -15,9 +15,8 @@ import {
   type ElevationSample,
 } from "./elevation.js";
 
-/** One stored track point. `segment` increments across pause/resume gaps so
- * renderers break the polyline instead of drawing a teleport line. */
-export type RecordedTrackPoint = {
+/** A fix as delivered by the platform, before acceptance filtering. */
+export type CandidateFix = {
   lon: number;
   lat: number;
   /** GPS altitude (ellipsoid-ish, noisy) — null when the fix has none. */
@@ -26,11 +25,27 @@ export type RecordedTrackPoint = {
   accuracyM: number | null;
   /** Fix time, epoch ms. */
   timestampMs: number;
-  segment: number;
 };
 
-/** A fix as delivered by the platform, before acceptance filtering. */
-export type CandidateFix = Omit<RecordedTrackPoint, "segment">;
+/**
+ * One stored track point. `segment` increments across pause/resume gaps so
+ * renderers break the polyline instead of drawing a teleport line.
+ *
+ * The two suppression fields are the recorder's record of what it REFUSED
+ * after this point: `suppressedCount` fixes arrived too close to it to be
+ * progress, and the last of them landed `stationaryMs` after it. That is
+ * positive evidence of standing still — see `demonstratedStoppedMs`, which is
+ * the only thing that can tell a stop from slow travel once the gap between
+ * accepted points is long.
+ *
+ * Null means NOT MEASURED, never "nothing was suppressed": rows written before
+ * the recorder counted have null, and an imported series has no field at all.
+ */
+export type RecordedTrackPoint = CandidateFix & {
+  segment: number;
+  suppressedCount?: number | null;
+  stationaryMs?: number | null;
+};
 
 // Fixes worse than this are discarded — a 100 m-radius fix under a canyon
 // wall adds noise distance, not track. 50 m keeps degraded-but-usable fixes
@@ -42,9 +57,13 @@ export type CandidateFix = Omit<RecordedTrackPoint, "segment">;
 export const MAX_ACCEPTED_ACCURACY_M = 50;
 
 // Floor for the movement gate below. A fix that moved less than this is a
-// duplicate, not progress, however good the fix is — it matches the recorder's
-// OS-level distanceInterval, re-applied here because resumed / replayed
-// batches can re-deliver the last fix.
+// duplicate, not progress, however good the fix is.
+//
+// It is the ONLY movement gate now. The recorder used to set a platform-level
+// `distanceInterval` as well, which meant the fixes this rejects were mostly
+// dropped natively and never seen — and a fix refused for being too close is
+// the single best evidence that the phone was standing still. Delivery is now
+// unfiltered so the refusals are counted (`RecordedTrackPoint.stationaryMs`).
 export const MIN_POINT_DISTANCE_M = 5;
 
 // Ground-speed ceiling for a plausible fix.
@@ -227,6 +246,10 @@ export type TrackSeriesPoint = {
   /** null = the source carried no time for this point. */
   timestampMs: number | null;
   segment: number;
+  /** Horizontal accuracy radius, when the source knows one. */
+  accuracyM?: number | null;
+  /** See `RecordedTrackPoint` — absent/null on anything but a recording. */
+  stationaryMs?: number | null;
 };
 
 /**
@@ -235,10 +258,16 @@ export type TrackSeriesPoint = {
  * Read it against the acceptance filter, not on its own: `rejectTrackFix`
  * DROPS a fix that moved less than the drift radius, so standing still does
  * not produce slow points — it produces a long gap between two accepted ones,
- * whose implied speed is tiny. That is what this classifies. The consequence
- * is that stopped time is quantised to the gap between accepted fixes, so a
- * two-minute breather at the 30 s rate is counted to the nearest fix, and a
- * stop shorter than one interval can vanish entirely.
+ * whose implied speed is tiny. That is what this classifies.
+ *
+ * On its own that classification is a COIN FLIP over a long interval, because
+ * it can only see the interval's average. A 30 s-rate recording where someone
+ * walked for 15 s of a 90 s gap averages 0.23 m/s at 5 km/h (booked: stopped,
+ * all 90 s) and 0.32 m/s at 7 km/h (booked: moving, none of it) — the same
+ * behaviour landing on opposite sides of a threshold. `demonstratedStoppedMs`
+ * exists for that: where the recorder counted its own refusals it can say how
+ * much of the interval was PROVEN stationary, and this threshold is the
+ * fallback for intervals with no such evidence.
  *
  * ponytail: 0.3 m/s (1.1 km/h) is a judgement, not a measurement — slower than
  * any party that is actually walking, faster than a drift-radius hop. It is
@@ -246,6 +275,32 @@ export type TrackSeriesPoint = {
  * against a trip you remember.
  */
 export const MOVING_SPEED_THRESHOLD_MPS = 0.3;
+
+/**
+ * Time after `point` that the recorder can DEMONSTRATE was spent standing
+ * still, capped at the interval it is being credited against. Null = no
+ * evidence either way, so the caller falls back to the interval's average
+ * speed.
+ *
+ * The evidence is `stationaryMs`: the recorder saw fixes keep arriving inside
+ * `point`'s drift radius for that long. Staying inside a radius R for a span S
+ * bounds the average speed at R/S, and only a bound BELOW the moving threshold
+ * proves a stop — which is what stops this from booking slow walking as rest.
+ * At the finest rate a 5 km/h walker covers 4.2 m in 3 s and is suppressed too,
+ * but that suppression only spans one interval, and 5 m over 3 s bounds nothing
+ * (1.7 m/s). Evidence has to accumulate for ~17 s at a 5 m radius before it
+ * says anything, which is also the shortest stop this can see.
+ */
+function demonstratedStoppedMs(
+  point: TrackSeriesPoint,
+  stepMs: number,
+): number | null {
+  const stationaryMs = point.stationaryMs;
+  if (stationaryMs == null || stationaryMs <= 0) return null;
+  const radiusM = Math.max(MIN_POINT_DISTANCE_M, point.accuracyM ?? 0);
+  if (radiusM / (stationaryMs / 1000) >= MOVING_SPEED_THRESHOLD_MPS) return null;
+  return Math.min(stationaryMs, stepMs);
+}
 
 /**
  * Odd, centred window for the speed series — the CHART's smoothing, never the
@@ -390,7 +445,14 @@ export function computeTrackDetail(
       if (stepMs <= 0) continue;
       durationMs += stepMs;
       const speedMps = stepM / (stepMs / 1000);
-      if (speedMps >= MOVING_SPEED_THRESHOLD_MPS) movingMs += stepMs;
+      // Proven-stationary time first, the interval's average speed only where
+      // there is nothing to prove it with.
+      const stoppedStepMs = demonstratedStoppedMs(segment[i - 1]!, stepMs);
+      if (stoppedStepMs != null) {
+        movingMs += stepMs - stoppedStepMs;
+      } else if (speedMps >= MOVING_SPEED_THRESHOLD_MPS) {
+        movingMs += stepMs;
+      }
       segmentSpeeds.push(speedMps);
       // Elapsed RECORDING time at the end of this interval — the running
       // durationMs, so the series' last x is the recording's own length and a
