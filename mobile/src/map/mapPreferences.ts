@@ -54,6 +54,7 @@ const NORTH_UP_KEY = "mapNorthUp";
 const LONG_PRESS_KEY = "mapLongPressAction";
 const NORTH_REFERENCE_KEY = "mapNorthReference";
 const SCALE_BAR_KEY = "mapScaleBar";
+const SPEED_ELEVATION_KEY = "mapSpeedElevation";
 
 /**
  * Read a value constrained to a known set, falling back when the store is empty
@@ -181,4 +182,22 @@ export function isScaleBarEnabled(): boolean {
 
 export function writeScaleBarEnabled(enabled: boolean): boolean {
   return writePref(SCALE_BAR_KEY, enabled ? "on" : "off");
+}
+
+/**
+ * Whether the speed + elevation chip is drawn above the other instruments.
+ *
+ * OFF by default, and unlike the scale bar this default is about power rather
+ * than pixels: the chip needs a POSITION, so switching it on runs the map's GPS
+ * watcher for as long as the map tab is focused and foregrounded, whether or
+ * not the user has asked to see themselves. That is the most expensive thing
+ * any of these switches can turn on, so it is opt-in and the settings row says
+ * what it costs.
+ */
+export function isSpeedElevationEnabled(): boolean {
+  return readPref(SPEED_ELEVATION_KEY) === "on";
+}
+
+export function writeSpeedElevationEnabled(enabled: boolean): boolean {
+  return writePref(SPEED_ELEVATION_KEY, enabled ? "on" : "off");
 }

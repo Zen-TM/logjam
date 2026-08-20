@@ -132,12 +132,15 @@ export function TrackStatsBody({
 
       {elevation ? (
         <View style={styles.chartBlock}>
-          <Text style={styles.chartLabel}>Elevation</Text>
+          {/* Names BOTH axes. "Elevation" alone left the horizontal one to be
+              inferred, and a reader who assumes it is time reads the whole
+              chart wrong — a long flat section is a plateau, not a rest. */}
+          <Text style={styles.chartLabel}>Elevation vs distance</Text>
           <ProfileChart
             series={elevationSeries(elevation)}
             formatValue={(elevationM) => `${Math.round(elevationM)} m`}
             formatX={formatDistanceM}
-            hint="Drag across for heights"
+            hint="Drag across for the height at a point along the track"
             accessibilityLabel="Elevation profile"
           />
           {/* Which surface these heights came from. Said out loud because the
@@ -164,14 +167,16 @@ export function TrackStatsBody({
 
       {detail.speed ? (
         <View style={styles.chartBlock}>
-          <Text style={styles.chartLabel}>Speed</Text>
+          {/* And the speed chart's is TIME, not distance — the one place the
+              two charts differ, and the reason each says which. */}
+          <Text style={styles.chartLabel}>Speed vs time</Text>
           <ProfileChart
             series={speedSeries(detail.speed)}
             formatValue={formatSpeedMps}
             // The speed series runs on a CLOCK, not a tape measure — its x is
             // time into the recording (see SpeedSample).
             formatX={formatDurationMs}
-            hint="Drag across for speeds"
+            hint="Drag across for the speed at a time into the trip"
             accessibilityLabel="Speed profile"
           />
         </View>

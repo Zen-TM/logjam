@@ -40,6 +40,8 @@ import { SavedScreen, type SavedItemReveal } from "./saved/SavedScreen";
 import { AccountScreen } from "./screens/AccountScreen";
 import { CanyonDetailScreen } from "./canyons/CanyonDetailScreen";
 import { CanyonsScreen } from "./canyons/CanyonsScreen";
+import { PickPointScreen } from "./map/PickPointScreen";
+import { setPickedPoint } from "./map/pickedPoint";
 import { ConsentGate } from "./screens/ConsentGate";
 import { FriendsScreen } from "./screens/FriendsScreen";
 import { MoreScreen } from "./screens/MoreScreen";
@@ -96,6 +98,9 @@ type MapStackParams = {
         // `drawRouteFor` = "Draw one on the map" from a canyon page: arm the
         // pen and save into that canyon's route slot.
         drawRouteFor?: { canyonId: string; nonce: number };
+        // `continueTrack` = "Continue recording" from Saved: pick a finished
+        // track back up. An id, never points.
+        continueTrack?: { trackId: string; nonce: number };
       }
     | undefined;
   MapCanyonDetail: { canyonId: string; name: string };
@@ -115,6 +120,15 @@ type CanyonsStackParams = {
   CanyonList: undefined;
   CanyonDetail: { canyonId: string; name: string };
   CanyonTripDetail: { trip: MirrorTrip };
+  /**
+   * The full-screen point picker for the add/edit form. Its ANSWER does not
+   * come back through params — a canyon's coordinate must not be written into
+   * navigation state, which persists and is dumped by devtools — it comes back
+   * in memory through `canyons/pickedPoint.ts`. What travels here is only where
+   * to open, which is a coordinate the user typed themselves and is on screen
+   * in front of them.
+   */
+  CanyonPickPoint: { latitude: number; longitude: number } | undefined;
 };
 
 type TripsStackParams = {
@@ -128,6 +142,14 @@ type SavedStackParams = {
   // at the regions it manages, and "All" would make the user find them again.
   // `nonce` so following the same pointer twice re-selects it.
   SavedHome: { filter?: "region"; nonce?: number } | undefined;
+  /**
+   * The point picker for the "waypoint from coordinates" form — the same screen
+   * the Canyons stack registers, because a stack can only push its own routes
+   * and the alternative is a cross-tab jump that leaves the form behind.
+   * Coordinates travel IN only (where to open); the answer comes back in memory
+   * through `map/pickedPoint.ts`.
+   */
+  SavedPickPoint: { latitude: number; longitude: number } | undefined;
 };
 
 type MoreStackParams = {
@@ -226,6 +248,7 @@ function MapStackNav() {
             route={route.params?.route ?? null}
             editRoute={route.params?.editRoute ?? null}
             drawRouteFor={route.params?.drawRouteFor ?? null}
+            continueTrack={route.params?.continueTrack ?? null}
           />
         )}
       </MapStack.Screen>
@@ -345,6 +368,30 @@ function SavedStackNav() {
                 params: { editRoute: { routeId, nonce: Date.now() } },
               })
             }
+            onPickPoint={(from) =>
+              navigation.navigate("SavedPickPoint", from ?? undefined)
+            }
+            // The recorder lives on the map, and so does the mode it puts the
+            // app into — this hands the id over rather than arming it here.
+            onContinueRecording={(trackId) =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { continueTrack: { trackId, nonce: Date.now() } },
+              })
+            }
+          />
+        )}
+      </SavedStack.Screen>
+      <SavedStack.Screen name="SavedPickPoint" options={{ headerShown: false }}>
+        {({ navigation, route }) => (
+          <PickPointScreen
+            initialPoint={route.params ?? null}
+            subject="waypoint"
+            onCancel={() => navigation.goBack()}
+            onConfirm={(point) => {
+              setPickedPoint(point);
+              navigation.goBack();
+            }}
           />
         )}
       </SavedStack.Screen>
@@ -369,9 +416,24 @@ function CanyonsStackNav() {
                 params: { focus: canyonFocus(canyon) },
               })
             }
-            onPickOnMap={() =>
-              navigation.getParent()?.navigate("Map", { screen: "MapView" })
+            onPickPoint={(from) =>
+              navigation.navigate("CanyonPickPoint", from ?? undefined)
             }
+          />
+        )}
+      </CanyonsStack.Screen>
+      {/* The picker owns the whole screen — see PickCanyonPointScreen for why
+          it cannot be a mode of the sheet that opened it. */}
+      <CanyonsStack.Screen name="CanyonPickPoint" options={{ headerShown: false }}>
+        {({ navigation, route }) => (
+          <PickPointScreen
+            initialPoint={route.params ?? null}
+            subject="canyon"
+            onCancel={() => navigation.goBack()}
+            onConfirm={(point) => {
+              setPickedPoint(point);
+              navigation.goBack();
+            }}
           />
         )}
       </CanyonsStack.Screen>

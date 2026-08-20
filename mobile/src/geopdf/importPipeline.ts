@@ -333,7 +333,12 @@ async function importStagedFile(
     minzoom: null,
     maxzoom: null,
     residualFraction: null,
-    opacity: 0.8,
+    // FULL. A GeoPDF is a map sheet the user deliberately put on top of the
+    // basemap; drawing it see-through was a hedge against covering something,
+    // and what it actually did was wash out the one map they asked for. The
+    // column survives (a future opacity control would use it) but nothing
+    // writes it any more and the map draws at 1 regardless — see MapScreen.
+    opacity: 1,
     visible: true,
     dirPath: dir.uri.replace(/^file:\/\//, ""),
     sourceSizeBytes,

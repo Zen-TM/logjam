@@ -20,6 +20,10 @@ import {
   areCrashReportsEnabled,
   setCrashReportsEnabled,
 } from "../../sentry/crashReportPreference";
+import {
+  savesCapturesToGallery,
+  setSaveCapturesToGallery,
+} from "../../media/galleryPreference";
 import { fontSize, lineHeight, spacing, theme } from "../../theme";
 import { ScreenScroll, SectionHeader, Toast, type ToastMessage } from "../../ui";
 import { PreferenceRow } from "./settingsKit";
@@ -59,6 +63,18 @@ export function PrivacySettingsScreen() {
     setCrashReportsState(next);
   }, [crashReports, notify]);
 
+  // Off by default — see galleryPreference.ts for why that default is a
+  // privacy decision and not a taste one.
+  const [saveToGallery, setSaveToGalleryState] = useState(savesCapturesToGallery);
+  const toggleSaveToGallery = useCallback(() => {
+    const next = !saveToGallery;
+    if (!setSaveCapturesToGallery(next)) {
+      notify("This phone wouldn't store that setting.", "error");
+      return;
+    }
+    setSaveToGalleryState(next);
+  }, [saveToGallery, notify]);
+
   return (
     <>
       <ScreenScroll>
@@ -84,6 +100,19 @@ export function PrivacySettingsScreen() {
           value={crashReports}
           ready
           onToggle={toggleCrashReports}
+        />
+
+        <PreferenceRow
+          icon="image"
+          title="Save photos to your gallery"
+          // Says the consequence, which is the part a switch label can't: the
+          // copy is out of Logjam's storage, its backup exclusion and its lock,
+          // and nothing here can take it back.
+          subtitle="A copy of anything you shoot in Logjam goes to your camera roll, outside the app lock."
+          subtitleNumberOfLines={3}
+          value={saveToGallery}
+          ready
+          onToggle={toggleSaveToGallery}
         />
 
         <SectionHeader label="What's on this phone" />

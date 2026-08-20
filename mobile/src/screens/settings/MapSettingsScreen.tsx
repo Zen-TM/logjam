@@ -31,6 +31,8 @@ import {
   MARKER_COLOR_ORDER,
   isNorthUpLocked,
   isScaleBarEnabled,
+  isSpeedElevationEnabled,
+  writeSpeedElevationEnabled,
   readKeepAwakeMode,
   readLongPressAction,
   readMapControlSide,
@@ -173,6 +175,7 @@ export function MapSettingsScreen() {
   const [compassEnabled, setCompassEnabledState] = useState(isCompassEnabled);
   const [northReference, setNorthReference] = useState<NorthReference>(readNorthReference);
   const [scaleBar, setScaleBar] = useState(isScaleBarEnabled);
+  const [speedElevation, setSpeedElevation] = useState(isSpeedElevationEnabled);
   const [accuracyLimit, setAccuracyLimit] = useState<AccuracyLimitM>(readAccuracyLimitM);
   const [fixRate, setFixRate] = useState<FixRate>(readFixRate);
 
@@ -185,6 +188,16 @@ export function MapSettingsScreen() {
     if (!stored(setCompassEnabled(next))) return;
     setCompassEnabledState(next);
   }, [compassEnabled, stored]);
+
+  // Same shape as the compass toggle above, and for a stronger reason: this
+  // one needs a POSITION, so a switch that went on and showed two dashes
+  // forever is exactly what one permission prompt avoids.
+  const toggleSpeedElevation = useCallback(async () => {
+    const next = !speedElevation;
+    if (next && !(await ensureForegroundLocationPermission())) return;
+    if (!stored(writeSpeedElevationEnabled(next))) return;
+    setSpeedElevation(next);
+  }, [speedElevation, stored]);
 
   return (
     <>
@@ -258,6 +271,19 @@ export function MapSettingsScreen() {
             if (!stored(writeScaleBarEnabled(next))) return;
             setScaleBar(next);
           }}
+        />
+
+        {/* Beneath the two instruments it joins in the same stack. Its subtitle
+            is the one on this page that names a COST rather than a behaviour:
+            the others draw something the phone already knows, and this one
+            keeps the GPS running to find out. */}
+        <PreferenceRow
+          icon="trending-up"
+          title="Speed and elevation"
+          subtitle="Keeps GPS running while the map is open."
+          value={speedElevation}
+          ready
+          onToggle={() => void toggleSpeedElevation()}
         />
 
         <ChoiceGroup

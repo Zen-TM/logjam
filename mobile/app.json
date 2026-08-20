@@ -99,6 +99,13 @@
           "microphonePermission": false
         }
       ],
+      [
+        "expo-media-library",
+        {
+          "savePhotosPermission": "Logjam saves photos and videos you take in the app to your device's gallery.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
       "expo-video",
       [
         "expo-splash-screen",

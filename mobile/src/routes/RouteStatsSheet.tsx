@@ -59,13 +59,19 @@ export function RouteStatsSheet({
         ) : null}
 
         {profile ? (
-          <ProfileChart
-            series={elevationSeries(profile)}
-            formatValue={(elevationM) => `${Math.round(elevationM)} m`}
-            formatX={formatDistanceM}
-            hint="Drag across for heights"
-            accessibilityLabel="Elevation profile"
-          />
+          <>
+            {/* The chart's own axes named, as on a track's stats — an unlabelled
+                height profile is read as a height-over-TIME by anyone who has
+                not been told otherwise. */}
+            <Text style={styles.chartLabel}>Elevation vs distance</Text>
+            <ProfileChart
+              series={elevationSeries(profile)}
+              formatValue={(elevationM) => `${Math.round(elevationM)} m`}
+              formatX={formatDistanceM}
+              hint="Drag across for the height at a point along the route"
+              accessibilityLabel="Elevation profile"
+            />
+          </>
         ) : (
           <Text style={styles.pending}>
             {loading
@@ -96,6 +102,13 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
+  chartLabel: {
+    color: theme.textMuted,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
   body: { gap: spacing(1.5) },
   statRow: { flexDirection: "row", gap: spacing(2) },
   stat: { gap: spacing(0.25) },

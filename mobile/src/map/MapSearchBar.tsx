@@ -10,9 +10,17 @@
 // Behaviour mirrors the web MapSearchBox: 3-char minimum, 350 ms debounce,
 // Nominatim via `geocode`, tap a result to recentre.
 //
+// IT SEARCHES THE USER'S OWN THINGS FIRST, and those never touch the network.
+// A box that could find Katoomba but not the canyon you saved last week was
+// answering the question nobody has standing in the bush; saved matches are
+// ranked on the device (`localSearch.ts`), appear from the second keystroke
+// with no debounce and no request, and are listed ABOVE the places with their
+// kind's glyph and hue so the two are never confused for each other.
+//
 // PRIVACY: only the typed string leaves the app (see src/geocode.ts). Canyon
-// names and coordinates are never sent here, and results are not persisted.
-import { useEffect, useRef, useState } from "react";
+// names and coordinates are never sent here — the saved matches are the reason
+// they do not have to be — and results are not persisted.
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -29,7 +37,9 @@ import { Feather } from "@expo/vector-icons";
 import { geocode, messageFromError, type GeocodeResult } from "@logjam/shared";
 
 import { fontSize, fontWeight, hitSlop, radius, spacing, theme } from "../theme";
+import { rankLocalMatches, type LocalSearchCandidate } from "./localSearch";
 import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
+import type { Bbox } from "../saved/bboxOfPoints";
 
 const DEBOUNCE_MS = 350;
 const MIN_QUERY_LENGTH = 3;
@@ -37,12 +47,37 @@ const GLYPH = 20;
 /** Keeps the glyph on the circle's centre line at every width. */
 const GLYPH_INSET = (SEARCH_SIZE - GLYPH) / 2;
 const EXPAND_MS = 220;
+/** Saved matches shown at once. Past this the panel is a list to read rather
+ *  than a shortcut, and the place results below it stop being reachable. */
+const MAX_LOCAL_RESULTS = 6;
+
+/**
+ * One of the user's own saved things, as the search box sees it.
+ *
+ * Composed by `MapScreen`, which already holds every one of these lists. The
+ * extent is resolved LAZILY (`resolveBbox`, the same descriptor Saved uses):
+ * a track's bounds mean reading its points off disk, and doing that for every
+ * candidate on every keystroke would be a file read per row per letter.
+ */
+export type SavedSearchItem = {
+  key: string;
+  icon: React.ComponentProps<typeof Feather>["name"];
+  hue: string;
+  title: string;
+  /** What kind of thing it is — "Canyon", "Waypoint". The row's only subtitle. */
+  kindLabel: string;
+  /** Matched but never displayed: alt names, tags. */
+  alternates?: readonly string[];
+  resolveBbox: () => Promise<Bbox | null>;
+};
 
 export function MapSearchBar({
   topInset,
   side = "left",
   reservedWidth = 0,
+  savedItems,
   onSelectPlace,
+  onSelectSaved,
 }: {
   /** Status-bar inset — chrome must never sit under the camera cutout. */
   topInset: number;
@@ -59,7 +94,10 @@ export function MapSearchBar({
    * has to stay reachable while a recording runs.
    */
   reservedWidth?: number;
+  /** The user's own canyons, waypoints, tracks and route files. */
+  savedItems: readonly SavedSearchItem[];
   onSelectPlace: (latitude: number, longitude: number) => void;
+  onSelectSaved: (item: SavedSearchItem) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
@@ -135,11 +173,29 @@ export function MapSearchBar({
     setLoading(false);
   };
 
+  // NOT debounced and not memoised on the query: it is a substring scan over
+  // one person's saved rows, and it has to answer on the keystroke — the whole
+  // point of the local half is that it costs nothing to run.
+  const candidates: LocalSearchCandidate<SavedSearchItem>[] = useMemo(
+    () =>
+      savedItems.map((item) => ({
+        title: item.title,
+        alternates: item.alternates,
+        value: item,
+      })),
+    [savedItems],
+  );
+  const localMatches = expanded
+    ? rankLocalMatches(query, candidates, MAX_LOCAL_RESULTS).map((m) => m.value)
+    : [];
+
   const width = grow.interpolate({
     inputRange: [0, 1],
     outputRange: [SEARCH_SIZE, windowWidth - CHROME_GAP * 2 - reservedWidth],
   });
-  const showPanel = expanded && (loading || error !== null || results.length > 0);
+  const showPanel =
+    expanded &&
+    (loading || error !== null || results.length > 0 || localMatches.length > 0);
 
   return (
     <View
@@ -206,30 +262,59 @@ export function MapSearchBar({
 
       {showPanel ? (
         <View style={styles.panel}>
-          {loading ? <Text style={styles.status}>Searching…</Text> : null}
-          {error !== null ? <Text style={styles.status}>{error}</Text> : null}
-          {!loading && error === null ? (
-            <ScrollView keyboardShouldPersistTaps="handled">
-              {results.map((result, index) => (
-                <Pressable
-                  key={`${result.lat},${result.lon},${index}`}
-                  accessibilityRole="button"
-                  style={({ pressed }) => [
-                    styles.result,
-                    pressed && styles.resultPressed,
-                  ]}
-                  onPress={() => {
-                    onSelectPlace(result.lat, result.lon);
-                    collapse();
-                  }}
-                >
-                  <Text style={styles.resultText} numberOfLines={2}>
-                    {result.displayName}
+          <ScrollView keyboardShouldPersistTaps="handled">
+            {/* Yours first, and above the network's answer whatever state that
+                is in — a saved match is already correct while the geocoder is
+                still being waited on, and with no signal it is the only answer
+                there will ever be. */}
+            {localMatches.map((item) => (
+              <Pressable
+                key={item.key}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.title}, ${item.kindLabel}`}
+                style={({ pressed }) => [
+                  styles.result,
+                  styles.savedResult,
+                  pressed && styles.resultPressed,
+                ]}
+                onPress={() => {
+                  onSelectSaved(item);
+                  collapse();
+                }}
+              >
+                <Feather name={item.icon} size={16} color={item.hue} />
+                <View style={styles.savedText}>
+                  <Text style={styles.resultText} numberOfLines={1}>
+                    {item.title}
                   </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          ) : null}
+                  <Text style={styles.resultKind}>{item.kindLabel}</Text>
+                </View>
+              </Pressable>
+            ))}
+
+            {loading ? <Text style={styles.status}>Searching…</Text> : null}
+            {error !== null ? <Text style={styles.status}>{error}</Text> : null}
+            {!loading && error === null
+              ? results.map((result, index) => (
+                  <Pressable
+                    key={`${result.lat},${result.lon},${index}`}
+                    accessibilityRole="button"
+                    style={({ pressed }) => [
+                      styles.result,
+                      pressed && styles.resultPressed,
+                    ]}
+                    onPress={() => {
+                      onSelectPlace(result.lat, result.lon);
+                      collapse();
+                    }}
+                  >
+                    <Text style={styles.resultText} numberOfLines={2}>
+                      {result.displayName}
+                    </Text>
+                  </Pressable>
+                ))
+              : null}
+          </ScrollView>
         </View>
       ) : null}
     </View>
@@ -299,6 +384,9 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.bonus2,
   },
   resultPressed: { backgroundColor: theme.bonus2 },
+  savedResult: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
+  savedText: { flex: 1 },
+  resultKind: { color: theme.textMuted, fontSize: fontSize.xs },
   resultText: {
     color: theme.textPrimary,
     fontSize: fontSize.sm,

@@ -1,10 +1,12 @@
 const { withAndroidManifest, AndroidConfig } = require("expo/config-plugins");
 
 /**
- * Makes the camera actually reachable on Android 11+.
+ * Manifest corrections for the media path.
  *
- * Two separate things are missing without this, and each one on its own is
- * enough to make "Take photo" do nothing at all:
+ * Two of them make the camera reachable on Android 11+, and each one on its own
+ * is enough to make "Take photo" do nothing at all. The third takes away a
+ * permission a dependency asks for and this app has no use for — see
+ * BLOCKED_PERMISSIONS.
  *
  * 1. `android.permission.CAMERA`. The expo-image-picker plugin's
  *    `cameraPermission` option only writes the iOS usage description; it does
@@ -24,8 +26,33 @@ const CAPTURE_ACTIONS = [
   "android.media.action.VIDEO_CAPTURE",
 ];
 
+/**
+ * Permissions declared by a dependency that this app must not ask for.
+ *
+ * `expo-media-library`'s config plugin declares the full READ_MEDIA_* set
+ * because the library can read audio, images and video. Logjam only ever WRITES
+ * — one copy of a photo or video the user just shot, when they have turned that
+ * on (`media/galleryPreference.ts`) — and it has no audio feature at all. An
+ * app that asks for the phone's music library in its permission list is asking
+ * for something it cannot explain, which is exactly the posture the privacy
+ * rules exist to avoid (root CLAUDE.md).
+ *
+ * READ_MEDIA_IMAGES / READ_MEDIA_VIDEO stay: `expo-image-picker` genuinely
+ * needs them for "Attach from library".
+ */
+const BLOCKED_PERMISSIONS = ["android.permission.READ_MEDIA_AUDIO"];
+
 module.exports = function withCameraCapture(config) {
-  return withAndroidManifest(config, (mod) => {
+  // `withBlockedPermissions` rather than filtering the array ourselves: plugin
+  // mods run in a composed order we do not control, so a filter here can run
+  // BEFORE the plugin that adds the entry (it does). Blocking marks it
+  // `tools:node="remove"`, which the manifest merger honours whenever the
+  // declaration is added.
+  const blocked = AndroidConfig.Permissions.withBlockedPermissions(
+    config,
+    BLOCKED_PERMISSIONS,
+  );
+  return withAndroidManifest(blocked, (mod) => {
     AndroidConfig.Permissions.addPermission(
       mod.modResults,
       "android.permission.CAMERA",

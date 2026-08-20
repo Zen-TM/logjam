@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { CANYON_RANGE_BOUNDS, validateCanyonPayload } from "@logjam/shared";
@@ -38,6 +38,9 @@ export function CanyonEditSheet({
   onClose,
   canyon,
   initialCoords,
+  onPickOnMap,
+  pickedCoords,
+  resuming = false,
   onSaved,
   onFailed,
 }: {
@@ -47,6 +50,26 @@ export function CanyonEditSheet({
   canyon?: MirrorCanyon | null;
   /** Seeds a new canyon's position from a point picked on the map. */
   initialCoords?: { latitude: number; longitude: number } | null;
+  /**
+   * Open the full-screen map picker, carrying whatever is in the two coordinate
+   * fields right now so it can open there. Absent where there is nowhere to
+   * navigate to — this sheet is also mounted on the map itself and on a
+   * canyon's detail screen, and only the Canyons list owns the picker route.
+   */
+  onPickOnMap?: (current: { latitude: number; longitude: number } | null) => void;
+  /** A point the picker returned: writes the two fields and nothing else. */
+  pickedCoords?: { latitude: number; longitude: number } | null;
+  /**
+   * True when this sheet is being re-opened after the picker took the screen,
+   * rather than opened for a new edit.
+   *
+   * A sheet is a Modal, so it HAS to close for a full-screen map to be visible
+   * — and re-opening otherwise reseeds every field from the canyon, which would
+   * throw away the name and grades the user typed before going to look up where
+   * the thing is. The component stays mounted throughout, so its state is
+   * intact; this flag is only what stops the seed effect from wiping it.
+   */
+  resuming?: boolean;
   onSaved: (message: string) => void;
   onFailed: (message: string) => void;
 }) {
@@ -66,10 +89,16 @@ export function CanyonEditSheet({
   const [invalid, setInvalid] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Read through a ref so it is NOT a dependency: `resuming` and `visible` flip
+  // in the same commit, and listing it would re-run the seed the moment the
+  // parent cleared the flag afterwards — which is the wipe this exists to stop.
+  const resumingRef = useRef(resuming);
+  resumingRef.current = resuming;
+
   // Seed each time the sheet opens, so a cancelled edit never leaks into the
   // next one.
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || resumingRef.current) return;
     setInvalid(null);
     setSaving(false);
     setName(canyon?.name ?? "");
@@ -87,6 +116,16 @@ export function CanyonEditSheet({
     setHours(numberText(canyon?.hours));
     setNotes(canyon?.notes ?? "");
   }, [canyon, initialCoords, visible]);
+
+  // A point back from the picker touches the two coordinate fields and nothing
+  // else — everything else on this form is what the user was in the middle of
+  // typing. Trimmed like any freshly picked point: a map tap carries fifteen
+  // meaningless decimals.
+  useEffect(() => {
+    if (!pickedCoords) return;
+    setLatitude(seedCoord(pickedCoords.latitude));
+    setLongitude(seedCoord(pickedCoords.longitude));
+  }, [pickedCoords]);
 
   /** The form in the shape both the validator and the ops speak. */
   const draft = useMemo(
@@ -245,6 +284,24 @@ export function CanyonEditSheet({
             />
           </View>
         </View>
+        {/* Under the coordinates it fills in, because that is what it does —
+            not at the top as a second way to start, which is what the old
+            two-option "Add a canyon" sheet made it. Nothing is lost by going:
+            the form comes back exactly as it was left. */}
+        {onPickOnMap ? (
+          <Button
+            label="Select on map"
+            icon="map-pin"
+            variant="outlineAccent"
+            onPress={() =>
+              onPickOnMap(
+                draft.latitude != null && draft.longitude != null
+                  ? { latitude: draft.latitude, longitude: draft.longitude }
+                  : null,
+              )
+            }
+          />
+        ) : null}
         {!editing && initialCoords ? (
           <View style={styles.fixNote}>
             <Feather name="map-pin" size={14} color={theme.accent} />

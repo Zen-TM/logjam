@@ -349,6 +349,60 @@ export async function resumeTrackRecording(track: Track): Promise<void> {
   resetTrackWriteHealth();
 }
 
+/**
+ * Pick a FINISHED recording back up — the same track, a new segment.
+ *
+ * The trip that comes back to the car for a dropped rope, the party that stops
+ * for two hours at the exit and walks out later, the recording someone finished
+ * by accident: all of them used to mean a second track that has to be
+ * remembered, exported and read alongside the first. This is `resume` for a
+ * track that was ended rather than paused, and it produces exactly what a pause
+ * would have: a segment break, so the line does not draw a teleport across the
+ * gap, and the gap itself excluded from the duration.
+ *
+ * NOT folded into `resumeTrackRecording`. The two differ in where the gap
+ * starts (`endedAt` rather than `pausedAt`) and in what a refused start has to
+ * roll back TO — a finished track must go back to being finished, and reusing
+ * resume's rollback would leave it as a live paused recording the user then has
+ * to finish a second time.
+ *
+ * Caller must have foreground location permission granted already, exactly as
+ * `startTrackRecording` requires.
+ */
+export async function continueTrackRecording(track: Track): Promise<void> {
+  // One recorder, one track. `findActiveTrack`'s own query is the check, so
+  // this cannot disagree with what the rest of the module considers active.
+  const existing = await findActiveTrack();
+  if (existing) throw new Error("A track is already being recorded.");
+  // Time since the track was finished is NOT recording time. Measured from
+  // `endedAt` (the finish tap), which is the same clock `pausedAt` runs on.
+  const gapMs =
+    track.endedAt == null ? 0 : Math.max(0, Date.now() - Date.parse(track.endedAt));
+  await updateTrack(track.id, {
+    state: "recording",
+    currentSegment: track.currentSegment + 1,
+    pausedMs: track.pausedMs + gapMs,
+    endedAt: null,
+    pausedAt: null,
+  });
+  try {
+    await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
+  } catch (error) {
+    // No half-armed state, same rule as start/resume: the row is already live,
+    // so a refused start (permission revoked, location services off) would
+    // leave a dead recorder that nothing corrects until the next cold launch —
+    // and would have quietly un-finished the user's track on the way.
+    await updateTrack(track.id, {
+      state: "done",
+      currentSegment: track.currentSegment,
+      pausedMs: track.pausedMs,
+      endedAt: track.endedAt,
+    });
+    throw error;
+  }
+  resetTrackWriteHealth();
+}
+
 export async function finishTrackRecording(trackId: string): Promise<void> {
   await stopLocationUpdatesIfRunning();
   const track = await getTrack(trackId);

@@ -29,13 +29,14 @@ import {
 } from "@logjam/shared";
 
 import { assetHue, fontSize, spacing, theme } from "../theme";
-import { BottomSheet, RenameForm, Row, StatGrid, type Stat } from "../ui";
+import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { deleteWaypointLocal, updateWaypointLocal } from "../sync/outbox";
 import { waypointActions } from "../saved/assetActions";
 import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
 import {
   WaypointCanyonFilter,
   WaypointCanyonsBody,
+  WaypointEditBody,
   WaypointSubModeHeader,
   WaypointTagsBody,
 } from "../waypoints/waypointSheetBodies";
@@ -227,7 +228,10 @@ export function WaypointSheet({
             <>
               <Row
                 icon="edit-2"
-                title="Edit name and notes"
+                // Not "Edit name and notes": the form also owns the position,
+                // and a verb that lists two of its three fields reads as a
+                // promise that the third is not in there.
+                title="Edit"
                 disabled={busy}
                 onPress={() => setMode("edit")}
               />
@@ -260,18 +264,15 @@ export function WaypointSheet({
       ) : null}
 
       {mode === "edit" ? (
-        <View style={styles.body}>
-          <RenameForm
-            initialName={waypoint.name}
-            initialNotes={waypoint.notes}
-            onSubmit={(changed) => {
-              if (Object.keys(changed).length > 0) write(changed);
-              // A drop lands here directly, so backing out of the form must
-              // return to the waypoint rather than to the map.
-              setMode("actions");
-            }}
-          />
-        </View>
+        <WaypointEditBody
+          waypoint={waypoint}
+          onSubmit={(changed) => {
+            if (Object.keys(changed).length > 0) write(changed);
+            // A drop lands here directly, so backing out of the form must
+            // return to the waypoint rather than to the map.
+            setMode("actions");
+          }}
+        />
       ) : null}
 
       {mode === "tags" ? (

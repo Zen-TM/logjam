@@ -13,6 +13,7 @@ import {
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
+import * as MediaLibrary from "expo-media-library";
 import {
   categoryHasThumbnail,
   mediaCategory,
@@ -24,6 +25,7 @@ import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "
 import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { scratchFileUri } from "../offline/localStores";
+import { savesCapturesToGallery } from "./galleryPreference";
 import { alertPermissionDenied } from "../permissionAlert";
 import { listTrackPoints, listTracks, type Track } from "../tracks/tracksDb";
 import { BottomSheet, Row, SectionHeader } from "../ui";
@@ -50,6 +52,41 @@ import { MediaViewer } from "./MediaViewer";
  * authed upload; the error paths carry no filenames, canyon names or
  * coordinates.
  */
+
+/**
+ * Copy a just-captured file into the phone's gallery, if the user asked for
+ * that (`galleryPreference.ts`).
+ *
+ * WRITE-ONLY permission: nothing in this app reads the gallery — the library
+ * picker is expo-image-picker's own, with its own grant — so this asks for the
+ * smallest scope that can do the job.
+ *
+ * Every failure is silent, deliberately, and this is the one place in the file
+ * where that is right. The user's actual request (attach this photo) is about
+ * to succeed either way; interrupting it with an alert about a side copy, on a
+ * ledge, is worse than the copy not existing. A denial is not re-asked either —
+ * expo remembers `canAskAgain`, and the switch in Settings is where someone who
+ * wants this goes back to.
+ *
+ * PRIVACY: the file leaves app-private storage here and lands somewhere this
+ * app no longer controls. That is the whole content of the preference, and why
+ * this function is never called without checking it.
+ */
+async function saveToGalleryIfWanted(uri: string): Promise<void> {
+  if (!savesCapturesToGallery()) return;
+  try {
+    const existing = await MediaLibrary.getPermissionsAsync(true);
+    const permission = existing.granted
+      ? existing
+      : await MediaLibrary.requestPermissionsAsync(true);
+    if (!permission.granted) return;
+    await MediaLibrary.saveToLibraryAsync(uri);
+  } catch (err) {
+    // No filename, no path: this is media on a canyon.
+    console.error("Gallery copy failed", err instanceof Error ? err.name : "unknown");
+  }
+}
+
 type SourceMode = "sources" | "tracks";
 
 export function MediaStrip({
@@ -203,6 +240,11 @@ export function MediaStrip({
       }
       if (result.canceled || result.assets.length === 0) return;
       const asset = result.assets[0];
+      // The gallery copy happens BEFORE the attach, and its failure is never
+      // allowed to cost the attachment: the photo the user actually asked for
+      // is the one going onto the canyon, and a refused media permission must
+      // not take that with it (Settings → Privacy and security).
+      if (source === "camera") await saveToGalleryIfWanted(asset.uri);
       await attach({
         uri: asset.uri,
         mimeType: asset.mimeType,

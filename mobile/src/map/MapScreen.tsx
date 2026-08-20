@@ -58,6 +58,7 @@ import { DeviceMotion, Magnetometer, type DeviceMotionMeasurement } from "expo-s
 import {
   DEM_ATTRIBUTION,
   TOPO_LAYERS,
+  TRACK_MIME_TYPES,
   VECTOR_STYLE_DEFAULTS,
   compassPointFor,
   draftAnchorIndices,
@@ -87,15 +88,43 @@ import { useRouteDraft, type RouteDraftHandle } from "./useRouteDraft";
 import { readSnapMode, writeSnapMode } from "./snapPreference";
 import { getVectorStyle, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
-import type { TCanyon } from "../api/types";
 import {
   useMirrorCanyons,
+  useMirrorCanyonTracks,
   useMirrorWaypoints,
   useMirrorRoutes,
 } from "../sync/useSyncQueries";
 import { config } from "../config";
-import { fontSize, fontWeight, radius, scrim, spacing, theme, withAlpha } from "../theme";
-import { MapSearchBar } from "./MapSearchBar";
+import {
+  assetHue,
+  fontSize,
+  fontWeight,
+  radius,
+  scrim,
+  spacing,
+  theme,
+  withAlpha,
+} from "../theme";
+import { MapSearchBar, type SavedSearchItem } from "./MapSearchBar";
+import {
+  CanyonPinsLayer,
+  OWNED_CANYON_COLOR,
+  SHARED_CANYON_COLOR,
+  toCanyonFeatureCollection,
+} from "./CanyonPinsLayer";
+import { SpeedElevationChip, READOUT_CHIP_HEIGHT } from "./SpeedElevationChip";
+import { sampleElevations } from "../offline/demLookup";
+import {
+  deriveSpeedMps,
+  publishLiveReadout,
+  type ReadoutFix,
+} from "./liveReadout";
+import {
+  routeActions,
+  trackActions,
+  vectorImportActions,
+  waypointActions,
+} from "../saved/assetActions";
 import { ScaleBar, SCALE_BAR_HEIGHT, type ScaleBarHandle } from "./ScaleBar";
 import { RouteMapLayer, ROUTE_COLOR, type RouteRequest } from "../media/RouteMapLayer";
 import {
@@ -151,6 +180,7 @@ import { isCompassEnabled } from "./compassPreference";
 import {
   isNorthUpLocked,
   isScaleBarEnabled,
+  isSpeedElevationEnabled,
   readKeepAwakeMode,
   readLongPressAction,
   readMapControlSide,
@@ -183,7 +213,7 @@ import { Row } from "../ui/Row";
 import { Toast, type ToastMessage } from "../ui/Toast";
 import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { CanyonRoutesLayer, type CanyonRoutesStatus } from "./CanyonRoutesLayer";
-import { MapLayersSheet } from "./MapLayersSheet";
+import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
 import { waypointSymbol } from "./waypointSymbol";
 import { WaypointSheet } from "./WaypointSheet";
 import { MapPointSheet, type MapPoint } from "./MapPointSheet";
@@ -214,6 +244,7 @@ import {
 import {
   reconcileTrackRecording,
   refreshActiveTrackStats,
+  continueTrackRecording,
   startTrackRecording,
 } from "../tracks/trackRecorder";
 import { TrackMapLayers } from "../tracks/TrackMapLayers";
@@ -389,40 +420,6 @@ const LOCATE_LABEL: Record<FollowMode, string> = {
   "course-up": "Facing your direction — tap to stop following",
 };
 
-const OWNED_CANYON_COLOR = "#f97316";
-const SHARED_CANYON_COLOR = "#629bf8";
-const MAX_LABEL_CHARS = 40;
-
-// Ellipsize pathological names (web CANYON-7 parity).
-const CANYON_LABEL_EXPR = [
-  "case",
-  [">", ["length", ["get", "name"]], MAX_LABEL_CHARS],
-  ["concat", ["slice", ["get", "name"], 0, MAX_LABEL_CHARS], "…"],
-  ["get", "name"],
-];
-
-type CanyonFeatureCollection = {
-  type: "FeatureCollection";
-  features: {
-    type: "Feature";
-    id: string;
-    geometry: { type: "Point"; coordinates: [number, number] };
-    properties: { id: string; name: string };
-  }[];
-};
-
-function toFeatureCollection(canyons: TCanyon[]): CanyonFeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: canyons.map((c) => ({
-      type: "Feature",
-      id: c.id,
-      geometry: { type: "Point", coordinates: [c.longitude, c.latitude] },
-      properties: { id: c.id, name: c.name },
-    })),
-  };
-}
-
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
 }
@@ -431,6 +428,9 @@ function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
  *  every render until the query resolved, which is exactly when its memo would
  *  have helped most. */
 const EMPTY_ROUTES: MirrorRoute[] = [];
+/** Stable identity for the waypoints-off case: a fresh `[]` per render would
+ *  re-commit every marker prop on a layer that is drawing nothing. */
+const EMPTY_WAYPOINTS: Waypoint[] = [];
 
 // Contour layers get contour styling; every other vector layer is the OSM
 // features set (web parity: `id.includes("contours")`).
@@ -615,6 +615,7 @@ export function MapScreen({
   route,
   editRoute,
   drawRouteFor,
+  continueTrack,
 }: {
   onOpenCanyon: (canyonId: string, name: string) => void;
   /**
@@ -653,6 +654,12 @@ export function MapScreen({
   // "Draw one on the map" from a canyon: arm the tool, and save into that
   // canyon's route slot rather than as a standalone route.
   drawRouteFor?: { canyonId: string; nonce: number } | null;
+  // "Continue recording" from the Saved tab: pick a finished track back up. An
+  // id only; the row comes from this screen's own list. It lands here rather
+  // than being done on Saved because arming the recorder needs the location
+  // prompt (which cannot be raised from a sheet) and because the map is what
+  // has to end up in recording mode.
+  continueTrack?: { trackId: string; nonce: number } | null;
 }) {
   // A route arrives via navigation params; clearing its badge drops it, and a
   // fresh request (new nonce) replaces whatever was showing.
@@ -670,6 +677,9 @@ export function MapScreen({
   // signal — battery saver + predictability in the field.
   const [offlineOnly, setOfflineOnly] = useState(false);
   const connectivity = useConnectivity(offlineOnly);
+  /** Mirror for `noteReadoutFix`, memoised once — see `dotWantedRef`. */
+  const offlineOnlyRef = useRef(offlineOnly);
+  offlineOnlyRef.current = offlineOnly;
   const { artifacts } = useMapArtifacts();
   // Bundled glyph/sprite install (§8.3). Map render is gated below until it
   // resolves — swapping the style's glyphs URL after mount rebuilds the whole
@@ -744,6 +754,23 @@ export function MapScreen({
   // "Canyon routes" layer (web parity), off by default: it is a lot of ink to
   // add to a map unasked, and the layers sheet is where it belongs.
   const [showCanyonRoutes, setShowCanyonRoutes] = useState(false);
+  // The rest of the layer masters. Every kind drawn over the basemap now has
+  // one, INCLUDING the three that never had a switch at all (own canyons,
+  // shared canyons, waypoints) — a map you cannot take the pins off is a map
+  // that cannot be read at a canyon's entrance, where they all overlap.
+  //
+  // Booleans in this screen's state, deliberately, and not derived from the
+  // items' own `visible` columns: a master has to toggle with zero items behind
+  // it (the layers tab lists every kind whether or not the phone holds any),
+  // and a switch whose value comes back from an async DB write lags the thumb.
+  // The per-item columns still exist and are still ANDed in below — they are
+  // written from Saved now rather than from the map.
+  const [showOwnedCanyons, setShowOwnedCanyons] = useState(true);
+  const [showSharedCanyons, setShowSharedCanyons] = useState(true);
+  const [showWaypoints, setShowWaypoints] = useState(true);
+  const [showGeoPdfs, setShowGeoPdfs] = useState(true);
+  const [showVectorImports, setShowVectorImports] = useState(true);
+  const [showOverlays, setShowOverlays] = useState(true);
   const [routesStatus, setRoutesStatus] = useState<CanyonRoutesStatus | null>(null);
   // Settled camera readout, used only to hand the offline-download screen the
   // ground the user is looking at. The scale bar does NOT read this: it follows
@@ -830,6 +857,12 @@ export function MapScreen({
   const [longPressAction, setLongPressAction] = useState<LongPressAction>(readLongPressAction);
   const [northReference, setNorthReference] = useState<NorthReference>(readNorthReference);
   const [scaleBarEnabled, setScaleBarEnabled] = useState(isScaleBarEnabled);
+  const [speedElevationEnabled, setSpeedElevationEnabled] = useState(
+    isSpeedElevationEnabled,
+  );
+  /** Mirror for `noteReadoutFix`, memoised once — see `dotWantedRef`. */
+  const speedElevationEnabledRef = useRef(speedElevationEnabled);
+  speedElevationEnabledRef.current = speedElevationEnabled;
   useFocusEffect(
     useCallback(() => {
       setCompassEnabled(isCompassEnabled());
@@ -840,6 +873,7 @@ export function MapScreen({
       setLongPressAction(readLongPressAction());
       setNorthReference(readNorthReference());
       setScaleBarEnabled(isScaleBarEnabled());
+      setSpeedElevationEnabled(isSpeedElevationEnabled());
       listEnabledOverlayKeys()
         .then((keys) => setEnabledOverlays(new Set(keys)))
         .catch(console.error);
@@ -1137,11 +1171,15 @@ export function MapScreen({
   const overlayRefs = useMemo(
     () =>
       // A muted area draws nothing, whatever its cells say — the "where" gate
-      // applied after the "what" (topoAreaMuting.ts).
-      composeTopoOverlayRefs(mergedOverlays, enabledOverlays).filter(
-        (ref) => !mutedAreas.has(ref.jobId),
-      ),
-    [mergedOverlays, enabledOverlays, mutedAreas],
+      // applied after the "what" (topoAreaMuting.ts). The kind's own master is
+      // a third gate ON TOP of both, so switching the band off and on again
+      // brings back exactly the layer/area picks that were showing.
+      showOverlays
+        ? composeTopoOverlayRefs(mergedOverlays, enabledOverlays).filter(
+            (ref) => !mutedAreas.has(ref.jobId),
+          )
+        : [],
+    [mergedOverlays, enabledOverlays, mutedAreas, showOverlays],
   );
 
   // Contiguous layerIndex allocation above the basemap band: raster overlays
@@ -1180,27 +1218,39 @@ export function MapScreen({
   );
   const withholdingCanyons = isWithholdingCanyons(mapFilter);
 
+  const ownedCanyons = useMemo(
+    () => (canyons.data ?? []).filter((c) => c.syncRole === "owner"),
+    [canyons.data],
+  );
+  const sharedCanyons = useMemo(
+    () => (canyons.data ?? []).filter((c) => c.syncRole === "shared"),
+    [canyons.data],
+  );
+  // The layer master and the Canyons screen's filter are separate gates and
+  // stay separate: the filter is "these particular canyons", the switch is
+  // "canyons at all", and folding one into the other would have turning the
+  // pins back on silently discard a filter the user set on another screen.
   const ownedFc = useMemo(
     () =>
-      toFeatureCollection(
-        (canyons.data ?? []).filter(
-          (c) =>
-            c.syncRole === "owner" &&
-            (allowedCanyonIds === null || allowedCanyonIds.has(c.id)),
-        ),
+      toCanyonFeatureCollection(
+        showOwnedCanyons
+          ? ownedCanyons.filter(
+              (c) => allowedCanyonIds === null || allowedCanyonIds.has(c.id),
+            )
+          : [],
       ),
-    [allowedCanyonIds, canyons.data],
+    [allowedCanyonIds, ownedCanyons, showOwnedCanyons],
   );
   const sharedFc = useMemo(
     () =>
-      toFeatureCollection(
-        (canyons.data ?? []).filter(
-          (c) =>
-            c.syncRole === "shared" &&
-            (allowedCanyonIds === null || allowedCanyonIds.has(c.id)),
-        ),
+      toCanyonFeatureCollection(
+        showSharedCanyons
+          ? sharedCanyons.filter(
+              (c) => allowedCanyonIds === null || allowedCanyonIds.has(c.id),
+            )
+          : [],
       ),
-    [allowedCanyonIds, canyons.data],
+    [allowedCanyonIds, sharedCanyons, showSharedCanyons],
   );
 
   /** Follow a track between two anchors, if snapping is on and finds one.
@@ -1676,15 +1726,18 @@ export function MapScreen({
   // independent asset management. This screen keeps only the per-asset
   // visibility toggles (registry/hooks below feed both screens).
   const { imports } = useVectorImports();
-  const visibleImports = imports.filter((imported) => imported.visible);
+  const visibleImports = showVectorImports
+    ? imports.filter((imported) => imported.visible)
+    : [];
 
   // Stage 6: GeoPDF imports. Import/resume/account-import/delete relocated
   // to SavedScreen (viewport-independent management); this screen keeps only
-  // the ready layers it renders plus the sheet's visibility + opacity rows.
+  // the ready layers it renders.
   const { geoPdfImports } = useGeoPdfImports();
-  const readyGeoPdfImports = geoPdfImports.filter(
-    (gp) => gp.state === "ready" && gp.visible,
-  );
+  const readyGeoPdfs = geoPdfImports.filter((gp) => gp.state === "ready");
+  const readyGeoPdfImports = showGeoPdfs
+    ? readyGeoPdfs.filter((gp) => gp.visible)
+    : [];
 
   // Stage 7: track recording + waypoints + navigate-to-point. The recorder
   // itself lives in tracks/trackRecorder (background task); this screen only
@@ -1721,6 +1774,13 @@ export function MapScreen({
     tracks.find(
       (track) => track.state === "recording" || track.state === "paused",
     ) ?? null;
+  /** Finished recordings — what the Tracks layer draws, and its tally. */
+  const savedTracks = tracks.filter((track) => track.state === "done");
+  // How many canyons have a route file on this phone. Counted here rather than
+  // taken from `routesStatus`, which only exists while the layer is MOUNTED —
+  // the row has to state its tally with the switch off, which is exactly when
+  // someone is deciding whether to turn it on.
+  const canyonRouteCount = useMirrorCanyonTracks(TRACK_MIME_TYPES).data?.length ?? 0;
 
   // Locking north-up straightens a map that is already turned. Without this the
   // setting reads as broken for as long as the user leaves the screen rotated:
@@ -2381,6 +2441,11 @@ export function MapScreen({
       setUserCoord(coord);
       latestFix.current = coord;
       refreshDeclination(coord);
+      // The readout's switch can be the ONLY reason this watcher is running
+      // (see the effect below), and in that case none of what follows applies:
+      // there is no dot to move and no camera to recentre, and flying to the
+      // first fix would yank a map the user never asked to be moved.
+      if (!dotWantedRef.current) return;
       const mode = followModeRef.current;
       if (firstFix.current) {
         firstFix.current = false;
@@ -2564,6 +2629,86 @@ export function MapScreen({
    * where a watcher is being replaced.
    */
   const [dotWanted, setDotWanted] = useState(false);
+  /** Mirror for `applyFix`, which is memoised once and must not be rebuilt on
+   *  every change of this — every rebuild tears the GPS watcher down and
+   *  starts a new one. */
+  const dotWantedRef = useRef(dotWanted);
+  dotWantedRef.current = dotWanted;
+
+  /**
+   * Why a position watcher is running at all.
+   *
+   * TWO reasons now, not one: the location dot, and the speed + elevation chip
+   * (Settings → Map), which needs a fix and has no other source for one. The
+   * chip's switch is off by default and its settings row says it keeps GPS
+   * running, because this is the one preference in the app that turns a sensor
+   * on for as long as the map is open without anything appearing on the map to
+   * account for it.
+   */
+  const fixWanted = dotWanted || speedElevationEnabled;
+
+  /**
+   * Fold one position into the speed/elevation chip.
+   *
+   * The heights come from the DEM FIRST and the handset second, for the reason
+   * `TrackStatsBody` gives at length: a DEM is deterministic where GPS altitude
+   * re-reads the same spot with metres of independent error. Saved regions
+   * answer with no request at all; the public tiles fill in elsewhere unless
+   * the user is simulating offline. The chip says which surface answered.
+   *
+   * The GPS altitude is published IMMEDIATELY and the terrain reading replaces
+   * it when it arrives — a number that is a little wrong now beats a dash that
+   * becomes a number in 200 ms, and outside DEM coverage the dash would be
+   * permanent.
+   *
+   * PRIVACY: `sampleElevations` sends TILE INDICES (a ~4.9 km cell) to the
+   * public terrarium bucket and nothing else, on the same client-direct path
+   * the region download already uses. Never logged. Nothing about the fix
+   * reaches our API from here.
+   */
+  const previousReadoutFix = useRef<ReadoutFix | null>(null);
+  const readoutSeq = useRef(0);
+  const noteReadoutFix = useCallback(
+    (position: Location.LocationObject) => {
+      if (!speedElevationEnabledRef.current) return;
+      const fix: ReadoutFix = {
+        lon: position.coords.longitude,
+        lat: position.coords.latitude,
+        speedMps: position.coords.speed,
+        atMs: position.timestamp,
+      };
+      const speedMps = deriveSpeedMps(fix, previousReadoutFix.current);
+      previousReadoutFix.current = fix;
+      publishLiveReadout({
+        speedMps,
+        elevationM: position.coords.altitude,
+        fromTerrain: false,
+        atMs: fix.atMs,
+      });
+
+      // Guarded by a sequence number: tile reads resolve out of order, and a
+      // late answer for a fix two positions ago would overwrite the current
+      // one with the height of somewhere the user has left.
+      const seq = (readoutSeq.current += 1);
+      // `distanceM` describes a position's place along a LINE; a lone point is
+      // at zero of one.
+      sampleElevations([{ lon: fix.lon, lat: fix.lat, distanceM: 0 }], {
+        allowNetwork: !offlineOnlyRef.current,
+      })
+        .then(([elevationM]) => {
+          if (seq !== readoutSeq.current || elevationM == null) return;
+          publishLiveReadout({
+            speedMps,
+            elevationM,
+            fromTerrain: true,
+            atMs: fix.atMs,
+          });
+        })
+        // No detail: the error could carry a tile index, which is a position.
+        .catch(() => undefined);
+    },
+    [],
+  );
 
   // The dot's own position watcher.
   //
@@ -2582,7 +2727,7 @@ export function MapScreen({
   // recording's battery cost for the (large) majority of a trip when the map
   // is not on screen, and not while the user is looking at it.
   useEffect(() => {
-    if (!sensorsActive || !dotWanted) return;
+    if (!sensorsActive || !fixWanted) return;
     let subscription: Location.LocationSubscription | null = null;
     let cancelled = false;
     void (async () => {
@@ -2593,6 +2738,12 @@ export function MapScreen({
       );
       if (cancelled) return;
       if (lastKnown) {
+        // The readout gets it too, and for the same reason the dot does: a
+        // chip showing two dashes until the first watch callback lands reads
+        // as broken, and indoors that callback can be minutes away. A cached
+        // fix is stale by definition, which is exactly what `atMs` and the
+        // staleness rule are for — the height still stands, the speed does not.
+        noteReadoutFix(lastKnown);
         applyFix([lastKnown.coords.longitude, lastKnown.coords.latitude]);
       }
       // Balanced = fused wifi/cell + GPS. High (GPS-priority) starves indoors
@@ -2603,8 +2754,10 @@ export function MapScreen({
           timeInterval: 3000,
           distanceInterval: 5,
         },
-        (position) =>
-          applyFix([position.coords.longitude, position.coords.latitude]),
+        (position) => {
+          noteReadoutFix(position);
+          applyFix([position.coords.longitude, position.coords.latitude]);
+        },
       ).catch((err: unknown) => {
         console.error(err);
         return null;
@@ -2619,8 +2772,12 @@ export function MapScreen({
       cancelled = true;
       subscription?.remove();
       subscription = null;
+      // A stopped watcher has no readout: leaving the tab must not leave the
+      // chip reporting the speed it saw on the way out.
+      publishLiveReadout(null);
+      previousReadoutFix.current = null;
     };
-  }, [sensorsActive, dotWanted, applyFix]);
+  }, [sensorsActive, fixWanted, applyFix, noteReadoutFix]);
 
   // The compass. Wanted by the tape (which runs with no fix at all) and by the
   // location arrow.
@@ -3022,6 +3179,50 @@ export function MapScreen({
     }
   }, [dotWanted, handleLocateMe, notify]);
 
+  /**
+   * Pick a finished recording back up, from its own options sheet.
+   *
+   * Everything `handleStartRecording` does around the recorder itself applies
+   * here too — the permission has to be asked for OUTSIDE the sheet, and
+   * recording without seeing yourself is disorienting — so this is that flow
+   * with a different verb in the middle rather than a second version of it.
+   */
+  const handleContinueRecording = useCallback(
+    async (track: Track) => {
+      if (!(await ensureForegroundLocationPermission())) return;
+      try {
+        await continueTrackRecording(track);
+        if (!dotWanted) handleLocateMe();
+        notify(`Recording again — “${track.name}” continues.`, "info");
+      } catch (err) {
+        console.error(err);
+        Alert.alert(
+          "Recording error",
+          // The one failure worth naming: another recording is already running,
+          // and the fix is the user's to make.
+          messageFromError(err, "Couldn't continue that recording."),
+        );
+      }
+    },
+    [dotWanted, handleLocateMe, notify],
+  );
+
+  // The Saved tab's "Continue recording", arriving as a navigation param.
+  // Below the handler it calls, and keyed on a nonce so asking twice for the
+  // same track works while a re-render does not repeat it.
+  const continueTrackNonce = continueTrack?.nonce ?? null;
+  const handledContinueNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!continueTrack) return;
+    if (handledContinueNonce.current === continueTrack.nonce) return;
+    const target = tracks.find((track) => track.id === continueTrack.trackId);
+    // The track list is read asynchronously; leave the request unhandled so the
+    // next render with rows tries again (same rule as `editRoute` above).
+    if (!target) return;
+    handledContinueNonce.current = continueTrack.nonce;
+    void handleContinueRecording(target);
+  }, [continueTrack, continueTrackNonce, handleContinueRecording, tracks]);
+
   const handleWaypointPress = useCallback(
     (waypoint: Waypoint) => {
       // Same reason as a canyon pin: while a tool is armed, a marker under the
@@ -3048,6 +3249,169 @@ export function MapScreen({
         TOPO_LAYERS.find((meta) => meta.name === layer.name)?.label ?? layer.name,
     })),
   );
+
+  /**
+   * What the search box can find on this phone.
+   *
+   * Composed from the same lists the layers above are counted from, in the
+   * order a tie is broken in (`localSearch.ts` keeps it): canyons, then
+   * waypoints, then the recorded and drawn lines. Extents resolve lazily
+   * through the SAME descriptors Saved uses (`assetActions.ts`) — one
+   * definition of "where is this thing", not a second one for search.
+   *
+   * PRIVACY: names and coordinates stay in this array. Nothing here is sent
+   * anywhere; the geocoder only ever sees the typed string.
+   */
+  const savedSearchItems: SavedSearchItem[] = useMemo(
+    () => [
+      ...ownedCanyons.map((canyon) => ({
+        key: `canyon:${canyon.id}`,
+        icon: "map-pin" as const,
+        hue: OWNED_CANYON_COLOR,
+        title: canyon.name,
+        kindLabel: "Canyon",
+        alternates: canyon.altNames,
+        resolveBbox: async () =>
+          bboxOfPoints([{ lon: canyon.longitude, lat: canyon.latitude }]),
+      })),
+      ...sharedCanyons.map((canyon) => ({
+        key: `canyon:${canyon.id}`,
+        icon: "share-2" as const,
+        hue: SHARED_CANYON_COLOR,
+        title: canyon.name,
+        kindLabel: "Shared canyon",
+        alternates: canyon.altNames,
+        resolveBbox: async () =>
+          bboxOfPoints([{ lon: canyon.longitude, lat: canyon.latitude }]),
+      })),
+      ...(mirrorWaypoints.data ?? []).map((waypoint) => ({
+        key: `waypoint:${waypoint.id}`,
+        icon: "flag" as const,
+        hue: assetHue.waypoint,
+        title: waypoint.name,
+        kindLabel: "Waypoint",
+        alternates: waypoint.tags,
+        resolveBbox: waypointActions(waypoint).resolveBbox,
+      })),
+      ...savedTracks.map((track) => ({
+        key: `track:${track.id}`,
+        icon: "activity" as const,
+        hue: assetHue.track,
+        title: track.name,
+        kindLabel: "Track",
+        resolveBbox: trackActions(track).resolveBbox,
+      })),
+      ...(routes.data ?? []).map((route) => ({
+        key: `route:${route.id}`,
+        icon: "pen-tool" as const,
+        hue: assetHue.route,
+        title: route.name,
+        kindLabel: "Route",
+        resolveBbox: routeActions(route).resolveBbox,
+      })),
+      ...imports.map((imported) => ({
+        key: `import:${imported.id}`,
+        icon: "file-plus" as const,
+        hue: assetHue.vector,
+        title: imported.name,
+        kindLabel: "Imported file",
+        resolveBbox: vectorImportActions(imported).resolveBbox,
+      })),
+    ],
+    [ownedCanyons, sharedCanyons, mirrorWaypoints.data, savedTracks, routes.data, imports],
+  );
+
+  /**
+   * The Layers tab, composed here because this is where every count and every
+   * switch already lives. Order is the reading order of the map: the things the
+   * user made or saved first, the imported files after, and the topo band last
+   * (it is the only row that opens — see MapLayersSheet's header).
+   *
+   * Hues match the ink the map actually draws with, so a row and its layer are
+   * recognisably the same thing.
+   */
+  const layerToggles: LayerToggleEntry[] = [
+    {
+      key: "canyons",
+      icon: "map-pin",
+      hue: OWNED_CANYON_COLOR,
+      title: "My canyons",
+      count: ownedCanyons.length,
+      value: showOwnedCanyons,
+      onChange: setShowOwnedCanyons,
+    },
+    {
+      key: "shared-canyons",
+      icon: "share-2",
+      hue: SHARED_CANYON_COLOR,
+      title: "Shared canyons",
+      count: sharedCanyons.length,
+      value: showSharedCanyons,
+      onChange: setShowSharedCanyons,
+    },
+    {
+      key: "waypoints",
+      icon: "flag",
+      hue: assetHue.waypoint,
+      title: "Waypoints",
+      count: waypoints.length,
+      value: showWaypoints,
+      onChange: setShowWaypoints,
+    },
+    {
+      key: "canyon-routes",
+      icon: "git-commit",
+      hue: OWNED_CANYON_COLOR,
+      title: "Canyon routes",
+      count: canyonRouteCount,
+      // The layer's own report of what it could not draw. Present only while
+      // it is on AND something is missing — a map drawing less than it says
+      // has to say so (DESIGN.md §8), and the rest of the time there is
+      // nothing to report.
+      note:
+        showCanyonRoutes && routesStatus && routesStatus.unavailable > 0
+          ? `${routesStatus.unavailable} not downloaded yet`
+          : undefined,
+      value: showCanyonRoutes,
+      onChange: setShowCanyonRoutes,
+    },
+    {
+      key: "routes",
+      icon: "pen-tool",
+      hue: assetHue.route,
+      title: "My routes",
+      count: routes.data?.length ?? 0,
+      value: showRoutes,
+      onChange: setShowRoutes,
+    },
+    {
+      key: "geopdfs",
+      icon: "file-text",
+      hue: assetHue.geoPdf,
+      title: "GeoPDF maps",
+      count: readyGeoPdfs.length,
+      value: showGeoPdfs,
+      onChange: setShowGeoPdfs,
+    },
+    {
+      key: "vector-imports",
+      icon: "file-plus",
+      hue: assetHue.vector,
+      title: "Other routes",
+      count: imports.length,
+      value: showVectorImports,
+      onChange: setShowVectorImports,
+    },
+    {
+      key: "tracks",
+      icon: "activity",
+      hue: assetHue.track,
+      title: "Tracks",
+      count: savedTracks.length,
+      value: showTracks,
+      onChange: setShowTracks,
+    },
+  ];
 
   // Chrome geometry. Notices clear the search row so an expanded search bar
   // never covers them; the scale bar runs from the left edge up to the floating
@@ -3089,6 +3453,8 @@ export function MapScreen({
     SCALE_BAR_HEIGHT +
     INSTRUMENT_GAP +
     COMPASS_STRIP_HEIGHT +
+    INSTRUMENT_GAP +
+    READOUT_CHIP_HEIGHT +
     INSTRUMENT_GAP;
   const controlsEdge = controlsOnLeft
     ? { left: CHROME_GAP, right: undefined }
@@ -3326,7 +3692,13 @@ export function MapScreen({
                   type="raster"
                   id={`geopdf-layer-${geoPdf.id}`}
                   layerIndex={overlayRenderPlan.nextIndex + geoPdfPosition}
-                  style={{ rasterOpacity: geoPdf.opacity }}
+                  // FULL, not `geoPdf.opacity`. Nothing writes that column
+                  // since the layers sheet lost its opacity rail, so reading it
+                  // only meant imports made before that change stayed
+                  // permanently washed out with no control to fix them. A
+                  // future opacity control re-wires this line and the default
+                  // in importPipeline together.
+                  style={{ rasterOpacity: 1 }}
                 />
               </ResolvedSource>
             ) : null,
@@ -3419,7 +3791,7 @@ export function MapScreen({
             the canyon sources so canyons draw on top. */}
         <TrackMapLayers
           tracks={tracks}
-          waypoints={waypoints}
+          waypoints={showWaypoints ? waypoints : EMPTY_WAYPOINTS}
           liveCoord={userCoord}
           showTracks={showTracks}
           onWaypointPress={handleWaypointPress}
@@ -3444,63 +3816,13 @@ export function MapScreen({
         ) : null}
 
         {/* Canyon overlays: authed API GeoJSON — never baked into tiles
-            (privacy rule). Shared first so owned draws on top. */}
-        <GeoJSONSource id="shared-canyons" data={sharedFc} onPress={handleCanyonPress}>
-          <Layer
-            key="shared-canyon-circles"
-            type="circle"
-            id="shared-canyon-circles"
-            style={{
-              circleRadius: 6,
-              circleColor: SHARED_CANYON_COLOR,
-              circleStrokeColor: "#ffffff",
-              circleStrokeWidth: 1.5,
-            }}
-          />
-          <Layer
-            key="shared-canyon-labels"
-            type="symbol"
-            id="shared-canyon-labels"
-            style={{
-              textField: CANYON_LABEL_EXPR as unknown as string,
-              textFont: ["Noto Sans Medium"],
-              textSize: 12,
-              textColor: theme.textPrimary,
-              textHaloColor: theme.bonus2,
-              textHaloWidth: 1,
-              textAnchor: "top",
-              textOffset: [0, 0.8],
-            }}
-          />
-        </GeoJSONSource>
-        <GeoJSONSource id="owned-canyons" data={ownedFc} onPress={handleCanyonPress}>
-          <Layer
-            key="canyon-circles"
-            type="circle"
-            id="canyon-circles"
-            style={{
-              circleRadius: 6,
-              circleColor: OWNED_CANYON_COLOR,
-              circleStrokeColor: "#ffffff",
-              circleStrokeWidth: 1.5,
-            }}
-          />
-          <Layer
-            key="canyon-labels"
-            type="symbol"
-            id="canyon-labels"
-            style={{
-              textField: CANYON_LABEL_EXPR as unknown as string,
-              textFont: ["Noto Sans Medium"],
-              textSize: 12,
-              textColor: theme.textPrimary,
-              textHaloColor: theme.bonus2,
-              textHaloWidth: 1,
-              textAnchor: "top",
-              textOffset: [0, 0.8],
-            }}
-          />
-        </GeoJSONSource>
+            (privacy rule). Shared under owned; one definition, also drawn by
+            the canyon point-picker (CanyonPinsLayer). */}
+        <CanyonPinsLayer
+          ownedFc={ownedFc}
+          sharedFc={sharedFc}
+          onPress={handleCanyonPress}
+        />
 
         {showRoutes ? (
           <RoutesLayer
@@ -3554,7 +3876,7 @@ export function MapScreen({
 
         {/* Own location marker (expo-location watcher) — see UserLocationMarker
             above for why it is its own component. */}
-        {userCoord ? (
+        {dotWanted && userCoord ? (
           <UserLocationMarker
             coord={userCoord}
             markerColorId={markerColorId}
@@ -3581,7 +3903,18 @@ export function MapScreen({
           // the user's handedness together, or they end up in the same corner.
           side={controlsOnLeft ? "right" : "left"}
           reservedWidth={SEARCH_SIZE + CHROME_GAP}
+          savedItems={savedSearchItems}
           onSelectPlace={handleSelectPlace}
+          onSelectSaved={(item) => {
+            item
+              .resolveBbox()
+              .then((bbox) => {
+                // Nothing to fly to (a track whose points went with a wipe) is
+                // not an error worth a toast — the row simply cannot answer.
+                if (bbox) fitCameraToBbox(bbox);
+              })
+              .catch((err: unknown) => console.error(err));
+          }}
         />
       ) : null}
 
@@ -3804,6 +4137,20 @@ export function MapScreen({
           the point of the setting is which side the thumb reaches, and leaving
           the instruments put would only move the buttons on top of them. */}
       <View style={[styles.controls, controlsEdge]}>
+        {/* THE TOOL GROUP IS AT THE TOP OF THE COLUMN, and that is a layout
+            constraint rather than a preference. Its tray opens SIDEWAYS, across
+            the map towards the opposite edge — which is where the instruments
+            live. Third from the bottom, the tray ran straight through the
+            speed/elevation chip; from the top it clears the whole stack. It is
+            also the least-reached button of the four, so the two that are
+            reached (layers, locate) keep the thumb end of the column. */}
+        <MapToolGroup
+          side={controlsOnLeft ? "left" : "right"}
+          open={toolsOpen}
+          activeTool={measuring ? "measure" : drawingRoute ? "route" : null}
+          onToggleOpen={() => setToolsOpen((open) => !open)}
+          onPickTool={handlePickTool}
+        />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Choose layers"
@@ -3831,16 +4178,6 @@ export function MapScreen({
             style={followMode === "off" ? styles.locateIcon : undefined}
           />
         </Pressable>
-        {/* Map tools behind one button. Turning MEASURE off discards its
-            points — a measurement is a question you asked once, not an asset.
-            Route draw is the opposite and asks before discarding. */}
-        <MapToolGroup
-          side={controlsOnLeft ? "left" : "right"}
-          open={toolsOpen}
-          activeTool={measuring ? "measure" : drawingRoute ? "route" : null}
-          onToggleOpen={() => setToolsOpen((open) => !open)}
-          onPickTool={handlePickTool}
-        />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Map data attribution"
@@ -3854,6 +4191,12 @@ export function MapScreen({
       {/* The map's own instruments, stacked along the bottom edge opposite the
           buttons: which way the user is facing, then how far things are. */}
       <View style={[styles.instruments, instrumentsEdge]} pointerEvents="none">
+        {/* Above the compass and the scale bar: the stack reads bottom-up from
+            "how far" through "which way" to "how fast and how high", and the
+            two that were here first must not move when this one is switched
+            on. It subscribes to its own value — a fix must not re-render this
+            screen (mobile/CLAUDE.md, Battery). */}
+        {speedElevationEnabled ? <SpeedElevationChip active={sensorsActive} /> : null}
         <LiveCompassStrip
           enabled={compassEnabled}
           width={compassWidth}
@@ -4122,6 +4465,7 @@ export function MapScreen({
         visible={optionsTrackId !== null}
         onClose={() => setOptionsTrackId(null)}
         onShowOnMap={(bbox) => fitCameraToBbox(bbox)}
+        onContinueRecording={(track) => void handleContinueRecording(track)}
         onInfo={(text) => notify(text, "info")}
         onError={(text) => notify(text, "error")}
       />
@@ -4148,27 +4492,9 @@ export function MapScreen({
         onToggleOverlay={toggleOverlay}
         mutedAreas={mutedAreas}
         onSetAreasMuted={setAreasMuted}
-        geoPdfImports={geoPdfImports}
-        onGeoPdfChange={(id, patch) => {
-          updateGeoPdfImport(id, patch).catch(console.error);
-        }}
-        imports={imports}
-        onImportVisibility={(id, visible) => {
-          setVectorImportVisible(id, visible).catch(console.error);
-        }}
-        tracks={tracks}
-        onTrackVisibility={(id, visible) => {
-          updateTrack(id, { visible }).catch(console.error);
-        }}
-        showTracks={showTracks}
-        onShowTracksChange={setShowTracks}
-        showCanyonRoutes={showCanyonRoutes}
-        onShowCanyonRoutesChange={setShowCanyonRoutes}
-        routesStatus={routesStatus}
-        canyonRouteHue={OWNED_CANYON_COLOR}
-        showRoutes={showRoutes}
-        onShowRoutesChange={setShowRoutes}
-        routeCount={routes.data?.length ?? 0}
+        layers={layerToggles}
+        showOverlays={showOverlays}
+        onShowOverlaysChange={setShowOverlays}
         offlineOnly={offlineOnly}
         onOfflineOnlyChange={setOfflineOnly}
         onSaveArea={() => {
@@ -4178,10 +4504,6 @@ export function MapScreen({
             center: [camera.longitude, camera.latitude],
             zoom: camera.zoom,
           });
-        }}
-        onShowOnMap={(bbox) => {
-          setPickerOpen(false);
-          fitCameraToBbox(bbox);
         }}
         onOpenSaved={(category) => {
           setPickerOpen(false);

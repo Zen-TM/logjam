@@ -261,9 +261,17 @@ export function ProfileChart({
           appears under a finger. */}
       <View style={styles.readoutRow}>
         {scrubbed ? (
+          // VALUE FIRST, then where it is, joined by a word.
+          // "3.7 km · 51 m" was two bare numbers in the order of the axes, and
+          // reading it needed you to already know which axis was which — the
+          // units do not settle it, since a height and a distance are both
+          // metres. "51 m at 3.7 km" says the same thing in the order the
+          // question is asked, costs no extra line, and works unchanged for a
+          // speed against a clock ("4.2 km/h at 1:23").
           <Text style={styles.readout}>
+            {scrubbed.value != null ? formatValue(scrubbed.value) : "—"}
+            <Text style={styles.readoutAt}>{"  at  "}</Text>
             {formatX(scrubbed.x)}
-            {scrubbed.value != null ? `  ·  ${formatValue(scrubbed.value)}` : ""}
           </Text>
         ) : (
           <Text style={styles.readoutHint}>{hint}</Text>
@@ -333,6 +341,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
   },
   readoutHint: { color: theme.textMuted, fontSize: fontSize.xs },
+  readoutAt: { color: theme.textMuted, fontWeight: fontWeight.regular },
   chart: {
     flexDirection: "row",
     alignItems: "flex-end",

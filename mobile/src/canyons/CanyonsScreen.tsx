@@ -70,6 +70,7 @@ import {
 } from "../ui";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { CanyonEditSheet } from "./CanyonEditSheet";
+import { takePickedPoint } from "../map/pickedPoint";
 import { canyonDeleteConfirm } from "./canyonDeleteConfirm";
 import { CanyonFilterSheet, sortLabel } from "./CanyonFilterSheet";
 import {
@@ -87,13 +88,17 @@ type Countable = MirrorCanyon & { _count?: { tripLogLinks: number; shares: numbe
 export function CanyonsScreen({
   onOpenCanyon,
   onShowOnMap,
-  onPickOnMap,
+  onPickPoint,
 }: {
   onOpenCanyon: (canyon: MirrorCanyon) => void;
   /** Focuses the map on one canyon (a tight bbox around its point). */
   onShowOnMap: (canyon: MirrorCanyon) => void;
-  /** Opens the map so the user can press and hold where the canyon is. */
-  onPickOnMap: () => void;
+  /**
+   * Open the full-screen point picker, starting on `from` if the form already
+   * holds a coordinate. It hands its answer back through `pickedPoint.ts`,
+   * which this screen collects when it regains focus.
+   */
+  onPickPoint: (from: { latitude: number; longitude: number } | null) => void;
 }) {
   const connectivity = useConnectivity();
   const online = connectivity === "online";
@@ -110,10 +115,55 @@ export function CanyonsScreen({
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<CanyonFilters>(EMPTY_CANYON_FILTERS);
   const [sort, setSort] = useState<CanyonSortKey>("name");
-  const [sheet, setSheet] = useState<"filters" | "add" | null>(null);
+  const [sheet, setSheet] = useState<"filters" | null>(null);
   const mapFilter = useCanyonMapFilter();
   const [menuCanyonId, setMenuCanyonId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ canyon: MirrorCanyon | null } | null>(null);
+  /**
+   * The picker round trip.
+   *
+   * `resumingEdit` is true from the moment the sheet is closed to make room for
+   * the map until the sheet is back on screen — it is what stops the reopen
+   * from reseeding the form (see `CanyonEditSheet`). `pickedCoords` is the
+   * answer, applied to the two coordinate fields and nothing else.
+   */
+  const [resumingEdit, setResumingEdit] = useState(false);
+  const [pickedCoords, setPickedCoords] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  /** Which canyon the interrupted edit belonged to (null = a new one). */
+  const pendingEditCanyon = useRef<MirrorCanyon | null>(null);
+  /**
+   * Away at the picker. A REF as well as the state above, because the two are
+   * cleared at different moments: this one the instant we are back (it is
+   * control flow), the state only when the sheet finally closes (it is the prop
+   * that suppresses the reseed, and clearing it while the sheet is open would
+   * wipe the form on the very next render).
+   */
+  const awayAtPicker = useRef(false);
+
+  const startEditing = useCallback((canyon: MirrorCanyon | null) => {
+    // A NEW edit, so the form seeds from scratch: every picker flag off first.
+    awayAtPicker.current = false;
+    setResumingEdit(false);
+    setPickedCoords(null);
+    setEditing({ canyon });
+  }, []);
+
+  const openPicker = useCallback(
+    (from: { latitude: number; longitude: number } | null) => {
+      // The sheet is a Modal and would cover the map, so it has to go — but the
+      // component stays mounted, which is what makes the form survive.
+      pendingEditCanyon.current = editing?.canyon ?? null;
+      awayAtPicker.current = true;
+      setResumingEdit(true);
+      setEditing(null);
+      onPickPoint(from);
+    },
+    [editing, onPickPoint],
+  );
+
   const [loggingFor, setLoggingFor] = useState<MirrorCanyon | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
@@ -126,14 +176,27 @@ export function CanyonsScreen({
     setToast({ text, tone: "error", nonce: toastNonce.current });
   }, []);
 
-  // Sheets don't outlive the tab (DESIGN.md §7).
-  const closeSheets = useCallback(() => {
+  // Sheets don't outlive the tab (DESIGN.md §7) — with ONE exception, and it is
+  // the same focus effect because the two must not race: arriving back from the
+  // point picker is not "the user came to this tab", it is the second half of
+  // something they started here. `takePickedPoint` consumes the answer, so a
+  // later ordinary arrival cannot re-apply a coordinate that has since been
+  // typed over, and a CANCELLED pick still restores the form — they went to
+  // look at a map, not to abandon what they had written.
+  const onFocus = useCallback(() => {
+    if (awayAtPicker.current) {
+      awayAtPicker.current = false;
+      const point = takePickedPoint();
+      if (point) setPickedCoords(point);
+      setEditing({ canyon: pendingEditCanyon.current });
+      return;
+    }
     setSheet(null);
     setMenuCanyonId(null);
     setEditing(null);
     setLoggingFor(null);
   }, []);
-  useFocusEffect(closeSheets);
+  useFocusEffect(onFocus);
 
   // The viewer's OWN trip tally per canyon, derived locally from the mirrored
   // trips — the server's `_count` never reaches the mirror. Trips of others
@@ -335,7 +398,7 @@ export function CanyonsScreen({
               filled={search.trim() !== ""}
               onPress={() => (findOpen ? clearFind() : setFindOpen(true))}
             />
-            <Button label="Add" icon="plus" compact onPress={() => setSheet("add")} />
+            <Button label="Add" icon="plus" compact onPress={() => startEditing(null)} />
           </View>
         }
       >
@@ -440,7 +503,7 @@ export function CanyonsScreen({
           <EmptyPanel
             bucket={bucket}
             filtering={filtering}
-            onAdd={() => setSheet("add")}
+            onAdd={() => startEditing(null)}
             onClear={() => {
               clearFind();
               resetFilters();
@@ -495,7 +558,7 @@ export function CanyonsScreen({
                   onPress={() => {
                     const canyon = menuCanyon;
                     setMenuCanyonId(null);
-                    setEditing({ canyon });
+                    startEditing(canyon);
                   }}
                 />
                 <Row
@@ -508,36 +571,6 @@ export function CanyonsScreen({
             ) : null}
           </View>
         ) : null}
-      </BottomSheet>
-
-      {/* How a canyon gets in. Both routes end in the same form; the difference
-          is only where the coordinates come from. Sharing a canyon and picking
-          it on the map both live on the canyon itself, not here. */}
-      <BottomSheet
-        visible={sheet === "add"}
-        onClose={() => setSheet(null)}
-        title="Add a canyon"
-      >
-        <View style={styles.sheetBody}>
-          <Row
-            icon="edit-3"
-            title="Enter it by hand"
-            subtitle="Name, position, grade — whatever you know"
-            onPress={() => {
-              setSheet(null);
-              setEditing({ canyon: null });
-            }}
-          />
-          <Row
-            icon="map"
-            title="Pick it on the map"
-            subtitle="Press and hold the spot, then choose Add canyon"
-            onPress={() => {
-              setSheet(null);
-              onPickOnMap();
-            }}
-          />
-        </View>
       </BottomSheet>
 
       <CanyonFilterSheet
@@ -558,7 +591,15 @@ export function CanyonsScreen({
       <CanyonEditSheet
         visible={editing !== null}
         canyon={editing?.canyon ?? null}
-        onClose={() => setEditing(null)}
+        onPickOnMap={openPicker}
+        pickedCoords={pickedCoords}
+        resuming={resumingEdit}
+        onClose={() => {
+          setEditing(null);
+          // The round trip is over: the next open seeds from scratch again.
+          setResumingEdit(false);
+          setPickedCoords(null);
+        }}
         onSaved={info}
         onFailed={fail}
       />

@@ -22,6 +22,7 @@ export function TrackOptionsSheet({
   visible,
   onClose,
   onShowOnMap,
+  onContinueRecording,
   onInfo,
   onError,
 }: {
@@ -29,6 +30,14 @@ export function TrackOptionsSheet({
   visible: boolean;
   onClose: () => void;
   onShowOnMap: (bbox: Bbox) => void;
+  /**
+   * Pick this recording back up. Owned by the MAP rather than by this sheet
+   * because starting a recorder needs the location permission prompt, which
+   * cannot be raised from an open sheet (DESIGN.md §7 — the bug that made
+   * "Take photo" look dead), and because the map is what has to enter
+   * recording mode afterwards.
+   */
+  onContinueRecording: (track: Track) => void;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
 }) {
@@ -116,6 +125,19 @@ export function TrackOptionsSheet({
                 }}
               />
             }
+          />
+          {/* First of the verbs, and above "Zoom to this track", because it is
+              the only one that changes what the phone is DOING rather than
+              what it is showing. */}
+          <Row
+            title="Continue recording"
+            icon="play-circle"
+            hue={assetHue.track}
+            disabled={busy}
+            onPress={() => {
+              close();
+              onContinueRecording(track);
+            }}
           />
           {actions.locatable ? (
             <Row

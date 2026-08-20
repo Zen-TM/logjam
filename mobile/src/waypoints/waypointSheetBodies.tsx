@@ -9,12 +9,16 @@
 //
 // Every write goes through the caller's `onWrite`, which owns the busy flag and
 // the error toast, because the two hosts report failure differently.
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
-import { WAYPOINT_TAG_SUGGESTIONS } from "@logjam/shared";
+import type { TextInput } from "react-native";
+import {
+  WAYPOINT_TAG_SUGGESTIONS,
+  validateWaypointPayload,
+} from "@logjam/shared";
 
 import { assetHue, fontSize, spacing, theme } from "../theme";
-import { ChipPicker, Row, TextField, type ChipOption } from "../ui";
+import { Button, ChipPicker, ErrorBanner, Row, TextField, type ChipOption } from "../ui";
 import { useMirrorCanyons, useMirrorShareCounts } from "../sync/useSyncQueries";
 import type { MirrorWaypoint } from "../sync/mirrorStore";
 import { linkableCanyons, truncationHint } from "./linkableCanyons";
@@ -169,6 +173,124 @@ export function WaypointCanyonsBody({
   );
 }
 
+
+/**
+ * Name, position and notes for one waypoint.
+ *
+ * This replaces a name+notes `RenameForm`, which meant a waypoint's POSITION —
+ * the only field it cannot exist without — was the one thing about it nobody
+ * could correct. A pin dropped with a thumb on a moving map is off by whatever
+ * the map's scale made it off by, and the fix used to be delete-and-drop-again.
+ *
+ * The coordinates share a line because they are one value read as a pair, and
+ * splitting them down a column reads as two unrelated numbers.
+ *
+ * Validated by `validateWaypointPayload` — the same predicate the API applies —
+ * BEFORE anything is queued, so a bad number is a message here rather than a
+ * dead push in the outbox whose reason the user never sees (the rule
+ * CanyonEditSheet already follows).
+ */
+export function WaypointEditBody({
+  waypoint,
+  onSubmit,
+}: {
+  waypoint: MirrorWaypoint;
+  /**
+   * Called with only what CHANGED, ready for an outbox patch. Not called at all
+   * when nothing moved; closing the mode is the caller's job either way.
+   */
+  onSubmit: (changed: {
+    name?: string;
+    notes?: string | null;
+    latitude?: number;
+    longitude?: number;
+  }) => void;
+}) {
+  const [name, setName] = useState(waypoint.name);
+  const [notes, setNotes] = useState(waypoint.notes ?? "");
+  // Text, not numbers: a half-typed "-33." is not a number and must not be
+  // rewritten under the cursor.
+  const [latitude, setLatitude] = useState(String(waypoint.latitude));
+  const [longitude, setLongitude] = useState(String(waypoint.longitude));
+  const [invalid, setInvalid] = useState<string | null>(null);
+  const nameRef = useRef<TextInput>(null);
+
+  // The sheet is already open and focused, so focus lands on the next frame —
+  // `autoFocus` runs before the field attaches (DESIGN.md §6).
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => nameRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const commit = () => {
+    setInvalid(null);
+    const changed: {
+      name?: string;
+      notes?: string | null;
+      latitude?: number;
+      longitude?: number;
+    } = {};
+
+    // An empty name is a no-op, not a clear: a waypoint requires one, and the
+    // server would reject it after the sheet had already closed.
+    const trimmedName = name.trim();
+    if (trimmedName && trimmedName !== waypoint.name) changed.name = trimmedName;
+
+    const trimmedNotes = notes.trim();
+    if (trimmedNotes !== (waypoint.notes ?? "")) changed.notes = trimmedNotes || null;
+
+    // Compared as TEXT against the stored value's own rendering, so retyping
+    // the same number is not an edit and 6 vs 6.0 does not queue a write.
+    if (latitude.trim() !== String(waypoint.latitude)) {
+      changed.latitude = Number(latitude.trim());
+    }
+    if (longitude.trim() !== String(waypoint.longitude)) {
+      changed.longitude = Number(longitude.trim());
+    }
+
+    const problem = validateWaypointPayload(changed, { requireCore: false });
+    if (problem) {
+      setInvalid(problem);
+      return;
+    }
+    if (Object.keys(changed).length > 0) onSubmit(changed);
+    else onSubmit({});
+  };
+
+  return (
+    <View style={styles.body}>
+      {invalid ? <ErrorBanner message={invalid} /> : null}
+      <TextField
+        label="Name"
+        value={name}
+        onChangeText={setName}
+        inputRef={nameRef}
+        returnKeyType="next"
+      />
+      <View style={styles.coordRow}>
+        <View style={styles.coordField}>
+          <TextField
+            label="Latitude"
+            value={latitude}
+            onChangeText={setLatitude}
+            keyboardType="numbers-and-punctuation"
+          />
+        </View>
+        <View style={styles.coordField}>
+          <TextField
+            label="Longitude"
+            value={longitude}
+            onChangeText={setLongitude}
+            keyboardType="numbers-and-punctuation"
+          />
+        </View>
+      </View>
+      <TextField label="Notes" value={notes} onChangeText={setNotes} multiline />
+      <Button label="Save" icon="check" onPress={commit} />
+    </View>
+  );
+}
+
 /** The pinned canyon filter field, for the host's header slot. */
 export function WaypointCanyonFilter({
   value,
@@ -183,5 +305,7 @@ export function WaypointCanyonFilter({
 const styles = StyleSheet.create({
   header: { gap: spacing(1) },
   body: { gap: spacing(1) },
+  coordRow: { flexDirection: "row", gap: spacing(1) },
+  coordField: { flex: 1 },
   hint: { color: theme.textMuted, fontSize: fontSize.xs },
 });

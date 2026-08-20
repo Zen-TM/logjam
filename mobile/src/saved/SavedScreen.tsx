@@ -140,15 +140,21 @@ import type { Bbox } from "./bboxOfPoints";
 import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import { createWaypointLocal, updateWaypointLocal } from "../sync/outbox";
+import { takePickedPoint } from "../map/pickedPoint";
 import {
   WaypointCanyonFilter,
   WaypointCanyonsBody,
+  WaypointEditBody,
   WaypointSubModeHeader,
   WaypointTagsBody,
 } from "../waypoints/waypointSheetBodies";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import { RouteStatsSheet } from "../routes/RouteStatsSheet";
 import { LinkCanyonSheet } from "../routes/LinkCanyonSheet";
+
+/** A picked coordinate at ~10 cm — finer than any map press, and readable.
+ *  Same figure the canyon form uses (`seedCoord` in CanyonEditSheet). */
+const PICKED_COORD_DECIMALS = 6;
 
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
@@ -306,6 +312,8 @@ export function SavedScreen({
   onOpenMap,
   onDownloadRegion,
   onEditRoute,
+  onPickPoint,
+  onContinueRecording,
   initialFilter,
 }: {
   onOpenMap: (bbox?: Bbox, basemapId?: BasemapId, reveal?: SavedItemReveal) => void;
@@ -313,6 +321,19 @@ export function SavedScreen({
   /** Open the map's draw tool on an existing route. Editing is a map gesture,
    *  so this screen hands it over rather than growing an editor of its own. */
   onEditRoute: (routeId: string) => void;
+  /**
+   * Open the full-screen point picker for the coordinate form, starting on
+   * `from` when it already holds one. The answer comes back through
+   * `map/pickedPoint.ts`, collected when this screen regains focus.
+   */
+  onPickPoint: (from: { latitude: number; longitude: number } | null) => void;
+  /**
+   * Pick a finished recording back up. Handed to the MAP rather than done here:
+   * arming the recorder needs the location prompt, which cannot be raised from
+   * an open sheet (DESIGN.md §7), and the map is what has to end up in
+   * recording mode.
+   */
+  onContinueRecording: (trackId: string) => void;
   /**
    * Land on one category rather than "All". The map's layer sheet points at
    * this screen for region management ("3 saved areas ›"), and dropping the
@@ -417,6 +438,21 @@ export function SavedScreen({
   useFocusEffect(
     useCallback(() => {
       refreshFreeSpace();
+      // Back from the point picker. `takePickedPoint` consumes the value, so an
+      // ordinary later return to this tab cannot re-apply a coordinate that has
+      // since been typed over.
+      if (awayAtPicker.current) {
+        awayAtPicker.current = false;
+        const point = takePickedPoint();
+        if (point) {
+          // Trimmed like every freshly picked point: a map tap carries fifteen
+          // meaningless decimals.
+          setCoordLat(String(Number(point.latitude.toFixed(PICKED_COORD_DECIMALS))));
+          setCoordLon(String(Number(point.longitude.toFixed(PICKED_COORD_DECIMALS))));
+          setCoordError(null);
+        }
+        setCoordSheetOpen(true);
+      }
       return () => {
         closeItemSheet();
         // A selection is a transient mode over rows you can see. Coming back to
@@ -1085,6 +1121,38 @@ export function SavedScreen({
     setCoordError(null);
   }, []);
 
+  /**
+   * Away at the map picker.
+   *
+   * The sheet is a Modal and would cover a full-screen map, so it has to close
+   * — but ONLY the `coordSheetOpen` flag moves. The fields are plain state on a
+   * screen that stays mounted, and nothing here reseeds them (unlike the canyon
+   * form, this sheet is cleared explicitly by `closeCoordSheet` and never on
+   * open), so the name the user typed is still there when they come back. A
+   * cancelled pick reopens the form too: they went to look at a map, not to
+   * throw away what they had written.
+   */
+  const awayAtPicker = useRef(false);
+  const openPointPicker = useCallback(() => {
+    // EMPTY IS NOT ZERO. `Number("")` is 0, and 0/0 is a valid coordinate — so
+    // testing the parsed value alone opened the picker on null island with a
+    // marker already placed, which reads as "the app thinks the waypoint is
+    // there". The blank check has to come first, exactly as it does in
+    // `saveCoordWaypoint` below.
+    const latitude = Number(coordLat.trim());
+    const longitude = Number(coordLon.trim());
+    const from =
+      coordLat.trim() !== "" &&
+      coordLon.trim() !== "" &&
+      isValidLatitude(latitude) &&
+      isValidLongitude(longitude)
+        ? { latitude, longitude }
+        : null;
+    awayAtPicker.current = true;
+    setCoordSheetOpen(false);
+    onPickPoint(from);
+  }, [coordLat, coordLon, onPickPoint]);
+
   /** Validate with the SAME predicates the API uses, so a typo is caught here
    *  rather than becoming a queued op that fails days later, offline. */
   const saveCoordWaypoint = useCallback(() => {
@@ -1744,6 +1812,14 @@ export function SavedScreen({
             keyboardType="numbers-and-punctuation"
             placeholder="150.25"
           />
+          {/* Under the coordinates it fills in, exactly as on the canyon form —
+              the same screen, the same round trip, nothing lost by going. */}
+          <Button
+            label="Select on map"
+            icon="map-pin"
+            variant="outlineAccent"
+            onPress={openPointPicker}
+          />
           {coordError ? <Text style={styles.coordError}>{coordError}</Text> : null}
           <Button label="Save waypoint" onPress={saveCoordWaypoint} />
         </View>
@@ -1874,24 +1950,33 @@ export function SavedScreen({
       >
         <View style={styles.sheetBody}>
           {menuItem == null ? null : menuMode === "rename" ? (
-            <RenameForm
-              initialName={menuItem.title}
-              // Only a waypoint carries notes; every other kind is a
-              // name-only rename and the field stays absent.
-              {...(menuWaypoint ? { initialNotes: menuWaypoint.notes } : {})}
-              onSubmit={(changed) => {
-                const target = menuItem;
-                if (menuWaypoint) {
+            // A waypoint gets the full editor — name, POSITION and notes — the
+            // same body the map's own sheet uses, because a waypoint reached
+            // from Saved must not be a lesser object than one reached from the
+            // map (DESIGN.md §7). Everything else here is a name-only rename.
+            menuWaypoint ? (
+              <WaypointEditBody
+                waypoint={menuWaypoint}
+                onSubmit={(changed) => {
                   if (Object.keys(changed).length > 0) writeMenuWaypoint(changed);
-                } else if (changed.name && target.rename) {
-                  target.rename(changed.name).catch((err: unknown) => {
-                    console.error(err);
-                    fail(messageFromError(err, "Couldn't rename that."));
-                  });
-                }
-                closeItemSheet();
-              }}
-            />
+                  closeItemSheet();
+                }}
+              />
+            ) : (
+              <RenameForm
+                initialName={menuItem.title}
+                onSubmit={(changed) => {
+                  const target = menuItem;
+                  if (changed.name && target.rename) {
+                    target.rename(changed.name).catch((err: unknown) => {
+                      console.error(err);
+                      fail(messageFromError(err, "Couldn't rename that."));
+                    });
+                  }
+                  closeItemSheet();
+                }}
+              />
+            )
           ) : menuMode === "stats" ? (
             menuImport ? (
               <TrackStatsBody
@@ -1957,6 +2042,23 @@ export function SavedScreen({
                   onPress={() => setMenuMode("stats")}
                 />
               ) : null}
+              {/* A finished recording can be picked back up — the same verb the
+                  map's own track sheet offers, so a track reached from here is
+                  not a lesser object than one reached from the line
+                  (DESIGN.md §7). It leaves for the map, which is where a
+                  recording lives. */}
+              {menuTrack ? (
+                <Row
+                  title="Continue recording"
+                  icon="play-circle"
+                  hue={assetHue.track}
+                  onPress={() => {
+                    const trackId = menuTrack.id;
+                    closeItemSheet();
+                    onContinueRecording(trackId);
+                  }}
+                />
+              ) : null}
               {menuItem.createRouteFrom ? (
                 <Row
                   title="Create route from this"
@@ -1998,7 +2100,7 @@ export function SavedScreen({
                   stub resolved without writing anything). */}
               {menuItem.rename ? (
                 <Row
-                  title={menuWaypoint ? "Edit name and notes" : "Rename"}
+                  title={menuWaypoint ? "Edit" : "Rename"}
                   icon="edit-2"
                   hue={theme.bonus1}
                   onPress={() => setMenuMode("rename")}

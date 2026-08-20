@@ -74,6 +74,7 @@ vi.mock("./tracksDb", () => ({
 
 const {
   applyRecordingOptionsToActiveTrack,
+  continueTrackRecording,
   resumeTrackRecording,
   startTrackRecording,
 } = await import("./trackRecorder");
@@ -124,6 +125,9 @@ function recordingTrack() {
 }
 
 beforeEach(() => {
+  // One test moves the clock; a failure inside it would otherwise leave every
+  // test after it running against a frozen one.
+  vi.useRealTimers();
   vi.clearAllMocks();
   startLocationUpdatesAsync.mockResolvedValue(undefined);
   appendTrackPoints.mockResolvedValue(undefined);
@@ -301,5 +305,65 @@ describe("arming and marking (MLIFE-002)", () => {
     startLocationUpdatesAsync.mockRejectedValueOnce(new Error("location off"));
     await expect(startTrackRecording()).rejects.toThrow();
     expect(deleteTrack).toHaveBeenCalledWith("track-1");
+  });
+
+  it("puts a continued track BACK to finished when the task won't arm", async () => {
+    const endedAt = new Date(1_700_000_600_000).toISOString();
+    const track = {
+      ...recordingTrack(),
+      state: "done",
+      currentSegment: 2,
+      pausedMs: 60_000,
+      endedAt,
+    };
+    startLocationUpdatesAsync.mockRejectedValueOnce(new Error("permission denied"));
+
+    await expect(continueTrackRecording(track as never)).rejects.toThrow();
+
+    // Un-finishing a saved track and then failing to record is the worst of
+    // both: the row must end up exactly as finished as it started.
+    expect(updateTrack).toHaveBeenCalledTimes(2);
+    expect(updateTrack).toHaveBeenLastCalledWith("track-1", {
+      state: "done",
+      currentSegment: 2,
+      pausedMs: 60_000,
+      endedAt,
+    });
+  });
+
+  it("continues into a NEW segment and bills the gap since the finish as paused", async () => {
+    const endedAt = new Date(1_700_000_600_000).toISOString();
+    // 5 minutes after the finish tap.
+    vi.setSystemTime(1_700_000_900_000);
+    const track = {
+      ...recordingTrack(),
+      state: "done",
+      currentSegment: 2,
+      pausedMs: 60_000,
+      endedAt,
+    };
+
+    await continueTrackRecording(track as never);
+
+    expect(updateTrack).toHaveBeenCalledTimes(1);
+    expect(updateTrack).toHaveBeenLastCalledWith("track-1", {
+      state: "recording",
+      // A new segment, so the line breaks across the gap rather than drawing a
+      // teleport from the exit back to wherever the party restarted.
+      currentSegment: 3,
+      pausedMs: 60_000 + 300_000,
+      endedAt: null,
+      pausedAt: null,
+    });
+    vi.useRealTimers();
+  });
+
+  it("refuses to continue while another recording is live", async () => {
+    activeTrack = recordingTrack();
+    const track = { ...recordingTrack(), id: "track-2", state: "done" };
+    await expect(continueTrackRecording(track as never)).rejects.toThrow(
+      /already being recorded/,
+    );
+    expect(updateTrack).not.toHaveBeenCalled();
   });
 });
