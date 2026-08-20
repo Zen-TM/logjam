@@ -60,15 +60,6 @@ export function RecordingSheet({
     isRecordingWriteFailing,
   );
 
-  const { detail, loading, line } = useTrackDetail(activeTrack?.id ?? null, open);
-  // Heights from the terrain rather than from the phone's altimeter, on the
-  // same terms as a drawn route: saved tiles first, then our API, then the
-  // public ones. The line is republished on a throttle (useTrackDetail), so a
-  // running recording does not re-sample the DEM on every written batch.
-  const { profile: demProfile, loading: demLoading } = useElevationProfile(line, {
-    allowNetwork,
-  });
-
   // The clock ticks on its own second, not on the arrival of a fix batch. The
   // stored durationMs only moves when a batch lands, so on good GPS while
   // standing still the headline number used to sit frozen and then jump.
@@ -105,6 +96,23 @@ export function RecordingSheet({
       stop();
     };
   }, [activeTrack, recording, open]);
+
+  // Below the clock on purpose: the detail folds `elapsedMs` in so the time
+  // since the last accepted fix is counted as stopped rather than as nothing
+  // (computeTrackDetail's `recordedMs`). Standing still is exactly when this
+  // panel gets opened, and it is the case where the two disagree most.
+  const { detail, loading, line } = useTrackDetail(
+    activeTrack?.id ?? null,
+    open,
+    elapsedMs,
+  );
+  // Heights from the terrain rather than from the phone's altimeter, on the
+  // same terms as a drawn route: saved tiles first, then our API, then the
+  // public ones. The line is republished on a throttle (useTrackDetail), so a
+  // running recording does not re-sample the DEM on every written batch.
+  const { profile: demProfile, loading: demLoading } = useElevationProfile(line, {
+    allowNetwork,
+  });
 
   const handlePauseResume = useCallback(() => {
     if (!activeTrack) return;

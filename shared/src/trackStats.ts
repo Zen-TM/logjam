@@ -391,6 +391,28 @@ function decimate<T>(samples: T[], max: number): T[] {
  */
 export function computeTrackDetail(
   points: readonly TrackSeriesPoint[],
+  options?: {
+    /**
+     * The recording's own wall-clock length (`recordedDurationMs`), when the
+     * caller has one. Imports do not, and pass nothing.
+     *
+     * Without it, everything here is measured between the FIRST and LAST
+     * accepted fix, and a recording's real span is longer at both ends: the
+     * wait for a first fix, and — much bigger — the stretch where someone
+     * stands still until the Finish tap. Measured on a real 70.9-minute walk
+     * (2026-08-20): the last fix landed 19.1 minutes before Finish, so moving
+     * and stopped summed to 51.8 minutes against a clock reading 70.9, and a
+     * quarter of the trip belonged to neither.
+     *
+     * The remainder is booked as STOPPED, never as moving, and that is a
+     * safety property rather than a guess: no distance was recorded across it,
+     * so adding it to moving time would divide a real distance by an inflated
+     * clock and under-report the pace actually walked. A recorder that died
+     * mid-walk reads as a long rest, which is the honest reading of a gap with
+     * no positions in it.
+     */
+    recordedMs?: number | null;
+  },
 ): TrackDetail {
   // One missing timestamp makes the whole series untimed. A part-timed series
   // would report a duration over the timed stretch and a distance over all of
@@ -507,12 +529,20 @@ export function computeTrackDetail(
     });
   }
 
-  const stoppedMs = timed ? Math.max(0, durationMs - movingMs) : null;
+  // The caller's clock wins when it is longer than the fixes' own span — see
+  // `recordedMs`. Never shorter: a clock that disagrees downwards would have to
+  // discard time the fixes themselves demonstrate.
+  const recordedMs = options?.recordedMs;
+  const totalMs =
+    recordedMs != null && Number.isFinite(recordedMs) && recordedMs > durationMs
+      ? recordedMs
+      : durationMs;
+  const stoppedMs = timed ? Math.max(0, totalMs - movingMs) : null;
   const speedSamples = decimate(rawSpeeds, ELEVATION_PROFILE_MAX_SAMPLES);
 
   return {
     distanceM,
-    durationMs,
+    durationMs: totalMs,
     elevationGainM,
     elevationLossM,
     pointCount: points.length,
@@ -520,7 +550,7 @@ export function computeTrackDetail(
     stoppedMs,
     // Speed over a zero span is not 0 m/s, it is unknown — a track with one
     // point must not claim the party stood still.
-    averageSpeedMps: timed && durationMs > 0 ? distanceM / (durationMs / 1000) : null,
+    averageSpeedMps: timed && totalMs > 0 ? distanceM / (totalMs / 1000) : null,
     movingSpeedMps: timed && movingMs > 0 ? distanceM / (movingMs / 1000) : null,
     minAltitudeM,
     maxAltitudeM,

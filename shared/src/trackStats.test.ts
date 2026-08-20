@@ -647,6 +647,51 @@ describe("computeTrackDetail", () => {
     expect(detail.movingMs).toBe(90_000);
   });
 
+  it("books the time after the last fix as stopped, not as nothing", () => {
+    // The 2026-08-20 field walk: the last accepted fix landed 19 minutes
+    // before the Finish tap, and moving + stopped summed to the fixes' own
+    // span rather than to the recording's.
+    const walked = walk({ count: 5, stepMilliDeg: 1, stepMs: 100_000 });
+    const fixSpanMs = 400_000;
+    const detail = computeTrackDetail(walked, {
+      recordedMs: fixSpanMs + 1_140_000,
+    });
+
+    expect(detail.durationMs).toBe(fixSpanMs + 1_140_000);
+    expect(detail.movingMs! + detail.stoppedMs!).toBe(detail.durationMs);
+    // The tail is all stopped: no distance was recorded across it.
+    expect(detail.stoppedMs).toBe(1_140_000);
+  });
+
+  it("does not let the tail deflate the pace actually walked", () => {
+    // The reason the tail is never credited as moving: moving time is the
+    // denominator of moving pace, and there is no distance to go with it.
+    const walked = walk({ count: 5, stepMilliDeg: 1, stepMs: 100_000 });
+    const withTail = computeTrackDetail(walked, { recordedMs: 3_000_000 });
+    const without = computeTrackDetail(walked);
+
+    expect(withTail.movingSpeedMps).toBeCloseTo(without.movingSpeedMps!, 6);
+    // The all-in average DOES fall — that one is meant to include the stop.
+    expect(withTail.averageSpeedMps!).toBeLessThan(without.averageSpeedMps!);
+  });
+
+  it("ignores a clock shorter than the fixes' own span", () => {
+    // A clock disagreeing downwards would discard time the fixes demonstrate.
+    const walked = walk({ count: 5, stepMilliDeg: 1, stepMs: 100_000 });
+    const detail = computeTrackDetail(walked, { recordedMs: 1_000 });
+    expect(detail.durationMs).toBe(400_000);
+  });
+
+  it("leaves an untimed series untimed however long the clock says", () => {
+    const untimed = walk({ count: 5, stepMilliDeg: 1, stepMs: 0 }).map((p) => ({
+      ...p,
+      timestampMs: null,
+    }));
+    const detail = computeTrackDetail(untimed, { recordedMs: 600_000 });
+    expect(detail.movingMs).toBeNull();
+    expect(detail.stoppedMs).toBeNull();
+  });
+
   it("has no time-derived stat at all when the series carries no timestamps", () => {
     // An imported GPX without <time>: real distance, real climb, no speed.
     const untimed = walk({ count: 10, stepMilliDeg: 1, stepMs: 0, altitudeStepM: 20 }).map(

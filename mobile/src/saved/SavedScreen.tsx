@@ -1377,7 +1377,11 @@ export function SavedScreen({
       ? (imports.find((imported) => imported.id === menuItem.key) ?? null)
       : null;
   const statsOpen = menuMode === "stats";
-  const trackStats = useTrackDetail(menuTrack?.id ?? null, statsOpen);
+  const trackStats = useTrackDetail(
+    menuTrack?.id ?? null,
+    statsOpen,
+    menuTrack?.durationMs,
+  );
   const importStats = useImportedTrackDetail(menuImport, statsOpen);
   // Heights from the terrain, for whichever of the two is open. Saved has no
   // offline-only switch of its own (that is a property of the MAP), so the

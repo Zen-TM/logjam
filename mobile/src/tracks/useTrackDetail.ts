@@ -14,8 +14,12 @@
 //
 // PRIVACY: the series is precise location history. It stays in memory for as
 // long as the panel is open and is never logged.
-import { useEffect, useRef, useState } from "react";
-import { computeTrackDetail, type TrackDetail } from "@logjam/shared";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  computeTrackDetail,
+  type RecordedTrackPoint,
+  type TrackDetail,
+} from "@logjam/shared";
 
 import { toElevationLine } from "./trackLine";
 import { listTrackPoints, onTracksChanged } from "./tracksDb";
@@ -34,23 +38,37 @@ const ELEVATION_LINE_REFRESH_POINTS = 20;
 export function useTrackDetail(
   trackId: string | null,
   enabled: boolean,
+  /**
+   * The recording's wall-clock length, so the stretch after the last accepted
+   * fix is counted (see `computeTrackDetail`'s `recordedMs`). A caller without
+   * one — an import — passes nothing and gets the fixes' own span.
+   */
+  recordedMs?: number | null,
 ): {
   detail: TrackDetail | null;
   loading: boolean;
   /** The track as a coarse line, for sampling the DEM along. */
   line: [number, number][];
 } {
-  const [detail, setDetail] = useState<TrackDetail | null>(null);
+  // The SERIES is state; the detail is derived from it. `recordedMs` ticks
+  // once a second on a live recording, and folding it in here rather than in
+  // the read means a tick re-runs the arithmetic (O(points), no I/O) instead of
+  // re-reading the whole series from SQLite every second.
+  const [points, setPoints] = useState<RecordedTrackPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [line, setLine] = useState<[number, number][]>([]);
   const linePointCount = useRef(0);
+  const detail = useMemo(
+    () => (points.length > 0 ? computeTrackDetail(points, { recordedMs }) : null),
+    [points, recordedMs],
+  );
 
   useEffect(() => {
     if (!enabled || trackId == null) {
       // Dropping the last panel's numbers matters: reopening on another track
       // would otherwise show the previous one's stats for a frame, which is
       // indistinguishable from this track's.
-      setDetail(null);
+      setPoints([]);
       setLine([]);
       linePointCount.current = 0;
       setLoading(false);
@@ -63,7 +81,7 @@ export function useTrackDetail(
       listTrackPoints(trackId)
         .then((points) => {
           if (!current) return;
-          setDetail(computeTrackDetail(points));
+          setPoints(points);
           // First read always publishes — the throttle is for a recording that
           // GROWS, and a 10-point track must not wait for points that will
           // never come.

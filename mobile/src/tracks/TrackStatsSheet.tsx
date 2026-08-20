@@ -36,6 +36,7 @@ export function TrackStatsSheet({
   const { detail, loading, line } = useTrackDetail(
     track?.id ?? null,
     visible && track != null,
+    track?.durationMs,
   );
   const { profile: demProfile, loading: demLoading } = useElevationProfile(line, {
     allowNetwork,
