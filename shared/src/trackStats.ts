@@ -250,10 +250,17 @@ export const MOVING_SPEED_THRESHOLD_MPS = 0.3;
 /**
  * Odd, centred window for the speed series — the CHART's smoothing, never the
  * stats'. Per-interval GPS speed is d/dt of two positions each carrying metres
- * of error, so the raw series is spiky enough to be unreadable. Moving and
- * stopped time are classified from the RAW speed regardless: smoothing across
- * the moment someone stops is exactly what would blur the boundary being
- * measured.
+ * of error, so the unsmoothed series is spiky enough to be unreadable.
+ *
+ * Moving and stopped time are classified BEFORE this window is applied, from
+ * each interval's own speed: smoothing across the moment someone stops is
+ * exactly what would blur the boundary being measured. Note what that speed
+ * already is, though — the step between two POSITION-smoothed points
+ * (DISTANCE_SMOOTHING_WINDOW), the same steps the distance total is built from,
+ * so moving time and distance agree with each other by construction. It also
+ * means the classification inherits that smoothing's corner-cutting: measured
+ * on a real bus trip, 159 s of stopped time against 90 s if the raw positions
+ * are used.
  */
 export const SPEED_SMOOTHING_WINDOW = 5;
 

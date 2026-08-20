@@ -4102,10 +4102,12 @@ export function MapScreen({
         activeTrack={activeTrack ?? null}
         visible={recordingSheetOpen && activeTrack != null}
         onClose={() => setRecordingSheetOpen(false)}
+        allowNetwork={!offlineOnly}
       />
 
       {/* A finished track's stats, and the way through to its verbs. */}
       <TrackStatsSheet
+        allowNetwork={!offlineOnly}
         track={tracks.find((track) => track.id === statsTrackId) ?? null}
         visible={statsTrackId !== null}
         onClose={() => setStatsTrackId(null)}

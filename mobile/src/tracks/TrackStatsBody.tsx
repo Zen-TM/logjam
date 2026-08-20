@@ -15,6 +15,7 @@ import {
   formatDistanceM,
   formatDurationMs,
   formatSpeedMps,
+  type ElevationProfile,
   type TrackDetail,
 } from "@logjam/shared";
 
@@ -32,6 +33,8 @@ export function TrackStatsBody({
   loading,
   elapsedMs,
   emptyMessage,
+  demProfile,
+  demLoading,
 }: {
   detail: TrackDetail | null;
   loading: boolean;
@@ -45,6 +48,30 @@ export function TrackStatsBody({
   /** What to say when there is nothing to summarise — an empty recording and
    *  an unreadable file are not the same absence. */
   emptyMessage?: string;
+  /**
+   * Heights read from the DEM along the track, when anything could answer.
+   *
+   * PREFERRED over the recording's own GPS altitudes wherever it exists, for
+   * every height on the panel — ascent, descent, the band, and the chart — so
+   * the numbers and the picture come from one surface.
+   *
+   * Why the terrain beats the measurement here: gain and loss are a SUM OF
+   * DIFFERENCES, so what matters is not absolute accuracy but per-sample noise.
+   * A DEM is deterministic — read the same spot twice, get the same metre, and
+   * a smooth spatial bias largely cancels in a difference. GPS altitude
+   * re-reads the same spot with metres of independent error each time, and
+   * summing thousands of those integrates noise into phantom climb (measured:
+   * 99 m of "ascent" on a trip spanning 35 m). That is why GPS altitude needs a
+   * 15 m hysteresis and a DEM only 5 — and why, on any trip with less relief
+   * than the sensor's own noise, the GPS answer collapses toward zero while the
+   * chart above it visibly rises and falls.
+   *
+   * Null offline outside a downloaded region, where the GPS altitudes are all
+   * there is; the panel says which one it is showing rather than leaving the
+   * reader to guess.
+   */
+  demProfile?: ElevationProfile | null;
+  demLoading?: boolean;
 }) {
   if (!detail) {
     return (
@@ -58,6 +85,12 @@ export function TrackStatsBody({
 
   const durationMs = elapsedMs ?? detail.durationMs;
   const timed = detail.movingMs != null;
+  // One source for every height on the panel.
+  const elevation = demProfile ?? detail.elevation;
+  const gainM = demProfile ? demProfile.gainM : detail.elevationGainM;
+  const lossM = demProfile ? demProfile.lossM : detail.elevationLossM;
+  const maxM = demProfile ? demProfile.maxM : detail.maxAltitudeM;
+  const minM = demProfile ? demProfile.minM : detail.minAltitudeM;
 
   const stats: Stat[] = [];
   if (timed || elapsedMs != null) {
@@ -68,14 +101,8 @@ export function TrackStatsBody({
     stats.push({ label: "Moving", value: formatDurationMs(detail.movingMs) });
     stats.push({ label: "Stopped", value: formatDurationMs(detail.stoppedMs) });
   }
-  stats.push({
-    label: "Ascent",
-    value: `↑ ${Math.round(detail.elevationGainM)} m`,
-  });
-  stats.push({
-    label: "Descent",
-    value: `↓ ${Math.round(detail.elevationLossM)} m`,
-  });
+  stats.push({ label: "Ascent", value: `↑ ${Math.round(gainM)} m` });
+  stats.push({ label: "Descent", value: `↓ ${Math.round(lossM)} m` });
   if (timed) {
     // Two speeds, because they answer different questions: the first is "how
     // long did the day take", the second is "how fast do we walk". A trip with
@@ -94,37 +121,44 @@ export function TrackStatsBody({
   // shipped a "High point 27 m / Low point 27 m" pair directly above the line
   // saying the track had no altitudes. A lone reading is not a height band and
   // cannot be drawn, so it says nothing at all.
-  if (detail.elevation && detail.maxAltitudeM != null && detail.minAltitudeM != null) {
-    stats.push({
-      label: "High point",
-      value: `${Math.round(detail.maxAltitudeM)} m`,
-    });
-    stats.push({
-      label: "Low point",
-      value: `${Math.round(detail.minAltitudeM)} m`,
-    });
+  if (elevation && maxM != null && minM != null) {
+    stats.push({ label: "High point", value: `${Math.round(maxM)} m` });
+    stats.push({ label: "Low point", value: `${Math.round(minM)} m` });
   }
 
   return (
     <View style={styles.body}>
       <StatGrid stats={stats} />
 
-      {detail.elevation ? (
+      {elevation ? (
         <View style={styles.chartBlock}>
           <Text style={styles.chartLabel}>Elevation</Text>
           <ProfileChart
-            series={elevationSeries(detail.elevation)}
+            series={elevationSeries(elevation)}
             formatValue={(elevationM) => `${Math.round(elevationM)} m`}
             formatX={formatDistanceM}
             hint="Drag across for heights"
             accessibilityLabel="Elevation profile"
           />
+          {/* Which surface these heights came from. Said out loud because the
+              two can differ by a lot — a DEM cannot see inside a slot narrower
+              than its ~19 m grid, and GPS altitude cannot see a hill smaller
+              than its own noise. A number with no provenance gets trusted. */}
+          <Text style={styles.pending}>
+            {demProfile
+              ? "Heights from terrain data"
+              : demLoading
+                ? "Heights from this phone's GPS — reading the terrain…"
+                : "Heights from this phone's GPS — no terrain data for here"}
+          </Text>
         </View>
       ) : (
         <Text style={styles.pending}>
-          {detail.maxAltitudeM == null
-            ? "No altitudes in this track — distance and time are unaffected."
-            : "Not enough altitude readings to chart — distance and time are unaffected."}
+          {demLoading
+            ? "Reading the terrain…"
+            : detail.maxAltitudeM == null
+              ? "No heights for this track — distance and time are unaffected."
+              : "Not enough height readings to chart — distance and time are unaffected."}
         </Text>
       )}
 

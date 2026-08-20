@@ -122,6 +122,7 @@ import {
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
 import { RegionDownloadRow } from "../offline/RegionDownloadRow";
+import { useElevationProfile } from "../map/useElevationProfile";
 import { TrackStatsBody } from "../tracks/TrackStatsBody";
 import { useTrackDetail } from "../tracks/useTrackDetail";
 import { useImportedTrackDetail } from "../imports/useImportedTrackDetail";
@@ -1310,6 +1311,13 @@ export function SavedScreen({
   const statsOpen = menuMode === "stats";
   const trackStats = useTrackDetail(menuTrack?.id ?? null, statsOpen);
   const importStats = useImportedTrackDetail(menuImport, statsOpen);
+  // Heights from the terrain, for whichever of the two is open. Saved has no
+  // offline-only switch of its own (that is a property of the MAP), so the
+  // hook's normal source order applies: saved tiles, then our API, then the
+  // public ones.
+  const statsElevation = useElevationProfile(
+    menuImport ? importStats.line : trackStats.line,
+  );
 
   const writeMenuWaypoint = (fields: Record<string, unknown>) => {
     if (!menuWaypoint) return;
@@ -1889,6 +1897,8 @@ export function SavedScreen({
               <TrackStatsBody
                 detail={importStats.detail}
                 loading={importStats.loading}
+                demProfile={statsElevation.profile}
+                demLoading={statsElevation.loading}
                 emptyMessage={
                   importStats.error ??
                   "No lines in this file — stats describe a walked line."
@@ -1901,6 +1911,8 @@ export function SavedScreen({
                 detail={trackStats.detail}
                 loading={trackStats.loading}
                 elapsedMs={menuTrack?.durationMs}
+                demProfile={statsElevation.profile}
+                demLoading={statsElevation.loading}
               />
             )
           ) : menuMode === "tags" && menuWaypoint ? (

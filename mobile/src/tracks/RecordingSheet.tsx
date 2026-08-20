@@ -16,6 +16,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Alert, AppState, StyleSheet, Text, View } from "react-native";
 
 import { ensureForegroundLocationPermission } from "../map/locationPermission";
+import { useElevationProfile } from "../map/useElevationProfile";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 import { BottomSheet, Button, IconButton } from "../ui";
 import { confirmFinishRecording } from "./finishRecordingPrompt";
@@ -37,10 +38,14 @@ export function RecordingSheet({
   activeTrack,
   visible,
   onClose,
+  allowNetwork = true,
 }: {
   activeTrack: Track | null;
   visible: boolean;
   onClose: () => void;
+  /** False in "Simulating offline mode": heights then come only from tiles
+   *  already on the phone, and nothing goes out. */
+  allowNetwork?: boolean;
 }) {
   const recording = activeTrack?.state === "recording";
   const open = visible && activeTrack != null;
@@ -55,7 +60,14 @@ export function RecordingSheet({
     isRecordingWriteFailing,
   );
 
-  const { detail, loading } = useTrackDetail(activeTrack?.id ?? null, open);
+  const { detail, loading, line } = useTrackDetail(activeTrack?.id ?? null, open);
+  // Heights from the terrain rather than from the phone's altimeter, on the
+  // same terms as a drawn route: saved tiles first, then our API, then the
+  // public ones. The line is republished on a throttle (useTrackDetail), so a
+  // running recording does not re-sample the DEM on every written batch.
+  const { profile: demProfile, loading: demLoading } = useElevationProfile(line, {
+    allowNetwork,
+  });
 
   // The clock ticks on its own second, not on the arrival of a fix batch. The
   // stored durationMs only moves when a batch lands, so on good GPS while
@@ -176,7 +188,13 @@ export function RecordingSheet({
             refusing writes. Finish and check free space.
           </Text>
         ) : null}
-        <TrackStatsBody detail={detail} loading={loading} elapsedMs={elapsedMs} />
+        <TrackStatsBody
+          detail={detail}
+          loading={loading}
+          elapsedMs={elapsedMs}
+          demProfile={demProfile}
+          demLoading={demLoading}
+        />
       </View>
     </BottomSheet>
   );

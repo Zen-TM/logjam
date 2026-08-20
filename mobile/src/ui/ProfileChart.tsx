@@ -190,6 +190,17 @@ export function ProfileChart({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_event, gesture) => isScrub(gesture),
       onPanResponderTerminationRequest: () => !scrubbing.current,
+      // THE line that makes any of the above matter on Android. A PanResponder
+      // blocks the native responder by DEFAULT, and blocking is not a
+      // negotiation: `NativeViewHierarchyManager.setJSResponder` stops the
+      // parent ScrollView's `onInterceptTouchEvent` from ever firing, so the
+      // scroll never asks and `onPanResponderTerminationRequest` is never
+      // consulted. Angle arithmetic in JS cannot fix a scroll that was never
+      // offered the touch — which is why biasing the angle changed nothing.
+      // With this false, the native ScrollView intercepts a vertical drag past
+      // its own touch slop and we get `onPanResponderTerminate`, while a
+      // horizontal drag never trips its slop and stays ours.
+      onShouldBlockNativeResponder: () => false,
       onPanResponderGrant: (event) => {
         scrubbing.current = false;
         track(event.nativeEvent.locationX);

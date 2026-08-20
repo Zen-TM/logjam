@@ -19,6 +19,8 @@ import {
   type TrackSeriesPoint,
 } from "@logjam/shared";
 
+import { toElevationLine } from "../tracks/trackLine";
+
 /**
  * Ceiling on what will be summarised, in positions.
  *
@@ -83,16 +85,20 @@ export function importedFeaturesToSeries(
   return series;
 }
 
-/** Read one stored import and summarise its lines. Null = it has no lines. */
+/**
+ * Read one stored import and summarise its lines, with the coarse line to
+ * sample the DEM along. Null detail = it has no lines.
+ */
 export async function readImportedTrackDetail(input: {
   /** Absolute app-private path, scheme-less (VectorImport.path). */
   path: string;
   /** The row's own count, so an over-large file is refused before it is read. */
   positionCount: number;
-}): Promise<TrackDetail | null> {
+}): Promise<{ detail: TrackDetail | null; line: [number, number][] }> {
   if (input.positionCount > MAX_STATS_POSITIONS) throw new TooManyPointsError();
   const text = await FileSystem.readAsStringAsync(`file://${input.path}`);
   const parsed = JSON.parse(text) as { features?: ImportedFeature[] };
   const series = importedFeaturesToSeries(parsed.features ?? []);
-  return series.length >= 2 ? computeTrackDetail(series) : null;
+  if (series.length < 2) return { detail: null, line: [] };
+  return { detail: computeTrackDetail(series), line: toElevationLine(series) };
 }

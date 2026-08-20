@@ -14,14 +14,22 @@ import { readImportedTrackDetail } from "./importedTrackSeries";
 export function useImportedTrackDetail(
   imported: VectorImport | null,
   enabled: boolean,
-): { detail: TrackDetail | null; loading: boolean; error: string | null } {
+): {
+  detail: TrackDetail | null;
+  loading: boolean;
+  error: string | null;
+  /** The imported lines, coarsened for sampling the DEM along. */
+  line: [number, number][];
+} {
   const [detail, setDetail] = useState<TrackDetail | null>(null);
+  const [line, setLine] = useState<[number, number][]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!enabled || imported == null) {
       setDetail(null);
+      setLine([]);
       setError(null);
       setLoading(false);
       return;
@@ -35,7 +43,8 @@ export function useImportedTrackDetail(
     })
       .then((next) => {
         if (!current) return;
-        setDetail(next);
+        setDetail(next.detail);
+        setLine(next.line);
         setLoading(false);
       })
       .catch((err: unknown) => {
@@ -51,5 +60,5 @@ export function useImportedTrackDetail(
     };
   }, [imported, enabled]);
 
-  return { detail, loading, error };
+  return { detail, loading, error, line };
 }

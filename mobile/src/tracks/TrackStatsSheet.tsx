@@ -6,12 +6,13 @@
 // behind "View options", so tapping a line can never be the first half of an
 // accidental delete.
 //
-// Unlike a route's profile, nothing here needs the network or the DEM: a
-// recording carries its own altitudes, so the whole panel works in a canyon
-// with no signal.
+// Heights come from the DEM where anything can answer, and fall back to the
+// recording's own GPS altitudes where nothing can — so the panel still works in
+// a canyon with no signal and no saved tiles, and says which it is showing.
 import { StyleSheet, View } from "react-native";
 
 import { spacing } from "../theme";
+import { useElevationProfile } from "../map/useElevationProfile";
 import { BottomSheet, Button } from "../ui";
 import { TrackStatsBody } from "./TrackStatsBody";
 import type { Track } from "./tracksDb";
@@ -22,17 +23,23 @@ export function TrackStatsSheet({
   visible,
   onClose,
   onViewOptions,
+  allowNetwork = true,
 }: {
   track: Track | null;
   visible: boolean;
   onClose: () => void;
   onViewOptions: () => void;
+  /** False in "Simulating offline mode" — saved tiles only. */
+  allowNetwork?: boolean;
 }) {
   // Hooks run before the early return — a null track reads nothing.
-  const { detail, loading } = useTrackDetail(
+  const { detail, loading, line } = useTrackDetail(
     track?.id ?? null,
     visible && track != null,
   );
+  const { profile: demProfile, loading: demLoading } = useElevationProfile(line, {
+    allowNetwork,
+  });
   if (!track) return null;
 
   return (
@@ -45,6 +52,8 @@ export function TrackStatsSheet({
           detail={detail}
           loading={loading}
           elapsedMs={track.durationMs}
+          demProfile={demProfile}
+          demLoading={demLoading}
         />
         <Button label="View options" icon="more-horizontal" onPress={onViewOptions} />
       </View>
