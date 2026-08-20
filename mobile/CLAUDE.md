@@ -746,6 +746,14 @@ an "unable to resolve" that looks like a mobile bug. `eas-build-post-install` in
 `package.json` runs `npm ci && npm run build` in `../shared` to produce it. Don't
 remove that hook, and don't "fix" it by committing `dist/`.
 
+**A LOCAL release build must pass `SENTRY_DISABLE_AUTO_UPLOAD=true` itself.**
+The flag lives in `eas.json`'s build profiles, so a cloud build inherits it and
+`./gradlew :app:assembleRelease` on a dev box does not: the Sentry gradle task
+runs, `sentry-cli` fails, and the build dies at
+`createBundleReleaseJsAndAssets_SentryUpload` — long after the slow tasks, for a
+step nothing needs. Prefix the command with the flag (this is also what the EAS
+profiles do, so the artifact is identical).
+
 **Sentry sourcemap upload is OFF** (`SENTRY_DISABLE_AUTO_UPLOAD=true` in the
 build profiles). The Sentry Gradle plugin fails the build outright when it has no
 org/project/auth token, and those need operator setup. Consequence: crash reports

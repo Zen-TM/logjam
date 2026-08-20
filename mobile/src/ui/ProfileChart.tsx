@@ -44,6 +44,17 @@ import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../them
  * a native rebuild.
  */
 const MAX_COLUMNS = 400;
+
+/**
+ * How much more horizontal than vertical a drag must be before the chart reads
+ * it as a scrub rather than letting the panel scroll. 1.5 is ~34° either side
+ * of the horizontal; a drag steeper than that belongs to the ScrollView.
+ */
+const SCRUB_HORIZONTAL_BIAS = 1.5;
+
+function isScrub(gesture: { dx: number; dy: number }): boolean {
+  return Math.abs(gesture.dx) > Math.abs(gesture.dy) * SCRUB_HORIZONTAL_BIAS;
+}
 const CHART_HEIGHT = 96;
 /** The lowest point still needs to be visible as a column, not a hairline. */
 const MIN_COLUMN_FRACTION = 0.08;
@@ -164,20 +175,37 @@ export function ProfileChart({
   // The chart lives inside a sheet's ScrollView, and the two gestures it must
   // tell apart share a finger: ACROSS is a scrub, UP/DOWN is the user trying to
   // scroll the panel. It claims on touch-down so a plain press still reads a
-  // value, then hands the gesture back the moment the movement is vertical —
-  // refusing to release (which is what it used to do) made the chart a dead
-  // zone the panel could not be scrolled through.
+  // value, then hands the gesture back unless the drag has PROVEN horizontal.
+  //
+  // The bias is the whole point. A first cut released only while |dy| > |dx|,
+  // which is a 45° line through a gesture nobody aims that precisely: a scroll
+  // begun with any sideways drift stayed with the chart and turned into a
+  // scrub. Scrolling is the common intent and scrubbing the deliberate one, so
+  // the chart now takes the gesture only inside ~34° of horizontal, and once it
+  // has, it keeps it — a scrub that wobbles vertically must not be stolen back
+  // mid-drag, which would be the same bug facing the other way.
+  const scrubbing = useRef(false);
   const responder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_event, gesture) =>
-        Math.abs(gesture.dx) > Math.abs(gesture.dy),
-      onPanResponderTerminationRequest: (_event, gesture) =>
-        Math.abs(gesture.dy) > Math.abs(gesture.dx),
-      onPanResponderGrant: (event) => track(event.nativeEvent.locationX),
-      onPanResponderMove: (event) => track(event.nativeEvent.locationX),
-      onPanResponderRelease: () => setScrubIndex(null),
-      onPanResponderTerminate: () => setScrubIndex(null),
+      onMoveShouldSetPanResponder: (_event, gesture) => isScrub(gesture),
+      onPanResponderTerminationRequest: () => !scrubbing.current,
+      onPanResponderGrant: (event) => {
+        scrubbing.current = false;
+        track(event.nativeEvent.locationX);
+      },
+      onPanResponderMove: (event, gesture) => {
+        if (isScrub(gesture)) scrubbing.current = true;
+        track(event.nativeEvent.locationX);
+      },
+      onPanResponderRelease: () => {
+        scrubbing.current = false;
+        setScrubIndex(null);
+      },
+      onPanResponderTerminate: () => {
+        scrubbing.current = false;
+        setScrubIndex(null);
+      },
     }),
   ).current;
 
