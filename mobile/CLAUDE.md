@@ -135,7 +135,11 @@ regenerate only together with an extract/schema refresh.
   editing `shared/`, `cd shared && npm run build` before Metro picks it up (imports
   resolve to `shared/dist`). Pure logic (parsers, transforms, estimators, GeoPDF
   dict parsing, sync state machine helpers) belongs in `shared/` with vitest tests,
-  reused by web + mobile — do not fork it into `mobile/`.
+  reused by web + mobile — do not fork it into `mobile/`. `npm run typecheck`
+  rebuilds `shared` first (a `pretypecheck` hook), so the "has no exported
+  member" that really means "stale `shared/dist`" cannot reach you through that
+  command. Metro is NOT covered — it resolves `shared/dist` directly, so an edit
+  to `shared/` still needs the build before the bundler sees it.
 - **UI is a fresh RN component layer.** MUI is web-only; do not port it. Reuse the
   design tokens/logic, rebuild the presentation. Design system: Claude Design
   project "Logjam Mobile" via DesignSync (`/design-login` first).

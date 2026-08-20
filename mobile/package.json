@@ -9,6 +9,7 @@
     "android": "expo run:android",
     "dev:android": "./scripts/dev-android.sh",
     "ios": "expo run:ios",
+    "pretypecheck": "npm --prefix ../shared run build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
