@@ -18,7 +18,7 @@
 //
 // Columns are scaled between the profile's own min and max, not from sea
 // level: a canyon between 700 and 840 m drawn from zero is a flat bar.
-import { useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   PanResponder,
   StyleSheet,
@@ -30,6 +30,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import type { ElevationProfile, SpeedProfile } from "@logjam/shared";
 
 import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
+import { SheetScrollLock } from "./BottomSheet";
 
 /**
  * Columns drawn: one per POINT of chart width, capped.
@@ -184,7 +185,28 @@ export function ProfileChart({
   // the chart now takes the gesture only inside ~34° of horizontal, and once it
   // has, it keeps it — a scrub that wobbles vertically must not be stolen back
   // mid-drag, which would be the same bug facing the other way.
+  // ONE SWIPE, ONE PURPOSE, and it has to hold in both directions. Handing a
+  // vertical drag to the scroll was half of it; the other half is that the
+  // native ScrollView will intercept a drag that wanders vertically LATER in
+  // the gesture, which yanked a curving scrub away mid-read. So the moment this
+  // chart decides a touch is its own, it freezes the sheet's scroll until the
+  // finger lifts — after that the direction of travel stops mattering.
+  const scrollLock = useContext(SheetScrollLock);
   const scrubbing = useRef(false);
+  const claimGesture = () => {
+    if (scrubbing.current) return;
+    scrubbing.current = true;
+    scrollLock?.setLocked(true);
+  };
+  const releaseGesture = () => {
+    scrubbing.current = false;
+    scrollLock?.setLocked(false);
+    setScrubIndex(null);
+  };
+  // A chart unmounted mid-scrub (the sheet closing under the finger) must not
+  // leave the scroll frozen for the next thing rendered into it.
+  useEffect(() => () => scrollLock?.setLocked(false), [scrollLock]);
+
   const responder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -202,21 +224,19 @@ export function ProfileChart({
       // horizontal drag never trips its slop and stays ours.
       onShouldBlockNativeResponder: () => false,
       onPanResponderGrant: (event) => {
+        // A press with no travel yet is the chart's — it reads a value straight
+        // away — but it does NOT lock the scroll: until the finger moves, the
+        // gesture could still turn out to be a scroll, and that is the one
+        // decision this component must not make early.
         scrubbing.current = false;
         track(event.nativeEvent.locationX);
       },
       onPanResponderMove: (event, gesture) => {
-        if (isScrub(gesture)) scrubbing.current = true;
+        if (isScrub(gesture)) claimGesture();
         track(event.nativeEvent.locationX);
       },
-      onPanResponderRelease: () => {
-        scrubbing.current = false;
-        setScrubIndex(null);
-      },
-      onPanResponderTerminate: () => {
-        scrubbing.current = false;
-        setScrubIndex(null);
-      },
+      onPanResponderRelease: releaseGesture,
+      onPanResponderTerminate: releaseGesture,
     }),
   ).current;
 

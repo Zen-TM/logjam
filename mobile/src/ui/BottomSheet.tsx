@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -36,6 +36,23 @@ import { IconButton } from "./IconButton";
 const SHEET_TRAVEL = Dimensions.get("window").height;
 const DISMISS_DISTANCE = 120;
 const DISMISS_VELOCITY = 1.2;
+
+/**
+ * Lets a child freeze the sheet's scroll for the rest of a touch.
+ *
+ * A gesture has ONE owner. The scroll and a child that reads a drag (the
+ * profile charts) are competing for the same finger, and the native ScrollView
+ * will happily intercept a drag mid-way through if it wanders vertically past
+ * its touch slop — so a scrub that curves gets stolen and the reading jumps
+ * away under the finger. A child that has decided the gesture is ITS gesture
+ * locks the scroll until the finger lifts.
+ *
+ * The context is optional: a chart rendered outside a sheet reads null here and
+ * simply has nothing to lock.
+ */
+export const SheetScrollLock = createContext<{
+  setLocked: (locked: boolean) => void;
+} | null>(null);
 
 export function BottomSheet({
   visible,
@@ -93,6 +110,11 @@ export function BottomSheet({
   children: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const [scrollLocked, setScrollLocked] = useState(false);
+  const scrollLock = useMemo(
+    () => ({ setLocked: (locked: boolean) => setScrollLocked(locked) }),
+    [],
+  );
   // Keyboard handling is done by hand rather than with KeyboardAvoidingView.
   // KAV's "height" behavior shrinks its own frame, and a sheet that MOUNTS
   // while the IME is already up inherits that shrunk frame and never gets it
@@ -260,10 +282,13 @@ export function BottomSheet({
               // second press — which read as "Save didn't save".
               keyboardShouldPersistTaps="handled"
               // Frozen while a sub-mode covers it: a drag on the overlay must
-              // not scroll the list hidden behind it.
-              scrollEnabled={overlay == null}
+              // not scroll the list hidden behind it. Frozen too while a child
+              // owns the current touch (SheetScrollLock).
+              scrollEnabled={overlay == null && !scrollLocked}
             >
-              {children}
+              <SheetScrollLock.Provider value={scrollLock}>
+                {children}
+              </SheetScrollLock.Provider>
             </ScrollView>
             {overlay != null ? <View style={styles.overlay}>{overlay}</View> : null}
           </View>
