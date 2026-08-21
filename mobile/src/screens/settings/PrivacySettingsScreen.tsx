@@ -102,14 +102,19 @@ export function PrivacySettingsScreen() {
           onToggle={toggleCrashReports}
         />
 
+        {/* Its own section, because it is not a guard like the two above it —
+            it is the one control on this page that sends a copy of your data
+            OUT of Logjam, which is why it lives on the privacy page at all and
+            why it must not read as a third security setting. */}
+        <SectionHeader label="Photos and videos" />
         <PreferenceRow
           icon="image"
           title="Save photos to your gallery"
           // Says the consequence, which is the part a switch label can't: the
-          // copy is out of Logjam's storage, its backup exclusion and its lock,
-          // and nothing here can take it back.
-          subtitle="A copy of anything you shoot in Logjam goes to your camera roll, outside the app lock."
-          subtitleNumberOfLines={3}
+          // copy is out of Logjam's storage and its backup exclusion, and
+          // nothing here can take it back.
+          subtitle="A copy of anything you shoot in Logjam goes to your camera roll."
+          subtitleNumberOfLines={2}
           value={saveToGallery}
           ready
           onToggle={toggleSaveToGallery}

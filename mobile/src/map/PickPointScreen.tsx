@@ -77,6 +77,10 @@ import {
 import { TrackMapLayers } from "../tracks/TrackMapLayers";
 import type { Waypoint } from "../tracks/tracksDb";
 
+/** The selection ring's width, and the amount its radius has to exceed the
+ *  thumb's for the two curves to sit concentric. */
+const THUMB_RING = 2;
+
 /** Matches `MapScreen`'s — the two maps must render the same vector basemap. */
 const PROTOMAPS_FLAVOR = "light" as const;
 
@@ -296,7 +300,11 @@ export function PickPointScreen({
         </Text>
       </View>
 
-      <View style={[styles.actions, { paddingBottom: insets.bottom + spacing(2) }]}>
+      {/* NO `insets.bottom` here: this screen is pushed inside a tab stack, so
+          the tab bar is already sitting below it and has already taken the
+          gesture inset. Adding it again floated the buttons a full navigation
+          bar's height above the tabs. */}
+      <View style={styles.actions}>
         <View style={styles.action}>
           <Button label="Cancel" variant="outlineAccent" onPress={onCancel} />
         </View>
@@ -329,9 +337,12 @@ const styles = StyleSheet.create({
     right: spacing(2),
     gap: spacing(1),
   },
+  // The ring has to be ROUNDER than the tile it wraps, by exactly its own
+  // width, or its corners cut across the thumb's — a 4 px ring around an 8 px
+  // tile left a visible notch at each corner.
   thumb: {
-    borderRadius: radius.sm,
-    borderWidth: 2,
+    borderRadius: radius.md + THUMB_RING,
+    borderWidth: THUMB_RING,
     borderColor: "transparent",
     overflow: "hidden",
   },
@@ -357,7 +368,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing(1.5),
     paddingHorizontal: spacing(2),
-    paddingTop: spacing(2),
+    paddingVertical: spacing(1.5),
     backgroundColor: theme.primary,
   },
   action: { flex: 1 },

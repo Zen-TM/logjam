@@ -11,6 +11,7 @@
 // Vulkan renders symbols correctly; don't revert to opengl without retesting
 // labels on the emulator AND a physical device.
 import {
+  Fragment,
   memo,
   useCallback,
   useDeferredValue,
@@ -616,6 +617,7 @@ export function MapScreen({
   editRoute,
   drawRouteFor,
   continueTrack,
+  startRecording,
 }: {
   onOpenCanyon: (canyonId: string, name: string) => void;
   /**
@@ -651,15 +653,20 @@ export function MapScreen({
   // "Edit points" from the Saved tab: arm the draw tool on a saved route. An
   // id only — the geometry comes from the mirror.
   editRoute?: { routeId: string; nonce: number } | null;
-  // "Draw one on the map" from a canyon: arm the tool, and save into that
-  // canyon's route slot rather than as a standalone route.
-  drawRouteFor?: { canyonId: string; nonce: number } | null;
+  // "Draw one on the map": arm the tool. From a canyon it carries that
+  // canyon's id and saves into its route slot; from the Saved tab's add sheet
+  // `canyonId` is null and the route belongs to nothing until the user links
+  // it.
+  drawRouteFor?: { canyonId: string | null; nonce: number } | null;
   // "Continue recording" from the Saved tab: pick a finished track back up. An
   // id only; the row comes from this screen's own list. It lands here rather
   // than being done on Saved because arming the recorder needs the location
   // prompt (which cannot be raised from a sheet) and because the map is what
   // has to end up in recording mode.
   continueTrack?: { trackId: string; nonce: number } | null;
+  // "Record a track" from the Saved tab's add sheet. Same reasoning as
+  // `continueTrack`: the prompt and the recording mode both belong here.
+  startRecording?: { nonce: number } | null;
 }) {
   // A route arrives via navigation params; clearing its badge drops it, and a
   // fresh request (new nonce) replaces whatever was showing.
@@ -3248,6 +3255,17 @@ export function MapScreen({
     void handleContinueRecording(target);
   }, [continueTrack, continueTrackNonce, handleContinueRecording, tracks]);
 
+  // The Saved tab's "Record a track", same shape as the one above with nothing
+  // to look up first.
+  const startRecordingNonce = startRecording?.nonce ?? null;
+  const handledStartNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (startRecordingNonce == null) return;
+    if (handledStartNonce.current === startRecordingNonce) return;
+    handledStartNonce.current = startRecordingNonce;
+    void handleStartRecording();
+  }, [handleStartRecording, startRecordingNonce]);
+
   const handleWaypointPress = useCallback(
     (waypoint: Waypoint) => {
       // Same reason as a canyon pin: while a tool is armed, a marker under the
@@ -3384,6 +3402,15 @@ export function MapScreen({
       onChange: setShowWaypoints,
     },
     {
+      key: "routes",
+      icon: "pen-tool",
+      hue: assetHue.route,
+      title: "My routes",
+      count: routes.data?.length ?? 0,
+      value: showRoutes,
+      onChange: setShowRoutes,
+    },
+    {
       key: "canyon-routes",
       icon: "git-commit",
       hue: OWNED_CANYON_COLOR,
@@ -3401,28 +3428,10 @@ export function MapScreen({
       onChange: setShowCanyonRoutes,
     },
     {
-      key: "routes",
-      icon: "pen-tool",
-      hue: assetHue.route,
-      title: "My routes",
-      count: routes.data?.length ?? 0,
-      value: showRoutes,
-      onChange: setShowRoutes,
-    },
-    {
-      key: "geopdfs",
-      icon: "file-text",
-      hue: assetHue.geoPdf,
-      title: "GeoPDF maps",
-      count: readyGeoPdfs.length,
-      value: showGeoPdfs,
-      onChange: setShowGeoPdfs,
-    },
-    {
       key: "vector-imports",
       icon: "file-plus",
       hue: assetHue.vector,
-      title: "Other routes",
+      title: "Imported routes and tracks",
       count: imports.length,
       value: showVectorImports,
       onChange: setShowVectorImports,
@@ -3435,6 +3444,15 @@ export function MapScreen({
       count: savedTracks.length,
       value: showTracks,
       onChange: setShowTracks,
+    },
+    {
+      key: "geopdfs",
+      icon: "file-text",
+      hue: assetHue.geoPdf,
+      title: "GeoPDF maps",
+      count: readyGeoPdfs.length,
+      value: showGeoPdfs,
+      onChange: setShowGeoPdfs,
     },
   ];
 
@@ -3460,27 +3478,49 @@ export function MapScreen({
    * How high MapLibre's compass ornament sits, clearing the instruments below
    * it in the same corner.
    *
-   * IT RESERVES BOTH INSTRUMENTS WHETHER OR NOT THEY ARE DRAWN, and that is the
-   * fix rather than the compromise. It used to be derived from the two
-   * preferences, which is correct arithmetic and the wrong side of a native
-   * boundary: the ornament is not a React view, and MapLibre lays its margins
-   * out when the view is attached — a margin that grows because the user just
-   * switched the tape on does not necessarily move the ornament that is already
-   * on screen, so the tape drew straight through it. Reserving unconditionally
-   * makes the number one the native side only ever sees once.
+   * MEASURED, NOT RESERVED: it counts only the instruments actually switched
+   * on, so the ornament sits on top of the stack rather than floating a gap
+   * above it whenever one of the three is off.
    *
-   * The cost is a ~44 dp float above empty space when both instruments are off,
-   * which `CHROME_BOTTOM`'s own comment already calls a gap nobody notices.
+   * It reserves a switched-on instrument even in the moments it draws nothing
+   * (the tape renders null until the first heading sample, the chip is present
+   * from the start), because the preference is the stable thing and a margin
+   * that flickers with a sensor is worse than a margin that is briefly tall.
    */
   const instrumentsBottom = spacing(1);
   const ornamentMarginY =
     instrumentsBottom +
-    SCALE_BAR_HEIGHT +
-    INSTRUMENT_GAP +
-    COMPASS_STRIP_HEIGHT +
-    INSTRUMENT_GAP +
-    READOUT_CHIP_HEIGHT +
-    INSTRUMENT_GAP;
+    (scaleBarEnabled ? SCALE_BAR_HEIGHT + INSTRUMENT_GAP : 0) +
+    (compassEnabled ? COMPASS_STRIP_HEIGHT + INSTRUMENT_GAP : 0) +
+    (speedElevationEnabled ? READOUT_CHIP_HEIGHT + INSTRUMENT_GAP : 0);
+  /**
+   * When the location marker has to be re-inserted to stay on top.
+   *
+   * MLRN adds an unpinned layer at the TOP of the style, in mount order — so a
+   * layer that mounts later than the marker draws over it, and several here
+   * mount late by nature: a track line appears when a recording starts, a
+   * layer switch turns a whole group on, the pen arms mid-session. The marker
+   * was mounted last and still ended up under the track the user was recording.
+   *
+   * Changing this key unmounts and re-adds the two top layers, which puts them
+   * back on top of whatever just arrived. It is a string of everything BELOW
+   * them that can mount or unmount; the layers under `layerIndex` (basemap,
+   * topo band, GeoPDFs, imports) are pinned by index and cannot climb, so they
+   * are deliberately not in it. Anything unpinned added to this map later
+   * belongs here too.
+   */
+  const topStackKey = [
+    showTracks ? tracks.map((track) => track.id).join(",") : "",
+    waypoints.length > 0,
+    showRoutes,
+    showCanyonRoutes,
+    showWaypoints,
+    drawingRoute,
+    measuring,
+    navLineShape != null,
+    shownRoute?.nonce ?? "",
+    focusPulse?.nonce ?? "",
+  ].join("|");
   const controlsEdge = controlsOnLeft
     ? { left: CHROME_GAP, right: undefined }
     : { right: CHROME_GAP, left: undefined };
@@ -3557,10 +3597,10 @@ export function MapScreen({
         // Bottom-left (position 2), above the JS instruments — it answers a
         // different question from the compass tape (which way the MAP faces, vs
         // which way the USER does), so both are on screen at once. The margin is
-        // a static clearance for the tape + scale bar rather than a measured
-        // one: an ornament margin that moves with a toggle re-commits a native
-        // view prop for a 46 px gap nobody notices. MLRN 11 does have a native
-        // scale bar, but Android only puts it top-left, so ours stays drawn in JS.
+        // clearance measured from the instruments actually switched on (see
+        // `ornamentMarginY`), so the ornament tracks the top of the stack.
+        // MLRN 11 does have a native scale bar, but Android only puts it
+        // top-left, so ours stays drawn in JS.
         // HIDDEN IN COURSE-UP, and not only because tapping it snapped the
         // map back to north against the mode that was steering it — a fight
         // the compass won for exactly as long as it took the next sensor
@@ -3879,35 +3919,41 @@ export function MapScreen({
           />
         ) : null}
 
-        {/* The spot the user tapped. Deliberately NOT a waypoint pin: a
-            waypoint is a thing they created and kept, this is a cursor. A small
-            ringed dot reads as "here is where you pointed" and disappears the
-            moment the panel is dismissed. */}
-        {tappedPointShape ? (
-          <GeoJSONSource id="tapped-point" data={tappedPointShape}>
-            <Layer
-              key="tapped-point-dot"
-              type="circle"
-              id="tapped-point-dot"
-              style={{
-                circleRadius: 5,
-                circleColor: theme.accent,
-                circleStrokeColor: "#ffffff",
-                circleStrokeWidth: 2,
-              }}
+        {/* WHERE YOU ARE, AND WHERE YOU JUST POINTED — the two things that must
+            never be drawn under anything else, re-inserted as a pair whenever
+            the stack below them changes (see `topStackKey`). Order within the
+            pair is the z-order: the marker, then the cursor over it. */}
+        <Fragment key={topStackKey}>
+          {/* Own location marker (expo-location watcher) — see
+              UserLocationMarker above for why it is its own component. */}
+          {dotWanted && userCoord ? (
+            <UserLocationMarker
+              coord={userCoord}
+              markerColorId={markerColorId}
+              lockUpright={followMode === "course-up"}
             />
-          </GeoJSONSource>
-        ) : null}
+          ) : null}
 
-        {/* Own location marker (expo-location watcher) — see UserLocationMarker
-            above for why it is its own component. */}
-        {dotWanted && userCoord ? (
-          <UserLocationMarker
-            coord={userCoord}
-            markerColorId={markerColorId}
-            lockUpright={followMode === "course-up"}
-          />
-        ) : null}
+          {/* The spot the user tapped. Deliberately NOT a waypoint pin: a
+              waypoint is a thing they created and kept, this is a cursor. A
+              small ringed dot reads as "here is where you pointed" and
+              disappears the moment the panel is dismissed. */}
+          {tappedPointShape ? (
+            <GeoJSONSource id="tapped-point" data={tappedPointShape}>
+              <Layer
+                key="tapped-point-dot"
+                type="circle"
+                id="tapped-point-dot"
+                style={{
+                  circleRadius: 5,
+                  circleColor: theme.accent,
+                  circleStrokeColor: "#ffffff",
+                  circleStrokeWidth: 2,
+                }}
+              />
+            </GeoJSONSource>
+          ) : null}
+        </Fragment>
 
         {/* The extent a "show on map" sent us to, outlined for ~2.5 s. Mounted
             last so it is over the basemap band and everything above it; it owns

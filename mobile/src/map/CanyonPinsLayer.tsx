@@ -83,12 +83,19 @@ export const CanyonPinsLayer = memo(function CanyonPinsLayer({
         data={sharedFc}
         onPress={onPress}
       >
+        {/* WIDER THAN AN OWNED PIN, deliberately. A canyon someone shared with
+            you and your own copy of it very often sit on the SAME coordinate —
+            that is what "copy" means — and owned draws on top, so an equal
+            circle vanished completely underneath it and the layer looked
+            broken. The extra 3 px leaves a blue ring around the orange dot,
+            which is both the only hint that two things are stacked there and
+            the part of the pin a thumb can land on to open the shared one. */}
         <Layer
           key={`${idPrefix}shared-canyon-circles`}
           type="circle"
           id={`${idPrefix}shared-canyon-circles`}
           style={{
-            circleRadius: 6,
+            circleRadius: 9,
             circleColor: SHARED_CANYON_COLOR,
             circleStrokeColor: "#ffffff",
             circleStrokeWidth: 1.5,
@@ -98,7 +105,14 @@ export const CanyonPinsLayer = memo(function CanyonPinsLayer({
           key={`${idPrefix}shared-canyon-labels`}
           type="symbol"
           id={`${idPrefix}shared-canyon-labels`}
-          style={LABEL_STYLE}
+          // Pushed clear of an owned label, and exempt from collision, for the
+          // same reason the circle is wider: stacked on one coordinate the two
+          // labels collide, and MapLibre places symbol layers top-down — so
+          // the owned label, being the higher layer, wins every time and the
+          // shared canyon loses both its dot and its name. The offset keeps
+          // the pair legible; `textAllowOverlap` is what stops the one the
+          // user cannot otherwise see from being the one that is dropped.
+          style={{ ...LABEL_STYLE, textOffset: [0, 2.6], textAllowOverlap: true }}
         />
       </GeoJSONSource>
       <GeoJSONSource

@@ -95,12 +95,15 @@ type MapStackParams = {
         // existing route. An id, never geometry — the map reads the points
         // from the mirror it already has.
         editRoute?: { routeId: string; nonce: number };
-        // `drawRouteFor` = "Draw one on the map" from a canyon page: arm the
-        // pen and save into that canyon's route slot.
-        drawRouteFor?: { canyonId: string; nonce: number };
+        // `drawRouteFor` = "Draw one on the map": arm the pen. From a canyon
+        // page it carries that canyon's id and saves into its route slot;
+        // from Saved's add sheet the id is null and the route stands alone.
+        drawRouteFor?: { canyonId: string | null; nonce: number };
         // `continueTrack` = "Continue recording" from Saved: pick a finished
         // track back up. An id, never points.
         continueTrack?: { trackId: string; nonce: number };
+        // `startRecording` = "Record a track" from Saved's add sheet.
+        startRecording?: { nonce: number };
       }
     | undefined;
   MapCanyonDetail: { canyonId: string; name: string };
@@ -249,6 +252,7 @@ function MapStackNav() {
             editRoute={route.params?.editRoute ?? null}
             drawRouteFor={route.params?.drawRouteFor ?? null}
             continueTrack={route.params?.continueTrack ?? null}
+            startRecording={route.params?.startRecording ?? null}
           />
         )}
       </MapStack.Screen>
@@ -377,6 +381,20 @@ function SavedStackNav() {
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
                 params: { continueTrack: { trackId, nonce: Date.now() } },
+              })
+            }
+            // Both of these are made ON the map, so the add sheet hands the
+            // request over rather than growing a second way to do it.
+            onRecordTrack={() =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { startRecording: { nonce: Date.now() } },
+              })
+            }
+            onDrawRoute={() =>
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapView",
+                params: { drawRouteFor: { canyonId: null, nonce: Date.now() } },
               })
             }
           />

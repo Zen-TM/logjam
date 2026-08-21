@@ -11,21 +11,33 @@
 // is the only thing that can notice a fix has gone stale, and 2 s is as coarse
 // as it can be while a 20 s staleness cliff still lands promptly.
 //
+// TWO LABELLED COLUMNS, FIXED WIDTH. Both halves are numbers with units, and
+// units alone don't say which is which — "3.4 km/h · 253 m" needs reading, a
+// labelled column is glanced at. The width is fixed and the values centred so
+// the chip does not breathe with every fix: it sits in a stack above the scale
+// bar and the compass tape, and a box that changes width while you walk drags
+// the eye to the one instrument that has nothing new to say.
+//
 // PRIVACY: two numbers, no position, and — like every instrument here — never
 // logged.
 import { memo, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { formatSpeedMps } from "@logjam/shared";
 
-import { fontSize, fontWeight, radius, spacing, theme } from "../theme";
+import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
 import { READOUT_STALE_MS, useLiveReadout } from "./liveReadout";
+
+const LABEL_LINE = Math.round(fontSize.xs * 1.2);
+const VALUE_LINE = Math.round(fontSize.sm * 1.35);
 
 /** Its drawn height, exported for the same reason `SCALE_BAR_HEIGHT` is: the
  *  native compass ornament is positioned by a NUMBER and has to clear the whole
  *  stack (see MapScreen's `ornamentMarginY`). */
-export const READOUT_CHIP_HEIGHT = Math.round(
-  fontSize.sm * 1.35 + spacing(0.5) + spacing(0.5),
-);
+export const READOUT_CHIP_HEIGHT = LABEL_LINE + VALUE_LINE + spacing(1);
+
+/** Wide enough for the longest pair either column produces ("12.5 km/h",
+ *  "1234 m") without the columns touching, and never wider. */
+const CHIP_WIDTH = 168;
 
 /** Coarse on purpose — see the header. */
 const TICK_MS = 2000;
@@ -62,25 +74,31 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
 
   return (
     <View style={styles.chip} pointerEvents="none">
-      <Text style={styles.value} accessibilityLabel={`Speed ${speed}`}>
-        {speed}
-      </Text>
-      <Text style={styles.separator}>·</Text>
-      <Text
-        style={styles.value}
-        accessibilityLabel={
-          // Which surface the height came from, said to a screen reader as it
-          // is said on screen — a DEM cannot see inside a slot narrower than
-          // its ~19 m grid, and GPS altitude cannot see a hill smaller than its
-          // own noise. A number with no provenance gets trusted.
-          `Elevation ${elevation}${readout?.fromTerrain ? ", from terrain data" : ""}`
-        }
-      >
-        {elevation}
-      </Text>
-      {/* One glyph rather than a word: the chip has to stay narrow enough to
-          sit above the scale bar, and this is the only distinction it makes. */}
-      {readout?.fromTerrain ? <Text style={styles.source}>▲</Text> : null}
+      <View style={styles.column}>
+        <Text style={styles.label}>Speed</Text>
+        <Text style={styles.value} accessibilityLabel={`Speed ${speed}`}>
+          {speed}
+        </Text>
+      </View>
+      <View style={styles.divider} />
+      <View style={styles.column}>
+        {/* One glyph rather than a word, and in the LABEL rather than beside the
+            number: which surface the height came from is a fact about the
+            reading, not part of it. A DEM cannot see inside a slot narrower
+            than its ~19 m grid, and GPS altitude cannot see a hill smaller than
+            its own noise — a number with no provenance gets trusted. */}
+        <Text style={styles.label}>
+          {readout?.fromTerrain ? "Elevation ▲" : "Elevation"}
+        </Text>
+        <Text
+          style={styles.value}
+          accessibilityLabel={
+            `Elevation ${elevation}${readout?.fromTerrain ? ", from terrain data" : ""}`
+          }
+        >
+          {elevation}
+        </Text>
+      </View>
     </View>
   );
 });
@@ -91,19 +109,31 @@ const styles = StyleSheet.create({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "flex-start",
-    gap: spacing(0.75),
+    width: CHIP_WIDTH,
+    height: READOUT_CHIP_HEIGHT,
     backgroundColor: `${theme.primary}CC`,
     borderRadius: radius.sm,
-    paddingHorizontal: spacing(0.75),
-    paddingVertical: spacing(0.5),
+    paddingHorizontal: spacing(0.5),
+  },
+  column: { flex: 1, alignItems: "center" },
+  label: {
+    color: theme.textMuted,
+    fontSize: fontSize.xs,
+    lineHeight: LABEL_LINE,
   },
   value: {
     color: theme.textPrimary,
     fontSize: fontSize.sm,
+    lineHeight: VALUE_LINE,
     fontWeight: fontWeight.medium,
     fontVariant: ["tabular-nums"],
   },
-  separator: { color: theme.textMuted, fontSize: fontSize.sm },
-  source: { color: theme.textMuted, fontSize: fontSize.xs },
+  // A hairline rather than a gap: two centred columns with nothing between them
+  // read as one wrapped sentence at a glance.
+  divider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    marginVertical: spacing(0.75),
+    backgroundColor: withAlpha(theme.textPrimary, 0.25),
+  },
 });

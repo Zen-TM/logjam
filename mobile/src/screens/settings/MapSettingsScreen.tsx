@@ -251,16 +251,6 @@ export function MapSettingsScreen() {
             setNorthUp(next);
           }}
         />
-        {/* Directly above the bearings choice it governs: switched off, that
-            choice has nothing to apply to and greys out with it. */}
-        <PreferenceRow
-          icon="compass"
-          title="Compass"
-          value={compassEnabled}
-          ready
-          onToggle={() => void toggleCompass()}
-        />
-
         <PreferenceRow
           icon="minus"
           title="Scale bar"
@@ -273,14 +263,23 @@ export function MapSettingsScreen() {
           }}
         />
 
-        {/* Beneath the two instruments it joins in the same stack. Its subtitle
-            is the one on this page that names a COST rather than a behaviour:
-            the others draw something the phone already knows, and this one
-            keeps the GPS running to find out. */}
+        {/* The two instruments that keep a sensor running carry the same one-line
+            cost, said the same way — a per-row variation would read as a
+            difference in kind when the only difference is which sensor. */}
+        <PreferenceRow
+          icon="compass"
+          title="Compass"
+          subtitle="Uses more battery while on the map."
+          value={compassEnabled}
+          ready
+          onToggle={() => void toggleCompass()}
+        />
+
+        {/* Beneath the two instruments it joins in the same stack. */}
         <PreferenceRow
           icon="trending-up"
           title="Speed and elevation"
-          subtitle="Keeps GPS running while the map is open."
+          subtitle="Uses more battery while on the map."
           value={speedElevation}
           ready
           onToggle={() => void toggleSpeedElevation()}

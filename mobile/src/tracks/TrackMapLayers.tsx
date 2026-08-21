@@ -57,7 +57,11 @@ const TrackLine = memo(function TrackLine({
     return trackPointsToFeature(points);
   }, [stored, tail, track.currentSegment]);
 
-  if (shape.geometry.coordinates.length === 0) return null;
+  // MOUNTED EVEN WHILE EMPTY (a MultiLineString with no coordinates draws
+  // nothing). A source that appeared the moment the first points landed was a
+  // layer added ABOVE the location marker mid-recording — the marker's
+  // re-insertion key in MapScreen can see this track's id, but not the moment
+  // its points arrive.
   return (
     <GeoJSONSource
       id={`track-${track.id}`}

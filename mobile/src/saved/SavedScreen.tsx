@@ -239,14 +239,18 @@ const CATEGORY_META: Record<
   track: { label: "Track", plural: "Tracks", icon: "activity" },
 };
 
+// Reading order for the filter rail, the capacity meter and the "add to this
+// device" sheet, which all derive from it: the maps you stand on first
+// (basemap, topo, paper sheet), then the things you place on them, then the
+// files you bring in from elsewhere.
 const CATEGORY_ORDER: Category[] = [
   "region",
   "overlay",
   "geoPdf",
-  "route",
   "waypoint",
-  "vector",
   "track",
+  "route",
+  "vector",
 ];
 
 /** A single on-device asset, flattened so one renderer covers every kind. */
@@ -314,6 +318,8 @@ export function SavedScreen({
   onEditRoute,
   onPickPoint,
   onContinueRecording,
+  onRecordTrack,
+  onDrawRoute,
   initialFilter,
 }: {
   onOpenMap: (bbox?: Bbox, basemapId?: BasemapId, reveal?: SavedItemReveal) => void;
@@ -334,6 +340,12 @@ export function SavedScreen({
    * recording mode.
    */
   onContinueRecording: (trackId: string) => void;
+  /** Start a new recording. Handed to the map for the same two reasons
+   *  `onContinueRecording` is. */
+  onRecordTrack: () => void;
+  /** Arm the pen on the map with nothing linked — a route drawn from here
+   *  belongs to no canyon until the user says otherwise. */
+  onDrawRoute: () => void;
   /**
    * Land on one category rather than "All". The map's layer sheet points at
    * this screen for region management ("3 saved areas ›"), and dropping the
@@ -1069,6 +1081,37 @@ export function SavedScreen({
     })),
   ];
 
+  /**
+   * What the empty state of the current tab offers to do about it.
+   *
+   * `null` where the tab IS the action: the LiDAR tab lists the account's
+   * overlays to save right above this panel, so a button that re-opens the tab
+   * you are standing on would be an affordance that only refuses (DESIGN.md
+   * §7).
+   */
+  const emptyAction = ((): { label: string; onPress: () => void } | null => {
+    switch (filter) {
+      case "all":
+        return { label: "Add to device", onPress: () => setAddSheetOpen(true) };
+      case "region":
+        return online ? { label: "Download a region", onPress: onDownloadRegion } : null;
+      case "overlay":
+        return null;
+      case "geoPdf":
+        return { label: "Import a GeoPDF", onPress: handleImportGeoPdf };
+      case "waypoint":
+        return { label: "Add a waypoint", onPress: () => setCoordSheetOpen(true) };
+      case "track":
+        return { label: "Record a track", onPress: onRecordTrack };
+      case "route":
+        return { label: "Draw a route", onPress: onDrawRoute };
+      case "vector":
+        return importBusy
+          ? null
+          : { label: "Import a file", onPress: () => void handleImportFile() };
+    }
+  })();
+
   // "All" is size-descending — the order that answers "what is filling the
   // device". Within a category, insertion order (newest registry rows last)
   // is more useful than size.
@@ -1630,7 +1673,15 @@ export function SavedScreen({
         !activeOp &&
         !importRun &&
         (filter !== "region" || downloadGroups.length === 0) ? (
-          <EmptyPanel filter={filter} online={online} onAdd={() => setAddSheetOpen(true)} />
+          <EmptyPanel
+            filter={filter}
+            online={online}
+            // The action that fills THIS tab, not the menu of everything —
+            // an empty GeoPDF tab knows exactly which flow it is missing, and
+            // making the user pick it out of a list again is a step that
+            // answers a question they already answered by being here.
+            action={emptyAction}
+          />
         ) : null}
 
         {visibleItems.map((item) => {
@@ -1851,14 +1902,19 @@ export function SavedScreen({
             }}
           />
           <Row
-            title="Waypoint from coordinates"
-            subtitle="Type a latitude and longitude — for transcribing off a guide"
-            icon="map-pin"
-            hue={assetHue.waypoint}
-            onPress={() => {
-              setAddSheetOpen(false);
-              setCoordSheetOpen(true);
-            }}
+            title="Save a LiDAR topo overlay"
+            subtitle="Contours, slope and vegetation you generated"
+            icon="layers"
+            hue={assetHue.overlay}
+            {...capabilityRowProps("lidarOverlays", accountState, online)}
+            onPress={
+              lidarReady
+                ? () => {
+                    setAddSheetOpen(false);
+                    setFilter("overlay");
+                  }
+                : undefined
+            }
           />
           <Row
             title="Import a GeoPDF file"
@@ -1886,6 +1942,42 @@ export function SavedScreen({
             }
           />
           <Row
+            title="Waypoint from coordinates"
+            subtitle="Type a latitude and longitude — for transcribing off a guide"
+            icon="map-pin"
+            hue={assetHue.waypoint}
+            onPress={() => {
+              setAddSheetOpen(false);
+              setCoordSheetOpen(true);
+            }}
+          />
+          {/* The two that are not "add a file" but "go and make one". They live
+              here because this sheet is the answer to "how do I get something
+              onto this device", and a user who has never drawn a route has no
+              reason to know the pen lives on the map. Both hand over to the
+              map: arming either needs the location prompt, which cannot be
+              raised from an open sheet (DESIGN.md §7). */}
+          <Row
+            title="Record a track"
+            subtitle="Follow where you walk, from the map"
+            icon="activity"
+            hue={assetHue.track}
+            onPress={() => {
+              setAddSheetOpen(false);
+              onRecordTrack();
+            }}
+          />
+          <Row
+            title="Draw a route"
+            subtitle="Trace a line on the map with the pen"
+            icon="edit-3"
+            hue={assetHue.route}
+            onPress={() => {
+              setAddSheetOpen(false);
+              onDrawRoute();
+            }}
+          />
+          <Row
             title="Import GPX, KML or GeoJSON"
             subtitle="From this phone's storage — works offline"
             icon="file-plus"
@@ -1897,21 +1989,6 @@ export function SavedScreen({
                     setAddSheetOpen(false);
                     handleImportFile();
                   }
-            }
-          />
-          <Row
-            title="Save a LiDAR topo overlay"
-            subtitle="Contours, slope and vegetation you generated"
-            icon="layers"
-            hue={assetHue.overlay}
-            {...capabilityRowProps("lidarOverlays", accountState, online)}
-            onPress={
-              lidarReady
-                ? () => {
-                    setAddSheetOpen(false);
-                    setFilter("overlay");
-                  }
-                : undefined
             }
           />
         </View>
@@ -2273,11 +2350,12 @@ export function SavedScreen({
 function EmptyPanel({
   filter,
   online,
-  onAdd,
+  action,
 }: {
   filter: Category | "all";
   online: boolean;
-  onAdd: () => void;
+  /** The one thing that fills this tab, or null where the tab is already it. */
+  action: { label: string; onPress: () => void } | null;
 }) {
   // An empty panel is where someone works out whether a feature is missing or
   // merely unused — so for the two account-backed categories it must say which.
@@ -2327,8 +2405,8 @@ function EmptyPanel({
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyHint}>{hint}</Text>
-      {filter !== "track" ? (
-        <Button label="Add to device" icon="plus" compact onPress={onAdd} />
+      {action ? (
+        <Button label={action.label} icon="plus" compact onPress={action.onPress} />
       ) : null}
     </View>
   );
