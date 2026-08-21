@@ -81,10 +81,32 @@ export type ProfileSeries = {
 };
 
 /** A DEM or GPS height profile over DISTANCE, scaled between its own ends. */
-export function elevationSeries(profile: ElevationProfile): ProfileSeries {
+export function elevationSeries(
+  profile: ElevationProfile,
+  /**
+   * The distance the rest of the panel reports, when the caller has one.
+   *
+   * A DEM profile's own x axis is the length of the line it was sampled along,
+   * and that line is built from RAW fix positions — while the headline
+   * distance walks position-smoothed ones, because summing raw fix-to-fix hops
+   * integrates the error circle as travel. On a real 3.4 km walk the two
+   * disagreed by 14%: the chart ran to 4.0 km beside a stat card reading
+   * 3.4 km, which reads as one of them being broken.
+   *
+   * The chart's shape is unaffected — this is a uniform scale, so every
+   * feature stays at the same fraction along the track. It only stops the
+   * axis contradicting the number printed above it.
+   */
+  alongDistanceM?: number,
+): ProfileSeries {
+  const lastM = profile.samples[profile.samples.length - 1]?.distanceM ?? 0;
+  const scale =
+    alongDistanceM != null && alongDistanceM > 0 && lastM > 0
+      ? alongDistanceM / lastM
+      : 1;
   return {
     points: profile.samples.map((sample) => ({
-      x: sample.distanceM,
+      x: sample.distanceM * scale,
       value: sample.elevationM,
     })),
     min: profile.minM,

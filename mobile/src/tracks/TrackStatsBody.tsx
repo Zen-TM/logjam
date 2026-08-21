@@ -137,7 +137,7 @@ export function TrackStatsBody({
               chart wrong — a long flat section is a plateau, not a rest. */}
           <Text style={styles.chartLabel}>Elevation vs distance</Text>
           <ProfileChart
-            series={elevationSeries(elevation)}
+            series={elevationSeries(elevation, detail.distanceM)}
             formatValue={(elevationM) => `${Math.round(elevationM)} m`}
             formatX={formatDistanceM}
             hint="Drag across for the height at a point along the track"

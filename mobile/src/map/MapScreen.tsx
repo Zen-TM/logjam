@@ -1020,7 +1020,18 @@ export function MapScreen({
   const lastPovBearing = useRef<number | null>(null);
   /** When the last course-up camera stop was written, for its duration. */
   const lastPovWriteAt = useRef(0);
-  const firstFix = useRef(true);
+  // False, now that the marker is on from the start: a true here would fly the
+  // camera to FOLLOW_ZOOM on the first fix of every launch, yanking a map the
+  // user never asked to be moved. Nothing is lost — the locate button reaches
+  // `recentre`, which already carries FOLLOW_ZOOM, so asking to be taken to
+  // yourself still zooms.
+  //
+  // ponytail: with `dotWanted` never false, this ref and the tail of
+  // `handleLocateMe` that sets it are unreachable, as is `applyFix`'s
+  // `!dotWantedRef.current` guard and the `dotWanted &&` in the marker's JSX.
+  // Left in place deliberately rather than unpicked in the same commit that
+  // changed the behaviour; collapse them once this has been in the field.
+  const firstFix = useRef(false);
 
   // Unmount teardown for the sensors is the effects' own cleanup below. It used
   // to be a screen-level effect plus an `unmounted` flag checked at every
@@ -2623,12 +2634,26 @@ export function MapScreen({
   const sensorsActive = mapFocused && appActive;
 
   /**
-   * The user has asked to see themselves. State, not a subscription handle:
-   * "show me where I am" outlives any one watcher, and the follow-mode cycle
-   * and the recording flow both need to ask the question during the window
-   * where a watcher is being replaced.
+   * Whether the marker is shown. ALWAYS TRUE once the map exists.
+   *
+   * It used to start false and be raised by the locate button or by starting a
+   * recording, which meant a marker that came and went for reasons the user
+   * could not see — most visibly across an app restart, where the recording
+   * survived (the record button reads the database) and this did not. "Where
+   * am I" is not a mode a map should make you ask for.
+   *
+   * The cost is the position watcher running whenever the map tab is focused
+   * AND foregrounded — never with the screen off, and never on another tab.
+   * Measured against the same field session: the watcher bills ~7.9 mAh/hour
+   * while the map is open, and the SCREEN that has to be on for the map to be
+   * looked at bills ~49 mAh/hour. Six times more, for the privilege of seeing
+   * the map at all. This is not where a field day is lost.
+   *
+   * Kept as state rather than deleted outright because `handleLocateMe` and
+   * `applyFix` still branch on it, and the follow-mode cycle needs the
+   * distinction between "showing you" and "chasing you".
    */
-  const [dotWanted, setDotWanted] = useState(false);
+  const [dotWanted, setDotWanted] = useState(true);
   /** Mirror for `applyFix`, which is memoised once and must not be rebuilt on
    *  every change of this — every rebuild tears the GPS watcher down and
    *  starts a new one. */
@@ -3039,26 +3064,6 @@ export function MapScreen({
     // The compass comes with it — the arrow is a heading as much as a position.
     setDotWanted(true);
   }, [dotWanted, recentre, requestPovRecentre]);
-
-  /**
-   * A RECORDING survives the app being killed; the intention to see yourself
-   * did not, and the two arriving back in different states is what a user
-   * reads as "the location marker disappeared".
-   *
-   * `dotWanted` is process state, so a relaunch resets it to false — while the
-   * foreground service keeps recording and the record button, which reads the
-   * database row, keeps saying so. Starting a recording already turns the dot
-   * on (see the start handler); this is the same rule applied when the app
-   * comes back to a recording that is ALREADY running.
-   *
-   * Only ever turns it ON. Nothing in this screen sets `dotWanted` false — the
-   * locate button cycles the follow MODE and leaves the marker up — so this
-   * cannot fight a user who wanted it off.
-   */
-  useEffect(() => {
-    if (dotWanted || activeTrack?.state !== "recording") return;
-    void handleLocateMe();
-  }, [dotWanted, activeTrack?.state, handleLocateMe]);
 
   /**
    * Navigate to a spot: distance + bearing from every new fix, in the chip at
