@@ -25,6 +25,29 @@ export type CandidateFix = {
   accuracyM: number | null;
   /** Fix time, epoch ms. */
   timestampMs: number;
+  /**
+   * The platform's own velocity and quality channels, RECORDED BUT NOT ACTED
+   * ON (2026-08-21). Nothing here reads them yet, and that is the point:
+   * whether they can separate a wandering fix from real travel is a question
+   * only a body of real recordings can answer, and a field not collected
+   * cannot be backfilled. They cost three columns and no extra work — the
+   * platform computes them for every fix and we were discarding them.
+   *
+   * `speedMps` is the interesting one. On Android it comes from the GNSS
+   * engine's Doppler solution, so it measures velocity INDEPENDENTLY of
+   * position differencing — a fix whose reported speed says 1.5 m/s while its
+   * displacement implies 3.8 m/s is internally contradictory in a way no
+   * position-only test can see.
+   *
+   * Null means NOT MEASURED — an older row, or a platform that had none for
+   * this fix. Never read a null as zero: "the receiver reported no speed" and
+   * "the receiver reported standing still" are opposite facts.
+   */
+  speedMps?: number | null;
+  /** Course over ground in degrees clockwise from north, from the receiver. */
+  headingDeg?: number | null;
+  /** Vertical accuracy, the altitude's counterpart to `accuracyM`. */
+  altitudeAccuracyM?: number | null;
 };
 
 /**
@@ -320,6 +343,46 @@ function demonstratedStoppedMs(
 export const SPEED_SMOOTHING_WINDOW = 5;
 
 /**
+ * How much longer than the typical interval one has to be before the smoothing
+ * window refuses to average across it.
+ *
+ * The window exists to kill the spikiness of per-interval GPS speed, which is
+ * d/dt of two positions each carrying metres of error. That reasoning holds
+ * between COMPARABLE samples and fails completely across a rest: a ten-minute
+ * gap's speed is not a noisy estimate, it is a very well determined one, and
+ * averaging it with the 30-second walking intervals either side pulls the one
+ * value on the chart that says "I stopped here" up towards walking pace.
+ *
+ * So a long interval keeps its own value and acts as a boundary — the same
+ * treatment a pause already gets, for the same reason.
+ */
+export const LONG_INTERVAL_FACTOR = 3;
+
+/**
+ * Smooth a segment's speeds, but never across an interval far longer than the
+ * rest. Long intervals pass through untouched and split the runs either side.
+ */
+function smoothSpeedRuns(speeds: number[], durationsMs: number[]): number[] {
+  if (speeds.length === 0) return [];
+  const sorted = durationsMs.slice().sort((a, b) => a - b);
+  const longMs = sorted[sorted.length >> 1]! * LONG_INTERVAL_FACTOR;
+  const out = new Array<number>(speeds.length);
+  let runStart = 0;
+  const flushRun = (end: number) => {
+    const run = movingMean(speeds.slice(runStart, end), SPEED_SMOOTHING_WINDOW);
+    for (let i = 0; i < run.length; i++) out[runStart + i] = run[i]!;
+  };
+  for (let i = 0; i < speeds.length; i++) {
+    if (durationsMs[i]! < longMs) continue;
+    flushRun(i);
+    out[i] = speeds[i]!;
+    runStart = i + 1;
+  }
+  flushRun(speeds.length);
+  return out;
+}
+
+/**
  * One point on the speed series: how fast, how far into the recording.
  *
  * Against TIME, not distance — unlike the elevation profile beside it, and the
@@ -331,6 +394,19 @@ export const SPEED_SMOOTHING_WINDOW = 5;
  * column that reads as a glitch rather than a break.
  */
 export type SpeedSample = { atMs: number; speedMps: number };
+
+/**
+ * A STEP series, not a line: every interval contributes two samples, one at
+ * each end, both at that interval's speed.
+ *
+ * A speed is a property of a SPAN, and one sample per interval left the
+ * renderer interpolating between the midpoints of adjacent spans. A ten-minute
+ * rest is a single interval, so it drew as a straight ramp down to one low
+ * point and straight back up — a V across ten minutes of chart, which reads as
+ * a glitch rather than as the longest thing that happened on the walk. Two
+ * samples per interval draw it flat for its whole width, which is what
+ * actually happened.
+ */
 
 export type SpeedProfile = {
   samples: SpeedSample[];
@@ -452,7 +528,10 @@ export function computeTrackDetail(
       DISTANCE_SMOOTHING_WINDOW,
     );
     const segmentSpeeds: number[] = [];
-    const segmentTimes: number[] = [];
+    const segmentDurations: number[] = [];
+    // Both ends of each interval, so the chart can draw it as a step.
+    const segmentStarts: number[] = [];
+    const segmentEnds: number[] = [];
     distanceAt[start] = distanceM;
     for (let i = 1; i < segment.length; i++) {
       const stepM = haversineMeters(lats[i - 1]!, lons[i - 1]!, lats[i]!, lons[i]!);
@@ -465,6 +544,7 @@ export function computeTrackDetail(
       // a negative duration or a division by zero.
       const stepMs = segment[i]!.timestampMs! - segment[i - 1]!.timestampMs!;
       if (stepMs <= 0) continue;
+      const intervalStartMs = durationMs;
       durationMs += stepMs;
       const speedMps = stepM / (stepMs / 1000);
       // Proven-stationary time first, the interval's average speed only where
@@ -476,19 +556,20 @@ export function computeTrackDetail(
         movingMs += stepMs;
       }
       segmentSpeeds.push(speedMps);
-      // Elapsed RECORDING time at the end of this interval — the running
+      segmentDurations.push(stepMs);
+      // Elapsed RECORDING time at each end of this interval — the running
       // durationMs, so the series' last x is the recording's own length and a
       // pause contributes no width to it.
-      segmentTimes.push(durationMs);
+      segmentStarts.push(intervalStartMs);
+      segmentEnds.push(durationMs);
     }
     // Smoothed per segment, so a pause gap's own long slow interval never
-    // averages into the walking on either side of it.
-    const smoothedSpeeds = movingMean(segmentSpeeds, SPEED_SMOOTHING_WINDOW);
+    // averages into the walking on either side of it — and, within a segment,
+    // never across a rest either (see LONG_INTERVAL_FACTOR).
+    const smoothedSpeeds = smoothSpeedRuns(segmentSpeeds, segmentDurations);
     for (let i = 0; i < smoothedSpeeds.length; i++) {
-      rawSpeeds.push({
-        atMs: segmentTimes[i]!,
-        speedMps: smoothedSpeeds[i]!,
-      });
+      rawSpeeds.push({ atMs: segmentStarts[i]!, speedMps: smoothedSpeeds[i]! });
+      rawSpeeds.push({ atMs: segmentEnds[i]!, speedMps: smoothedSpeeds[i]! });
     }
     start = end;
   }

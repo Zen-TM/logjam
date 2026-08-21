@@ -246,7 +246,8 @@ export async function listTrackPoints(
   const db = await getOfflineDb();
   return db.getAllAsync<RecordedTrackPoint>(
     `SELECT segment, lon, lat, altitudeM, accuracyM, timestampMs,
-            suppressedCount, stationaryMs
+            suppressedCount, stationaryMs, speedMps, headingDeg,
+            altitudeAccuracyM
        FROM track_point WHERE trackId = ? AND seq >= ? ORDER BY seq`,
     trackId,
     fromSeq,
@@ -260,7 +261,8 @@ export async function lastTrackPoint(
   const db = await getOfflineDb();
   const rows = await db.getAllAsync<RecordedTrackPoint>(
     `SELECT segment, lon, lat, altitudeM, accuracyM, timestampMs,
-            suppressedCount, stationaryMs
+            suppressedCount, stationaryMs, speedMps, headingDeg,
+            altitudeAccuracyM
        FROM track_point WHERE trackId = ? ORDER BY seq DESC LIMIT 1`,
     trackId,
   );
@@ -293,8 +295,9 @@ export async function appendTrackPoints(
       await db.runAsync(
         `INSERT INTO track_point
            (trackId, seq, segment, lon, lat, altitudeM, accuracyM, timestampMs,
-            suppressedCount, stationaryMs)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            suppressedCount, stationaryMs, speedMps, headingDeg,
+            altitudeAccuracyM)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         trackId,
         seq++,
         p.segment,
@@ -305,6 +308,9 @@ export async function appendTrackPoints(
         p.timestampMs,
         p.suppressedCount ?? null,
         p.stationaryMs ?? null,
+        p.speedMps ?? null,
+        p.headingDeg ?? null,
+        p.altitudeAccuracyM ?? null,
       );
     }
     await db.runAsync(

@@ -758,12 +758,47 @@ describe("computeTrackDetail", () => {
       walk({ count: 20, stepMilliDeg: 1, stepMs: 100_000 }),
     );
     const samples = detail.speed!.samples;
-    // Monotonic in time, ending at the recording's own length — a chart drawn
-    // from these has the clock as its x axis.
+    // Non-decreasing in time, ending at the recording's own length — a chart
+    // drawn from these has the clock as its x axis. Equal neighbours are the
+    // step's vertical riser, where one interval ends and the next begins.
     for (let i = 1; i < samples.length; i++) {
-      expect(samples[i]!.atMs).toBeGreaterThan(samples[i - 1]!.atMs);
+      expect(samples[i]!.atMs).toBeGreaterThanOrEqual(samples[i - 1]!.atMs);
     }
+    expect(samples[0]!.atMs).toBe(0);
     expect(samples[samples.length - 1]!.atMs).toBe(detail.durationMs);
+  });
+
+  it("draws each interval as a flat step, not a point to interpolate through", () => {
+    // One sample per interval left the renderer drawing a ramp between the
+    // midpoints of adjacent spans, so a ten-minute rest became a V across ten
+    // minutes of chart. A speed belongs to a SPAN and has to be drawn as one.
+    const detail = computeTrackDetail(
+      walk({ count: 4, stepMilliDeg: 1, stepMs: 100_000 }),
+    );
+    const samples = detail.speed!.samples;
+    // 3 intervals -> 3 flat pairs.
+    expect(samples).toHaveLength(6);
+    for (let i = 0; i < samples.length; i += 2) {
+      expect(samples[i + 1]!.speedMps).toBe(samples[i]!.speedMps);
+      expect(samples[i + 1]!.atMs).toBeGreaterThan(samples[i]!.atMs);
+    }
+  });
+
+  it("does not average a rest into the walking either side of it", () => {
+    // The smoothing window kills the spikiness of per-interval GPS speed,
+    // which is d/dt of two noisy positions. A ten-minute gap is not a noisy
+    // estimate — averaging it with its neighbours raises the one value on the
+    // chart that says "I stopped here".
+    const walked = walk({ count: 9, stepMilliDeg: 1, stepMs: 30_000 });
+    // Insert a long, nearly motionless interval in the middle.
+    const paused = walked.map((point, i) =>
+      i < 4 ? point : { ...point, timestampMs: point.timestampMs + 900_000 },
+    );
+    const detail = computeTrackDetail(paused);
+    const restSpeed = Math.min(...detail.speed!.samples.map((s) => s.speedMps));
+    // The rest covered ~111 m in 930 s = 0.12 m/s. Smoothed across its
+    // neighbours it read several times that.
+    expect(restSpeed).toBeLessThan(0.2);
   });
 
   it("gives a long stop its full width on the speed series", () => {

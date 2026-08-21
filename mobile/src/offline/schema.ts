@@ -90,6 +90,9 @@ export const SCHEMA_SQL = `
           timestampMs INTEGER NOT NULL,
           suppressedCount INTEGER,
           stationaryMs    INTEGER,
+          speedMps           REAL,
+          headingDeg         REAL,
+          altitudeAccuracyM  REAL,
           PRIMARY KEY (trackId, seq)
         );
         CREATE TABLE IF NOT EXISTS waypoint (
@@ -150,4 +153,12 @@ export const ADDED_COLUMNS: { table: string; column: string; definition: string 
   // so no DEFAULT 0 here.
   { table: "track_point", column: "suppressedCount", definition: "INTEGER" },
   { table: "track_point", column: "stationaryMs", definition: "INTEGER" },
+  // The platform's velocity and vertical-quality channels, collected without
+  // being acted on — see `CandidateFix` in shared/src/trackStats.ts. They are
+  // here now rather than when a filter wants them because a fix that was never
+  // recorded cannot be recovered, and they cost nothing to take: the platform
+  // already computes them for every fix we receive.
+  { table: "track_point", column: "speedMps", definition: "REAL" },
+  { table: "track_point", column: "headingDeg", definition: "REAL" },
+  { table: "track_point", column: "altitudeAccuracyM", definition: "REAL" },
 ];

@@ -218,6 +218,13 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
       altitudeM: location.coords.altitude,
       accuracyM: location.coords.accuracy,
       timestampMs: location.timestamp,
+      // Collected, not acted on — see `CandidateFix`. Nothing below reads
+      // these; they are here so the recordings made between now and whenever
+      // the acceptance filter is revisited can answer questions the current
+      // one cannot.
+      speedMps: location.coords.speed,
+      headingDeg: location.coords.heading,
+      altitudeAccuracyM: location.coords.altitudeAccuracy,
     };
     const rejection = rejectTrackFix(prev, fix, maxAccuracyM);
     if (rejection === "too-close") {
