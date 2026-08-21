@@ -106,6 +106,9 @@ type MapStackParams = {
         startRecording?: { nonce: number };
       }
     | undefined;
+  // Where the waypoint form went to point at a map. A coordinate already in
+  // the form arrives as params; the answer goes back through `pickedPoint.ts`.
+  MapPickPoint: { latitude: number; longitude: number } | undefined;
   MapCanyonDetail: { canyonId: string; name: string };
   MapTripDetail: { trip: MirrorTrip };
   // Where the map was looking when "Save maps for offline use" was tapped, so
@@ -253,6 +256,22 @@ function MapStackNav() {
             drawRouteFor={route.params?.drawRouteFor ?? null}
             continueTrack={route.params?.continueTrack ?? null}
             startRecording={route.params?.startRecording ?? null}
+            onPickPoint={(from) =>
+              navigation.navigate("MapPickPoint", from ?? undefined)
+            }
+          />
+        )}
+      </MapStack.Screen>
+      <MapStack.Screen name="MapPickPoint" options={{ headerShown: false }}>
+        {({ navigation, route }) => (
+          <PickPointScreen
+            initialPoint={route.params ?? null}
+            subject="waypoint"
+            onCancel={() => navigation.goBack()}
+            onConfirm={(point) => {
+              setPickedPoint(point);
+              navigation.goBack();
+            }}
           />
         )}
       </MapStack.Screen>

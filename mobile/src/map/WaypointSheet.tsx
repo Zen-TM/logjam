@@ -36,7 +36,8 @@ import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
 import {
   WaypointCanyonFilter,
   WaypointCanyonsBody,
-  WaypointEditBody,
+  WaypointFormBody,
+  type WaypointFormDraft,
   WaypointSubModeHeader,
   WaypointTagsBody,
 } from "../waypoints/waypointSheetBodies";
@@ -48,6 +49,9 @@ export function WaypointSheet({
   waypoint,
   userCoord,
   autoEdit = false,
+  draft = null,
+  picked = null,
+  onPickOnMap,
   onClose,
   onNavigate,
   onInfo,
@@ -63,6 +67,12 @@ export function WaypointSheet({
    * matters when the drop happened one-handed on a ledge.
    */
   autoEdit?: boolean;
+  /** The form's own fields, held by the map while this sheet was closed for
+   *  the point picker (a Modal cannot sit over a full-screen map). */
+  draft?: WaypointFormDraft | null;
+  /** A coordinate just chosen on the picker, replacing the two fields. */
+  picked?: { latitude: number; longitude: number } | null;
+  onPickOnMap?: (current: WaypointFormDraft) => void;
   onClose: () => void;
   onNavigate: (waypoint: MirrorWaypoint) => void;
   onInfo: (message: string) => void;
@@ -264,8 +274,11 @@ export function WaypointSheet({
       ) : null}
 
       {mode === "edit" ? (
-        <WaypointEditBody
+        <WaypointFormBody
           waypoint={waypoint}
+          draft={draft}
+          picked={picked}
+          onPickOnMap={onPickOnMap}
           onSubmit={(changed) => {
             if (Object.keys(changed).length > 0) write(changed);
             // A drop lands here directly, so backing out of the form must

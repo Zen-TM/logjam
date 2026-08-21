@@ -68,6 +68,8 @@ import {
   formatDistanceM,
   haversineMeters,
   initialBearingDegrees,
+  isValidLatitude,
+  isValidLongitude,
   messageFromError,
   ROUTE_NAME_MAX_LENGTH,
   nearestSegment,
@@ -217,6 +219,8 @@ import { CanyonRoutesLayer, type CanyonRoutesStatus } from "./CanyonRoutesLayer"
 import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
 import { waypointSymbol } from "./waypointSymbol";
 import { WaypointSheet } from "./WaypointSheet";
+import type { WaypointFormDraft } from "../waypoints/waypointSheetBodies";
+import { takePickedPoint } from "./pickedPoint";
 import { MapPointSheet, type MapPoint } from "./MapPointSheet";
 import { CanyonEditSheet } from "../canyons/CanyonEditSheet";
 import {
@@ -425,10 +429,6 @@ function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
 }
 
-/** Stable empty list: `?? []` in the JSX handed RoutesLayer a fresh array on
- *  every render until the query resolved, which is exactly when its memo would
- *  have helped most. */
-const EMPTY_ROUTES: MirrorRoute[] = [];
 /** Stable identity for the waypoints-off case: a fresh `[]` per render would
  *  re-commit every marker prop on a layer that is drawing nothing. */
 const EMPTY_WAYPOINTS: Waypoint[] = [];
@@ -612,6 +612,7 @@ export function MapScreen({
   onOpenCanyon,
   onOpenSaved,
   onSaveMapsOffline,
+  onPickPoint,
   focus,
   route,
   editRoute,
@@ -631,6 +632,13 @@ export function MapScreen({
   }) => void;
   // Opens the Saved tab on one category, from the layer sheet's regions row.
   onOpenSaved?: (category: "region") => void;
+  /**
+   * Open the full-screen point picker for the waypoint form, starting on
+   * `from` when the form already holds a coordinate. The answer comes back
+   * through `map/pickedPoint.ts`, collected when this screen regains focus —
+   * the same round trip the Saved tab's form makes.
+   */
+  onPickPoint: (from: { latitude: number; longitude: number } | null) => void;
   // "Show on map" for a trip's route attachment. Transient: drawn until the
   // user clears its badge, never added to the imports registry.
   route?: RouteRequest | null;
@@ -881,6 +889,15 @@ export function MapScreen({
       setNorthReference(readNorthReference());
       setScaleBarEnabled(isScaleBarEnabled());
       setSpeedElevationEnabled(isSpeedElevationEnabled());
+      // Back from the point picker. `takePickedPoint` consumes the value, so a
+      // later ordinary return to the map cannot re-apply a coordinate that has
+      // since been typed over. The sheet reopens by itself: `openWaypoint` was
+      // left standing, only hidden.
+      if (waypointPickerAwayRef.current) {
+        setWaypointPickerAway(false);
+        const point = takePickedPoint();
+        if (point) setWaypointPicked(point);
+      }
       listEnabledOverlayKeys()
         .then((keys) => setEnabledOverlays(new Set(keys)))
         .catch(console.error);
@@ -1800,6 +1817,34 @@ export function MapScreen({
   // someone is deciding whether to turn it on.
   const canyonRouteCount = useMirrorCanyonTracks(TRACK_MIME_TYPES).data?.length ?? 0;
 
+  /**
+   * The two route toggles split by WHAT THE ROUTE BELONGS TO, not by how it
+   * was made.
+   *
+   * "Canyon routes" is every route attached to a canyon — the GPX and KML
+   * files counted above, and drawn routes carrying a `canyonId`. "My routes"
+   * is what is attached to nothing. Splitting it the other way (drawn vs
+   * imported) put a canyon's own line under a switch labelled for loose
+   * routes, so turning canyon routes off still drew half of them.
+   */
+  const standaloneRoutes = useMemo(
+    () => (routes.data ?? []).filter((route) => route.canyonId == null),
+    [routes.data],
+  );
+  const canyonLinkedRoutes = useMemo(
+    () => (routes.data ?? []).filter((route) => route.canyonId != null),
+    [routes.data],
+  );
+  // One list for one layer: RoutesLayer draws whatever it is handed, and which
+  // switch put a route in here is not its business.
+  const visibleRoutes = useMemo(
+    () => [
+      ...(showRoutes ? standaloneRoutes : []),
+      ...(showCanyonRoutes ? canyonLinkedRoutes : []),
+    ],
+    [canyonLinkedRoutes, showCanyonRoutes, showRoutes, standaloneRoutes],
+  );
+
   // Locking north-up straightens a map that is already turned. Without this the
   // setting reads as broken for as long as the user leaves the screen rotated:
   // the gesture stops working, but the map stays askew with no way back to north
@@ -1833,6 +1878,48 @@ export function MapScreen({
     id: string;
     autoEdit: boolean;
   } | null>(null);
+  /**
+   * The waypoint form's round trip to the point picker.
+   *
+   * The sheet is an RN Modal and would cover a full-screen map, so it closes on
+   * the way out and its body unmounts with it — `waypointDraft` is what makes
+   * that lossless and `waypointPicked` is what comes back. Same shape as the
+   * Saved tab's, for the same reason.
+   */
+  const [waypointDraft, setWaypointDraft] = useState<WaypointFormDraft | null>(null);
+  const [waypointPicked, setWaypointPicked] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const [waypointPickerAway, setWaypointPickerAway] = useState(false);
+  /** Read by the focus effect, which must not re-subscribe when it changes. */
+  const waypointPickerAwayRef = useRef(waypointPickerAway);
+  waypointPickerAwayRef.current = waypointPickerAway;
+
+  /** Leave for the picker, carrying what the form has in it. */
+  const openWaypointPicker = useCallback(
+    (current: WaypointFormDraft) => {
+      // EMPTY IS NOT ZERO: `Number("")` is 0, and 0/0 is a real place off the
+      // coast of Africa — a blank pair must open the picker with no marker.
+      const latitude = Number(current.latitude.trim());
+      const longitude = Number(current.longitude.trim());
+      const from =
+        current.latitude.trim() !== "" &&
+        current.longitude.trim() !== "" &&
+        isValidLatitude(latitude) &&
+        isValidLongitude(longitude)
+          ? { latitude, longitude }
+          : null;
+      setWaypointDraft(current);
+      setWaypointPicked(null);
+      setWaypointPickerAway(true);
+      // Reopening lands on the FORM rather than the verb list: the user is
+      // mid-edit, and the trip to the map is one step of that edit.
+      setOpenWaypoint((open) => (open ? { ...open, autoEdit: true } : open));
+      onPickPoint(from);
+    },
+    [onPickPoint],
+  );
   const [navTarget, setNavTarget] = useState<Waypoint | null>(null);
   const navDistanceM =
     navTarget && userCoord
@@ -3406,7 +3493,7 @@ export function MapScreen({
       icon: "pen-tool",
       hue: assetHue.route,
       title: "My routes",
-      count: routes.data?.length ?? 0,
+      count: standaloneRoutes.length,
       value: showRoutes,
       onChange: setShowRoutes,
     },
@@ -3415,7 +3502,7 @@ export function MapScreen({
       icon: "git-commit",
       hue: OWNED_CANYON_COLOR,
       title: "Canyon routes",
-      count: canyonRouteCount,
+      count: canyonRouteCount + canyonLinkedRoutes.length,
       // The layer's own report of what it could not draw. Present only while
       // it is on AND something is missing — a map drawing less than it says
       // has to say so (DESIGN.md §8), and the rest of the time there is
@@ -3889,9 +3976,9 @@ export function MapScreen({
           onPress={handleCanyonPress}
         />
 
-        {showRoutes ? (
+        {visibleRoutes.length > 0 ? (
           <RoutesLayer
-            routes={routes.data ?? EMPTY_ROUTES}
+            routes={visibleRoutes}
             hiddenRouteId={editingRouteId}
             // While a tool is collecting points every tap belongs to the tool —
             // opening a stats sheet mid-draw would steal the point being placed.
@@ -3989,10 +4076,13 @@ export function MapScreen({
         />
       ) : null}
 
-      {/* The record button holds the corner the search pill does not. Present
-          whether or not anything is recording — it is the start button, the
-          "still going" light and the way into the numbers, and a control that
-          disappeared the moment it mattered was the old layout's worst habit. */}
+      {/* The record button holds the corner the search pill does not, and
+          leaves with it while a tool is collecting points: the draw/measure
+          card now sits under this row, and a HUD that has to dodge a button
+          gets pushed down the screen instead of using it. Recording is not
+          interrupted by the button going away — it keeps running, and the card
+          is dismissed in one tap. */}
+      {collectingPoints ? null : (
       <View
         style={[
           styles.recordSlot,
@@ -4023,6 +4113,7 @@ export function MapScreen({
           }
         />
       </View>
+      )}
 
       {/* Everything that talks to the user from the top of the map stacks in
           one column, so a second message can never land on top of the first. */}
@@ -4353,7 +4444,9 @@ export function MapScreen({
           was tapped with. */}
       <WaypointSheet
         waypoint={
-          openWaypoint
+          // Hidden, not closed, while its form is away at the point picker:
+          // the sheet is a Modal and would cover the picker's map.
+          openWaypoint && !waypointPickerAway
             ? ((mirrorWaypoints.data ?? []).find(
                 (row) => row.id === openWaypoint.id,
               ) ?? null)
@@ -4361,7 +4454,14 @@ export function MapScreen({
         }
         userCoord={userCoord}
         autoEdit={openWaypoint?.autoEdit ?? false}
-        onClose={() => setOpenWaypoint(null)}
+        draft={waypointDraft}
+        picked={waypointPicked}
+        onPickOnMap={openWaypointPicker}
+        onClose={() => {
+          setOpenWaypoint(null);
+          setWaypointDraft(null);
+          setWaypointPicked(null);
+        }}
         onNavigate={(waypoint) => {
           setNavTarget({
             id: waypoint.id,

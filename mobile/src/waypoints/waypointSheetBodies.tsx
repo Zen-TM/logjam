@@ -174,71 +174,153 @@ export function WaypointCanyonsBody({
 }
 
 
+export type WaypointFormDraft = {
+  name: string;
+  /** Text, not numbers: a half-typed "-33." is not a number and must not be
+   *  rewritten under the cursor. */
+  latitude: string;
+  longitude: string;
+  notes: string;
+};
+
+export type WaypointFormFields = {
+  name?: string;
+  notes?: string | null;
+  latitude?: number;
+  longitude?: number;
+};
+
+const EMPTY_DRAFT: WaypointFormDraft = {
+  name: "",
+  latitude: "",
+  longitude: "",
+  notes: "",
+};
+
+function draftOf(waypoint: MirrorWaypoint | null): WaypointFormDraft {
+  return waypoint
+    ? {
+        name: waypoint.name,
+        latitude: String(waypoint.latitude),
+        longitude: String(waypoint.longitude),
+        notes: waypoint.notes ?? "",
+      }
+    : EMPTY_DRAFT;
+}
+
 /**
- * Name, position and notes for one waypoint.
+ * Name, position and notes for ONE waypoint — the same form whether it exists
+ * yet or not.
  *
- * This replaces a name+notes `RenameForm`, which meant a waypoint's POSITION —
+ * THREE SURFACES SHARE IT: the map's waypoint sheet (edit), the Saved tab's
+ * per-item sheet (edit) and the Saved tab's add sheet (create). They used to
+ * be two different forms — create had no notes, edit had no map picker — which
+ * meant "make a waypoint" and "fix a waypoint" disagreed about what a waypoint
+ * has (DESIGN.md §7). What differs between them now is the sheet title and
+ * whether the fields start filled.
+ *
+ * It replaced a name+notes rename form, which meant a waypoint's POSITION —
  * the only field it cannot exist without — was the one thing about it nobody
  * could correct. A pin dropped with a thumb on a moving map is off by whatever
  * the map's scale made it off by, and the fix used to be delete-and-drop-again.
  *
  * The coordinates share a line because they are one value read as a pair, and
- * splitting them down a column reads as two unrelated numbers.
+ * splitting them down a column reads as two unrelated numbers. "Select on map"
+ * sits directly under them, because that is the field it fills.
  *
  * Validated by `validateWaypointPayload` — the same predicate the API applies —
  * BEFORE anything is queued, so a bad number is a message here rather than a
  * dead push in the outbox whose reason the user never sees (the rule
  * CanyonEditSheet already follows).
  */
-export function WaypointEditBody({
-  waypoint,
+export function WaypointFormBody({
+  waypoint = null,
+  draft = null,
+  picked = null,
+  onPickOnMap,
+  submitLabel = "Save",
   onSubmit,
 }: {
-  waypoint: MirrorWaypoint;
+  /** The waypoint being edited, or null to create one. */
+  waypoint?: MirrorWaypoint | null;
   /**
-   * Called with only what CHANGED, ready for an outbox patch. Not called at all
-   * when nothing moved; closing the mode is the caller's job either way.
+   * What the user had typed before they left for the map picker. The host
+   * holds it, because this body is inside a `BottomSheet` — an RN Modal that
+   * would cover the picker, so it has to close, and closing unmounts this.
    */
-  onSubmit: (changed: {
-    name?: string;
-    notes?: string | null;
-    latitude?: number;
-    longitude?: number;
-  }) => void;
+  draft?: WaypointFormDraft | null;
+  /** A coordinate just chosen on the map, which replaces the two fields. */
+  picked?: { latitude: number; longitude: number } | null;
+  /** Absent where the host has no picker to offer, which hides the button. */
+  onPickOnMap?: (current: WaypointFormDraft) => void;
+  submitLabel?: string;
+  /**
+   * Creating: every field, ready for `createWaypointLocal`. Editing: only what
+   * CHANGED, ready for an outbox patch — and not called at all when nothing
+   * moved. Closing the mode is the caller's job either way.
+   */
+  onSubmit: (fields: WaypointFormFields) => void;
 }) {
-  const [name, setName] = useState(waypoint.name);
-  const [notes, setNotes] = useState(waypoint.notes ?? "");
-  // Text, not numbers: a half-typed "-33." is not a number and must not be
-  // rewritten under the cursor.
-  const [latitude, setLatitude] = useState(String(waypoint.latitude));
-  const [longitude, setLongitude] = useState(String(waypoint.longitude));
+  const seed = draft ?? draftOf(waypoint);
+  const [name, setName] = useState(seed.name);
+  const [notes, setNotes] = useState(seed.notes);
+  const [latitude, setLatitude] = useState(seed.latitude);
+  const [longitude, setLongitude] = useState(seed.longitude);
   const [invalid, setInvalid] = useState<string | null>(null);
   const nameRef = useRef<TextInput>(null);
 
   // The sheet is already open and focused, so focus lands on the next frame —
-  // `autoFocus` runs before the field attaches (DESIGN.md §6).
+  // `autoFocus` runs before the field attaches (DESIGN.md §6). Only for a
+  // waypoint that already exists: on a form reopened after a map pick, the
+  // keyboard covering the coordinates the user just chose is the wrong answer.
+  const resumed = draft != null;
   useEffect(() => {
+    if (resumed) return;
     const frame = requestAnimationFrame(() => nameRef.current?.focus());
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [resumed]);
+
+  // The picked point lands on the two coordinate fields and nothing else — a
+  // name half-typed before the trip to the map survives it.
+  const pickedLat = picked?.latitude;
+  const pickedLon = picked?.longitude;
+  useEffect(() => {
+    if (pickedLat == null || pickedLon == null) return;
+    setLatitude(String(pickedLat));
+    setLongitude(String(pickedLon));
+  }, [pickedLat, pickedLon]);
 
   const commit = () => {
     setInvalid(null);
-    const changed: {
-      name?: string;
-      notes?: string | null;
-      latitude?: number;
-      longitude?: number;
-    } = {};
+    const trimmedName = name.trim();
+    const trimmedNotes = notes.trim();
 
+    if (!waypoint) {
+      const fields: WaypointFormFields = {
+        name: trimmedName,
+        latitude: Number(latitude.trim()),
+        longitude: Number(longitude.trim()),
+        notes: trimmedNotes || null,
+      };
+      // A blank coordinate parses as 0, which is a real place off the coast of
+      // Africa — so the emptiness has to be caught before the number is.
+      const problem =
+        !latitude.trim() || !longitude.trim()
+          ? "Give it a latitude and a longitude."
+          : validateWaypointPayload(fields, { requireCore: true });
+      if (problem) {
+        setInvalid(problem);
+        return;
+      }
+      onSubmit(fields);
+      return;
+    }
+
+    const changed: WaypointFormFields = {};
     // An empty name is a no-op, not a clear: a waypoint requires one, and the
     // server would reject it after the sheet had already closed.
-    const trimmedName = name.trim();
     if (trimmedName && trimmedName !== waypoint.name) changed.name = trimmedName;
-
-    const trimmedNotes = notes.trim();
     if (trimmedNotes !== (waypoint.notes ?? "")) changed.notes = trimmedNotes || null;
-
     // Compared as TEXT against the stored value's own rendering, so retyping
     // the same number is not an edit and 6 vs 6.0 does not queue a write.
     if (latitude.trim() !== String(waypoint.latitude)) {
@@ -253,8 +335,7 @@ export function WaypointEditBody({
       setInvalid(problem);
       return;
     }
-    if (Object.keys(changed).length > 0) onSubmit(changed);
-    else onSubmit({});
+    onSubmit(changed);
   };
 
   return (
@@ -285,8 +366,16 @@ export function WaypointEditBody({
           />
         </View>
       </View>
+      {onPickOnMap ? (
+        <Button
+          label="Select on map"
+          icon="map-pin"
+          variant="outlineAccent"
+          onPress={() => onPickOnMap({ name, latitude, longitude, notes })}
+        />
+      ) : null}
       <TextField label="Notes" value={notes} onChangeText={setNotes} multiline />
-      <Button label="Save" icon="check" onPress={commit} />
+      <Button label={submitLabel} icon="check" onPress={commit} />
     </View>
   );
 }

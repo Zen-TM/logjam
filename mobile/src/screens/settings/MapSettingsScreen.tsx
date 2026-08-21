@@ -182,11 +182,22 @@ export function MapSettingsScreen() {
   // Turning the compass ON is where the location permission gets asked for — it
   // needs one, and a switch that goes on and shows nothing is the failure mode
   // worth one prompt to avoid.
+  //
+  // THE STATE MOVES FIRST, and that is what stops the switch jittering. RN's
+  // Switch animates to the new position the moment it is pressed, then snaps
+  // back to whatever `value` still says on the next render — so an await
+  // between the press and the state, even one that resolves immediately with
+  // the permission already granted, drew on → off → on. Moving first and
+  // reverting on refusal means the only animation the user sees is the one
+  // their thumb asked for.
   const toggleCompass = useCallback(async () => {
     const next = !compassEnabled;
-    if (next && !(await ensureForegroundLocationPermission())) return;
-    if (!stored(setCompassEnabled(next))) return;
     setCompassEnabledState(next);
+    if (next && !(await ensureForegroundLocationPermission())) {
+      setCompassEnabledState(!next);
+      return;
+    }
+    if (!stored(setCompassEnabled(next))) setCompassEnabledState(!next);
   }, [compassEnabled, stored]);
 
   // Same shape as the compass toggle above, and for a stronger reason: this
@@ -194,9 +205,12 @@ export function MapSettingsScreen() {
   // forever is exactly what one permission prompt avoids.
   const toggleSpeedElevation = useCallback(async () => {
     const next = !speedElevation;
-    if (next && !(await ensureForegroundLocationPermission())) return;
-    if (!stored(writeSpeedElevationEnabled(next))) return;
     setSpeedElevation(next);
+    if (next && !(await ensureForegroundLocationPermission())) {
+      setSpeedElevation(!next);
+      return;
+    }
+    if (!stored(writeSpeedElevationEnabled(next))) setSpeedElevation(!next);
   }, [speedElevation, stored]);
 
   return (
@@ -240,9 +254,6 @@ export function MapSettingsScreen() {
         <PreferenceRow
           icon="navigation"
           title="Keep the map north-up"
-          // The consequence, not the mechanism: what changes for the user is
-          // that the twist they may do by accident no longer turns the map.
-          subtitle="Two-finger twists no longer turn the map."
           value={northUp}
           ready
           onToggle={() => {

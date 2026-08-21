@@ -21,10 +21,21 @@
 // picker's Confirm and the form's next focus. Never persisted, never logged.
 export type PickedPoint = { latitude: number; longitude: number };
 
+/**
+ * A map tap carries fifteen meaningless decimals — the last ten of them
+ * describe a patch of ground narrower than an atom. Trimmed HERE rather than in
+ * each form, so every surface that receives a picked point receives it in the
+ * same shape, and the number the user sees in the field is the number stored.
+ */
+const PICKED_COORD_DECIMALS = 6;
+
 let pending: PickedPoint | null = null;
 
 export function setPickedPoint(point: PickedPoint): void {
-  pending = point;
+  pending = {
+    latitude: Number(point.latitude.toFixed(PICKED_COORD_DECIMALS)),
+    longitude: Number(point.longitude.toFixed(PICKED_COORD_DECIMALS)),
+  };
 }
 
 /** The point, once. Null when the picker was cancelled or never opened. */

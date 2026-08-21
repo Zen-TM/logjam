@@ -82,14 +82,12 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
       </View>
       <View style={styles.divider} />
       <View style={styles.column}>
-        {/* One glyph rather than a word, and in the LABEL rather than beside the
-            number: which surface the height came from is a fact about the
-            reading, not part of it. A DEM cannot see inside a slot narrower
-            than its ~19 m grid, and GPS altitude cannot see a hill smaller than
-            its own noise — a number with no provenance gets trusted. */}
-        <Text style={styles.label}>
-          {readout?.fromTerrain ? "Elevation ▲" : "Elevation"}
-        </Text>
+        {/* No provenance glyph on screen. It said something true — a DEM
+            reading and a GPS one are not the same measurement — but it said it
+            to everyone, permanently, in a two-word chip, and the distinction
+            only matters to someone already asking. The screen reader still
+            gets it, on the value below. */}
+        <Text style={styles.label}>Elevation</Text>
         <Text
           style={styles.value}
           accessibilityLabel={

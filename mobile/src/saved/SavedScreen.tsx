@@ -44,8 +44,6 @@ import {
   formatDistanceM,
   isValidLatitude,
   isValidLongitude,
-  LATITUDE_RANGE,
-  LONGITUDE_RANGE,
   routeLengthM,
   messageFromError,
   type TopoLayerFormat,
@@ -141,10 +139,13 @@ import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import { createWaypointLocal, updateWaypointLocal } from "../sync/outbox";
 import { takePickedPoint } from "../map/pickedPoint";
+import type { PickedPoint } from "../map/PickPointScreen";
 import {
   WaypointCanyonFilter,
   WaypointCanyonsBody,
-  WaypointEditBody,
+  WaypointFormBody,
+  type WaypointFormDraft,
+  type WaypointFormFields,
   WaypointSubModeHeader,
   WaypointTagsBody,
 } from "../waypoints/waypointSheetBodies";
@@ -152,9 +153,6 @@ import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import { RouteStatsSheet } from "../routes/RouteStatsSheet";
 import { LinkCanyonSheet } from "../routes/LinkCanyonSheet";
 
-/** A picked coordinate at ~10 cm — finer than any map press, and readable.
- *  Same figure the canyon form uses (`seedCoord` in CanyonEditSheet). */
-const PICKED_COORD_DECIMALS = 6;
 
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
   return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
@@ -409,9 +407,30 @@ export function SavedScreen({
   >("actions");
   // Filter text for the canyon sub-mode, pinned in the sheet header.
   const [menuCanyonQuery, setMenuCanyonQuery] = useState("");
+  /**
+   * What the waypoint form had in it when it left for the map picker, and what
+   * the picker sent back.
+   *
+   * They live HERE rather than in the form because the form is inside a
+   * `BottomSheet` — an RN Modal, which would cover a full-screen map, so the
+   * sheet has to close and the body unmounts with it. One pair of fields for
+   * both forms: only one of them can be open at a time.
+   */
+  const [waypointDraft, setWaypointDraft] = useState<WaypointFormDraft | null>(null);
+  const [pickedCoords, setPickedCoords] = useState<PickedPoint | null>(null);
+  /** Which form is away at the picker, and therefore hidden rather than
+   *  closed. Null the rest of the time. */
+  const [pickerAway, setPickerAway] = useState<"create" | "edit" | null>(null);
+  /** Read by the focus effect below, which must not re-subscribe when it
+   *  changes — the established mirror-ref pattern. */
+  const pickerAwayRef = useRef(pickerAway);
+  pickerAwayRef.current = pickerAway;
+
   const closeItemSheet = useCallback(() => {
     setMenuItemKey(null);
     setMenuMode("actions");
+    setWaypointDraft(null);
+    setPickedCoords(null);
   }, []);
   const openItemSheet = useCallback((key: string) => {
     setMenuMode("actions");
@@ -446,26 +465,26 @@ export function SavedScreen({
 
   // Leaving the tab drops any open per-item sheet: coming back to a rename form
   // for a row you have since navigated away from is a stale prompt, not a
-  // resumed task.
+  // resumed task. The trip to the point picker is the exception — that is one
+  // task, not two, and it is the only blur that leaves the sheet standing.
   useFocusEffect(
     useCallback(() => {
       refreshFreeSpace();
       // Back from the point picker. `takePickedPoint` consumes the value, so an
       // ordinary later return to this tab cannot re-apply a coordinate that has
       // since been typed over.
-      if (awayAtPicker.current) {
-        awayAtPicker.current = false;
+      const away = pickerAwayRef.current;
+      if (away) {
+        setPickerAway(null);
         const point = takePickedPoint();
-        if (point) {
-          // Trimmed like every freshly picked point: a map tap carries fifteen
-          // meaningless decimals.
-          setCoordLat(String(Number(point.latitude.toFixed(PICKED_COORD_DECIMALS))));
-          setCoordLon(String(Number(point.longitude.toFixed(PICKED_COORD_DECIMALS))));
-          setCoordError(null);
-        }
-        setCoordSheetOpen(true);
+        // Already trimmed to a sane number of decimals by the store.
+        if (point) setPickedCoords(point);
+        // The edit form is reached through the item sheet, which was left
+        // mounted and simply hidden — nothing to reopen.
+        if (away === "create") setCoordSheetOpen(true);
       }
       return () => {
+        if (pickerAwayRef.current) return;
         closeItemSheet();
         // A selection is a transient mode over rows you can see. Coming back to
         // the tab holding a pending "delete these five" you no longer remember
@@ -711,10 +730,6 @@ export function SavedScreen({
   const [waypointQuery, setWaypointQuery] = useState("");
   const [waypointTag, setWaypointTag] = useState<string | null>(null);
   const [coordSheetOpen, setCoordSheetOpen] = useState(false);
-  const [coordName, setCoordName] = useState("");
-  const [coordLat, setCoordLat] = useState("");
-  const [coordLon, setCoordLon] = useState("");
-  const [coordError, setCoordError] = useState<string | null>(null);
 
   // --- Vector imports (GPX/KML/GeoJSON) ---
   const { imports } = useVectorImports();
@@ -1158,76 +1173,68 @@ export function SavedScreen({
 
   const closeCoordSheet = useCallback(() => {
     setCoordSheetOpen(false);
-    setCoordName("");
-    setCoordLat("");
-    setCoordLon("");
-    setCoordError(null);
+    setWaypointDraft(null);
+    setPickedCoords(null);
   }, []);
 
   /**
-   * Away at the map picker.
+   * Off to the map picker, from whichever waypoint form asked.
    *
-   * The sheet is a Modal and would cover a full-screen map, so it has to close
-   * — but ONLY the `coordSheetOpen` flag moves. The fields are plain state on a
-   * screen that stays mounted, and nothing here reseeds them (unlike the canyon
-   * form, this sheet is cleared explicitly by `closeCoordSheet` and never on
-   * open), so the name the user typed is still there when they come back. A
-   * cancelled pick reopens the form too: they went to look at a map, not to
-   * throw away what they had written.
+   * The form's own fields come up with the request, because the sheet is a
+   * Modal that has to close for a full-screen map to be visible — the draft is
+   * what makes the round trip lossless, and a cancelled pick restores it just
+   * the same: they went to look at a map, not to throw away what they typed.
    */
-  const awayAtPicker = useRef(false);
-  const openPointPicker = useCallback(() => {
-    // EMPTY IS NOT ZERO. `Number("")` is 0, and 0/0 is a valid coordinate — so
-    // testing the parsed value alone opened the picker on null island with a
-    // marker already placed, which reads as "the app thinks the waypoint is
-    // there". The blank check has to come first, exactly as it does in
-    // `saveCoordWaypoint` below.
-    const latitude = Number(coordLat.trim());
-    const longitude = Number(coordLon.trim());
-    const from =
-      coordLat.trim() !== "" &&
-      coordLon.trim() !== "" &&
-      isValidLatitude(latitude) &&
-      isValidLongitude(longitude)
-        ? { latitude, longitude }
-        : null;
-    awayAtPicker.current = true;
-    setCoordSheetOpen(false);
-    onPickPoint(from);
-  }, [coordLat, coordLon, onPickPoint]);
+  const openWaypointPicker = useCallback(
+    (form: "create" | "edit", current: WaypointFormDraft) => {
+      // EMPTY IS NOT ZERO. `Number("")` is 0, and 0/0 is a valid coordinate —
+      // so testing the parsed value alone opened the picker on null island with
+      // a marker already placed, which reads as "the app thinks the waypoint is
+      // there".
+      const latitude = Number(current.latitude.trim());
+      const longitude = Number(current.longitude.trim());
+      const from =
+        current.latitude.trim() !== "" &&
+        current.longitude.trim() !== "" &&
+        isValidLatitude(latitude) &&
+        isValidLongitude(longitude)
+          ? { latitude, longitude }
+          : null;
+      setWaypointDraft(current);
+      setPickedCoords(null);
+      setPickerAway(form);
+      if (form === "create") setCoordSheetOpen(false);
+      onPickPoint(from);
+    },
+    [onPickPoint],
+  );
 
-  /** Validate with the SAME predicates the API uses, so a typo is caught here
-   *  rather than becoming a queued op that fails days later, offline. */
-  const saveCoordWaypoint = useCallback(() => {
-    const name = coordName.trim();
-    if (!name) {
-      setCoordError("Give it a name.");
-      return;
-    }
-    const latitude = Number(coordLat.trim());
-    const longitude = Number(coordLon.trim());
-    if (!coordLat.trim() || !isValidLatitude(latitude)) {
-      setCoordError(
-        `Latitude must be between ${LATITUDE_RANGE.min} and ${LATITUDE_RANGE.max}.`,
-      );
-      return;
-    }
-    if (!coordLon.trim() || !isValidLongitude(longitude)) {
-      setCoordError(
-        `Longitude must be between ${LONGITUDE_RANGE.min} and ${LONGITUDE_RANGE.max}.`,
-      );
-      return;
-    }
-    createWaypointLocal({ name, latitude, longitude })
-      .then(() => {
-        info(`Saved “${name}”.`);
-        closeCoordSheet();
+  /** Create, from the form's own validated fields. */
+  const createWaypoint = useCallback(
+    (fields: WaypointFormFields) => {
+      // The form validates with the API's own predicates before it calls this,
+      // so a missing core field here is impossible rather than handled — the
+      // guard is what makes that statement checkable.
+      if (fields.name == null || fields.latitude == null || fields.longitude == null) {
+        return;
+      }
+      createWaypointLocal({
+        name: fields.name,
+        latitude: fields.latitude,
+        longitude: fields.longitude,
+        notes: fields.notes ?? null,
       })
-      .catch((err: unknown) => {
-        console.error(err);
-        fail(messageFromError(err, "Couldn't save that waypoint."));
-      });
-  }, [closeCoordSheet, coordLat, coordLon, coordName, fail, info]);
+        .then(() => {
+          info(`Saved “${fields.name ?? ""}”.`);
+          closeCoordSheet();
+        })
+        .catch((err: unknown) => {
+          console.error(err);
+          fail(messageFromError(err, "Couldn't save that waypoint."));
+        });
+    },
+    [closeCoordSheet, fail, info],
+  );
 
   // Everything picked that is still in the list, in list order.
   const selectedItems = useMemo(
@@ -1844,39 +1851,19 @@ export function SavedScreen({
       <BottomSheet
         visible={coordSheetOpen}
         onClose={closeCoordSheet}
-        title="Waypoint from coordinates"
+        title="Create waypoint"
       >
         <View style={styles.sheetBody}>
-          <TextField
-            label="Name"
-            value={coordName}
-            onChangeText={setCoordName}
-            placeholder="Carpark"
+          {/* The same body the edit forms use — one definition of what a
+              waypoint has, so creating one can never offer fewer fields than
+              fixing one (DESIGN.md §7). */}
+          <WaypointFormBody
+            draft={waypointDraft}
+            picked={pickedCoords}
+            onPickOnMap={(current) => openWaypointPicker("create", current)}
+            submitLabel="Save waypoint"
+            onSubmit={createWaypoint}
           />
-          <TextField
-            label="Latitude"
-            value={coordLat}
-            onChangeText={setCoordLat}
-            keyboardType="numbers-and-punctuation"
-            placeholder="-33.65"
-          />
-          <TextField
-            label="Longitude"
-            value={coordLon}
-            onChangeText={setCoordLon}
-            keyboardType="numbers-and-punctuation"
-            placeholder="150.25"
-          />
-          {/* Under the coordinates it fills in, exactly as on the canyon form —
-              the same screen, the same round trip, nothing lost by going. */}
-          <Button
-            label="Select on map"
-            icon="map-pin"
-            variant="outlineAccent"
-            onPress={openPointPicker}
-          />
-          {coordError ? <Text style={styles.coordError}>{coordError}</Text> : null}
-          <Button label="Save waypoint" onPress={saveCoordWaypoint} />
         </View>
       </BottomSheet>
 
@@ -1885,14 +1872,14 @@ export function SavedScreen({
         onClose={() => setAddSheetOpen(false)}
         title="Add to this device"
       >
+        {/* NO SUBTITLES. Every row here names a verb and an object — "Import a
+            GeoPDF file" — and a second line explaining that a file comes from
+            this phone's storage is a sentence nobody needed twice. Order is
+            the filter rail's (CATEGORY_ORDER), with each kind's own-device
+            source above its account one. */}
         <View style={styles.sheetBody}>
           <Row
             title="Download a map region"
-            subtitle={
-              online
-                ? "Frame an area, pick the maps and the detail"
-                : "Needs a connection"
-            }
             icon="map"
             hue={assetHue.region}
             disabled={!online}
@@ -1902,8 +1889,34 @@ export function SavedScreen({
             }}
           />
           <Row
-            title="Save a LiDAR topo overlay"
-            subtitle="Contours, slope and vegetation you generated"
+            title="Import a GeoPDF file"
+            icon="file-text"
+            hue={assetHue.geoPdf}
+            onPress={() => {
+              setAddSheetOpen(false);
+              handleImportGeoPdf();
+            }}
+          />
+          <Row
+            title={accountJobsLoading ? "Loading your GeoPDFs…" : "GeoPDFs from my account"}
+            icon="cloud"
+            hue={assetHue.geoPdf}
+            {...capabilityRowProps("accountGeoPdf", accountState, online)}
+            onPress={
+              accountGeoPdfReady && !accountJobsLoading
+                ? () => {
+                    setAddSheetOpen(false);
+                    loadAccountGeoPdfs();
+                  }
+                : undefined
+            }
+          />
+          {/* Under the other "from my account" row rather than up with the
+              regions: both are things you generated on the web and are pulling
+              down, which is more like each other than either is like a
+              basemap download. */}
+          <Row
+            title="LiDAR topos from my account"
             icon="layers"
             hue={assetHue.overlay}
             {...capabilityRowProps("lidarOverlays", accountState, online)}
@@ -1917,33 +1930,7 @@ export function SavedScreen({
             }
           />
           <Row
-            title="Import a GeoPDF file"
-            subtitle="From this phone's storage — works offline"
-            icon="file-text"
-            hue={assetHue.geoPdf}
-            onPress={() => {
-              setAddSheetOpen(false);
-              handleImportGeoPdf();
-            }}
-          />
-          <Row
-            title={accountJobsLoading ? "Loading your GeoPDFs…" : "GeoPDFs from my account"}
-            subtitle="Maps you generated on the web"
-            icon="cloud"
-            hue={assetHue.geoPdf}
-            {...capabilityRowProps("accountGeoPdf", accountState, online)}
-            onPress={
-              accountGeoPdfReady && !accountJobsLoading
-                ? () => {
-                    setAddSheetOpen(false);
-                    loadAccountGeoPdfs();
-                  }
-                : undefined
-            }
-          />
-          <Row
-            title="Waypoint from coordinates"
-            subtitle="Type a latitude and longitude — for transcribing off a guide"
+            title="Create a waypoint"
             icon="map-pin"
             hue={assetHue.waypoint}
             onPress={() => {
@@ -1959,7 +1946,6 @@ export function SavedScreen({
               raised from an open sheet (DESIGN.md §7). */}
           <Row
             title="Record a track"
-            subtitle="Follow where you walk, from the map"
             icon="activity"
             hue={assetHue.track}
             onPress={() => {
@@ -1969,7 +1955,6 @@ export function SavedScreen({
           />
           <Row
             title="Draw a route"
-            subtitle="Trace a line on the map with the pen"
             icon="edit-3"
             hue={assetHue.route}
             onPress={() => {
@@ -1979,7 +1964,6 @@ export function SavedScreen({
           />
           <Row
             title="Import GPX, KML or GeoJSON"
-            subtitle="From this phone's storage — works offline"
             icon="file-plus"
             hue={assetHue.vector}
             onPress={
@@ -1995,7 +1979,7 @@ export function SavedScreen({
       </BottomSheet>
 
       <BottomSheet
-        visible={menuItem != null && !showRouteSheet}
+        visible={menuItem != null && !showRouteSheet && pickerAway == null}
         onClose={closeItemSheet}
         title={
           menuItem == null
@@ -2036,8 +2020,11 @@ export function SavedScreen({
             // from Saved must not be a lesser object than one reached from the
             // map (DESIGN.md §7). Everything else here is a name-only rename.
             menuWaypoint ? (
-              <WaypointEditBody
+              <WaypointFormBody
                 waypoint={menuWaypoint}
+                draft={waypointDraft}
+                picked={pickedCoords}
+                onPickOnMap={(current) => openWaypointPicker("edit", current)}
                 onSubmit={(changed) => {
                   if (Object.keys(changed).length > 0) writeMenuWaypoint(changed);
                   closeItemSheet();
