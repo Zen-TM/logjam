@@ -5,8 +5,9 @@ import prisma from "../services/prisma";
 import { BOB_ID, NONEXISTENT_ID } from "./_actors";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
-// BOB_ID owns no canyons in the seed; tests that need a "foreign" canyon
-// create one directly via Prisma (owned by bob) and clean it up afterwards.
+// Tests that need a "foreign" canyon create one directly via Prisma owned by
+// BOB_ID and clean it up afterwards, rather than leaning on bob's seeded
+// canyons — so the fixture is independent of what the seed happens to hold.
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
