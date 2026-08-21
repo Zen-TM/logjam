@@ -28,8 +28,11 @@ export { Row } from "./Row";
 export { StatGrid, type Stat } from "./StatGrid";
 export {
   ProfileChart,
+} from "./ProfileChart";
+export {
   elevationSeries,
   speedSeries,
+  type ProfilePoint,
   type ProfileSeries,
-} from "./ProfileChart";
+} from "./profileSeries";
 export { Toast, type ToastMessage } from "./Toast";
