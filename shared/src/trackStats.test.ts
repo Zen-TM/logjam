@@ -692,6 +692,45 @@ describe("computeTrackDetail", () => {
     expect(detail.stoppedMs).toBeNull();
   });
 
+  it("draws exactly the stopped time it reports, and runs the full recording", () => {
+    // The chart and the headline numbers are two renderings of ONE
+    // classification. A chart reading 0.1 km/h beside a stat saying "stopped"
+    // is the app disagreeing with itself, and a chart ending at the last fix
+    // leaves the longest rest of the day off the picture entirely.
+    const walked = walk({ count: 6, stepMilliDeg: 1, stepMs: 30_000 });
+    // A proven rest inside the track, and a long wait before Finish.
+    walked[2] = { ...walked[2]!, stationaryMs: 120_000, accuracyM: 5 };
+    const paused = walked.map((point, i) =>
+      i < 3 ? point : { ...point, timestampMs: point.timestampMs + 150_000 },
+    );
+    const detail = computeTrackDetail(paused, { recordedMs: 900_000 });
+    const samples = detail.speed!.samples;
+
+    expect(samples[samples.length - 1]!.atMs).toBe(detail.durationMs);
+    let zeroMs = 0;
+    for (let i = 1; i < samples.length; i++) {
+      if (samples[i]!.speedMps === 0 && samples[i - 1]!.speedMps === 0) {
+        zeroMs += samples[i]!.atMs - samples[i - 1]!.atMs;
+      }
+    }
+    expect(zeroMs).toBe(detail.stoppedMs);
+  });
+
+  it("puts a proven stop at the START of its interval, where the evidence is", () => {
+    // The refused fixes kept arriving until `stationaryMs` after the previous
+    // point, so that is when the party was standing still; whatever travel the
+    // interval contains happened after.
+    const walked = walk({ count: 3, stepMilliDeg: 1, stepMs: 200_000 });
+    walked[0] = { ...walked[0]!, stationaryMs: 120_000, accuracyM: 5 };
+    const samples = computeTrackDetail(walked).speed!.samples;
+
+    expect(samples[0]).toEqual({ atMs: 0, speedMps: 0 });
+    expect(samples[1]).toEqual({ atMs: 120_000, speedMps: 0 });
+    // Then the interval's remaining 80 s, at the pace actually walked.
+    expect(samples[2]!.atMs).toBe(120_000);
+    expect(samples[2]!.speedMps).toBeGreaterThan(1);
+  });
+
   it("has no time-derived stat at all when the series carries no timestamps", () => {
     // An imported GPX without <time>: real distance, real climb, no speed.
     const untimed = walk({ count: 10, stepMilliDeg: 1, stepMs: 0, altitudeStepM: 20 }).map(

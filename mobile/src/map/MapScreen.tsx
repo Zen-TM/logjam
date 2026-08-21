@@ -3041,6 +3041,26 @@ export function MapScreen({
   }, [dotWanted, recentre, requestPovRecentre]);
 
   /**
+   * A RECORDING survives the app being killed; the intention to see yourself
+   * did not, and the two arriving back in different states is what a user
+   * reads as "the location marker disappeared".
+   *
+   * `dotWanted` is process state, so a relaunch resets it to false — while the
+   * foreground service keeps recording and the record button, which reads the
+   * database row, keeps saying so. Starting a recording already turns the dot
+   * on (see the start handler); this is the same rule applied when the app
+   * comes back to a recording that is ALREADY running.
+   *
+   * Only ever turns it ON. Nothing in this screen sets `dotWanted` false — the
+   * locate button cycles the follow MODE and leaves the marker up — so this
+   * cannot fight a user who wanted it off.
+   */
+  useEffect(() => {
+    if (dotWanted || activeTrack?.state !== "recording") return;
+    void handleLocateMe();
+  }, [dotWanted, activeTrack?.state, handleLocateMe]);
+
+  /**
    * Navigate to a spot: distance + bearing from every new fix, in the chip at
    * the top of the map.
    *

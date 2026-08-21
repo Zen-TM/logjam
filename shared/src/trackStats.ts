@@ -362,7 +362,11 @@ export const LONG_INTERVAL_FACTOR = 3;
  * Smooth a segment's speeds, but never across an interval far longer than the
  * rest. Long intervals pass through untouched and split the runs either side.
  */
-function smoothSpeedRuns(speeds: number[], durationsMs: number[]): number[] {
+function smoothSpeedRuns(
+  speeds: number[],
+  durationsMs: number[],
+  stoppedMs: number[],
+): number[] {
   if (speeds.length === 0) return [];
   const sorted = durationsMs.slice().sort((a, b) => a - b);
   const longMs = sorted[sorted.length >> 1]! * LONG_INTERVAL_FACTOR;
@@ -373,7 +377,10 @@ function smoothSpeedRuns(speeds: number[], durationsMs: number[]): number[] {
     for (let i = 0; i < run.length; i++) out[runStart + i] = run[i]!;
   };
   for (let i = 0; i < speeds.length; i++) {
-    if (durationsMs[i]! < longMs) continue;
+    // A rest is a boundary whether it is long in absolute terms or merely
+    // demonstrated: either way the value either side of it is not noise this
+    // window should be averaging across.
+    if (durationsMs[i]! < longMs && stoppedMs[i]! <= 0) continue;
     flushRun(i);
     out[i] = speeds[i]!;
     runStart = i + 1;
@@ -532,6 +539,9 @@ export function computeTrackDetail(
     // Both ends of each interval, so the chart can draw it as a step.
     const segmentStarts: number[] = [];
     const segmentEnds: number[] = [];
+    // The part of each interval that was PROVEN standing still, so the chart
+    // can draw the same answer the stats give rather than a near-zero average.
+    const segmentStopped: number[] = [];
     distanceAt[start] = distanceM;
     for (let i = 1; i < segment.length; i++) {
       const stepM = haversineMeters(lats[i - 1]!, lons[i - 1]!, lats[i]!, lons[i]!);
@@ -549,13 +559,26 @@ export function computeTrackDetail(
       const speedMps = stepM / (stepMs / 1000);
       // Proven-stationary time first, the interval's average speed only where
       // there is nothing to prove it with.
-      const stoppedStepMs = demonstratedStoppedMs(segment[i - 1]!, stepMs);
-      if (stoppedStepMs != null) {
-        movingMs += stepMs - stoppedStepMs;
+      const demonstrated = demonstratedStoppedMs(segment[i - 1]!, stepMs);
+      let stoppedStepMs = demonstrated ?? 0;
+      if (demonstrated != null) {
+        movingMs += stepMs - demonstrated;
       } else if (speedMps >= MOVING_SPEED_THRESHOLD_MPS) {
         movingMs += stepMs;
+      } else {
+        // Classified stopped by its average speed rather than by evidence.
+        // There is nothing to locate the stop WITHIN the interval, so the
+        // whole of it is the stop — which is exactly what the moving/stopped
+        // totals already assert. The chart draws the classification, so the
+        // two cannot disagree about the same interval.
+        stoppedStepMs = stepMs;
       }
-      segmentSpeeds.push(speedMps);
+      // The chart's speed for this interval is the pace over the part that was
+      // actually travelled. Averaging a 50 m drift across a ten-minute rest
+      // reports 0.1 km/h for standing still, which then has to be explained.
+      const travelledMs = stepMs - stoppedStepMs;
+      segmentSpeeds.push(travelledMs > 0 ? stepM / (travelledMs / 1000) : 0);
+      segmentStopped.push(stoppedStepMs);
       segmentDurations.push(stepMs);
       // Elapsed RECORDING time at each end of this interval — the running
       // durationMs, so the series' last x is the recording's own length and a
@@ -566,10 +589,26 @@ export function computeTrackDetail(
     // Smoothed per segment, so a pause gap's own long slow interval never
     // averages into the walking on either side of it — and, within a segment,
     // never across a rest either (see LONG_INTERVAL_FACTOR).
-    const smoothedSpeeds = smoothSpeedRuns(segmentSpeeds, segmentDurations);
+    const smoothedSpeeds = smoothSpeedRuns(
+      segmentSpeeds,
+      segmentDurations,
+      segmentStopped,
+    );
     for (let i = 0; i < smoothedSpeeds.length; i++) {
-      rawSpeeds.push({ atMs: segmentStarts[i]!, speedMps: smoothedSpeeds[i]! });
-      rawSpeeds.push({ atMs: segmentEnds[i]!, speedMps: smoothedSpeeds[i]! });
+      const startMs = segmentStarts[i]!;
+      const stoppedMs = segmentStopped[i]!;
+      // A proven stop is drawn AT ZERO, for its proven length, at the start of
+      // the interval — which is where the evidence puts it: the refused fixes
+      // kept arriving until `stationaryMs` after the previous point, and any
+      // travel happened after that.
+      if (stoppedMs > 0) {
+        rawSpeeds.push({ atMs: startMs, speedMps: 0 });
+        rawSpeeds.push({ atMs: startMs + stoppedMs, speedMps: 0 });
+      }
+      if (stoppedMs < segmentDurations[i]!) {
+        rawSpeeds.push({ atMs: startMs + stoppedMs, speedMps: smoothedSpeeds[i]! });
+        rawSpeeds.push({ atMs: segmentEnds[i]!, speedMps: smoothedSpeeds[i]! });
+      }
     }
     start = end;
   }
@@ -619,6 +658,13 @@ export function computeTrackDetail(
       ? recordedMs
       : durationMs;
   const stoppedMs = timed ? Math.max(0, totalMs - movingMs) : null;
+  // The wait before Finish, drawn. `recordedMs` counts it as stopped time
+  // (see above), so a chart that stopped at the last accepted fix ended short
+  // of its own x axis and left the longest rest of the day off the picture.
+  if (timed && totalMs > durationMs && rawSpeeds.length > 0) {
+    rawSpeeds.push({ atMs: durationMs, speedMps: 0 });
+    rawSpeeds.push({ atMs: totalMs, speedMps: 0 });
+  }
   const speedSamples = decimate(rawSpeeds, ELEVATION_PROFILE_MAX_SAMPLES);
 
   return {
