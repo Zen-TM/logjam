@@ -330,7 +330,11 @@ export function SavedScreen({
    * `from` when it already holds one. The answer comes back through
    * `map/pickedPoint.ts`, collected when this screen regains focus.
    */
-  onPickPoint: (from: { latitude: number; longitude: number } | null) => void;
+  onPickPoint: (
+    from: { latitude: number; longitude: number } | null,
+    /** The waypoint being moved, so the picker can leave its pin off. */
+    hideWaypointId?: string,
+  ) => void;
   /**
    * Pick a finished recording back up. Handed to the MAP rather than done here:
    * arming the recorder needs the location prompt, which cannot be raised from
@@ -1186,7 +1190,13 @@ export function SavedScreen({
    * the same: they went to look at a map, not to throw away what they typed.
    */
   const openWaypointPicker = useCallback(
-    (form: "create" | "edit", current: WaypointFormDraft) => {
+    (
+      form: "create" | "edit",
+      current: WaypointFormDraft,
+      /** Only the edit form has one — a waypoint that does not exist yet has
+       *  no pin to hide. */
+      hideWaypointId?: string,
+    ) => {
       // EMPTY IS NOT ZERO. `Number("")` is 0, and 0/0 is a valid coordinate —
       // so testing the parsed value alone opened the picker on null island with
       // a marker already placed, which reads as "the app thinks the waypoint is
@@ -1204,7 +1214,7 @@ export function SavedScreen({
       setPickedCoords(null);
       setPickerAway(form);
       if (form === "create") setCoordSheetOpen(false);
-      onPickPoint(from);
+      onPickPoint(from, hideWaypointId);
     },
     [onPickPoint],
   );
@@ -2024,7 +2034,9 @@ export function SavedScreen({
                 waypoint={menuWaypoint}
                 draft={waypointDraft}
                 picked={pickedCoords}
-                onPickOnMap={(current) => openWaypointPicker("edit", current)}
+                onPickOnMap={(current) =>
+                  openWaypointPicker("edit", current, menuWaypoint.id)
+                }
                 onSubmit={(changed) => {
                   if (Object.keys(changed).length > 0) writeMenuWaypoint(changed);
                   closeItemSheet();

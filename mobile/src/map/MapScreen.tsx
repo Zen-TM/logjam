@@ -638,7 +638,11 @@ export function MapScreen({
    * through `map/pickedPoint.ts`, collected when this screen regains focus —
    * the same round trip the Saved tab's form makes.
    */
-  onPickPoint: (from: { latitude: number; longitude: number } | null) => void;
+  onPickPoint: (
+    from: { latitude: number; longitude: number } | null,
+    /** The waypoint being moved, so the picker can leave its pin off. */
+    hideWaypointId?: string,
+  ) => void;
   // "Show on map" for a trip's route attachment. Transient: drawn until the
   // user clears its badge, never added to the imports registry.
   route?: RouteRequest | null;
@@ -1896,6 +1900,11 @@ export function MapScreen({
   const waypointPickerAwayRef = useRef(waypointPickerAway);
   waypointPickerAwayRef.current = waypointPickerAway;
 
+  /** Which waypoint the form is on, for the picker request below — a ref so
+   *  that callback stays stable across opening one. */
+  const openWaypointId = useRef<string | null>(null);
+  openWaypointId.current = openWaypoint?.id ?? null;
+
   /** Leave for the picker, carrying what the form has in it. */
   const openWaypointPicker = useCallback(
     (current: WaypointFormDraft) => {
@@ -1916,7 +1925,7 @@ export function MapScreen({
       // Reopening lands on the FORM rather than the verb list: the user is
       // mid-edit, and the trip to the map is one step of that edit.
       setOpenWaypoint((open) => (open ? { ...open, autoEdit: true } : open));
-      onPickPoint(from);
+      onPickPoint(from, openWaypointId.current ?? undefined);
     },
     [onPickPoint],
   );
@@ -3549,7 +3558,13 @@ export function MapScreen({
   // The top row is occupied whether or not the search pill is in it: the
   // record button sits in the opposite corner and stays through a tool, a
   // recording being the one thing that must remain stoppable while measuring.
-  const noticeTop = insets.top + CHROME_GAP + SEARCH_SIZE + spacing(1);
+  // Clears the top row of chrome — search pill on one side, record button on
+  // the other. While a tool is collecting points BOTH of those are gone
+  // (they'd only be in the way mid-draw), so the stack takes their place
+  // instead of leaving the draw/measure card floating below an empty row.
+  const noticeTop = collectingPoints
+    ? insets.top + CHROME_GAP
+    : insets.top + CHROME_GAP + SEARCH_SIZE + spacing(1);
   const recordingWriteFailing = useSyncExternalStore(
     onTrackWriteHealthChanged,
     isRecordingWriteFailing,

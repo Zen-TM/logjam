@@ -107,8 +107,12 @@ type MapStackParams = {
       }
     | undefined;
   // Where the waypoint form went to point at a map. A coordinate already in
-  // the form arrives as params; the answer goes back through `pickedPoint.ts`.
-  MapPickPoint: { latitude: number; longitude: number } | undefined;
+  // the form arrives as params, with the id of the waypoint being moved so the
+  // picker can leave its own pin off; the answer goes back through
+  // `pickedPoint.ts`.
+  MapPickPoint:
+    | { latitude: number; longitude: number; waypointId?: string }
+    | undefined;
   MapCanyonDetail: { canyonId: string; name: string };
   MapTripDetail: { trip: MirrorTrip };
   // Where the map was looking when "Save maps for offline use" was tapped, so
@@ -155,7 +159,9 @@ type SavedStackParams = {
    * Coordinates travel IN only (where to open); the answer comes back in memory
    * through `map/pickedPoint.ts`.
    */
-  SavedPickPoint: { latitude: number; longitude: number } | undefined;
+  SavedPickPoint:
+    | { latitude: number; longitude: number; waypointId?: string }
+    | undefined;
 };
 
 type MoreStackParams = {
@@ -256,8 +262,13 @@ function MapStackNav() {
             drawRouteFor={route.params?.drawRouteFor ?? null}
             continueTrack={route.params?.continueTrack ?? null}
             startRecording={route.params?.startRecording ?? null}
-            onPickPoint={(from) =>
-              navigation.navigate("MapPickPoint", from ?? undefined)
+            onPickPoint={(from, hideWaypointId) =>
+              navigation.navigate(
+                "MapPickPoint",
+                from || hideWaypointId
+                  ? { ...(from ?? undefined), waypointId: hideWaypointId }
+                  : undefined,
+              )
             }
           />
         )}
@@ -265,8 +276,18 @@ function MapStackNav() {
       <MapStack.Screen name="MapPickPoint" options={{ headerShown: false }}>
         {({ navigation, route }) => (
           <PickPointScreen
-            initialPoint={route.params ?? null}
+            // A request that carries only a waypoint id has no coordinate in
+            // it — the form was blank — so the picker must open with no marker.
+            initialPoint={
+              route.params?.latitude != null && route.params?.longitude != null
+                ? {
+                    latitude: route.params.latitude,
+                    longitude: route.params.longitude,
+                  }
+                : null
+            }
             subject="waypoint"
+            hideWaypointId={route.params?.waypointId ?? null}
             onCancel={() => navigation.goBack()}
             onConfirm={(point) => {
               setPickedPoint(point);
@@ -391,8 +412,13 @@ function SavedStackNav() {
                 params: { editRoute: { routeId, nonce: Date.now() } },
               })
             }
-            onPickPoint={(from) =>
-              navigation.navigate("SavedPickPoint", from ?? undefined)
+            onPickPoint={(from, hideWaypointId) =>
+              navigation.navigate(
+                "SavedPickPoint",
+                from || hideWaypointId
+                  ? { ...(from ?? undefined), waypointId: hideWaypointId }
+                  : undefined,
+              )
             }
             // The recorder lives on the map, and so does the mode it puts the
             // app into — this hands the id over rather than arming it here.
@@ -422,8 +448,19 @@ function SavedStackNav() {
       <SavedStack.Screen name="SavedPickPoint" options={{ headerShown: false }}>
         {({ navigation, route }) => (
           <PickPointScreen
-            initialPoint={route.params ?? null}
+            // Same shape as the map stack's: a request may carry an id and no
+            // coordinate (a blank form on an existing waypoint), and that must
+            // open with no marker rather than one at null island.
+            initialPoint={
+              route.params?.latitude != null && route.params?.longitude != null
+                ? {
+                    latitude: route.params.latitude,
+                    longitude: route.params.longitude,
+                  }
+                : null
+            }
             subject="waypoint"
+            hideWaypointId={route.params?.waypointId ?? null}
             onCancel={() => navigation.goBack()}
             onConfirm={(point) => {
               setPickedPoint(point);

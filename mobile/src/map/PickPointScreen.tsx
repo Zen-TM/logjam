@@ -93,6 +93,7 @@ export type PickedPoint = { latitude: number; longitude: number };
 export function PickPointScreen({
   initialPoint,
   subject,
+  hideWaypointId = null,
   onCancel,
   onConfirm,
 }: {
@@ -105,6 +106,15 @@ export function PickPointScreen({
    * arrives with no other context on it.
    */
   subject: "canyon" | "waypoint";
+  /**
+   * The waypoint being MOVED, which must not draw itself.
+   *
+   * Its pin sits exactly where the dropped point starts, so leaving it in put a
+   * labelled waypoint under the cursor that does not move with it — two markers
+   * for one thing, the stale one wearing the name. Every OTHER waypoint stays:
+   * "not on top of the one next to it" is half of why this screen exists.
+   */
+  hideWaypointId?: string | null;
   onCancel: () => void;
   onConfirm: (point: PickedPoint) => void;
 }) {
@@ -165,15 +175,17 @@ export function PickPointScreen({
   const mirrorWaypoints = useMirrorWaypoints();
   const waypoints: Waypoint[] = useMemo(
     () =>
-      (mirrorWaypoints.data ?? []).map((wp) => ({
-        id: wp.id,
-        name: wp.name,
-        lon: wp.longitude,
-        lat: wp.latitude,
-        createdAt: wp.createdAt,
-        color: waypointSymbol(wp).color,
-      })),
-    [mirrorWaypoints.data],
+      (mirrorWaypoints.data ?? [])
+        .filter((wp) => wp.id !== hideWaypointId)
+        .map((wp) => ({
+          id: wp.id,
+          name: wp.name,
+          lon: wp.longitude,
+          lat: wp.latitude,
+          createdAt: wp.createdAt,
+          color: waypointSymbol(wp).color,
+        })),
+    [hideWaypointId, mirrorWaypoints.data],
   );
   const { tracks } = useTracks();
   const routes = useMirrorRoutes();
