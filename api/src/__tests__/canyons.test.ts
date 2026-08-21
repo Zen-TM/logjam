@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
+import { BOB_ID, NONEXISTENT_ID } from "./_actors";
 
 // Requires `make dev` to be running (Postgres + MiniStack + API on :8080) with
 // AUTH_MODE=fake (every request authenticates as the seeded alice user).
@@ -8,11 +9,6 @@ import request from "supertest";
 // mutate the baseline seed (5 alice canyons, 2 shared with bob).
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
-
-// Seed user IDs (api/prisma/seed.ts).
-const BOB_ID = "00000000-0000-0000-0000-000000000002";
-
-const NONEXISTENT_ID = "99999999-9999-9999-9999-999999999999";
 
 async function createCanyon(name: string): Promise<string> {
   const res = await request(API_URL)

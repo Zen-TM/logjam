@@ -112,6 +112,13 @@ async function sendBatch(
       console.error(`sync push rejected as too large (${batch.length} ops)`);
     }
     if (batch.length === 1) {
+      // The envelope 400 says nothing the UI can show, and the op's Sync Issue
+      // deliberately stays generic — but a developer needs the server's actual
+      // reason without pulling the outbox DB off the device.
+      console.error(
+        `sync push refused op ${batch[0].op.entity}/${batch[0].op.op}:`,
+        (err as { serverMessage?: string }).serverMessage ?? status,
+      );
       await db.runAsync(
         "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
         JSON.stringify({

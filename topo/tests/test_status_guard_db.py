@@ -36,7 +36,7 @@ os.environ.setdefault("S3_BUCKET_TOPO", "test-bucket")
 os.environ.setdefault("JOB_ID", "unused-for-this-test")
 
 # Seeded dev user (api/prisma/seed.ts).
-ALICE_ID = "00000000-0000-0000-0000-000000000001"
+ALICE_ID = "00000000-0000-4000-8000-000000000001"
 
 
 @unittest.skipUnless(

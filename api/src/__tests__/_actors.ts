@@ -15,14 +15,19 @@ export const ALICE_SUB = "fake-alice-sub";
 export const BOB_SUB = "fake-bob-sub";
 export const CAROL_SUB = "fake-carol-sub";
 
-// Seed user row IDs (api/prisma/seed.ts).
-export const ALICE_ID = "00000000-0000-0000-0000-000000000001";
-export const BOB_ID = "00000000-0000-0000-0000-000000000002";
-export const CAROL_ID = "00000000-0000-0000-0000-000000000003";
+// Seed user row IDs (api/prisma/seed.ts — these mirror its `seedId` helper and
+// like it MUST stay real UUIDv4s; see src/lib/seedIds.unit.test.ts).
+export const ALICE_ID = "00000000-0000-4000-8000-000000000001";
+export const BOB_ID = "00000000-0000-4000-8000-000000000002";
+export const CAROL_ID = "00000000-0000-4000-8000-000000000003";
 
 // Seed canyon IDs (all alice-owned). Canyons 0 and 1 are shared with bob;
 // carol is shared nothing (the stranger).
-export const SHARED_CANYON_ID = "10000000-0000-0000-0000-000000000001";
+export const SHARED_CANYON_ID = "10000000-0000-4000-8000-000000000001";
+
+// Well-formed UUIDv4 that no seeded row uses — the "unknown id" probe, so a
+// 404 assertion is testing not-found and not id-format rejection.
+export const NONEXISTENT_ID = "99999999-9999-4999-8999-999999999999";
 
 // Header bundle authenticating the request as `sub`. Usage:
 //   request(API_URL).get("/canyons").set(as(BOB_SUB))

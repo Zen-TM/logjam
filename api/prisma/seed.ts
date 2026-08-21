@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { databaseUrlFromEnv } from "../src/lib/databaseUrl";
 import { CURRENT_CONSENT_VERSION } from "../src/constants/consent";
 import { enforceCanyoningTag, TRACK_COLORS } from "@logjam/shared";
+import { seedId, cid } from "./seedIds";
 
 const adapter = new PrismaPg({ connectionString: databaseUrlFromEnv() });
 const prisma = new PrismaClient({ adapter });
@@ -23,9 +24,9 @@ const prisma = new PrismaClient({ adapter });
 // New data uses fresh ids and never mutates those invariants.
 // ---------------------------------------------------------------------------
 
-const ALICE_ID = "00000000-0000-0000-0000-000000000001";
-const BOB_ID = "00000000-0000-0000-0000-000000000002";
-const CAROL_ID = "00000000-0000-0000-0000-000000000003";
+const ALICE_ID = seedId("0", 1);
+const BOB_ID = seedId("0", 2);
+const CAROL_ID = seedId("0", 3);
 
 // Matches FAKE_USER_SUB default in auth middleware and the Terraform-generated
 // .env.local (infra/terraform/templates/env.local.tftpl)
@@ -35,11 +36,11 @@ const CAROL_COGNITO_ID = "fake-carol-sub";
 
 // Stable anchor canyon ids referenced by the integration suite.
 const CANYON_IDS = [
-  "10000000-0000-0000-0000-000000000001", // SHARED_CANYON_ID (shared w/ bob)
-  "10000000-0000-0000-0000-000000000002", // shared w/ bob
-  "10000000-0000-0000-0000-000000000003",
-  "10000000-0000-0000-0000-000000000004",
-  "10000000-0000-0000-0000-000000000005",
+  cid(1), // SHARED_CANYON_ID (shared w/ bob)
+  cid(2), // shared w/ bob
+  cid(3),
+  cid(4),
+  cid(5),
 ];
 
 // Custom-field definitions live on the user's uiPreferences; trip customFields
@@ -71,7 +72,6 @@ type SeedCanyon = {
   forkedFromId?: string;
 };
 
-const cid = (n: number) => `10000000-0000-0000-0000-0000000000${String(n).padStart(2, "0")}`;
 const sandstone = (wetsuit?: number, sources?: [string, string][]): Prisma.InputJsonValue => ({
   rockType: "Sandstone",
   ...(wetsuit != null ? { wetsuit } : {}),
@@ -118,15 +118,15 @@ const ALICE_CANYONS: SeedCanyon[] = [
 
 // bob owns a fork of alice's shared Grand Canyon + two of his own.
 const BOB_CANYONS: SeedCanyon[] = [
-  { id: "20000000-0000-0000-0000-000000000001", ownerId: BOB_ID, name: "Grand Canyon (copy)", latitude: -33.6563, longitude: 150.3179, numAbseils: 1, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 3, forkedFromId: CANYON_IDS[0], attributes: sandstone(3) },
-  { id: "20000000-0000-0000-0000-000000000002", ownerId: BOB_ID, name: "Coin Slot", latitude: -33.1224, longitude: 150.3297, numAbseils: 5, longestAbseil: 35, vGrade: 3, aGrade: 1, commitment: 4, quality: 4, hours: 3.5, attributes: sandstone(2) },
-  { id: "20000000-0000-0000-0000-000000000003", ownerId: BOB_ID, name: "Galah Canyon", latitude: -33.2514, longitude: 150.3037, numAbseils: 8, longestAbseil: 30, quality: 4, hours: 10, attributes: sandstone(4) },
+  { id: seedId("2", 1), ownerId: BOB_ID, name: "Grand Canyon (copy)", latitude: -33.6563, longitude: 150.3179, numAbseils: 1, longestAbseil: 20, vGrade: 2, aGrade: 2, commitment: 3, quality: 3.4, hours: 3, forkedFromId: CANYON_IDS[0], attributes: sandstone(3) },
+  { id: seedId("2", 2), ownerId: BOB_ID, name: "Coin Slot", latitude: -33.1224, longitude: 150.3297, numAbseils: 5, longestAbseil: 35, vGrade: 3, aGrade: 1, commitment: 4, quality: 4, hours: 3.5, attributes: sandstone(2) },
+  { id: seedId("2", 3), ownerId: BOB_ID, name: "Galah Canyon", latitude: -33.2514, longitude: 150.3037, numAbseils: 8, longestAbseil: 30, quality: 4, hours: 10, attributes: sandstone(4) },
 ];
 
 // carol owns her own canyons (and is shared nothing of alice's — the stranger).
 const CAROL_CANYONS: SeedCanyon[] = [
-  { id: "30000000-0000-0000-0000-000000000001", ownerId: CAROL_ID, name: "Pipeline Canyon", latitude: -33.1658, longitude: 150.2634, numAbseils: 10, longestAbseil: 25, quality: 4, hours: 7, attributes: sandstone(4) },
-  { id: "30000000-0000-0000-0000-000000000002", ownerId: CAROL_ID, name: "Surefire Canyon", latitude: -33.2286, longitude: 150.2926, numAbseils: 5, longestAbseil: 15, quality: 4.5, hours: 12, attributes: sandstone(4) },
+  { id: seedId("3", 1), ownerId: CAROL_ID, name: "Pipeline Canyon", latitude: -33.1658, longitude: 150.2634, numAbseils: 10, longestAbseil: 25, quality: 4, hours: 7, attributes: sandstone(4) },
+  { id: seedId("3", 2), ownerId: CAROL_ID, name: "Surefire Canyon", latitude: -33.2286, longitude: 150.2926, numAbseils: 5, longestAbseil: 15, quality: 4.5, hours: 12, attributes: sandstone(4) },
 ];
 
 const ALL_CANYONS = [...ALICE_CANYONS, ...BOB_CANYONS, ...CAROL_CANYONS];

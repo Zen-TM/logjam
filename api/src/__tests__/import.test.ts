@@ -2,6 +2,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import prisma from "../services/prisma";
+import { ALICE_ID } from "./_actors";
 
 // Idempotent file-import endpoints (see plan §6b/§6c, §8).
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
@@ -9,8 +10,6 @@ import prisma from "../services/prisma";
 // suffix to avoid colliding with rows left by earlier runs.
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
-
-const ALICE_ID = "00000000-0000-0000-0000-000000000001";
 
 // Track every batch we create so afterAll can undo them even if a test throws.
 const batches: string[] = [];

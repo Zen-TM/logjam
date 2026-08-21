@@ -2,16 +2,13 @@ import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import prisma from "../services/prisma";
+import { BOB_ID, NONEXISTENT_ID } from "./_actors";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 // BOB_ID owns no canyons in the seed; tests that need a "foreign" canyon
 // create one directly via Prisma (owned by bob) and clean it up afterwards.
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
-
-const BOB_ID = "00000000-0000-0000-0000-000000000002";
-
-const NONEXISTENT_ID = "99999999-9999-9999-9999-999999999999";
 
 async function createCanyon(name: string): Promise<string> {
   const res = await request(API_URL)

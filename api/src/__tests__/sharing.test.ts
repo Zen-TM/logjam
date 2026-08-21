@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
+import { BOB_ID, CAROL_ID, NONEXISTENT_ID } from "./_actors";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 // alice <-> bob are friends in the seed, so alice may share with bob.
@@ -8,11 +9,6 @@ import request from "supertest";
 // baseline seed shares (canyon 1 & 2 -> bob) are left intact.
 const API_URL = process.env.API_URL ?? "http://localhost:8080";
 const AUTH = { Authorization: "Bearer fake-token" } as const;
-
-const BOB_ID = "00000000-0000-0000-0000-000000000002";
-const CAROL_ID = "00000000-0000-0000-0000-000000000003";
-
-const NONEXISTENT_ID = "99999999-9999-9999-9999-999999999999";
 
 async function createCanyon(name: string): Promise<string> {
   const res = await request(API_URL)
