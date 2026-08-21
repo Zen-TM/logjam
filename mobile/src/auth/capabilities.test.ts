@@ -4,6 +4,7 @@ import {
   capabilityRowProps,
   capabilityScreenBlock,
   capabilityStatus,
+  fieldDefsBlockedReason,
   unavailableReasonText,
   type Capability,
 } from "./capabilities";
@@ -16,7 +17,6 @@ const ALL_CAPABILITIES: Capability[] = [
   "accountGeoPdf",
   "vectorRegionDownload",
   "serverPrefs",
-  "customFieldDefs",
   "pushNotifications",
   "syncNow",
   "offlineSettings",
@@ -111,5 +111,19 @@ describe("capabilityRowProps", () => {
       disabled: true,
       subtitle: "Needs a connection",
     });
+  });
+});
+
+// Custom fields are deliberately NOT in the union above: a guest keeps their
+// own definitions on the device, so there is no account axis to gate on.
+describe("fieldDefsBlockedReason", () => {
+  it("never blocks a guest, online or off", () => {
+    expect(fieldDefsBlockedReason("guest", true)).toBeUndefined();
+    expect(fieldDefsBlockedReason("guest", false)).toBeUndefined();
+  });
+
+  it("blocks a linked user offline, because that list is shared with the web", () => {
+    expect(fieldDefsBlockedReason("linked", false)).toBe("Needs a connection");
+    expect(fieldDefsBlockedReason("linked", true)).toBeUndefined();
   });
 });

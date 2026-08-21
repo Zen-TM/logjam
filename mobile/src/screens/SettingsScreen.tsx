@@ -4,10 +4,12 @@
 // WHY PAGES RATHER THAN ONE LIST: this was a single scroll of six sections, and
 // it mixed two kinds of preference with different failure modes. Theme, app lock
 // and compass are DEVICE prefs — synchronous, no account, no signal needed.
-// Notifications and custom-field definitions live on the user record, so they
-// need both, and every one of those rows had to carry its own "Needs an account"
-// subtitle to say so. Split by page, each page is one backend and can state that
-// once (see `NotificationSettingsScreen`).
+// Notifications live on the user record, so they need both, and every one of
+// those rows had to carry its own "Needs an account" subtitle to say so. Split
+// by page, each page is one backend and can state that once (see
+// `NotificationSettingsScreen`). Custom-field definitions sit in between: an
+// account's are on the user record, a guest's are on the device
+// (`customFields/fieldDefsStore.ts`), so those rows gate on connection alone.
 //
 // LAYOUT: a plain list, so per DESIGN.md §2 it keeps `ScreenScroll` and the
 // native header rather than being given a hero. There is no headline metric
@@ -20,21 +22,17 @@
 // §10's "Needs an account".
 //
 // PRIVACY: nothing here reads canyon data.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { type TripLogCustomFieldDef } from "@logjam/shared";
 
-import {
-  customFieldDefsOf,
-  fetchCurrentUser,
-  useApiQuery,
-  type CustomFieldEntity,
-} from "../api/queries";
+import { type CustomFieldEntity } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
-import { capabilityRowProps, capabilityStatus, unavailableReasonText } from "../auth/capabilities";
+import { capabilityRowProps, fieldDefsBlockedReason } from "../auth/capabilities";
 import { CLIENT_VERSION } from "../config";
 import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
+import { useFieldDefs } from "../customFields/useFieldDefs";
 import { useConnectivity } from "../map/connectivity";
 import { fontSize, theme } from "../theme";
 import {
@@ -74,63 +72,33 @@ type SheetMode =
 
 export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage) => void }) {
   const { accountState } = useAccountState();
-  const userQuery = useApiQuery(
-    fetchCurrentUser,
-    "Couldn't load your settings.",
-    accountState !== "guest",
-  );
   const online = useConnectivity() === "online";
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback((text: string, tone: ToastMessage["tone"] = "info") => {
     setToast({ text, tone, nonce: Date.now() });
   }, []);
 
-  const user = userQuery.data;
-
   // ── custom fields ────────────────────────────────────────────────────────
-  // Definitions are account-level (DESIGN.md §10), so they stay here on the root
-  // rather than earning a page: two rows behind a chevron would be a page whose
-  // whole content is the two rows above it.
+  // Two lists rather than a page: two rows behind a chevron would be a page
+  // whose whole content is the two rows above it.
   const [sheet, setSheet] = useState<SheetMode>({ kind: "closed" });
-  const [tripFieldDefs, setTripFieldDefs] = useState<TripLogCustomFieldDef[]>([]);
-  const [canyonFieldDefs, setCanyonFieldDefs] = useState<TripLogCustomFieldDef[]>([]);
-  // Re-seed on the VALUE, not on `user.id` — which never changes for a signed-in
-  // user, so defs edited on another device and pulled in by a refetch while this
-  // screen stayed mounted were silently dropped. The serialized value is the key
-  // because a refetch mints a fresh object every time even when nothing moved.
-  const serverFieldDefsKey = user
-    ? JSON.stringify({
-        tripLog: customFieldDefsOf(user, "tripLog"),
-        canyon: customFieldDefsOf(user, "canyon"),
-      })
-    : null;
-  useEffect(() => {
-    if (!serverFieldDefsKey) return;
-    const defs = JSON.parse(serverFieldDefsKey) as Record<
-      CustomFieldEntity,
-      TripLogCustomFieldDef[]
-    >;
-    setTripFieldDefs(defs.tripLog);
-    setCanyonFieldDefs(defs.canyon);
-  }, [serverFieldDefsKey]);
+  const tripFields = useFieldDefs("tripLog");
+  const canyonFields = useFieldDefs("canyon");
 
   const defsFor = (entity: CustomFieldEntity) =>
-    entity === "tripLog" ? tripFieldDefs : canyonFieldDefs;
+    entity === "tripLog" ? tripFields.defs : canyonFields.defs;
   const setDefsFor = (entity: CustomFieldEntity, next: TripLogCustomFieldDef[]) => {
-    if (entity === "tripLog") setTripFieldDefs(next);
-    else setCanyonFieldDefs(next);
+    if (entity === "tripLog") tripFields.setDefs(next);
+    else canyonFields.setDefs(next);
   };
 
-  // Why the field rows can't be touched right now — no account is one reason,
-  // offline is another, a failed account fetch a third, and a dead row with no
-  // reason is the state this must never render in (§8).
-  const fieldDefs = capabilityStatus("customFieldDefs", accountState, online);
+  // Why the field rows can't be touched right now — offline with an account is
+  // one reason, a failed account fetch another, and a dead row with no reason is
+  // the state this must never render in (§8). A guest is never blocked: their
+  // list is on this phone.
   const fieldsBlocked: string | undefined =
-    fieldDefs.status === "unavailable"
-      ? unavailableReasonText(fieldDefs.reason)
-      : userQuery.error
-        ? "Couldn't reach your account"
-        : undefined;
+    fieldDefsBlockedReason(accountState, online) ??
+    (tripFields.error ? "Couldn't reach your account" : undefined);
 
   return (
     <>
@@ -158,7 +126,7 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
         <Row
           icon="tag"
           title="Trip fields"
-          subtitle={fieldsBlocked ?? fieldCountLabel(tripFieldDefs.length)}
+          subtitle={fieldsBlocked ?? fieldCountLabel(tripFields.defs.length)}
           disabled={fieldsBlocked !== undefined}
           onPress={() => setSheet({ kind: "fields", entity: "tripLog" })}
           right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
@@ -166,7 +134,7 @@ export function SettingsScreen({ onOpenPage }: { onOpenPage: (page: SettingsPage
         <Row
           icon="tag"
           title="Canyon fields"
-          subtitle={fieldsBlocked ?? fieldCountLabel(canyonFieldDefs.length)}
+          subtitle={fieldsBlocked ?? fieldCountLabel(canyonFields.defs.length)}
           disabled={fieldsBlocked !== undefined}
           onPress={() => setSheet({ kind: "fields", entity: "canyon" })}
           right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}

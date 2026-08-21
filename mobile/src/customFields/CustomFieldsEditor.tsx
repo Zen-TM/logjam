@@ -9,12 +9,9 @@ import {
 } from "@logjam/shared";
 
 import { fontSize, spacing, theme } from "../theme";
-import {
-  deleteCustomFieldDef,
-  getCustomFieldImpact,
-  updateCustomFieldDefs,
-  type CustomFieldEntity,
-} from "../api/queries";
+import type { CustomFieldEntity } from "../api/queries";
+import { useAccountState } from "../auth/AccountStateContext";
+import { countFieldValues, removeFieldDef, saveFieldDefs } from "./fieldDefsStore";
 import { Button, Row, SectionHeader, SegmentedControl, TextField, Toggle } from "../ui";
 
 /**
@@ -30,15 +27,19 @@ import { Button, Row, SectionHeader, SegmentedControl, TextField, Toggle } from 
  * - `CustomFieldList`: what exists, plus a way in to add or change one.
  * - `CustomFieldForm`: add/rename/retype one, and delete it.
  *
- * Definitions live in `User.uiPreferences`, which every device and the web
- * share, so this is deliberately ONLINE-ONLY: a queued offline edit to a shared
- * list would need merge rules for a list the user could be reordering in a
- * browser at the same time. The VALUES stay offline-first as always.
+ * Where the definitions live depends on the install, and only
+ * `fieldDefsStore.ts` knows which: a LINKED user's are in `User.uiPreferences`,
+ * shared with every device and the web, so editing them is online-only — a
+ * queued offline edit to a shared list would need merge rules for a list the
+ * user could be reordering in a browser at the same time. A GUEST's are on the
+ * device, so editing works with no signal at all. Hence `canEdit` below rather
+ * than the bare `online` this used to gate on. The VALUES stay offline-first
+ * either way.
  *
  * A rename keeps the field's `key`, so stored values stay attached (that is why
- * renaming goes through the same PATCH as adding). Deleting is a separate
- * endpoint because it also strips the orphaned values off every row that
- * carried one — reported up front, before the user confirms.
+ * renaming goes through the same whole-list save as adding). Deleting has its
+ * own path because it also strips the orphaned values off every row that
+ * carried one — counted up front, before the user confirms.
  */
 
 /** The only per-entity difference in this file: what to call the rows. */
@@ -60,6 +61,8 @@ export function CustomFieldList({
   onAdd: () => void;
   onEdit: (def: TripLogCustomFieldDef) => void;
 }) {
+  const { accountState } = useAccountState();
+  const canEdit = accountState === "guest" || online;
   const noun = ENTITY_NOUN[entity];
   return (
     <View style={styles.body}>
@@ -77,14 +80,15 @@ export function CustomFieldList({
               icon="tag"
               title={customFieldDisplayLabel(def)}
               subtitle={fieldSummary(def)}
-              onPress={online ? () => onEdit(def) : undefined}
+              onPress={canEdit ? () => onEdit(def) : undefined}
             />
           ))}
         </>
       )}
-      {/* Reading the list works offline; changing it doesn't. Say which, rather
-          than letting the save fail after the typing. */}
-      {online ? (
+      {/* An account's list is shared with the web, so changing it needs a
+          connection — say so rather than letting the save fail after the
+          typing. A guest's list is on this phone and always editable. */}
+      {canEdit ? (
         <Row icon="plus" title="Add a field" onPress={onAdd} />
       ) : (
         <Text style={styles.hint}>
@@ -114,6 +118,8 @@ export function CustomFieldForm({
   onFailed: (message: string) => void;
   onDone: () => void;
 }) {
+  const { accountState } = useAccountState();
+  const canEdit = accountState === "guest" || online;
   const noun = ENTITY_NOUN[entity];
   const [label, setLabel] = useState(editing?.label ?? "");
   const [type, setType] = useState<TripLogCustomFieldType>(editing?.type ?? "string");
@@ -146,23 +152,27 @@ export function CustomFieldForm({
       : [...defs, built.def];
     setSaving(true);
     try {
-      await updateCustomFieldDefs(entity, next);
+      await saveFieldDefs(entity, accountState, next);
       onSaved(next, editing ? "Field updated." : "Field added.");
       onDone();
     } catch (err) {
       console.error(err);
-      onFailed("Couldn't save that field. Custom fields need a connection.");
+      onFailed(
+        accountState === "guest"
+          ? "This phone wouldn't store that field."
+          : "Couldn't save that field. Account fields need a connection.",
+      );
     } finally {
       setSaving(false);
     }
-  }, [bounded, defs, editing, entity, label, max, min, numeric, onDone, onFailed, onSaved, type]);
+  }, [accountState, bounded, defs, editing, entity, label, max, min, numeric, onDone, onFailed, onSaved, type]);
 
   const confirmDelete = useCallback(() => {
     if (!editing) return;
     const key = editing.key;
-    // Ask the server how many rows carry a value BEFORE confirming: "this also
-    // clears it from 12 trips" is the part of the consequence the user can't see.
-    getCustomFieldImpact(entity, key)
+    // Count the rows that carry a value BEFORE confirming: "this also clears it
+    // from 12 trips" is the part of the consequence the user can't see.
+    countFieldValues(entity, accountState, key)
       .then((affected) => {
         Alert.alert(
           `Delete “${editing.label}”?`,
@@ -175,7 +185,7 @@ export function CustomFieldForm({
               text: "Delete",
               style: "destructive",
               onPress: () => {
-                deleteCustomFieldDef(entity, key)
+                removeFieldDef(entity, accountState, key, defs)
                   .then((removed) => {
                     onSaved(
                       defs.filter((def) => def.key !== key),
@@ -198,7 +208,7 @@ export function CustomFieldForm({
         console.error(err);
         onFailed(`Couldn't check which ${noun.many} use this field.`);
       });
-  }, [defs, editing, entity, noun, onDone, onFailed, onSaved]);
+  }, [accountState, defs, editing, entity, noun, onDone, onFailed, onSaved]);
 
   return (
     <View style={styles.body}>
@@ -268,16 +278,16 @@ export function CustomFieldForm({
         label={editing ? "Save field" : "Add field"}
         icon="check"
         loading={saving}
-        disabled={!online}
+        disabled={!canEdit}
         onPress={() => void save()}
       />
-      {online ? null : <Text style={styles.hint}>This needs a connection.</Text>}
+      {canEdit ? null : <Text style={styles.hint}>This needs a connection.</Text>}
       {editing ? (
         <Row
           icon="trash-2"
           hue={theme.warning}
           title="Delete field"
-          onPress={online ? confirmDelete : undefined}
+          onPress={canEdit ? confirmDelete : undefined}
         />
       ) : null}
     </View>

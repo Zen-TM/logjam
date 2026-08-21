@@ -42,10 +42,10 @@ import {
   type CanyonShareRecipient,
   type Friend,
 } from "../api/friends";
-import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { tripTitle } from "../api/tripTitle";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityStatus, unavailableReasonText } from "../auth/capabilities";
+import { useFieldDefs } from "../customFields/useFieldDefs";
 import { useConnectivity } from "../map/connectivity";
 import { MediaStrip } from "../media/MediaStrip";
 import { PickRouteSheet } from "../routes/PickRouteSheet";
@@ -128,16 +128,10 @@ export function CanyonDetailScreen({
   const waypoints = useMirrorWaypoints();
   const canyonsQuery = useMirrorCanyons();
   const online = useConnectivity() === "online";
-  // Custom-field DEFINITIONS live on the user record, so a guest has none —
-  // and would spend a failing request per screen open finding that out. Their
-  // field VALUES on a canyon are local and unaffected; the keys simply render
-  // un-slugged, exactly as they do offline.
-  const { accountState } = useAccountState();
-  const userQuery = useApiQuery(
-    fetchCurrentUser,
-    "Couldn't load your fields.",
-    accountState !== "guest",
-  );
+  // Definitions give each stored value its real label; a guest's come off the
+  // device, an account's off the user record. Without them (offline with an
+  // account, or a field deleted since) the key renders un-slugged.
+  const { defs: fieldDefs } = useFieldDefs("canyon");
 
   const [editing, setEditing] = useState(false);
   const [logging, setLogging] = useState(false);
@@ -194,9 +188,6 @@ export function CanyonDetailScreen({
     (item) => mediaCategory(item.mediaType) === "track",
   ).length;
 
-  // Canyon custom fields are their own account-level definition list (the web's
-  // canyonCustomFields), separate from trip fields.
-  const fieldDefs = userQuery.data?.uiPreferences?.canyonCustomFields ?? [];
   const storedFields = canyon.attributes?.customFields ?? {};
   const customFields = [
     ...fieldDefs

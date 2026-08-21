@@ -935,16 +935,23 @@ which subsystem is talking.
   seeded from and send the difference (see `save()` in `TripEditSheet`). Sending
   the whole form makes every save a write to every column, which under
   field-scoped LWW clobbers a concurrent edit to a field the user never touched.
-- **Definitions are online, values are offline.** A trip's field VALUES queue
-  through the outbox like everything else, but the field DEFINITIONS live in an
-  account-level preference blob the web and every device share, so editing them
-  requires a connection and says so when it fails. Queuing an offline edit to a
-  shared list would need merge rules for a list the user could be reordering in
-  a browser at the same time.
+- **Where the DEFINITIONS live depends on the account, and one file knows.**
+  Field VALUES always queue through the outbox. The definitions are an
+  account-level preference blob the web and every device share, so a linked user
+  needs a connection to edit them (an offline edit to a shared list would need
+  merge rules for a list they could be reordering in a browser at the same
+  time) — but a GUEST has no such blob, keeps their own list on the device, and
+  can add, rename and delete a field in a canyon with no signal.
+  `customFields/fieldDefsStore.ts` owns that branch and
+  `capabilities.fieldDefsBlockedReason` owns the reason string; no screen
+  re-derives either. Both entity forms (`TripEditSheet`, `CanyonEditSheet`) and
+  Settings reach the same editor as a MODE of their own sheet.
 - **A destructive action reports the part the user can't see.** Deleting a
   custom field also clears its value from every trip that had one, so the
-  confirm asks the server for that count first and puts it in the dialog
-  ("12 trips have a value…"), rather than discovering it afterwards.
+  confirm counts the affected rows FIRST and puts the number in the dialog
+  ("12 trips have a value…"), rather than discovering it afterwards. A guest's
+  count and clearing are local, and the clearing still goes through the outbox
+  so it survives linking an account.
 - **An unavailable cell inside a swipeable grid stays a `Pressable` with a
   no-op press** — never the `disabled` prop, and never a plain `View`. RN's
   touch dispatch looks for a JS touch target under the finger; an inert View
@@ -1135,7 +1142,7 @@ which those are:
 
 | Works offline | Needs a connection |
 |---|---|
-| Reading trips, canyons, notes, fields | Custom field DEFINITIONS (account-level blob) |
+| Reading trips, canyons, notes, fields | An ACCOUNT's custom field DEFINITIONS (a guest's are local) |
 | Logging, editing, deleting a trip | Downloading regions, topo overlays, GeoPDFs |
 | Adding, editing, deleting a canyon | Sharing a canyon (and reading who it's shared with) |
 | Attaching photos, videos, routes, tracks | Full-res media not yet downloaded |
@@ -1144,7 +1151,7 @@ which those are:
 | Rendering a saved offline region | Saving a new region (Wi-Fi unless opted in) |
 | Canyon routes already cached | Canyon routes never opened on this phone |
 | Turning the app lock on/off | Fetching what an auto-download found (Wi-Fi by default) |
-| Every Display, Map, Offline and Privacy preference | Notification prefs, field DEFINITIONS |
+| Every Display, Map, Offline and Privacy preference | Notification prefs, an account's field DEFINITIONS |
 | — | Username, email, account deletion |
 
 **"Needs an account" outranks "Needs a connection".** The app runs without a
@@ -1185,7 +1192,8 @@ retry).
 | Everything in the "Works offline" column | Sharing, friends, the inbox |
 | Recording tracks, importing a local GeoPDF/GPX | LiDAR topo overlays, account GeoPDFs |
 | Downloading SIX raster regions (client-direct) | The Protomaps vector region clip |
-| Theme, text size, every Map preference, app lock, crash reports, auto-download (device prefs) | Notification prefs, field DEFINITIONS |
+| Theme, text size, every Map preference, app lock, crash reports, auto-download (device prefs) | Notification prefs |
+| Their own custom fields, definitions included (kept on the device, carried up on link) | — |
 
 **Say what is true, not what is optimistic.** A queued upload says "Uploading…"
 only when it can actually upload; offline it says "Waiting". A label that

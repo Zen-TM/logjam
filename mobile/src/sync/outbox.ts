@@ -364,6 +364,16 @@ const CANYON_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
     encode: (value) => JSON.stringify(value ?? []),
     decode: (raw) => JSON.parse((raw as string | null) ?? "[]"),
   },
+  // The canyon's free-form blob, which carries `customFields` (and `sources`,
+  // which only the web writes). Callers pass the WHOLE object — the server
+  // replaces it wholesale, so an edit that drops a key the web put there loses
+  // it. `CanyonEditSheet` spreads the canyon's existing attributes for that
+  // reason.
+  attributes: {
+    column: "attributes_json",
+    encode: (value) => JSON.stringify(value ?? {}),
+    decode: (raw) => JSON.parse((raw as string | null) ?? "{}"),
+  },
 };
 
 export async function updateCanyonLocal(
@@ -388,6 +398,8 @@ export type CanyonDraftFields = {
   quality?: number | null;
   hours?: number | null;
   notes?: string | null;
+  /** Free-form blob; `customFields` holds the user's own field values. */
+  attributes?: Record<string, unknown>;
 };
 
 /**
@@ -403,6 +415,7 @@ export async function createCanyonLocal(draft: CanyonDraftFields): Promise<strin
   const id = mintUuid();
   const now = new Date().toISOString();
   const altNames = draft.altNames ?? [];
+  const attributes = draft.attributes ?? {};
   const fields: Record<string, unknown> = {
     name: draft.name,
     latitude: draft.latitude,
@@ -410,6 +423,7 @@ export async function createCanyonLocal(draft: CanyonDraftFields): Promise<strin
     altNames,
     ...optionalNumbers(draft),
     ...(draft.notes != null && { notes: draft.notes }),
+    ...(Object.keys(attributes).length > 0 && { attributes }),
   };
 
   const invalid = validateCanyonPayload(fields, { requireCoords: true });
@@ -423,7 +437,7 @@ export async function createCanyonLocal(draft: CanyonDraftFields): Promise<strin
           longest_abseil, v_grade, a_grade, commitment, quality, hours, notes,
           attributes_json, forked_from_id, created_at, updated_at, extra_json,
           dirty_fields_json)
-       VALUES (?, 'owner', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', NULL, ?, ?, NULL, ?)`,
+       VALUES (?, 'owner', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?)`,
       id,
       draft.name,
       draft.latitude,
@@ -437,6 +451,7 @@ export async function createCanyonLocal(draft: CanyonDraftFields): Promise<strin
       draft.quality ?? null,
       draft.hours ?? null,
       draft.notes ?? null,
+      JSON.stringify(attributes),
       now,
       now,
       JSON.stringify(Object.keys(fields)),

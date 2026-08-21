@@ -102,7 +102,13 @@ export function useAuth() {
   // needs it (offline-first rule).
   useEffect(() => {
     if (config.authMode === "fake") {
-      setState("authenticated");
+      // Fake auth has no session to restore, but a recorded guest choice is
+      // still this device's answer. Ignoring it made guest mode UNREACHABLE in
+      // local dev — the one environment it can be exercised in — and would have
+      // thrown a guest into an account on their next cold start. Nothing
+      // recorded still means "straight in", so the dev entry flow is unchanged
+      // for everyone who never asked for guest mode.
+      setState(readEntryChoice() === "guest" ? "guest" : "authenticated");
       return;
     }
     // A recorded guest choice short-circuits every network and Keychain call

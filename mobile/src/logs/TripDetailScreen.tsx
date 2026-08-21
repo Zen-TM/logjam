@@ -19,9 +19,8 @@ import {
 } from "@logjam/shared";
 
 import { useConnectivity } from "../map/connectivity";
-import { fetchCurrentUser, useApiQuery } from "../api/queries";
-import { useAccountState } from "../auth/AccountStateContext";
 import { tripTitle } from "../api/tripTitle";
+import { useFieldDefs } from "../customFields/useFieldDefs";
 import { MediaStrip } from "../media/MediaStrip";
 import { fontSize, fontWeight, lineHeight, radius, spacing, surface, theme } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
@@ -63,15 +62,9 @@ export function TripDetailScreen({
   const allTrips = useMirrorTrips();
   const online = useConnectivity() === "online";
   // Definitions give each stored value its real label and ordering; without
-  // them (offline, a guest with no user record, or a field deleted since) the
-  // key is un-slugged instead.
-  const { accountState } = useAccountState();
-  const userQuery = useApiQuery(
-    fetchCurrentUser,
-    "Couldn't load your fields.",
-    accountState !== "guest",
-  );
-  const fieldDefs = userQuery.data?.uiPreferences?.tripLogCustomFields ?? [];
+  // them (offline with an account, or a field deleted since) the key is
+  // un-slugged instead. A guest's come off the device, so they are always there.
+  const { defs: fieldDefs } = useFieldDefs("tripLog");
 
   const [editing, setEditing] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);

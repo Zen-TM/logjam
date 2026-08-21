@@ -170,6 +170,14 @@ regenerate only together with an extract/schema refresh.
     delta pull is `INSERT OR REPLACE`, so linking into an account that already
     has data merges rather than replaces. **Never add a guest-specific write
     path** — that equivalence is the whole feature.
+  - **Custom fields are the one guest-mode exception to that equivalence.**
+    Definitions are a USER PREFERENCE, not an entity, so there is no outbox op
+    to accumulate — a guest's list lives in `sync_state` (`customFields/
+    fieldDefsStore.ts`), and `adoptLocalFieldDefs` carries it up to the account
+    on link, before the outbox pushes the trips that reference its keys.
+    `sync_state` rather than `prefsDb` because `wipeAllLocalData` spares
+    `prefsDb`, and field labels are the user's words about their canyoning, not
+    a statement about the handset. Values were always local for both.
   - **`auth/capabilities.ts` is the single source of what is gated**, and the
     only place "Needs an account" / "Needs a connection" are spelled. Screens
     read `accountState` from `auth/AccountStateContext`, never from the

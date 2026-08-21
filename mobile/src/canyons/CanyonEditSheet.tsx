@@ -1,15 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { CANYON_RANGE_BOUNDS, validateCanyonPayload } from "@logjam/shared";
+import {
+  CANYON_RANGE_BOUNDS,
+  validateCanyonPayload,
+  type TripLogCustomFieldDef,
+} from "@logjam/shared";
 
 import { fontSize, spacing, theme } from "../theme";
 import type { MirrorCanyon } from "../sync/mirrorStore";
 import { createCanyonLocal, updateCanyonLocal } from "../sync/outbox";
+import { useAccountState } from "../auth/AccountStateContext";
+import { fieldDefsBlockedReason } from "../auth/capabilities";
+import { CustomFieldForm, CustomFieldList } from "../customFields/CustomFieldsEditor";
+import {
+  coerceCustomFields,
+  CustomFieldValueInputs,
+  fieldValueStrings,
+} from "../customFields/CustomFieldValues";
+import { useFieldDefs } from "../customFields/useFieldDefs";
+import { useConnectivity } from "../map/connectivity";
 import {
   BottomSheet,
   Button,
+  DatePicker,
   ErrorBanner,
+  Row,
   SectionHeader,
   SegmentedControl,
   TextField,
@@ -29,10 +45,18 @@ import {
  * cannot be raised from an open sheet (DESIGN.md §7 — the bug that made "Take
  * photo" look dead), so any future fix-based entry belongs in the caller too.
  *
+ * The user's own fields are edited here too, and their definitions are reached
+ * through a MODE of this sheet, exactly as on `TripEditSheet` (DESIGN.md §6 —
+ * never a second modal). A date-typed field needs the picker, which is the
+ * other mode.
+ *
  * PRIVACY: a canyon's name and position are the most sensitive pair in the app.
  * They live in component state and leave only through the outbox's authed push;
  * nothing here is logged, and the failure copy is ours rather than the error's.
  */
+/** The sheet's sub-screens. Modes, never a second sheet (DESIGN.md §6). */
+type Mode = "form" | "date" | "fields" | "fieldForm";
+
 export function CanyonEditSheet({
   visible,
   onClose,
@@ -88,6 +112,16 @@ export function CanyonEditSheet({
   const [notes, setNotes] = useState("");
   const [invalid, setInvalid] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [mode, setMode] = useState<Mode>("form");
+  const { accountState } = useAccountState();
+  const online = useConnectivity() === "online";
+  const { defs: customFieldDefs, setDefs: setCustomFieldDefs } = useFieldDefs("canyon");
+  // Values are strings while editing and coerced on save, like every other
+  // custom-field form.
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [dateFieldKey, setDateFieldKey] = useState<string | null>(null);
+  const [editingField, setEditingField] = useState<TripLogCustomFieldDef | null>(null);
+  const fieldsBlocked = fieldDefsBlockedReason(accountState, online);
 
   // Read through a ref so it is NOT a dependency: `resuming` and `visible` flip
   // in the same commit, and listing it would re-run the seed the moment the
@@ -115,6 +149,10 @@ export function CanyonEditSheet({
     setLongestAbseil(numberText(canyon?.longestAbseil));
     setHours(numberText(canyon?.hours));
     setNotes(canyon?.notes ?? "");
+    setMode("form");
+    setEditingField(null);
+    setDateFieldKey(null);
+    setFieldValues(fieldValueStrings(canyon?.attributes?.customFields));
   }, [canyon, initialCoords, visible]);
 
   // A point back from the picker touches the two coordinate fields and nothing
@@ -184,6 +222,7 @@ export function CanyonEditSheet({
       return;
     }
 
+    const effectiveCustomFields = coerceCustomFields(fieldValues, customFieldDefs);
     setSaving(true);
     try {
       if (canyon) {
@@ -202,6 +241,18 @@ export function CanyonEditSheet({
           if (draft[key] !== canyon[key]) changes[key] = draft[key];
         }
         if (draft.notes !== canyon.notes) changes.notes = draft.notes;
+        // `attributes` is replaced wholesale by the server, so the canyon's
+        // existing blob is spread through — `sources`, which only the web
+        // writes, would otherwise be dropped by an edit made on the phone.
+        if (
+          JSON.stringify(effectiveCustomFields) !==
+          JSON.stringify(canyon.attributes?.customFields ?? {})
+        ) {
+          changes.attributes = {
+            ...canyon.attributes,
+            customFields: effectiveCustomFields,
+          };
+        }
         if (Object.keys(changes).length === 0) {
           onClose();
           return;
@@ -223,6 +274,9 @@ export function CanyonEditSheet({
           longestAbseil: draft.longestAbseil,
           hours: draft.hours,
           notes: draft.notes,
+          ...(Object.keys(effectiveCustomFields).length > 0 && {
+            attributes: { customFields: effectiveCustomFields },
+          }),
         });
         onSaved("Canyon added.");
       }
@@ -233,22 +287,89 @@ export function CanyonEditSheet({
     } finally {
       setSaving(false);
     }
-  }, [canyon, draft, editing, onClose, onFailed, onSaved]);
+  }, [canyon, customFieldDefs, draft, editing, fieldValues, onClose, onFailed, onSaved]);
+
+  const title =
+    mode === "date"
+      ? (customFieldDefs.find((def) => def.key === dateFieldKey)?.label ?? "Date")
+      : mode === "fields"
+        ? "Your canyon fields"
+        : mode === "fieldForm"
+          ? (editingField ? "Edit field" : "New field")
+          : editing
+            ? "Edit canyon"
+            : "Add a canyon";
 
   return (
     <BottomSheet
       visible={visible}
-      onClose={onClose}
-      title={editing ? "Edit canyon" : "Add a canyon"}
+      // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
+      // not "throw away everything I just typed".
+      onClose={
+        mode === "form"
+          ? onClose
+          : () => setMode(mode === "fieldForm" ? "fields" : "form")
+      }
+      title={title}
       footer={
-        <Button
-          label={editing ? "Save changes" : "Add canyon"}
-          icon="check"
-          loading={saving}
-          onPress={() => void save()}
-        />
+        mode === "form" ? (
+          <Button
+            label={editing ? "Save changes" : "Add canyon"}
+            icon="check"
+            loading={saving}
+            onPress={() => void save()}
+          />
+        ) : mode === "fieldForm" ? (
+          // Its own body carries the save action; this is just the way back.
+          <Button label="Cancel" variant="outlineAccent" onPress={() => setMode("fields")} />
+        ) : (
+          <Button label="Done" icon="check" onPress={() => setMode("form")} />
+        )
       }
     >
+      {mode === "date" && dateFieldKey ? (
+        <View style={styles.modeBody}>
+          <DatePicker
+            value={fieldValues[dateFieldKey] || null}
+            onChange={(key) =>
+              setFieldValues((current) => ({ ...current, [dateFieldKey]: key }))
+            }
+          />
+        </View>
+      ) : null}
+
+      {mode === "fields" ? (
+        <CustomFieldList
+          entity="canyon"
+          online={online}
+          defs={customFieldDefs}
+          onAdd={() => {
+            setEditingField(null);
+            setMode("fieldForm");
+          }}
+          onEdit={(def) => {
+            setEditingField(def);
+            setMode("fieldForm");
+          }}
+        />
+      ) : null}
+
+      {mode === "fieldForm" ? (
+        <CustomFieldForm
+          entity="canyon"
+          online={online}
+          defs={customFieldDefs}
+          editing={editingField}
+          onSaved={(next, message) => {
+            setCustomFieldDefs(next);
+            onSaved(message);
+          }}
+          onFailed={onFailed}
+          onDone={() => setMode("fields")}
+        />
+      ) : null}
+
+      {mode !== "form" ? null : (
       <View style={styles.form}>
         {invalid ? <ErrorBanner message={invalid} /> : null}
 
@@ -351,7 +472,37 @@ export function CanyonEditSheet({
             private.
           </Text>
         </View>
+
+        <SectionHeader label="Your own fields" />
+        <CustomFieldValueInputs
+          defs={customFieldDefs}
+          values={fieldValues}
+          onChange={(key, next) =>
+            setFieldValues((current) => ({ ...current, [key]: next }))
+          }
+          onPickDate={(key) => {
+            setDateFieldKey(key);
+            setMode("date");
+          }}
+        />
+        {/* A guest's definitions are on this phone, so this door is open with no
+            account and no signal. An account's list is shared with the web,
+            which is the only case that needs a connection. */}
+        <Row
+          icon="sliders"
+          title="Your canyon fields"
+          subtitle={
+            fieldsBlocked ??
+            (customFieldDefs.length === 0
+              ? "Add your own — access notes, permit, anything"
+              : `${customFieldDefs.length} field${customFieldDefs.length === 1 ? "" : "s"}`)
+          }
+          disabled={fieldsBlocked !== undefined}
+          right={<Feather name="chevron-right" size={20} color={theme.textMuted} />}
+          onPress={() => setMode("fields")}
+        />
       </View>
+      )}
     </BottomSheet>
   );
 }
@@ -434,6 +585,7 @@ function sameList(a: string[], b: string[]): boolean {
 
 const styles = StyleSheet.create({
   form: { gap: spacing(1.5) },
+  modeBody: { gap: spacing(2) },
   field: { gap: spacing(0.5) },
   hint: { color: theme.textMuted, fontSize: fontSize.sm, flex: 1 },
   coordRow: { flexDirection: "row", gap: spacing(1) },

@@ -29,8 +29,8 @@ export type AccountState = "guest" | "linked";
 /**
  * A server-backed feature that can be gated. Anything absent from this union
  * works for a guest — canyons, trip logs, waypoints, media capture, tracks,
- * local GeoPDF import, measure, compass and raster offline regions are all
- * fully local and must never be routed through here.
+ * local GeoPDF import, measure, compass, raster offline regions and the user's
+ * own custom fields are all fully local and must never be routed through here.
  */
 export type Capability =
   /** Per-canyon sharing with another Logjam user. */
@@ -47,8 +47,6 @@ export type Capability =
   | "vectorRegionDownload"
   /** Preferences stored on the user record (PATCH /users/me). */
   | "serverPrefs"
-  /** Custom-field DEFINITIONS, which live on the user record. Values on a trip are local. */
-  | "customFieldDefs"
   /** Push-token registration (POST /devices). */
   | "pushNotifications"
   /** Manually running a sync cycle. */
@@ -79,7 +77,6 @@ const NEEDS_CONNECTION: Record<Capability, boolean> = {
   accountGeoPdf: true,
   vectorRegionDownload: true,
   serverPrefs: true,
-  customFieldDefs: true,
   pushNotifications: true,
   syncNow: true,
   offlineSettings: false,
@@ -120,7 +117,6 @@ const CAPABILITY_LABEL: Record<Capability, string> = {
   accountGeoPdf: "Account GeoPDFs",
   vectorRegionDownload: "The vector map download",
   serverPrefs: "This preference",
-  customFieldDefs: "Custom fields",
   pushNotifications: "Push notifications",
   syncNow: "Syncing",
   offlineSettings: "Offline and storage settings",
@@ -164,4 +160,23 @@ export function capabilityRowProps(
   return result.status === "available"
     ? { disabled: false }
     : { disabled: true, subtitle: unavailableReasonText(result.reason) };
+}
+
+/**
+ * Custom fields are NOT a gated capability, and this is where that decision is
+ * written down. A guest keeps their own definitions on the device
+ * (`customFields/fieldDefsStore.ts`), so there is no account axis: they can add,
+ * rename and delete a field in a canyon with no signal. Only the ACCOUNT list is
+ * network-bound — it is shared with the web and every other device — so a linked
+ * user still needs a connection to change it.
+ *
+ * Undefined means "go ahead", to match `capabilityRowProps`' subtitle contract.
+ */
+export function fieldDefsBlockedReason(
+  accountState: AccountState,
+  online: boolean,
+): string | undefined {
+  return accountState === "linked" && !online
+    ? unavailableReasonText("needs-connection")
+    : undefined;
 }
