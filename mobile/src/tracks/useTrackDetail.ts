@@ -22,7 +22,8 @@ import {
 } from "@logjam/shared";
 
 import { toElevationLine } from "./trackLine";
-import { listTrackPoints, onTracksChanged } from "./tracksDb";
+import { listTrackPoints } from "./tracksDb";
+import { useTrackChangeRefresh } from "./useTrackChangeRefresh";
 
 /**
  * Points a LIVE recording must grow by before the DEM line is republished.
@@ -61,6 +62,15 @@ export function useTrackDetail(
   const detail = useMemo(
     () => (points.length > 0 ? computeTrackDetail(points, { recordedMs }) : null),
     [points, recordedMs],
+  );
+
+  // A panel left open while the phone goes back in a pocket would otherwise
+  // re-read the WHOLE series on every delivery, for hours — see
+  // `useTrackChangeRefresh`.
+  const [readNonce, setReadNonce] = useState(0);
+  useTrackChangeRefresh(
+    () => setReadNonce((n) => n + 1),
+    enabled && trackId != null,
   );
 
   useEffect(() => {
@@ -103,19 +113,15 @@ export function useTrackDetail(
         });
     };
 
+    // A live recording appends a batch every fix, and re-reading on that is
+    // what makes an open panel a live readout rather than a snapshot of the
+    // moment it opened. `readNonce` is that signal, already gated on the app
+    // being in front of someone. A finished track never moves it.
     read();
-    // A live recording appends a batch every fix; each one notifies, and
-    // recomputing on that is what makes the open panel a live readout rather
-    // than a snapshot of the moment it opened. A finished track never fires,
-    // so this costs a subscription and nothing else.
-    const unsubscribe = onTracksChanged(() => {
-      if (current) read();
-    });
     return () => {
       current = false;
-      unsubscribe();
     };
-  }, [trackId, enabled]);
+  }, [trackId, enabled, readNonce]);
 
   return { detail, loading, line };
 }
