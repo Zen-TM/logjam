@@ -44,8 +44,7 @@ import { useFieldDefs } from "../customFields/useFieldDefs";
 import { useConnectivity } from "../map/connectivity";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
-import { PickRouteSheet } from "../routes/PickRouteSheet";
-import { deleteMediaLocal } from "../sync/mediaUpload";
+import { AddWaySheet } from "./AddWaySheet";
 import {
   assetHue,
   fontSize,
@@ -146,7 +145,7 @@ export function CanyonDetailScreen({
   }, []);
 
   // Above the early returns — hooks cannot be conditional.
-  const [pickingRoute, setPickingRoute] = useState(false);
+  const [addingWay, setAddingWay] = useState(false);
   const [routeSlotMenu, setRouteSlotMenu] = useState(false);
 
   const canyon = query.data;
@@ -182,10 +181,6 @@ export function CanyonDetailScreen({
   const linkedWaypoints = (waypoints.data ?? [])
     .filter((waypoint) => waypoint.canyonIds.includes(canyonId))
     .sort((a, b) => a.name.localeCompare(b.name));
-  // The canyon's route slot, as filled by a FILE. A drawn route can occupy the
-  // same slot, so the picker has to know about this one to say what it displaces.
-  const attachedTrack =
-    attachments.find((item) => mediaCategory(item.mediaType) === "track") ?? null;
   const routeCount = attachments.filter(
     (item) => mediaCategory(item.mediaType) === "track",
   ).length;
@@ -397,8 +392,10 @@ export function CanyonDetailScreen({
                   );
                 });
             }}
-            onPickDrawnRoute={isOwner ? () => setPickingRoute(true) : undefined}
-            onDrawRoute={isOwner && onDrawRoute ? () => onDrawRoute(canyonId) : undefined}
+            // The slot's five sources are one panel, owned by this screen —
+            // three of them are not media at all, so the strip does not try to
+            // offer them (AddWaySheet.tsx).
+            onAddWay={isOwner ? () => setAddingWay(true) : undefined}
           />
         )}
 
@@ -529,13 +526,16 @@ export function CanyonDetailScreen({
         title={linkedRoute?.name ?? "Route"}
       >
         <View style={styles.sheetBody}>
+          {/* The SAME panel the empty slot opens: replacing was narrower than
+              adding until this batch, and a slot that only accepts a drawn
+              route on the way in is a slot with two different rules. */}
           <Row
-            title="Replace with another route"
+            title="Replace with another way"
             icon="repeat"
             hue={assetHue.route}
             onPress={() => {
               setRouteSlotMenu(false);
-              setPickingRoute(true);
+              setAddingWay(true);
             }}
           />
           <Row
@@ -558,15 +558,16 @@ export function CanyonDetailScreen({
         </View>
       </BottomSheet>
 
-      <PickRouteSheet
+      {/* Every way of filling this canyon's one route slot, from the empty
+          slot AND from the replace row above — one panel, one displacement
+          decision (canyons/routeSlot.ts). */}
+      <AddWaySheet
         canyonId={canyonId}
         canyonName={canyon.name}
-        attachedTrack={attachedTrack}
-        visible={pickingRoute}
-        onClose={() => setPickingRoute(false)}
-        onDeleteTrack={() =>
-          attachedTrack ? deleteMediaLocal(attachedTrack) : Promise.resolve()
-        }
+        media={attachments}
+        visible={addingWay}
+        onClose={() => setAddingWay(false)}
+        onDrawRoute={onDrawRoute ? () => onDrawRoute(canyonId) : undefined}
         onInfo={(text) => notify(text, "info")}
         onError={(text) => notify(text, "error")}
       />

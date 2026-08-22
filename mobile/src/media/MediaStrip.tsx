@@ -27,6 +27,7 @@ import type { MirrorMedia } from "../sync/mirrorStore";
 import { scratchFileUri } from "../offline/localStores";
 import { savesCapturesToGallery } from "./galleryPreference";
 import { alertPermissionDenied } from "../permissionAlert";
+import { routeFileMimeType } from "./routeFileMime";
 import { listTrackPoints, listTracks, type Track } from "../tracks/tracksDb";
 import { BottomSheet, Row, SectionHeader } from "../ui";
 import { MediaViewer } from "./MediaViewer";
@@ -99,8 +100,7 @@ export function MediaStrip({
   limit,
   onFailed,
   onShowRoute,
-  onPickDrawnRoute,
-  onDrawRoute,
+  onAddWay,
 }: {
   /**
    * Which family of attachment this strip owns. Photos/videos and route files
@@ -138,10 +138,15 @@ export function MediaStrip({
    * to read a GPX, and a full-screen "open it elsewhere" page is a dead end.
    */
   onShowRoute?: (item: MirrorMedia) => void;
-  /** Fill the canyon's route slot from an already-drawn route (canyon screen). */
-  onPickDrawnRoute?: () => void;
-  /** Open the map with the draw tool armed for this canyon (canyon screen). */
-  onDrawRoute?: () => void;
+  /**
+   * The canyon route slot's own panel ("Add a way"), owned by the canyon screen
+   * — a canyon's slot can be filled five ways, three of which are not media at
+   * all, so this strip does not try to offer them. Given, the add tile opens
+   * that panel instead of this component's own source sheet, and the tile
+   * survives the limit as "Replace". A TRIP has no slot and no limit, passes
+   * nothing, and keeps the two file sources below.
+   */
+  onAddWay?: () => void;
 }) {
   const [sourceMode, setSourceMode] = useState<SourceMode | null>(null);
   const [tracks, setTracks] = useState<Track[] | null>(null);
@@ -263,7 +268,7 @@ export function MediaStrip({
     });
     if (result.canceled || result.assets.length === 0) return;
     const asset = result.assets[0];
-    const mimeType = routeMimeType(asset.name, asset.mimeType);
+    const mimeType = routeFileMimeType(asset.name, asset.mimeType);
     if (mimeType === null) {
       fail("Pick a .gpx or .kml file.");
       return;
@@ -351,19 +356,30 @@ export function MediaStrip({
     <View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.row}>
-          {atLimit ? null : (
+          {/* The slot's panel can REPLACE what is in it, so its tile outlives
+              the limit; a strip with no such panel still stops offering "Add"
+              at the limit rather than failing on upload. */}
+          {atLimit && !onAddWay ? null : (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={kind === "track" ? "Add a route" : "Add a photo or video"}
-              onPress={() => setSourceMode("sources")}
+              accessibilityLabel={
+                kind !== "track"
+                  ? "Add a photo or video"
+                  : onAddWay
+                    ? atLimit
+                      ? "Replace this canyon's route"
+                      : "Add a way"
+                    : "Add a route"
+              }
+              onPress={() => (onAddWay ? onAddWay() : setSourceMode("sources"))}
               style={({ pressed }) => [
                 styles.tile,
                 styles.addTile,
                 pressed && styles.addTilePressed,
               ]}
             >
-              <Feather name="plus" size={20} color={theme.accent} />
-              <Text style={styles.addTileLabel}>Add</Text>
+              <Feather name={atLimit ? "repeat" : "plus"} size={20} color={theme.accent} />
+              <Text style={styles.addTileLabel}>{atLimit ? "Replace" : "Add"}</Text>
             </Pressable>
           )}
 
@@ -386,9 +402,11 @@ export function MediaStrip({
           ) : null}
           {atLimit ? (
             <Text style={styles.emptyHint}>
-              {limit === 1
-                ? "One route per canyon. Press and hold to replace it."
-                : `${limit} is the limit here.`}
+              {limit !== 1
+                ? `${limit} is the limit here.`
+                : onAddWay
+                  ? "One route per canyon."
+                  : "One route per canyon. Press and hold to replace it."}
             </Text>
           ) : null}
         </View>
@@ -453,26 +471,6 @@ export function MediaStrip({
                   subtitle="A track you recorded in Logjam"
                   onPress={() => setSourceMode("tracks")}
                 />
-                {/* The other two ways a canyon's route slot gets filled. They
-                    are handled by the CANYON screen rather than here: a drawn
-                    route is a synced record with its own linking rule, not a
-                    file to upload, and this component only knows about media. */}
-                {onPickDrawnRoute ? (
-                  <Row
-                    icon="edit-3"
-                    title="Use a route you drew"
-                    subtitle="One of your saved routes"
-                    onPress={() => runAfterSheet(onPickDrawnRoute)}
-                  />
-                ) : null}
-                {onDrawRoute ? (
-                  <Row
-                    icon="pen-tool"
-                    title="Draw one on the map"
-                    subtitle="Opens the map with the pen ready"
-                    onPress={() => runAfterSheet(onDrawRoute)}
-                  />
-                ) : null}
               </>
             )}
             {busy ? <ActivityIndicator color={theme.accent} /> : null}
@@ -585,15 +583,6 @@ function glyphFor(
   if (category === "track") return "map";
   if (category === "video") return "video";
   return "image";
-}
-
-/** Android often hands back octet-stream for .gpx/.kml, so trust the extension. */
-function routeMimeType(name: string, reported?: string | null): string | null {
-  const lower = name.toLowerCase();
-  if (lower.endsWith(".gpx")) return "application/gpx+xml";
-  if (lower.endsWith(".kml")) return "application/vnd.google-earth.kml+xml";
-  if (reported && mediaCategory(reported) === "track") return reported;
-  return null;
 }
 
 function trackSummary(track: Track): string {

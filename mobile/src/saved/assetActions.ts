@@ -15,6 +15,9 @@
 //   tracks/TrackOptionsSheet.tsx   — tracks,   from BOTH Saved and the map
 //   imports/ImportOptionsSheet.tsx — imports,  from BOTH Saved and the map
 //   map/WaypointSheet.tsx          — waypoints, from BOTH Saved and the map
+//   canyons/AddWaySheet.tsx        — a canyon's route slot, which renders a
+//                                    TRACK's createRouteFrom and an IMPORT's
+//                                    attachToCanyon from the canyon's side
 //   saved/SavedScreen.tsx          — regions, GeoPDFs and LiDAR overlays (its
 //                                    inline sheet). These are the kinds with
 //                                    no map tap surface of their own;

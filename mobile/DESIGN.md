@@ -1058,10 +1058,33 @@ which subsystem is talking.
   layers sheet, where they ARE listed and DO grey out offline — there the row is
   still the way to select them when online, so the reason belongs in its subtitle.
 - **A server-side cap is a UI rule, not an error to discover.** A canyon takes
-  exactly one route (the API answers a second with 409), so the strip stops
-  offering "Add" at the limit and says what the limit is. An affordance that
-  exists only to fail parks a dead op in the outbox, where the user can't see
-  the reason.
+  exactly one route (the API answers a second with 409), so the strip never
+  offers a SECOND one: with no panel that can replace what is there, the add
+  tile disappears at the limit and the line beside it says what the limit is. An
+  affordance that exists only to fail parks a dead op in the outbox, where the
+  user can't see the reason.
+  - **A cap of one is a REPLACE affordance, not a missing Add.** Where the slot
+    does have a panel that can displace its occupant (a canyon's, below), the
+    tile stays and becomes "Replace" — "one per canyon, press and hold the tile
+    to delete it, then add another" is a two-step the user has to be told, and
+    the only way to be told it was to want the thing it prevents.
+- **One slot, one panel — "Add a way".** A canyon's single route slot can be
+  filled five ways (a route you drew · an import from Saved · a recorded track,
+  converted to a route · a .gpx/.kml off the phone · one drawn on the map), and
+  which of them existed used to depend on how you arrived: the media strip's
+  source sheet offered three, the slot's own ⋯ offered "Replace with another
+  route" and meant it. `canyons/AddWaySheet.tsx` is that panel, opened from the
+  empty slot AND from the replace row, so adding and replacing are the same
+  question. ("Way" is this codebase's umbrella word for route-or-track in prose
+  and labels; the `Route` and `Track` TYPES stay distinct.)
+  - **The confirm belongs to the WRITE, not to the source.** Three of the five
+    sources have not chosen a file when the row is tapped — the phone's picker
+    has not opened, the pen has not been armed — so confirming a deletion there
+    is agreeing to something the user can still walk away from. Every source
+    goes through `canyons/fillRouteSlot.ts` at the moment it actually writes,
+    the map's pen included: its confirm is raised when the drawn route is saved,
+    which is also the only reading of the slot that is current by then.
+
 - **A picker over an OPTIONAL value keeps an explicit "not recorded" stop.** The
   grade rails in `CanyonEditSheet` lead with `—`. Most imported canyons have gaps,
   and a picker you can't get back out of turns "I don't know" into a wrong answer

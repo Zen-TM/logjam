@@ -222,6 +222,8 @@ import type { WaypointFormDraft } from "../waypoints/waypointSheetBodies";
 import { takePickedPoint } from "./pickedPoint";
 import { MapPointSheet, type MapPoint } from "./MapPointSheet";
 import { CanyonEditSheet } from "../canyons/CanyonEditSheet";
+import { fillRouteSlot } from "../canyons/fillRouteSlot";
+import { routeSlotOccupant } from "../canyons/routeSlot";
 import { CanyonOptionsSheet } from "../canyons/CanyonOptionsSheet";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import {
@@ -1094,6 +1096,10 @@ export function MapScreen({
   // Canyon overlay reads the offline mirror (Stage 8): instant, and the map
   // keeps its pins in airplane mode.
   const canyons = useMirrorCanyons();
+  // Every canyon route ATTACHMENT on the account. Read here rather than beside
+  // its tally below, because the route tool's save consults it to see what it
+  // would displace (routeSlot.ts) and that runs earlier in this component.
+  const { data: canyonTrackMedia } = useMirrorCanyonTracks(TRACK_MIME_TYPES);
   // Only for the trip form a canyon pin can open — the type vocabulary is the
   // user's own history, and a form that offered fewer types here than on the
   // Logs tab would be the same drift this sheet exists to remove.
@@ -1570,13 +1576,40 @@ export function MapScreen({
             anchors,
             ...(draftColor ? { color: draftColor } : {}),
           });
+        } else if (draftCanyonId) {
+          // Drawn INTO a canyon's route slot, which may have filled since the
+          // pen was armed (from another device, or from the canyon screen).
+          // The confirm and the swap order are routeSlot.ts's, exactly as they
+          // are for the four sources that write immediately — this one just
+          // asks at the moment it finally writes.
+          const filled = await fillRouteSlot({
+            canyonName:
+              canyons.data?.find((canyon) => canyon.id === draftCanyonId)?.name ??
+              "This canyon",
+            source: "draw",
+            occupant: routeSlotOccupant(
+              draftCanyonId,
+              routes.data ?? [],
+              canyonTrackMedia ?? [],
+            ),
+            write: () =>
+              createRouteLocal({
+                name,
+                points,
+                anchors,
+                ...(draftColor ? { color: draftColor } : {}),
+                canyonId: draftCanyonId,
+              }),
+          });
+          // Cancelled the displacement confirm: the draft stays exactly as it
+          // was, so the user can pick a different name or back out themselves.
+          if (!filled) return;
         } else {
           await createRouteLocal({
             name,
             points,
             anchors,
             ...(draftColor ? { color: draftColor } : {}),
-            ...(draftCanyonId ? { canyonId: draftCanyonId } : {}),
           });
         }
         setNamingRoute(false);
@@ -1591,7 +1624,15 @@ export function MapScreen({
         setSavingRoute(false);
       }
     },
-    [draftCanyonId, draftColor, editingRouteId, routeDraft],
+    [
+      canyonTrackMedia,
+      canyons.data,
+      draftCanyonId,
+      draftColor,
+      editingRouteId,
+      routeDraft,
+      routes.data,
+    ],
   );
 
   /** Arming a tool closes the tray: the HUD then says what mode you are in,
@@ -1960,7 +2001,7 @@ export function MapScreen({
   // taken from `routesStatus`, which only exists while the layer is MOUNTED —
   // the row has to state its tally with the switch off, which is exactly when
   // someone is deciding whether to turn it on.
-  const canyonRouteCount = useMirrorCanyonTracks(TRACK_MIME_TYPES).data?.length ?? 0;
+  const canyonRouteCount = canyonTrackMedia?.length ?? 0;
 
   /**
    * The two route toggles split by WHAT THE ROUTE BELONGS TO, not by how it

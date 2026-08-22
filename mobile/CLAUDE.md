@@ -452,7 +452,9 @@ KML extracted from it (`writeAsStringAsync` is UTF-8 and would corrupt a zip).
 `vector` / "GPX & KML" because the tab holds whole FILES that may contain
 points and polygons, and naming it for lines promised something the type does
 not guarantee. **"Way" is the umbrella term for route-or-track** in prose and
-labels only; the `Route` and `Track` types stay distinct everywhere.
+labels only; the `Route` and `Track` types stay distinct everywhere. It names
+one panel: `canyons/AddWaySheet.tsx`, every way of filling a canyon's single
+route slot, opened from the empty slot and from the replace row alike.
 
 **A received copy is labelled `Copy` with "from <sender>" in its subtitle, never
 the `Shared` pill.** On a route that word means live/revocable/read-only; a
