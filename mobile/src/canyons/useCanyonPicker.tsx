@@ -98,6 +98,10 @@ export function useCanyonPicker({
     job()
       .catch((err: unknown) => {
         console.error(err);
+        // Leave the sheet FIRST. A Toast is a plain view at the screen root and
+        // renders UNDER an open sheet (a Modal), so a failure reported with the
+        // picker still up is a failure the user never sees.
+        onDone();
         onError(messageFromError(err, failure));
       })
       .finally(() => setBusy(false));

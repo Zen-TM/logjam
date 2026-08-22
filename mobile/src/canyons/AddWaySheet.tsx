@@ -169,6 +169,10 @@ export function AddWaySheet({
         })
         .catch((err: unknown) => {
           console.error(err);
+          // Close FIRST: a Toast is a plain view at the screen root and renders
+          // UNDER an open sheet, so a failure reported with this one still up
+          // is a failure the user never sees.
+          close();
           onError(messageFromError(err, "Couldn't set that as this canyon's route."));
         })
         .finally(() => setBusy(false));
