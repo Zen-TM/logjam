@@ -244,3 +244,27 @@ function distanceToSegment(
   );
   return Math.hypot(point[0] - (start[0] + dx * t), point[1] - (start[1] + dy * t));
 }
+
+/**
+ * Reverse a whole draft — the direction flip applied to work in progress.
+ *
+ * `reverseRoute` / `reverseRouteAnchors` (routeValidation.ts) reverse a SAVED
+ * route: a point list plus the indices of the user's own vertices within it. A
+ * draft holds the same information in the other shape — anchors as points, with
+ * each snapped run kept beside the segment it fills — so reversing one means
+ * reversing the anchors, reversing the ORDER of the runs (run i sits between
+ * anchors i and i+1, and that pairing has to survive), and reversing each run
+ * internally.
+ *
+ * Equivalent to the saved-route pair by construction, and pinned as such in the
+ * test: reversing the draft then flattening gives the same points and the same
+ * anchor indices as flattening then reversing. Anything less remaps which
+ * vertices count as the user's, which is the whole reason reverseRouteAnchors
+ * exists.
+ */
+export function reverseDraft(draft: RouteDraft): RouteDraft {
+  return {
+    anchors: [...draft.anchors].reverse(),
+    filler: draft.filler.map((run) => [...run].reverse()).reverse(),
+  };
+}

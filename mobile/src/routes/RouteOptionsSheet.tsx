@@ -14,11 +14,17 @@
 //
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the line you tapped.
+//
+// There is ONE "Edit" row, not three. Edit points, Reverse direction and Colour
+// were separate rows that all edited the route, two of them acting on a line
+// the user could not see while deciding. Edit now opens the map's draw tool on
+// this route, and reverse and colour are controls in the tool's own panel,
+// acting on the draft (DraftToolPanel.tsx).
 import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
-import { messageFromError, TRACK_COLORS } from "@logjam/shared";
+import { Alert, StyleSheet, Text, View } from "react-native";
+import { messageFromError } from "@logjam/shared";
 
-import { assetHue, fontSize, radius, spacing, theme } from "../theme";
+import { assetHue, fontSize, theme } from "../theme";
 import { BottomSheet, RenameForm, Row } from "../ui";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
@@ -58,7 +64,6 @@ export function RouteOptionsSheet({
   allowNetwork?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
-  const [pickingColor, setPickingColor] = useState(false);
   // The share panel is rendered HERE rather than handed to the caller: this
   // one component is both Saved's three-dots sheet and the map's route sheet,
   // and a callback would have given the verb to whichever surface remembered
@@ -76,7 +81,6 @@ export function RouteOptionsSheet({
   useEffect(() => {
     if (!visible) {
       setSharing(false);
-      setPickingColor(false);
       setRenaming(false);
       setShowingStats(false);
     }
@@ -102,20 +106,9 @@ export function RouteOptionsSheet({
 
   const close = () => {
     setSharing(false);
-    setPickingColor(false);
     setRenaming(false);
     setShowingStats(false);
     onClose();
-  };
-
-  const run = (action: () => Promise<unknown>, failure: string) => {
-    setBusy(true);
-    action()
-      .catch((err: unknown) => {
-        console.error(err);
-        onError(messageFromError(err, failure));
-      })
-      .finally(() => setBusy(false));
   };
 
   const save = (format: "gpx" | "kml") => {
@@ -226,23 +219,14 @@ export function RouteOptionsSheet({
         />
         {actions.editableRouteId ? (
           <Row
-            title="Edit points"
+            // ONE verb for every way of editing this route. It opens the draw
+            // tool on the map, where the points, the direction and the colour
+            // are all in reach of the line they change.
+            title="Edit"
             icon="edit-3"
             hue={assetHue.route}
             disabled={busy}
             onPress={onEdit}
-          />
-        ) : null}
-        {actions.reverse ? (
-          <Row
-            title="Reverse direction"
-            icon="repeat"
-            hue={assetHue.route}
-            disabled={busy}
-            onPress={() => {
-              close();
-              run(actions.reverse!, "Couldn't reverse that route.");
-            }}
           />
         ) : null}
         {actions.editableRouteId ? (
@@ -255,54 +239,6 @@ export function RouteOptionsSheet({
             disabled={busy}
             onPress={onLinkCanyon}
           />
-        ) : null}
-        {actions.setColor ? (
-          <>
-            <Row
-              title="Colour"
-              icon="droplet"
-              hue={route.color ?? theme.accent}
-              disabled={busy}
-              onPress={() => setPickingColor((open) => !open)}
-              right={
-                <View
-                  style={[
-                    styles.currentSwatch,
-                    { backgroundColor: route.color ?? theme.accent },
-                  ]}
-                />
-              }
-            />
-            {pickingColor ? (
-              <View style={styles.palette}>
-                {TRACK_COLORS.map((color) => (
-                  <Pressable
-                    key={color}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Colour ${color}`}
-                    accessibilityState={{ selected: color === route.color }}
-                    disabled={busy}
-                    onPress={() => {
-                      setPickingColor(false);
-                      run(
-                        () => actions.setColor!(color),
-                        "Couldn't change the colour.",
-                      );
-                    }}
-                    style={[
-                      styles.swatch,
-                      { backgroundColor: color },
-                      color === route.color ? styles.swatchSelected : null,
-                    ]}
-                  >
-                    {color === route.color ? (
-                      <Text style={styles.swatchTick}>✓</Text>
-                    ) : null}
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
-          </>
         ) : null}
         <Row
           title="Save as GPX"
@@ -371,21 +307,4 @@ export function RouteOptionsSheet({
 const styles = StyleSheet.create({
   body: { gap: 8 },
   sharedHint: { color: theme.textMuted, fontSize: fontSize.xs },
-  currentSwatch: { width: 22, height: 22, borderRadius: radius.sm },
-  palette: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing(1),
-    paddingHorizontal: spacing(1),
-    paddingBottom: spacing(0.5),
-  },
-  swatch: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  swatchSelected: { borderWidth: 2, borderColor: theme.textPrimary },
-  swatchTick: { color: theme.primary, fontWeight: "700" },
 });

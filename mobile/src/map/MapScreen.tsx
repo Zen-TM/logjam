@@ -767,6 +767,14 @@ export function MapScreen({
   const [linkingRouteId, setLinkingRouteId] = useState<string | null>(null);
   // Set when the draw was started from a canyon page; consumed by the save.
   const [draftCanyonId, setDraftCanyonId] = useState<string | null>(null);
+  /** The colour the draft will SAVE with, picked in the tool panel.
+   *
+   *  Null means "not chosen in this session", which is why the save writes the
+   *  field only when it is set: a draft restored after the app was killed comes
+   *  back with an `editingRouteId` and no colour, and writing null there would
+   *  quietly strip the colour off the route being edited. The palette can only
+   *  set a colour, never clear one, so nothing is lost by the gate. */
+  const [draftColor, setDraftColor] = useState<string | null>(null);
   // "Canyon routes" layer (web parity), off by default: it is a lot of ink to
   // add to a map unasked, and the layers sheet is where it belongs.
   const [showCanyonRoutes, setShowCanyonRoutes] = useState(false);
@@ -1402,6 +1410,7 @@ export function MapScreen({
       const discard = () => {
         routeDraft.close();
         setEditingRouteId(null);
+        setDraftColor(null);
         if (typeof then === "function") then();
       };
       if (routeDraft.points.length === 0) {
@@ -1510,12 +1519,18 @@ export function MapScreen({
       setSavingRoute(true);
       try {
         if (editingRouteId) {
-          await updateRouteLocal(editingRouteId, { name, points, anchors });
+          await updateRouteLocal(editingRouteId, {
+            name,
+            points,
+            anchors,
+            ...(draftColor ? { color: draftColor } : {}),
+          });
         } else {
           await createRouteLocal({
             name,
             points,
             anchors,
+            ...(draftColor ? { color: draftColor } : {}),
             ...(draftCanyonId ? { canyonId: draftCanyonId } : {}),
           });
         }
@@ -1523,6 +1538,7 @@ export function MapScreen({
         routeDraft.close();
         setEditingRouteId(null);
         setDraftCanyonId(null);
+        setDraftColor(null);
       } catch (err) {
         console.error(err);
         Alert.alert("Route error", "Couldn't save that route.");
@@ -1530,7 +1546,7 @@ export function MapScreen({
         setSavingRoute(false);
       }
     },
-    [draftCanyonId, editingRouteId, routeDraft],
+    [draftCanyonId, draftColor, editingRouteId, routeDraft],
   );
 
   /** Arming a tool closes the tray: the HUD then says what mode you are in,
@@ -2306,6 +2322,7 @@ export function MapScreen({
         measureDraft.close();
         routeDraft.open({ points: target.points, anchors: target.anchors });
         setEditingRouteId(target.id);
+        setDraftColor(target.color ?? null);
         const bbox = bboxOfPoints(
           target.points.map(([lon, lat]) => ({ lon, lat })),
         );
@@ -2334,6 +2351,7 @@ export function MapScreen({
       routeDraft.open();
       setEditingRouteId(null);
       setDraftCanyonId(drawRouteFor.canyonId);
+      setDraftColor(null);
     };
     if (routeDraft.active && routeDraft.points.length > 0) {
       handleCancelRouteDraw(arm);
@@ -4114,6 +4132,7 @@ export function MapScreen({
         {drawingRoute ? (
           <RouteDraftLayer
             idPrefix="route-draft"
+            color={draftColor ?? undefined}
             draft={routeDraft.draft ?? emptyDraft}
             dotted={false}
             {...anchorHandlers(routeDraft)}
@@ -4295,6 +4314,9 @@ export function MapScreen({
             onSnapModeChange={handleSnapModeChange}
             onSave={() => setNamingRoute(true)}
             onDiscard={() => handleCancelRouteDraw()}
+            onReverse={routeDraft.reverse}
+            color={draftColor}
+            onColorChange={setDraftColor}
           />
         ) : null}
 

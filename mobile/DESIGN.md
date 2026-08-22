@@ -221,13 +221,36 @@ BottomSheet(s)      acquisition + per-item actions
   points silently (a question asked once), while leaving route draw confirms,
   because those points were meant to become something. Route draw ends in Save,
   and the result lands in Saved.
-- **The two point tools are ONE implementation, differing in exactly two
-  things.** They share the draft model (`@logjam/shared` `routeDraft.ts` behind
-  `useRouteDraft`), the HUD (`DraftToolPanel.tsx`) and the map layer
-  (`RouteDraftLayer.tsx`); measure has no Save, and its line is DOTTED where a
-  route is SOLID (a thing you are asking versus a thing you are making). They
-  were parallel implementations once, and the measure copy is what quietly
-  lacked draggable points. A third tool extends these, it does not fork them.
+- **The two point tools are ONE implementation; what a tool does NOT have is an
+  absent prop, never a second component.** They share the draft model
+  (`@logjam/shared` `routeDraft.ts` behind `useRouteDraft`), the HUD
+  (`DraftToolPanel.tsx`) and the map layer (`RouteDraftLayer.tsx`). Measure has
+  no Save, no Reverse and no Colour — its points are a question asked once, not
+  a line anyone keeps — and its line is DOTTED where a route is SOLID (a thing
+  you are asking versus a thing you are making). Each of those is a prop the
+  route tool passes and measure omits, so the panel cannot grow a tool's private
+  half. They were parallel implementations once, and the measure copy is what
+  quietly lacked draggable points. A third tool extends these, it does not fork
+  them.
+- **A drawn thing's PROPERTIES are edited in the tool that draws it, not in a
+  list row.** The route options sheet used to carry "Edit points", "Reverse
+  direction" and "Colour" as three rows; two of them changed a line the user
+  could not see while deciding, and all three edited the same object. There is
+  one **"Edit"** row now, it opens the draw tool on that route, and direction
+  and colour are controls in the tool panel beside Undo and Clear. Colour is a
+  DISCLOSURE there (tap the droplet, the swatches appear) — ten swatches is a
+  third of a phone's map, and the panel is a toolbar over the thing being
+  worked in.
+- **A tool control edits the DRAFT, and the draft is what Save writes.**
+  Reversing or recolouring the stored route from under an open editor leaves the
+  two disagreeing until Save, and a discard then silently keeps the change.
+  `reverseDraft` (`shared/src/routeDraft.ts`) flips anchors AND their snapped
+  runs — the draft's equivalent of `reverseRoute` + `reverseRouteAnchors`, pinned
+  equal to that pair in its test, because anchors are indices into the points and
+  a half-reverse lands the user's own vertices on arbitrary snapped ones. The
+  colour is written by the save, and only when one was actually picked: a draft
+  restored after the app was killed carries no colour, and writing null there
+  would strip the colour off the route being edited.
 - **A handle is dragged far more often than it is deleted, so a TAP on one only
   offers.** Dropping a point ends on the same pixel as tapping it; removing a
   vertex on what felt like a drop is a loss the user cannot see coming, so the
@@ -795,7 +818,7 @@ which subsystem is talking.
   that genuinely needs the map (arming the draw tool, starting the recorder,
   pointing the bearing line at a waypoint) is still PRESENT on the Saved surface
   and hands over as a navigation param keyed on a nonce — see "Continue
-  recording", "Edit points" and "Navigate to this waypoint".
+  recording", a route's "Edit" and "Navigate to this waypoint".
   - **A tapped PIN opens the same verb list a tapped line does.** A canyon pin
     used to go straight to the detail screen, which made the map's answer to
     "what can I do with this canyon" one verb out of six, and made the pin the

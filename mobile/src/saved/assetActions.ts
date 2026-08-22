@@ -47,8 +47,6 @@ import {
   ROUTE_NAME_MAX_LENGTH,
   exportFilename,
   trackPointsToGpx,
-  reverseRoute,
-  reverseRouteAnchors,
   simplifyToFit,
   type RoutePoint,
 } from "@logjam/shared";
@@ -119,20 +117,12 @@ export type AssetActions = {
    */
   editableRouteId?: string;
   /**
-   * Flip vertex order. Only routes have it: direction is semantic on a route
-   * (approach vs exit, upstream vs downstream) and a recording's direction is
-   * a fact about what happened, not an editable property.
-   */
-  reverse?: () => Promise<unknown>;
-  /**
    * Turn a recording into an editable route. Non-destructive — the recording
    * is untouched — and simplifying is unavoidable: a real recording is
    * thousands of fixes and the cap is MAX_ROUTE_POINTS. Resolves with the
    * point count kept so the caller can say what happened.
    */
   createRouteFrom?: () => Promise<{ name: string; pointCount: number }>;
-  /** Set a route's colour, from the shared TRACK_COLORS palette. */
-  setColor?: (color: string) => Promise<unknown>;
   /**
    * Ways to write this asset out as a file the user keeps, in menu order.
    *
@@ -294,30 +284,16 @@ export function routeActions(route: MirrorRoute): AssetActions {
     resolveBbox: async () =>
       bboxOfPoints(route.points.map(([lon, lat]) => ({ lon, lat }))),
     // One gate for every write verb: a shared route is read-only, so rename,
-    // edit, colour, reverse and delete are all ABSENT rather than present and
-    // refused (see AssetActions.delete).
+    // edit and delete are all ABSENT rather than present and refused (see
+    // AssetActions.delete). Direction and colour are not verbs here at all —
+    // they are controls in the draw tool, reached through `editableRouteId`,
+    // and they act on the DRAFT so the open editor and the stored route can
+    // never disagree.
     ...(readOnly
       ? {}
       : {
           rename: (name: string) => updateRouteLocal(route.id, { name }),
           editableRouteId: route.id,
-          setColor: (color: string) => updateRouteLocal(route.id, { color }),
-          reverse: () =>
-            updateRouteLocal(route.id, {
-              points: reverseRoute(route.points),
-              // Anchors are indices INTO points, so they have to be remapped
-              // or the user's own vertices land on arbitrary snapped ones. A
-              // route with none (an import) stays without: an empty list is
-              // not a valid anchor set, it is the absence of one.
-              ...(route.anchors
-                ? {
-                    anchors: reverseRouteAnchors(
-                      route.anchors,
-                      route.points.length,
-                    ),
-                  }
-                : {}),
-            }),
           delete: {
             confirmTitle: "Delete route?",
             confirmBody:

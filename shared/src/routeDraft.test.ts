@@ -10,10 +10,15 @@ import {
   insertAnchor,
   moveAnchor,
   nearestSegment,
+  reverseDraft,
   setFiller,
   type RouteDraft,
 } from "./routeDraft.js";
-import type { RoutePoint } from "./routeValidation.js";
+import {
+  reverseRoute,
+  reverseRouteAnchors,
+  type RoutePoint,
+} from "./routeValidation.js";
 
 const A: RoutePoint = [150, -33];
 const B: RoutePoint = [150.01, -33];
@@ -195,5 +200,38 @@ describe("nearestSegment", () => {
     const near = nearestSegment(snapped, [150.0045, -33.001])!;
     expect(near.index).toBe(0);
     expect(near.distanceDegrees).toBeLessThan(0.0005);
+  });
+});
+
+describe("reverseDraft", () => {
+  it("agrees with the saved-route pair — points AND anchor indices", () => {
+    // The invariant that matters: whichever shape you reverse in, the route on
+    // the wire is the same. Reversing the draft and flattening must equal
+    // flattening and reversing, anchors included.
+    const draft: RouteDraft = { anchors: [A, B, C], filler: [fillAB, []] };
+    const points = draftPoints(draft);
+    const reversed = reverseDraft(draft);
+    expect(draftPoints(reversed)).toEqual(reverseRoute(points));
+    expect(draftAnchorIndices(reversed)).toEqual(
+      reverseRouteAnchors(draftAnchorIndices(draft), points.length),
+    );
+  });
+
+  it("keeps each snapped run with the segment it fills", () => {
+    // Reversing the runs' order but not their contents (or the other way
+    // round) still flattens to the right length, so only the geometry catches
+    // it — the filler must come back between the same two anchors.
+    const reversed = reverseDraft(snapped);
+    expect(reversed.anchors).toEqual([B, A]);
+    expect(reversed.filler).toEqual([[...fillAB].reverse()]);
+  });
+
+  it("is its own inverse", () => {
+    const draft: RouteDraft = { anchors: [A, B, C], filler: [fillAB, []] };
+    expect(reverseDraft(reverseDraft(draft))).toEqual(draft);
+  });
+
+  it("has nothing to do to an empty draft", () => {
+    expect(reverseDraft(emptyDraft)).toEqual(emptyDraft);
   });
 });

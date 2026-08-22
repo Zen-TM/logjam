@@ -10,6 +10,19 @@
 // phone the map is the thing being worked in, so the chrome should not eat a
 // third of it. Compact rows: what you have drawn, then what you can do about it.
 //
+// The route tool also carries the two properties of the LINE it is making —
+// direction and colour. They live here rather than in the route's options sheet
+// because both of them edit the route, and one "Edit" that lands you on the map
+// beats three sheet rows that each do a different thing to a line you cannot
+// see. They act on the DRAFT: a reverse or a colour written straight to the
+// stored route would disagree with the open editor until Save, and a discard
+// would silently keep it. Measure has neither — its points are not a line
+// anyone keeps, and a shared panel that grows a tool's private controls is how
+// the shared 90 % rots. Both are absent props for measure, exactly as Save is.
+//
+// The colour palette is a DISCLOSURE, not a permanent strip: ten swatches is a
+// third of a phone's map, and this is a toolbar over the thing being worked in.
+//
 // The two destructive controls are deliberately different verbs:
 //   Clear  — empty the points, stay in the tool. Start the line again.
 //   Trash  — discard and leave. Route draw confirms first (in the caller);
@@ -19,11 +32,13 @@
 //
 // Gain/loss come from the DEM on demand and are simply absent offline — which
 // is the case these tools are built for.
-import { StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
   formatDistanceM,
   routeLengthM,
   MAX_ROUTE_POINTS,
+  TRACK_COLORS,
   type SnapMode,
 } from "@logjam/shared";
 
@@ -43,8 +58,12 @@ export function DraftToolPanel({
   saving,
   onUndo,
   onClear,
+  onRemovePoint,
   onSave,
   onDiscard,
+  onReverse,
+  color,
+  onColorChange,
   snapMode,
   onSnapModeChange,
   allowNetwork = true,
@@ -61,9 +80,22 @@ export function DraftToolPanel({
   saving: boolean;
   onUndo: () => void;
   onClear: () => void;
+  /**
+   * Present only while an anchor is SELECTED — a tap on a handle picks it, and
+   * this is where the picked point's one verb appears. No confirm behind it:
+   * the selection step is what makes the delete deliberate, which is what the
+   * modal it replaced was standing in for.
+   */
+  onRemovePoint?: () => void;
   /** Absent for measure: its points are a question, not an asset. */
   onSave?: () => void;
   onDiscard: () => void;
+  /** Route only — flip the draft's direction. */
+  onReverse?: () => void;
+  /** The draft's colour, once picked. Null draws in the default accent. */
+  color?: string | null;
+  /** Route only — set the colour the draft saves with. */
+  onColorChange?: (color: string) => void;
   snapMode: SnapMode;
   onSnapModeChange: (mode: SnapMode) => void;
   /**
@@ -74,6 +106,7 @@ export function DraftToolPanel({
 }) {
   const { profile, loading } = useElevationProfile(points, { allowNetwork });
   const hasLine = points.length >= 2;
+  const [pickingColor, setPickingColor] = useState(false);
 
   return (
     <View style={styles.bar}>
@@ -108,42 +141,101 @@ export function DraftToolPanel({
 
       <SnapPicker mode={snapMode} onChange={onSnapModeChange} disabled={saving} />
 
+      {/* Two groups in a WRAPPING row: what you do to the line on the left,
+          what the line is and how you leave it on the right. Wrapping rather
+          than a fixed second row, so the transient "Remove point" costs a line
+          of the map only while a point is actually selected. */}
       <View style={styles.actions}>
-        <IconButton
-          icon="corner-up-left"
-          accessibilityLabel="Undo the last change"
-          disabled={!canUndo || saving}
-          onPress={onUndo}
-        />
-        <Button
-          label="Clear"
-          variant="outlineAccent"
-          compact
-          disabled={points.length === 0 || saving}
-          onPress={onClear}
-        />
-        <View style={styles.spacer} />
-        <IconButton
-          icon="trash-2"
-          color={theme.warning}
-          accessibilityLabel={
-            tool === "measure"
-              ? "Clear the measurement and close the tool"
-              : "Discard this route and close the tool"
-          }
-          disabled={saving}
-          onPress={onDiscard}
-        />
-        {onSave ? (
-          <Button
-            label={saving ? "Saving…" : "Save"}
-            icon="check"
-            compact
-            disabled={!hasLine || saving}
-            onPress={onSave}
+        <View style={styles.group}>
+          <IconButton
+            icon="corner-up-left"
+            accessibilityLabel="Undo the last change"
+            disabled={!canUndo || saving}
+            onPress={onUndo}
           />
-        ) : null}
+          <Button
+            label="Clear"
+            variant="outlineAccent"
+            compact
+            disabled={points.length === 0 || saving}
+            onPress={onClear}
+          />
+          {onRemovePoint ? (
+            <Button
+              label="Remove point"
+              variant="outlineAccent"
+              compact
+              disabled={saving}
+              onPress={onRemovePoint}
+            />
+          ) : null}
+        </View>
+        <View style={styles.group}>
+          {onReverse ? (
+            <IconButton
+              icon="repeat"
+              accessibilityLabel="Reverse the direction of this route"
+              disabled={!hasLine || saving}
+              onPress={onReverse}
+            />
+          ) : null}
+          {onColorChange ? (
+            <IconButton
+              icon="droplet"
+              filled
+              color={color ?? theme.accent}
+              accessibilityLabel="Choose the colour of this route"
+              disabled={saving}
+              onPress={() => setPickingColor((open) => !open)}
+            />
+          ) : null}
+          <IconButton
+            icon="trash-2"
+            color={theme.warning}
+            accessibilityLabel={
+              tool === "measure"
+                ? "Clear the measurement and close the tool"
+                : "Discard this route and close the tool"
+            }
+            disabled={saving}
+            onPress={onDiscard}
+          />
+          {onSave ? (
+            <Button
+              label={saving ? "Saving…" : "Save"}
+              icon="check"
+              compact
+              disabled={!hasLine || saving}
+              onPress={onSave}
+            />
+          ) : null}
+        </View>
       </View>
+
+      {onColorChange && pickingColor ? (
+        <View style={styles.palette}>
+          {TRACK_COLORS.map((swatch) => (
+            <Pressable
+              key={swatch}
+              accessibilityRole="button"
+              accessibilityLabel={`Colour ${swatch}`}
+              accessibilityState={{ selected: swatch === color }}
+              disabled={saving}
+              onPress={() => {
+                setPickingColor(false);
+                onColorChange(swatch);
+              }}
+              style={[
+                styles.swatch,
+                { backgroundColor: swatch },
+                swatch === color ? styles.swatchSelected : null,
+              ]}
+            >
+              {swatch === color ? <Text style={styles.swatchTick}>✓</Text> : null}
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -168,6 +260,28 @@ const styles = StyleSheet.create({
   meta: { color: theme.textMuted, fontSize: fontSize.xs, flexShrink: 1 },
   editing: { color: theme.textMuted, fontSize: fontSize.xs },
   note: { color: theme.warning, fontSize: fontSize.xs },
-  actions: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
+  actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: spacing(0.75),
+  },
+  group: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
   spacer: { flex: 1 },
+  palette: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing(1),
+    paddingBottom: spacing(0.25),
+  },
+  swatch: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  swatchSelected: { borderWidth: 2, borderColor: theme.textPrimary },
+  swatchTick: { color: theme.primary, fontWeight: "700" },
 });

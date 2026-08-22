@@ -110,6 +110,7 @@ export function RouteDraftLayer({
   idPrefix,
   draft,
   dotted,
+  color = theme.accent,
   onAnchorDragStart,
   onAnchorDrag,
   onAnchorDragEnd,
@@ -119,6 +120,10 @@ export function RouteDraftLayer({
   /** The draft itself — anchors AND the snapped filler between them. */
   draft: RouteDraft;
   dotted: boolean;
+  /** The ink for the line being drawn. The route tool passes the colour the
+   *  draft will SAVE with, so picking one shows up immediately rather than at
+   *  the next reload; measure has no colour and draws in the accent. */
+  color?: string;
   onAnchorDragStart: (index: number) => void;
   onAnchorDrag: (index: number, point: RoutePoint) => void;
   onAnchorDragEnd: (index: number, point: RoutePoint) => void;
@@ -169,7 +174,7 @@ export function RouteDraftLayer({
             type="line"
             id={`${idPrefix}-line-stroke`}
             style={{
-              lineColor: theme.accent,
+              lineColor: color,
               lineWidth: 3,
               lineCap: "round",
               lineJoin: "round",
@@ -181,7 +186,7 @@ export function RouteDraftLayer({
             type="symbol"
             id={`${idPrefix}-line-arrows`}
             minzoom={ROUTE_ARROW_MIN_ZOOM}
-            style={routeArrowStyle(theme.accent)}
+            style={routeArrowStyle(color)}
           />
         </GeoJSONSource>
       ) : null}

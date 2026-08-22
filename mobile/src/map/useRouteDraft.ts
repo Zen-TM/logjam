@@ -21,6 +21,7 @@ import {
   emptyDraft,
   insertAnchor,
   moveAnchor,
+  reverseDraft,
   setFiller,
   MAX_ROUTE_POINTS,
   type RouteDraft,
@@ -48,6 +49,8 @@ export type RouteDraftHandle = {
   previewAnchorAt: (index: number, point: RoutePoint) => void;
   moveAnchorAt: (index: number, point: RoutePoint) => void;
   deleteAnchorAt: (index: number) => void;
+  /** Flip the direction of the whole draft — anchors, filler and all. */
+  reverse: () => void;
   insertAnchorAt: (segmentIndex: number, point: RoutePoint) => void;
   clear: () => void;
   undo: () => void;
@@ -160,6 +163,10 @@ export function useRouteDraft(): RouteDraftHandle {
       (index: number) => commit((current) => deleteAnchor(current, index)),
       [commit],
     ),
+    // On the DRAFT, not on the stored route: reversing a saved route from
+    // under an open editor would leave the two disagreeing until Save, and a
+    // discard would silently keep the flip. Undoable like any other edit.
+    reverse: useCallback(() => commit(reverseDraft), [commit]),
     insertAnchorAt: useCallback(
       (segmentIndex: number, point: RoutePoint) =>
         commit((current) => insertAnchor(current, segmentIndex, point)),

@@ -75,8 +75,6 @@ describe("assetActions ownership", () => {
     expect(actions.delete).toBeDefined();
     expect(actions.rename).toBeDefined();
     expect(actions.editableRouteId).toBe("r1");
-    expect(actions.reverse).toBeDefined();
-    expect(actions.setColor).toBeDefined();
   });
 
   it("withholds every write verb on a shared route, and keeps the read ones", () => {
@@ -84,8 +82,6 @@ describe("assetActions ownership", () => {
     expect(actions.delete).toBeUndefined();
     expect(actions.rename).toBeUndefined();
     expect(actions.editableRouteId).toBeUndefined();
-    expect(actions.reverse).toBeUndefined();
-    expect(actions.setColor).toBeUndefined();
     // Still viewable: a sharee can fly to it, which is the whole point of it
     // being on their phone.
     expect(actions.locatable).toBe(true);
