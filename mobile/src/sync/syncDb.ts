@@ -33,7 +33,7 @@ import {
  * reset untouched. A change to THEIR shape needs its own migration, and this
  * lever won't do it.
  */
-export const MIRROR_SCHEMA_VERSION = 2;
+export const MIRROR_SCHEMA_VERSION = 3;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 

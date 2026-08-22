@@ -3,10 +3,12 @@
 // S3 leg, no presign/confirm, and no orphan sweeper. See the Route model in
 // schema.prisma for why.
 //
-// Visibility follows canyon-level MEDIA, not waypoints:
-//   - unlinked route  → owner-private;
-//   - linked route    → also visible to everyone the canyon is shared with,
-//                       read-only (view + export, never edit).
+// Visibility has TWO sources, and lib/shareAccess.ts is the only place they
+// are combined:
+//   - unlinked, unshared route → owner-private;
+//   - linked route             → visible to everyone the canyon is shared with;
+//   - directly shared route    → visible to each Share recipient.
+// Either way a non-owner is read-only (view + export, never edit).
 // Non-owned ids are 404, never 403, so a status can't confirm a route exists
 // to someone who can't see it (SEC-001 anti-oracle). A SHAREE attempting a
 // mutation gets 403 — they legitimately see the route, they just can't change
@@ -30,7 +32,19 @@ import {
   parseAnchorsOrNull,
   resolveRouteCanyonId,
 } from "../lib/routeLink";
-import { routeDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
+import {
+  directShareRevokeTombstones,
+  routeDeleteTombstones,
+  writeTombstones,
+} from "../lib/syncTombstones";
+import {
+  deleteSharesFor,
+  directShareeIds,
+  directlySharedIds,
+  getRouteRole,
+  requireShareAccess,
+  requireShareOwner,
+} from "../lib/shareAccess";
 import {
   assertClientIdReplayable,
   parseClientSuppliedId,
@@ -44,34 +58,15 @@ const LIST_TAKE = 500;
 
 const NOT_FOUND = "Route not found";
 
-/** The caller's relationship to a route. Mirrors CanyonRole. */
-type RouteRole = "owner" | "shared" | "none";
-
-type RouteRow = { id: string; ownerId: string; canyonId: string | null };
-
-/**
- * Owner, sharee (via the linked canyon), or neither. A route is only ever
- * visible to a non-owner through the canyon it is linked to, so the share
- * check is a canyon-share check — never re-derived from route state.
- */
-async function getRouteRole(userId: string, route: RouteRow): Promise<RouteRole> {
-  if (route.ownerId === userId) return "owner";
-  if (route.canyonId === null) return "none";
-  const shared = await prisma.canyonShare.count({
-    where: { canyonId: route.canyonId, sharedWithId: userId },
-  });
-  return shared > 0 ? "shared" : "none";
-}
-
 /** Load a route for a mutation, or throw. none → 404, sharee → 403. */
 async function requireOwnedRoute(userId: string, id: string) {
   const route = await prisma.route.findUnique({ where: { id } });
   if (!route) throw new AppError(404, NOT_FOUND);
-  const role = await getRouteRole(userId, route);
-  if (role === "none") throw new AppError(404, NOT_FOUND);
-  if (role === "shared") {
-    throw new AppError(403, "Only the owner can change this route");
-  }
+  requireShareOwner(
+    await getRouteRole(userId, route),
+    "route",
+    "Only the owner can change this route",
+  );
   return route;
 }
 
@@ -81,10 +76,13 @@ async function requireOwnedRoute(userId: string, id: string) {
 // so it never accepts an arbitrary id.
 router.get("/", requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   const user = await resolveUser(req.user!.sub);
+  // Owned, canyon-inherited, or directly shared — the same three-way union
+  // lib/shareAccess.ts resolves for a single row, expressed as a query.
   const where: Prisma.RouteWhereInput = {
     OR: [
       { ownerId: user.id },
       { canyon: { shares: { some: { sharedWithId: user.id } } } },
+      { id: { in: await directlySharedIds(user.id, "route") } },
     ],
   };
   const [rows, total] = await Promise.all([
@@ -105,9 +103,7 @@ router.get("/:id", requireAuth, async (req: AuthenticatedRequest, res: Response)
   const id = getParam(req.params.id);
   const route = await prisma.route.findUnique({ where: { id } });
   if (!route) throw new AppError(404, NOT_FOUND);
-  if ((await getRouteRole(user.id, route)) === "none") {
-    throw new AppError(404, NOT_FOUND);
-  }
+  requireShareAccess(await getRouteRole(user.id, route), "route");
   res.json(route);
 });
 
@@ -246,12 +242,21 @@ router.delete("/:id", requireAuth, async (req: AuthenticatedRequest, res: Respon
     // of the shared canyon record). Read the fan-out BEFORE the delete.
     const shareeIds =
       route.canyonId === null ? [] : await canyonShareeIds(tx, route.canyonId);
+    // Direct recipients likewise — also read before the rows go.
+    const directIds = await directShareeIds(tx, "route", id);
+    // Share.entityId is polymorphic, so Postgres cannot cascade: without this
+    // the rows outlive the route and grant access to a dead (reusable) id.
+    await deleteSharesFor(tx, "route", [id]);
     await tx.route.delete({ where: { id } });
     // Same transaction as the delete (sync tombstone rule).
-    await writeTombstones(
-      tx,
-      routeDeleteTombstones({ ownerId: user.id, routeId: id, shareeIds }),
-    );
+    await writeTombstones(tx, [
+      ...routeDeleteTombstones({ ownerId: user.id, routeId: id, shareeIds }),
+      ...directShareRevokeTombstones({
+        entityType: "route",
+        entityId: id,
+        userIds: directIds,
+      }),
+    ]);
   });
 
   res.status(204).send();

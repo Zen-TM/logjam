@@ -37,6 +37,8 @@ export const SCHEMA_SQL = `
           color         TEXT NOT NULL,
           visible       INTEGER NOT NULL DEFAULT 1,
           path          TEXT NOT NULL,
+          sourcePath    TEXT,
+          sentBy        TEXT,
           west REAL NOT NULL, south REAL NOT NULL,
           east REAL NOT NULL, north REAL NOT NULL,
           featureCount  INTEGER NOT NULL,
@@ -161,4 +163,16 @@ export const ADDED_COLUMNS: { table: string; column: string; definition: string 
   { table: "track_point", column: "speedMps", definition: "REAL" },
   { table: "track_point", column: "headingDeg", definition: "REAL" },
   { table: "track_point", column: "altitudeAccuracyM", definition: "REAL" },
+  // The file the user actually picked, kept beside the GeoJSON derived from
+  // it. The derivation is LOSSY — ImportedFeature.properties keeps only `name`
+  // and `coordTimes`, so <desc>, <sym>, <extensions>, <metadata>, the rte/trk
+  // distinction and multi-trkseg grouping are all gone — which makes a GeoJSON
+  // round trip the wrong thing to hand anyone. Nullable: rows written before
+  // this landed have no original, and their export offers GeoJSON only.
+  { table: "vector_import", column: "sourcePath", definition: "TEXT" },
+  // Username of the friend this import arrived from, when it came in through
+  // "Send a copy" rather than the picker. Provenance only: the file is the
+  // recipient's own from the moment they accept it — editable, permanent, and
+  // not revocable — so this labels the row and grants nothing.
+  { table: "vector_import", column: "sentBy", definition: "TEXT" },
 ];

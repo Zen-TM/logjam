@@ -6,6 +6,7 @@ vi.mock("../services/prisma", () => ({ default: {} }));
 
 import {
   applyWaypointCanyonLinks,
+  serializeWaypointFor,
   snapshotCanyonWaypointVisibility,
   snapshotWaypointVisibility,
   writeWaypointVisibilityLoss,
@@ -262,5 +263,56 @@ describe("snapshotCanyonWaypointVisibility", () => {
     // The carpark survives in Bob's mirror via canyonB; the exit does not.
     expect(revokedUsers(fixture.tombstones, "carpark")).toEqual([]);
     expect(revokedUsers(fixture.tombstones, "exit")).toEqual(["bob"]);
+  });
+});
+
+// Root CLAUDE.md: "Owner-private extends to derived cardinality, not just the
+// rows." The share fan-out is named there explicitly, and the warning attached
+// to it is that a test asserting the LIST is withheld still passes while the
+// COUNT leaks. So these assert the count's absence directly.
+describe("serializeWaypointFor sharedCount (owner-private cardinality)", () => {
+  const OWNER = "user-owner";
+  const SHAREE = "user-sharee";
+  const waypoint = {
+    id: "wp-1",
+    ownerId: OWNER,
+    name: "Carpark",
+    canyonId: null,
+    canyonLinks: [{ canyonId: "canyon-1" }],
+  } as unknown as Parameters<typeof serializeWaypointFor>[0];
+
+  it("gives the owner the count of people they shared it with", () => {
+    const row = serializeWaypointFor(
+      waypoint,
+      OWNER,
+      new Set(),
+      new Map([["wp-1", 3]]),
+    );
+    expect(row).toMatchObject({ syncRole: "owner", sharedCount: 3 });
+  });
+
+  it("reports 0 for an owned waypoint absent from the count map", () => {
+    const row = serializeWaypointFor(waypoint, OWNER, new Set(), new Map());
+    expect(row).toMatchObject({ sharedCount: 0 });
+  });
+
+  it("NEVER sends sharedCount to a recipient, even when a count exists", () => {
+    const row = serializeWaypointFor(
+      waypoint,
+      SHAREE,
+      new Set(["canyon-1"]),
+      new Map([["wp-1", 3]]),
+    );
+    expect(row.syncRole).toBe("shared");
+    // How many OTHER people hold this waypoint is the owner's business.
+    expect(row).not.toHaveProperty("sharedCount");
+  });
+
+  it("OMITS the field entirely when no map is supplied, rather than faking 0", () => {
+    // The write paths have no map to consult. A fabricated 0 would tell the
+    // client a waypoint with three recipients has none; absent means
+    // "unchanged" and only the delta is authoritative.
+    const row = serializeWaypointFor(waypoint, OWNER, new Set());
+    expect(row).not.toHaveProperty("sharedCount");
   });
 });

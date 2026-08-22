@@ -138,6 +138,11 @@ export const SYNC_TABLES: readonly TableSchema[] = [
       canyon_ids_json: "TEXT",
       tags_json: "TEXT",
       sync_role: "TEXT",
+      // Owner rows only: how many people it is directly shared with, for
+      // the Saved row's shared-out badge. NULL on a row shared WITH this
+      // user (the server withholds it — owner-private cardinality) and on
+      // one written by a local create, which has no server answer yet.
+      shared_count: "INTEGER",
       name: "TEXT NOT NULL",
       latitude: "REAL NOT NULL",
       longitude: "REAL NOT NULL",
@@ -165,6 +170,7 @@ export const SYNC_TABLES: readonly TableSchema[] = [
       points_json: "TEXT NOT NULL",
       anchors_json: "TEXT",
       sync_role: "TEXT",
+      shared_count: "INTEGER",
       created_at: "TEXT",
       updated_at: "TEXT",
       extra_json: "TEXT",

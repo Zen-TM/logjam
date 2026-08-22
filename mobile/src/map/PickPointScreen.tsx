@@ -20,7 +20,7 @@
 //     topo, a creek junction on the imagery and a track on the vector map are
 //     three different ways to be sure, and switching between them is the whole
 //     reason this screen is not just a coordinate field.
-//   Your own things — canyons, waypoints, tracks and routes, all on. They are
+//   Your own things — canyons, waypoints and ways, all on. They are
 //     the reference that answers "is this the one I already have?" and "does
 //     this line go where I think it does".
 //   NOT GeoPDFs, and not the topo overlay band. A GeoPDF is an opaque sheet of

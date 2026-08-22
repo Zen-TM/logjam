@@ -45,6 +45,7 @@ import { PickPointScreen } from "./map/PickPointScreen";
 import { setPickedPoint } from "./map/pickedPoint";
 import { ConsentGate } from "./screens/ConsentGate";
 import { FriendsScreen } from "./screens/FriendsScreen";
+import { ReceivedFilesScreen } from "./screens/ReceivedFilesScreen";
 import { MoreScreen } from "./screens/MoreScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { SettingsScreen, type SettingsPage } from "./screens/SettingsScreen";
@@ -174,6 +175,7 @@ type MoreStackParams = {
   MoreTripDetail: { trip: MirrorTrip };
   Account: undefined;
   Friends: undefined;
+  ReceivedFiles: undefined;
   SyncIssues: undefined;
   Settings: undefined;
   // Settings sub-pages. One route each rather than one parameterised route: a
@@ -907,6 +909,7 @@ export function AppShell({
                     onOpenInbox={() => navigation.navigate("Inbox")}
                     onOpenAccount={() => navigation.navigate("Account")}
                     onOpenFriends={() => navigation.navigate("Friends")}
+                    onOpenReceivedFiles={() => navigation.navigate("ReceivedFiles")}
                     onOpenSyncIssues={() => navigation.navigate("SyncIssues")}
                     onOpenSettings={() => navigation.navigate("Settings")}
                   />
@@ -996,6 +999,11 @@ export function AppShell({
               </MoreStack.Screen>
               <MoreStack.Screen name="Friends" options={{ headerShown: false }}>
                 {({ navigation }) => <FriendsScreen onBack={() => navigation.goBack()} />}
+              </MoreStack.Screen>
+              <MoreStack.Screen name="ReceivedFiles" options={{ headerShown: false }}>
+                {({ navigation }) => (
+                  <ReceivedFilesScreen onBack={() => navigation.goBack()} />
+                )}
               </MoreStack.Screen>
               <MoreStack.Screen name="SyncIssues" options={{ headerShown: false }}>
                 {({ navigation }) => <SyncIssuesScreen onBack={() => navigation.goBack()} />}

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
-import type { ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, CanyonMergePolicy, ElevationProfile } from "@logjam/shared";
+import type { ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, CanyonMergePolicy, ElevationProfile, SharableEntityType, FileSendStatus, FileSendSourceKind } from "@logjam/shared";
 import { formatTripCanyonNames } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
@@ -1158,6 +1158,83 @@ export function unshareCanyonWith(
 
 export function getCanyonShares(canyonId: string): Promise<TCanyonShare[]> {
   return apiFetch<TCanyonShare[]>(`/canyons/${canyonId}/shares`);
+}
+
+// ── Direct sharing, non-canyon entities ───────────────────────
+// Waypoints, routes, LiDAR topo jobs and GeoPDF jobs. A live, read-only view
+// the owner can revoke — NOT the same promise as a sent copy below.
+
+export type TEntityShare = {
+  id: string;
+  entityType: SharableEntityType;
+  entityId: string;
+  sharedWith: { id: string; username: string };
+};
+
+export function getEntityShares(
+  entityType: SharableEntityType,
+  entityId: string,
+): Promise<TEntityShare[]> {
+  return apiFetch<TEntityShare[]>(`/shares/${entityType}/${entityId}`);
+}
+
+export function shareEntityWith(
+  entityType: SharableEntityType,
+  entityId: string,
+  sharedWithUserId: string,
+): Promise<void> {
+  return apiFetch<void>(`/shares`, {
+    method: "POST",
+    body: { entityType, entityId, sharedWithUserId },
+  });
+}
+
+export function unshareEntityWith(
+  entityType: SharableEntityType,
+  entityId: string,
+  userId: string,
+): Promise<void> {
+  return apiFetch<void>(`/shares/${entityType}/${entityId}/${userId}`, {
+    method: "DELETE",
+  });
+}
+
+// ── Sent copies (FileSend), recipient side ────────────────────
+// A file a friend handed over. Accepting downloads it and it is then THEIRS —
+// there is no revoking a copy, so nothing here may be worded as if there were.
+// Web has no vector-import feature, so accepting means a browser download, not
+// an import. There is no sender side on web: nothing here holds a local file to
+// send.
+
+export type TFileSendInboxRow = {
+  fileSendId: string;
+  status: FileSendStatus;
+  sourceKind: FileSendSourceKind;
+  filename: string;
+  sizeBytes: number;
+  createdAt: string;
+  expiresAt: string;
+  sentBy: { id: string; username: string };
+};
+
+export function getFileSendInbox(): Promise<TFileSendInboxRow[]> {
+  return apiFetch<TFileSendInboxRow[]>("/file-sends/inbox");
+}
+
+/** Returns a short-lived presigned URL. Accepted rows stay downloadable until
+ *  the send expires, which is what makes a re-download possible after a failed
+ *  transfer (the API flips status when the URL is issued, not when it lands). */
+export function acceptFileSend(
+  fileSendId: string,
+): Promise<{ downloadUrl: string; filename: string }> {
+  return apiFetch<{ downloadUrl: string; filename: string }>(
+    `/file-sends/${fileSendId}/accept`,
+    { method: "POST" },
+  );
+}
+
+export function declineFileSend(fileSendId: string): Promise<void> {
+  return apiFetch<void>(`/file-sends/${fileSendId}/decline`, { method: "POST" });
 }
 
 // ── Sharing audit, per friend (fix 24) ────────────────────────

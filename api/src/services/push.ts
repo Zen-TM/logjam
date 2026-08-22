@@ -28,6 +28,8 @@ const PUSH_TITLES: Record<string, string> = {
   topo_export_complete: "Topo export finished",
   topo_export_skipped: "Auto-export skipped",
   geo_pdf_complete: "GeoPDF finished",
+  item_shared: "Something was shared with you",
+  file_sent: "A friend sent you a file",
 };
 
 const GENERIC_TITLE = "Logjam notification";
@@ -41,6 +43,9 @@ export type PushData = {
   jobId?: string;
   exportId?: string;
   geoPdfJobId?: string;
+  entityType?: string;
+  entityId?: string;
+  fileSendId?: string;
 };
 
 const ALLOWED_DATA_KEYS = new Set([
@@ -51,6 +56,9 @@ const ALLOWED_DATA_KEYS = new Set([
   "jobId",
   "exportId",
   "geoPdfJobId",
+  "entityType",
+  "entityId",
+  "fileSendId",
 ]);
 
 export type ExpoPushMessage = {

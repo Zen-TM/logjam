@@ -4,7 +4,7 @@ import classes from "./CanyonDetailPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import CanyonDialog from "../../dialogs/CanyonDialog";
-import ShareCanyonDialog from "../../dialogs/ShareCanyonDialog";
+import ShareDialog from "../../dialogs/ShareDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
@@ -15,6 +15,7 @@ import {
   deleteCanyon,
   deleteMedia,
   copyCanyon,
+  shareCanyonWith,
   unshareCanyonWith,
   getTripLogs,
   getCanyonDetail,
@@ -595,11 +596,23 @@ function CanyonDetailPanel({
       />
 
       {isOwnedCanyon && (
-        <ShareCanyonDialog
-          canyon={canyon}
+        <ShareDialog
+          title={`Share ${canyon.name}`}
+          blurb={
+            <>
+              Recipients see this canyon&rsquo;s details, canyon-level notes and
+              canyon-level media, and can copy or export it while the share is
+              active. They do <b>not</b> see your trip logs or any per-trip notes
+              or media. Unsharing won&rsquo;t remove copies they&rsquo;ve already
+              made.
+            </>
+          }
           friends={friends}
           open={showShareDialog}
           onClose={() => setShowShareDialog(false)}
+          listShares={() => getCanyonShares(canyon.id)}
+          share={(userId) => shareCanyonWith(canyon.id, userId)}
+          unshare={(userId) => unshareCanyonWith(canyon.id, userId)}
         />
       )}
 

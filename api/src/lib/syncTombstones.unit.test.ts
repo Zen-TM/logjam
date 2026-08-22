@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canyonDeleteTombstones,
+  directShareRevokeTombstones,
   friendshipDeleteTombstones,
   mediaDeleteTombstones,
   routeDeleteTombstones,
@@ -232,5 +233,43 @@ describe("waypointRevokeTombstones", () => {
     expect(waypointRevokeTombstones({ waypointId: "w1", userIds: [] })).toEqual(
       [],
     );
+  });
+});
+
+// Direct sharing's revocation fan-out. The trap this guards: revoking a direct
+// share deletes NOTHING the owner can see, so without these rows the
+// recipient's mirror keeps the waypoint/route forever.
+describe("directShareRevokeTombstones", () => {
+  it("tombstones each losing user, and never the owner", () => {
+    expect(
+      directShareRevokeTombstones({
+        entityType: "route",
+        entityId: "rt-1",
+        userIds: ["u1", "u2"],
+      }),
+    ).toEqual([
+      { userId: "u1", entityType: "route", entityId: "rt-1" },
+      { userId: "u2", entityType: "route", entityId: "rt-1" },
+    ]);
+  });
+
+  it("carries the entity type through, so a waypoint isn't tombstoned as a route", () => {
+    expect(
+      directShareRevokeTombstones({
+        entityType: "waypoint",
+        entityId: "wp-1",
+        userIds: ["u1"],
+      }),
+    ).toEqual([{ userId: "u1", entityType: "waypoint", entityId: "wp-1" }]);
+  });
+
+  it("is empty when nothing was shared — no rows, no writeTombstones call", () => {
+    expect(
+      directShareRevokeTombstones({
+        entityType: "route",
+        entityId: "rt-1",
+        userIds: [],
+      }),
+    ).toEqual([]);
   });
 });

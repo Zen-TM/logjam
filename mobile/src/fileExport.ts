@@ -1,4 +1,5 @@
-// Save a route or a recorded track out of the app as GPX or KML.
+// Save a way — a route or a recorded track — out of the app as GPX or KML,
+// or hand back an imported file exactly as it arrived.
 //
 // Serialisation is shared (shared/src/routeExport.ts for an authored route,
 // shared/src/trackExport.ts for a recording) so the file a phone writes is
@@ -26,6 +27,7 @@ import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import {
   exportFilename,
+  GEOJSON_MIME_TYPE,
   GPX_MIME_TYPE,
   KML_MIME_TYPE,
   routeToGpx,
@@ -110,6 +112,29 @@ export async function exportRoute(
     mimeTypeFor(format),
   );
 }
+
+/**
+ * A file already on the device, written back out unchanged.
+ *
+ * The import path's reason for existing: an imported GPX's GeoJSON is a LOSSY
+ * derivation, so handing one back as "your file" would quietly drop the
+ * descriptions, symbols, extensions and rte/trk distinction the user gave us.
+ * The bytes go out as they came in.
+ */
+export async function exportStoredFile(
+  storedPath: string,
+  filename: string,
+): Promise<string | null> {
+  const content = await FileSystem.readAsStringAsync(`file://${storedPath}`);
+  return saveExportFile(filename, content, mimeTypeForFilename(filename));
+}
+
+const mimeTypeForFilename = (filename: string) => {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".gpx")) return GPX_MIME_TYPE;
+  if (lower.endsWith(".kml")) return KML_MIME_TYPE;
+  return GEOJSON_MIME_TYPE;
+};
 
 /** A recording: `<trk>` / `<gx:Track>`, timestamps and pause gaps preserved. */
 export async function exportTrack(

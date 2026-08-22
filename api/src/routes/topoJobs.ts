@@ -27,6 +27,13 @@ import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota
 import { deleteS3Prefix } from "../lib/s3Cleanup";
 import { logger } from "../lib/logger";
 import { resolveUser as getUser } from "../lib/resolveUser";
+import {
+  deleteSharesFor,
+  directlySharedIds,
+  getJobRole,
+  requireShareAccess,
+  requireShareOwner,
+} from "../lib/shareAccess";
 
 const router = Router();
 
@@ -185,7 +192,11 @@ router.post(
 
     const job = await prisma.topoJob.findUnique({ where: { id: jobId } });
     if (!job) throw new AppError(404, "Job not found");
-    if (job.userId !== user.id) throw new AppError(403, "Access denied");
+    requireShareOwner(
+      await getJobRole(user.id, "topoJob", job),
+      "topoJob",
+      "Only the owner can delete this job",
+    );
     if (job.status !== "uploading") throw new AppError(400, "Job is not awaiting upload");
 
     // Verify the S3 object was actually uploaded
@@ -314,11 +325,18 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
+    // Own jobs, plus jobs shared directly with me (read-only there).
     const jobs = await prisma.topoJob.findMany({
-      where: { userId: user.id },
+      where: {
+        OR: [
+          { userId: user.id },
+          { id: { in: await directlySharedIds(user.id, "topoJob") } },
+        ],
+      },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
+        userId: true,
         status: true,
         name: true,
         footprint: true,
@@ -330,7 +348,15 @@ router.get(
         updatedAt: true,
       },
     });
-    res.json(jobs);
+    // syncRole mirrors the waypoint/route delta convention: a 'shared' job is
+    // read-only on the client. userId itself is dropped — a recipient has no
+    // business learning the owner's internal id from a list row.
+    res.json(
+      jobs.map(({ userId, ...job }) => ({
+        ...job,
+        syncRole: userId === user.id ? "owner" : "shared",
+      })),
+    );
   },
 );
 
@@ -345,10 +371,17 @@ router.get(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
     const jobs = await prisma.topoJob.findMany({
-      where: { userId: user.id, status: "complete" },
+      where: {
+        status: "complete",
+        OR: [
+          { userId: user.id },
+          { id: { in: await directlySharedIds(user.id, "topoJob") } },
+        ],
+      },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
+        userId: true,
         name: true,
         footprint: true,
         createdAt: true,
@@ -394,6 +427,12 @@ router.get(
           createdAt: j.createdAt,
           footprint: j.footprint,
           layers,
+          // Same convention as GET /topo-jobs: a 'shared' overlay is read-only
+          // on the client, which is what lets Saved offer Share/rename/delete
+          // on an owned overlay and withhold them on one shared in. The owner's
+          // internal id is NOT emitted — the role is the whole answer, and a
+          // recipient has no business learning who owns it from a list row.
+          syncRole: j.userId === user.id ? "owner" : "shared",
         };
       }),
     );
@@ -426,7 +465,9 @@ router.get(
       },
     });
     if (!job) throw new AppError(404, "Job not found");
-    if (job.userId !== user.id) throw new AppError(403, "Access denied");
+    // Was a 403, which confirmed the id existed to anyone who guessed it.
+    // shareAccess gives a stranger the same 404 a missing id gets.
+    requireShareAccess(await getJobRole(user.id, "topoJob", job), "topoJob");
     res.json(job);
   },
 );
@@ -446,7 +487,11 @@ router.delete(
     const jobId = getParam(req.params.id);
     const job = await prisma.topoJob.findUnique({ where: { id: jobId } });
     if (!job) throw new AppError(404, "Job not found");
-    if (job.userId !== user.id) throw new AppError(403, "Access denied");
+    requireShareOwner(
+      await getJobRole(user.id, "topoJob", job),
+      "topoJob",
+      "Only the owner can delete this job",
+    );
 
     // A running export is actively reading this job's COGs from
     // outputs/{jobId}/ — refuse until it finishes (no FK on sourceJobIds, so
@@ -520,6 +565,12 @@ router.delete(
           errorMessage: "A source topo job was deleted before the export started.",
         },
       });
+      // Share.entityId is polymorphic, so Postgres cannot cascade: without
+      // this the rows outlive the job and keep it in a recipient's list.
+      // No tombstone — topo jobs are not delta-synced; the recipient's next
+      // GET /topo-jobs simply stops returning it and the client reconciles
+      // its downloaded overlay from that.
+      await deleteSharesFor(tx, "topoJob", [jobId]);
       await tx.topoJob.delete({ where: { id: jobId } });
       await decrementStorageUsed(job.userId, fresh.outputBytes ?? 0n, tx);
     });

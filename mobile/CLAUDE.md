@@ -361,6 +361,103 @@ sharing one render across a block of tiles is the available big win — it is no
 built, because it would have to move the mesh warp's lattice off each tile's own
 `srcRect`, and getting that wrong produces a confidently misplaced map.
 
+## Sharing and sending (2026-08-22)
+
+**TWO VERBS, and they are not variants of each other.** The wording is the
+feature — a user who thinks a sent file can be taken back has been misled by
+the UI, not by the API.
+
+- **Share** — a LIVE, revocable view of a server-backed row the sender still
+  owns: waypoints, routes, LiDAR topo jobs, GeoPDF jobs, and canyons. The
+  recipient can view and export, never edit. `POST /shares` (canyons keep their
+  own `/canyons/:id/share`).
+- **Send a copy** — a FILE handed over. Once accepted it is the recipient's own,
+  editable, permanent, and there is NO revocation: imports, recorded tracks
+  (serialised to GPX at send time) and GeoPDF imports. `POST /file-sends/*`,
+  three-phase like media upload, expiring after `FILE_SEND_TTL_DAYS`.
+
+**Which kind gets which verb lives in `saved/assetActions.ts` and nowhere
+else**, and the matrix has an executable check (`assetActions.test.ts`, "the
+share / send-a-copy verb matrix"). A descriptor withholds a verb rather than a
+screen hiding it — `share` is absent on a row shared WITH you, `sendCopy` is
+absent on an import with no retained original and on an empty recording.
+
+**Every surface renders ONE panel** — `useSharePanel` in `src/sharing/
+SharePanel.tsx`, for both verbs and every kind, canyons included. It returns
+`{ title, body, footer }` (plus the `sharing` state the canyon screen's
+at-a-glance section reads) and the caller spreads those onto the sheet it
+already owns, because a sheet's primary action belongs in `BottomSheet`'s
+pinned `footer` (DESIGN.md §6) and nothing may open a second sheet. Which verb
+it shows follows `target`: `entity`/`canyon` grant a live view (tap acts
+immediately — it is revocable), `copy` ticks a box and waits for the footer
+button (a send cannot be undone). The promise banner states which one it is —
+accent + eye for Share, warning + triangle for Send a copy — above an
+always-present search field and the friend rows. Do not hand-roll a picker.
+
+**The promise is NOT a prop.** Both sentences (`SHARE_BLURB`, and the canyon's
+own, which names notes and photos and says trip logs stay private) live in
+SharePanel.tsx and are chosen by target kind, as is the revoke confirm. A
+canyon is shared from TWO screens — its detail page and the Canyons list's
+options sheet (`CanyonsScreen.tsx`, as a sub-mode of the per-canyon sheet) —
+and a wording argument at each call site is how those drift. The verb ROWS
+carry no subtitle for the same reason: the panel states the promise where the
+user is about to act on it, rather than twice in two voices.
+
+**`useSharing`'s `calls` must be memoised on the item's ids**, and the panel is
+what does it. The hook reloads when they change, so a `calls` rebuilt per
+render would reload forever — and the previous shape (capture the first
+render's calls, never look again) was invisible only while every caller mounted
+the hook alongside its item. The panel mounts ABOVE the item, at screen level,
+so it started on a placeholder and answered every open with "no share target".
+Object-literal `target` props are keyed the same way (`targetKey`): using the
+object itself reset the copy-mode selection on every render, so a tap on a
+friend appeared to do nothing.
+
+**A share verb is DIMMED offline, never hidden** — `useShareRowProps(online)`
+(SharePanel.tsx) is what every Share / Send a copy row spreads, so all six say
+"Needs a connection" (or "Needs an account") in a subtitle and refuse the tap,
+instead of the row disappearing. Sharing is the first thing most saved items
+offer that needs the network at all, so it is the row a user is most likely to
+go looking for and not find. Consequence for LiDAR topos: the verb is withheld
+only on `syncRole === "shared"` — a job we KNOW is someone else's — because an
+overlay rebuilt from a downloaded artifact carries no `syncRole` at all
+(`map/topoOverlays.ts`), and treating unknown as "not yours" is what made the
+verb vanish offline.
+
+**A verb whose panel needs space is rendered INSIDE the sheet that owns the
+verb, never handed to the caller as a callback.** A callback is only as good as
+the caller that remembers to pass it: the Share verb shipped invisible once
+because it was wired into `SavedScreen`'s inline sheet while routes actually
+open `routes/RouteOptionsSheet.tsx`. The render sites are listed in
+`assetActions.ts`'s header — check all of them when adding a verb.
+
+**Imports keep their ORIGINAL BYTES** (`vector_import.sourcePath`) alongside
+the derived GeoJSON, and a send ships the original. GPX → GeoJSON is lossy —
+`ImportedFeature.properties` keeps only `name` and `coordTimes`, so `<desc>`,
+`<sym>`, `<extensions>`, `<metadata>`, the `rte`/`trk` distinction and
+multi-`trkseg` grouping are all discarded — so a round trip through the
+derivation would hand a friend less than the sender has. A KMZ is stored as the
+KML extracted from it (`writeAsStringAsync` is UTF-8 and would corrupt a zip).
+
+**The Saved category is `import`, labelled "Imports"** — renamed from
+`vector` / "GPX & KML" because the tab holds whole FILES that may contain
+points and polygons, and naming it for lines promised something the type does
+not guarantee. **"Way" is the umbrella term for route-or-track** in prose and
+labels only; the `Route` and `Track` types stay distinct everywhere.
+
+**A received copy is labelled `Copy` with "from <sender>" in its subtitle, never
+the `Shared` pill.** On a route that word means live/revocable/read-only; a
+received copy is the recipient's own, editable and permanent, and reusing the
+word for opposite promises is exactly the confusion the two verbs exist to
+prevent.
+
+**`accepted` means the download URL was ISSUED, not that the file arrived.**
+The row flips when accept returns, so a recipient who accepts on a flaky
+connection is `accepted` with no file. Accepted rows stay downloadable until
+the TTL and the inbox offers "Download again"; that is the mitigation, and
+closing the gap properly would need an S3 access-log read or a client confirm
+callback.
+
 ## Battery (field constraint — a flat phone is a navigation failure)
 
 The 2026-08-17 pass. Every rule below is a rule because the code broke it. Where

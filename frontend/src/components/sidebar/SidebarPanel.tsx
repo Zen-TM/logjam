@@ -412,6 +412,7 @@ function SidebarPanel({
         )}
         {activePanel === "geopdfs" && (
           <GeoPdfsPanel
+            friends={friends}
             onOpenGeoPdf={onOpenGeoPdf}
             onOpenGeoPdfWithTemplate={onOpenGeoPdfWithTemplate}
             onEditGeoPdfTemplate={onEditGeoPdfTemplate}
@@ -422,6 +423,7 @@ function SidebarPanel({
         )}
         {activePanel === "lidar" && (
           <LidarPanel
+            friends={friends}
             activeTopoJobs={activeTopoJobs}
             completedTopoJobs={completedTopoJobs}
             topoExports={topoExports}
@@ -523,6 +525,7 @@ function SidebarPanel({
             route={selectedRoute}
             currentUserId={currentUserId}
             ownedCanyons={canyons}
+            friends={friends}
             allRoutes={allRoutes}
             onEdit={onEditRoute}
             onChanged={onRoutesChanged}
@@ -532,6 +535,7 @@ function SidebarPanel({
         )}
         {activePanel === "waypoints" && (
           <WaypointsPanel
+            friends={friends}
             waypoints={waypoints}
             loading={waypointsLoading}
             error={waypointsError}

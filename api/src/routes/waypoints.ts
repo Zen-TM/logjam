@@ -1,11 +1,11 @@
 // Field waypoints (Stage 8 server model for the Stage 7 mobile capture).
 //
-// Visibility follows canyon-level MEDIA, exactly as a linked Route does: an
-// UNLINKED waypoint is owner-private, and one linked to a shared canyon is part
-// of that shared record — sharees may read and export it, never edit it. The
-// decision is derived from lib/canyonAccess.ts, never re-implemented inline
-// (SEC-001), and every LINK change goes through lib/waypointLink.ts, which owns
-// the many-to-many revocation rule.
+// Visibility has TWO sources and lib/shareAccess.ts is the only place they are
+// combined: a waypoint LINKED to a shared canyon is part of that shared record
+// (exactly as a linked Route is), and a waypoint shared DIRECTLY is visible to
+// each Share recipient. An unlinked, unshared waypoint is owner-private. Either
+// way a non-owner may read and export, never edit. Every LINK change goes
+// through lib/waypointLink.ts, which owns the many-to-many revocation rule.
 //
 // Denial statuses follow the house anti-oracle rule: a caller with no path to
 // the waypoint gets 404 (never confirming the id exists), while a SHAREE
@@ -22,7 +22,18 @@ import {
   normalizeWaypointTags,
   validateWaypointPayload,
 } from "@logjam/shared";
-import { waypointDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
+import {
+  directShareRevokeTombstones,
+  waypointDeleteTombstones,
+  writeTombstones,
+} from "../lib/syncTombstones";
+import {
+  deleteSharesFor,
+  directShareeIds,
+  directlySharedIds,
+  getWaypointRole,
+  requireShareOwner,
+} from "../lib/shareAccess";
 import {
   applyWaypointCanyonLinks,
   resolveWaypointCanyonIds,
@@ -73,12 +84,14 @@ async function loadVisibleWaypoint(
   if (waypoint.ownerId === userId) {
     return { waypoint, role: "owner", sharedCanyonIds: new Set() };
   }
-  const sharedCanyonIds = await sharedCanyonIdSet(userId);
-  const visible = waypoint.canyonLinks.some((link) =>
-    sharedCanyonIds.has(link.canyonId),
-  );
+  // The role comes from shareAccess (direct share OR canyon link), never from
+  // re-reading the links here — the two arms must not be able to disagree.
+  const role = await getWaypointRole(userId, waypoint);
   // No path at all → 404, so the status never confirms the id exists.
-  if (!visible) throw new AppError(404, "Waypoint not found");
+  if (role === "none") throw new AppError(404, "Waypoint not found");
+  // Still needed to SCOPE the serialized canyonIds: a directly-shared waypoint
+  // must not leak which canyons the owner filed it under.
+  const sharedCanyonIds = await sharedCanyonIdSet(userId);
   return { waypoint, role: "shared", sharedCanyonIds };
 }
 
@@ -88,9 +101,7 @@ async function requireWaypointOwner(
   id: string,
 ): Promise<WaypointWithLinks> {
   const { waypoint, role } = await loadVisibleWaypoint(userId, id);
-  if (role !== "owner") {
-    throw new AppError(403, "Only the owner can change this waypoint");
-  }
+  requireShareOwner(role, "waypoint", "Only the owner can change this waypoint");
   return waypoint;
 }
 
@@ -119,9 +130,9 @@ router.get(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
     const sharedCanyonIds = await sharedCanyonIdSet(user.id);
-    // Own waypoints, plus those linked to a canyon shared WITH me — the same
-    // visibility canyon-level media has. An unlinked waypoint of another owner
-    // can never match.
+    // Own waypoints, those linked to a canyon shared WITH me (the same
+    // visibility canyon-level media has), and those shared with me directly.
+    // An unlinked, unshared waypoint of another owner can never match.
     const where: Prisma.WaypointWhereInput = {
       OR: [
         { ownerId: user.id },
@@ -130,6 +141,7 @@ router.get(
             some: { canyonId: { in: [...sharedCanyonIds] } },
           },
         },
+        { id: { in: await directlySharedIds(user.id, "waypoint") } },
       ],
     };
     const [rows, total] = await Promise.all([
@@ -296,17 +308,26 @@ router.delete(
     await prisma.$transaction(async (tx) => {
       // Who could see it, captured before the row (and its links) go.
       const viewers = await snapshotWaypointVisibility(tx, [id]);
+      // Direct recipients likewise — also read before the rows go.
+      const directIds = await directShareeIds(tx, "waypoint", id);
+      // Share.entityId is polymorphic, so Postgres cannot cascade: without
+      // this the rows outlive the waypoint and grant access to a dead id.
+      await deleteSharesFor(tx, "waypoint", [id]);
       await tx.waypoint.delete({ where: { id } });
       // Same transaction as the delete (sync tombstone rule). A delete revokes
       // EVERY viewer unconditionally, so this needs no diff — unlike an unlink.
-      await writeTombstones(
-        tx,
-        waypointDeleteTombstones({
+      await writeTombstones(tx, [
+        ...waypointDeleteTombstones({
           ownerId: user.id,
           waypointId: id,
           shareeIds: [...(viewers.get(id) ?? [])],
         }),
-      );
+        ...directShareRevokeTombstones({
+          entityType: "waypoint",
+          entityId: id,
+          userIds: directIds,
+        }),
+      ]);
     });
 
     res.status(204).send();

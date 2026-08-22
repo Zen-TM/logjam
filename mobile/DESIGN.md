@@ -825,6 +825,24 @@ which subsystem is talking.
   delta pull brought it back. The guard belongs where the verbs are declared;
   every surface then inherits it (`assetActions.test.ts` pins it). Copy for the
   absence is `SHARED_READ_ONLY_HINT`, written once.
+- **Picking people is ONE panel, and the promise is the first thing in it.**
+  `useSharePanel` (`src/sharing/SharePanel.tsx`) is what Saved's item sheet,
+  the route sheet, the track sheet, the map's waypoint sheet and the canyon
+  screen all render, in both of its modes — a live revocable Share and a
+  permanent Send a copy. It opens with a tinted banner saying which promise
+  this is (accent + eye, or warning + triangle), then an always-present search
+  field, then the rows: initials avatar, name, and a trailing glyph that is the
+  state of the row (a `+` you tap to grant, a tick you toggle to select). The
+  banner is not decoration — the two verbs are one word apart and only one of
+  them can be undone, so the panel says so before the list rather than after
+  it, and the irreversible one keeps its confirm in a pinned `footer` (§6)
+  while the revocable one acts on the tap. Extend the panel; never hand-roll a
+  second picker.
+  - **Both verbs are DIMMED offline, never withheld** (`useShareRowProps`).
+    They are the first thing most saved items offer that needs a connection, so
+    a row that simply is not there reads as "this kind can't be shared" rather
+    than "not right now" — §10's rule, in the place it is easiest to get wrong,
+    because the honest-looking alternative is to hide a verb that cannot work.
 - **A switch that LOWERS a guard costs an authentication; raising it is free.**
   The app-lock toggle (Settings → Privacy and security) is what stands between someone
   holding this unlocked phone and the canyon coordinates on it, so turning it off

@@ -33,10 +33,13 @@ export type AccountState = "guest" | "linked";
  * own custom fields are all fully local and must never be routed through here.
  */
 export type Capability =
-  /** Per-canyon sharing with another Logjam user. */
+  /** Sharing a canyon, waypoint, route, topo or GeoPDF with another user. */
   | "sharing"
   /** Friend list, requests and search. */
   | "friends"
+  /** Files friends sent you. Needs the network — the list and the download
+   *  both live on the server, and there is no cache worth reading offline. */
+  | "receivedFiles"
   /** Notification inbox. Cache-first once linked, so it reads offline. */
   | "inbox"
   /** Server-rendered LiDAR overlays (GET /topo-jobs/completed-overlays). */
@@ -72,6 +75,7 @@ export type UnavailableReason = "needs-account" | "needs-connection";
 const NEEDS_CONNECTION: Record<Capability, boolean> = {
   sharing: true,
   friends: true,
+  receivedFiles: true,
   inbox: false,
   lidarOverlays: true,
   accountGeoPdf: true,
@@ -110,8 +114,9 @@ export function unavailableReasonText(reason: UnavailableReason): string {
  * for the same reason the two reason strings are.
  */
 const CAPABILITY_LABEL: Record<Capability, string> = {
-  sharing: "Sharing a canyon",
+  sharing: "Sharing",
   friends: "Friends",
+  receivedFiles: "Received files",
   inbox: "The inbox",
   lidarOverlays: "LiDAR overlays",
   accountGeoPdf: "Account GeoPDFs",

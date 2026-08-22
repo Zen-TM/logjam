@@ -1,12 +1,21 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
-import { ChevronDown, Download, Trash2 } from "lucide-react";
+import { ChevronDown, Download, Share2, Trash2 } from "lucide-react";
 import classes from "./GeoPdfsPanel.module.css";
-import { apiFetch, useGeoPdfJobs, deleteGeoPdfJob } from "../../../canyonUtils";
+import {
+  apiFetch,
+  useGeoPdfJobs,
+  deleteGeoPdfJob,
+  getEntityShares,
+  shareEntityWith,
+  unshareEntityWith,
+  type TFriend,
+} from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import { JobRibbonStack, JobRibbon, minutesEta } from "../../feedback/JobRibbon";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import ShareDialog from "../../dialogs/ShareDialog";
 import type { GeoPdfTemplate } from "../../dialogs/GeoPdfDialog";
 
 /** Descriptor for the shared confirm dialog — one delete kind at a time. */
@@ -53,6 +62,7 @@ function GeoPdfsPanel({
   onCreateGeoPdfTemplate,
   refetchTrigger,
   geoPdfJobsRefetch,
+  friends,
 }: {
   onOpenGeoPdf: () => void;
   onOpenGeoPdfWithTemplate: (id: string) => void;
@@ -60,6 +70,8 @@ function GeoPdfsPanel({
   onCreateGeoPdfTemplate: () => void;
   refetchTrigger: number;
   geoPdfJobsRefetch: number;
+  /** Friends a generated GeoPDF can be shared with. */
+  friends: TFriend[];
 }) {
   const toast = useToast();
   const [templates, setTemplates] = useState<GeoPdfTemplate[]>([]);
@@ -77,6 +89,11 @@ function GeoPdfsPanel({
   // generated GeoPDFs. `confirmBusy` disables the dialog while the action runs.
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  // Non-null = the GeoPDF whose share dialog is open, carrying the same label
+  // the row shows so the dialog title matches what was clicked.
+  const [shareJob, setShareJob] = useState<{ id: string; label: string } | null>(
+    null,
+  );
   const { jobs, total: jobsTotal, loading: jobsLoading, error: jobsError, refetch: refetchJobs } = useGeoPdfJobs(true);
 
   useEffect(() => {
@@ -325,26 +342,62 @@ function GeoPdfsPanel({
                       <Download size={14} />
                     </a>
                   )}
-                  <button
-                    className={classes.iconDeleteButton}
-                    onClick={() =>
-                      setPendingDelete({
-                        title: `Delete GeoPDF · ${dateStr}?`,
-                        message:
-                          "This generated GeoPDF will be permanently deleted. This cannot be undone.",
-                        onConfirm: () => handleDeleteJob(job.id),
-                      })
-                    }
-                    title="Delete"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {/* Owner-only. A GeoPDF shared with you is readable and
+                      downloadable but not yours to share on or delete, and the
+                      API answers both with 403 — so the buttons are withheld
+                      rather than offered and refused (the rule RouteDetailPanel
+                      already follows). */}
+                  {job.syncRole === "owner" && (
+                    <>
+                      <button
+                        className={classes.iconDownloadButton}
+                        onClick={() =>
+                          setShareJob({ id: job.id, label: job.title ?? `GeoPDF · ${dateStr}` })
+                        }
+                        title="Share with a friend"
+                      >
+                        <Share2 size={14} />
+                      </button>
+                      <button
+                        className={classes.iconDeleteButton}
+                        onClick={() =>
+                          setPendingDelete({
+                            title: `Delete GeoPDF · ${dateStr}?`,
+                            message:
+                              "This generated GeoPDF will be permanently deleted. This cannot be undone.",
+                            onConfirm: () => handleDeleteJob(job.id),
+                          })
+                        }
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {shareJob && (
+        <ShareDialog
+          title={`Share ${shareJob.label}`}
+          blurb={
+            <>
+              Recipients can view and download this GeoPDF. They cannot delete
+              it, and you can unshare at any time.
+            </>
+          }
+          friends={friends}
+          open
+          onClose={() => setShareJob(null)}
+          listShares={() => getEntityShares("geoPdfJob", shareJob.id)}
+          share={(userId) => shareEntityWith("geoPdfJob", shareJob.id, userId)}
+          unshare={(userId) => unshareEntityWith("geoPdfJob", shareJob.id, userId)}
+        />
+      )}
 
       <ConfirmDialog
         open={pendingDelete != null}

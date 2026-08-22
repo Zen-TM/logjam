@@ -33,6 +33,9 @@ export type GeoJsonPolygonal = GeoJsonPolygon | GeoJsonMultiPolygon;
 /** Per-completed-job overlay payload returned by GET /topo-jobs/completed-overlays. */
 export type CompletedTopoJob = {
   jobId: string;
+  /** Owner vs recipient. The list now returns topos shared WITH the user, and
+   *  they are read-only: no share, no delete, no export-as-your-own. */
+  syncRole: "owner" | "shared";
   name: string | null;
   createdAt: string;
   footprint: GeoJsonPolygonal | null;

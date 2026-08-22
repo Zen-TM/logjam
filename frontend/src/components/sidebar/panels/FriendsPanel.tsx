@@ -8,6 +8,7 @@ import { messageFromError } from "../../../errors/messageFromError";
 import type {
   TFriend,
   TFriendRequest,
+  TFileSendInboxRow,
   TSearchUser,
 } from "../../../canyonUtils";
 import {
@@ -16,6 +17,9 @@ import {
   acceptFriendRequest,
   declineFriendRequest,
   removeFriend,
+  getFileSendInbox,
+  acceptFileSend,
+  declineFileSend,
 } from "../../../canyonUtils";
 
 function FriendsPanel({
@@ -42,6 +46,8 @@ function FriendsPanel({
   } | null>(null);
   // Non-null = the sharing audit for that friend replaces the list (fix 24).
   const [openFriend, setOpenFriend] = useState<TFriend | null>(null);
+  const [inbox, setInbox] = useState<TFileSendInboxRow[]>([]);
+  const [busySendId, setBusySendId] = useState<string | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = useToast();
 
@@ -66,8 +72,58 @@ function FriendsPanel({
   // stays invisible until a full reload.
   useEffect(() => {
     onRefetchFriends();
+    refreshInbox();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function refreshInbox() {
+    getFileSendInbox()
+      .then(setInbox)
+      .catch((err) => {
+        console.error(err);
+      });
+  }
+
+  // A sent copy is the recipient's to keep, so "accept" is a download, not a
+  // subscription — and on web it is ONLY a download: there is no vector-import
+  // feature here to receive it into.
+  //
+  // The API flips the row to `accepted` when it issues the URL, not when the
+  // bytes land, so an accept over a dead connection leaves an accepted row and
+  // no file. Accepted rows stay downloadable until the send expires, which is
+  // what the "Download again" affordance below is for.
+  async function handleAcceptSend(row: TFileSendInboxRow) {
+    setBusySendId(row.fileSendId);
+    try {
+      const { downloadUrl } = await acceptFileSend(row.fileSendId);
+      // The presigned URL carries its own Content-Disposition; a plain anchor
+      // click is enough, and a cross-origin `download` attribute would be
+      // ignored anyway.
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.rel = "noopener";
+      anchor.click();
+      refreshInbox();
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't download that file."));
+    } finally {
+      setBusySendId(null);
+    }
+  }
+
+  async function handleDeclineSend(fileSendId: string) {
+    setBusySendId(fileSendId);
+    try {
+      await declineFileSend(fileSendId);
+      refreshInbox();
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't decline that file."));
+    } finally {
+      setBusySendId(null);
+    }
+  }
 
   async function handleSendFriendRequest(user: TSearchUser) {
     // Guard against a double-click firing two POSTs for the same user: the
@@ -207,6 +263,46 @@ function FriendsPanel({
                 </div>
               ))}
             </div>
+          </>
+        )}
+
+        {inbox.length > 0 && (
+          <>
+            <span className={classes.sectionTitle}>Files sent to you</span>
+            <div className={classes.pendingScrollList}>
+              {inbox.map((row) => (
+                <div key={row.fileSendId} className={classes.friendRow}>
+                  <span className={classes.friendName}>
+                    {row.filename}
+                    <br />
+                    <small>from {row.sentBy.username}</small>
+                  </span>
+                  <div className={classes.friendActions}>
+                    <button
+                      className={classes.acceptButton}
+                      onClick={() => void handleAcceptSend(row)}
+                      disabled={busySendId === row.fileSendId}
+                    >
+                      {row.status === "accepted" ? "Download again" : "Download"}
+                    </button>
+                    {row.status !== "accepted" && (
+                      <button
+                        className={classes.declineButton}
+                        onClick={() => void handleDeclineSend(row.fileSendId)}
+                        disabled={busySendId === row.fileSendId}
+                      >
+                        Decline
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <span className={classes.caption}>
+              These are copies. Downloading keeps the file on your computer —
+              Logjam on the web doesn&rsquo;t import GPX or KML, so open it in
+              the mobile app or another tool.
+            </span>
           </>
         )}
 

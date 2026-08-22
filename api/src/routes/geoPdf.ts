@@ -33,7 +33,15 @@ import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { launchFargateTask } from "../lib/ecsRunTask";
 import { assertHasStorageQuota } from "../lib/storageQuota";
+import { Prisma } from "@prisma/client";
 import { resolveUser as getUser } from "../lib/resolveUser";
+import {
+  deleteSharesFor,
+  directlySharedIds,
+  getJobRole,
+  requireShareAccess,
+  requireShareOwner,
+} from "../lib/shareAccess";
 import { estimateGeoPdfSeconds } from "../lib/runtimeEstimates";
 
 const router = Router();
@@ -111,6 +119,7 @@ async function presignResult(
 function rowToView(
   row: {
     id: string;
+    userId: string;
     status: string;
     config: unknown;
     estimatedSeconds: number | null;
@@ -120,6 +129,7 @@ function rowToView(
     completedAt: Date | null;
   },
   download: { url: string; expiresAt: string } | null,
+  callerId: string,
 ): GeoPdfJobView {
   return {
     id: row.id,
@@ -130,6 +140,7 @@ function rowToView(
     errorMessage: row.errorMessage,
     createdAt: row.createdAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
+    syncRole: row.userId === callerId ? "owner" : "shared",
     downloadUrl: download?.url ?? null,
     downloadExpiresAt: download?.expiresAt ?? null,
   };
@@ -241,6 +252,10 @@ router.post(
       rowToView(
         {
           id: job.id,
+          // The creator IS the owner on this path, so syncRole resolves to
+          // "owner" — but it is passed rather than hardcoded so there is one
+          // rule for the field, not one rule plus an exception.
+          userId: user.id,
           status: "queued",
           config: job.config,
           estimatedSeconds: job.estimatedSeconds,
@@ -250,6 +265,7 @@ router.post(
           completedAt: null,
         },
         null,
+        user.id,
       ),
     );
   },
@@ -261,7 +277,13 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const where = { userId: user.id };
+    // Own jobs, plus jobs shared directly with me (read-only there).
+    const where: Prisma.GeoPdfJobWhereInput = {
+      OR: [
+        { userId: user.id },
+        { id: { in: await directlySharedIds(user.id, "geoPdfJob") } },
+      ],
+    };
     const [rows, total] = await Promise.all([
       prisma.geoPdfJob.findMany({
         where,
@@ -277,6 +299,7 @@ router.get(
           r.status === "completed"
             ? await presignResult(r.resultKey, geoPdfDownloadFilename(r.config, r.createdAt))
             : null,
+          user.id,
         ),
       ),
     );
@@ -296,12 +319,15 @@ router.get(
       where: { id: getParam(req.params.id) },
     });
     if (!row) throw new AppError(404, "GeoPDF job not found");
-    if (row.userId !== user.id) throw new AppError(404, "GeoPDF job not found");
+    // Owner or share recipient; a stranger gets the same 404 a missing id gets.
+    // The presigned download below rides this decision — a sharee may download,
+    // which is the whole point of sharing a rendered PDF.
+    requireShareAccess(await getJobRole(user.id, "geoPdfJob", row), "geoPdfJob");
     const download =
       row.status === "completed"
         ? await presignResult(row.resultKey, geoPdfDownloadFilename(row.config, row.createdAt))
         : null;
-    res.json(rowToView(row, download));
+    res.json(rowToView(row, download, user.id));
   },
 );
 
@@ -315,7 +341,11 @@ router.delete(
       where: { id: getParam(req.params.id) },
     });
     if (!row) throw new AppError(404, "GeoPDF job not found");
-    if (row.userId !== user.id) throw new AppError(404, "GeoPDF job not found");
+    requireShareOwner(
+      await getJobRole(user.id, "geoPdfJob", row),
+      "geoPdfJob",
+      "Only the owner can delete this GeoPDF",
+    );
     if (row.status === "queued" || row.status === "running") {
       throw new AppError(409, "Cannot delete an in-progress GeoPDF job");
     }
@@ -332,6 +362,10 @@ router.delete(
           data: { storageUsedBytes: { decrement: row.resultBytes } },
         });
       }
+      // Share.entityId is polymorphic, so Postgres cannot cascade. No
+      // tombstone: GeoPDF jobs are not delta-synced, so a recipient's next
+      // GET /geo-pdf simply stops returning it.
+      await deleteSharesFor(tx, "geoPdfJob", [row.id]);
       await tx.geoPdfJob.delete({ where: { id: row.id } });
     });
     res.status(204).send();

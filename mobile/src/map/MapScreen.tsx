@@ -2187,7 +2187,7 @@ export function MapScreen({
         case "geoPdf":
           updateGeoPdfImport(focus.reveal.key, { visible: true }).catch(console.error);
           break;
-        case "vector":
+        case "import":
           setVectorImportVisible(focus.reveal.key, true).catch(console.error);
           break;
         case "overlay": {
@@ -3451,7 +3451,7 @@ export function MapScreen({
       ...imports.map((imported) => ({
         key: `import:${imported.id}`,
         icon: "file-plus" as const,
-        hue: assetHue.vector,
+        hue: assetHue.import,
         title: imported.name,
         kindLabel: "Imported file",
         resolveBbox: vectorImportActions(imported).resolveBbox,
@@ -3526,8 +3526,8 @@ export function MapScreen({
     {
       key: "vector-imports",
       icon: "file-plus",
-      hue: assetHue.vector,
-      title: "Imported routes and tracks",
+      hue: assetHue.import,
+      title: "Imported ways",
       count: imports.length,
       value: showVectorImports,
       onChange: setShowVectorImports,

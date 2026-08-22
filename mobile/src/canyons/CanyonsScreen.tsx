@@ -45,6 +45,7 @@ import { canyonHue, fontSize, fontWeight, radius, spacing, surface, theme, withA
 import type { MirrorCanyon } from "../sync/mirrorStore";
 import { deleteCanyonLocal } from "../sync/outbox";
 import { useConnectivity } from "../map/connectivity";
+import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import {
   useMirrorCanyons,
   useMirrorShareCounts,
@@ -118,6 +119,15 @@ export function CanyonsScreen({
   const [sheet, setSheet] = useState<"filters" | null>(null);
   const mapFilter = useCanyonMapFilter();
   const [menuCanyonId, setMenuCanyonId] = useState<string | null>(null);
+  /** The options sheet swaps its verb list for the share panel in place — a
+   *  sub-mode, never a second sheet (DESIGN.md §6). */
+  const [menuMode, setMenuMode] = useState<"actions" | "share">("actions");
+  /** The one way this sheet closes: the sub-mode has to go with it, or the
+   *  next canyon opens straight into the last one's friend picker. */
+  const closeMenu = useCallback(() => {
+    setMenuCanyonId(null);
+    setMenuMode("actions");
+  }, []);
   const [editing, setEditing] = useState<{ canyon: MirrorCanyon | null } | null>(null);
   /**
    * The picker round trip.
@@ -192,10 +202,10 @@ export function CanyonsScreen({
       return;
     }
     setSheet(null);
-    setMenuCanyonId(null);
+    closeMenu();
     setEditing(null);
     setLoggingFor(null);
-  }, []);
+  }, [closeMenu]);
   useFocusEffect(onFocus);
 
   // The viewer's OWN trip tally per canyon, derived locally from the mirrored
@@ -326,6 +336,21 @@ export function CanyonsScreen({
   const filterCount = activeCanyonFilterCount(filters);
   const filtering = filterCount > 0 || search.trim() !== "";
   const menuCanyon = canyons.find((canyon) => canyon.id === menuCanyonId) ?? null;
+  // THE sharing panel, the same one the canyon's own detail screen renders:
+  // a canyon reached from this list must not be a lesser object than one
+  // reached from its page (DESIGN.md §7). Withheld on a canyon shared WITH
+  // this user — re-sharing is the owner's to do, and the API refuses it.
+  const shareRowProps = useShareRowProps(online);
+  const canyonShare = useSharePanel({
+    target:
+      menuCanyon && menuCanyon.syncRole === "owner"
+        ? { kind: "canyon", canyonId: menuCanyon.id }
+        : null,
+    itemLabel: menuCanyon?.name ?? "",
+    online,
+    enabled: menuCanyon != null,
+    active: menuMode === "share",
+  });
 
   // Stable identities so the memoised rows never re-render for a state change
   // that has nothing to do with them (DESIGN.md §9).
@@ -354,7 +379,7 @@ export function CanyonsScreen({
 
   const confirmDelete = useCallback(
     (canyon: MirrorCanyon) => {
-      setMenuCanyonId(null);
+      closeMenu();
       const confirm = canyonDeleteConfirm(canyon.name, tripCounts.get(canyon.id) ?? 0);
       Alert.alert(
         confirm.confirmTitle,
@@ -376,7 +401,7 @@ export function CanyonsScreen({
         ],
       );
     },
-    [fail, info, tripCounts],
+    [closeMenu, fail, info, tripCounts],
   );
 
   if (query.loading && canyons.length === 0) return <LoadingState />;
@@ -518,17 +543,22 @@ export function CanyonsScreen({
           the wrong one. */}
       <BottomSheet
         visible={menuCanyon !== null}
-        onClose={() => setMenuCanyonId(null)}
-        title={menuCanyon?.name ?? ""}
+        onClose={closeMenu}
+        title={
+          menuMode === "share" ? canyonShare.title : (menuCanyon?.name ?? "")
+        }
+        onBack={menuMode === "share" ? () => setMenuMode("actions") : undefined}
       >
-        {menuCanyon ? (
+        {menuMode === "share" ? (
+          canyonShare.body
+        ) : menuCanyon ? (
           <View style={styles.sheetBody}>
             <Row
               icon="book-open"
               title="Open canyon"
               onPress={() => {
                 const canyon = menuCanyon;
-                setMenuCanyonId(null);
+                closeMenu();
                 onOpenCanyon(canyon);
               }}
             />
@@ -537,7 +567,7 @@ export function CanyonsScreen({
               title="Show on map"
               onPress={() => {
                 const canyon = menuCanyon;
-                setMenuCanyonId(null);
+                closeMenu();
                 onShowOnMap(canyon);
               }}
             />
@@ -546,7 +576,7 @@ export function CanyonsScreen({
               title="Log a trip here"
               onPress={() => {
                 const canyon = menuCanyon;
-                setMenuCanyonId(null);
+                closeMenu();
                 setLoggingFor(canyon);
               }}
             />
@@ -557,9 +587,15 @@ export function CanyonsScreen({
                   title="Edit canyon"
                   onPress={() => {
                     const canyon = menuCanyon;
-                    setMenuCanyonId(null);
+                    closeMenu();
                     startEditing(canyon);
                   }}
+                />
+                <Row
+                  icon="share-2"
+                  title="Share"
+                  {...shareRowProps}
+                  onPress={() => setMenuMode("share")}
                 />
                 <Row
                   icon="trash-2"

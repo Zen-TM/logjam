@@ -8,70 +8,74 @@ datasource db {
 }
 
 model User {
-  id                  String           @id @default(uuid())
-  cognitoId           String           @unique @map("cognito_id")
-  username            String           @unique
-  email               String           @unique
-  uiPreferences       Json             @default("{}") @map("ui_preferences")
-  vectorStyle         Json?            @map("vector_style")
-  storageUsedBytes    BigInt           @default(0) @map("storage_used_bytes")
-  storageQuotaBytes   BigInt           @default(5368709120) @map("storage_quota_bytes")
-  monthlyTileQuota    Int              @default(40) @map("monthly_tile_quota")
-  consentedAt         DateTime?        @map("consented_at")
-  consentVersion      String?          @map("consent_version")
-  createdAt           DateTime         @default(now()) @map("created_at")
-  sharedBy            CanyonShare[]    @relation("sharedBy")
-  sharedWith          CanyonShare[]    @relation("sharedWith")
-  canyons             Canyon[]
-  receivedFriendships Friendship[]     @relation("addressee")
-  sentFriendships     Friendship[]     @relation("requester")
-  media               Media[]
-  notifications       Notification[]
-  topoJobs            TopoJob[]
-  topoExportJobs      TopoExportJob[]
-  geoPdfJobs          GeoPdfJob[]
-  tripLogs            TripLog[]
-  geoPdfTemplates     GeoPdfTemplate[]
-  topoTemplates       TopoTemplate[]
-  deviceTokens        DeviceToken[]
-  waypoints           Waypoint[]
-  routes              Route[]
-  syncTombstones      SyncTombstone[]
+  id                   String              @id @default(uuid())
+  cognitoId            String              @unique @map("cognito_id")
+  username             String              @unique
+  email                String              @unique
+  uiPreferences        Json                @default("{}") @map("ui_preferences")
+  vectorStyle          Json?               @map("vector_style")
+  storageUsedBytes     BigInt              @default(0) @map("storage_used_bytes")
+  storageQuotaBytes    BigInt              @default(5368709120) @map("storage_quota_bytes")
+  monthlyTileQuota     Int                 @default(40) @map("monthly_tile_quota")
+  consentedAt          DateTime?           @map("consented_at")
+  consentVersion       String?             @map("consent_version")
+  createdAt            DateTime            @default(now()) @map("created_at")
+  sharedBy             CanyonShare[]       @relation("sharedBy")
+  sharedWith           CanyonShare[]       @relation("sharedWith")
+  canyons              Canyon[]
+  receivedFriendships  Friendship[]        @relation("addressee")
+  sentFriendships      Friendship[]        @relation("requester")
+  media                Media[]
+  notifications        Notification[]
+  topoJobs             TopoJob[]
+  topoExportJobs       TopoExportJob[]
+  geoPdfJobs           GeoPdfJob[]
+  tripLogs             TripLog[]
+  geoPdfTemplates      GeoPdfTemplate[]
+  topoTemplates        TopoTemplate[]
+  deviceTokens         DeviceToken[]
+  waypoints            Waypoint[]
+  routes               Route[]
+  syncTombstones       SyncTombstone[]
+  directSharesSent     Share[]             @relation("directSharedBy")
+  directSharesReceived Share[]             @relation("directSharedWith")
+  fileSends            FileSend[]
+  fileSendsReceived    FileSendRecipient[]
 
   @@map("users")
 }
 
 model Canyon {
-  id               String          @id @default(uuid())
-  ownerId          String          @map("owner_id")
+  id               String           @id @default(uuid())
+  ownerId          String           @map("owner_id")
   name             String
-  altNames         String[]        @default([])
+  altNames         String[]         @default([])
   latitude         Float
   longitude        Float
-  numAbseils       Int?            @map("num_abseils")
-  longestAbseil    Float?          @map("longest_abseil_m")
+  numAbseils       Int?             @map("num_abseils")
+  longestAbseil    Float?           @map("longest_abseil_m")
   notes            String?
-  attributes       Json            @default("{}")
-  createdAt        DateTime        @default(now()) @map("created_at")
-  updatedAt        DateTime        @updatedAt @map("updated_at")
-  forkedFromId     String?         @map("forked_from_id")
-  ropeWikiId       Int?            @map("ropewiki_id")
-  ropeWikiSnapshot Json?           @map("ropewiki_snapshot")
-  vGrade           Int?            @map("v_grade")
-  aGrade           Int?            @map("a_grade")
+  attributes       Json             @default("{}")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  forkedFromId     String?          @map("forked_from_id")
+  ropeWikiId       Int?             @map("ropewiki_id")
+  ropeWikiSnapshot Json?            @map("ropewiki_snapshot")
+  vGrade           Int?             @map("v_grade")
+  aGrade           Int?             @map("a_grade")
   commitment       Int?
   quality          Float?
   hours            Float?
-  importKey        String?         @map("import_key")
-  importBatchId    String?         @map("import_batch_id")
+  importKey        String?          @map("import_key")
+  importBatchId    String?          @map("import_batch_id")
   shares           CanyonShare[]
-  forkedFrom       Canyon?         @relation("CanyonForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
-  forks            Canyon[]        @relation("CanyonForks")
-  owner            User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  forkedFrom       Canyon?          @relation("CanyonForks", fields: [forkedFromId], references: [id], onDelete: SetNull)
+  forks            Canyon[]         @relation("CanyonForks")
+  owner            User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   tripLogLinks     TripLogCanyon[]
   waypointLinks    CanyonWaypoint[]
   /// @deprecated Back-relation for the pending canyon_id contract — see Waypoint.
-  legacyWaypoints  Waypoint[]      @relation("LegacyWaypointCanyon")
+  legacyWaypoints  Waypoint[]       @relation("LegacyWaypointCanyon")
   // At most one — the canyon's route slot. See Route.canyonId.
   route            Route?
 
@@ -504,4 +508,101 @@ model DeviceToken {
 
   @@index([userId])
   @@map("device_tokens")
+}
+
+// Direct, per-item sharing for the things that are not canyons: waypoints,
+// routes, LiDAR topo jobs, GeoPDF jobs. A row is a LIVE, REVOCABLE view of a
+// record the sender still owns — contrast FileSend below, which hands over a
+// copy and cannot be taken back.
+//
+// Canyons keep CanyonShare rather than folding in here: that table is
+// load-bearing in delta sync, notifications and the tombstone builders, and
+// migrating the one share path that already works buys nothing.
+//
+// THE ACCESS DECISION FOR A ROW HERE IS MADE ONLY IN
+// api/src/lib/shareAccess.ts, which unions these rows with the visibility a
+// waypoint or route already inherits from a shared canyon. Two sources of
+// visibility read in two places is exactly how SEC-001 happened.
+//
+// NO FOREIGN KEY to the shared entity — entityType is polymorphic, so Postgres
+// cannot cascade. Every hard-delete of a sharable entity must delete its Share
+// rows in the same transaction (see deleteSharesFor in lib/shareAccess.ts);
+// the guard is shareAccess.unit.test.ts.
+model Share {
+  id           String   @id @default(uuid())
+  // One of SHARABLE_ENTITY_TYPES (shared/src/sharing.ts), validated at the
+  // route. Not a Postgres enum: the vocabulary is read by the API and both
+  // clients, and the TS union is the copy all three already share.
+  entityType   String   @map("entity_type")
+  entityId     String   @map("entity_id")
+  sharedById   String   @map("shared_by_id")
+  sharedWithId String   @map("shared_with_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  sharedBy     User     @relation("directSharedBy", fields: [sharedById], references: [id], onDelete: Cascade)
+  sharedWith   User     @relation("directSharedWith", fields: [sharedWithId], references: [id], onDelete: Cascade)
+
+  // One share per (thing, recipient): a repeat POST is a 409, not a second row.
+  @@unique([entityType, entityId, sharedWithId])
+  // "What of this type is shared with me" — the recipient's list/delta query.
+  @@index([sharedWithId, entityType])
+  // "Who can see this" — the owner's recipient list, and revoke-all on delete.
+  @@index([entityType, entityId])
+  @@map("shares")
+}
+
+// A file handed to friends as a COPY: an imported GPX/KML/GeoJSON, or a
+// recorded track serialised to GPX at send time. NOT a share — once the
+// recipient accepts, the file is theirs, editable, permanent, and there is no
+// live link back. The UI says "Send a copy" for precisely this reason.
+//
+// One row here per SEND (one S3 object, charged to the sender's quota once,
+// however many recipients); one FileSendRecipient row per person.
+//
+// Nothing deletes the object early. Accept and decline move a recipient row to
+// a terminal status and no more: deleting the bytes when the first person
+// responds strands every other recipient of the same send. The object expires
+// by S3 lifecycle rule on the prefix, and the reaper sweeps these rows and
+// refunds the sender's quota.
+model FileSend {
+  id         String              @id @default(uuid())
+  senderId   String              @map("sender_id")
+  // One of FILE_SEND_SOURCE_KINDS — "import" | "track". Feeds the recipient's
+  // provenance line and nothing else.
+  sourceKind String              @map("source_kind")
+  // Display name shown to the recipient before they accept. The one
+  // user-supplied string on a send: length-capped at the route, never logged.
+  filename   String
+  s3Key      String              @map("s3_key")
+  sizeBytes  BigInt              @map("size_bytes")
+  createdAt  DateTime            @default(now()) @map("created_at")
+  // Must stay <= the S3 lifecycle rule's expiry, or a row outlives its bytes
+  // and offers the recipient a download that 404s (FILE_SEND_TTL_DAYS).
+  expiresAt  DateTime            @map("expires_at")
+  sender     User                @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  recipients FileSendRecipient[]
+
+  @@index([senderId])
+  // The reaper's sweep.
+  @@index([expiresAt])
+  @@map("file_sends")
+}
+
+// One recipient of one send.
+//
+// THE DOWNLOAD GATE READS THIS ROW, never the S3 object's existence: one
+// object serves every recipient, so "declined" has to be a fact about the
+// person rather than about the bytes.
+model FileSendRecipient {
+  id          String    @id @default(uuid())
+  fileSendId  String    @map("file_send_id")
+  userId      String    @map("user_id")
+  // One of FILE_SEND_STATUSES — "pending" | "accepted" | "declined".
+  status      String    @default("pending")
+  respondedAt DateTime? @map("responded_at")
+  fileSend    FileSend  @relation(fields: [fileSendId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([fileSendId, userId])
+  @@index([userId, status])
+  @@map("file_send_recipients")
 }

@@ -13,7 +13,6 @@
 // username-only; recipients never see this section at all.
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Clipboard,
   Linking,
@@ -34,17 +33,13 @@ import {
   routeLengthM,
 } from "@logjam/shared";
 
-import {
-  getCanyonShares,
-  getFriends,
-  shareCanyon,
-  unshareCanyon,
-  type CanyonShareRecipient,
-  type Friend,
-} from "../api/friends";
 import { tripTitle } from "../api/tripTitle";
-import { useAccountState } from "../auth/AccountStateContext";
-import { capabilityStatus, unavailableReasonText } from "../auth/capabilities";
+import {
+  RecipientRows,
+  shareRowSubtitle,
+  SharingError,
+} from "../sharing/useSharing";
+import { useSharePanel } from "../sharing/SharePanel";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { useConnectivity } from "../map/connectivity";
 import { MediaStrip } from "../media/MediaStrip";
@@ -74,7 +69,6 @@ import {
   BottomSheet,
   Button,
   EmptyState,
-  ErrorBanner,
   ErrorState,
   HeroHeader,
   IconButton,
@@ -566,8 +560,11 @@ export function CanyonDetailScreen({
  * record and its tombstone still propagate to the sharee's mirror on their next
  * pull. Recipients and the friend picker are username-only (never email).
  *
+ * The state, the panel and the friend picker come from `useSharePanel`, shared
+ * with every other sharing surface; only this at-a-glance section is local.
+ *
  * `openRequest` lets a caller trigger the picker without lifting this
- * component's load/share/unshare state out of it.
+ * component's state out of it.
  */
 function CanyonSharingSection({
   canyonId,
@@ -582,133 +579,43 @@ function CanyonSharingSection({
   openRequest: number;
   onShareRequested: () => void;
 }) {
-  const [recipients, setRecipients] = useState<CanyonShareRecipient[] | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [friends, setFriends] = useState<Friend[] | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      setRecipients(await getCanyonShares(canyonId));
-      setLoadFailed(false);
-    } catch (err) {
-      // The rest of this screen renders offline; sharing needs the network.
-      // Degrade to a note rather than a hard error — never block the read view.
-      // The copy is ours, not the error's: interpolating a server message into a
-      // row is how a canyon name reaches a screenshot (DESIGN.md §11).
-      console.error(err);
-      setLoadFailed(true);
-    }
-  }, [canyonId]);
+  // THE sharing panel, identical to the one Saved, the route sheet, the track
+  // sheet and the map's waypoint sheet render. Only the endpoints (canyons keep
+  // their own — the hybrid share model lives behind them) and the sentence are
+  // canyon-specific, and both are arguments to the same hook.
+  const { title, body, sharing } = useSharePanel({
+    target: { kind: "canyon", canyonId },
+    itemLabel: canyonName,
+    online,
+    // The recipients load with the SECTION, not with the picker: this screen
+    // lists them whether or not the sheet is ever opened. Friends load only
+    // once the sheet is up.
+    active: pickerOpen,
+  });
 
-  const { accountState } = useAccountState();
-  const shareStatus = capabilityStatus("sharing", accountState, online);
-  const canShare = shareStatus.status === "available";
-
-  useEffect(() => {
-    // A guest has no shares to list and no endpoint that would answer.
-    if (canShare) void load();
-  }, [load, canShare]);
-
-  const openPicker = useCallback(async () => {
-    setActionError(null);
+  const openPicker = useCallback(() => {
     setPickerOpen(true);
-    if (friends === null) {
-      try {
-        setFriends(await getFriends());
-      } catch (err) {
-        console.error(err);
-        setActionError(messageFromError(err, "Couldn't load friends."));
-      }
-    }
-  }, [friends]);
+  }, []);
 
   // openRequest starts at 0; only act once the caller has bumped it.
   useEffect(() => {
-    if (openRequest > 0) void openPicker();
+    if (openRequest > 0) openPicker();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);
-
-  const share = useCallback(
-    async (friend: Friend) => {
-      setBusyId(friend.id);
-      setActionError(null);
-      try {
-        await shareCanyon(canyonId, friend.id);
-        await load();
-        setPickerOpen(false);
-      } catch (err) {
-        console.error(err);
-        setActionError(messageFromError(err, "Couldn't share canyon."));
-      } finally {
-        setBusyId(null);
-      }
-    },
-    [canyonId, load],
-  );
-
-  const confirmUnshare = useCallback(
-    (recipient: CanyonShareRecipient) => {
-      Alert.alert(
-        `Stop sharing with ${recipient.sharedWith.username}?`,
-        `They'll lose access to ${canyonName} and its photos.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Unshare",
-            style: "destructive",
-            onPress: () => {
-              setBusyId(recipient.id);
-              setActionError(null);
-              unshareCanyon(canyonId, recipient.sharedWith.id)
-                .then(() => load())
-                .catch((err: unknown) => {
-                  console.error(err);
-                  setActionError(messageFromError(err, "Couldn't unshare canyon."));
-                })
-                .finally(() => setBusyId(null));
-            },
-          },
-        ],
-      );
-    },
-    [canyonId, canyonName, load],
-  );
-
-  const sharedIds = new Set((recipients ?? []).map((r) => r.sharedWith.id));
-  const shareable = (friends ?? []).filter((f) => !sharedIds.has(f.id));
 
   return (
     <>
       <SectionHeader
         label={
-          recipients && recipients.length > 0
-            ? `Shared with · ${recipients.length}`
+          sharing.recipients && sharing.recipients.length > 0
+            ? `Shared with · ${sharing.recipients.length}`
             : "Shared with"
         }
       />
-      {actionError ? <ErrorBanner message={actionError} /> : null}
-      {(recipients ?? []).map((recipient) => (
-        <Row
-          key={recipient.id}
-          icon="user"
-          title={recipient.sharedWith.username}
-          right={
-            busyId === recipient.id ? (
-              <ActivityIndicator color={theme.accent} />
-            ) : (
-              <IconButton
-                icon="x"
-                color={theme.warning}
-                accessibilityLabel={`Stop sharing with ${recipient.sharedWith.username}`}
-                onPress={() => confirmUnshare(recipient)}
-              />
-            )
-          }
-        />
-      ))}
+      <SharingError sharing={sharing} />
+      <RecipientRows sharing={sharing} />
 
       {/* Offline this door is closed WITH THE REASON in place of its subtitle
           (DESIGN.md §10) rather than hidden, so the feature doesn't appear to
@@ -716,50 +623,17 @@ function CanyonSharingSection({
       <Row
         icon="share-2"
         title="Share with a friend"
-        subtitle={
-          shareStatus.status === "unavailable"
-            ? unavailableReasonText(shareStatus.reason)
-            : loadFailed
-              ? "Can't reach your account right now"
-              : recipients === null
-                ? "Loading…"
-                : recipients.length === 0
-                  ? "Not shared with anyone yet"
-                  : undefined
-        }
-        disabled={!canShare || loadFailed}
+        subtitle={shareRowSubtitle(sharing)}
+        disabled={!sharing.canShare || sharing.loadFailed}
         onPress={onShareRequested}
       />
 
       <BottomSheet
         visible={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        title={`Share ${canyonName} with`}
+        title={title}
       >
-        {actionError ? <ErrorBanner message={actionError} /> : null}
-        {friends === null ? (
-          <ActivityIndicator color={theme.accent} style={styles.spinner} />
-        ) : shareable.length === 0 ? (
-          <Text style={styles.muted}>
-            {friends.length === 0
-              ? "No friends yet — add friends from the More tab."
-              : "All your friends already have access."}
-          </Text>
-        ) : (
-          <View style={styles.sheetBody}>
-            {shareable.map((friend) => (
-              <Row
-                key={friend.id}
-                icon="user"
-                title={friend.username}
-                onPress={busyId === null ? () => void share(friend) : undefined}
-                right={
-                  busyId === friend.id ? <ActivityIndicator color={theme.accent} /> : undefined
-                }
-              />
-            ))}
-          </View>
-        )}
+        {body}
       </BottomSheet>
     </>
   );

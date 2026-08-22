@@ -5,10 +5,11 @@
 // it and export it, but edit/delete/link belong to the owner. The API enforces
 // this with a 403; the UI just doesn't offer the controls.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, Trash2, Download, ArrowLeftRight, Link2Off } from "lucide-react";
+import { Pencil, Trash2, Download, ArrowLeftRight, Link2Off, Share2 } from "lucide-react";
 import classes from "./RouteDetailPanel.module.css";
 import shared from "../../../styles/shared.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import ShareDialog from "../../dialogs/ShareDialog";
 import TrackIcon from "../../media/TrackIcon";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -17,8 +18,12 @@ import {
   deleteRoute,
   updateRoute,
   useElevationProfile,
+  getEntityShares,
+  shareEntityWith,
+  unshareEntityWith,
   type TRoute,
   type TCanyon,
+  type TFriend,
 } from "../../../canyonUtils";
 import {
   densifyLine,
@@ -40,6 +45,8 @@ type RouteDetailPanelProps = {
   currentUserId: string | null;
   /** Canyons the user owns, for the link picker. */
   ownedCanyons: TCanyon[];
+  /** Friends this route can be shared with. */
+  friends: TFriend[];
   /** Every route the caller can see, to detect an occupied canyon slot before
    * linking (the displacement is non-destructive but must not be a surprise). */
   allRoutes: TRoute[];
@@ -66,6 +73,7 @@ export default function RouteDetailPanel({
   route,
   currentUserId,
   ownedCanyons,
+  friends,
   allRoutes,
   onEdit,
   onChanged,
@@ -74,6 +82,7 @@ export default function RouteDetailPanel({
 }: RouteDetailPanelProps): React.JSX.Element {
   const toast = useToast();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showShare, setShowShare] = useState(false);
   // Canyon the user picked that already holds a route — pending confirmation.
   const [pendingLink, setPendingLink] = useState<{
     canyonId: string;
@@ -353,6 +362,14 @@ export default function RouteDetailPanel({
             </button>
             <button
               type="button"
+              className={`${shared.btn} ${shared.btnGhost} ${shared.btnSm}`}
+              onClick={() => setShowShare(true)}
+              disabled={busy}
+            >
+              <Share2 size={14} /> Share
+            </button>
+            <button
+              type="button"
               className={`${shared.btn} ${shared.btnOutlineWarning} ${shared.btnSm}`}
               onClick={() => setConfirmDelete(true)}
               disabled={busy}
@@ -362,6 +379,24 @@ export default function RouteDetailPanel({
           </>
         )}
       </div>
+
+      {isOwner && (
+        <ShareDialog
+          title={`Share ${route.name}`}
+          blurb={
+            <>
+              Recipients see this route on their map and can export it. They
+              cannot edit or delete it, and you can unshare at any time.
+            </>
+          }
+          friends={friends}
+          open={showShare}
+          onClose={() => setShowShare(false)}
+          listShares={() => getEntityShares("route", route.id)}
+          share={(userId) => shareEntityWith("route", route.id, userId)}
+          unshare={(userId) => unshareEntityWith("route", route.id, userId)}
+        />
+      )}
 
       <ConfirmDialog
         open={pendingLink !== null}

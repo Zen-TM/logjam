@@ -17,13 +17,21 @@
 // asked for by opening it — never on a collapsed list row. Same rule the mobile
 // list follows (mobile/DESIGN.md §11).
 import { useMemo, useState } from "react";
-import { ChevronDown, Copy, MapPin, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Copy, MapPin, Plus, Share2, Trash2 } from "lucide-react";
 import { WAYPOINT_TAG_SUGGESTIONS, waypointColor } from "@logjam/shared";
 
 import classes from "./WaypointsPanel.module.css";
 import { ErrorBanner } from "../../feedback/ErrorBanner";
 import { filterWaypoints, tagTallies } from "./waypointFilter";
-import type { TCanyon, TWaypoint } from "../../../canyonUtils";
+import ShareDialog from "../../dialogs/ShareDialog";
+import {
+  getEntityShares,
+  shareEntityWith,
+  unshareEntityWith,
+  type TCanyon,
+  type TFriend,
+  type TWaypoint,
+} from "../../../canyonUtils";
 
 type WaypointsPanelProps = {
   waypoints: TWaypoint[];
@@ -33,6 +41,8 @@ type WaypointsPanelProps = {
   onRetry: () => void;
   /** Owned + shared — for naming the canyons a waypoint is filed under. */
   canyons: TCanyon[];
+  /** Friends an owned waypoint can be shared with. */
+  friends: TFriend[];
   currentUserId: string | null;
   /** Which waypoint is expanded; lifted so a map marker click can open one. */
   selectedId: string | null;
@@ -59,6 +69,7 @@ export default function WaypointsPanel({
   error,
   onRetry,
   canyons,
+  friends,
   currentUserId,
   selectedId,
   onSelect,
@@ -91,6 +102,7 @@ export default function WaypointsPanel({
       key={waypoint.id}
       waypoint={waypoint}
       canyons={canyons}
+      friends={friends}
       expanded={waypoint.id === selectedId}
       onToggle={() => onSelect(waypoint.id === selectedId ? null : waypoint.id)}
       onFlyTo={() => onFlyTo(waypoint)}
@@ -179,6 +191,7 @@ export default function WaypointsPanel({
 function WaypointRow({
   waypoint,
   canyons,
+  friends,
   allWaypoints,
   expanded,
   onToggle,
@@ -188,6 +201,7 @@ function WaypointRow({
 }: {
   waypoint: TWaypoint;
   canyons: TCanyon[];
+  friends: TFriend[];
   allWaypoints: TWaypoint[];
   expanded: boolean;
   onToggle: () => void;
@@ -256,6 +270,7 @@ function WaypointRow({
             <EditableDetail
               waypoint={waypoint}
               canyons={canyons}
+              friends={friends}
               allWaypoints={allWaypoints}
               onUpdate={onUpdate}
               onDelete={onDelete}
@@ -270,12 +285,14 @@ function WaypointRow({
 function EditableDetail({
   waypoint,
   canyons,
+  friends,
   allWaypoints,
   onUpdate,
   onDelete,
 }: {
   waypoint: TWaypoint;
   canyons: TCanyon[];
+  friends: TFriend[];
   allWaypoints: TWaypoint[];
   onUpdate: (
     data: Partial<{
@@ -291,6 +308,7 @@ function EditableDetail({
   const [notes, setNotes] = useState(waypoint.notes ?? "");
   const [newTag, setNewTag] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [showShare, setShowShare] = useState(false);
 
   // Seed vocabulary ∪ every tag already in use — there is no tag registry, the
   // vocabulary IS the used values (same contract as trip types).
@@ -451,6 +469,30 @@ function EditableDetail({
           <Trash2 size={12} /> Delete waypoint
         </button>
       )}
+
+      <button
+        type="button"
+        className={classes.cancelButton}
+        onClick={() => setShowShare(true)}
+      >
+        <Share2 size={12} /> Share waypoint
+      </button>
+
+      <ShareDialog
+        title={`Share ${waypoint.name}`}
+        blurb={
+          <>
+            Recipients see this waypoint on their map and can export it. They
+            cannot edit or delete it, and you can unshare at any time.
+          </>
+        }
+        friends={friends}
+        open={showShare}
+        onClose={() => setShowShare(false)}
+        listShares={() => getEntityShares("waypoint", waypoint.id)}
+        share={(userId) => shareEntityWith("waypoint", waypoint.id, userId)}
+        unshare={(userId) => unshareEntityWith("waypoint", waypoint.id, userId)}
+      />
     </>
   );
 }

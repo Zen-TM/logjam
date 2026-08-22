@@ -2,11 +2,24 @@
 // *delete* — as one descriptor per kind (DESIGN.md §7: uniformity is the
 // feature).
 //
-// This exists because there are now TWO places that offer them: the Saved
-// screen's per-item overflow sheet, and the map's layer sheet, where a GeoPDF
-// or a recorded track you can see on the map should be flyable-to and
-// deletable without a trip to another tab. Two copies of "what does Delete
-// mean for a GeoPDF" is how the copy on one of them goes stale.
+// This exists because SEVERAL surfaces offer them, and two copies of "what does
+// Delete mean for a GeoPDF" is how the wording on one of them goes stale.
+//
+// THE RENDER SITES, all of which must be checked when a verb is added here —
+// this list said "TWO places" until 2026-08-22, and a Share verb wired into
+// only the first one shipped invisible: routes in Saved open
+// RouteOptionsSheet, not SavedScreen's inline sheet, so every test passed
+// while the button did not exist in the running app.
+//
+//   saved/SavedScreen.tsx        — imports, GeoPDFs, overlays (inline sheet)
+//   routes/RouteOptionsSheet.tsx — routes, from BOTH Saved and the map
+//   tracks/TrackOptionsSheet.tsx — tracks, from BOTH Saved and the map
+//   map/WaypointSheet.tsx        — waypoints on the map
+//
+// A verb whose panel needs a surface (Share, Send a copy) is rendered INSIDE
+// the sheet that owns the verb, never handed to the caller as a callback: a
+// callback is only as good as the caller that remembers to pass it, which is
+// the same asymmetry in a different shape.
 //
 // Regions and topo overlays are NOT here: they are registry artifacts with no
 // per-item row in the layer sheet, and their verbs stay inline in SavedScreen.
@@ -23,16 +36,24 @@ import {
   updateWaypointLocal,
 } from "../sync/outbox";
 import {
+  type FileSendSourceKind,
+  type SharableEntityType,
   MIN_ROUTE_POINTS,
   ROUTE_NAME_MAX_LENGTH,
+  exportFilename,
+  trackPointsToGpx,
   reverseRoute,
   reverseRouteAnchors,
   simplifyToFit,
   type RoutePoint,
 } from "@logjam/shared";
 import type { MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
-import { exportTrack, type ExportFormat } from "../fileExport";
+import { exportStoredFile, exportTrack } from "../fileExport";
 import { bboxOfPoints, type Bbox } from "./bboxOfPoints";
+// Narrow imports rather than the namespace: this module is pure descriptors
+// and the only filesystem work in it is the track scratch file below.
+import { deleteAsync, writeAsStringAsync } from "expo-file-system/legacy";
+import { scratchFileUri } from "../offline/localStores";
 
 /**
  * Why a shared asset's write verbs are missing, in one sentence — the map's
@@ -89,12 +110,52 @@ export type AssetActions = {
   /** Set a route's colour, from the shared TRACK_COLORS palette. */
   setColor?: (color: string) => Promise<unknown>;
   /**
-   * Write the asset out as a GPX or KML file the user keeps. Resolves with the
-   * filename written, or NULL when the user backed out of the folder picker —
-   * a cancel is not a failure. Routes have their own sheet and do not go
-   * through here; this is the recording's copy of that verb.
+   * Ways to write this asset out as a file the user keeps, in menu order.
+   *
+   * A LIST rather than the old `(format: ExportFormat) => …`, because the two
+   * kinds that offer it no longer agree on what the choices are: a recording
+   * serialises to GPX or KML, while an import hands back the ORIGINAL file it
+   * was made from (whatever format that was) plus its derived GeoJSON. The
+   * surfaces render whatever is here, so neither has to know which kind it is
+   * looking at.
+   *
+   * Each `run` resolves with the filename written, or NULL when the user backed
+   * out of the folder picker — a cancel is not a failure. Routes have their own
+   * sheet and do not go through here.
    */
-  exportFile?: (format: ExportFormat) => Promise<string | null>;
+  exports?: { title: string; run: () => Promise<string | null> }[];
+  /**
+   * The item this asset IS, for the share sheet — present only when the user
+   * owns it, absent on anything shared with them (the API refuses, so offering
+   * the verb would be a lie, exactly as with `delete` and `rename`).
+   *
+   * Identity rather than a callback, for the same reason `editableRouteId` is:
+   * opening a picker is navigation, and navigation lives with the screen. The
+   * two IDs together are what `/shares` needs.
+   *
+   * Only for kinds the API can share — a device-local file (import, GeoPDF
+   * import, region) has nothing on the server to grant access TO, and gets
+   * "Send a copy" instead, which is a different and non-revocable promise.
+   */
+  share?: { entityType: SharableEntityType; entityId: string };
+  /**
+   * Hand this asset to a friend as a FILE, for the kinds that have no server
+   * record to grant access to. A different promise from `share` and not a
+   * weaker version of it: the recipient keeps the copy, can edit it, and the
+   * sender cannot take it back. The two verbs sit next to each other in the
+   * same sheet, so neither may borrow the other's words.
+   *
+   * `resolveFile` yields a file:// URI to upload. A track has no file on disk
+   * — it is serialised on demand — so the temporary it writes comes back with
+   * a `cleanup`; an import's stored original does not, and must not be
+   * deleted.
+   */
+  sendCopy?: {
+    sourceKind: FileSendSourceKind;
+    /** What the recipient sees, extension included. */
+    filename: string;
+    resolveFile: () => Promise<{ uri: string; cleanup?: () => Promise<void> }>;
+  };
 };
 
 export function geoPdfActions(geoPdf: GeoPdfImport): AssetActions {
@@ -102,6 +163,21 @@ export function geoPdfActions(geoPdf: GeoPdfImport): AssetActions {
     locatable: geoPdf.bbox != null,
     resolveBbox: async () => geoPdf.bbox,
     rename: (name) => updateGeoPdfImport(geoPdf.id, { label: name }),
+    // The source PDF, not the MBTiles rendered from it: the recipient's own
+    // import re-derives tiles on their device, and a tile pyramid is not a
+    // thing another app can open. Only once the import finished — a
+    // half-written source.pdf is not a file to hand anyone.
+    ...(geoPdf.state === "ready"
+      ? {
+          sendCopy: {
+            sourceKind: "import" as const,
+            filename: exportFilename(geoPdf.label, "pdf", "import"),
+            resolveFile: async () => ({
+              uri: `file://${geoPdf.dirPath}/source.pdf`,
+            }),
+          },
+        }
+      : {}),
     delete: {
       confirmTitle: "Delete this GeoPDF?",
       confirmBody: "The imported map and its tiles are removed from the device.",
@@ -110,11 +186,66 @@ export function geoPdfActions(geoPdf: GeoPdfImport): AssetActions {
   };
 }
 
+/** Extension of the file the user picked, or null on a row with no original. */
+function sourceFormatOf(imported: VectorImport): "gpx" | "kml" | "geojson" | null {
+  const lower = imported.sourcePath?.toLowerCase();
+  if (!lower) return null;
+  if (lower.endsWith(".gpx")) return "gpx";
+  if (lower.endsWith(".kml")) return "kml";
+  return "geojson";
+}
+
 export function vectorImportActions(imported: VectorImport): AssetActions {
+  const sourceFormat = sourceFormatOf(imported);
+  // The original, when it is not already GeoJSON. A GeoJSON source collapses
+  // into the row below rather than offering the same file twice under two
+  // names — and it is the ORIGINAL that survives the collapse, since the
+  // derived collection is a re-serialisation of it.
+  const originalRow =
+    imported.sourcePath && sourceFormat && sourceFormat !== "geojson"
+      ? [
+          {
+            title: `Export original (${sourceFormat.toUpperCase()})`,
+            run: () =>
+              exportStoredFile(
+                imported.sourcePath!,
+                exportFilename(imported.name, sourceFormat, "import"),
+              ),
+          },
+        ]
+      : [];
   return {
     locatable: true,
     resolveBbox: async () => imported.bbox,
     rename: (name) => renameVectorImport(imported.id, name),
+    exports: [
+      ...originalRow,
+      {
+        title: "Export as GeoJSON",
+        run: () =>
+          exportStoredFile(
+            // A GeoJSON source ships its own bytes; anything else ships the
+            // derived collection, which is all the GeoJSON there is.
+            sourceFormat === "geojson" && imported.sourcePath
+              ? imported.sourcePath
+              : imported.path,
+            exportFilename(imported.name, "geojson", "import"),
+          ),
+      },
+    ],
+    // The ORIGINAL bytes, never the derived GeoJSON — the derivation is lossy
+    // (shared/src/vectorImport.ts keeps only `name` and `coordTimes`), which is
+    // the whole reason originals are kept. A row with no original predates that
+    // and can only offer what it has.
+    ...(imported.sourcePath && sourceFormat
+      ? {
+          sendCopy: {
+            sourceKind: "import" as const,
+            filename: exportFilename(imported.name, sourceFormat, "import"),
+            resolveFile: async () => ({ uri: `file://${imported.sourcePath}` }),
+          },
+        }
+      : {}),
     delete: {
       confirmTitle: "Delete this import?",
       confirmBody: "The imported features are removed from the device and the map.",
@@ -168,6 +299,7 @@ export function routeActions(route: MirrorRoute): AssetActions {
               "The route is removed from every device on your account. This can't be undone.",
             run: () => deleteRouteLocal(route.id),
           },
+          share: { entityType: "route", entityId: route.id },
         }),
   };
 }
@@ -191,6 +323,7 @@ export function waypointActions(waypoint: MirrorWaypoint): AssetActions {
               "The waypoint is removed from every device on your account, and from anyone you shared its canyons with. This can't be undone.",
             run: () => deleteWaypointLocal(waypoint.id),
           },
+          share: { entityType: "waypoint", entityId: waypoint.id },
         }),
   };
 }
@@ -224,11 +357,37 @@ export function trackActions(track: Track): AssetActions {
     // legal, if dull, file.
     ...(track.pointCount > 0
       ? {
-          exportFile: async (format: ExportFormat) =>
-            exportTrack(
-              { name: track.name, points: await listTrackPoints(track.id) },
-              format,
-            ),
+          exports: (["gpx", "kml"] as const).map((format) => ({
+            title: `Save as ${format.toUpperCase()}`,
+            run: async () =>
+              exportTrack(
+                { name: track.name, points: await listTrackPoints(track.id) },
+                format,
+              ),
+          })),
+        }
+      : {}),
+    // Serialised on demand and NOT filed in the sender's own Imports tab: the
+    // GPX exists for this send and nothing else. GPX rather than a choice,
+    // because a recording's timestamps are the point and this is the format
+    // that carries them everywhere.
+    ...(track.pointCount > 0
+      ? {
+          sendCopy: {
+            sourceKind: "track" as const,
+            filename: exportFilename(track.name, "gpx", "track"),
+            resolveFile: async () => {
+              const points = await listTrackPoints(track.id);
+              // SCRATCH_DIR, so the file joins the wipe: a serialised
+              // recording is precise location history (offline/localStores.ts).
+              const uri = await scratchFileUri(`send-${track.id}.gpx`);
+              await writeAsStringAsync(uri, trackPointsToGpx(track.name, points));
+              return {
+                uri,
+                cleanup: () => deleteAsync(uri, { idempotent: true }),
+              };
+            },
+          },
         }
       : {}),
     delete: {

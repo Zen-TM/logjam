@@ -221,3 +221,21 @@ export function waypointRevokeTombstones(args: {
     }),
   );
 }
+
+/** A DIRECT share revoked (DELETE /shares/...), or the entity it pointed at
+ * hard-deleted: the named users lose sight of it, the owner keeps it. The
+ * sibling of waypointRevokeTombstones/routeUnlinkTombstones for the sharing
+ * path that does not run through a canyon.
+ *
+ * Only waypoints and routes appear here because only they ride delta sync —
+ * topo and GeoPDF jobs are fetched through their own list endpoints, so a
+ * revoked job simply stops appearing there and the client reconciles its
+ * downloaded artifact on the next fetch. */
+export function directShareRevokeTombstones(args: {
+  entityType: Extract<SyncEntityType, "waypoint" | "route">;
+  entityId: string;
+  userIds: string[];
+}): TombstoneRow[] {
+  const { entityType, entityId, userIds } = args;
+  return userIds.map((userId): TombstoneRow => ({ userId, entityType, entityId }));
+}

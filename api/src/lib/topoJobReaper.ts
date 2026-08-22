@@ -5,6 +5,7 @@ import { sendPushToUser } from "../services/push";
 import { ecs, s3 } from "../services/awsClients";
 import { decrementStorageUsed } from "./storageQuota";
 import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
+import { sweepExpiredFileSends } from "./fileSendReaper";
 import { createAndLaunchTopoExport } from "./topoExportLauncher";
 import { AppError } from "../middleware/errorHandler";
 import {
@@ -583,6 +584,13 @@ export function startTopoJobReaper(): () => void {
       })
       .catch((err) => {
         logger.error({ err }, "sync_tombstone_sweep_failed");
+      });
+    sweepExpiredFileSends()
+      .then((count) => {
+        if (count > 0) logger.info({ count }, "file_sends_expired");
+      })
+      .catch((err) => {
+        logger.error({ err }, "file_send_sweep_failed");
       });
   };
 

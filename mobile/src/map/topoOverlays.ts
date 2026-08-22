@@ -16,6 +16,21 @@ export type CompletedOverlaysResponse = {
     jobId: string;
     name: string | null;
     createdAt: string;
+    /**
+     * Owner or direct-share recipient, from the server.
+     *
+     * ABSENT on a synthetic job — one reconstructed from a downloaded artifact
+     * when the online list is unavailable (see mergeSavedOverlayJobs). A cold
+     * offline launch genuinely does not know who owns an overlay, and absent
+     * means exactly that rather than guessing.
+     *
+     * So surfaces test for the NEGATIVE — `=== "shared"` withholds an
+     * owner-only verb, unknown does not. Gating on `=== "owner"` instead made
+     * Share disappear from every saved topo the moment the signal went, which
+     * is the vanishing-feature DESIGN.md §10 forbids; the row is shown dimmed
+     * with its reason instead, and the verb needs the network anyway.
+     */
+    syncRole?: "owner" | "shared";
     layers: { name: TopoLayerName; format: TopoLayerFormat; pmtilesUrl: string }[];
   }[];
   expiresAt: string;

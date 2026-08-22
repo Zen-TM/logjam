@@ -25,6 +25,26 @@ module "media" {
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
   }]
+
+  # "Send a copy" handoffs. The bytes are transient by design: one object per
+  # send, collected here rather than by any application delete path.
+  #
+  # 8 days, deliberately ONE MORE than shared/src/sharing.ts's
+  # FILE_SEND_TTL_DAYS = 7. The API reaper sweeps the rows (and refunds the
+  # sender's quota) at day 7; this rule must not remove the object first, or a
+  # recipient gets a download URL for bytes that are already gone. S3 expiry is
+  # asynchronous and only guaranteed to be "at least" N days, so the margin is
+  # what keeps the ordering true. Raising FILE_SEND_TTL_DAYS means raising this
+  # first.
+  #
+  # It also collects abandoned presigns: an upload that never confirmed leaves
+  # an orphan blob with no row, which is why this feature needs no orphan
+  # sweeper of its own.
+  lifecycle_rules = [{
+    id              = "expire-file-sends"
+    prefix          = "file-sends/"
+    expiration_days = 8
+  }]
 }
 
 # Topo job inputs/outputs + CDN-served master tiles. All four PAB flags true

@@ -8,12 +8,14 @@
 //
 // Rename lives in the caller (Saved has a rename form; the map does not need a
 // second one), so it is passed in rather than assumed.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { messageFromError, TRACK_COLORS } from "@logjam/shared";
 
 import { assetHue, fontSize, radius, spacing, theme } from "../theme";
 import { BottomSheet, Row } from "../ui";
+import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
+import { useConnectivity } from "../map/connectivity";
 import { SHARED_READ_ONLY_HINT, routeActions } from "../saved/assetActions";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import { exportRoute, ExportUnsupportedError } from "../fileExport";
@@ -44,9 +46,42 @@ export function RouteOptionsSheet({
 }) {
   const [busy, setBusy] = useState(false);
   const [pickingColor, setPickingColor] = useState(false);
+  // The share panel is rendered HERE rather than handed to the caller: this
+  // one component is both Saved's three-dots sheet and the map's "View
+  // options", and a callback would have given the verb to whichever surface
+  // remembered to pass it. That asymmetry is the bug this sheet exists to
+  // prevent (DESIGN.md §7).
+  const [sharing, setSharing] = useState(false);
 
-  if (!route) return null;
-  const actions = routeActions(route);
+  // Reset every sub-mode when the sheet closes. This component stays mounted
+  // between openings — `visible` is a prop, not a remount — so a sub-mode left
+  // set means the NEXT open lands inside it. That is exactly what shipped:
+  // after sharing once, tapping a route's ⋯ went straight to the share panel
+  // and the verb list could not be reached again.
+  useEffect(() => {
+    if (!visible) {
+      setSharing(false);
+      setPickingColor(false);
+    }
+  }, [visible]);
+  const online = useConnectivity() === "online";
+
+  const shareRowProps = useShareRowProps(online);
+  const actions = route ? routeActions(route) : null;
+  // THE sharing panel — the same one Saved, the waypoint sheet and the canyon
+  // screen render. Called unconditionally; a closed sheet passes a null target
+  // and issues no request.
+  const share = useSharePanel({
+    target: actions?.share
+      ? { kind: "entity", entityType: actions.share.entityType, entityId: actions.share.entityId }
+      : null,
+    itemLabel: route?.name ?? "",
+    online,
+    enabled: visible && route != null,
+    active: sharing,
+  });
+
+  if (!route || !actions) return null;
 
   const run = (action: () => Promise<unknown>, failure: string) => {
     setBusy(true);
@@ -97,7 +132,21 @@ export function RouteOptionsSheet({
   };
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={route.name}>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title={sharing ? share.title : route.name}
+      // The share panel REPLACES the verb list rather than expanding inside it
+      // — same sub-mode shape as the waypoint sheet and the canyon sheet. Shown
+      // inline it pushed "Delete route" below the friend picker, which put a
+      // destructive verb in the middle of a sharing flow and made this the one
+      // surface that looked different from the others.
+      onBack={sharing ? () => setSharing(false) : undefined}
+      footer={sharing ? share.footer : undefined}
+    >
+      {sharing && actions.share ? (
+        share.body
+      ) : (
       <View style={styles.body}>
         {onViewStats ? (
           <Row
@@ -223,6 +272,19 @@ export function RouteOptionsSheet({
             onPress={onRename}
           />
         ) : null}
+        {/* `actions.share` is absent on a route reached through someone else's
+            canyon, so the verb is withheld rather than offered and refused
+            with a 403. The panel behind it is a sub-mode of THIS sheet. */}
+        {actions.share ? (
+          <Row
+            title="Share"
+            icon="share-2"
+            hue={theme.bonus1}
+            {...shareRowProps}
+            disabled={busy || shareRowProps.disabled}
+            onPress={() => setSharing((open) => !open)}
+          />
+        ) : null}
         {/* A route is a synced record, so this removes it from the ACCOUNT —
             "from device" would promise the copy on another phone survives.
             A route shared through someone else's canyon carries no delete
@@ -240,6 +302,7 @@ export function RouteOptionsSheet({
           <Text style={styles.sharedHint}>{SHARED_READ_ONLY_HINT}</Text>
         )}
       </View>
+      )}
     </BottomSheet>
   );
 }

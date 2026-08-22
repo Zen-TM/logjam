@@ -32,6 +32,8 @@ import { assetHue, fontSize, spacing, theme } from "../theme";
 import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { deleteWaypointLocal, updateWaypointLocal } from "../sync/outbox";
 import { waypointActions } from "../saved/assetActions";
+import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
+import { useConnectivity } from "./connectivity";
 import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
 import {
   WaypointCanyonFilter,
@@ -43,7 +45,7 @@ import {
 } from "../waypoints/waypointSheetBodies";
 import type { MirrorWaypoint } from "../sync/mirrorStore";
 
-type Mode = "actions" | "edit" | "tags" | "canyons";
+type Mode = "actions" | "edit" | "tags" | "canyons" | "share";
 
 export function WaypointSheet({
   waypoint,
@@ -79,11 +81,30 @@ export function WaypointSheet({
   onError: (message: string) => void;
 }) {
   const [mode, setMode] = useState<Mode>(autoEdit ? "edit" : "actions");
+  const online = useConnectivity() === "online";
   const [busy, setBusy] = useState(false);
   const [canyonQuery, setCanyonQuery] = useState("");
 
   const canyons = useMirrorCanyons();
   const waypoints = useMirrorWaypoints();
+
+  // One descriptor for every verb on this sheet, same source as Saved
+  // (saved/assetActions.ts). `share` and `delete` are both absent on a
+  // waypoint seen through someone else's canyon.
+  const shareRowProps = useShareRowProps(online);
+  const actions = waypoint ? waypointActions(waypoint) : null;
+  // THE sharing panel, identical to the one Saved, the route sheet and the
+  // canyon screen render — the hook is called unconditionally (a closed sheet
+  // passes a null target and issues no request).
+  const share = useSharePanel({
+    target: actions?.share
+      ? { kind: "entity", entityType: actions.share.entityType, entityId: actions.share.entityId }
+      : null,
+    itemLabel: waypoint?.name ?? "",
+    online,
+    enabled: waypoint != null,
+    active: mode === "share",
+  });
 
   const close = () => {
     setMode("actions");
@@ -198,7 +219,9 @@ export function WaypointSheet({
         ? "Tags"
         : mode === "canyons"
           ? "Linked canyons"
-          : waypoint.name;
+          : mode === "share"
+            ? share.title
+            : waypoint.name;
 
   return (
     <BottomSheet
@@ -208,6 +231,7 @@ export function WaypointSheet({
       // Sub-modes get a back arrow on the title line; the actions list is the
       // top of this sheet and has nowhere to go back to.
       onBack={mode === "actions" ? undefined : () => setMode("actions")}
+      footer={mode === "share" ? share.footer : undefined}
       header={
         mode === "canyons" ? (
           <WaypointSubModeHeader hint="Anyone you share a canyon with can see its waypoints.">
@@ -261,6 +285,21 @@ export function WaypointSheet({
                 disabled={busy}
                 onPress={() => setMode("canyons")}
               />
+              {/* Owner-only by construction: waypointActions omits `share` on
+                  a waypoint reached through someone else's canyon, and this
+                  whole block is already behind `readOnly`. Offered HERE as
+                  well as in Saved because a waypoint is most often looked at
+                  on the map, and a verb that exists on one surface and not the
+                  other is the drift DESIGN.md §7 is about. */}
+              {actions?.share ? (
+                <Row
+                  icon="share-2"
+                  title="Share"
+                  {...shareRowProps}
+                  disabled={busy || shareRowProps.disabled}
+                  onPress={() => setMode("share")}
+                />
+              ) : null}
               <Row
                 icon="trash-2"
                 title="Delete waypoint"
@@ -295,6 +334,8 @@ export function WaypointSheet({
           onWrite={write}
         />
       ) : null}
+
+      {mode === "share" ? share.body : null}
 
       {mode === "canyons" ? (
         <WaypointCanyonsBody

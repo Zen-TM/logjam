@@ -88,6 +88,8 @@ export async function importVectorSource(
   sourceUri: string,
   displayName: string,
   existingCount: number,
+  /** Friend this file arrived from, when it came in through "Send a copy". */
+  sentBy: string | null = null,
 ): Promise<VectorImport> {
   // THE SIZE CHECK LIVES HERE, not in the picker. `importVectorFileFromPicker`
   // was the only caller that checked, and the share sheet ("Open in Logjam")
@@ -103,7 +105,7 @@ export async function importVectorSource(
     scratchName: `vector-incoming-${randomId()}`,
   });
   try {
-    return await parseAndStore(staged.uri, displayName, existingCount);
+    return await parseAndStore(staged.uri, displayName, existingCount, sentBy);
   } finally {
     if (staged.scratch) {
       await FileSystem.deleteAsync(staged.scratch, { idempotent: true }).catch(
@@ -117,6 +119,7 @@ async function parseAndStore(
   sourceUri: string,
   displayName: string,
   existingCount: number,
+  sentBy: string | null,
 ): Promise<VectorImport> {
   let sourceName = displayName;
   let text: string;
@@ -132,12 +135,22 @@ async function parseAndStore(
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
   const id = randomId();
   const fileUri = `${dir}${id}.geojson`;
+  const sourceUriStored = `${dir}${id}-source.${sourceExtension(sourceName)}`;
   const collection = JSON.stringify({
     type: "FeatureCollection",
     features: parsed.features,
   });
   try {
     await FileSystem.writeAsStringAsync(fileUri, collection);
+    // The picked file, kept verbatim beside its derivation. `text` rather than
+    // a copy of `sourceUri` so a KMZ lands as the KML it contains: the staged
+    // original is a zip, `writeAsStringAsync` is UTF-8, and the app has never
+    // read a KMZ's bundled assets anyway — so the text it parsed IS the most
+    // faithful original it can honestly offer.
+    // ponytail: text-only. A KMZ's icons/overlays are dropped, as they always
+    // were; keeping the zip needs a binary-safe SAF write, do it when someone
+    // asks for those assets back.
+    await FileSystem.writeAsStringAsync(sourceUriStored, text);
     const record: VectorImport = {
       id,
       // Fall back to the file name (minus extension) when the file itself
@@ -146,18 +159,38 @@ async function parseAndStore(
       color: pickImportColor(existingCount),
       visible: true,
       path: fileUri.replace(/^file:\/\//, ""),
+      sourcePath: sourceUriStored.replace(/^file:\/\//, ""),
+      sentBy,
       bbox: parsed.bbox,
       featureCount: parsed.features.length,
       positionCount: parsed.stats.positions,
-      sizeBytes: collection.length,
+      // Both files are on the device, so both count against the Saved tab's
+      // capacity meter — reporting only the GeoJSON would under-report by
+      // roughly the size of the file the user picked.
+      sizeBytes: collection.length + text.length,
       createdAt: new Date().toISOString(),
     };
     await insertVectorImport(record);
     return record;
   } catch (err) {
     await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => {});
+    await FileSystem.deleteAsync(sourceUriStored, { idempotent: true }).catch(
+      () => {},
+    );
     throw err;
   }
+}
+
+/**
+ * The stored original's extension: the picked file's own, narrowed to the
+ * three the parser accepts so nothing user-supplied reaches a filesystem path.
+ * A KMZ is stored as the KML extracted from it (see parseAndStore).
+ */
+function sourceExtension(sourceName: string): "gpx" | "kml" | "geojson" {
+  const lower = sourceName.toLowerCase();
+  if (lower.endsWith(".gpx")) return "gpx";
+  if (lower.endsWith(".kml") || lower.endsWith(".kmz")) return "kml";
+  return "geojson";
 }
 
 /**
@@ -183,11 +216,13 @@ export async function importVectorFileFromPicker(
   return { status: "imported", record };
 }
 
-/** Delete an import: row + stored GeoJSON file. */
+/** Delete an import: row + stored GeoJSON + the original it was derived from. */
 export async function deleteVectorImport(id: string): Promise<void> {
   const record = await deleteVectorImportRow(id);
-  if (record) {
-    await FileSystem.deleteAsync(`file://${record.path}`, {
+  if (!record) return;
+  for (const path of [record.path, record.sourcePath]) {
+    if (!path) continue;
+    await FileSystem.deleteAsync(`file://${path}`, {
       idempotent: true,
     }).catch(() => {});
   }

@@ -188,6 +188,14 @@ export function serializeWaypointFor(
   waypoint: WaypointWithLinks,
   userId: string,
   sharedCanyonIds: Set<string>,
+  /**
+   * Direct-share recipient counts, keyed by waypoint id — see shareCountsFor.
+   * OMITTED (not zero) when absent, because the write paths below have no map
+   * to consult and a fabricated 0 would tell the client a waypoint with three
+   * recipients has none. Absent means "unchanged"; only the delta is
+   * authoritative for this field.
+   */
+  sharedCounts?: Map<string, number>,
 ) {
   const { canyonLinks, canyonId: _legacyCanyonId, ...fields } = waypoint;
   const isOwner = waypoint.ownerId === userId;
@@ -196,6 +204,12 @@ export function serializeWaypointFor(
     ...fields,
     syncRole: isOwner ? ("owner" as const) : ("shared" as const),
     canyonIds: isOwner ? ids : ids.filter((id) => sharedCanyonIds.has(id)),
+    // Owner-only: a share fan-out is owner-private derived cardinality (root
+    // CLAUDE.md). Telling a recipient how many OTHER people hold the thing
+    // they were given leaks the owner's sharing behaviour.
+    ...(isOwner && sharedCounts
+      ? { sharedCount: sharedCounts.get(waypoint.id) ?? 0 }
+      : {}),
   };
 }
 

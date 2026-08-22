@@ -213,6 +213,16 @@ export type SyncDeltaWaypointRow = {
   symbol: string | null;
   notes: string | null;
   tags: string[];
+  /**
+   * How many people this waypoint is directly shared with.
+   *
+   * OWNER ROWS ONLY. A share fan-out is owner-private derived cardinality
+   * (root CLAUDE.md): a recipient must not learn how many OTHER people hold
+   * the thing they were given. Optional rather than `number` for a second
+   * reason — the write paths return a row without it, where absent means
+   * "unchanged", not zero.
+   */
+  sharedCount?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -241,6 +251,8 @@ export type SyncDeltaRouteRow = {
    * which reads as "every point is the user's".
    */
   anchors: number[] | null;
+  /** Owner rows only — see SyncDeltaWaypointRow.sharedCount. */
+  sharedCount?: number;
   createdAt: string;
   updatedAt: string;
 };

@@ -50,12 +50,13 @@ const TRIP_KNOWN = [
 
 const WAYPOINT_KNOWN = [
   "id", "ownerId", "canyonIds", "tags", "syncRole", "name", "latitude",
-  "longitude", "elevation", "symbol", "notes", "createdAt", "updatedAt",
+  "longitude", "elevation", "symbol", "notes", "sharedCount",
+  "createdAt", "updatedAt",
 ] as const;
 
 const ROUTE_KNOWN = [
   "id", "ownerId", "canyonId", "name", "color", "points", "syncRole",
-  "createdAt", "updatedAt",
+  "sharedCount", "createdAt", "updatedAt",
 ] as const;
 
 const MEDIA_KNOWN = [
@@ -174,9 +175,9 @@ export async function upsertWaypoint(
   await db.runAsync(
     `INSERT OR REPLACE INTO waypoints
        (id, owner_id, canyon_ids_json, tags_json, sync_role, name, latitude,
-        longitude, elevation, symbol, notes, created_at, updated_at,
-        extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        longitude, elevation, symbol, notes, shared_count, created_at,
+        updated_at, extra_json, dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.ownerId,
     JSON.stringify(row.canyonIds ?? []),
@@ -188,6 +189,7 @@ export async function upsertWaypoint(
     row.elevation,
     row.symbol,
     row.notes,
+    row.sharedCount ?? null,
     row.createdAt,
     row.updatedAt,
     splitExtras(row, WAYPOINT_KNOWN),
@@ -203,8 +205,9 @@ export async function upsertRoute(
   await db.runAsync(
     `INSERT OR REPLACE INTO routes
        (id, owner_id, canyon_id, name, color, points_json, anchors_json,
-        sync_role, created_at, updated_at, extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sync_role, shared_count, created_at, updated_at, extra_json,
+        dirty_fields_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.ownerId,
     row.canyonId,
@@ -213,6 +216,7 @@ export async function upsertRoute(
     JSON.stringify(row.points),
     row.anchors == null ? null : JSON.stringify(row.anchors),
     row.syncRole,
+    row.sharedCount ?? null,
     row.createdAt,
     row.updatedAt,
     splitExtras(row, ROUTE_KNOWN),
@@ -729,6 +733,7 @@ type WaypointRow = {
   elevation: number | null;
   symbol: string | null;
   notes: string | null;
+  shared_count: number | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -746,6 +751,13 @@ export type MirrorWaypoint = {
   elevation: number | null;
   symbol: string | null;
   notes: string | null;
+  /**
+   * People this waypoint is directly shared with. NULL means "not applicable
+   * or not known": a row shared WITH this user (the server withholds the
+   * count) or one created locally and not yet confirmed. 0 means the owner
+   * has shared it with nobody — a real answer, and a different one.
+   */
+  sharedCount: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -779,6 +791,7 @@ function rowToWaypoint(row: WaypointRow): MirrorWaypoint {
     elevation: row.elevation,
     symbol: row.symbol,
     notes: row.notes,
+    sharedCount: row.shared_count,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
   };
@@ -801,6 +814,7 @@ type RouteRow = {
   points_json: string;
   anchors_json: string | null;
   sync_role: string | null;
+  shared_count: number | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -816,6 +830,8 @@ export type MirrorRoute = {
   anchors: number[] | null;
   /** 'shared' means this arrived through a canyon share — read-only here. */
   syncRole: string | null;
+  /** See MirrorWaypoint.sharedCount — null is "not applicable", 0 is "nobody". */
+  sharedCount: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -850,6 +866,7 @@ function rowToRoute(row: RouteRow): MirrorRoute {
     points,
     anchors,
     syncRole: row.sync_role,
+    sharedCount: row.shared_count,
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
   };

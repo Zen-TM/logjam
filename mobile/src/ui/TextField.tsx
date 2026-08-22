@@ -19,6 +19,9 @@ type TextFieldProps = {
   TextInputProps,
   | "secureTextEntry"
   | "autoCapitalize"
+  // A search field wants it off — autocorrect on a username is a wrong guess
+  // the user then has to undo.
+  | "autoCorrect"
   | "autoComplete"
   | "keyboardType"
   | "placeholder"

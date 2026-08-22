@@ -70,6 +70,7 @@ import {
   snapshotWaypointVisibility,
   waypointInclude as waypointSyncInclude,
 } from "../lib/waypointLink";
+import { directlySharedIds, shareCountsFor } from "../lib/shareAccess";
 
 const router = Router();
 
@@ -211,6 +212,13 @@ router.get(
       select: { canyonId: true },
     });
     const sharedCanyonIds = sharedCanyonRows.map((row) => row.canyonId);
+    // Direct per-item shares — the second, independent source of visibility
+    // (lib/shareAccess.ts). Share.entityId is polymorphic so there is no
+    // relation filter to express this with; the ids come back as a set.
+    const [directWaypointIds, directRouteIds] = await Promise.all([
+      directlySharedIds(user.id, "waypoint"),
+      directlySharedIds(user.id, "route"),
+    ]);
 
     // Generic budget-fill step: fetch up to remaining+1 rows for one entity,
     // truncate, record the keyset when the entity didn't drain. Entities run
@@ -302,9 +310,10 @@ router.get(
       (row) => row.updatedAt,
     );
 
-    // Own waypoints, plus waypoints LINKED to a canyon shared with me — the
-    // same visibility canyon-level media and linked routes have. An unlinked
-    // waypoint of another owner can never match.
+    // Own waypoints, waypoints LINKED to a canyon shared with me (the same
+    // visibility canyon-level media and linked routes have), and waypoints
+    // shared with me DIRECTLY. An unlinked, unshared waypoint of another owner
+    // can never match.
     const waypoints = await fill(
       "waypoints",
       (after, take) =>
@@ -319,6 +328,7 @@ router.get(
                       some: { canyonId: { in: sharedCanyonIds } },
                     },
                   },
+                  { id: { in: directWaypointIds } },
                 ],
               },
               keysetWhere("updatedAt", since, after),
@@ -331,9 +341,9 @@ router.get(
       (row) => row.updatedAt,
     );
 
-    // Owned routes, plus routes LINKED to a canyon shared with me — the same
-    // visibility canyon-level media has (a linked route is part of the shared
-    // canyon record). An unlinked route of another owner can never match.
+    // Owned routes, routes LINKED to a canyon shared with me (a linked route is
+    // part of the shared canyon record), and routes shared with me DIRECTLY. An
+    // unlinked, unshared route of another owner can never match.
     const routes = await fill(
       "routes",
       (after, take) =>
@@ -344,6 +354,7 @@ router.get(
                 OR: [
                   { ownerId: user.id },
                   { canyonId: { in: sharedCanyonIds } },
+                  { id: { in: directRouteIds } },
                 ],
               },
               keysetWhere("updatedAt", since, after),
@@ -514,6 +525,21 @@ router.get(
       "sync_delta_served",
     );
 
+    // Direct-share fan-out for the rows on THIS page, two grouped queries
+    // rather than one per row. Scoped to OWNED ids at the call site: a share
+    // count is owner-private derived cardinality (root CLAUDE.md), so a
+    // recipient's copy of a row must not carry one.
+    const [waypointShareCounts, routeShareCounts] = await Promise.all([
+      shareCountsFor(
+        "waypoint",
+        waypoints.filter((row) => row.ownerId === user.id).map((row) => row.id),
+      ),
+      shareCountsFor(
+        "route",
+        routes.filter((row) => row.ownerId === user.id).map((row) => row.id),
+      ),
+    ]);
+
     // Ids delivered as live rows in this same page, by tombstone entityType.
     const liveIds = new Map<string, Set<string>>([
       ["canyon", new Set(canyons.map((row) => row.id))],
@@ -543,15 +569,28 @@ router.get(
         // canyonIds is SCOPED: a sharee given the carpark must not learn which
         // other canyons the owner filed it under.
         waypoints: waypoints.map((waypoint) =>
-          serializeWaypointFor(waypoint, user.id, new Set(sharedCanyonIds)),
+          serializeWaypointFor(
+            waypoint,
+            user.id,
+            new Set(sharedCanyonIds),
+            waypointShareCounts,
+          ),
         ),
         // Geometry travels INLINE (no blob leg). syncRole tells the client
         // whether this is its own route or one seen through a canyon share —
         // a 'shared' route is read-only there.
-        routes: routes.map((route) => ({
-          syncRole: route.ownerId === user.id ? "owner" : "shared",
-          ...route,
-        })),
+        routes: routes.map((route) => {
+          const isOwner = route.ownerId === user.id;
+          return {
+            syncRole: isOwner ? "owner" : "shared",
+            ...route,
+            // Owner-only, for the reason serializeWaypointFor states: the
+            // fan-out of a share is owner-private derived cardinality.
+            ...(isOwner
+              ? { sharedCount: routeShareCounts.get(route.id) ?? 0 }
+              : {}),
+          };
+        }),
         // Metadata only: no S3 keys, no presigned URLs (§7.3 — blobs are
         // fetched via POST /media/download-urls). BigInt → string.
         media: media.map((row) => ({

@@ -176,4 +176,13 @@ export interface GeoPdfJobView {
   completedAt: string | null;
   downloadUrl: string | null; // presigned, set only when status=completed
   downloadExpiresAt: string | null;
+  // Whether this row belongs to the caller or reached them through a direct
+  // share. Same convention as the topo-job and waypoint/route delta rows: a
+  // 'shared' job is READ-ONLY, and the clients use this to withhold Share and
+  // Delete rather than rendering buttons the API answers with 403.
+  //
+  // The owner's user id is deliberately NOT exposed — the role is the whole
+  // answer, and a recipient has no business learning who owns a job from a
+  // list row.
+  syncRole: "owner" | "shared";
 }

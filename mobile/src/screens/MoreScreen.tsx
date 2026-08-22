@@ -54,6 +54,7 @@ export function MoreScreen({
   onOpenInbox,
   onOpenAccount,
   onOpenFriends,
+  onOpenReceivedFiles,
   onOpenSyncIssues,
   onOpenSettings,
 }: {
@@ -61,6 +62,7 @@ export function MoreScreen({
   onOpenInbox: () => void;
   onOpenAccount: () => void;
   onOpenFriends: () => void;
+  onOpenReceivedFiles: () => void;
   onOpenSyncIssues: () => void;
   onOpenSettings: () => void;
 }) {
@@ -156,6 +158,16 @@ export function MoreScreen({
           // the tap (§10).
           onPress={onOpenFriends}
           {...capabilityRowProps("friends", accountState, online)}
+          right={<Trailing />}
+        />
+        {/* Sits beside Friends because that is who files come from. Its own
+            row rather than a section of the Inbox: the Inbox is notifications
+            you read, this is files waiting on a decision that expires. */}
+        <Row
+          icon="download"
+          title="Received files"
+          onPress={onOpenReceivedFiles}
+          {...capabilityRowProps("receivedFiles", accountState, online)}
           right={<Trailing />}
         />
         {/* Sync issues can only exist once something has tried to sync. */}

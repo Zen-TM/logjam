@@ -29,6 +29,7 @@ export * from "./vectorImport.js";
 export * from "./trackStats.js";
 export * from "./apiTypes.js";
 export * from "./sync.js";
+export * from "./sharing.js";
 export * from "./syncClient.js";
 export * from "./waypointTags.js";
 export * from "./waypointValidation.js";

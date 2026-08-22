@@ -560,6 +560,12 @@ router.delete(
       ...geoPdfJobs.map(({ id }) =>
         deleteS3Prefix(TOPO_BUCKET, `exports/geo-pdf/${id}/`),
       ),
+      // Sent copies live in the MEDIA bucket under file-sends/{senderId}/.
+      // One prefix delete covers every send, including one whose upload was
+      // presigned but never confirmed (no row, so the per-id list above would
+      // miss it). The lifecycle rule would eventually collect these; this is
+      // the same belt-and-braces the topo prefixes get.
+      deleteS3Prefix(MEDIA_BUCKET, `file-sends/${user.id}/`),
     ]);
 
     // The user-owned FKs are now ON DELETE CASCADE (see migration
@@ -653,6 +659,7 @@ router.delete(
       prisma.topoJob.deleteMany({ where: { userId: user.id } }),
       prisma.topoExportJob.deleteMany({ where: { userId: user.id } }),
       prisma.geoPdfJob.deleteMany({ where: { userId: user.id } }),
+      prisma.fileSend.deleteMany({ where: { senderId: user.id } }),
       prisma.media.deleteMany({ where: { ownerId: user.id } }),
       // Explicit even though TripLogCanyon.tripLogId cascades on TripLog
       // delete — ARCH-001 convention: never rely solely on an implicit

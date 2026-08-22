@@ -227,8 +227,8 @@ export const assetHue = {
   /** Routes you drew — she-oak green, distinct from the imported-file blue
    *  because a route is authored rather than brought in. */
   route: "#8FBFA6",
-  /** Imported vector files (GPX/KML/GeoJSON) — waterhole blue. */
-  vector: "#86B5D4",
+  /** Imported files (GPX/KML/GeoJSON) — waterhole blue. */
+  import: "#86B5D4",
   /** Recorded tracks — heath flower. */
   track: "#B79EC0",
   /** Marked points — waratah, the warmest hue here without leaving the muted
@@ -273,7 +273,7 @@ export const notificationHue = {
   /** LiDAR topo jobs — as in Saved. */
   topo: assetHue.overlay,
   /** Topo exports — the waterhole blue of the vector files they produce. */
-  export: assetHue.vector,
+  export: assetHue.import,
   /** GeoPDFs — as in Saved. */
   geoPdf: assetHue.geoPdf,
   /** Anything that failed or was skipped. The one place a hue means "look". */

@@ -32,6 +32,8 @@ function coord(value: number): string {
 
 export const GPX_MIME_TYPE = "application/gpx+xml";
 export const KML_MIME_TYPE = "application/vnd.google-earth.kml+xml";
+/** Imports are stored as GeoJSON, so exporting one needs a third type here. */
+export const GEOJSON_MIME_TYPE = "application/geo+json";
 
 /** One `<rte>` of `<rtept>`s. No `<time>`: a drawn route never happened. */
 export function routeToGpx(name: string, points: readonly RoutePoint[]): string {
@@ -67,7 +69,7 @@ export function routeToKml(name: string, points: readonly RoutePoint[]): string 
 }
 
 /**
- * A filename for a route or track export.
+ * A filename for a way or import export.
  *
  * Names are free text and reach a real filesystem here, so anything that could
  * change what a path MEANS — separators, traversal, control characters, a
@@ -76,7 +78,7 @@ export function routeToKml(name: string, points: readonly RoutePoint[]): string 
  */
 export function exportFilename(
   name: string,
-  extension: "gpx" | "kml",
+  extension: "gpx" | "kml" | "geojson" | "pdf",
   fallback = "route",
 ): string {
   const safe = name

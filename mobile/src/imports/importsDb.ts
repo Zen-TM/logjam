@@ -15,6 +15,21 @@ export type VectorImport = {
   visible: boolean;
   /** Absolute app-private path of the stored GeoJSON, scheme-less. */
   path: string;
+  /**
+   * Absolute app-private path of the file the user PICKED, scheme-less, or
+   * null for a row written before originals were kept.
+   *
+   * Exists because `path`'s GeoJSON is a lossy derivation (see
+   * shared/src/vectorImport.ts — only `name` and `coordTimes` survive), so it
+   * is not what anyone should be handed back. The extension carries the source
+   * format; nothing else records it.
+   */
+  sourcePath: string | null;
+  /**
+   * The friend who sent this copy, or null when the user imported it
+   * themselves. Display only — a received copy is the recipient's own file.
+   */
+  sentBy: string | null;
   bbox: [number, number, number, number];
   featureCount: number;
   positionCount: number;
@@ -38,6 +53,8 @@ type ImportRow = {
   color: string;
   visible: number;
   path: string;
+  sourcePath: string | null;
+  sentBy: string | null;
   west: number;
   south: number;
   east: number;
@@ -55,6 +72,8 @@ function rowToImport(row: ImportRow): VectorImport {
     color: row.color,
     visible: row.visible !== 0,
     path: row.path,
+    sourcePath: row.sourcePath,
+    sentBy: row.sentBy,
     bbox: [row.west, row.south, row.east, row.north],
     featureCount: row.featureCount,
     positionCount: row.positionCount,
@@ -75,14 +94,16 @@ export async function insertVectorImport(record: VectorImport): Promise<void> {
   const db = await getOfflineDb();
   await db.runAsync(
     `INSERT INTO vector_import
-       (id, name, color, visible, path, west, south, east, north,
-        featureCount, positionCount, sizeBytes, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, name, color, visible, path, sourcePath, sentBy, west, south, east,
+        north, featureCount, positionCount, sizeBytes, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     record.id,
     record.name,
     record.color,
     record.visible ? 1 : 0,
     record.path,
+    record.sourcePath,
+    record.sentBy,
     record.bbox[0],
     record.bbox[1],
     record.bbox[2],

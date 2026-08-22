@@ -1,9 +1,16 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
 import { Switch } from "@mui/material";
-import { ChevronDown, Lock, Download, Trash2 } from "lucide-react";
+import { ChevronDown, Lock, Download, Share2, Trash2 } from "lucide-react";
 import classes from "./LidarPanel.module.css";
-import { apiFetch, deleteTopoExport } from "../../../canyonUtils";
+import {
+  apiFetch,
+  deleteTopoExport,
+  getEntityShares,
+  shareEntityWith,
+  unshareEntityWith,
+  type TFriend,
+} from "../../../canyonUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import { JobRibbonStack, JobRibbon, minutesEta } from "../../feedback/JobRibbon";
@@ -16,6 +23,7 @@ import VectorContoursForm from "./vectorStyles/VectorContoursForm";
 import VectorFeaturesForm from "./vectorStyles/VectorFeaturesForm";
 import VectorLabelSizeForm from "./vectorStyles/VectorLabelSizeForm";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import ShareDialog from "../../dialogs/ShareDialog";
 import type { VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
 
 /** Descriptor for the shared confirm dialog — one delete kind at a time. */
@@ -67,6 +75,7 @@ const switchSx = (color: string) => ({
 function LidarPanel({
   activeTopoJobs,
   completedTopoJobs,
+  friends,
   topoExports,
   topoExportsTotal,
   onRefetchTopoExports,
@@ -84,6 +93,8 @@ function LidarPanel({
 }: {
   activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
+  /** Friends a completed topo can be shared with. */
+  friends: TFriend[];
   topoExports: TopoExportJobView[];
   topoExportsTotal: number | null;
   onRefetchTopoExports: () => void;
@@ -113,6 +124,11 @@ function LidarPanel({
   // Single shared delete-confirmation dialog, reused for templates, topo jobs,
   // and exports. `confirmBusy` disables the dialog while the action runs.
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  // Non-null = the topo whose share dialog is open, with the label already
+  // resolved (the row computes it from name-or-date and we want the same words).
+  const [shareJob, setShareJob] = useState<{ id: string; label: string } | null>(
+    null,
+  );
   const [confirmBusy, setConfirmBusy] = useState(false);
 
   // Vector styles accordion — controlled by App; edits apply live to the map
@@ -479,6 +495,10 @@ function LidarPanel({
               });
               const label = job.name ?? dateStr;
               const subtitle = job.name ? dateStr : null;
+              // A topo shared WITH this user is read-only: the API refuses the
+              // write, so the UI must not offer it (same rule RouteDetailPanel
+              // states for shared routes).
+              const isOwner = job.syncRole === "owner";
               return (
                 <div key={job.jobId} className={classes.jobItem}>
                   <Switch
@@ -508,20 +528,31 @@ function LidarPanel({
                   >
                     Export
                   </button>
-                  <button
-                    className={classes.iconDeleteButton}
-                    onClick={() =>
-                      setPendingDelete({
-                        title: `Delete “${label}”?`,
-                        message:
-                          "This LiDAR topo will be permanently deleted. This cannot be undone.",
-                        onConfirm: () => handleDeleteJob(job.jobId),
-                      })
-                    }
-                    title="Delete LiDAR topo"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {isOwner && (
+                    <button
+                      className={classes.actionButton}
+                      onClick={() => setShareJob({ id: job.jobId, label })}
+                      title="Share with a friend"
+                    >
+                      <Share2 size={14} />
+                    </button>
+                  )}
+                  {isOwner && (
+                    <button
+                      className={classes.iconDeleteButton}
+                      onClick={() =>
+                        setPendingDelete({
+                          title: `Delete “${label}”?`,
+                          message:
+                            "This LiDAR topo will be permanently deleted. This cannot be undone.",
+                          onConfirm: () => handleDeleteJob(job.jobId),
+                        })
+                      }
+                      title="Delete LiDAR topo"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -615,6 +646,25 @@ function LidarPanel({
         job={exportJob}
         onExportQueued={onRefetchTopoExports}
       />
+
+      {shareJob && (
+        <ShareDialog
+          title={`Share ${shareJob.label}`}
+          blurb={
+            <>
+              Recipients can view and download this LiDAR topo. They cannot
+              delete or re-export it as their own, and you can unshare at any
+              time.
+            </>
+          }
+          friends={friends}
+          open
+          onClose={() => setShareJob(null)}
+          listShares={() => getEntityShares("topoJob", shareJob.id)}
+          share={(userId) => shareEntityWith("topoJob", shareJob.id, userId)}
+          unshare={(userId) => unshareEntityWith("topoJob", shareJob.id, userId)}
+        />
+      )}
 
       <ConfirmDialog
         open={pendingDelete != null}

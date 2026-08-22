@@ -14,6 +14,9 @@ function required(name: string, value: string | undefined): string {
 export const config = {
   apiUrl: required("EXPO_PUBLIC_API_URL", process.env.EXPO_PUBLIC_API_URL),
   authMode: process.env.EXPO_PUBLIC_AUTH_MODE ?? "cognito",
+  // Which seeded user a fake-auth dev build acts as ("fake-bob-sub").
+  // Unset = alice, the historical default. Ignored outside fake auth.
+  fakeSub: process.env.EXPO_PUBLIC_FAKE_SUB ?? null,
   cognitoUserPoolId: process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID,
   cognitoClientId: process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID,
   // CDN serving master topo tiles + (future) Protomaps basemap/glyphs —

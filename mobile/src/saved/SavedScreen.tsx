@@ -46,6 +46,7 @@ import {
   isValidLongitude,
   routeLengthM,
   messageFromError,
+  type SharableEntityType,
   type TopoLayerFormat,
   type TopoLayerName,
 } from "@logjam/shared";
@@ -131,9 +132,11 @@ import {
   routeActions,
   vectorImportActions,
   waypointActions,
+  type AssetActions,
 } from "./assetActions";
+import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useTracks } from "../tracks/useTracks";
-import { ExportUnsupportedError, type ExportFormat } from "../fileExport";
+import { ExportUnsupportedError } from "../fileExport";
 import type { Bbox } from "./bboxOfPoints";
 import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
 import type { MirrorRoute } from "../sync/mirrorStore";
@@ -193,7 +196,7 @@ export type Category =
   | "geoPdf"
   | "route"
   | "waypoint"
-  | "vector"
+  | "import"
   | "track";
 
 /** Enough to turn a saved item's layer on when it is shown on the map. */
@@ -221,11 +224,8 @@ const CATEGORY_META: Record<
   region: { label: "Region", plural: "Regions", icon: "map" },
   overlay: { label: "LiDAR topo", plural: "LiDAR Topos", icon: "layers" },
   geoPdf: { label: "GeoPDF", plural: "GeoPDFs", icon: "file-text" },
-  // "Files" was too vague (everything here is a file); the category is
-  // specifically vector data brought in from another app, so it is named for
-  // the formats users recognise.
   // Routes you drew, as opposed to files you brought in. Kept a separate
-  // category rather than folded into "vector": they behave differently (a route
+  // category rather than folded into "import": they behave differently (a route
   // is editable and syncs; an import is an opaque file on this device), and a
   // list that mixes them would need to explain which rows can be edited.
   route: { label: "Route", plural: "Routes", icon: "edit-3" },
@@ -233,7 +233,12 @@ const CATEGORY_META: Record<
   // this device, and they are the one kind here that can be SEARCHED and
   // filtered by tag — see the waypoint filter rail below.
   waypoint: { label: "Waypoint", plural: "Waypoints", icon: "map-pin" },
-  vector: { label: "GPX / KML", plural: "GPX & KML", icon: "file-plus" },
+  // NOT named for a format ("GPX & KML") and not for lines ("Ways"): a row
+  // here is a whole FILE the user brought in from another app, and it may hold
+  // points and polygons as readily as lines. "Files" alone was rejected as too
+  // vague — everything in this tab is a file — so the distinguishing word is
+  // the one that survives.
+  import: { label: "Import", plural: "Imports", icon: "file-plus" },
   track: { label: "Track", plural: "Tracks", icon: "activity" },
 };
 
@@ -248,7 +253,7 @@ const CATEGORY_ORDER: Category[] = [
   "waypoint",
   "track",
   "route",
-  "vector",
+  "import",
 ];
 
 /** A single on-device asset, flattened so one renderer covers every kind. */
@@ -300,8 +305,17 @@ type SavedItem = {
   reverse?: () => Promise<unknown>;
   /** Present on a recording: make an editable route from it, non-destructively. */
   createRouteFrom?: () => Promise<{ name: string; pointCount: number }>;
-  /** Present on a recording: save it out as a GPX or KML file. */
-  exportFile?: (format: ExportFormat) => Promise<string | null>;
+  /** Ways to write this asset out as a file, in menu order. See AssetActions. */
+  exports?: { title: string; run: () => Promise<string | null> }[];
+  /** Present on an OWNED, server-backed asset — see `AssetActions.share`. */
+  share?: { entityType: SharableEntityType; entityId: string };
+  /**
+   * Present on an asset that exists as a FILE this device can hand over — an
+   * import with its original bytes, a recording that serialises to GPX, a
+   * GeoPDF. Deliberately not the same field as `share`: that one grants a
+   * revocable view of a row, this one gives away a copy for good.
+   */
+  sendCopy?: NonNullable<AssetActions["sendCopy"]>;
   /**
    * What the waypoint search matches against, and the tags its chip rail
    * filters by. Only waypoints carry it — see the rail render below for why
@@ -407,7 +421,7 @@ export function SavedScreen({
   // fails to rise, and the user sees the sheet settle then jump.
   const [menuItemKey, setMenuItemKey] = useState<string | null>(null);
   const [menuMode, setMenuMode] = useState<
-    "actions" | "rename" | "tags" | "canyons" | "stats"
+    "actions" | "rename" | "tags" | "canyons" | "stats" | "share" | "sendCopy"
   >("actions");
   // Filter text for the canyon sub-mode, pinned in the sheet header.
   const [menuCanyonQuery, setMenuCanyonQuery] = useState("");
@@ -743,7 +757,7 @@ export function SavedScreen({
       setImportBusy(true);
       setActiveOp({
         label: "Importing file",
-        category: "vector",
+        category: "import",
         fraction: null,
       });
       const outcome = await importVectorFileFromPicker(imports.length);
@@ -751,7 +765,7 @@ export function SavedScreen({
         info("File imported.");
         // Land on the tab holding what was just added, so the new row is
         // visible instead of buried in a size-sorted "All".
-        setFilter("vector");
+        setFilter("import");
         refreshFreeSpace();
       }
     } catch (err) {
@@ -899,6 +913,16 @@ export function SavedScreen({
         subtitle: countOf(group.members.length, "layer"),
         sizeBytes: group.sizeBytes,
         pill: { label: "Offline", tone: "accent" },
+        // Withheld only when we KNOW it is not ours (`syncRole === "shared"` —
+        // the API answers a non-owner's share with 403). Absent ownership is
+        // not a no: a synthetic job rebuilt from a downloaded artifact carries
+        // no `syncRole`, which is the normal state on a cold offline launch,
+        // and hiding the verb there made sharing the one thing that vanished
+        // when the signal did. It is present and DIMMED instead, with the
+        // reason in its subtitle (DESIGN.md §10).
+        ...(job?.syncRole === "shared"
+          ? {}
+          : { share: { entityType: "topoJob" as const, entityId: group.key } }),
         locatable: group.bbox != null,
         resolveBbox: async () => group.bbox,
         // Topo artifacts carry no groupId (they are written a layer at a time
@@ -985,7 +1009,21 @@ export function SavedScreen({
         // on this device, so they take no meaningful storage. Same deliberate
         // treatment as recorded tracks.
         sizeBytes: 0,
-        ...(shared ? { pill: { label: "Shared", tone: "muted" as const } } : {}),
+        // Two DIFFERENT pills, and the words are not interchangeable.
+        // "Shared" on a received row means someone else's, read-only. The
+        // owner's badge is a COUNT of who they gave it to — a fact about
+        // their own sharing, which is why the server only sends the count on
+        // owned rows.
+        ...(shared
+          ? { pill: { label: "Shared", tone: "muted" as const } }
+          : route.sharedCount
+            ? {
+                pill: {
+                  label: `Shared with ${route.sharedCount}`,
+                  tone: "muted" as const,
+                },
+              }
+            : {}),
         ...routeActions(route),
       });
     }
@@ -1007,7 +1045,16 @@ export function SavedScreen({
         // A synced row, not a file on this device — same treatment as routes
         // and recordings, so it stays out of the capacity meter.
         sizeBytes: 0,
-        ...(shared ? { pill: { label: "Shared", tone: "muted" as const } } : {}),
+        ...(shared
+          ? { pill: { label: "Shared", tone: "muted" as const } }
+          : waypoint.sharedCount
+            ? {
+                pill: {
+                  label: `Shared with ${waypoint.sharedCount}`,
+                  tone: "muted" as const,
+                },
+              }
+            : {}),
         // Notes are searchable but never rendered in the row — a note can hold
         // anything, and this is a list surface.
         search: {
@@ -1021,10 +1068,24 @@ export function SavedScreen({
     for (const imported of imports) {
       rows.push({
         key: imported.id,
-        category: "vector",
+        category: "import",
         title: imported.name,
-        subtitle: `${imported.featureCount} feature${imported.featureCount === 1 ? "" : "s"} · imported ${formatDay(imported.createdAt)}`,
+        // Where it came from, in the row rather than behind a tap: who sent
+        // you a file is a browsing-time fact, and burying it in the overflow
+        // sheet means you only learn it while trying to do something else.
+        subtitle: `${imported.featureCount} feature${imported.featureCount === 1 ? "" : "s"} · ${
+          imported.sentBy
+            ? `from ${imported.sentBy} · ${formatDay(imported.createdAt)}`
+            : `imported ${formatDay(imported.createdAt)}`
+        }`,
         sizeBytes: imported.sizeBytes,
+        // NOT the "Shared" pill. On a route that word means live, revocable
+        // and read-only; a received copy is this user's own file, editable and
+        // permanent. Same word for opposite promises is the confusion the
+        // Share / Send-a-copy split exists to prevent.
+        ...(imported.sentBy
+          ? { pill: { label: "Copy", tone: "muted" as const } }
+          : {}),
         ...vectorImportActions(imported),
       });
     }
@@ -1065,7 +1126,7 @@ export function SavedScreen({
       geoPdf: 0,
       route: 0,
       waypoint: 0,
-      vector: 0,
+      import: 0,
       track: 0,
     };
     for (const item of items) byCategory[item.category] += 1;
@@ -1124,7 +1185,7 @@ export function SavedScreen({
         return { label: "Record a track", onPress: onRecordTrack };
       case "route":
         return { label: "Draw a route", onPress: onDrawRoute };
-      case "vector":
+      case "import":
         return importBusy
           ? null
           : { label: "Import a file", onPress: () => void handleImportFile() };
@@ -1368,10 +1429,10 @@ export function SavedScreen({
     [fail, info],
   );
 
-  /** Recording → file on the handset. Mirrors RouteOptionsSheet's save(). */
+  /** Asset → file on the handset. Mirrors RouteOptionsSheet's save(). */
   const exportItem = useCallback(
-    (item: SavedItem, format: ExportFormat) => {
-      item.exportFile?.(format).then(
+    (option: { run: () => Promise<string | null> }) => {
+      option.run().then(
         (filename) => {
           // Null = the user backed out of the folder picker. Not a failure,
           // and a toast claiming success would be a lie.
@@ -1433,9 +1494,37 @@ export function SavedScreen({
       ? (savedTracks.find((track) => track.id === menuItem.key) ?? null)
       : null;
   const menuImport =
-    menuItem?.category === "vector"
+    menuItem?.category === "import"
       ? (imports.find((imported) => imported.id === menuItem.key) ?? null)
       : null;
+  // THE sharing panel: one component for both verbs and every kind, the same
+  // one the route sheet, the track sheet, the map's waypoint sheet and the
+  // canyon screen render. Which verb it is showing follows the sub-mode, and
+  // the wording follows from that — a copy cannot be taken back, a share can.
+  const sharePanel = useSharePanel({
+    target:
+      menuMode === "sendCopy" && menuItem?.sendCopy
+        ? { kind: "copy", sendCopy: menuItem.sendCopy }
+        : menuItem?.share
+          ? {
+              kind: "entity",
+              entityType: menuItem.share.entityType,
+              entityId: menuItem.share.entityId,
+            }
+          : null,
+    itemLabel: menuItem?.title ?? "",
+    online,
+    enabled: menuItem != null,
+    active: menuMode === "share" || menuMode === "sendCopy",
+    onSent: (count: number) => {
+      closeItemSheet();
+      info(`Sent a copy to ${countOf(count, "friend")}.`);
+    },
+  });
+
+  // Both verb rows below carry this: offline they dim and say why.
+  const shareRowProps = useShareRowProps(online);
+
   const statsOpen = menuMode === "stats";
   const trackStats = useTrackDetail(
     menuTrack?.id ?? null,
@@ -1975,7 +2064,7 @@ export function SavedScreen({
           <Row
             title="Import GPX, KML or GeoJSON"
             icon="file-plus"
-            hue={assetHue.vector}
+            hue={assetHue.import}
             onPress={
               importBusy
                 ? undefined
@@ -2002,16 +2091,24 @@ export function SavedScreen({
                 ? "Tags"
                 : menuMode === "canyons"
                   ? "Linked canyons"
-                  : menuItem.title
+                  : menuMode === "sendCopy" || menuMode === "share"
+                    ? sharePanel.title
+                    : menuItem.title
         }
         // Only the waypoint sub-modes go BACK to an actions list; every other
         // mode here (a plain rename) closes instead.
         onBack={
           (menuWaypoint && (menuMode === "tags" || menuMode === "canyons")) ||
-          menuMode === "stats"
+          menuMode === "stats" ||
+          menuMode === "share" ||
+          menuMode === "sendCopy"
             ? () => setMenuMode("actions")
             : undefined
         }
+        // The send button is pinned rather than sitting under the friend list
+        // (DESIGN.md §6): a confirm that scrolls away leaves the drag handle as
+        // the only exit, and the handle means discard.
+        footer={menuMode === "sendCopy" ? sharePanel.footer : undefined}
         header={
           menuWaypoint && menuMode === "canyons" ? (
             <WaypointSubModeHeader hint="Anyone you share a canyon with can see its waypoints.">
@@ -2080,6 +2177,9 @@ export function SavedScreen({
                 demLoading={statsElevation.loading}
               />
             )
+          ) : (menuMode === "sendCopy" && menuItem.sendCopy) ||
+            (menuMode === "share" && menuItem.share) ? (
+            sharePanel.body
           ) : menuMode === "tags" && menuWaypoint ? (
             <WaypointTagsBody
               waypoint={menuWaypoint}
@@ -2151,29 +2251,45 @@ export function SavedScreen({
                   }}
                 />
               ) : null}
-              {menuItem.exportFile ? (
-                <>
-                  <Row
-                    title="Save as GPX"
-                    icon="download"
-                    hue={theme.bonus1}
-                    onPress={() => {
-                      const target = menuItem;
-                      closeItemSheet();
-                      exportItem(target, "gpx");
-                    }}
-                  />
-                  <Row
-                    title="Save as KML"
-                    icon="download"
-                    hue={theme.bonus1}
-                    onPress={() => {
-                      const target = menuItem;
-                      closeItemSheet();
-                      exportItem(target, "kml");
-                    }}
-                  />
-                </>
+              {menuItem.exports?.map((option) => (
+                <Row
+                  key={option.title}
+                  title={option.title}
+                  icon="download"
+                  hue={theme.bonus1}
+                  onPress={() => {
+                    closeItemSheet();
+                    exportItem(option);
+                  }}
+                />
+              ))}
+              {/* "Share", not "Send a copy": this hands a friend a LIVE view of
+                  the owner's record that the owner can revoke. The file kinds
+                  get the other verb, and the two must not read alike. Absent on
+                  anything shared WITH this user — the API refuses it. */}
+              {menuItem.share ? (
+                <Row
+                  title="Share"
+                  icon="share-2"
+                  hue={theme.bonus1}
+                  {...shareRowProps}
+                  onPress={() => setMenuMode("share")}
+                />
+              ) : null}
+              {/* The OTHER verb, and deliberately not a variant of the one
+                  above: a copy leaves this device for good. Neither row
+                  explains itself here — "Send" and "Share" are one word apart
+                  and the difference is permanent, so it is stated in the
+                  panel's promise banner, where the user is about to act on it,
+                  rather than twice in two voices. */}
+              {menuItem.sendCopy ? (
+                <Row
+                  title="Send a copy"
+                  icon="send"
+                  hue={theme.bonus1}
+                  {...shareRowProps}
+                  onPress={() => setMenuMode("sendCopy")}
+                />
               ) : null}
               {/* Absent on a shared route or waypoint: the rename used to be
                   offered, take the user's typing and drop it (the descriptor's
@@ -2390,8 +2506,8 @@ function EmptyPanel({
         ? "Import a GeoPDF from this phone. Pulling one from a Logjam account needs an account."
         : "Import a GeoPDF from this phone, or pull one from your Logjam account.",
     },
-    vector: {
-      title: "No GPX or KML files",
+    import: {
+      title: "No imported files",
       hint: "Bring in GPX, KML or GeoJSON from another app to see it on the map.",
     },
     track: {
@@ -2411,6 +2527,14 @@ function EmptyPanel({
   );
 }
 
+/**
+ * The Share sub-mode of the per-item sheet: who has this item, and who else
+ * could. Sits beside the canyon detail screen's Shared-with section on the same
+ * `useSharing` hook, so "what does unsharing mean" is worded once (DESIGN.md §7).
+ *
+ * Mounted only while the sub-mode is open, which is what makes the hook's load
+ * fire on open rather than for every row in the list.
+ */
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.primary },
   // The rail's own bottom pad is the gap the list scrolls against — without it

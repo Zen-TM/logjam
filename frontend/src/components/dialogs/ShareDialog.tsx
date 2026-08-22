@@ -1,3 +1,15 @@
+// The friend-picker for SHARING — a live, read-only view of something the
+// owner keeps and can revoke at any time.
+//
+// One dialog for canyons and for the four direct-share types (waypoint, route,
+// topoJob, geoPdfJob), because "who can see this, and take it back" is one
+// interaction. The endpoints differ — canyons keep /canyons/:id/share, the rest
+// use /shares — so the three calls arrive as props rather than being switched
+// on a type here.
+//
+// NOT for "send a copy" (FileSend). That hands over a file the recipient keeps
+// permanently and cannot be un-sent; wording the two alike teaches people that
+// a sent file can be recalled. See shared/src/sharing.ts.
 import { useState, useEffect } from "react";
 import {
   Dialog,
@@ -7,25 +19,41 @@ import {
   Button,
   TextField,
 } from "@mui/material";
-import classes from "./ShareCanyonDialog.module.css";
+import classes from "./ShareDialog.module.css";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
-import type { TCanyon, TFriend, TCanyonShare } from "../../canyonUtils";
-import { getCanyonShares, shareCanyonWith, unshareCanyonWith } from "../../canyonUtils";
+import type { TFriend } from "../../canyonUtils";
 
-function ShareCanyonDialog({
-  canyon,
+/** Enough of a share row to list and revoke it. Both endpoints return this. */
+export type ShareRecipientRow = {
+  id: string;
+  sharedWith: { id: string; username: string };
+};
+
+function ShareDialog({
+  title,
+  blurb,
   friends,
   open,
   onClose,
+  listShares,
+  share,
+  unshare,
 }: {
-  canyon: TCanyon;
+  /** Dialog heading, e.g. `Share ${canyon.name}`. */
+  title: string;
+  /** What the recipient gets, in the caller's own words — a canyon share and a
+   *  route share do not grant the same things. */
+  blurb: React.ReactNode;
   friends: TFriend[];
   open: boolean;
   onClose: () => void;
+  listShares: () => Promise<ShareRecipientRow[]>;
+  share: (userId: string) => Promise<unknown>;
+  unshare: (userId: string) => Promise<unknown>;
 }) {
   const toast = useToast();
-  const [canyonShares, setCanyonShares] = useState<TCanyonShare[]>([]);
+  const [shares, setShares] = useState<ShareRecipientRow[]>([]);
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
   const [shareSearch, setShareSearch] = useState("");
   const [sharing, setSharing] = useState(false);
@@ -34,15 +62,26 @@ function ShareCanyonDialog({
     if (!open) return;
     setSelectedFriendIds([]);
     setShareSearch("");
-    getCanyonShares(canyon.id)
-      .then(setCanyonShares)
+    listShares()
+      .then(setShares)
       .catch((err) => {
         console.error(err);
         toast.error(messageFromError(err, "Couldn't load shares."));
       });
-  }, [open, canyon.id, toast]);
+    // `listShares` is a fresh closure each render; depending on it would refetch
+    // forever. Open/close is the real trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, toast]);
 
-  async function handleShareCanyon() {
+  function refreshShares() {
+    listShares()
+      .then(setShares)
+      .catch((err) => {
+        console.error(err);
+      });
+  }
+
+  async function handleShare() {
     if (selectedFriendIds.length === 0) return;
     const sharedNames = selectedFriendIds
       .map((id) => friends.find((f) => f.id === id)?.username)
@@ -50,15 +89,11 @@ function ShareCanyonDialog({
     setSharing(true);
     try {
       for (const friendId of selectedFriendIds) {
-        await shareCanyonWith(canyon.id, friendId);
+        await share(friendId);
       }
       setSelectedFriendIds([]);
       setShareSearch("");
-      getCanyonShares(canyon.id)
-        .then(setCanyonShares)
-        .catch((err) => {
-          console.error(err);
-        });
+      refreshShares();
       toast.success(
         sharedNames.length === 1
           ? `Shared with ${sharedNames[0]}.`
@@ -67,7 +102,7 @@ function ShareCanyonDialog({
       onClose();
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't share canyon. Please try again."));
+      toast.error(messageFromError(err, "Couldn't share. Please try again."));
     } finally {
       setSharing(false);
     }
@@ -75,12 +110,8 @@ function ShareCanyonDialog({
 
   async function handleUnshare(userId: string) {
     try {
-      await unshareCanyonWith(canyon.id, userId);
-      getCanyonShares(canyon.id)
-        .then(setCanyonShares)
-        .catch((err) => {
-          console.error(err);
-        });
+      await unshare(userId);
+      refreshShares();
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't remove share. Please try again."));
@@ -100,12 +131,10 @@ function ShareCanyonDialog({
         },
       }}
     >
-      <DialogTitle sx={{ color: "var(--theme-text-primary)" }}>
-        Share {canyon.name}
-      </DialogTitle>
+      <DialogTitle sx={{ color: "var(--theme-text-primary)" }}>{title}</DialogTitle>
       <DialogContent>
         {friends.length === 0 ? (
-          <span className={classes.caption}>Add friends first to share canyons.</span>
+          <span className={classes.caption}>Add friends first to share.</span>
         ) : (
           <div className={classes.content}>
             <TextField
@@ -124,7 +153,7 @@ function ShareCanyonDialog({
                     .toLowerCase()
                     .includes(shareSearch.toLowerCase()) &&
                   !selectedFriendIds.includes(f.id) &&
-                  !canyonShares.some((s) => s.sharedWith.id === f.id),
+                  !shares.some((s) => s.sharedWith.id === f.id),
               );
               return (
                 <div className={classes.searchResults}>
@@ -174,24 +203,16 @@ function ShareCanyonDialog({
             )}
           </div>
         )}
-        {friends.length > 0 && (
-          <p className={classes.caption}>
-            Recipients see this canyon&rsquo;s details, canyon-level notes and
-            canyon-level media, and can copy or export it while the share is
-            active. They do <b>not</b> see your trip logs or any per-trip notes
-            or media. Unsharing won&rsquo;t remove copies they&rsquo;ve already
-            made.
-          </p>
-        )}
-        {canyonShares.length > 0 && (
+        {friends.length > 0 && <p className={classes.caption}>{blurb}</p>}
+        {shares.length > 0 && (
           <div className={classes.sharedWithList}>
             <span className={classes.sharedWithHeader}>Shared with:</span>
-            {canyonShares.map((share) => (
-              <div key={share.id} className={classes.sharedWithRow}>
-                <span>{share.sharedWith.username}</span>
+            {shares.map((row) => (
+              <div key={row.id} className={classes.sharedWithRow}>
+                <span>{row.sharedWith.username}</span>
                 <button
                   className={classes.unshareButton}
-                  onClick={() => handleUnshare(share.sharedWith.id)}
+                  onClick={() => handleUnshare(row.sharedWith.id)}
                 >
                   Unshare
                 </button>
@@ -210,7 +231,7 @@ function ShareCanyonDialog({
         </Button>
         {friends.length > 0 && (
           <Button
-            onClick={handleShareCanyon}
+            onClick={handleShare}
             disabled={sharing || selectedFriendIds.length === 0}
             variant="contained"
             sx={{ backgroundColor: "var(--theme-accent)" }}
@@ -223,4 +244,4 @@ function ShareCanyonDialog({
   );
 }
 
-export default ShareCanyonDialog;
+export default ShareDialog;

@@ -52,6 +52,19 @@ function baseHeaders(token: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
     [CLIENT_VERSION_HEADER]: CLIENT_VERSION,
+    // DEV ONLY, and only in fake-auth builds: act as a specific seeded user.
+    // Without it every fake-auth client is alice, which makes anything with a
+    // second person in it — sharing, sending a copy, a friend request —
+    // untestable on real devices.
+    //
+    // Safe by construction rather than by discipline: `config.authMode` is
+    // "fake" only in a dev build, and the API's matching `x-fake-sub` handling
+    // lives INSIDE its own fake-auth branch, which throws at module load when
+    // NODE_ENV=production (api/src/middleware/auth.ts). A production build
+    // sends this header to a server that has no code to read it.
+    ...(config.authMode === "fake" && config.fakeSub
+      ? { "x-fake-sub": config.fakeSub }
+      : {}),
   };
 }
 

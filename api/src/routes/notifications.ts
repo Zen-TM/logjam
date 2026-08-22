@@ -16,6 +16,8 @@ const NOTIFICATIONS_LIST_CAP = 500;
 // live rows at read time below:
 //   friend_request / friend_request_accepted: payload.friendshipId (+ counterpart username)
 //   canyon_shared:                            payload.canyonId, payload.sharedById (+ canyonName, sharedByUsername)
+//   item_shared:                              payload.entityType, payload.entityId, payload.sharedById (+ sharedByUsername)
+//   file_sent:                                payload.fileSendId, payload.sentById (+ sentByUsername)
 //   topo_complete / topo_failed / *_export:   self-only refs (jobId, jobName, footprint)
 // When the referenced canyon/share/friendship is gone (share revoked, canyon
 // deleted, friendship removed, or the other user's account deleted), there is
@@ -54,6 +56,8 @@ router.get(
     const friendshipIds = new Set<string>();
     const canyonIds = new Set<string>();
     const sharerIds = new Set<string>();
+    const sharedItems: { entityType: string; entityId: string }[] = [];
+    const fileSendIds = new Set<string>();
     for (const n of notifications) {
       if (n.type === "friend_request" || n.type === "friend_request_accepted") {
         const id = payloadString(n.payload, "friendshipId");
@@ -61,6 +65,21 @@ router.get(
       } else if (n.type === "canyon_shared") {
         const id = payloadString(n.payload, "canyonId");
         if (id) canyonIds.add(id);
+        const sharedById = payloadString(n.payload, "sharedById");
+        if (sharedById) sharerIds.add(sharedById);
+      } else if (n.type === "file_sent") {
+        const id = payloadString(n.payload, "fileSendId");
+        if (id) fileSendIds.add(id);
+        const sentById = payloadString(n.payload, "sentById");
+        if (sentById) sharerIds.add(sentById);
+      } else if (n.type === "item_shared") {
+        const entityType = payloadString(n.payload, "entityType");
+        const entityId = payloadString(n.payload, "entityId");
+        if (entityType && entityId) sharedItems.push({ entityType, entityId });
+        // No name is resolved for a directly-shared item: the client already
+        // has the row through delta sync (waypoint/route) or its own list
+        // endpoint (topo/GeoPDF job), and resolving one here would mean
+        // reading a waypoint name into a notification payload for no gain.
         const sharedById = payloadString(n.payload, "sharedById");
         if (sharedById) sharerIds.add(sharedById);
       }
@@ -109,6 +128,40 @@ router.get(
     const canyonById = new Map(existingCanyons.map((c) => [c.id, c]));
     const sharerById = new Map(sharerUsers.map((u) => [u.id, u]));
 
+    // Which item_shared notifications still have a live Share row for this
+    // recipient. A revoked share resolves to nothing and the notification is
+    // dropped below (PRIV-001/003), mirroring the canyon_shared rule.
+    const liveShares =
+      sharedItems.length > 0
+        ? await prisma.share.findMany({
+            where: { sharedWithId: user.id, OR: sharedItems },
+            select: { entityType: true, entityId: true },
+          })
+        : [];
+    const liveShareKeys = new Set(
+      liveShares.map((row) => `${row.entityType}:${row.entityId}:${user.id}`),
+    );
+
+    // Which file_sent notifications still have a live, non-declined recipient
+    // row. A swept (expired) send or a declined one resolves to nothing and the
+    // notification is dropped below, exactly as a revoked share is. Note this
+    // is NOT a revocation: the file was a copy and an accepted recipient keeps
+    // it — only the notification stops being resolvable.
+    const liveFileSends =
+      fileSendIds.size > 0
+        ? await prisma.fileSendRecipient.findMany({
+            where: {
+              userId: user.id,
+              fileSendId: { in: [...fileSendIds] },
+              status: { not: "declined" },
+            },
+            select: { fileSendId: true },
+          })
+        : [];
+    const liveFileSendIds = new Set(
+      liveFileSends.map((row) => row.fileSendId),
+    );
+
     const visible = notifications.flatMap((n) => {
       if (n.type === "friend_request" || n.type === "friend_request_accepted") {
         const id = payloadString(n.payload, "friendshipId");
@@ -128,6 +181,40 @@ router.get(
           {
             ...n,
             payload: { ...(n.payload as object), [usernameKey]: counterpart.username },
+          },
+        ];
+      }
+      if (n.type === "file_sent") {
+        const id = payloadString(n.payload, "fileSendId");
+        if (!id || !liveFileSendIds.has(id)) return [];
+        const sentById = payloadString(n.payload, "sentById");
+        const sender = sentById ? sharerById.get(sentById) : undefined;
+        return [
+          {
+            ...n,
+            payload: {
+              ...(n.payload as object),
+              ...(sender ? { sentByUsername: sender.username } : {}),
+            },
+          },
+        ];
+      }
+      if (n.type === "item_shared") {
+        // Dropped when the share is gone, exactly as canyon_shared is: the
+        // revoke deletes the row opportunistically, and this is the fallback.
+        const entityType = payloadString(n.payload, "entityType");
+        const entityId = payloadString(n.payload, "entityId");
+        if (!entityType || !entityId) return [];
+        if (!liveShareKeys.has(`${entityType}:${entityId}:${user.id}`)) return [];
+        const sharedById = payloadString(n.payload, "sharedById");
+        const sharer = sharedById ? sharerById.get(sharedById) : undefined;
+        return [
+          {
+            ...n,
+            payload: {
+              ...(n.payload as object),
+              ...(sharer ? { sharedByUsername: sharer.username } : {}),
+            },
           },
         ];
       }

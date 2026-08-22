@@ -55,9 +55,17 @@ describe("topo-jobs route (fake auth)", () => {
       expect(ownRes.status).toBe(200);
       expect(ownRes.body.status).toBe("uploading");
 
-      // A different user cannot (job-id ownership oracle is 403, per route).
+      // A stranger gets 404, NOT 403. This assertion used to expect 403 and
+      // its comment called the oracle intended behaviour — it was the same
+      // existence oracle the canyon routes closed (root CLAUDE.md): a 403
+      // confirms the job id is real to someone with no right to know it, while
+      // a 404 is indistinguishable from a job that never existed. Direct
+      // sharing routed this endpoint through lib/shareAccess, which bakes the
+      // rule in. A SHAREE attempting an owner-only action still gets 403 —
+      // they can legitimately see the job, so its existence is not a secret
+      // from them (see directShare.test.ts).
       const bobRes = await request(API_URL).get(`/topo-jobs/${jobId}`).set(as(BOB_SUB));
-      expect(bobRes.status).toBe(403);
+      expect(bobRes.status).toBe(404);
 
       // Starting before the ZIP is uploaded is rejected (S3 HeadObject miss),
       // still launch-free.
