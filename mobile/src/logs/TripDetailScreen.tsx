@@ -16,12 +16,14 @@ import {
   customFieldDisplayLabel,
   distinctTripTypes,
   mediaCategory,
+  messageFromError,
 } from "@logjam/shared";
 
 import { useConnectivity } from "../map/connectivity";
 import { tripTitle } from "../api/tripTitle";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { MediaStrip } from "../media/MediaStrip";
+import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
 import { fontSize, fontWeight, lineHeight, radius, spacing, surface, theme } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import {
@@ -47,13 +49,14 @@ export function TripDetailScreen({
   trip,
   onBack,
   onOpenCanyon,
-  onShowRoute,
+  onFocusOnMap,
 }: {
   trip: MirrorTrip;
   onBack: () => void;
   onOpenCanyon: (canyonId: string, name: string) => void;
-  /** Opens the Map tab with this route attachment drawn on it. */
-  onShowRoute: (mediaId: string, filename: string, localPath: string | null) => void;
+  /** Opens the Map tab framed on this route attachment's extent (resolved
+   *  here, first) — nothing is drawn on the map. */
+  onFocusOnMap: (bbox: [number, number, number, number]) => void;
 }) {
   const live = useMirrorTrip(trip.id);
   const current = live.data ?? trip;
@@ -172,9 +175,23 @@ export function TripDetailScreen({
           media={attachments}
           emptyHint="Attach a .gpx or .kml."
           onFailed={(text) => notify(text, "error")}
-          onShowRoute={(item) =>
-            onShowRoute(item.id, item.filename ?? "Route", item.localDisplayPath)
-          }
+          onShowRoute={(item) => {
+            resolveRouteAttachmentBbox({
+              mediaId: item.id,
+              filename: item.filename ?? "Route",
+              localPath: item.localDisplayPath,
+            })
+              .then(onFocusOnMap)
+              .catch((err: unknown) => {
+                notify(
+                  messageFromError(
+                    err,
+                    "Couldn't read that route file. It may not be downloaded yet.",
+                  ),
+                  "error",
+                );
+              });
+          }}
         />
 
         <SectionHeader label="Notes" />

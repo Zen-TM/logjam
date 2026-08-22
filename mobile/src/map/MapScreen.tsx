@@ -129,7 +129,6 @@ import {
   waypointActions,
 } from "../saved/assetActions";
 import { ScaleBar, SCALE_BAR_HEIGHT, type ScaleBarHandle } from "./ScaleBar";
-import { RouteMapLayer, ROUTE_COLOR, type RouteRequest } from "../media/RouteMapLayer";
 import {
   CHROME_BOTTOM,
   CHROME_GAP,
@@ -620,7 +619,6 @@ export function MapScreen({
   onSaveMapsOffline,
   onPickPoint,
   focus,
-  route,
   editRoute,
   drawRouteFor,
   continueTrack,
@@ -649,9 +647,6 @@ export function MapScreen({
     /** The waypoint being moved, so the picker can leave its pin off. */
     hideWaypointId?: string,
   ) => void;
-  // "Show on map" for a trip's route attachment. Transient: drawn until the
-  // user clears its badge, never added to the imports registry.
-  route?: RouteRequest | null;
   // "Show on map" from the Saved tab: fit this bbox once on arrival. `nonce`
   // makes a repeat request for the same asset refocus instead of no-op.
   // Coordinates stay in navigation params + component state — never logged.
@@ -686,18 +681,6 @@ export function MapScreen({
   // `continueTrack`: the prompt and the recording mode both belong here.
   startRecording?: { nonce: number } | null;
 }) {
-  // A route arrives via navigation params; clearing its badge drops it, and a
-  // fresh request (new nonce) replaces whatever was showing.
-  const [shownRoute, setShownRoute] = useState<RouteRequest | null>(route ?? null);
-  const [routeError, setRouteError] = useState<string | null>(null);
-  const fittedRouteNonce = useRef<number | null>(null);
-  useEffect(() => {
-    if (route) {
-      setShownRoute(route);
-      setRouteError(null);
-    }
-  }, [route]);
-
   // "Offline maps only" forces the resolver to local artifacts even with
   // signal — battery saver + predictability in the field.
   const [offlineOnly, setOfflineOnly] = useState(false);
@@ -2162,10 +2145,10 @@ export function MapScreen({
   // GPS spin-up) rather than leaving the user over the middle of NSW. One shot,
   // never a watcher: the live dot stays the locate button's job.
   //
-  // Mount-only, and yields to an explicit destination: arriving with a route or
-  // a "Show on map" bbox means the user asked for somewhere specific, and that
+  // Mount-only, and yields to an explicit destination: arriving with a
+  // "Show on map" bbox means the user asked for somewhere specific, and that
   // beats where they happen to be standing.
-  const openedWithDestination = useRef(focus != null || route != null);
+  const openedWithDestination = useRef(focus != null);
   const centredOnOpen = useRef(false);
   useEffect(() => {
     // WAIT FOR THE MAP. There is no <Camera> until the bundled glyph/sprite
@@ -3678,7 +3661,6 @@ export function MapScreen({
     drawingRoute,
     measuring,
     navLineShape != null,
-    shownRoute?.nonce ?? "",
     focusPulse?.nonce ?? "",
   ].join("|");
   const controlsEdge = controlsOnLeft
@@ -3985,27 +3967,6 @@ export function MapScreen({
           );
         })}
 
-        {/* A trip's route attachment, shown transiently. Mounted alongside the
-            recorded tracks so it sits in the same band, under the canyons. */}
-        {shownRoute ? (
-          <RouteMapLayer
-            request={shownRoute}
-            onLoaded={(bbox) => {
-              // Fit once per request. The layer can re-resolve its file for
-              // reasons that have nothing to do with the user (a re-render, a
-              // remount), and refitting then yanks the camera back mid-pan —
-              // the map became impossible to explore around the route.
-              if (fittedRouteNonce.current === shownRoute.nonce) return;
-              fittedRouteNonce.current = shownRoute.nonce;
-              fitCameraToBbox(bbox, 60);
-            }}
-            onFailed={(message) => {
-              setShownRoute(null);
-              setRouteError(message);
-            }}
-          />
-        ) : null}
-
         {/* Every canyon route at once (layers sheet → Layers → Canyon routes).
             Mirror-backed, so it draws with no signal for any file this phone
             has fetched; mounted before the canyon pins so the pins stay on
@@ -4307,12 +4268,6 @@ export function MapScreen({
           </View>
         ) : null}
 
-        {routeError ? (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>{routeError}</Text>
-          </View>
-        ) : null}
-
         {/* A map that quietly hides pins is a map you can't trust. Says how many
             are missing, and the dismiss IS the way out — clearing it turns the
             Canyons screen's "show only these" option back off. */}
@@ -4345,23 +4300,6 @@ export function MapScreen({
         {downloadProgress ? (
           <View style={styles.notice}>
             <Text style={styles.noticeText}>{downloadProgress}</Text>
-          </View>
-        ) : null}
-
-        {/* Says what is on the map that the user didn't put there, and gives
-            them one tap to take it off again. */}
-        {shownRoute ? (
-          <View style={styles.routeBadge}>
-            <Feather name="map" size={14} color={ROUTE_COLOR} />
-            <Text style={styles.routeBadgeText} numberOfLines={1}>
-              {shownRoute.filename}
-            </Text>
-            <IconButton
-              icon="x"
-              size={16}
-              accessibilityLabel="Stop showing this route"
-              onPress={() => setShownRoute(null)}
-            />
           </View>
         ) : null}
       </View>
@@ -4906,8 +4844,7 @@ const styles = StyleSheet.create({
   },
   controlActive: { backgroundColor: theme.accent },
   locateIcon: { marginTop: 3, marginLeft: -3 },
-  // Same pill shape as the route badge, in the accent rather than the route
-  // colour — both are "something is being done to this map".
+  // Pill shape for "something is being done to this map" notices.
   filterBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -4918,23 +4855,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: withAlpha(theme.accent, 0.5),
     backgroundColor: withAlpha(theme.primary, 0.92),
-  },
-  routeBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(1),
-    paddingLeft: spacing(1.5),
-    paddingRight: spacing(0.5),
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: withAlpha(ROUTE_COLOR, 0.5),
-    backgroundColor: withAlpha(theme.primary, 0.92),
-  },
-  routeBadgeText: {
-    flex: 1,
-    color: theme.textPrimary,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
   },
   instruments: {
     position: "absolute",

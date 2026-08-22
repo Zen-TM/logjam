@@ -21,9 +21,13 @@ import { TRACK_MIME_TYPES, parseVectorImport } from "@logjam/shared";
 import { theme } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import { useMirrorCanyonTracks } from "../sync/useSyncQueries";
-import { ROUTE_COLOR } from "../media/RouteMapLayer";
 
 export type CanyonRoutesStatus = { drawn: number; unavailable: number };
+
+/** Default colour for a canyon's route attachment when it has none of its
+ *  own — distinct from the recorded-track palette, so a route reads as "not
+ *  mine to edit" rather than as another live recording. */
+const ROUTE_COLOR = "#E8C07D";
 
 export const CanyonRoutesLayer = memo(function CanyonRoutesLayer({
   onStatus,

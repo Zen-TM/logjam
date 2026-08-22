@@ -43,6 +43,7 @@ import { useSharePanel } from "../sharing/SharePanel";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { useConnectivity } from "../map/connectivity";
 import { MediaStrip } from "../media/MediaStrip";
+import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
 import { PickRouteSheet } from "../routes/PickRouteSheet";
 import { deleteMediaLocal } from "../sync/mediaUpload";
 import {
@@ -88,14 +89,21 @@ import { canyonDeleteConfirm } from "./canyonDeleteConfirm";
 import { waypointSymbol } from "../map/waypointSymbol";
 import { CANYON_STATUS_META, canyonStatus } from "./canyonMeta";
 
+/** Extent of a drawn route's points, for "show it on the map". Built at
+ *  render time and never stored — a region of interest stays off the server. */
+function routeBbox(points: [number, number][]): [number, number, number, number] {
+  const lons = points.map(([lon]) => lon);
+  const lats = points.map(([, lat]) => lat);
+  return [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
+}
+
 export function CanyonDetailScreen({
   canyonId,
   onBack,
   onOpenTrip,
   onShowOnMap,
-  onShowRoute,
+  onFocusOnMap,
   onDrawRoute,
-  onShowRouteOnMap,
   onShowWaypointOnMap,
   onDeleted,
 }: {
@@ -104,12 +112,12 @@ export function CanyonDetailScreen({
   /** Opens one of the viewer's own logged trips at this canyon. */
   onOpenTrip: (trip: MirrorTrip) => void;
   onShowOnMap: (canyon: MirrorCanyon) => void;
-  /** Opens the Map tab with this route attachment drawn on it. */
-  onShowRoute: (mediaId: string, filename: string, localPath: string | null) => void;
+  /** Opens the Map tab framed on a route's extent — a media route attachment
+   *  (its bbox resolved here, first) or a drawn route's own points. Neither
+   *  is drawn on the map; this only flies the camera there. */
+  onFocusOnMap: (bbox: [number, number, number, number]) => void;
   /** Opens the Map tab with the draw tool armed, saving into this canyon's slot. */
   onDrawRoute?: (canyonId: string) => void;
-  /** Frames a DRAWN route (not a media file) on the map. */
-  onShowRouteOnMap?: (route: { points: [number, number][] }) => void;
   /** Centres the map on one of this canyon's linked waypoints. */
   onShowWaypointOnMap?: (waypoint: { latitude: number; longitude: number }) => void;
   /** The canyon this screen is showing is gone — leave, don't render a husk. */
@@ -347,7 +355,7 @@ export function CanyonDetailScreen({
               subtitle={`Drawn route · ${formatDistanceM(routeLengthM(linkedRoute.points))}`}
               icon="edit-3"
               hue={assetHue.route}
-              onPress={() => onShowRouteOnMap?.(linkedRoute)}
+              onPress={() => onFocusOnMap(routeBbox(linkedRoute.points))}
               right={
                 isOwner ? (
                   <IconButton
@@ -372,9 +380,23 @@ export function CanyonDetailScreen({
             media={attachments}
             emptyHint="Attach a .gpx or .kml."
             onFailed={(text) => notify(text, "error")}
-            onShowRoute={(item) =>
-              onShowRoute(item.id, item.filename ?? "Route", item.localDisplayPath)
-            }
+            onShowRoute={(item) => {
+              resolveRouteAttachmentBbox({
+                mediaId: item.id,
+                filename: item.filename ?? "Route",
+                localPath: item.localDisplayPath,
+              })
+                .then(onFocusOnMap)
+                .catch((err: unknown) => {
+                  notify(
+                    messageFromError(
+                      err,
+                      "Couldn't read that route file. It may not be downloaded yet.",
+                    ),
+                    "error",
+                  );
+                });
+            }}
             onPickDrawnRoute={isOwner ? () => setPickingRoute(true) : undefined}
             onDrawRoute={isOwner && onDrawRoute ? () => onDrawRoute(canyonId) : undefined}
           />

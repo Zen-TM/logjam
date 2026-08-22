@@ -74,9 +74,9 @@ const navigationTheme = {
 };
 
 type MapStackParams = {
-  // `focus` = "show on map" from Saved: a bbox to fit on arrival (see
-  // MapScreen's `focus` prop). `route` = a trip's route attachment to draw
-  // transiently. Params only — never persisted or logged.
+  // `focus` = "show on map" from Saved, or the resolved extent of a trip's
+  // route attachment (see MapScreen's `focus` prop): a bbox to fit on
+  // arrival. Params only — never persisted or logged.
   MapView:
     | {
         focus?: {
@@ -86,12 +86,6 @@ type MapStackParams = {
           basemapId?: BasemapId;
           /** Which saved item this is, to toggle its layer on before flying. */
           reveal?: SavedItemReveal;
-        };
-        route?: {
-          mediaId: string;
-          filename: string;
-          localPath?: string | null;
-          nonce: number;
         };
         // `editRoute` = "Edit points" from Saved: arm the draw tool on an
         // existing route. An id, never geometry — the map reads the points
@@ -209,19 +203,6 @@ const Tabs = createBottomTabNavigator();
  * is what `MapView`'s `focus` param takes. Built at navigation time and never
  * stored: a region of interest stays off the server (mobile/CLAUDE.md).
  */
-/** Extent of a drawn route, for "show it on the map". Built at navigation time
- * and never stored — a region of interest stays off the server. */
-function routeBbox(points: [number, number][]): [number, number, number, number] {
-  const lons = points.map(([lon]) => lon);
-  const lats = points.map(([, lat]) => lat);
-  return [
-    Math.min(...lons),
-    Math.min(...lats),
-    Math.max(...lons),
-    Math.max(...lats),
-  ];
-}
-
 const CANYON_FOCUS_DEGREES = 0.005;
 function canyonFocus(canyon: { latitude: number; longitude: number }) {
   return {
@@ -260,7 +241,6 @@ function MapStackNav() {
               navigation.navigate("MapRegionDownload", context)
             }
             focus={route.params?.focus ?? null}
-            route={route.params?.route ?? null}
             editRoute={route.params?.editRoute ?? null}
             drawRouteFor={route.params?.drawRouteFor ?? null}
             continueTrack={route.params?.continueTrack ?? null}
@@ -333,21 +313,13 @@ function MapStackNav() {
             onShowOnMap={(canyon) =>
               navigation.navigate("MapView", { focus: canyonFocus(canyon) })
             }
-            onShowRoute={(mediaId, filename, localPath) =>
-              navigation.navigate("MapView", {
-                route: { mediaId, filename, localPath, nonce: Date.now() },
-              })
-            }
-            onShowRouteOnMap={(route) =>
-              navigation.getParent()?.navigate("Map", {
-                screen: "MapView",
-                params: { focus: { bbox: routeBbox(route.points), nonce: Date.now() } },
-              })
+            onFocusOnMap={(bbox) =>
+              navigation.navigate("MapView", { focus: { bbox, nonce: Date.now() } })
             }
             onShowWaypointOnMap={(waypoint) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                // canyonFocus, not routeBbox: a single point yields a
+                // canyonFocus, not a route bbox: a single point yields a
                 // zero-span bbox, which the camera reads as "fit nothing".
                 params: { focus: canyonFocus(waypoint) },
               })
@@ -370,10 +342,8 @@ function MapStackNav() {
             onOpenCanyon={(canyonId, name) =>
               navigation.navigate("MapCanyonDetail", { canyonId, name })
             }
-            onShowRoute={(mediaId, filename, localPath) =>
-              navigation.navigate("MapView", {
-                route: { mediaId, filename, localPath, nonce: Date.now() },
-              })
+            onFocusOnMap={(bbox) =>
+              navigation.navigate("MapView", { focus: { bbox, nonce: Date.now() } })
             }
           />
         )}
@@ -526,22 +496,16 @@ function CanyonsStackNav() {
                 params: { focus: canyonFocus(canyon) },
               })
             }
-            onShowRoute={(mediaId, filename, localPath) =>
+            onFocusOnMap={(bbox) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
-              })
-            }
-            onShowRouteOnMap={(route) =>
-              navigation.getParent()?.navigate("Map", {
-                screen: "MapView",
-                params: { focus: { bbox: routeBbox(route.points), nonce: Date.now() } },
+                params: { focus: { bbox, nonce: Date.now() } },
               })
             }
             onShowWaypointOnMap={(waypoint) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                // canyonFocus, not routeBbox: a single point yields a
+                // canyonFocus, not a route bbox: a single point yields a
                 // zero-span bbox, which the camera reads as "fit nothing".
                 params: { focus: canyonFocus(waypoint) },
               })
@@ -564,10 +528,10 @@ function CanyonsStackNav() {
             onOpenCanyon={(canyonId, name) =>
               navigation.navigate("CanyonDetail", { canyonId, name })
             }
-            onShowRoute={(mediaId, filename, localPath) =>
+            onFocusOnMap={(bbox) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
+                params: { focus: { bbox, nonce: Date.now() } },
               })
             }
           />
@@ -595,10 +559,10 @@ function TripsStackNav() {
             onOpenCanyon={(canyonId, name) =>
               navigation.navigate("TripCanyonDetail", { canyonId, name })
             }
-            onShowRoute={(mediaId, filename, localPath) =>
+            onFocusOnMap={(bbox) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
+                params: { focus: { bbox, nonce: Date.now() } },
               })
             }
           />
@@ -616,22 +580,16 @@ function TripsStackNav() {
                 params: { focus: canyonFocus(canyon) },
               })
             }
-            onShowRoute={(mediaId, filename, localPath) =>
+            onFocusOnMap={(bbox) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
-              })
-            }
-            onShowRouteOnMap={(route) =>
-              navigation.getParent()?.navigate("Map", {
-                screen: "MapView",
-                params: { focus: { bbox: routeBbox(route.points), nonce: Date.now() } },
+                params: { focus: { bbox, nonce: Date.now() } },
               })
             }
             onShowWaypointOnMap={(waypoint) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
-                // canyonFocus, not routeBbox: a single point yields a
+                // canyonFocus, not a route bbox: a single point yields a
                 // zero-span bbox, which the camera reads as "fit nothing".
                 params: { focus: canyonFocus(waypoint) },
               })
@@ -941,33 +899,28 @@ export function AppShell({
                         params: { focus: canyonFocus(canyon) },
                       })
                     }
-                    onShowRoute={(mediaId, filename, localPath) =>
+                    onFocusOnMap={(bbox) =>
                       navigation.getParent()?.navigate("Map", {
                         screen: "MapView",
-                        params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
+                        params: { focus: { bbox, nonce: Date.now() } },
                       })
                     }
-                    onShowRouteOnMap={(route) =>
-              navigation.getParent()?.navigate("Map", {
-                screen: "MapView",
-                params: { focus: { bbox: routeBbox(route.points), nonce: Date.now() } },
-              })
-            }
-            onShowWaypointOnMap={(waypoint) =>
-              navigation.getParent()?.navigate("Map", {
-                screen: "MapView",
-                // canyonFocus, not routeBbox: a single point yields a
-                // zero-span bbox, which the camera reads as "fit nothing".
-                params: { focus: canyonFocus(waypoint) },
-              })
-            }
-            onDrawRoute={(id) =>
-              navigation.getParent()?.navigate("Map", {
-                screen: "MapView",
-                params: { drawRouteFor: { canyonId: id, nonce: Date.now() } },
-              })
-            }
-            onDeleted={() => navigation.goBack()}
+                    onShowWaypointOnMap={(waypoint) =>
+                      navigation.getParent()?.navigate("Map", {
+                        screen: "MapView",
+                        // canyonFocus, not a route bbox: a single point
+                        // yields a zero-span bbox, which the camera reads as
+                        // "fit nothing".
+                        params: { focus: canyonFocus(waypoint) },
+                      })
+                    }
+                    onDrawRoute={(id) =>
+                      navigation.getParent()?.navigate("Map", {
+                        screen: "MapView",
+                        params: { drawRouteFor: { canyonId: id, nonce: Date.now() } },
+                      })
+                    }
+                    onDeleted={() => navigation.goBack()}
                   />
                 )}
               </MoreStack.Screen>
@@ -979,10 +932,10 @@ export function AppShell({
                     onOpenCanyon={(canyonId) =>
                       navigation.navigate("MoreCanyonDetail", { canyonId })
                     }
-                    onShowRoute={(mediaId, filename, localPath) =>
+                    onFocusOnMap={(bbox) =>
                       navigation.getParent()?.navigate("Map", {
                         screen: "MapView",
-                        params: { route: { mediaId, filename, localPath, nonce: Date.now() } },
+                        params: { focus: { bbox, nonce: Date.now() } },
                       })
                     }
                   />
