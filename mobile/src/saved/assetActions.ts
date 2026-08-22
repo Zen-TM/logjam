@@ -45,8 +45,10 @@ import {
 import {
   type FileSendSourceKind,
   type SharableEntityType,
+  MEDIA_EXTENSION_BY_MIME,
   MIN_ROUTE_POINTS,
   ROUTE_NAME_MAX_LENGTH,
+  TRACK_MIME_TYPES,
   exportFilename,
   trackPointsToGpx,
   simplifyToFit,
@@ -54,6 +56,7 @@ import {
 } from "@logjam/shared";
 import type { MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
 import { exportStoredFile, exportTrack } from "../fileExport";
+import { attachMediaLocal } from "../sync/mediaUpload";
 import { bboxOfPoints, type Bbox } from "./bboxOfPoints";
 // Narrow imports rather than the namespace: this module is pure descriptors
 // and the only filesystem work in it is the track scratch file below.
@@ -131,6 +134,21 @@ export type AssetActions = {
    * unlinked, and a failed second write would strand it there.
    */
   createRouteFrom?: (canyonId?: string) => Promise<{ name: string; pointCount: number }>;
+  /**
+   * Fill a canyon's route slot with a COPY of this asset's stored original.
+   *
+   * A COPY, and nothing in Saved changes: imports are device-local and never
+   * sync, while a canyon route attachment is synced media — which is the only
+   * reason a sharee sees one at all. So the file is uploaded against the canyon
+   * and the import row stays exactly as it was.
+   *
+   * Present only where there IS an original and it is a .gpx/.kml: a canyon
+   * route attachment is TRACK media and the API takes nothing else, so a
+   * GeoJSON import and a row predating retained originals both withhold the
+   * verb rather than offering a broken one — the same absence `sendCopy` makes
+   * over the same file.
+   */
+  attachToCanyon?: (canyonId: string) => Promise<unknown>;
   /**
    * Ways to write this asset out as a file the user keeps, in menu order.
    *
@@ -219,6 +237,12 @@ function sourceFormatOf(imported: VectorImport): "gpx" | "kml" | "geojson" | nul
 
 export function vectorImportActions(imported: VectorImport): AssetActions {
   const sourceFormat = sourceFormatOf(imported);
+  // Derived from the extension table rather than restated: two lists that must
+  // agree are one declaration (mobile CLAUDE.md). GeoJSON is deliberately not
+  // in TRACK_MIME_TYPES, so it falls out here and the attach verb is withheld.
+  const trackMimeType = TRACK_MIME_TYPES.find(
+    (mime) => MEDIA_EXTENSION_BY_MIME[mime] === sourceFormat,
+  );
   // The original, when it is not already GeoJSON. A GeoJSON source collapses
   // into the row below rather than offering the same file twice under two
   // names — and it is the ORIGINAL that survives the collapse, since the
@@ -266,6 +290,20 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
             filename: exportFilename(imported.name, sourceFormat, "import"),
             resolveFile: async () => ({ uri: `file://${imported.sourcePath}` }),
           },
+        }
+      : {}),
+    // The canyon's route slot takes the ORIGINAL bytes, for the same reason a
+    // send does: the derived GeoJSON has thrown away everything but `name` and
+    // `coordTimes`. The filename carries the matching extension because the API
+    // validates the two against each other (validateMediaType).
+    ...(imported.sourcePath && trackMimeType && sourceFormat
+      ? {
+          attachToCanyon: (canyonId: string) =>
+            attachMediaLocal("canyon", canyonId, {
+              uri: `file://${imported.sourcePath}`,
+              mimeType: trackMimeType,
+              fileName: exportFilename(imported.name, sourceFormat, "import"),
+            }),
         }
       : {}),
     delete: {

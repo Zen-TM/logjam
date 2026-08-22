@@ -31,6 +31,7 @@ vi.mock("../sync/outbox", () => ({
   updateWaypointLocal: vi.fn(),
 }));
 vi.mock("../fileExport", () => ({ exportTrack: vi.fn(), exportStoredFile: vi.fn() }));
+vi.mock("../sync/mediaUpload", () => ({ attachMediaLocal: vi.fn() }));
 // Both reach expo-file-system, whose Flow sources vitest cannot parse — the
 // same wall shareRowSubtitle.ts and map/elevationSources.ts were split out to
 // stay behind.
@@ -244,5 +245,33 @@ describe("the share / send-a-copy verb matrix", () => {
     // Pre-retention rows degrade to GeoJSON-only export rather than sending a
     // derivation the sender never chose (GPX → GeoJSON is lossy).
     expect(vectorImportActions(importRow({ sourcePath: null })).sendCopy).toBeUndefined();
+  });
+
+  // A canyon's route slot takes TRACK media and nothing else, so this verb has
+  // a narrower gate than Send a copy over the very same file — the row that can
+  // only fail is absent, not offered (DESIGN.md §7).
+  it("gives an import with a GPX or KML original Attach to a canyon", () => {
+    for (const sourcePath of ["/imports/i1-source.gpx", "/imports/i1-source.kml"]) {
+      expect(vectorImportActions(importRow({ sourcePath })).attachToCanyon).toBeDefined();
+    }
+  });
+
+  it("withholds Attach to a canyon on a GeoJSON import and on one with no original", () => {
+    expect(
+      vectorImportActions(importRow({ sourcePath: "/imports/i1-source.geojson" }))
+        .attachToCanyon,
+    ).toBeUndefined();
+    expect(
+      vectorImportActions(importRow({ sourcePath: null })).attachToCanyon,
+    ).toBeUndefined();
+  });
+
+  it("never offers Attach to a canyon on the kinds that are not files", () => {
+    expect(routeActions(route("owner")).attachToCanyon).toBeUndefined();
+    expect(waypointActions(waypoint("owner")).attachToCanyon).toBeUndefined();
+    // A recording gets there through createRouteFrom instead: the track itself
+    // is never linked, a route made from it is.
+    expect(trackActions(track(3)).attachToCanyon).toBeUndefined();
+    expect(trackActions(track(3)).createRouteFrom).toBeDefined();
   });
 });

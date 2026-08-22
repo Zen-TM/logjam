@@ -21,6 +21,7 @@ import { messageFromError } from "@logjam/shared";
 import { assetHue, spacing, theme } from "../theme";
 import { BottomSheet, RenameForm, Row, Toggle } from "../ui";
 import { vectorImportActions } from "../saved/assetActions";
+import { useCanyonPicker } from "../canyons/useCanyonPicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
@@ -56,6 +57,7 @@ export function ImportOptionsSheet({
 }) {
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
+  const [attaching, setAttaching] = useState(false);
   // Rendered in this sheet rather than handed to the caller: this component is
   // the map's import options as well as Saved's, and a callback would have
   // given the verb only to whichever surface remembered to pass it.
@@ -73,6 +75,7 @@ export function ImportOptionsSheet({
       setRenaming(false);
       setSending(false);
       setShowingStats(false);
+      setAttaching(false);
     }
   }, [visible]);
 
@@ -102,12 +105,30 @@ export function ImportOptionsSheet({
     },
   });
 
+  // THE canyon picker, as a sub-mode of this sheet — the same panel the route
+  // and track sheets render. Called unconditionally, like the share panel.
+  const canyonPicker = useCanyonPicker({
+    source: "import",
+    active: attaching,
+    attach: async (canyonId, canyonName) => {
+      if (!actions?.attachToCanyon) throw new Error("This import has no original file.");
+      await actions.attachToCanyon(canyonId);
+      onInfo(`Attached a copy as ${canyonName}'s route.`);
+    },
+    onDone: () => {
+      setAttaching(false);
+      onClose();
+    },
+    onError,
+  });
+
   if (!imported || !actions) return null;
 
   const close = () => {
     setRenaming(false);
     setSending(false);
     setShowingStats(false);
+    setAttaching(false);
     onClose();
   };
 
@@ -138,7 +159,9 @@ export function ImportOptionsSheet({
       ? () => setSending(false)
       : showingStats
         ? () => setShowingStats(false)
-        : null;
+        : attaching
+          ? () => setAttaching(false)
+          : null;
 
   return (
     <BottomSheet
@@ -146,12 +169,23 @@ export function ImportOptionsSheet({
       onClose={leaveSubMode ?? close}
       // The stats sub-mode keeps the file's own name: it is the same subject,
       // seen as numbers.
-      title={renaming ? "Rename import" : sending ? share.title : imported.name}
+      title={
+        renaming
+          ? "Rename import"
+          : sending
+            ? share.title
+            : attaching
+              ? "Attach to a canyon"
+              : imported.name
+      }
       onBack={leaveSubMode ?? undefined}
       footer={sending ? share.footer : undefined}
+      header={attaching ? canyonPicker.header : undefined}
     >
       {sending && actions.sendCopy ? (
         share.body
+      ) : attaching ? (
+        canyonPicker.body
       ) : renaming ? (
         <View style={styles.body}>
           <RenameForm
@@ -232,6 +266,19 @@ export function ImportOptionsSheet({
             disabled={busy}
             onPress={() => setShowingStats(true)}
           />
+          {/* Absent on a row with no retained original, and on a GeoJSON one:
+              a canyon route attachment is track media, so there would be
+              nothing legal to upload (assetActions.ts withholds the verb). */}
+          {actions.attachToCanyon ? (
+            <Row
+              title="Attach to a canyon"
+              subtitle="As that canyon's route"
+              icon="link"
+              hue={assetHue.route}
+              disabled={busy}
+              onPress={() => setAttaching(true)}
+            />
+          ) : null}
           {actions.exports?.map((option) => (
             <Row
               key={option.title}
