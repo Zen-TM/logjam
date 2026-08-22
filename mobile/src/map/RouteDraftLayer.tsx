@@ -86,12 +86,22 @@ export function routeArrowStyle(
  * changes appearance immediately. A ViewAnnotation's child view does neither:
  * MLRN rasterises it once, so the old last-anchor kept its dark fill until the
  * draft was reopened.
+ *
+ * SELECTION rides in the same expression for the same reason: a selected anchor
+ * is a bigger dot with a light ring, driven by a `selected` property per
+ * feature, so picking and un-picking one repaints immediately and costs no new
+ * view. A selected anchor takes the WARNING fill on top of the size and ring:
+ * a middle anchor's own fill is near-white and a middle anchor's ring is the
+ * accent, so a size-only change is the one variation that has to read on all
+ * three roles at arm's length. It matches the one verb the selection offers.
  */
 const ANCHOR_RADIUS_END = 7;
 const ANCHOR_RADIUS_MIDDLE = 5;
+const ANCHOR_RADIUS_SELECTED = 10;
 
 function anchorFeatures(
   anchors: readonly RoutePoint[],
+  selectedIndex: number | null,
 ): GeoJSON.FeatureCollection {
   const last = anchors.length - 1;
   return {
@@ -101,6 +111,7 @@ function anchorFeatures(
       geometry: { type: "Point" as const, coordinates: [...anchor] },
       properties: {
         role: index === 0 ? "start" : index === last && last > 0 ? "end" : "middle",
+        selected: index === selectedIndex,
       },
     })),
   };
@@ -111,6 +122,7 @@ export function RouteDraftLayer({
   draft,
   dotted,
   color = theme.accent,
+  selectedIndex = null,
   onAnchorDragStart,
   onAnchorDrag,
   onAnchorDragEnd,
@@ -124,6 +136,8 @@ export function RouteDraftLayer({
    *  draft will SAVE with, so picking one shows up immediately rather than at
    *  the next reload; measure has no colour and draws in the accent. */
   color?: string;
+  /** The anchor the user has tapped, drawn picked out. Null when none is. */
+  selectedIndex?: number | null;
   onAnchorDragStart: (index: number) => void;
   onAnchorDrag: (index: number, point: RoutePoint) => void;
   onAnchorDragEnd: (index: number, point: RoutePoint) => void;
@@ -193,30 +207,48 @@ export function RouteDraftLayer({
 
       {/* Declared after the line, so it paints above it. */}
       {anchors.length > 0 ? (
-        <GeoJSONSource id={`${idPrefix}-anchors`} data={anchorFeatures(anchors)}>
+        <GeoJSONSource
+          id={`${idPrefix}-anchors`}
+          data={anchorFeatures(anchors, selectedIndex)}
+        >
           <Layer
             key={`${idPrefix}-anchor-dots`}
             type="circle"
             id={`${idPrefix}-anchor-dots`}
             style={{
               circleRadius: [
-                "match",
-                ["get", "role"],
-                "middle",
-                ANCHOR_RADIUS_MIDDLE,
-                ANCHOR_RADIUS_END,
+                "case",
+                ["get", "selected"],
+                ANCHOR_RADIUS_SELECTED,
+                [
+                  "match",
+                  ["get", "role"],
+                  "middle",
+                  ANCHOR_RADIUS_MIDDLE,
+                  ANCHOR_RADIUS_END,
+                ],
               ],
               circleColor: [
-                "match",
-                ["get", "role"],
-                "start",
-                theme.accent,
-                "end",
-                theme.primary,
-                theme.textPrimary,
+                "case",
+                ["get", "selected"],
+                theme.warning,
+                [
+                  "match",
+                  ["get", "role"],
+                  "start",
+                  theme.accent,
+                  "end",
+                  theme.primary,
+                  theme.textPrimary,
+                ],
               ],
-              circleStrokeWidth: 2,
-              circleStrokeColor: theme.accent,
+              circleStrokeWidth: ["case", ["get", "selected"], 3, 2],
+              circleStrokeColor: [
+                "case",
+                ["get", "selected"],
+                theme.textPrimary,
+                theme.accent,
+              ],
             }}
           />
         </GeoJSONSource>

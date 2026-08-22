@@ -276,7 +276,7 @@ import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers, protomapsLayerCount } from "./basemap/ProtomapsLayers";
 import { buildShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
-import { pressIsOnAnchor } from "./anchorHit";
+import { anchorIndexAtPress, pressIsOnAnchor } from "./anchorHit";
 import { stopSourcePress } from "./sourcePress";
 import { useConnectivity } from "./connectivity";
 import { rememberMapCamera } from "./lastCamera";
@@ -737,8 +737,17 @@ export function MapScreen({
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [savingRoute, setSavingRoute] = useState(false);
   /** A drag ends with a tap that also fires onSelected; this tells the two
-   *  apart so dropping a handle doesn't delete it. */
+   *  apart so dropping a handle doesn't select it. */
   const anchorDragged = useRef(false);
+  /** The anchor the user has tapped, in the ARMED tool's draft.
+   *
+   *  A tap on a handle picks it out and the panel grows a "Remove point"
+   *  button; a tap anywhere else lets it go. One piece of state for both tools,
+   *  because only one of them is ever armed. This replaced a modal confirm
+   *  raised from the annotation's `onSelect`, which the user never found —
+   *  selecting first is what makes the delete deliberate, so the dialog had
+   *  nothing left to add. */
+  const [selectedAnchor, setSelectedAnchor] = useState<number | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [namingRoute, setNamingRoute] = useState(false);
   const drawingRoute = routeDraft.active;
@@ -750,6 +759,14 @@ export function MapScreen({
       : null;
   /** Either point-collecting tool is armed — the flag every tap surface reads. */
   const collectingPoints = activeDraft !== null;
+  /** A selection is an INDEX, so anything that changes how many anchors there
+   *  are can slide it onto a different point — undo, clear, delete, a new tap,
+   *  an insert, switching tools. Dropping it on any count change is one rule
+   *  instead of six, and a drag (which never changes the count) keeps it. */
+  const anchorCount = activeDraft?.anchors.length ?? 0;
+  useEffect(() => {
+    setSelectedAnchor(null);
+  }, [anchorCount]);
   const routes = useMirrorRoutes();
   // The user's own drawn routes, on by default: they are few, they are theirs,
   // and the map is where they are for. The switch lives in the layers sheet.
@@ -1347,23 +1364,6 @@ export function MapScreen({
     [snapBetween],
   );
 
-  /** A tap on a handle offers to remove it — it does not remove it. A drag ends
-   *  on the handle too, and losing a point to what felt like a drop is not a
-   *  mistake the user can see coming (DESIGN.md §7). */
-  const confirmDeleteAnchor = useCallback(
-    (handle: RouteDraftHandle, index: number) => {
-      Alert.alert("Remove this point?", "The line will join its neighbours.", [
-        { text: "Keep it", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => handle.deleteAnchorAt(index),
-        },
-      ]);
-    },
-    [],
-  );
-
   /** Drag and tap wiring for one draft's handles.
    *
    *  The drag PREVIEWS on every frame (so the line follows the finger) and
@@ -1385,16 +1385,29 @@ export function MapScreen({
         // being read as "remove this point".
         anchorDragged.current = true;
       },
+      // Kept wired to the same selection the map's hit test drives, because it
+      // costs nothing: whichever of the two fires (or both), the result is the
+      // same index selected. The drag guard stays — a drop lands on the handle
+      // too, and picking a point on release would fight the gesture.
       onAnchorPress: (index: number) => {
         if (anchorDragged.current) {
           anchorDragged.current = false;
           return;
         }
-        confirmDeleteAnchor(handle, index);
+        setSelectedAnchor(index);
       },
     }),
-    [confirmDeleteAnchor, snapAroundAnchor],
+    [snapAroundAnchor],
   );
+
+  /** Delete the picked point, from the panel's "Remove point". No confirm: the
+   *  selection is the deliberate step the old modal stood in for, and Undo
+   *  takes it back. */
+  const removeSelectedAnchor = useCallback(() => {
+    if (selectedAnchor === null || !activeDraft) return;
+    activeDraft.deleteAnchorAt(selectedAnchor);
+    setSelectedAnchor(null);
+  }, [activeDraft, selectedAnchor]);
 
   /** Leaving route draw is NOT free the way leaving measure is — these points
    *  were meant to become something. Confirm before binning real work. */
@@ -1673,6 +1686,22 @@ export function MapScreen({
     [activeDraft, camera.zoom],
   );
 
+  /** Which anchor of the armed draft a press landed on, if any. Shares the
+   *  zoom-derived tolerance with `insertAnchorNear` — the reach has to feel the
+   *  same whichever gesture is asking. */
+  const pressedAnchorIndex = useCallback(
+    (lon: number, lat: number): number | null => {
+      if (!activeDraft?.draft) return null;
+      const degreesPerPixel = 360 / (256 * 2 ** camera.zoom * PIXEL_RATIO);
+      return anchorIndexAtPress(
+        activeDraft.draft.anchors,
+        [lon, lat],
+        degreesPerPixel,
+      );
+    },
+    [activeDraft, camera.zoom],
+  );
+
   const lastTap = useRef<TapSample | null>(null);
   /** Set when the SECOND tap of a double tap is still to arrive at
    *  `handleMapPress` — see the retroactive dismissal below. */
@@ -1691,6 +1720,17 @@ export function MapScreen({
       }
       // A tool armed owns every tap; nothing else on this handler runs.
       if (collectingPoints) {
+        // A tap that lands ON an existing anchor SELECTS it rather than
+        // appending — it used to stack a duplicate vertex straight on top of
+        // the handle the user was aiming at. The hit test is the map's own,
+        // not the annotation's `onSelect`, so the selection does not depend on
+        // that callback firing (see anchorHit.ts).
+        const hit = pressedAnchorIndex(lon, lat);
+        if (hit !== null) {
+          setSelectedAnchor(hit);
+          return;
+        }
+        setSelectedAnchor(null);
         void addToolPoint(lon, lat);
         return;
       }
@@ -1700,7 +1740,7 @@ export function MapScreen({
       // longer following you.
       setTappedPoint({ latitude: lat, longitude: lon });
     },
-    [addToolPoint, collectingPoints],
+    [addToolPoint, collectingPoints, pressedAnchorIndex],
   );
 
   const handleCanyonPress = useCallback(
@@ -4167,6 +4207,7 @@ export function MapScreen({
           <RouteDraftLayer
             idPrefix="route-draft"
             color={draftColor ?? undefined}
+            selectedIndex={selectedAnchor}
             draft={routeDraft.draft ?? emptyDraft}
             dotted={false}
             {...anchorHandlers(routeDraft)}
@@ -4177,6 +4218,9 @@ export function MapScreen({
         {measuring ? (
           <RouteDraftLayer
             idPrefix="measure-draft"
+            // `activeDraft` prefers the route draft, so a selection belongs to
+            // measure only while route draw is off.
+            selectedIndex={drawingRoute ? null : selectedAnchor}
             draft={measureDraft.draft ?? emptyDraft}
             dotted
             {...anchorHandlers(measureDraft)}
@@ -4321,6 +4365,9 @@ export function MapScreen({
             saving={false}
             onUndo={measureDraft.undo}
             onClear={measureDraft.clear}
+            onRemovePoint={
+              selectedAnchor === null ? undefined : removeSelectedAnchor
+            }
             snapMode={snapMode}
             onSnapModeChange={handleSnapModeChange}
             onDiscard={measureDraft.close}
@@ -4344,6 +4391,9 @@ export function MapScreen({
             saving={savingRoute}
             onUndo={routeDraft.undo}
             onClear={handleClearRouteDraw}
+            onRemovePoint={
+              selectedAnchor === null ? undefined : removeSelectedAnchor
+            }
             snapMode={snapMode}
             onSnapModeChange={handleSnapModeChange}
             onSave={() => setNamingRoute(true)}

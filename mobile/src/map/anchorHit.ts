@@ -32,13 +32,38 @@ export function pressIsOnAnchor(
   press: RoutePoint,
   degreesPerPixel: number,
 ): boolean {
+  return anchorIndexAtPress(anchors, press, degreesPerPixel) !== null;
+}
+
+/**
+ * WHICH anchor a press landed on, or null for a press on open map.
+ *
+ * The same hit test, answering the question a TAP asks rather than the one a
+ * long press asks. A tap inside an anchor's handle SELECTS that anchor — it
+ * does not append a point, which is what it used to do, stacking a duplicate
+ * vertex directly on top of the one the user was aiming at.
+ *
+ * NEAREST rather than first: two anchors a few pixels apart both satisfy the
+ * tolerance, and picking the one further from the finger is a wrong answer the
+ * user can see. Ties keep the earlier index, which is arbitrary but stable.
+ */
+export function anchorIndexAtPress(
+  anchors: readonly RoutePoint[],
+  press: RoutePoint,
+  degreesPerPixel: number,
+): number | null {
   const tolerance = degreesPerPixel * ANCHOR_GRAB_PIXELS;
-  return anchors.some((anchor) => {
+  let bestIndex: number | null = null;
+  let bestDistance = Infinity;
+  for (let index = 0; index < anchors.length; index++) {
+    const anchor = anchors[index]!;
     // Planar comparison in degrees, like `nearestSegment`'s: over a tolerance
     // of tens of pixels the longitude foreshortening at NSW latitudes is far
     // below the precision this decision needs.
-    const deltaLon = anchor[0] - press[0];
-    const deltaLat = anchor[1] - press[1];
-    return Math.hypot(deltaLon, deltaLat) <= tolerance;
-  });
+    const distance = Math.hypot(anchor[0] - press[0], anchor[1] - press[1]);
+    if (distance > tolerance || distance >= bestDistance) continue;
+    bestIndex = index;
+    bestDistance = distance;
+  }
+  return bestIndex;
 }

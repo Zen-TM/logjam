@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { ANCHOR_GRAB_PIXELS, pressIsOnAnchor } from "./anchorHit";
+import {
+  ANCHOR_GRAB_PIXELS,
+  anchorIndexAtPress,
+  pressIsOnAnchor,
+} from "./anchorHit";
 
 // Zoom 15-ish on a 3x screen: about 3.6e-6 degrees per pixel. The exact value
 // does not matter to these cases, only that the tolerance scales with it.
@@ -54,5 +58,38 @@ describe("pressIsOnAnchor", () => {
 
   it("has nothing to hit on an empty draft", () => {
     expect(pressIsOnAnchor([], [150.4, -33.5], DEGREES_PER_PIXEL)).toBe(false);
+  });
+});
+
+describe("anchorIndexAtPress", () => {
+  it("names the anchor the finger landed on", () => {
+    // The tap path: this is what turns a press into a SELECTED point instead of
+    // a duplicate vertex stacked on the one the user aimed at.
+    expect(anchorIndexAtPress(ANCHORS, ANCHORS[0], DEGREES_PER_PIXEL)).toBe(0);
+    expect(anchorIndexAtPress(ANCHORS, ANCHORS[1], DEGREES_PER_PIXEL)).toBe(1);
+  });
+
+  it("is null on open map, so the tap places a point as before", () => {
+    const midpoint: [number, number] = [
+      (ANCHORS[0][0] + ANCHORS[1][0]) / 2,
+      (ANCHORS[0][1] + ANCHORS[1][1]) / 2,
+    ];
+    expect(anchorIndexAtPress(ANCHORS, midpoint, DEGREES_PER_PIXEL)).toBeNull();
+    expect(anchorIndexAtPress([], ANCHORS[0], DEGREES_PER_PIXEL)).toBeNull();
+  });
+
+  it("picks the NEAREST of two anchors both within reach", () => {
+    // Two vertices a few pixels apart is ordinary at the end of a fiddly line.
+    // Answering with the first one in the list would delete the wrong point.
+    const close: [number, number][] = [
+      [150.4033, -33.5603],
+      [150.4033 + TOLERANCE * 0.5, -33.5603],
+    ];
+    const nearSecond: [number, number] = [
+      close[1][0] + TOLERANCE * 0.1,
+      close[1][1],
+    ];
+    expect(anchorIndexAtPress(close, nearSecond, DEGREES_PER_PIXEL)).toBe(1);
+    expect(anchorIndexAtPress(close, close[0], DEGREES_PER_PIXEL)).toBe(0);
   });
 });

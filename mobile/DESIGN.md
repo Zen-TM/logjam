@@ -259,12 +259,31 @@ BottomSheet(s)      acquisition + per-item actions
   colour is written by the save, and only when one was actually picked: a draft
   restored after the app was killed carries no colour, and writing null there
   would strip the colour off the route being edited.
-- **A handle is dragged far more often than it is deleted, so a TAP on one only
-  offers.** Dropping a point ends on the same pixel as tapping it; removing a
-  vertex on what felt like a drop is a loss the user cannot see coming, so the
-  tap opens the §7 destructive confirm. The line follows the finger DURING the
-  drag (preview, no undo step) and commits once on release — which is also when
-  snapping re-runs, on BOTH segments touching a middle anchor.
+- **A TAP on a handle SELECTS it; the verb then appears in the toolbar.** The
+  selected anchor is drawn picked out (bigger, warning fill, light ring — one
+  more branch in the same data-driven circle expression, not a new view), and
+  "Remove point" joins Undo and Clear in the tool panel for as long as it is
+  selected. Tapping open map lets it go. No confirm behind the button: choosing
+  the point IS the deliberate step, which is all the dialog was ever standing in
+  for, and Undo takes the delete back.
+  - This replaced a modal "Remove this point?" raised from the annotation's own
+    `onSelect`, which the user never found. A verb that only exists inside a
+    gesture nobody makes is a verb the app does not have — put it where the
+    other verbs already are.
+  - Selecting is decided by a HIT TEST on the map's own press
+    (`anchorIndexAtPress`, `map/anchorHit.ts`, tested), not by `onSelect`, so it
+    does not depend on that callback firing. It also fixes the tap that used to
+    stack a duplicate vertex straight on top of the handle the user aimed at.
+    `onSelect` stays wired to the same selection because it costs nothing:
+    whichever fires, the same index ends up picked.
+  - A selection is an INDEX, so ANY change in the anchor count drops it — undo,
+    clear, delete, a new point, an insert, switching tools. One rule, not six.
+    A drag never changes the count, so a picked point survives being moved.
+  - Dragging is unaffected: the line follows the finger DURING the drag
+    (preview, no undo step) and commits once on release — which is also when
+    snapping re-runs, on BOTH segments touching a middle anchor. The
+    `anchorDragged` guard still tells a drop apart from a tap, so releasing a
+    handle does not select it.
 - **A drawn line says which way it runs.** Small arrows along it
   (`RouteDirectionArrows`, a `symbol-placement: "line"` layer, so MapLibre
   spaces and rotates them itself) on the draft and on saved routes, with a zoom

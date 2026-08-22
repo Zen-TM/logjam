@@ -103,6 +103,14 @@ without calling it still leaks the tap. Not enforced by a test — the handlers
 are passed by reference, so a source scan cannot see them — so it is a
 convention to check when adding a pressable source.
 
+**A tap on an anchor is a hit test on the map's press, not `ViewAnnotation`'s
+`onSelect`.** `anchorIndexAtPress` (`src/map/anchorHit.ts`, tested) answers
+which anchor a tap landed on, and `handleMapPress` selects it instead of
+appending a point there. Same file, same tolerance and same reason as the rule
+below: position is knowable, callback ordering is not. `onSelect` is still wired
+to the same state — whichever fires, the same index is selected — but nothing
+depends on it.
+
 **A press-and-hold on an anchor reaches the MAP as well as the annotation.**
 MLRN 10's `PointAnnotation` consumed the touch that starts a drag; MLRN 11's
 `ViewAnnotation` does not, so the map's `onLongPress` also fires and the
