@@ -298,9 +298,11 @@ export function RouteOptionsSheet({
             disabled={busy}
             onPress={confirmDelete}
           />
-        ) : (
+        ) : actions.sharedWithYou ? (
+          // Keyed on ownership rather than on the delete verb's absence — the
+          // two only coincide for kinds whose delete is the owner's.
           <Text style={styles.sharedHint}>{SHARED_READ_ONLY_HINT}</Text>
-        )}
+        ) : null}
       </View>
       )}
     </BottomSheet>

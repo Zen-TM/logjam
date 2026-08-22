@@ -46,6 +46,7 @@ import type { MirrorCanyon } from "../sync/mirrorStore";
 import { deleteCanyonLocal } from "../sync/outbox";
 import { useConnectivity } from "../map/connectivity";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
+import { SHARED_READ_ONLY_HINT } from "../saved/assetActions";
 import {
   useMirrorCanyons,
   useMirrorShareCounts,
@@ -553,6 +554,12 @@ export function CanyonsScreen({
           canyonShare.body
         ) : menuCanyon ? (
           <View style={styles.sheetBody}>
+            {/* Edit, Share and Delete are all absent below on someone else's
+                canyon, and three verbs vanishing with nothing said reads as a
+                broken sheet. Same sentence as every other kind. */}
+            {menuCanyon.syncRole === "owner" ? null : (
+              <Text style={styles.sharedHint}>{SHARED_READ_ONLY_HINT}</Text>
+            )}
             <Row
               icon="book-open"
               title="Open canyon"
@@ -814,6 +821,7 @@ const styles = StyleSheet.create({
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
   badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
   sheetBody: { gap: spacing(1) },
+  sharedHint: { color: theme.textMuted, fontSize: fontSize.xs },
   empty: {
     alignItems: "center",
     gap: spacing(1),

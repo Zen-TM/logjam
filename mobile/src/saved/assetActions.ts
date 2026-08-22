@@ -56,14 +56,33 @@ import { deleteAsync, writeAsStringAsync } from "expo-file-system/legacy";
 import { scratchFileUri } from "../offline/localStores";
 
 /**
- * Why a shared asset's write verbs are missing, in one sentence — the map's
- * waypoint sheet and the Saved tab's overflow both say it, and the ownership
- * rule is not something two surfaces should word differently (DESIGN.md §7).
+ * Why a shared asset's write verbs are missing, in one sentence — five
+ * surfaces say it, and the ownership rule is not something any two of them
+ * should word differently (DESIGN.md §7).
+ *
+ * It does NOT name a canyon any more. It used to read "shared with you through
+ * a canyon", which was true while a canyon share was the only way someone
+ * else's row could reach this phone; direct `/shares` means a route, waypoint
+ * or LiDAR topo now arrives with no canyon involved at all, and the sentence
+ * was stating a false reason on the two surfaces that showed it most. Export
+ * is named because a sharee genuinely can, and the copy that said only "view"
+ * undersold what they were given.
  */
 export const SHARED_READ_ONLY_HINT =
-  "Shared with you through a canyon — you can view it, but only its owner can change it.";
+  "Shared with you — you can view and export it, but only its owner can change it.";
 
 export type AssetActions = {
+  /**
+   * Someone else owns this — the reason every write verb below is absent, and
+   * the flag the surfaces render `SHARED_READ_ONLY_HINT` on.
+   *
+   * An EXPLICIT statement rather than the proxy the screens used to read (`no
+   * delete descriptor` = shared). The proxy only held for kinds whose delete
+   * is the owner's: a LiDAR topo shared with you is a file on this handset, so
+   * it keeps its delete, fell through the test, and lost its Share verb with
+   * nothing on screen saying why.
+   */
+  sharedWithYou?: true;
   /** False when the asset has no geographic extent to fly to. */
   locatable: boolean;
   /** Resolved on tap — a track's extent needs its points read back. */
@@ -265,6 +284,7 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
 export function routeActions(route: MirrorRoute): AssetActions {
   const readOnly = route.syncRole === "shared";
   return {
+    ...(readOnly ? { sharedWithYou: true as const } : {}),
     locatable: route.points.length > 0,
     resolveBbox: async () =>
       bboxOfPoints(route.points.map(([lon, lat]) => ({ lon, lat }))),
@@ -307,6 +327,7 @@ export function routeActions(route: MirrorRoute): AssetActions {
 export function waypointActions(waypoint: MirrorWaypoint): AssetActions {
   const readOnly = waypoint.syncRole === "shared";
   return {
+    ...(readOnly ? { sharedWithYou: true as const } : {}),
     locatable: true,
     // A point has no extent; the caller's camera treats a degenerate bbox as
     // "centre here", which is exactly what showing a waypoint means.

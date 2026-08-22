@@ -31,7 +31,7 @@ import {
 import { assetHue, fontSize, spacing, theme } from "../theme";
 import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { deleteWaypointLocal, updateWaypointLocal } from "../sync/outbox";
-import { waypointActions } from "../saved/assetActions";
+import { SHARED_READ_ONLY_HINT, waypointActions } from "../saved/assetActions";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "./connectivity";
 import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
@@ -243,11 +243,8 @@ export function WaypointSheet({
       {mode === "actions" ? (
         <View style={styles.body}>
           <StatGrid stats={stats} />
-          {readOnly ? (
-            <Text style={styles.hint}>
-              Shared with you through a canyon — you can view it, but only its
-              owner can change it.
-            </Text>
+          {actions?.sharedWithYou ? (
+            <Text style={styles.hint}>{SHARED_READ_ONLY_HINT}</Text>
           ) : null}
           {waypoint.notes ? <Text style={styles.notes}>{waypoint.notes}</Text> : null}
           <Row

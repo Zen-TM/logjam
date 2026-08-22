@@ -103,6 +103,32 @@ describe("assetActions ownership", () => {
     expect(actions.rename).toBeUndefined();
     expect(actions.locatable).toBe(true);
   });
+
+  // `sharedWithYou` is what every surface renders SHARED_READ_ONLY_HINT on,
+  // and the hint's whole job is to explain the missing verbs — so a descriptor
+  // that sets the flag while still offering a write verb puts a sentence on
+  // screen that the buttons beside it contradict, and one that withholds the
+  // verbs without the flag leaves them missing with nothing said. That second
+  // case is not hypothetical: it is exactly what a shared LiDAR topo did,
+  // because the screens read "no delete descriptor" as the proxy for shared.
+  it.each([
+    ["route", routeActions(route("shared"))],
+    ["waypoint", waypointActions(waypoint("shared"))],
+  ])("flags a shared %s and withholds every write verb with it", (_kind, actions) => {
+    expect(actions.sharedWithYou).toBe(true);
+    expect(actions.share).toBeUndefined();
+    expect(actions.rename).toBeUndefined();
+    expect(actions.delete).toBeUndefined();
+  });
+
+  it.each([
+    ["route", routeActions(route("owner"))],
+    ["waypoint", waypointActions(waypoint("owner"))],
+  ])("leaves the flag off an owned %s, which keeps its verbs", (_kind, actions) => {
+    expect(actions.sharedWithYou).toBeUndefined();
+    expect(actions.share).toBeDefined();
+    expect(actions.delete).toBeDefined();
+  });
 });
 
 // An import's export rows decide WHICH FILE the user gets back, and getting it

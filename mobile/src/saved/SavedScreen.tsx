@@ -295,6 +295,9 @@ type SavedItem = {
     sizeBytes: number;
     delete: () => Promise<unknown>;
   }[];
+  /** Someone else owns it — see `AssetActions.sharedWithYou`. Drives the
+   *  read-only hint, and is why the write verbs below are missing. */
+  sharedWithYou?: true;
   /** Absent on an asset this user may not delete — see `AssetActions.delete`.
    *  Such a row offers no Delete in its sheet and cannot be multi-selected,
    *  because deleting is the only thing a selection does. */
@@ -921,7 +924,7 @@ export function SavedScreen({
         // when the signal did. It is present and DIMMED instead, with the
         // reason in its subtitle (DESIGN.md §10).
         ...(job?.syncRole === "shared"
-          ? {}
+          ? { sharedWithYou: true as const }
           : { share: { entityType: "topoJob" as const, entityId: group.key } }),
         locatable: group.bbox != null,
         resolveBbox: async () => group.bbox,
@@ -2195,10 +2198,13 @@ export function SavedScreen({
           ) : (
             <>
               {/* Says why the write verbs below are missing, in the same words
-                  the map's waypoint sheet uses. */}
-              {menuItem.delete ? null : (
+                  every other surface uses. Keyed on OWNERSHIP, not on the
+                  delete verb being absent: a LiDAR topo shared with you is
+                  still a file on this handset, so it keeps its delete and used
+                  to lose its Share verb with nothing explaining it. */}
+              {menuItem.sharedWithYou ? (
                 <Text style={styles.sharedHint}>{SHARED_READ_ONLY_HINT}</Text>
-              )}
+              ) : null}
               {menuItem.locatable ? (
                 <Row
                   title="Show on map"

@@ -14,6 +14,7 @@ import { formatDistanceM, routeLengthM } from "@logjam/shared";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 import { BottomSheet, Button, ProfileChart, elevationSeries } from "../ui";
 import { useElevationProfile } from "../map/useElevationProfile";
+import { SHARED_READ_ONLY_HINT } from "../saved/assetActions";
 import type { MirrorRoute } from "../sync/mirrorStore";
 
 export function RouteStatsSheet({
@@ -81,9 +82,7 @@ export function RouteStatsSheet({
         )}
 
         {route.syncRole === "shared" ? (
-          <Text style={styles.note}>
-            Shared with you — you can view and export it, but not change it.
-          </Text>
+          <Text style={styles.note}>{SHARED_READ_ONLY_HINT}</Text>
         ) : null}
 
         <Button label="View options" icon="more-horizontal" onPress={onViewOptions} />
