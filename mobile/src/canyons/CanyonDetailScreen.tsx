@@ -373,7 +373,10 @@ export function CanyonDetailScreen({
             linkedType="canyon"
             linkedId={canyonId}
             media={attachments}
-            emptyHint="Attach a .gpx or .kml."
+            // Not "Attach a .gpx or .kml" any more: the slot takes a drawn
+            // route, an import or a recording as readily as a file, and naming
+            // only the file promised the least of the five (see AddWaySheet).
+            emptyHint="Add a route, a file or a recording."
             onFailed={(text) => notify(text, "error")}
             onShowRoute={(item) => {
               resolveRouteAttachmentBbox({
