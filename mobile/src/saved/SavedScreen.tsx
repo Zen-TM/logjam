@@ -1791,24 +1791,15 @@ export function SavedScreen({
             // of them would be a mis-tap waiting to happen (DESIGN.md §7).
             onLongPress={() => selectItem(item)}
             onPress={selecting ? () => selectItem(item) : undefined}
+            /* ONE trailing slot for both modes, and every child of it keeps its
+               place when the mode changes. Selecting used to render a slot of
+               its own holding only the size and a 22px circle: the pill and the
+               two buttons went away, the title column got their width back, and
+               a two-line title un-wrapped — so entering the mode SHRANK rows
+               and the whole list jumped up under the user's finger. The circle
+               therefore takes the ⋯ button's 40pt box rather than replacing it,
+               and the pill stays put; only the buttons stop responding. */
             right={
-              selecting ? (
-                <View style={styles.rowActions}>
-                  {item.sizeBytes > 0 ? (
-                    <Text style={styles.size}>{formatBytes(item.sizeBytes)}</Text>
-                  ) : null}
-                  {/* No circle at all on a row that cannot be picked: an
-                      empty checkbox is a promise that tapping it does
-                      something. */}
-                  {item.delete ? (
-                    <Feather
-                      name={picked ? "check-circle" : "circle"}
-                      size={22}
-                      color={picked ? theme.accent : theme.textMuted}
-                    />
-                  ) : null}
-                </View>
-              ) : (
               <View style={styles.rowActions}>
                 {item.sizeBytes > 0 ? (
                   <Text style={styles.size}>{formatBytes(item.sizeBytes)}</Text>
@@ -1831,16 +1822,35 @@ export function SavedScreen({
                     icon={item.inlineAction.icon}
                     accessibilityLabel={item.inlineAction.label}
                     color={theme.accent}
+                    // Inert while picking — the row's own tap is the verb now —
+                    // but still rendered, because its absence would resize the
+                    // row (see the note above).
+                    disabled={selecting}
                     onPress={item.inlineAction.onPress}
                   />
                 ) : null}
-                <IconButton
-                  icon="more-vertical"
-                  accessibilityLabel={`Actions for ${item.title}`}
-                  onPress={() => openItemSheet(item.key)}
-                />
+                {selecting ? (
+                  // The ⋯ button's box, holding the checkbox. No circle at all
+                  // on a row that cannot be picked — an empty checkbox is a
+                  // promise that tapping it does something — but the box stays,
+                  // so an unpickable row is still the height it was.
+                  <View style={styles.selectBox}>
+                    {item.delete ? (
+                      <Feather
+                        name={picked ? "check-circle" : "circle"}
+                        size={22}
+                        color={picked ? theme.accent : theme.textMuted}
+                      />
+                    ) : null}
+                  </View>
+                ) : (
+                  <IconButton
+                    icon="more-vertical"
+                    accessibilityLabel={`Actions for ${item.title}`}
+                    onPress={() => openItemSheet(item.key)}
+                  />
+                )}
               </View>
-              )
             }
           />
           );
@@ -2437,6 +2447,9 @@ const styles = StyleSheet.create({
   },
   body: { paddingHorizontal: spacing(2), paddingBottom: spacing(4), gap: spacing(1) },
   rowActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
+  // IconButton's own box, so the checkbox that stands in for the ⋯ button
+  // occupies exactly what it replaced and the row cannot resize on selection.
+  selectBox: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   size: { color: theme.textMuted, fontSize: fontSize.xs, fontWeight: fontWeight.medium },
   sheetBody: { gap: spacing(1) },
   // Same treatment as the map's waypoint sheet hint: a footnote above the
