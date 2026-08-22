@@ -3257,6 +3257,10 @@ export function MapScreen({
       // "add a point here" — the mobile stand-in for dragging the line on web.
       // Only when it lands near the line; anywhere else follows the preference.
       if (insertAnchorNear(lon, lat)) return;
+      // Drawing or measuring: every other long-press outcome (waypoint, navigate,
+      // start route/measure, add canyon, "This point" sheet) is a bug mid-draw —
+      // press-and-hold off the line does nothing while a tool is armed.
+      if (collectingPoints) return;
       const point = { latitude: lat, longitude: lon };
       switch (longPressAction) {
         case "waypoint":
@@ -3282,6 +3286,7 @@ export function MapScreen({
       }
     },
     [
+      collectingPoints,
       dropWaypointAt,
       insertAnchorNear,
       longPressAction,
