@@ -94,9 +94,9 @@ such call on `onDidFinishLoadingMap`, and prefer the bounds carried on
 
 **A source's press bubbles to the MAP in MLRN 11.** MLRN 10 let a source's
 `onPress` consume the tap; MLRN 11 emits it on the source AND on the `Map`
-(documented on `MapProps.onPress`). Tapping a canyon, route, track or waypoint
-therefore also ran the map's handler and opened the "This point" sheet on top
-of the one the user asked for — and with a point tool armed it placed a point
+(documented on `MapProps.onPress`). Tapping a canyon, route, track, import or
+waypoint therefore also ran the map's handler and opened the "This point" sheet
+on top of the one the user asked for — and with a point tool armed it placed a point
 at the same tap. Every pressable source handler calls `stopSourcePress(event)`
 (`src/map/sourcePress.ts`) FIRST, before any early return: a handler that bails
 without calling it still leaks the tap. Not enforced by a test — the handlers
