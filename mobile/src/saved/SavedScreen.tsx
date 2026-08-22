@@ -153,7 +153,6 @@ import {
   WaypointTagsBody,
 } from "../waypoints/waypointSheetBodies";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
-import { RouteStatsSheet } from "../routes/RouteStatsSheet";
 import { LinkCanyonSheet } from "../routes/LinkCanyonSheet";
 
 
@@ -1475,14 +1474,14 @@ export function SavedScreen({
 
   const menuItem = items.find((item) => item.key === menuItemKey) ?? null;
   // A route's overflow is the SAME sheet the map shows, so the two surfaces
-  // cannot offer different verbs for the same object (DESIGN.md §7). Rename is
-  // the exception: the form lives in the generic sheet, so choosing it hands
-  // back to that one.
+  // cannot offer different verbs for the same object (DESIGN.md §7) — rename,
+  // sharing and the stats are all sub-modes of that sheet, so there is nothing
+  // left for this screen to hand back to.
   const menuRoute =
     menuItem?.category === "route"
       ? ((routes.data ?? []).find((route) => route.id === menuItem.key) ?? null)
       : null;
-  const showRouteSheet = menuRoute !== null && menuMode !== "rename";
+  const showRouteSheet = menuRoute !== null;
   // A waypoint's overflow offers the same verbs its map sheet does — the bodies
   // are shared (waypoints/waypointSheetBodies.tsx) so the two cannot drift.
   const menuWaypoint =
@@ -1550,7 +1549,6 @@ export function SavedScreen({
       fail(messageFromError(err, "Couldn't save that change."));
     });
   };
-  const [statsRoute, setStatsRoute] = useState<MirrorRoute | null>(null);
   const [linkingRoute, setLinkingRoute] = useState<MirrorRoute | null>(null);
 
   return (
@@ -2401,10 +2399,6 @@ export function SavedScreen({
         route={menuRoute}
         visible={showRouteSheet}
         onClose={closeItemSheet}
-        onViewStats={() => {
-          setStatsRoute(menuRoute);
-          closeItemSheet();
-        }}
         onShowOnMap={() => {
           const target = menuItem;
           closeItemSheet();
@@ -2415,24 +2409,12 @@ export function SavedScreen({
           closeItemSheet();
           if (routeId) onEditRoute(routeId);
         }}
-        onRename={() => setMenuMode("rename")}
         onLinkCanyon={() => {
           setLinkingRoute(menuRoute);
           closeItemSheet();
         }}
         onInfo={info}
         onError={fail}
-      />
-
-      <RouteStatsSheet
-        route={statsRoute}
-        visible={statsRoute !== null}
-        onClose={() => setStatsRoute(null)}
-        onViewOptions={() => {
-          const target = statsRoute;
-          setStatsRoute(null);
-          if (target) openItemSheet(target.id);
-        }}
       />
 
       <LinkCanyonSheet

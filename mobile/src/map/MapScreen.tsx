@@ -204,7 +204,6 @@ import { MapToolGroup, type MapTool } from "./MapToolGroup";
 import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
 import type { MirrorRoute } from "../sync/mirrorStore";
-import { RouteStatsSheet } from "../routes/RouteStatsSheet";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import { LinkCanyonSheet } from "../routes/LinkCanyonSheet";
 import { BottomSheet } from "../ui/BottomSheet";
@@ -256,7 +255,6 @@ import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
 import { confirmFinishRecording } from "../tracks/finishRecordingPrompt";
 import { RecordButton } from "../tracks/RecordButton";
 import { RecordingSheet } from "../tracks/RecordingSheet";
-import { TrackStatsSheet } from "../tracks/TrackStatsSheet";
 import {
   isRecordingWriteFailing,
   onTrackWriteHealthChanged,
@@ -750,11 +748,11 @@ export function MapScreen({
   // rows' `visible`) so it toggles smoothly and stays toggleable with zero
   // tracks — the layer sheet's Tracks switch drives this directly.
   const [showTracks, setShowTracks] = useState(true);
-  // Tapping a route opens its stats; every verb sits one step further on, so a
-  // tap on the map can never begin an accidental edit. Three sheets, one at a
-  // time, each holding the id rather than the row — the row comes from the
-  // mirror so it stays current if a sync lands while a sheet is open.
-  const [statsRouteId, setStatsRouteId] = useState<string | null>(null);
+  // Tapping a route opens its OPTIONS — the same panel Saved's ⋯ opens, with
+  // the stats a sub-mode one row in (DESIGN.md §7: the same object offers the
+  // same panel wherever it is tapped). Two sheets, one at a time, each holding
+  // the id rather than the row — the row comes from the mirror so it stays
+  // current if a sync lands while a sheet is open.
   const [optionsRouteId, setOptionsRouteId] = useState<string | null>(null);
   const [linkingRouteId, setLinkingRouteId] = useState<string | null>(null);
   // Set when the draw was started from a canyon page; consumed by the save.
@@ -1658,13 +1656,10 @@ export function MapScreen({
   );
 
   /** A recorded line's own verbs, from the map (DESIGN.md §7: the same object
-   *  wherever it is listed). Held as an id, so an edit made inside the sheet
+   *  wherever it is listed) — what a TAP on the line opens, with the stats a
+   *  sub-mode one row in. Held as an id, so an edit made inside the sheet
    *  re-renders it rather than showing the copy the line was tapped with. */
   const [optionsTrackId, setOptionsTrackId] = useState<string | null>(null);
-  // Tapping a line asks what it IS; the verbs are one tap further on, behind
-  // the stats sheet's "View options" — the same two-step a route already has
-  // (DESIGN.md §7), so neither line type is a lesser object than the other.
-  const [statsTrackId, setStatsTrackId] = useState<string | null>(null);
   const [recordingSheetOpen, setRecordingSheetOpen] = useState(false);
   const handleTrackPress = useCallback(
     (track: Track, coordinates?: { latitude: number; longitude: number }) => {
@@ -1678,7 +1673,7 @@ export function MapScreen({
         }
         return;
       }
-      setStatsTrackId(track.id);
+      setOptionsTrackId(track.id);
     },
     [addToolPoint, collectingPoints],
   );
@@ -2346,7 +2341,6 @@ export function MapScreen({
 
   const findRoute = (id: string | null) =>
     (id && routes.data?.find((route) => route.id === id)) || null;
-  const statsRoute = findRoute(statsRouteId);
   const optionsRoute = findRoute(optionsRouteId);
   const linkingRoute = findRoute(linkingRouteId);
 
@@ -4015,8 +4009,9 @@ export function MapScreen({
             routes={visibleRoutes}
             hiddenRouteId={editingRouteId}
             // While a tool is collecting points every tap belongs to the tool —
-            // opening a stats sheet mid-draw would steal the point being placed.
-            onPressRoute={collectingPoints ? undefined : setStatsRouteId}
+            // opening an options sheet mid-draw would steal the point being
+            // placed.
+            onPressRoute={collectingPoints ? undefined : setOptionsRouteId}
           />
         ) : null}
 
@@ -4576,34 +4571,14 @@ export function MapScreen({
         onFailed={(text) => notify(text, "error")}
       />
 
-      {/* Route sheets: stats → options → link, each opening the next and
-          closing itself, so only one is ever on screen. */}
-      <RouteStatsSheet
-        allowNetwork={!offlineOnly}
-        route={statsRoute}
-        visible={statsRoute !== null}
-        onClose={() => setStatsRouteId(null)}
-        onViewOptions={() => {
-          setOptionsRouteId(statsRouteId);
-          setStatsRouteId(null);
-        }}
-      />
-
+      {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
+          in (DESIGN.md §7). No "Show on map" row here — the user is looking at
+          the line they just tapped. */}
       <RouteOptionsSheet
         route={optionsRoute}
         visible={optionsRoute !== null}
         onClose={() => setOptionsRouteId(null)}
-        onViewStats={() => {
-          setStatsRouteId(optionsRouteId);
-          setOptionsRouteId(null);
-        }}
-        onShowOnMap={() => {
-          const bbox =
-            optionsRoute &&
-            bboxOfPoints(optionsRoute.points.map(([lon, lat]) => ({ lon, lat })));
-          setOptionsRouteId(null);
-          if (bbox) fitCameraToBbox(bbox);
-        }}
+        allowNetwork={!offlineOnly}
         onEdit={() => {
           const target = optionsRoute;
           setOptionsRouteId(null);
@@ -4630,23 +4605,14 @@ export function MapScreen({
         allowNetwork={!offlineOnly}
       />
 
-      {/* A finished track's stats, and the way through to its verbs. */}
-      <TrackStatsSheet
-        allowNetwork={!offlineOnly}
-        track={tracks.find((track) => track.id === statsTrackId) ?? null}
-        visible={statsTrackId !== null}
-        onClose={() => setStatsTrackId(null)}
-        onViewOptions={() => {
-          setOptionsTrackId(statsTrackId);
-          setStatsTrackId(null);
-        }}
-      />
-
+      {/* A finished track's verbs, from the line the user tapped. Its stats are
+          a sub-mode one tap in, and there is no "Show on map" row — the line is
+          already on screen. */}
       <TrackOptionsSheet
         track={tracks.find((track) => track.id === optionsTrackId) ?? null}
         visible={optionsTrackId !== null}
         onClose={() => setOptionsTrackId(null)}
-        onShowOnMap={(bbox) => fitCameraToBbox(bbox)}
+        allowNetwork={!offlineOnly}
         onContinueRecording={(track) => void handleContinueRecording(track)}
         onInfo={(text) => notify(text, "info")}
         onError={(text) => notify(text, "error")}

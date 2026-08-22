@@ -754,19 +754,46 @@ which subsystem is talking.
   Two places offering "Delete" with two descriptions of what is deleted is how one
   of them goes stale. Inside a sheet it opens as an `overlay` sub-mode, not a second
   sheet (§6).
-- **A tapped LINE answers "what is this" before it offers verbs.** A route opened
-  its stats sheet; a recorded track went straight to its verb list, and an
-  imported file had no answer anywhere. All three now render ONE body
-  (`tracks/TrackStatsBody.tsx`) from ONE derivation (`computeTrackDetail` in
-  shared) — distance, ascent and descent, moving and stopped time, average and
-  moving speed, the height band, and the elevation and speed profiles — with the
-  verbs behind "View options" (map) or a `stats` sub-mode (Saved). Two rules hold
-  it together. The stats are **derived on demand, never stored**: the recorder
-  caches four columns because it writes them as it goes, and everything else is
-  computed when something is looking at it, so a new stat is never a migration.
-  And a series with **no timestamps renders no time-derived cell at all** — an
-  imported GPX without `<time>` has a real distance and a real climb and no
-  honest pace, so those cells are absent rather than zero.
+- **A tapped LINE offers its VERBS, and the stats are one tap in.** This is the
+  reverse of what shipped first (a tap opened the stats sheet, with the verbs
+  behind a "View options" button at its bottom) and the reason is the rule above
+  it: the same object must offer the same panel wherever it is reached. Saved's
+  ⋯ opened the verb list, the map opened a read-only summary, and the two
+  surfaces disagreed about what tapping a route even meant. A route, a recorded
+  track and an imported file now all open their options sheet from either
+  surface, with "View stats" a `stats` SUB-MODE of that sheet (§6 — a sub-mode
+  swaps the content, it never stacks) and a back arrow to the verbs, exactly as
+  Saved already did. The standalone `RouteStatsSheet`/`TrackStatsSheet` and
+  their "View options" buttons are deleted; the bodies they rendered
+  (`tracks/TrackStatsBody.tsx`, `routes/RouteStatsBody.tsx`) are what the
+  sub-mode mounts. Three rules hold it together. The stats come from ONE
+  derivation (`computeTrackDetail` in shared) — distance, ascent and descent,
+  moving and stopped time, average and moving speed, the height band, and the
+  elevation and speed profiles. They are **derived on demand, never stored**:
+  the recorder caches four columns because it writes them as it goes, and
+  everything else is computed when something is looking at it, so a new stat is
+  never a migration. And a series with **no timestamps renders no time-derived
+  cell at all** — an imported GPX without `<time>` has a real distance and a
+  real climb and no honest pace, so those cells are absent rather than zero.
+- **One kind, one options sheet, rendered by BOTH surfaces — and the only row
+  they may differ by is "Show on map".** A route (`routes/RouteOptionsSheet`), a
+  track (`tracks/TrackOptionsSheet`) and an import
+  (`imports/ImportOptionsSheet`) each have exactly one verb list, mounted by
+  `map/MapScreen` and by `saved/SavedScreen` alike. Saved leads the list with
+  "Show on map"; the map omits that one row, because the user got there by
+  tapping the thing and is already looking at it. Everything else — the
+  map-visibility toggle included — appears on both. Two corollaries. A row must
+  never be conditional on a CALLBACK the caller might not pass: that is how the
+  map's route sheet ended up with no Rename at all, so a verb whose panel fits
+  in the sheet (rename, share, send a copy, stats) is a sub-mode of the sheet
+  and not the caller's business. And a verb that genuinely needs the map (arming
+  the draw tool, starting the recorder) is still PRESENT on the Saved surface
+  and hands over — see "Continue recording" and "Edit points".
+- **A visibility toggle is a STATE row and must not be worded like the "Show on
+  map" verb beside it.** The track sheet's toggle read "Show on the map" while
+  the row above it read "Show on map" — one draws the line, the other flies to
+  it, and two rows a word apart are read as the same thing twice. The toggles
+  say "Visible on the map".
 - **A selection is a STATE of the row, not a label on it.** The basemap list used
   to hang a "Showing" pill off the active row; it now lights the whole card (accent
   border, accent tint, a filled check). One row looking different is read before any

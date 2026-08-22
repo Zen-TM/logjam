@@ -1,11 +1,16 @@
 // The verb list for one recorded track, rendered from `trackActions` — the
-// sheet the map opens when a track line is tapped.
+// sheet the map opens when a track line is tapped AND the sheet behind Saved's
+// three-dots.
 //
-// Same shape and the same reason as RouteOptionsSheet: the actions have one
-// definition in saved/assetActions.ts, and a track reached from the map must
-// not be a lesser object than one reached from Saved (DESIGN.md §7). The
-// rename is a sub-mode of THIS sheet rather than a second one (§6: never open a
-// second sheet — swap the content).
+// ONE component for both, same shape and same reason as RouteOptionsSheet: the
+// actions have one definition in saved/assetActions.ts, and a track reached
+// from the map must not be a lesser object than one reached from Saved
+// (DESIGN.md §7). Rename, Send a copy and the stats are sub-modes of THIS
+// sheet rather than second sheets (§6: never open a second sheet — swap the
+// content), so no caller can be the surface that forgot one.
+//
+// `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
+// looking at the line you tapped.
 import { useEffect, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { messageFromError } from "@logjam/shared";
@@ -18,6 +23,9 @@ import { ExportUnsupportedError } from "../fileExport";
 import { updateTrack, type Track } from "./tracksDb";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
+import { useElevationProfile } from "../map/useElevationProfile";
+import { TrackStatsBody } from "./TrackStatsBody";
+import { useTrackDetail } from "./useTrackDetail";
 
 export function TrackOptionsSheet({
   track,
@@ -27,11 +35,17 @@ export function TrackOptionsSheet({
   onContinueRecording,
   onInfo,
   onError,
+  allowNetwork = true,
 }: {
   track: Track | null;
   visible: boolean;
   onClose: () => void;
-  onShowOnMap: (bbox: Bbox) => void;
+  /**
+   * Fly the map to this track. Saved-only — the map surface omits it, because
+   * the user got here by tapping the line and is already looking at it
+   * (DESIGN.md §7: "View on map" is the one row the two surfaces differ by).
+   */
+  onShowOnMap?: (bbox: Bbox) => void;
   /**
    * Pick this recording back up. Owned by the MAP rather than by this sheet
    * because starting a recorder needs the location permission prompt, which
@@ -42,8 +56,12 @@ export function TrackOptionsSheet({
   onContinueRecording: (track: Track) => void;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
+  /** False in "Simulating offline mode" — the stats sub-mode then reads
+   *  elevation only from tiles already on the phone. */
+  allowNetwork?: boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
+  const [showingStats, setShowingStats] = useState(false);
   // Rendered in this sheet rather than handed to the caller: this component is
   // the map's track options as well as Saved's, and a callback would have
   // given the verb only to whichever surface remembered to pass it.
@@ -62,8 +80,21 @@ export function TrackOptionsSheet({
     if (!visible) {
       setRenaming(false);
       setSending(false);
+      setShowingStats(false);
     }
   }, [visible]);
+
+  // The stats read the whole series back, so they run only while that sub-mode
+  // is actually open — the same `enabled` gate `useTrackDetail` exists for
+  // (mobile/CLAUDE.md, Battery).
+  const { detail, loading, line } = useTrackDetail(
+    track?.id ?? null,
+    visible && showingStats && track != null,
+    track?.durationMs,
+  );
+  const { profile: demProfile, loading: demLoading } = useElevationProfile(line, {
+    allowNetwork,
+  });
 
   const shareRowProps = useShareRowProps(online);
   const actions = track ? trackActions(track) : null;
@@ -86,6 +117,7 @@ export function TrackOptionsSheet({
   const close = () => {
     setRenaming(false);
     setSending(false);
+    setShowingStats(false);
     onClose();
   };
 
@@ -108,19 +140,25 @@ export function TrackOptionsSheet({
     );
   };
 
+  // Every sub-mode backs out to the verb list; only the list itself closes the
+  // sheet (DESIGN.md §6 — a sub-mode swaps the content, it never stacks).
+  const leaveSubMode = renaming
+    ? () => setRenaming(false)
+    : sending
+      ? () => setSending(false)
+      : showingStats
+        ? () => setShowingStats(false)
+        : null;
+
   return (
     <BottomSheet
       visible={visible}
       // A sub-mode backs out to its parent, not out of the sheet (DESIGN.md §6).
-      onClose={
-        renaming
-          ? () => setRenaming(false)
-          : sending
-            ? () => setSending(false)
-            : close
-      }
+      onClose={leaveSubMode ?? close}
+      // The stats sub-mode keeps the track's own name: it is the same subject,
+      // seen as numbers.
       title={renaming ? "Rename track" : sending ? share.title : track.name}
-      onBack={sending ? () => setSending(false) : undefined}
+      onBack={leaveSubMode ?? undefined}
       footer={sending ? share.footer : undefined}
     >
       {/* Send a copy REPLACES the verb list, like Rename does and like the
@@ -151,41 +189,25 @@ export function TrackOptionsSheet({
             }}
           />
         </View>
+      ) : showingStats ? (
+        <View style={styles.body}>
+          {/* The stored duration, not the series': a track's recording time is
+              wall-clock minus pauses, and the point-derived span stops at the
+              last accepted fix (see `recordedDurationMs`). */}
+          <TrackStatsBody
+            detail={detail}
+            loading={loading}
+            elapsedMs={track.durationMs}
+            demProfile={demProfile}
+            demLoading={demLoading}
+          />
+        </View>
       ) : (
         <View style={styles.body}>
-          {/* Visibility is the one property of a track that is about the MAP
-              rather than the track, so it belongs here rather than only in the
-              layers sheet — the user tapped the line to act on it. */}
-          <Row
-            title="Show on the map"
-            icon="eye"
-            hue={assetHue.track}
-            right={
-              <Toggle
-                value={track.visible}
-                accessibilityLabel={`Show ${track.name}`}
-                onValueChange={(next) => {
-                  updateTrack(track.id, { visible: next }).catch(console.error);
-                }}
-              />
-            }
-          />
-          {/* First of the verbs, and above "Zoom to this track", because it is
-              the only one that changes what the phone is DOING rather than
-              what it is showing. */}
-          <Row
-            title="Continue recording"
-            icon="play-circle"
-            hue={assetHue.track}
-            disabled={busy}
-            onPress={() => {
-              close();
-              onContinueRecording(track);
-            }}
-          />
-          {actions.locatable ? (
+          {/* The one row the two surfaces differ by, and it leads the list. */}
+          {onShowOnMap && actions.locatable ? (
             <Row
-              title="Zoom to this track"
+              title="Show on map"
               icon="map-pin"
               hue={assetHue.track}
               disabled={busy}
@@ -200,6 +222,48 @@ export function TrackOptionsSheet({
               }}
             />
           ) : null}
+          {/* Visibility is the one property of a track that is about the MAP
+              rather than the track, so it belongs here rather than only in the
+              layers sheet — the user tapped the line to act on it. Worded as a
+              STATE, not as the "Show on map" verb above it: one draws the line,
+              the other flies to it, and two rows a word apart would be read as
+              the same thing twice. */}
+          <Row
+            title="Visible on the map"
+            icon="eye"
+            hue={assetHue.track}
+            right={
+              <Toggle
+                value={track.visible}
+                accessibilityLabel={`Show ${track.name} on the map`}
+                onValueChange={(next) => {
+                  updateTrack(track.id, { visible: next }).catch(console.error);
+                }}
+              />
+            }
+          />
+          {/* What this track IS, one tap in — a tapped line opens the verbs
+              now, and the numbers are behind this row (DESIGN.md §7). */}
+          <Row
+            title="View stats"
+            subtitle="Distance, climb, pace and profiles"
+            icon="bar-chart-2"
+            hue={assetHue.track}
+            disabled={busy}
+            onPress={() => setShowingStats(true)}
+          />
+          {/* The one verb that changes what the phone is DOING rather than
+              what it is showing. */}
+          <Row
+            title="Continue recording"
+            icon="play-circle"
+            hue={assetHue.track}
+            disabled={busy}
+            onPress={() => {
+              close();
+              onContinueRecording(track);
+            }}
+          />
           {actions.createRouteFrom ? (
             <Row
               title="Create route from this"

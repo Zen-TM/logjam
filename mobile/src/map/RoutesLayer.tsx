@@ -37,7 +37,8 @@ export const RoutesLayer = memo(function RoutesLayer({
 }: {
   routes: readonly MirrorRoute[];
   hiddenRouteId: string | null;
-  /** Tapping a line opens its stats. Absent while a tool owns the map's taps. */
+  /** Tapping a line opens its options sheet. Absent while a tool owns the
+   *  map's taps. */
   onPressRoute?: (routeId: string) => void;
 }) {
   const shape = useMemo<GeoJSON.FeatureCollection>(
