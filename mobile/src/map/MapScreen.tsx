@@ -1417,13 +1417,47 @@ export function MapScreen({
         discard();
         return;
       }
+      // TWO cases, and the wrong sentence is a lie in one of them. Drawing a
+      // new route, the points ARE what is lost. Editing a saved one, they are
+      // not: the stored route is untouched until Save, so the honest promise is
+      // that it stays as it was — "the points you placed will be lost" reads as
+      // if the route itself is going.
+      if (editingRouteId) {
+        Alert.alert("Discard changes?", "The saved route is left as it was.", [
+          { text: "Keep editing", style: "cancel" },
+          { text: "Discard changes", style: "destructive", onPress: discard },
+        ]);
+        return;
+      }
       Alert.alert("Discard this route?", "The points you placed will be lost.", [
         { text: "Keep drawing", style: "cancel" },
         { text: "Discard", style: "destructive", onPress: discard },
       ]);
     },
-    [routeDraft],
+    [editingRouteId, routeDraft],
   );
+
+  /** Clear confirms for the ROUTE tool, and only there.
+   *
+   *  Clear empties minutes of drawing from a button one thumb-width from Undo,
+   *  and a fat finger is not a decision. Measure's Clear stays immediate — the
+   *  panel's own header says why: a measurement is a question asked once, and a
+   *  confirm on it is friction for nothing. An empty draft has nothing to lose,
+   *  so it just clears (the button is disabled there anyway). */
+  const handleClearRouteDraw = useCallback(() => {
+    if (routeDraft.points.length === 0) {
+      routeDraft.clear();
+      return;
+    }
+    Alert.alert(
+      "Clear all points?",
+      "The line is emptied and the tool stays open. Undo brings the points back.",
+      [
+        { text: "Keep the points", style: "cancel" },
+        { text: "Clear points", style: "destructive", onPress: routeDraft.clear },
+      ],
+    );
+  }, [routeDraft]);
 
   /** Restore a draft the app was killed in the middle of.
    *
@@ -4309,7 +4343,7 @@ export function MapScreen({
             }
             saving={savingRoute}
             onUndo={routeDraft.undo}
-            onClear={routeDraft.clear}
+            onClear={handleClearRouteDraw}
             snapMode={snapMode}
             onSnapModeChange={handleSnapModeChange}
             onSave={() => setNamingRoute(true)}

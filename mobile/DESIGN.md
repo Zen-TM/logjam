@@ -216,11 +216,19 @@ BottomSheet(s)      acquisition + per-item actions
   jumped when the tools opened. Arming a tool closes the tray — the HUD is then
   the thing saying what mode you are in, and an open tray behind it is a second
   answer to the same question.
-- **A tool that produces an ASSET asks before discarding.** Measure and route
-  draw look alike and behave oppositely at the exit: leaving measure bins its
-  points silently (a question asked once), while leaving route draw confirms,
-  because those points were meant to become something. Route draw ends in Save,
-  and the result lands in Saved.
+- **A tool that produces an ASSET asks before discarding, and the confirm says
+  which of the two things is being thrown away.** Measure and route draw look
+  alike and behave oppositely at the exit: leaving measure bins its points
+  silently (a question asked once), while leaving route draw confirms, because
+  those points were meant to become something. Route draw ends in Save, and the
+  result lands in Saved. Its trash asks **"Discard this route? · The points you
+  placed will be lost."** when drawing a new one and **"Discard changes? · The
+  saved route is left as it was."** when editing an existing one — the first
+  sentence is simply false in the editing case, where the stored route is
+  untouched until Save. Clear confirms too, but only for the route tool
+  ("Clear all points?"): it empties minutes of drawing from a button one
+  thumb-width from Undo. Measure's Clear stays immediate, for the same reason
+  its exit does.
 - **The two point tools are ONE implementation; what a tool does NOT have is an
   absent prop, never a second component.** They share the draft model
   (`@logjam/shared` `routeDraft.ts` behind `useRouteDraft`), the HUD
