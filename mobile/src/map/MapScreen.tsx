@@ -207,7 +207,6 @@ import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
 import type { MirrorCanyon, MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
-import { LinkCanyonSheet } from "../routes/LinkCanyonSheet";
 import { BottomSheet } from "../ui/BottomSheet";
 import { Button } from "../ui/Button";
 import { TextField } from "../ui/TextField";
@@ -781,7 +780,6 @@ export function MapScreen({
   // the id rather than the row — the row comes from the mirror so it stays
   // current if a sync lands while a sheet is open.
   const [optionsRouteId, setOptionsRouteId] = useState<string | null>(null);
-  const [linkingRouteId, setLinkingRouteId] = useState<string | null>(null);
   // Set when the draw was started from a canyon page; consumed by the save.
   const [draftCanyonId, setDraftCanyonId] = useState<string | null>(null);
   /** The colour the draft will SAVE with, picked in the tool panel.
@@ -2463,7 +2461,6 @@ export function MapScreen({
   const findRoute = (id: string | null) =>
     (id && routes.data?.find((route) => route.id === id)) || null;
   const optionsRoute = findRoute(optionsRouteId);
-  const linkingRoute = findRoute(linkingRouteId);
 
   // The two-finger gesture and the drag that ends a follow mode — the whole of
   // the touch-responder contract, in its own file (see useMapPinchGesture).
@@ -4821,10 +4818,6 @@ export function MapScreen({
           setOptionsRouteId(null);
           if (target) openRouteForEditing(target);
         }}
-        onLinkCanyon={() => {
-          setLinkingRouteId(optionsRouteId);
-          setOptionsRouteId(null);
-        }}
         onInfo={(text) => notify(text, "info")}
         onError={(text) => notify(text, "error")}
       />
@@ -4862,14 +4855,6 @@ export function MapScreen({
         visible={optionsImportId !== null}
         onClose={() => setOptionsImportId(null)}
         allowNetwork={!offlineOnly}
-        onInfo={(text) => notify(text, "info")}
-        onError={(text) => notify(text, "error")}
-      />
-
-      <LinkCanyonSheet
-        route={linkingRoute}
-        visible={linkingRoute !== null}
-        onClose={() => setLinkingRouteId(null)}
         onInfo={(text) => notify(text, "info")}
         onError={(text) => notify(text, "error")}
       />

@@ -861,6 +861,29 @@ which subsystem is talking.
     an effect keyed on `visible` (`map/WaypointSheet` keys on `[autoEdit,
     visible]`, which is also how a fresh drop lands in its form), or the next
     item opens inside the last one's picker. That has shipped twice.
+- **"Which canyon?" is ONE panel, and it is a sub-mode of the sheet that owns
+  the verb.** A canyon holds at most one route, and three kinds can now fill
+  that slot from their own options sheet — a drawn route, a recorded track
+  (converted to a route first), an imported file (copied in as canyon media).
+  `canyons/useCanyonPicker.tsx` returns `{ header, body }`, the shape
+  `useSharePanel` established, so each sheet renders it in place instead of
+  closing itself to open a second sheet — which is what the route's own
+  `LinkCanyonSheet` used to do, and what two more near-copies of a canyon list
+  would have become. The picker reads the MIRROR (so it works with no signal),
+  offers only canyons the user OWNS (the API refuses the rest), and states the
+  promise for the kind being attached, chosen by the panel and never argued as
+  a prop.
+  - **What displacing the incumbent costs is ONE decision, not five.**
+    `canyons/routeSlot.ts` answers which occupant is in the slot, the sentence
+    for displacing it (a drawn route is unlinked and kept; an attached file is
+    deleted and cannot be got back), and the order the swap is written in —
+    link first and remove second, so a failed removal shows both rather than
+    losing the file, EXCEPT file-over-file, where the API's one-track-per-canyon
+    409 means the incumbent must go first or nothing lands at all.
+    `canyons/fillRouteSlot.ts` is the only thing that acts on that, and every
+    source goes through it. Five call sites each choosing what to warn about is
+    how one of them silently deletes a file; `routeSlot.test.ts` pins the
+    occupant, the sentence and the order.
 - **A visibility toggle is a STATE row and must not be worded like the "Show on
   map" verb beside it.** The track sheet's toggle read "Show on the map" while
   the row above it read "Show on map" — one draws the line, the other flies to

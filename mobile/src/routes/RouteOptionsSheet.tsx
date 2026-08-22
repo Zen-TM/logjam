@@ -29,6 +29,8 @@ import { BottomSheet, RenameForm, Row } from "../ui";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
 import { SHARED_READ_ONLY_HINT, routeActions } from "../saved/assetActions";
+import { useCanyonPicker } from "../canyons/useCanyonPicker";
+import { updateRouteLocal } from "../sync/outbox";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import { exportRoute, ExportUnsupportedError } from "../fileExport";
 import { RouteStatsBody } from "./RouteStatsBody";
@@ -39,7 +41,6 @@ export function RouteOptionsSheet({
   onClose,
   onShowOnMap,
   onEdit,
-  onLinkCanyon,
   onInfo,
   onError,
   allowNetwork = true,
@@ -56,7 +57,6 @@ export function RouteOptionsSheet({
   /** Arm the map's draw tool on this route. Editing is a map gesture, so both
    *  surfaces hand it over — Saved navigates to the map first. */
   onEdit: () => void;
-  onLinkCanyon: () => void;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
   /** False in "Simulating offline mode" — the stats sub-mode then reads
@@ -72,6 +72,7 @@ export function RouteOptionsSheet({
   const [sharing, setSharing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   // Reset every sub-mode when the sheet closes. This component stays mounted
   // between openings — `visible` is a prop, not a remount — so a sub-mode left
@@ -83,6 +84,7 @@ export function RouteOptionsSheet({
       setSharing(false);
       setRenaming(false);
       setShowingStats(false);
+      setLinking(false);
     }
   }, [visible]);
   const online = useConnectivity() === "online";
@@ -102,12 +104,36 @@ export function RouteOptionsSheet({
     active: sharing,
   });
 
+  // THE canyon picker, as a sub-mode of this sheet rather than a second sheet
+  // the caller had to remember to mount (DESIGN.md §6). Same panel a track's
+  // and an import's options render.
+  const canyonPicker = useCanyonPicker({
+    source: "route",
+    active: linking,
+    currentCanyonId: route?.canyonId ?? null,
+    ignoreRouteId: route?.id ?? null,
+    onUnlink: () =>
+      updateRouteLocal(route!.id, { canyonId: null }).then(() =>
+        onInfo("Route unlinked."),
+      ),
+    attach: (canyonId, canyonName) =>
+      updateRouteLocal(route!.id, { canyonId }).then(() =>
+        onInfo(`Route linked to ${canyonName}.`),
+      ),
+    onDone: () => {
+      setLinking(false);
+      onClose();
+    },
+    onError,
+  });
+
   if (!route || !actions) return null;
 
   const close = () => {
     setSharing(false);
     setRenaming(false);
     setShowingStats(false);
+    setLinking(false);
     onClose();
   };
 
@@ -157,7 +183,9 @@ export function RouteOptionsSheet({
       ? () => setRenaming(false)
       : showingStats
         ? () => setShowingStats(false)
-        : null;
+        : linking
+          ? () => setLinking(false)
+          : null;
 
   return (
     <BottomSheet
@@ -165,16 +193,29 @@ export function RouteOptionsSheet({
       onClose={leaveSubMode ?? close}
       // The stats sub-mode keeps the route's own name: it is the same subject,
       // seen as numbers.
-      title={sharing ? share.title : renaming ? "Rename route" : route.name}
+      title={
+        sharing
+          ? share.title
+          : renaming
+            ? "Rename route"
+            : linking
+              ? route.canyonId
+                ? "Change linked canyon"
+                : "Link to a canyon"
+              : route.name
+      }
       // A sub-mode REPLACES the verb list rather than expanding inside it —
       // same shape as the waypoint sheet and the canyon sheet. Shown inline the
       // share panel pushed "Delete route" below the friend picker, which put a
       // destructive verb in the middle of a sharing flow.
       onBack={leaveSubMode ?? undefined}
       footer={sharing ? share.footer : undefined}
+      header={linking ? canyonPicker.header : undefined}
     >
       {sharing && actions.share ? (
         share.body
+      ) : linking ? (
+        canyonPicker.body
       ) : renaming && actions.rename ? (
         <View style={styles.body}>
           <RenameForm
@@ -237,7 +278,7 @@ export function RouteOptionsSheet({
             icon="link"
             hue={assetHue.route}
             disabled={busy}
-            onPress={onLinkCanyon}
+            onPress={() => setLinking(true)}
           />
         ) : null}
         <Row

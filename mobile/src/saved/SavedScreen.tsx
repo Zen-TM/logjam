@@ -136,7 +136,6 @@ import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useTracks } from "../tracks/useTracks";
 import type { Bbox } from "./bboxOfPoints";
 import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
-import type { MirrorRoute } from "../sync/mirrorStore";
 import { createWaypointLocal } from "../sync/outbox";
 import { takePickedPoint } from "../map/pickedPoint";
 import type { PickedPoint } from "../map/PickPointScreen";
@@ -147,7 +146,6 @@ import {
 } from "../waypoints/waypointSheetBodies";
 import { WaypointSheet } from "../map/WaypointSheet";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
-import { LinkCanyonSheet } from "../routes/LinkCanyonSheet";
 
 
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
@@ -1492,7 +1490,6 @@ export function SavedScreen({
   // Both verb rows below carry this: offline they dim and say why.
   const shareRowProps = useShareRowProps(online);
 
-  const [linkingRoute, setLinkingRoute] = useState<MirrorRoute | null>(null);
 
   return (
     <View style={styles.screen}>
@@ -2258,18 +2255,6 @@ export function SavedScreen({
           closeItemSheet();
           if (routeId) onEditRoute(routeId);
         }}
-        onLinkCanyon={() => {
-          setLinkingRoute(menuRoute);
-          closeItemSheet();
-        }}
-        onInfo={info}
-        onError={fail}
-      />
-
-      <LinkCanyonSheet
-        route={linkingRoute}
-        visible={linkingRoute !== null}
-        onClose={() => setLinkingRoute(null)}
         onInfo={info}
         onError={fail}
       />

@@ -18,6 +18,7 @@ import { messageFromError } from "@logjam/shared";
 import { assetHue, spacing, theme } from "../theme";
 import { BottomSheet, RenameForm, Row, Toggle } from "../ui";
 import { trackActions } from "../saved/assetActions";
+import { useCanyonPicker } from "../canyons/useCanyonPicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
 import { updateTrack, type Track } from "./tracksDb";
@@ -62,6 +63,7 @@ export function TrackOptionsSheet({
 }) {
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
+  const [attaching, setAttaching] = useState(false);
   // Rendered in this sheet rather than handed to the caller: this component is
   // the map's track options as well as Saved's, and a callback would have
   // given the verb only to whichever surface remembered to pass it.
@@ -81,6 +83,7 @@ export function TrackOptionsSheet({
       setRenaming(false);
       setSending(false);
       setShowingStats(false);
+      setAttaching(false);
     }
   }, [visible]);
 
@@ -112,12 +115,35 @@ export function TrackOptionsSheet({
     },
   });
 
+  // THE canyon picker, as a sub-mode of this sheet — the same panel a route's
+  // and an import's options render. Called unconditionally, like the share
+  // panel above it; with the sub-mode closed it issues nothing.
+  const canyonPicker = useCanyonPicker({
+    source: "track",
+    active: attaching,
+    attach: async (canyonId, canyonName) => {
+      if (!actions?.createRouteFrom) throw new Error("This track can't become a route.");
+      // RDP always throws points away; saying how many survived is what stops
+      // the user concluding the app lost their recording.
+      const { name, pointCount } = await actions.createRouteFrom(canyonId);
+      onInfo(
+        `Saved “${name}” — ${pointCount} points — as ${canyonName}'s route. The recording is unchanged.`,
+      );
+    },
+    onDone: () => {
+      setAttaching(false);
+      onClose();
+    },
+    onError,
+  });
+
   if (!track || !actions) return null;
 
   const close = () => {
     setRenaming(false);
     setSending(false);
     setShowingStats(false);
+    setAttaching(false);
     onClose();
   };
 
@@ -148,7 +174,9 @@ export function TrackOptionsSheet({
       ? () => setSending(false)
       : showingStats
         ? () => setShowingStats(false)
-        : null;
+        : attaching
+          ? () => setAttaching(false)
+          : null;
 
   return (
     <BottomSheet
@@ -157,15 +185,26 @@ export function TrackOptionsSheet({
       onClose={leaveSubMode ?? close}
       // The stats sub-mode keeps the track's own name: it is the same subject,
       // seen as numbers.
-      title={renaming ? "Rename track" : sending ? share.title : track.name}
+      title={
+        renaming
+          ? "Rename track"
+          : sending
+            ? share.title
+            : attaching
+              ? "Attach to a canyon"
+              : track.name
+      }
       onBack={leaveSubMode ?? undefined}
       footer={sending ? share.footer : undefined}
+      header={attaching ? canyonPicker.header : undefined}
     >
       {/* Send a copy REPLACES the verb list, like Rename does and like the
           route and waypoint sheets' Share — a picker rendered between the
           verbs pushes "Delete track" into the middle of the flow. */}
       {sending && actions.sendCopy ? (
         share.body
+      ) : attaching ? (
+        canyonPicker.body
       ) : renaming ? (
         <View style={styles.body}>
           <RenameForm
@@ -285,6 +324,19 @@ export function TrackOptionsSheet({
                   },
                 );
               }}
+            />
+          ) : null}
+          {/* The track is never linked itself — it is an observation, and stays
+              one. This creates a route from it and links THAT, which the
+              picker says before the fact (routeSlot.ts's promise). */}
+          {actions.createRouteFrom ? (
+            <Row
+              title="Attach to a canyon"
+              subtitle="As that canyon's route"
+              icon="link"
+              hue={assetHue.route}
+              disabled={busy}
+              onPress={() => setAttaching(true)}
             />
           ) : null}
           {actions.exports?.map((option) => (

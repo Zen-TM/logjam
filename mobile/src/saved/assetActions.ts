@@ -21,10 +21,12 @@
 //                                    everything that CAN be tapped on the map
 //                                    has one sheet, above.
 //
-// A verb whose panel needs a surface (Share, Send a copy) is rendered INSIDE
-// the sheet that owns the verb, never handed to the caller as a callback: a
-// callback is only as good as the caller that remembers to pass it, which is
-// the same asymmetry in a different shape.
+// A verb whose panel needs a surface (Share, Send a copy, "Attach to a canyon")
+// is rendered INSIDE the sheet that owns the verb, never handed to the caller
+// as a callback: a callback is only as good as the caller that remembers to
+// pass it, which is the same asymmetry in a different shape. The canyon picker
+// behind the last of those is `canyons/useCanyonPicker.tsx`, a sub-mode of the
+// route, track and import sheets alike.
 //
 // Regions and topo overlays are NOT here: they are registry artifacts with no
 // per-item row in the layer sheet, and their verbs stay inline in SavedScreen.
@@ -121,8 +123,14 @@ export type AssetActions = {
    * is untouched — and simplifying is unavoidable: a real recording is
    * thousands of fixes and the cap is MAX_ROUTE_POINTS. Resolves with the
    * point count kept so the caller can say what happened.
+   *
+   * `canyonId` fills that canyon's route slot in the SAME write: the track
+   * itself is an immutable observation and is never linked to anything, so
+   * "attach this recording to a canyon" is this verb with a destination.
+   * Creating and then updating would leave a window where the route exists
+   * unlinked, and a failed second write would strand it there.
    */
-  createRouteFrom?: () => Promise<{ name: string; pointCount: number }>;
+  createRouteFrom?: (canyonId?: string) => Promise<{ name: string; pointCount: number }>;
   /**
    * Ways to write this asset out as a file the user keeps, in menu order.
    *
@@ -340,7 +348,7 @@ export function trackActions(track: Track): AssetActions {
     // route from it, which is the editable thing. Both exist afterwards.
     ...(track.pointCount >= MIN_ROUTE_POINTS
       ? {
-          createRouteFrom: async () => {
+          createRouteFrom: async (canyonId?: string) => {
             const fixes = await listTrackPoints(track.id);
             const { points } = simplifyToFit(
               fixes.map(({ lon, lat }): RoutePoint => [lon, lat]),
@@ -348,7 +356,7 @@ export function trackActions(track: Track): AssetActions {
             const name = `${track.name} (route)`.slice(0, ROUTE_NAME_MAX_LENGTH);
             // No anchors: every vertex came from RDP, not from a finger, so
             // there is no "the user placed these" subset to record.
-            await createRouteLocal({ name, points });
+            await createRouteLocal({ name, points, ...(canyonId ? { canyonId } : {}) });
             return { name, pointCount: points.length };
           },
         }
