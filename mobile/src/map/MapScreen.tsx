@@ -297,7 +297,13 @@ import {
   useMapPinchGesture,
   type FollowMode,
 } from "./useMapPinchGesture";
-import { isDoubleTap, type TapSample } from "./doubleTap";
+import {
+  isDoubleTap,
+  ZOOM_RAMP_MS,
+  ZOOM_RAMP_TICK_MS,
+  zoomRampValue,
+  type TapSample,
+} from "./doubleTap";
 import { TopoIconImages, TopoVectorOverlay } from "./TopoVectorOverlay";
 
 // Shell style (glyphs/sprite) lives in basemap/shellStyle.ts — bundled
@@ -1045,6 +1051,9 @@ export function MapScreen({
   // run outside React's render cycle.
   const headingFilter = useRef(createHeadingFilter());
   const headingTicker = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** The double-tap-to-zoom ramp (see `zoomRampValue`) — a short-lived
+   *  interval, same shape as `headingTicker` but one-shot per double tap. */
+  const zoomRampTicker = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastPovBearing = useRef<number | null>(null);
   /** When the last course-up camera stop was written, for its duration. */
   const lastPovWriteAt = useRef(0);
@@ -1692,6 +1701,49 @@ export function MapScreen({
   );
 
   /**
+   * Stop the double-tap zoom ramp, if one is running. Idempotent — called on
+   * every new double tap (supersede) as well as from the cleanup effect below
+   * (mode change / focus loss), so it must be safe to call with nothing to
+   * cancel.
+   */
+  const cancelZoomRamp = useCallback(() => {
+    if (zoomRampTicker.current == null) return;
+    clearInterval(zoomRampTicker.current);
+    zoomRampTicker.current = null;
+  }, []);
+
+  /**
+   * Drive the zoom from `zoomRef.current` to `targetZoom` in short linear
+   * ticks instead of one animated `setCameraStop` — see `zoomRampValue` in
+   * doubleTap.ts for why one stop visibly slides the marker in course-up.
+   * Every tick re-reads `latestFix.current`, so a fix landing mid-ramp is
+   * folded in rather than fought.
+   */
+  const startZoomRamp = useCallback(
+    (targetZoom: number) => {
+      cancelZoomRamp();
+      const startZoom = zoomRef.current;
+      const startedAt = Date.now();
+      const writeTick = () => {
+        const elapsed = Date.now() - startedAt;
+        const zoom = zoomRampValue(startZoom, targetZoom, elapsed, ZOOM_RAMP_MS);
+        if (latestFix.current) {
+          setCameraStop({
+            center: latestFix.current,
+            zoom,
+            duration: ZOOM_RAMP_TICK_MS,
+            easing: "linear",
+          });
+        }
+        if (elapsed >= ZOOM_RAMP_MS) cancelZoomRamp();
+      };
+      writeTick();
+      zoomRampTicker.current = setInterval(writeTick, ZOOM_RAMP_TICK_MS);
+    },
+    [cancelZoomRamp, latestFix, setCameraStop, zoomRef],
+  );
+
+  /**
    * DOUBLE-TAP TO ZOOM, WHILE FOLLOWING — the gesture MapLibre lost when this
    * screen took its zoom away.
    *
@@ -1746,18 +1798,12 @@ export function MapScreen({
       // thing".
       setTappedPoint(null);
       swallowNextPress.current = true;
-      // One level, about the followed position — the centre is pinned to the
-      // fix for the same reason the pinch pins it (nothing may translate while
-      // following), and through `setCameraStop` so `zoomRef` stays the truth
-      // the next pinch starts from. Short animation: a step this size reads as
-      // a jump cut with no animation at all.
-      setCameraStop({
-        center: latestFix.current,
-        zoom: Math.min(MAX_PINCH_ZOOM, zoomRef.current + 1),
-        duration: 200,
-      });
+      // One level, about the followed position — ramped rather than a single
+      // animated stop (see `startZoomRamp`), which is what keeps the marker
+      // still in course-up while the zoom changes.
+      startZoomRamp(Math.min(MAX_PINCH_ZOOM, zoomRef.current + 1));
     },
-    [collectingPoints, followModeRef, latestFix, setCameraStop, zoomRef],
+    [collectingPoints, followModeRef, latestFix, startZoomRamp, zoomRef],
   );
 
   // Stage 4b topo overlays + Stage 5 vector-import file management (save
@@ -1876,6 +1922,13 @@ export function MapScreen({
       deactivateKeepAwake(KEEP_AWAKE_TAG).catch(console.error);
     };
   }, [keepAwakeReason]);
+
+  // The double-tap zoom ramp is a few loose interval ticks (see
+  // `startZoomRamp`); a follow-mode change, the screen losing focus, or
+  // unmount mid-ramp must not leave it writing camera stops nobody asked for
+  // any more. A fresh double tap already supersedes it (`startZoomRamp`
+  // cancels first) — this is the "the user left" half.
+  useEffect(() => cancelZoomRamp, [followMode, mapFocused, cancelZoomRamp]);
   // Which waypoint's sheet is open, and whether it should land on the edit
   // form (a fresh drop) rather than the verb list (a tap on an existing pin).
   const [openWaypoint, setOpenWaypoint] = useState<{

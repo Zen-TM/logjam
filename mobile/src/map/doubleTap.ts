@@ -39,3 +39,39 @@ export function isDoubleTap(previous: TapSample | null, next: TapSample): boolea
   if (gap < 0 || gap > DOUBLE_TAP_MS) return false;
   return Math.hypot(next.x - previous.x, next.y - previous.y) <= DOUBLE_TAP_SLOP_PX;
 }
+
+/**
+ * The double-tap zoom ramp, in course-up.
+ *
+ * A single 200 ms `setCameraStop` (one zoom, one centre) was the original
+ * shape, and it visibly translated the map: MapLibre interpolates centre
+ * LINEARLY between the two stops while zoom moves EXPONENTIALLY (metres per
+ * pixel halves per level), and course-up's centre is offset from the fix by
+ * an amount that itself depends on zoom (`povCameraCenter`), so the two
+ * endpoints' centres differ by a few hundred metres and the marker slid
+ * across the screen and back. Stepping the zoom in short ticks — recomputing
+ * the offset centre at each intermediate zoom, same as `tickHeading` steps
+ * the compass — confines that mismatch to one tick's travel instead of the
+ * whole gesture, which is what holds the marker still.
+ */
+export const ZOOM_RAMP_MS = 200;
+
+/** Tick cadence for the ramp: five steps over `ZOOM_RAMP_MS`. */
+export const ZOOM_RAMP_TICK_MS = 40;
+
+/**
+ * The zoom the ramp should be at `elapsedMs` into a `durationMs` linear climb
+ * from `startZoom` to `targetZoom`. Exact at both ends — the caller writes
+ * this straight into `zoomRef`, so a rounding artefact at the finish would
+ * leave the next pinch starting from the wrong level.
+ */
+export function zoomRampValue(
+  startZoom: number,
+  targetZoom: number,
+  elapsedMs: number,
+  durationMs: number,
+): number {
+  if (elapsedMs <= 0) return startZoom;
+  if (elapsedMs >= durationMs) return targetZoom;
+  return startZoom + (targetZoom - startZoom) * (elapsedMs / durationMs);
+}
