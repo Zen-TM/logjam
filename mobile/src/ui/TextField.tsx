@@ -30,6 +30,7 @@ type TextFieldProps = {
   | "onSubmitEditing"
   | "returnKeyType"
   | "multiline"
+  | "editable"
 >;
 
 export function TextField({

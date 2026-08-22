@@ -9,12 +9,15 @@
 //     kind. One "Add" affordance opens the acquisition sheet, so the screen
 //     body is purely what is already here.
 //   Filter rail — categories with tallies; "All" is a flat size-descending
-//     list of everything on device, which is what "reclaim space" wants.
+//     list of everything on device, which is what "reclaim space" wants. A
+//     name search sits under it on every tab (hidden when the tab is empty),
+//     plus a tag rail on the waypoint tab only.
 //   Rows — one Row per asset with its kind's hue + glyph, and an overflow
 //     sheet carrying the three things you can do to any asset: show it on the
 //     map, rename it, delete it. Press and hold one to start a multi-select;
-//     the contextual bar then takes the filter rail's slot and offers the
-//     group verbs (show on map, select all, delete).
+//     the contextual bar then takes ONLY the segmented control's slot — the
+//     search field stays put, disabled — and offers the group verbs (select
+//     all, delete).
 // Not-yet-downloaded topo overlays are the one non-on-device list: they live
 // under the LiDAR Topos filter below the saved ones, never in "All".
 //
@@ -246,6 +249,13 @@ const CATEGORY_ORDER: Category[] = [
   "route",
   "import",
 ];
+
+/** The name search's field label and its "nothing matches" copy — derived
+ *  from `CATEGORY_META`'s plural rather than seven hand-written strings,
+ *  "All" being the one case with no entry to derive from. */
+function searchNoun(filter: Category | "all"): string {
+  return filter === "all" ? "everything" : CATEGORY_META[filter].plural.toLowerCase();
+}
 
 /** A single on-device asset, flattened so one renderer covers every kind. */
 type SavedItem = {
@@ -517,6 +527,11 @@ export function SavedScreen({
     (next: Category | "all") => {
       closeItemSheet();
       clearSelection();
+      // A query is scoped to the tab it was typed on — carrying it into a
+      // different category would silently hide rows the user never searched
+      // for. Same reasoning as the selection clear just above.
+      setSearchQuery("");
+      setWaypointTag(null);
       setFilter(next);
     },
     [clearSelection, closeItemSheet],
@@ -741,7 +756,10 @@ export function SavedScreen({
   // --- Drawn routes (synced records, not device files) ---
   const routes = useMirrorRoutes();
   const waypoints = useMirrorWaypoints();
-  const [waypointQuery, setWaypointQuery] = useState("");
+  // One field for every tab (item 8) — the waypoint TAG rail stays a
+  // waypoint-only narrowing control (DESIGN.md §3), but the name search
+  // beside it is now general.
+  const [searchQuery, setSearchQuery] = useState("");
   const [waypointTag, setWaypointTag] = useState<string | null>(null);
   const [coordSheetOpen, setCoordSheetOpen] = useState(false);
 
@@ -1099,6 +1117,13 @@ export function SavedScreen({
       });
     }
 
+    // Every row is now searchable by name (item 8) — the waypoint rows above
+    // already set a richer haystack (name + notes + tags, notes deliberately
+    // searchable though never shown), so this only fills the other six kinds.
+    for (const row of rows) {
+      if (!row.search) row.search = { haystack: row.title.toLowerCase(), tags: [] };
+    }
+
     return rows;
   }, [
     artifacts,
@@ -1220,17 +1245,22 @@ export function SavedScreen({
       ? [...items].sort((a, b) => b.sizeBytes - a.sizeBytes)
       : items.filter((item) => item.category === filter);
 
-  // Narrowing only ever applies inside the waypoint filter, so leaving a stale
-  // query behind cannot silently hide another category's rows.
-  const needle = waypointQuery.trim().toLowerCase();
-  const visibleItems =
-    filter === "waypoint"
-      ? inCategory.filter(
-          (item) =>
-            (!needle || (item.search?.haystack ?? "").includes(needle)) &&
-            (!waypointTag || (item.search?.tags ?? []).includes(waypointTag)),
-        )
-      : inCategory;
+  // Every row now carries a `search.haystack` (item 8), so the name search
+  // applies inside every tab, "All" included. The tag rail stays scoped to
+  // the waypoint filter, which is the only place a tag can be selected.
+  const needle = searchQuery.trim().toLowerCase();
+  const visibleItems = inCategory.filter(
+    (item) =>
+      (!needle || (item.search?.haystack ?? "").includes(needle)) &&
+      (filter !== "waypoint" || !waypointTag || (item.search?.tags ?? []).includes(waypointTag)),
+  );
+  // Whether the current tab is empty because a search/tag narrowed it there,
+  // as against genuinely holding nothing — the two need different copy below.
+  const searching = needle !== "" || (filter === "waypoint" && waypointTag != null);
+  // The search field itself follows the same "nothing to search" rule the tag
+  // rail already did: hidden when the active tab holds no rows, so an empty
+  // panel gets the whole screen body.
+  const activeCategoryCount = filter === "all" ? items.length : counts[filter];
 
   const closeCoordSheet = useCallback(() => {
     setCoordSheetOpen(false);
@@ -1507,85 +1537,92 @@ export function SavedScreen({
         <SyncStatusPills online={online} pendingCount={pendingCount} />
       </HeroHeader>
 
-      {/* While picking, the contextual bar TAKES the rail's slot rather than
-          stacking a second bar over the tab bar: two rows of chrome above the
-          thumb, and the tabs are the escape hatch out of the mode. Changing
-          category mid-selection is impossible for the same reason it is
-          cleared on a handoff — see selectFilter. */}
-      {selecting ? (
-        <View style={[styles.rail, styles.selectionBar]}>
-          <IconButton
-            icon="x"
-            accessibilityLabel="Clear selection"
-            onPress={clearSelection}
-          />
-          <Text style={styles.selectionCount} numberOfLines={1}>
-            {countOf(selectedItems.length, "item")} selected
-            {selectedBytes > 0 ? ` · ${formatBytes(selectedBytes)}` : ""}
-          </Text>
-          {/* "Everything" means everything a selection can act on — a shared
-              route or waypoint is skipped rather than picked and then refused. */}
-          {selectedItems.length < selectableItems.length ? (
-            <IconButton
-              icon="check-square"
-              accessibilityLabel="Select everything in this list"
-              onPress={() => setSelectedKeys(selectableItems.map((item) => item.key))}
-            />
-          ) : null}
-          <IconButton
-            icon="trash-2"
-            accessibilityLabel="Delete the selected items"
-            color={theme.warning}
-            filled
-            onPress={deleteSelected}
-          />
-        </View>
-      ) : (
+      {/* While picking, the contextual bar TAKES ONLY THE SEGMENTED CONTROL'S
+          slot (item 15) — it used to replace the whole rail, search field and
+          tag chips included, and their absence is what made the list jump:
+          the two states had different heights, so every row below slid up the
+          moment a selection started. The narrowing controls now stay mounted
+          in the SAME place in both states, so the rail's height cannot
+          differ. They go inert rather than unmounting — see the note on
+          `disabled` below. */}
       <View style={styles.rail}>
-        <SegmentedControl
-          options={filterOptions}
-          value={filter}
-          onChange={selectFilter}
-          scroll
-        />
-        {/* Search + tag chips belong to the WAYPOINT filter only. Every other
-            category here is a handful of large files you scan by eye; a
-            waypoint list is hundreds of small things you came looking for one
-            of. Both narrow the mirror on this device — no request, so it works
-            in a gorge. */}
-        {filter === "waypoint" ? (
-          <>
-            {/* Nothing to search: the field is hidden with nothing on the
-                phone, same rule the tag rail already follows, and the empty
-                panel gets the whole screen body. */}
-            {counts.waypoint > 0 ? (
-              // The field carries its own right pad because the rail has none —
-              // the category chips are meant to scroll off the edge, an input
-              // running into it just looks clipped.
-              <View style={styles.waypointSearch}>
-                <TextField
-                  label="Search waypoints"
-                  value={waypointQuery}
-                  onChangeText={setWaypointQuery}
-                />
-              </View>
+        {selecting ? (
+          <View style={styles.selectionBar}>
+            <IconButton
+              icon="x"
+              accessibilityLabel="Clear selection"
+              onPress={clearSelection}
+            />
+            <Text style={styles.selectionCount} numberOfLines={1}>
+              {countOf(selectedItems.length, "item")} selected
+              {selectedBytes > 0 ? ` · ${formatBytes(selectedBytes)}` : ""}
+            </Text>
+            {/* "Everything" means everything a selection can act on — a shared
+                route or waypoint is skipped rather than picked and then refused. */}
+            {selectedItems.length < selectableItems.length ? (
+              <IconButton
+                icon="check-square"
+                accessibilityLabel="Select everything in this list"
+                onPress={() => setSelectedKeys(selectableItems.map((item) => item.key))}
+              />
             ) : null}
-            {waypointTagOptions.length > 0 ? (
-              <View style={styles.waypointTags}>
-                <SegmentedControl
-                  options={waypointTagOptions}
-                  value={waypointTag ?? "all"}
-                  onChange={(value) =>
-                    setWaypointTag(value === "all" ? null : value)
-                  }
-                  scroll
-                />
-              </View>
-            ) : null}
-          </>
+            <IconButton
+              icon="trash-2"
+              accessibilityLabel="Delete the selected items"
+              color={theme.warning}
+              filled
+              onPress={deleteSelected}
+            />
+          </View>
+        ) : (
+          <SegmentedControl
+            options={filterOptions}
+            value={filter}
+            onChange={selectFilter}
+            scroll
+          />
+        )}
+        {/* A name search on every tab (item 8) — every category now carries a
+            `search.haystack`. Nothing to search: the field is hidden with
+            nothing on the phone, same rule the waypoint tag rail already
+            follows, and the empty panel gets the whole screen body. */}
+        {activeCategoryCount > 0 ? (
+          // The field carries its own right pad because the rail has none —
+          // the category chips are meant to scroll off the edge, an input
+          // running into it just looks clipped.
+          <View style={styles.searchField}>
+            <TextField
+              label={`Search ${searchNoun(filter)}`}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              // Narrowing the list mid-selection could scroll a selected row
+              // out of view or drop it out of the visible set entirely — the
+              // same reason changing category clears the selection outright
+              // (selectFilter). The field stays visible (so the bar's height
+              // never differs from the rail's) but inert, rather than losing
+              // what was typed.
+              editable={!selecting}
+            />
+          </View>
+        ) : null}
+        {/* The tag rail stays waypoint-only (DESIGN.md §3) — every other
+            category is a handful of large files scanned by eye. Both this
+            and the search field above narrow the on-device mirror, so both
+            work with no signal. */}
+        {filter === "waypoint" && waypointTagOptions.length > 0 ? (
+          <View style={styles.waypointTags}>
+            <SegmentedControl
+              options={waypointTagOptions}
+              value={waypointTag ?? "all"}
+              onChange={(value) => {
+                if (selecting) return;
+                setWaypointTag(value === "all" ? null : value);
+              }}
+              scroll
+            />
+          </View>
         ) : null}
       </View>
-      )}
 
       {/* Hero + rail stay pinned; only the inventory scrolls, so the filter
           you are working in never scrolls out of reach. */}
@@ -1727,7 +1764,10 @@ export function SavedScreen({
             // an empty GeoPDF tab knows exactly which flow it is missing, and
             // making the user pick it out of a list again is a step that
             // answers a question they already answered by being here.
-            action={emptyAction}
+            // Withheld while a search/tag narrowed the tab to nothing: the
+            // fix there is to clear the search, not add another item.
+            action={searching ? null : emptyAction}
+            searching={searching}
           />
         ) : null}
 
@@ -2288,11 +2328,16 @@ function EmptyPanel({
   filter,
   online,
   action,
+  searching,
 }: {
   filter: Category | "all";
   online: boolean;
   /** The one thing that fills this tab, or null where the tab is already it. */
   action: { label: string; onPress: () => void } | null;
+  /** The tab has rows, but a search/tag narrowed all of them out — a
+   *  different message from the tab genuinely holding nothing (item 8), same
+   *  pattern as `useCanyonPicker`'s "No canyon of yours matches that." */
+  searching: boolean;
 }) {
   // An empty panel is where someone works out whether a feature is missing or
   // merely unused — so for the two account-backed categories it must say which.
@@ -2337,7 +2382,12 @@ function EmptyPanel({
       hint: "Tracks you record on the Map tab are saved here.",
     },
   };
-  const { title, hint } = copy[filter];
+  const { title, hint } = searching
+    ? {
+        title: `No ${searchNoun(filter)} match that`,
+        hint: "Try a different search.",
+      }
+    : copy[filter];
   return (
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>{title}</Text>
@@ -2362,13 +2412,16 @@ const styles = StyleSheet.create({
   // The rail's own bottom pad is the gap the list scrolls against — without it
   // rows slide flush into the chips.
   coordError: { color: theme.warning, fontSize: fontSize.sm },
-  // Breathing room on both seams: category chips → search label, and search
-  // input → tag chips. Without it the three controls read as one dense block.
-  waypointSearch: { paddingTop: spacing(1.5), paddingRight: spacing(2) },
+  // Breathing room on both seams: category chips/selection bar → search
+  // label, and search input → tag chips. Without it the controls read as one
+  // dense block.
+  searchField: { paddingTop: spacing(1.5), paddingRight: spacing(2) },
   waypointTags: { paddingTop: spacing(1.5) },
   rail: { paddingLeft: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
-  // Same vertical metrics as the rail it replaces, so nothing below it jumps
-  // when a selection starts.
+  // Sits where the SegmentedControl sits, inside the same `rail` container —
+  // it replaces only that control, not the search field or tag rail beneath
+  // it, so the rail's total height cannot differ between the two states
+  // (item 15).
   selectionBar: {
     flexDirection: "row",
     alignItems: "center",

@@ -489,15 +489,25 @@ most common class always feels native to the chosen theme.
 ### A category may add its own narrowing control, below the rail
 
 The filter rail picks a KIND; anything that narrows WITHIN one kind belongs
-under it, rendered only for that filter. Waypoints are the case that earns this
-(`SavedScreen`): every other saved kind is a handful of large files you scan by
-eye, while a waypoint list is hundreds of small things you arrived looking for
-one of, so the waypoint filter — and only it — grows a search field and a rail
-of its tags. The tag rail is the vocabulary IN USE, so it never offers a chip
-that would match nothing, and the search field follows the same rule one step
-further out: with no waypoints at all there is nothing to narrow, so it is
-absent and the empty panel gets the whole body. Both narrow the on-device mirror, so both work with
-no signal; a narrowing control that needs the network does not belong here.
+under it, rendered only for that filter. A name search sits under the rail on
+EVERY tab (`SavedScreen`, including "All") — it used to be waypoint-only, on
+the reasoning that every other saved kind is a handful of large files you scan
+by eye, but the same screen holds several dozen imports and tracks on a phone
+with a season of trips on it, and "large" does not mean "few". It narrows by
+name only: the label names what is being searched ("Search waypoints", "Search
+tracks"), derived from `CATEGORY_META`'s plural so a new kind needs no seventh
+string. Waypoints are still the case that earns something MORE than the search
+every tab gets: a rail of the tags in use, because a waypoint list is hundreds
+of small things you arrived looking for one of and a name alone does not
+capture how most of them were found. The tag rail is the vocabulary IN USE, so
+it never offers a chip that would match nothing, and the search field follows
+the same rule one step further out: with no rows in the tab at all there is
+nothing to narrow, so it is absent and the empty panel gets the whole body. A
+tab whose rows are all filtered OUT by the search (as against holding none to
+begin with) says so — "No tracks match that", not a bare empty list — same
+pattern as `useCanyonPicker`'s "No canyon of yours matches that." Both controls
+narrow the on-device mirror, so both work with no signal; a narrowing control
+that needs the network does not belong here.
 
 **When a thing has no kinds, its STATE is the category.** Canyons are all the
 same sort of object, so `canyonHue` keys off done / to do / shared instead
@@ -896,23 +906,35 @@ which subsystem is talking.
   three square kilometres of saved tiles is not an offline basemap, and the pill
   claimed it was. It is one declaration — `Row`'s `selected` prop — so the active
   basemap and a multi-selected saved asset cannot drift into two looks.
-- **A multi-select starts with press-and-hold, and its bar TAKES the rail's slot.**
-  Hold any row to enter the mode with that row picked, tap to toggle the rest,
-  and the last row deselected leaves the mode — no separate "done". While it is
-  running, the contextual bar replaces the filter rail rather than stacking a
-  second bar above the tab bar: two rows of chrome eat the list, and the tabs
-  themselves are the way out of the mode. The bar reads `× | N selected · size |
-  select-all · delete`, and it carries only verbs that are BETTER in bulk than
-  one at a time. "Show on map" was in the first cut and came out: flying to the
-  union of five extents is not what any of the five meant, and the single-item
-  verb already does the thing the user wanted. Reference: `saved/SavedScreen.tsx`.
+- **A multi-select starts with press-and-hold, and its bar TAKES ONLY THE
+  SEGMENTED CONTROL'S slot.** Hold any row to enter the mode with that row
+  picked, tap to toggle the rest, and the last row deselected leaves the mode
+  — no separate "done". While it is running, the contextual bar replaces the
+  category SegmentedControl in place, rather than stacking a second bar above
+  the tab bar: two rows of chrome eat the list, and the tabs themselves are
+  the way out of the mode. It used to take the WHOLE rail's slot — search
+  field and tag chips included — which is exactly what broke item 15: a tab
+  with rows below the fold has a taller rail than the bar replacing it, so
+  every row slid up the instant a selection started. Any narrowing control
+  under the SegmentedControl (the name search every tab now has, and the
+  waypoint tag rail) stays MOUNTED in the same place in both states — so the
+  rail's height cannot differ — and goes INERT rather than unmounting: typing
+  or picking a tag mid-selection could narrow a selected row out of the
+  visible list, the same risk a category change already answers by clearing
+  the selection outright (`selectFilter`). The bar reads `× | N selected ·
+  size | select-all · delete`, and it carries only verbs that are BETTER in
+  bulk than one at a time. "Show on map" was in the first cut and came out:
+  flying to the union of five extents is not what any of the five meant, and
+  the single-item verb already does the thing the user wanted. Reference:
+  `saved/SavedScreen.tsx`.
   - **A row the group verb cannot act on is not selectable.** Deleting is all a
     selection does, so a shared route or waypoint (no `delete` descriptor) is
     skipped by select-all and answers a long press with the reason instead of a
     checkbox — silently ignoring the press reads as a missed tap, and picking it
     would only teach the count to lie.
-  - **Filter and selection are exclusive.** The rail is gone while picking, and
-    any programmatic filter change clears the selection: a bulk delete that
+  - **Filter and selection are exclusive.** The category rail is gone while
+    picking, any narrowing control that remains is inert, and any
+    programmatic filter change clears the selection: a bulk delete that
     reaches rows scrolled behind another category is one the user never saw.
   - **A bulk confirm counts BOTH consequences, and reads as English in every
     combination.** A mixed selection of files and synced records is two different
