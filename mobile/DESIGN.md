@@ -777,9 +777,11 @@ which subsystem is talking.
   real climb and no honest pace, so those cells are absent rather than zero.
 - **One kind, one options sheet, rendered by BOTH surfaces — and the only row
   they may differ by is "Show on map".** A route (`routes/RouteOptionsSheet`), a
-  track (`tracks/TrackOptionsSheet`), an import (`imports/ImportOptionsSheet`)
-  and a waypoint (`map/WaypointSheet`) each have exactly one verb list, mounted
-  by `map/MapScreen` and by `saved/SavedScreen` alike. Sharing only the sub-mode
+  track (`tracks/TrackOptionsSheet`), an import (`imports/ImportOptionsSheet`),
+  a waypoint (`map/WaypointSheet`) and a canyon
+  (`canyons/CanyonOptionsSheet`) each have exactly one verb list, mounted by
+  `map/MapScreen` and by the list surface that also offers it —
+  `saved/SavedScreen`, or `canyons/CanyonsScreen` for a canyon. Sharing only the sub-mode
   BODIES is not enough and was tried: the waypoint bodies were shared while the
   rows around them drifted, so Saved had no "Navigate to this waypoint" and the
   map had no "Show on map". Saved leads the list with
@@ -794,6 +796,21 @@ which subsystem is talking.
   pointing the bearing line at a waypoint) is still PRESENT on the Saved surface
   and hands over as a navigation param keyed on a nonce — see "Continue
   recording", "Edit points" and "Navigate to this waypoint".
+  - **A tapped PIN opens the same verb list a tapped line does.** A canyon pin
+    used to go straight to the detail screen, which made the map's answer to
+    "what can I do with this canyon" one verb out of six, and made the pin the
+    only drawn thing whose tap meant something different from its ⋯. It opens
+    the options sheet now, with **"Open canyon" as the first row** because that
+    is what the tap used to do. The two verbs needing a FORM (a trip, an edit)
+    stay the CALLER's: a form is a sheet of its own, so the options sheet
+    closes and the form opens (§6), and both screens mount `TripEditSheet` and
+    `CanyonEditSheet` themselves. Share stays a sub-mode INSIDE the sheet.
+  - **A sub-mode resets on the sheet's OPEN EDGE, not only in its own close.**
+    A list surface drops its sheet from outside — a tab blur, a filter change,
+    a navigation handoff — and none of those run the sheet's `close()`. Reset in
+    an effect keyed on `visible` (`map/WaypointSheet` keys on `[autoEdit,
+    visible]`, which is also how a fresh drop lands in its form), or the next
+    item opens inside the last one's picker. That has shipped twice.
 - **A visibility toggle is a STATE row and must not be worded like the "Show on
   map" verb beside it.** The track sheet's toggle read "Show on the map" while
   the row above it read "Show on map" — one draws the line, the other flies to

@@ -62,6 +62,7 @@ import {
   TRACK_MIME_TYPES,
   VECTOR_STYLE_DEFAULTS,
   compassPointFor,
+  distinctTripTypes,
   draftAnchorIndices,
   draftPoints,
   emptyDraft,
@@ -93,6 +94,7 @@ import { getVectorStyle, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import {
   useMirrorCanyons,
+  useMirrorTrips,
   useMirrorCanyonTracks,
   useMirrorWaypoints,
   useMirrorRoutes,
@@ -203,7 +205,7 @@ import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, type MapTool } from "./MapToolGroup";
 import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
-import type { MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
+import type { MirrorCanyon, MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import { LinkCanyonSheet } from "../routes/LinkCanyonSheet";
 import { BottomSheet } from "../ui/BottomSheet";
@@ -221,6 +223,8 @@ import type { WaypointFormDraft } from "../waypoints/waypointSheetBodies";
 import { takePickedPoint } from "./pickedPoint";
 import { MapPointSheet, type MapPoint } from "./MapPointSheet";
 import { CanyonEditSheet } from "../canyons/CanyonEditSheet";
+import { CanyonOptionsSheet } from "../canyons/CanyonOptionsSheet";
+import { TripEditSheet } from "../logs/TripEditSheet";
 import {
   isWithholdingCanyons,
   setCanyonMapFilterEnabled,
@@ -1067,6 +1071,14 @@ export function MapScreen({
   // Canyon overlay reads the offline mirror (Stage 8): instant, and the map
   // keeps its pins in airplane mode.
   const canyons = useMirrorCanyons();
+  // Only for the trip form a canyon pin can open — the type vocabulary is the
+  // user's own history, and a form that offered fewer types here than on the
+  // Logs tab would be the same drift this sheet exists to remove.
+  const trips = useMirrorTrips();
+  const tripTypes = useMemo(
+    () => distinctTripTypes(trips.data ?? []),
+    [trips.data],
+  );
   // Both of these are account-backed. A guest gets no LiDAR overlays at all,
   // and the default vector style — which is what every user sees offline
   // anyway, so the map itself is unaffected.
@@ -1654,12 +1666,23 @@ export function MapScreen({
         return;
       }
       const props = event.nativeEvent.features[0]?.properties;
-      if (props && typeof props.id === "string" && typeof props.name === "string") {
-        onOpenCanyon(props.id, props.name);
-      }
+      // The OPTIONS sheet, not the detail screen: the same six verbs the
+      // Canyons list offers, with "Open canyon" first because that is what this
+      // tap used to do (DESIGN.md §7). Held as an id so an edit made from
+      // inside the sheet re-renders it rather than showing a stale copy.
+      if (props && typeof props.id === "string") setOptionsCanyonId(props.id);
     },
-    [addToolPoint, collectingPoints, onOpenCanyon],
+    [addToolPoint, collectingPoints],
   );
+
+  /** One canyon's verbs, from its pin. */
+  const [optionsCanyonId, setOptionsCanyonId] = useState<string | null>(null);
+  const optionsCanyon =
+    (canyons.data ?? []).find((row) => row.id === optionsCanyonId) ?? null;
+  /** The two verbs that need a FORM. Each is a sheet of its own, so the
+   *  options sheet closes before one opens (DESIGN.md §6). */
+  const [editingCanyon, setEditingCanyon] = useState<MirrorCanyon | null>(null);
+  const [loggingCanyon, setLoggingCanyon] = useState<MirrorCanyon | null>(null);
 
   /** A recorded line's own verbs, from the map (DESIGN.md §7: the same object
    *  wherever it is listed) — what a TAP on the line opens, with the stats a
@@ -4629,10 +4652,52 @@ export function MapScreen({
         </View>
       </BottomSheet>
 
+      {/* ONE form for both modes (DESIGN.md §7): a long-press drops a new
+          canyon here, and "Edit canyon" in the pin's options sheet reopens the
+          same fields on an existing one. The two states are mutually exclusive
+          — each entry point clears the other. */}
       <CanyonEditSheet
-        visible={addCanyonAt !== null}
+        visible={addCanyonAt !== null || editingCanyon !== null}
+        canyon={editingCanyon}
         initialCoords={addCanyonAt}
-        onClose={() => setAddCanyonAt(null)}
+        onClose={() => {
+          setAddCanyonAt(null);
+          setEditingCanyon(null);
+        }}
+        onSaved={(text) => notify(text, "info")}
+        onFailed={(text) => notify(text, "error")}
+      />
+
+      {/* One canyon's verbs, from the pin the user tapped — the same sheet the
+          Canyons list opens, minus its "Show on map" row. */}
+      <CanyonOptionsSheet
+        canyon={optionsCanyon}
+        visible={optionsCanyon !== null}
+        onClose={() => setOptionsCanyonId(null)}
+        onOpenCanyon={(canyon) => onOpenCanyon(canyon.id, canyon.name)}
+        onLogTrip={(canyon) => {
+          setAddCanyonAt(null);
+          setLoggingCanyon(canyon);
+        }}
+        onEdit={(canyon) => {
+          setAddCanyonAt(null);
+          setEditingCanyon(canyon);
+        }}
+        onInfo={(text) => notify(text, "info")}
+        onError={(text) => notify(text, "error")}
+      />
+
+      {/* Logging from a pin: the same trip form the Canyons list opens, with
+          this canyon already linked. */}
+      <TripEditSheet
+        online={connectivity === "online"}
+        visible={loggingCanyon !== null}
+        canyons={canyons.data ?? []}
+        initialCanyons={
+          loggingCanyon ? [{ id: loggingCanyon.id, name: loggingCanyon.name }] : undefined
+        }
+        existingTypes={tripTypes}
+        onClose={() => setLoggingCanyon(null)}
         onSaved={(text) => notify(text, "info")}
         onFailed={(text) => notify(text, "error")}
       />

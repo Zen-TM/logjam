@@ -18,7 +18,6 @@
 // print our own copy rather than an error string that might embed a canyon name.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   FlatList,
   Keyboard,
   RefreshControl,
@@ -43,10 +42,7 @@ import {
 import { useAccountState } from "../auth/AccountStateContext";
 import { canyonHue, fontSize, fontWeight, radius, spacing, surface, theme, withAlpha } from "../theme";
 import type { MirrorCanyon } from "../sync/mirrorStore";
-import { deleteCanyonLocal } from "../sync/outbox";
 import { useConnectivity } from "../map/connectivity";
-import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
-import { SHARED_READ_ONLY_HINT } from "../saved/assetActions";
 import {
   useMirrorCanyons,
   useMirrorShareCounts,
@@ -55,7 +51,6 @@ import {
   useSyncStatus,
 } from "../sync/useSyncQueries";
 import {
-  BottomSheet,
   Button,
   CapacityBar,
   HeroHeader,
@@ -73,7 +68,7 @@ import {
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { CanyonEditSheet } from "./CanyonEditSheet";
 import { takePickedPoint } from "../map/pickedPoint";
-import { canyonDeleteConfirm } from "./canyonDeleteConfirm";
+import { CanyonOptionsSheet } from "./CanyonOptionsSheet";
 import { CanyonFilterSheet, sortLabel } from "./CanyonFilterSheet";
 import {
   publishVisibleCanyons,
@@ -120,15 +115,8 @@ export function CanyonsScreen({
   const [sheet, setSheet] = useState<"filters" | null>(null);
   const mapFilter = useCanyonMapFilter();
   const [menuCanyonId, setMenuCanyonId] = useState<string | null>(null);
-  /** The options sheet swaps its verb list for the share panel in place — a
-   *  sub-mode, never a second sheet (DESIGN.md §6). */
-  const [menuMode, setMenuMode] = useState<"actions" | "share">("actions");
-  /** The one way this sheet closes: the sub-mode has to go with it, or the
-   *  next canyon opens straight into the last one's friend picker. */
-  const closeMenu = useCallback(() => {
-    setMenuCanyonId(null);
-    setMenuMode("actions");
-  }, []);
+  /** The sheet owns its own share sub-mode and forgets it on close. */
+  const closeMenu = useCallback(() => setMenuCanyonId(null), []);
   const [editing, setEditing] = useState<{ canyon: MirrorCanyon | null } | null>(null);
   /**
    * The picker round trip.
@@ -337,21 +325,6 @@ export function CanyonsScreen({
   const filterCount = activeCanyonFilterCount(filters);
   const filtering = filterCount > 0 || search.trim() !== "";
   const menuCanyon = canyons.find((canyon) => canyon.id === menuCanyonId) ?? null;
-  // THE sharing panel, the same one the canyon's own detail screen renders:
-  // a canyon reached from this list must not be a lesser object than one
-  // reached from its page (DESIGN.md §7). Withheld on a canyon shared WITH
-  // this user — re-sharing is the owner's to do, and the API refuses it.
-  const shareRowProps = useShareRowProps(online);
-  const canyonShare = useSharePanel({
-    target:
-      menuCanyon && menuCanyon.syncRole === "owner"
-        ? { kind: "canyon", canyonId: menuCanyon.id }
-        : null,
-    itemLabel: menuCanyon?.name ?? "",
-    online,
-    enabled: menuCanyon != null,
-    active: menuMode === "share",
-  });
 
   // Stable identities so the memoised rows never re-render for a state change
   // that has nothing to do with them (DESIGN.md §9).
@@ -377,33 +350,6 @@ export function CanyonsScreen({
   }, []);
 
   const resetFilters = useCallback(() => setFilters(EMPTY_CANYON_FILTERS), []);
-
-  const confirmDelete = useCallback(
-    (canyon: MirrorCanyon) => {
-      closeMenu();
-      const confirm = canyonDeleteConfirm(canyon.name, tripCounts.get(canyon.id) ?? 0);
-      Alert.alert(
-        confirm.confirmTitle,
-        confirm.confirmBody,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: () => {
-              deleteCanyonLocal(canyon.id)
-                .then(() => info("Canyon deleted."))
-                .catch((err: unknown) => {
-                  console.error(err);
-                  fail("Couldn't delete this canyon.");
-                });
-            },
-          },
-        ],
-      );
-    },
-    [closeMenu, fail, info, tripCounts],
-  );
 
   if (query.loading && canyons.length === 0) return <LoadingState />;
   if (query.error && canyons.length === 0) {
@@ -541,80 +487,20 @@ export function CanyonsScreen({
       />
 
       {/* Per-canyon actions, titled with the canyon so a mis-tap can't destroy
-          the wrong one. */}
-      <BottomSheet
+          the wrong one — the SAME sheet the map opens on a canyon pin, so the
+          two surfaces cannot offer different verbs for one canyon (DESIGN.md
+          §7). The only row this surface adds is "Show on map". */}
+      <CanyonOptionsSheet
+        canyon={menuCanyon}
         visible={menuCanyon !== null}
         onClose={closeMenu}
-        title={
-          menuMode === "share" ? canyonShare.title : (menuCanyon?.name ?? "")
-        }
-        onBack={menuMode === "share" ? () => setMenuMode("actions") : undefined}
-      >
-        {menuMode === "share" ? (
-          canyonShare.body
-        ) : menuCanyon ? (
-          <View style={styles.sheetBody}>
-            {/* Edit, Share and Delete are all absent below on someone else's
-                canyon, and three verbs vanishing with nothing said reads as a
-                broken sheet. Same sentence as every other kind. */}
-            {menuCanyon.syncRole === "owner" ? null : (
-              <Text style={styles.sharedHint}>{SHARED_READ_ONLY_HINT}</Text>
-            )}
-            <Row
-              icon="book-open"
-              title="Open canyon"
-              onPress={() => {
-                const canyon = menuCanyon;
-                closeMenu();
-                onOpenCanyon(canyon);
-              }}
-            />
-            <Row
-              icon="map"
-              title="Show on map"
-              onPress={() => {
-                const canyon = menuCanyon;
-                closeMenu();
-                onShowOnMap(canyon);
-              }}
-            />
-            <Row
-              icon="edit-3"
-              title="Log a trip here"
-              onPress={() => {
-                const canyon = menuCanyon;
-                closeMenu();
-                setLoggingFor(canyon);
-              }}
-            />
-            {menuCanyon.syncRole === "owner" ? (
-              <>
-                <Row
-                  icon="edit-2"
-                  title="Edit canyon"
-                  onPress={() => {
-                    const canyon = menuCanyon;
-                    closeMenu();
-                    startEditing(canyon);
-                  }}
-                />
-                <Row
-                  icon="share-2"
-                  title="Share"
-                  {...shareRowProps}
-                  onPress={() => setMenuMode("share")}
-                />
-                <Row
-                  icon="trash-2"
-                  hue={theme.warning}
-                  title="Delete canyon"
-                  onPress={() => confirmDelete(menuCanyon)}
-                />
-              </>
-            ) : null}
-          </View>
-        ) : null}
-      </BottomSheet>
+        onOpenCanyon={onOpenCanyon}
+        onShowOnMap={onShowOnMap}
+        onLogTrip={setLoggingFor}
+        onEdit={startEditing}
+        onInfo={info}
+        onError={fail}
+      />
 
       <CanyonFilterSheet
         visible={sheet === "filters"}
@@ -820,8 +706,6 @@ const styles = StyleSheet.create({
   quality: { color: theme.textMuted, fontSize: fontSize.xs },
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
   badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
-  sheetBody: { gap: spacing(1) },
-  sharedHint: { color: theme.textMuted, fontSize: fontSize.xs },
   empty: {
     alignItems: "center",
     gap: spacing(1),

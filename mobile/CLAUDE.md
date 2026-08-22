@@ -397,9 +397,10 @@ always-present search field and the friend rows. Do not hand-roll a picker.
 **The promise is NOT a prop.** Both sentences (`SHARE_BLURB`, and the canyon's
 own, which names notes and photos and says trip logs stay private) live in
 SharePanel.tsx and are chosen by target kind, as is the revoke confirm. A
-canyon is shared from TWO screens — its detail page and the Canyons list's
-options sheet (`CanyonsScreen.tsx`, as a sub-mode of the per-canyon sheet) —
-and a wording argument at each call site is how those drift. The verb ROWS
+canyon is shared from TWO components — its detail page and
+`canyons/CanyonOptionsSheet.tsx` (a sub-mode of the per-canyon sheet, which the
+Canyons list AND a tapped map pin both render) — and a wording argument at each
+call site is how those drift. The verb ROWS
 carry no subtitle for the same reason: the panel states the promise where the
 user is about to act on it, rather than twice in two voices.
 
