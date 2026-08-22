@@ -14,6 +14,7 @@
 //   saved/SavedScreen.tsx        — imports, GeoPDFs, overlays (inline sheet)
 //   routes/RouteOptionsSheet.tsx — routes, from BOTH Saved and the map
 //   tracks/TrackOptionsSheet.tsx — tracks, from BOTH Saved and the map
+//   imports/ImportOptionsSheet.tsx — imports, from the map
 //   map/WaypointSheet.tsx        — waypoints on the map
 //
 // A verb whose panel needs a surface (Share, Send a copy) is rendered INSIDE

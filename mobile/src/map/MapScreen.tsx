@@ -231,6 +231,7 @@ import { GEOPDF_ERRORS, importGeoPdfFile } from "../geopdf/importPipeline";
 import { runGeoPdfImport } from "../geopdf/importRunner";
 import { useGeoPdfImports } from "../geopdf/useGeoPdfImports";
 import { setVectorImportVisible } from "../imports/importsDb";
+import { ImportOptionsSheet } from "../imports/ImportOptionsSheet";
 import {
   classifyIncomingBytes,
   isFileIntentUrl,
@@ -3397,6 +3398,31 @@ export function MapScreen({
     void handleStartRecording();
   }, [handleStartRecording, startRecordingNonce]);
 
+  /**
+   * An imported file's own verbs, from the map. Held as an id for the same
+   * reason a track's is: the row comes from `useVectorImports`, so a rename or
+   * a visibility flip made inside the sheet re-renders it.
+   */
+  const [optionsImportId, setOptionsImportId] = useState<string | null>(null);
+  const handleImportPress = useCallback(
+    (importId: string, event: NativeSyntheticEvent<PressEvent>) => {
+      // FIRST, before any early return — MLRN 11 bubbles a source press to the
+      // map as well, so a handler that bails without this leaks the tap into
+      // the map's own handler (map/sourcePress.ts).
+      stopSourcePress(event);
+      // Same rule as a canyon pin and a track line: while a point-collecting
+      // tool is armed the feature under the thumb has to place the point
+      // itself, or tapping near an import does nothing and reads as broken.
+      if (collectingPoints) {
+        const [lon, lat] = event.nativeEvent.lngLat;
+        void addToolPoint(lon, lat);
+        return;
+      }
+      setOptionsImportId(importId);
+    },
+    [addToolPoint, collectingPoints],
+  );
+
   const handleWaypointPress = useCallback(
     (waypoint: Waypoint) => {
       // Same reason as a canyon pin: while a tool is armed, a marker under the
@@ -3919,6 +3945,7 @@ export function MapScreen({
               key={imported.id}
               id={`import-${imported.id}`}
               data={`file://${imported.path}`}
+              onPress={(event) => handleImportPress(imported.id, event)}
             >
               <Layer
                 key={`import-fill-${imported.id}`}
@@ -4614,6 +4641,17 @@ export function MapScreen({
         onClose={() => setOptionsTrackId(null)}
         allowNetwork={!offlineOnly}
         onContinueRecording={(track) => void handleContinueRecording(track)}
+        onInfo={(text) => notify(text, "info")}
+        onError={(text) => notify(text, "error")}
+      />
+
+      {/* An imported file's verbs, from the features the user tapped. Same
+          sheet Saved's ⋯ opens, minus its "Show on map" row. */}
+      <ImportOptionsSheet
+        imported={imports.find((row) => row.id === optionsImportId) ?? null}
+        visible={optionsImportId !== null}
+        onClose={() => setOptionsImportId(null)}
+        allowNetwork={!offlineOnly}
         onInfo={(text) => notify(text, "info")}
         onError={(text) => notify(text, "error")}
       />
