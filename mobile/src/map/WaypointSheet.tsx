@@ -1,15 +1,22 @@
-// Everything you can do to one waypoint.
+// Everything you can do to one waypoint — the sheet the map opens when a pin
+// is tapped AND the sheet behind Saved's three-dots.
 //
 // This replaces the three-button Alert the map used to show, which offered
 // Cancel / Delete / Navigate and no way to reach the name, notes, tags or links
 // a waypoint has always been able to carry. Android's Alert also drops buttons
 // past three, so the list could not have grown anyway.
 //
+// ONE component for both surfaces, on the model of TrackOptionsSheet and for
+// the same reason (DESIGN.md §7): sharing only the BODIES was not enough — the
+// rows AROUND them drifted, so Saved offered "Show on map" and the map offered
+// "Navigate to this waypoint" and neither surface had the other's row.
+// `onShowOnMap` is the ONE row they may differ by.
+//
 // MODES of one sheet rather than a stack of sheets (DESIGN.md §6): the body
 // swaps between the verb list, the rename form, the tag picker and the canyon
-// picker, and the sheet itself never closes underneath the user. The bodies for
-// the last three are shared with the Saved tab's per-item sheet, which offers
-// the same verbs (waypoints/waypointSheetBodies.tsx).
+// picker, and the sheet itself never closes underneath the user. The last three
+// bodies live in waypoints/waypointSheetBodies.tsx, where the Saved tab's
+// CREATE form also reads the edit form.
 //
 // PRIVACY: a waypoint's whole payload is a coordinate, so linking one to a
 // canyon that is already shared PUBLISHES it to that canyon's recipients. That
@@ -18,7 +25,7 @@
 // gains sight before the first such link is written. Coordinates render here
 // because this is a DETAIL surface the user opened for this exact point (§11);
 // copying them is an explicit tap, and the clipboard is the user's own.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Clipboard, StyleSheet, Text, View } from "react-native";
 import {
   formatDistanceM,
@@ -32,6 +39,7 @@ import { assetHue, fontSize, spacing, theme } from "../theme";
 import { BottomSheet, Row, StatGrid, type Stat } from "../ui";
 import { deleteWaypointLocal, updateWaypointLocal } from "../sync/outbox";
 import { SHARED_READ_ONLY_HINT, waypointActions } from "../saved/assetActions";
+import type { Bbox } from "../saved/bboxOfPoints";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "./connectivity";
 import { useMirrorCanyons, useMirrorWaypoints } from "../sync/useSyncQueries";
@@ -49,17 +57,27 @@ type Mode = "actions" | "edit" | "tags" | "canyons" | "share";
 
 export function WaypointSheet({
   waypoint,
+  visible,
   userCoord,
   autoEdit = false,
   draft = null,
   picked = null,
   onPickOnMap,
+  onShowOnMap,
   onClose,
   onNavigate,
   onInfo,
   onError,
 }: {
   waypoint: MirrorWaypoint | null;
+  /**
+   * Whether this sheet is logically OPEN — which is not the same as having a
+   * waypoint. `waypoint` goes null while the edit form is away at the point
+   * picker (a Modal cannot sit over a full-screen map) and that must not read
+   * as a close, or the user comes back to the verb list instead of the form
+   * they were filling in.
+   */
+  visible: boolean;
   /** Latest fix as [lon, lat], or null when the dot isn't running. */
   userCoord: [number, number] | null;
   /**
@@ -75,7 +93,19 @@ export function WaypointSheet({
   /** A coordinate just chosen on the picker, replacing the two fields. */
   picked?: { latitude: number; longitude: number } | null;
   onPickOnMap?: (current: WaypointFormDraft) => void;
+  /**
+   * Fly the map to this waypoint. Saved-only — the map surface omits it,
+   * because the user got here by tapping the pin and is already looking at it
+   * (DESIGN.md §7: "Show on map" is the one row the two surfaces differ by).
+   */
+  onShowOnMap?: (bbox: Bbox) => void;
   onClose: () => void;
+  /**
+   * Start navigating to it. Present on BOTH surfaces: the map owns the bearing
+   * line, so Saved hands over exactly as it does for "Continue recording" —
+   * needing the map is not a reason to withhold the verb from the other
+   * surface (DESIGN.md §7).
+   */
   onNavigate: (waypoint: MirrorWaypoint) => void;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
@@ -87,6 +117,22 @@ export function WaypointSheet({
 
   const canyons = useMirrorCanyons();
   const waypoints = useMirrorWaypoints();
+
+  // EVERY sub-mode resets when the sheet closes. This component stays mounted
+  // between openings — `visible` is a prop, not a remount — so a sub-mode left
+  // set means the NEXT open lands inside it instead of on the verb list. That
+  // shipped twice on the sibling sheets, and closing this one is not always the
+  // sheet's own doing: leaving the Saved tab or changing its filter drops it
+  // from outside, nowhere near `close()` below.
+  //
+  // It keys on the OPEN EDGE rather than on `waypoint`, because the picker
+  // round trip nulls the waypoint mid-edit (above) — and `autoEdit` flipping
+  // true is exactly how both hosts ask to land in the form: a fresh drop, or a
+  // return from the picker.
+  useEffect(() => {
+    setMode(visible && autoEdit ? "edit" : "actions");
+    setCanyonQuery("");
+  }, [autoEdit, visible]);
 
   // One descriptor for every verb on this sheet, same source as Saved
   // (saved/assetActions.ts). `share` and `delete` are both absent on a
@@ -225,7 +271,7 @@ export function WaypointSheet({
 
   return (
     <BottomSheet
-      visible
+      visible={visible}
       onClose={close}
       title={title}
       // Sub-modes get a back arrow on the title line; the actions list is the
@@ -247,6 +293,24 @@ export function WaypointSheet({
             <Text style={styles.hint}>{SHARED_READ_ONLY_HINT}</Text>
           ) : null}
           {waypoint.notes ? <Text style={styles.notes}>{waypoint.notes}</Text> : null}
+          {/* The one row the two surfaces differ by, and it leads the list. */}
+          {onShowOnMap && actions ? (
+            <Row
+              icon="map-pin"
+              title="Show on map"
+              hue={assetHue.waypoint}
+              disabled={busy}
+              onPress={() => {
+                close();
+                actions.resolveBbox().then(
+                  (bbox) => {
+                    if (bbox) onShowOnMap(bbox);
+                  },
+                  (err: unknown) => console.error(err),
+                );
+              }}
+            />
+          ) : null}
           <Row
             icon="navigation"
             title="Navigate to this waypoint"

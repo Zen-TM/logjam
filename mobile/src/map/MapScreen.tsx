@@ -203,7 +203,7 @@ import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, type MapTool } from "./MapToolGroup";
 import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
-import type { MirrorRoute } from "../sync/mirrorStore";
+import type { MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import { LinkCanyonSheet } from "../routes/LinkCanyonSheet";
 import { BottomSheet } from "../ui/BottomSheet";
@@ -622,6 +622,7 @@ export function MapScreen({
   drawRouteFor,
   continueTrack,
   startRecording,
+  navigateWaypoint,
 }: {
   onOpenCanyon: (canyonId: string, name: string) => void;
   /**
@@ -679,6 +680,10 @@ export function MapScreen({
   // "Record a track" from the Saved tab's add sheet. Same reasoning as
   // `continueTrack`: the prompt and the recording mode both belong here.
   startRecording?: { nonce: number } | null;
+  // "Navigate to this waypoint" from the Saved tab. An id only — the point
+  // comes from the mirror this screen already reads, so no coordinate travels
+  // in navigation params.
+  navigateWaypoint?: { waypointId: string; nonce: number } | null;
 }) {
   // "Offline maps only" forces the resolver to local artifacts even with
   // signal — battery saver + predictability in the field.
@@ -3387,6 +3392,46 @@ export function MapScreen({
     void handleContinueRecording(target);
   }, [continueTrack, continueTrackNonce, handleContinueRecording, tracks]);
 
+  /**
+   * Point the bearing line at one waypoint — what "Navigate to this waypoint"
+   * does, from the map's own sheet AND from the Saved tab's copy of it.
+   */
+  const startNavigatingTo = useCallback(
+    (waypoint: MirrorWaypoint) => {
+      setNavTarget({
+        id: waypoint.id,
+        name: waypoint.name,
+        lon: waypoint.longitude,
+        lat: waypoint.latitude,
+        createdAt: waypoint.createdAt,
+      });
+      // A bearing with no "you are here" is half a navigation aid.
+      if (!dotWanted) handleLocateMe();
+    },
+    [dotWanted, handleLocateMe],
+  );
+
+  // The Saved tab's "Navigate to this waypoint", arriving as a navigation
+  // param. Same nonce shape as `continueTrack` above, and the same rule: a
+  // request the mirror cannot answer yet is left for the next render with rows.
+  const navigateWaypointNonce = navigateWaypoint?.nonce ?? null;
+  const handledNavigateNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!navigateWaypoint) return;
+    if (handledNavigateNonce.current === navigateWaypoint.nonce) return;
+    const target = (mirrorWaypoints.data ?? []).find(
+      (row) => row.id === navigateWaypoint.waypointId,
+    );
+    if (!target) return;
+    handledNavigateNonce.current = navigateWaypoint.nonce;
+    startNavigatingTo(target);
+  }, [
+    mirrorWaypoints.data,
+    navigateWaypoint,
+    navigateWaypointNonce,
+    startNavigatingTo,
+  ]);
+
   // The Saved tab's "Record a track", same shape as the one above with nothing
   // to look up first.
   const startRecordingNonce = startRecording?.nonce ?? null;
@@ -4476,6 +4521,9 @@ export function MapScreen({
           the sheet re-renders it instead of showing the stale copy the pin
           was tapped with. */}
       <WaypointSheet
+        // Open from the moment a pin is tapped until the sheet is dismissed —
+        // the trip to the point picker hides it without closing it.
+        visible={openWaypoint !== null}
         waypoint={
           // Hidden, not closed, while its form is away at the point picker:
           // the sheet is a Modal and would cover the picker's map.
@@ -4495,16 +4543,7 @@ export function MapScreen({
           setWaypointDraft(null);
           setWaypointPicked(null);
         }}
-        onNavigate={(waypoint) => {
-          setNavTarget({
-            id: waypoint.id,
-            name: waypoint.name,
-            lon: waypoint.longitude,
-            lat: waypoint.latitude,
-            createdAt: waypoint.createdAt,
-          });
-          if (!dotWanted) handleLocateMe();
-        }}
+        onNavigate={startNavigatingTo}
         onInfo={(message) => notify(message, "info")}
         onError={(message) => notify(message, "error")}
       />

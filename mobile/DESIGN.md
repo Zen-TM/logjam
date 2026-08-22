@@ -777,18 +777,23 @@ which subsystem is talking.
   real climb and no honest pace, so those cells are absent rather than zero.
 - **One kind, one options sheet, rendered by BOTH surfaces — and the only row
   they may differ by is "Show on map".** A route (`routes/RouteOptionsSheet`), a
-  track (`tracks/TrackOptionsSheet`) and an import
-  (`imports/ImportOptionsSheet`) each have exactly one verb list, mounted by
-  `map/MapScreen` and by `saved/SavedScreen` alike. Saved leads the list with
+  track (`tracks/TrackOptionsSheet`), an import (`imports/ImportOptionsSheet`)
+  and a waypoint (`map/WaypointSheet`) each have exactly one verb list, mounted
+  by `map/MapScreen` and by `saved/SavedScreen` alike. Sharing only the sub-mode
+  BODIES is not enough and was tried: the waypoint bodies were shared while the
+  rows around them drifted, so Saved had no "Navigate to this waypoint" and the
+  map had no "Show on map". Saved leads the list with
   "Show on map"; the map omits that one row, because the user got there by
   tapping the thing and is already looking at it. Everything else — the
   map-visibility toggle included — appears on both. Two corollaries. A row must
   never be conditional on a CALLBACK the caller might not pass: that is how the
   map's route sheet ended up with no Rename at all, so a verb whose panel fits
-  in the sheet (rename, share, send a copy, stats) is a sub-mode of the sheet
-  and not the caller's business. And a verb that genuinely needs the map (arming
-  the draw tool, starting the recorder) is still PRESENT on the Saved surface
-  and hands over — see "Continue recording" and "Edit points".
+  in the sheet (rename, share, send a copy, stats, a waypoint's tags and canyon
+  links) is a sub-mode of the sheet and not the caller's business. And a verb
+  that genuinely needs the map (arming the draw tool, starting the recorder,
+  pointing the bearing line at a waypoint) is still PRESENT on the Saved surface
+  and hands over as a navigation param keyed on a nonce — see "Continue
+  recording", "Edit points" and "Navigate to this waypoint".
 - **A visibility toggle is a STATE row and must not be worded like the "Show on
   map" verb beside it.** The track sheet's toggle read "Show on the map" while
   the row above it read "Show on map" — one draws the line, the other flies to
@@ -854,7 +859,7 @@ which subsystem is talking.
   absence is `SHARED_READ_ONLY_HINT`, written once.
 - **Picking people is ONE panel, and the promise is the first thing in it.**
   `useSharePanel` (`src/sharing/SharePanel.tsx`) is what Saved's item sheet,
-  the route sheet, the track sheet, the map's waypoint sheet and the canyon
+  the route sheet, the track sheet, the waypoint sheet and the canyon
   screen all render, in both of its modes — a live revocable Share and a
   permanent Send a copy. It opens with a tinted banner saying which promise
   this is (accent + eye, or warning + triangle), then an always-present search

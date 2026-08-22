@@ -137,18 +137,15 @@ import { useTracks } from "../tracks/useTracks";
 import type { Bbox } from "./bboxOfPoints";
 import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
 import type { MirrorRoute } from "../sync/mirrorStore";
-import { createWaypointLocal, updateWaypointLocal } from "../sync/outbox";
+import { createWaypointLocal } from "../sync/outbox";
 import { takePickedPoint } from "../map/pickedPoint";
 import type { PickedPoint } from "../map/PickPointScreen";
 import {
-  WaypointCanyonFilter,
-  WaypointCanyonsBody,
   WaypointFormBody,
   type WaypointFormDraft,
   type WaypointFormFields,
-  WaypointSubModeHeader,
-  WaypointTagsBody,
 } from "../waypoints/waypointSheetBodies";
+import { WaypointSheet } from "../map/WaypointSheet";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import { LinkCanyonSheet } from "../routes/LinkCanyonSheet";
 
@@ -327,6 +324,7 @@ export function SavedScreen({
   onContinueRecording,
   onRecordTrack,
   onDrawRoute,
+  onNavigateToWaypoint,
   initialFilter,
 }: {
   onOpenMap: (bbox?: Bbox, basemapId?: BasemapId, reveal?: SavedItemReveal) => void;
@@ -357,6 +355,13 @@ export function SavedScreen({
   /** Arm the pen on the map with nothing linked — a route drawn from here
    *  belongs to no canyon until the user says otherwise. */
   onDrawRoute: () => void;
+  /**
+   * Start navigating to a waypoint. Handed to the MAP for the same reason
+   * `onContinueRecording` is: the bearing line, the distance readout and the
+   * user dot all live there. Needing the map is not a reason to leave the verb
+   * off this surface (DESIGN.md §7).
+   */
+  onNavigateToWaypoint: (waypointId: string) => void;
   /**
    * Land on one category rather than "All". The map's layer sheet points at
    * this screen for region management ("3 saved areas ›"), and dropping the
@@ -416,10 +421,8 @@ export function SavedScreen({
   // fails to rise, and the user sees the sheet settle then jump.
   const [menuItemKey, setMenuItemKey] = useState<string | null>(null);
   const [menuMode, setMenuMode] = useState<
-    "actions" | "rename" | "tags" | "canyons" | "share" | "sendCopy"
+    "actions" | "rename" | "share" | "sendCopy"
   >("actions");
-  // Filter text for the canyon sub-mode, pinned in the sheet header.
-  const [menuCanyonQuery, setMenuCanyonQuery] = useState("");
   /**
    * What the waypoint form had in it when it left for the map picker, and what
    * the picker sent back.
@@ -1436,12 +1439,16 @@ export function SavedScreen({
       ? ((routes.data ?? []).find((route) => route.id === menuItem.key) ?? null)
       : null;
   const showRouteSheet = menuRoute !== null;
-  // A waypoint's overflow offers the same verbs its map sheet does — the bodies
-  // are shared (waypoints/waypointSheetBodies.tsx) so the two cannot drift.
+  // A waypoint's overflow IS the map's waypoint sheet — one component, so the
+  // two surfaces cannot offer different verbs for one point (DESIGN.md §7).
+  // Sharing only the sub-mode bodies was not enough: the rows around them
+  // drifted, and Saved lost "Navigate to this waypoint" while the map lost
+  // "Show on map".
   const menuWaypoint =
     menuItem?.category === "waypoint"
       ? ((waypoints.data ?? []).find((row) => row.id === menuItem.key) ?? null)
       : null;
+  const showWaypointSheet = menuWaypoint !== null;
   // A recorded track and an imported file each open the SAME sheet the map
   // opens when their line is tapped, so the two surfaces cannot offer different
   // verbs for one object (DESIGN.md §7). Only the kinds with no map tap surface
@@ -1485,13 +1492,6 @@ export function SavedScreen({
   // Both verb rows below carry this: offline they dim and say why.
   const shareRowProps = useShareRowProps(online);
 
-  const writeMenuWaypoint = (fields: Record<string, unknown>) => {
-    if (!menuWaypoint) return;
-    updateWaypointLocal(menuWaypoint.id, fields).catch((err: unknown) => {
-      console.error(err);
-      fail(messageFromError(err, "Couldn't save that change."));
-    });
-  };
   const [linkingRoute, setLinkingRoute] = useState<MirrorRoute | null>(null);
 
   return (
@@ -2027,30 +2027,22 @@ export function SavedScreen({
           !showRouteSheet &&
           !showTrackSheet &&
           !showImportSheet &&
-          pickerAway == null
+          !showWaypointSheet
         }
         onClose={closeItemSheet}
         title={
           menuItem == null
             ? ""
             : menuMode === "rename"
-              ? menuWaypoint
-                ? "Edit waypoint"
-                : `Rename ${CATEGORY_META[menuItem.category].label.toLowerCase()}`
-              : menuMode === "tags"
-                ? "Tags"
-                : menuMode === "canyons"
-                  ? "Linked canyons"
-                  : menuMode === "sendCopy" || menuMode === "share"
-                    ? sharePanel.title
-                    : menuItem.title
+              ? `Rename ${CATEGORY_META[menuItem.category].label.toLowerCase()}`
+              : menuMode === "sendCopy" || menuMode === "share"
+                ? sharePanel.title
+                : menuItem.title
         }
-        // Only the waypoint sub-modes go BACK to an actions list; every other
-        // mode here (a plain rename) closes instead.
+        // The sharing sub-modes go BACK to the actions list; a plain rename
+        // closes instead.
         onBack={
-          (menuWaypoint && (menuMode === "tags" || menuMode === "canyons")) ||
-          menuMode === "share" ||
-          menuMode === "sendCopy"
+          menuMode === "share" || menuMode === "sendCopy"
             ? () => setMenuMode("actions")
             : undefined
         }
@@ -2058,66 +2050,25 @@ export function SavedScreen({
         // (DESIGN.md §6): a confirm that scrolls away leaves the drag handle as
         // the only exit, and the handle means discard.
         footer={menuMode === "sendCopy" ? sharePanel.footer : undefined}
-        header={
-          menuWaypoint && menuMode === "canyons" ? (
-            <WaypointSubModeHeader hint="Anyone you share a canyon with can see its waypoints.">
-              <WaypointCanyonFilter
-                value={menuCanyonQuery}
-                onChangeText={setMenuCanyonQuery}
-              />
-            </WaypointSubModeHeader>
-          ) : undefined
-        }
       >
         <View style={styles.sheetBody}>
           {menuItem == null ? null : menuMode === "rename" ? (
-            // A waypoint gets the full editor — name, POSITION and notes — the
-            // same body the map's own sheet uses, because a waypoint reached
-            // from Saved must not be a lesser object than one reached from the
-            // map (DESIGN.md §7). Everything else here is a name-only rename.
-            menuWaypoint ? (
-              <WaypointFormBody
-                waypoint={menuWaypoint}
-                draft={waypointDraft}
-                picked={pickedCoords}
-                onPickOnMap={(current) =>
-                  openWaypointPicker("edit", current, menuWaypoint.id)
+            <RenameForm
+              initialName={menuItem.title}
+              onSubmit={(changed) => {
+                const target = menuItem;
+                if (changed.name && target.rename) {
+                  target.rename(changed.name).catch((err: unknown) => {
+                    console.error(err);
+                    fail(messageFromError(err, "Couldn't rename that."));
+                  });
                 }
-                onSubmit={(changed) => {
-                  if (Object.keys(changed).length > 0) writeMenuWaypoint(changed);
-                  closeItemSheet();
-                }}
-              />
-            ) : (
-              <RenameForm
-                initialName={menuItem.title}
-                onSubmit={(changed) => {
-                  const target = menuItem;
-                  if (changed.name && target.rename) {
-                    target.rename(changed.name).catch((err: unknown) => {
-                      console.error(err);
-                      fail(messageFromError(err, "Couldn't rename that."));
-                    });
-                  }
-                  closeItemSheet();
-                }}
-              />
-            )
+                closeItemSheet();
+              }}
+            />
           ) : (menuMode === "sendCopy" && menuItem.sendCopy) ||
             (menuMode === "share" && menuItem.share) ? (
             sharePanel.body
-          ) : menuMode === "tags" && menuWaypoint ? (
-            <WaypointTagsBody
-              waypoint={menuWaypoint}
-              allWaypoints={waypoints.data ?? []}
-              onWrite={writeMenuWaypoint}
-            />
-          ) : menuMode === "canyons" && menuWaypoint ? (
-            <WaypointCanyonsBody
-              waypoint={menuWaypoint}
-              query={menuCanyonQuery}
-              onWrite={writeMenuWaypoint}
-            />
           ) : (
             <>
               {/* Says why the write verbs below are missing, in the same words
@@ -2173,56 +2124,22 @@ export function SavedScreen({
                   stub resolved without writing anything). */}
               {menuItem.rename ? (
                 <Row
-                  title={menuWaypoint ? "Edit" : "Rename"}
+                  title="Rename"
                   icon="edit-2"
                   hue={theme.bonus1}
                   onPress={() => setMenuMode("rename")}
                 />
               ) : null}
-              {/* The same two verbs the waypoint's map sheet offers, rendering
-                  the same bodies — a waypoint reached from Saved must not be a
-                  lesser object than one reached from the map (DESIGN.md §7). */}
-              {menuWaypoint && menuWaypoint.syncRole !== "shared" ? (
-                <>
-                  <Row
-                    title="Tags"
-                    subtitle={
-                      menuWaypoint.tags.length
-                        ? menuWaypoint.tags.join(", ")
-                        : "None yet"
-                    }
-                    icon="tag"
-                    hue={assetHue.track}
-                    onPress={() => setMenuMode("tags")}
-                  />
-                  <Row
-                    title="Linked canyons"
-                    subtitle={
-                      menuWaypoint.canyonIds.length
-                        ? `${menuWaypoint.canyonIds.length} linked`
-                        : "Not linked"
-                    }
-                    icon="link-2"
-                    hue={assetHue.route}
-                    onPress={() => setMenuMode("canyons")}
-                  />
-                </>
-              ) : null}
               {/* Every asset that still reaches THIS sheet is a file on this
-                  handset, or a waypoint (which gets its own label). Routes,
-                  tracks and imports left for their own sheets, which is what
-                  keeps this label from growing a branch per kind.
-                  No descriptor = not this user's to delete (a shared
-                  waypoint): the verb is absent rather than shown and refused,
-                  and the hint above says why. */}
+                  handset. Routes, tracks, imports and waypoints left for their
+                  own sheets, which is what keeps this label from growing a
+                  branch per kind. */}
               {menuItem.delete ? (
                 <Row
                   title={
-                    menuWaypoint
-                      ? "Delete waypoint"
-                      : menuItem.members && menuItem.members.length > 1
-                        ? "Delete all from device"
-                        : "Delete from device"
+                    menuItem.members && menuItem.members.length > 1
+                      ? "Delete all from device"
+                      : "Delete from device"
                   }
                   icon="trash-2"
                   hue={theme.warning}
@@ -2296,6 +2213,33 @@ export function SavedScreen({
             onOpenMap(bbox, undefined, { category: "import", key: menuImport.id });
           }
         }}
+        onInfo={info}
+        onError={fail}
+      />
+
+      {/* A waypoint's overflow is the MAP's waypoint sheet — same verbs, same
+          sub-modes, and the only row this surface adds is "Show on map"
+          (DESIGN.md §7). Hidden rather than closed while its edit form is away
+          at the point picker: the sheet is a Modal and would cover the picker's
+          map, and the form's fields ride the round trip in `waypointDraft`. */}
+      <WaypointSheet
+        visible={showWaypointSheet}
+        waypoint={pickerAway == null ? menuWaypoint : null}
+        // No live fix on this tab, so the distance/bearing pair is simply
+        // absent — the position and elevation still render.
+        userCoord={null}
+        draft={waypointDraft}
+        picked={pickedCoords}
+        onPickOnMap={(current) => {
+          if (menuWaypoint) openWaypointPicker("edit", current, menuWaypoint.id);
+        }}
+        onShowOnMap={(bbox) => {
+          if (menuWaypoint) {
+            onOpenMap(bbox, undefined, { category: "waypoint", key: menuWaypoint.id });
+          }
+        }}
+        onClose={closeItemSheet}
+        onNavigate={(waypoint) => onNavigateToWaypoint(waypoint.id)}
         onInfo={info}
         onError={fail}
       />
