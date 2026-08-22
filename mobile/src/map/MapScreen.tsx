@@ -2402,6 +2402,12 @@ export function MapScreen({
           break;
       }
     }
+    // Being asked to look at something else ENDS follow mode, exactly as a
+    // place search does (handleSelectPlace). While following, the fix watcher
+    // writes a camera stop per sample, so the fit below was overwritten within
+    // a frame: tapping "Show on map" — or a canyon's route attachment — did
+    // nothing at all, silently, for as long as the dot was on.
+    setFollowMode("off");
     fitCameraToBbox(focus.bbox);
     // …and say WHICH rectangle — but only for a saved REGION, the one asset
     // whose extent is a meaningful box. A pulsing rectangle around a pin, a
