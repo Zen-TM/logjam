@@ -11,11 +11,15 @@
 // RouteOptionsSheet, not SavedScreen's inline sheet, so every test passed
 // while the button did not exist in the running app.
 //
-//   saved/SavedScreen.tsx        — imports, GeoPDFs, overlays (inline sheet)
-//   routes/RouteOptionsSheet.tsx — routes, from BOTH Saved and the map
-//   tracks/TrackOptionsSheet.tsx — tracks, from BOTH Saved and the map
-//   imports/ImportOptionsSheet.tsx — imports, from the map
-//   map/WaypointSheet.tsx        — waypoints on the map
+//   routes/RouteOptionsSheet.tsx   — routes,   from BOTH Saved and the map
+//   tracks/TrackOptionsSheet.tsx   — tracks,   from BOTH Saved and the map
+//   imports/ImportOptionsSheet.tsx — imports,  from BOTH Saved and the map
+//   map/WaypointSheet.tsx          — waypoints on the map
+//   saved/SavedScreen.tsx          — regions, GeoPDFs, LiDAR overlays and
+//                                    waypoints (its inline sheet). These are
+//                                    the kinds with no map tap surface of
+//                                    their own; everything that CAN be tapped
+//                                    on the map has one sheet, above.
 //
 // A verb whose panel needs a surface (Share, Send a copy) is rendered INSIDE
 // the sheet that owns the verb, never handed to the caller as a callback: a

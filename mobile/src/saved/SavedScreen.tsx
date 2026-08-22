@@ -121,10 +121,8 @@ import {
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
 import { RegionDownloadRow } from "../offline/RegionDownloadRow";
-import { useElevationProfile } from "../map/useElevationProfile";
-import { TrackStatsBody } from "../tracks/TrackStatsBody";
-import { useTrackDetail } from "../tracks/useTrackDetail";
-import { useImportedTrackDetail } from "../imports/useImportedTrackDetail";
+import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
+import { ImportOptionsSheet } from "../imports/ImportOptionsSheet";
 import {
   SHARED_READ_ONLY_HINT,
   geoPdfActions,
@@ -136,7 +134,6 @@ import {
 } from "./assetActions";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useTracks } from "../tracks/useTracks";
-import { ExportUnsupportedError } from "../fileExport";
 import type { Bbox } from "./bboxOfPoints";
 import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
 import type { MirrorRoute } from "../sync/mirrorStore";
@@ -305,10 +302,6 @@ type SavedItem = {
   editableRouteId?: string;
   /** Present on an editable route: flip vertex order (direction is semantic). */
   reverse?: () => Promise<unknown>;
-  /** Present on a recording: make an editable route from it, non-destructively. */
-  createRouteFrom?: () => Promise<{ name: string; pointCount: number }>;
-  /** Ways to write this asset out as a file, in menu order. See AssetActions. */
-  exports?: { title: string; run: () => Promise<string | null> }[];
   /** Present on an OWNED, server-backed asset — see `AssetActions.share`. */
   share?: { entityType: SharableEntityType; entityId: string };
   /**
@@ -423,7 +416,7 @@ export function SavedScreen({
   // fails to rise, and the user sees the sheet settle then jump.
   const [menuItemKey, setMenuItemKey] = useState<string | null>(null);
   const [menuMode, setMenuMode] = useState<
-    "actions" | "rename" | "tags" | "canyons" | "stats" | "share" | "sendCopy"
+    "actions" | "rename" | "tags" | "canyons" | "share" | "sendCopy"
   >("actions");
   // Filter text for the canyon sub-mode, pinned in the sheet header.
   const [menuCanyonQuery, setMenuCanyonQuery] = useState("");
@@ -1414,45 +1407,6 @@ export function SavedScreen({
     [fail, refreshFreeSpace],
   );
 
-  /** Recording → route. Says how many points survived, because RDP always
-   *  throws some away and silently handing back a coarser line is how the user
-   *  concludes the app lost their track. */
-  const createRouteFromItem = useCallback(
-    (item: SavedItem) => {
-      item.createRouteFrom?.().then(
-        ({ name, pointCount }) =>
-          info(`Saved “${name}” — ${pointCount} points. The recording is unchanged.`),
-        (err: unknown) => {
-          console.error(err);
-          fail(messageFromError(err, "Couldn't make a route from that."));
-        },
-      );
-    },
-    [fail, info],
-  );
-
-  /** Asset → file on the handset. Mirrors RouteOptionsSheet's save(). */
-  const exportItem = useCallback(
-    (option: { run: () => Promise<string | null> }) => {
-      option.run().then(
-        (filename) => {
-          // Null = the user backed out of the folder picker. Not a failure,
-          // and a toast claiming success would be a lie.
-          if (filename) info(`Saved ${filename}.`);
-        },
-        (err: unknown) => {
-          if (err instanceof ExportUnsupportedError) {
-            fail(err.message);
-            return;
-          }
-          console.error(err);
-          fail("Couldn't save that file.");
-        },
-      );
-    },
-    [fail, info],
-  );
-
   const showOnMap = useCallback(
     (item: SavedItem) => {
       item
@@ -1488,17 +1442,21 @@ export function SavedScreen({
     menuItem?.category === "waypoint"
       ? ((waypoints.data ?? []).find((row) => row.id === menuItem.key) ?? null)
       : null;
-  // A recorded track and an imported line both answer the same question — what
-  // IS this — with the same panel the map shows (DESIGN.md §7). The import's
-  // series is read out of its stored GeoJSON; the track's out of SQLite.
+  // A recorded track and an imported file each open the SAME sheet the map
+  // opens when their line is tapped, so the two surfaces cannot offer different
+  // verbs for one object (DESIGN.md §7). Only the kinds with no map tap surface
+  // at all — regions, LiDAR overlays, GeoPDFs, waypoints — still go through the
+  // generic sheet below.
   const menuTrack =
     menuItem?.category === "track"
       ? (savedTracks.find((track) => track.id === menuItem.key) ?? null)
       : null;
+  const showTrackSheet = menuTrack !== null;
   const menuImport =
     menuItem?.category === "import"
       ? (imports.find((imported) => imported.id === menuItem.key) ?? null)
       : null;
+  const showImportSheet = menuImport !== null;
   // THE sharing panel: one component for both verbs and every kind, the same
   // one the route sheet, the track sheet, the map's waypoint sheet and the
   // canyon screen render. Which verb it is showing follows the sub-mode, and
@@ -1526,21 +1484,6 @@ export function SavedScreen({
 
   // Both verb rows below carry this: offline they dim and say why.
   const shareRowProps = useShareRowProps(online);
-
-  const statsOpen = menuMode === "stats";
-  const trackStats = useTrackDetail(
-    menuTrack?.id ?? null,
-    statsOpen,
-    menuTrack?.durationMs,
-  );
-  const importStats = useImportedTrackDetail(menuImport, statsOpen);
-  // Heights from the terrain, for whichever of the two is open. Saved has no
-  // offline-only switch of its own (that is a property of the MAP), so the
-  // hook's normal source order applies: saved tiles, then our API, then the
-  // public ones.
-  const statsElevation = useElevationProfile(
-    menuImport ? importStats.line : trackStats.line,
-  );
 
   const writeMenuWaypoint = (fields: Record<string, unknown>) => {
     if (!menuWaypoint) return;
@@ -2079,7 +2022,13 @@ export function SavedScreen({
       </BottomSheet>
 
       <BottomSheet
-        visible={menuItem != null && !showRouteSheet && pickerAway == null}
+        visible={
+          menuItem != null &&
+          !showRouteSheet &&
+          !showTrackSheet &&
+          !showImportSheet &&
+          pickerAway == null
+        }
         onClose={closeItemSheet}
         title={
           menuItem == null
@@ -2100,7 +2049,6 @@ export function SavedScreen({
         // mode here (a plain rename) closes instead.
         onBack={
           (menuWaypoint && (menuMode === "tags" || menuMode === "canyons")) ||
-          menuMode === "stats" ||
           menuMode === "share" ||
           menuMode === "sendCopy"
             ? () => setMenuMode("actions")
@@ -2155,29 +2103,6 @@ export function SavedScreen({
                 }}
               />
             )
-          ) : menuMode === "stats" ? (
-            menuImport ? (
-              <TrackStatsBody
-                detail={importStats.detail}
-                loading={importStats.loading}
-                demProfile={statsElevation.profile}
-                demLoading={statsElevation.loading}
-                emptyMessage={
-                  importStats.error ??
-                  "No lines in this file — stats describe a walked line."
-                }
-              />
-            ) : (
-              // A finished track's time is the stored wall-clock span minus
-              // pauses, not the span between its first and last fix.
-              <TrackStatsBody
-                detail={trackStats.detail}
-                loading={trackStats.loading}
-                elapsedMs={menuTrack?.durationMs}
-                demProfile={statsElevation.profile}
-                demLoading={statsElevation.loading}
-              />
-            )
           ) : (menuMode === "sendCopy" && menuItem.sendCopy) ||
             (menuMode === "share" && menuItem.share) ? (
             sharePanel.body
@@ -2215,58 +2140,6 @@ export function SavedScreen({
                   }}
                 />
               ) : null}
-              {/* Only for the two categories that ARE a line someone walked.
-                  A region, a GeoPDF or a waypoint has no distance to report. */}
-              {menuTrack || menuImport ? (
-                <Row
-                  title="Stats"
-                  subtitle="Distance, climb, pace and profiles"
-                  icon="bar-chart-2"
-                  hue={assetHue[menuItem.category]}
-                  onPress={() => setMenuMode("stats")}
-                />
-              ) : null}
-              {/* A finished recording can be picked back up — the same verb the
-                  map's own track sheet offers, so a track reached from here is
-                  not a lesser object than one reached from the line
-                  (DESIGN.md §7). It leaves for the map, which is where a
-                  recording lives. */}
-              {menuTrack ? (
-                <Row
-                  title="Continue recording"
-                  icon="play-circle"
-                  hue={assetHue.track}
-                  onPress={() => {
-                    const trackId = menuTrack.id;
-                    closeItemSheet();
-                    onContinueRecording(trackId);
-                  }}
-                />
-              ) : null}
-              {menuItem.createRouteFrom ? (
-                <Row
-                  title="Create route from this"
-                  icon="pen-tool"
-                  hue={assetHue.route}
-                  onPress={() => {
-                    const target = menuItem;
-                    closeItemSheet();
-                    createRouteFromItem(target);
-                  }}
-                />
-              ) : null}
-              {menuItem.exports?.map((option) => (
-                <Row
-                  key={option.title}
-                  title={option.title}
-                  icon="download"
-                  hue={theme.bonus1}
-                  onPress={() => {
-                    closeItemSheet();
-                    exportItem(option);
-                  }}
-                />
-              ))}
               {/* "Share", not "Send a copy": this hands a friend a LIVE view of
                   the owner's record that the owner can revoke. The file kinds
                   get the other verb, and the two must not read alike. Absent on
@@ -2335,10 +2208,10 @@ export function SavedScreen({
                   />
                 </>
               ) : null}
-              {/* Every asset that reaches THIS sheet is a file on this
-                  handset. A route is not — it is a synced record whose delete
-                  removes it from the account — which is why routes get their
-                  own sheet rather than this label with a branch in it.
+              {/* Every asset that still reaches THIS sheet is a file on this
+                  handset, or a waypoint (which gets its own label). Routes,
+                  tracks and imports left for their own sheets, which is what
+                  keeps this label from growing a branch per kind.
                   No descriptor = not this user's to delete (a shared
                   waypoint): the verb is absent rather than shown and refused,
                   and the hint above says why. */}
@@ -2394,6 +2267,38 @@ export function SavedScreen({
           )}
         </View>
       </BottomSheet>
+
+      {/* Tracks and imports open the SAME sheet the map opens on their line —
+          one verb list per kind, and the only row this surface adds is "Show on
+          map" (DESIGN.md §7). Both hand their bbox straight to `onOpenMap` with
+          this row's reveal, rather than going back through `showOnMap`, which
+          would resolve the same extent a second time. */}
+      <TrackOptionsSheet
+        track={menuTrack}
+        visible={showTrackSheet}
+        onClose={closeItemSheet}
+        onShowOnMap={(bbox) => {
+          if (menuTrack) {
+            onOpenMap(bbox, undefined, { category: "track", key: menuTrack.id });
+          }
+        }}
+        onContinueRecording={(track) => onContinueRecording(track.id)}
+        onInfo={info}
+        onError={fail}
+      />
+
+      <ImportOptionsSheet
+        imported={menuImport}
+        visible={showImportSheet}
+        onClose={closeItemSheet}
+        onShowOnMap={(bbox) => {
+          if (menuImport) {
+            onOpenMap(bbox, undefined, { category: "import", key: menuImport.id });
+          }
+        }}
+        onInfo={info}
+        onError={fail}
+      />
 
       <RouteOptionsSheet
         route={menuRoute}
