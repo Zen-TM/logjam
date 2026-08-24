@@ -37,7 +37,7 @@ import {
   validateWaypointPayload,
   parseRouteColor,
   parseRoutePoints,
-  randomTrackColor,
+  pickNextTrackColor,
   type SyncCursor,
   type SyncCursorKeysets,
   type SyncPushOp,
@@ -1290,13 +1290,24 @@ async function applyRouteOp(
       return { opId: op.opId, status: "alreadyApplied" };
     }
     const created = await prisma.$transaction(async (tx) => {
+      let assignedColor = color;
+      if (!assignedColor) {
+        const existingRoutes = await tx.route.findMany({
+          where: resolvedCanyonId
+            ? { OR: [{ ownerId: userId }, { canyonId: resolvedCanyonId }] }
+            : { ownerId: userId },
+          select: { color: true },
+        });
+        assignedColor = pickNextTrackColor(existingRoutes.map((r) => r.color));
+      }
+
       const route = await tx.route.create({
         data: {
           id: op.id,
           ownerId: userId,
           canyonId: null,
           name: (fields.name as string).trim(),
-          color: color ?? randomTrackColor(),
+          color: assignedColor,
           points: points!,
           anchors: anchors!,
         },

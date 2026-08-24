@@ -512,6 +512,7 @@ function Map({
   selectRoute,
   routeHoverPosition,
   drawingRoute,
+  drawColor,
   drawPoints,
   drawAnchorIndices,
   draft,
@@ -571,6 +572,8 @@ function Map({
   // Draw/edit mode. The vertex list lives in App so the HUD can render the
   // running distance and drive undo; the map only reports gestures.
   drawingRoute: boolean;
+  /** Palette colour the draft will be saved with. */
+  drawColor?: string;
   drawPoints: [number, number][];
   /** Which of drawPoints are the user's own vertices (the draggable handles). */
   drawAnchorIndices: number[];
@@ -1083,6 +1086,8 @@ function Map({
 
       // The route being drawn or edited. Dashed, so an unsaved line never
       // reads as a saved one, and unpinned above the saved routes.
+      const initialDraftColor =
+        drawColor || readCssVar("--theme-accent", "#3b82f6");
       map.addSource("route-draft", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -1095,7 +1100,7 @@ function Map({
         source: "route-draft",
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
-          "line-color": readCssVar("--theme-accent", "#3b82f6"),
+          "line-color": initialDraftColor,
           "line-width": 3,
         },
       });
@@ -1116,7 +1121,7 @@ function Map({
           "text-ignore-placement": true,
         },
         paint: {
-          "text-color": readCssVar("--theme-accent", "#3b82f6"),
+          "text-color": initialDraftColor,
           "text-halo-color": "#ffffff",
           "text-halo-width": 1,
         },
@@ -1136,11 +1141,11 @@ function Map({
             "match",
             ["get", "role"],
             "start",
-            readCssVar("--theme-accent", "#3b82f6"),
+            initialDraftColor,
             "#ffffff",
           ],
           "circle-stroke-width": ["match", ["get", "role"], "middle", 2, 2.5],
-          "circle-stroke-color": readCssVar("--theme-accent", "#3b82f6"),
+          "circle-stroke-color": initialDraftColor,
         },
       });
 
@@ -1787,6 +1792,29 @@ function Map({
         : { type: "FeatureCollection", features: [] },
     );
   }, [drawPoints, drawAnchorIndices, drawingRoute, mapLoaded]);
+
+  // Update route draft colors dynamically when drawColor changes.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const map = mapRef.current;
+    const effectiveColor = drawColor || readCssVar("--theme-accent", "#3b82f6");
+    if (map.getLayer("route-draft-line")) {
+      map.setPaintProperty("route-draft-line", "line-color", effectiveColor);
+    }
+    if (map.getLayer("route-draft-direction")) {
+      map.setPaintProperty("route-draft-direction", "text-color", effectiveColor);
+    }
+    if (map.getLayer("route-draft-vertices")) {
+      map.setPaintProperty("route-draft-vertices", "circle-stroke-color", effectiveColor);
+      map.setPaintProperty("route-draft-vertices", "circle-color", [
+        "match",
+        ["get", "role"],
+        "start",
+        effectiveColor,
+        "#ffffff",
+      ]);
+    }
+  }, [drawColor, mapLoaded]);
 
   // Draggable vertex handles. MapLibre markers do the drag maths natively, so
   // this only has to keep one marker per vertex alive and report the drop.

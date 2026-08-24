@@ -28,7 +28,7 @@ import {
 import {
   mediaCategory,
   categoryHasThumbnail,
-  randomTrackColor,
+  pickNextTrackColor,
   MEDIA_SIZE_CAPS,
   MEDIA_EXTENSION_BY_MIME,
   TRACK_MIME_TYPES,
@@ -283,6 +283,22 @@ router.post(
             quota: quota.toString(),
           });
         }
+
+        let assignedColor: string | null = null;
+        if (category === "track") {
+          const existingTracks = await tx.media.findMany({
+            where: {
+              OR: [
+                { ownerId: user.id },
+                ...(linkedId ? [{ linkedId }] : []),
+              ],
+              color: { not: null },
+            },
+            select: { color: true },
+          });
+          assignedColor = pickNextTrackColor(existingTracks.map((t) => t.color));
+        }
+
         return tx.media.create({
           data: {
             id: mediaId,
@@ -294,9 +310,9 @@ router.post(
             mediaType,
             filename,
             fileSizeBytes: totalBytes,
-            // Tracks get a stable random colour from the canonical palette;
+            // Tracks get a deterministic next colour avoiding collisions;
             // image/video media carry none.
-            color: category === "track" ? randomTrackColor() : null,
+            color: assignedColor,
           },
         });
       });

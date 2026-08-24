@@ -11,7 +11,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { File } from "expo-file-system";
 import { unzipSync } from "fflate";
 
-import { parseVectorImport, IMPORT_ERRORS } from "@logjam/shared";
+import { parseVectorImport, IMPORT_ERRORS, pickTrackColorByIndex } from "@logjam/shared";
 
 import {
   deleteVectorImportRow,
@@ -25,20 +25,8 @@ import { stageIncomingFile } from "./stagedFile";
 // complexity guard, this just refuses to read absurd files into memory.
 const MAX_IMPORT_FILE_BYTES = 30 * 1024 * 1024;
 
-// Rotating default palette — high-contrast against both the paper-topo
-// rasters and the Protomaps light flavor, distinct from the canyon layer's
-// orange (#f97316 owned / #629bf8 shared).
-const IMPORT_COLORS = [
-  "#d946ef", // fuchsia
-  "#10b981", // emerald
-  "#eab308", // yellow
-  "#8b5cf6", // violet
-  "#ef4444", // red
-  "#06b6d4", // cyan
-];
-
 export function pickImportColor(existingCount: number): string {
-  return IMPORT_COLORS[existingCount % IMPORT_COLORS.length];
+  return pickTrackColorByIndex(existingCount);
 }
 
 export function randomId(): string {

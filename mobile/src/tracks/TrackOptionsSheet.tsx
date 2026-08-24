@@ -12,10 +12,10 @@
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the line you tapped.
 import { useEffect, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
-import { messageFromError } from "@logjam/shared";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { messageFromError, TRACK_COLORS } from "@logjam/shared";
 
-import { assetHue, spacing, theme } from "../theme";
+import { assetHue, radius, spacing, theme, withAlpha } from "../theme";
 import { BottomSheet, RenameForm, Row, Toggle } from "../ui";
 import { trackActions } from "../saved/assetActions";
 import { useCanyonPicker } from "../canyons/useCanyonPicker";
@@ -64,6 +64,7 @@ export function TrackOptionsSheet({
   const [renaming, setRenaming] = useState(false);
   const [showingStats, setShowingStats] = useState(false);
   const [attaching, setAttaching] = useState(false);
+  const [pickingColor, setPickingColor] = useState(false);
   // Rendered in this sheet rather than handed to the caller: this component is
   // the map's track options as well as Saved's, and a callback would have
   // given the verb only to whichever surface remembered to pass it.
@@ -84,6 +85,7 @@ export function TrackOptionsSheet({
       setSending(false);
       setShowingStats(false);
       setAttaching(false);
+      setPickingColor(false);
     }
   }, [visible]);
 
@@ -281,6 +283,49 @@ export function TrackOptionsSheet({
               />
             }
           />
+          <Row
+            title="Colour"
+            icon="droplet"
+            hue={assetHue.track}
+            right={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Choose track colour"
+                accessibilityState={{ expanded: pickingColor }}
+                onPress={() => setPickingColor((open) => !open)}
+                style={styles.swatchButton}
+              >
+                <View style={[styles.currentSwatch, { backgroundColor: track.color }]} />
+              </Pressable>
+            }
+            onPress={() => setPickingColor((open) => !open)}
+          />
+          {pickingColor ? (
+            <View style={styles.palette}>
+              {TRACK_COLORS.map((swatch) => (
+                <Pressable
+                  key={swatch}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Colour ${swatch}`}
+                  accessibilityState={{ selected: swatch === track.color }}
+                  onPress={() => {
+                    setPickingColor(false);
+                    actions.setColor?.(swatch).catch((err: unknown) => {
+                      console.error(err);
+                      onError(messageFromError(err, "Couldn't update track colour."));
+                    });
+                  }}
+                  style={[
+                    styles.swatch,
+                    { backgroundColor: swatch },
+                    swatch === track.color ? styles.swatchSelected : null,
+                  ]}
+                >
+                  {swatch === track.color ? <Text style={styles.swatchTick}>✓</Text> : null}
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
           {/* What this track IS, one tap in — a tapped line opens the verbs
               now, and the numbers are behind this row (DESIGN.md §7). */}
           <Row
@@ -400,4 +445,39 @@ export function TrackOptionsSheet({
 
 const styles = StyleSheet.create({
   body: { gap: spacing(1) },
+  swatchButton: {
+    padding: spacing(0.5),
+    borderRadius: radius.sm,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  currentSwatch: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: withAlpha(theme.textPrimary, 0.35),
+  },
+  palette: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing(1),
+    paddingHorizontal: spacing(1),
+    paddingVertical: spacing(0.5),
+  },
+  swatch: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  swatchSelected: {
+    borderWidth: 2,
+    borderColor: theme.textPrimary,
+  },
+  swatchTick: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
 });

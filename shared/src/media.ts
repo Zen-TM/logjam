@@ -54,10 +54,54 @@ export const TRACK_COLORS = [
   "#dcbeff", // lavender
 ] as const;
 
-// Pick a random colour from the canonical track palette. Assigned server-side
-// when a track is confirmed so the colour is stable across the card and map.
+export type TrackColor = (typeof TRACK_COLORS)[number];
+
+/**
+ * Picks the next best track/route colour avoiding collisions with existing items.
+ * 1. Returns the first unused colour from TRACK_COLORS.
+ * 2. If all colours are present, returns the colour with the lowest frequency.
+ */
+export function pickNextTrackColor(
+  existingColors: readonly (string | null | undefined)[] | (string | null | undefined)[],
+): string {
+  const counts = new Map<string, number>();
+  for (const c of TRACK_COLORS) counts.set(c, 0);
+
+  for (const c of existingColors) {
+    if (c && counts.has(c)) {
+      counts.set(c, counts.get(c)! + 1);
+    }
+  }
+
+  let minCount = Infinity;
+  let bestColor: string = TRACK_COLORS[0];
+
+  for (const c of TRACK_COLORS) {
+    const count = counts.get(c)!;
+    if (count < minCount) {
+      minCount = count;
+      bestColor = c;
+      if (minCount === 0) break; // Found an unused colour
+    }
+  }
+
+  return bestColor;
+}
+
+/**
+ * Picks a deterministic palette colour given an item index (e.g. for batch imports).
+ */
+export function pickTrackColorByIndex(index: number): string {
+  const normalized = Math.max(0, Math.floor(index));
+  return TRACK_COLORS[normalized % TRACK_COLORS.length];
+}
+
+/**
+ * @deprecated Use `pickNextTrackColor` or `pickTrackColorByIndex`.
+ * Retained for backwards compatibility.
+ */
 export function randomTrackColor(): string {
-  return TRACK_COLORS[Math.floor(Math.random() * TRACK_COLORS.length)];
+  return pickNextTrackColor([]);
 }
 
 export function mediaCategory(mimeType: string): MediaCategory | null {

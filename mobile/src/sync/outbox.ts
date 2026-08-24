@@ -6,8 +6,8 @@
 import * as Crypto from "expo-crypto";
 import {
   isUuidV4,
+  pickNextTrackColor,
   planOutboxEnqueue,
-  randomTrackColor,
   validateCanyonPayload,
   type OutboxEntry,
   type SyncPushEntity,
@@ -236,12 +236,19 @@ export type RouteDraft = {
 export async function createRouteLocal(draft: RouteDraft): Promise<string> {
   const id = mintUuid();
   const now = new Date().toISOString();
+  const db = await getSyncDb();
   // The colour is chosen HERE, not left to the server. Leaving it null meant
   // every freshly drawn route rendered in the same fallback accent, and then
   // changed to a random palette colour when the create op came back — so the
   // route you had just finished appeared to recolour itself the moment you
   // drew the next one. The server honours a palette colour it is given.
-  const color = draft.color ?? randomTrackColor();
+  let color = draft.color;
+  if (!color) {
+    const existing = await db.getAllAsync<{ color: string | null }>(
+      "SELECT color FROM routes WHERE color IS NOT NULL",
+    );
+    color = pickNextTrackColor(existing.map((r) => r.color));
+  }
   const fields: Record<string, unknown> = {
     name: draft.name,
     points: draft.points,
@@ -250,7 +257,6 @@ export async function createRouteLocal(draft: RouteDraft): Promise<string> {
     ...(draft.canyonId != null && { canyonId: draft.canyonId }),
   };
 
-  const db = await getSyncDb();
   await withSyncTransaction(db, async () => {
     await db.runAsync(
       `INSERT INTO routes

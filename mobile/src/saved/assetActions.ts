@@ -106,6 +106,8 @@ export type AssetActions = {
    * away without a word.
    */
   rename?: (name: string) => Promise<unknown>;
+  /** Change the asset's display colour. */
+  setColor?: (color: string) => Promise<unknown>;
   /**
    * ABSENT where the user may not delete this asset — today, a route or
    * waypoint shared with them through someone else's canyon. The API's delete
@@ -385,6 +387,7 @@ export function trackActions(track: Track): AssetActions {
     // A track's extent isn't stored; derive it from its points on demand.
     resolveBbox: async () => bboxOfPoints(await listTrackPoints(track.id)),
     rename: (name) => updateTrack(track.id, { name }),
+    setColor: (color: string) => updateTrack(track.id, { color }),
     // A recording is an observation and stays immutable; this makes a SEPARATE
     // route from it, which is the editable thing. Both exist afterwards.
     ...(track.pointCount >= MIN_ROUTE_POINTS
@@ -397,7 +400,12 @@ export function trackActions(track: Track): AssetActions {
             const name = `${track.name} (route)`.slice(0, ROUTE_NAME_MAX_LENGTH);
             // No anchors: every vertex came from RDP, not from a finger, so
             // there is no "the user placed these" subset to record.
-            await createRouteLocal({ name, points, ...(canyonId ? { canyonId } : {}) });
+            await createRouteLocal({
+              name,
+              points,
+              color: track.color,
+              ...(canyonId ? { canyonId } : {}),
+            });
             return { name, pointCount: points.length };
           },
         }

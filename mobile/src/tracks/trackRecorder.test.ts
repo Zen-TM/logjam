@@ -70,6 +70,7 @@ vi.mock("./tracksDb", () => ({
   getTrack: async () => activeTrack,
   lastTrackPoint: async () => storedPoints.at(-1) ?? null,
   listTrackPoints: async () => storedPoints,
+  listTracks: async () => [],
 }));
 
 const {

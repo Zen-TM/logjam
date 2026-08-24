@@ -100,6 +100,16 @@ const ANCHOR_RADIUS_END = 7;
 const ANCHOR_RADIUS_MIDDLE = 5;
 const ANCHOR_RADIUS_SELECTED = 10;
 
+const EMPTY_LINE_FEATURE: GeoJSON.FeatureCollection = {
+  type: "FeatureCollection",
+  features: [],
+};
+
+const EMPTY_ANCHOR_FEATURES: GeoJSON.FeatureCollection = {
+  type: "FeatureCollection",
+  features: [],
+};
+
 function anchorFeatures(
   anchors: readonly RoutePoint[],
   selectedIndex: number | null,
@@ -197,101 +207,111 @@ export function RouteDraftLayer({
     () => (drag ? moveAnchor(draft, drag.index, drag.point) : draft),
     [draft, drag],
   );
-  const previewPoints = useMemo(() => draftPoints(preview), [preview]);
+  const previewPoints = draftPoints(preview);
   const anchors = preview.anchors;
+  const lineData: GeoJSON.FeatureCollection = useMemo(
+    () =>
+      previewPoints.length >= 2
+        ? {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                geometry: {
+                  type: "LineString",
+                  coordinates: previewPoints.map((point) => [...point]),
+                },
+                properties: {},
+              },
+            ],
+          }
+        : EMPTY_LINE_FEATURE,
+    [previewPoints],
+  );
+
+  const anchorData: GeoJSON.FeatureCollection = useMemo(
+    () =>
+      anchors.length > 0
+        ? anchorFeatures(anchors, selectedIndex)
+        : EMPTY_ANCHOR_FEATURES,
+    [anchors, selectedIndex],
+  );
 
   return (
     <>
-      {previewPoints.length >= 2 ? (
-        <GeoJSONSource
-          id={`${idPrefix}-line`}
-          data={{
-            type: "Feature",
-            geometry: {
-              type: "LineString",
-              coordinates: previewPoints.map((point) => [...point]),
-            },
-            properties: {},
+      <GeoJSONSource id={`${idPrefix}-line`} data={lineData}>
+        <Layer
+          key={`${idPrefix}-line-stroke`}
+          type="line"
+          id={`${idPrefix}-line-stroke`}
+          style={{
+            lineColor: color,
+            lineWidth: 3,
+            lineCap: "round",
+            lineJoin: "round",
+            ...(dotted ? { lineDasharray: [1, 1.5] } : {}),
           }}
-        >
-          <Layer
-            key={`${idPrefix}-line-stroke`}
-            type="line"
-            id={`${idPrefix}-line-stroke`}
-            style={{
-              lineColor: color,
-              lineWidth: 3,
-              lineCap: "round",
-              lineJoin: "round",
-              ...(dotted ? { lineDasharray: [1, 1.5] } : {}),
-            }}
-          />
-          <Layer
-            key={`${idPrefix}-line-arrows`}
-            type="symbol"
-            id={`${idPrefix}-line-arrows`}
-            minzoom={ROUTE_ARROW_MIN_ZOOM}
-            style={routeArrowStyle(color)}
-          />
-        </GeoJSONSource>
-      ) : null}
+        />
+        <Layer
+          key={`${idPrefix}-line-arrows`}
+          type="symbol"
+          id={`${idPrefix}-line-arrows`}
+          minzoom={ROUTE_ARROW_MIN_ZOOM}
+          style={routeArrowStyle(color)}
+        />
+      </GeoJSONSource>
 
-      {/* Declared after the line, so it paints above it. */}
-      {anchors.length > 0 ? (
-        <GeoJSONSource
-          id={`${idPrefix}-anchors`}
-          data={anchorFeatures(anchors, selectedIndex)}
-        >
-          <Layer
-            key={`${idPrefix}-anchor-dots`}
-            type="circle"
-            id={`${idPrefix}-anchor-dots`}
-            style={{
-              circleRadius: [
-                "case",
-                ["get", "selected"],
-                ANCHOR_RADIUS_SELECTED,
-                [
-                  "match",
-                  ["get", "role"],
-                  "middle",
-                  ANCHOR_RADIUS_MIDDLE,
-                  ANCHOR_RADIUS_END,
-                ],
+      {/* Declared after the line, so it always paints above it in MapLibre. */}
+      <GeoJSONSource id={`${idPrefix}-anchors`} data={anchorData}>
+        <Layer
+          key={`${idPrefix}-anchor-dots`}
+          type="circle"
+          id={`${idPrefix}-anchor-dots`}
+          style={{
+            circleRadius: [
+              "case",
+              ["get", "selected"],
+              ANCHOR_RADIUS_SELECTED,
+              [
+                "match",
+                ["get", "role"],
+                "middle",
+                ANCHOR_RADIUS_MIDDLE,
+                ANCHOR_RADIUS_END,
               ],
-              // The ROUTE'S colour, not the accent: a line drawn in green with
-              // orange dots on it reads as two things overlaid. Only the roles
-              // stay fixed — the start is filled with the line's colour, the
-              // end stays dark, the middles stay pale — so which end is which
-              // survives every palette choice.
-              circleColor: [
-                "case",
-                ["get", "selected"],
-                theme.warning,
-                [
-                  "match",
-                  ["get", "role"],
-                  "start",
-                  color,
-                  "end",
-                  theme.primary,
-                  theme.textPrimary,
-                ],
-              ],
-              circleStrokeWidth: ["case", ["get", "selected"], 3, 2],
-              // Selected keeps the light ring and the warning fill rather than
-              // the route's colour: it has to stay legible against all ten of
-              // TRACK_COLORS, including the pale ones.
-              circleStrokeColor: [
-                "case",
-                ["get", "selected"],
-                theme.textPrimary,
+            ],
+            // The ROUTE'S colour, not the accent: a line drawn in green with
+            // orange dots on it reads as two things overlaid. Only the roles
+            // stay fixed — the start is filled with the line's colour, the
+            // end stays dark, the middles stay pale — so which end is which
+            // survives every palette choice.
+            circleColor: [
+              "case",
+              ["get", "selected"],
+              theme.warning,
+              [
+                "match",
+                ["get", "role"],
+                "start",
                 color,
+                "end",
+                theme.primary,
+                theme.textPrimary,
               ],
-            }}
-          />
-        </GeoJSONSource>
-      ) : null}
+            ],
+            circleStrokeWidth: ["case", ["get", "selected"], 3, 2],
+            // Selected keeps the light ring and the warning fill rather than
+            // the route's colour: it has to stay legible against all ten of
+            // TRACK_COLORS, including the pale ones.
+            circleStrokeColor: [
+              "case",
+              ["get", "selected"],
+              theme.textPrimary,
+              color,
+            ],
+          }}
+        />
+      </GeoJSONSource>
 
       {/* One INVISIBLE handle per anchor — never per point. A snapped run is
           geometry the tool produced, not vertices the user placed, so dotting

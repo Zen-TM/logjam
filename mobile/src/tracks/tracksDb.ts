@@ -167,6 +167,7 @@ export async function updateTrack(
       | "endedAt"
       | "pausedMs"
       | "pausedAt"
+      | "color"
     >
   > & { stats?: TrackStats },
 ): Promise<void> {
@@ -176,6 +177,10 @@ export async function updateTrack(
   if (patch.name !== undefined) {
     sets.push("name = ?");
     args.push(patch.name);
+  }
+  if (patch.color !== undefined) {
+    sets.push("color = ?");
+    args.push(patch.color);
   }
   if (patch.state !== undefined) {
     sets.push("state = ?");

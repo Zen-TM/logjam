@@ -24,7 +24,7 @@ import {
   validateRoutePayload,
   parseRouteColor,
   parseRoutePoints,
-  randomTrackColor,
+  pickNextTrackColor,
 } from "@logjam/shared";
 import {
   applyRouteCanyonLink,
@@ -137,6 +137,17 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
     // Create unlinked, then route the link through applyRouteCanyonLink so the
     // displacement rule and its tombstones have exactly one implementation.
     const created = await prisma.$transaction(async (tx) => {
+      let assignedColor = parseRouteColor(body.color);
+      if (!assignedColor) {
+        const existingRoutes = await tx.route.findMany({
+          where: canyonId
+            ? { OR: [{ ownerId: user.id }, { canyonId }] }
+            : { ownerId: user.id },
+          select: { color: true },
+        });
+        assignedColor = pickNextTrackColor(existingRoutes.map((r) => r.color));
+      }
+
       const route = await tx.route.create({
         data: {
           ...(clientId && { id: clientId }),
@@ -144,10 +155,10 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
           canyonId: null,
           name: (body.name as string).trim(),
           // The client may choose from the shared palette; when it doesn't,
-          // the server picks. Mobile picks at draw time so the line is its
-          // final colour from the first frame rather than changing under the
-          // user when the create op comes back.
-          color: parseRouteColor(body.color) ?? randomTrackColor(),
+          // the server picks avoiding collisions. Mobile picks at draw time so the line
+          // is its final colour from the first frame rather than changing under
+          // the user when the create op comes back.
+          color: assignedColor,
           points: parsed.points,
           anchors: parseAnchorsOrNull(body.anchors, parsed.points.length),
         },

@@ -72,6 +72,7 @@ import {
   isValidLatitude,
   isValidLongitude,
   messageFromError,
+  pickNextTrackColor,
   ROUTE_NAME_MAX_LENGTH,
   nearestSegment,
   snapSegment,
@@ -1709,10 +1710,11 @@ export function MapScreen({
       }
       measureDraft.close();
       setEditingRouteId(null);
+      setDraftColor(pickNextTrackColor(routes.data?.map((r) => r.color) ?? []));
       routeDraft.open();
     },
     // handleCancelRouteDraw is declared below and is stable; see its useCallback.
-    [measureDraft, routeDraft, handleCancelRouteDraw],
+    [measureDraft, routeDraft, handleCancelRouteDraw, routes.data],
   );
 
   /** One entry point for both point-collecting tools, so every tap surface
@@ -2540,7 +2542,7 @@ export function MapScreen({
       routeDraft.open();
       setEditingRouteId(null);
       setDraftCanyonId(drawRouteFor.canyonId);
-      setDraftColor(null);
+      setDraftColor(pickNextTrackColor(routes.data?.map((r) => r.color) ?? []));
     };
     if (routeDraft.active && routeDraft.points.length > 0) {
       handleCancelRouteDraw(arm);
@@ -2554,6 +2556,7 @@ export function MapScreen({
     handleCancelRouteDraw,
     measureDraft,
     routeDraft,
+    routes.data,
   ]);
 
   const editRouteNonce = editRoute?.nonce ?? null;
@@ -3477,12 +3480,13 @@ export function MapScreen({
       if (!routeDraft.active) {
         measureDraft.close();
         setEditingRouteId(null);
+        setDraftColor(pickNextTrackColor(routes.data?.map((r) => r.color) ?? []));
         routeDraft.open({ points: [[point.longitude, point.latitude]] });
         return;
       }
       void addToolPoint(point.longitude, point.latitude);
     },
-    [addToolPoint, measureDraft, routeDraft],
+    [addToolPoint, measureDraft, routeDraft, routes.data],
   );
 
   /**

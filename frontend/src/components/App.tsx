@@ -64,7 +64,11 @@ import ConsentGate from "./ConsentGate";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
-import { TOPO_OVERLAY_SOURCE, GEOPDF_OVERLAY_ATTRIBUTION } from "@logjam/shared";
+import {
+  TOPO_OVERLAY_SOURCE,
+  GEOPDF_OVERLAY_ATTRIBUTION,
+  pickNextTrackColor,
+} from "@logjam/shared";
 import type { OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
 import { useStoredState } from "../useStoredState";
@@ -151,6 +155,7 @@ function App() {
   // can show the running distance and drive undo. `editingRouteId` is null
   // while drawing a new route.
   const [drawingRoute, setDrawingRoute] = useState(false);
+  const [drawColor, setDrawColor] = useState<string | null>(null);
   const routeDraft = useRouteDraft();
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
   const [savingRoute, setSavingRoute] = useState(false);
@@ -991,6 +996,8 @@ function App() {
   const startDrawingRoute = () => {
     setEditingRouteId(null);
     routeDraft.reset();
+    const nextColor = pickNextTrackColor(routes.map((r) => r.color));
+    setDrawColor(nextColor);
     setDrawingRoute(true);
     setActivePanel(null);
   };
@@ -1000,6 +1007,7 @@ function App() {
     // Anchors come back with the route, so a snapped line reopens with the
     // user's own handful of points rather than every snapped vertex.
     routeDraft.reset({ points: route.points, anchors: route.anchors });
+    setDrawColor(route.color ?? pickNextTrackColor(routes.map((r) => r.color)));
     setDrawingRoute(true);
     setActivePanel(null);
   };
@@ -1008,15 +1016,18 @@ function App() {
     setDrawingRoute(false);
     routeDraft.reset();
     setEditingRouteId(null);
+    setDrawColor(null);
   };
 
-  const saveDrawnRoute = async (name: string) => {
+  const saveDrawnRoute = async (name: string, color?: string) => {
     setSavingRoute(true);
     try {
+      const chosenColor = color ?? drawColor ?? undefined;
       const payload = {
         name,
         points: routeDraft.points,
         anchors: routeDraft.anchorIndices,
+        ...(chosenColor ? { color: chosenColor } : {}),
       };
       const result = editingRouteId
         ? await updateRoute(editingRouteId, payload)
@@ -1271,6 +1282,7 @@ function App() {
           setActivePanel("route-detail");
         }}
         drawingRoute={drawingRoute}
+        drawColor={drawColor ?? undefined}
         drawPoints={routeDraft.points}
         drawAnchorIndices={routeDraft.anchorIndices}
         draft={routeDraft.draft}
@@ -1347,8 +1359,13 @@ function App() {
         initialName={
           routes.find((r) => r.id === editingRouteId)?.name ?? "New route"
         }
+        initialColor={
+          drawColor ??
+          routes.find((r) => r.id === editingRouteId)?.color ??
+          undefined
+        }
         busy={savingRoute}
-        onSave={(name) => void saveDrawnRoute(name)}
+        onSave={(name, color) => void saveDrawnRoute(name, color)}
         onClose={() => setNamingRoute(false)}
       />
 

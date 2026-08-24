@@ -493,6 +493,7 @@ export function createRoute(data: {
   points: [number, number][];
   anchors?: number[] | null;
   canyonId?: string | null;
+  color?: string;
 }): Promise<RouteWriteResult> {
   return apiFetch<RouteWriteResult>("/routes", { method: "POST", body: data });
 }

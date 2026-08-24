@@ -274,4 +274,31 @@ describe("the share / send-a-copy verb matrix", () => {
     expect(trackActions(track(3)).attachToCanyon).toBeUndefined();
     expect(trackActions(track(3)).createRouteFrom).toBeDefined();
   });
+
+  it("offers setColor on trackActions and updates track color", async () => {
+    const { updateTrack } = await import("../tracks/tracksDb");
+    const t = { ...track(3), id: "track-123", color: "#e6194b" } as unknown as Track;
+    const actions = trackActions(t);
+    expect(actions.setColor).toBeDefined();
+    await actions.setColor?.("#3cb44b");
+    expect(updateTrack).toHaveBeenCalledWith("track-123", { color: "#3cb44b" });
+  });
+
+  it("passes track.color to createRouteLocal in createRouteFrom", async () => {
+    const { createRouteLocal } = await import("../sync/outbox");
+    const { listTrackPoints } = await import("../tracks/tracksDb");
+    vi.mocked(listTrackPoints).mockResolvedValueOnce([
+      { lon: 150.1, lat: -33.5, ele: 100, time: "2026-08-22T00:00:00Z" },
+      { lon: 150.2, lat: -33.6, ele: 100, time: "2026-08-22T00:01:00Z" },
+    ] as never);
+    const t = { ...track(2), name: "My Track", color: "#911eb4" } as unknown as Track;
+    const actions = trackActions(t);
+    await actions.createRouteFrom?.();
+    expect(createRouteLocal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        color: "#911eb4",
+        name: "My Track (route)",
+      }),
+    );
+  });
 });

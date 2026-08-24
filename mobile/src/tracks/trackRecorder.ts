@@ -22,6 +22,7 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import {
   computeTrackStats,
+  pickNextTrackColor,
   recordedDurationMs,
   rejectTrackFix,
   type CandidateFix,
@@ -47,6 +48,7 @@ import {
   insertTrack,
   lastTrackPoint,
   listTrackPoints,
+  listTracks,
   updateTrack,
   type Track,
 } from "./tracksDb";
@@ -97,8 +99,6 @@ export async function applyRecordingOptionsToActiveTrack(): Promise<boolean> {
   await Location.startLocationUpdatesAsync(TRACK_RECORDING_TASK, locationOptions());
   return true;
 }
-
-const TRACK_COLOR = "#f59e0b"; // amber — distinct from the import palette
 
 /**
  * Elapsed recording time from the wall clock. The point-derived duration in
@@ -282,13 +282,15 @@ export async function startTrackRecording(): Promise<Track> {
   if (existing) {
     throw new Error("A track is already being recorded.");
   }
+  const allTracks = await listTracks();
+  const color = pickNextTrackColor(allTracks.map((t) => t.color));
   const now = new Date();
   const track: Track = {
     id: randomId(),
     // Default label from the local date — user can rename on finish.
     name: `Track ${now.toLocaleDateString()}`,
     state: "recording",
-    color: TRACK_COLOR,
+    color,
     visible: true,
     currentSegment: 0,
     distanceM: 0,
