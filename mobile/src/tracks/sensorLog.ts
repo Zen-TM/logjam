@@ -50,12 +50,16 @@ const IMU_HZ = 100;
 const BATCH_SECONDS = 30;
 
 /**
- * MEASURED 2026-08-25 on a Pixel 9: ~20 MB an hour at `IMU_HZ`, after the
- * native side was taught to write four decimals instead of nine and to
- * decimate the barometer the platform over-delivers. The first version wrote
- * 42.5 MB/hour.
+ * MEASURED 2026-08-25 on a Pixel 9: 8.4 kB/s at `IMU_HZ`, i.e. ~30 MB an hour,
+ * after the native side was taught to write four decimals instead of nine and
+ * to decimate the barometer the platform over-delivers. The first version wrote
+ * 42.5 MB/hour, and an intermediate estimate of 20 was optimistic — this figure
+ * is from a real log, not from arithmetic.
+ *
+ * It is exported because the settings row states it: a research toggle whose
+ * disk cost is a surprise is a toggle that fills someone's phone in a canyon.
  */
-export const SENSOR_LOG_MB_PER_HOUR = 20;
+export const SENSOR_LOG_MB_PER_HOUR = 30;
 
 /**
  * Refuse to start without room for a long day. A canyon trip is the one
