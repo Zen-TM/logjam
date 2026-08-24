@@ -19,14 +19,28 @@ const stopLogging = vi.fn(() => ({
   samples: 0,
   dropped: 0,
 }));
+// `null` here is a USER BUILD: the plugin excludes the native module from
+// autolinking, so `requireOptionalNativeModule` hands back nothing.
+let nativeModule: unknown = null;
 vi.mock("../../modules/logjam-sensors/src/LogjamSensorsModule", () => ({
-  default: {
-    capabilities: vi.fn(),
-    logStatus: () => logStatus(),
-    startLogging: (...args: unknown[]) => startLogging(...(args as [])),
-    stopLogging: () => stopLogging(),
+  get default() {
+    return nativeModule;
   },
 }));
+
+const realModule = {
+  capabilities: vi.fn(() => ({
+    accelerometer: true,
+    gyroscope: true,
+    barometer: true,
+    stepCounter: true,
+    significantMotion: true,
+    imuFifoEvents: 3000,
+  })),
+  logStatus: () => logStatus(),
+  startLogging: (...args: unknown[]) => startLogging(...(args as [])),
+  stopLogging: () => stopLogging(),
+};
 
 const getInfoAsync = vi.fn(async () => ({ exists: false }));
 vi.mock("expo-file-system/legacy", () => ({
@@ -55,10 +69,11 @@ vi.mock("../prefsDb", () => ({
   writePref: () => true,
 }));
 
-const { startSensorLog } = await import("./sensorLog");
+const { sensorLoggingAvailable, startSensorLog } = await import("./sensorLog");
 
 beforeEach(() => {
   vi.clearAllMocks();
+  nativeModule = realModule;
   enabled = "1";
   logStatus.mockReturnValue({
     logging: false,
@@ -121,5 +136,25 @@ describe("who may begin a log", () => {
       throw new Error("no such device");
     });
     await expect(startSensorLog("t1")).resolves.toBe(false);
+  });
+});
+
+describe("a user build has no logger at all", () => {
+  // The module is excluded from autolinking unless LOGJAM_SENSOR_LOG=1 was set
+  // at build time (plugins/withSensorLogging.js), so the native side is
+  // genuinely absent and every surface has to degrade to "not available"
+  // rather than throw. One JS bundle, two build shapes.
+  beforeEach(() => {
+    nativeModule = null;
+  });
+
+  it("reports itself unavailable", () => {
+    expect(sensorLoggingAvailable()).toBe(false);
+  });
+
+  it("refuses to start even with the preference on", async () => {
+    enabled = "1";
+    expect(await startSensorLog("t1")).toBe(false);
+    expect(startLogging).not.toHaveBeenCalled();
   });
 });

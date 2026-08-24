@@ -103,9 +103,18 @@ export async function ensureStepPermission(): Promise<boolean> {
   }
 }
 
+/**
+ * True only in a build that actually carries the native module. A user build
+ * excludes it at autolinking time, so this is false and every surface below
+ * (including the settings row) simply is not there.
+ */
+export function sensorLoggingAvailable(): boolean {
+  return LogjamSensors != null;
+}
+
 export function sensorCapabilities(): SensorCapabilities | null {
   try {
-    return LogjamSensors.capabilities();
+    return LogjamSensors?.capabilities() ?? null;
   } catch {
     return null;
   }
@@ -113,7 +122,7 @@ export function sensorCapabilities(): SensorCapabilities | null {
 
 export function sensorLogStatus(): SensorLogStatus | null {
   try {
-    return LogjamSensors.logStatus();
+    return LogjamSensors?.logStatus() ?? null;
   } catch {
     return null;
   }
@@ -142,6 +151,7 @@ export async function startSensorLog(
   trackId: string,
   resumeOnly = false,
 ): Promise<boolean> {
+  if (LogjamSensors == null) return false;
   if (!readSensorLoggingEnabled()) return false;
   try {
     // Idempotent: start/resume/continue all arm the recorder, and a resume
@@ -176,7 +186,7 @@ export async function startSensorLog(
 /** Stop and flush. Safe when nothing was logging; never throws. */
 export function stopSensorLog(): SensorLogStatus | null {
   try {
-    return LogjamSensors.stopLogging();
+    return LogjamSensors?.stopLogging() ?? null;
   } catch {
     return null;
   }

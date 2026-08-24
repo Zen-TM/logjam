@@ -1,4 +1,4 @@
-import { NativeModule, requireNativeModule } from "expo";
+import { NativeModule, requireOptionalNativeModule } from "expo";
 
 // Research logger for the track-accuracy work (private/todo/track-accuracy.md).
 // DIAGNOSTIC ONLY: nothing in the app reads what this writes, and nothing may
@@ -9,6 +9,8 @@ import { NativeModule, requireNativeModule } from "expo";
 //
 // Android only. There is no iOS half and there should not be one until the same
 // questions are being asked of an iPhone.
+//
+// AND ANDROID ONLY IN A DEVELOPER BUILD — see the default export.
 
 export interface SensorCapabilities {
   accelerometer: boolean;
@@ -52,4 +54,12 @@ declare class LogjamSensorsModule extends NativeModule {
   logStatus(): SensorLogStatus;
 }
 
-export default requireNativeModule<LogjamSensorsModule>("LogjamSensors");
+/**
+ * NULL IN A USER BUILD. `plugins/withSensorLogging.js` excludes this module
+ * from autolinking unless `LOGJAM_SENSOR_LOG=1` was set at build time, so the
+ * native side genuinely is not there — `requireOptionalNativeModule` returns
+ * null rather than throwing, which is what lets one JS bundle serve both build
+ * shapes. Every caller in `tracks/sensorLog.ts` treats null as "this build
+ * cannot log".
+ */
+export default requireOptionalNativeModule<LogjamSensorsModule>("LogjamSensors");

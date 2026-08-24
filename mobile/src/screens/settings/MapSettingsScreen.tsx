@@ -64,6 +64,7 @@ import {
   ensureStepPermission,
   readSensorLoggingEnabled,
   sensorCapabilities,
+  sensorLoggingAvailable,
   sensorLogStatus,
   SENSOR_LOG_MB_PER_HOUR,
   writeSensorLoggingEnabled,
@@ -186,8 +187,9 @@ export function MapSettingsScreen() {
   const [speedElevation, setSpeedElevation] = useState(isSpeedElevationEnabled);
   const [accuracyLimit, setAccuracyLimit] = useState<AccuracyLimitM>(readAccuracyLimitM);
   const [sensorLogging, setSensorLogging] = useState(readSensorLoggingEnabled);
-  // Read once: the answer is a property of the handset and cannot change while
-  // this screen is open.
+  // Read once: the answer is a property of the handset AND of the build (a user
+  // build has no logger compiled in at all), and neither can change while this
+  // screen is open.
   const [sensorCaps] = useState(sensorCapabilities);
   const [fixRate, setFixRate] = useState<FixRate>(readFixRate);
 
@@ -402,7 +404,7 @@ export function MapSettingsScreen() {
             here rather than behind a hidden gesture because the person who
             needs it is the person carrying the phone into the canyon, and a
             setting they cannot find is a trip's data lost. */}
-        {sensorCaps != null && (
+        {sensorLoggingAvailable() && sensorCaps != null && (
           <PreferenceRow
             icon="activity"
             title="Log raw sensors while recording"

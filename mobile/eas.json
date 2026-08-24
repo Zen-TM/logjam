@@ -9,7 +9,10 @@
       "distribution": "internal",
       "android": { "buildType": "apk" },
       "channel": "development",
-      "environment": "development"
+      "environment": "development",
+      "env": {
+        "LOGJAM_SENSOR_LOG": "1"
+      }
     },
     "preview": {
       "distribution": "internal",

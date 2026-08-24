@@ -34,9 +34,6 @@
     "android": {
       "package": "com.logjamnsw.mobile",
       "allowBackup": false,
-      "permissions": [
-        "android.permission.ACTIVITY_RECOGNITION"
-      ],
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW"
       ],
@@ -73,6 +70,7 @@
     },
     "plugins": [
       "expo-dev-client",
+      "./plugins/withSensorLogging.js",
       "expo-asset",
       "expo-font",
       [
