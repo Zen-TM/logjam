@@ -1,0 +1,103 @@
+// The one thing about this module that is a decision rather than plumbing:
+// which caller may BEGIN a log and which may only RESUME one. Getting it wrong
+// produces a file missing its first half, and nothing downstream can tell that
+// from a phone that stopped sampling.
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const logStatus = vi.fn(() => ({
+  logging: false,
+  path: "",
+  bytes: 0,
+  samples: 0,
+  dropped: 0,
+}));
+const startLogging = vi.fn(() => "/data/sensor-logs/t1.csv");
+const stopLogging = vi.fn(() => ({
+  logging: false,
+  path: "",
+  bytes: 0,
+  samples: 0,
+  dropped: 0,
+}));
+vi.mock("../../modules/logjam-sensors/src/LogjamSensorsModule", () => ({
+  default: {
+    capabilities: vi.fn(),
+    logStatus: () => logStatus(),
+    startLogging: (...args: unknown[]) => startLogging(...(args as [])),
+    stopLogging: () => stopLogging(),
+  },
+}));
+
+const getInfoAsync = vi.fn(async () => ({ exists: false }));
+vi.mock("expo-file-system/legacy", () => ({
+  makeDirectoryAsync: vi.fn(async () => {}),
+  getInfoAsync: (...args: unknown[]) => getInfoAsync(...(args as [])),
+}));
+
+vi.mock("../offline/localStores", () => ({ SENSOR_LOG_DIR: "/logs/" }));
+
+let enabled = "1";
+vi.mock("../prefsDb", () => ({
+  readPref: () => enabled,
+  writePref: () => true,
+}));
+
+const { startSensorLog } = await import("./sensorLog");
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  enabled = "1";
+  logStatus.mockReturnValue({
+    logging: false,
+    path: "",
+    bytes: 0,
+    samples: 0,
+    dropped: 0,
+  });
+  getInfoAsync.mockResolvedValue({ exists: false });
+});
+
+describe("who may begin a log", () => {
+  it("a recording start begins one", async () => {
+    expect(await startSensorLog("t1")).toBe(true);
+    expect(startLogging).toHaveBeenCalledTimes(1);
+  });
+
+  it("the per-batch re-arm does NOT begin one", async () => {
+    // The toggle was flipped during a recording that started without logging.
+    expect(await startSensorLog("t1", true)).toBe(false);
+    expect(startLogging).not.toHaveBeenCalled();
+  });
+
+  it("the per-batch re-arm DOES resume an existing log", async () => {
+    // A headless relaunch after a process kill: the file is already there.
+    getInfoAsync.mockResolvedValue({ exists: true });
+    expect(await startSensorLog("t1", true)).toBe(true);
+    expect(startLogging).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing at all while the toggle is off", async () => {
+    enabled = "0";
+    expect(await startSensorLog("t1")).toBe(false);
+    expect(startLogging).not.toHaveBeenCalled();
+  });
+
+  it("is idempotent while already logging", async () => {
+    logStatus.mockReturnValue({
+      logging: true,
+      path: "/logs/t1.csv",
+      bytes: 10,
+      samples: 1,
+      dropped: 0,
+    });
+    expect(await startSensorLog("t1")).toBe(true);
+    expect(startLogging).not.toHaveBeenCalled();
+  });
+
+  it("never throws when the native side refuses", async () => {
+    startLogging.mockImplementation(() => {
+      throw new Error("no such device");
+    });
+    await expect(startSensorLog("t1")).resolves.toBe(false);
+  });
+});

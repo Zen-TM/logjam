@@ -72,28 +72,44 @@ export function sensorLogStatus(): SensorLogStatus | null {
   }
 }
 
+function logUri(trackId: string): string {
+  return `${SENSOR_LOG_DIR}${trackId}.csv`;
+}
+
 /**
  * Start logging for `trackId`, if the developer toggle is on.
+ *
+ * `resumeOnly` starts it ONLY when this track already has a log file, which is
+ * what separates the two callers. A recording start means "begin a log"; the
+ * per-batch call means "a headless relaunch may have lost the registration,
+ * put it back" — and those must not be the same thing, or flipping the toggle
+ * during a recording would begin a file whose first half is missing, which
+ * nothing downstream could distinguish from a phone that stopped sampling.
  *
  * NEVER THROWS. A research logger that can fail a recording is worse than no
  * logger — the recording is the thing the trip cannot repeat. Returns whether
  * it started, for the settings screen to report; callers on the recording path
  * ignore it.
  */
-export async function startSensorLog(trackId: string): Promise<boolean> {
+export async function startSensorLog(
+  trackId: string,
+  resumeOnly = false,
+): Promise<boolean> {
   if (!readSensorLoggingEnabled()) return false;
   try {
     // Idempotent: start/resume/continue all arm the recorder, and a resume
     // inside a process that never stopped logging must not be an error.
     if (LogjamSensors.logStatus().logging) return true;
+    if (resumeOnly) {
+      const existing = await FileSystem.getInfoAsync(logUri(trackId));
+      if (!existing.exists) return false;
+    }
     await FileSystem.makeDirectoryAsync(SENSOR_LOG_DIR, { intermediates: true });
     // One file per track, appended: a headless task relaunch mid-trip resumes
-    // into the same file rather than orphaning what was written before it.
-    LogjamSensors.startLogging(
-      `${SENSOR_LOG_DIR}${trackId}.csv`,
-      IMU_HZ,
-      BATCH_SECONDS,
-    );
+    // into the same file rather than orphaning what was written before it. The
+    // native side writes a fresh wall-clock anchor row on every open, so each
+    // resumed span carries its own clock alignment.
+    LogjamSensors.startLogging(logUri(trackId), IMU_HZ, BATCH_SECONDS);
     return true;
   } catch (error) {
     // Static code only — never a path or a sample (PRIVACY).

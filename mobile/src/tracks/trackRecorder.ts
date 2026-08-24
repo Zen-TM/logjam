@@ -170,9 +170,13 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
   // after a process kill, and nothing on that path goes through
   // `startTrackRecording` — so without this the logger would stop at the first
   // kill and the trip's log would end silently partway through, which is the
-  // one failure a trip cannot repeat. It is a no-op when the toggle is off or
+  // one failure a trip cannot repeat.
+  //
+  // `resumeOnly` so this RESUMES a log and never BEGINS one: a toggle flipped
+  // mid-recording must take effect at the next recording, as the setting says,
+  // not produce a file missing its first half. No-op when the toggle is off or
   // logging is already running, and it cannot throw.
-  void startSensorLog(track.id);
+  void startSensorLog(track.id, true);
 
   // Only the LAST stored point, not the series: it is all the acceptance filter
   // needs for `prev`, and it is one indexed row rather than a read that grows
