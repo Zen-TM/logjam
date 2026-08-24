@@ -498,18 +498,20 @@ function sensorLoggingSubtitle(
   enabled: boolean,
 ): string {
   const channels = [
-    caps.gyroscope && caps.accelerometer ? "motion" : null,
+    caps.gyroscope && caps.accelerometer ? "Motion" : null,
     caps.barometer ? "pressure" : null,
     caps.stepCounter ? "steps" : null,
     "satellites",
   ].filter(Boolean) as string[];
-  const cost = caps.imuFifoEvents > 0 ? "a few percent of battery" : "battery";
-  const what = `Records ${channels.join(", ")} to a file for later analysis. No positions are written, nothing is uploaded, and the app does not read it back.`;
-  if (!enabled) return `${what} Costs ${cost} over a trip.`;
+  // Cost first, and in the same breath as what it buys: the row is four lines
+  // and the sentence a user needs before flipping it is the price, not the
+  // reassurance. The privacy line stays because it is the second question
+  // everyone asks of a thing called "raw sensors".
+  const cost = caps.imuFifoEvents > 0 ? "a few percent" : "some";
+  const what = `${channels.join(", ")} to a file for later analysis — costs ${cost} of battery. No positions written, nothing uploaded.`;
+  if (!enabled) return what;
   const status = sensorLogStatus();
-  if (status == null || !status.logging) {
-    return `${what} On from the next recording.`;
-  }
+  if (status == null || !status.logging) return `${what} On from the next recording.`;
   const mb = (status.bytes / 1_000_000).toFixed(1);
-  return `${what} Logging now — ${mb} MB written.`;
+  return `${what} Logging now — ${mb} MB.`;
 }
