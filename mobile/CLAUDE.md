@@ -230,6 +230,14 @@ regenerate only together with an extract/schema refresh.
     `sentry/crashReportPreference.test.ts`. Installs that predate the toggle are
     grandfathered by `grandfatherCrashReports()`, and an explicit no is never
     overwritten.
+- **An Expo native module is instantiated ONCE PER JS CONTEXT**, and this app
+  has two: the UI, and the headless context TaskManager relaunches for a
+  background location delivery. Anything guarding a PROCESS-global resource — a
+  file handle, a sensor registration, a wakelock — must live in a Kotlin
+  `object`, not in instance fields, or the second context duplicates it. Listeners
+  especially: `unregisterListener` matches on object identity, so one context can
+  never unregister the other's. `logjam-sensors` shipped this bug and opened the
+  same log file twice with two sets of sensors running.
 - **A second caller inherits the first one's guards.** Grep every caller before
   changing a guarded function, and every sibling entry point when adding one:
   the share sheet skipped the picker's size cap, `resumeTrackRecording` skipped
@@ -605,6 +613,13 @@ review, not by CI.
     one. Pinned by `heading.test.ts` ("turns at a CONSTANT rate, which is the
     whole point", measuring per-tick angular velocity ripple at 8/25/60°/s,
     "does not sail past a turn that stops", "does not follow one bad sample").
+- **`expo-sensors` UNREGISTERS EVERY SENSOR WHEN THE ACTIVITY BACKGROUNDS**
+  (`SensorProxy.kt:99`, `OnActivityEntersBackground { onHostPause() }`). So no
+  sensor of any kind — barometer included — is reachable from JS during a
+  recording, which is exactly when the data is interesting. The only way in is a
+  native module registering against the SensorManager itself; worked example in
+  `modules/logjam-sensors`, and it ships in developer builds only (see
+  `plugins/withSensorLogging.js`).
 - **The heading comes from `expo-sensors`' `DeviceMotion`, NOT
   `expo-location`'s `watchHeadingAsync`, and that swap fixed more than any
   filter did** (2026-08-17). `rotation.alpha` is Android's `TYPE_ROTATION_VECTOR`
@@ -888,6 +903,13 @@ note is mandatory. Non-negotiables:
   privacy boundary between two users of one phone: don't add a wipe anywhere
   else, extend this one. (A guest *linking* keeps their data — they have no
   local identity, so the different-user comparison never fires.)
+- **A dependency's manifest can add permissions you never declared.**
+  `expo-sensors` declares `ACTIVITY_RECOGNITION` for a Pedometer this app never
+  uses, and manifest merging put it in every build from the day the compass
+  started using expo-sensors. Removing our own declaration is a no-op — a
+  library's has to be BLOCKED (`tools:node="remove"`, as app.json already does
+  for SYSTEM_ALERT_WINDOW; `plugins/withSensorLogging.js` does it for this one).
+  Audit with `aapt2 dump permissions <apk>` on the BUILT artifact, never app.json.
 - **No canyon names/coords in push payloads** — opaque IDs only; fetch details over
   the authed API on tap.
 - Crash/error reporter scrubs coords/names (mirror `api/src/lib/logger.ts`) — wired
@@ -987,6 +1009,13 @@ EAS-managed (`appVersionSource: "remote"` + `autoIncrement`) — don't hand-set 
   screenshot loop via `adb exec-out screencap -p`; mock GPS via `adb emu geo fix`;
   Maestro flows in `e2e/`. iOS = EAS build + real device (no local iOS on the
   Linux dev host).
+- **To read data off a build that behaves like a real one, add `debuggable true`
+  to `buildTypes.release`.** A debug build loads its JS from Metro and dies
+  silently on the first headless relaunch out of signal; a plain release build
+  refuses `run-as`. The debuggable-release APK is both trip-safe and readable.
+  `android/` is gitignored so it ships nowhere, and release signs with
+  `signingConfigs.debug` — so local debug/release swaps PRESERVE on-device
+  tracks, and only an EAS build (different keystore) forces an uninstall.
 - **Reading the on-device mirror: copy the `-wal` file too.** `logjam.db` runs in
   WAL mode, so `adb exec-out run-as com.logjamnsw.mobile cat files/SQLite/logjam.db`
   alone gives a snapshot missing every recent commit — which reads as "the write
