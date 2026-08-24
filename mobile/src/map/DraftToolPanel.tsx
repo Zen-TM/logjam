@@ -42,7 +42,7 @@ import {
   type SnapMode,
 } from "@logjam/shared";
 
-import { fontSize, fontWeight, radius, spacing, theme, withAlpha } from "../theme";
+import { fontSize, fontWeight, hitSlop, radius, spacing, theme, withAlpha } from "../theme";
 import { Button, IconButton } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
 import { SnapPicker } from "./SnapPicker";
@@ -179,15 +179,30 @@ export function DraftToolPanel({
               onPress={onReverse}
             />
           ) : null}
+          {/* THE SWATCH IS THE CONTROL, not a glyph tinted with the colour: a
+              droplet asks the user to decode a metaphor before they can see
+              what it is set to, while a filled square IS the answer. Same
+              shape the route sheet used before this moved onto the toolbar.
+              It keeps an IconButton's 40pt box so it lines up with the buttons
+              either side of it and stays a real tap target. */}
           {onColorChange ? (
-            <IconButton
-              icon="droplet"
-              filled
-              color={color ?? theme.accent}
+            <Pressable
+              accessibilityRole="button"
               accessibilityLabel="Choose the colour of this route"
+              accessibilityState={{ expanded: pickingColor, disabled: saving }}
               disabled={saving}
               onPress={() => setPickingColor((open) => !open)}
-            />
+              hitSlop={hitSlop}
+              style={({ pressed }) => [
+                styles.colorButton,
+                pressed && styles.colorButtonPressed,
+                saving && styles.colorButtonDisabled,
+              ]}
+            >
+              <View
+                style={[styles.currentSwatch, { backgroundColor: color ?? theme.accent }]}
+              />
+            </Pressable>
           ) : null}
           <IconButton
             icon="trash-2"
@@ -283,5 +298,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   swatchSelected: { borderWidth: 2, borderColor: theme.textPrimary },
+  // An IconButton's box, so the swatch sits on the same baseline as the
+  // buttons beside it and keeps a full-size tap target around a small square.
+  colorButton: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  colorButtonPressed: { opacity: 0.6 },
+  colorButtonDisabled: { opacity: 0.4 },
+  // The current colour, shown rather than symbolised.
+  currentSwatch: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: withAlpha(theme.textPrimary, 0.35),
+  },
   swatchTick: { color: theme.primary, fontWeight: "700" },
 });

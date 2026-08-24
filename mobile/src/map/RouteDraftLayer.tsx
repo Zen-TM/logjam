@@ -228,6 +228,11 @@ export function RouteDraftLayer({
                   ANCHOR_RADIUS_END,
                 ],
               ],
+              // The ROUTE'S colour, not the accent: a line drawn in green with
+              // orange dots on it reads as two things overlaid. Only the roles
+              // stay fixed — the start is filled with the line's colour, the
+              // end stays dark, the middles stay pale — so which end is which
+              // survives every palette choice.
               circleColor: [
                 "case",
                 ["get", "selected"],
@@ -236,18 +241,21 @@ export function RouteDraftLayer({
                   "match",
                   ["get", "role"],
                   "start",
-                  theme.accent,
+                  color,
                   "end",
                   theme.primary,
                   theme.textPrimary,
                 ],
               ],
               circleStrokeWidth: ["case", ["get", "selected"], 3, 2],
+              // Selected keeps the light ring and the warning fill rather than
+              // the route's colour: it has to stay legible against all ten of
+              // TRACK_COLORS, including the pale ones.
               circleStrokeColor: [
                 "case",
                 ["get", "selected"],
                 theme.textPrimary,
-                theme.accent,
+                color,
               ],
             }}
           />
