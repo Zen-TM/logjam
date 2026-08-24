@@ -145,9 +145,6 @@ import {
 import {
   HEADING_SENSOR_MS,
   HEADING_TICK_MS,
-  POV_ANIMATION_HEADROOM,
-  POV_ANIMATION_MAX_MS,
-  POV_ANIMATION_MIN_MS,
   POV_DEADBAND_DEG,
   EMPTY_FIELD_WINDOW,
   NO_COMPASS_CALIBRATION,
@@ -169,6 +166,7 @@ import {
   noteHeadingSample,
   normalizeBearing,
   povCameraCenter,
+  povStopDurationMs,
   publishHeading,
   resolveTrueHeading,
   shortestAngleDelta,
@@ -1860,16 +1858,39 @@ export function MapScreen({
       cancelZoomRamp();
       const startZoom = zoomRef.current;
       const startedAt = Date.now();
+      let lastWriteAt = 0;
       const writeTick = () => {
-        const elapsed = Date.now() - startedAt;
+        const now = Date.now();
+        const elapsed = now - startedAt;
         const zoom = zoomRampValue(startZoom, targetZoom, elapsed, ZOOM_RAMP_MS);
         if (latestFix.current) {
+          // ONE CAMERA WRITER AT A TIME. `tickHeading` stands down for the
+          // length of the ramp (see there), so this stop has to carry the
+          // BEARING as well as the centre and the zoom — a stop cancels the one
+          // in flight rather than blending into it, so two streams of stops
+          // that each omit what the other carries make the map alternate
+          // between rotating and zooming, which is the jitter this fixes.
+          // The bearing is whatever the filter currently displays, and it is
+          // recorded as written so the heading ticker picks up from it and does
+          // not snap when the ramp ends.
+          const bearing =
+            followModeRef.current === "course-up" ? headingFilter.current.value : null;
           setCameraStop({
             center: latestFix.current,
             zoom,
-            duration: ZOOM_RAMP_TICK_MS,
+            ...(bearing != null ? { bearing: normalizeBearing(bearing) } : {}),
+            // Same headroom rule as the heading path: a duration equal to the
+            // interval leaves nothing in hand when a tick lands late.
+            duration: povStopDurationMs(
+              lastWriteAt === 0 ? ZOOM_RAMP_TICK_MS : now - lastWriteAt,
+            ),
             easing: "linear",
           });
+          lastWriteAt = now;
+          if (bearing != null) {
+            lastPovBearing.current = bearing;
+            lastPovWriteAt.current = now;
+          }
         }
         if (elapsed >= ZOOM_RAMP_MS) cancelZoomRamp();
       };
@@ -2814,7 +2835,13 @@ export function MapScreen({
     // See the camera note in heading.ts for why the curve is the whole problem.
     // The deadband is what lets a phone held still write nothing at all, and
     // the ticker stopping below is what keeps the renderer idle in this mode.
-    if (followModeRef.current === "course-up") {
+    // ONE CAMERA WRITER AT A TIME. While the double-tap zoom ramp is running it
+    // owns the camera and carries this bearing itself (`startZoomRamp`); a stop
+    // written from here would cancel the ramp's transition mid-flight, and vice
+    // versa, which is what made a double tap in course-up read as two
+    // mechanisms fighting. The heading still ticks and is still PUBLISHED above
+    // — the arrow and the compass tape must not freeze.
+    if (followModeRef.current === "course-up" && zoomRampTicker.current == null) {
       const previous = lastPovBearing.current;
       if (
         previous == null ||
@@ -2829,10 +2856,7 @@ export function MapScreen({
           // Carry the position too: this stop REPLACES whatever the last one
           // was, and it would otherwise cancel every recentre a fix asked for.
           ...(latestFix.current ? { center: latestFix.current } : {}),
-          duration: Math.min(
-            Math.max(sinceLastWrite * POV_ANIMATION_HEADROOM, POV_ANIMATION_MIN_MS),
-            POV_ANIMATION_MAX_MS,
-          ),
+          duration: povStopDurationMs(sinceLastWrite),
           easing: "linear",
         });
       }

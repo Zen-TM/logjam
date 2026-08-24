@@ -344,6 +344,24 @@ export const POV_ANIMATION_HEADROOM = 1.15;
  *  ticks cannot produce a stutter. */
 export const POV_ANIMATION_MIN_MS = 32;
 export const POV_ANIMATION_MAX_MS = 400;
+
+/**
+ * The duration a continuous camera stop should carry, given the gap since the
+ * last one.
+ *
+ * ONE implementation, because there is more than one continuous writer: the
+ * heading ticker and the double-tap zoom ramp (`startZoomRamp` in MapScreen)
+ * both stream stops at their own cadence, and the ramp shipped with
+ * `duration: <its own interval>` — exactly the no-headroom case the constant
+ * above exists to prevent. Two copies of a rule is a parallel list that
+ * drifts; this is the list.
+ */
+export function povStopDurationMs(sinceLastWriteMs: number): number {
+  return Math.min(
+    Math.max(sinceLastWriteMs * POV_ANIMATION_HEADROOM, POV_ANIMATION_MIN_MS),
+    POV_ANIMATION_MAX_MS,
+  );
+}
 /**
  * Small on purpose, and only there to let a still phone stop writing at all —
  * NOT to shape the motion. A deadband wide enough to be felt leaves the map

@@ -5,6 +5,9 @@ import {
   HEADING_MAX_SLEW_DEG_PER_S,
   HEADING_SETTLED_DEG,
   HEADING_TICK_MS,
+  POV_ANIMATION_HEADROOM,
+  POV_ANIMATION_MAX_MS,
+  POV_ANIMATION_MIN_MS,
   POV_USER_SCREEN_FRACTION,
   EMPTY_FIELD_WINDOW,
   NO_COMPASS_CALIBRATION,
@@ -25,6 +28,7 @@ import {
   learnDeclination,
   magneticInterference,
   normalizeBearing,
+  povStopDurationMs,
   noteDeclinationFix,
   noteHeadingSample,
   povCameraCenter,
@@ -647,5 +651,20 @@ describe("normalizeBearing", () => {
   it("reads a non-finite bearing as north rather than poisoning a camera stop", () => {
     expect(normalizeBearing(NaN)).toBe(0);
     expect(normalizeBearing(Infinity)).toBe(0);
+  });
+});
+
+describe("povStopDurationMs", () => {
+  it("gives every continuous writer headroom over its own interval", () => {
+    // The bug this exists for: the zoom ramp shipped with
+    // `duration: <its own tick>`, so a tick landing late cancelled a
+    // transition that had not finished.
+    expect(povStopDurationMs(100)).toBeGreaterThan(100);
+    expect(povStopDurationMs(100)).toBe(100 * POV_ANIMATION_HEADROOM);
+  });
+
+  it("clamps a stalled or bursting timer at both ends", () => {
+    expect(povStopDurationMs(0)).toBe(POV_ANIMATION_MIN_MS);
+    expect(povStopDurationMs(10_000)).toBe(POV_ANIMATION_MAX_MS);
   });
 });

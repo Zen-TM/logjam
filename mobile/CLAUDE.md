@@ -527,6 +527,19 @@ review, not by CI.
     (`Transform.easeCamera` calls `cancelTransitions()` first), so "make the
     animation longer so they overlap" does not smooth anything — with an ease
     curve it just restarts the slow opening, forever.
+    - **So ONE writer owns the camera at a time, and its stop carries
+      everything.** Course-up's heading ticker (bearing + centre, no zoom) and
+      the double-tap zoom ramp (centre + zoom, no bearing) each ran on their own
+      interval, and each cancelled the other mid-transition: the operator read
+      it as "two mechanisms fighting", one zooming to the middle and one holding
+      the marker in place. `startZoomRamp` is now the only writer while it runs
+      — it carries the bearing `headingFilter.current.value` holds and records
+      it in `lastPovBearing`, and `tickHeading` publishes the heading but writes
+      no stop while `zoomRampTicker.current != null`, so the ticker resumes from
+      the bearing the ramp last wrote instead of snapping. The duration rule is
+      `povStopDurationMs` (heading.ts, `heading.test.ts`) — one implementation,
+      because the ramp shipped with `duration: <its own interval>`, the exact
+      no-headroom case `POV_ANIMATION_HEADROOM` exists to prevent.
   - **The display runs on its own clock, not the sensor's.** A sample moves a
     TARGET (`noteHeadingSample`); a fixed 31 Hz ticker in `MapScreen`
     (`tickHeading`) walks the shown bearing towards it, publishes it and writes

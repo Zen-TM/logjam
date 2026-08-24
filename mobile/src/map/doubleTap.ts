@@ -53,6 +53,12 @@ export function isDoubleTap(previous: TapSample | null, next: TapSample): boolea
  * the offset centre at each intermediate zoom, same as `tickHeading` steps
  * the compass — confines that mismatch to one tick's travel instead of the
  * whole gesture, which is what holds the marker still.
+ *
+ * The ramp is also the ONLY camera writer while it runs: the heading ticker
+ * stands down for its duration and the ramp's own stops carry the bearing. Two
+ * streams of stops do not blend — each cancels the other's transition — so a
+ * bearing-only stream interleaved with a zoom-only one is two mechanisms
+ * fighting over the same camera, which is exactly what it looked like.
  */
 export const ZOOM_RAMP_MS = 200;
 
