@@ -270,6 +270,17 @@ export function AddWaySheet({
     >
       {mode === "sources" ? (
         <View style={styles.body}>
+          {/* ORDER IS "what you already have", then "go and get one": the
+              three things already on the phone, then the file picker, then the
+              pen. Within the first three, most-likely-first — a drawn route is
+              what this slot is for.
+
+              The two FILE rows share one glyph and one hue on purpose: they
+              are the same kind of object, and now that they sit together the
+              repeated icon reads as a pair rather than as a mistake. The
+              labels carry the whole difference — one picks from what is
+              already in Saved, the other opens the system picker — so they
+              have to stay plainly distinct. */}
           <Row
             icon="edit-3"
             hue={assetHue.route}
@@ -277,14 +288,6 @@ export function AddWaySheet({
             subtitle="One of your saved routes"
             disabled={busy}
             onPress={() => setMode("routes")}
-          />
-          <Row
-            icon="file-plus"
-            hue={assetHue.import}
-            title="Use an imported file"
-            subtitle="A GPX or KML in Saved"
-            disabled={busy}
-            onPress={() => setMode("imports")}
           />
           <Row
             icon="activity"
@@ -295,9 +298,17 @@ export function AddWaySheet({
             onPress={() => setMode("tracks")}
           />
           <Row
-            icon="map"
-            hue={assetHue.route}
-            title="Attach a route file"
+            icon="file-plus"
+            hue={assetHue.import}
+            title="Use an imported file"
+            subtitle="A GPX or KML already in Saved"
+            disabled={busy}
+            onPress={() => setMode("imports")}
+          />
+          <Row
+            icon="file-plus"
+            hue={assetHue.import}
+            title="Import a new file"
             subtitle="A .gpx or .kml from this phone"
             disabled={busy}
             onPress={() => runAfterSheet(pickFile)}
@@ -306,7 +317,7 @@ export function AddWaySheet({
             <Row
               icon="pen-tool"
               hue={assetHue.route}
-              title="Draw one on the map"
+              title="Draw a route on the map"
               subtitle="Opens the map with the pen ready"
               disabled={busy}
               onPress={() => {
