@@ -60,6 +60,12 @@ import {
   type AccuracyLimitM,
   type FixRate,
 } from "../../tracks/recordingPreferences";
+import {
+  readSensorLoggingEnabled,
+  sensorCapabilities,
+  sensorLogStatus,
+  writeSensorLoggingEnabled,
+} from "../../tracks/sensorLog";
 import { applyRecordingOptionsToActiveTrack } from "../../tracks/trackRecorder";
 import { radius, spacing, surface, theme, withAlpha } from "../../theme";
 import { ScreenScroll, SectionHeader, Toast, type ToastMessage } from "../../ui";
@@ -177,6 +183,10 @@ export function MapSettingsScreen() {
   const [scaleBar, setScaleBar] = useState(isScaleBarEnabled);
   const [speedElevation, setSpeedElevation] = useState(isSpeedElevationEnabled);
   const [accuracyLimit, setAccuracyLimit] = useState<AccuracyLimitM>(readAccuracyLimitM);
+  const [sensorLogging, setSensorLogging] = useState(readSensorLoggingEnabled);
+  // Read once: the answer is a property of the handset and cannot change while
+  // this screen is open.
+  const [sensorCaps] = useState(sensorCapabilities);
   const [fixRate, setFixRate] = useState<FixRate>(readFixRate);
 
   // Turning the compass ON is where the location permission gets asked for — it
@@ -382,6 +392,39 @@ export function MapSettingsScreen() {
             setAccuracyLimit(limit);
           }}
         />
+
+        {/* ── Research ──────────────────────────────────────────────────────
+            Developer-only, default off, and worded as what it is rather than
+            as a feature: it costs battery, it produces a file only a laptop
+            can read, and nothing in the app gets better while it is on. It is
+            here rather than behind a hidden gesture because the person who
+            needs it is the person carrying the phone into the canyon, and a
+            setting they cannot find is a trip's data lost. */}
+        {sensorCaps != null && (
+          <PreferenceRow
+            icon="activity"
+            title="Log raw sensors while recording"
+            subtitle={sensorLoggingSubtitle(sensorCaps, sensorLogging)}
+            subtitleNumberOfLines={4}
+            value={sensorLogging}
+            ready
+            onToggle={() => {
+              const next = !sensorLogging;
+              if (!stored(writeSensorLoggingEnabled(next))) return;
+              setSensorLogging(next);
+              // Takes effect at the NEXT recording, deliberately: starting a
+              // logger into a run already in progress would produce a file
+              // whose first half is missing, and nothing downstream could tell
+              // that from a phone that stopped sampling.
+              notify(
+                next
+                  ? "Raw sensors will be logged from the next recording."
+                  : "Sensor logging off from the next recording.",
+                "info",
+              );
+            }}
+          />
+        )}
       </ScreenScroll>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
@@ -443,3 +486,30 @@ const styles = StyleSheet.create({
     borderColor: withAlpha(theme.textPrimary, 0.2),
   },
 });
+
+/**
+ * What the toggle actually costs and what it produces, in the two sentences a
+ * user needs before turning it on. The capability list matters because the
+ * answer is per-handset: a phone with no barometer contributes nothing to the
+ * elevation question and should not imply it does.
+ */
+function sensorLoggingSubtitle(
+  caps: NonNullable<ReturnType<typeof sensorCapabilities>>,
+  enabled: boolean,
+): string {
+  const channels = [
+    caps.gyroscope && caps.accelerometer ? "motion" : null,
+    caps.barometer ? "pressure" : null,
+    caps.stepCounter ? "steps" : null,
+    "satellites",
+  ].filter(Boolean) as string[];
+  const cost = caps.imuFifoEvents > 0 ? "a few percent of battery" : "battery";
+  const what = `Records ${channels.join(", ")} to a file for later analysis. No positions are written, nothing is uploaded, and the app does not read it back.`;
+  if (!enabled) return `${what} Costs ${cost} over a trip.`;
+  const status = sensorLogStatus();
+  if (status == null || !status.logging) {
+    return `${what} On from the next recording.`;
+  }
+  const mb = (status.bytes / 1_000_000).toFixed(1);
+  return `${what} Logging now — ${mb} MB written.`;
+}

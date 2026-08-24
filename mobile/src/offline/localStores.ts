@@ -45,6 +45,15 @@ export const SCRATCH_DIR = `${FileSystem.cacheDirectory}logjam-scratch/`;
 export const BASEMAP_ASSETS_DIR = `${FileSystem.documentDirectory}basemap-assets/`;
 
 /**
+ * Raw sensor logs from the developer-only research logger
+ * (modules/logjam-sensors, private/todo/track-accuracy.md). WIPED: the samples
+ * describe how one person moved through a canyon for a day, which is location
+ * history by another name even though no coordinate is written — so it leaves
+ * with the account like everything else.
+ */
+export const SENSOR_LOG_DIR = `${FileSystem.documentDirectory}sensor-logs/`;
+
+/**
  * Every tree `wipeAllLocalData` deletes. Databases are not here — they are
  * cleared by table, so their files survive with no rows (see wipeLocalData.ts).
  */
@@ -54,6 +63,7 @@ export const WIPED_DIRS = [
   OVERLAY_DIR,
   IMPORTS_DIR,
   SCRATCH_DIR,
+  SENSOR_LOG_DIR,
 ] as const;
 
 /** Create the scratch directory if needed and return a URI inside it. */

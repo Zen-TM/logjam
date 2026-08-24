@@ -35,6 +35,7 @@ import {
   readAccuracyLimitM,
   readFixRate,
 } from "./recordingPreferences";
+import { startSensorLog, stopSensorLog } from "./sensorLog";
 import {
   enqueueTrackWrite,
   resetTrackWriteHealth,
@@ -165,6 +166,14 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
   // Fixes can trail in after pause/finish (queued deliveries) — drop them.
   if (!track || track.state !== "recording") return;
 
+  // Re-arm the research logger. TaskManager relaunches this task headless
+  // after a process kill, and nothing on that path goes through
+  // `startTrackRecording` — so without this the logger would stop at the first
+  // kill and the trip's log would end silently partway through, which is the
+  // one failure a trip cannot repeat. It is a no-op when the toggle is off or
+  // logging is already running, and it cannot throw.
+  void startSensorLog(track.id);
+
   // Only the LAST stored point, not the series: it is all the acceptance filter
   // needs for `prev`, and it is one indexed row rather than a read that grows
   // with the recording (MLIFE-004 — the in-memory series that used to stand in
@@ -294,6 +303,12 @@ TaskManager.defineTask<{ locations: Location.LocationObject[] }>(
 );
 
 async function stopLocationUpdatesIfRunning(): Promise<void> {
+  // Every path that disarms the recorder — pause, finish, discard, wipe —
+  // funnels through here, so the research logger is stopped in ONE place
+  // rather than at four call sites that each have to remember. Same rule as
+  // mobile/CLAUDE.md's "a second caller inherits the first one's guards",
+  // which this module has already been bitten by.
+  stopSensorLog();
   if (await Location.hasStartedLocationUpdatesAsync(TRACK_RECORDING_TASK)) {
     await Location.stopLocationUpdatesAsync(TRACK_RECORDING_TASK);
   }
@@ -336,6 +351,9 @@ export async function startTrackRecording(): Promise<Track> {
     await deleteTrack(track.id);
     throw error;
   }
+  // Developer-only, default off, and deliberately AFTER the service is armed:
+  // it must never be able to stop a recording from starting.
+  void startSensorLog(track.id);
   return track;
 }
 
@@ -379,6 +397,7 @@ export async function resumeTrackRecording(track: Track): Promise<void> {
     throw error;
   }
   resetTrackWriteHealth();
+  void startSensorLog(track.id);
 }
 
 /**
@@ -433,6 +452,7 @@ export async function continueTrackRecording(track: Track): Promise<void> {
     throw error;
   }
   resetTrackWriteHealth();
+  void startSensorLog(track.id);
 }
 
 export async function finishTrackRecording(trackId: string): Promise<void> {

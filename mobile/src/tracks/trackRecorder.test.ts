@@ -46,6 +46,16 @@ vi.mock("expo-location", () => ({
 
 vi.mock("../imports/vectorImports", () => ({ randomId: () => "track-1" }));
 
+// The research logger is native-only and deliberately inert here: what these
+// tests assert is the recording path, and the logger's contract is that it
+// cannot affect it.
+const startSensorLog = vi.fn(async () => false);
+const stopSensorLog = vi.fn(() => null);
+vi.mock("./sensorLog", () => ({
+  startSensorLog: (...args: unknown[]) => startSensorLog(...(args as [])),
+  stopSensorLog: () => stopSensorLog(),
+}));
+
 vi.mock("./recordingPreferences", () => ({
   FIX_RATE_OPTIONS: { balanced: { timeInterval: 30_000 } },
   readFixRate: () => "balanced",
