@@ -74,6 +74,7 @@ import {
   Row,
   SectionHeader,
   SegmentedControl,
+  SEGMENTED_CONTROL_HEIGHT,
   StatusPill,
   SyncStatusPills,
   TextField,
@@ -1600,7 +1601,9 @@ export function SavedScreen({
               // same reason changing category clears the selection outright
               // (selectFilter). The field stays visible (so the bar's height
               // never differs from the rail's) but inert, rather than losing
-              // what was typed.
+              // what was typed. It also GREYS OUT (TextField's own disabled
+              // treatment, `editable={false}`) — a live-looking field that
+              // silently eats taps read as broken, not as "not now".
               editable={!selecting}
             />
           </View>
@@ -1608,9 +1611,18 @@ export function SavedScreen({
         {/* The tag rail stays waypoint-only (DESIGN.md §3) — every other
             category is a handful of large files scanned by eye. Both this
             and the search field above narrow the on-device mirror, so both
-            work with no signal. */}
+            work with no signal. Inert the same way as the search field while
+            selecting, and dimmed the same way — a chip that still looks
+            pressable but does nothing is the same bug the search field had. */}
         {filter === "waypoint" && waypointTagOptions.length > 0 ? (
-          <View style={styles.waypointTags}>
+          <View
+            style={[styles.waypointTags, selecting && styles.railInert]}
+            // Dimming alone would be the same lie in a new place: the chips
+            // underneath stay pressable and a tap would still narrow the list
+            // out from under the selection. The look and the behaviour have to
+            // change together.
+            pointerEvents={selecting ? "none" : "auto"}
+          >
             <SegmentedControl
               options={waypointTagOptions}
               value={waypointTag ?? "all"}
@@ -2427,12 +2439,23 @@ const styles = StyleSheet.create({
   // dense block.
   searchField: { paddingTop: spacing(1.5), paddingRight: spacing(2) },
   waypointTags: { paddingTop: spacing(1.5) },
+  // Dims the tag rail while selecting, same treatment as TextField's own
+  // `disabled` state — a control that still looks pressable but silently
+  // no-ops is worse than one that visibly can't be touched.
+  railInert: { opacity: 0.45 },
   rail: { paddingLeft: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
   // Sits where the SegmentedControl sits, inside the same `rail` container —
   // it replaces only that control, not the search field or tag rail beneath
   // it, so the rail's total height cannot differ between the two states
-  // (item 15).
+  // (item 15). Fixed to SEGMENTED_CONTROL_HEIGHT — the exact height of the
+  // scroll-mode SegmentedControl it replaces (one Chip, `CHIP_HEIGHT`) —
+  // rather than left to size itself off its 40pt IconButtons, which would
+  // read a few px taller and jump the list below on every selection start
+  // (operator feedback, 2026-08-24). The buttons keep their full 40pt tap
+  // target; they simply overflow this shorter row by 2px top and bottom,
+  // which is invisible against the row's own vertical padding.
   selectionBar: {
+    height: SEGMENTED_CONTROL_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing(0.5),

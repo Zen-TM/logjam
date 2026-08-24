@@ -921,8 +921,23 @@ which subsystem is talking.
   rail's height cannot differ — and goes INERT rather than unmounting: typing
   or picking a tag mid-selection could narrow a selected row out of the
   visible list, the same risk a category change already answers by clearing
-  the selection outright (`selectFilter`). The bar reads `× | N selected ·
-  size | select-all · delete`, and it carries only verbs that are BETTER in
+  the selection outright (`selectFilter`). **Inert means visibly dimmed, not
+  just unresponsive** (operator feedback, 2026-08-24): a live-looking search
+  field that silently drops every tap read as broken, so `TextField` grew its
+  own `disabled` treatment (`editable={false}` dims it, matching `Row`'s and
+  `IconButton`'s convention) and the waypoint tag rail dims the same way. **The
+  bar itself is pinned to `SEGMENTED_CONTROL_HEIGHT`** (`ui/SegmentedControl.tsx`,
+  re-exporting `Chip`'s own `CHIP_HEIGHT`) rather than left to size itself off
+  its 40pt `IconButton`s — a few px taller than one chip is still a jump, just
+  a smaller one. Its buttons keep their full tap target and simply overflow
+  the shorter row by a couple of px top and bottom, invisible against the
+  row's own padding.
+
+  Dimming is paired with `pointerEvents="none"` in both cases — a control that
+  looks unavailable but still answers a tap is the same lie in a new place.
+
+  The bar reads `× | N selected · size | select-all · delete`, and it carries
+  only verbs that are BETTER in
   bulk than one at a time. "Show on map" was in the first cut and came out:
   flying to the union of five extents is not what any of the five meant, and
   the single-item verb already does the thing the user wanted. Reference:

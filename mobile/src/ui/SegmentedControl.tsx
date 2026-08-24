@@ -10,7 +10,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import type { Feather } from "@expo/vector-icons";
 
 import { spacing, theme, withAlpha } from "../theme";
-import { Chip } from "./Chip";
+import { Chip, CHIP_HEIGHT } from "./Chip";
+
+// A single-line (`scroll`) control is exactly one chip tall — re-exported so
+// a bar replacing it in the same slot (Saved's multi-select bar, item A) can
+// match without a second hand-kept number.
+export const SEGMENTED_CONTROL_HEIGHT = CHIP_HEIGHT;
 
 export type SegmentOption<T extends string> = {
   value: T;

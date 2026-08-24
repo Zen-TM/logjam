@@ -42,8 +42,13 @@ export function TextField({
   inputRef,
   ...inputProps
 }: TextFieldProps) {
+  // `editable={false}` is a DISABLED field, not a live one that silently
+  // ignores taps — same convention as `Row`'s and `IconButton`'s `disabled`
+  // (dim, don't hide). Undeclared `editable` (the common case) stays full
+  // opacity.
+  const disabled = inputProps.editable === false;
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, disabled && styles.disabled]}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
         ref={inputRef}
@@ -69,6 +74,8 @@ export function TextField({
 
 const styles = StyleSheet.create({
   container: { gap: spacing(0.5) },
+  // Matches `Row`'s/`Button`'s disabled dim (0.45) — see the note above.
+  disabled: { opacity: 0.45 },
   label: {
     fontSize: fontSize.xs,
     fontWeight: "600",

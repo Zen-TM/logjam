@@ -3,6 +3,11 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { fontSize, fontWeight, hitSlop, radius, spacing, surface, theme, withAlpha } from "../theme";
 
+// The single source of a chip's height (padding + font + border collapse to
+// this one number via `minHeight`) — `SegmentedControl` re-exports it so a
+// scroll rail's height is never guessed at from outside this file.
+export const CHIP_HEIGHT = 36;
+
 /**
  * The pill primitive behind every chip surface — filter rails
  * (`SegmentedControl`) and multi-select vocabularies (`ChipPicker`) both render
@@ -69,7 +74,7 @@ const styles = StyleSheet.create({
     backgroundColor: surface.card,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.75),
-    minHeight: 36,
+    minHeight: CHIP_HEIGHT,
   },
   pressed: { opacity: 0.75 },
   disabled: { opacity: 0.4 },

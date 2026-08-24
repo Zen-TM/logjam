@@ -16,7 +16,11 @@ export { SectionHeader } from "./SectionHeader";
 export { StatusPill } from "./StatusPill";
 export { SyncStatusPills } from "./SyncStatusPills";
 export { Toggle } from "./Toggle";
-export { SegmentedControl, type SegmentOption } from "./SegmentedControl";
+export {
+  SegmentedControl,
+  SEGMENTED_CONTROL_HEIGHT,
+  type SegmentOption,
+} from "./SegmentedControl";
 export { BottomSheet } from "./BottomSheet";
 export { TextField } from "./TextField";
 export { EmptyState, ErrorState, LoadingState } from "./ScreenStates";
