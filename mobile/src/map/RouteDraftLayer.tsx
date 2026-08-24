@@ -26,17 +26,7 @@ import {
 } from "@logjam/shared";
 
 import { dragIsTap } from "./anchorHit";
-import { Feather } from "@expo/vector-icons";
-
 import { theme } from "../theme";
-
-/**
- * Gap between the selected anchor and its delete button, in dp. Wide enough
- * that the button never covers the dot it belongs to (the selected anchor is
- * drawn at ANCHOR_RADIUS_SELECTED) and that a thumb aiming at one cannot
- * easily hit the other.
- */
-const ANCHOR_DELETE_GAP_DP = 26;
 
 /** Below this a route is a few pixels of line and arrows on it are just noise. */
 export const ROUTE_ARROW_MIN_ZOOM = 12;
@@ -135,11 +125,10 @@ export function RouteDraftLayer({
   degreesPerDp,
   color = theme.accent,
   selectedIndex = null,
-  selectedSide = "left",
   onAnchorDrag,
   onAnchorDragEnd,
   onAnchorPress,
-  onRemoveSelected,
+  onDragActiveChange,
 }: {
   idPrefix: string;
   /** The draft itself — anchors AND the snapped filler between them. */
@@ -154,20 +143,20 @@ export function RouteDraftLayer({
   color?: string;
   /** The anchor the user has tapped, drawn picked out. Null when none is. */
   selectedIndex?: number | null;
-  /**
-   * Which side of the selected anchor the delete button sits on. The caller
-   * decides it from where the finger landed, because only the caller sees the
-   * press: near the left edge of the screen a button drawn to the LEFT would
-   * be half off it.
-   */
-  selectedSide?: "left" | "right";
   onAnchorDrag: (index: number, point: RoutePoint) => void;
   onAnchorDragEnd: (index: number, point: RoutePoint) => void;
   /** The screen x of the press, in dp, when the gesture carried one — see
    *  `selectedSide`. */
   onAnchorPress: (index: number, screenXDp: number | null) => void;
-  /** Delete the selected anchor. Absent while nothing is selected. */
-  onRemoveSelected?: () => void;
+  /**
+   * A real drag started, or the one in flight ended. The caller hides the
+   * selected anchor's delete button for the length of it — a button pinned to
+   * a point that is moving under the finger chases it across the map, and it
+   * sits exactly where the finger is going. Reported on the SLOP CROSSING, not
+   * on `onDragStart`, so a tap that arrives through the drag callbacks never
+   * flickers it.
+   */
+  onDragActiveChange?: (dragging: boolean) => void;
 }) {
   /**
    * The anchor being dragged, held HERE rather than in the screen's state.
@@ -324,6 +313,7 @@ export function RouteDraftLayer({
             if (!dragBeyondSlop.current && dragIsTap(anchor, moved, degreesPerDp)) {
               return;
             }
+            if (!dragBeyondSlop.current) onDragActiveChange?.(true);
             dragBeyondSlop.current = true;
             setDrag({ index, point: moved });
             onAnchorDrag(index, moved);
@@ -337,6 +327,7 @@ export function RouteDraftLayer({
               dragBeyondSlop.current ||
               (moved != null && !dragIsTap(anchor, moved, degreesPerDp));
             setDrag(null);
+            if (dragBeyondSlop.current) onDragActiveChange?.(false);
             if (!wasDrag) {
               // Never moved: this was a tap that happened to arrive through the
               // drag callbacks. Nothing is committed and nothing is snapped.
@@ -359,36 +350,6 @@ export function RouteDraftLayer({
         </ViewAnnotation>
       ))}
 
-      {/* THE SELECTED POINT'S ONE VERB, next to the point itself rather than in
-          the toolbar at the top of the screen. A button by your thumb, attached
-          to the thing it acts on, is the whole affordance; the same verb in the
-          card meant looking away from the map to delete something you were
-          pointing at.
-
-          A ViewAnnotation rather than an absolutely-positioned view, so the
-          native side keeps it pinned to the anchor through every pan, zoom and
-          rotation with no per-frame JS. `anchor` names the part of the BUTTON
-          placed on the coordinate, so sitting the button to the LEFT of the
-          point means anchoring its RIGHT edge there and pushing it back by the
-          gap. */}
-      {selectedIndex != null && draft.anchors[selectedIndex] && onRemoveSelected ? (
-        <ViewAnnotation
-          key={`${idPrefix}-anchor-delete`}
-          id={`${idPrefix}-anchor-delete`}
-          lngLat={draft.anchors[selectedIndex] as [number, number]}
-          anchor={selectedSide === "left" ? "right" : "left"}
-          offset={
-            selectedSide === "left"
-              ? [-ANCHOR_DELETE_GAP_DP, 0]
-              : [ANCHOR_DELETE_GAP_DP, 0]
-          }
-          onPress={onRemoveSelected}
-        >
-          <View style={styles.deleteButton}>
-            <Feather name="trash-2" size={20} color={theme.primary} />
-          </View>
-        </ViewAnnotation>
-      ) : null}
     </>
   );
 }
@@ -405,18 +366,5 @@ const styles = StyleSheet.create({
     height: 34,
     borderRadius: 17,
     backgroundColor: "rgba(255,255,255,0.01)",
-  },
-  // Circular, warning-coloured, and the same 44 dp the rest of the app treats
-  // as a real touch target. Solid rather than translucent: it sits over the
-  // map, which can be any colour under it.
-  deleteButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.warning,
-    borderWidth: 2,
-    borderColor: theme.primary,
   },
 });

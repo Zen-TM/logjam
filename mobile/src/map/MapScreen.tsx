@@ -47,6 +47,7 @@ import {
   type PressEvent,
   type PressEventWithFeatures,
   type ViewStateChangeEvent,
+  ViewAnnotation,
 } from "@maplibre/maplibre-react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -327,6 +328,11 @@ const PROTOMAPS_FLAVOR = "light" as const;
 /** Room needed on the left of a point before its delete button fits there:
  *  the 44 dp button, its 26 dp gap and a margin off the screen edge. */
 const ANCHOR_DELETE_FLIP_DP = 78;
+
+/** Gap between the selected anchor and its delete button, in dp. Wide enough
+ *  that the button never covers the dot it belongs to, and that a thumb aiming
+ *  at one cannot easily hit the other. */
+const ANCHOR_DELETE_GAP_DP = 26;
 
 const DEGENERATE_BBOX_DEGREES = 1e-5;
 const SINGLE_POINT_ZOOM = 14;
@@ -764,6 +770,12 @@ export function MapScreen({
   const [selectedAnchorSide, setSelectedAnchorSide] = useState<"left" | "right">(
     "left",
   );
+  /** A handle is being dragged. Only the delete button reads it, to get out of
+   *  the way for the length of the gesture — it is pinned to the point being
+   *  moved, so it would otherwise chase the finger across the map, sitting
+   *  exactly where the finger is going. One render at each end of the drag,
+   *  never per frame: the drag itself stays inside RouteDraftLayer. */
+  const [anchorDragging, setAnchorDragging] = useState(false);
   /** Below this much room on the left, the button flips to the other side:
    *  the button itself plus its gap plus a margin off the edge. */
   const anchorDeleteSideFor = useCallback(
@@ -1428,6 +1440,15 @@ export function MapScreen({
   /** Delete the picked point, from the panel's "Remove point". No confirm: the
    *  selection is the deliberate step the old modal stood in for, and Undo
    *  takes it back. */
+  /** Where the delete button pins itself: the picked anchor's own position, or
+   *  null when nothing is picked. Read from the ARMED draft, so it follows the
+   *  point as edits move it. */
+  const selectedAnchorCoord =
+    selectedAnchor === null
+      ? null
+      : (activeDraft?.draft?.anchors[selectedAnchor] as [number, number] | undefined) ??
+        null;
+
   const removeSelectedAnchor = useCallback(() => {
     if (selectedAnchor === null || !activeDraft) return;
     activeDraft.deleteAnchorAt(selectedAnchor);
@@ -3936,6 +3957,11 @@ export function MapScreen({
     showWaypoints,
     drawingRoute,
     measuring,
+    // The draft's LINE layer is added and removed as the point count crosses
+    // two, and a re-added layer lands on top of the stack — which is what put
+    // the line over the delete button below. Re-inserting the top stack when
+    // it changes puts the button back above it.
+    (activeDraft?.points.length ?? 0) >= 2,
     navLineShape != null,
     focusPulse?.nonce ?? "",
   ].join("|");
@@ -4304,8 +4330,7 @@ export function MapScreen({
             idPrefix="route-draft"
             color={draftColor ?? undefined}
             selectedIndex={selectedAnchor}
-            selectedSide={selectedAnchorSide}
-            onRemoveSelected={selectedAnchor === null ? undefined : removeSelectedAnchor}
+            onDragActiveChange={setAnchorDragging}
             draft={routeDraft.draft ?? emptyDraft}
             dotted={false}
             degreesPerDp={degreesPerDp(camera.zoom)}
@@ -4320,10 +4345,7 @@ export function MapScreen({
             // `activeDraft` prefers the route draft, so a selection belongs to
             // measure only while route draw is off.
             selectedIndex={drawingRoute ? null : selectedAnchor}
-            selectedSide={selectedAnchorSide}
-            onRemoveSelected={
-              drawingRoute || selectedAnchor === null ? undefined : removeSelectedAnchor
-            }
+            onDragActiveChange={setAnchorDragging}
             draft={measureDraft.draft ?? emptyDraft}
             dotted
             degreesPerDp={degreesPerDp(camera.zoom)}
@@ -4364,6 +4386,45 @@ export function MapScreen({
                 }}
               />
             </GeoJSONSource>
+          ) : null}
+
+          {/* THE SELECTED POINT'S ONE VERB, beside the point rather than in the
+              toolbar at the top of the screen — a button attached to the thing
+              it acts on, where the thumb already is.
+
+              Mounted HERE, in the top stack, and not inside RouteDraftLayer
+              where it started: the draft's own line layer is re-added whenever
+              its source remounts, and a re-added layer lands on top of the
+              stack, so the line was drawing over the button. This Fragment is
+              the app's answer to exactly that (see `topStackKey`).
+
+              It is a ViewAnnotation, so the native side keeps it pinned to the
+              anchor through every pan, zoom and rotation with no per-frame JS.
+              `anchor` names the part of the BUTTON put on the coordinate, so
+              sitting it to the LEFT of the point means anchoring its RIGHT edge
+              there and pushing it back by the gap. */}
+          {selectedAnchorCoord && !anchorDragging ? (
+            <ViewAnnotation
+              key="anchor-delete"
+              id="anchor-delete"
+              lngLat={selectedAnchorCoord}
+              anchor={selectedAnchorSide === "left" ? "right" : "left"}
+              offset={
+                selectedAnchorSide === "left"
+                  ? [-ANCHOR_DELETE_GAP_DP, 0]
+                  : [ANCHOR_DELETE_GAP_DP, 0]
+              }
+              onPress={removeSelectedAnchor}
+            >
+              <View
+                accessible
+                accessibilityRole="button"
+                accessibilityLabel="Remove this point"
+                style={styles.anchorDelete}
+              >
+                <Feather name="trash-2" size={20} color={theme.primary} />
+              </View>
+            </ViewAnnotation>
           ) : null}
         </Fragment>
 
@@ -5081,6 +5142,19 @@ function MeasureGlyph() {
 }
 
 const styles = StyleSheet.create({
+  // The selected point's delete button: circular, warning-coloured, and the
+  // same 44 dp the rest of the app treats as a real touch target. Solid rather
+  // than translucent — it sits over the map, which can be any colour under it.
+  anchorDelete: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.warning,
+    borderWidth: 2,
+    borderColor: theme.primary,
+  },
   // The field and its Save button were flush against each other, which read as
   // one control and put the button under the thumb aiming for the input.
   nameForm: { gap: spacing(2) },

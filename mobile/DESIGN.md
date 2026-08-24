@@ -276,6 +276,16 @@ BottomSheet(s)      acquisition + per-item actions
     point — except within `ANCHOR_DELETE_FLIP_DP` of the screen's left edge,
     where it would be drawn half off, and flips to the right. The side is
     decided from the press's own screen x, which MLRN reports in dp.
+  - It is mounted in the TOP STACK (`topStackKey`), not inside
+    `RouteDraftLayer` where it started: the draft's line layer is re-added
+    whenever its source remounts, and a re-added layer lands on top of the
+    stack, so the line drew over the button. The draft's line-presence is part
+    of that key for the same reason.
+  - **It hides for the length of a drag.** Pinned to a point moving under the
+    finger it would chase it across the map, and sit exactly where the finger
+    is going. The layer reports the SLOP CROSSING rather than `onDragStart`, so
+    a tap arriving through the drag callbacks never flickers it, and the button
+    returns beside the point's new position on release.
   - This replaced a modal "Remove this point?" raised from the annotation's own
     `onSelect`, which the user never found. A verb that only exists inside a
     gesture nobody makes is a verb the app does not have — put it where the
