@@ -53,6 +53,7 @@ vi.mock("./recordingPreferences", () => ({
 }));
 
 const appendTrackPoints = vi.fn(async () => {});
+const appendRejectedFixes = vi.fn(async () => {});
 const addTrackPointSuppression = vi.fn(async () => {});
 const updateTrack = vi.fn(async () => {});
 const deleteTrack = vi.fn(async () => {});
@@ -61,6 +62,8 @@ let storedPoints: RecordedTrackPoint[] = [];
 
 vi.mock("./tracksDb", () => ({
   appendTrackPoints: (...args: unknown[]) => appendTrackPoints(...(args as [])),
+  appendRejectedFixes: (...args: unknown[]) =>
+    appendRejectedFixes(...(args as [])),
   addTrackPointSuppression: (...args: unknown[]) =>
     addTrackPointSuppression(...(args as [])),
   updateTrack: (...args: unknown[]) => updateTrack(...(args as [])),
@@ -366,5 +369,55 @@ describe("arming and marking (MLIFE-002)", () => {
       /already being recorded/,
     );
     expect(updateTrack).not.toHaveBeenCalled();
+  });
+});
+
+describe("rejected fixes are kept, and cannot cost a recording", () => {
+  // Every diagnosis of a bad fix so far needed the fix AFTER it, and a refused
+  // fix used to be unrecoverable — so no candidate filter could be tested
+  // against the fixes it would have to judge. See private/todo/track-accuracy.md.
+  it("stores a refused fix with the reason the filter gave", async () => {
+    activeTrack = recordingTrack();
+
+    // fixAt(0) is accepted; stillAt(1) is inside the drift radius.
+    await taskHandler!({ data: { locations: [fixAt(0), stillAt(1)] } });
+
+    expect(appendRejectedFixes).toHaveBeenCalledTimes(1);
+    const [trackId, rejected] = appendRejectedFixes.mock.calls[0] as unknown as [
+      string,
+      { reason: string; segment: number; lon: number }[],
+    ];
+    expect(trackId).toBe("track-1");
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]!.reason).toBe("too-close");
+    expect(rejected[0]!.segment).toBe(0);
+  });
+
+  it("writes nothing when every fix was accepted", async () => {
+    activeTrack = recordingTrack();
+
+    await taskHandler!({ data: { locations: [fixAt(0), fixAt(1)] } });
+
+    expect(appendTrackPoints).toHaveBeenCalledTimes(1);
+    expect(appendRejectedFixes).not.toHaveBeenCalled();
+  });
+
+  // THE POINT OF THE SEPARATION: this table is diagnostic, so a failure writing
+  // it must not reach the write the trip depends on. Before the try/catch, a
+  // throw here propagated out of handleLocationBatch and the batch's accepted
+  // points were never appended.
+  it("still appends the accepted points when the diagnostic write throws", async () => {
+    activeTrack = recordingTrack();
+    appendRejectedFixes.mockRejectedValueOnce(new Error("database is locked"));
+
+    await taskHandler!({ data: { locations: [fixAt(0), stillAt(1), fixAt(2)] } });
+
+    expect(appendRejectedFixes).toHaveBeenCalledTimes(1);
+    expect(appendTrackPoints).toHaveBeenCalledTimes(1);
+    const [, points] = appendTrackPoints.mock.calls[0] as unknown as [
+      string,
+      RecordedTrackPoint[],
+    ];
+    expect(points).toHaveLength(2);
   });
 });

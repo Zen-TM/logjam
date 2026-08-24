@@ -41,6 +41,7 @@ import {
 } from "./trackWriteQueue";
 import {
   addTrackPointSuppression,
+  appendRejectedFixes,
   appendTrackPoints,
   deleteTrack,
   findActiveTrack,
@@ -50,6 +51,7 @@ import {
   listTrackPoints,
   listTracks,
   updateTrack,
+  type RejectedFix,
   type Track,
 } from "./tracksDb";
 
@@ -180,6 +182,7 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
   // setting is whatever `prefsDb` says right now.
   const maxAccuracyM = readAccuracyLimitM();
   const accepted: RecordedTrackPoint[] = [];
+  const rejected: RejectedFix[] = [];
 
   // A fix refused for being too close to the last one is not noise to be
   // dropped — it is the recorder watching someone stand still, and it is the
@@ -227,6 +230,14 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
       altitudeAccuracyM: location.coords.altitudeAccuracy,
     };
     const rejection = rejectTrackFix(prev, fix, maxAccuracyM);
+    if (rejection !== null) {
+      // Kept, not dropped. Every diagnosis of a bad fix so far needed the fix
+      // AFTER it, and until now a refused fix was gone the instant it was
+      // refused — so no candidate filter could be tested against the fixes it
+      // would have to judge. Diagnostic only: a separate table nothing draws,
+      // measures or exports (`appendRejectedFixes`).
+      rejected.push({ ...fix, reason: rejection, segment: track.currentSegment });
+    }
     if (rejection === "too-close") {
       pendingCount += 1;
       pendingUntilMs = Math.max(pendingUntilMs, fix.timestampMs);
@@ -244,6 +255,18 @@ async function handleLocationBatch(locations: Location.LocationObject[]) {
 
   if (storedCount > 0) {
     await addTrackPointSuppression(track.id, storedCount, storedStationaryMs);
+  }
+  // Diagnostics must never cost a recording. This is the only write in the
+  // batch nothing depends on, so it is the only one allowed to fail quietly —
+  // and it runs BEFORE the point append so a throw here cannot be mistaken for
+  // one from the write that matters.
+  if (rejected.length > 0) {
+    try {
+      await appendRejectedFixes(track.id, rejected);
+    } catch {
+      // Static count only — never the fixes themselves (PRIVACY).
+      console.warn(`track-recording: ${rejected.length} rejected fixes unsaved`);
+    }
   }
   // The whole job of a backgrounded recorder: write the points. The append
   // carries `pointCount` with it, so the row stays truthful about what is

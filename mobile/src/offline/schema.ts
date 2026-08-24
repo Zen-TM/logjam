@@ -97,6 +97,37 @@ export const SCHEMA_SQL = `
           altitudeAccuracyM  REAL,
           PRIMARY KEY (trackId, seq)
         );
+        -- Fixes rejectTrackFix REFUSED, kept instead of dropped.
+        --
+        -- A SEPARATE TABLE on purpose, not a flag on track_point. Four queries
+        -- treat that table as "the track": listTrackPoints draws it,
+        -- lastTrackPoint hands the acceptance filter its reference, the seq
+        -- allocator counts it, and track.pointCount sums it. A flag would mean
+        -- each of those needing a predicate, and the one that matters --
+        -- lastTrackPoint -- fails SILENTLY if it ever forgets: the filter would
+        -- start measuring against a fix it had itself refused. Nothing reads
+        -- this table, so it cannot break recording.
+        --
+        -- Its seq is its own counter, unrelated to track_point.seq. Order
+        -- against accepted points by timestampMs.
+        --
+        -- Why keep them at all: every diagnosis of a bad fix so far needed the
+        -- fix AFTER it, and a rejected fix used to be unrecoverable, so no
+        -- candidate filter could ever be tested against the fixes it would have
+        -- to judge (private/todo/track-accuracy.md).
+        CREATE TABLE IF NOT EXISTS track_point_rejected (
+          trackId     TEXT NOT NULL,
+          seq         INTEGER NOT NULL,
+          reason      TEXT NOT NULL,
+          segment     INTEGER NOT NULL,
+          lon REAL NOT NULL, lat REAL NOT NULL,
+          altitudeM REAL, accuracyM REAL,
+          timestampMs INTEGER NOT NULL,
+          speedMps           REAL,
+          headingDeg         REAL,
+          altitudeAccuracyM  REAL,
+          PRIMARY KEY (trackId, seq)
+        );
         CREATE TABLE IF NOT EXISTS waypoint (
           id        TEXT PRIMARY KEY,
           name      TEXT NOT NULL,

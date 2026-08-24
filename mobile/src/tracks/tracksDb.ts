@@ -7,7 +7,12 @@
 // backup-excluded, arm the Stage 4 app lock, stay local until Stage 8's
 // explicit sync, and never reach logs, telemetry or crash reports. Logging
 // around this module is state transitions and counts only.
-import type { RecordedTrackPoint, TrackStats } from "@logjam/shared";
+import type {
+  CandidateFix,
+  FixRejection,
+  RecordedTrackPoint,
+  TrackStats,
+} from "@logjam/shared";
 
 import { getOfflineDb } from "../offline/registryDb";
 
@@ -231,6 +236,7 @@ export async function updateTrack(
 export async function deleteTrack(id: string): Promise<void> {
   const db = await getOfflineDb();
   await db.runAsync("DELETE FROM track_point WHERE trackId = ?", id);
+  await db.runAsync("DELETE FROM track_point_rejected WHERE trackId = ?", id);
   await db.runAsync("DELETE FROM track WHERE id = ?", id);
   notifyChanged();
 }
@@ -272,6 +278,61 @@ export async function lastTrackPoint(
     trackId,
   );
   return rows.length > 0 ? rows[0] : null;
+}
+
+/** A fix the acceptance filter refused, with the reason it gave. */
+export type RejectedFix = CandidateFix & {
+  reason: FixRejection;
+  segment: number;
+};
+
+/**
+ * Keep the fixes `rejectTrackFix` threw away.
+ *
+ * DIAGNOSTIC ONLY — nothing draws, measures or exports these, and no code path
+ * outside this function writes them. That isolation is the point: the accepted
+ * series and the filter's reference (`lastTrackPoint`) live in `track_point`
+ * and cannot see this table, so a bug here cannot corrupt a recording.
+ *
+ * Deliberately does NOT `notifyChanged()`: no screen observes rejected fixes,
+ * and a notify per batch on a path nothing reads is how the `useTracks` storm
+ * (885379d) happened the first time.
+ *
+ * Failure is swallowed by the caller, not here — see `handleLocationBatch`.
+ */
+export async function appendRejectedFixes(
+  trackId: string,
+  fixes: RejectedFix[],
+): Promise<void> {
+  if (fixes.length === 0) return;
+  const db = await getOfflineDb();
+  await db.withTransactionAsync(async () => {
+    const maxRow = await db.getFirstAsync<{ maxSeq: number | null }>(
+      "SELECT MAX(seq) AS maxSeq FROM track_point_rejected WHERE trackId = ?",
+      trackId,
+    );
+    let seq = (maxRow?.maxSeq ?? -1) + 1;
+    for (const fix of fixes) {
+      await db.runAsync(
+        `INSERT INTO track_point_rejected
+           (trackId, seq, reason, segment, lon, lat, altitudeM, accuracyM,
+            timestampMs, speedMps, headingDeg, altitudeAccuracyM)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        trackId,
+        seq++,
+        fix.reason,
+        fix.segment,
+        fix.lon,
+        fix.lat,
+        fix.altitudeM,
+        fix.accuracyM,
+        fix.timestampMs,
+        fix.speedMps ?? null,
+        fix.headingDeg ?? null,
+        fix.altitudeAccuracyM ?? null,
+      );
+    }
+  });
 }
 
 /**
