@@ -36,6 +36,11 @@ vi.mock("expo-file-system/legacy", () => ({
 
 vi.mock("../offline/localStores", () => ({ SENSOR_LOG_DIR: "/logs/" }));
 
+const hasSpaceFor = vi.fn(async () => true);
+vi.mock("../offline/freeSpace", () => ({
+  hasSpaceFor: (...args: unknown[]) => hasSpaceFor(...(args as [])),
+}));
+
 let enabled = "1";
 vi.mock("../prefsDb", () => ({
   readPref: () => enabled,
@@ -55,6 +60,7 @@ beforeEach(() => {
     dropped: 0,
   });
   getInfoAsync.mockResolvedValue({ exists: false });
+  hasSpaceFor.mockResolvedValue(true);
 });
 
 describe("who may begin a log", () => {
@@ -91,6 +97,14 @@ describe("who may begin a log", () => {
       dropped: 0,
     });
     expect(await startSensorLog("t1")).toBe(true);
+    expect(startLogging).not.toHaveBeenCalled();
+  });
+
+  it("refuses to start when the disk is nearly full", async () => {
+    // The log and the offline DB share a filesystem, so a logger that fills the
+    // phone takes the recording — the thing the trip cannot repeat — with it.
+    hasSpaceFor.mockResolvedValue(false);
+    expect(await startSensorLog("t1")).toBe(false);
     expect(startLogging).not.toHaveBeenCalled();
   });
 

@@ -66,40 +66,77 @@ class SensorLogException(message: String) : CodedException(message)
  */
 private const val CSV_HEADER = "# logjam sensor log v1"
 
-class LogjamSensorsModule : Module() {
-  private var writer: BufferedWriter? = null
-  private var logFile: File? = null
-  private var thread: HandlerThread? = null
-  private var handler: Handler? = null
-  private val sampleCount = AtomicLong(0)
-  private val droppedCount = AtomicLong(0)
+/** One barometer sample a second; see the listener for why this is enforced here. */
+private const val BARO_MIN_GAP_NANOS = 900_000_000L
 
-  private val context: Context
-    get() = appContext.reactContext ?: throw SensorLogException("no context")
+/**
+ * Four decimals, which is below the noise floor of both parts and roughly
+ * halves the file. The ICM45631's accelerometer noise density puts its real
+ * precision near 1e-3 m/s^2; Java's default `Float.toString` was writing nine
+ * significant figures of it, and at 200 rows a second that is the difference
+ * between a log you can pull off a phone and one you cannot.
+ */
+private fun f(value: Float): String = String.format("%.4f", value)
 
-  private val sensorManager: SensorManager
-    get() = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+/**
+ * PROCESS-GLOBAL, and that is load-bearing.
+ *
+ * Expo instantiates a module ONCE PER JS CONTEXT, and this app has two: the UI,
+ * and the headless context TaskManager relaunches for a background location
+ * delivery. Holding the writer and the listeners as instance fields gave each
+ * context its own — so the headless one saw `logging == false` for a log the UI
+ * had already started, opened the same file a SECOND time, and registered a
+ * SECOND set of sensor listeners. Two BufferedWriters appending to one file
+ * interleave partial lines, and two registrations cost twice the battery.
+ * Observed 2026-08-25 as four `anchor` rows in one process.
+ *
+ * A singleton is the fix because the resources being guarded — a file handle
+ * and the SensorManager's registration table — are per-PROCESS, not per-context.
+ */
+private object SensorLog {
+  var writer: BufferedWriter? = null
+  var logFile: File? = null
+  var thread: HandlerThread? = null
+  var handler: Handler? = null
+  val sampleCount = AtomicLong(0)
+  val droppedCount = AtomicLong(0)
+  var lastBaroNanos = 0L
 
-  // -------------------------------------------------------------------------
-  // Listeners
-  // -------------------------------------------------------------------------
+  /**
+   * The listeners live here, not on the module, for the same reason the writer
+   * does: `unregisterListener` matches on OBJECT IDENTITY, so a listener
+   * registered by the UI context and unregistered by the headless one would
+   * simply leak — the sensors would keep running for the life of the process
+   * with nothing reading them.
+   */
+  lateinit var sensorManager: SensorManager
 
   /**
    * Accelerometer and gyroscope arrive as separate events, so they are written
-   * as separate halves of a row rather than being paired up here: pairing would
-   * mean holding one sample waiting for its partner, and the two streams are
-   * not guaranteed to interleave one-for-one. Post-processing joins on the
+   * as separate rows rather than being paired up here: pairing would mean
+   * holding one sample waiting for its partner, and the two streams are not
+   * guaranteed to interleave one-for-one. Post-processing joins on the
    * timestamp, which is what it would have had to do anyway.
    */
-  private val imuListener = object : SensorEventListener {
+  val imuListener = object : SensorEventListener {
     override fun onSensorChanged(event: SensorEvent) {
       val v = event.values
       when (event.sensor.type) {
         Sensor.TYPE_ACCELEROMETER ->
-          write("acc,${event.timestamp},${v[0]},${v[1]},${v[2]}")
+          write("acc,${event.timestamp},${f(v[0])},${f(v[1])},${f(v[2])}")
         Sensor.TYPE_GYROSCOPE ->
-          write("gyr,${event.timestamp},${v[0]},${v[1]},${v[2]}")
-        Sensor.TYPE_PRESSURE -> write("bar,${event.timestamp},${v[0]}")
+          write("gyr,${event.timestamp},${f(v[0])},${f(v[1])},${f(v[2])}")
+        // DECIMATED IN SOFTWARE, because the platform ignores the rate we ask
+        // for. Registered at 1 Hz and confirmed as `selected = 1000.00 ms` in
+        // `dumpsys sensorservice`, the ICP20100 still delivers at ~12.5 Hz
+        // (measured 2026-08-25) — twelve times the samples for a channel whose
+        // whole use is a slow elevation profile.
+        Sensor.TYPE_PRESSURE -> {
+          if (event.timestamp - lastBaroNanos >= BARO_MIN_GAP_NANOS) {
+            lastBaroNanos = event.timestamp
+            write("bar,${event.timestamp},${v[0]}")
+          }
+        }
         Sensor.TYPE_STEP_COUNTER -> write("stp,${event.timestamp},${v[0].toLong()}")
       }
     }
@@ -114,7 +151,7 @@ class LogjamSensorsModule : Module() {
    * One-shot by contract — it must be re-armed after every fire, and forgetting
    * to is a silent loss of the whole channel rather than an error.
    */
-  private val motionListener = object : TriggerEventListener() {
+  val motionListener = object : TriggerEventListener() {
     override fun onTrigger(event: TriggerEvent) {
       write("sig,${event.timestamp}")
       sensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION)?.let {
@@ -130,7 +167,7 @@ class LogjamSensorsModule : Module() {
    * per satellite — the per-satellite detail is ~30 rows a second for a
    * question ("is the sky visible") that four numbers answer.
    */
-  private val gnssCallback = object : GnssStatus.Callback() {
+  val gnssCallback = object : GnssStatus.Callback() {
     override fun onSatelliteStatusChanged(status: GnssStatus) {
       var used = 0
       var maxCn0 = 0f
@@ -151,16 +188,12 @@ class LogjamSensorsModule : Module() {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Writing
-  // -------------------------------------------------------------------------
-
   /**
    * Never throws at the caller — a logger that can break the thing it is
    * observing is worse than no logger. A failed write is counted and the run
    * carries on; the count is what `logStatus` reports.
    */
-  private fun write(line: String) {
+  fun write(line: String) {
     val out = writer ?: return
     try {
       synchronized(out) { out.write(line); out.write("\n") }
@@ -169,6 +202,14 @@ class LogjamSensorsModule : Module() {
       droppedCount.incrementAndGet()
     }
   }
+}
+
+class LogjamSensorsModule : Module() {
+  private val context: Context
+    get() = appContext.reactContext ?: throw SensorLogException("no context")
+
+  private val sensorManager: SensorManager
+    get() = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
   // -------------------------------------------------------------------------
   // Module surface
@@ -200,7 +241,7 @@ class LogjamSensorsModule : Module() {
      *   should only ever be used to demonstrate why not to.
      */
     Function("startLogging") { fileUri: String, imuHz: Int, batchSeconds: Int ->
-      if (writer != null) throw SensorLogException("already logging")
+      if (SensorLog.writer != null) throw SensorLogException("already logging")
 
       val file = File(fileUri.removePrefix("file://"))
       file.parentFile?.mkdirs()
@@ -211,48 +252,50 @@ class LogjamSensorsModule : Module() {
       out.write(
         "anchor,${SystemClock.elapsedRealtimeNanos()},${System.currentTimeMillis()}\n",
       )
-      writer = out
-      logFile = file
-      sampleCount.set(0)
-      droppedCount.set(0)
+      SensorLog.writer = out
+      SensorLog.logFile = file
+      SensorLog.sampleCount.set(0)
+      SensorLog.droppedCount.set(0)
+      SensorLog.lastBaroNanos = 0L
 
       val t = HandlerThread("logjam-sensors").also { it.start() }
-      thread = t
+      SensorLog.thread = t
       val h = Handler(t.looper)
-      handler = h
+      SensorLog.handler = h
 
       val sm = sensorManager
+      SensorLog.sensorManager = sm
       if (imuHz > 0) {
         val periodUs = 1_000_000 / imuHz
         val latencyUs = batchSeconds * 1_000_000
         sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
-          sm.registerListener(imuListener, it, periodUs, latencyUs, h)
+          sm.registerListener(SensorLog.imuListener, it, periodUs, latencyUs, h)
         }
         sm.getDefaultSensor(Sensor.TYPE_GYROSCOPE)?.let {
-          sm.registerListener(imuListener, it, periodUs, latencyUs, h)
+          sm.registerListener(SensorLog.imuListener, it, periodUs, latencyUs, h)
         }
       }
       // 1 Hz is plenty: pressure changes with altitude, and nobody descends a
       // canyon fast enough for a second sample to say anything new.
       sm.getDefaultSensor(Sensor.TYPE_PRESSURE)?.let {
-        sm.registerListener(imuListener, it, 1_000_000, batchSeconds * 1_000_000, h)
+        sm.registerListener(SensorLog.imuListener, it, 1_000_000, batchSeconds * 1_000_000, h)
       }
       // On-change, and its value is cumulative since boot — so a gap in the log
       // still yields the step count across that gap.
       sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)?.let {
-        sm.registerListener(imuListener, it, 1_000_000, batchSeconds * 1_000_000, h)
+        sm.registerListener(SensorLog.imuListener, it, 1_000_000, batchSeconds * 1_000_000, h)
       }
       sm.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION)?.let {
-        sm.requestTriggerSensor(motionListener, it)
+        sm.requestTriggerSensor(SensorLog.motionListener, it)
       }
 
       // Best-effort: needs ACCESS_FINE_LOCATION, which a recording already
       // holds, but a logger started with location denied must not crash.
       try {
         val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        lm.registerGnssStatusCallback(gnssCallback, h)
+        lm.registerGnssStatusCallback(SensorLog.gnssCallback, h)
       } catch (_: SecurityException) {
-        write("# gnss status unavailable: permission")
+        SensorLog.write("# gnss status unavailable: permission")
       }
 
       file.absolutePath
@@ -260,35 +303,35 @@ class LogjamSensorsModule : Module() {
 
     Function("stopLogging") {
       val sm = sensorManager
-      sm.unregisterListener(imuListener)
+      sm.unregisterListener(SensorLog.imuListener)
       sm.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION)?.let {
-        sm.cancelTriggerSensor(motionListener, it)
+        sm.cancelTriggerSensor(SensorLog.motionListener, it)
       }
       try {
         val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        lm.unregisterGnssStatusCallback(gnssCallback)
+        lm.unregisterGnssStatusCallback(SensorLog.gnssCallback)
       } catch (_: Throwable) {
         // Never registered (permission denied at start) — nothing to undo.
       }
 
-      writer?.let { out -> synchronized(out) { out.flush(); out.close() } }
-      writer = null
-      thread?.quitSafely()
-      thread = null
-      handler = null
+      SensorLog.writer?.let { out -> synchronized(out) { out.flush(); out.close() } }
+      SensorLog.writer = null
+      SensorLog.thread?.quitSafely()
+      SensorLog.thread = null
+      SensorLog.handler = null
 
-      val f = logFile
-      logFile = null
+      val f = SensorLog.logFile
+      SensorLog.logFile = null
       mapOf(
         "path" to (f?.absolutePath ?: ""),
         "bytes" to (f?.length() ?: 0L),
-        "samples" to sampleCount.get(),
-        "dropped" to droppedCount.get(),
+        "samples" to SensorLog.sampleCount.get(),
+        "dropped" to SensorLog.droppedCount.get(),
       )
     }
 
     Function("logStatus") {
-      val out = writer
+      val out = SensorLog.writer
       // Flushing on a status read is what makes the byte count mean anything
       // while a run is in progress — a 64 KB buffer is minutes of cheap
       // channels, and a status that reports 0 bytes reads as "it is broken".
@@ -297,10 +340,10 @@ class LogjamSensorsModule : Module() {
       }
       mapOf(
         "logging" to (out != null),
-        "path" to (logFile?.absolutePath ?: ""),
-        "bytes" to (logFile?.length() ?: 0L),
-        "samples" to sampleCount.get(),
-        "dropped" to droppedCount.get(),
+        "path" to (SensorLog.logFile?.absolutePath ?: ""),
+        "bytes" to (SensorLog.logFile?.length() ?: 0L),
+        "samples" to SensorLog.sampleCount.get(),
+        "dropped" to SensorLog.droppedCount.get(),
       )
     }
   }

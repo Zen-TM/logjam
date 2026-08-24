@@ -20,11 +20,13 @@
 // account transition like every other local store. Nothing uploads it; getting
 // it off the phone is a deliberate `adb` pull.
 import * as FileSystem from "expo-file-system/legacy";
+import { Pedometer } from "expo-sensors";
 
 import LogjamSensors, {
   type SensorCapabilities,
   type SensorLogStatus,
 } from "../../modules/logjam-sensors/src/LogjamSensorsModule";
+import { hasSpaceFor } from "../offline/freeSpace";
 import { SENSOR_LOG_DIR } from "../offline/localStores";
 import { readPref, writePref } from "../prefsDb";
 
@@ -47,6 +49,23 @@ const IMU_HZ = 100;
  */
 const BATCH_SECONDS = 30;
 
+/**
+ * MEASURED 2026-08-25 on a Pixel 9: ~20 MB an hour at `IMU_HZ`, after the
+ * native side was taught to write four decimals instead of nine and to
+ * decimate the barometer the platform over-delivers. The first version wrote
+ * 42.5 MB/hour.
+ */
+export const SENSOR_LOG_MB_PER_HOUR = 20;
+
+/**
+ * Refuse to start without room for a long day. A canyon trip is the one
+ * recording that cannot be repeated, and a logger that fills the phone takes
+ * the TRACK down with it — the offline DB and the log share a filesystem. The
+ * app's rule is that nothing large is written without asking whether it fits
+ * (`offline/freeSpace.ts`, mobile/CLAUDE.md); this is that check.
+ */
+const REQUIRED_FREE_BYTES = 14 * SENSOR_LOG_MB_PER_HOUR * 1_000_000;
+
 /** Device-scoped, like every other recording preference. */
 export function readSensorLoggingEnabled(): boolean {
   return readPref(ENABLED_KEY) === "1";
@@ -54,6 +73,30 @@ export function readSensorLoggingEnabled(): boolean {
 
 export function writeSensorLoggingEnabled(enabled: boolean): boolean {
   return writePref(ENABLED_KEY, enabled ? "1" : "0");
+}
+
+/**
+ * Ask for `ACTIVITY_RECOGNITION`, which the step counter needs at RUNTIME on
+ * Android 10+ and which a manifest entry alone does not grant.
+ *
+ * Borrowed from `expo-sensors`' Pedometer, whose `requestPermissionsAsync` asks
+ * for exactly this permission (`PedometerModule.kt`) — reusing it is a prompt we
+ * do not have to write native code for. The Pedometer ITSELF is unusable here
+ * (it stops at background, and its Android `getStepCountAsync` throws), but its
+ * permission request is the same permission.
+ *
+ * Never throws, and a refusal is not fatal: every other channel still logs, the
+ * step column is simply absent. Without this the counter is silently empty and
+ * looks exactly like a phone that never moved — which is how it shipped for the
+ * first day, and how it read on a stationary desk test.
+ */
+export async function ensureStepPermission(): Promise<boolean> {
+  try {
+    const { granted } = await Pedometer.requestPermissionsAsync();
+    return granted;
+  } catch {
+    return false;
+  }
 }
 
 export function sensorCapabilities(): SensorCapabilities | null {
@@ -103,6 +146,12 @@ export async function startSensorLog(
     if (resumeOnly) {
       const existing = await FileSystem.getInfoAsync(logUri(trackId));
       if (!existing.exists) return false;
+    }
+    if (!(await hasSpaceFor(REQUIRED_FREE_BYTES))) {
+      // Counts only, no path (PRIVACY). Not an exception: a full disk must
+      // cost the research log, never the recording.
+      console.warn("sensor-log: not enough free space, logging skipped");
+      return false;
     }
     await FileSystem.makeDirectoryAsync(SENSOR_LOG_DIR, { intermediates: true });
     // One file per track, appended: a headless task relaunch mid-trip resumes

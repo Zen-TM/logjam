@@ -61,9 +61,11 @@ import {
   type FixRate,
 } from "../../tracks/recordingPreferences";
 import {
+  ensureStepPermission,
   readSensorLoggingEnabled,
   sensorCapabilities,
   sensorLogStatus,
+  SENSOR_LOG_MB_PER_HOUR,
   writeSensorLoggingEnabled,
 } from "../../tracks/sensorLog";
 import { applyRecordingOptionsToActiveTrack } from "../../tracks/trackRecorder";
@@ -412,6 +414,12 @@ export function MapSettingsScreen() {
               const next = !sensorLogging;
               if (!stored(writeSensorLoggingEnabled(next))) return;
               setSensorLogging(next);
+              // The step counter needs ACTIVITY_RECOGNITION at runtime, and a
+              // manifest entry does not grant it — without the prompt that
+              // channel is silently empty and reads exactly like a phone that
+              // never moved. Asked on the way ON only, and a refusal costs the
+              // step column and nothing else.
+              if (next) void ensureStepPermission();
               // Takes effect at the NEXT recording, deliberately: starting a
               // logger into a run already in progress would produce a file
               // whose first half is missing, and nothing downstream could tell
@@ -508,7 +516,9 @@ function sensorLoggingSubtitle(
   // reassurance. The privacy line stays because it is the second question
   // everyone asks of a thing called "raw sensors".
   const cost = caps.imuFifoEvents > 0 ? "a few percent" : "some";
-  const what = `${channels.join(", ")} to a file for later analysis — costs ${cost} of battery. No positions written, nothing uploaded.`;
+  // Disk is stated because it is the larger of the two costs and the one that
+  // can take the recording down with it if it runs out.
+  const what = `${channels.join(", ")} to a file for later analysis — costs ${cost} of battery and about ${SENSOR_LOG_MB_PER_HOUR} MB an hour. No positions written.`;
   if (!enabled) return what;
   const status = sensorLogStatus();
   if (status == null || !status.logging) return `${what} On from the next recording.`;
