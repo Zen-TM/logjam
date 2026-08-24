@@ -259,13 +259,23 @@ BottomSheet(s)      acquisition + per-item actions
   colour is written by the save, and only when one was actually picked: a draft
   restored after the app was killed carries no colour, and writing null there
   would strip the colour off the route being edited.
-- **A TAP on a handle SELECTS it; the verb then appears in the toolbar.** The
-  selected anchor is drawn picked out (bigger, warning fill, light ring — one
-  more branch in the same data-driven circle expression, not a new view), and
-  "Remove point" joins Undo and Clear in the tool panel for as long as it is
-  selected. Tapping open map lets it go. No confirm behind the button: choosing
-  the point IS the deliberate step, which is all the dialog was ever standing in
-  for, and Undo takes the delete back.
+- **A TAP on a handle SELECTS it; its delete button appears BESIDE THE POINT.**
+  The selected anchor is drawn picked out (bigger, warning fill, light ring —
+  one more branch in the same data-driven circle expression, not a new view),
+  and a round trash button rides next to it until it is let go. Tapping open
+  map lets it go. No confirm behind the button: choosing the point IS the
+  deliberate step, which is all the dialog was ever standing in for, and Undo
+  takes the delete back.
+  - **Beside the point, not in the toolbar** (operator, 2026-08-24). The verb
+    lived with Undo and Clear first; a button attached to the thing it acts on,
+    where the thumb already is, is the whole affordance, while the same verb at
+    the top of the screen made you look away from the point you were pointing
+    at to delete it.
+  - It is a `ViewAnnotation`, so the native side keeps it pinned through every
+    pan, zoom and rotation with no per-frame JS, and it sits to the LEFT of the
+    point — except within `ANCHOR_DELETE_FLIP_DP` of the screen's left edge,
+    where it would be drawn half off, and flips to the right. The side is
+    decided from the press's own screen x, which MLRN reports in dp.
   - This replaced a modal "Remove this point?" raised from the annotation's own
     `onSelect`, which the user never found. A verb that only exists inside a
     gesture nobody makes is a verb the app does not have — put it where the

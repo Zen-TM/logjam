@@ -289,6 +289,19 @@ export function AddWaySheet({
             disabled={busy}
             onPress={() => setMode("routes")}
           />
+          {onDrawRoute ? (
+            <Row
+              icon="pen-tool"
+              hue={assetHue.route}
+              title="Draw a route on the map"
+              subtitle="Opens the map with the pen ready"
+              disabled={busy}
+              onPress={() => {
+                close();
+                onDrawRoute();
+              }}
+            />
+          ) : null}
           <Row
             icon="activity"
             hue={assetHue.track}
@@ -313,19 +326,6 @@ export function AddWaySheet({
             disabled={busy}
             onPress={() => runAfterSheet(pickFile)}
           />
-          {onDrawRoute ? (
-            <Row
-              icon="pen-tool"
-              hue={assetHue.route}
-              title="Draw a route on the map"
-              subtitle="Opens the map with the pen ready"
-              disabled={busy}
-              onPress={() => {
-                close();
-                onDrawRoute();
-              }}
-            />
-          ) : null}
           {busy ? <ActivityIndicator color={theme.accent} /> : null}
         </View>
       ) : null}

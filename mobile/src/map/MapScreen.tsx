@@ -324,6 +324,10 @@ const PROTOMAPS_FLAVOR = "light" as const;
 // object lets the memo hold and keeps every re-render of this screen from
 // re-committing props to the native camera.
 /** Below this span an extent is a point, not an area (~1 m). */
+/** Room needed on the left of a point before its delete button fits there:
+ *  the 44 dp button, its 26 dp gap and a margin off the screen edge. */
+const ANCHOR_DELETE_FLIP_DP = 78;
+
 const DEGENERATE_BBOX_DEGREES = 1e-5;
 const SINGLE_POINT_ZOOM = 14;
 
@@ -750,6 +754,23 @@ export function MapScreen({
    *  selecting first is what makes the delete deliberate, so the dialog had
    *  nothing left to add. */
   const [selectedAnchor, setSelectedAnchor] = useState<number | null>(null);
+  /**
+   * Which side of the picked anchor its delete button sits on. Decided from
+   * where the finger landed: the button goes to the LEFT of the point, except
+   * near the left edge of the screen, where a left-hand button would be drawn
+   * half off it. Screen x arrives in dp — MLRN divides the native press point
+   * by the display density before emitting it (MLRNMapView.kt).
+   */
+  const [selectedAnchorSide, setSelectedAnchorSide] = useState<"left" | "right">(
+    "left",
+  );
+  /** Below this much room on the left, the button flips to the other side:
+   *  the button itself plus its gap plus a margin off the edge. */
+  const anchorDeleteSideFor = useCallback(
+    (screenXDp: number | null): "left" | "right" =>
+      screenXDp != null && screenXDp < ANCHOR_DELETE_FLIP_DP ? "right" : "left",
+    [],
+  );
   const [toolsOpen, setToolsOpen] = useState(false);
   const [namingRoute, setNamingRoute] = useState(false);
   const drawingRoute = routeDraft.active;
@@ -1395,12 +1416,13 @@ export function MapScreen({
       // never reaches the map at all (the annotation consumes it), so the map's
       // own hit test only covers the ring outside it. Whichever fires, the same
       // index ends up selected.
-      onAnchorPress: (index: number) => {
+      onAnchorPress: (index: number, screenXDp: number | null) => {
         if (Date.now() - anchorDropAt.current < ANCHOR_DROP_SELECT_MS) return;
         setSelectedAnchor(index);
+        setSelectedAnchorSide(anchorDeleteSideFor(screenXDp));
       },
     }),
-    [snapAroundAnchor],
+    [anchorDeleteSideFor, snapAroundAnchor],
   );
 
   /** Delete the picked point, from the panel's "Remove point". No confirm: the
@@ -1768,6 +1790,7 @@ export function MapScreen({
         const hit = pressedAnchorIndex(lon, lat);
         if (hit !== null) {
           setSelectedAnchor(hit);
+          setSelectedAnchorSide(anchorDeleteSideFor(event.nativeEvent.point?.[0] ?? null));
           return;
         }
         setSelectedAnchor(null);
@@ -1780,7 +1803,7 @@ export function MapScreen({
       // longer following you.
       setTappedPoint({ latitude: lat, longitude: lon });
     },
-    [addToolPoint, collectingPoints, pressedAnchorIndex],
+    [addToolPoint, anchorDeleteSideFor, collectingPoints, pressedAnchorIndex],
   );
 
   const handleCanyonPress = useCallback(
@@ -4281,6 +4304,8 @@ export function MapScreen({
             idPrefix="route-draft"
             color={draftColor ?? undefined}
             selectedIndex={selectedAnchor}
+            selectedSide={selectedAnchorSide}
+            onRemoveSelected={selectedAnchor === null ? undefined : removeSelectedAnchor}
             draft={routeDraft.draft ?? emptyDraft}
             dotted={false}
             degreesPerDp={degreesPerDp(camera.zoom)}
@@ -4295,6 +4320,10 @@ export function MapScreen({
             // `activeDraft` prefers the route draft, so a selection belongs to
             // measure only while route draw is off.
             selectedIndex={drawingRoute ? null : selectedAnchor}
+            selectedSide={selectedAnchorSide}
+            onRemoveSelected={
+              drawingRoute || selectedAnchor === null ? undefined : removeSelectedAnchor
+            }
             draft={measureDraft.draft ?? emptyDraft}
             dotted
             degreesPerDp={degreesPerDp(camera.zoom)}
@@ -4440,9 +4469,6 @@ export function MapScreen({
             saving={false}
             onUndo={measureDraft.undo}
             onClear={measureDraft.clear}
-            onRemovePoint={
-              selectedAnchor === null ? undefined : removeSelectedAnchor
-            }
             snapMode={snapMode}
             onSnapModeChange={handleSnapModeChange}
             onDiscard={measureDraft.close}
@@ -4466,9 +4492,6 @@ export function MapScreen({
             saving={savingRoute}
             onUndo={routeDraft.undo}
             onClear={handleClearRouteDraw}
-            onRemovePoint={
-              selectedAnchor === null ? undefined : removeSelectedAnchor
-            }
             snapMode={snapMode}
             onSnapModeChange={handleSnapModeChange}
             onSave={() => setNamingRoute(true)}

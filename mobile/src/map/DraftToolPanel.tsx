@@ -58,7 +58,6 @@ export function DraftToolPanel({
   saving,
   onUndo,
   onClear,
-  onRemovePoint,
   onSave,
   onDiscard,
   onReverse,
@@ -80,13 +79,6 @@ export function DraftToolPanel({
   saving: boolean;
   onUndo: () => void;
   onClear: () => void;
-  /**
-   * Present only while an anchor is SELECTED — a tap on a handle picks it, and
-   * this is where the picked point's one verb appears. No confirm behind it:
-   * the selection step is what makes the delete deliberate, which is what the
-   * modal it replaced was standing in for.
-   */
-  onRemovePoint?: () => void;
   /** Absent for measure: its points are a question, not an asset. */
   onSave?: () => void;
   onDiscard: () => void;
@@ -141,10 +133,10 @@ export function DraftToolPanel({
 
       <SnapPicker mode={snapMode} onChange={onSnapModeChange} disabled={saving} />
 
-      {/* Two groups in a WRAPPING row: what you do to the line on the left,
-          what the line is and how you leave it on the right. Wrapping rather
-          than a fixed second row, so the transient "Remove point" costs a line
-          of the map only while a point is actually selected. */}
+      {/* Two groups in one row: what you do to the line on the left, what the
+          line is and how you leave it on the right. The picked point's delete
+          verb is NOT here — it rides next to the point itself on the map
+          (RouteDraftLayer), where the thumb already is. */}
       <View style={styles.actions}>
         <View style={styles.group}>
           <IconButton
@@ -160,15 +152,6 @@ export function DraftToolPanel({
             disabled={points.length === 0 || saving}
             onPress={onClear}
           />
-          {onRemovePoint ? (
-            <Button
-              label="Remove point"
-              variant="outlineAccent"
-              compact
-              disabled={saving}
-              onPress={onRemovePoint}
-            />
-          ) : null}
         </View>
         <View style={styles.group}>
           {onReverse ? (
