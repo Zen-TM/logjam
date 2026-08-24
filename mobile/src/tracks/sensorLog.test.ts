@@ -36,6 +36,14 @@ vi.mock("expo-file-system/legacy", () => ({
 
 vi.mock("../offline/localStores", () => ({ SENSOR_LOG_DIR: "/logs/" }));
 
+// Only the permission request is borrowed from expo-sensors; unmocked it drags
+// react-native's Flow-typed entry point into the transform and the file will
+// not parse at all.
+const requestPermissionsAsync = vi.fn(async () => ({ granted: true }));
+vi.mock("expo-sensors", () => ({
+  Pedometer: { requestPermissionsAsync: () => requestPermissionsAsync() },
+}));
+
 const hasSpaceFor = vi.fn(async () => true);
 vi.mock("../offline/freeSpace", () => ({
   hasSpaceFor: (...args: unknown[]) => hasSpaceFor(...(args as [])),
