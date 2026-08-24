@@ -58,12 +58,18 @@ export function isDoubleTap(previous: TapSample | null, next: TapSample): boolea
  * stands down for its duration and the ramp's own stops carry the bearing. Two
  * streams of stops do not blend — each cancels the other's transition — so a
  * bearing-only stream interleaved with a zoom-only one is two mechanisms
- * fighting over the same camera, which is exactly what it looked like.
+ * fighting over the same camera.
+ *
+ * That was necessary and not sufficient: making the ramp the only writer still
+ * left it ANIMATING each step, and an animated stop per tick cancels the ease
+ * in flight and restarts a new one from wherever it had reached — a restart
+ * every tick, which on a real device still read as jitter. The ramp now jumps
+ * the camera per FRAME with `duration: 0`, which is how the pinch has always
+ * driven the same two properties smoothly (`useMapPinchGesture`): with no
+ * animation there is nothing to cancel. There is no tick constant any more —
+ * the display's frame clock is the cadence.
  */
 export const ZOOM_RAMP_MS = 200;
-
-/** Tick cadence for the ramp: five steps over `ZOOM_RAMP_MS`. */
-export const ZOOM_RAMP_TICK_MS = 40;
 
 /**
  * The zoom the ramp should be at `elapsedMs` into a `durationMs` linear climb

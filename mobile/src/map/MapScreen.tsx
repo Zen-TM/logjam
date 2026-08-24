@@ -305,7 +305,6 @@ import {
 import {
   isDoubleTap,
   ZOOM_RAMP_MS,
-  ZOOM_RAMP_TICK_MS,
   zoomRampValue,
   type TapSample,
 } from "./doubleTap";
@@ -1070,8 +1069,11 @@ export function MapScreen({
   const headingFilter = useRef(createHeadingFilter());
   const headingTicker = useRef<ReturnType<typeof setInterval> | null>(null);
   /** The double-tap-to-zoom ramp (see `zoomRampValue`) — a short-lived
-   *  interval, same shape as `headingTicker` but one-shot per double tap. */
-  const zoomRampTicker = useRef<ReturnType<typeof setInterval> | null>(null);
+   *  requestAnimationFrame loop, one-shot per double tap. A FRAME loop rather
+   *  than an interval because the ramp jumps the camera per frame instead of
+   *  animating it (see `startZoomRamp`), so the display's clock is the one that
+   *  matters. */
+  const zoomRampFrame = useRef<number | null>(null);
   const lastPovBearing = useRef<number | null>(null);
   /** When the last course-up camera stop was written, for its duration. */
   const lastPovWriteAt = useRef(0);
@@ -1842,9 +1844,9 @@ export function MapScreen({
    * cancel.
    */
   const cancelZoomRamp = useCallback(() => {
-    if (zoomRampTicker.current == null) return;
-    clearInterval(zoomRampTicker.current);
-    zoomRampTicker.current = null;
+    if (zoomRampFrame.current == null) return;
+    cancelAnimationFrame(zoomRampFrame.current);
+    zoomRampFrame.current = null;
   }, []);
 
   /**
@@ -1859,44 +1861,46 @@ export function MapScreen({
       cancelZoomRamp();
       const startZoom = zoomRef.current;
       const startedAt = Date.now();
-      let lastWriteAt = 0;
-      const writeTick = () => {
+      const writeFrame = () => {
         const now = Date.now();
         const elapsed = now - startedAt;
         const zoom = zoomRampValue(startZoom, targetZoom, elapsed, ZOOM_RAMP_MS);
         if (latestFix.current) {
           // ONE CAMERA WRITER AT A TIME. `tickHeading` stands down for the
-          // length of the ramp (see there), so this stop has to carry the
-          // BEARING as well as the centre and the zoom — a stop cancels the one
-          // in flight rather than blending into it, so two streams of stops
-          // that each omit what the other carries make the map alternate
-          // between rotating and zooming, which is the jitter this fixes.
-          // The bearing is whatever the filter currently displays, and it is
-          // recorded as written so the heading ticker picks up from it and does
-          // not snap when the ramp ends.
+          // length of the ramp (see there), so this stop carries the BEARING as
+          // well as the centre and the zoom.
           const bearing =
             followModeRef.current === "course-up" ? headingFilter.current.value : null;
+          // DURATION 0 — A JUMP PER FRAME, exactly like the pinch
+          // (`useMapPinchGesture`), and for the same reason. An ANIMATED stop
+          // per tick is what made this jitter: a stop does not blend into the
+          // one in flight, it calls `cancelTransitions()` and starts a fresh
+          // ease from wherever the last one had reached, so a stream of them is
+          // a restart every tick — the map alternately eases and is yanked,
+          // which reads exactly as the two-mechanisms-fighting it was. With no
+          // animation there is nothing to cancel: each frame simply IS the
+          // camera, the pinch's proven-smooth shape for the same job.
           setCameraStop({
             center: latestFix.current,
             zoom,
             ...(bearing != null ? { bearing: normalizeBearing(bearing) } : {}),
-            // Same headroom rule as the heading path: a duration equal to the
-            // interval leaves nothing in hand when a tick lands late.
-            duration: povStopDurationMs(
-              lastWriteAt === 0 ? ZOOM_RAMP_TICK_MS : now - lastWriteAt,
-            ),
-            easing: "linear",
+            duration: 0,
           });
-          lastWriteAt = now;
           if (bearing != null) {
             lastPovBearing.current = bearing;
             lastPovWriteAt.current = now;
           }
         }
-        if (elapsed >= ZOOM_RAMP_MS) cancelZoomRamp();
+        if (elapsed >= ZOOM_RAMP_MS) {
+          cancelZoomRamp();
+          return;
+        }
+        // Driven by the display's own clock rather than a timer: with a jump
+        // per frame the frame RATE is the smoothness, and a setInterval slower
+        // than the display quantises the zoom into visible steps.
+        zoomRampFrame.current = requestAnimationFrame(writeFrame);
       };
-      writeTick();
-      zoomRampTicker.current = setInterval(writeTick, ZOOM_RAMP_TICK_MS);
+      writeFrame();
     },
     [cancelZoomRamp, latestFix, setCameraStop, zoomRef],
   );
@@ -2842,7 +2846,7 @@ export function MapScreen({
     // versa, which is what made a double tap in course-up read as two
     // mechanisms fighting. The heading still ticks and is still PUBLISHED above
     // — the arrow and the compass tape must not freeze.
-    if (followModeRef.current === "course-up" && zoomRampTicker.current == null) {
+    if (followModeRef.current === "course-up" && zoomRampFrame.current == null) {
       const previous = lastPovBearing.current;
       if (
         previous == null ||
