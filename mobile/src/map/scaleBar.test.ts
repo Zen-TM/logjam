@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { chooseScaleStep, metersPerPixel } from "./scaleBar";
+import { chooseScaleStep, degreesPerDp, metersPerPixel } from "./scaleBar";
 
 describe("metersPerPixel", () => {
   it("matches MapLibre's 512-based resolution at the equator", () => {
@@ -61,5 +61,29 @@ describe("chooseScaleStep", () => {
   it("throws on degenerate input", () => {
     expect(() => chooseScaleStep(0, 300)).toThrow(/bad metersPerPixel/);
     expect(() => chooseScaleStep(1, 0)).toThrow(/bad maxWidthPx/);
+  });
+});
+
+describe("degreesPerDp", () => {
+  it("uses the same 512-based world the scale bar does", () => {
+    // Not 256, and not divided by the display density: the anchor hit test
+    // did both, which left a 20 dp reach measuring under 15 dp.
+    expect(degreesPerDp(0)).toBeCloseTo(360 / 512, 10);
+    expect(degreesPerDp(1)).toBeCloseTo(degreesPerDp(0) / 2, 10);
+  });
+
+  it("agrees with metersPerPixel at the equator", () => {
+    // Two derivations of the same convention, so a change to one that does not
+    // reach the other fails here.
+    const metresPerDegree = 40075016.686 / 360;
+    expect(degreesPerDp(14) * metresPerDegree).toBeCloseTo(
+      metersPerPixel(0, 14),
+      6,
+    );
+  });
+
+  it("refuses a nonsense zoom rather than sizing a hit test off NaN", () => {
+    expect(() => degreesPerDp(Number.NaN)).toThrow();
+    expect(() => degreesPerDp(-1)).toThrow();
   });
 });

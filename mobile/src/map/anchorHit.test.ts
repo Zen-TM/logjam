@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  ANCHOR_GRAB_PIXELS,
+  ANCHOR_GRAB_DP,
+  ANCHOR_TAP_SLOP_DP,
   anchorIndexAtPress,
+  dragIsTap,
   pressIsOnAnchor,
 } from "./anchorHit";
+import { degreesPerDp } from "./scaleBar";
 
-// Zoom 15-ish on a 3x screen: about 3.6e-6 degrees per pixel. The exact value
-// does not matter to these cases, only that the tolerance scales with it.
-const DEGREES_PER_PIXEL = 3.6e-6;
-const TOLERANCE = DEGREES_PER_PIXEL * ANCHOR_GRAB_PIXELS;
+// Zoom 15-ish: about 2.1e-5 degrees per DP. The exact value does not matter to
+// these cases, only that the tolerance scales with it.
+const DEGREES_PER_PIXEL = degreesPerDp(15);
+const TOLERANCE = DEGREES_PER_PIXEL * ANCHOR_GRAB_DP;
 
 const ANCHORS: [number, number][] = [
   [150.4033, -33.5603],
@@ -91,5 +94,42 @@ describe("anchorIndexAtPress", () => {
     ];
     expect(anchorIndexAtPress(close, nearSecond, DEGREES_PER_PIXEL)).toBe(1);
     expect(anchorIndexAtPress(close, close[0], DEGREES_PER_PIXEL)).toBe(0);
+  });
+});
+
+describe("dragIsTap", () => {
+  const anchor = ANCHORS[0];
+
+  it("reads a finger that wobbled a couple of DP as a TAP", () => {
+    // The operator's report: "they tap and accidentally drag a miniscule
+    // amount, so the delete option is never actually triggered."
+    const wobble: [number, number] = [
+      anchor[0] + DEGREES_PER_PIXEL * 2,
+      anchor[1] - DEGREES_PER_PIXEL,
+    ];
+    expect(dragIsTap(anchor, wobble, DEGREES_PER_PIXEL)).toBe(true);
+  });
+
+  it("reads a deliberate move as a DRAG, so anchors can still be moved", () => {
+    const moved: [number, number] = [
+      anchor[0] + DEGREES_PER_PIXEL * (ANCHOR_TAP_SLOP_DP + 4),
+      anchor[1],
+    ];
+    expect(dragIsTap(anchor, moved, DEGREES_PER_PIXEL)).toBe(false);
+  });
+
+  it("measures in DP, so the threshold is the same at every zoom", () => {
+    // A move of a fixed number of DEGREES is a drag when zoomed in and a tap
+    // when zoomed out — the finger is what the threshold is about.
+    const gap: [number, number] = [
+      anchor[0] + DEGREES_PER_PIXEL * (ANCHOR_TAP_SLOP_DP + 2),
+      anchor[1],
+    ];
+    expect(dragIsTap(anchor, gap, DEGREES_PER_PIXEL)).toBe(false);
+    expect(dragIsTap(anchor, gap, DEGREES_PER_PIXEL * 4)).toBe(true);
+  });
+
+  it("is a tap when nothing moved at all", () => {
+    expect(dragIsTap(anchor, [...anchor], DEGREES_PER_PIXEL)).toBe(true);
   });
 });

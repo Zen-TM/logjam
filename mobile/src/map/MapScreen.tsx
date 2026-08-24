@@ -31,7 +31,6 @@ import {
   StyleSheet,
   Text,
   View,
-  PixelRatio,
   useWindowDimensions,
   type GestureResponderEvent,
   type NativeSyntheticEvent,
@@ -275,7 +274,12 @@ import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers, protomapsLayerCount } from "./basemap/ProtomapsLayers";
 import { buildShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
-import { anchorIndexAtPress, pressIsOnAnchor } from "./anchorHit";
+import {
+  ANCHOR_DROP_SELECT_MS,
+  anchorIndexAtPress,
+  pressIsOnAnchor,
+} from "./anchorHit";
+import { degreesPerDp } from "./scaleBar";
 import { stopSourcePress } from "./sourcePress";
 import { useConnectivity } from "./connectivity";
 import { rememberMapCamera } from "./lastCamera";
@@ -356,10 +360,8 @@ const CAMERA_DEFAULTS = {
  */
 const FOLLOW_ZOOM = 15;
 
-/** How near the drawn line a press-and-hold must land to insert a point. */
-const LINE_GRAB_PIXELS = 24;
-/** Screen pixels per CSS pixel, for converting a tolerance into degrees. */
-const PIXEL_RATIO = PixelRatio.get();
+/** How near the drawn line a press-and-hold must land to insert a point, in DP. */
+const LINE_GRAB_DP = 24;
 
 // A remount (tab switch) re-fires Linking.getInitialURL with the same intent
 // URI — imports must not run twice for one "Open in Logjam".
@@ -737,7 +739,9 @@ export function MapScreen({
   const [savingRoute, setSavingRoute] = useState(false);
   /** A drag ends with a tap that also fires onSelected; this tells the two
    *  apart so dropping a handle doesn't select it. */
-  const anchorDragged = useRef(false);
+  /** When the last real anchor DROP happened, so the select it fires can be
+   *  told from a fresh tap. See `ANCHOR_DROP_SELECT_MS`. */
+  const anchorDropAt = useRef(0);
   /** The anchor the user has tapped, in the ARMED tool's draft.
    *
    *  A tap on a handle picks it out and the panel grows a "Remove point"
@@ -1373,29 +1377,24 @@ export function MapScreen({
    *  and one round of snapping rather than one per frame. */
   const anchorHandlers = useCallback(
     (handle: RouteDraftHandle) => ({
-      onAnchorDragStart: () => {
-        anchorDragged.current = false;
-      },
       onAnchorDrag: (index: number, point: [number, number]) => {
-        anchorDragged.current = true;
         handle.previewAnchorAt(index, point);
       },
       onAnchorDragEnd: (index: number, point: [number, number]) => {
         handle.moveAnchorAt(index, point);
         snapAroundAnchor(handle, index, point);
-        // The tap that ends a drag also fires onSelected; this keeps it from
-        // being read as "remove this point".
-        anchorDragged.current = true;
+        // The drop also fires a press; this keeps it from picking the handle
+        // straight back up. A WINDOW, not a flag: the flag this replaces was
+        // only ever cleared by the next press, so a drop that produced none
+        // left it armed and swallowed the user's next real tap.
+        anchorDropAt.current = Date.now();
       },
-      // Kept wired to the same selection the map's hit test drives, because it
-      // costs nothing: whichever of the two fires (or both), the result is the
-      // same index selected. The drag guard stays — a drop lands on the handle
-      // too, and picking a point on release would fight the gesture.
+      // The main way an anchor gets selected — a tap INSIDE the 34 dp handle
+      // never reaches the map at all (the annotation consumes it), so the map's
+      // own hit test only covers the ring outside it. Whichever fires, the same
+      // index ends up selected.
       onAnchorPress: (index: number) => {
-        if (anchorDragged.current) {
-          anchorDragged.current = false;
-          return;
-        }
+        if (Date.now() - anchorDropAt.current < ANCHOR_DROP_SELECT_MS) return;
         setSelectedAnchor(index);
       },
     }),
@@ -1705,18 +1704,21 @@ export function MapScreen({
     (lon: number, lat: number): boolean => {
       if (!activeDraft?.draft) return false;
       // Tolerance in degrees, derived from the current zoom so the reach feels
-      // the same however far in you are.
-      const degreesPerPixel = 360 / (256 * 2 ** camera.zoom * PIXEL_RATIO);
+      // the same however far in you are. `degreesPerDp` owns the conversion —
+      // this used to inline a 256-based world size AND divide by the display
+      // density, which made every reach here roughly three quarters of what it
+      // said (see scaleBar.ts).
+      const perDp = degreesPerDp(camera.zoom);
       // A press-and-hold ON an anchor is the start of a DRAG, and MLRN 11
       // delivers it here as well as to the annotation (see anchorHit.ts).
       // Consume it: returning true stops the long-press falling through to the
       // waypoint/navigate/route actions as well as skipping the insert.
-      if (pressIsOnAnchor(activeDraft.draft.anchors, [lon, lat], degreesPerPixel)) {
+      if (pressIsOnAnchor(activeDraft.draft.anchors, [lon, lat], perDp)) {
         return true;
       }
       const near = nearestSegment(activeDraft.draft, [lon, lat]);
       if (!near) return false;
-      if (near.distanceDegrees > degreesPerPixel * LINE_GRAB_PIXELS) return false;
+      if (near.distanceDegrees > perDp * LINE_GRAB_DP) return false;
       activeDraft.insertAnchorAt(near.index, [lon, lat]);
       return true;
     },
@@ -1729,11 +1731,10 @@ export function MapScreen({
   const pressedAnchorIndex = useCallback(
     (lon: number, lat: number): number | null => {
       if (!activeDraft?.draft) return null;
-      const degreesPerPixel = 360 / (256 * 2 ** camera.zoom * PIXEL_RATIO);
       return anchorIndexAtPress(
         activeDraft.draft.anchors,
         [lon, lat],
-        degreesPerPixel,
+        degreesPerDp(camera.zoom),
       );
     },
     [activeDraft, camera.zoom],
@@ -4278,6 +4279,7 @@ export function MapScreen({
             selectedIndex={selectedAnchor}
             draft={routeDraft.draft ?? emptyDraft}
             dotted={false}
+            degreesPerDp={degreesPerDp(camera.zoom)}
             {...anchorHandlers(routeDraft)}
           />
         ) : null}
@@ -4291,6 +4293,7 @@ export function MapScreen({
             selectedIndex={drawingRoute ? null : selectedAnchor}
             draft={measureDraft.draft ?? emptyDraft}
             dotted
+            degreesPerDp={degreesPerDp(camera.zoom)}
             {...anchorHandlers(measureDraft)}
           />
         ) : null}

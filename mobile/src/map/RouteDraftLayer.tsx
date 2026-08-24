@@ -8,7 +8,7 @@
 //
 // Unpinned (no layerIndex) so it sits above every overlay — a line you can't
 // see under a topo layer is useless.
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
   GeoJSONSource,
@@ -25,6 +25,7 @@ import {
   type RoutePoint,
 } from "@logjam/shared";
 
+import { dragIsTap } from "./anchorHit";
 import { theme } from "../theme";
 
 /** Below this a route is a few pixels of line and arrows on it are just noise. */
@@ -121,9 +122,9 @@ export function RouteDraftLayer({
   idPrefix,
   draft,
   dotted,
+  degreesPerDp,
   color = theme.accent,
   selectedIndex = null,
-  onAnchorDragStart,
   onAnchorDrag,
   onAnchorDragEnd,
   onAnchorPress,
@@ -132,13 +133,15 @@ export function RouteDraftLayer({
   /** The draft itself — anchors AND the snapped filler between them. */
   draft: RouteDraft;
   dotted: boolean;
+  /** The current zoom's ground scale, for telling a tap from a drag — see
+   *  `dragIsTap`. Passed in because the camera lives on the screen. */
+  degreesPerDp: number;
   /** The ink for the line being drawn. The route tool passes the colour the
    *  draft will SAVE with, so picking one shows up immediately rather than at
    *  the next reload; measure has no colour and draws in the accent. */
   color?: string;
   /** The anchor the user has tapped, drawn picked out. Null when none is. */
   selectedIndex?: number | null;
-  onAnchorDragStart: (index: number) => void;
   onAnchorDrag: (index: number, point: RoutePoint) => void;
   onAnchorDragEnd: (index: number, point: RoutePoint) => void;
   onAnchorPress: (index: number) => void;
@@ -153,6 +156,22 @@ export function RouteDraftLayer({
   const [drag, setDrag] = useState<{ index: number; point: RoutePoint } | null>(
     null,
   );
+
+  /**
+   * Whether the gesture in progress has travelled far enough to BE a drag.
+   *
+   * A tap on a draggable annotation arrives as a drag of a pixel or two, and
+   * committing that moved the anchor a metre or two and selected nothing —
+   * which is what made deleting a point feel impossible. Below the slop the
+   * gesture is forwarded as a PRESS instead and the anchor does not move at
+   * all. Once past the slop it stays a drag for the rest of the gesture, so a
+   * finger that wanders out and comes back still commits (the alternative
+   * leaves the preview showing a move nothing wrote).
+   *
+   * A ref, not state: it must be readable in the same event that sets it, and
+   * nothing draws from it.
+   */
+  const dragBeyondSlop = useRef(false);
 
   // The draft as it should look right now: the committed draft with the drag
   // applied through `moveAnchor` — the SAME helper the drop commits through, so
@@ -274,21 +293,42 @@ export function RouteDraftLayer({
           lngLat={anchor as [number, number]}
           draggable
           onDragStart={() => {
-            setDrag({ index, point: anchor });
-            onAnchorDragStart(index);
+            dragBeyondSlop.current = false;
           }}
           onDrag={(event: NativeSyntheticEvent<ViewAnnotationEvent>) => {
             const moved = event.nativeEvent.lngLat as RoutePoint | undefined;
             if (!moved) return;
+            if (!dragBeyondSlop.current && dragIsTap(anchor, moved, degreesPerDp)) {
+              return;
+            }
+            dragBeyondSlop.current = true;
             setDrag({ index, point: moved });
             onAnchorDrag(index, moved);
           }}
           onDragEnd={(event: NativeSyntheticEvent<ViewAnnotationEvent>) => {
             const moved = event.nativeEvent.lngLat as RoutePoint | undefined;
+            // The drop is re-measured against the origin as well as trusting
+            // the per-frame flag, so a gesture that somehow delivers no drag
+            // frames is still committed if it actually went somewhere.
+            const wasDrag =
+              dragBeyondSlop.current ||
+              (moved != null && !dragIsTap(anchor, moved, degreesPerDp));
             setDrag(null);
+            if (!wasDrag) {
+              // Never moved: this was a tap that happened to arrive through the
+              // drag callbacks. Nothing is committed and nothing is snapped.
+              onAnchorPress(index);
+              return;
+            }
             if (moved) onAnchorDragEnd(index, moved);
           }}
-          onSelect={() => onAnchorPress(index)}
+          // `onPress`, NOT `onSelect`: the native side fires onSelect only on
+          // the false->true transition and then leaves the annotation selected
+          // (nothing here ever deselects it), so a second tap on the same
+          // anchor fired nothing at all — one of the reasons the delete verb
+          // was unreachable. onPress fires on every tap
+          // (MLRNPointAnnotation.kt).
+          onPress={() => onAnchorPress(index)}
         >
           <View style={styles.handle} />
         </ViewAnnotation>

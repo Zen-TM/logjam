@@ -1,6 +1,11 @@
-// Scale-bar maths. MapLibre React Native v10 exposes no scale-bar ornament
-// (only compass/attribution/logo), so the bar is drawn in JS from the camera's
-// zoom and latitude — these are the pure bits, unit-tested.
+// Camera zoom to ground scale, and the scale bar drawn from it. MapLibre React
+// Native v10 exposes no scale-bar ornament (only compass/attribution/logo), so
+// the bar is drawn in JS from the camera's zoom and latitude — these are the
+// pure bits, unit-tested.
+//
+// This file is where the 512 lives (see below): the scale bar is the one place
+// the convention is VISIBLY wrong when it is wrong, so anything else needing
+// zoom→ground takes it from here rather than writing its own power of two.
 
 // Web-Mercator ground resolution at zoom 0, latitude 0.
 //
@@ -10,7 +15,9 @@
 // number `onRegionDidChange` reports is still the 512-based one — so the bar
 // must divide by 512, and the 256-based 156543.034 constant this used made
 // every distance read exactly double.
-const EQUATOR_METERS_PER_PIXEL_Z0 = 40075016.686 / 512;
+export const MAP_WORLD_DP_Z0 = 512;
+
+const EQUATOR_METERS_PER_PIXEL_Z0 = 40075016.686 / MAP_WORLD_DP_Z0;
 
 // Round distances a reader can divide in their head. Ends at 500 km — beyond
 // that the whole state fits on screen and the bar stops being useful.
@@ -30,6 +37,28 @@ export function metersPerPixel(latitudeDeg: number, zoom: number): number {
     (EQUATOR_METERS_PER_PIXEL_Z0 * Math.cos((latitudeDeg * Math.PI) / 180)) /
     2 ** zoom
   );
+}
+
+/**
+ * Degrees of latitude per DP at `zoom` — the tolerance converter for hit tests
+ * that compare in degrees (`anchorHit.ts`, the line-grab reach).
+ *
+ * DP, not physical pixels: MapLibre Native is handed the view size divided by
+ * the display density, so its own screen space is density-independent and its
+ * zoom is the 512-based one above. The anchor hit test used to divide by
+ * `PixelRatio.get()` AND use 256, which on a 2.625x screen left a 20 dp reach
+ * of about 15 dp — smaller than the 17 dp handle it was meant to extend, so it
+ * could never fire at all.
+ *
+ * Longitude is not corrected for latitude: over tens of DP the foreshortening
+ * at NSW latitudes is far below the precision these decisions need, and the
+ * callers compare planar degrees for the same reason (`nearestSegment`).
+ */
+export function degreesPerDp(zoom: number): number {
+  if (!Number.isFinite(zoom) || zoom < 0) {
+    throw new Error(`degreesPerDp: zoom out of range (${zoom})`);
+  }
+  return 360 / (MAP_WORLD_DP_Z0 * 2 ** zoom);
 }
 
 export type ScaleBarStep = {

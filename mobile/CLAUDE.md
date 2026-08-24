@@ -103,13 +103,39 @@ without calling it still leaks the tap. Not enforced by a test — the handlers
 are passed by reference, so a source scan cannot see them — so it is a
 convention to check when adding a pressable source.
 
-**A tap on an anchor is a hit test on the map's press, not `ViewAnnotation`'s
-`onSelect`.** `anchorIndexAtPress` (`src/map/anchorHit.ts`, tested) answers
-which anchor a tap landed on, and `handleMapPress` selects it instead of
-appending a point there. Same file, same tolerance and same reason as the rule
-below: position is knowable, callback ordering is not. `onSelect` is still wired
-to the same state — whichever fires, the same index is selected — but nothing
-depends on it.
+**A tap on an anchor is `ViewAnnotation`'s `onPress`, plus a map-press hit
+test for the ring outside the handle.** (Corrected 2026-08-24 — the earlier
+version of this rule had it the other way round and was wrong.) On Android a
+`ViewAnnotation` is a `Symbol`, and `SymbolManager`'s click listener returns
+`true` (`MLRNMapView.kt` `createSymbolManager`), so a tap inside the rasterised
+34 dp handle is CONSUMED and `MLRNMapView.onMapClick` never runs. Three things
+follow, and all three were broken until this batch:
+- Wire **`onPress`**, never `onSelect`. `MLRNPointAnnotation.onSelect` fires
+  only on the annotation's false→true transition and nothing here ever
+  deselects it, so a second tap on the same anchor delivered no event at all.
+  `onPress` fires on every tap (`MLRNPointAnnotation.kt`).
+- `anchorIndexAtPress` (`src/map/anchorHit.ts`, tested) only ever sees the
+  ring BETWEEN the 17 dp handle and `ANCHOR_GRAB_DP` (22 dp, a 44 dp target).
+  It is not dead weight — it is the margin — but it is not the main path, and
+  when the tolerance was smaller than the handle it could not fire at all.
+- **Tolerances are DP and come from `degreesPerDp` (`src/map/scaleBar.ts`,
+  tested).** MapLibre Native is handed the view size divided by the display
+  density, so its screen space is density-independent and its zoom is
+  512-based. The anchor reach inlined a 256-based world AND divided by
+  `PixelRatio.get()`; the two errors did not cancel, and a stated 20 dp measured
+  under 15 dp. Nothing may write its own power of two for this.
+
+**A drag under the touch slop is a TAP.** `ViewAnnotation` is `draggable`, so a
+finger that moves two pixels while tapping arrives as a drag, and committing it
+moved the anchor a metre and selected nothing — the operator's report that
+deleting a point was "virtually impossible". `RouteDraftLayer` gates the drag on
+`dragIsTap` (`anchorHit.ts`, `ANCHOR_TAP_SLOP_DP` = Android's own 8 dp): below
+the slop nothing previews, nothing commits, and the gesture is forwarded as a
+press. Past the slop it stays a drag for the rest of the gesture, so a finger
+that wanders out and back still commits. The drop's own press is suppressed by a
+WINDOW (`ANCHOR_DROP_SELECT_MS`), not by a flag — the flag it replaces was
+cleared only by the next press, so a drop that produced none stayed armed and
+swallowed the user's next real tap.
 
 **A press-and-hold on an anchor reaches the MAP as well as the annotation.**
 MLRN 10's `PointAnnotation` consumed the touch that starts a drag; MLRN 11's
