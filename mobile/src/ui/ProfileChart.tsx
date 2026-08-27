@@ -89,12 +89,18 @@ function toColumns(samples: readonly ProfilePoint[], count: number): Column[] {
     const before = samples[cursor]!;
     const after = samples[cursor + 1] ?? before;
     const span = after.x - before.x;
-    const fraction = span > 0 ? (x - before.x) / span : 0;
+    // Clamp to the sample span: the first column can sit before the first
+    // sample (x = 0 when the series starts at x > 0), and extrapolating there
+    // would invent a value below the data's own minimum — and a negative bar
+    // height in the renderer.
+    const fraction =
+      span > 0 ? Math.min(1, Math.max(0, (x - before.x) / span)) : 0;
     // A gap in coverage stays a gap: interpolating across it would invent
-    // ground that was never measured.
+    // ground that was never measured, and borrowing a neighbour's height would
+    // paint a fake plateau over the hole.
     const value =
       before.value == null || after.value == null
-        ? (before.value ?? after.value)
+        ? null
         : before.value + (after.value - before.value) * fraction;
     columns.push({ value, x });
   }

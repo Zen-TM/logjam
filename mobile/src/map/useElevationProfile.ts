@@ -36,7 +36,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   buildElevationProfile,
-  densifyLine,
+  densifyLineSegments,
   type ElevationProfile,
 } from "@logjam/shared";
 
@@ -57,26 +57,33 @@ export type ElevationState = {
  * A profile from the DEM.
  *
  * "Covers" is decided by the heights themselves rather than by bbox arithmetic:
- * a line can start inside a saved area and run out of it, and the useful answer
- * there is the part we know — so a partial local answer WINS, and costs no
- * request. Null only when nothing anywhere is known.
+ * a line can start inside a saved area and run out of it. A COMPLETE local
+ * answer wins outright and costs no request; a PARTIAL one is held as the
+ * fallback while the network is still asked, because a caller that needs a
+ * whole surface (`TrackStatsBody` falls back to GPS heights the moment one
+ * sample is missing) would otherwise throw away a partial answer AND never
+ * reach the source that could have completed it. Null only when nothing
+ * anywhere is known.
  */
 async function profileFromDem(
-  points: readonly [number, number][],
+  segments: readonly (readonly [number, number][])[],
   sources: { api: boolean; tiles: boolean },
 ): Promise<ElevationProfile | null> {
-  const positions = densifyLine(points);
+  const positions = densifyLineSegments(segments);
 
   const saved = await sampleElevations(positions);
-  if (saved.some((value) => value != null)) {
+  if (saved.every((value) => value != null)) {
     return buildElevationProfile(positions, saved);
   }
+  const partial = saved.some((value) => value != null)
+    ? buildElevationProfile(positions, saved)
+    : null;
 
   if (sources.api) {
     try {
       return await apiFetch<ElevationProfile>("/elevation/profile", {
         method: "POST",
-        body: { points },
+        body: { segments },
       });
     } catch {
       // A deployed API older than this app has no such route, and a flaky link
@@ -86,22 +93,24 @@ async function profileFromDem(
     }
   }
 
-  if (!sources.tiles) return null;
+  if (!sources.tiles) return partial;
   const fetched = await sampleElevations(positions, { allowNetwork: true });
-  if (fetched.every((value) => value == null)) return null;
+  if (fetched.every((value) => value == null)) return partial;
   return buildElevationProfile(positions, fetched);
 }
 
 export function useElevationProfile(
-  points: readonly [number, number][],
+  segments: readonly (readonly [number, number][])[],
   { allowNetwork = true }: { allowNetwork?: boolean } = {},
 ): ElevationState {
   const [profile, setProfile] = useState<ElevationProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const isGuest = useAccountState().accountState === "guest";
   // Identity of the geometry, so a re-render with the same points does not
-  // re-request and a moved vertex does.
-  const geometryKey = points.length >= 2 ? JSON.stringify(points) : null;
+  // re-request and a moved vertex does. A line needs at least two points
+  // across its segments, as before.
+  const totalPoints = segments.reduce((n, s) => n + s.length, 0);
+  const geometryKey = totalPoints >= 2 ? JSON.stringify(segments) : null;
   // Guards against a slow response for an older line landing after a newer
   // one — without it, undoing a point could leave the pre-undo profile on
   // screen.
@@ -117,11 +126,11 @@ export function useElevationProfile(
 
     const timer = setTimeout(() => {
       setLoading(true);
-      const points = JSON.parse(geometryKey) as [number, number][];
+      const segments = JSON.parse(geometryKey) as [number, number][][];
       void (async () => {
         try {
           const built = await profileFromDem(
-            points,
+            segments,
             planElevationSources({ allowNetwork, isGuest }),
           );
           if (latestKey.current === geometryKey) setProfile(built);

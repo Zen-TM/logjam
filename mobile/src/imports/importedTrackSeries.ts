@@ -94,7 +94,7 @@ export async function readImportedTrackDetail(input: {
   path: string;
   /** The row's own count, so an over-large file is refused before it is read. */
   positionCount: number;
-}): Promise<{ detail: TrackDetail | null; line: [number, number][] }> {
+}): Promise<{ detail: TrackDetail | null; line: [number, number][][] }> {
   if (input.positionCount > MAX_STATS_POSITIONS) throw new TooManyPointsError();
   const text = await FileSystem.readAsStringAsync(`file://${input.path}`);
   const parsed = JSON.parse(text) as { features?: ImportedFeature[] };

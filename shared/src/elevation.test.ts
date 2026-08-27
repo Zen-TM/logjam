@@ -5,6 +5,7 @@ import {
   ELEVATION_SAMPLE_SPACING_M,
   buildElevationProfile,
   densifyLine,
+  densifyLineSegments,
   elevationGainLoss,
 } from "./elevation.js";
 import type { RoutePoint } from "./routeValidation.js";
@@ -89,6 +90,62 @@ describe("densifyLine", () => {
     const middle = samples[Math.floor(samples.length / 2)]!;
     expect(middle.lon).toBeGreaterThan(150);
     expect(middle.lon).toBeLessThan(150.01);
+  });
+});
+
+describe("densifyLineSegments", () => {
+  // Two segments ~5 km apart in latitude, so a flat densifyLine across their
+  // join would place samples on the teleport line between them.
+  const segA: RoutePoint[] = eastwardLine(0.01, 2);
+  const segB: RoutePoint[] = eastwardLine(0.01, 2).map(
+    (p): RoutePoint => [p[0] + 0.02, LAT + 0.05],
+  );
+
+  it("never samples the gap between two segments", () => {
+    const samples = densifyLineSegments([segA, segB]);
+    expect(samples.length).toBeGreaterThan(30);
+    for (const sample of samples) {
+      const onA = Math.abs(sample.lat - LAT) < 1e-6;
+      const onB = Math.abs(sample.lat - (LAT + 0.05)) < 1e-6;
+      expect(onA || onB).toBe(true);
+    }
+  });
+
+  it("runs its distance continuously across the whole combined length", () => {
+    const samples = densifyLineSegments([segA, segB]);
+    for (let i = 1; i < samples.length; i++) {
+      expect(samples[i]!.distanceM).toBeGreaterThan(samples[i - 1]!.distanceM);
+    }
+    expect(samples[0]!.distanceM).toBe(0);
+  });
+
+  it("starts at the first vertex and ends at the last", () => {
+    const samples = densifyLineSegments([segA, segB]);
+    const first = segA[0]!;
+    const last = segB[segB.length - 1]!;
+    expect(samples[0]!.lon).toBeCloseTo(first[0], 9);
+    expect(samples[0]!.lat).toBeCloseTo(first[1], 9);
+    const end = samples[samples.length - 1]!;
+    expect(end.lon).toBeCloseTo(last[0], 9);
+    expect(end.lat).toBeCloseTo(last[1], 9);
+  });
+
+  it("delegates a single segment to densifyLine", () => {
+    expect(densifyLineSegments([segA])).toEqual(densifyLine(segA));
+  });
+
+  it("treats a single-point segment as a break, not a sample", () => {
+    const lone: RoutePoint[] = [[150.5, -33.5]];
+    const samples = densifyLineSegments([segA, lone, segB]);
+    for (const sample of samples) {
+      const onA = Math.abs(sample.lat - LAT) < 1e-6;
+      const onB = Math.abs(sample.lat - (LAT + 0.05)) < 1e-6;
+      expect(onA || onB).toBe(true);
+    }
+  });
+
+  it("returns nothing for an empty segment list", () => {
+    expect(densifyLineSegments([])).toEqual([]);
   });
 });
 

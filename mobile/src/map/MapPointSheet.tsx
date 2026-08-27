@@ -100,7 +100,7 @@ function PointDetail({
     ],
     [point.latitude, point.longitude],
   );
-  const { profile, loading } = useElevationProfile(profilePoints, { allowNetwork });
+  const { profile, loading } = useElevationProfile([profilePoints], { allowNetwork });
   const elevationM = profile?.samples[0]?.elevationM ?? null;
 
   const distanceM = userCoord

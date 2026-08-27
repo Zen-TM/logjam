@@ -34,7 +34,7 @@ export function RouteStatsBody({
    */
   allowNetwork?: boolean;
 }) {
-  const { profile, loading } = useElevationProfile(route.points, { allowNetwork });
+  const { profile, loading } = useElevationProfile([route.points], { allowNetwork });
 
   return (
     <View style={styles.body}>

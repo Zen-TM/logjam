@@ -96,7 +96,7 @@ export function DraftToolPanel({
    */
   allowNetwork?: boolean;
 }) {
-  const { profile, loading } = useElevationProfile(points, { allowNetwork });
+  const { profile, loading } = useElevationProfile([points], { allowNetwork });
   const hasLine = points.length >= 2;
   const [pickingColor, setPickingColor] = useState(false);
 

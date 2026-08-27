@@ -19,10 +19,10 @@ export function useImportedTrackDetail(
   loading: boolean;
   error: string | null;
   /** The imported lines, coarsened for sampling the DEM along. */
-  line: [number, number][];
+  line: [number, number][][];
 } {
   const [detail, setDetail] = useState<TrackDetail | null>(null);
-  const [line, setLine] = useState<[number, number][]>([]);
+  const [line, setLine] = useState<[number, number][][]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

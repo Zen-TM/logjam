@@ -218,13 +218,32 @@ describe("computeTrackStats", () => {
     expect(computeTrackStats(points).elevationGainM).toBe(50);
   });
 
-  it("elevation runs across segments (climb made while paused still counts)", () => {
+  it("does not book a pause gap's altitude jump as walked ascent", () => {
+    // Pause at 610 m, resume (a new segment) at 700 m: the 90 m in between was
+    // a drive, not a climb, so it must not read as ascent the party walked.
     const points = [
       point({ altitudeM: 600, timestampMs: 0, segment: 0 }),
       point({ lat: BASE_LAT + 0.001, altitudeM: 610, timestampMs: 10_000, segment: 0 }),
       point({ lat: BASE_LAT + 0.002, altitudeM: 700, timestampMs: 600_000, segment: 1 }),
     ];
-    expect(computeTrackStats(points).elevationGainM).toBe(100);
+    expect(computeTrackStats(points).elevationGainM).toBe(0);
+    expect(computeTrackStats(points).elevationLossM).toBe(0);
+  });
+
+  it("sums gain per segment and excludes only the pause jump", () => {
+    // Segment 0 climbs 600→650, segment 1 climbs 700→780. The 650→700 jump
+    // between them is a relocation, not a climb: total = 50 + 80, not 180.
+    const points = [
+      point({ altitudeM: 600, timestampMs: 0, segment: 0 }),
+      point({ lat: BASE_LAT + 0.001, altitudeM: 625, timestampMs: 10_000, segment: 0 }),
+      point({ lat: BASE_LAT + 0.002, altitudeM: 650, timestampMs: 20_000, segment: 0 }),
+      point({ lat: BASE_LAT + 0.003, altitudeM: 700, timestampMs: 600_000, segment: 1 }),
+      point({ lat: BASE_LAT + 0.004, altitudeM: 740, timestampMs: 610_000, segment: 1 }),
+      point({ lat: BASE_LAT + 0.005, altitudeM: 780, timestampMs: 620_000, segment: 1 }),
+    ];
+    const stats = computeTrackStats(points);
+    expect(stats.elevationGainM).toBe(130);
+    expect(stats.elevationLossM).toBe(0);
   });
 });
 
@@ -853,6 +872,49 @@ describe("computeTrackDetail", () => {
     const stopSpan =
       samples[samples.length - 1]!.atMs - samples[samples.length - 2]!.atMs;
     expect(stopSpan).toBe(3_600_000);
+  });
+
+  it("keeps every height with its own point when segment ids repeat", () => {
+    // Segments grouped by CONSECUTIVE RUN, not by id: an id that comes back
+    // (0, 1, 0 — a resume that reuses a number) must still leave the elevation
+    // samples in point order, or every height pairs with another point's
+    // distance. Heights climb monotonically here, so an out-of-order
+    // concatenation shows up as a height that goes backwards.
+    const points = [
+      point({ altitudeM: 700, timestampMs: 0, segment: 0 }),
+      point({ lat: BASE_LAT + 0.001, altitudeM: 710, timestampMs: 10_000, segment: 0 }),
+      point({ lat: BASE_LAT + 0.002, altitudeM: 720, timestampMs: 20_000, segment: 1 }),
+      point({ lat: BASE_LAT + 0.003, altitudeM: 730, timestampMs: 30_000, segment: 1 }),
+      point({ lat: BASE_LAT + 0.004, altitudeM: 740, timestampMs: 40_000, segment: 0 }),
+      point({ lat: BASE_LAT + 0.005, altitudeM: 750, timestampMs: 50_000, segment: 0 }),
+    ];
+    const samples = computeTrackDetail(points).elevation!.samples;
+    expect(samples.map((sample) => sample.elevationM)).toEqual([
+      700, 710, 720, 730, 740, 750,
+    ]);
+    // Never backwards — and flat across a segment break, which is a gap that
+    // adds no walked distance.
+    for (let i = 1; i < samples.length; i++) {
+      expect(samples[i]!.distanceM).toBeGreaterThanOrEqual(
+        samples[i - 1]!.distanceM,
+      );
+    }
+  });
+
+  it("reports the peak speed from the full series, not the thinned chart", () => {
+    // On a short track nothing is decimated, so the peak and the chart's own
+    // max are the same number; this pins maxMps to the true maximum rather
+    // than to whatever the stride happened to keep. The decimation-drop case
+    // (a long track whose peak falls between kept indices) is verified by
+    // construction rather than by test: position and speed smoothing spread
+    // any speed spike wider than the decimation stride, so no isolated spike
+    // survives to be dropped.
+    const detail = computeTrackDetail(
+      walk({ count: 4, stepMilliDeg: 1, stepMs: 100_000 }),
+    );
+    const peak = Math.max(...detail.speed!.samples.map((s) => s.speedMps));
+    expect(detail.speed!.maxMps).toBeCloseTo(peak, 6);
+    expect(detail.speed!.maxMps).toBeGreaterThan(1);
   });
 
   it("agrees with the cached stats the recorder writes", () => {

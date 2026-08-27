@@ -622,19 +622,47 @@ export function computeTrackDetail(
   // `withAltitude` keeps each smoothed height's own point index, so the
   // profile's x axis is the distance measured AT that height rather than at
   // whatever position shares its place in a compacted array.
+  //
+  // Smoothing AND gain/loss run PER SEGMENT: a pause gap's altitude jump (drive
+  // from 500 m to 1200 m, then resume) is a climb the altitude record shows but
+  // not one the party walked, and smoothing across it would also bleed the two
+  // sides' heights into the boundary sample. `altitudes` below is the
+  // per-segment smoothed values concatenated in point order, so it still lines
+  // up with `withAltitude` for the profile chart and min/max.
+  // Grouped by CONSECUTIVE RUN of the same `segment`, never by segment number:
+  // keying an array on the number would order `altitudes` by segment id while
+  // `withAltitude` is in point order, so a series whose segment ids ever arrive
+  // out of order would silently pair every height with another point's
+  // distance. A run is also the same rule `trackPointsToFeature` and
+  // `toElevationLine` group by, so all three break a track in one place.
   const withAltitude: number[] = [];
-  const rawAltitudes: number[] = [];
+  const segmentAltitudes: number[][] = [];
+  let currentSegment: number | null = null;
   for (let i = 0; i < points.length; i++) {
-    const altitudeM = points[i]!.altitudeM;
+    const point = points[i]!;
+    if (currentSegment === null || point.segment !== currentSegment) {
+      currentSegment = point.segment;
+      segmentAltitudes.push([]);
+    }
+    const altitudeM = point.altitudeM;
     if (altitudeM == null || !Number.isFinite(altitudeM)) continue;
     withAltitude.push(i);
-    rawAltitudes.push(altitudeM);
+    segmentAltitudes[segmentAltitudes.length - 1]!.push(altitudeM);
   }
-  const altitudes = movingMedian(rawAltitudes, ELEVATION_SMOOTHING_WINDOW);
-  const { gainM: elevationGainM, lossM: elevationLossM } = elevationGainLoss(
-    altitudes,
-    ELEVATION_HYSTERESIS_M,
-  );
+  const altitudes: number[] = [];
+  let elevationGainM = 0;
+  let elevationLossM = 0;
+  for (const segAlts of segmentAltitudes) {
+    const smoothed =
+      segAlts.length > 0
+        ? movingMedian(segAlts, ELEVATION_SMOOTHING_WINDOW)
+        : [];
+    for (const value of smoothed) altitudes.push(value);
+    if (smoothed.length < 2) continue;
+    const { gainM, lossM } = elevationGainLoss(smoothed, ELEVATION_HYSTERESIS_M);
+    elevationGainM += gainM;
+    elevationLossM += lossM;
+  }
 
   let minAltitudeM: number | null = null;
   let maxAltitudeM: number | null = null;
@@ -666,6 +694,13 @@ export function computeTrackDetail(
     rawSpeeds.push({ atMs: totalMs, speedMps: 0 });
   }
   const speedSamples = decimate(rawSpeeds, ELEVATION_PROFILE_MAX_SAMPLES);
+  // The headline peak comes from the FULL series, not the decimated chart: a
+  // short sprint that falls between the stride's kept indices would otherwise
+  // never reach the number, and the chart's y-scale is derived from it.
+  const maxSpeedMps = rawSpeeds.reduce(
+    (max, sample) => Math.max(max, sample.speedMps),
+    0,
+  );
 
   return {
     distanceM,
@@ -695,7 +730,7 @@ export function computeTrackDetail(
       speedSamples.length >= 2
         ? {
             samples: speedSamples,
-            maxMps: speedSamples.reduce((max, s) => Math.max(max, s.speedMps), 0),
+            maxMps: maxSpeedMps,
             // The series' own mean, which is NOT distance/duration: it weights
             // every interval equally where the headline average weights them
             // by time. The chart's own baseline, and nothing else's.

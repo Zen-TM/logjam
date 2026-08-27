@@ -48,8 +48,8 @@ export function useTrackDetail(
 ): {
   detail: TrackDetail | null;
   loading: boolean;
-  /** The track as a coarse line, for sampling the DEM along. */
-  line: [number, number][];
+  /** The track as coarse per-segment lines, for sampling the DEM along. */
+  line: [number, number][][];
 } {
   // The SERIES is state; the detail is derived from it. `recordedMs` ticks
   // once a second on a live recording, and folding it in here rather than in
@@ -57,7 +57,7 @@ export function useTrackDetail(
   // re-reading the whole series from SQLite every second.
   const [points, setPoints] = useState<RecordedTrackPoint[]>([]);
   const [loading, setLoading] = useState(false);
-  const [line, setLine] = useState<[number, number][]>([]);
+  const [line, setLine] = useState<[number, number][][]>([]);
   const linePointCount = useRef(0);
   const detail = useMemo(
     () => (points.length > 0 ? computeTrackDetail(points, { recordedMs }) : null),

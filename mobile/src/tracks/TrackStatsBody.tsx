@@ -85,12 +85,19 @@ export function TrackStatsBody({
 
   const durationMs = elapsedMs ?? detail.durationMs;
   const timed = detail.movingMs != null;
-  // One source for every height on the panel.
-  const elevation = demProfile ?? detail.elevation;
-  const gainM = demProfile ? demProfile.gainM : detail.elevationGainM;
-  const lossM = demProfile ? demProfile.lossM : detail.elevationLossM;
-  const maxM = demProfile ? demProfile.maxM : detail.maxAltitudeM;
-  const minM = demProfile ? demProfile.minM : detail.minAltitudeM;
+  // One source for every height on the panel — DEM only when it has no gaps.
+  // A DEM with even one uncovered sample would draw a hole in a chart the
+  // reader can't tell from the terrain, so a partial DEM falls back to GPS for
+  // the whole section rather than mixing two surfaces.
+  const demComplete =
+    demProfile != null &&
+    demProfile.samples.every((sample) => sample.elevationM != null);
+  const dem = demComplete ? demProfile : null;
+  const elevation = dem ?? detail.elevation;
+  const gainM = dem ? dem.gainM : detail.elevationGainM;
+  const lossM = dem ? dem.lossM : detail.elevationLossM;
+  const maxM = dem ? dem.maxM : detail.maxAltitudeM;
+  const minM = dem ? dem.minM : detail.minAltitudeM;
 
   const stats: Stat[] = [];
   if (timed || elapsedMs != null) {
@@ -148,11 +155,13 @@ export function TrackStatsBody({
               than its ~19 m grid, and GPS altitude cannot see a hill smaller
               than its own noise. A number with no provenance gets trusted. */}
           <Text style={styles.pending}>
-            {demProfile
+            {demComplete
               ? "Heights from terrain data"
-              : demLoading
-                ? "Heights from this phone's GPS — reading the terrain…"
-                : "Heights from this phone's GPS — no terrain data for here"}
+              : demProfile
+                ? "Terrain data incomplete — heights from this phone's GPS"
+                : demLoading
+                  ? "Heights from this phone's GPS — reading the terrain…"
+                  : "Heights from this phone's GPS — no terrain data for here"}
           </Text>
         </View>
       ) : (

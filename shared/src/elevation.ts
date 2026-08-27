@@ -136,6 +136,93 @@ export function densifyLine(
 }
 
 /**
+ * Resample a MULTI-SEGMENT polyline to evenly spaced positions.
+ *
+ * The segment-aware form of `densifyLine`, for recorded tracks and imported
+ * multi-line files: a pause/resume gap (or the join between two imported
+ * lines) is ground the party did not cover, so no sample is ever placed on it
+ * and nothing is interpolated across it. The walked length is the sum of the
+ * segment lengths, and each segment is densified against a running distance
+ * offset, so the profile's x axis runs continuously across the whole track
+ * while the teleport between segments contributes nothing.
+ */
+export function densifyLineSegments(
+  segments: readonly (readonly RoutePoint[])[],
+  maxSamples: number = ELEVATION_PROFILE_MAX_SAMPLES,
+): SamplePosition[] {
+  // Single-point segments carry no distance and no teleport — drop them.
+  const segs = segments.filter((s) => s.length >= 2);
+  if (segs.length === 0) {
+    for (const seg of segments) {
+      if (seg.length > 0) {
+        return [{ lon: seg[0]![0], lat: seg[0]![1], distanceM: 0 }];
+      }
+    }
+    return [];
+  }
+  if (segs.length === 1) return densifyLine(segs[0]!, maxSamples);
+
+  // Per-segment cumulative distances, and each segment's offset into the
+  // combined walked length.
+  const cumulative: number[][] = [];
+  const offset: number[] = [];
+  let totalM = 0;
+  for (const seg of segs) {
+    const cum: number[] = [0];
+    for (let i = 1; i < seg.length; i++) {
+      const a = seg[i - 1]!;
+      const b = seg[i]!;
+      cum.push(cum[i - 1]! + haversineMeters(a[1], a[0], b[1], b[0]));
+    }
+    offset.push(totalM);
+    cumulative.push(cum);
+    totalM += cum[cum.length - 1]!;
+  }
+  if (totalM === 0) {
+    const first = segs[0]![0]!;
+    return [{ lon: first[0], lat: first[1], distanceM: 0 }];
+  }
+
+  const sampleCount = Math.min(
+    maxSamples,
+    Math.max(2, Math.ceil(totalM / ELEVATION_SAMPLE_SPACING_M) + 1),
+  );
+  const step = totalM / (sampleCount - 1);
+
+  const positions: SamplePosition[] = [];
+  let segIndex = 0;
+  for (let i = 0; i < sampleCount; i++) {
+    const target = i === sampleCount - 1 ? totalM : i * step;
+    // Advance past any segment that ends before this sample's distance.
+    while (
+      segIndex < segs.length - 1 &&
+      offset[segIndex]! + cumulative[segIndex]![cumulative[segIndex]!.length - 1]! <
+        target
+    ) {
+      segIndex++;
+    }
+    const seg = segs[segIndex]!;
+    const cum = cumulative[segIndex]!;
+    const local = target - offset[segIndex]!;
+    // Walk the segment spine for `local` — same logic as densifyLine.
+    let s = 1;
+    while (s < cum.length - 1 && cum[s]! < local) s++;
+    const startM = cum[s - 1]!;
+    const endM = cum[s]!;
+    const span = endM - startM;
+    const t = span === 0 ? 0 : (local - startM) / span;
+    const a = seg[s - 1]!;
+    const b = seg[s]!;
+    positions.push({
+      lon: a[0] + (b[0] - a[0]) * t,
+      lat: a[1] + (b[1] - a[1]) * t,
+      distanceM: target,
+    });
+  }
+  return positions;
+}
+
+/**
  * Accumulate gain and loss through a hysteresis filter: track the extreme
  * reached since the last committed turn, and commit a leg only once the swing
  * back exceeds the threshold. Without it every wobble below the data's own
