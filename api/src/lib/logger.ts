@@ -52,7 +52,7 @@ export const redactPaths = [
   'req.body.north',
   // Authorization headers (never log credentials)
   'req.headers.authorization',
-  'req.headers["x-fake-auth"]',
+  'req.headers["x-fake-sub"]',
   'req.headers.cookie',
 ];
 
@@ -64,9 +64,22 @@ export const redactPaths = [
  * strings (e.g. fetch errors embedding the request URL), so coordinate-
  * bearing fragments are removed before the message is logged at all.
  */
+// A decimal lat/lng pair in free text — "-33.5621, 150.4017", "[150.40,-33.56]"
+// and the GeoJSON-ish forms in between. Keyed redaction (redactPaths) cannot
+// reach a coordinate that was interpolated into a message before it got here,
+// which is exactly what an error string carries. Mirrors COORDINATE_PAIR in
+// mobile/src/sentry/scrubEvent.ts — the same rule on the other side of the API.
+//
+// Four decimal places (~11 m) is the floor: below that the false-positive rate
+// on ordinary numbers (timings, versions, ratios) costs more debuggability than
+// the ~1 km it would protect. Anything formatted from a real GPS fix has more
+// precision than that, not less.
+const COORDINATE_PAIR = /-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}/g;
+
 export function redactTilePathPatterns(message: string): string {
   return message
     .replace(/\bhttps?:\/\/\S+/gi, "[redacted-url]")
+    .replace(COORDINATE_PAIR, "[redacted-coords]")
     .replace(/\b\d+\/\d+\/\d+\b/g, "[redacted-tile]");
 }
 
@@ -108,6 +121,27 @@ export function safeErrorForLog(err: unknown): {
   return {
     name: err.name || "Error",
     message: redactTilePathPatterns(message),
+  };
+}
+
+/**
+ * pino-http request serializer. Logs the PATH ONLY: the query string carries
+ * user-typed search terms (`GET /trips?search=` matches canyon NAMES,
+ * `/friends/search?q=` usernames) and pino's `redact.paths` cannot reach inside
+ * a URL string, so a full `req.url` would put canyon names in plaintext access
+ * logs — the exact thing the root CLAUDE.md privacy rule forbids. Nothing
+ * operational needs the query string. (PRIV-109)
+ */
+export function serializeRequestForLog(req: {
+  id?: unknown;
+  method?: string;
+  url?: string;
+}): { id: unknown; method: string | undefined; url: string } {
+  return {
+    id: req.id,
+    method: req.method,
+    // Deliberately omit body — payloads may contain canyon names/coords.
+    url: String(req.url ?? "").split("?")[0],
   };
 }
 

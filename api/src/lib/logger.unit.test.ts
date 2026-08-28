@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import pino from "pino";
-import { redactPaths, redactTilePathPatterns, safeErrorForLog } from "./logger";
+import {
+  redactPaths,
+  redactTilePathPatterns,
+  safeErrorForLog,
+  serializeRequestForLog,
+} from "./logger";
 
 // Build a pino logger using the SAME redact paths the app logger uses, but
 // writing to an in-memory buffer so we can assert what actually gets censored.
@@ -156,8 +163,89 @@ describe("safeErrorForLog", () => {
     expect(safe.message).toContain("[redacted-url]");
   });
 
+  // Mirrors COORDINATE_PAIR in mobile/src/sentry/scrubEvent.ts — the same rule
+  // on both sides of the API. Keyed redaction cannot reach a coordinate that
+  // was interpolated into a message before it arrived here.
+  it("redacts a decimal lat/lng pair interpolated into an error message", () => {
+    const safe = safeErrorForLog(
+      new Error("failed to place waypoint at -33.5621, 150.4017 for job"),
+    );
+    expect(safe.message).not.toMatch(/33\.5621/);
+    expect(safe.message).not.toMatch(/150\.4017/);
+    expect(safe.message).toContain("[redacted-coords]");
+  });
+
+  it("redacts coordinate pairs in bracketed / lng-first forms", () => {
+    for (const text of [
+      "[150.40170,-33.56210]",
+      "point(-33.56210 , 150.40170)",
+      "-33.5621,150.4017",
+    ]) {
+      expect(redactTilePathPatterns(text)).toContain("[redacted-coords]");
+    }
+  });
+
+  it("leaves low-precision and non-coordinate number pairs alone", () => {
+    // Four decimals is the floor: below it the false-positive rate on ordinary
+    // numbers costs more debuggability than the ~1 km it would protect.
+    expect(redactTilePathPatterns("took 1.23, 4.56 seconds")).toBe(
+      "took 1.23, 4.56 seconds",
+    );
+    expect(redactTilePathPatterns("v2.1, build 7")).toBe("v2.1, build 7");
+  });
+
   it("handles non-Error throwables", () => {
     expect(safeErrorForLog("just a string").name).toBe("NonError");
     expect(safeErrorForLog("just a string").message).toBe("just a string");
+  });
+});
+
+// PRIV-109: the query string carries user search terms (?search= is matched
+// against canyon NAMES in GET /trips), and no redact path can reach inside a
+// URL string.
+describe("serializeRequestForLog", () => {
+  it("logs the path without the query string", () => {
+    const out = serializeRequestForLog({
+      id: "req-1",
+      method: "GET",
+      url: "/trips?search=Claustral&limit=20",
+    });
+    expect(out.url).toBe("/trips");
+    expect(JSON.stringify(out)).not.toContain("Claustral");
+  });
+
+  it("keeps a query-free path intact and never emits a body", () => {
+    const out = serializeRequestForLog({ id: "req-2", method: "POST", url: "/canyons" });
+    expect(out.url).toBe("/canyons");
+    expect(out).not.toHaveProperty("body");
+  });
+});
+
+// The api/CLAUDE.md rule "never log a raw thrown error; scrub it with
+// safeErrorForLog" was a comment until this test: 21 sites had drifted past it
+// by the 2026-08-28 review (APIC-001). Pino's redact.paths only censor
+// structured keys — they cannot reach free text inside err.message/err.stack,
+// where Prisma renders user-supplied canyon names and coordinates.
+describe("no raw err reaches a log site", () => {
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) return sourceFiles(full);
+      if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) return [];
+      return [full];
+    });
+  }
+
+  it("every logger.* call scrubs its error argument", () => {
+    // An `err` key in a logger call's object argument whose value is not a
+    // safeErrorForLog(...) call (shorthand `{ err }` included).
+    const rawErrLogSite =
+      /logger\.\w+\(\s*\{[^}]*?[{,]\s*err\s*(?::(?!\s*safeErrorForLog\()|[,}])/g;
+    const offenders = sourceFiles(join(__dirname, "..")).flatMap((file) =>
+      (readFileSync(file, "utf8").match(rawErrLogSite) ?? []).map(
+        (hit) => `${file}: ${hit.replace(/\s+/g, " ")}`,
+      ),
+    );
+    expect(offenders).toEqual([]);
   });
 });

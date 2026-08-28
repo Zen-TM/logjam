@@ -28,6 +28,7 @@ const PUSH_TITLES: Record<string, string> = {
   topo_export_complete: "Topo export finished",
   topo_export_skipped: "Auto-export skipped",
   geo_pdf_complete: "GeoPDF finished",
+  geo_pdf_failed: "GeoPDF failed",
   item_shared: "Something was shared with you",
   file_sent: "A friend sent you a file",
 };

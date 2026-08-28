@@ -168,3 +168,30 @@ describe("canyons routes (fake auth = alice)", () => {
     }
   });
 });
+
+// APIR-010: `name`/`altNames`/`notes`/`attributes` were unvalidated, so a
+// mistyped field passed validation and died inside Prisma as a raw 500 — and
+// on the sync push path one such op poisoned every flush of that batch.
+describe("POST /canyons — free-text field validation", () => {
+  const AUTH_LOCAL = { Authorization: "Bearer fake-token" } as const;
+
+  it("400s (never 500s) on mistyped name/altNames/notes/attributes", async () => {
+    const bad: Record<string, unknown>[] = [
+      { name: 123 },
+      { name: "   " },
+      { name: "x".repeat(201) },
+      { name: "ok", altNames: "not-an-array" },
+      { name: "ok", altNames: [1] },
+      { name: "ok", notes: 7 },
+      { name: "ok", attributes: [1, 2] },
+    ];
+    for (const fields of bad) {
+      const res = await request(API_URL)
+        .post("/canyons")
+        .set(AUTH_LOCAL)
+        .send({ latitude: -33.7, longitude: 150.3, ...fields });
+      expect(res.status).toBe(400);
+    }
+  });
+});
+

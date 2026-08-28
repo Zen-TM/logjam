@@ -5,7 +5,8 @@ vi.mock("../services/prisma", () => ({
     topoJob: { updateMany: vi.fn(), findMany: vi.fn() },
     topoExportJob: { updateMany: vi.fn(), findMany: vi.fn() },
     geoPdfJob: { updateMany: vi.fn(), findMany: vi.fn() },
-    notification: { create: vi.fn() },
+    notification: { create: vi.fn(), createMany: vi.fn() },
+    deviceToken: { findMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -59,6 +60,26 @@ const transaction = (prisma as unknown as { $transaction: Mock }).$transaction;
 const notificationCreate = (
   prisma as unknown as { notification: { create: Mock } }
 ).notification.create;
+const notificationCreateMany = (
+  prisma as unknown as { notification: { createMany: Mock } }
+).notification.createMany;
+const deviceTokenFindMany = (
+  prisma as unknown as { deviceToken: { findMany: Mock } }
+).deviceToken.findMany;
+
+/**
+ * reapStuckTopoJobs reads the overdue rows first (an updateMany reports a
+ * count, not rows, so there would otherwise be nobody to notify), then claims
+ * each row with its own status-guarded updateMany — `count === 1` means THIS
+ * pass won the flip and owes the owner a notification (APIC-005). Stage rows by
+ * the status each read asks for instead of by call order.
+ */
+function stageByStatus(mock: Mock, rowsByStatus: Record<string, unknown[]>) {
+  mock.mockImplementation(async (args: { where?: { status?: string } }) => {
+    const status = args?.where?.status ?? "";
+    return rowsByStatus[status] ?? [];
+  });
+}
 const launchExport = createAndLaunchTopoExport as unknown as Mock;
 
 // Transaction client handed to the expiry sweep's interactive callback.
@@ -90,6 +111,8 @@ beforeEach(() => {
   txExecuteRaw.mockReset().mockResolvedValue(1);
   txShareDeleteMany.mockReset().mockResolvedValue({ count: 0 });
   notificationCreate.mockReset().mockResolvedValue({});
+  notificationCreateMany.mockReset().mockResolvedValue({ count: 0 });
+  deviceTokenFindMany.mockReset().mockResolvedValue([]);
   launchExport.mockReset().mockResolvedValue("export-id");
   transaction
     .mockReset()
@@ -209,16 +232,29 @@ describe("isProcessingDead", () => {
 
 describe("reapStuckTopoJobs — topo_jobs", () => {
   it("anchors the pending cutoff on the pending timeout", async () => {
+    stageByStatus(jobFindMany, { pending: [{ id: "p1", userId: "u1", name: null }] });
+    jobUpdateMany.mockResolvedValue({ count: 1 });
+
     await reapStuckTopoJobs(NOW);
-    const pendingUpdate = jobUpdateMany.mock.calls[0][0];
-    expect(pendingUpdate.where.status).toBe("pending");
-    expect(pendingUpdate.where.updatedAt.lt).toEqual(
+
+    const pendingRead = jobFindMany.mock.calls[0][0];
+    expect(pendingRead.where.status).toBe("pending");
+    expect(pendingRead.where.updatedAt.lt).toEqual(
       new Date(NOW.getTime() - env.TOPO_REAPER_PENDING_TIMEOUT_MS),
     );
+    // The claim stays status-guarded: a job that left `pending` between the
+    // read and the write must not be dragged back to failed.
+    const pendingUpdate = jobUpdateMany.mock.calls[0][0];
+    expect(pendingUpdate.where.status).toBe("pending");
+    expect(pendingUpdate.where.id).toBe("p1");
     expect(pendingUpdate.data.status).toBe("failed");
   });
 
   it("pins the reaper messages to honest retry semantics (ARCH-008)", async () => {
+    stageByStatus(jobFindMany, { pending: [{ id: "p1", userId: "u1", name: null }] });
+    stageByStatus(exportFindMany, {
+      queued: [{ id: "q1", userId: "u1", format: "geotiff" }],
+    });
     jobUpdateMany.mockResolvedValue({ count: 1 });
     exportUpdateMany.mockResolvedValue({ count: 1 });
     await reapStuckTopoJobs(NOW);
@@ -250,13 +286,15 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
       estimatedSeconds: Math.round(100 * 8.5) * 60,
       ecsTaskArn: "arn:task/large",
     };
-    jobFindMany.mockResolvedValue([overdue, longButAlive]);
+    stageByStatus(jobFindMany, { processing: [overdue, longButAlive] });
     jobUpdateMany.mockResolvedValue({ count: 1 });
 
     await reapStuckTopoJobs(NOW);
 
-    const processingUpdate = jobUpdateMany.mock.calls[1][0];
-    expect(processingUpdate.where.id.in).toEqual(["job-overdue"]);
+    const processingUpdate = jobUpdateMany.mock.calls[0][0];
+    // One claim, for the dead job only — the advancing one is never touched.
+    expect(jobUpdateMany).toHaveBeenCalledTimes(1);
+    expect(processingUpdate.where.id).toBe("job-overdue");
     expect(processingUpdate.where.status).toBe("processing");
     expect(processingUpdate.data.status).toBe("failed");
   });
@@ -265,10 +303,12 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
     const old = new Date(
       NOW.getTime() - env.TOPO_REAPER_PROCESSING_TIMEOUT_MS - 60_000,
     );
-    jobFindMany.mockResolvedValue([
-      { id: "j1", startedAt: old, updatedAt: old, estimatedSeconds: null, ecsTaskArn: "arn:task/j1" },
-      { id: "j2", startedAt: old, updatedAt: old, estimatedSeconds: null, ecsTaskArn: null },
-    ]);
+    stageByStatus(jobFindMany, {
+      processing: [
+        { id: "j1", startedAt: old, updatedAt: old, estimatedSeconds: null, ecsTaskArn: "arn:task/j1" },
+        { id: "j2", startedAt: old, updatedAt: old, estimatedSeconds: null, ecsTaskArn: null },
+      ],
+    });
     jobUpdateMany.mockResolvedValue({ count: 2 });
 
     await reapStuckTopoJobs(NOW);
@@ -281,9 +321,11 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
     const old = new Date(
       NOW.getTime() - env.TOPO_REAPER_PROCESSING_TIMEOUT_MS - 60_000,
     );
-    jobFindMany.mockResolvedValue([
-      { id: "j1", startedAt: old, updatedAt: old, estimatedSeconds: null, ecsTaskArn: "arn:task/j1" },
-    ]);
+    stageByStatus(jobFindMany, {
+      processing: [
+        { id: "j1", startedAt: old, updatedAt: old, estimatedSeconds: null, ecsTaskArn: "arn:task/j1" },
+      ],
+    });
     jobUpdateMany.mockResolvedValue({ count: 1 });
     ecsSend.mockRejectedValue(new Error("task already stopped"));
 
@@ -293,18 +335,28 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
 
 describe("reapStuckTopoJobs — topo_export_jobs (ARCH-002)", () => {
   it("fails queued exports older than the queued timeout, anchored on createdAt", async () => {
+    stageByStatus(exportFindMany, {
+      queued: [{ id: "q1", userId: "u1", format: "geotiff" }],
+    });
+    exportUpdateMany.mockResolvedValue({ count: 1 });
+
     await reapStuckTopoJobs(NOW);
-    const queuedUpdate = exportUpdateMany.mock.calls[0][0];
-    expect(queuedUpdate.where.status).toBe("queued");
-    expect(queuedUpdate.where.createdAt.lt).toEqual(
+
+    const queuedRead = exportFindMany.mock.calls[0][0];
+    expect(queuedRead.where.status).toBe("queued");
+    expect(queuedRead.where.createdAt.lt).toEqual(
       new Date(NOW.getTime() - env.TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS),
     );
+    const queuedUpdate = exportUpdateMany.mock.calls[0][0];
+    expect(queuedUpdate.where.status).toBe("queued");
+    expect(queuedUpdate.where.id).toBe("q1");
     expect(queuedUpdate.data.status).toBe("failed");
   });
 
   it("selects running exports on startedAt with a createdAt fallback", async () => {
     await reapStuckTopoJobs(NOW);
-    const runningWhere = exportFindMany.mock.calls[0][0].where;
+    // calls[0] is the queued-id read; calls[1] is the running select.
+    const runningWhere = exportFindMany.mock.calls[1][0].where;
     const cutoff = new Date(
       NOW.getTime() - env.TOPO_REAPER_EXPORT_RUNNING_TIMEOUT_MS,
     );
@@ -316,20 +368,21 @@ describe("reapStuckTopoJobs — topo_export_jobs (ARCH-002)", () => {
   });
 
   it("force-fails overdue running exports status-guarded and stops their tasks", async () => {
-    exportFindMany.mockResolvedValue([
-      { id: "e1", ecsTaskArn: "arn:task/e1" },
-      { id: "e2", ecsTaskArn: null },
-    ]);
-    // First exportUpdateMany call is the queued sweep (nothing), second is
-    // the running sweep (both rows).
-    exportUpdateMany
-      .mockResolvedValueOnce({ count: 0 })
-      .mockResolvedValueOnce({ count: 2 });
+    stageByStatus(exportFindMany, {
+      running: [
+        { id: "e1", userId: "u1", format: "geotiff", ecsTaskArn: "arn:task/e1" },
+        { id: "e2", userId: "u1", format: "geotiff", ecsTaskArn: null },
+      ],
+    });
+    exportUpdateMany.mockResolvedValue({ count: 1 });
 
     const count = await reapStuckTopoJobs(NOW);
 
-    const runningUpdate = exportUpdateMany.mock.calls[1][0];
-    expect(runningUpdate.where.id.in).toEqual(["e1", "e2"]);
+    expect(exportUpdateMany.mock.calls.map((call) => call[0].where.id)).toEqual([
+      "e1",
+      "e2",
+    ]);
+    const runningUpdate = exportUpdateMany.mock.calls[0][0];
     expect(runningUpdate.where.status).toBe("running");
     expect(ecsSend).toHaveBeenCalledTimes(1);
     expect(ecsSend.mock.calls[0][0].input).toMatchObject({ task: "arn:task/e1" });
@@ -337,8 +390,18 @@ describe("reapStuckTopoJobs — topo_export_jobs (ARCH-002)", () => {
   });
 
   it("sums reap counts across all four sweeps", async () => {
-    jobUpdateMany.mockResolvedValue({ count: 2 });
-    exportUpdateMany.mockResolvedValue({ count: 3 });
+    stageByStatus(jobFindMany, {
+      pending: [
+        { id: "p1", userId: "u1", name: null },
+        { id: "p2", userId: "u1", name: null },
+      ],
+    });
+    stageByStatus(exportFindMany, {
+      queued: ["q1", "q2", "q3"].map((id) => ({ id, userId: "u1", format: "gpkg" })),
+    });
+    // Every claim wins → the count is the number of rows this pass claimed.
+    jobUpdateMany.mockResolvedValue({ count: 1 });
+    exportUpdateMany.mockResolvedValue({ count: 1 });
     // No processing/running rows → only pending (2) + queued (3).
     const count = await reapStuckTopoJobs(NOW);
     expect(count).toBe(5);
@@ -356,21 +419,25 @@ describe("reapStuckTopoJobs — legacy prod row shapes (gap 6)", () => {
     const old = new Date(
       NOW.getTime() - env.TOPO_REAPER_PROCESSING_TIMEOUT_MS - 60_000,
     );
-    jobFindMany.mockResolvedValue([
-      {
-        id: "legacy-job",
-        startedAt: null, // pre-startedAt column
-        updatedAt: old,
-        estimatedSeconds: null,
-        ecsTaskArn: null, // pre-task_arn column
-      },
-    ]);
+    stageByStatus(jobFindMany, {
+      processing: [
+        {
+          id: "legacy-job",
+          userId: "u1",
+          name: null,
+          startedAt: null, // pre-startedAt column
+          updatedAt: old,
+          estimatedSeconds: null,
+          ecsTaskArn: null, // pre-task_arn column
+        },
+      ],
+    });
     jobUpdateMany.mockResolvedValue({ count: 1 });
 
     const count = await reapStuckTopoJobs(NOW);
 
-    const processingUpdate = jobUpdateMany.mock.calls[1][0];
-    expect(processingUpdate.where.id.in).toEqual(["legacy-job"]);
+    const processingUpdate = jobUpdateMany.mock.calls[0][0];
+    expect(processingUpdate.where.id).toBe("legacy-job");
     expect(processingUpdate.where.status).toBe("processing");
     expect(processingUpdate.data.status).toBe("failed");
     // No task ARN → no StopTask attempted with a null task.
@@ -379,16 +446,16 @@ describe("reapStuckTopoJobs — legacy prod row shapes (gap 6)", () => {
   });
 
   it("reaps a running export with NULL startedAt and NULL ecsTaskArn without a StopTask", async () => {
-    exportFindMany.mockResolvedValue([{ id: "legacy-export", ecsTaskArn: null }]);
-    exportUpdateMany
-      .mockResolvedValueOnce({ count: 0 }) // queued sweep
-      .mockResolvedValueOnce({ count: 1 }); // running sweep
+    stageByStatus(exportFindMany, {
+      running: [
+        { id: "legacy-export", userId: "u1", format: "gpkg", ecsTaskArn: null },
+      ],
+    });
+    exportUpdateMany.mockResolvedValue({ count: 1 });
 
     const count = await reapStuckTopoJobs(NOW);
 
-    expect(exportUpdateMany.mock.calls[1][0].where.id.in).toEqual([
-      "legacy-export",
-    ]);
+    expect(exportUpdateMany.mock.calls[0][0].where.id).toBe("legacy-export");
     expect(ecsSend).not.toHaveBeenCalled();
     expect(count).toBeGreaterThanOrEqual(1);
   });
@@ -397,21 +464,129 @@ describe("reapStuckTopoJobs — legacy prod row shapes (gap 6)", () => {
     const old = new Date(
       NOW.getTime() - env.TOPO_REAPER_PROCESSING_TIMEOUT_MS - 60_000,
     );
-    jobFindMany.mockResolvedValue([
-      { id: "j", startedAt: null, updatedAt: old, estimatedSeconds: null, ecsTaskArn: null },
-    ]);
+    stageByStatus(jobFindMany, {
+      processing: [
+        {
+          id: "j",
+          userId: "u1",
+          name: null,
+          startedAt: null,
+          updatedAt: old,
+          estimatedSeconds: null,
+          ecsTaskArn: null,
+        },
+      ],
+    });
     jobUpdateMany.mockResolvedValue({ count: 1 });
-    exportFindMany.mockResolvedValue([{ id: "e", ecsTaskArn: null }]);
-    exportUpdateMany
-      .mockResolvedValueOnce({ count: 0 })
-      .mockResolvedValueOnce({ count: 1 });
-    geoPdfFindMany.mockResolvedValue([{ id: "g", ecsTaskArn: null }]);
-    geoPdfUpdateMany
-      .mockResolvedValueOnce({ count: 0 })
-      .mockResolvedValueOnce({ count: 1 });
+    stageByStatus(exportFindMany, {
+      running: [{ id: "e", userId: "u1", format: "gpkg", ecsTaskArn: null }],
+    });
+    exportUpdateMany.mockResolvedValue({ count: 1 });
+    stageByStatus(geoPdfFindMany, {
+      running: [{ id: "g", userId: "u1", ecsTaskArn: null }],
+    });
+    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
 
     await expect(reapStuckTopoJobs(NOW)).resolves.toBeGreaterThanOrEqual(3);
     expect(ecsSend).not.toHaveBeenCalled();
+  });
+});
+
+// ── Reaped jobs are user-visible (APIC-005) ────────────────────────────────
+//
+// The workers' own except paths write a Notification + push on failure; the
+// reaper used to write status="failed" and nothing else, so a user whose task
+// was never placed or was SIGKILLed learned about it only by polling the list.
+// Same terminal state, two behaviours.
+
+describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
+  it("writes a topo_failed notification + push for a reaped topo job", async () => {
+    stageByStatus(jobFindMany, {
+      pending: [{ id: "p1", userId: "u1", name: "Claustral run" }],
+    });
+    jobUpdateMany.mockResolvedValue({ count: 1 });
+    deviceTokenFindMany.mockResolvedValue([{ token: "ExponentPushToken[x]" }]);
+
+    await reapStuckTopoJobs(NOW);
+
+    expect(notificationCreateMany).toHaveBeenCalledTimes(1);
+    const rows = notificationCreateMany.mock.calls[0][0].data;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].userId).toBe("u1");
+    expect(rows[0].type).toBe("topo_failed");
+    expect(rows[0].payload).toMatchObject({ jobId: "p1" });
+  });
+
+  // The dedup rule (root CLAUDE.md): the status-guarded claim is per row, and
+  // only `count === 1` means THIS pass won it. Prod runs the API on Elastic
+  // Beanstalk, so two instances can sweep the same overdue ids at once — the
+  // loser's updateMany reports 0 and it must stay silent, or the user gets two
+  // notifications and two pushes for one dead job.
+  it("stays silent for a row another instance claimed first", async () => {
+    stageByStatus(jobFindMany, {
+      pending: [{ id: "p1", userId: "u1", name: null }],
+    });
+    jobUpdateMany.mockResolvedValue({ count: 0 }); // lost the race
+    deviceTokenFindMany.mockResolvedValue([{ token: "ExponentPushToken[x]" }]);
+
+    const count = await reapStuckTopoJobs(NOW);
+
+    expect(jobUpdateMany).toHaveBeenCalledTimes(1);
+    expect(notificationCreateMany).not.toHaveBeenCalled();
+    // No push either — nothing was looked up to push to.
+    expect(deviceTokenFindMany).not.toHaveBeenCalled();
+    // And the returned count only ever counts rows this pass claimed.
+    expect(count).toBe(0);
+  });
+
+  it("notifies only the rows it won when a pass claims some and loses others", async () => {
+    stageByStatus(jobFindMany, {
+      pending: [
+        { id: "won", userId: "u1", name: null },
+        { id: "lost", userId: "u2", name: null },
+      ],
+    });
+    jobUpdateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+
+    const count = await reapStuckTopoJobs(NOW);
+
+    const rows = notificationCreateMany.mock.calls[0][0].data;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].payload).toMatchObject({ jobId: "won" });
+    expect(count).toBe(1);
+  });
+
+  it("uses each pipeline's own notification type for exports and GeoPDFs", async () => {
+    stageByStatus(exportFindMany, {
+      queued: [{ id: "e1", userId: "u2", format: "geotiff" }],
+    });
+    exportUpdateMany.mockResolvedValue({ count: 1 });
+    stageByStatus(geoPdfFindMany, { queued: [{ id: "g1", userId: "u3" }] });
+    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
+
+    await reapStuckTopoJobs(NOW);
+
+    const written = notificationCreateMany.mock.calls.flatMap((call) => call[0].data);
+    const exportRow = written.find((r: { userId: string }) => r.userId === "u2");
+    const geoPdfRow = written.find((r: { userId: string }) => r.userId === "u3");
+    // Types both clients already render, with the failure carried in the
+    // payload exactly as the Python/TS workers write it.
+    expect(exportRow.type).toBe("topo_export_complete");
+    expect(exportRow.payload).toMatchObject({ status: "failed", format: "geotiff" });
+    expect(geoPdfRow.type).toBe("geo_pdf_complete");
+    expect(geoPdfRow.payload).toMatchObject({ status: "failed" });
+  });
+
+  it("does not abort the sweep when the notification write fails", async () => {
+    stageByStatus(jobFindMany, {
+      pending: [{ id: "p1", userId: "u1", name: null }],
+    });
+    jobUpdateMany.mockResolvedValue({ count: 1 });
+    notificationCreateMany.mockRejectedValue(new Error("db down"));
+
+    await expect(reapStuckTopoJobs(NOW)).resolves.toBe(1);
   });
 });
 
@@ -499,18 +674,26 @@ describe("expireCompletedExports", () => {
 
 describe("reapStuckTopoJobs — geo_pdf_jobs", () => {
   it("fails queued GeoPDF jobs older than the queued timeout, anchored on createdAt", async () => {
+    stageByStatus(geoPdfFindMany, { queued: [{ id: "q1", userId: "u1" }] });
+    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
+
     await reapStuckTopoJobs(NOW);
-    const queuedUpdate = geoPdfUpdateMany.mock.calls[0][0];
-    expect(queuedUpdate.where.status).toBe("queued");
-    expect(queuedUpdate.where.createdAt.lt).toEqual(
+
+    const queuedRead = geoPdfFindMany.mock.calls[0][0];
+    expect(queuedRead.where.status).toBe("queued");
+    expect(queuedRead.where.createdAt.lt).toEqual(
       new Date(NOW.getTime() - env.GEO_PDF_QUEUED_TIMEOUT_MS),
     );
+    const queuedUpdate = geoPdfUpdateMany.mock.calls[0][0];
+    expect(queuedUpdate.where.status).toBe("queued");
+    expect(queuedUpdate.where.id).toBe("q1");
     expect(queuedUpdate.data.status).toBe("failed");
   });
 
   it("selects running GeoPDF jobs on startedAt with a createdAt fallback", async () => {
     await reapStuckTopoJobs(NOW);
-    const runningWhere = geoPdfFindMany.mock.calls[0][0].where;
+    // calls[0] is the queued-id read; calls[1] is the running select.
+    const runningWhere = geoPdfFindMany.mock.calls[1][0].where;
     const cutoff = new Date(NOW.getTime() - env.GEO_PDF_RUNNING_TIMEOUT_MS);
     expect(runningWhere.status).toBe("running");
     expect(runningWhere.OR).toEqual([
@@ -520,20 +703,21 @@ describe("reapStuckTopoJobs — geo_pdf_jobs", () => {
   });
 
   it("force-fails overdue running GeoPDF jobs status-guarded and stops their tasks", async () => {
-    geoPdfFindMany.mockResolvedValue([
-      { id: "g1", ecsTaskArn: "arn:task/g1" },
-      { id: "g2", ecsTaskArn: null },
-    ]);
-    // First geoPdfUpdateMany call is the queued sweep (nothing), second is
-    // the running sweep (both rows).
-    geoPdfUpdateMany
-      .mockResolvedValueOnce({ count: 0 })
-      .mockResolvedValueOnce({ count: 2 });
+    stageByStatus(geoPdfFindMany, {
+      running: [
+        { id: "g1", userId: "u1", ecsTaskArn: "arn:task/g1" },
+        { id: "g2", userId: "u1", ecsTaskArn: null },
+      ],
+    });
+    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
 
     const count = await reapStuckTopoJobs(NOW);
 
-    const runningUpdate = geoPdfUpdateMany.mock.calls[1][0];
-    expect(runningUpdate.where.id.in).toEqual(["g1", "g2"]);
+    expect(geoPdfUpdateMany.mock.calls.map((call) => call[0].where.id)).toEqual([
+      "g1",
+      "g2",
+    ]);
+    const runningUpdate = geoPdfUpdateMany.mock.calls[0][0];
     expect(runningUpdate.where.status).toBe("running");
     expect(ecsSend).toHaveBeenCalledTimes(1);
     expect(ecsSend.mock.calls[0][0].input).toMatchObject({ task: "arn:task/g1" });
@@ -541,10 +725,12 @@ describe("reapStuckTopoJobs — geo_pdf_jobs", () => {
   });
 
   it("includes geo_pdf_jobs counts in the total reaped", async () => {
-    geoPdfUpdateMany.mockResolvedValue({ count: 4 });
+    stageByStatus(geoPdfFindMany, {
+      queued: ["q1", "q2", "q3", "q4"].map((id) => ({ id, userId: "u1" })),
+    });
+    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
     const count = await reapStuckTopoJobs(NOW);
-    // queued (4) + running (4, since the running findMany returns [] by
-    // default so no second updateMany is issued for running).
+    // queued (4 claimed); the running read returns [] so nothing else runs.
     expect(count).toBe(4);
   });
 });

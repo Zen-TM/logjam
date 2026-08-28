@@ -132,3 +132,31 @@ describe("validateEnv — origin-verify", () => {
     expect(env.ORIGIN_VERIFY_SECRET).toBe("token");
   });
 });
+
+// APIC-004: DATABASE_SSL / DATABASE_SSL_CA / GEO_PDF_JOB_ID were consumed but
+// absent from the schema, so nothing validated them. DATABASE_SSL is an exact
+// "disable" compare in services/prisma.ts — a near-miss value used to leave
+// verified TLS on and surface as an opaque pg_hba error.
+describe("TLS + worker env vars are in the schema", () => {
+  it("accepts DATABASE_SSL=disable and the CA path", () => {
+    process.env.DATABASE_SSL = "disable";
+    process.env.DATABASE_SSL_CA = "/app/rds-ca.pem";
+    process.env.GEO_PDF_JOB_ID = "job-1";
+    const env = validateEnv();
+    expect(env.DATABASE_SSL).toBe("disable");
+    expect(env.DATABASE_SSL_CA).toBe("/app/rds-ca.pem");
+    expect(env.GEO_PDF_JOB_ID).toBe("job-1");
+  });
+
+  it("rejects a near-miss DATABASE_SSL value instead of silently ignoring it", () => {
+    for (const bad of ["DISABLED", "false", "true", "require"]) {
+      process.env.DATABASE_SSL = bad;
+      expect(() => validateEnv()).toThrow(/process.exit\(1\)/);
+    }
+  });
+
+  it("leaves all three optional", () => {
+    expect(validateEnv().DATABASE_SSL).toBeUndefined();
+  });
+});
+

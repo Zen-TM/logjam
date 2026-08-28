@@ -37,7 +37,19 @@ export async function assertCanSubmit(
   tileCount: number | null | undefined,
   db: DbClient = prisma,
 ) {
-  if (!tileCount) return;
+  if (tileCount === null || tileCount === undefined) return;
+  // Type-check at the boundary: a mistyped tileCount survives arithmetic here
+  // ("5" concatenates instead of adding, so the quota never trips) and then
+  // dies inside Prisma as a raw 500 on the create/update. Both callers route
+  // through this guard.
+  if (
+    typeof tileCount !== "number" ||
+    !Number.isInteger(tileCount) ||
+    tileCount < 0
+  ) {
+    throw new AppError(400, "tileCount must be a non-negative integer");
+  }
+  if (tileCount === 0) return;
   const { used, quota, resetAt } = await getMonthlyTileUsage(user.id, user.monthlyTileQuota, db);
   if (used + tileCount > quota) {
     throw new AppError(429, "Monthly tile quota exceeded", { used, quota, resetAt });

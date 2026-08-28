@@ -11,6 +11,7 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { AppError } from "../middleware/errorHandler";
+import { elevationLimiter } from "../middleware/rateLimit";
 import {
   buildElevationProfile,
   densifyLineSegments,
@@ -30,6 +31,8 @@ const router = Router();
 router.post(
   "/profile",
   requireAuth,
+  // After requireAuth so the limiter buckets per user, not per IP.
+  elevationLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     // Reuses the route point parser so the accepted geometry — shape, bounds
     // and the MAX_ROUTE_POINTS ceiling — is defined in exactly one place, and

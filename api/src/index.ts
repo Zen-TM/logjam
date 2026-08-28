@@ -16,7 +16,7 @@ import helmet from "helmet";
 import pinoHttp from "pino-http";
 import { randomUUID, timingSafeEqual } from "crypto";
 import { getEnv } from "./lib/env";
-import { logger } from "./lib/logger";
+import { logger, safeErrorForLog, serializeRequestForLog } from "./lib/logger";
 import prisma from "./services/prisma";
 import { AppError, errorHandler } from "./middleware/errorHandler";
 import { globalLimiter } from "./middleware/rateLimit";
@@ -80,12 +80,8 @@ app.use(
       return "info";
     },
     serializers: {
-      req: (req) => ({
-        id: req.id,
-        method: req.method,
-        url: req.url,
-        // Deliberately omit body — payloads may contain canyon names/coords.
-      }),
+      // Path-only URL + no body: see serializeRequestForLog in lib/logger.
+      req: serializeRequestForLog,
     },
   }),
 );
@@ -99,7 +95,7 @@ app.use(
       return callback(null, false);
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Fake-Auth", "X-Request-Id"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Fake-Sub", "X-Request-Id"],
     exposedHeaders: ["X-Request-Id", "X-Total-Count"],
     credentials: true,
   }),
@@ -149,7 +145,7 @@ app.get("/ready", async (_req, res) => {
     ]);
     res.json({ status: "ready" });
   } catch (err) {
-    logger.warn({ err }, "ready_check_failed");
+    logger.warn({ err: safeErrorForLog(err) }, "ready_check_failed");
     res.status(503).json({ status: "db_unavailable" });
   }
 });
@@ -249,13 +245,13 @@ function shutdown(signal: string) {
   force.unref();
 
   server.close(async (err) => {
-    if (err) logger.error({ err }, "server_close_error");
+    if (err) logger.error({ err: safeErrorForLog(err) }, "server_close_error");
     try {
       await prisma.$disconnect();
       logger.info("shutdown_complete");
       process.exit(0);
     } catch (disconnectErr) {
-      logger.error({ err: disconnectErr }, "prisma_disconnect_error");
+      logger.error({ err: safeErrorForLog(disconnectErr) }, "prisma_disconnect_error");
       process.exit(1);
     }
   });
@@ -265,11 +261,11 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
 
 process.on("unhandledRejection", (reason) => {
-  logger.error({ err: reason }, "unhandled_rejection");
+  logger.error({ err: safeErrorForLog(reason) }, "unhandled_rejection");
 });
 
 process.on("uncaughtException", (err) => {
-  logger.fatal({ err }, "uncaught_exception");
+  logger.fatal({ err: safeErrorForLog(err) }, "uncaught_exception");
   shutdown("uncaughtException");
 });
 

@@ -14,7 +14,7 @@ import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import prisma from "../services/prisma";
 import { s3 } from "../services/awsClients";
 import { getEnv } from "./env";
-import { logger } from "./logger";
+import { logger, safeErrorForLog } from "./logger";
 import { decrementStorageUsed } from "./storageQuota";
 
 /**
@@ -62,7 +62,7 @@ export async function sweepExpiredFileSends(
     } catch (err) {
       // No filename, no recipient ids — a send's filename is user text and the
       // row id is enough to find it.
-      logger.error({ err, id: row.id }, "file_send_expiry_failed");
+      logger.error({ err: safeErrorForLog(err), id: row.id }, "file_send_expiry_failed");
     }
   }
   return swept;

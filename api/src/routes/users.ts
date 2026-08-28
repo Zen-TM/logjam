@@ -19,7 +19,7 @@ import { getMonthlyTileUsage } from "../lib/tileQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
-import { logger } from "../lib/logger";
+import { logger, safeErrorForLog } from "../lib/logger";
 import { accountDeleteTombstones } from "../lib/syncTombstones";
 import { snapshotWaypointVisibility } from "../lib/waypointLink";
 
@@ -32,14 +32,19 @@ function shortHash(value: string): string {
 }
 
 async function cognitoUserExists(sub: string): Promise<boolean> {
-  const poolId = process.env.COGNITO_USER_POOL_ID;
-  if (!poolId) return true; // fail safe: assume exists if pool not configured
+  // env.ts makes COGNITO_USER_POOL_ID required whenever AUTH_MODE=cognito, so an
+  // unset pool id only ever happens in fake-auth dev, where there is no Cognito
+  // directory to ask and no takeover to guard against. Deliberate fail-safe.
+  const poolId = getEnv().COGNITO_USER_POOL_ID;
+  if (!poolId) return true;
   try {
     await cognitoIdp.send(new AdminGetUserCommand({ UserPoolId: poolId, Username: sub }));
     return true;
   } catch (err) {
     if (err instanceof UserNotFoundException) return false;
-    // IAM not granted or network error — fail safe: treat as existing
+    // IAM not granted or network error — fail safe: treat as existing, but say
+    // so, or a missing AdminGetUser permission silently disables the guard.
+    logger.warn({ err: safeErrorForLog(err) }, "cognito_user_exists_check_failed");
     return true;
   }
 }

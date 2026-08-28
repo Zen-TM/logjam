@@ -205,6 +205,12 @@ type ApplyDecision = {
   targetCanyonId?: string;
 };
 
+// Cap decisions per request: each one does a target lookup plus a chunked
+// update write, so an unbounded array turns one call into thousands of writes.
+// Same both-ends contract as the other bulk endpoints (0 → 400, over cap → 413,
+// SEC-001); the RopeWiki corpus is far smaller than this.
+const APPLY_DECISION_LIMIT = 2000;
+
 // POST /ropewiki/import/apply — resolve review-tier decisions returned from
 // /import. Each decision either links the RopeWiki canyon onto an existing
 // user canyon (fill-nulls merge), creates a new canyon, or skips.
@@ -216,8 +222,14 @@ router.post(
     const user = await loadUser(req.user!.sub);
 
     const decisions = req.body?.decisions;
-    if (!Array.isArray(decisions)) {
-      throw new AppError(400, "decisions must be an array");
+    if (!Array.isArray(decisions) || decisions.length === 0) {
+      throw new AppError(400, "decisions must be a non-empty array");
+    }
+    if (decisions.length > APPLY_DECISION_LIMIT) {
+      throw new AppError(
+        413,
+        `Cannot apply more than ${APPLY_DECISION_LIMIT} decisions at once`,
+      );
     }
     const normalized: ApplyDecision[] = decisions.map((d, i) => {
       if (

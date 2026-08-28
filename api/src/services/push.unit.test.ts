@@ -32,6 +32,7 @@ describe("buildPushMessages — privacy invariant", () => {
       "topo_export_complete",
       "topo_export_skipped",
       "geo_pdf_complete",
+      "geo_pdf_failed",
       "unknown_future_type",
     ]) {
       const title = pushTitleFor(type);
@@ -41,6 +42,14 @@ describe("buildPushMessages — privacy invariant", () => {
       expect(title).toBe(pushTitleFor(type)); // deterministic
     }
     expect(pushTitleFor("unknown_future_type")).toBe("Logjam notification");
+  });
+
+  // APIC-002: a failed GeoPDF used to push "GeoPDF finished" — the push carries
+  // no status field, so the type is the only thing that can carry the outcome.
+  it("gives a failed GeoPDF its own title, distinct from the success one", () => {
+    expect(pushTitleFor("geo_pdf_failed")).toBe("GeoPDF failed");
+    expect(pushTitleFor("geo_pdf_failed")).not.toBe(pushTitleFor("geo_pdf_complete"));
+    expect(pushTitleFor("geo_pdf_failed")).not.toBe("Logjam notification");
   });
 
   it("throws loudly on a non-whitelisted data key (no free-text smuggling)", () => {

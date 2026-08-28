@@ -10,7 +10,7 @@ import prisma from "../services/prisma";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
-import { formatTripCanyonNames } from "@logjam/shared";
+import { formatTripCanyonNames, TRIP_NAME_MAX_LENGTH } from "@logjam/shared";
 import {
   canyonDeleteTombstones,
   tripDeleteTombstones,
@@ -22,6 +22,14 @@ import {
 } from "./waypointLink";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
+
+/** Derived trip titles obey the same length cap as user-supplied ones. */
+export function truncateDisplayName(name: string | null): string | null {
+  if (name === null) return null;
+  return name.length > TRIP_NAME_MAX_LENGTH
+    ? name.slice(0, TRIP_NAME_MAX_LENGTH)
+    : name;
+}
 
 /**
  * Delete canyons by ID for a given user, cascading through canyon-level media
@@ -35,6 +43,7 @@ const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
  * had no others). Per-trip media is therefore never deleted by this path and
  * never contributes to the quota decrement below.
  */
+
 export async function deleteCanyonsCascade(
   userId: string,
   canyonIds: string[],
@@ -97,8 +106,13 @@ export async function deleteCanyonsCascade(
         tx.tripLog.update({
           where: { id: trip.id },
           data: {
-            displayName: formatTripCanyonNames(
-              trip.canyons.map((link) => link.canyon.name),
+            // Capped like a user-typed title (parseDisplayName in
+            // routes/tripLogsGlobal). An uncapped derived join — 20 canyons
+            // with long names — persists a label PATCH /trips/:id would then
+            // reject, stranding the trip at a title the edit dialog cannot
+            // save (STP-005).
+            displayName: truncateDisplayName(
+              formatTripCanyonNames(trip.canyons.map((link) => link.canyon.name)),
             ),
           },
         }),

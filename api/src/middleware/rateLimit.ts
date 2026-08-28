@@ -60,6 +60,19 @@ export const regionClipLimiter = rateLimit({
   keyGenerator: userOrIpKey,
 });
 
+// Elevation profiles fan out to DEM tile fetches over the network per request
+// (services/elevation.ts), so cost scales with the bbox a caller asks for, not
+// with request count. Interactive though — the measure tool and route editor
+// re-request on edit — so this is a ceiling on sustained fan-out, not a
+// regionClip-style hard cap.
+export const elevationLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
 export const userPatchLimiter = rateLimit({
   windowMs: 60_000,
   max: 30,

@@ -6,7 +6,8 @@ import { Prisma } from "@prisma/client";
 import { resolveUser } from "../lib/resolveUser";
 import { assignTripImportKeys } from "../lib/importKeys";
 import { deleteTripsCascade } from "../lib/bulkDelete";
-import { parseTripTypes } from "./tripLogsGlobal";
+import { parseTripTypes, parseDisplayName } from "./tripLogsGlobal";
+import { enforceCanyoningTag } from "@logjam/shared";
 
 const BULK_DELETE_LIMIT = 500;
 // Cap import rows per request so a single authenticated call can't force an
@@ -119,9 +120,15 @@ router.post(
       // types is an optional free-text list (trip categories) — reuse the same
       // validator as the single-trip routes rather than re-deriving the rules
       // here. Row-level so a bad `types` value doesn't abort the whole batch.
+      // A canyon-linked trip always carries the `canyoning` tag — the same
+      // invariant POST/PATCH /trips maintain (tripLogsGlobal.ts). displayName
+      // gets the same trim + TRIP_NAME_MAX_LENGTH cap, or an imported row lands
+      // over the limit and PATCH /trips/:id can never save it again.
       let types: string[];
+      let displayName: string | null;
       try {
-        types = parseTripTypes(t.types) ?? [];
+        types = enforceCanyoningTag(parseTripTypes(t.types) ?? [], canyonId !== null);
+        displayName = parseDisplayName(t.displayName) ?? null;
       } catch (e) {
         if (e instanceof AppError) {
           errors.push({ index: i, error: e.message });
@@ -133,7 +140,7 @@ router.post(
       validTrips.push({
         index: i,
         canyonId,
-        displayName: t.displayName ?? null,
+        displayName,
         date,
         notes: t.notes ?? null,
         customFields: t.customFields ?? {},
@@ -266,7 +273,7 @@ router.post(
       throw new AppError(400, "ids array is required");
     }
     if (ids.length > BULK_DELETE_LIMIT) {
-      throw new AppError(400, `Cannot delete more than ${BULK_DELETE_LIMIT} trip logs at once`);
+      throw new AppError(413, `Cannot delete more than ${BULK_DELETE_LIMIT} trip logs at once`);
     }
 
     const deletedIds = await deleteTripsCascade(user.id, ids as string[]);
