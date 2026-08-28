@@ -21,7 +21,7 @@ resource "aws_db_instance" "main" {
   db_name                         = "logjam"
   db_subnet_group_name            = "logjam-db-subnet-group"
   dedicated_log_volume            = false
-  delete_automated_backups        = true
+  delete_automated_backups        = false
   deletion_protection             = true
   enabled_cloudwatch_logs_exports = ["postgresql"]
   engine                          = "postgres"
@@ -53,12 +53,19 @@ resource "aws_db_instance" "main" {
   performance_insights_enabled = false
   port                         = 5432
   publicly_accessible          = false
-  skip_final_snapshot          = true
-  storage_encrypted            = true
-  kms_key_id                   = "arn:aws:kms:ap-southeast-2:620853681701:key/abe78b2a-98e6-40a6-bafc-b8b4c2e7d577"
-  storage_type                 = "gp2"
-  username                     = "logjam_admin"
-  vpc_security_group_ids       = ["sg-06cc0aaa310968aa4"]
+  skip_final_snapshot          = false
+  # INF-007: belt-and-suspenders behind prevent_destroy + deletion_protection —
+  # both already guard against an accidental terraform destroy or console
+  # delete, but neither guards a *deliberate* one from losing everything. A
+  # static identifier is fine: this only matters if the instance is actually
+  # ever deleted, at which point whoever is running that delete picks a fresh
+  # name if this one is taken.
+  final_snapshot_identifier = "logjam-db-enc-final"
+  storage_encrypted         = true
+  kms_key_id                = "arn:aws:kms:ap-southeast-2:620853681701:key/abe78b2a-98e6-40a6-bafc-b8b4c2e7d577"
+  storage_type              = "gp2"
+  username                  = "logjam_admin"
+  vpc_security_group_ids    = ["sg-06cc0aaa310968aa4"]
 
   lifecycle {
     prevent_destroy = true

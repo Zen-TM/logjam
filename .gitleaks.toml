@@ -14,8 +14,16 @@ description = "Public, non-secret identifiers safe to commit"
 # and the user pool's sign-in endpoints are public by design. Security comes from
 # the pool's own policy, not from keeping these IDs hidden.
 # Committed env *templates* hold only placeholders / empty values by design.
+#
+# The two mobile paths below are flagged by the generic-api-key heuristic on
+# non-secret string literals: an AsyncStorage key name
+# (`recordingFixRateV2`) and a test-fixture logical key (`job1/hillshade`) —
+# neither is a credential. Wired into CI 2026-08-29 (INF-003); confirmed via
+# `gitleaks detect` against full history before allowlisting.
 paths = [
   '''.*\.example$''',
+  '''mobile/src/tracks/recordingPreferences\.ts''',
+  '''mobile/src/map/sourceResolver\.test\.ts''',
 ]
 
 regexTarget = "match"

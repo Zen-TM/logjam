@@ -29,7 +29,7 @@ variable "public_access_block" {
     restrict_public_buckets = bool
   })
   default     = null
-  description = "Public-access-block settings. null = do not manage one (LocalStack dev). Prod buckets differ: media/frontend are all-true; topo-jobs leaves block_public_policy/restrict_public_buckets false so its CloudFront OAC bucket policy can grant access."
+  description = "Public-access-block settings. null = do not manage one (LocalStack dev). Prod buckets are all-true (media/frontend/topo-jobs, CP-004) — the CloudFront OAC bucket policy grants access without needing any of the four PAB flags relaxed."
 }
 
 variable "cors_rules" {

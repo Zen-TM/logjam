@@ -1,11 +1,20 @@
 name: Deploy Topo Worker
 
+# Gated on CI: fires only after the `CI` workflow (ci.yml) completes
+# successfully for a push to main (mirrors deploy-api.yml, INF-004). A red CI
+# on that push means the deploy job's `if:` guard is false, so a failing
+# test can no longer poison the image the next on-demand RunTask launches.
+# workflow_run does NOT support a `paths:` filter, so the previous topo/**
+# path scoping is dropped — this workflow now runs after every green
+# push-to-main CI, rebuilding+pushing the worker image even for changes
+# outside topo/. The guard excludes pull_request CI runs (event == 'push'),
+# so it does not double-fire. workflow_run always uses this file as it exists
+# on the default branch.
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
-    paths:
-      - "topo/**"
-      - ".github/workflows/deploy-topo-worker.yml"
 
 env:
   ECR_REPOSITORY: logjam-topo-worker
@@ -14,28 +23,36 @@ jobs:
   deploy:
     name: Build and push worker image
     runs-on: ubuntu-latest
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
     permissions:
       id-token: write
       contents: read
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          # Build the exact commit CI validated, not the default-branch HEAD
+          # (github.sha under workflow_run can be a newer, unvalidated commit).
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-role
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
 
       - name: Build, tag, and push image to ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./topo
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
