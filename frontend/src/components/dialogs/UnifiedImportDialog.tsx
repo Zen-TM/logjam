@@ -78,6 +78,7 @@ import {
   menuPaperProps,
 } from "../../csvImport/dialogStyles";
 import { SectionLabel } from "../../csvImport/SectionLabel";
+import { describeDroppedCanyonRow, describeDroppedTripRow } from "../../csvImport/rowSkip";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useToast } from "../feedback/ToastProvider";
@@ -149,14 +150,23 @@ type ReviewState = {
 };
 
 type ImportOutcome =
-  | { kind: "canyon"; batchId: string; created: number; merged: number; merges: CanyonMergePair[]; skipped: number; errors: string[]; warnings: string[] }
-  | { kind: "triplog"; batchId: string; imported: number; updated: number; createdCanyons: number; noCanyon: number; linked: number; discarded: number; errors: string[]; warnings: string[] };
+  // `skipped` is the server's merge-policy skip count (from bulkCanyonImport);
+  // `droppedRows` is unrelated — source CSV rows this client never sent at all
+  // because a required field couldn't be read (FECO-006/D5). Both are real
+  // counts kept under separate names so neither silently hides the other.
+  | { kind: "canyon"; batchId: string; created: number; merged: number; merges: CanyonMergePair[]; skipped: number; droppedRows: number; errors: string[]; warnings: string[] }
+  | { kind: "triplog"; batchId: string; imported: number; updated: number; createdCanyons: number; noCanyon: number; linked: number; discarded: number; droppedRows: number; errors: string[]; warnings: string[] };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function genBatchId(): string {
   return crypto.randomUUID();
 }
+
+// PapaParse parses the whole file into memory synchronously; a canyon/trip
+// CSV is a few hundred KB at most, so this is generous headroom, not a tight
+// budget (FECO-003).
+const MAX_CSV_FILE_BYTES = 20 * 1024 * 1024;
 
 // Split a CSV `type` cell into multiple trip types: ";"-separated, each part
 // trimmed, empties dropped, deduped case-insensitively (first casing wins).
@@ -384,11 +394,20 @@ function UnifiedImportDialog({
   // Step 2 (review) state — only one kind of file is active per import run.
   const [activeKind, setActiveKind] = useState<"canyon" | "triplog" | null>(null);
   const [preparedCanyonRows, setPreparedCanyonRows] = useState<PreparedCanyonRow[]>([]);
-  // Per-field coercion warnings collected while preparing canyon rows (IMPORT-5).
+  // Per-field coercion warnings collected while preparing canyon rows (IMPORT-5),
+  // plus per-row "couldn't be read — skipped" entries (FECO-006/D5).
   const [canyonWarnings, setCanyonWarnings] = useState<string[]>([]);
+  // Source rows dropped entirely (missing name / unreadable lat-lon) before
+  // reaching the server (FECO-006/D5) — reported in the outcome summary
+  // alongside `created`/`merged`, distinct from the server's merge-skip count.
+  const [canyonDroppedRows, setCanyonDroppedRows] = useState<number>(0);
   const [preparedTripRows, setPreparedTripRows] = useState<PreparedTripRow[]>([]);
-  // Per-row coercion warnings collected while preparing trip rows (IMPORT-5).
+  // Per-row coercion warnings collected while preparing trip rows (IMPORT-5),
+  // plus per-row "couldn't be read — skipped" entries (FECO-006/D5).
   const [tripWarnings, setTripWarnings] = useState<string[]>([]);
+  // Source rows dropped entirely (unreadable date) before reaching the server
+  // (FECO-006/D5) — reported in the outcome summary alongside `imported`.
+  const [tripDroppedRows, setTripDroppedRows] = useState<number>(0);
   const [reviewState, setReviewState] = useState<ReviewState>({
     decisions: {},
     createForms: {},
@@ -444,8 +463,10 @@ function UnifiedImportDialog({
     setActiveKind(null);
     setPreparedCanyonRows([]);
     setCanyonWarnings([]);
+    setCanyonDroppedRows(0);
     setPreparedTripRows([]);
     setTripWarnings([]);
+    setTripDroppedRows(0);
     setReviewState({ decisions: {}, createForms: {}, options: {}, distances: {}, bestGuessId: {}, displayName: {}, autoMergeId: {} });
     // Layer the stored policy over the defaults rather than replacing them: a
     // policy saved before a field joined MERGEABLE_FIELDS has no entry for it,
@@ -487,6 +508,16 @@ function UnifiedImportDialog({
 
   async function loadFile(file: File) {
     setError(null);
+    // PapaParse reads the whole file into memory with no streaming — an
+    // accidentally-picked huge file (a photo mis-selected as CSV, an export of
+    // something else entirely) would otherwise freeze the tab before any of
+    // the row/column checks below even run (FECO-003).
+    if (file.size > MAX_CSV_FILE_BYTES) {
+      setError(
+        `"${file.name}" is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB) — CSV imports are capped at ${MAX_CSV_FILE_BYTES / (1024 * 1024)} MB.`,
+      );
+      return;
+    }
     let parsed;
     try {
       parsed = await parseCsv(file);
@@ -506,6 +537,16 @@ function UnifiedImportDialog({
         "That file has no data rows we could read. Make sure the first row is a header and there's at least one row of data.",
       );
       return;
+    }
+
+    // Non-fatal PapaParse row/header problems (unbalanced quotes, a renamed
+    // duplicate column) — the file still loaded, but fields may be misaligned
+    // from here on, so flag it rather than staying silent (FECO-002).
+    if (parsed.parseErrors.length > 0) {
+      toast.info(
+        `"${file.name}" had ${parsed.parseErrors.length} parsing ${parsed.parseErrors.length === 1 ? "issue" : "issues"} (see console) — some fields may be misaligned. Check the column mapping before importing.`,
+      );
+      console.error("CSV parse issues in", file.name, parsed.parseErrors);
     }
 
     const kind = detectFileKind(parsed.headers);
@@ -606,28 +647,46 @@ function UnifiedImportDialog({
     [tripFile, tripAssignments],
   );
 
-  function buildCanyonRows(): { rows: PreparedCanyonRow[]; warnings: string[] } {
-    if (!canyonFile) return { rows: [], warnings: [] };
+  function buildCanyonRows(): { rows: PreparedCanyonRow[]; warnings: string[]; droppedRows: number } {
+    if (!canyonFile) return { rows: [], warnings: [], droppedRows: 0 };
+    // Raw source value for a row dropped on a missing/unreadable required field
+    // (FECO-006/D5) — resolved once outside the loop since assignments don't
+    // vary per row.
+    const latHeader = Object.entries(canyonAssignments).find(([, role]) => role === "latitude")?.[0];
+    const lonHeader = Object.entries(canyonAssignments).find(([, role]) => role === "longitude")?.[0];
     const out: PreparedCanyonRow[] = [];
     const warnings: string[] = [];
+    let droppedRows = 0;
     canyonFile.rows.forEach((row, rowIndex) => {
       const { input, warnings: rowWarnings } = buildCanyonInput(row, canyonAssignments);
-      if (!input.name || isNaN(input.latitude) || isNaN(input.longitude)) return;
       // CSV line number: header is line 1, so the first data row is line 2 (IMPORT-7).
-      for (const warning of rowWarnings) warnings.push(`Row ${rowIndex + 2}: ${warning}`);
+      const line = rowIndex + 2;
+      const dropReason = describeDroppedCanyonRow({
+        name: input.name,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        rawLatitude: (latHeader ? row[latHeader] : "") ?? "",
+        rawLongitude: (lonHeader ? row[lonHeader] : "") ?? "",
+      });
+      if (dropReason) {
+        droppedRows += 1;
+        warnings.push(`Row ${line}: ${dropReason} — skipped`);
+        return;
+      }
+      for (const warning of rowWarnings) warnings.push(`Row ${line}: ${warning}`);
       out.push({ rowIndex, sourceName: input.name, input });
     });
-    return { rows: out, warnings };
+    return { rows: out, warnings, droppedRows };
   }
 
-  function buildTripRows(): { rows: PreparedTripRow[]; warnings: string[] } {
-    if (!tripFile) return { rows: [], warnings: [] };
+  function buildTripRows(): { rows: PreparedTripRow[]; warnings: string[]; droppedRows: number } {
+    if (!tripFile) return { rows: [], warnings: [], droppedRows: 0 };
     const { headers, rows } = tripFile;
     const nameCol = headers.find((h) => tripAssignments[h] === "name");
     const dateCol = headers.find((h) => tripAssignments[h] === "date");
     const notesCol = headers.find((h) => tripAssignments[h] === "notes");
     const typeCol = headers.find((h) => tripAssignments[h] === "type");
-    if (!nameCol || !dateCol) return { rows: [], warnings: [] };
+    if (!nameCol || !dateCol) return { rows: [], warnings: [], droppedRows: 0 };
 
     // Custom-field columns: existing cf:<key> plus any new fields the user named.
     const cfCols: {
@@ -660,10 +719,16 @@ function UnifiedImportDialog({
     // IMPORT-5 warnings) — a lenient coerce would silently store "5.5" as 5 or
     // "abc" as null.
     const warnings: string[] = [];
+    let droppedRows = 0;
     rows.forEach((row, rowIndex) => {
       const sourceCanyonName = (row[nameCol] ?? "").trim();
-      const isoDate = toIsoDate(row[dateCol] ?? "", dateFormat);
-      if (!isoDate) return;
+      const rawDate = row[dateCol] ?? "";
+      const isoDate = toIsoDate(rawDate, dateFormat);
+      if (!isoDate) {
+        droppedRows += 1;
+        warnings.push(`Row ${rowIndex + 2}: ${describeDroppedTripRow(null, rawDate)} — skipped`);
+        return;
+      }
       const customFields: Record<string, unknown> = {};
       for (const cf of cfCols) {
         const rawCell = row[cf.header] ?? "";
@@ -686,14 +751,15 @@ function UnifiedImportDialog({
         customFields,
       });
     });
-    return { rows: out, warnings };
+    return { rows: out, warnings, droppedRows };
   }
 
   // Build the trip-stage review state and advance the dialog. Runs both from the
   // initial map step (logbook-only or logbook-first) and after the canyon stage
   // of a combined import, where `candidates` are the freshly imported canyons.
   function startTripStage(candidates: MatchCandidate[]): boolean {
-    const { rows, warnings: tripRowWarnings } = buildTripRows();
+    const { rows, warnings: tripRowWarnings, droppedRows } = buildTripRows();
+    setTripDroppedRows(droppedRows);
     if (rows.length === 0) {
       setError(
         "No valid trip rows found — each row needs a canyon name and a date we could read. " +
@@ -746,12 +812,13 @@ function UnifiedImportDialog({
 
     // Process the canyon file first so trips can match the just-imported canyons.
     if (canyonFile && canyonMapValid) {
-      const { rows, warnings } = buildCanyonRows();
+      const { rows, warnings, droppedRows } = buildCanyonRows();
       if (rows.length === 0) {
         setError("No valid canyon rows found (each needs a name, latitude and longitude).");
         return;
       }
       setCanyonWarnings(warnings);
+      setCanyonDroppedRows(droppedRows);
       // Canyon files: auto-create on `none`; surface only the ambiguous middle.
       const decisions: Record<string, ReviewDecision> = {};
       const options: Record<string, MatchCandidate[]> = {};
@@ -974,6 +1041,7 @@ function UnifiedImportDialog({
             merged: result.merged,
             merges: result.merges,
             skipped: result.skipped,
+            droppedRows: canyonDroppedRows,
             errors: formatCanyonRowErrors(result.errors),
             warnings: canyonWarnings,
           });
@@ -989,6 +1057,7 @@ function UnifiedImportDialog({
         merged: result.merged,
         merges: result.merges,
         skipped: result.skipped,
+        droppedRows: canyonDroppedRows,
         errors: formatCanyonRowErrors(result.errors),
         warnings: canyonWarnings,
       });
@@ -1139,6 +1208,7 @@ function UnifiedImportDialog({
         noCanyon,
         linked,
         discarded,
+        droppedRows: tripDroppedRows,
         errors: [
           ...errors,
           ...result.errors.map(
@@ -1522,10 +1592,15 @@ function UnifiedImportDialog({
           ? [
               { count: outcome.created, label: "created" },
               { count: outcome.merged, label: "merged" },
+              // Row-level parse failures (FECO-006/D5) — distinct from `skipped`
+              // below, which is the server's merge-policy skip count.
+              { count: outcome.droppedRows, label: "couldn't be read" },
               { count: outcome.skipped, label: "skipped" },
             ]
           : [
               { count: outcome.imported, label: "imported" },
+              // Row-level parse failures (FECO-006/D5), reported next to imported.
+              { count: outcome.droppedRows, label: "couldn't be read" },
               { count: outcome.updated, label: "updated" },
               { count: outcome.linked, label: "linked to a canyon" },
               { count: outcome.noCanyon, label: "without a canyon" },
@@ -1547,6 +1622,14 @@ function UnifiedImportDialog({
       }
       const warnings =
         outcome.warnings.length > 0 ? outcome.warnings : undefined;
+      // ImportResultSummary hides the Undo button when every headline count is
+      // zero — but `droppedRows` (FECO-006/D5) now sits in that same headline
+      // array and is never itself undoable, so it must not be what keeps the
+      // button visible when nothing was actually created/imported.
+      const hasUndoableChange =
+        outcome.kind === "canyon"
+          ? outcome.created > 0 || outcome.merged > 0
+          : outcome.imported > 0 || outcome.updated > 0 || outcome.createdCanyons > 0;
       return (
         <ImportResultSummary
           headline={headline}
@@ -1554,7 +1637,7 @@ function UnifiedImportDialog({
           detailsLabel={detailsLabel}
           warnings={warnings}
           errors={outcome.errors.length > 0 ? outcome.errors : undefined}
-          onUndo={handleUndo}
+          onUndo={hasUndoableChange ? handleUndo : undefined}
           undoing={undoing}
         />
       );

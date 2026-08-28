@@ -87,8 +87,11 @@ export function ThemePreferencesProvider({
       const user = await fetchCurrentUser();
       const normalized = normalizeUserUiPreferences(user.uiPreferences);
       setSchemeId(normalized.themeSchemeId);
-    } catch {
-      // Keep local default when offline or unauthenticated.
+    } catch (err) {
+      // Best-effort: keep the local default theme rather than surface a
+      // toast for a background hydration failure — but still log it, or a
+      // systematic failure (e.g. a 500 on /users/me) is invisible (FECO-011).
+      console.error(err);
     } finally {
       setIsHydrating(false);
     }
