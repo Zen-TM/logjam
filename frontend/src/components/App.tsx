@@ -613,7 +613,12 @@ function App() {
     apiFetch<TopoJob[]>("/topo-jobs")
       .then((jobs) => {
         const resumable = jobs.filter(
-          (j) => j.status === "pending" || j.status === "processing",
+          (j) =>
+            (j.status === "pending" || j.status === "processing") &&
+            // Only the caller's OWN jobs resume here: a job shared WITH the
+            // user is read-only and its row must never land in the active-jobs
+            // ribbon (whose Dismiss/delete is owner-only).
+            j.syncRole === "owner",
         );
         if (resumable.length) setActiveTopoJobs(resumable);
       })

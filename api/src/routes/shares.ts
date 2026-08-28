@@ -20,6 +20,7 @@ import { resolveUser } from "../lib/resolveUser";
 import { normalizeUserUiPreferences } from "@logjam/shared";
 import { sendPushToUser } from "../services/push";
 import {
+  hasCanyonInheritedAccess,
   loadEntityRole,
   parseSharableEntityType,
   requireEntityOwner,
@@ -203,6 +204,16 @@ router.delete(
     });
     if (!share) throw new AppError(404, "Share not found");
 
+    const synced = syncedEntityType(entityType);
+    // A direct revoke must not tombstone a recipient who still sees the entity
+    // through a shared canyon: a waypoint/route can be visible for two reasons,
+    // and revoking the direct arm leaves the canyon arm standing. Only a
+    // recipient left with NO path gets a tombstone. Read before the transaction
+    // — the revoke deletes no canyon row, so this visibility is stable across it.
+    const stillVisible =
+      synced !== null &&
+      (await hasCanyonInheritedAccess(targetUserId, synced, entityId));
+
     await prisma.$transaction(async (tx) => {
       await tx.share.delete({ where: { id: share.id } });
       // Purge the recipient's residual notification, as canyon revoke does —
@@ -215,19 +226,24 @@ router.delete(
           payload: { path: ["entityId"], equals: entityId },
         },
       });
-      const synced = syncedEntityType(entityType);
       if (synced) {
-        // Visibility revoked with no delete anywhere: without this the
-        // recipient's mirror keeps the row forever. Same transaction as the
-        // revoke it records (sync tombstone rule).
-        await writeTombstones(
-          tx,
-          directShareRevokeTombstones({
-            entityType: synced,
-            entityId,
-            userIds: [targetUserId],
-          }),
-        );
+        // Bump the row's updatedAt so the owner's OTHER devices re-pull it and
+        // refresh their now-stale sharedCount, and so a still-visible recipient
+        // re-delivers it through the canyon arm (grant does the same).
+        await touchForDelta(tx, entityType, entityId);
+        if (!stillVisible) {
+          // Visibility revoked with no delete anywhere: without this the
+          // recipient's mirror keeps the row forever. Same transaction as the
+          // revoke it records (sync tombstone rule).
+          await writeTombstones(
+            tx,
+            directShareRevokeTombstones({
+              entityType: synced,
+              entityId,
+              userIds: [targetUserId],
+            }),
+          );
+        }
       }
     });
 

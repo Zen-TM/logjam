@@ -172,6 +172,19 @@ export async function upsertWaypoint(
   row: SyncDeltaWaypointRow,
   dirtyFieldNames: string[],
 ): Promise<void> {
+  // sharedCount is OPTIONAL on the wire: absent means "unchanged", not zero
+  // (shared/src/sync.ts). The write-path response re-applied by flush omits it
+  // (waypointLink.serializeOwnWaypoint), and INSERT OR REPLACE would null the
+  // column and vanish the "Shared with N" pill. Carry the stored count forward.
+  const sharedCount =
+    row.sharedCount !== undefined
+      ? row.sharedCount
+      : (
+          await db.getFirstAsync<{ shared_count: number | null }>(
+            "SELECT shared_count FROM waypoints WHERE id = ?",
+            row.id,
+          )
+        )?.shared_count ?? null;
   await db.runAsync(
     `INSERT OR REPLACE INTO waypoints
        (id, owner_id, canyon_ids_json, tags_json, sync_role, name, latitude,
@@ -189,7 +202,7 @@ export async function upsertWaypoint(
     row.elevation,
     row.symbol,
     row.notes,
-    row.sharedCount ?? null,
+    sharedCount,
     row.createdAt,
     row.updatedAt,
     splitExtras(row, WAYPOINT_KNOWN),
@@ -202,6 +215,18 @@ export async function upsertRoute(
   row: SyncDeltaRouteRow,
   dirtyFieldNames: string[],
 ): Promise<void> {
+  // Same contract as upsertWaypoint: absent sharedCount means "unchanged", not
+  // zero — carry the stored count forward rather than nulling it (see the
+  // comment there).
+  const sharedCount =
+    row.sharedCount !== undefined
+      ? row.sharedCount
+      : (
+          await db.getFirstAsync<{ shared_count: number | null }>(
+            "SELECT shared_count FROM routes WHERE id = ?",
+            row.id,
+          )
+        )?.shared_count ?? null;
   await db.runAsync(
     `INSERT OR REPLACE INTO routes
        (id, owner_id, canyon_id, name, color, points_json, anchors_json,
@@ -216,7 +241,7 @@ export async function upsertRoute(
     JSON.stringify(row.points),
     row.anchors == null ? null : JSON.stringify(row.anchors),
     row.syncRole,
-    row.sharedCount ?? null,
+    sharedCount,
     row.createdAt,
     row.updatedAt,
     splitExtras(row, ROUTE_KNOWN),

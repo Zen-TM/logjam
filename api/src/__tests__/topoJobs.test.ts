@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
-import { API_URL, as, BOB_SUB } from "./_actors";
+import { API_URL, as, BOB_SUB, BOB_ID } from "./_actors";
 
 // Requires `make dev` (Postgres + MiniStack + API on :8080, AUTH_MODE=fake).
 // No auth header = alice. These tests deliberately exercise only launch-free
@@ -79,5 +79,35 @@ describe("topo-jobs route (fake auth)", () => {
     // Gone after delete.
     const goneRes = await request(API_URL).get(`/topo-jobs/${jobId}`).set(AUTH);
     expect(goneRes.status).toBe(404);
+  });
+
+  it("a sharee polling the detail endpoint gets status fields, never the owner id or raw S3 keys", async () => {
+    const createRes = await request(API_URL)
+      .post("/topo-jobs")
+      .set(AUTH)
+      .send({ jobName: "sharee-detail-redaction" });
+    expect(createRes.status).toBe(201);
+    const jobId: string = createRes.body.jobId;
+
+    try {
+      const shareRes = await request(API_URL)
+        .post("/shares")
+        .set(AUTH)
+        .send({ entityType: "topoJob", entityId: jobId, sharedWithUserId: BOB_ID });
+      expect(shareRes.status).toBe(201);
+
+      const bobRes = await request(API_URL)
+        .get(`/topo-jobs/${jobId}`)
+        .set(as(BOB_SUB));
+      expect(bobRes.status).toBe(200);
+      // Finding 9: the list endpoints strip userId/s3OutputKeys for a sharee;
+      // the detail endpoint leaked both (the owner's internal id and raw S3
+      // keys). A sharee must see status fields only.
+      expect(bobRes.body.userId).toBeUndefined();
+      expect(bobRes.body.s3OutputKeys).toBeUndefined();
+      expect(bobRes.body.status).toBe("uploading");
+    } finally {
+      await request(API_URL).delete(`/topo-jobs/${jobId}`).set(AUTH);
+    }
   });
 });

@@ -5,6 +5,7 @@ vi.mock("../services/prisma", () => ({
     share: { findUnique: vi.fn() },
     canyonShare: { findFirst: vi.fn() },
     canyonWaypoint: { findFirst: vi.fn() },
+    route: { findFirst: vi.fn() },
   },
 }));
 
@@ -16,6 +17,7 @@ import {
   getJobRole,
   getRouteRole,
   getWaypointRole,
+  hasCanyonInheritedAccess,
   parseSharableEntityType,
   requireShareAccess,
   requireShareOwner,
@@ -25,6 +27,7 @@ const mocked = prisma as unknown as {
   share: { findUnique: Mock };
   canyonShare: { findFirst: Mock };
   canyonWaypoint: { findFirst: Mock };
+  route: { findFirst: Mock };
 };
 
 const OWNER = "user-owner";
@@ -34,6 +37,7 @@ beforeEach(() => {
   mocked.share.findUnique.mockReset().mockResolvedValue(null);
   mocked.canyonShare.findFirst.mockReset().mockResolvedValue(null);
   mocked.canyonWaypoint.findFirst.mockReset().mockResolvedValue(null);
+  mocked.route.findFirst.mockReset().mockResolvedValue(null);
 });
 
 // The reason this file exists: after direct sharing there are TWO independent
@@ -76,7 +80,7 @@ describe("getRouteRole", () => {
   });
 
   it("grants 'shared' through the linked canyon's share", async () => {
-    mocked.canyonShare.findFirst.mockResolvedValue({ id: "cs-1" });
+    mocked.route.findFirst.mockResolvedValue({ id: "rt-1" });
     const role = await getRouteRole(OTHER, {
       id: "rt-1",
       ownerId: OWNER,
@@ -85,15 +89,35 @@ describe("getRouteRole", () => {
     expect(role).toBe("shared");
   });
 
-  it("short-circuits to 'none' on an unlinked route with no direct share", async () => {
+  it("is 'none' on a route whose canyon (if any) is not shared", async () => {
     const role = await getRouteRole(OTHER, {
       id: "rt-1",
       ownerId: OWNER,
       canyonId: null,
     });
     expect(role).toBe("none");
-    // No canyon to consult — the query must not be issued at all.
-    expect(mocked.canyonShare.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+// The revoke path asks this directly: a direct revoke must not tombstone a
+// recipient who keeps the canyon arm (finding 2).
+describe("hasCanyonInheritedAccess", () => {
+  it("is true for a waypoint linked to a canyon shared with the user", async () => {
+    mocked.canyonWaypoint.findFirst.mockResolvedValue({ waypointId: "wp-1" });
+    expect(await hasCanyonInheritedAccess(OTHER, "waypoint", "wp-1")).toBe(true);
+  });
+
+  it("is false for a waypoint with no shared-canyon link", async () => {
+    expect(await hasCanyonInheritedAccess(OTHER, "waypoint", "wp-1")).toBe(false);
+  });
+
+  it("is true for a route whose canyon is shared with the user", async () => {
+    mocked.route.findFirst.mockResolvedValue({ id: "rt-1" });
+    expect(await hasCanyonInheritedAccess(OTHER, "route", "rt-1")).toBe(true);
+  });
+
+  it("is false for a route with no shared-canyon link", async () => {
+    expect(await hasCanyonInheritedAccess(OTHER, "route", "rt-1")).toBe(false);
   });
 });
 

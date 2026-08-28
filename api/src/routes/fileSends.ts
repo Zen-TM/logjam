@@ -16,6 +16,7 @@
 // which is why this needs no orphan sweeper of its own.
 import { Router, Response } from "express";
 import { randomUUID } from "crypto";
+import { Prisma } from "@prisma/client";
 
 import { HeadObjectCommand, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -262,6 +263,23 @@ router.post(
         return created;
       });
     } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002"
+      ) {
+        // A concurrent duplicate confirm won the race: this transaction rolled
+        // back (nothing double-charged) — return the winner's row, as the
+        // idempotent path above does. Without this the loser 500s on a send
+        // that succeeded.
+        const winner = await prisma.fileSend.findUnique({
+          where: { id: fileSendId },
+          include: { recipients: { select: { userId: true, status: true } } },
+        });
+        if (winner && winner.senderId === user.id) {
+          res.status(200).json(toSentView(winner));
+          return;
+        }
+      }
       if (err instanceof AppError && err.statusCode === 507) {
         await deleteS3KeysBestEffort(MEDIA_BUCKET, [key]);
       }

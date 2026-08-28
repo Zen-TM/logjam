@@ -468,7 +468,15 @@ router.get(
     // Was a 403, which confirmed the id existed to anyone who guessed it.
     // shareAccess gives a stranger the same 404 a missing id gets.
     requireShareAccess(await getJobRole(user.id, "topoJob", job), "topoJob");
-    res.json(job);
+    if (job.userId === user.id) {
+      res.json(job);
+      return;
+    }
+    // A recipient gets the status fields only — never the owner's internal id
+    // or the raw S3 keys (the two list endpoints strip them for the same
+    // reason; see GET /topo-jobs and /completed-overlays).
+    const { userId: _ownerId, s3OutputKeys: _keys, ...sharedView } = job;
+    res.json(sharedView);
   },
 );
 

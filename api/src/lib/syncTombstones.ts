@@ -239,3 +239,70 @@ export function directShareRevokeTombstones(args: {
   const { entityType, entityId, userIds } = args;
   return userIds.map((userId): TombstoneRow => ({ userId, entityType, entityId }));
 }
+
+/** DELETE /users/me: every OTHER user whose mirror held something of this
+ * account's must forget it. The deleted user's own rows need no tombstone —
+ * their account (and their whole tombstone log) is going away with them.
+ *
+ * Four counterpart groups, one per way another user could be holding a row:
+ * canyon sharees (the canyon + its canyon-level media), friendship
+ * counterparts (the edge), owners of canyons shared WITH the deleted user (the
+ * CanyonShare row), and DIRECT recipients of the deleted user's synced
+ * waypoints/routes. The last group is the one a cascade silently drops: the
+ * Share rows vanish with the user, but a cascade writes no tombstone, so
+ * without this the recipient's mirror keeps the item forever. */
+export function accountDeleteTombstones(args: {
+  userId: string;
+  /** Canyon-level media ids, keyed by canyon id. */
+  mediaIdsByCanyon: Map<string, string[]>;
+  canyonSharesOut: { canyonId: string; sharedWithId: string }[];
+  canyonSharesIn: { id: string; sharedById: string }[];
+  friendships: { id: string; requesterId: string; addresseeId: string }[];
+  directSharesOut: {
+    entityType: Extract<SyncEntityType, "waypoint" | "route">;
+    entityId: string;
+    sharedWithId: string;
+  }[];
+}): TombstoneRow[] {
+  const {
+    userId,
+    mediaIdsByCanyon,
+    canyonSharesOut,
+    canyonSharesIn,
+    friendships,
+    directSharesOut,
+  } = args;
+  return [
+    ...canyonSharesOut.flatMap((share): TombstoneRow[] => [
+      { userId: share.sharedWithId, entityType: "canyon", entityId: share.canyonId },
+      ...(mediaIdsByCanyon.get(share.canyonId) ?? []).map(
+        (mediaId): TombstoneRow => ({
+          userId: share.sharedWithId,
+          entityType: "media",
+          entityId: mediaId,
+        }),
+      ),
+    ]),
+    ...friendships.map(
+      (f): TombstoneRow => ({
+        userId: f.requesterId === userId ? f.addresseeId : f.requesterId,
+        entityType: "friendship",
+        entityId: f.id,
+      }),
+    ),
+    ...canyonSharesIn.map(
+      (share): TombstoneRow => ({
+        userId: share.sharedById,
+        entityType: "canyonShare",
+        entityId: share.id,
+      }),
+    ),
+    ...directSharesOut.map(
+      (share): TombstoneRow => ({
+        userId: share.sharedWithId,
+        entityType: share.entityType,
+        entityId: share.entityId,
+      }),
+    ),
+  ];
+}

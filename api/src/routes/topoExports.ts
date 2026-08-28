@@ -29,6 +29,7 @@ import { getParam } from "../lib/getParam";
 import { createAndLaunchTopoExport } from "../lib/topoExportLauncher";
 import { assertHasStorageQuota } from "../lib/storageQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
+import { directlySharedIds } from "../lib/shareAccess";
 
 const exportRequestSchema = z.object({
   sourceJobIds: z.array(z.string()).length(1),
@@ -119,9 +120,21 @@ router.post(
     const v = validateExportRequest({ format, bundling, layers });
     if (!v.ok) throw new AppError(400, v.error);
 
-    // Ownership check on every source job.
+    // Read-access check on every source job — owned OR directly shared with
+    // the caller, the same OR arm the list endpoints use. A recipient can
+    // already see the topo's overlay tiles, so exporting it broadens nothing;
+    // the export job is created under THEIR user id, so it charges their quota
+    // and lands in their downloads, not the owner's.
+    // A job the caller cannot read is 404 (never 403) — the id must not be
+    // confirmable to a stranger who guessed it.
     const jobs = await prisma.topoJob.findMany({
-      where: { id: { in: sourceJobIds }, userId: user.id },
+      where: {
+        id: { in: sourceJobIds },
+        OR: [
+          { userId: user.id },
+          { id: { in: await directlySharedIds(user.id, "topoJob") } },
+        ],
+      },
     });
     if (jobs.length !== sourceJobIds.length) {
       throw new AppError(404, "One or more source jobs not found");

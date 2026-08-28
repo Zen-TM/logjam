@@ -20,6 +20,7 @@ import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
 import { logger } from "../lib/logger";
+import { accountDeleteTombstones } from "../lib/syncTombstones";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const TOPO_BUCKET = getEnv().S3_BUCKET_TOPO ?? "";
@@ -481,6 +482,7 @@ router.delete(
       friendships,
       sharesOut,
       sharesIn,
+      directSharesOut,
     ] = await Promise.all([
       prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
       prisma.topoExportJob.findMany({
@@ -525,6 +527,18 @@ router.delete(
       prisma.canyonShare.findMany({
         where: { sharedWithId: user.id },
         select: { id: true, sharedById: true },
+      }),
+      // Direct shares of synced entities this user OWNS. The account delete is
+      // a delete site like any other, so each recipient's mirror must forget
+      // the waypoint/route (the Share row itself cascades away with the user,
+      // but a cascade writes no tombstone). Jobs are excluded: they are not
+      // synced entities, so there is no mirror row to revoke.
+      prisma.share.findMany({
+        where: {
+          sharedById: user.id,
+          entityType: { in: ["waypoint", "route"] },
+        },
+        select: { entityType: true, entityId: true, sharedWithId: true },
       }),
     ]);
 
@@ -585,33 +599,21 @@ router.delete(
       list.push(m.id);
       mediaIdsByCanyon.set(m.linkedId, list);
     }
-    const accountTombstones = [
-      // Sharees of my canyons forget each canyon + its canyon-level media.
-      ...sharesOut.flatMap((share) => [
-        {
-          userId: share.sharedWithId,
-          entityType: "canyon",
-          entityId: share.canyonId,
-        },
-        ...(mediaIdsByCanyon.get(share.canyonId) ?? []).map((mediaId) => ({
-          userId: share.sharedWithId,
-          entityType: "media",
-          entityId: mediaId,
-        })),
-      ]),
-      // Friendship counterparts forget the edge.
-      ...friendships.map((f) => ({
-        userId: f.requesterId === user.id ? f.addresseeId : f.requesterId,
-        entityType: "friendship",
-        entityId: f.id,
-      })),
-      // Owners of canyons shared WITH me forget the share row.
-      ...sharesIn.map((share) => ({
-        userId: share.sharedById,
-        entityType: "canyonShare",
-        entityId: share.id,
-      })),
-    ];
+    const accountTombstones = accountDeleteTombstones({
+      userId: user.id,
+      mediaIdsByCanyon,
+      canyonSharesOut: sharesOut,
+      canyonSharesIn: sharesIn,
+      friendships,
+      // Share.entityType is a plain string column; the query above already
+      // restricted it to the two synced types, so this narrows rather than
+      // widens.
+      directSharesOut: directSharesOut.flatMap((share) =>
+        share.entityType === "waypoint" || share.entityType === "route"
+          ? [{ ...share, entityType: share.entityType }]
+          : [],
+      ),
+    });
 
     await prisma.$transaction([
       ...(accountTombstones.length > 0

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  accountDeleteTombstones,
   canyonDeleteTombstones,
   directShareRevokeTombstones,
   friendshipDeleteTombstones,
@@ -271,5 +272,75 @@ describe("directShareRevokeTombstones", () => {
         userIds: [],
       }),
     ).toEqual([]);
+  });
+});
+
+// DELETE /users/me is a delete site like any other. The direct-share arm is the
+// one a Postgres cascade silently drops: Share rows vanish with the user, but a
+// cascade writes no tombstone, so a recipient's mirror would keep the item.
+describe("accountDeleteTombstones", () => {
+  const base = {
+    userId: "me",
+    mediaIdsByCanyon: new Map<string, string[]>(),
+    canyonSharesOut: [],
+    canyonSharesIn: [],
+    friendships: [],
+    directSharesOut: [],
+  };
+
+  it("tombstones direct recipients of my waypoints and routes", () => {
+    const rows = accountDeleteTombstones({
+      ...base,
+      directSharesOut: [
+        { entityType: "route" as const, entityId: "rt-1", sharedWithId: "bob" },
+        { entityType: "waypoint" as const, entityId: "wp-1", sharedWithId: "carol" },
+      ],
+    });
+    expect(has(rows, { userId: "bob", entityType: "route", entityId: "rt-1" })).toBe(true);
+    expect(has(rows, { userId: "carol", entityType: "waypoint", entityId: "wp-1" })).toBe(true);
+  });
+
+  it("never tombstones the departing user — their own log goes with them", () => {
+    const rows = accountDeleteTombstones({
+      ...base,
+      canyonSharesOut: [{ canyonId: "c-1", sharedWithId: "bob" }],
+      friendships: [{ id: "f-1", requesterId: "me", addresseeId: "bob" }],
+      directSharesOut: [
+        { entityType: "route" as const, entityId: "rt-1", sharedWithId: "bob" },
+      ],
+    });
+    expect(rows.some((r) => r.userId === "me")).toBe(false);
+  });
+
+  it("fans canyon sharees out to the canyon AND its canyon-level media", () => {
+    const rows = accountDeleteTombstones({
+      ...base,
+      mediaIdsByCanyon: new Map([["c-1", ["m-1", "m-2"]]]),
+      canyonSharesOut: [{ canyonId: "c-1", sharedWithId: "bob" }],
+    });
+    expect(has(rows, { userId: "bob", entityType: "canyon", entityId: "c-1" })).toBe(true);
+    expect(has(rows, { userId: "bob", entityType: "media", entityId: "m-1" })).toBe(true);
+    expect(has(rows, { userId: "bob", entityType: "media", entityId: "m-2" })).toBe(true);
+  });
+
+  it("gives the friendship edge to the OTHER party, whichever side I was on", () => {
+    const asRequester = accountDeleteTombstones({
+      ...base,
+      friendships: [{ id: "f-1", requesterId: "me", addresseeId: "bob" }],
+    });
+    const asAddressee = accountDeleteTombstones({
+      ...base,
+      friendships: [{ id: "f-2", requesterId: "bob", addresseeId: "me" }],
+    });
+    expect(asRequester).toEqual([
+      { userId: "bob", entityType: "friendship", entityId: "f-1" },
+    ]);
+    expect(asAddressee).toEqual([
+      { userId: "bob", entityType: "friendship", entityId: "f-2" },
+    ]);
+  });
+
+  it("is empty for an account nobody shared anything with", () => {
+    expect(accountDeleteTombstones(base)).toEqual([]);
   });
 });

@@ -6,7 +6,7 @@ vi.mock("../services/prisma", () => ({
     canyonShare: { findFirst: vi.fn() },
     canyonWaypoint: { findFirst: vi.fn() },
     waypoint: { findUnique: vi.fn() },
-    route: { findUnique: vi.fn() },
+    route: { findUnique: vi.fn(), findFirst: vi.fn() },
     topoJob: { findUnique: vi.fn() },
     geoPdfJob: { findUnique: vi.fn() },
   },
@@ -25,7 +25,7 @@ const mocked = prisma as unknown as {
   canyonShare: { findFirst: Mock };
   canyonWaypoint: { findFirst: Mock };
   waypoint: { findUnique: Mock };
-  route: { findUnique: Mock };
+  route: { findUnique: Mock; findFirst: Mock };
   topoJob: { findUnique: Mock };
   geoPdfJob: { findUnique: Mock };
 };
@@ -48,6 +48,7 @@ beforeEach(() => {
   mocked.route.findUnique
     .mockReset()
     .mockResolvedValue({ id: "rt-1", ownerId: OWNER, canyonId: null });
+  mocked.route.findFirst.mockReset().mockResolvedValue(null);
   mocked.topoJob.findUnique
     .mockReset()
     .mockResolvedValue({ id: "job-1", userId: OWNER });

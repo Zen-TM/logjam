@@ -79,14 +79,9 @@ export async function getWaypointRole(
 ): Promise<ShareRole> {
   if (waypoint.ownerId === userId) return "owner";
   if (await hasDirectShare(userId, "waypoint", waypoint.id)) return "shared";
-  const viaCanyon = await prisma.canyonWaypoint.findFirst({
-    where: {
-      waypointId: waypoint.id,
-      canyon: { shares: { some: { sharedWithId: userId } } },
-    },
-    select: { waypointId: true },
-  });
-  return viaCanyon ? "shared" : "none";
+  return (await hasCanyonInheritedAccess(userId, "waypoint", waypoint.id))
+    ? "shared"
+    : "none";
 }
 
 /**
@@ -100,12 +95,42 @@ export async function getRouteRole(
 ): Promise<ShareRole> {
   if (route.ownerId === userId) return "owner";
   if (await hasDirectShare(userId, "route", route.id)) return "shared";
-  if (route.canyonId == null) return "none";
-  const viaCanyon = await prisma.canyonShare.findFirst({
-    where: { canyonId: route.canyonId, sharedWithId: userId },
+  return (await hasCanyonInheritedAccess(userId, "route", route.id))
+    ? "shared"
+    : "none";
+}
+
+/**
+ * Whether `userId` still sees a synced entity through canyon inheritance,
+ * INDEPENDENT of any direct Share row. A waypoint or route can be visible for
+ * two reasons — a direct share OR a link to a canyon shared with the user — and
+ * revoking the direct share must not tombstone a user who keeps the canyon arm.
+ * This is the single source of that arm, so the role helpers above and the
+ * revoke path can never disagree on it.
+ */
+export async function hasCanyonInheritedAccess(
+  userId: string,
+  entityType: "waypoint" | "route",
+  entityId: string,
+): Promise<boolean> {
+  if (entityType === "waypoint") {
+    const viaCanyon = await prisma.canyonWaypoint.findFirst({
+      where: {
+        waypointId: entityId,
+        canyon: { shares: { some: { sharedWithId: userId } } },
+      },
+      select: { waypointId: true },
+    });
+    return viaCanyon != null;
+  }
+  const viaCanyon = await prisma.route.findFirst({
+    where: {
+      id: entityId,
+      canyon: { shares: { some: { sharedWithId: userId } } },
+    },
     select: { id: true },
   });
-  return viaCanyon ? "shared" : "none";
+  return viaCanyon != null;
 }
 
 /**

@@ -104,6 +104,8 @@ export type TopoJob = {
   s3OutputKeys:
     | { name: string; mbtilesKey: string; pmtilesKey: string | null }[]
     | null;
+  /** Owner vs recipient — a job shared WITH the user is read-only. */
+  syncRole: "owner" | "shared";
 };
 
 export type DownloadUrl = {

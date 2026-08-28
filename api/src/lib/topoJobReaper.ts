@@ -17,7 +17,8 @@ import {
   type TopoLayerKey,
 } from "@logjam/shared";
 import { getEnv } from "./env";
-import { logger } from "./logger";
+import { logger, safeErrorForLog } from "./logger";
+import { deleteSharesFor } from "./shareAccess";
 
 // Stuck-job reaper for both topo pipelines (Design L4).
 //
@@ -368,11 +369,20 @@ export async function expireCompletedGeoPdfJobs(
       }
       await prisma.$transaction(async (tx) => {
         await decrementStorageUsed(row.userId, row.resultBytes ?? 0n, tx);
+        // Same transaction as the row delete: Share.entityId is polymorphic, so
+        // Postgres cannot cascade — without this the rows outlive the job and
+        // keep the recipient's notification resolvable to a dead id.
+        await deleteSharesFor(tx, "geoPdfJob", [row.id]);
         await tx.geoPdfJob.delete({ where: { id: row.id } });
       });
       expired += 1;
     } catch (err) {
-      logger.error({ err, id: row.id }, "geo_pdf_expiry_failed");
+      // Scrub before logging: an S3/Prisma error can embed the result key, and
+      // the result key can name a canyon (root privacy rule).
+      logger.error(
+        { ...safeErrorForLog(err), id: row.id },
+        "geo_pdf_expiry_failed",
+      );
     }
   }
   return expired;

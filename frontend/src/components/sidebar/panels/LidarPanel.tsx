@@ -521,6 +521,10 @@ function LidarPanel({
                       <span className={classes.jobSubtitle}>{subtitle}</span>
                     )}
                   </button>
+                  {/* Export is NOT owner-gated: a recipient can already see
+                      the overlay, and POST /topo-exports accepts a shared
+                      source job, creating the export under the recipient's own
+                      account. Share/Delete below stay owner-only. */}
                   <button
                     className={classes.actionButton}
                     onClick={() => setExportJob(job)}

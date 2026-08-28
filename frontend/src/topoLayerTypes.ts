@@ -33,8 +33,10 @@ export type GeoJsonPolygonal = GeoJsonPolygon | GeoJsonMultiPolygon;
 /** Per-completed-job overlay payload returned by GET /topo-jobs/completed-overlays. */
 export type CompletedTopoJob = {
   jobId: string;
-  /** Owner vs recipient. The list now returns topos shared WITH the user, and
-   *  they are read-only: no share, no delete, no export-as-your-own. */
+  /** Owner vs recipient. The list returns topos shared WITH the user; they are
+   *  read-only, so no re-share and no delete. Export IS allowed — the recipient
+   *  can already see the overlay, and the export is created under their own
+   *  account (POST /topo-exports accepts a shared source job). */
   syncRole: "owner" | "shared";
   name: string | null;
   createdAt: string;

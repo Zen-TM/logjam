@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { randomUUID } from "crypto";
-import { API_URL, ALICE_SUB, BOB_SUB, as } from "./_actors";
+import { API_URL, ALICE_SUB, BOB_SUB, BOB_ID, as } from "./_actors";
 
 // POST /sync/push contract (Stage 8 §8): FIFO order, per-op transactions,
 // per-op statuses, dependencyFailed propagation, conflict receipts, and the
@@ -451,5 +451,56 @@ describe("sync push — route anchors", () => {
     await push(ALICE_SUB, [
       { opId: `anchors-d-${routeId}`, entity: "route", op: "delete", id: routeId },
     ]);
+  });
+});
+
+describe("sync push — direct-share delete cleanup", () => {
+  // REST DELETE /routes/:id fans tombstones out to direct sharees and purges
+  // their Share rows; the sync push delete used to do neither (finding 1), so a
+  // waypoint/route deleted from a phone while offline stranded the recipient's
+  // mirror AND left the Share row granting access to a dead id.
+  it("a pushed route delete tombstones a direct sharee", async () => {
+    const routeId = randomUUID();
+    const created = await push(ALICE_SUB, [
+      {
+        opId: `share-del-c-${routeId}`,
+        entity: "route",
+        op: "create",
+        id: routeId,
+        fields: {
+          name: "sync delete direct-share cleanup",
+          points: [
+            [150.1, -33.1],
+            [150.2, -33.2],
+          ],
+        },
+      },
+    ]);
+    expect(created.body.results[0].status).toBe("applied");
+
+    const shareRes = await request(API_URL)
+      .post("/shares")
+      .set(as(ALICE_SUB))
+      .send({ entityType: "route", entityId: routeId, sharedWithUserId: BOB_ID });
+    expect(shareRes.status).toBe(201);
+
+    const before = await request(API_URL)
+      .get("/sync/delta")
+      .query({ cursor: "" })
+      .set(as(BOB_SUB))
+      .set(CLIENT);
+    const cursor = before.body.cursor;
+
+    const del = await push(ALICE_SUB, [
+      { opId: `share-del-d-${routeId}`, entity: "route", op: "delete", id: routeId },
+    ]);
+    expect(del.body.results[0].status).toBe("applied");
+
+    const after = await request(API_URL)
+      .get("/sync/delta")
+      .query({ cursor })
+      .set(as(BOB_SUB))
+      .set(CLIENT);
+    expect(after.body.tombstones).toContainEqual({ type: "route", id: routeId });
   });
 });

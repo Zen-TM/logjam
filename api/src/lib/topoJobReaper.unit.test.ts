@@ -65,10 +65,12 @@ const launchExport = createAndLaunchTopoExport as unknown as Mock;
 const txExportDelete = vi.fn();
 const txGeoPdfDelete = vi.fn();
 const txExecuteRaw = vi.fn();
+const txShareDeleteMany = vi.fn();
 const txClient = {
   $executeRaw: txExecuteRaw,
   topoExportJob: { delete: txExportDelete },
   geoPdfJob: { delete: txGeoPdfDelete },
+  share: { deleteMany: txShareDeleteMany },
 };
 
 const NOW = new Date("2026-06-05T12:00:00.000Z");
@@ -86,6 +88,7 @@ beforeEach(() => {
   txExportDelete.mockReset().mockResolvedValue({});
   txGeoPdfDelete.mockReset().mockResolvedValue({});
   txExecuteRaw.mockReset().mockResolvedValue(1);
+  txShareDeleteMany.mockReset().mockResolvedValue({ count: 0 });
   notificationCreate.mockReset().mockResolvedValue({});
   launchExport.mockReset().mockResolvedValue("export-id");
   transaction
@@ -579,6 +582,11 @@ describe("expireCompletedGeoPdfJobs", () => {
     expect(transaction).toHaveBeenCalledTimes(1);
     expect(txExecuteRaw).toHaveBeenCalledTimes(1);
     expect(txGeoPdfDelete).toHaveBeenCalledWith({ where: { id: "geo-1" } });
+    // Share rows are purged in the same transaction as the row delete (finding
+    // 3): Share.entityId is polymorphic, so nothing cascades.
+    expect(txShareDeleteMany).toHaveBeenCalledWith({
+      where: { entityType: "geoPdfJob", entityId: { in: ["geo-1"] } },
+    });
     expect(s3Send.mock.invocationCallOrder[0]).toBeLessThan(
       transaction.mock.invocationCallOrder[0],
     );

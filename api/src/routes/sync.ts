@@ -52,6 +52,7 @@ import {
 } from "./tripLogsGlobal";
 import { deleteCanyonsCascade, deleteTripsCascade } from "../lib/bulkDelete";
 import {
+  directShareRevokeTombstones,
   routeDeleteTombstones,
   waypointDeleteTombstones,
   writeTombstones,
@@ -70,7 +71,12 @@ import {
   snapshotWaypointVisibility,
   waypointInclude as waypointSyncInclude,
 } from "../lib/waypointLink";
-import { directlySharedIds, shareCountsFor } from "../lib/shareAccess";
+import {
+  deleteSharesFor,
+  directlySharedIds,
+  directShareeIds,
+  shareCountsFor,
+} from "../lib/shareAccess";
 
 const router = Router();
 
@@ -1099,15 +1105,23 @@ async function applyWaypointOp(
     }
     await prisma.$transaction(async (tx) => {
       const viewers = await snapshotWaypointVisibility(tx, [op.id]);
+      // Direct recipients likewise — read before the rows go, so the tombstone
+      // fan-out and the Share cleanup match the REST DELETE (waypoints.ts).
+      const directIds = await directShareeIds(tx, "waypoint", op.id);
+      await deleteSharesFor(tx, "waypoint", [op.id]);
       await tx.waypoint.delete({ where: { id: op.id } });
-      await writeTombstones(
-        tx,
-        waypointDeleteTombstones({
+      await writeTombstones(tx, [
+        ...waypointDeleteTombstones({
           ownerId: userId,
           waypointId: op.id,
           shareeIds: [...(viewers.get(op.id) ?? [])],
         }),
-      );
+        ...directShareRevokeTombstones({
+          entityType: "waypoint",
+          entityId: op.id,
+          userIds: directIds,
+        }),
+      ]);
     });
     return { opId: op.opId, status: "applied" };
   }
@@ -1250,11 +1264,19 @@ async function applyRouteOp(
       // Sharees of the linked canyon must forget it too. Read before delete.
       const shareeIds =
         route.canyonId === null ? [] : await canyonShareeIds(tx, route.canyonId);
+      // Direct recipients likewise — read before the rows go, so the tombstone
+      // fan-out and the Share cleanup match the REST DELETE (routes.ts).
+      const directIds = await directShareeIds(tx, "route", op.id);
+      await deleteSharesFor(tx, "route", [op.id]);
       await tx.route.delete({ where: { id: op.id } });
-      await writeTombstones(
-        tx,
-        routeDeleteTombstones({ ownerId: userId, routeId: op.id, shareeIds }),
-      );
+      await writeTombstones(tx, [
+        ...routeDeleteTombstones({ ownerId: userId, routeId: op.id, shareeIds }),
+        ...directShareRevokeTombstones({
+          entityType: "route",
+          entityId: op.id,
+          userIds: directIds,
+        }),
+      ]);
     });
     return { opId: op.opId, status: "applied" };
   }
