@@ -10,10 +10,11 @@ data "aws_sns_topic" "alerts" {
   name = "logjam-alerts"
 }
 
-# RDS is a db.t3.micro on 20 GB gp2 with NO storage autoscaling
-# (max_allocated_storage unset), so exhausting disk is a hard outage with zero
-# cushion. Warn early — 4 GiB free ≈ 80% used — to leave time to extend storage
-# or enable autoscaling. FreeStorageSpace is reported in bytes.
+# RDS is a db.t3.micro on 20 GB gp2. Storage autoscaling IS enabled
+# (max_allocated_storage = 100 in rds.tf, cap 100 GB) but only grows on
+# demand — it doesn't warn you it's happening. Warn early — 4 GiB free ≈ 80%
+# used — to leave time to notice before disk actually runs out.
+# FreeStorageSpace is reported in bytes.
 resource "aws_cloudwatch_metric_alarm" "rds_free_storage_low" {
   alarm_name        = "logjam-rds-free-storage-low"
   alarm_description = "RDS ${aws_db_instance.main.identifier} free storage below 4 GiB — extend storage or enable autoscaling before it hits zero."
