@@ -101,7 +101,9 @@ export type TopoJob = {
   errorMessage: string | null;
   createdAt: string;
   updatedAt: string;
-  s3OutputKeys:
+  /** Owner-only: absent from a job shared WITH the user, because raw bucket
+   *  keys can name a canyon (see serializeTopoJobFor in api/routes/topoJobs). */
+  s3OutputKeys?:
     | { name: string; mbtilesKey: string; pmtilesKey: string | null }[]
     | null;
   /** Owner vs recipient — a job shared WITH the user is read-only. */

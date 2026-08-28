@@ -40,6 +40,61 @@ const router = Router();
 const env = getEnv();
 const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
 
+// ── One job view, three surfaces ──────────────────────────────────────────
+//
+// GET /topo-jobs, GET /topo-jobs/:id and (for the role stamp)
+// /completed-overlays all answer the same two questions about a TopoJob row:
+// which columns a client is allowed to see, and what a NON-owner is allowed to
+// see of them. Answering them three times is how they drifted — the detail
+// endpoint used to stamp no syncRole at all, so a client polling a shared job
+// could not tell from that response that it was read-only.
+//
+// Two rules, declared once:
+//   - userId NEVER leaves this file. A recipient has no business learning the
+//     owner's internal id; the derived syncRole is the whole answer they need.
+//   - s3OutputKeys is owner-only. It names raw bucket keys, and a key can name
+//     a canyon (root privacy rule) — so it is stripped for a recipient even on
+//     the detail endpoint that owners use to poll for outputs.
+//
+// A new column reaches clients by being added to TOPO_JOB_SELECT, which forces
+// the same decision for every surface at once.
+
+export const TOPO_JOB_SELECT = {
+  id: true,
+  userId: true, // consumed by serializeTopoJobFor; never emitted
+  status: true,
+  name: true,
+  footprint: true,
+  tileCount: true,
+  estimatedSeconds: true,
+  layerOptions: true,
+  errorMessage: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+/** syncRole mirrors the waypoint/route delta convention: a 'shared' row is
+ *  read-only on the client. */
+function syncRoleFor(row: { userId: string }, callerId: string) {
+  return row.userId === callerId ? ("owner" as const) : ("shared" as const);
+}
+
+/** The client-facing view of a job row, for owner and recipient alike. Pass a
+ *  row selected with TOPO_JOB_SELECT; `s3OutputKeys` is included only when the
+ *  caller selected it AND owns the row. */
+export function serializeTopoJobFor<T extends { userId: string; s3OutputKeys?: unknown }>(
+  row: T,
+  callerId: string,
+) {
+  const { userId, s3OutputKeys, ...rest } = row;
+  const isOwner = userId === callerId;
+  return {
+    ...rest,
+    ...(isOwner && s3OutputKeys !== undefined ? { s3OutputKeys } : {}),
+    syncRole: syncRoleFor(row, callerId),
+  };
+}
+
 // Input-ZIP size caps (zip-bomb / disk-DoS guard for the Fargate worker).
 // A legitimate ELVIS export is bounded by the monthly tile quota (default 40
 // tiles, ~17 MB compressed LAZ + ~5 MB DEM each). These caps sit well above
@@ -334,29 +389,9 @@ router.get(
         ],
       },
       orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        userId: true,
-        status: true,
-        name: true,
-        footprint: true,
-        tileCount: true,
-        estimatedSeconds: true,
-        layerOptions: true,
-        errorMessage: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: TOPO_JOB_SELECT,
     });
-    // syncRole mirrors the waypoint/route delta convention: a 'shared' job is
-    // read-only on the client. userId itself is dropped — a recipient has no
-    // business learning the owner's internal id from a list row.
-    res.json(
-      jobs.map(({ userId, ...job }) => ({
-        ...job,
-        syncRole: userId === user.id ? "owner" : "shared",
-      })),
-    );
+    res.json(jobs.map((job) => serializeTopoJobFor(job, user.id)));
   },
 );
 
@@ -427,12 +462,11 @@ router.get(
           createdAt: j.createdAt,
           footprint: j.footprint,
           layers,
-          // Same convention as GET /topo-jobs: a 'shared' overlay is read-only
-          // on the client, which is what lets Saved offer Share/rename/delete
-          // on an owned overlay and withhold them on one shared in. The owner's
-          // internal id is NOT emitted — the role is the whole answer, and a
-          // recipient has no business learning who owns it from a list row.
-          syncRole: j.userId === user.id ? "owner" : "shared",
+          // Same rule as the job view above — the role is the whole answer,
+          // and the owner's internal id is never emitted. This payload is a
+          // derived overlay shape rather than a job row, so it stamps the role
+          // directly instead of going through serializeTopoJobFor.
+          syncRole: syncRoleFor(j, user.id),
         };
       }),
     );
@@ -449,34 +483,13 @@ router.get(
     const user = await getUser(req.user!.sub);
     const job = await prisma.topoJob.findUnique({
       where: { id: getParam(req.params.id) },
-      select: {
-        id: true,
-        userId: true, // needed for ownership check below
-        status: true,
-        name: true,
-        footprint: true,
-        tileCount: true,
-        estimatedSeconds: true,
-        layerOptions: true,
-        errorMessage: true,
-        createdAt: true,
-        updatedAt: true,
-        s3OutputKeys: true,
-      },
+      select: { ...TOPO_JOB_SELECT, s3OutputKeys: true },
     });
     if (!job) throw new AppError(404, "Job not found");
     // Was a 403, which confirmed the id existed to anyone who guessed it.
     // shareAccess gives a stranger the same 404 a missing id gets.
     requireShareAccess(await getJobRole(user.id, "topoJob", job), "topoJob");
-    if (job.userId === user.id) {
-      res.json(job);
-      return;
-    }
-    // A recipient gets the status fields only — never the owner's internal id
-    // or the raw S3 keys (the two list endpoints strip them for the same
-    // reason; see GET /topo-jobs and /completed-overlays).
-    const { userId: _ownerId, s3OutputKeys: _keys, ...sharedView } = job;
-    res.json(sharedView);
+    res.json(serializeTopoJobFor(job, user.id));
   },
 );
 

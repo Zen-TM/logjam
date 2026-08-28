@@ -106,6 +106,17 @@ describe("topo-jobs route (fake auth)", () => {
       expect(bobRes.body.userId).toBeUndefined();
       expect(bobRes.body.s3OutputKeys).toBeUndefined();
       expect(bobRes.body.status).toBe("uploading");
+      // All three job surfaces now answer through serializeTopoJobFor, so the
+      // detail response carries the read-only role a client used to have to
+      // infer from a prior list call.
+      expect(bobRes.body.syncRole).toBe("shared");
+
+      // The owner's own detail response: keys yes, internal id still never.
+      const aliceRes = await request(API_URL).get(`/topo-jobs/${jobId}`).set(AUTH);
+      expect(aliceRes.status).toBe(200);
+      expect(aliceRes.body.userId).toBeUndefined();
+      expect(aliceRes.body.syncRole).toBe("owner");
+      expect(aliceRes.body).toHaveProperty("s3OutputKeys");
     } finally {
       await request(API_URL).delete(`/topo-jobs/${jobId}`).set(AUTH);
     }
