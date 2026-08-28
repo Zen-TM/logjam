@@ -58,3 +58,35 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
   alarm_actions = [data.aws_sns_topic.alerts.arn]
   ok_actions    = [data.aws_sns_topic.alerts.arn]
 }
+
+# The pgaudit -> WORM pipeline's only health signal. INF-001: the CloudWatch
+# subscription filter fed this stream from a log group that stopped existing at
+# the 2026-06-23 DB rename, so the stream sat ACTIVE and idle for two months
+# while the CloudTrail half kept writing to the same bucket — the audit sink
+# looked alive from every angle except the one nobody checked.
+#
+# A starved Firehose emits NO datapoints rather than bad ones, so
+# treat_missing_data = "breaching" is the entire point of this alarm: absence of
+# data IS the failure. 24 h at one 24 h period, because pgaudit volume is bursty
+# (log_connections plus operator sessions) and a shorter window would flap
+# overnight.
+resource "aws_cloudwatch_metric_alarm" "pgaudit_delivery_stalled" {
+  alarm_name        = "logjam-pgaudit-delivery-stalled"
+  alarm_description = "No pgaudit records reached the WORM audit stream in 24h — the CloudWatch subscription filter or the RDS log export is broken (see audit.tf, INF-001)."
+
+  namespace   = "AWS/Firehose"
+  metric_name = "IncomingBytes"
+  dimensions = {
+    DeliveryStreamName = aws_kinesis_firehose_delivery_stream.pgaudit.name
+  }
+
+  statistic           = "Sum"
+  period              = 86400
+  evaluation_periods  = 1
+  comparison_operator = "LessThanThreshold"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+
+  alarm_actions = [data.aws_sns_topic.alerts.arn]
+  ok_actions    = [data.aws_sns_topic.alerts.arn]
+}
