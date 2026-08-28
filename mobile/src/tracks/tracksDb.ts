@@ -427,27 +427,7 @@ export async function addTrackPointSuppression(
 }
 
 // --- Waypoints ---
-
-export async function listWaypoints(): Promise<Waypoint[]> {
-  const db = await getOfflineDb();
-  return db.getAllAsync<Waypoint>("SELECT * FROM waypoint ORDER BY createdAt DESC");
-}
-
-export async function insertWaypoint(waypoint: Waypoint): Promise<void> {
-  const db = await getOfflineDb();
-  await db.runAsync(
-    "INSERT INTO waypoint (id, name, lon, lat, createdAt) VALUES (?, ?, ?, ?, ?)",
-    waypoint.id,
-    waypoint.name,
-    waypoint.lon,
-    waypoint.lat,
-    waypoint.createdAt,
-  );
-  notifyChanged();
-}
-
-export async function deleteWaypoint(id: string): Promise<void> {
-  const db = await getOfflineDb();
-  await db.runAsync("DELETE FROM waypoint WHERE id = ?", id);
-  notifyChanged();
-}
+//
+// The local-only `waypoint` table is gone (Stage 8 made waypoints a synced
+// entity; `migrateLegacyWaypoints` drains and drops it). The `Waypoint` SHAPE
+// survives as the map layer's contract — mirror rows are mapped into it.

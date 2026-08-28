@@ -4,6 +4,7 @@
 // Flushing is flush.ts's job; a debounced sync request fires after every
 // enqueue so field edits batch into one cycle.
 import * as Crypto from "expo-crypto";
+import * as FileSystem from "expo-file-system/legacy";
 import {
   isUuidV4,
   pickNextTrackColor,
@@ -15,7 +16,7 @@ import {
 } from "@logjam/shared";
 
 import type { TripCanyonLink } from "./canyonLinks";
-import { scrubCanyonLinks } from "./mirrorStore";
+import { cascadeCanyonDelete } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
 
@@ -106,6 +107,9 @@ function mintUuid(): string {
 // drops/deletes them). Canyon/trip edit forms reuse enqueueOp when they land.
 
 export type WaypointDraft = {
+  /** Client-minted id to reuse. Only the legacy-waypoint promotion passes it
+   * (see `migrateLegacyWaypoints`); every other caller lets one be minted. */
+  id?: string;
   name: string;
   latitude: number;
   longitude: number;
@@ -117,7 +121,7 @@ export type WaypointDraft = {
 };
 
 export async function createWaypointLocal(draft: WaypointDraft): Promise<string> {
-  const id = mintUuid();
+  const id = draft.id ?? mintUuid();
   const now = new Date().toISOString();
   const fields: Record<string, unknown> = {
     name: draft.name,
@@ -499,28 +503,29 @@ function optionalNumbers(draft: CanyonDraftFields): Record<string, number> {
  * Delete a canyon offline. Owner-only (the caller gates on syncRole): a
  * sharee's delete would 404 server-side and park deadRemote.
  *
- * Trip and waypoint links to it go with it server-side, so the mirror's rows
- * are scrubbed of the link here too — otherwise a trip keeps rendering a title
- * built from a canyon that no longer exists, and a waypoint keeps a dead id in
- * its link list, until the next delta pull. Same cascade the server tombstone
- * runs (`scrubCanyonLinks`), so the two paths cannot diverge again.
+ * The mirror-side cascade is `cascadeCanyonDelete` — the SAME function the
+ * server tombstone runs, so the two paths cannot diverge again. They did:
+ * this path used to scrub links and shares only, leaving the canyon's media
+ * rows, their cached blobs and `routes.canyon_id` behind until a later delta
+ * pull cleaned up — i.e. never, for a guest, whose device is never registered
+ * for pulls at all.
  */
 export async function deleteCanyonLocal(id: string): Promise<void> {
   const db = await getSyncDb();
-  await withSyncTransaction(db, async () => {
-    await scrubCanyonLinks(db, id);
-    await db.runAsync("DELETE FROM canyons WHERE id = ?", id);
-    await db.runAsync(
-      "DELETE FROM canyon_shares WHERE canyon_id = ?",
-      id,
-    );
+  const orphanedPaths = await withSyncTransaction(db, async () => {
+    const paths = await cascadeCanyonDelete(db, id);
     await appendOp(db, {
       opId: mintUuid(),
       entity: "canyon",
       op: "delete",
       id,
     });
+    return paths;
   });
+  // Cached blobs: best-effort, outside the transaction (same as deltaPull).
+  for (const path of orphanedPaths) {
+    await FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
+  }
   notifyMirrorChanged();
   scheduleMutationSync();
 }
@@ -700,7 +705,15 @@ type Db = Awaited<ReturnType<typeof getSyncDb>>;
 
 /** Run the shared coalescing planner and apply its plan. Caller owns the
  * transaction and the mirror-side materialization. */
-async function appendOp(db: Db, incoming: SyncPushOp): Promise<void> {
+async function appendOp(
+  db: Db,
+  incoming: SyncPushOp,
+  /** Server-confirmed values for the fields this op newly dirties (§6
+   * conflict base). An argument rather than module state: a throw inside the
+   * enqueue transaction rolls SQLite back but not a JS variable, so a shared
+   * mutable leaked the failed op's base map into whatever enqueued next. */
+  baseSnapshot: Record<string, unknown> = {},
+): Promise<void> {
   // planOutboxEnqueue inspects exactly two things: the incoming row's own
   // queued ops, and the queue TAIL (an update merges into an adjacent update
   // only — merging into anything earlier would reorder the queue). Reading the
@@ -727,8 +740,7 @@ async function appendOp(db: Db, incoming: SyncPushOp): Promise<void> {
     const existingBase = target?.base_fields_json
       ? (JSON.parse(target.base_fields_json) as Record<string, unknown>)
       : {};
-    const incomingBase = pendingBaseSnapshot;
-    const mergedBase = { ...incomingBase, ...existingBase };
+    const mergedBase = { ...baseSnapshot, ...existingBase };
     await db.runAsync(
       "UPDATE outbox SET fields_json = ?, base_fields_json = ? WHERE seq = ?",
       JSON.stringify(plan.mergedFields ?? {}),
@@ -748,19 +760,11 @@ async function appendOp(db: Db, incoming: SyncPushOp): Promise<void> {
       plan.append.id,
       plan.append.baseUpdatedAt ?? null,
       plan.append.fields ? JSON.stringify(plan.append.fields) : null,
-      Object.keys(pendingBaseSnapshot).length
-        ? JSON.stringify(pendingBaseSnapshot)
-        : null,
+      Object.keys(baseSnapshot).length ? JSON.stringify(baseSnapshot) : null,
       new Date().toISOString(),
     );
   }
-  pendingBaseSnapshot = {};
 }
-
-// Base-value snapshot for the op being appended/merged (set by
-// enqueueUpdate before calling appendOp — same transaction, so module state
-// is safe under the engine's serialized writes).
-let pendingBaseSnapshot: Record<string, unknown> = {};
 
 /**
  * How an op field maps onto its mirror column. A bare string is the scalar
@@ -835,18 +839,21 @@ async function enqueueUpdate(
       id,
     );
 
-    pendingBaseSnapshot = baseSnapshot;
-    await appendOp(db, {
-      opId: mintUuid(),
-      entity,
-      op: "update",
-      id,
-      // Conflict DETECTION base (§6): the server updatedAt this edit saw.
-      ...(typeof current.updated_at === "string" && {
-        baseUpdatedAt: current.updated_at,
-      }),
-      fields,
-    });
+    await appendOp(
+      db,
+      {
+        opId: mintUuid(),
+        entity,
+        op: "update",
+        id,
+        // Conflict DETECTION base (§6): the server updatedAt this edit saw.
+        ...(typeof current.updated_at === "string" && {
+          baseUpdatedAt: current.updated_at,
+        }),
+        fields,
+      },
+      baseSnapshot,
+    );
   });
   notifyMirrorChanged();
   scheduleMutationSync();
@@ -856,27 +863,53 @@ async function enqueueUpdate(
 //
 // Stage 7 stored dropped waypoints in a local-only table (logjam-offline.db
 // `waypoint`). Stage 8 makes waypoints a synced entity; promote any legacy
-// rows into the mirror + outbox once, then clear the legacy table.
+// rows into the mirror + outbox once, then DROP the legacy table — a fresh
+// install never creates it (it is no longer in SCHEMA_SQL), so its absence is
+// the normal case and the promotion is a no-op from then on.
 
 export async function migrateLegacyWaypoints(): Promise<void> {
   // Lazy import: keeps offline/ and sync/ decoupled at module load.
   const { getOfflineDb } = await import("../offline/registryDb");
   const legacyDb = await getOfflineDb();
+  // Existence check rather than a swallowed error: a genuinely broken query
+  // must still throw. Fresh installs take this branch on every launch.
+  const present = await legacyDb.getFirstAsync<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'waypoint'",
+  );
+  if (!present) return;
+
   const rows = await legacyDb.getAllAsync<{
     id: string;
     name: string;
     lon: number;
     lat: number;
   }>("SELECT id, name, lon, lat FROM waypoint");
-  if (rows.length === 0) return;
+  const db = await getSyncDb();
   for (const row of rows) {
-    await createWaypointLocal({
-      name: row.name,
-      latitude: row.lat,
-      longitude: row.lon,
-    });
+    // Crash-idempotent: the promoted waypoint KEEPS the legacy id, so a kill
+    // between the insert and the legacy DELETE (two different SQLite files —
+    // no transaction can span them) replays onto the row it already wrote
+    // instead of minting a second waypoint and a second create op.
+    // Stage 7 ids that aren't UUIDv4 can't be pushed at all, so those get a
+    // fresh one and accept the (narrow) duplicate window.
+    const id = isUuidV4(row.id) ? row.id : undefined;
+    const already =
+      id != null &&
+      (await db.getFirstAsync<{ id: string }>(
+        "SELECT id FROM waypoints WHERE id = ?",
+        id,
+      )) != null;
+    if (!already) {
+      await createWaypointLocal({
+        id,
+        name: row.name,
+        latitude: row.lat,
+        longitude: row.lon,
+      });
+    }
     await legacyDb.runAsync("DELETE FROM waypoint WHERE id = ?", row.id);
   }
+  await legacyDb.execAsync("DROP TABLE IF EXISTS waypoint");
 }
 
 // ── discard-an-update revert ────────────────────────────────────────────────

@@ -116,8 +116,8 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
     `INSERT OR REPLACE INTO map_artifact
        (id, kind, logicalKey, format, sourceType, path,
         west, south, east, north, minzoom, maxzoom,
-        sizeBytes, downloadedAt, verifiedAt, label, groupId, groupLabel)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sizeBytes, downloadedAt, label, groupId, groupLabel)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     artifact.id,
     artifact.kind,
     artifact.logicalKey,
@@ -132,7 +132,6 @@ export async function insertArtifact(artifact: MapArtifact): Promise<void> {
     artifact.maxzoom,
     artifact.sizeBytes,
     artifact.downloadedAt,
-    new Date().toISOString(),
     artifact.label ?? null,
     artifact.groupId ?? null,
     artifact.groupLabel ?? null,

@@ -54,7 +54,14 @@ const LOCAL_DEFS_KEY: Record<CustomFieldEntity, string> = {
   canyon: "localCanyonCustomFields",
 };
 
-export const CUSTOM_FIELD_ENTITIES: readonly CustomFieldEntity[] = ["tripLog", "canyon"];
+/** Derived, not repeated: `Record<CustomFieldEntity, …>` above already forces
+ * an entry per entity, so a third custom-field entity joins this list by
+ * existing. Hand-keeping it meant `adoptLocalFieldDefs` and `removeFieldDef`
+ * would silently skip a forgotten entity — a guest's definitions for it would
+ * never reach the account on link. */
+export const CUSTOM_FIELD_ENTITIES = Object.keys(
+  LOCAL_DEFS_KEY,
+) as readonly CustomFieldEntity[];
 
 /**
  * Stored JSON → definitions. Throws on anything that isn't a list of valid

@@ -51,7 +51,12 @@ const OFFLINE_TABLES = [
   "geo_pdf_import",
   "track_point",
   "track",
-  "waypoint",
+  // (No "waypoint": Stage 8 made waypoints a synced entity, so they live in
+  // logjam.db and go with `wipeAllSyncData`. The legacy table is not created
+  // on a fresh install any more, so a DELETE naming it would throw "no such
+  // table" and take the WHOLE offline wipe — regions, tracks, route drafts —
+  // down with it. An upgraded device that has not run the promotion yet still
+  // has rows, so the wipe DROPs it below instead.)
   "overlay_enabled",
   // An unfinished route draft is coordinates through a canyon — the most
   // sensitive shape of data this app holds.
@@ -138,6 +143,10 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
       for (const table of OFFLINE_TABLES) {
         await db.runAsync(`DELETE FROM ${table}`);
       }
+      // Stage 7 leftovers on a device that never completed the promotion —
+      // coordinates, so they go with everything else. IF EXISTS, because the
+      // normal case is that the table is long gone.
+      await db.runAsync("DROP TABLE IF EXISTS waypoint");
     });
     notifyRegistryChanged();
   } catch (err) {

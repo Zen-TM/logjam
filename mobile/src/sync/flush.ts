@@ -140,6 +140,15 @@ async function sendBatch(
     return;
   }
 
+  if (response.results.length !== batch.length) {
+    // Results are positional per the contract, one per op. A SHORT reply left
+    // the trailing ops inflight with attempts already bumped (recovered only
+    // by the next cycle's blanket inflight→queued reset); a LONG one indexed
+    // past the batch and crashed with an opaque TypeError. Neither is a
+    // per-op verdict, so refuse the whole reply and let the retry re-send it.
+    throw new Error("push result correlation mismatch");
+  }
+
   let mirrorTouched = false;
   for (const [index, result] of response.results.entries()) {
     const entry = batch[index];

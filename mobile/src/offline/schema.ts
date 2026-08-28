@@ -24,7 +24,13 @@ export const SCHEMA_SQL = `
           minzoom INTEGER, maxzoom INTEGER,
           sizeBytes    INTEGER NOT NULL,
           downloadedAt TEXT NOT NULL,
-          verifiedAt   TEXT,
+          -- (verifiedAt was here. It was bound to the wall clock of its own
+          -- INSERT — identical in meaning to downloadedAt — and had no other
+          -- writer and no reader anywhere: schema asserting a verification
+          -- step that was never built. Dropped from the DDL and from
+          -- insertArtifact. Devices installed before this keep the column as a
+          -- harmless nullable leftover, which SQLite has no cheap way to drop
+          -- and which nothing reads.)
           label        TEXT,
           groupId      TEXT,
           groupLabel   TEXT
@@ -128,12 +134,6 @@ export const SCHEMA_SQL = `
           altitudeAccuracyM  REAL,
           PRIMARY KEY (trackId, seq)
         );
-        CREATE TABLE IF NOT EXISTS waypoint (
-          id        TEXT PRIMARY KEY,
-          name      TEXT NOT NULL,
-          lon REAL NOT NULL, lat REAL NOT NULL,
-          createdAt TEXT NOT NULL
-        );
         CREATE TABLE IF NOT EXISTS overlay_enabled (
           overlayKey TEXT PRIMARY KEY
         );
@@ -154,6 +154,12 @@ export const SCHEMA_SQL = `
         -- unfinished downloads are discovered by reading the region directory.
         -- Dropped rather than left as schema nobody can explain.)
         DROP TABLE IF EXISTS region_download;
+        -- (Stage 7's local-only waypoint table was here. Stage 8 made
+        -- waypoints a synced entity; migrateLegacyWaypoints drains any
+        -- surviving rows into the mirror and drops the table itself. It is NOT
+        -- dropped here: this SQL runs on every open, ahead of the promotion,
+        -- so dropping it here would delete an upgrading user's waypoints
+        -- before they were promoted.)
       `;
 
 // Columns added to a table that already exists on installed devices. The

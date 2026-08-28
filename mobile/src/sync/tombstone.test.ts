@@ -37,7 +37,16 @@ vi.mock("./syncDb", () => ({
   withSyncTransaction: async (_db: unknown, task: () => Promise<void>) => task(),
 }));
 
+vi.mock("./mediaSyncBridge", () => ({ scheduleMutationSync: () => {} }));
+vi.mock("expo-file-system/legacy", () => ({
+  deleteAsync: () => Promise.resolve(),
+}));
+vi.mock("expo-crypto", () => ({
+  randomUUID: () => "00000000-0000-4000-8000-000000000000",
+}));
+
 const { applyTombstone } = await import("./mirrorStore");
+const { deleteCanyonLocal } = await import("./outbox");
 
 function sqlText(): string {
   return calls.map((call) => call.sql).join("\n");
@@ -97,5 +106,48 @@ describe("canyon tombstone cascade", () => {
     const text = sqlText();
     expect(text).toContain("DELETE FROM outbox WHERE entity_id = ? AND op = 'delete'");
     expect(text).toContain("UPDATE outbox SET state = 'deadRemote'");
+  });
+});
+
+describe("deleteCanyonLocal runs the SAME cascade as the tombstone", () => {
+  // The divergence this pins: the local delete used to scrub links and shares
+  // only, so the canyon's media rows (and their cached blobs) and any route
+  // pointing at it survived until a later delta pull tidied up — i.e. forever
+  // for a guest, whose device is never registered for pulls at all.
+  beforeEach(() => {
+    calls.length = 0;
+    waypointRows = [];
+    tripRows = [];
+  });
+
+  it("deletes the canyon's media rows, shares and route links", async () => {
+    await deleteCanyonLocal(DEAD);
+    const text = sqlText();
+    expect(text).toContain("DELETE FROM canyons WHERE id = ?");
+    expect(text).toContain("DELETE FROM media WHERE linked_type = 'canyon'");
+    expect(text).toContain("DELETE FROM canyon_shares WHERE canyon_id = ?");
+    expect(text).toContain("UPDATE routes SET canyon_id = NULL");
+  });
+
+  it("still queues the canyon delete op", async () => {
+    await deleteCanyonLocal(DEAD);
+    const op = calls.find((call) => call.sql.includes("INSERT INTO outbox"));
+    expect(op).toBeDefined();
+    expect(op!.args).toContain("canyon");
+    expect(op!.args).toContain("delete");
+  });
+
+  it("issues every statement the tombstone cascade issues", async () => {
+    await applyTombstone(db as never, { type: "canyon", id: DEAD });
+    const tombstoneSql = calls
+      .map((call) => call.sql)
+      // The tombstone additionally reconciles the outbox; the local delete
+      // owns its own op planning, so compare the MIRROR statements only.
+      .filter((sql) => !sql.includes("outbox"));
+    expect(tombstoneSql.length).toBeGreaterThan(3); // the scan really ran
+    calls.length = 0;
+    await deleteCanyonLocal(DEAD);
+    const localSql = new Set(calls.map((call) => call.sql));
+    expect(tombstoneSql.filter((sql) => !localSql.has(sql))).toEqual([]);
   });
 });

@@ -385,52 +385,81 @@ export async function scrubCanyonLinks(
 // Returns local file paths of cached media blobs the caller must delete
 // AFTER the transaction commits (filesystem I/O doesn't belong inside it).
 
+/** Cached-blob paths of the media rows a `WHERE` clause selects. */
+async function collectMediaPaths(
+  db: SQLiteDatabase,
+  where: string,
+  ...args: string[]
+): Promise<string[]> {
+  const rows = await db.getAllAsync<{
+    local_display_path: string | null;
+    local_thumb_path: string | null;
+  }>(
+    `SELECT local_display_path, local_thumb_path FROM media WHERE ${where}`,
+    ...args,
+  );
+  const paths: string[] = [];
+  for (const row of rows) {
+    if (row.local_display_path) paths.push(row.local_display_path);
+    if (row.local_thumb_path) paths.push(row.local_thumb_path);
+  }
+  return paths;
+}
+
+/**
+ * The canyon delete cascade, declared once. Both paths that remove a canyon
+ * from the mirror — the server tombstone and the local owner delete
+ * (`deleteCanyonLocal`) — call this, because they diverged before: the local
+ * path left the canyon's media rows and their cached blobs on disk (forever
+ * for a guest, who is never registered for delta pulls) and left
+ * `routes.canyon_id` dangling.
+ *
+ * Returns cached blob paths to unlink AFTER the transaction commits.
+ */
+export async function cascadeCanyonDelete(
+  db: SQLiteDatabase,
+  canyonId: string,
+): Promise<string[]> {
+  // Belt and braces both ends: the server fans out media tombstones too,
+  // but the local cascade must not depend on their delivery order.
+  const orphanedPaths = await collectMediaPaths(
+    db,
+    "linked_type = 'canyon' AND linked_id = ?",
+    canyonId,
+  );
+  await db.runAsync(
+    "DELETE FROM media WHERE linked_type = 'canyon' AND linked_id = ?",
+    canyonId,
+  );
+  await db.runAsync("DELETE FROM canyons WHERE id = ?", canyonId);
+  await db.runAsync("DELETE FROM canyon_shares WHERE canyon_id = ?", canyonId);
+  // Route canyon links are SetNull server-side; mirror matches.
+  await db.runAsync(
+    "UPDATE routes SET canyon_id = NULL WHERE canyon_id = ?",
+    canyonId,
+  );
+  await scrubCanyonLinks(db, canyonId);
+  return orphanedPaths;
+}
+
 export async function applyTombstone(
   db: SQLiteDatabase,
   tombstone: SyncDeltaTombstone,
 ): Promise<string[]> {
   const orphanedPaths: string[] = [];
 
-  const collectMediaPaths = async (where: string, ...args: string[]) => {
-    const rows = await db.getAllAsync<{
-      local_display_path: string | null;
-      local_thumb_path: string | null;
-    }>(
-      `SELECT local_display_path, local_thumb_path FROM media WHERE ${where}`,
-      ...args,
-    );
-    for (const row of rows) {
-      if (row.local_display_path) orphanedPaths.push(row.local_display_path);
-      if (row.local_thumb_path) orphanedPaths.push(row.local_thumb_path);
-    }
-  };
-
   switch (tombstone.type) {
     case "canyon": {
-      // Belt and braces both ends: the server fans out media tombstones too,
-      // but the local cascade must not depend on their delivery order.
-      await collectMediaPaths(
-        "linked_type = 'canyon' AND linked_id = ?",
-        tombstone.id,
-      );
-      await db.runAsync(
-        "DELETE FROM media WHERE linked_type = 'canyon' AND linked_id = ?",
-        tombstone.id,
-      );
-      await db.runAsync("DELETE FROM canyons WHERE id = ?", tombstone.id);
-      await db.runAsync("DELETE FROM canyon_shares WHERE canyon_id = ?", tombstone.id);
-      // Route canyon links are SetNull server-side; mirror matches.
-      await db.runAsync(
-        "UPDATE routes SET canyon_id = NULL WHERE canyon_id = ?",
-        tombstone.id,
-      );
-      await scrubCanyonLinks(db, tombstone.id);
+      orphanedPaths.push(...(await cascadeCanyonDelete(db, tombstone.id)));
       break;
     }
     case "tripLog": {
-      await collectMediaPaths(
-        "linked_type = 'tripLog' AND linked_id = ?",
-        tombstone.id,
+      orphanedPaths.push(
+        ...(await collectMediaPaths(
+          db,
+          "linked_type = 'tripLog' AND linked_id = ?",
+          tombstone.id,
+        )),
       );
       await db.runAsync(
         "DELETE FROM media WHERE linked_type = 'tripLog' AND linked_id = ?",
@@ -440,7 +469,7 @@ export async function applyTombstone(
       break;
     }
     case "media": {
-      await collectMediaPaths("id = ?", tombstone.id);
+      orphanedPaths.push(...(await collectMediaPaths(db, "id = ?", tombstone.id)));
       await db.runAsync("DELETE FROM media WHERE id = ?", tombstone.id);
       break;
     }
@@ -458,6 +487,19 @@ export async function applyTombstone(
       // still exists for its owner, but this user must forget it.
       await db.runAsync("DELETE FROM routes WHERE id = ?", tombstone.id);
       break;
+    default: {
+      // `parseSyncDeltaTombstone` validates `type` against SYNC_ENTITY_TYPES,
+      // so an eighth entity would sail through the boundary check, match no
+      // case here, delete nothing, and still advance the cursor — the copy
+      // would sit in the mirror forever. The compiler answers instead.
+      const unhandled: never = tombstone.type;
+      // Loud, but not a rollback: throwing here would abort the whole delta
+      // page and freeze the cursor forever — the exact failure this mirror's
+      // drop-and-rebuild lever exists to avoid. The compile error above is
+      // the guard; this is only the belt.
+      console.error(`sync: unhandled tombstone type ${String(unhandled)}`);
+      break;
+    }
   }
 
   // Pending local ops on a server-deleted row: delete wins (§6); park them

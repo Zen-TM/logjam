@@ -11,8 +11,12 @@ import { ADDED_COLUMNS, SCHEMA_SQL } from "./schema";
 /** Column names declared in `CREATE TABLE <name> ( ... )`, per table. */
 function createTableColumns(sql: string): Map<string, Set<string>> {
   const tables = new Map<string, Set<string>>();
+  // Comments go FIRST: the table pattern stops at the next `;`, so a single
+  // semicolon inside a `--` comment used to truncate that table's column set
+  // and quietly make the ADDED_COLUMNS check below vacuous for it.
+  const code = sql.replace(/--.*$/gm, "");
   const pattern = /CREATE TABLE IF NOT EXISTS (\w+) \(([^;]*?)\n\s*\);/g;
-  for (const [, table, body] of sql.matchAll(pattern)) {
+  for (const [, table, body] of code.matchAll(pattern)) {
     const columns = new Set<string>();
     for (const line of body!.split("\n")) {
       // Strip comments, then take every `name TYPE` pair on the line — several
