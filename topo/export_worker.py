@@ -156,6 +156,10 @@ def update_status(conn, export_job_id: str, status: str, storage_delta_bytes: in
     rows, the storage charge is SKIPPED, and the caller must self-clean and
     skip notification/email.
     """
+    # No `updated_at = NOW()` here, unlike worker.py's twin: topo_export_jobs
+    # has no updated_at column (schema.prisma TopoExportJob / migration
+    # 20260528000001) — created_at, started_at and completed_at only. The two
+    # copies differ because the two tables do (STP-008).
     set_clauses = ["status = %s"]
     values: list = [status]
     for col, val in kwargs.items():
@@ -379,26 +383,34 @@ def main():
         conn.close()
         return
 
-    create_notification(
-        conn, export_job["user_id"], "topo_export_complete",
-        {
-            "exportJobId": EXPORT_JOB_ID,
-            "format": export_job["format"],
-            "jobName": job_name,
-            "status": "completed" if ok else "failed",
-            "errorMessage": None if ok else (error_msg or "Unknown failure"),
-        },
-    )
-    # Best-effort push — generic title + opaque IDs only (format/status/error
-    # stay in the in-app notification, never in a push).
-    from push_send import send_push
-    send_push(conn, export_job["user_id"],
-              {"type": "topo_export_complete", "exportId": EXPORT_JOB_ID})
+    # Everything past the terminal flip is best-effort (STP-002): the row is
+    # already correct and the artefact uploaded, so a transient DB blip in the
+    # notification tail must not kill the process or skip the email.
+    try:
+        create_notification(
+            conn, export_job["user_id"], "topo_export_complete",
+            {
+                "exportJobId": EXPORT_JOB_ID,
+                "format": export_job["format"],
+                "jobName": job_name,
+                "status": "completed" if ok else "failed",
+                "errorMessage": None if ok else (error_msg or "Unknown failure"),
+            },
+        )
+        # Push — generic title + opaque IDs only (format/status/error stay in
+        # the in-app notification, never in a push).
+        from push_send import send_push
+        send_push(conn, export_job["user_id"],
+                  {"type": "topo_export_complete", "exportId": EXPORT_JOB_ID})
+    except Exception as e:
+        log.warning(f"Export {EXPORT_JOB_ID}: notification/push failed: {e}")
 
     try:
         email = get_user_email(conn, export_job["user_id"])
         if email and wants_email(conn, export_job["user_id"], "exportEmail"):
             send_completion_email(email, EXPORT_JOB_ID, export_job["format"], ok, error_msg)
+    except Exception as e:
+        log.warning(f"Export {EXPORT_JOB_ID}: completion email failed: {e}")
     finally:
         conn.close()
 

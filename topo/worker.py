@@ -26,6 +26,7 @@ Optional environment variables:
 """
 
 import boto3
+import contextlib
 import json
 import logging
 import os
@@ -711,7 +712,9 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int, Optio
         # PMTiles for in-app display. Vector layers use the tippecanoe output;
         # raster layers reuse the styled MBTiles.
         pmtiles_source = vector_mbtiles_by_layer.get(name, styled_mbtiles)
-        with sqlite3.connect(str(pmtiles_source)) as _conn:
+        # closing(): sqlite3's own context manager commits but does NOT close,
+        # leaking an fd on a multi-hundred-MB MBTiles per layer (STP-009).
+        with contextlib.closing(sqlite3.connect(str(pmtiles_source))) as _conn:
             _row = _conn.execute("SELECT value FROM metadata WHERE name='maxzoom'").fetchone()
             maxzoom = int(_row[0]) if _row else 18
             tile_count = _conn.execute("SELECT COUNT(*) FROM tiles").fetchone()[0]
@@ -757,6 +760,11 @@ def main():
         conn.close()
         return
 
+    # Set once the `complete` flip has committed. After that point the job's
+    # outputs are referenced by the row and MUST NOT be self-cleaned, however
+    # the post-completion notification/push/email sequence fails (STP-001).
+    completed = False
+
     try:
         with tempfile.TemporaryDirectory() as tmp:
             output_keys, footprint_local, osm_failed, total_output_bytes, pipeline_metrics = process_job(job, tmp)
@@ -797,6 +805,7 @@ def main():
                         "cleaning up outputs and skipping notification/email.")
             delete_s3_prefix_best_effort(f"outputs/{JOB_ID}/")
             return
+        completed = True
 
         log.info(f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded"
                  + (" (OSM features missing — Overpass failed)" if osm_failed else ""))
@@ -817,6 +826,15 @@ def main():
             send_completion_email(email, JOB_ID, output_keys, osm_failed=osm_failed)
 
     except Exception as e:
+        if completed:
+            # The job IS complete and its outputs are live — only the
+            # best-effort notification/push/email tail raised (STP-001).
+            # Never self-clean here: the guarded `failed` write below would
+            # match 0 rows (status is `complete`, not `processing`) and the
+            # 0-rowcount branch would delete the finished job's outputs.
+            log.error(f"Job {JOB_ID} completed but post-completion "
+                      f"notification failed: {e}", exc_info=True)
+            return
         log.error(f"Job {JOB_ID} failed: {e}", exc_info=True)
         updated = update_status(conn, JOB_ID, "failed",
                                 expected_status="processing",

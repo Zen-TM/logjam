@@ -2452,7 +2452,7 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
     }
 
     import time as _time
-    resp = None
+    raw: Optional[dict] = None
     last_err: Optional[str] = None
     attempts = 0
     for endpoint in endpoints:
@@ -2462,21 +2462,28 @@ def fetch_osm_features(lon_min: float, lat_min: float, lon_max: float, lat_max: 
                 resp = requests.post(endpoint, data={"data": query},
                                      headers=headers, timeout=180)
                 resp.raise_for_status()
+                # Decoded INSIDE the retry loop (STP-003): a mirror answering
+                # 200 with an HTML interstitial is a mirror failure, not a job
+                # failure — rotate to the next endpoint instead of raising out
+                # of a function whose contract is "degrade to an empty layer".
+                decoded = resp.json()
+                if not isinstance(decoded, dict):
+                    raise ValueError(f"expected a JSON object, got {type(decoded).__name__}")
+                raw = decoded
                 break
             except Exception as e:
                 last_err = f"{endpoint}: {e}"
                 log.warning(f"Overpass attempt {attempts} failed ({last_err})")
-                resp = None
+                raw = None
                 if retry == 0:
                     _time.sleep(10)
-        if resp is not None and resp.ok:
+        if raw is not None:
             break
-    if resp is None or not resp.ok:
+    if raw is None:
         log.warning(f"Overpass API failed after {attempts} attempts across {len(endpoints)} endpoints. "
                     f"Features layer will be empty. Last error: {last_err}")
         return None
 
-    raw = resp.json()
     geojson_path = os.path.join(work_dir, "osm_features.geojson")
     features = []
 
