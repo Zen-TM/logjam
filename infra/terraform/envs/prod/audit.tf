@@ -30,7 +30,7 @@ locals {
   # ARN built as a literal (not aws_cloudtrail.audit.arn) to break the
   # bucket-policy <-> trail dependency cycle: the trail depends_on the bucket
   # policy, so the policy cannot reference the trail resource.
-  trail_arn        = "arn:aws:cloudtrail:${local.region}:${local.account_id}:trail/${local.trail_name}"
+  trail_arn = "arn:aws:cloudtrail:${local.region}:${local.account_id}:trail/${local.trail_name}"
   # Derived from the instance, never a literal: RDS names this group after the
   # identifier, so the 2026-06-23 logjam-db -> logjam-db-enc migration left a
   # hardcoded name pointing at a dead group and pgaudit delivery was silently
