@@ -23,6 +23,7 @@ import {
 } from "@logjam/shared";
 
 import { apiFetch } from "./apiFetch";
+import { downloadFromPresignedUrl, uploadToPresignedUrl } from "./presignedTransfer";
 
 /** One file waiting in my inbox, or one I already took. */
 export type InboxFileSend = {
@@ -93,11 +94,10 @@ export async function sendFileCopy({
 
   // BINARY_CONTENT streams the file from disk. The alternative — reading it
   // into a JS string — corrupts any non-UTF-8 file (a GeoPDF is a PDF) and
-  // would put 64 MB through Hermes, which has no JIT.
-  const upload = await FileSystem.uploadAsync(uploadUrl, fileUri, {
-    httpMethod: "PUT",
-    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-  });
+  // would put 64 MB through Hermes, which has no JIT. The first-byte deadline
+  // lives in presignedTransfer.ts: this leg carries no auth header, so
+  // apiFetch's abort never reached it.
+  const upload = await uploadToPresignedUrl(uploadUrl, fileUri);
   if (upload.status < 200 || upload.status >= 300) {
     // The S3 body is XML and may echo the key; say nothing but the status.
     throw new Error(`Upload failed (${upload.status}).`);
@@ -123,7 +123,7 @@ export async function downloadFileSend(
   scratchName: string,
 ): Promise<string> {
   const target = await scratchFileUri(scratchName);
-  const result = await FileSystem.downloadAsync(downloadUrl, target);
+  const result = await downloadFromPresignedUrl(downloadUrl, target);
   if (result.status < 200 || result.status >= 300) {
     throw new Error(`Download failed (${result.status}).`);
   }

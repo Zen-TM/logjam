@@ -38,6 +38,12 @@ export function randomId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+// A KMZ may not expand past what a bare .kml import is allowed to be. The
+// ceiling above is checked against the COMPRESSED file, so without this a 30 MB
+// zip of zeroes inflates to gigabytes — on the one input path an outside party
+// controls, and before any downstream guard (MAX_IMPORT_POSITIONS) gets to run.
+const MAX_KMZ_UNCOMPRESSED_BYTES = MAX_IMPORT_FILE_BYTES;
+
 /**
  * KMZ = zip with a KML inside (canonically doc.kml). Returns the KML text.
  *
@@ -46,22 +52,43 @@ export function randomId(): string {
  * loop the GeoPDF work was written to eliminate. Hermes has no JIT, so that
  * costs ~70× what it profiles at on a laptop: a 20 MB KMZ froze the UI thread
  * for seconds with nothing on screen. `new File(uri).bytes()` is native.
+ *
+ * TWO PASSES, and the first one inflates nothing. A bare `unzipSync(bytes)`
+ * eagerly inflates EVERY entry — icons, overlays, and a hostile 10000:1 entry
+ * alike — into JS memory before our first line runs. fflate's `filter` is
+ * called with the central-directory record before any inflation, and it sizes
+ * the output buffer from that same declared `originalSize`, so refusing there
+ * is a real cap: a record that lies high is refused, one that lies low
+ * truncates into an unparseable KML rather than growing the buffer.
  */
-function kmlFromKmz(bytes: Uint8Array): { fileName: string; text: string } {
-  let entries: Record<string, Uint8Array>;
+export function kmlFromKmz(bytes: Uint8Array): { fileName: string; text: string } {
+  const declared: { name: string; originalSize: number }[] = [];
   try {
-    entries = unzipSync(bytes);
+    unzipSync(bytes, {
+      filter: ({ name, originalSize }) => {
+        declared.push({ name, originalSize });
+        return false; // listing pass only
+      },
+    });
   } catch {
     throw new Error(IMPORT_ERRORS.unparseable);
   }
-  const kmlName =
-    Object.keys(entries).find((n) => n.toLowerCase() === "doc.kml") ??
-    Object.keys(entries).find((n) => n.toLowerCase().endsWith(".kml"));
-  if (!kmlName) throw new Error(IMPORT_ERRORS.unparseable);
-  return {
-    fileName: kmlName,
-    text: new TextDecoder().decode(entries[kmlName]),
-  };
+  const entry =
+    declared.find((e) => e.name.toLowerCase() === "doc.kml") ??
+    declared.find((e) => e.name.toLowerCase().endsWith(".kml"));
+  if (!entry) throw new Error(IMPORT_ERRORS.unparseable);
+  if (entry.originalSize > MAX_KMZ_UNCOMPRESSED_BYTES) {
+    throw new Error(IMPORT_ERRORS.tooLarge);
+  }
+  let entries: Record<string, Uint8Array>;
+  try {
+    entries = unzipSync(bytes, { filter: ({ name }) => name === entry.name });
+  } catch {
+    throw new Error(IMPORT_ERRORS.unparseable);
+  }
+  const inflated = entries[entry.name];
+  if (!inflated) throw new Error(IMPORT_ERRORS.unparseable);
+  return { fileName: entry.name, text: new TextDecoder().decode(inflated) };
 }
 
 export type ImportOutcome =

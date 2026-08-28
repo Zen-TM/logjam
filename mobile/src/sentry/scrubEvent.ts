@@ -3,8 +3,9 @@
 //
 // Mirrors api/src/lib/logger.ts: no canyon coordinates or names may leave the
 // device in a crash report (root CLAUDE.md privacy rule). Three layers:
-//   1. redactTilePathPatterns semantics — strip URLs and z/x/y tile triples
-//      from every free-text field (a tile index at z18 localises to ~150 m).
+//   1. redactTilePathPatterns semantics — strip URLs, decimal lat/lng pairs
+//      and z/x/y tile triples from every free-text field (a tile index at z18
+//      localises to ~150 m).
 //   2. safeErrorForLog semantics — drop stack-embedded argument blocks from
 //      exception messages.
 //   3. Structured-key redaction — censor coordinate/name-shaped keys anywhere
@@ -14,9 +15,22 @@
 // This module must ship BEFORE any Sentry init does (PROGRESS.md: reporter
 // without scrubber = build-breaker).
 
+// A decimal lat/lng pair in free text — "-33.5621, 150.4017", "[150.40,-33.56]"
+// and the GeoJSON-ish forms in between. Keyed redaction (SENSITIVE_KEYS) cannot
+// reach a coordinate that was interpolated into a message before it got here,
+// and console.log/warn arrive as breadcrumbs through this same filter, so this
+// is the only layer standing between an interpolated fix and Sentry.
+//
+// Four decimal places (~11 m) is the floor: below that the false-positive rate
+// on ordinary numbers (timings, versions, ratios) costs more debuggability than
+// the ~1 km it would protect. Anything the app formats from a real GPS fix has
+// more precision than that, not less.
+const COORDINATE_PAIR = /-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}/g;
+
 export function redactTilePathPatterns(message: string): string {
   return message
     .replace(/\bhttps?:\/\/\S+/gi, "[redacted-url]")
+    .replace(COORDINATE_PAIR, "[redacted-coords]")
     .replace(/\b\d+\/\d+\/\d+\b/g, "[redacted-tile]");
 }
 
@@ -84,10 +98,29 @@ export type ScrubbableBreadcrumb = {
   data?: { [key: string]: unknown };
 };
 
+// The frame fields that can carry user data: a bundle path (a full http:// URL
+// under Metro), the source line an error was thrown from, and `vars` — local
+// variables, which are exactly where a coordinate would be sitting. Spelled
+// out rather than an index signature so Sentry's own StackFrame satisfies it.
+export type ScrubbableStackFrame = {
+  filename?: string;
+  abs_path?: string;
+  module?: string;
+  function?: string;
+  context_line?: string;
+  pre_context?: string[];
+  post_context?: string[];
+  vars?: { [key: string]: unknown };
+};
+
 export type ScrubbableEvent = {
   message?: string;
   exception?: {
-    values?: { type?: string; value?: string }[];
+    values?: {
+      type?: string;
+      value?: string;
+      stacktrace?: { frames?: ScrubbableStackFrame[] };
+    }[];
   };
   breadcrumbs?: ScrubbableBreadcrumb[];
   request?: unknown;
@@ -111,6 +144,12 @@ export function scrubEvent<E extends ScrubbableEvent>(event: E): E {
       values: scrubbed.exception.values.map((v) => ({
         ...v,
         ...(typeof v.value === "string" && { value: scrubMessage(v.value) }),
+        // Frames are free-form enough to deserve the recursive walk: bundle
+        // paths, the throwing source line, and `vars` all land here untouched
+        // by the message-level scrub above.
+        ...(v.stacktrace && {
+          stacktrace: scrubStructure(v.stacktrace) as typeof v.stacktrace,
+        }),
       })),
     };
   }

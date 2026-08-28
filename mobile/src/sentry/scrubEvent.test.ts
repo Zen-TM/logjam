@@ -24,6 +24,29 @@ describe("redactTilePathPatterns", () => {
   it("leaves ordinary text alone", () => {
     expect(redactTilePathPatterns("plain error message")).toBe("plain error message");
   });
+
+  // The consent sheet promises reports are "scrubbed of canyon names and
+  // coordinates". Keyed redaction can only reach a coordinate that is still a
+  // field; once it has been interpolated into a message (or a console line,
+  // which Sentry captures as a breadcrumb through this same filter) this
+  // pattern is the whole promise.
+  it("strips a plain-text lat/lng pair", () => {
+    expect(redactTilePathPatterns("no fix near -33.5621, 150.4017 yet")).toBe(
+      "no fix near [redacted-coords] yet",
+    );
+  });
+
+  it("strips a bracketed lng/lat pair with no space", () => {
+    expect(redactTilePathPatterns("bbox [150.40171,-33.56213] empty")).toBe(
+      "bbox [[redacted-coords]] empty",
+    );
+  });
+
+  it("leaves low-precision number pairs alone", () => {
+    // ~1 km at three decimals, and the false-positive cost on timings/ratios
+    // is what buys the four-decimal floor.
+    expect(redactTilePathPatterns("took 1.25, 3.75 s")).toBe("took 1.25, 3.75 s");
+  });
 });
 
 describe("stripArgsBlock", () => {
@@ -111,6 +134,38 @@ describe("scrubEvent", () => {
     expect(scrubbed.breadcrumbs![0].data).toEqual({
       url: "[redacted-url]",
       status_code: 200,
+    });
+  });
+
+  it("scrubs exception stack frames", () => {
+    const event = {
+      exception: {
+        values: [
+          {
+            type: "Error",
+            value: "boom",
+            stacktrace: {
+              frames: [
+                {
+                  filename: "http://10.0.2.2:8081/index.bundle?platform=android",
+                  function: "recordFix",
+                  context_line: "log(`fix at -33.56213, 150.40171`)",
+                  vars: { name: "Hidden Canyon", latitude: -33.7, count: 2 },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    };
+    const frame = scrubEvent(event).exception!.values![0].stacktrace!.frames![0];
+    expect(frame.filename).toBe("[redacted-url]");
+    expect(frame.function).toBe("recordFix");
+    expect(frame.context_line).toBe("log(`fix at [redacted-coords]`)");
+    expect(frame.vars).toEqual({
+      name: "[redacted]",
+      latitude: "[redacted]",
+      count: 2,
     });
   });
 

@@ -98,6 +98,15 @@ async function writeIndex(backend: KeyValueBackend, keys: string[]): Promise<voi
   await backend.set(INDEX_KEY, JSON.stringify(keys));
 }
 
+/**
+ * Delete `count` chunks AND any beyond them, up to the first gap.
+ *
+ * The header is written last, so a process death mid-`setItem` leaves a
+ * contiguous run of chunks that no header counts — token fragments that
+ * nothing could reach again, because SecureStore has no listing API. Chunks
+ * are written in order, so "sweep from 0 to the first gap" is exactly the run
+ * this module could have written; `count` is a lower bound, not the truth.
+ */
 async function removeChunks(
   backend: KeyValueBackend,
   baseKey: string,
@@ -106,17 +115,23 @@ async function removeChunks(
   for (let i = 0; i < count; i++) {
     await backend.remove(chunkKey(baseKey, i));
   }
+  for (let i = count; (await backend.get(chunkKey(baseKey, i))) != null; i++) {
+    await backend.remove(chunkKey(baseKey, i));
+  }
 }
 
 async function removeKey(backend: KeyValueBackend, key: string): Promise<void> {
   const existing = await backend.get(key);
+  let count = 0;
   if (existing != null && existing.startsWith(CHUNK_HEADER_PREFIX)) {
-    const count = Number(existing.slice(CHUNK_HEADER_PREFIX.length));
+    count = Number(existing.slice(CHUNK_HEADER_PREFIX.length));
     if (!Number.isInteger(count) || count < 0) {
       throw new Error(`Corrupt chunk header for key ${key}`);
     }
-    await removeChunks(backend, key, count);
   }
+  // Unconditional: a headerless base key can still have orphan chunks beside
+  // it, and they are the whole point of the sweep.
+  await removeChunks(backend, key, count);
   await backend.remove(key);
 }
 
@@ -126,6 +141,17 @@ export function createChunkedKeyValueStorage(
 ): KeyValueStorage {
   return {
     async setItem(key: string, value: string): Promise<void> {
+      // The index entry goes in BEFORE the value, not after. It is what
+      // `clear()` enumerates, so a process death partway through the writes
+      // below would otherwise leave Cognito token fragments under a base key
+      // that sign-out and account-switch can never see again. An index entry
+      // for a value that never landed is harmless: `removeKey` on an absent
+      // key is a no-op.
+      const index = await readIndex(backend);
+      if (!index.includes(key)) {
+        await writeIndex(backend, [...index, key]);
+      }
+
       // Remove any previous value first so a shrinking chunk count can't
       // leave stale trailing chunks behind.
       await removeKey(backend, key);
@@ -139,11 +165,6 @@ export function createChunkedKeyValueStorage(
           await backend.set(chunkKey(key, i), chunks[i]);
         }
         await backend.set(key, `${CHUNK_HEADER_PREFIX}${chunks.length}`);
-      }
-
-      const index = await readIndex(backend);
-      if (!index.includes(key)) {
-        await writeIndex(backend, [...index, key]);
       }
     },
 

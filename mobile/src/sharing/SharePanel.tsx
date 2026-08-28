@@ -258,7 +258,9 @@ export function useSharePanel({
       body: (
         <View style={styles.body}>
           {sendError ? <ErrorBanner message={sendError} /> : null}
-          {friends.error ? <ErrorBanner message={friends.error} /> : null}
+          {friends.error ? (
+            <ErrorBanner message={friends.error} onRetry={friends.retry} />
+          ) : null}
           {/* The promise, stated plainly and in the warning hue, because it
               cannot be undone: this is where a user learns Send is not Share. */}
           <PromiseBanner
@@ -317,7 +319,9 @@ export function useSharePanel({
     body: (
       <View style={styles.body}>
         <SharingError sharing={sharing} />
-        {friends.error ? <ErrorBanner message={friends.error} /> : null}
+        {friends.error ? (
+          <ErrorBanner message={friends.error} onRetry={friends.retry} />
+        ) : null}
         <PromiseBanner
           tone="share"
           text={canyonId ? CANYON_SHARE_BLURB : SHARE_BLURB}
@@ -367,6 +371,11 @@ const EMPTY_SELECTION: ReadonlySet<string> = new Set<string>();
 function useFriendList({ active, online }: { active: boolean; online: boolean }) {
   const [list, setList] = useState<Friend[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A failed load leaves `list` null and changes none of the other deps, so
+  // without this the effect never runs again: the panel showed "Couldn't load
+  // friends." until the whole sheet was closed and reopened. Bumping the
+  // attempt is the retry.
+  const [attempt, setAttempt] = useState(0);
   const { accountState } = useAccountState();
   const status = capabilityStatus("sharing", accountState, online);
   const available = status.status === "available";
@@ -386,9 +395,14 @@ function useFriendList({ active, online }: { active: boolean; online: boolean })
     return () => {
       cancelled = true;
     };
-  }, [active, available, list]);
+  }, [active, available, list, attempt]);
 
-  return { list, error, status };
+  const retry = useCallback(() => {
+    setError(null);
+    setAttempt((n) => n + 1);
+  }, []);
+
+  return { list, error, status, retry };
 }
 
 function FriendRows({

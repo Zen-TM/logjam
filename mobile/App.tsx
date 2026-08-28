@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { Alert, StyleSheet, Text } from "react-native";
+import { Alert, Linking, Platform, StyleSheet, Text } from "react-native";
+import Constants from "expo-constants";
 // SystemBars (react-native-edge-to-edge) rather than expo-status-bar: with
 // android.edgeToEdgeEnabled the app draws behind BOTH system bars, so the
 // navigation bar needs light icons too — expo-status-bar only styles the status
@@ -21,7 +22,19 @@ import { AppLockGate } from "./src/offline/AppLockGate";
 import { applyScreenCapturePolicy } from "./src/offline/appLockPreference";
 import { excludeLocalDataFromBackup } from "./src/offline/localStores";
 import { LoadingState } from "./src/ui/ScreenStates";
+import { Button } from "./src/ui/Button";
 import { fontSize, spacing, theme } from "./src/theme";
+
+// The blocked build's only way out. Derived from app.json's `android.package`
+// rather than a second literal, so it cannot drift from the id the store
+// actually lists. The https form (not `market://`) because it still resolves
+// when the Play app is missing — a sideloaded field build is exactly the case
+// this screen exists for. Android only: there is no iOS listing to point at
+// yet, and the text alone has to do until there is.
+const storeUrl =
+  Platform.OS === "android" && Constants.expoConfig?.android?.package
+    ? `https://play.google.com/store/apps/details?id=${Constants.expoConfig.android.package}`
+    : null;
 
 export default function App() {
   const minVersionGate = useMinVersionGate();
@@ -47,6 +60,15 @@ export default function App() {
             supported version is {minVersionGate.minVersion}. Please update the
             app to continue.
           </Text>
+          {storeUrl ? (
+            <Button
+              label="Open the Play Store"
+              icon="external-link"
+              onPress={() => {
+                void Linking.openURL(storeUrl).catch(console.error);
+              }}
+            />
+          ) : null}
         </SafeAreaView>
       </SafeAreaProvider>
     );
