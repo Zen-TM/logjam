@@ -142,6 +142,22 @@ router.get(
       liveShares.map((row) => `${row.entityType}:${row.entityId}:${user.id}`),
     );
 
+    // The canyon twin of liveShareKeys. The canyon row OUTLIVES its share (it
+    // stays alive under its owner), so "the canyon still exists" is not the
+    // same question as "this recipient may still see its name" — checking only
+    // existence made the documented read-time fallback unable to catch a
+    // revoked canyon share (APIR-012/PRIV-103).
+    const liveCanyonShares =
+      canyonIds.size > 0
+        ? await prisma.canyonShare.findMany({
+            where: { sharedWithId: user.id, canyonId: { in: [...canyonIds] } },
+            select: { canyonId: true },
+          })
+        : [];
+    const liveCanyonShareIds = new Set(
+      liveCanyonShares.map((row) => row.canyonId),
+    );
+
     // Which file_sent notifications still have a live, non-declined recipient
     // row. A swept (expired) send or a declined one resolves to nothing and the
     // notification is dropped below, exactly as a revoked share is. Note this
@@ -221,7 +237,9 @@ router.get(
       if (n.type === "canyon_shared") {
         const id = payloadString(n.payload, "canyonId");
         const canyon = id ? canyonById.get(id) : undefined;
-        if (!canyon) return [];
+        // Both halves: the canyon must still exist AND still be shared with
+        // this recipient, exactly as item_shared requires a live Share row.
+        if (!canyon || !liveCanyonShareIds.has(canyon.id)) return [];
         const sharedById = payloadString(n.payload, "sharedById");
         const sharer = sharedById ? sharerById.get(sharedById) : undefined;
         return [
@@ -269,12 +287,13 @@ router.patch(
     const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
-    const notification = await prisma.notification.findUnique({
-      where: { id },
+    // Owner-scoped lookup: a foreign id gets the SAME 404 a non-existent one
+    // gets, so the status cannot confirm that a notification id exists to
+    // anyone but its owner (house anti-oracle rule, PRIV-105).
+    const notification = await prisma.notification.findFirst({
+      where: { id, userId: user.id },
     });
     if (!notification) throw new AppError(404, "Notification not found");
-    if (notification.userId !== user.id)
-      throw new AppError(403, "Access denied");
 
     const updated = await prisma.notification.update({
       where: { id },
@@ -311,12 +330,11 @@ router.delete(
     const user = await resolveUser(req.user!.sub);
 
     const id = getParam(req.params.id);
-    const notification = await prisma.notification.findUnique({
-      where: { id },
+    // Owner-scoped, same reason as PATCH /:id/read above (PRIV-105).
+    const notification = await prisma.notification.findFirst({
+      where: { id, userId: user.id },
     });
     if (!notification) throw new AppError(404, "Notification not found");
-    if (notification.userId !== user.id)
-      throw new AppError(403, "Access denied");
 
     await prisma.notification.delete({ where: { id } });
 

@@ -426,9 +426,14 @@ router.delete(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
     const id = getParam(req.params.id);
-    const media = await prisma.media.findUnique({ where: { id } });
+    // Owner-scoped: a foreign media id gets the SAME 404 a non-existent one
+    // gets. A sharee sees canyon-level media ids in a shared canyon payload,
+    // so a 403 here would confirm which of them are real (APIR-013/PRIV-106) —
+    // the presign path in this same file already argues exactly that.
+    const media = await prisma.media.findFirst({
+      where: { id, ownerId: user.id },
+    });
     if (!media) throw new AppError(404, "Media not found");
-    if (media.ownerId !== user.id) throw new AppError(403, "Access denied");
 
     // S3-first (ARCH-004): blobs go before the row, so an S3 failure leaves
     // the row (and therefore the keys) intact for a retried DELETE. The row

@@ -49,7 +49,8 @@ export async function requireCanyonAccess(
  * oracle without lying to a sharee:
  *   none   → 404 (caller can't see this canyon at all)
  *   shared → 403 forbiddenMessage (caller sees it but lacks this permission)
- * For trip-level owner checks use the sync requireCanyonOwner (always 404).
+ * For owner-private resources reached through a canyon use the sync
+ * requireCanyonOwner below (404 by default).
  */
 export async function requireCanyonOwnerAccess(
   userId: string,
@@ -62,14 +63,20 @@ export async function requireCanyonOwnerAccess(
 }
 
 /**
- * Assert the user owns the canyon. Owner-private resources (trip logs, trip
- * media) should pass a 404 denial so the response does not become an
- * existence oracle for IDs the caller is not allowed to see.
+ * Assert the user owns the canyon, for owner-private resources reached through
+ * one (trip logs, trip media). NO CURRENT CALL SITE — the nested single-trip
+ * route it was written for is gone, and routes/tripLogs.ts does the same check
+ * inline against getCanyonRole.
+ *
+ * The default denial is a 404 ON PURPOSE (PRIV-102): the whole point of an
+ * owner-private resource is that its existence is not confirmable, so the
+ * lazy call — no `denial` argument — has to be the safe one. Pass a 403
+ * explicitly only where the caller can already legitimately see the canyon.
  */
 export function requireCanyonOwner(
   userId: string,
   canyon: { ownerId: string },
-  denial: AppError = new AppError(403, "Access denied"),
+  denial: AppError = new AppError(404, "Canyon not found"),
 ): void {
   if (canyon.ownerId !== userId) throw denial;
 }

@@ -98,12 +98,9 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
     throw new AppError(400, "You already own this item");
   }
 
-  const targetUser = await prisma.user.findUnique({
-    where: { id: sharedWithUserId },
-  });
-  if (!targetUser) throw new AppError(404, "Target user not found");
-
-  // Friends only — same rule canyon sharing enforces.
+  // Friends only — same rule canyon sharing enforces, and checked BEFORE the
+  // target-user lookup so an unknown id and an existing non-friend get the
+  // same 403 rather than 404-vs-403 (PRIV-101).
   const friendship = await prisma.friendship.findFirst({
     where: {
       status: "accepted",
@@ -116,6 +113,13 @@ router.post("/", requireAuth, async (req: AuthenticatedRequest, res: Response) =
   if (!friendship) {
     throw new AppError(403, "You can only share items with friends");
   }
+
+  // Unreachable given the friendship above; kept so a missing row fails loud
+  // rather than reading preferences off undefined.
+  const targetUser = await prisma.user.findUnique({
+    where: { id: sharedWithUserId },
+  });
+  if (!targetUser) throw new AppError(404, "Target user not found");
 
   const existing = await prisma.share.findUnique({
     where: {

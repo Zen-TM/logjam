@@ -216,11 +216,13 @@ router.get(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const row = await prisma.topoExportJob.findUnique({
-      where: { id: getParam(req.params.id) },
+    // Owner-scoped lookup: a foreign export id gets the SAME 404 a
+    // non-existent one gets, so the status is no existence oracle for export
+    // ids the caller may not see (APIR-013/PRIV-106, matching topoJobs.ts).
+    const row = await prisma.topoExportJob.findFirst({
+      where: { id: getParam(req.params.id), userId: user.id },
     });
     if (!row) throw new AppError(404, "Export not found");
-    if (row.userId !== user.id) throw new AppError(403, "Access denied");
     const download = row.status === "completed" ? await presignResult(row.resultKey) : null;
     res.json(rowToView(row, download));
   },
@@ -232,11 +234,13 @@ router.delete(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const row = await prisma.topoExportJob.findUnique({
-      where: { id: getParam(req.params.id) },
+    // Owner-scoped lookup: a foreign export id gets the SAME 404 a
+    // non-existent one gets, so the status is no existence oracle for export
+    // ids the caller may not see (APIR-013/PRIV-106, matching topoJobs.ts).
+    const row = await prisma.topoExportJob.findFirst({
+      where: { id: getParam(req.params.id), userId: user.id },
     });
     if (!row) throw new AppError(404, "Export not found");
-    if (row.userId !== user.id) throw new AppError(403, "Access denied");
     if (row.status === "queued" || row.status === "running") {
       throw new AppError(409, "Cannot delete an in-progress export");
     }

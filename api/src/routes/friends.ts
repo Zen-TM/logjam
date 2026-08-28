@@ -17,6 +17,7 @@ import {
   snapshotWaypointVisibility,
   writeWaypointVisibilityLoss,
 } from "../lib/waypointLink";
+import { revokeAllSharesBetween } from "../lib/shareAccess";
 
 async function wantsInAppNotification(
   userId: string,
@@ -372,7 +373,7 @@ router.delete(
           })
         ).map((link) => link.waypointId),
       );
-      await tx.syncTombstone.createMany({ data: unfriendTombstones });
+      await writeTombstones(tx, unfriendTombstones);
       // Revoke any canyons shared between these two users
       await tx.canyonShare.deleteMany({
         where: {
@@ -382,6 +383,12 @@ router.delete(
           ],
         },
       });
+      // Every OTHER share type between the two users: direct per-item Shares
+      // (waypoint / route / topo job / GeoPDF job) in both directions, plus
+      // file sends the recipient has not taken yet. Canyon shares are the
+      // block above; this is the rest of the same promise — unfriending takes
+      // back all live access, not just canyons.
+      await revokeAllSharesBetween(tx, user.id, otherId);
       await writeWaypointVisibilityLoss(tx, waypointVisibility);
       // Drop the recipient's residual canyon_shared notifications for each
       // canyon whose share was just revoked.

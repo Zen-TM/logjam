@@ -36,13 +36,11 @@ router.post(
     if (!sharedWithUserId)
       throw new AppError(400, "sharedWithUserId is required");
 
-    // Confirm the target user exists
-    const targetUser = await prisma.user.findUnique({
-      where: { id: sharedWithUserId },
-    });
-    if (!targetUser) throw new AppError(404, "Target user not found");
-
-    // Confirm they are friends
+    // Friendship FIRST, target-user lookup second. Probing arbitrary internal
+    // user ids used to answer 404 for an unknown id and 403 for an existing
+    // non-friend — a user-row existence oracle (PRIV-101). An accepted
+    // friendship implies the row exists, so checking it first collapses both
+    // cases onto the same 403.
     const friendship = await prisma.friendship.findFirst({
       where: {
         status: "accepted",
@@ -54,6 +52,13 @@ router.post(
     });
     if (!friendship)
       throw new AppError(403, "You can only share canyons with friends");
+
+    // Unreachable given the friendship above; kept so a missing row fails loud
+    // rather than reading preferences off undefined.
+    const targetUser = await prisma.user.findUnique({
+      where: { id: sharedWithUserId },
+    });
+    if (!targetUser) throw new AppError(404, "Target user not found");
 
     // Prevent duplicate shares
     const existing = await prisma.canyonShare.findFirst({

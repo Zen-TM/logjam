@@ -105,7 +105,9 @@ describe("requireCanyonOwner", () => {
     expect(() => requireCanyonOwner("owner-1", CANYON)).not.toThrow();
   });
 
-  it("throws the default 403 for a non-owner (even a share recipient)", () => {
+  // PRIV-102: the DEFAULT denial must be the safe one. A 403 default would
+  // ship an existence oracle at the first call site that forgot the argument.
+  it("throws the default 404 for a non-owner (even a share recipient)", () => {
     const err = (() => {
       try {
         requireCanyonOwner("friend-1", CANYON);
@@ -114,7 +116,7 @@ describe("requireCanyonOwner", () => {
       }
     })();
     expect(err).toBeInstanceOf(AppError);
-    expect((err as AppError).statusCode).toBe(403);
+    expect((err as AppError).statusCode).toBe(404);
   });
 
   it("throws the caller-supplied denial (404 anti-oracle for trip logs)", () => {
@@ -132,9 +134,9 @@ describe("requireCanyonOwner", () => {
 // these tests are the deliberate stop to revisit the boundary.
 describe("sharee single-trip denial (privacy.html: per-trip data 'remain private to you')", () => {
   it("sharee cannot read per-trip notes — denial body has no owner-private fields or presigned-URL markers", () => {
-    // A share recipient ("shared" role, not owner) hitting
-    // GET /canyons/:canyonId/trips/:id is denied by requireCanyonOwner with
-    // the 404 anti-oracle denial (routes/tripLogs.ts).
+    // A share recipient ("shared" role, not owner) reaching an owner-private
+    // trip-log resource is denied with the 404 anti-oracle denial — the same
+    // shape routes/tripLogs.ts throws inline for role === "none"/"shared".
     let denial: AppError | undefined;
     try {
       requireCanyonOwner(
