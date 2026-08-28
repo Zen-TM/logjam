@@ -120,7 +120,11 @@ export function defaultFrameInsets(size: {
  * Ground resolution at the centre of a bbox, for the detail picker's caption.
  * "z16" means nothing on its own; "≈ 2 m per pixel" is the thing a user can
  * actually judge a map against.
+ *
+ * Re-exported (not reimplemented) from scaleBar.ts's `tileMetersPerPixel`:
+ * this screen plans against slippy-tile zooms (256-based), the opposite
+ * convention from a MapLibre `camera.zoom` — see that file's header for why
+ * a second copy of this formula is how the convention split stops being
+ * discoverable (MMO-001/MMO-003).
  */
-export function metresPerPixel(latitude: number, zoom: number): number {
-  return (156543.03392 * Math.cos((latitude * Math.PI) / 180)) / 2 ** zoom;
-}
+export { tileMetersPerPixel as metresPerPixel } from "./scaleBar";

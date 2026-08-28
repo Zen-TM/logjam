@@ -26,6 +26,12 @@ const NICE_STEPS_M = [
   50_000, 100_000, 200_000, 500_000,
 ] as const;
 
+/**
+ * Ground metres per pixel at a MapLibre CAMERA zoom (512-based — see the file
+ * header). For a slippy-tile zoom (256-based, e.g. `regionFrame.ts`'s
+ * download-size estimates), use `tileMetersPerPixel` below instead — the two
+ * are off by exactly 2x and neither may stand in for the other.
+ */
 export function metersPerPixel(latitudeDeg: number, zoom: number): number {
   if (!Number.isFinite(latitudeDeg) || Math.abs(latitudeDeg) > 90) {
     throw new Error(`metersPerPixel: latitude out of range (${latitudeDeg})`);
@@ -35,6 +41,26 @@ export function metersPerPixel(latitudeDeg: number, zoom: number): number {
   }
   return (
     (EQUATOR_METERS_PER_PIXEL_Z0 * Math.cos((latitudeDeg * Math.PI) / 180)) /
+    2 ** zoom
+  );
+}
+
+// Web-Mercator ground resolution at zoom 0, latitude 0, for the SLIPPY-TILE
+// convention (256-based) — deliberately a separate constant from
+// EQUATOR_METERS_PER_PIXEL_Z0 above, which is 512-based.
+const EQUATOR_METERS_PER_PIXEL_TILE_Z0 = 156543.03392;
+
+/**
+ * Ground metres per pixel at a slippy-tile zoom (256-based XYZ tile
+ * coordinates), NOT a MapLibre camera zoom — use `metersPerPixel` above for
+ * that. Sole caller: `regionFrame.ts`'s region-download size/detail estimate,
+ * which plans against standard tile zooms. Mixing the two conventions is
+ * exactly the MMO-001 bug (see scaleBar's file header) — don't inline this
+ * formula a third time.
+ */
+export function tileMetersPerPixel(latitudeDeg: number, zoom: number): number {
+  return (
+    (EQUATOR_METERS_PER_PIXEL_TILE_Z0 * Math.cos((latitudeDeg * Math.PI) / 180)) /
     2 ** zoom
   );
 }

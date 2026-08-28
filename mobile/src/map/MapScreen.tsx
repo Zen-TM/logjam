@@ -2424,9 +2424,19 @@ export function MapScreen({
 
   // "Show on map" arrival: fit the requested asset's bbox. Keyed on the nonce
   // so tapping the same asset again refocuses, and so a re-render with the
-  // same params doesn't fight the user's own panning.
+  // same params doesn't fight the user's own panning — the nonce is checked
+  // INSIDE the effect (like the sibling draw/edit/continue/navigate/start
+  // arrival effects below), not just listed as a dep: `mergedOverlays` is a
+  // useMemo that gets a new identity on every overlay/artifact registry
+  // change (e.g. a background region download finishing), which re-ran this
+  // whole body — including `setFollowMode("off")` and a fresh
+  // `fitCameraToBbox` — and yanked the camera away from the user's own
+  // panning while following (MMO-002).
+  const handledFocusNonce = useRef<number | null>(null);
   useEffect(() => {
     if (!focus) return;
+    if (handledFocusNonce.current === focus.nonce) return;
+    handledFocusNonce.current = focus.nonce;
     // Basemap first, camera second: they commit in the same render either way,
     // and the ordering says which one is the correction.
     if (focus.basemapId) chooseBasemap(focus.basemapId);
