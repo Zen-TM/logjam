@@ -8,7 +8,12 @@ import type {
   TDateRange,
   TCustomFieldFilter,
 } from "../../../canyonUtils";
-import { refreshFromRopeWiki, passesFilters, activeFilterCount } from "../../../canyonUtils";
+import {
+  refreshFromRopeWiki,
+  passesFilters,
+  activeFilterCount,
+  emptyFilters,
+} from "../../../canyonUtils";
 // The graded axes' bounds double as the "inactive" value, so they come from
 // the same place the predicate reads them (shared/src/canyonFilter.ts).
 import { CANYON_RANGE_BOUNDS as SLIDER_RANGES, type CanyonRangeKey } from "@logjam/shared";
@@ -317,11 +322,17 @@ function CanyonsPanel({
             <option value="Exactly">=</option>
           </select>
           {op !== "Any" && (
+            // FEUI-005: uncontrolled (defaultValue, not value) so backspacing
+            // to empty doesn't get snapped back to the last committed number
+            // on every keystroke — React only re-applies `value` bindings,
+            // never `defaultValue`, after mount. A commit still fires live on
+            // every valid parse; an empty/invalid intermediate state is left
+            // alone rather than reverted or force-committed.
             <input
               type="number"
               aria-label={`${displayName} value`}
               className={classes.numberInput}
-              value={num}
+              defaultValue={num}
               onChange={(e) => {
                 const v = parseInt(e.target.value, 10);
                 if (!isNaN(v)) {
@@ -478,12 +489,13 @@ function CanyonsPanel({
             <option value="Exactly">=</option>
           </select>
           {op !== "Any" && (
+            // FEUI-005: uncontrolled (defaultValue, not value) — see thresholdCell.
             <input
               type="number"
               step={def.type === "float" ? "any" : 1}
               aria-label={`${def.label} value`}
               className={classes.numberInput}
-              value={num}
+              defaultValue={num}
               onChange={(e) => {
                 const v =
                   def.type === "float"
@@ -646,24 +658,12 @@ function CanyonsPanel({
   }
 
   function handleReset() {
-    onChangeFilters({
-      name: null,
-      v_grade: null,
-      a_grade: null,
-      commitment: null,
-      quality: null,
-      pitches: null,
-      longest_pitch: null,
-      hours: null,
-      ownership: "all",
-      shared_by_me: false,
-      completion: "any",
-      created_at: null,
-      updated_at: null,
-      ropewiki: "any",
-      custom: {},
-      include_unknowns: false,
-    });
+    // FEUI-004: was a hand-spelled duplicate of EMPTY_CANYON_FILTERS (the two
+    // lists that must agree = one declaration + a test anti-pattern) — a new
+    // CanyonFilters key would be silently missed here, so Reset would leave
+    // that filter active. `custom` gets a fresh object so the singleton's
+    // nested record is never shared/mutated.
+    onChangeFilters({ ...emptyFilters, custom: {} });
   }
 
   // RopeWiki refresh

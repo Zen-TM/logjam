@@ -1821,8 +1821,20 @@ function Map({
   // Draggable vertex handles. MapLibre markers do the drag maths natively, so
   // this only has to keep one marker per vertex alive and report the drop.
   const vertexMarkersRef = useRef<maplibregl.Marker[]>([]);
+  // FEUI-001: `snapBetweenRef` requests are fire-and-forget network reads. If
+  // one lands while the user is mid-drag of a handle, drawPoints/drawAnchorIndices
+  // change and this effect's deps fire — tearing every marker down (including
+  // the one under the user's finger) kills the native drag before `dragend`
+  // ever runs (Marker.remove() unbinds the map's mousemove/mouseup listeners).
+  // Set true on any handle's dragstart, cleared on its dragend; both the
+  // rebuild body and the previous run's own cleanup check it before touching
+  // the DOM markers, so an in-flight drag survives an async snap landing.
+  // `dragend` itself commits a state change that re-fires this effect once
+  // the gesture ends, performing the now-safe rebuild with fresh data.
+  const draggingVertexRef = useRef(false);
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
+    if (draggingVertexRef.current) return;
     const map = mapRef.current;
     // Rebuild wholesale: the vertex count changes on nearly every gesture, and
     // a handful of markers is far cheaper than diffing them.
@@ -1864,6 +1876,7 @@ function Map({
       });
       marker.on("dragstart", () => {
         movedDuringDrag = false;
+        draggingVertexRef.current = true;
       });
       // Repaint the line under the cursor on every frame. The preview is built
       // with the same `moveAnchor` the drop commits, so what you drag is
@@ -1874,6 +1887,7 @@ function Map({
         previewDraft(map, moveAnchor(draftRef.current, anchorIndex, [lng, lat]));
       });
       marker.on("dragend", () => {
+        draggingVertexRef.current = false;
         handlePressedAt.current = Date.now();
         if (!movedDuringDrag) return;
         const { lng, lat } = marker.getLngLat();
@@ -1894,6 +1908,10 @@ function Map({
     });
 
     return () => {
+      // Skip teardown while a drag is active (see comment above the ref) —
+      // otherwise this cleanup, registered before the drag even started,
+      // still runs unconditionally the moment an async snap changes drawPoints.
+      if (draggingVertexRef.current) return;
       for (const marker of vertexMarkersRef.current) marker.remove();
       vertexMarkersRef.current = [];
     };
@@ -2143,8 +2161,9 @@ function Map({
 
         box = document.createElement("div");
         box.style.position = "absolute";
-        box.style.border = "2px dashed #22d3ee";
-        box.style.backgroundColor = "rgba(34, 211, 238, 0.1)";
+        box.style.border = "2px dashed var(--theme-accent)";
+        box.style.backgroundColor =
+          "color-mix(in srgb, var(--theme-accent) 20%, transparent)";
         box.style.pointerEvents = "none";
         box.style.zIndex = "10";
         container.appendChild(box);
@@ -2930,23 +2949,9 @@ function Map({
     <div id="map" className={classes.map} data-sidebar-open={sidebarOpen ? "true" : "false"}>
       <div ref={containerRef} style={{ height: "100%", width: "100%" }} />
       {/* Button to toggle 3D terrain on and off. */}
-      <button onClick={toggleTerrain} style={{
-        position: "absolute",
-        top: "145px", 
-        left: "auto", 
-        right: "10px", 
-        zIndex: 1000, 
-        width: "29px", 
-        height: "29px",
-        color: "black",
-        background: "white",
-        border: "none",
-        borderRadius: "4px",
-        boxShadow: "0 0 0 2px rgba(0,0,0,0.1)",
-        fontSize: "13px",
-        fontWeight: "bold",
-        cursor: "pointer",
-      }}> 3D </button>
+      <button onClick={toggleTerrain} className={classes.terrainToggle}>
+        3D
+      </button>
 
       {/* Persistent place search — always available; stays usable during pick
           modes for a quick fly-to. Slides right with the sidebar like the

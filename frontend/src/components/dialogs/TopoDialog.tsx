@@ -514,7 +514,12 @@ export default function TopoDialog({
         setStorageUsed(u.storageUsedBytes);
         setStorageQuota(u.storageQuotaBytes);
       })
-      .catch(() => {});
+      // Best-effort: quota display/gating only — a failure here leaves
+      // tileUsed/tileQuota null (the client-side over-quota checks then skip,
+      // and the server still enforces the quota on submit), so it's not worth
+      // a toast, but FEUI-011 wants the failure at least visible in the console
+      // rather than fully silent.
+      .catch((err) => console.error(err));
   }, [open]);
 
   useEffect(() => {

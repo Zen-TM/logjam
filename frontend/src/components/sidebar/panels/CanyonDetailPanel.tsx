@@ -20,6 +20,7 @@ import {
   getTripLogs,
   getCanyonDetail,
   getCanyonShares,
+  isHttpUrl,
 } from "../../../canyonUtils";
 import CanyonSlideshow from "../../media/CanyonSlideshow";
 import TrackIcon from "../../media/TrackIcon";
@@ -142,7 +143,14 @@ function CanyonDetailPanel({
     if (sharesFetchKeyRef.current === fetchKey) return;
     sharesFetchKeyRef.current = fetchKey;
     getCanyonShares(canyon.id)
-      .then(setCanyonShares)
+      .then((shares) => {
+        // FEUI-013: a slower response for a canyon/dialog-state the user has
+        // since navigated away from must not overwrite what's now showing —
+        // same stale-response race as FEUI-006 below. The ref already moved
+        // on if this fetch is no longer current.
+        if (sharesFetchKeyRef.current !== fetchKey) return;
+        setCanyonShares(shares);
+      })
       // Best-effort: this line is informational; on failure just omit it.
       .catch(console.error);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -157,10 +165,15 @@ function CanyonDetailPanel({
     }
     if (detailFetchKeyRef.current === canyon.id) return;
     detailFetchKeyRef.current = canyon.id;
+    const requestedId = canyon.id;
     setLoadingTrips(true);
     // One fetch yields canyon-level media plus (for owners) the trip logs.
-    getCanyonDetail(canyon.id)
+    getCanyonDetail(requestedId)
       .then((detail) => {
+        // FEUI-006: a slower canyon-A response landing after a since-selected
+        // canyon-B's must not overwrite B's panel. The dedup ref has already
+        // moved to B by the time this resolves if that happened.
+        if (detailFetchKeyRef.current !== requestedId) return;
         setTripLogs(detail.tripLogs ?? []);
         setCanyonMedia(detail.media);
       })
@@ -168,7 +181,9 @@ function CanyonDetailPanel({
         console.error(err);
         toast.error(messageFromError(err, "Couldn't load canyon details."));
       })
-      .finally(() => setLoadingTrips(false));
+      .finally(() => {
+        if (detailFetchKeyRef.current === requestedId) setLoadingTrips(false);
+      });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canyon?.id, toast]);
 
@@ -254,8 +269,14 @@ function CanyonDetailPanel({
   // slideshow + track card reflect changes without waiting for a Save.
   function reloadCanyonMedia() {
     if (!canyon) return;
-    getCanyonDetail(canyon.id)
-      .then((detail) => setCanyonMedia(detail.media))
+    const requestedId = canyon.id;
+    getCanyonDetail(requestedId)
+      .then((detail) => {
+        // FEUI-006: same stale-response guard as the detail-fetch effect —
+        // don't apply a response for a canyon the user has since left.
+        if (detailFetchKeyRef.current !== requestedId) return;
+        setCanyonMedia(detail.media);
+      })
       .catch((err) => {
         console.error(err);
         toast.error(messageFromError(err, "Couldn't refresh media."));
@@ -381,6 +402,11 @@ function CanyonDetailPanel({
             }}
             tabIndex={0}
             onKeyDown={(e) => {
+              // FEUI-009: mirrors the onClick guard above — keydown bubbles
+              // from a focused nested source <a> or the edit <button>, so an
+              // unguarded Enter/Space here both activates that element AND
+              // pops the edit dialog over it.
+              if ((e.target as HTMLElement).closest("a, button")) return;
               if (e.key === "Enter" || e.key === " ") setShowEdit(true);
             }}
             aria-label="Canyon attributes — click to edit"
@@ -429,7 +455,10 @@ function CanyonDetailPanel({
                 <ul className={classes.sourcesList}>
                   {canyon.attributes.sources.map(([label, url], i) => (
                     <li key={i}>
-                      {url ? (
+                      {/* FEUI-012: only render http(s) as a link — a non-http
+                          scheme (e.g. from data saved before the save-time
+                          check existed) falls back to plain text. */}
+                      {url && isHttpUrl(url) ? (
                         <a href={url} target="_blank" rel="noopener noreferrer">
                           {label}
                         </a>

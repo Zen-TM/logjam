@@ -64,6 +64,8 @@ import ConsentGate from "./ConsentGate";
 import type { TripLogCustomFieldDef } from "@logjam/shared";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
+import ConfirmDialog from "./dialogs/ConfirmDialog";
+import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
 import {
   TOPO_OVERLAY_SOURCE,
   GEOPDF_OVERLAY_ATTRIBUTION,
@@ -1024,6 +1026,19 @@ function App() {
     setDrawColor(null);
   };
 
+  // FEUI-010: Cancel/Clear used to wipe an in-progress route (dozens of
+  // deliberate map clicks, plus `reset()` also drops the undo history) with
+  // no confirm. Reuse the same discard-guard the dialogs already use for
+  // unsaved changes — "dirty" here means at least one placed vertex.
+  const cancelRouteGuard = useUnsavedChangesGuard(
+    routeDraft.points.length > 0,
+    cancelDrawingRoute,
+  );
+  const clearRouteGuard = useUnsavedChangesGuard(
+    routeDraft.points.length > 0,
+    () => routeDraft.reset(),
+  );
+
   const saveDrawnRoute = async (name: string, color?: string) => {
     setSavingRoute(true);
     try {
@@ -1350,14 +1365,34 @@ function App() {
           atCap={routeDraft.atCap}
           editingName={routes.find((r) => r.id === editingRouteId)?.name ?? null}
           onUndo={routeDraft.undo}
-          onClear={() => routeDraft.reset()}
+          onClear={clearRouteGuard.requestClose}
           onSave={() => setNamingRoute(true)}
-          onCancel={cancelDrawingRoute}
+          onCancel={cancelRouteGuard.requestClose}
           saving={savingRoute}
           snapMode={snapMode}
           onSnapModeChange={setSnapMode}
         />
       )}
+
+      <ConfirmDialog
+        open={cancelRouteGuard.guardOpen}
+        title="Discard this route?"
+        message="Your placed points will be lost. This cannot be undone."
+        confirmLabel="Discard"
+        confirmColor="error"
+        onConfirm={cancelRouteGuard.confirmDiscard}
+        onClose={cancelRouteGuard.cancelDiscard}
+      />
+
+      <ConfirmDialog
+        open={clearRouteGuard.guardOpen}
+        title="Clear this route?"
+        message="Your placed points will be lost. This cannot be undone."
+        confirmLabel="Clear"
+        confirmColor="error"
+        onConfirm={clearRouteGuard.confirmDiscard}
+        onClose={clearRouteGuard.cancelDiscard}
+      />
 
       <RouteNameDialog
         open={namingRoute}

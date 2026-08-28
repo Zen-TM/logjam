@@ -36,6 +36,19 @@ export function tripTitle(trip: TTripLog): string {
   );
 }
 
+// Only http(s) URLs are safe to render as a clickable <a href> or store as a
+// canyon source link — any other scheme (javascript:, data:, vbscript:, ...)
+// is an XSS/hygiene sink. FEUI-012. Single source for both the save-time
+// reject in CanyonDialog and the render-time guard in CanyonDetailPanel.
+export function isHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export type TFriend = {
   id: string;
   username: string;
