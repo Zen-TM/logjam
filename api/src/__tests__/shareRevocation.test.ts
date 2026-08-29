@@ -55,15 +55,38 @@ async function ensureFriends(
     .get("/friends/requests")
     .set(as(addresseeSub))
     .set(CLIENT);
-  if (pending.status !== 200) return;
+  // Fail LOUDLY. This used to `return` on any non-200, so a 429 from the
+  // per-IP global limiter turned the whole restore into a silent no-op — the
+  // suite still reported green while leaving the seeded bob<->carol friendship
+  // deleted for every later run. A restore hook that can quietly not restore is
+  // worse than no hook.
+  if (pending.status !== 200) {
+    throw new Error(
+      `ensureFriends: GET /friends/requests returned ${pending.status}, ` +
+        `cannot restore the friendship`,
+    );
+  }
   const incoming = (pending.body.incoming ?? pending.body ?? []) as {
     id: string;
   }[];
   for (const row of incoming) {
-    await request(API_URL)
+    const accept = await request(API_URL)
       .patch(`/friends/${row.id}/accept`)
       .set(as(addresseeSub))
       .set(CLIENT);
+    // 200 accepted; 404 means someone else already actioned it, which is fine.
+    if (accept.status !== 200 && accept.status !== 404) {
+      throw new Error(
+        `ensureFriends: accept of ${row.id} returned ${accept.status}`,
+      );
+    }
+  }
+  // Assert the postcondition rather than assuming it: this helper exists to
+  // leave the graph as it found it, so prove it did.
+  if ((await friendshipId(requesterSub, addresseeId)) === null) {
+    throw new Error(
+      "ensureFriends: friendship still missing after the accept pass",
+    );
   }
 }
 
