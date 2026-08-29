@@ -172,10 +172,11 @@ resource "aws_iam_role_policy" "gha_ecr_push" {
 # The two S3 surfaces CI actually touches are scoped explicitly instead:
 #   - frontend SPA bucket   -> aws_iam_role_policy.gha_frontend_deploy (below)
 #   - EB app-version bucket -> aws_iam_role_policy.gha_eb_appversions (below); the
-#     beanstalk-deploy action uploads the deploy.zip there. This grant is now the
-#     ONLY thing authorising that upload — AdministratorAccess-AWSElasticBeanstalk,
-#     which used to cover elasticbeanstalk-* buckets as a side effect, is gone
-#     (see gha_eb_deploy below).
+#     beanstalk-deploy action uploads the deploy.zip there. NOTE this grant is
+#     not the only thing authorising that upload: the EB managed policy covers
+#     elasticbeanstalk-* buckets as a side effect and is still attached (the
+#     narrowing was tried and reverted — see gha_eb below). It is kept explicit
+#     so the dependency on that breadth is stated rather than assumed.
 # VERIFY BEFORE APPLY: scan CloudTrail for any github-actions-role S3 call
 # outside these two buckets; if found, widen the scoped grant, never re-add
 # the managed full-access policy.
