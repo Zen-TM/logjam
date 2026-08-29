@@ -7,6 +7,7 @@
 // (documentDirectory, covered by allowBackup=false), paths tracked in the
 // mirror so tombstone apply deletes them with their rows.
 import * as FileSystem from "expo-file-system/legacy";
+import { downloadFromPresignedUrl } from "../api/presignedTransfer";
 import { categoryHasThumbnail, mediaCategory } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -85,7 +86,7 @@ export async function syncThumbnailCache(): Promise<void> {
         // downloadAsync writes the body regardless of HTTP status — an S3
         // error XML saved as a "thumbnail" poisons the cache, so gate on 200
         // and delete anything else.
-        const result = await FileSystem.downloadAsync(item.thumbnailUrl, path);
+        const result = await downloadFromPresignedUrl(item.thumbnailUrl, path);
         if (result.status !== 200) {
           await FileSystem.deleteAsync(path, { idempotent: true });
           continue;
@@ -125,7 +126,7 @@ export async function ensureDisplayCached(mediaId: string): Promise<string | nul
     if (!item) return null; // invisible/deleted server-side (omitted, §7.3)
     await ensureCacheDir();
     const path = `${CACHE_DIR}${mediaId}.display`;
-    const result = await FileSystem.downloadAsync(item.displayUrl, path);
+    const result = await downloadFromPresignedUrl(item.displayUrl, path);
     if (result.status !== 200) {
       await FileSystem.deleteAsync(path, { idempotent: true });
       return null;

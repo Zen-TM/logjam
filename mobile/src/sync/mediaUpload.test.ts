@@ -62,10 +62,22 @@ vi.mock("expo-file-system/legacy", () => ({
   copyAsync: () => Promise.resolve(),
   makeDirectoryAsync: () => Promise.resolve(),
   getInfoAsync: () => Promise.resolve({ exists: true, size: 1 }),
-  uploadAsync: (_url: string, fileUri: string) => {
-    uploaded.push(fileUri);
-    return Promise.resolve({ status: 200 });
-  },
+  // The media PUT goes through uploadToPresignedUrl now, which uses the TASK
+  // api so it can cancel a transfer that never starts (MAPP-006). The task
+  // reports progress immediately here, so the first-byte deadline never fires.
+  createUploadTask: (
+    _url: string,
+    fileUri: string,
+    _options: unknown,
+    onProgress?: (p: { totalBytesSent: number }) => void,
+  ) => ({
+    uploadAsync: () => {
+      onProgress?.({ totalBytesSent: 1 });
+      uploaded.push(fileUri);
+      return Promise.resolve({ status: 200 });
+    },
+    cancelAsync: () => Promise.resolve(),
+  }),
   FileSystemUploadType: { BINARY_CONTENT: "BINARY_CONTENT" },
 }));
 

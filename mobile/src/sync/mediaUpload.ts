@@ -25,6 +25,7 @@ import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
 import { MEDIA_CACHE_DIR as CACHE_DIR, WIPED_DIRS } from "../offline/localStores";
 import { canRunNow } from "../offline/networkPolicy";
+import { uploadToPresignedUrl } from "../api/presignedTransfer";
 
 // Client thumbnail contract (mirrors the web): a downscaled JPEG. The server
 // only bounds thumbnailSizeBytes, not dimensions.
@@ -253,10 +254,15 @@ async function putFile(
   fileUri: string,
   contentType: string,
 ): Promise<void> {
-  const result = await FileSystem.uploadAsync(url, fileUri, {
-    httpMethod: "PUT",
-    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-    headers: { "Content-Type": contentType },
+  // Guarded, not bare: `uploadAsync` has no timeout, so the Pixel-9
+  // connect()-hang this helper exists for parked a media op forever with the
+  // sync pump waiting on it (MAPP-006 — the finding fixed the Send-a-copy and
+  // GeoPDF legs; these media legs are the same call on a sibling surface, and
+  // mobile/CLAUDE.md's rule is that a second caller inherits the first's
+  // guards). A first-byte timeout throws, so the op fails and retries like any
+  // other transient error instead of hanging.
+  const result = await uploadToPresignedUrl(url, fileUri, {
+    "Content-Type": contentType,
   });
   if (result.status < 200 || result.status >= 300) {
     throw new Error(`Upload failed (${result.status})`);

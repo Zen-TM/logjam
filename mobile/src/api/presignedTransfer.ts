@@ -64,10 +64,17 @@ async function awaitStart<T>(
   return result;
 }
 
-/** PUT a file straight to a presigned URL. Streams from disk (BINARY_CONTENT). */
+/**
+ * PUT a file straight to a presigned URL. Streams from disk (BINARY_CONTENT).
+ *
+ * `headers` carries Content-Type where the presign was signed with one (the
+ * media upload path); omit it where it was not (Send-a-copy), because sending
+ * a header S3 did not sign is a signature mismatch, not a no-op.
+ */
 export async function uploadToPresignedUrl(
   uploadUrl: string,
   fileUri: string,
+  headers?: Record<string, string>,
 ): Promise<FileSystem.FileSystemUploadResult> {
   let moved = false;
   const task = FileSystem.createUploadTask(
@@ -76,6 +83,7 @@ export async function uploadToPresignedUrl(
     {
       httpMethod: "PUT",
       uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      ...(headers && { headers }),
     },
     ({ totalBytesSent }) => {
       if (totalBytesSent > 0) moved = true;
