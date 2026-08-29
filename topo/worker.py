@@ -38,12 +38,16 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote
 
 import psycopg2
 import psycopg2.extras
 from pmtiles.convert import mbtiles_to_pmtiles
 
+from worker_common import (
+    compose_database_url,
+    create_notification,
+    get_user_email,
+)
 from email_send import send_email, wants_email
 
 logging.basicConfig(
@@ -69,41 +73,6 @@ def safe_error_message(e: Exception) -> str:
     if isinstance(e, (OSError, IOError)):
         return "Could not read input LiDAR data. Verify the ZIP contains Elvis DTM files."
     return f"Processing failed. Contact support with job ID {JOB_ID}."
-
-def compose_database_url() -> str:
-    """Compose a Postgres connection string from discrete DB_* env vars.
-
-    Mirrored in export_worker.py — keep both copies in sync. User and
-    password are URL-quoted (safe="") because RDS-generated passwords
-    contain characters like "!" that aren't valid unescaped in a URL.
-    Fails loud, listing missing var NAMES only (never values).
-    """
-    host = os.environ.get("DB_HOST")
-    name = os.environ.get("DB_NAME")
-    user = os.environ.get("DB_USER")
-    password = os.environ.get("DB_PASSWORD")
-    port = os.environ.get("DB_PORT", "5432")
-
-    missing = [
-        var_name
-        for var_name, value in (
-            ("DB_HOST", host),
-            ("DB_NAME", name),
-            ("DB_USER", user),
-            ("DB_PASSWORD", password),
-        )
-        if not value
-    ]
-    if missing:
-        raise RuntimeError(
-            f"Missing required environment variables for database connection: {', '.join(missing)}"
-        )
-
-    return (
-        f"postgresql://{quote(user, safe='')}:{quote(password, safe='')}"
-        f"@{host}:{port}/{name}"
-    )
-
 
 AWS_REGION   = os.environ.get("AWS_REGION", "ap-southeast-2")
 BUCKET       = os.environ["S3_BUCKET_TOPO"]
@@ -344,24 +313,6 @@ def get_job(conn, job_id: str) -> dict:
     if not row:
         raise RuntimeError(f"Job {job_id} not found in DB")
     return dict(row)
-
-
-def create_notification(conn, user_id: str, notif_type: str, payload: dict):
-    import uuid as _uuid
-    with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO notifications (id, user_id, type, payload, read, created_at) "
-            "VALUES (%s, %s, %s, %s, false, NOW())",
-            (str(_uuid.uuid4()), user_id, notif_type, json.dumps(payload)),
-        )
-    conn.commit()
-
-
-def get_user_email(conn, user_id: str) -> str | None:
-    with conn.cursor() as cur:
-        cur.execute("SELECT email FROM users WHERE id = %s", (user_id,))
-        row = cur.fetchone()
-    return row["email"] if row else None
 
 
 # ── Email ─────────────────────────────────────────────────────────────────────
