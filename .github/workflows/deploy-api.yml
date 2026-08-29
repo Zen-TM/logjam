@@ -148,4 +148,14 @@ jobs:
           # Re-running a failed deploy on the same commit must reuse the already
           # uploaded version instead of erroring on the duplicate label.
           use_existing_version_if_available: true
+          # The action's default post-update health wait is 30s, and this
+          # environment does not reliably recover that fast: on 2026-08-29 EB
+          # logged "Environment update completed successfully" at 04:59:17 and
+          # went RED -> GREEN at 05:00:13 — 56s — so the action failed a deploy
+          # that had in fact succeeded and was serving. A deploy reported red
+          # while it is actually green is worse than a slow one: it trains
+          # everyone to disbelieve red. Single-instance environments take the
+          # whole app down during the swap and come back cold, so give it real
+          # headroom rather than shaving it.
+          wait_for_environment_recovery: 180
           wait_for_deployment: true
