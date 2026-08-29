@@ -69,17 +69,33 @@ jobs:
       # in a one-shot Fargate task on the image just pushed to :latest, and gate
       # the EB swap on its exit code. A failing migration aborts the deploy here
       # (EB untouched, old version keeps serving) instead of crash-looping the
-      # new container at boot. boot.ts no longer migrates. SUBNETS/SECURITY_GROUP
-      # match the ecs_subnets / ecs_security_groups Terraform outputs; the SG is
-      # the dedicated worker SG RDS ingress admits (CP-003).
+      # new container at boot. boot.ts no longer migrates.
+      #
+      # SUBNETS mirrors network.tf's `data "aws_subnet" "worker_a"/"worker_b"`,
+      # which are literal ids on both sides — a human edits both or neither.
+      # SECURITY_GROUP is NOT a literal any more (INF-012): it is a Terraform
+      # *managed* resource, so its id is generated and a replacement mints a new
+      # one, leaving a hardcoded id here silently pointing at nothing while
+      # Terraform is perfectly happy. Look it up by the name Terraform sets
+      # (network.tf `aws_security_group.worker`, name = logjam-worker-sg) — the
+      # one identity that survives replacement. This is the SG that RDS ingress
+      # admits (CP-003), so a wrong or empty value must abort, never fall back.
       - name: Run DB migrations (gated pre-deploy)
         env:
           CLUSTER: logjam-cluster
           TASK_DEF: logjam-api-migrate
           SUBNETS: subnet-0f59b0845905891be,subnet-0c10e1438a8fd0231
-          SECURITY_GROUP: sg-0bd5e6621b5f3ec4b
+          WORKER_SG_NAME: logjam-worker-sg
         run: |
           set -euo pipefail
+          SECURITY_GROUP=$(aws ec2 describe-security-groups \
+            --filters "Name=group-name,Values=$WORKER_SG_NAME" \
+            --query 'SecurityGroups[0].GroupId' --output text)
+          if [ -z "$SECURITY_GROUP" ] || [ "$SECURITY_GROUP" = "None" ]; then
+            echo "::error::no security group named $WORKER_SG_NAME — refusing to \
+          guess. Check network.tf's aws_security_group.worker."; exit 1
+          fi
+          echo "Resolved $WORKER_SG_NAME -> $SECURITY_GROUP"
           echo "Launching migrate task ($TASK_DEF) on the newly pushed image..."
           TASK_ARN=$(aws ecs run-task \
             --cluster "$CLUSTER" \

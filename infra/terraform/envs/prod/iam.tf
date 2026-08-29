@@ -172,16 +172,61 @@ resource "aws_iam_role_policy" "gha_ecr_push" {
 # The two S3 surfaces CI actually touches are scoped explicitly instead:
 #   - frontend SPA bucket   -> aws_iam_role_policy.gha_frontend_deploy (below)
 #   - EB app-version bucket -> aws_iam_role_policy.gha_eb_appversions (below); the
-#     beanstalk-deploy action uploads the deploy.zip there. (gha_eb's
-#     AdministratorAccess-AWSElasticBeanstalk also covers elasticbeanstalk-*
-#     buckets; this explicit grant removes the dependency on that breadth.)
+#     beanstalk-deploy action uploads the deploy.zip there. This grant is now the
+#     ONLY thing authorising that upload — AdministratorAccess-AWSElasticBeanstalk,
+#     which used to cover elasticbeanstalk-* buckets as a side effect, is gone
+#     (see gha_eb_deploy below).
 # VERIFY BEFORE APPLY: scan CloudTrail for any github-actions-role S3 call
 # outside these two buckets; if found, widen the scoped grant, never re-add
 # the managed full-access policy.
 
-resource "aws_iam_role_policy_attachment" "gha_eb" {
-  role       = aws_iam_role.github_actions.name
-  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess-AWSElasticBeanstalk"
+# INF-006: AdministratorAccess-AWSElasticBeanstalk REMOVED (least-privilege).
+# That managed policy is "administrator of everything EB touches" — EC2, ECS,
+# S3, CloudFormation, autoscaling, IAM PassRole — held by a role any pushed
+# workflow file can assume. What the deploy actually does is one action:
+# einaregilsson/beanstalk-deploy@v22, whose whole API surface is the six calls
+# below (derived from the action's source, not guessed).
+#
+# The two other things it needs are already granted, scoped, elsewhere:
+#   - the deploy.zip upload  -> aws_iam_role_policy.gha_eb_appversions
+#   - every Describe*        -> the ReadOnlyAccess attachment
+# The Describes are repeated here anyway so this policy stands on its own if
+# ReadOnlyAccess is ever narrowed.
+#
+# Resource "*" is deliberate, not laziness: EB's resource-level permission
+# support is inconsistent across these actions (CreateStorageLocation has none
+# at all), and a wrong ARN fails the deploy at the last step. The win here is
+# the action list, which is the part that was unbounded.
+#
+# BLAST RADIUS if this is wrong: the next deploy fails at the beanstalk-deploy
+# step with AccessDenied — visible immediately in the workflow log, EB
+# untouched, old version still serving. Roll back by re-attaching the managed
+# policy. Watch one real deploy after applying this.
+resource "aws_iam_role_policy" "gha_eb_deploy" {
+  name = "logjam-eb-deploy"
+  role = aws_iam_role.github_actions.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "BeanstalkDeploy"
+        Effect = "Allow"
+        Action = [
+          # Ensures/resolvesthe elasticbeanstalk-* app-version bucket.
+          "elasticbeanstalk:CreateStorageLocation",
+          # Registers the uploaded deploy.zip as a new application version.
+          "elasticbeanstalk:CreateApplicationVersion",
+          # Swaps the environment onto it.
+          "elasticbeanstalk:UpdateEnvironment",
+          # Polled while waiting for the swap to finish/fail.
+          "elasticbeanstalk:DescribeEnvironments",
+          "elasticbeanstalk:DescribeEvents",
+          "elasticbeanstalk:DescribeApplicationVersions",
+        ]
+        Resource = "*"
+      },
+    ]
+  })
 }
 
 # Plan-on-PR (terraform-plan.yml): terraform plan against envs/prod needs
