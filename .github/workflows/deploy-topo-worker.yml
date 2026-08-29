@@ -4,12 +4,21 @@ name: Deploy Topo Worker
 # successfully for a push to main (mirrors deploy-api.yml, INF-004). A red CI
 # on that push means the deploy job's `if:` guard is false, so a failing
 # test can no longer poison the image the next on-demand RunTask launches.
-# workflow_run does NOT support a `paths:` filter, so the previous topo/**
-# path scoping is dropped — this workflow now runs after every green
-# push-to-main CI, rebuilding+pushing the worker image even for changes
-# outside topo/. The guard excludes pull_request CI runs (event == 'push'),
-# so it does not double-fire. workflow_run always uses this file as it exists
-# on the default branch.
+# The guard excludes pull_request CI runs (event == 'push'), so it does not
+# double-fire. workflow_run always uses this file as it exists on the default
+# branch.
+#
+# Path scoping: workflow_run does NOT support a `paths:` filter, so the topo/**
+# scoping that `on: push` used to provide is rebuilt as the `changes` job
+# below. It skips the deploy only when the CI-validated commit provably
+# touched nothing under topo/ and not this file. The check fails OPEN — see
+# that job for why and how.
+#
+# This scoping matters more here than for the other deploys: topo/Dockerfile
+# builds from external upstreams, so every needless rebuild is another roll of
+# the upstream dice — which is exactly how prod's worker got rebuilt twice for
+# changes that touched no topo code at all.
+
 on:
   workflow_run:
     workflows: ["CI"]
@@ -20,13 +29,102 @@ env:
   ECR_REPOSITORY: logjam-topo-worker
 
 jobs:
-  deploy:
-    name: Build and push worker image
+  # Path scoping for a workflow_run trigger. `on: workflow_run` supports no
+  # `paths:` filter, so the scoping that `on: push` used to give us has to be
+  # rebuilt as a job. This asks the API which files the CI-validated commit
+  # touched and lets the deploy below decide.
+  #
+  # FAIL OPEN — this is the whole design rule. A deploy that runs when it did
+  # not need to costs a few minutes of CI. A deploy that is silently SKIPPED
+  # means prod never receives a fix and nobody is told. So the only value that
+  # skips is an explicit, successfully-computed `false`; every failure mode
+  # (API error, no sha, empty list, truncated list, this job dying outright)
+  # resolves to `unknown` or to no output at all, and both deploy.
+  changes:
+    name: Check for relevant changes
     runs-on: ubuntu-latest
+    # Same CI gate as the deploy job — no point querying the API for a commit
+    # that cannot deploy anyway.
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main'
+    permissions:
+      contents: read
+    outputs:
+      # 'false' is the ONLY value that skips the deploy. 'true', 'unknown', or
+      # an absent output (job failed) all deploy.
+      relevant: ${{ steps.check.outputs.relevant }}
+    steps:
+      - name: List files changed by the CI-validated commit
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          # No `set -e`: this step must never fail the job in a way that could
+          # be read as "skip". Every exit path below is an explicit exit 0 with
+          # a value written to $GITHUB_OUTPUT.
+          set -uo pipefail
+
+          emit() {
+            echo "relevant=$1" >> "$GITHUB_OUTPUT"
+            echo "==> relevant=$1"
+            exit 0
+          }
+
+          if [ -z "${HEAD_SHA:-}" ]; then
+            echo "::warning::workflow_run carried no head_sha — deploying (fail open)"
+            emit unknown
+          fi
+
+          # For a merge commit the GitHub commits API returns the diff against
+          # the FIRST parent, i.e. exactly what the merged PR changed. Verified
+          # against this repo's own merge commits.
+          if ! FILES=$(gh api --paginate "repos/$REPO/commits/$HEAD_SHA" --jq '.files[]?.filename' 2>&1); then
+            echo "::warning::could not list files for $HEAD_SHA — deploying (fail open). API said: $FILES"
+            emit unknown
+          fi
+
+          if [ -z "$FILES" ]; then
+            echo "::warning::empty file list for $HEAD_SHA — deploying (fail open)"
+            emit unknown
+          fi
+
+          echo "Files changed in $HEAD_SHA:"
+          echo "$FILES" | sed 's/^/  /'
+
+          # The commits API caps files at 300 per page. --paginate should follow
+          # the rest, but if a commit is anywhere near that cap we do not trust a
+          # negative answer derived from a possibly-truncated list.
+          COUNT=$(echo "$FILES" | wc -l)
+          if [ "$COUNT" -ge 300 ]; then
+            echo "::warning::$COUNT files — list may be truncated, deploying (fail open)"
+            emit unknown
+          fi
+
+          if echo "$FILES" | grep -qE '^(topo/|\.github/workflows/deploy-topo-worker\.yml$)'; then
+            emit true
+          fi
+          emit false
+
+  deploy:
+    name: Build and push worker image
+    runs-on: ubuntu-latest
+    needs: changes
+    # `!cancelled()` is load-bearing: with a plain `needs`, a FAILED `changes`
+    # job would silently skip this deploy — the fail-CLOSED behaviour we must
+    # not have. With it, a failed `changes` yields an empty output, and
+    # '' != 'false' is true, so the deploy proceeds. The CI-gate conditions are
+    # repeated here rather than inherited, because !cancelled() also bypasses
+    # the skip a skipped `changes` job would otherwise propagate.
+    if: >-
+      !cancelled() &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      needs.changes.outputs.relevant != 'false'
     permissions:
       id-token: write
       contents: read
@@ -57,3 +155,18 @@ jobs:
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./topo
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      # INF-009: point both topo-worker task definitions at the image just
+      # pushed, by sha, so a RunTask launches this commit rather than whatever
+      # the moving `:latest` tag resolves to. Nothing here waits on it — these
+      # are on-demand workers with no service to roll — so the pin is the whole
+      # deploy for topo/.
+      - name: Pin ECS task definitions to this image (INF-009)
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          for family in logjam-topo-worker logjam-topo-export-worker; do
+            infra/scripts/pin-ecs-task-image.sh \
+              "$family" "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          done
