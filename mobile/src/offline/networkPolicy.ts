@@ -61,10 +61,27 @@ export type ConnectionState = {
   details?: unknown;
 };
 
+/**
+ * Meteredness exactly as the platform reported it — including "it didn't say".
+ *
+ * `true` = costs money, `false` = definitely free, `null` = no answer (the
+ * property is absent, or there are no details at all because there is no
+ * connection). MAPP-002 needs the third: only a definite `false` may hard-block
+ * a too-old build, because the user standing in a canyon on a hotspot has to
+ * keep their maps and their in-progress track. Every OTHER caller here wants
+ * the collapse below, so both live in this file rather than one being derived
+ * at each call site.
+ */
+export function meteredness(state: ConnectionState): boolean | null {
+  const details = state.details as { isConnectionExpensive?: unknown } | null | undefined;
+  return typeof details?.isConnectionExpensive === "boolean"
+    ? details.isConnectionExpensive
+    : null;
+}
+
 /** True when the platform says this connection costs the user money. */
 export function isExpensive(state: ConnectionState): boolean {
-  const details = state.details as { isConnectionExpensive?: boolean } | null;
-  return details?.isConnectionExpensive === true;
+  return meteredness(state) === true;
 }
 
 /**
@@ -101,4 +118,20 @@ export async function canRunNow(job: MeteredJob): Promise<boolean> {
     console.error(err);
     return false;
   }
+}
+
+/**
+ * Connection changes, for a caller that must RE-DECIDE rather than re-ask.
+ *
+ * Here, not in the caller, for the same reason as everything else in this file:
+ * NetInfo is imported in one place. MAPP-002's upgrade gate subscribes because
+ * a user warned on mobile data has to escalate to the hard block the moment
+ * they reach an unmetered connection, and the server's min-version answer has
+ * not changed — only the connection has, so re-fetching would be the wrong
+ * question. Returns the unsubscribe.
+ */
+export function subscribeConnection(
+  listener: (state: ConnectionState) => void,
+): () => void {
+  return NetInfo.addEventListener(listener);
 }

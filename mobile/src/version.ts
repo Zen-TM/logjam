@@ -21,3 +21,32 @@ export function isVersionBelowMinimum(current: string, minimum: string): boolean
   }
   return false;
 }
+
+/** What a build below the minimum is allowed to do to the user (MAPP-002). */
+export type UpgradeEnforcement = "none" | "warn" | "block";
+
+/**
+ * THE UPGRADE RULE, pure so it can be tested exhaustively (MAPP-002).
+ *
+ * The gate used to have one outcome — block the whole app — and it re-checks on
+ * foreground after an offline start, so that block can now land on a user
+ * standing in a canyon: a dead app holding their offline maps and their
+ * in-progress track, whose only remedy is a Play Store they cannot reach.
+ *
+ * So the hard block is reserved for the one connection where the remedy is
+ * actually to hand and free: a DEFINITELY UNMETERED one. Everything else warns
+ * and keeps working. `metered` is deliberately tri-state — `null` ("the
+ * platform did not say") must fail toward the warning, which the boolean
+ * `isExpensive` could not express, because it collapses "unknown" into "not
+ * expensive" and would have blocked exactly the user this rule protects.
+ *
+ * Note what is NOT an input: reachability. A build that never got an answer
+ * from the server is not `belowMinimum` at all, and neither warns nor blocks.
+ */
+export function upgradeEnforcement(args: {
+  belowMinimum: boolean;
+  metered: boolean | null;
+}): UpgradeEnforcement {
+  if (!args.belowMinimum) return "none";
+  return args.metered === false ? "block" : "warn";
+}

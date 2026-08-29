@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isVersionBelowMinimum, parseSemver } from "./version";
+import { isVersionBelowMinimum, parseSemver, upgradeEnforcement } from "./version";
 
 describe("parseSemver", () => {
   it("parses a bare semver", () => {
@@ -28,5 +28,21 @@ describe("isVersionBelowMinimum", () => {
     ["0.9.0", "0.10.0", true],
   ])("current %s vs min %s → below=%s", (current, minimum, below) => {
     expect(isVersionBelowMinimum(current, minimum)).toBe(below);
+  });
+});
+
+describe("upgradeEnforcement", () => {
+  it.each([
+    // belowMinimum, metered, outcome — every cell of the MAPP-002 table.
+    [false, false, "none"],
+    [false, true, "none"],
+    [false, null, "none"],
+    [true, false, "block"],
+    [true, true, "warn"],
+    // The one that matters: no answer from the platform is NOT an invitation
+    // to block someone who may be mid-trip on a hotspot.
+    [true, null, "warn"],
+  ] as const)("below=%s metered=%s → %s", (belowMinimum, metered, expected) => {
+    expect(upgradeEnforcement({ belowMinimum, metered })).toBe(expected);
   });
 });

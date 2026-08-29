@@ -23,6 +23,7 @@ import { applyScreenCapturePolicy } from "./src/offline/appLockPreference";
 import { excludeLocalDataFromBackup } from "./src/offline/localStores";
 import { LoadingState } from "./src/ui/ScreenStates";
 import { Button } from "./src/ui/Button";
+import { ErrorBanner } from "./src/ui/ErrorBanner";
 import { fontSize, spacing, theme } from "./src/theme";
 
 // The blocked build's only way out. Derived from app.json's `android.package`
@@ -49,7 +50,20 @@ export default function App() {
     void excludeLocalDataFromBackup().catch(console.error);
   }, []);
 
-  if (minVersionGate.status === "upgradeRequired") {
+  // MAPP-002: the hard block is for a build that is too old AND on a
+  // connection where the update is free and to hand. Everything else warns
+  // below and keeps working — a dead app in a canyon holds the user's offline
+  // maps and their in-progress track hostage to a Play Store they may have no
+  // way to reach.
+  const upgradeEnforcement =
+    minVersionGate.status === "upgradeRequired" ? minVersionGate.enforcement : "none";
+  const openStore = storeUrl
+    ? () => {
+        void Linking.openURL(storeUrl).catch(console.error);
+      }
+    : undefined;
+
+  if (minVersionGate.status === "upgradeRequired" && upgradeEnforcement === "block") {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.blockingContainer}>
@@ -60,14 +74,8 @@ export default function App() {
             supported version is {minVersionGate.minVersion}. Please update the
             app to continue.
           </Text>
-          {storeUrl ? (
-            <Button
-              label="Open the Play Store"
-              icon="external-link"
-              onPress={() => {
-                void Linking.openURL(storeUrl).catch(console.error);
-              }}
-            />
+          {openStore ? (
+            <Button label="Open the Play Store" icon="external-link" onPress={openStore} />
           ) : null}
         </SafeAreaView>
       </SafeAreaProvider>
@@ -77,6 +85,20 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SystemBars style="light" />
+      {/* The non-blocking half of MAPP-002. It says "over mobile data, or on
+          Wi-Fi later" and NOT "connect to Wi-Fi to install it", because the
+          update is perfectly installable over mobile data — the metered check
+          governs whether we may take the app away, not whether they can act. */}
+      {upgradeEnforcement === "warn" ? (
+        <SafeAreaView edges={["top"]} style={styles.warningDock}>
+          <ErrorBanner
+            title="Update required"
+            message={`This version (${CLIENT_VERSION}) is no longer supported. You can update now over mobile data, or on Wi-Fi later.`}
+            actionLabel="Open the Play Store"
+            onRetry={openStore}
+          />
+        </SafeAreaView>
+      ) : null}
       {/* App lock (Stage 4): active once offline map data exists on-device. */}
       <AppLockGate>
       {auth.state === "loading" ? (
@@ -158,4 +180,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   authSafeArea: { flex: 1, backgroundColor: theme.primary },
+  warningDock: { backgroundColor: theme.primary, paddingHorizontal: spacing(1.5) },
 });

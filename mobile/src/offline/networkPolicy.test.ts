@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { readPref } from "../prefsDb";
-import { connectionAllowsMetered, isExpensive, isMeteredAllowed } from "./networkPolicy";
+import {
+  connectionAllowsMetered,
+  isExpensive,
+  isMeteredAllowed,
+  meteredness,
+} from "./networkPolicy";
 
 // The rule under test is pure; its module's two native neighbours are not.
 vi.mock("@react-native-community/netinfo", () => ({
@@ -76,5 +81,28 @@ describe("isMeteredAllowed", () => {
   it("honours an explicit opt-in for the new job like every other one", () => {
     vi.mocked(readPref).mockReturnValue("on");
     expect(isMeteredAllowed("mediaUpload")).toBe(true);
+  });
+});
+
+describe("meteredness", () => {
+  it("reports the platform's two answers", () => {
+    expect(meteredness(wifi)).toBe(false);
+    expect(meteredness(hotspot)).toBe(true);
+  });
+
+  // The whole reason it exists beside isExpensive: MAPP-002's hard block is
+  // allowed on a definite false and on nothing else, so "the platform did not
+  // say" must stay distinguishable from "it said no".
+  it.each([
+    ["no details at all", offline],
+    ["details without the property", { isConnected: true, type: "wifi", details: {} }],
+    ["a non-boolean value", {
+      isConnected: true,
+      type: "wifi",
+      details: { isConnectionExpensive: "yes" },
+    }],
+  ])("answers null on %s, where isExpensive answers false", (_label, state) => {
+    expect(meteredness(state)).toBeNull();
+    expect(isExpensive(state)).toBe(false);
   });
 });
