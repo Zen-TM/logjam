@@ -180,53 +180,33 @@ resource "aws_iam_role_policy" "gha_ecr_push" {
 # outside these two buckets; if found, widen the scoped grant, never re-add
 # the managed full-access policy.
 
-# INF-006: AdministratorAccess-AWSElasticBeanstalk REMOVED (least-privilege).
-# That managed policy is "administrator of everything EB touches" — EC2, ECS,
-# S3, CloudFormation, autoscaling, IAM PassRole — held by a role any pushed
-# workflow file can assume. What the deploy actually does is one action:
-# einaregilsson/beanstalk-deploy@v22, whose whole API surface is the six calls
-# below (derived from the action's source, not guessed).
+# INF-006 (EB half): ATTEMPTED, REVERTED 2026-08-29 — the managed policy stays.
 #
-# The two other things it needs are already granted, scoped, elsewhere:
-#   - the deploy.zip upload  -> aws_iam_role_policy.gha_eb_appversions
-#   - every Describe*        -> the ReadOnlyAccess attachment
-# The Describes are repeated here anyway so this policy stands on its own if
-# ReadOnlyAccess is ever narrowed.
+# The narrowing was applied and the very next deploy failed at UpdateEnvironment.
+# beanstalk-deploy's own six API calls were right; what they miss is everything
+# ELASTIC BEANSTALK ITSELF does under the caller's identity while updating an
+# environment. Observed, from that failure plus CloudTrail of the preceding
+# successful deploy:
+#   s3:PutObjectAcl, s3:DeleteObject  on the elasticbeanstalk-* bucket, under
+#                                     resources/environments/.../_runtime/...
+#   sns:CreateTopic, sns:Unsubscribe  on ElasticBeanstalkNotifications-Environment-*
+#   autoscaling:SuspendProcesses / ResumeProcesses
+#   cloudformation:Describe*, ListStackResources, ec2:DescribeLaunchTemplate*
+# ...and that is only what THIS update happened to need; a create, rebuild or
+# scale path would surface more.
 #
-# Resource "*" is deliberate, not laziness: EB's resource-level permission
-# support is inconsistent across these actions (CreateStorageLocation has none
-# at all), and a wrong ARN fails the deploy at the last step. The win here is
-# the action list, which is the part that was unbounded.
+# EB was never at risk — it stayed Green on the previous version throughout —
+# but the deploy pipeline was blocked, and every further guess costs another
+# failed prod deploy. An over-broad grant that is documented beats a broken
+# deploy role.
 #
-# BLAST RADIUS if this is wrong: the next deploy fails at the beanstalk-deploy
-# step with AccessDenied — visible immediately in the workflow log, EB
-# untouched, old version still serving. Roll back by re-attaching the managed
-# policy. Watch one real deploy after applying this.
-resource "aws_iam_role_policy" "gha_eb_deploy" {
-  name = "logjam-eb-deploy"
-  role = aws_iam_role.github_actions.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "BeanstalkDeploy"
-        Effect = "Allow"
-        Action = [
-          # Ensures/resolvesthe elasticbeanstalk-* app-version bucket.
-          "elasticbeanstalk:CreateStorageLocation",
-          # Registers the uploaded deploy.zip as a new application version.
-          "elasticbeanstalk:CreateApplicationVersion",
-          # Swaps the environment onto it.
-          "elasticbeanstalk:UpdateEnvironment",
-          # Polled while waiting for the swap to finish/fail.
-          "elasticbeanstalk:DescribeEnvironments",
-          "elasticbeanstalk:DescribeEvents",
-          "elasticbeanstalk:DescribeApplicationVersions",
-        ]
-        Resource = "*"
-      },
-    ]
-  })
+# TO RETRY PROPERLY: enumerate a full successful deploy from CloudTrail under
+# this role, build the policy from that observed set, and verify it against a
+# throwaway EB environment rather than prod. Do NOT re-derive it from the
+# action's source alone — that is exactly what failed here.
+resource "aws_iam_role_policy_attachment" "gha_eb" {
+  role       = aws_iam_role.github_actions.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess-AWSElasticBeanstalk"
 }
 
 # Plan-on-PR (terraform-plan.yml): terraform plan against envs/prod needs
