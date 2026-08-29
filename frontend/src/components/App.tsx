@@ -425,6 +425,19 @@ function App() {
     error: tripLogsError,
     refetch: refetchTripLogs,
   } = useTripLogs(authenticated);
+  // Every trip write also moves canyon state, not just trip state: a canyon's
+  // map marker is green iff `_count.tripLogLinks > 0` (isCanyonDoneByViewer),
+  // and that tally is computed server-side on the OWNED canyon list. Nothing in
+  // the client can maintain it locally without duplicating the server's join —
+  // a trip links many canyons, an edit can add and remove links in one save, and
+  // a delete drops all of them — so the honest refresh is to re-pull the list
+  // the count came from. Every trip create/edit/delete/import already funnels
+  // through onRefetchTripLogs, so pairing the two here covers all of them at
+  // once (and any site added later) instead of at each call site.
+  const refetchAfterTripWrite = useCallback(() => {
+    refetchTripLogs();
+    refetch();
+  }, [refetchTripLogs, refetch]);
   const { analytics, loading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(authenticated);
   const { currentUser, refetchCurrentUser, applyCurrentUser } = useCurrentUser(authenticated);
   const {
@@ -1041,7 +1054,7 @@ function App() {
           tripLogs={tripLogs}
           tripLogsTotal={tripLogsTotal}
           tripLogsLoading={tripLogsLoading}
-          onRefetchTripLogs={refetchTripLogs}
+          onRefetchTripLogs={refetchAfterTripWrite}
           onRefetchAnalytics={refetchAnalytics}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={setCustomFieldDefs}
