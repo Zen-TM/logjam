@@ -962,6 +962,30 @@ function App() {
     .map((id) => allCanyons.find((c) => c.id === id))
     .filter((c): c is TCanyon => c != null);
 
+  const cancelDrawingRoute = () => {
+    setDrawingRoute(false);
+    routeDraft.reset();
+    setEditingRouteId(null);
+    setDrawColor(null);
+  };
+
+  // FEUI-010: Cancel/Clear used to wipe an in-progress route (dozens of
+  // deliberate map clicks, plus `reset()` also drops the undo history) with
+  // no confirm. Reuse the same discard-guard the dialogs already use for
+  // unsaved changes — "dirty" here means at least one placed vertex.
+  //
+  // These two sit ABOVE the loading/unauthenticated early returns below: a
+  // hook after an early return runs on some renders and not others, so the
+  // sign-in -> map transition would shift every later hook's slot.
+  const cancelRouteGuard = useUnsavedChangesGuard(
+    routeDraft.points.length > 0,
+    cancelDrawingRoute,
+  );
+  const clearRouteGuard = useUnsavedChangesGuard(
+    routeDraft.points.length > 0,
+    () => routeDraft.reset(),
+  );
+
   // While checking for an existing session, show a branded splash instead of
   // a blank flash before the sign-in form or map appears.
   if (auth.state === "loading") {
@@ -1018,26 +1042,6 @@ function App() {
     setDrawingRoute(true);
     setActivePanel(null);
   };
-
-  const cancelDrawingRoute = () => {
-    setDrawingRoute(false);
-    routeDraft.reset();
-    setEditingRouteId(null);
-    setDrawColor(null);
-  };
-
-  // FEUI-010: Cancel/Clear used to wipe an in-progress route (dozens of
-  // deliberate map clicks, plus `reset()` also drops the undo history) with
-  // no confirm. Reuse the same discard-guard the dialogs already use for
-  // unsaved changes — "dirty" here means at least one placed vertex.
-  const cancelRouteGuard = useUnsavedChangesGuard(
-    routeDraft.points.length > 0,
-    cancelDrawingRoute,
-  );
-  const clearRouteGuard = useUnsavedChangesGuard(
-    routeDraft.points.length > 0,
-    () => routeDraft.reset(),
-  );
 
   const saveDrawnRoute = async (name: string, color?: string) => {
     setSavingRoute(true);
