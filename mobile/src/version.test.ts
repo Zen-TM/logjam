@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { isVersionBelowMinimum, parseSemver, upgradeEnforcement } from "./version";
+import {
+  isVersionBelowMinimum,
+  parseSemver,
+  storeListingUrl,
+  upgradeEnforcement,
+} from "./version";
 
 describe("parseSemver", () => {
   it("parses a bare semver", () => {
@@ -44,5 +49,35 @@ describe("upgradeEnforcement", () => {
     [true, null, "warn"],
   ] as const)("below=%s metered=%s → %s", (belowMinimum, metered, expected) => {
     expect(upgradeEnforcement({ belowMinimum, metered })).toBe(expected);
+  });
+});
+
+describe("storeListingUrl", () => {
+  it("links the Play listing for the id app.json declares", () => {
+    expect(
+      storeListingUrl({ os: "android", androidPackage: "com.logjamnsw.mobile" }),
+    ).toBe("https://play.google.com/store/apps/details?id=com.logjamnsw.mobile");
+  });
+
+  it.each([
+    // The one that matters (MAPP-001): iOS HAS a bundleIdentifier and no
+    // listing, so a package id present there must still yield no link — the
+    // block screen's text is all it gets until there is a listing.
+    ["ios", "com.logjamnsw.mobile"],
+    ["web", "com.logjamnsw.mobile"],
+    ["macos", "com.logjamnsw.mobile"],
+    // Android with nothing to link to: the app.json read came back empty.
+    ["android", ""],
+    ["android", null],
+    ["android", undefined],
+    ["ios", null],
+  ] as const)("gives no link on %s with package %j", (os, androidPackage) => {
+    expect(storeListingUrl({ os, androidPackage })).toBeNull();
+  });
+
+  it("is the https form, so it resolves without the Play app installed", () => {
+    const url = storeListingUrl({ os: "android", androidPackage: "a.b" });
+    expect(url?.startsWith("https://")).toBe(true);
+    expect(url).not.toContain("market://");
   });
 });

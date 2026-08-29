@@ -10,6 +10,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import { CLIENT_VERSION } from "./src/config";
 import { useMinVersionGate } from "./src/useMinVersionGate";
+import { storeListingUrl } from "./src/version";
 import { mountsAppShell, useAuth } from "./src/auth/useAuth";
 import { countUnsyncedChanges } from "./src/sync/syncDb";
 import { wipeAllLocalData } from "./src/offline/wipeLocalData";
@@ -26,16 +27,15 @@ import { Button } from "./src/ui/Button";
 import { ErrorBanner } from "./src/ui/ErrorBanner";
 import { fontSize, spacing, theme } from "./src/theme";
 
-// The blocked build's only way out. Derived from app.json's `android.package`
-// rather than a second literal, so it cannot drift from the id the store
-// actually lists. The https form (not `market://`) because it still resolves
-// when the Play app is missing — a sideloaded field build is exactly the case
-// this screen exists for. Android only: there is no iOS listing to point at
-// yet, and the text alone has to do until there is.
-const storeUrl =
-  Platform.OS === "android" && Constants.expoConfig?.android?.package
-    ? `https://play.google.com/store/apps/details?id=${Constants.expoConfig.android.package}`
-    : null;
+// The blocked build's only way out (MAPP-001). The rule itself — Android only,
+// from app.json's package id, https so it resolves without the Play app — is
+// `storeListingUrl` in ./src/version, pure and tested, because mobile/ has no
+// React Native test environment and a rule inside a component is a rule nothing
+// can run. This file keeps only the platform values it is fed.
+const storeUrl = storeListingUrl({
+  os: Platform.OS,
+  androidPackage: Constants.expoConfig?.android?.package,
+});
 
 export default function App() {
   const minVersionGate = useMinVersionGate();

@@ -37,6 +37,7 @@ import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
 import { registerTopoAutoDownload } from "./offline/topoAutoDownload";
 import { BackgroundToast } from "./BackgroundToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
+import { notificationTapTarget } from "./notifications/tapTarget";
 import { SavedScreen, type SavedItemReveal } from "./saved/SavedScreen";
 import { AccountScreen } from "./screens/AccountScreen";
 import { CanyonDetailScreen } from "./canyons/CanyonDetailScreen";
@@ -739,29 +740,29 @@ export function AppShell({
     if (!isGuest) void registerForPushNotifications();
     const subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
-        const data = response.notification.request.content.data as {
-          type?: string;
-          canyonId?: string;
-        };
         // The ref is untyped across nested navigators; runtime routes are
         // the tab/screen names registered below.
         const nav = navigationRef.current as unknown as {
           navigate: (name: string, params?: object) => void;
         } | null;
         if (!nav) return;
-        // The same guard the tab bar applies, for the same reason: a route
-        // being drawn owns the map's taps and nothing on another screen says
-        // the draft is still armed. A notification tap is just a second way to
-        // leave the map, so it refuses the same way — with the Alert, so the
-        // tap is answered rather than silently ignored.
-        if (isRouteEditing()) {
+        // Where the tap goes — including the guard the tab bar applies, for the
+        // same reason (MAPP-009). The precedence lives in
+        // notifications/tapTarget, pure and tested, because this listener is
+        // inside a component and nothing in mobile/ can run one.
+        const target = notificationTapTarget({
+          data: response.notification.request.content.data,
+          routeEditing: isRouteEditing(),
+        });
+        if (target.kind === "blocked") {
+          // With the Alert, so the tap is answered rather than silently ignored.
           alertFinishRouteFirst();
           return;
         }
-        if (typeof data.canyonId === "string") {
+        if (target.kind === "canyon") {
           nav.navigate("Canyons", {
             screen: "CanyonDetail",
-            params: { canyonId: data.canyonId, name: "Canyon" },
+            params: { canyonId: target.canyonId, name: "Canyon" },
           });
         } else {
           // Inbox now lives inside the More stack.

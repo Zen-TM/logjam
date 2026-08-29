@@ -56,6 +56,7 @@ import type { AssetActions } from "../saved/assetActions";
 import { Button, ErrorBanner, SectionHeader, Row } from "../ui";
 import { fontSize, lineHeight, radius, spacing, surface, theme, withAlpha } from "../theme";
 import { FriendAvatar } from "./FriendAvatar";
+import { friendListLoadKey } from "./friendListLoad";
 import { friendMatches } from "./friendSearch";
 import {
   RecipientRows,
@@ -379,9 +380,14 @@ function useFriendList({ active, online }: { active: boolean; online: boolean })
   const { accountState } = useAccountState();
   const status = capabilityStatus("sharing", accountState, online);
   const available = status.status === "available";
+  // Which load — if any — should be running right now. Pure and exhaustively
+  // tested in ./friendListLoad, because a hook is a place nothing can run: the
+  // bug was that a failed load changed none of the effect's inputs, so the key
+  // is what the retry moves.
+  const loadKey = friendListLoadKey({ active, available, loaded: list !== null, attempt });
 
   useEffect(() => {
-    if (!active || !available || list !== null) return;
+    if (loadKey === null) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -395,7 +401,7 @@ function useFriendList({ active, online }: { active: boolean; online: boolean })
     return () => {
       cancelled = true;
     };
-  }, [active, available, list, attempt]);
+  }, [loadKey]);
 
   const retry = useCallback(() => {
     setError(null);
