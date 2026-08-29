@@ -27,6 +27,7 @@ try:
         compose_database_url,
         merge_settings,
         safe_error_message,
+        send_failure_email,
     )
     from email_send import wants_email  # noqa: E402
     _IMPORT_OK = True
@@ -149,6 +150,42 @@ class TestWantsEmail(unittest.TestCase):
         # exportEmail absent while another key is present → default true.
         row = {"ui_preferences": {"notifications": {"topoEmail": False}}}
         self.assertTrue(wants_email(_FakeConn(row), "u1", "exportEmail"))
+
+
+@unittest.skipUnless(_IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}")
+class TestSendFailureEmail(unittest.TestCase):
+    """A reaped/failed topo job must mail its owner (APIC-005) — worker.py used
+    to email only on success. Captures the send_email call instead of sending."""
+
+    def setUp(self):
+        self.sent = []
+        self._saved_send = worker.send_email
+        self._saved_url = worker.FRONTEND_URL
+        worker.send_email = lambda *args: self.sent.append(args)
+
+    def tearDown(self):
+        worker.send_email = self._saved_send
+        worker.FRONTEND_URL = self._saved_url
+
+    def test_sends_subject_error_and_deep_link(self):
+        worker.FRONTEND_URL = "https://logjam.example/"
+        send_failure_email("alice@example.com", "job-9", "Ran out of memory.")
+        self.assertEqual(len(self.sent), 1)
+        to_email, subject, text, html = self.sent[0]
+        self.assertEqual(to_email, "alice@example.com")
+        self.assertEqual(subject, "Topo map failed — Logjam")
+        self.assertIn("Ran out of memory.", text)
+        # Trailing slash on FRONTEND_URL must not double up in the link.
+        self.assertIn("https://logjam.example/?topoJob=job-9", text)
+        self.assertIn("https://logjam.example/?topoJob=job-9", html)
+        # Same logo-header shape as the completion mail.
+        self.assertIn("email-logo-lockup.png", html)
+        self.assertIn("<strong>Ran out of memory.</strong>", html)
+
+    def test_no_frontend_url_skips_send(self):
+        worker.FRONTEND_URL = ""
+        send_failure_email("alice@example.com", "job-9", "boom")
+        self.assertEqual(self.sent, [])
 
 
 @unittest.skipUnless(_IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}")

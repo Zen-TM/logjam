@@ -3,6 +3,7 @@ import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { Prisma } from "@prisma/client";
 import prisma from "../services/prisma";
 import { sendPushToUser, type PushData } from "../services/push";
+import { sendEmail } from "../services/email";
 import { ecs, s3 } from "../services/awsClients";
 import { decrementStorageUsed } from "./storageQuota";
 import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
@@ -12,6 +13,7 @@ import { AppError } from "../middleware/errorHandler";
 import {
   TOPO_LAYERS,
   VECTOR_STYLE_DEFAULTS,
+  normalizeUserUiPreferences,
   reconcileExportSelection,
   validateAutoExportSettings,
   validateExportRequest,
@@ -167,19 +169,72 @@ async function stopTasksBestEffort(
 
 /**
  * A reaped job is a FAILED job the user was never told about (APIC-005): the
- * workers' own except paths write a Notification + push, the reaper used to
- * write only `status`/`errorMessage`, so a user whose task was never placed or
- * was SIGKILLed found out by polling the list.
+ * workers' own except paths write a Notification + push (+ email), the reaper
+ * used to write only `status`/`errorMessage`, so a user whose task was never
+ * placed or was SIGKILLed found out by polling the list.
  *
- * Best-effort by design: notification/push failure must never abort a sweep
- * that has already done its real work (the status flip).
+ * Best-effort by design: notification/push/email failure must never abort a
+ * sweep that has already done its real work (the status flip).
  */
 type ReapEntry = {
   userId: string;
   type: string;
   payload: Prisma.InputJsonValue;
   push: PushData;
+  /**
+   * Failure email, gated on the pipeline's EXISTING preference — `topoEmail` /
+   * `exportEmail` / `geoPdfEmail` mean "finishes or fails", so a reaped job
+   * mails the same users a worker-detected failure would (no new pref key).
+   * `reason` is the generic REAPER_* message: the reaper never knows more.
+   */
+  email: {
+    pref: "topoEmail" | "exportEmail" | "geoPdfEmail";
+    subject: string;
+    headline: string;
+    reason: string;
+    /** Query string for the FRONTEND_URL deep link, e.g. `topoJob=<id>`. */
+    deepLink: string;
+  };
 };
+
+/**
+ * Best-effort failure email per reaped row. Same shape as the workers' own
+ * failure mail (geoPdfWorker.ts / export_worker.py): logo header, one-line
+ * reason, FRONTEND_URL deep link — a reaped-job email must not read as a
+ * different species from a worker-sent one.
+ *
+ * One user read for the whole batch; `sendEmail` swallows its own send
+ * failures, and the caller wraps this so a user-lookup failure can't abort a
+ * sweep either.
+ */
+async function emailReaped(entries: ReapEntry[]): Promise<void> {
+  const recipients = await prisma.user.findMany({
+    where: { id: { in: [...new Set(entries.map((entry) => entry.userId))] } },
+    select: { id: true, email: true, uiPreferences: true },
+  });
+  const byId = new Map(recipients.map((row) => [row.id, row]));
+  const base = (getEnv().FRONTEND_URL ?? "").replace(/\/$/, "");
+  // Logo lives in the frontend SPA bucket, so it only resolves when
+  // FRONTEND_URL is configured (unset in local dev).
+  const logoHtml = base
+    ? `<p style="margin:0 0 16px"><img src="${base}/email-logo-lockup.png" alt="Logjam" width="212" style="display:block" /></p>`
+    : "";
+  for (const entry of entries) {
+    const recipient = byId.get(entry.userId);
+    if (!recipient?.email) continue;
+    const wanted = normalizeUserUiPreferences(recipient.uiPreferences).notifications;
+    if (!wanted[entry.email.pref]) continue;
+    const openUrl = base ? `${base}/?${entry.email.deepLink}` : "";
+    const openLink = openUrl ? `\n\nOpen Logjam: ${openUrl}` : "";
+    const openLinkHtml = openUrl ? `<p><a href="${openUrl}">Open Logjam</a></p>` : "";
+    await sendEmail({
+      to: recipient.email,
+      subject: entry.email.subject,
+      text: `${entry.email.headline}\n\n${entry.email.reason}${openLink}`,
+      html: `${logoHtml}<p>${entry.email.headline}</p><p><strong>${entry.email.reason}</strong></p>${openLinkHtml}`,
+    });
+  }
+}
 
 async function notifyReaped(entries: ReapEntry[]): Promise<void> {
   if (entries.length === 0) return;
@@ -199,6 +254,11 @@ async function notifyReaped(entries: ReapEntry[]): Promise<void> {
       logger.warn({ err: safeErrorForLog(err) }, "reaper_push_failed");
     }
   }
+  try {
+    await emailReaped(entries);
+  } catch (err) {
+    logger.error({ err: safeErrorForLog(err) }, "reaper_email_failed");
+  }
 }
 
 /**
@@ -209,8 +269,8 @@ async function notifyReaped(entries: ReapEntry[]): Promise<void> {
  * as `queueAutoExports`'s `autoExportedAt` marker): two API instances sweeping
  * concurrently both read the same overdue ids, but only one `updateMany` per id
  * reports `count === 1`. Notifying on the READ set instead would send the user
- * two notifications and two pushes per reaped job — prod runs the API on
- * Elastic Beanstalk, so >1 instance is a real configuration.
+ * two notifications, two pushes and two emails per reaped job — prod runs the
+ * API on Elastic Beanstalk, so >1 instance is a real configuration.
  *
  * Winning the flip also proves the row was still `pending`/`queued`/overdue a
  * moment ago, which is why no confirm-read is needed.
@@ -240,6 +300,14 @@ function topoJobEntry(row: { id: string; userId: string; name: string | null }):
     type: "topo_failed",
     payload: { jobId: row.id, jobName: row.name },
     push: { type: "topo_failed", jobId: row.id },
+    email: {
+      pref: "topoEmail",
+      // Mirrors worker.py's "Topo map ready — Logjam".
+      subject: "Topo map failed — Logjam",
+      headline: "Your topo map job failed.",
+      reason: REAPER_JOB_MESSAGE,
+      deepLink: `topoJob=${row.id}`,
+    },
   };
 }
 
@@ -255,6 +323,14 @@ function exportJobEntry(row: { id: string; userId: string; format: string }): Re
       errorMessage: REAPER_EXPORT_MESSAGE,
     },
     push: { type: "topo_export_complete", exportId: row.id },
+    email: {
+      pref: "exportEmail",
+      // Same subject export_worker.py's failure mail uses.
+      subject: `Topo export failed — ${row.format.toUpperCase()}`,
+      headline: "Your topo export failed.",
+      reason: REAPER_EXPORT_MESSAGE,
+      deepLink: `export=${row.id}`,
+    },
   };
 }
 
@@ -269,6 +345,14 @@ function geoPdfJobEntry(row: { id: string; userId: string }): ReapEntry {
       errorMessage: REAPER_GEO_PDF_MESSAGE,
     },
     push: { type: "geo_pdf_failed", geoPdfJobId: row.id },
+    email: {
+      pref: "geoPdfEmail",
+      // Same subject geoPdfWorker.ts's failure mail uses.
+      subject: "GeoPDF failed — Logjam",
+      headline: "Your GeoPDF could not be generated.",
+      reason: REAPER_GEO_PDF_MESSAGE,
+      deepLink: `geoPdfJob=${row.id}`,
+    },
   };
 }
 

@@ -49,9 +49,9 @@ const NOTIFICATION_ROWS: {
   title: string;
   group: "email" | "inApp";
 }[] = [
-  { key: "topoEmail", title: "A LiDAR topo job finishes", group: "email" },
-  { key: "exportEmail", title: "A topo export is ready", group: "email" },
-  { key: "geoPdfEmail", title: "A GeoPDF is ready", group: "email" },
+  { key: "topoEmail", title: "A LiDAR topo job finishes or fails", group: "email" },
+  { key: "exportEmail", title: "A topo export finishes or fails", group: "email" },
+  { key: "geoPdfEmail", title: "A GeoPDF finishes or fails", group: "email" },
   { key: "friendRequestInApp", title: "Friend requests", group: "inApp" },
   { key: "shareInApp", title: "A canyon is shared with me", group: "inApp" },
 ];

@@ -7,6 +7,7 @@ vi.mock("../services/prisma", () => ({
     geoPdfJob: { updateMany: vi.fn(), findMany: vi.fn() },
     notification: { create: vi.fn(), createMany: vi.fn() },
     deviceToken: { findMany: vi.fn() },
+    user: { findMany: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -19,6 +20,8 @@ vi.mock("../services/awsClients", () => ({
 vi.mock("./topoExportLauncher", () => ({
   createAndLaunchTopoExport: vi.fn(),
 }));
+
+vi.mock("../services/email", () => ({ sendEmail: vi.fn() }));
 
 import prisma from "../services/prisma";
 import { ecs, s3 } from "../services/awsClients";
@@ -34,6 +37,7 @@ import {
   ESTIMATE_SAFETY_FACTOR,
 } from "./topoJobReaper";
 import { createAndLaunchTopoExport } from "./topoExportLauncher";
+import { sendEmail } from "../services/email";
 import { AppError } from "../middleware/errorHandler";
 import { AUTO_EXPORT_DEFAULTS } from "@logjam/shared";
 import { getEnv } from "./env";
@@ -66,6 +70,9 @@ const notificationCreateMany = (
 const deviceTokenFindMany = (
   prisma as unknown as { deviceToken: { findMany: Mock } }
 ).deviceToken.findMany;
+const userFindMany = (prisma as unknown as { user: { findMany: Mock } }).user
+  .findMany;
+const emailSend = sendEmail as unknown as Mock;
 
 /**
  * reapStuckTopoJobs reads the overdue rows first (an updateMany reports a
@@ -113,6 +120,8 @@ beforeEach(() => {
   notificationCreate.mockReset().mockResolvedValue({});
   notificationCreateMany.mockReset().mockResolvedValue({ count: 0 });
   deviceTokenFindMany.mockReset().mockResolvedValue([]);
+  userFindMany.mockReset().mockResolvedValue([]);
+  emailSend.mockReset().mockResolvedValue(undefined);
   launchExport.mockReset().mockResolvedValue("export-id");
   transaction
     .mockReset()
@@ -585,6 +594,138 @@ describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
     });
     jobUpdateMany.mockResolvedValue({ count: 1 });
     notificationCreateMany.mockRejectedValue(new Error("db down"));
+
+    await expect(reapStuckTopoJobs(NOW)).resolves.toBe(1);
+  });
+});
+
+// ── failure email for reaped rows (APIC-005) ────────────────────────────────
+
+// A reaped job is a failed job, so the three EXISTING toggles now mean
+// "finishes or fails" and the reaper mails on them. Same claim gate as the
+// notification: only rows this pass won get mail.
+describe("reapStuckTopoJobs — emails the owners of reaped jobs", () => {
+  const RECIPIENT = { id: "u1", email: "alice@example.com", uiPreferences: null };
+
+  it("emails a reaped topo job's owner, matching the worker's mail shape", async () => {
+    stageByStatus(jobFindMany, {
+      pending: [{ id: "p1", userId: "u1", name: "Claustral run" }],
+    });
+    jobUpdateMany.mockResolvedValue({ count: 1 });
+    userFindMany.mockResolvedValue([RECIPIENT]);
+
+    await reapStuckTopoJobs(NOW);
+
+    expect(emailSend).toHaveBeenCalledTimes(1);
+    const mail = emailSend.mock.calls[0][0];
+    expect(mail.to).toBe("alice@example.com");
+    expect(mail.subject).toBe("Topo map failed — Logjam");
+    // The generic reaper message is the body's reason (intended: the reaper
+    // knows nothing more than "it timed out").
+    expect(mail.text).toContain("did not complete in the expected time");
+    expect(mail.html).toContain("<strong>");
+    // Deep link + logo header only when FRONTEND_URL is configured.
+    if (getEnv().FRONTEND_URL) {
+      expect(mail.text).toContain("topoJob=p1");
+      expect(mail.html).toContain("email-logo-lockup.png");
+    }
+  });
+
+  it("uses each pipeline's own subject and pref", async () => {
+    stageByStatus(exportFindMany, {
+      queued: [{ id: "e1", userId: "u1", format: "geotiff" }],
+    });
+    exportUpdateMany.mockResolvedValue({ count: 1 });
+    stageByStatus(geoPdfFindMany, { queued: [{ id: "g1", userId: "u1" }] });
+    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
+    userFindMany.mockResolvedValue([RECIPIENT]);
+
+    await reapStuckTopoJobs(NOW);
+
+    const subjects = emailSend.mock.calls.map((call) => call[0].subject);
+    expect(subjects).toEqual([
+      "Topo export failed — GEOTIFF",
+      "GeoPDF failed — Logjam",
+    ]);
+  });
+
+  // The house dedup rule: mailing the READ set would double-send from two
+  // Elastic Beanstalk instances sweeping the same overdue ids.
+  it("sends NO email for a row another instance claimed first", async () => {
+    stageByStatus(jobFindMany, {
+      pending: [{ id: "p1", userId: "u1", name: null }],
+    });
+    jobUpdateMany.mockResolvedValue({ count: 0 }); // lost the race
+    userFindMany.mockResolvedValue([RECIPIENT]);
+
+    await reapStuckTopoJobs(NOW);
+
+    expect(emailSend).not.toHaveBeenCalled();
+    // Nobody was even looked up — the claim gate short-circuits first.
+    expect(userFindMany).not.toHaveBeenCalled();
+  });
+
+  it("mails only the row it won when a pass claims some and loses others", async () => {
+    stageByStatus(jobFindMany, {
+      pending: [
+        { id: "won", userId: "u1", name: null },
+        { id: "lost", userId: "u2", name: null },
+      ],
+    });
+    jobUpdateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+    userFindMany.mockResolvedValue([
+      RECIPIENT,
+      { id: "u2", email: "bob@example.com", uiPreferences: null },
+    ]);
+
+    await reapStuckTopoJobs(NOW);
+
+    expect(emailSend).toHaveBeenCalledTimes(1);
+    expect(emailSend.mock.calls[0][0].to).toBe("alice@example.com");
+    // Only the won row's owner is even looked up.
+    expect(userFindMany.mock.calls[0][0].where.id.in).toEqual(["u1"]);
+  });
+
+  it("respects the pipeline's existing preference toggle", async () => {
+    stageByStatus(jobFindMany, {
+      pending: [{ id: "p1", userId: "u1", name: null }],
+    });
+    jobUpdateMany.mockResolvedValue({ count: 1 });
+    userFindMany.mockResolvedValue([
+      {
+        id: "u1",
+        email: "alice@example.com",
+        uiPreferences: { notifications: { topoEmail: false } },
+      },
+    ]);
+
+    await reapStuckTopoJobs(NOW);
+
+    expect(emailSend).not.toHaveBeenCalled();
+    // The in-app notification is unconditional — only the email is gated.
+    expect(notificationCreateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips a user with no email address", async () => {
+    stageByStatus(jobFindMany, {
+      pending: [{ id: "p1", userId: "u1", name: null }],
+    });
+    jobUpdateMany.mockResolvedValue({ count: 1 });
+    userFindMany.mockResolvedValue([{ id: "u1", email: null, uiPreferences: null }]);
+
+    await reapStuckTopoJobs(NOW);
+
+    expect(emailSend).not.toHaveBeenCalled();
+  });
+
+  it("does not abort the sweep when the recipient lookup fails", async () => {
+    stageByStatus(jobFindMany, {
+      pending: [{ id: "p1", userId: "u1", name: null }],
+    });
+    jobUpdateMany.mockResolvedValue({ count: 1 });
+    userFindMany.mockRejectedValue(new Error("db down"));
 
     await expect(reapStuckTopoJobs(NOW)).resolves.toBe(1);
   });

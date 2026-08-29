@@ -416,6 +416,41 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
     send_email(to_email, "Topo map ready — Logjam", text_body, html_body)
 
 
+def send_failure_email(to_email: str, job_id: str, error_message: str):
+    """Failure sibling of send_completion_email (APIC-005). Both are gated on the
+    same `topoEmail` preference, which means "finishes or fails" — the export
+    worker's send_completion_email carries ok/error in one function instead;
+    here a separate function keeps the osm-warning branches out of the way."""
+    if not FRONTEND_URL:
+        log.warning("FRONTEND_URL not set — skipping failure email")
+        return
+
+    base = FRONTEND_URL.rstrip("/")
+    open_url = f"{base}/?topoJob={job_id}"
+
+    text_body = "\n".join([
+        "Your topo map job failed.",
+        "",
+        error_message,
+        "",
+        f"Open it in Logjam: {open_url}",
+    ])
+
+    html_body = "\n".join([
+        "<html>",
+        "  <body>",
+        '    <p style="margin:0 0 16px">'
+        f'<img src="{base}/email-logo-lockup.png" alt="Logjam" width="212" '
+        'style="display:block" /></p>',
+        "    <p>Your topo map job failed.</p>",
+        f"    <p><strong>{error_message}</strong></p>",
+        f'    <p><a href="{open_url}">Open it in Logjam</a></p>',
+        "  </body>",
+        "</html>",
+    ])
+    send_email(to_email, "Topo map failed — Logjam", text_body, html_body)
+
+
 # ── Vector tile generation ────────────────────────────────────────────────────
 
 def run_tippecanoe_contours(geojson_dir: str, out_dir: str) -> Path | None:
@@ -836,9 +871,10 @@ def main():
                       f"notification failed: {e}", exc_info=True)
             return
         log.error(f"Job {JOB_ID} failed: {e}", exc_info=True)
+        error_text = safe_error_message(e)
         updated = update_status(conn, JOB_ID, "failed",
                                 expected_status="processing",
-                                error_message=safe_error_message(e))
+                                error_message=error_text)
         if updated == 0:
             # Already reaped/deleted — outcome is moot. Clean up any partial
             # uploads and exit 0 so ECS doesn't surface a duplicate failure.
@@ -853,6 +889,18 @@ def main():
         # Best-effort push — generic title + opaque IDs only.
         from push_send import send_push
         send_push(conn, job["user_id"], {"type": "topo_failed", "jobId": JOB_ID})
+
+        # Failure email (APIC-005), gated on the same `topoEmail` preference as
+        # the completion email. Wrapped for the same reason export_worker.py
+        # wraps its notification tail (STP-002): the row is already `failed`, so
+        # a mail problem must not change the job outcome or the exit code.
+        try:
+            email = get_user_email(conn, job["user_id"])
+            if email and wants_email(conn, job["user_id"], "topoEmail"):
+                send_failure_email(email, JOB_ID, error_text)
+        except Exception as mail_error:
+            log.warning(f"Job {JOB_ID}: failure email failed: {mail_error}")
+
         sys.exit(1)
 
     finally:
