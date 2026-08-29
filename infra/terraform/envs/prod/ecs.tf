@@ -1,9 +1,23 @@
-# ECS task definitions for the three on-demand Fargate workers. Launched via
-# RunTask (api/src/lib/ecsRunTask.ts), no long-running services. CI pushes new
-# images to ECR; the task defs reference :latest, so CI image pushes flow
-# through without re-registering here. container_definitions is pinned to the
-# exact live JSON (generated via `terraform plan -generate-config-out`) so the
-# plan stays clean — editing it registers a new task-def revision.
+# ECS task definitions for the three on-demand Fargate workers, plus the
+# pre-deploy migrate one-shot. Launched via RunTask
+# (api/src/lib/ecsRunTask.ts), no long-running services. container_definitions
+# is pinned to the exact live JSON (generated via
+# `terraform plan -generate-config-out`) so the plan stays clean — editing it
+# registers a new task-def revision.
+#
+# WHO OWNS THE IMAGE TAG (INF-009). Terraform owns everything in these defs
+# EXCEPT the image: after each deploy, CI registers a further revision with the
+# image pinned to the commit sha it just pushed
+# (infra/scripts/pin-ecs-task-image.sh, called from deploy-api.yml and
+# deploy-topo-worker.yml). RunTask resolves a family to its latest ACTIVE
+# revision, so CI's revision is the one that launches and Terraform's is the
+# floor beneath it. That is why `terraform plan` stays clean: the provider reads
+# the specific revision ARN in state, which CI never touches.
+#
+# The `:latest` below is therefore a floor, not the deployed tag — and applying
+# a change to one of these defs registers a revision carrying that floor again,
+# which is a real (if brief) un-pinning. Re-run the matching deploy workflow
+# after any apply that touches a task definition.
 #
 # The cluster (aws_ecs_cluster) lives in ecs_cluster.tf, added after its
 # CloudFormation stack is retired.
@@ -68,7 +82,8 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       value = "https://logjamnsw.com"
     }]
     essential = true
-    image     = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest"
+    # Floor only — CI re-registers this def pinned to a sha (INF-009, header).
+    image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest"
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -135,7 +150,8 @@ resource "aws_ecs_task_definition" "topo_worker" {
       value = "s3://logjam-topo-jobs/svtm/svtm_formation.tif"
     }]
     essential = true
-    image     = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
+    # Floor only — CI re-registers this def pinned to a sha (INF-009, header).
+    image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -210,7 +226,8 @@ resource "aws_ecs_task_definition" "api_migrate" {
       value = "production"
     }]
     essential = true
-    image     = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest"
+    # Floor only — CI re-registers this def pinned to a sha (INF-009, header).
+    image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-api:latest"
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -271,7 +288,8 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       value = "logjam-topo-jobs"
     }]
     essential = true
-    image     = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
+    # Floor only — CI re-registers this def pinned to a sha (INF-009, header).
+    image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
     logConfiguration = {
       logDriver = "awslogs"
       options = {

@@ -428,6 +428,48 @@ resource "aws_iam_role_policy" "gha_eb_appversions" {
 # EB version swap. Scoped to that task def + the one cluster; PassRole limited
 # to the exact execution role the task uses (no task role is passed), gated to
 # ECS tasks so the deploy identity can't repurpose it elsewhere.
+# INF-009: let the deploy workflows register a task-definition revision pinned
+# to the image sha they just pushed (infra/scripts/pin-ecs-task-image.sh), so a
+# RunTask launches a known commit instead of resolving the moving `:latest` tag.
+#
+# RegisterTaskDefinition supports no resource-level permission — there is no
+# task-def ARN to scope to before the revision exists — so it is `*`. What that
+# does NOT grant is the ability to run anything: ecs:RunTask stays scoped to
+# logjam-api-migrate in the policy above, and the API's own runtime role is what
+# launches the workers. The teeth are in PassRole, which is limited to the two
+# roles these four task defs already use and gated to ECS tasks, so a registered
+# definition cannot attach a more privileged role than the one it replaces.
+resource "aws_iam_role_policy" "gha_pin_task_defs" {
+  name = "logjam-gha-pin-task-defs"
+  role = aws_iam_role.github_actions.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ReadAndRegisterTaskDefinitions"
+        Effect = "Allow"
+        # DescribeTaskDefinition is also in the attached ReadOnlyAccess; named
+        # here too so this policy stands on its own if that attachment ever
+        # narrows.
+        Action   = ["ecs:DescribeTaskDefinition", "ecs:RegisterTaskDefinition"]
+        Resource = "*"
+      },
+      {
+        Sid    = "PassWorkerRoles"
+        Effect = "Allow"
+        Action = "iam:PassRole"
+        Resource = [
+          aws_iam_role.ecs_task_execution.arn,
+          aws_iam_role.topo_worker.arn,
+        ]
+        Condition = {
+          StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
+        }
+      },
+    ]
+  })
+}
+
 resource "aws_iam_role_policy" "gha_migrate_runtask" {
   name = "logjam-gha-migrate-runtask"
   role = aws_iam_role.github_actions.id

@@ -165,3 +165,17 @@ jobs:
       - name: Unit tests
         working-directory: topo
         run: python -m unittest discover -s tests
+
+  # The deploy workflows rewrite live ECS task definitions
+  # (infra/scripts/pin-ecs-task-image.sh, INF-009). Its one piece of real logic
+  # is the jq filter that strips the read-only fields `describe` returns and
+  # `register` rejects — a list that only breaks when ECS adds an output field,
+  # i.e. long after anyone remembers this exists. The script's --self-test runs
+  # that filter over a fixture with no AWS, so the breakage surfaces here rather
+  # than half way through a prod deploy.
+  infra-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: ECS task-definition pin filter
+        run: infra/scripts/pin-ecs-task-image.sh --self-test

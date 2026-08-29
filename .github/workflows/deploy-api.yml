@@ -65,8 +65,24 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
+      # INF-009: point the two logjam-api task definitions at the image just
+      # pushed, by sha. Both used to carry `:latest`, so what a RunTask launched
+      # was whatever that moving tag happened to resolve to — including a stale
+      # image if the `:latest` push failed after the sha push succeeded, which
+      # would run the migration on one build and the API on another. This step
+      # runs BEFORE the migration below for exactly that reason.
+      - name: Pin ECS task definitions to this image (INF-009)
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          for family in logjam-api-migrate logjam-geo-pdf-worker; do
+            infra/scripts/pin-ecs-task-image.sh \
+              "$family" "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          done
+
       # Gated pre-deploy migration (ARCH-001 half B). Run `prisma migrate deploy`
-      # in a one-shot Fargate task on the image just pushed to :latest, and gate
+      # in a one-shot Fargate task on the sha-pinned revision registered above, and gate
       # the EB swap on its exit code. A failing migration aborts the deploy here
       # (EB untouched, old version keeps serving) instead of crash-looping the
       # new container at boot. boot.ts no longer migrates.
