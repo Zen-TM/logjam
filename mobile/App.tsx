@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { Alert, Linking, Platform, StyleSheet, Text } from "react-native";
+import { useEffect, useState } from "react";
+import { Alert, AppState, Linking, Platform, StyleSheet, Text } from "react-native";
 import Constants from "expo-constants";
 // SystemBars (react-native-edge-to-edge) rather than expo-status-bar: with
 // android.edgeToEdgeEnabled the app draws behind BOTH system bars, so the
@@ -24,7 +24,6 @@ import { applyScreenCapturePolicy } from "./src/offline/appLockPreference";
 import { excludeLocalDataFromBackup } from "./src/offline/localStores";
 import { LoadingState } from "./src/ui/ScreenStates";
 import { Button } from "./src/ui/Button";
-import { ErrorBanner } from "./src/ui/ErrorBanner";
 import { fontSize, spacing, theme } from "./src/theme";
 
 // The blocked build's only way out (MAPP-001). The rule itself — Android only,
@@ -51,10 +50,10 @@ export default function App() {
   }, []);
 
   // MAPP-002: the hard block is for a build that is too old AND on a
-  // connection where the update is free and to hand. Everything else warns
-  // below and keeps working — a dead app in a canyon holds the user's offline
-  // maps and their in-progress track hostage to a Play Store they may have no
-  // way to reach.
+  // connection where the update is free and to hand. Everything else shows the
+  // same screen with a way past it and keeps working — a dead app in a canyon
+  // holds the user's offline maps and their in-progress track hostage to a Play
+  // Store they may have no way to reach.
   const upgradeEnforcement =
     minVersionGate.status === "upgradeRequired" ? minVersionGate.enforcement : "none";
   const openStore = storeUrl
@@ -63,19 +62,46 @@ export default function App() {
       }
     : undefined;
 
-  if (minVersionGate.status === "upgradeRequired" && upgradeEnforcement === "block") {
+  // The warn screen is the same screen as the block, plus a way past it, and
+  // the way past lasts only until the app is next foregrounded. Not sticky on
+  // purpose: a build below the minimum stays below it, and the one gesture that
+  // dismisses this screen and leaves — tapping through to the Play Store — is
+  // exactly the one after which it should be shown again. `block` never reads
+  // this flag; it renders no dismiss button, so nothing can set it.
+  const [warnDismissed, setWarnDismissed] = useState(false);
+  useEffect(() => {
+    if (upgradeEnforcement !== "warn") return;
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (next === "active") setWarnDismissed(false);
+    });
+    return () => subscription.remove();
+  }, [upgradeEnforcement]);
+
+  const warning = upgradeEnforcement === "warn";
+  if (minVersionGate.status === "upgradeRequired" && !(warning && warnDismissed)) {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.blockingContainer}>
           <SystemBars style="light" />
           <Text style={styles.blockingTitle}>Update required</Text>
+          {/* The warn copy says "over mobile data, or on Wi-Fi later" and NOT
+              "connect to Wi-Fi to install it", because the update is perfectly
+              installable over mobile data — the metered check governs whether
+              we may take the app away, not whether they can act. */}
           <Text style={styles.blockingLine}>
-            This version ({CLIENT_VERSION}) is no longer supported. Minimum
-            supported version is {minVersionGate.minVersion}. Please update the
-            app to continue.
+            {warning
+              ? `This version (${CLIENT_VERSION}) is no longer supported. You can update now over mobile data, or on Wi-Fi later.`
+              : `This version (${CLIENT_VERSION}) is no longer supported. Minimum supported version is ${minVersionGate.minVersion}. Please update the app to continue.`}
           </Text>
           {openStore ? (
             <Button label="Open the Play Store" icon="external-link" onPress={openStore} />
+          ) : null}
+          {warning ? (
+            <Button
+              label="Continue for now"
+              variant="ghost"
+              onPress={() => setWarnDismissed(true)}
+            />
           ) : null}
         </SafeAreaView>
       </SafeAreaProvider>
@@ -85,20 +111,6 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SystemBars style="light" />
-      {/* The non-blocking half of MAPP-002. It says "over mobile data, or on
-          Wi-Fi later" and NOT "connect to Wi-Fi to install it", because the
-          update is perfectly installable over mobile data — the metered check
-          governs whether we may take the app away, not whether they can act. */}
-      {upgradeEnforcement === "warn" ? (
-        <SafeAreaView edges={["top"]} style={styles.warningDock}>
-          <ErrorBanner
-            title="Update required"
-            message={`This version (${CLIENT_VERSION}) is no longer supported. You can update now over mobile data, or on Wi-Fi later.`}
-            actionLabel="Open the Play Store"
-            onRetry={openStore}
-          />
-        </SafeAreaView>
-      ) : null}
       {/* App lock (Stage 4): active once offline map data exists on-device. */}
       <AppLockGate>
       {auth.state === "loading" ? (
@@ -180,5 +192,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   authSafeArea: { flex: 1, backgroundColor: theme.primary },
-  warningDock: { backgroundColor: theme.primary, paddingHorizontal: spacing(1.5) },
 });

@@ -39,7 +39,7 @@ import { invalidateCurrentUser } from "../api/apiFetch";
 import { stopGeoPdfImportRun } from "../geopdf/importRunner";
 import { wipeAllSyncData } from "../sync/syncDb";
 import { stopTrackRecordingForWipe } from "../tracks/trackRecorder";
-import { WIPED_DIRS } from "./localStores";
+import { CACHE_ROOT, WIPED_DIRS } from "./localStores";
 import { clearOfflineDemCache } from "./demLookup";
 import { cancelAllRegionDownloads } from "./regionDownloadQueue";
 import { getOfflineDb, notifyRegistryChanged } from "./registryDb";
@@ -164,6 +164,32 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
       console.error(err);
       failed.push("downloaded files");
     }
+  }
+
+  // Then everything else in the app's cache directory (MOT-005). The OS
+  // pickers copy each attachment into a subdirectory of their own before
+  // handing us a URI; the attach path deletes its copy, but files left there by
+  // earlier builds outlive sign-out — confirmed on a handset after a full wipe.
+  //
+  // This is deliberately NOT a list of expo-image-picker's paths (decision D6):
+  // those mirror a third-party native module's internals and drift on upgrade.
+  // "Empty the cache directory" names nothing that can drift and catches
+  // pre-existing files as well as future ones. It is safe by contract — on
+  // Android `cacheDir` is app-private scratch space the OS may delete at any
+  // moment to reclaim storage, so nothing durable is allowed to live there, and
+  // every store this app keeps is under `documentDirectory` (localStores.ts).
+  //
+  // Last, and non-fatal: the privacy-critical stores above are already gone by
+  // the time this runs, so a cache that will not empty is reported like any
+  // other failed store rather than costing the rest of the wipe.
+  try {
+    if (!CACHE_ROOT) throw new Error("No cacheDirectory to empty");
+    for (const entry of await FileSystem.readDirectoryAsync(CACHE_ROOT)) {
+      await FileSystem.deleteAsync(`${CACHE_ROOT}${entry}`, { idempotent: true });
+    }
+  } catch (err) {
+    console.error(err);
+    failed.push("cached files");
   }
 
   return { failed };

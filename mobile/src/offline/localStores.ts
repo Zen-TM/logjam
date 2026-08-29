@@ -37,6 +37,20 @@ export const IMPORTS_DIR = `${FileSystem.documentDirectory}imports/`;
 export const SCRATCH_DIR = `${FileSystem.cacheDirectory}logjam-scratch/`;
 
 /**
+ * The app's whole cache directory, which `wipeAllLocalData` EMPTIES on sign-out
+ * (MOT-005). Not a store of ours — it is the root the OS hands out for
+ * disposable scratch, and every library that caches writes into it, including
+ * the pickers, which keep their own copy of every photo and file the user
+ * attaches. Emptying it names no third-party path, so it cannot drift when a
+ * dependency renames its subdirectory, and it catches what earlier builds left.
+ *
+ * Not in `WIPED_DIRS`, and not named `*_DIR`, because the wipe EMPTIES it
+ * rather than deleting it: the platform owns this directory and libraries write
+ * into it without re-creating it. `localStores.test.ts` pins the sweep instead.
+ */
+export const CACHE_ROOT = FileSystem.cacheDirectory;
+
+/**
  * Bundled Protomaps glyphs and sprites. DELIBERATELY NOT WIPED: identical for
  * every user, account-independent, and re-extracting them costs a first-launch
  * unzip. It is declared here anyway so "not wiped" is a recorded decision

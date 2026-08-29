@@ -133,3 +133,33 @@ describe("the wipe stops the producers before it deletes", () => {
     expect(wipe).toContain("resetDatabase()");
   });
 });
+
+describe("the wipe empties the app cache directory", () => {
+  const wipe = readFileSync(join(SRC_DIR, "offline", "wipeLocalData.ts"), "utf8");
+
+  it("sweeps the cache ROOT, not a list of picker paths", () => {
+    // MOT-005: the OS pickers keep their own copy of every attached photo and
+    // file in a subdirectory of the cache. Decision D6 rejected adding those
+    // paths to WIPED_DIRS — they mirror a third-party native module's
+    // internals and drift on upgrade — in favour of emptying the whole cache
+    // directory, which names nothing that can drift and also catches the files
+    // earlier builds already left behind.
+    expect(wipe).toContain("readDirectoryAsync(CACHE_ROOT)");
+    expect(code(wipe)).not.toMatch(/ImagePicker|DocumentPicker/);
+  });
+
+  it("declares the cache root beside every other store", () => {
+    // Emptied rather than deleted, so it is not a WIPED_DIRS entry — but it is
+    // still the one file allowed to name a filesystem root.
+    expect(declaration()).toMatch(/export const CACHE_ROOT = FileSystem\.cacheDirectory/);
+  });
+
+  it("sweeps last, so a cache failure cannot cost a store", () => {
+    // The stores are the privacy boundary; the cache is a follow-up. Best
+    // effort, and after everything that matters is already gone.
+    const storesAt = wipe.indexOf("for (const dir of WIPED_DIRS)");
+    const cacheAt = wipe.indexOf("readDirectoryAsync(CACHE_ROOT)");
+    expect(storesAt).toBeGreaterThan(-1);
+    expect(cacheAt).toBeGreaterThan(storesAt);
+  });
+});
