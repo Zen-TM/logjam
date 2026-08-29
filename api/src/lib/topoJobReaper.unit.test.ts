@@ -22,6 +22,11 @@ vi.mock("./topoExportLauncher", () => ({
 }));
 
 vi.mock("../services/email", () => ({ sendEmail: vi.fn() }));
+// sendPushToUser POSTs to https://exp.host/--/api/v2/push/send. Unmocked, with
+// a device token staged below, these tests made a REAL request to Expo on every
+// run — ~400ms, and slow enough under parallel load to blow vitest's 5s timeout
+// intermittently. api/CLAUDE.md: never hit a real service in a unit test.
+vi.mock("../services/push", () => ({ sendPushToUser: vi.fn() }));
 
 import prisma from "../services/prisma";
 import { ecs, s3 } from "../services/awsClients";
@@ -38,6 +43,7 @@ import {
 } from "./topoJobReaper";
 import { createAndLaunchTopoExport } from "./topoExportLauncher";
 import { sendEmail } from "../services/email";
+import { sendPushToUser } from "../services/push";
 import { AppError } from "../middleware/errorHandler";
 import { AUTO_EXPORT_DEFAULTS } from "@logjam/shared";
 import { getEnv } from "./env";
@@ -67,6 +73,7 @@ const notificationCreate = (
 const notificationCreateMany = (
   prisma as unknown as { notification: { createMany: Mock } }
 ).notification.createMany;
+const pushSend = sendPushToUser as unknown as Mock;
 const deviceTokenFindMany = (
   prisma as unknown as { deviceToken: { findMany: Mock } }
 ).deviceToken.findMany;
@@ -120,6 +127,7 @@ beforeEach(() => {
   notificationCreate.mockReset().mockResolvedValue({});
   notificationCreateMany.mockReset().mockResolvedValue({ count: 0 });
   deviceTokenFindMany.mockReset().mockResolvedValue([]);
+  pushSend.mockReset().mockResolvedValue(undefined);
   userFindMany.mockReset().mockResolvedValue([]);
   emailSend.mockReset().mockResolvedValue(undefined);
   launchExport.mockReset().mockResolvedValue("export-id");
@@ -514,10 +522,11 @@ describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
       pending: [{ id: "p1", userId: "u1", name: "Claustral run" }],
     });
     jobUpdateMany.mockResolvedValue({ count: 1 });
-    deviceTokenFindMany.mockResolvedValue([{ token: "ExponentPushToken[x]" }]);
-
     await reapStuckTopoJobs(NOW);
 
+    expect(pushSend).toHaveBeenCalledTimes(1);
+    expect(pushSend.mock.calls[0][0]).toBe("u1");
+    expect(pushSend.mock.calls[0][1]).toMatchObject({ type: "topo_failed", jobId: "p1" });
     expect(notificationCreateMany).toHaveBeenCalledTimes(1);
     const rows = notificationCreateMany.mock.calls[0][0].data;
     expect(rows).toHaveLength(1);
@@ -536,14 +545,13 @@ describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
       pending: [{ id: "p1", userId: "u1", name: null }],
     });
     jobUpdateMany.mockResolvedValue({ count: 0 }); // lost the race
-    deviceTokenFindMany.mockResolvedValue([{ token: "ExponentPushToken[x]" }]);
 
     const count = await reapStuckTopoJobs(NOW);
 
     expect(jobUpdateMany).toHaveBeenCalledTimes(1);
     expect(notificationCreateMany).not.toHaveBeenCalled();
-    // No push either — nothing was looked up to push to.
-    expect(deviceTokenFindMany).not.toHaveBeenCalled();
+    // No push either.
+    expect(pushSend).not.toHaveBeenCalled();
     // And the returned count only ever counts rows this pass claimed.
     expect(count).toBe(0);
   });

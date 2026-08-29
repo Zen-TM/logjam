@@ -153,6 +153,13 @@ const baseSchema = z.object({
   // worker died with an opaque pg_hba error. Now it fails loud at boot.
   DATABASE_SSL: z.enum(["disable"]).optional(),
   DATABASE_SSL_CA: z.string().optional(),
+  // CI-only headroom for the global rate limiter (middleware/rateLimit.ts,
+  // which reads it from process.env at module load — declared here so it is
+  // still validated and appears in the var list). IGNORED when
+  // NODE_ENV=production, so it can never widen the production abuse cap. Set
+  // only by the api-integration job in .github/workflows/ci.yml; no dev value,
+  // so it is deliberately absent from the env.local Terraform template.
+  RATE_LIMIT_GLOBAL_MAX: z.coerce.number().int().positive().optional(),
   // Job id for the one-shot GeoPDF worker container (worker/geoPdfWorker.ts
   // CLI entrypoint); unset in the API process.
   GEO_PDF_JOB_ID: z.string().optional(),

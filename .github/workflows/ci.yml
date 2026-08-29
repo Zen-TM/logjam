@@ -1,9 +1,10 @@
 name: CI
 
 # Test/lint/typecheck gate. Runs on every PR and on pushes to main. This is
-# the workflow branch protection should require (jobs: shared, api, frontend,
-# mobile, topo). Integration tests (api/src/__tests__) are NOT run here — they need a
-# live API + MiniStack (`make dev`); see CLAUDE.md "Testing".
+# the workflow branch protection should require (jobs: shared, api,
+# api-integration, frontend, mobile, topo). The api-integration job stands up
+# the live API + Postgres + MiniStack the integration suite needs, so
+# api/src/__tests__ now gates PRs too; see CLAUDE.md "Testing".
 
 on:
   pull_request:
@@ -71,6 +72,152 @@ jobs:
       - name: Unit tests (no infra)
         working-directory: api
         run: npm run test:unit
+
+  api-integration:
+    # api/src/__tests__ (31 files / ~250 tests) hits a LIVE API over HTTP — it
+    # is the only coverage of the multi-actor privacy boundaries
+    # (shareBoundary / syncBoundary / directShare / shareRevocation), which the
+    # mocked-Prisma unit tests structurally cannot reach. It was local-only
+    # until the first real run found three contract bugs.
+    #
+    # This job is `make dev` reduced to what the suite actually needs:
+    # Postgres + MiniStack (S3 only — no test drives POST /topo-jobs/:id/start
+    # to a real ECS launch, so no Docker socket is mounted) + the API on :8080
+    # with AUTH_MODE=fake.
+    #
+    # The DB is a fresh service container every run, deliberately NOT cached:
+    # the suite is not idempotent against a reused database (sync_tombstones
+    # accumulate until syncBoundary's paged-pull assertions stop finding the
+    # tombstone they just wrote). Never cache the Postgres volume here.
+    runs-on: ubuntu-latest
+    services:
+      # Mirrors the `migrations` job's config exactly.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: logjam
+          POSTGRES_PASSWORD: logjam
+          POSTGRES_DB: logjam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logjam"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      # Same emulator image as docker-compose.yml, so presign/PUT/confirm
+      # behaves as it does locally. media/canyonTracks/clientIds/fileSends and
+      # topoJobs' HeadObject check all do real S3 round-trips against it.
+      # No /var/run/docker.sock mount (that is only for ECS RunTask) and no
+      # healthcheck options — the image has no curl, so the wait step below
+      # polls the health endpoint from the runner instead.
+      ministack:
+        image: ministackorg/ministack
+        env:
+          SERVICES: s3
+          DEFAULT_REGION: ap-southeast-2
+          AWS_DEFAULT_REGION: ap-southeast-2
+        ports:
+          - 4566:4566
+    env:
+      # One block, reused by every step below (and by the API process). Values
+      # mirror the Terraform-generated root .env.local, which is what the suite
+      # is known to pass against locally.
+      NODE_ENV: development
+      AUTH_MODE: fake
+      FAKE_USER_SUB: fake-alice-sub
+      PORT: 8080
+      API_URL: http://localhost:8080
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: logjam
+      DB_USER: logjam
+      DB_PASSWORD: logjam
+      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_REGION: ap-southeast-2
+      AWS_DEFAULT_REGION: ap-southeast-2
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      S3_BUCKET_MEDIA: logjam-media-local
+      S3_BUCKET_TOPO: logjam-topo-local
+      TOPO_CDN_BASE_URL: http://localhost:4566/logjam-topo-local
+      CORS_ORIGIN: http://localhost:5173
+      # Non-empty so the topo-job routes take the same branch they do locally.
+      # No test reaches an actual RunTask (see the comment atop topoJobs.test.ts).
+      ECS_SUBNETS: subnet-local
+      ECS_SECURITY_GROUPS: sg-local
+      # The global limiter is 300 req/60s keyed by IP for pre-auth requests, so
+      # the whole suite shares ONE bucket and a full run brushes the cap. Raise
+      # it for CI only; middleware/rateLimit.ts ignores this whenever
+      # NODE_ENV=production, so prod behaviour is unchanged. Without it the run
+      # still passes but burns minutes in _rateLimitGate.ts's window sleeps.
+      RATE_LIMIT_GLOBAL_MAX: 1000000
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      # api depends on shared via file:../shared and imports from shared/dist.
+      - name: Build shared
+        working-directory: shared
+        run: npm ci && npm run build
+      - name: Install
+        working-directory: api
+        run: npm ci
+      # npm ci no longer auto-generates the client (Prisma 7) — tsc fails without it.
+      - name: Prisma generate
+        working-directory: api
+        run: npx prisma generate
+      # prisma.config.ts composes the datasource URL from the DB_* vars above.
+      - name: Migrate
+        working-directory: api
+        run: npx prisma migrate deploy
+      # Creates alice/bob/carol with the friendships and shares every
+      # multi-actor test asserts against.
+      - name: Seed
+        working-directory: api
+        run: npx prisma db seed
+      - name: Build API
+        working-directory: api
+        run: npm run build
+      - name: Wait for MiniStack and create buckets
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
+              echo "ministack ready"; break
+            fi
+            if [ "$i" = 60 ]; then echo "ministack never became ready"; exit 1; fi
+            sleep 2
+          done
+          aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_MEDIA"
+          aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_TOPO"
+      # dist/index.js, not dist/boot.js: boot resolves DB creds from Secrets
+      # Manager, which this job doesn't run.
+      - name: Start API
+        working-directory: api
+        run: |
+          node dist/index.js > "$RUNNER_TEMP/api.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/api.pid"
+      - name: Wait for API
+        run: |
+          for i in $(seq 1 60); do
+            if ! kill -0 "$(cat "$RUNNER_TEMP/api.pid")" 2>/dev/null; then
+              echo "API process exited during startup:"; cat "$RUNNER_TEMP/api.log"; exit 1
+            fi
+            if curl -sf http://localhost:8080/health > /dev/null; then
+              echo "API ready"; exit 0
+            fi
+            sleep 1
+          done
+          echo "API never answered on :8080:"; cat "$RUNNER_TEMP/api.log"; exit 1
+      - name: Integration tests
+        working-directory: api
+        run: npm test
+      - name: API log (on failure)
+        if: failure()
+        run: cat "$RUNNER_TEMP/api.log"
 
   frontend:
     runs-on: ubuntu-latest

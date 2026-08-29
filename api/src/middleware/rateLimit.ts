@@ -27,9 +27,34 @@ function userOrIpKey(req: Request): string {
   return `ip:${ipKeyGenerator(req.ip ?? "")}`;
 }
 
+// Production ceiling for the global limiter. Not a knob in prod: see
+// globalLimitMax().
+const GLOBAL_MAX_DEFAULT = 300;
+
+// CI-only headroom for the global limiter.
+//
+// The integration suite (api/src/__tests__, ~250 tests) runs every actor
+// through ONE bucket — this limiter mounts before requireAuth, so userOrIpKey
+// always falls back to the runner's IP — and a full run's demand exceeds a
+// single 300/60s window. RATE_LIMIT_GLOBAL_MAX raises the cap for that run.
+//
+// Fail-closed, same shape as the AUTH_MODE=fake guard in lib/env.ts: the
+// override is IGNORED whenever NODE_ENV=production, so a stray value in a prod
+// environment can never widen the real abuse cap. Read straight from
+// process.env (not getEnv()) because this module is imported while index.ts is
+// still wiring up; the var is declared in lib/env.ts so it is still validated
+// and listed at boot. Covered by rateLimit.unit.test.ts.
+export function globalLimitMax(env: NodeJS.ProcessEnv = process.env): number {
+  if (env.NODE_ENV === "production") return GLOBAL_MAX_DEFAULT;
+  const override = Number(env.RATE_LIMIT_GLOBAL_MAX);
+  return Number.isInteger(override) && override > 0
+    ? override
+    : GLOBAL_MAX_DEFAULT;
+}
+
 export const globalLimiter = rateLimit({
   windowMs: 60_000,
-  max: 300,
+  max: globalLimitMax(),
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userOrIpKey,
