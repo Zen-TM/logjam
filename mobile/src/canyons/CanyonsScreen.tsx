@@ -18,6 +18,7 @@
 // print our own copy rather than an error string that might embed a canyon name.
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   FlatList,
   Keyboard,
   RefreshControl,
@@ -59,12 +60,15 @@ import {
   ErrorState,
   Row,
   SegmentedControl,
+  SelectionBar,
   SyncStatusPills,
   Toast,
+  useBulkSelection,
   type CapacitySegment,
   type SegmentOption,
   type ToastMessage,
 } from "../ui";
+import { deleteCanyonLocal } from "../sync/outbox";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { CanyonEditSheet } from "./CanyonEditSheet";
 import { takePickedPoint } from "../map/pickedPoint";
@@ -255,6 +259,64 @@ export function CanyonsScreen({
     [bucket, countable, matchesSearchAndFilters, sort, statusOf],
   );
 
+  // --- Multi-select ---------------------------------------------------------
+  // Press and hold a row to start; the rail's bucket chips become the
+  // cancel / select-all / delete bar (see SavedScreen, the reference). A shared
+  // canyon is not pickable — deleting is the only thing a selection does, and
+  // the owner-only delete gate means a sharee has nothing to be picked for.
+  const {
+    selectedKeys,
+    clearSelection,
+    selectItem,
+    selectAll,
+    selectedItems,
+    selectableItems,
+    selecting,
+  } = useBulkSelection({
+    items: visible,
+    keyOf: (canyon) => canyon.id,
+    isDeletable: (canyon) => canyon.syncRole === "owner",
+  });
+  // A selection is a transient mode over rows you can see; a pending "delete
+  // these five" you no longer remember making is a stale prompt (DESIGN.md §7).
+  useFocusEffect(
+    useCallback(() => {
+      clearSelection();
+    }, [clearSelection]),
+  );
+
+  const deleteSelected = useCallback(() => {
+    const targets = selectedItems;
+    const count = targets.length;
+    Alert.alert(
+      count === 1 ? "Delete this canyon?" : `Delete ${count} canyons?`,
+      "Their notes and photos are removed from this device and from your account. Trips that link to them stay, but lose the link. This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              let failures = 0;
+              for (const canyon of targets) {
+                try {
+                  await deleteCanyonLocal(canyon.id);
+                } catch (err) {
+                  console.error(err);
+                  failures += 1;
+                }
+              }
+              clearSelection();
+              if (failures === 0) info(`Deleted ${count} ${count === 1 ? "canyon" : "canyons"}.`);
+              else fail(`${failures} of ${count} couldn't be deleted.`);
+            })();
+          },
+        },
+      ],
+    );
+  }, [selectedItems, clearSelection, fail, info]);
+
   // Tallies come from the OTHER axes only, so a chip's count answers "how many
   // would I get if I tapped this" rather than restating the current view.
   const withoutBucket = useMemo(
@@ -339,9 +401,13 @@ export function CanyonsScreen({
         sharedWith={item._count?.shares ?? 0}
         onOpen={openCanyon}
         onMenu={openMenu}
+        selecting={selecting}
+        selected={selectedKeys.includes(item.id)}
+        deletable={item.syncRole === "owner"}
+        onToggle={() => selectItem(item)}
       />
     ),
-    [openCanyon, openMenu, statusOf],
+    [openCanyon, openMenu, statusOf, selecting, selectedKeys, selectItem],
   );
 
   const clearFind = useCallback(() => {
@@ -427,7 +493,19 @@ export function CanyonsScreen({
       </HeroHeader>
 
       <View style={styles.rail}>
-        <SegmentedControl scroll options={bucketOptions} value={bucket} onChange={setBucket} />
+        {selecting ? (
+          <SelectionBar
+            countLabel={`${selectedItems.length} ${
+              selectedItems.length === 1 ? "canyon" : "canyons"
+            } selected`}
+            showSelectAll={selectedItems.length < selectableItems.length}
+            onClear={clearSelection}
+            onSelectAll={selectAll}
+            onDelete={deleteSelected}
+          />
+        ) : (
+          <SegmentedControl scroll options={bucketOptions} value={bucket} onChange={setBucket} />
+        )}
       </View>
 
       {/* An active hidden filter has to announce itself, with the way out in
@@ -562,12 +640,22 @@ const CanyonRow = memo(function CanyonRow({
   sharedWith,
   onOpen,
   onMenu,
+  selecting,
+  selected,
+  deletable,
+  onToggle,
 }: {
   canyon: MirrorCanyon;
   status: CanyonStatus;
   sharedWith: number;
   onOpen: (canyon: MirrorCanyon) => void;
   onMenu: (canyon: MirrorCanyon) => void;
+  selecting: boolean;
+  selected: boolean;
+  /** False on a shared canyon — the owner-only delete gate leaves it nothing to
+   *  be picked for, so it is greyed out while selecting rather than refused. */
+  deletable: boolean;
+  onToggle: () => void;
 }) {
   const meta = CANYON_STATUS_META[status];
   const quality = qualityLabel(canyon.quality);
@@ -578,7 +666,10 @@ const CanyonRow = memo(function CanyonRow({
       title={canyon.name}
       titleNumberOfLines={2}
       subtitle={canyonSummary(canyon) || undefined}
-      onPress={() => onOpen(canyon)}
+      selected={selected}
+      disabled={selecting && !deletable}
+      onLongPress={onToggle}
+      onPress={selecting ? onToggle : () => onOpen(canyon)}
       right={
         <View style={styles.rowTrailing}>
           {quality ? <Text style={styles.quality}>{quality}</Text> : null}
@@ -588,11 +679,25 @@ const CanyonRow = memo(function CanyonRow({
               <Text style={styles.badgeText}>{sharedWith}</Text>
             </View>
           ) : null}
-          <IconButton
-            icon="more-vertical"
-            accessibilityLabel={`Actions for ${canyon.name}`}
-            onPress={() => onMenu(canyon)}
-          />
+          {selecting ? (
+            // The ⋯ button's box, holding the checkbox — no circle at all on a
+            // shared canyon (an empty checkbox promises a tap that does nothing).
+            <View style={styles.selectBox}>
+              {deletable ? (
+                <Feather
+                  name={selected ? "check-circle" : "circle"}
+                  size={22}
+                  color={selected ? theme.accent : theme.textMuted}
+                />
+              ) : null}
+            </View>
+          ) : (
+            <IconButton
+              icon="more-vertical"
+              accessibilityLabel={`Actions for ${canyon.name}`}
+              onPress={() => onMenu(canyon)}
+            />
+          )}
         </View>
       }
     />
@@ -703,6 +808,9 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   listContent: { paddingHorizontal: spacing(2), paddingBottom: spacing(4), gap: spacing(1) },
   rowTrailing: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
+  // IconButton's own box, so the checkbox that stands in for the ⋯ button
+  // occupies exactly what it replaced and the row cannot resize on selection.
+  selectBox: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   quality: { color: theme.textMuted, fontSize: fontSize.xs },
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
   badgeText: { color: theme.textMuted, fontSize: fontSize.xs },

@@ -16,12 +16,12 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { messageFromError, TRACK_COLORS } from "@logjam/shared";
 
 import { assetHue, radius, spacing, theme, withAlpha } from "../theme";
-import { BottomSheet, RenameForm, Row, Toggle } from "../ui";
+import { BottomSheet, RenameForm, Row } from "../ui";
 import { trackActions } from "../saved/assetActions";
 import { useCanyonPicker } from "../canyons/useCanyonPicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
-import { updateTrack, type Track } from "./tracksDb";
+import { type Track } from "./tracksDb";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
 import { useElevationProfile } from "../map/useElevationProfile";
@@ -263,26 +263,6 @@ export function TrackOptionsSheet({
               }}
             />
           ) : null}
-          {/* Visibility is the one property of a track that is about the MAP
-              rather than the track, so it belongs here rather than only in the
-              layers sheet — the user tapped the line to act on it. Worded as a
-              STATE, not as the "Show on map" verb above it: one draws the line,
-              the other flies to it, and two rows a word apart would be read as
-              the same thing twice. */}
-          <Row
-            title="Visible on the map"
-            icon="eye"
-            hue={assetHue.track}
-            right={
-              <Toggle
-                value={track.visible}
-                accessibilityLabel={`Show ${track.name} on the map`}
-                onValueChange={(next) => {
-                  updateTrack(track.id, { visible: next }).catch(console.error);
-                }}
-              />
-            }
-          />
           <Row
             title="Colour"
             icon="droplet"

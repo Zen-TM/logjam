@@ -42,12 +42,12 @@ import {
   Images,
   Layer,
   Map,
+  Marker,
   type CameraStop,
   type MapRef,
   type PressEvent,
   type PressEventWithFeatures,
   type ViewStateChangeEvent,
-  ViewAnnotation,
 } from "@maplibre/maplibre-react-native";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -3794,7 +3794,7 @@ export function MapScreen({
       })),
       ...(routes.data ?? []).map((route) => ({
         key: `route:${route.id}`,
-        icon: "pen-tool" as const,
+        icon: "edit-3" as const,
         hue: assetHue.route,
         title: route.name,
         kindLabel: "Route",
@@ -3851,7 +3851,7 @@ export function MapScreen({
     },
     {
       key: "routes",
-      icon: "pen-tool",
+      icon: "edit-3",
       hue: assetHue.route,
       title: "My routes",
       count: standaloneRoutes.length,
@@ -4290,6 +4290,22 @@ export function MapScreen({
             top of their own lines. */}
         {showCanyonRoutes ? <CanyonRoutesLayer onStatus={setRoutesStatus} /> : null}
 
+        {/* Saved routes, below the point markers — a route is ink on the map and
+            a waypoint or canyon marker must stay above it (the draft layer below
+            is exempt: while editing, the line you are working on is the thing
+            that has to stay readable). Mounted before the tracks/waypoints and
+            canyon pins for exactly that reason. Always mounted (RoutesLayer
+            keeps an empty source rather than unmounting) so the 0↔1 route
+            transition cannot re-add its layers to the top of the stack. */}
+        <RoutesLayer
+          routes={visibleRoutes}
+          hiddenRouteId={editingRouteId}
+          // While a tool is collecting points every tap belongs to the tool —
+          // opening an options sheet mid-draw would steal the point being
+          // placed.
+          onPressRoute={collectingPoints ? undefined : setOptionsRouteId}
+        />
+
         {/* Recorded tracks + waypoints (Stage 7): unpinned, mounted before
             the canyon sources so canyons draw on top. */}
         <TrackMapLayers
@@ -4326,17 +4342,6 @@ export function MapScreen({
           sharedFc={sharedFc}
           onPress={handleCanyonPress}
         />
-
-        {visibleRoutes.length > 0 ? (
-          <RoutesLayer
-            routes={visibleRoutes}
-            hiddenRouteId={editingRouteId}
-            // While a tool is collecting points every tap belongs to the tool —
-            // opening an options sheet mid-draw would steal the point being
-            // placed.
-            onPressRoute={collectingPoints ? undefined : setOptionsRouteId}
-          />
-        ) : null}
 
         {/* The route being drawn — solid. */}
         {drawingRoute ? (
@@ -4406,19 +4411,22 @@ export function MapScreen({
               toolbar at the top of the screen — a button attached to the thing
               it acts on, where the thumb already is.
 
-              Mounted HERE, in the top stack, and not inside RouteDraftLayer
-              where it started: the draft's own line layer is re-added whenever
-              its source remounts, and a re-added layer lands on top of the
-              stack, so the line was drawing over the button. This Fragment is
-              the app's answer to exactly that (see `topStackKey`).
+              A `Marker`, not a `ViewAnnotation`: on Android a ViewAnnotation is
+              rasterised to a bitmap and drawn as a Symbol inside the GL layer
+              stack, whose SymbolLayer is created ONCE at style-load at the
+              bottom of the data layers — so every route/track/import line added
+              afterwards drew over the button, and no re-mount moved it (the
+              SymbolLayer itself, not the symbol, was the thing pinned down).
+              A Marker renders a real native view on the map projection, above
+              the GL surface, so it stays above every line for free. It is not
+              draggable, which is the one thing the anchor handles need and this
+              button does not.
 
-              It is a ViewAnnotation, so the native side keeps it pinned to the
-              anchor through every pan, zoom and rotation with no per-frame JS.
               `anchor` names the part of the BUTTON put on the coordinate, so
               sitting it to the LEFT of the point means anchoring its RIGHT edge
               there and pushing it back by the gap. */}
           {selectedAnchorCoord && !anchorDragging ? (
-            <ViewAnnotation
+            <Marker
               key="anchor-delete"
               id="anchor-delete"
               lngLat={selectedAnchorCoord}
@@ -4438,7 +4446,7 @@ export function MapScreen({
               >
                 <Feather name="trash-2" size={20} color={theme.primary} />
               </View>
-            </ViewAnnotation>
+            </Marker>
           ) : null}
         </Fragment>
 
@@ -4882,7 +4890,7 @@ export function MapScreen({
             targets. */}
         <View style={styles.sheetBody}>
           <Row
-            icon="map-pin"
+            icon="flag"
             title="Drop a waypoint"
             onPress={() => {
               const point = longPressPoint;

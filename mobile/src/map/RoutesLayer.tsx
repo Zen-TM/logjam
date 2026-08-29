@@ -61,8 +61,12 @@ export const RoutesLayer = memo(function RoutesLayer({
     [routes, hiddenRouteId],
   );
 
-  if (shape.features.length === 0) return null;
-
+  // Always mounted — never `return null` when empty. A conditionally-mounted
+  // source remounts on the 0↔1 route transition and re-adds its layers to the
+  // TOP of the stack, drawing over the waypoint/canyon markers that are meant to
+  // sit above routes. An empty FeatureCollection keeps the source (and its four
+  // layers) pinned where MapScreen mounts them, the same pattern RouteDraftLayer
+  // uses for its own line.
   return (
     <GeoJSONSource
       id="saved-routes"

@@ -164,7 +164,7 @@ function PointDetail({
         }}
       />
       <Row
-        icon="map-pin"
+        icon="flag"
         title="Drop a waypoint here"
         subtitle="Kept in Saved, and it syncs"
         onPress={() => {

@@ -57,9 +57,11 @@ import {
   Row,
   SectionHeader,
   SegmentedControl,
+  SelectionBar,
   SyncStatusPills,
   Toast,
   todayDateKey,
+  useBulkSelection,
   type SegmentOption,
   type ToastMessage,
 } from "../ui";
@@ -136,6 +138,63 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
     [visible],
   );
 
+  // --- Multi-select ---------------------------------------------------------
+  // Press and hold a row to start; the rail's type chips become the
+  // cancel / select-all / delete bar (see SavedScreen, the reference). Every
+  // trip is deletable, so nothing is greyed out while selecting.
+  const {
+    selectedKeys,
+    clearSelection,
+    selectItem,
+    selectAll,
+    selectedItems,
+    selectableItems,
+    selecting,
+  } = useBulkSelection({
+    items: visible,
+    keyOf: (trip) => trip.id,
+    isDeletable: () => true,
+  });
+  // A selection is a transient mode over rows you can see; a pending "delete
+  // these five" you no longer remember making is a stale prompt (DESIGN.md §7).
+  useFocusEffect(
+    useCallback(() => {
+      clearSelection();
+    }, [clearSelection]),
+  );
+
+  const deleteSelected = useCallback(() => {
+    const targets = selectedItems;
+    const count = targets.length;
+    Alert.alert(
+      count === 1 ? "Delete this trip?" : `Delete ${count} trips?`,
+      "The log entries and their photos are removed from this device and from your account. This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              let failures = 0;
+              for (const trip of targets) {
+                try {
+                  await deleteTripLocal(trip.id);
+                } catch (err) {
+                  console.error(err);
+                  failures += 1;
+                }
+              }
+              clearSelection();
+              if (failures === 0) info(`Deleted ${count} ${count === 1 ? "trip" : "trips"}.`);
+              else fail(`${failures} of ${count} couldn't be deleted.`);
+            })();
+          },
+        },
+      ],
+    );
+  }, [selectedItems, clearSelection, fail, info]);
+
   // Tallies come from the OTHER axes only, so a chip's count answers "how many
   // would I get if I tapped this" rather than "how many are showing now".
   const withoutType = useMemo(
@@ -207,9 +266,12 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
         attachments={counts?.[item.id] ?? 0}
         onOpen={openTrip}
         onMenu={openMenu}
+        selecting={selecting}
+        selected={selectedKeys.includes(item.id)}
+        onToggle={() => selectItem(item)}
       />
     ),
-    [counts, openMenu, openTrip],
+    [counts, openMenu, openTrip, selecting, selectedKeys, selectItem],
   );
   const renderSectionHeader = useCallback(
     ({ section }: { section: { title: string; count: number } }) => (
@@ -339,12 +401,24 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
       </HeroHeader>
 
       <View style={styles.rail}>
-        <SegmentedControl
-          scroll
-          options={typeOptions}
-          value={typeFilter}
-          onChange={setTypeFilter}
-        />
+        {selecting ? (
+          <SelectionBar
+            countLabel={`${selectedItems.length} ${
+              selectedItems.length === 1 ? "trip" : "trips"
+            } selected`}
+            showSelectAll={selectedItems.length < selectableItems.length}
+            onClear={clearSelection}
+            onSelectAll={selectAll}
+            onDelete={deleteSelected}
+          />
+        ) : (
+          <SegmentedControl
+            scroll
+            options={typeOptions}
+            value={typeFilter}
+            onChange={setTypeFilter}
+          />
+        )}
       </View>
 
       {rangeSet ? (
@@ -541,11 +615,17 @@ const TripRow = memo(function TripRow({
   attachments,
   onOpen,
   onMenu,
+  selecting,
+  selected,
+  onToggle,
 }: {
   trip: MirrorTrip;
   attachments: number;
   onOpen: (trip: MirrorTrip) => void;
   onMenu: (trip: MirrorTrip) => void;
+  selecting: boolean;
+  selected: boolean;
+  onToggle: () => void;
 }) {
   const meta = tripTypeMeta(primaryTripType(trip.types));
   return (
@@ -560,7 +640,9 @@ const TripRow = memo(function TripRow({
       ]
         .filter(Boolean)
         .join(" · ")}
-      onPress={() => onOpen(trip)}
+      selected={selected}
+      onLongPress={onToggle}
+      onPress={selecting ? onToggle : () => onOpen(trip)}
       right={
         <View style={styles.rowTrailing}>
           {/* What is IN this entry, each glyph labelled by its own count where
@@ -581,11 +663,22 @@ const TripRow = memo(function TripRow({
               accessibilityLabel="Has notes"
             />
           ) : null}
-          <IconButton
-            icon="more-vertical"
-            accessibilityLabel={`Actions for ${tripTitle(trip)}`}
-            onPress={() => onMenu(trip)}
-          />
+          {selecting ? (
+            // The ⋯ button's box, holding the checkbox.
+            <View style={styles.selectBox}>
+              <Feather
+                name={selected ? "check-circle" : "circle"}
+                size={22}
+                color={selected ? theme.accent : theme.textMuted}
+              />
+            </View>
+          ) : (
+            <IconButton
+              icon="more-vertical"
+              accessibilityLabel={`Actions for ${tripTitle(trip)}`}
+              onPress={() => onMenu(trip)}
+            />
+          )}
         </View>
       }
     />
@@ -708,6 +801,9 @@ const styles = StyleSheet.create({
   },
   yearCount: { color: theme.textMuted, fontSize: fontSize.xs },
   rowTrailing: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
+  // IconButton's own box, so the checkbox that stands in for the ⋯ button
+  // occupies exactly what it replaced and the row cannot resize on selection.
+  selectBox: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   badge: { flexDirection: "row", alignItems: "center", gap: spacing(0.25) },
   badgeText: { color: theme.textMuted, fontSize: fontSize.xs },
   sheetBody: { gap: spacing(1) },

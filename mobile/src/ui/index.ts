@@ -22,6 +22,8 @@ export {
   type SegmentOption,
 } from "./SegmentedControl";
 export { BottomSheet } from "./BottomSheet";
+export { SelectionBar } from "./SelectionBar";
+export { useBulkSelection } from "./useBulkSelection";
 export { TextField } from "./TextField";
 export { EmptyState, ErrorState, LoadingState } from "./ScreenStates";
 export { ErrorBanner } from "./ErrorBanner";

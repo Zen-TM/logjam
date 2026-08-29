@@ -26,7 +26,7 @@ const TAG_GLYPHS: Record<string, Glyph> = {
 };
 
 export const DEFAULT_WAYPOINT_SYMBOL = {
-  icon: "map-pin" as Glyph,
+  icon: "flag" as Glyph,
   color: DEFAULT_WAYPOINT_COLOR,
 };
 

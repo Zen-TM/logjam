@@ -72,7 +72,15 @@
       "expo-dev-client",
       "./plugins/withSensorLogging.js",
       "expo-asset",
-      "expo-font",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/feather.ttf",
+            "./assets/fonts/material-community.ttf"
+          ]
+        }
+      ],
       [
         "@maplibre/maplibre-react-native",
         {

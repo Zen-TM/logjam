@@ -19,7 +19,7 @@ import { Alert, StyleSheet, View } from "react-native";
 import { messageFromError } from "@logjam/shared";
 
 import { assetHue, spacing, theme } from "../theme";
-import { BottomSheet, RenameForm, Row, Toggle } from "../ui";
+import { BottomSheet, RenameForm, Row } from "../ui";
 import { vectorImportActions } from "../saved/assetActions";
 import { useCanyonPicker } from "../canyons/useCanyonPicker";
 import type { Bbox } from "../saved/bboxOfPoints";
@@ -28,7 +28,7 @@ import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
 import { useElevationProfile } from "../map/useElevationProfile";
 import { TrackStatsBody } from "../tracks/TrackStatsBody";
-import { setVectorImportVisible, type VectorImport } from "./importsDb";
+import { type VectorImport } from "./importsDb";
 import { useImportedTrackDetail } from "./useImportedTrackDetail";
 
 export function ImportOptionsSheet({
@@ -242,22 +242,6 @@ export function ImportOptionsSheet({
               }}
             />
           ) : null}
-          {/* Worded as a STATE, not as the "Show on map" verb above it: one
-              draws the file, the other flies to it (DESIGN.md §7). */}
-          <Row
-            title="Visible on the map"
-            icon="eye"
-            hue={assetHue.import}
-            right={
-              <Toggle
-                value={imported.visible}
-                accessibilityLabel={`Show ${imported.name} on the map`}
-                onValueChange={(next) => {
-                  setVectorImportVisible(imported.id, next).catch(console.error);
-                }}
-              />
-            }
-          />
           <Row
             title="View stats"
             subtitle="Distance, climb, pace and profiles"

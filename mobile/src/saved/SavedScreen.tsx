@@ -74,7 +74,7 @@ import {
   Row,
   SectionHeader,
   SegmentedControl,
-  SEGMENTED_CONTROL_HEIGHT,
+  SelectionBar,
   StatusPill,
   SyncStatusPills,
   TextField,
@@ -213,7 +213,7 @@ const CATEGORY_META: Record<
       | "file-plus"
       | "activity"
       | "edit-3"
-      | "map-pin";
+      | "flag";
   }
 > = {
   region: { label: "Region", plural: "Regions", icon: "map" },
@@ -227,7 +227,7 @@ const CATEGORY_META: Record<
   // Marked points. Like routes they are synced records rather than files on
   // this device, and they are the one kind here that can be SEARCHED and
   // filtered by tag — see the waypoint filter rail below.
-  waypoint: { label: "Waypoint", plural: "Waypoints", icon: "map-pin" },
+  waypoint: { label: "Waypoint", plural: "Waypoints", icon: "flag" },
   // NOT named for a format ("GPX & KML") and not for lines ("Ways"): a row
   // here is a whole FILE the user brought in from another app, and it may hold
   // points and polygons as readily as lines. "Files" alone was rejected as too
@@ -1548,33 +1548,17 @@ export function SavedScreen({
           `disabled` below. */}
       <View style={styles.rail}>
         {selecting ? (
-          <View style={styles.selectionBar}>
-            <IconButton
-              icon="x"
-              accessibilityLabel="Clear selection"
-              onPress={clearSelection}
-            />
-            <Text style={styles.selectionCount} numberOfLines={1}>
-              {countOf(selectedItems.length, "item")} selected
-              {selectedBytes > 0 ? ` · ${formatBytes(selectedBytes)}` : ""}
-            </Text>
-            {/* "Everything" means everything a selection can act on — a shared
-                route or waypoint is skipped rather than picked and then refused. */}
-            {selectedItems.length < selectableItems.length ? (
-              <IconButton
-                icon="check-square"
-                accessibilityLabel="Select everything in this list"
-                onPress={() => setSelectedKeys(selectableItems.map((item) => item.key))}
-              />
-            ) : null}
-            <IconButton
-              icon="trash-2"
-              accessibilityLabel="Delete the selected items"
-              color={theme.warning}
-              filled
-              onPress={deleteSelected}
-            />
-          </View>
+          <SelectionBar
+            countLabel={`${countOf(selectedItems.length, "item")} selected${
+              selectedBytes > 0 ? ` · ${formatBytes(selectedBytes)}` : ""
+            }`}
+            // "Everything" means everything a selection can act on — a shared
+            // route or waypoint is skipped rather than picked and then refused.
+            showSelectAll={selectedItems.length < selectableItems.length}
+            onClear={clearSelection}
+            onSelectAll={() => setSelectedKeys(selectableItems.map((item) => item.key))}
+            onDelete={deleteSelected}
+          />
         ) : (
           <SegmentedControl
             options={filterOptions}
@@ -2033,7 +2017,7 @@ export function SavedScreen({
           />
           <Row
             title="Create a waypoint"
-            icon="map-pin"
+            icon="flag"
             hue={assetHue.waypoint}
             onPress={() => {
               setAddSheetOpen(false);
@@ -2444,30 +2428,6 @@ const styles = StyleSheet.create({
   // no-ops is worse than one that visibly can't be touched.
   railInert: { opacity: 0.45 },
   rail: { paddingLeft: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
-  // Sits where the SegmentedControl sits, inside the same `rail` container —
-  // it replaces only that control, not the search field or tag rail beneath
-  // it, so the rail's total height cannot differ between the two states
-  // (item 15). Fixed to SEGMENTED_CONTROL_HEIGHT — the exact height of the
-  // scroll-mode SegmentedControl it replaces (one Chip, `CHIP_HEIGHT`) —
-  // rather than left to size itself off its 40pt IconButtons, which would
-  // read a few px taller and jump the list below on every selection start
-  // (operator feedback, 2026-08-24). The buttons keep their full 40pt tap
-  // target; they simply overflow this shorter row by 2px top and bottom,
-  // which is invisible against the row's own vertical padding.
-  selectionBar: {
-    height: SEGMENTED_CONTROL_HEIGHT,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(0.5),
-    paddingLeft: spacing(0.5),
-    paddingRight: spacing(1.5),
-  },
-  selectionCount: {
-    flex: 1,
-    color: theme.textPrimary,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
   body: { paddingHorizontal: spacing(2), paddingBottom: spacing(4), gap: spacing(1) },
   rowActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
   // IconButton's own box, so the checkbox that stands in for the ⋯ button
