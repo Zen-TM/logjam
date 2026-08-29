@@ -58,6 +58,7 @@ import FilterEmptyState from "./map/FilterEmptyState";
 import {
   CURRENT_CONSENT_VERSION,
   PENDING_CONSENT_STORAGE_KEY,
+  consentGate,
   needsReconsent,
 } from "../consent";
 import ConsentGate from "./ConsentGate";
@@ -452,17 +453,34 @@ function App() {
   const auth = useAuth();
   const authenticated = auth.state === "authenticated";
   const { hydrateFromUser } = useThemePreferences();
-  const { canyons, total: canyonsTotal, loaded: canyonsLoaded, error: canyonsError, refetch } = useCanyons(authenticated);
+  const { currentUser, refetchCurrentUser, applyCurrentUser } = useCurrentUser(authenticated);
+  // FECO-005. `authenticated` is NOT enough to start fetching the user's data:
+  // a user whose recorded consent is stale gets ConsentGate rendered instead of
+  // the app, but rendering is all that used to stop — every hook and boot
+  // effect below still pulled their canyons, trips, friends and notifications
+  // out of the API behind the gate. `loadsUserData` is what they wait on now.
+  //
+  // `useCurrentUser` above and `useAuth` are the two that cannot: they are how
+  // the answer arrives. Everything downstream of them gates on this instead.
+  // The localStorage read is deliberately unmemoised — it is a string compare,
+  // and the key is removed in the boot effect below, whose `applyCurrentUser`
+  // re-render is what re-reads it.
+  const { blocked: consentBlocked, settled: consentSettled } = consentGate(
+    currentUser,
+    localStorage.getItem(PENDING_CONSENT_STORAGE_KEY),
+  );
+  const loadsUserData = authenticated && consentSettled;
+  const { canyons, total: canyonsTotal, loaded: canyonsLoaded, error: canyonsError, refetch } = useCanyons(loadsUserData);
   const { canyons: sharedCanyons, error: sharedError, refetch: refetchShared } =
-    useSharedCanyons(authenticated);
+    useSharedCanyons(loadsUserData);
   // Also fetched for the Routes panel, which lists the same track files.
   const { tracks: canyonTracks, refetch: refetchCanyonTracks } = useCanyonTracks(
-    authenticated && (showCanyonTracks || activePanel === "routes"),
+    loadsUserData && (showCanyonTracks || activePanel === "routes"),
   );
   // Routes load whenever the layer is on OR a draw/edit session is live (the
   // editor needs the row it is editing even with the layer toggled off).
   const { routes, refetch: refetchRoutes } = useRoutes(
-    authenticated && (showRoutes || drawingRoute || activePanel === "routes"),
+    loadsUserData && (showRoutes || drawingRoute || activePanel === "routes"),
   );
   // Waypoints load whenever the layer is on or the panel is open — the same
   // rule routes follow.
@@ -471,7 +489,7 @@ function App() {
     loading: waypointsLoading,
     error: waypointsError,
     refetch: refetchWaypoints,
-  } = useWaypoints(authenticated && (showWaypoints || activePanel === "waypoints"));
+  } = useWaypoints(loadsUserData && (showWaypoints || activePanel === "waypoints"));
 
   // Waypoint writes. Each refetches rather than patching local state: the list
   // is small, the server owns the scoped canyonIds it returns, and a stale
@@ -534,28 +552,27 @@ function App() {
     requests: friendRequests,
     error: friendsError,
     refetch: refetchFriends,
-  } = useFriends(authenticated);
+  } = useFriends(loadsUserData);
   const {
     notifications,
     total: notificationsTotal,
     unreadCount,
     error: notificationsError,
     refetch: refetchNotifications,
-  } = useNotifications(authenticated);
+  } = useNotifications(loadsUserData);
   const {
     tripLogs,
     total: tripLogsTotal,
     loading: tripLogsLoading,
     error: tripLogsError,
     refetch: refetchTripLogs,
-  } = useTripLogs(authenticated);
-  const { analytics, loading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(authenticated);
-  const { currentUser, refetchCurrentUser, applyCurrentUser } = useCurrentUser(authenticated);
+  } = useTripLogs(loadsUserData);
+  const { analytics, loading: analyticsLoading, error: analyticsError, refetch: refetchAnalytics } = useAnalytics(loadsUserData);
   const {
     vectorStyle,
     setVectorStyle: setLiveVectorStyle,
     saveError: vectorStyleSaveError,
-  } = useLiveVectorStyle(authenticated);
+  } = useLiveVectorStyle(loadsUserData);
 
   const [customFieldDefs, setCustomFieldDefs] = useState<
     TripLogCustomFieldDef[]
@@ -563,8 +580,8 @@ function App() {
 
   // Refresh analytics whenever the analytics panel opens
   useEffect(() => {
-    if (activePanel === "analytics" && authenticated) refetchAnalytics();
-  }, [activePanel, authenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (activePanel === "analytics" && loadsUserData) refetchAnalytics();
+  }, [activePanel, loadsUserData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Surface background data-load errors as toasts
   useEffect(() => { if (canyonsError) toast.error(canyonsError); }, [canyonsError, toast]);
@@ -611,7 +628,7 @@ function App() {
 
   // Resume tracking any jobs that were pending/processing before page load
   useEffect(() => {
-    if (!authenticated) return;
+    if (!loadsUserData) return;
     apiFetch<TopoJob[]>("/topo-jobs")
       .then((jobs) => {
         const resumable = jobs.filter(
@@ -627,7 +644,7 @@ function App() {
       // Best-effort: if this fails, in-progress jobs simply won't resume
       // polling until the next page load — non-critical background refresh.
       .catch((err) => { console.error(err); });
-  }, [authenticated]);
+  }, [loadsUserData]);
 
   // Fetch the user's completed topo jobs (with presigned PMTiles URLs) on
   // auth and whenever a job transitions to complete.
@@ -653,14 +670,14 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!authenticated) return;
+    if (!loadsUserData) return;
     refetchCompletedTopoJobs();
-  }, [authenticated, refetchCompletedTopoJobs]);
+  }, [loadsUserData, refetchCompletedTopoJobs]);
 
   // Pre-refetch presigned PMTiles URLs ~30 min before the server-reported expiry
   // so MapLibre tile requests never see a 403 in an active session.
   useEffect(() => {
-    if (!authenticated || !overlaysExpiresAt) return;
+    if (!loadsUserData || !overlaysExpiresAt) return;
     const refetchAt = new Date(overlaysExpiresAt).getTime() - 30 * 60 * 1000;
     const delay = refetchAt - Date.now();
     if (delay <= 0) {
@@ -669,7 +686,7 @@ function App() {
     }
     const timer = setTimeout(() => { refetchCompletedTopoJobs(); }, delay);
     return () => clearTimeout(timer);
-  }, [authenticated, overlaysExpiresAt, refetchCompletedTopoJobs]);
+  }, [loadsUserData, overlaysExpiresAt, refetchCompletedTopoJobs]);
 
   // Topo exports (Stage 2 on-demand pipeline). Owned at App level so the
   // recent-exports list (rendered in the LiDAR panel accordion) and the
@@ -681,12 +698,12 @@ function App() {
     total: topoExportsTotal,
     loading: topoExportsLoading,
     refetch: refetchTopoExports,
-  } = useTopoExports(authenticated);
+  } = useTopoExports(loadsUserData);
 
   // GeoPDF jobs are also polled here (in addition to the sidebar panel) so
   // auto-download works even when the Generated PDFs panel is closed. The hook
   // self-throttles: it only polls while a job is queued/running.
-  const { jobs: geoPdfJobs, refetch: refetchGeoPdfJobs } = useGeoPdfJobs(authenticated);
+  const { jobs: geoPdfJobs, refetch: refetchGeoPdfJobs } = useGeoPdfJobs(loadsUserData);
 
   // Auto-download exports that complete during this session. Snapshot the
   // exports already completed on first successful fetch so we never download a
@@ -853,7 +870,7 @@ function App() {
   // With ?download=<layer>: fetch presigned URL for that layer and trigger download.
   // Without ?download: open TopoDialog (existing behaviour).
   useEffect(() => {
-    if (!authenticated) return;
+    if (!loadsUserData) return;
     const jobId = sessionStorage.getItem("pendingTopoJobId");
     if (!jobId) return;
     sessionStorage.removeItem("pendingTopoJobId");
@@ -892,13 +909,13 @@ function App() {
           toast.error(messageFromError(err, "Couldn't load topo job."));
         });
     }
-  }, [authenticated, toast]);
+  }, [loadsUserData, toast]);
 
   // Resolve a stashed ?export=<id> deep link: download the export directly
   // (mirrors NotificationsPanel.handleDownloadExport). A presign that has
   // expired (no downloadUrl) opens the LiDAR panel so the user can re-presign.
   useEffect(() => {
-    if (!authenticated) return;
+    if (!loadsUserData) return;
     const exportId = sessionStorage.getItem("pendingExportId");
     if (!exportId) return;
     sessionStorage.removeItem("pendingExportId");
@@ -916,19 +933,19 @@ function App() {
         console.error(err);
         toast.error(messageFromError(err, "Couldn't load the export."));
       });
-  }, [authenticated, toast]);
+  }, [loadsUserData, toast]);
 
   // Resolve a stashed ?geoPdfJob=<id> deep link: open the GeoPDFs panel, whose
   // job list carries per-item download buttons (and auto-download for jobs this
   // tab queued). Refetch so a just-finished job shows immediately.
   useEffect(() => {
-    if (!authenticated) return;
+    if (!loadsUserData) return;
     const geoPdfJobId = sessionStorage.getItem("pendingGeoPdfJobId");
     if (!geoPdfJobId) return;
     sessionStorage.removeItem("pendingGeoPdfJobId");
     setActivePanel("geopdfs");
     setGeoPdfJobsRefetch((n) => n + 1);
-  }, [authenticated]);
+  }, [loadsUserData]);
 
   // First login (empty account): offer a non-forced onboarding choice once,
   // after the first canyon fetch completes. The user picks RopeWiki, file
@@ -1014,14 +1031,6 @@ function App() {
     );
   }
 
-  // Blocking re-consent gate (PRIV-002): a signed-in user whose recorded
-  // consent version is stale or absent must re-consent before using the app
-  // (the privacy.html / tos.html "re-consent on next sign-in" promise). The
-  // pending-key fast path keeps the gate from flashing for fresh sign-ups
-  // whose consent PATCH (recorded by the effect above) is still in flight.
-  const pendingConsentMatchesCurrent =
-    localStorage.getItem(PENDING_CONSENT_STORAGE_KEY) ===
-    CURRENT_CONSENT_VERSION;
   const selectedRoute = routes.find((r) => r.id === selectedRouteID) ?? null;
 
   const startDrawingRoute = () => {
@@ -1069,7 +1078,14 @@ function App() {
     }
   };
 
-  if (currentUser && needsReconsent(currentUser) && !pendingConsentMatchesCurrent) {
+  // Blocking re-consent gate (PRIV-002): a signed-in user whose recorded
+  // consent version is stale or absent must re-consent before using the app
+  // (the privacy.html / tos.html "re-consent on next sign-in" promise). The
+  // pending-key fast path keeps the gate from flashing for fresh sign-ups
+  // whose consent PATCH (recorded by the effect above) is still in flight.
+  // Decided once, up beside the data hooks the same answer holds back
+  // (`consentGate`), so the gate and the fetches can never disagree.
+  if (consentBlocked) {
     return <ConsentGate onAccepted={applyCurrentUser} onSignOut={auth.signOut} />;
   }
 

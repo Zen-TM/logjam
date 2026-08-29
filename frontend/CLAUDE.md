@@ -68,7 +68,9 @@ Never re-implement the add-custom-field sub-form or per-field inputs inline — 
 
 ### Consent versioning
 
-Bumping `CURRENT_CONSENT_VERSION` (only with materially changed ToS/privacy wording) is all that's needed client-side: `App.tsx` blocks existing users behind `ConsentGate` when `needsReconsent()` is true; the server rejects any other version on record. Don't add per-feature consent prompts.
+Bumping `CURRENT_CONSENT_VERSION` (only with materially changed ToS/privacy wording) is all that's needed client-side: `App.tsx` blocks existing users behind `ConsentGate`; the server rejects any other version on record. Don't add per-feature consent prompts.
+
+The block is one decision, `consentGate()` in `src/consent.ts` (tested in `consent.test.ts`), used twice: `blocked` renders the gate, and `settled` is the `enabled` argument every user-data hook and boot effect takes instead of `authenticated` (`loadsUserData` in App.tsx). Gate on `authenticated` alone and you get FECO-005 back — the gate stops the UI while the app fetches the user's canyons, trips, friends and notifications behind it. `useAuth` and `useCurrentUser` are the only two that stay on `authenticated`: they are how the answer arrives.
 
 ### File inputs
 
