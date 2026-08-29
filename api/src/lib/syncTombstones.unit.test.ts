@@ -286,6 +286,7 @@ describe("accountDeleteTombstones", () => {
     canyonSharesIn: [],
     friendships: [],
     directSharesOut: [],
+    canyonInheritedOut: [],
   };
 
   it("tombstones direct recipients of my waypoints and routes", () => {
@@ -338,6 +339,37 @@ describe("accountDeleteTombstones", () => {
     expect(asAddressee).toEqual([
       { userId: "bob", entityType: "friendship", entityId: "f-2" },
     ]);
+  });
+
+  // PRIV-107: the canyon tombstone does NOT imply the waypoints and routes a
+  // sharee could reach through that canyon. Account delete HARD-deletes both
+  // tables, so every current viewer must be told — the single-canyon delete
+  // path fans these out explicitly and this one has to match.
+  it("tombstones canyon sharees for waypoints and routes they saw through the canyon", () => {
+    const rows = accountDeleteTombstones({
+      ...base,
+      canyonSharesOut: [{ canyonId: "c-1", sharedWithId: "bob" }],
+      canyonInheritedOut: [
+        { entityType: "waypoint" as const, entityId: "wp-1", userIds: ["bob"] },
+        { entityType: "route" as const, entityId: "rt-1", userIds: ["bob", "carol"] },
+      ],
+    });
+    expect(has(rows, { userId: "bob", entityType: "waypoint", entityId: "wp-1" })).toBe(true);
+    expect(has(rows, { userId: "bob", entityType: "route", entityId: "rt-1" })).toBe(true);
+    expect(has(rows, { userId: "carol", entityType: "route", entityId: "rt-1" })).toBe(true);
+    // Still never the departing user.
+    expect(rows.some((r) => r.userId === "me")).toBe(false);
+  });
+
+  it("emits no canyon-inherited rows for an entity nobody could see", () => {
+    expect(
+      accountDeleteTombstones({
+        ...base,
+        canyonInheritedOut: [
+          { entityType: "waypoint" as const, entityId: "wp-1", userIds: [] },
+        ],
+      }),
+    ).toEqual([]);
   });
 
   it("is empty for an account nobody shared anything with", () => {

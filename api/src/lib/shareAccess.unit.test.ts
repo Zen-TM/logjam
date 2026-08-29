@@ -21,6 +21,7 @@ import {
   parseSharableEntityType,
   requireShareAccess,
   requireShareOwner,
+  revokeAllSharesBetween,
 } from "./shareAccess";
 
 const mocked = prisma as unknown as {
@@ -226,5 +227,117 @@ describe("parseSharableEntityType", () => {
         expect((error as AppError).statusCode).toBe(400);
       }
     }
+  });
+});
+
+// APIR-007 / decision D2: unfriending revokes EVERY share type, in both
+// directions — not just the canyon shares the unfriend handler already
+// deleted. The distinction that is easy to get wrong is FileSend: a pending
+// send is still live access, an accepted one is a copy the recipient holds.
+describe("revokeAllSharesBetween", () => {
+  const ME = "me";
+  const EX = "ex-friend";
+
+  function makeTx(
+    shares: {
+      id: string;
+      entityType: string;
+      entityId: string;
+      sharedWithId: string;
+    }[],
+    pendingSends: { id: string; userId: string; fileSendId: string }[] = [],
+  ) {
+    return {
+      share: {
+        findMany: vi.fn().mockResolvedValue(shares),
+        deleteMany: vi.fn().mockResolvedValue({ count: shares.length }),
+      },
+      fileSendRecipient: {
+        findMany: vi.fn().mockResolvedValue(pendingSends),
+        deleteMany: vi.fn().mockResolvedValue({ count: pendingSends.length }),
+      },
+      notification: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      syncTombstone: { createMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    };
+  }
+
+  it("reads and deletes shares in BOTH directions", async () => {
+    const tx = makeTx([]);
+    await revokeAllSharesBetween(tx as never, ME, EX);
+    const where = tx.share.findMany.mock.calls[0][0].where;
+    expect(where.OR).toEqual([
+      { sharedById: ME, sharedWithId: EX },
+      { sharedById: EX, sharedWithId: ME },
+    ]);
+  });
+
+  it("deletes every share type but tombstones only the delta-synced ones", async () => {
+    const tx = makeTx([
+      { id: "s1", entityType: "waypoint", entityId: "wp-1", sharedWithId: EX },
+      { id: "s2", entityType: "route", entityId: "rt-1", sharedWithId: ME },
+      { id: "s3", entityType: "topoJob", entityId: "tj-1", sharedWithId: EX },
+      { id: "s4", entityType: "geoPdfJob", entityId: "gp-1", sharedWithId: EX },
+    ]);
+    await revokeAllSharesBetween(tx as never, ME, EX);
+
+    // All four Share rows go — a job share is revoked as hard as a waypoint.
+    expect(tx.share.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ["s1", "s2", "s3", "s4"] } },
+    });
+    // Jobs are not delta-synced, so they get no tombstone (they reconcile on
+    // the next list fetch); waypoint/route do, one per losing recipient.
+    expect(tx.syncTombstone.createMany).toHaveBeenCalledWith({
+      data: [
+        { userId: EX, entityType: "waypoint", entityId: "wp-1" },
+        { userId: ME, entityType: "route", entityId: "rt-1" },
+      ],
+    });
+  });
+
+  it("purges each recipient's item_shared notification", async () => {
+    const tx = makeTx([
+      { id: "s1", entityType: "waypoint", entityId: "wp-1", sharedWithId: EX },
+    ]);
+    await revokeAllSharesBetween(tx as never, ME, EX);
+    expect(tx.notification.deleteMany).toHaveBeenCalledWith({
+      where: {
+        userId: EX,
+        type: "item_shared",
+        payload: { path: ["entityId"], equals: "wp-1" },
+      },
+    });
+  });
+
+  it("revokes PENDING file sends only, in both directions", async () => {
+    const tx = makeTx([], [{ id: "r1", userId: EX, fileSendId: "fs-1" }]);
+    await revokeAllSharesBetween(tx as never, ME, EX);
+
+    const where = tx.fileSendRecipient.findMany.mock.calls[0][0].where;
+    // The status filter IS the accepted-is-a-copy rule (D2). If this ever
+    // widens, accepted recipients start losing files they already own.
+    expect(where.status).toBe("pending");
+    expect(where.OR).toEqual([
+      { userId: EX, fileSend: { senderId: ME } },
+      { userId: ME, fileSend: { senderId: EX } },
+    ]);
+    expect(tx.fileSendRecipient.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ["r1"] } },
+    });
+    expect(tx.notification.deleteMany).toHaveBeenCalledWith({
+      where: {
+        userId: EX,
+        type: "file_sent",
+        payload: { path: ["fileSendId"], equals: "fs-1" },
+      },
+    });
+  });
+
+  it("writes nothing when the pair shared nothing", async () => {
+    const tx = makeTx([]);
+    await revokeAllSharesBetween(tx as never, ME, EX);
+    expect(tx.share.deleteMany).not.toHaveBeenCalled();
+    expect(tx.fileSendRecipient.deleteMany).not.toHaveBeenCalled();
+    expect(tx.syncTombstone.createMany).not.toHaveBeenCalled();
+    expect(tx.notification.deleteMany).not.toHaveBeenCalled();
   });
 });

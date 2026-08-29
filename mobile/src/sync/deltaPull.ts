@@ -16,9 +16,11 @@ import {
   parseSyncDeltaTombstone,
   parseSyncDeltaTripRow,
   parseSyncDeltaWaypointRow,
+  DELTA_ENTITY_ORDER,
   SYNC_PROTOCOL,
   SyncRowError,
   type OutboxEntry,
+  type DeltaEntityKey,
   type SyncDeltaResponse,
   type SyncPushOp,
 } from "@logjam/shared";
@@ -190,7 +192,22 @@ export async function runDeltaPull(currentUserId: string): Promise<DeltaPullResu
         parseSyncDeltaFriendshipRow,
         skipped,
       ),
-    };
+      // `satisfies` is the derivation: DELTA_ENTITY_ORDER is the declared set
+      // of change keys, and this object must cover it exactly. An eighth
+      // protocol entity now fails to compile here instead of being fetched,
+      // never read, and acknowledged by the advancing cursor — permanently
+      // absent from every phone with nothing to show for it.
+    } satisfies Record<DeltaEntityKey, unknown[]>;
+
+    // The other direction: a SERVER newer than this app version sends a key
+    // this build has never heard of. Count its rows as skipped so the user
+    // gets a sync issue (and a reason to update) rather than silence.
+    for (const [key, rows] of Object.entries(raw)) {
+      if ((DELTA_ENTITY_ORDER as readonly string[]).includes(key)) continue;
+      if (Array.isArray(rows) && rows.length > 0) {
+        skipped.push(`${key}: ${rows.length} row(s) this app version cannot apply`);
+      }
+    }
     const tombstones = parsedRows(
       (response.tombstones ?? []) as unknown[],
       parseSyncDeltaTombstone,

@@ -10,11 +10,9 @@
 // Privacy: only column *names* are inspected here, never row values, so no
 // canyon name/coord ever flows through this function.
 
-export type FileKind = "canyon" | "triplog" | "unknown";
+import { normalize as normalizeHeader } from "./canyonColumns";
 
-function normalizeHeader(header: string): string {
-  return header.toLowerCase().replace(/[\s_-]+/g, " ").trim();
-}
+export type FileKind = "canyon" | "triplog" | "unknown";
 
 const LATITUDE_ALIASES = new Set([
   "lat",

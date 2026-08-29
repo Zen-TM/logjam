@@ -16,6 +16,7 @@
 // logged, exactly as the sender's side treats it.
 import { useCallback, useEffect, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { messageFromError } from "@logjam/shared";
 
@@ -79,12 +80,20 @@ export function ReceivedFilesScreen({ onBack }: { onBack: () => void }) {
     async (send: InboxFileSend) => {
       setBusyId(send.fileSendId);
       setError(null);
+      // Deleted in the finally: this is the ONE import entry point whose input
+      // is already a `file://` path, so `stageIncomingFile` returns
+      // `scratch: null` and both pipelines' own cleanup no-ops. Nothing else
+      // sweeps SCRATCH_DIR before sign-out, so a season of accepted GeoPDFs
+      // (up to 64 MB each) otherwise just accumulates, uncounted by the Saved
+      // capacity meter.
+      let scratchUri: string | null = null;
       try {
         const { downloadUrl, filename } = await acceptFileSend(send.fileSendId);
         const uri = await downloadFileSend(
           downloadUrl,
           `received-${send.fileSendId}`,
         );
+        scratchUri = uri;
         if (isPdf(filename)) {
           // Through the runner, like every other GeoPDF entry point: it is the
           // "one import at a time" guard, and two would fight over the single
@@ -109,6 +118,11 @@ export function ReceivedFilesScreen({ onBack }: { onBack: () => void }) {
         console.error(err);
         setError(messageFromError(err, "Couldn't save that file."));
       } finally {
+        if (scratchUri) {
+          await FileSystem.deleteAsync(scratchUri, { idempotent: true }).catch(
+            () => {},
+          );
+        }
         setBusyId(null);
       }
     },

@@ -211,9 +211,16 @@ export function enqueueRegionDownloads(specs: RegionTaskSpec[]): void {
  */
 function pump(): void {
   if (pumping) return;
-  const run = drain().finally(() => {
-    if (pumping === run) pumping = null;
-  });
+  // MOT-007: everything past drain()'s own per-job try/catch — patch →
+  // publish → listener callbacks (toasts included), the dynamic
+  // registryDb import, renameArtifactGroup — runs unguarded. One throwing
+  // subscriber turned the whole drain into an unhandled rejection and
+  // stranded every other queued job until the next enqueue.
+  const run = drain()
+    .catch(console.error)
+    .finally(() => {
+      if (pumping === run) pumping = null;
+    });
   pumping = run;
 }
 

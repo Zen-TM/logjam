@@ -127,9 +127,45 @@ resource "aws_iam_role_policy_attachment" "topo_worker_custom" {
   policy_arn = aws_iam_policy.topo_worker.arn
 }
 
-resource "aws_iam_role_policy_attachment" "gha_ecr" {
-  role       = aws_iam_role.github_actions.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+# INF-006: AmazonEC2ContainerRegistryFullAccess REMOVED (least-privilege) —
+# deploy-api.yml and deploy-topo-worker.yml only ever docker-login then push
+# to these two repos. Scoped to AWS's own documented push action set
+# (ecr:GetAuthorizationToken has no resource-level permissions, hence
+# Resource "*" for that statement only) on just logjam-api / logjam-topo-worker.
+# VERIFY BEFORE APPLY: scan CloudTrail for any github-actions-role ecr:*
+# call outside these two repos or this action set; if found, widen this
+# grant, never re-add the managed full-access policy.
+resource "aws_iam_role_policy" "gha_ecr_push" {
+  name = "logjam-ecr-push"
+  role = aws_iam_role.github_actions.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "EcrAuth"
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Sid    = "EcrPushPull"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+        ]
+        Resource = [
+          aws_ecr_repository.api.arn,
+          aws_ecr_repository.topo_worker.arn,
+        ]
+      },
+    ]
+  })
 }
 
 # NOTE: the broad AmazonS3FullAccess attachment was REMOVED (least-privilege).

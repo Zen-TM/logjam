@@ -271,13 +271,13 @@ describe("POST /canyons/bulk/delete (fake auth = alice)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects more than 500 ids with 400", async () => {
+  it("rejects more than 500 ids with 413", async () => {
     const ids = Array.from({ length: 501 }, (_, i) => `id-${i}`);
     const res = await request(API_URL)
       .post("/canyons/bulk/delete")
       .set(AUTH)
       .send({ ids });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(413);
   });
 
   it("bulk-deleting BOTH canyons of a 2-canyon trip keeps the trip and backfills displayName with the joined names", async () => {

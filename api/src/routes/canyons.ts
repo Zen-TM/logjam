@@ -24,6 +24,64 @@ import { serializeTrip, tripCanyonsInclude } from "./tripLogsGlobal";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
+// Bounds for the free-text canyon fields. `validateCanyonPayload` (shared)
+// covers coordinates + numerics only, so a mistyped `name`/`altNames`/`notes`/
+// `attributes` used to sail past validation and die inside Prisma as a raw 500
+// — and on the sync push path, one such op poisoned every subsequent flush of
+// that batch (the per-op catch re-throws non-AppErrors). Bad input is a 400.
+// Sibling values: TRIP_NAME_MAX_LENGTH / ROUTE_NAME_MAX_LENGTH = 200.
+export const CANYON_NAME_MAX_LENGTH = 200;
+export const CANYON_MAX_ALT_NAMES = 50;
+
+/**
+ * Type/shape check for the canyon fields `validateCanyonPayload` does not
+ * cover. Returns the first user-facing error string, or null when valid.
+ * A field that is `undefined` is absent (PATCH leaves it unchanged); create
+ * separately requires name/latitude/longitude.
+ *
+ * Exported for the sync push path — REST and sync must reject identically
+ * (§8.1 validation parity), which is the SEC-001 failure mode when they drift.
+ */
+export function validateCanyonTextFields(payload: {
+  name?: unknown;
+  altNames?: unknown;
+  notes?: unknown;
+  attributes?: unknown;
+}): string | null {
+  const { name, altNames, notes, attributes } = payload;
+
+  if (name !== undefined) {
+    if (typeof name !== "string") return "name must be a string";
+    if (name.trim().length === 0) return "name is required";
+    if (name.length > CANYON_NAME_MAX_LENGTH)
+      return `name must be at most ${CANYON_NAME_MAX_LENGTH} characters`;
+  }
+
+  if (altNames !== undefined && altNames !== null) {
+    if (!Array.isArray(altNames)) return "altNames must be an array of strings";
+    if (altNames.length > CANYON_MAX_ALT_NAMES)
+      return `altNames must have at most ${CANYON_MAX_ALT_NAMES} entries`;
+    for (const alt of altNames) {
+      if (typeof alt !== "string")
+        return "altNames must be an array of strings";
+      if (alt.length > CANYON_NAME_MAX_LENGTH)
+        return `altNames entries must be at most ${CANYON_NAME_MAX_LENGTH} characters`;
+    }
+  }
+
+  // notes is deliberately uncapped in length (trip beta can be long); the 1 MB
+  // body cap is its ceiling. Only the type matters for the 500-vs-400 bug.
+  if (notes !== undefined && notes !== null && typeof notes !== "string")
+    return "notes must be a string or null";
+
+  if (attributes !== undefined && attributes !== null) {
+    if (typeof attributes !== "object" || Array.isArray(attributes))
+      return "attributes must be an object";
+  }
+
+  return null;
+}
+
 const router = Router();
 
 // Hard cap on list responses. The body stays a bare array (consumers depend on
@@ -182,9 +240,9 @@ router.post(
 
     // Validate coordinate + numeric-field ranges (CANYON-1/CANYON-2). Same
     // ranges as the CSV bulk-import path, sourced from @logjam/shared.
-    const validationError = validateCanyonPayload(req.body, {
-      requireCoords: true,
-    });
+    const validationError =
+      validateCanyonPayload(req.body, { requireCoords: true }) ??
+      validateCanyonTextFields(req.body);
     if (validationError) throw new AppError(400, validationError);
 
     // Optional client-minted id (Stage 8 §3.5): own-id replay → 200 with the
@@ -425,9 +483,9 @@ router.patch(
 
     // Validate any supplied coordinate/numeric field (CANYON-1/CANYON-2).
     // requireCoords:false — PATCH may omit fields; only validate what's present.
-    const validationError = validateCanyonPayload(req.body, {
-      requireCoords: false,
-    });
+    const validationError =
+      validateCanyonPayload(req.body, { requireCoords: false }) ??
+      validateCanyonTextFields(req.body);
     if (validationError) throw new AppError(400, validationError);
 
     const updated = await prisma.canyon.update({

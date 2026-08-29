@@ -4,6 +4,7 @@ import { mediaCategory, type MediaItem } from "@logjam/shared";
 import { deleteMedia } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
+import ConfirmDialog from "../dialogs/ConfirmDialog";
 import Lightbox from "./Lightbox";
 import TrackIcon from "./TrackIcon";
 import classes from "./MediaGallery.module.css";
@@ -28,6 +29,10 @@ export default function MediaGallery({
   const [lightbox, setLightbox] = useState<MediaItem | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // FEUI-007: one-tap Trash2 permanently deletes the S3 object with no
+  // recovery. Route through the same ConfirmDialog every other destructive
+  // surface uses (e.g. the track-card delete in CanyonDetailPanel).
+  const [pendingDelete, setPendingDelete] = useState<MediaItem | null>(null);
   // Thumbnails that failed to load (e.g. a 404'd S3 object) — MOBILE-5. Tracked
   // by id so a broken thumb shows a labelled fallback instead of the browser's
   // broken-image glyph.
@@ -44,6 +49,10 @@ export default function MediaGallery({
     try {
       await deleteMedia(id);
       onDeleted(id);
+      // Only close the confirm on success — an error leaves it open (with the
+      // banner inside) so the user sees why and can retry, matching the
+      // track-card delete in CanyonDetailPanel.
+      setPendingDelete(null);
     } catch (err) {
       console.error(err);
       setError(messageFromError(err, "Couldn't delete file."));
@@ -99,7 +108,7 @@ export default function MediaGallery({
                   <button
                     type="button"
                     className={classes.deleteBtn}
-                    onClick={() => void handleDelete(m.id)}
+                    onClick={() => setPendingDelete(m)}
                     disabled={deletingId === m.id}
                     aria-label={`Delete ${m.filename}`}
                   >
@@ -124,7 +133,7 @@ export default function MediaGallery({
                 <button
                   type="button"
                   className={classes.deleteBtnInline}
-                  onClick={() => void handleDelete(m.id)}
+                  onClick={() => setPendingDelete(m)}
                   disabled={deletingId === m.id}
                   aria-label={`Delete ${m.filename}`}
                 >
@@ -136,9 +145,26 @@ export default function MediaGallery({
         </div>
       )}
 
-      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
-
       {lightbox && <Lightbox item={lightbox} onClose={() => setLightbox(null)} />}
+
+      <ConfirmDialog
+        open={pendingDelete != null}
+        title="Delete file?"
+        message={
+          <>
+            This permanently deletes <b>{pendingDelete?.filename}</b>. This cannot
+            be undone.
+            {/* Rendered inside the dialog (not the page behind it) — the
+                modal backdrop would otherwise hide a page-level ErrorBanner. */}
+            {error && (
+              <ErrorBanner message={error} onDismiss={() => setError(null)} />
+            )}
+          </>
+        }
+        busy={deletingId === pendingDelete?.id}
+        onConfirm={() => pendingDelete && void handleDelete(pendingDelete.id)}
+        onClose={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

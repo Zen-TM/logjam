@@ -51,7 +51,8 @@ import { TOPO_LAYERS } from "../constants/topoLayers";
 import type { TopoLayerName } from "../constants/topoLayers";
 import { AppError } from "../middleware/errorHandler";
 import prisma from "./prisma";
-import { logger, redactTilePathPatterns } from "../lib/logger";
+import { logger, safeErrorForLog } from "../lib/logger";
+import { getEnv } from "../lib/env";
 
 /** Bounding box of a GeoJSON Polygon/MultiPolygon coords ring. */
 function geomBbox(
@@ -148,7 +149,7 @@ async function loadPointIcons(
           cache.set(key, img);
         } catch (e) {
           logger.warn(
-            { icon: key, err: e instanceof Error ? e.message : String(e) },
+            { icon: key, err: safeErrorForLog(e) },
             "GeoPDF: failed to load icon",
           );
         }
@@ -371,8 +372,16 @@ export async function generateGeoPdf(
   // Drives the attribution credits so we never credit a source whose data isn't
   // on the page (e.g. a layer selected over an area with no LiDAR coverage).
   const renderedOverlays = new Set<string>();
+  // Fail loud on a missing bucket instead of guessing a name: every S3 error in
+  // the overlay path is swallowed as "this job has no such layer" (the
+  // deliberate 404-tolerance below), so a wrong bucket renders every GeoPDF
+  // with its overlays silently missing and nothing in the logs. env.ts makes
+  // S3_BUCKET_TOPO prod-required, so this can only bite local dev. (APIC-003)
+  const topoBucket = getEnv().S3_BUCKET_TOPO ?? "";
+  if (config.overlays.length > 0 && !topoBucket) {
+    throw new Error("S3_BUCKET_TOPO is not set — cannot render overlay layers");
+  }
   if (config.overlays.length > 0) {
-    const topoBucket = process.env.S3_BUCKET_TOPO ?? "logjam-topo-jobs";
     const s3 = s3Client;
 
     // Overlays are always sampled at their native resolution (max z18), independent
@@ -468,9 +477,7 @@ export async function generateGeoPdf(
             {
               overlay: overlayName,
               jobId: job.id,
-              err: redactTilePathPatterns(
-                e instanceof Error ? e.message : String(e),
-              ),
+              err: safeErrorForLog(e),
             },
             "GeoPDF: skipping overlay for job",
           );
@@ -650,7 +657,7 @@ async function fetchAndDrawHttpTilesDirect(
         // Privacy: never log tile x/y — at these zooms a tile index is an
         // approximate coordinate of the export AOI (SEC-002).
         logger.warn(
-          { source: "http-tile", z: tile.z, err: redactTilePathPatterns(String(err)) },
+          { source: "http-tile", z: tile.z, err: safeErrorForLog(err) },
           "GeoPDF: failed to fetch base-layer tile",
         );
       }
@@ -720,7 +727,7 @@ async function fetchAndDrawPMTilesRasterDirect(
         return 1;
       } catch (err) {
         logger.warn(
-          { source: "raster-pmtile", z: tile.z, err: redactTilePathPatterns(String(err)) },
+          { source: "raster-pmtile", z: tile.z, err: safeErrorForLog(err) },
           "GeoPDF: failed to fetch raster PMTile",
         );
         return 0;
@@ -786,7 +793,7 @@ async function fetchAndDrawPMTilesVectorDirect(
         return 1;
       } catch (err) {
         logger.warn(
-          { source: "vector-pmtile", z: tile.z, err: redactTilePathPatterns(String(err)) },
+          { source: "vector-pmtile", z: tile.z, err: safeErrorForLog(err) },
           "GeoPDF: failed to render vector PMTile",
         );
         return 0;
@@ -1962,7 +1969,7 @@ export async function buildPdf(
     } catch (err) {
       // GeoPDF metadata is best-effort — PDF renders correctly without it.
       logger.warn(
-        { err: err instanceof Error ? err.message : String(err) },
+        { err: safeErrorForLog(err) },
         "GeoPDF: failed to inject GeoPDF metadata",
       );
     }

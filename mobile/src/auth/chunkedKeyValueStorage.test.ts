@@ -167,6 +167,50 @@ describe("createChunkedKeyValueStorage", () => {
     await expect(kv.getItem("k")).rejects.toThrow(/Missing chunk 2/);
   });
 
+  // A torn write — process death after some chunks and before the header —
+  // used to strand JWT fragments in the Keystore that neither removeItem nor
+  // clear() could ever name again: removeKey read the (absent) header, and
+  // clear() iterated an index the key had not been added to yet. Cognito token
+  // material surviving sign-out on a shared phone is the privacy line.
+  it("clear() collects chunks stranded by a torn write", async () => {
+    const backend = makeMemoryBackend();
+    const kv = createChunkedKeyValueStorage(backend, 10);
+    // Kill the process one chunk in: index entry written, chunk 0 written,
+    // no header. (setItem writes the index first, which is what makes this
+    // recoverable at all.)
+    let writes = 0;
+    const set = backend.set.bind(backend);
+    backend.set = async (k, v) => {
+      if (++writes > 2) throw new Error("power lost");
+      await set(k, v);
+    };
+    await expect(kv.setItem("token", "x".repeat(50))).rejects.toThrow("power lost");
+    backend.set = set;
+    expect([...backend.store.keys()]).toContain("token__chunk_0");
+
+    await kv.clear();
+    expect([...backend.store.keys()]).toEqual([]);
+  });
+
+  it("removeItem collects chunks stranded by a torn write", async () => {
+    const backend = makeMemoryBackend();
+    const kv = createChunkedKeyValueStorage(backend, 10);
+    backend.store.set("token__chunk_0", "orphan-a");
+    backend.store.set("token__chunk_1", "orphan-b");
+
+    await kv.removeItem("token");
+    expect([...backend.store.keys()].filter((k) => k.startsWith("token"))).toEqual([]);
+  });
+
+  it("a later write sweeps orphans left beside the key", async () => {
+    const backend = makeMemoryBackend();
+    const kv = createChunkedKeyValueStorage(backend, 10);
+    backend.store.set("token__chunk_0", "orphan");
+    await kv.setItem("token", "small");
+    expect(await kv.getItem("token")).toBe("small");
+    expect([...backend.store.keys()]).not.toContain("token__chunk_0");
+  });
+
   it("stores a value that collides with the header prefix via chunking", async () => {
     const backend = makeMemoryBackend();
     const kv = createChunkedKeyValueStorage(backend, 100);

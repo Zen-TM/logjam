@@ -128,9 +128,13 @@ export const HEADING_SENSOR_MS = 60;
  */
 export const HEADING_SETTLED_DEG = 0.25;
 /**
- * Longest gap one tick may account for. Four ticks' worth: enough that an
- * ordinary hiccup in the timer is absorbed, little enough that the first tick
- * after the ticker has been stopped cannot jump.
+ * Longest gap one tick may account for. Two ticks' worth (64 ms): enough that
+ * an ordinary hiccup in the timer is absorbed, little enough that the first
+ * tick after the ticker has been stopped cannot jump. This caps the TICK
+ * interval `stepHeadingFilter` dead-reckons over (its `dt`, below), not the
+ * raw sensor gap — the measured 133 ms sensor cadence does not itself breach
+ * it, but a starved JS timer routinely does, so this really is only two
+ * ticks of headroom, not four.
  */
 const HEADING_MAX_STEP_MS = 2 * HEADING_TICK_MS;
 /** ...and this slow. Both, or a phone still turning would be declared arrived

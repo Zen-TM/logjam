@@ -144,6 +144,18 @@ const baseSchema = z.object({
   // changes shape without moving updatedAt (e.g. a migration rewriting rows).
   // Clients whose cursor was minted under a different epoch get resetRequired.
   SYNC_EPOCH: z.coerce.number().int().positive().default(1),
+
+  // Read at module load by services/prisma.ts (not via getEnv(), which would
+  // run before boot.ts resolves DB credentials) — declared here so the values
+  // are still validated at boot and appear in the var list. DATABASE_SSL is an
+  // exact-string compare against "disable": before this entry, a well-meant
+  // `DATABASE_SSL=DISABLED`/`false` silently left verified TLS on and the local
+  // worker died with an opaque pg_hba error. Now it fails loud at boot.
+  DATABASE_SSL: z.enum(["disable"]).optional(),
+  DATABASE_SSL_CA: z.string().optional(),
+  // Job id for the one-shot GeoPDF worker container (worker/geoPdfWorker.ts
+  // CLI entrypoint); unset in the API process.
+  GEO_PDF_JOB_ID: z.string().optional(),
 });
 
 type Env = z.infer<typeof baseSchema> & {

@@ -103,6 +103,25 @@
   background: color-mix(in srgb, var(--theme-accent) 80%, transparent);
 }
 
+/* FEUI-003: 3D terrain toggle — same floating-control shape as .pickBanner
+   (theme tokens, not hardcoded white/black). */
+.terrainToggle {
+  position: absolute;
+  top: 145px;
+  right: 10px;
+  z-index: 1000;
+  width: 29px;
+  height: 29px;
+  color: var(--theme-text-primary);
+  background: var(--theme-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-float);
+  font-size: var(--text-sm);
+  font-weight: bold;
+  cursor: pointer;
+}
+
 /* Draggable vertex handle for the route draw/edit tool. Larger than the
    painted circle underneath it so it stays grabbable on a trackpad; the
    painted circle is what the user actually sees. */

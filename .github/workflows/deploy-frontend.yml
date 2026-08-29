@@ -1,33 +1,49 @@
 name: Deploy Frontend
 
+# Gated on CI: fires only after the `CI` workflow (ci.yml) completes
+# successfully for a push to main (mirrors deploy-api.yml, INF-004). A red CI
+# on that push means the deploy job's `if:` guard is false, so a failing
+# test/lint/typecheck can no longer ship a build. workflow_run does NOT
+# support a `paths:` filter, so the previous frontend/**|shared/** path
+# scoping is dropped — this workflow now runs after every green push-to-main
+# CI, rebuilding+redeploying the frontend even for changes outside
+# frontend/shared. The guard excludes pull_request CI runs (event == 'push'),
+# so it does not double-fire. workflow_run always uses this file as it exists
+# on the default branch.
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
-    paths:
-      - "frontend/**"
-      - "shared/**"
-      - ".github/workflows/deploy-frontend.yml"
 
 jobs:
   deploy:
     name: Build and deploy
     runs-on: ubuntu-latest
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
     permissions:
       id-token: write
       contents: read
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          # Build the exact commit CI validated, not the default-branch HEAD
+          # (github.sha under workflow_run can be a newer, unvalidated commit).
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/logjam-github-actions-role
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm

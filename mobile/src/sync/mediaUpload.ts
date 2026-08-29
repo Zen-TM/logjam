@@ -23,7 +23,9 @@ import { apiFetch } from "../api/apiFetch";
 import type { MirrorMedia } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
-import { MEDIA_CACHE_DIR as CACHE_DIR } from "../offline/localStores";
+import { MEDIA_CACHE_DIR as CACHE_DIR, WIPED_DIRS } from "../offline/localStores";
+import { canRunNow } from "../offline/networkPolicy";
+import { uploadToPresignedUrl } from "../api/presignedTransfer";
 
 // Client thumbnail contract (mirrors the web): a downscaled JPEG. The server
 // only bounds thumbnailSizeBytes, not dimensions.
@@ -67,6 +69,22 @@ async function fileSize(uri: string): Promise<number> {
   return info.size ?? 0;
 }
 
+/**
+ * MOT-005/D6: a picker/camera source is safe (and, since nothing else
+ * declares or wipes it, necessary) to delete once `attachMediaLocal` has
+ * copied it. A path under one of OUR declared stores is not that — it's an
+ * asset whose lifecycle is governed elsewhere, e.g. a vector import's
+ * `sourcePath` reused by `saved/assetActions.ts`'s "attach to canyon" (the
+ * app's only kept original of a lossy GPX/KML derivation — see mobile/
+ * CLAUDE.md "Imports keep their ORIGINAL BYTES"). `localStores.test.ts`
+ * guarantees nothing outside `localStores.ts` names a filesystem root, so
+ * anything NOT under one of these prefixes can only be a native module's own
+ * cache path.
+ */
+function isOwnedStorePath(uri: string): boolean {
+  return WIPED_DIRS.some((dir) => uri.startsWith(dir));
+}
+
 function mintUuid(): string {
   const id = Crypto.randomUUID();
   if (!isUuidV4(id)) throw new Error("UUID mint produced a non-v4 id");
@@ -100,72 +118,94 @@ export async function attachMediaLocal(
   const filename = file.fileName ?? `${mediaId}.${MEDIA_EXTENSION_BY_MIME[mediaType] ?? "bin"}`;
 
   const displayPath = `${CACHE_DIR}${mediaId}.display`;
-  await FileSystem.copyAsync({ from: file.uri, to: displayPath });
-
   let thumbPath: string | null = null;
-  if (categoryHasThumbnail(category)) {
-    // A video's thumbnail has to be extracted from a frame first —
-    // ImageManipulator cannot read an mp4. The server REQUIRES a thumbnail for
-    // every category that declares one, so this is not optional.
-    const stillUri =
-      category === "video"
-        ? (await getThumbnailAsync(file.uri, { time: VIDEO_THUMBNAIL_MS })).uri
-        : file.uri;
-    const thumb = await manipulateAsync(
-      stillUri,
-      [{ resize: { width: THUMBNAIL_MAX_WIDTH } }],
-      { compress: THUMBNAIL_QUALITY, format: SaveFormat.JPEG },
-    );
-    thumbPath = `${CACHE_DIR}${mediaId}.thumb`;
-    await FileSystem.copyAsync({ from: thumb.uri, to: thumbPath });
-    await FileSystem.deleteAsync(thumb.uri, { idempotent: true }).catch(() => {});
-    if (stillUri !== file.uri) {
-      await FileSystem.deleteAsync(stillUri, { idempotent: true }).catch(() => {});
+  try {
+    await FileSystem.copyAsync({ from: file.uri, to: displayPath });
+
+    if (categoryHasThumbnail(category)) {
+      // A video's thumbnail has to be extracted from a frame first —
+      // ImageManipulator cannot read an mp4. The server REQUIRES a thumbnail
+      // for every category that declares one, so this is not optional.
+      const stillUri =
+        category === "video"
+          ? (await getThumbnailAsync(file.uri, { time: VIDEO_THUMBNAIL_MS })).uri
+          : file.uri;
+      const thumb = await manipulateAsync(
+        stillUri,
+        [{ resize: { width: THUMBNAIL_MAX_WIDTH } }],
+        { compress: THUMBNAIL_QUALITY, format: SaveFormat.JPEG },
+      );
+      thumbPath = `${CACHE_DIR}${mediaId}.thumb`;
+      await FileSystem.copyAsync({ from: thumb.uri, to: thumbPath });
+      await FileSystem.deleteAsync(thumb.uri, { idempotent: true }).catch(() => {});
+      if (stillUri !== file.uri) {
+        await FileSystem.deleteAsync(stillUri, { idempotent: true }).catch(() => {});
+      }
     }
-  }
 
-  const sizeBytes = await fileSize(displayPath);
-  const thumbnailSizeBytes = thumbPath === null ? null : await fileSize(thumbPath);
+    // MOT-005/D6: the source has now been fully copied (display) and read
+    // (thumbnail extraction, if any) — delete it unless it's a path this app
+    // already owns the lifecycle of elsewhere (see isOwnedStorePath). A
+    // picker/camera source left alive here lives outside every declared
+    // store and outside the account-transition wipe until now.
+    if (!isOwnedStorePath(file.uri)) {
+      await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {});
+    }
 
-  const db = await getSyncDb();
-  await withSyncTransaction(db, async () => {
-    await db.runAsync(
-      `INSERT INTO media
-         (id, linked_type, linked_id, media_type, filename, file_size_bytes,
-          color, created_at, extra_json, sync_state, local_display_path,
-          local_thumb_path)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, 'pendingUpload', ?, ?)`,
-      mediaId,
-      linkedType,
-      linkedId,
-      mediaType,
-      filename,
-      String(sizeBytes),
-      new Date().toISOString(),
-      displayPath,
-      thumbPath,
-    );
-    // Media ops never coalesce (immutable rows) — insert directly, not via
-    // the shared enqueue planner (which is typed to push entities).
-    await db.runAsync(
-      `INSERT INTO outbox
-         (op_id, entity, op, entity_id, fields_json, state, attempts, created_at)
-       VALUES (?, 'media', 'create', ?, ?, 'queued', 0, ?)`,
-      mintUuid(),
-      mediaId,
-      JSON.stringify({
+    const sizeBytes = await fileSize(displayPath);
+    const thumbnailSizeBytes = thumbPath === null ? null : await fileSize(thumbPath);
+
+    const db = await getSyncDb();
+    await withSyncTransaction(db, async () => {
+      await db.runAsync(
+        `INSERT INTO media
+           (id, linked_type, linked_id, media_type, filename, file_size_bytes,
+            color, created_at, extra_json, sync_state, local_display_path,
+            local_thumb_path)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, 'pendingUpload', ?, ?)`,
+        mediaId,
         linkedType,
         linkedId,
-        filename,
         mediaType,
-        sizeBytes,
-        ...(thumbnailSizeBytes != null && { thumbnailSizeBytes }),
-        localDisplayPath: displayPath,
-        localThumbPath: thumbPath,
-      }),
-      new Date().toISOString(),
-    );
-  });
+        filename,
+        String(sizeBytes),
+        new Date().toISOString(),
+        displayPath,
+        thumbPath,
+      );
+      // Media ops never coalesce (immutable rows) — insert directly, not via
+      // the shared enqueue planner (which is typed to push entities).
+      await db.runAsync(
+        `INSERT INTO outbox
+           (op_id, entity, op, entity_id, fields_json, state, attempts, created_at)
+         VALUES (?, 'media', 'create', ?, ?, 'queued', 0, ?)`,
+        mintUuid(),
+        mediaId,
+        JSON.stringify({
+          linkedType,
+          linkedId,
+          filename,
+          mediaType,
+          sizeBytes,
+          ...(thumbnailSizeBytes != null && { thumbnailSizeBytes }),
+          localDisplayPath: displayPath,
+          localThumbPath: thumbPath,
+        }),
+        new Date().toISOString(),
+      );
+    });
+  } catch (err) {
+    // Anything between the first copy and the committed row (a manipulator
+    // failure, an unreadable video, a rejected insert) used to strand the
+    // bytes on disk: nothing sweeps MEDIA_CACHE_DIR except the
+    // account-transition wipe, so an orphaned full-res photo lived for the
+    // life of the install.
+    await FileSystem.deleteAsync(displayPath, { idempotent: true }).catch(() => {});
+    if (thumbPath !== null) {
+      await FileSystem.deleteAsync(thumbPath, { idempotent: true }).catch(() => {});
+    }
+    throw err;
+  }
   notifyMirrorChanged();
   scheduleMutationSync();
   return mediaId;
@@ -214,10 +254,15 @@ async function putFile(
   fileUri: string,
   contentType: string,
 ): Promise<void> {
-  const result = await FileSystem.uploadAsync(url, fileUri, {
-    httpMethod: "PUT",
-    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-    headers: { "Content-Type": contentType },
+  // Guarded, not bare: `uploadAsync` has no timeout, so the Pixel-9
+  // connect()-hang this helper exists for parked a media op forever with the
+  // sync pump waiting on it (MAPP-006 — the finding fixed the Send-a-copy and
+  // GeoPDF legs; these media legs are the same call on a sibling surface, and
+  // mobile/CLAUDE.md's rule is that a second caller inherits the first's
+  // guards). A first-byte timeout throws, so the op fails and retries like any
+  // other transient error instead of hanging.
+  const result = await uploadToPresignedUrl(url, fileUri, {
+    "Content-Type": contentType,
   });
   if (result.status < 200 || result.status >= 300) {
     throw new Error(`Upload failed (${result.status})`);
@@ -320,6 +365,22 @@ export async function runMediaCreateOp(row: MediaOpRow): Promise<MediaOpOutcome>
     return "done";
   }
 
+  // MOT-006: presign above is a few hundred bytes of JSON, fine on the
+  // `sync` allowance it always rode; the PUTs below are the actual media
+  // bytes (up to 30 MB an image, 500 MB a video) and answer to their own
+  // metered gate instead. Not allowed right now is not a failure — undo
+  // flush.ts's optimistic attempts bump and leave the op exactly where it
+  // was, so it waits for Wi-Fi like every other large transfer instead of
+  // burning through MEDIA_MAX_ATTEMPTS and parking as a Sync Issue.
+  if (!(await canRunNow("mediaUpload"))) {
+    await db.runAsync(
+      "UPDATE outbox SET state = 'queued', attempts = ? WHERE seq = ?",
+      row.attempts,
+      row.seq,
+    );
+    return "blocked";
+  }
+
   // Phase 2: PUT display + thumbnail to S3 (no limiter cost).
   await putFile(presign.displayUploadUrl, fields.localDisplayPath, fields.mediaType);
   if (presign.thumbnailUploadUrl && fields.localThumbPath) {
@@ -381,7 +442,25 @@ function messageForBlock(status: number): string {
 /** Enqueue a media delete (used by the detail UI). */
 export async function deleteMediaLocal(media: MirrorMedia): Promise<void> {
   const db = await getSyncDb();
-  await withSyncTransaction(db, async () => {
+  const cancelled = await withSyncTransaction(db, async () => {
+    // Media ops bypass `planOutboxEnqueue`, so its delete-cancellation never
+    // ran here: deleting a photo whose upload was still queued uploaded the
+    // whole file (presign → PUT → confirm, possibly on metered data) and then
+    // deleted it server-side again. Same "never sent" test the planner uses —
+    // queued, no attempt, no phase started — and the server has nothing to
+    // delete, so the local row and its blobs go straight away.
+    const pendingCreate = await db.getFirstAsync<{ seq: number }>(
+      `SELECT seq FROM outbox
+       WHERE entity = 'media' AND op = 'create' AND entity_id = ?
+         AND state = 'queued' AND attempts = 0 AND media_phase IS NULL`,
+      media.id,
+    );
+    if (pendingCreate) {
+      await db.runAsync("DELETE FROM outbox WHERE seq = ?", pendingCreate.seq);
+      await db.runAsync("DELETE FROM media WHERE id = ?", media.id);
+      return true;
+    }
+
     // Optimistic: hide the row immediately; the op reconciles server + blobs.
     await db.runAsync(
       "UPDATE media SET sync_state = 'pendingDelete' WHERE id = ?",
@@ -395,7 +474,13 @@ export async function deleteMediaLocal(media: MirrorMedia): Promise<void> {
       media.id,
       new Date().toISOString(),
     );
+    return false;
   });
+  if (cancelled) {
+    for (const path of [media.localDisplayPath, media.localThumbPath]) {
+      if (path) await FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
+    }
+  }
   notifyMirrorChanged();
   scheduleMutationSync();
 }

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { chooseScaleStep, degreesPerDp, metersPerPixel } from "./scaleBar";
+import {
+  chooseScaleStep,
+  degreesPerDp,
+  metersPerPixel,
+  tileMetersPerPixel,
+} from "./scaleBar";
 
 describe("metersPerPixel", () => {
   it("matches MapLibre's 512-based resolution at the equator", () => {
@@ -24,6 +29,29 @@ describe("metersPerPixel", () => {
     expect(() => metersPerPixel(91, 10)).toThrow(/latitude out of range/);
     expect(() => metersPerPixel(Number.NaN, 10)).toThrow(/latitude out of range/);
     expect(() => metersPerPixel(0, -1)).toThrow(/zoom out of range/);
+  });
+});
+
+describe("tileMetersPerPixel", () => {
+  it("is exactly double metersPerPixel at the same latitude and zoom", () => {
+    // The whole point of keeping two functions: a slippy-tile zoom (256-based)
+    // and a MapLibre camera zoom (512-based) are off by exactly 2x at the same
+    // zoom number. MMO-001 was this ratio applied to the wrong convention.
+    // The two source constants (78271.51696 vs 156543.03392) are independently
+    // rounded literals, not one computed from the other, so the match is close
+    // but not bit-exact — precision 2 is well inside that rounding noise and
+    // still catches a wrong power-of-two or a swapped convention outright.
+    for (const zoom of [0, 8, 14, 20]) {
+      expect(tileMetersPerPixel(-33.7, zoom)).toBeCloseTo(
+        metersPerPixel(-33.7, zoom) * 2,
+        2,
+      );
+    }
+  });
+
+  it("is about 2 m/px at z16 in the Blue Mountains (regionFrame's own case)", () => {
+    expect(tileMetersPerPixel(-33.7, 16)).toBeGreaterThan(1.7);
+    expect(tileMetersPerPixel(-33.7, 16)).toBeLessThan(2.1);
   });
 });
 

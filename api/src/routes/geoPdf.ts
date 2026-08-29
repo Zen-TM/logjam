@@ -17,7 +17,7 @@ import { AppError } from "../middleware/errorHandler";
 import { GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from "../services/awsClients";
-import { logger } from "../lib/logger";
+import { logger, safeErrorForLog } from "../lib/logger";
 import type {
   GeoPdfConfig,
   VectorStyleSettings,
@@ -195,7 +195,7 @@ router.post(
     try {
       estimatedSeconds = await estimateGeoPdfSeconds(config);
     } catch (err) {
-      logger.warn({ reason: String(err) }, "geo_pdf_estimate_failed");
+      logger.warn({ err: safeErrorForLog(err) }, "geo_pdf_estimate_failed");
     }
 
     // Count + create in one transaction so concurrent submissions can't both

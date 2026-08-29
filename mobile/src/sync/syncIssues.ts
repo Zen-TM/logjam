@@ -131,6 +131,11 @@ export async function listShelfEntries(): Promise<ShelfEntry[]> {
  * retrying. A permanent failure belongs on the screen for permanent failures.
  */
 export async function countSyncIssues(): Promise<number> {
+  // The §8.5 30-day purge runs here too, not only in listShelfEntries: the
+  // badge is polled on every mirror change and the list screen may never be
+  // opened, so a conflict resolved by time kept inflating "Sync issues (N)"
+  // forever.
+  await purgeExpiredShelf();
   const db = await getSyncDb();
   const parked = await db.getFirstAsync<{ n: number }>(
     "SELECT COUNT(*) AS n FROM outbox WHERE state IN ('blocked', 'deadRemote')",
@@ -282,15 +287,28 @@ export async function discardParkedOp(seq: number): Promise<void> {
 export async function recreateFromDeadRemote(seq: number): Promise<string | null> {
   const parked = await listParkedOps();
   const op = parked.find((entry) => entry.seq === seq);
-  if (!op || op.entity !== "waypoint" || !op.fields) {
+  const fields = op?.fields;
+  // A parked UPDATE carries only the fields it dirtied, so a rename-only edit
+  // (or a create merged from partial fields) has no coordinates at all — and a
+  // waypoint with no position is not a waypoint. `Number(undefined)` used to
+  // put NaN in a NOT NULL REAL column: the insert threw, the op stayed parked,
+  // and Recreate was permanently broken for it until Discard. Fall back to the
+  // same discard-and-shelve path every non-waypoint entity takes, so the
+  // user's typed values are kept rather than lost.
+  if (
+    !op ||
+    op.entity !== "waypoint" ||
+    !fields ||
+    typeof fields.latitude !== "number" ||
+    typeof fields.longitude !== "number"
+  ) {
     await discardParkedOp(seq);
     return null;
   }
-  const fields = op.fields;
   const draft: WaypointDraft = {
     name: typeof fields.name === "string" ? fields.name : "Recovered waypoint",
-    latitude: Number(fields.latitude),
-    longitude: Number(fields.longitude),
+    latitude: fields.latitude,
+    longitude: fields.longitude,
     elevation: typeof fields.elevation === "number" ? fields.elevation : null,
     symbol: typeof fields.symbol === "string" ? fields.symbol : null,
     notes: typeof fields.notes === "string" ? fields.notes : null,

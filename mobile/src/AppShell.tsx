@@ -60,6 +60,17 @@ import { LogsScreen } from "./logs/LogsScreen";
 import { TripDetailScreen } from "./logs/TripDetailScreen";
 import { LoadingState } from "./ui/ScreenStates";
 
+// Said in one place because it is said from two: the tab bar and the
+// notification-response listener are both ways off the map, and two copies of
+// this sentence would be two chances for them to drift apart.
+function alertFinishRouteFirst(): void {
+  Alert.alert(
+    "Finish your route first",
+    "Save it, or discard it with the bin, before leaving the map.",
+    [{ text: "OK" }],
+  );
+}
+
 const navigationTheme = {
   ...DarkTheme,
   colors: {
@@ -738,6 +749,15 @@ export function AppShell({
           navigate: (name: string, params?: object) => void;
         } | null;
         if (!nav) return;
+        // The same guard the tab bar applies, for the same reason: a route
+        // being drawn owns the map's taps and nothing on another screen says
+        // the draft is still armed. A notification tap is just a second way to
+        // leave the map, so it refuses the same way — with the Alert, so the
+        // tap is answered rather than silently ignored.
+        if (isRouteEditing()) {
+          alertFinishRouteFirst();
+          return;
+        }
         if (typeof data.canyonId === "string") {
           nav.navigate("Canyons", {
             screen: "CanyonDetail",
@@ -821,11 +841,7 @@ export function AppShell({
             const target = event.target ?? "";
             if (target.startsWith("Map")) return;
             event.preventDefault();
-            Alert.alert(
-              "Finish your route first",
-              "Save it, or discard it with the bin, before leaving the map.",
-              [{ text: "OK" }],
-            );
+            alertFinishRouteFirst();
           },
         }}
         screenOptions={{

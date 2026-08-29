@@ -309,7 +309,7 @@ function AccountPanel({
               onChange={() => handleToggleNotif("topoEmail")}
               disabled={notifSaving}
             />
-            <span className={classes.notifLabel}>Email me when a topo job finishes</span>
+            <span className={classes.notifLabel}>Email me when a topo job finishes or fails</span>
           </label>
           <label className={classes.notifRow}>
             <input
@@ -318,7 +318,7 @@ function AccountPanel({
               onChange={() => handleToggleNotif("exportEmail")}
               disabled={notifSaving}
             />
-            <span className={classes.notifLabel}>Email me when a topo export is ready</span>
+            <span className={classes.notifLabel}>Email me when a topo export finishes or fails</span>
           </label>
           <label className={classes.notifRow}>
             <input
@@ -327,7 +327,7 @@ function AccountPanel({
               onChange={() => handleToggleNotif("geoPdfEmail")}
               disabled={notifSaving}
             />
-            <span className={classes.notifLabel}>Email me when a GeoPDF is ready</span>
+            <span className={classes.notifLabel}>Email me when a GeoPDF finishes or fails</span>
           </label>
           <label className={classes.notifRow}>
             <input

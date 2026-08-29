@@ -9,7 +9,7 @@
 
 import prisma from "../services/prisma";
 import { getEnv } from "./env";
-import { logger } from "./logger";
+import { logger, safeErrorForLog } from "./logger";
 import { geoPdfNativeMegapixels } from "../services/geoPdfTileMath";
 import {
   estimateRuntimeSeconds,
@@ -113,7 +113,7 @@ export async function estimateGeoPdfSeconds(config: GeoPdfConfig): Promise<numbe
     } catch (err) {
       // Malformed/legacy stored config (missing/non-numeric extent or scale) —
       // skip this row rather than let one bad historical row break the estimate.
-      logger.warn({ reason: String(err) }, "geo_pdf_estimate_history_row_skipped");
+      logger.warn({ err: safeErrorForLog(err) }, "geo_pdf_estimate_history_row_skipped");
     }
   }
 

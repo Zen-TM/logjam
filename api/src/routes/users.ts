@@ -19,8 +19,9 @@ import { getMonthlyTileUsage } from "../lib/tileQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
-import { logger } from "../lib/logger";
+import { logger, safeErrorForLog } from "../lib/logger";
 import { accountDeleteTombstones } from "../lib/syncTombstones";
+import { snapshotWaypointVisibility } from "../lib/waypointLink";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const TOPO_BUCKET = getEnv().S3_BUCKET_TOPO ?? "";
@@ -31,14 +32,19 @@ function shortHash(value: string): string {
 }
 
 async function cognitoUserExists(sub: string): Promise<boolean> {
-  const poolId = process.env.COGNITO_USER_POOL_ID;
-  if (!poolId) return true; // fail safe: assume exists if pool not configured
+  // env.ts makes COGNITO_USER_POOL_ID required whenever AUTH_MODE=cognito, so an
+  // unset pool id only ever happens in fake-auth dev, where there is no Cognito
+  // directory to ask and no takeover to guard against. Deliberate fail-safe.
+  const poolId = getEnv().COGNITO_USER_POOL_ID;
+  if (!poolId) return true;
   try {
     await cognitoIdp.send(new AdminGetUserCommand({ UserPoolId: poolId, Username: sub }));
     return true;
   } catch (err) {
     if (err instanceof UserNotFoundException) return false;
-    // IAM not granted or network error — fail safe: treat as existing
+    // IAM not granted or network error — fail safe: treat as existing, but say
+    // so, or a missing AdminGetUser permission silently disables the guard.
+    logger.warn({ err: safeErrorForLog(err) }, "cognito_user_exists_check_failed");
     return true;
   }
 }
@@ -483,6 +489,8 @@ router.delete(
       sharesOut,
       sharesIn,
       directSharesOut,
+      ownedWaypoints,
+      canyonLinkedRoutes,
     ] = await Promise.all([
       prisma.topoJob.findMany({ where: { userId: user.id }, select: { id: true } }),
       prisma.topoExportJob.findMany({
@@ -539,6 +547,22 @@ router.delete(
           entityType: { in: ["waypoint", "route"] },
         },
         select: { entityType: true, entityId: true, sharedWithId: true },
+      }),
+      // Waypoints and routes are hard-deleted below, and a canyon sharee could
+      // see them through the canyon link (they follow canyon-level media
+      // visibility). The canyon tombstone does NOT imply them — the
+      // single-canyon delete path fans them out explicitly — so they need
+      // their own rows or the sharee's mirror keeps the coordinates forever.
+      prisma.waypoint.findMany({
+        where: { ownerId: user.id },
+        select: { id: true },
+      }),
+      prisma.route.findMany({
+        where: { ownerId: user.id, canyonId: { not: null } },
+        select: {
+          id: true,
+          canyon: { select: { shares: { select: { sharedWithId: true } } } },
+        },
       }),
     ]);
 
@@ -599,8 +623,37 @@ router.delete(
       list.push(m.id);
       mediaIdsByCanyon.set(m.linkedId, list);
     }
+    // Who can currently see each owned waypoint through a canyon share. Reuses
+    // the one helper that answers that question (lib/waypointLink.ts) rather
+    // than re-deriving the canyonWaypoint → canyon.shares join here; no
+    // post-delete diff is needed because the waypoints themselves are going.
+    const waypointViewers = await snapshotWaypointVisibility(
+      prisma,
+      ownedWaypoints.map((w) => w.id),
+    );
+    const canyonInheritedOut = [
+      ...[...waypointViewers].flatMap(([waypointId, viewers]) =>
+        viewers.size > 0
+          ? [
+              {
+                entityType: "waypoint" as const,
+                entityId: waypointId,
+                userIds: [...viewers],
+              },
+            ]
+          : [],
+      ),
+      ...canyonLinkedRoutes.flatMap((route) => {
+        const userIds = (route.canyon?.shares ?? []).map((s) => s.sharedWithId);
+        return userIds.length > 0
+          ? [{ entityType: "route" as const, entityId: route.id, userIds }]
+          : [];
+      }),
+    ];
+
     const accountTombstones = accountDeleteTombstones({
       userId: user.id,
+      canyonInheritedOut,
       mediaIdsByCanyon,
       canyonSharesOut: sharesOut,
       canyonSharesIn: sharesIn,

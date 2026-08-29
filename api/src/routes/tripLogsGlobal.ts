@@ -173,11 +173,24 @@ router.get(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
 
-    const { search, dateFrom, dateTo } = req.query as {
-      search?: string;
-      dateFrom?: string;
-      dateTo?: string;
+    const { search, dateFrom, dateTo } = req.query;
+    if (search !== undefined && typeof search !== "string") {
+      throw new AppError(400, "search must be a string");
+    }
+    // Bad input is a 400, not a 500: an Invalid Date (or a repeated query param,
+    // which Express hands over as an array) reaches Prisma as a malformed filter
+    // and throws PrismaClientValidationError. Mirrors the bulk-import path,
+    // which already rejects unparseable dates.
+    const parseDateParam = (value: unknown, name: string): Date | undefined => {
+      if (value === undefined) return undefined;
+      if (typeof value !== "string") throw new AppError(400, `${name} must be a string`);
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime()))
+        throw new AppError(400, `${name} must be a valid date`);
+      return parsed;
     };
+    const dateFromParsed = parseDateParam(dateFrom, "dateFrom");
+    const dateToParsed = parseDateParam(dateTo, "dateTo");
 
     // Same owner-filtered where for the page and the count, so X-Total-Count
     // reflects exactly the set being truncated by the cap (UX-001).
@@ -199,11 +212,11 @@ router.get(
             ],
           }
         : {}),
-      ...(dateFrom || dateTo
+      ...(dateFromParsed || dateToParsed
         ? {
             date: {
-              ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-              ...(dateTo ? { lte: new Date(dateTo) } : {}),
+              ...(dateFromParsed ? { gte: dateFromParsed } : {}),
+              ...(dateToParsed ? { lte: dateToParsed } : {}),
             },
           }
         : {}),

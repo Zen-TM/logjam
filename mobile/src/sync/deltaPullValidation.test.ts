@@ -189,3 +189,51 @@ describe("a malformed delta row", () => {
     expect(stateWrites.applyFailedAt).toBeUndefined();
   });
 });
+
+describe("a change key this app version does not consume", () => {
+  // The client applies a hand-listed set of `changes` keys. An eighth protocol
+  // entity used to be fetched, never read, and acknowledged anyway by the
+  // advancing cursor — permanently absent from every phone, with none of the
+  // skipped-row marking an unreadable ROW gets. (The other direction, this
+  // build's own list drifting from DELTA_ENTITY_ORDER, is a compile error:
+  // `satisfies Record<DeltaEntityKey, unknown[]>` in deltaPull.ts.)
+  it("is counted as a sync issue instead of dropped in silence", async () => {
+    pages = [
+      page({
+        changes: {
+          canyons: [],
+          tripLogs: [],
+          waypoints: [],
+          routes: [],
+          media: [],
+          canyonShares: [],
+          friendships: [],
+          gearLists: [{ id: "gear-1" }],
+        },
+      }),
+    ];
+
+    await expect(runDeltaPull("user-1")).resolves.toMatchObject({ pages: 1 });
+    expect(stateWrites.applyFailedAt).toBeTruthy();
+  });
+
+  it("stays silent when the unknown key carries no rows", async () => {
+    pages = [
+      page({
+        changes: {
+          canyons: [],
+          tripLogs: [],
+          waypoints: [],
+          routes: [],
+          media: [],
+          canyonShares: [],
+          friendships: [],
+          gearLists: [],
+        },
+      }),
+    ];
+
+    await runDeltaPull("user-1");
+    expect(stateWrites.applyFailedAt).toBeUndefined();
+  });
+});

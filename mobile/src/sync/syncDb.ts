@@ -175,15 +175,37 @@ export async function clearSyncStateValue(key: string): Promise<void> {
  * resetRequired (§4.3): wipe the MIRROR and the cursor — never the outbox.
  * Unsynced local work survives a server-forced resync; pending ops rebase
  * onto the freshly-pulled rows.
+ *
+ * Two things the plain `DELETE FROM every mirror table` got wrong:
+ *
+ *  - `lastSyncAt` stayed, so `hasMirrorSynced()` kept saying yes over an empty
+ *    mirror. If the post-reset pull then failed — the network dropping mid-
+ *    drain is exactly the company a forced reset keeps — every screen rendered
+ *    an empty list with no first-sync error state and a stale "last synced"
+ *    claim. `applySchemaVersion` documents the same rule for the same event.
+ *  - a locally-created row exists ONLY as its optimistic mirror row until its
+ *    create op flushes, so wiping it made the user's unsynced canyons, trips
+ *    and waypoints vanish from every screen — while "Changes still waiting to
+ *    upload are kept" was the sentence they had just agreed to, and while the
+ *    ops themselves did survive. Offline, nothing brings them back. Rows named
+ *    by a create op still in the outbox are therefore kept, in any op state:
+ *    a parked create is unsent work too, and `discardParkedOp` is the one path
+ *    that deliberately removes its row.
  */
 export async function wipeMirror(): Promise<void> {
   const db = await getSyncDb();
   await withSyncTransaction(db, async () => {
     for (const table of MIRROR_TABLES) {
-      await db.runAsync(`DELETE FROM ${table.name}`);
+      // Entity ids are UUIDv4, so one global id set needs no entity→table map.
+      // `notifications_cache` is keyless (and server-derived) — it just goes.
+      const keep =
+        "id" in table.columns
+          ? " WHERE id NOT IN (SELECT entity_id FROM outbox WHERE op = 'create')"
+          : "";
+      await db.runAsync(`DELETE FROM ${table.name}${keep}`);
     }
     await db.runAsync(
-      "DELETE FROM sync_state WHERE key IN ('cursor', 'applyFailedAt')",
+      "DELETE FROM sync_state WHERE key IN ('cursor', 'applyFailedAt', 'lastSyncAt')",
     );
   });
   notifyMirrorChanged();

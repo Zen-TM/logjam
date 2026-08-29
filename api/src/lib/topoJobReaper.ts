@@ -1,7 +1,9 @@
 import { StopTaskCommand } from "@aws-sdk/client-ecs";
 import { DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { Prisma } from "@prisma/client";
 import prisma from "../services/prisma";
-import { sendPushToUser } from "../services/push";
+import { sendPushToUser, type PushData } from "../services/push";
+import { sendEmail } from "../services/email";
 import { ecs, s3 } from "../services/awsClients";
 import { decrementStorageUsed } from "./storageQuota";
 import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
@@ -11,6 +13,7 @@ import { AppError } from "../middleware/errorHandler";
 import {
   TOPO_LAYERS,
   VECTOR_STYLE_DEFAULTS,
+  normalizeUserUiPreferences,
   reconcileExportSelection,
   validateAutoExportSettings,
   validateExportRequest,
@@ -159,16 +162,206 @@ async function stopTasksBestEffort(
         }),
       );
     } catch (err) {
-      logger.warn({ err, id: row.id }, event);
+      logger.warn({ err: safeErrorForLog(err), id: row.id }, event);
     }
   }
 }
 
 /**
- * One reaper pass over both job tables. Returns the number of rows reaped.
- * Throws on DB error (fail loud — the caller logs). All updates are
- * status-guarded so a row that reaches a terminal state between read and
- * write is left untouched.
+ * A reaped job is a FAILED job the user was never told about (APIC-005): the
+ * workers' own except paths write a Notification + push (+ email), the reaper
+ * used to write only `status`/`errorMessage`, so a user whose task was never
+ * placed or was SIGKILLed found out by polling the list.
+ *
+ * Best-effort by design: notification/push/email failure must never abort a
+ * sweep that has already done its real work (the status flip).
+ */
+type ReapEntry = {
+  userId: string;
+  type: string;
+  payload: Prisma.InputJsonValue;
+  push: PushData;
+  /**
+   * Failure email, gated on the pipeline's EXISTING preference — `topoEmail` /
+   * `exportEmail` / `geoPdfEmail` mean "finishes or fails", so a reaped job
+   * mails the same users a worker-detected failure would (no new pref key).
+   * `reason` is the generic REAPER_* message: the reaper never knows more.
+   */
+  email: {
+    pref: "topoEmail" | "exportEmail" | "geoPdfEmail";
+    subject: string;
+    headline: string;
+    reason: string;
+    /** Query string for the FRONTEND_URL deep link, e.g. `topoJob=<id>`. */
+    deepLink: string;
+  };
+};
+
+/**
+ * Best-effort failure email per reaped row. Same shape as the workers' own
+ * failure mail (geoPdfWorker.ts / export_worker.py): logo header, one-line
+ * reason, FRONTEND_URL deep link — a reaped-job email must not read as a
+ * different species from a worker-sent one.
+ *
+ * One user read for the whole batch; `sendEmail` swallows its own send
+ * failures, and the caller wraps this so a user-lookup failure can't abort a
+ * sweep either.
+ */
+async function emailReaped(entries: ReapEntry[]): Promise<void> {
+  const recipients = await prisma.user.findMany({
+    where: { id: { in: [...new Set(entries.map((entry) => entry.userId))] } },
+    select: { id: true, email: true, uiPreferences: true },
+  });
+  const byId = new Map(recipients.map((row) => [row.id, row]));
+  const base = (getEnv().FRONTEND_URL ?? "").replace(/\/$/, "");
+  // Logo lives in the frontend SPA bucket, so it only resolves when
+  // FRONTEND_URL is configured (unset in local dev).
+  const logoHtml = base
+    ? `<p style="margin:0 0 16px"><img src="${base}/email-logo-lockup.png" alt="Logjam" width="212" style="display:block" /></p>`
+    : "";
+  for (const entry of entries) {
+    const recipient = byId.get(entry.userId);
+    if (!recipient?.email) continue;
+    const wanted = normalizeUserUiPreferences(recipient.uiPreferences).notifications;
+    if (!wanted[entry.email.pref]) continue;
+    const openUrl = base ? `${base}/?${entry.email.deepLink}` : "";
+    const openLink = openUrl ? `\n\nOpen Logjam: ${openUrl}` : "";
+    const openLinkHtml = openUrl ? `<p><a href="${openUrl}">Open Logjam</a></p>` : "";
+    await sendEmail({
+      to: recipient.email,
+      subject: entry.email.subject,
+      text: `${entry.email.headline}\n\n${entry.email.reason}${openLink}`,
+      html: `${logoHtml}<p>${entry.email.headline}</p><p><strong>${entry.email.reason}</strong></p>${openLinkHtml}`,
+    });
+  }
+}
+
+async function notifyReaped(entries: ReapEntry[]): Promise<void> {
+  if (entries.length === 0) return;
+  try {
+    await prisma.notification.createMany({
+      data: entries.map(({ userId, type, payload }) => ({ userId, type, payload })),
+    });
+  } catch (err) {
+    logger.error({ err: safeErrorForLog(err) }, "reaper_notification_write_failed");
+    return;
+  }
+  for (const entry of entries) {
+    // sendPushToUser swallows its own failures; the try is belt-and-braces.
+    try {
+      await sendPushToUser(entry.userId, entry.push);
+    } catch (err) {
+      logger.warn({ err: safeErrorForLog(err) }, "reaper_push_failed");
+    }
+  }
+  try {
+    await emailReaped(entries);
+  } catch (err) {
+    logger.error({ err: safeErrorForLog(err) }, "reaper_email_failed");
+  }
+}
+
+/**
+ * Flip overdue rows to failed ONE AT A TIME and notify only the rows this pass
+ * actually claimed.
+ *
+ * The status-guarded claim is the house dedup rule (root CLAUDE.md; same shape
+ * as `queueAutoExports`'s `autoExportedAt` marker): two API instances sweeping
+ * concurrently both read the same overdue ids, but only one `updateMany` per id
+ * reports `count === 1`. Notifying on the READ set instead would send the user
+ * two notifications, two pushes and two emails per reaped job — prod runs the
+ * API on Elastic Beanstalk, so >1 instance is a real configuration.
+ *
+ * Winning the flip also proves the row was still `pending`/`queued`/overdue a
+ * moment ago, which is why no confirm-read is needed.
+ *
+ * ponytail: one UPDATE per row — a sweep handles a handful of stuck rows, so
+ * the round-trips are noise. If a pass ever reaps thousands, claim in batches
+ * with a per-pass marker column instead.
+ */
+async function claimAndNotify<Row extends { id: string }>(
+  rows: Row[],
+  claimOne: (id: string) => Promise<{ count: number }>,
+  entryFor: (row: Row) => ReapEntry,
+): Promise<number> {
+  const claimedRows: Row[] = [];
+  for (const row of rows) {
+    const claim = await claimOne(row.id);
+    if (claim.count === 1) claimedRows.push(row);
+  }
+  await notifyReaped(claimedRows.map(entryFor));
+  return claimedRows.length;
+}
+
+/** Same type + payload shape topo/worker.py's failure path writes. */
+function topoJobEntry(row: { id: string; userId: string; name: string | null }): ReapEntry {
+  return {
+    userId: row.userId,
+    type: "topo_failed",
+    payload: { jobId: row.id, jobName: row.name },
+    push: { type: "topo_failed", jobId: row.id },
+    email: {
+      pref: "topoEmail",
+      // Mirrors worker.py's "Topo map ready — Logjam".
+      subject: "Topo map failed — Logjam",
+      headline: "Your topo map job failed.",
+      reason: REAPER_JOB_MESSAGE,
+      deepLink: `topoJob=${row.id}`,
+    },
+  };
+}
+
+/** Mirrors topo/export_worker.py's failure notification. */
+function exportJobEntry(row: { id: string; userId: string; format: string }): ReapEntry {
+  return {
+    userId: row.userId,
+    type: "topo_export_complete",
+    payload: {
+      exportJobId: row.id,
+      format: row.format,
+      status: "failed",
+      errorMessage: REAPER_EXPORT_MESSAGE,
+    },
+    push: { type: "topo_export_complete", exportId: row.id },
+    email: {
+      pref: "exportEmail",
+      // Same subject export_worker.py's failure mail uses.
+      subject: `Topo export failed — ${row.format.toUpperCase()}`,
+      headline: "Your topo export failed.",
+      reason: REAPER_EXPORT_MESSAGE,
+      deepLink: `export=${row.id}`,
+    },
+  };
+}
+
+/** Mirrors worker/geoPdfWorker.ts's failure notification + push type. */
+function geoPdfJobEntry(row: { id: string; userId: string }): ReapEntry {
+  return {
+    userId: row.userId,
+    type: "geo_pdf_complete",
+    payload: {
+      geoPdfJobId: row.id,
+      status: "failed",
+      errorMessage: REAPER_GEO_PDF_MESSAGE,
+    },
+    push: { type: "geo_pdf_failed", geoPdfJobId: row.id },
+    email: {
+      pref: "geoPdfEmail",
+      // Same subject geoPdfWorker.ts's failure mail uses.
+      subject: "GeoPDF failed — Logjam",
+      headline: "Your GeoPDF could not be generated.",
+      reason: REAPER_GEO_PDF_MESSAGE,
+      deepLink: `geoPdfJob=${row.id}`,
+    },
+  };
+}
+
+/**
+ * One reaper pass over both job tables. Returns the number of rows THIS pass
+ * claimed (see claimAndNotify — an overlapping instance's rows don't count).
+ * Throws on DB error (fail loud — the caller logs). Every flip is a per-row
+ * status-guarded claim, so a row that reaches a terminal state between read and
+ * write is left untouched and its owner is never told it failed.
  */
 export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number> {
   const env = getEnv();
@@ -176,11 +369,20 @@ export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number>
 
   // topo_jobs · pending: anchored on updatedAt (set when /start flipped it).
   const pendingCutoff = new Date(now.getTime() - env.TOPO_REAPER_PENDING_TIMEOUT_MS);
-  const pendingResult = await prisma.topoJob.updateMany({
+  // Read the rows first: an updateMany reports a count, leaving nobody to tell.
+  const pendingJobs = await prisma.topoJob.findMany({
     where: { status: "pending", updatedAt: { lt: pendingCutoff } },
-    data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
+    select: { id: true, userId: true, name: true },
   });
-  reaped += pendingResult.count;
+  reaped += await claimAndNotify(
+    pendingJobs,
+    (id) =>
+      prisma.topoJob.updateMany({
+        where: { id, status: "pending" },
+        data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
+      }),
+    topoJobEntry,
+  );
 
   // topo_jobs · processing: reaped only when stalled or past the absolute
   // ceiling (see isProcessingDead). lastProgressAt is the heartbeat anchor, so a
@@ -189,6 +391,8 @@ export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number>
     where: { status: "processing" },
     select: {
       id: true,
+      userId: true,
+      name: true,
       startedAt: true,
       updatedAt: true,
       lastProgressAt: true,
@@ -205,13 +409,19 @@ export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number>
     ),
   );
   if (overdueJobs.length > 0) {
-    const result = await prisma.topoJob.updateMany({
+    reaped += await claimAndNotify(
+      overdueJobs,
       // status kept in the WHERE: a job that completed between the read and
       // this write must not be flipped back to failed.
-      where: { id: { in: overdueJobs.map((j) => j.id) }, status: "processing" },
-      data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
-    });
-    reaped += result.count;
+      (id) =>
+        prisma.topoJob.updateMany({
+          where: { id, status: "processing" },
+          data: { status: "failed", errorMessage: REAPER_JOB_MESSAGE },
+        }),
+      topoJobEntry,
+    );
+    // Best-effort even for rows another instance claimed: the task is dead
+    // either way, and StopTask on an already-stopped task is a no-op.
     await stopTasksBestEffort(overdueJobs, "topo_job_reaper_stop_task_failed");
   }
 
@@ -219,11 +429,19 @@ export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number>
   const exportQueuedCutoff = new Date(
     now.getTime() - env.TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS,
   );
-  const queuedExportResult = await prisma.topoExportJob.updateMany({
+  const queuedExports = await prisma.topoExportJob.findMany({
     where: { status: "queued", createdAt: { lt: exportQueuedCutoff } },
-    data: { status: "failed", errorMessage: REAPER_EXPORT_MESSAGE },
+    select: { id: true, userId: true, format: true },
   });
-  reaped += queuedExportResult.count;
+  reaped += await claimAndNotify(
+    queuedExports,
+    (id) =>
+      prisma.topoExportJob.updateMany({
+        where: { id, status: "queued" },
+        data: { status: "failed", errorMessage: REAPER_EXPORT_MESSAGE },
+      }),
+    exportJobEntry,
+  );
 
   // topo_export_jobs · running: anchored on startedAt (createdAt fallback).
   const exportRunningCutoff = new Date(
@@ -237,14 +455,18 @@ export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number>
         { startedAt: null, createdAt: { lt: exportRunningCutoff } },
       ],
     },
-    select: { id: true, ecsTaskArn: true },
+    select: { id: true, userId: true, format: true, ecsTaskArn: true },
   });
   if (overdueExports.length > 0) {
-    const result = await prisma.topoExportJob.updateMany({
-      where: { id: { in: overdueExports.map((e) => e.id) }, status: "running" },
-      data: { status: "failed", errorMessage: REAPER_EXPORT_MESSAGE },
-    });
-    reaped += result.count;
+    reaped += await claimAndNotify(
+      overdueExports,
+      (id) =>
+        prisma.topoExportJob.updateMany({
+          where: { id, status: "running" },
+          data: { status: "failed", errorMessage: REAPER_EXPORT_MESSAGE },
+        }),
+      exportJobEntry,
+    );
     await stopTasksBestEffort(
       overdueExports,
       "topo_export_reaper_stop_task_failed",
@@ -255,11 +477,19 @@ export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number>
   const geoPdfQueuedCutoff = new Date(
     now.getTime() - env.GEO_PDF_QUEUED_TIMEOUT_MS,
   );
-  const queuedGeoPdfResult = await prisma.geoPdfJob.updateMany({
+  const queuedGeoPdfJobs = await prisma.geoPdfJob.findMany({
     where: { status: "queued", createdAt: { lt: geoPdfQueuedCutoff } },
-    data: { status: "failed", errorMessage: REAPER_GEO_PDF_MESSAGE },
+    select: { id: true, userId: true },
   });
-  reaped += queuedGeoPdfResult.count;
+  reaped += await claimAndNotify(
+    queuedGeoPdfJobs,
+    (id) =>
+      prisma.geoPdfJob.updateMany({
+        where: { id, status: "queued" },
+        data: { status: "failed", errorMessage: REAPER_GEO_PDF_MESSAGE },
+      }),
+    geoPdfJobEntry,
+  );
 
   // geo_pdf_jobs · running: anchored on startedAt (createdAt fallback).
   const geoPdfRunningCutoff = new Date(
@@ -273,14 +503,18 @@ export async function reapStuckTopoJobs(now: Date = new Date()): Promise<number>
         { startedAt: null, createdAt: { lt: geoPdfRunningCutoff } },
       ],
     },
-    select: { id: true, ecsTaskArn: true },
+    select: { id: true, userId: true, ecsTaskArn: true },
   });
   if (overdueGeoPdfJobs.length > 0) {
-    const result = await prisma.geoPdfJob.updateMany({
-      where: { id: { in: overdueGeoPdfJobs.map((j) => j.id) }, status: "running" },
-      data: { status: "failed", errorMessage: REAPER_GEO_PDF_MESSAGE },
-    });
-    reaped += result.count;
+    reaped += await claimAndNotify(
+      overdueGeoPdfJobs,
+      (id) =>
+        prisma.geoPdfJob.updateMany({
+          where: { id, status: "running" },
+          data: { status: "failed", errorMessage: REAPER_GEO_PDF_MESSAGE },
+        }),
+      geoPdfJobEntry,
+    );
     await stopTasksBestEffort(
       overdueGeoPdfJobs,
       "geo_pdf_reaper_stop_task_failed",
@@ -333,7 +567,7 @@ export async function expireCompletedExports(
       });
       expired += 1;
     } catch (err) {
-      logger.error({ err, id: row.id }, "topo_export_expiry_failed");
+      logger.error({ err: safeErrorForLog(err), id: row.id }, "topo_export_expiry_failed");
     }
   }
   return expired;
@@ -511,12 +745,12 @@ export async function queueAutoExports(now: Date = new Date()): Promise<number> 
           err instanceof AppError && err.statusCode === 429
             ? "too many exports are already in progress"
             : "the export could not be started";
-        logger.error({ err, jobId: job.id }, "auto_export_launch_failed");
+        logger.error({ err: safeErrorForLog(err), jobId: job.id }, "auto_export_launch_failed");
         await notifyAutoExportSkipped(job.userId, job.id, reason);
       }
     } catch (err) {
       // One bad job can't wedge the pass (matches expireCompletedExports).
-      logger.error({ err, jobId: job.id }, "auto_export_pass_failed");
+      logger.error({ err: safeErrorForLog(err), jobId: job.id }, "auto_export_pass_failed");
     }
   }
   return queued;
@@ -562,45 +796,45 @@ export function startTopoJobReaper(): () => void {
       .catch((err) => {
         // Don't crash the sweep loop on a transient DB error — log and retry
         // next interval.
-        logger.error({ err }, "topo_job_reaper_failed");
+        logger.error({ err: safeErrorForLog(err) }, "topo_job_reaper_failed");
       });
     queueAutoExports()
       .then((count) => {
         if (count > 0) logger.info({ count }, "topo_auto_exports_queued");
       })
       .catch((err) => {
-        logger.error({ err }, "topo_auto_export_sweep_failed");
+        logger.error({ err: safeErrorForLog(err) }, "topo_auto_export_sweep_failed");
       });
     expireCompletedExports()
       .then((count) => {
         if (count > 0) logger.info({ count }, "topo_exports_expired");
       })
       .catch((err) => {
-        logger.error({ err }, "topo_export_expiry_sweep_failed");
+        logger.error({ err: safeErrorForLog(err) }, "topo_export_expiry_sweep_failed");
       });
     expireCompletedGeoPdfJobs()
       .then((count) => {
         if (count > 0) logger.info({ count }, "geo_pdf_jobs_expired");
       })
       .catch((err) => {
-        logger.error({ err }, "geo_pdf_expiry_sweep_failed");
+        logger.error({ err: safeErrorForLog(err) }, "geo_pdf_expiry_sweep_failed");
       });
     sweepOrphanedMediaUploads().catch((err) => {
-      logger.error({ err }, "media_orphan_sweep_failed");
+      logger.error({ err: safeErrorForLog(err) }, "media_orphan_sweep_failed");
     });
     sweepSyncTombstones()
       .then((count) => {
         if (count > 0) logger.info({ count }, "sync_tombstones_swept");
       })
       .catch((err) => {
-        logger.error({ err }, "sync_tombstone_sweep_failed");
+        logger.error({ err: safeErrorForLog(err) }, "sync_tombstone_sweep_failed");
       });
     sweepExpiredFileSends()
       .then((count) => {
         if (count > 0) logger.info({ count }, "file_sends_expired");
       })
       .catch((err) => {
-        logger.error({ err }, "file_send_sweep_failed");
+        logger.error({ err: safeErrorForLog(err) }, "file_send_sweep_failed");
       });
   };
 

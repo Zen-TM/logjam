@@ -235,9 +235,14 @@ export async function updateTrack(
 
 export async function deleteTrack(id: string): Promise<void> {
   const db = await getOfflineDb();
-  await db.runAsync("DELETE FROM track_point WHERE trackId = ?", id);
-  await db.runAsync("DELETE FROM track_point_rejected WHERE trackId = ?", id);
-  await db.runAsync("DELETE FROM track WHERE id = ?", id);
+  // MOT-003: all three or none — a crash between them used to leave orphaned
+  // track_point / track_point_rejected rows (location history) with no track
+  // row to ever delete them again.
+  await db.withTransactionAsync(async () => {
+    await db.runAsync("DELETE FROM track_point WHERE trackId = ?", id);
+    await db.runAsync("DELETE FROM track_point_rejected WHERE trackId = ?", id);
+    await db.runAsync("DELETE FROM track WHERE id = ?", id);
+  });
   notifyChanged();
 }
 
@@ -427,27 +432,7 @@ export async function addTrackPointSuppression(
 }
 
 // --- Waypoints ---
-
-export async function listWaypoints(): Promise<Waypoint[]> {
-  const db = await getOfflineDb();
-  return db.getAllAsync<Waypoint>("SELECT * FROM waypoint ORDER BY createdAt DESC");
-}
-
-export async function insertWaypoint(waypoint: Waypoint): Promise<void> {
-  const db = await getOfflineDb();
-  await db.runAsync(
-    "INSERT INTO waypoint (id, name, lon, lat, createdAt) VALUES (?, ?, ?, ?, ?)",
-    waypoint.id,
-    waypoint.name,
-    waypoint.lon,
-    waypoint.lat,
-    waypoint.createdAt,
-  );
-  notifyChanged();
-}
-
-export async function deleteWaypoint(id: string): Promise<void> {
-  const db = await getOfflineDb();
-  await db.runAsync("DELETE FROM waypoint WHERE id = ?", id);
-  notifyChanged();
-}
+//
+// The local-only `waypoint` table is gone (Stage 8 made waypoints a synced
+// entity; `migrateLegacyWaypoints` drains and drops it). The `Waypoint` SHAPE
+// survives as the map layer's contract — mirror rows are mapped into it.

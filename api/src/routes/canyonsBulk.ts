@@ -509,7 +509,7 @@ router.post(
       throw new AppError(400, "ids array is required");
     }
     if (ids.length > BULK_DELETE_LIMIT) {
-      throw new AppError(400, `Cannot delete more than ${BULK_DELETE_LIMIT} canyons at once`);
+      throw new AppError(413, `Cannot delete more than ${BULK_DELETE_LIMIT} canyons at once`);
     }
 
     const deletedIds = await deleteCanyonsCascade(user.id, ids as string[]);

@@ -244,13 +244,15 @@ export function directShareRevokeTombstones(args: {
  * account's must forget it. The deleted user's own rows need no tombstone —
  * their account (and their whole tombstone log) is going away with them.
  *
- * Four counterpart groups, one per way another user could be holding a row:
+ * Five counterpart groups, one per way another user could be holding a row:
  * canyon sharees (the canyon + its canyon-level media), friendship
  * counterparts (the edge), owners of canyons shared WITH the deleted user (the
- * CanyonShare row), and DIRECT recipients of the deleted user's synced
- * waypoints/routes. The last group is the one a cascade silently drops: the
- * Share rows vanish with the user, but a cascade writes no tombstone, so
- * without this the recipient's mirror keeps the item forever. */
+ * CanyonShare row), DIRECT recipients of the deleted user's synced
+ * waypoints/routes, and canyon sharees who could see a waypoint or route
+ * through one of those shared canyons. The last two are the ones a cascade
+ * silently drops: the Share rows vanish with the user and the waypoint/route
+ * rows are hard-deleted, but neither writes a tombstone, so without these the
+ * recipient's mirror keeps the item forever. */
 export function accountDeleteTombstones(args: {
   userId: string;
   /** Canyon-level media ids, keyed by canyon id. */
@@ -263,6 +265,18 @@ export function accountDeleteTombstones(args: {
     entityId: string;
     sharedWithId: string;
   }[];
+  /**
+   * Waypoints/routes of this account that OTHER users could see through a
+   * canyon share, with the users who could see each. No visibility DIFF is
+   * needed here (unlike an unlink or a single-canyon delete): the account
+   * delete hard-deletes every one of these rows, so no surviving path can
+   * exist and every current viewer loses the row.
+   */
+  canyonInheritedOut: {
+    entityType: Extract<SyncEntityType, "waypoint" | "route">;
+    entityId: string;
+    userIds: string[];
+  }[];
 }): TombstoneRow[] {
   const {
     userId,
@@ -271,6 +285,7 @@ export function accountDeleteTombstones(args: {
     canyonSharesIn,
     friendships,
     directSharesOut,
+    canyonInheritedOut,
   } = args;
   return [
     ...canyonSharesOut.flatMap((share): TombstoneRow[] => [
@@ -303,6 +318,17 @@ export function accountDeleteTombstones(args: {
         entityType: share.entityType,
         entityId: share.entityId,
       }),
+    ),
+    ...canyonInheritedOut.flatMap((entity): TombstoneRow[] =>
+      entity.entityType === "waypoint"
+        ? waypointRevokeTombstones({
+            waypointId: entity.entityId,
+            userIds: entity.userIds,
+          })
+        : routeUnlinkTombstones({
+            routeId: entity.entityId,
+            shareeIds: entity.userIds,
+          }),
     ),
   ];
 }

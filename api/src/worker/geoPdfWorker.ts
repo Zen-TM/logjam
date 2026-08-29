@@ -19,7 +19,7 @@ import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { s3 } from "../services/awsClients";
 import prisma from "../services/prisma";
 import { getEnv } from "../lib/env";
-import { logger } from "../lib/logger";
+import { logger, safeErrorForLog } from "../lib/logger";
 import { sendPushToUser } from "../services/push";
 import { generateGeoPdf } from "../services/generateGeoPdf";
 import { sendEmail } from "../services/email";
@@ -192,8 +192,16 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
     },
   });
 
-  // Best-effort push, mirroring email — generic title + opaque IDs only.
-  await sendPushToUser(job.userId, { type: "geo_pdf_complete", geoPdfJobId: jobId });
+  // Best-effort push, mirroring email — generic title + opaque IDs only. A
+  // failed render pushes `geo_pdf_failed` ("GeoPDF failed"), not the cheerful
+  // complete title; the push carries no status field, so the type IS the title
+  // (APIC-002). The stored notification row above deliberately keeps the
+  // `geo_pdf_complete` type in both cases — mobile and web both switch on that
+  // type and branch on `payload.status` for the failure wording.
+  await sendPushToUser(job.userId, {
+    type: ok ? "geo_pdf_complete" : "geo_pdf_failed",
+    geoPdfJobId: jobId,
+  });
 
   // Best-effort completion email (Resend), mirroring the Python workers'
   // send_completion_email. Gated on the user's geoPdfEmail preference (default
@@ -251,7 +259,7 @@ if (require.main === module) {
       process.exit(code);
     })
     .catch(async (err) => {
-      logger.error({ err }, "geo_pdf_worker_unhandled_error");
+      logger.error({ err: safeErrorForLog(err) }, "geo_pdf_worker_unhandled_error");
       await prisma.$disconnect();
       process.exit(1);
     });

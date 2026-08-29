@@ -37,7 +37,6 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote
 
 import boto3
 import psycopg2
@@ -51,6 +50,11 @@ from renderers import (
     render_gpkg,
     render_geojson,
     render_gpx,
+)
+from worker_common import (
+    compose_database_url,
+    create_notification,
+    get_user_email,
 )
 from email_send import send_email, wants_email
 
@@ -70,41 +74,6 @@ def _scrub_paths(message: str) -> str:
     the failure email or the notification shown in the dialog. The
     human-readable prefix (e.g. 'tippecanoe (features) failed:') survives."""
     return _PATH_RE.sub("<path>", message)
-
-
-def compose_database_url() -> str:
-    """Compose a Postgres connection string from discrete DB_* env vars.
-
-    Mirrored in worker.py — keep both copies in sync. User and password are
-    URL-quoted (safe="") because RDS-generated passwords contain characters
-    like "!" that aren't valid unescaped in a URL. Fails loud, listing
-    missing var NAMES only (never values).
-    """
-    host = os.environ.get("DB_HOST")
-    name = os.environ.get("DB_NAME")
-    user = os.environ.get("DB_USER")
-    password = os.environ.get("DB_PASSWORD")
-    port = os.environ.get("DB_PORT", "5432")
-
-    missing = [
-        var_name
-        for var_name, value in (
-            ("DB_HOST", host),
-            ("DB_NAME", name),
-            ("DB_USER", user),
-            ("DB_PASSWORD", password),
-        )
-        if not value
-    ]
-    if missing:
-        raise RuntimeError(
-            f"Missing required environment variables for database connection: {', '.join(missing)}"
-        )
-
-    return (
-        f"postgresql://{quote(user, safe='')}:{quote(password, safe='')}"
-        f"@{host}:{port}/{name}"
-    )
 
 
 AWS_REGION   = os.environ.get("AWS_REGION", "ap-southeast-2")
@@ -156,6 +125,10 @@ def update_status(conn, export_job_id: str, status: str, storage_delta_bytes: in
     rows, the storage charge is SKIPPED, and the caller must self-clean and
     skip notification/email.
     """
+    # No `updated_at = NOW()` here, unlike worker.py's twin: topo_export_jobs
+    # has no updated_at column (schema.prisma TopoExportJob / migration
+    # 20260528000001) — created_at, started_at and completed_at only. The two
+    # copies differ because the two tables do (STP-008).
     set_clauses = ["status = %s"]
     values: list = [status]
     for col, val in kwargs.items():
@@ -195,24 +168,6 @@ def delete_s3_prefix_best_effort(prefix: str):
         log.info(f"Cleaned up s3://{BUCKET}/{prefix}")
     except Exception as e:
         log.warning(f"Best-effort cleanup of {prefix} failed: {e}")
-
-
-def get_user_email(conn, user_id: str) -> Optional[str]:
-    with conn.cursor() as cur:
-        cur.execute("SELECT email FROM users WHERE id = %s", (user_id,))
-        row = cur.fetchone()
-    return row["email"] if row else None
-
-
-def create_notification(conn, user_id: str, notif_type: str, payload: dict):
-    import uuid as _uuid
-    with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO notifications (id, user_id, type, payload, read, created_at) "
-            "VALUES (%s, %s, %s, %s, false, NOW())",
-            (str(_uuid.uuid4()), user_id, notif_type, json.dumps(payload)),
-        )
-    conn.commit()
 
 
 def send_completion_email(to_email: str, export_job_id: str, format_: str, ok: bool, error: Optional[str]):
@@ -379,26 +334,34 @@ def main():
         conn.close()
         return
 
-    create_notification(
-        conn, export_job["user_id"], "topo_export_complete",
-        {
-            "exportJobId": EXPORT_JOB_ID,
-            "format": export_job["format"],
-            "jobName": job_name,
-            "status": "completed" if ok else "failed",
-            "errorMessage": None if ok else (error_msg or "Unknown failure"),
-        },
-    )
-    # Best-effort push — generic title + opaque IDs only (format/status/error
-    # stay in the in-app notification, never in a push).
-    from push_send import send_push
-    send_push(conn, export_job["user_id"],
-              {"type": "topo_export_complete", "exportId": EXPORT_JOB_ID})
+    # Everything past the terminal flip is best-effort (STP-002): the row is
+    # already correct and the artefact uploaded, so a transient DB blip in the
+    # notification tail must not kill the process or skip the email.
+    try:
+        create_notification(
+            conn, export_job["user_id"], "topo_export_complete",
+            {
+                "exportJobId": EXPORT_JOB_ID,
+                "format": export_job["format"],
+                "jobName": job_name,
+                "status": "completed" if ok else "failed",
+                "errorMessage": None if ok else (error_msg or "Unknown failure"),
+            },
+        )
+        # Push — generic title + opaque IDs only (format/status/error stay in
+        # the in-app notification, never in a push).
+        from push_send import send_push
+        send_push(conn, export_job["user_id"],
+                  {"type": "topo_export_complete", "exportId": EXPORT_JOB_ID})
+    except Exception as e:
+        log.warning(f"Export {EXPORT_JOB_ID}: notification/push failed: {e}")
 
     try:
         email = get_user_email(conn, export_job["user_id"])
         if email and wants_email(conn, export_job["user_id"], "exportEmail"):
             send_completion_email(email, EXPORT_JOB_ID, export_job["format"], ok, error_msg)
+    except Exception as e:
+        log.warning(f"Export {EXPORT_JOB_ID}: completion email failed: {e}")
     finally:
         conn.close()
 

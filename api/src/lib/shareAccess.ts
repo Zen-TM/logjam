@@ -25,6 +25,7 @@ import { isSharableEntityType, type SharableEntityType } from "@logjam/shared";
 
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
+import { directShareRevokeTombstones, writeTombstones } from "./syncTombstones";
 
 /**
  * "owner"  → full access, including edit/delete/share.
@@ -268,6 +269,96 @@ export async function deleteSharesFor(
   await tx.share.deleteMany({
     where: { entityType, entityId: { in: entityIds } },
   });
+}
+
+/**
+ * Revoke every non-canyon share between two users, in BOTH directions, inside
+ * the caller's transaction. The unfriend leg of the share lifecycle (APIR-007):
+ * shares can only be CREATED between friends, so removing the friendship must
+ * take them all back — canyon shares are revoked by the caller, this is the
+ * rest.
+ *
+ * Two different promises, so two different rules:
+ *   - `Share` (waypoint / route / topo job / GeoPDF job) is a LIVE view of a
+ *     record the owner still holds, so all of it goes.
+ *   - `FileSend` handed the recipient a COPY. Only rows they have not taken yet
+ *     (`status = "pending"`) are still live access and are revoked; an accepted
+ *     send is already theirs and expires on its own within FILE_SEND_TTL_DAYS.
+ *     A FileSend left with no recipients is collected by the normal reaper
+ *     sweep — deliberately no second delete path here.
+ *
+ * Tombstones are unconditional for the two synced entity types, with no
+ * `hasCanyonInheritedAccess` check (unlike the single revoke in routes/
+ * shares.ts): the caller deletes every canyon share between the pair in the
+ * same transaction, and only an entity's owner can share their own canyon, so
+ * no surviving path exists. A row duplicated with the caller's
+ * visibility-loss fan-out is harmless — a tombstone is an idempotent
+ * "forget this id".
+ */
+export async function revokeAllSharesBetween(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  otherId: string,
+): Promise<void> {
+  const bothDirections = [
+    { sharedById: userId, sharedWithId: otherId },
+    { sharedById: otherId, sharedWithId: userId },
+  ];
+  const shares = await tx.share.findMany({
+    where: { OR: bothDirections },
+    select: { id: true, entityType: true, entityId: true, sharedWithId: true },
+  });
+  if (shares.length > 0) {
+    await tx.share.deleteMany({ where: { id: { in: shares.map((s) => s.id) } } });
+    await writeTombstones(
+      tx,
+      shares.flatMap((share) =>
+        share.entityType === "waypoint" || share.entityType === "route"
+          ? directShareRevokeTombstones({
+              entityType: share.entityType,
+              entityId: share.entityId,
+              userIds: [share.sharedWithId],
+            })
+          : [],
+      ),
+    );
+    // Drop each recipient's residual item_shared row, as the single revoke
+    // does — the read-time filter already hides it, but a revoked share should
+    // not leave a notification at rest (PRIV-001).
+    for (const share of shares) {
+      await tx.notification.deleteMany({
+        where: {
+          userId: share.sharedWithId,
+          type: "item_shared",
+          payload: { path: ["entityId"], equals: share.entityId },
+        },
+      });
+    }
+  }
+
+  const pendingSends = await tx.fileSendRecipient.findMany({
+    where: {
+      status: "pending",
+      OR: [
+        { userId: otherId, fileSend: { senderId: userId } },
+        { userId, fileSend: { senderId: otherId } },
+      ],
+    },
+    select: { id: true, userId: true, fileSendId: true },
+  });
+  if (pendingSends.length === 0) return;
+  await tx.fileSendRecipient.deleteMany({
+    where: { id: { in: pendingSends.map((row) => row.id) } },
+  });
+  for (const row of pendingSends) {
+    await tx.notification.deleteMany({
+      where: {
+        userId: row.userId,
+        type: "file_sent",
+        payload: { path: ["fileSendId"], equals: row.fileSendId },
+      },
+    });
+  }
 }
 
 /**

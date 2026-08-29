@@ -52,14 +52,22 @@ describe("GET /notifications (fake auth = alice)", () => {
     }
   });
 
+  // "Live" means a live SHARE, not merely a live canyon (APIR-012/PRIV-103).
+  // This fixture used to own the canyon as ALICE and create no CanyonShare at
+  // all — an impossible state that only resolved because the old read-time
+  // fallback checked canyon existence. Bob owns it and shares it, as the
+  // notification claims.
   it("resolves canyonName and sharedByUsername for a live canyon_shared notification", async () => {
     const canyon = await prisma.canyon.create({
       data: {
-        ownerId: ALICE_ID,
+        ownerId: BOB_ID,
         name: "CH-002 notification canyon",
         latitude: -33.7,
         longitude: 150.3,
       },
+    });
+    const share = await prisma.canyonShare.create({
+      data: { canyonId: canyon.id, sharedById: BOB_ID, sharedWithId: ALICE_ID },
     });
     const notification = await prisma.notification.create({
       data: {
@@ -76,8 +84,18 @@ describe("GET /notifications (fake auth = alice)", () => {
       expect(found).toBeDefined();
       expect(found.payload.canyonName).toBe("CH-002 notification canyon");
       expect(found.payload.sharedByUsername).toBe("bob");
+
+      // The other half of the same rule: revoke the share, leave the canyon
+      // alive, and the name must stop resolving.
+      await prisma.canyonShare.delete({ where: { id: share.id } });
+      const after = await request(API_URL).get("/notifications").set(AUTH);
+      expect(after.status).toBe(200);
+      expect(
+        after.body.some((n: { id: string }) => n.id === notification.id),
+      ).toBe(false);
     } finally {
       await prisma.notification.deleteMany({ where: { id: notification.id } });
+      await prisma.canyonShare.deleteMany({ where: { canyonId: canyon.id } });
       await prisma.canyon.delete({ where: { id: canyon.id } });
     }
   });
@@ -141,7 +159,10 @@ describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth
     expect(deleteRes.status).toBe(404);
   });
 
-  it("403s when the notification belongs to another user", async () => {
+  // 404, not 403 (APIR-013/PRIV-105): a foreign notification id must be
+  // indistinguishable from one that does not exist, or the status confirms the
+  // id is real to someone who cannot see it.
+  it("404s when the notification belongs to another user", async () => {
     const bobNotification = await prisma.notification.create({
       data: {
         userId: BOB_ID,
@@ -154,12 +175,12 @@ describe("PATCH /notifications/:id/read and DELETE /notifications/:id (fake auth
       const patchRes = await request(API_URL)
         .patch(`/notifications/${bobNotification.id}/read`)
         .set(AUTH);
-      expect(patchRes.status).toBe(403);
+      expect(patchRes.status).toBe(404);
 
       const deleteRes = await request(API_URL)
         .delete(`/notifications/${bobNotification.id}`)
         .set(AUTH);
-      expect(deleteRes.status).toBe(403);
+      expect(deleteRes.status).toBe(404);
 
       // Confirm bob's notification was untouched.
       const after = await prisma.notification.findUnique({ where: { id: bobNotification.id } });

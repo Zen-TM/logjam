@@ -37,6 +37,7 @@ import {
   deleteCanyon,
   getCanyonDetail,
   updateUserPreferences,
+  isHttpUrl,
 } from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
@@ -454,6 +455,17 @@ function CanyonDialog({
       if (customFieldInvalid) {
         setShowFieldErrors(true);
         setError("Please fix the highlighted fields.");
+        setSaving(false);
+        return;
+      }
+
+      // FEUI-012: reject non-http(s) source URLs (javascript:, data:, ...)
+      // rather than storing them verbatim to later render as a clickable href.
+      const invalidSourceUrl = sources.some(
+        (s) => s.url.trim() && !isHttpUrl(s.url.trim()),
+      );
+      if (invalidSourceUrl) {
+        setError("Source URLs must start with http:// or https://.");
         setSaving(false);
         return;
       }

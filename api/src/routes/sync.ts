@@ -50,6 +50,7 @@ import {
   serializeTrip,
   tripCanyonsInclude,
 } from "./tripLogsGlobal";
+import { validateCanyonTextFields } from "./canyons";
 import { deleteCanyonsCascade, deleteTripsCascade } from "../lib/bulkDelete";
 import {
   directShareRevokeTombstones,
@@ -855,9 +856,13 @@ async function applyCanyonOp(userId: string, op: PushOp): Promise<PushOpResult> 
 
   const fields = op.fields ?? {};
   assertKnownFields(fields, CANYON_FIELDS);
-  const validationError = validateCanyonPayload(fields, {
-    requireCoords: op.op === "create",
-  });
+  // Same two validators the REST twins run, in the same order — REST/sync
+  // divergence here is the SEC-001 failure mode, and a mistyped free-text field
+  // that reaches Prisma throws a non-AppError, which the per-op catch re-throws
+  // and 500s the WHOLE batch (a poison pill that never drains).
+  const validationError =
+    validateCanyonPayload(fields, { requireCoords: op.op === "create" }) ??
+    validateCanyonTextFields(fields);
   if (validationError) throw new AppError(400, validationError);
 
   if (op.op === "create") {

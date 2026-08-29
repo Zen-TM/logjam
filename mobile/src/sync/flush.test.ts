@@ -32,6 +32,9 @@ let rows: Row[] = [];
 /** Op ids the fake server refuses at the envelope level (one bad op → 400). */
 let poison = new Set<string>();
 let pushCalls: string[][] = [];
+/** Miscount the fake server applies to its results array (+1 = one extra
+ * result, -1 = one missing). MSD-005. */
+let resultCountDelta = 0;
 /** Media ops whose runner throws (a file the OS reclaimed). */
 let deadMedia = new Set<number>();
 let mediaRuns: number[] = [];
@@ -115,6 +118,9 @@ vi.mock("./syncDb", () => ({
   withSyncTransaction: async (_db: unknown, task: () => Promise<void>) => task(),
 }));
 vi.mock("./mediaSyncBridge", () => ({ scheduleMutationSync: () => {} }));
+vi.mock("expo-file-system/legacy", () => ({
+  deleteAsync: () => Promise.resolve(),
+}));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "00000000-0000-4000-8000-000000000000" }));
 vi.mock("./mirrorStore", () => ({
   upsertCanyon: () => Promise.resolve(),
@@ -137,9 +143,13 @@ vi.mock("../api/apiFetch", () => ({
     if (opIds.some((opId) => poison.has(opId))) {
       return Promise.reject(Object.assign(new Error("bad op"), { status: 400 }));
     }
-    return Promise.resolve({
-      results: opIds.map((opId) => ({ opId, status: "applied" })),
-    });
+    const results = opIds.map((opId) => ({ opId, status: "applied" }));
+    if (resultCountDelta > 0) {
+      results.push({ opId: "op-ghost", status: "applied" });
+    } else if (resultCountDelta < 0) {
+      results.pop();
+    }
+    return Promise.resolve({ results });
   },
 }));
 
@@ -151,6 +161,28 @@ beforeEach(() => {
   pushCalls = [];
   deadMedia = new Set();
   mediaRuns = [];
+  resultCountDelta = 0;
+});
+
+describe("push result correlation", () => {
+  // Positional results, one per op. A count mismatch is not a per-op verdict
+  // either way: an EXTRA result used to index past the batch and crash with an
+  // opaque TypeError ("Couldn't sync"), and a SHORT one left the trailing ops
+  // inflight with attempts already bumped, recovered only by the next cycle's
+  // blanket reset.
+  it("refuses a reply with more results than ops", async () => {
+    rows = [pushRow(1), pushRow(2)];
+    resultCountDelta = 1;
+    await expect(flushOutbox()).rejects.toThrow("correlation mismatch");
+  });
+
+  it("refuses a reply with fewer results than ops", async () => {
+    rows = [pushRow(1), pushRow(2)];
+    resultCountDelta = -1;
+    await expect(flushOutbox()).rejects.toThrow("correlation mismatch");
+    // Nothing was treated as applied on the strength of a partial reply.
+    expect(rows.map((row) => row.seq)).toEqual([1, 2]);
+  });
 });
 
 describe("media pass", () => {

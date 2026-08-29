@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { API_URL, as, CAROL_SUB } from "./_actors";
+import { API_URL, as, CAROL_SUB, NONEXISTENT_ID } from "./_actors";
 
 // Integration coverage for POST /trips/bulk (routes/tripLogsBulk.ts), previously
 // untested (CH-003, 2026-06-22). Focus: the SEC-001 row-cap guards (empty 400 /
@@ -205,5 +205,75 @@ describe("POST /trips/bulk (import, fake auth = alice)", () => {
       await deleteTripsBySearch(name);
       await request(API_URL).delete(`/canyons/${canyonId}`).set(AUTH);
     }
+  });
+
+  // APIR-003: POST /trips and PATCH /trips/:id force the `canyoning` tag onto
+  // any canyon-linked trip ("maintained on every write"); the bulk importer
+  // linked canyons without it, so a CSV row with no types imported untagged and
+  // stayed that way until someone re-saved it through PATCH.
+  it("force-tags a canyon-linked imported row as canyoning", async () => {
+    const canyonName = `${TAG}-tag-canyon`;
+    const canyonRes = await request(API_URL)
+      .post("/canyons")
+      .set(AUTH)
+      .send({ name: canyonName, latitude: -33.71, longitude: 150.31 });
+    expect(canyonRes.status).toBe(201);
+    const canyonId = canyonRes.body.id as string;
+    const name = `${TAG}-tag-trip`;
+    try {
+      const res = await request(API_URL)
+        .post("/trips/bulk")
+        .set(AUTH)
+        .send({
+          importBatchId: `${name}-batch`,
+          trips: [
+            // No `types` at all — the tag must be added by the server.
+            { canyonId, sourceCanyonName: canyonName, date: "2024-07-03", displayName: name },
+          ],
+        });
+      expect(res.status).toBe(200);
+
+      const list = await request(API_URL).get("/trips").query({ search: name }).set(AUTH);
+      expect(list.body[0].types).toContain("canyoning");
+    } finally {
+      await deleteTripsBySearch(name);
+      await request(API_URL).delete(`/canyons/${canyonId}`).set(AUTH);
+    }
+  });
+
+  // APIR-004: displayName went in verbatim, so an over-long CSV field produced
+  // a row PATCH /trips/:id (which caps at TRIP_NAME_MAX_LENGTH) could never
+  // save again.
+  it("rejects an over-long displayName per row instead of storing it", async () => {
+    const name = `${TAG}-longname`;
+    const res = await request(API_URL)
+      .post("/trips/bulk")
+      .set(AUTH)
+      .send({
+        importBatchId: `${name}-batch`,
+        trips: [
+          { sourceCanyonName: name, date: "2024-07-04", displayName: "x".repeat(201) },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.imported).toBe(0);
+    expect(res.body.errors?.[0]?.error).toMatch(/at most 200 characters/);
+  });
+
+  // APIR-002: the documented contract is 0 → 400, over cap → 413 (SEC-001);
+  // the delete path answered 400 for both.
+  it("rejects an oversized delete with 413, and an empty one with 400", async () => {
+    const ids = Array.from({ length: 501 }, () => NONEXISTENT_ID);
+    const tooMany = await request(API_URL)
+      .post("/trips/bulk/delete")
+      .set(AUTH)
+      .send({ ids });
+    expect(tooMany.status).toBe(413);
+
+    const empty = await request(API_URL)
+      .post("/trips/bulk/delete")
+      .set(AUTH)
+      .send({ ids: [] });
+    expect(empty.status).toBe(400);
   });
 });

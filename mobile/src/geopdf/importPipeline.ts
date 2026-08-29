@@ -53,6 +53,7 @@ import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
 import { insertArtifact, deleteArtifact } from "../offline/registryDb";
 import { randomId } from "../imports/vectorImports";
 import { stageIncomingFile } from "../imports/stagedFile";
+import { downloadFromPresignedUrl } from "../api/presignedTransfer";
 import {
   deleteGeoPdfImportRow,
   findGeoPdfImportBySha256,
@@ -372,7 +373,7 @@ export async function importGeoPdfFromUrl(
 ): Promise<GeoPdfImportOutcome> {
   const scratchUri = await scratchFileUri(`geopdf-download-${randomId()}.pdf`);
   try {
-    const result = await FileSystem.downloadAsync(downloadUrl, scratchUri);
+    const result = await downloadFromPresignedUrl(downloadUrl, scratchUri);
     if (result.status !== 200) {
       throw new Error(`GeoPDF download failed (HTTP ${result.status})`);
     }

@@ -428,3 +428,31 @@ describe("GET /trips/:id (acting as carol — spreads the per-user rate-limit bu
     expect(res.status).toBe(404);
   });
 });
+
+// APIR-011: malformed query params reached Prisma as an Invalid Date and came
+// back as a 500 for what is plain bad input (the bulk import path has always
+// rejected unparseable dates with a 400).
+describe("GET /trips — query param validation", () => {
+  it("400s on an unparseable dateFrom/dateTo instead of 500ing", async () => {
+    for (const query of [{ dateFrom: "garbage" }, { dateTo: "2024-13-45x" }]) {
+      const res = await request(API_URL).get("/trips").query(query).set(AUTH);
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("400s on a repeated param that arrives as an array", async () => {
+    const res = await request(API_URL)
+      .get("/trips?dateFrom=2024-01-01&dateFrom=2024-02-01")
+      .set(AUTH);
+    expect(res.status).toBe(400);
+  });
+
+  it("still accepts a well-formed date range", async () => {
+    const res = await request(API_URL)
+      .get("/trips")
+      .query({ dateFrom: "2024-01-01", dateTo: "2024-12-31" })
+      .set(AUTH);
+    expect(res.status).toBe(200);
+  });
+});
+

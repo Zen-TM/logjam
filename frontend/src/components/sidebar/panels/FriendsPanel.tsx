@@ -57,12 +57,24 @@ function FriendsPanel({
       return;
     }
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    // FEUI-008: guards a stale response landing after a newer query's already
+    // replaced it (type "abel" then "abelin" — if "abel"'s GET resolves last,
+    // its results must not overwrite "abelin"'s). Same race class MapSearchBox
+    // guards with an AbortController; `searchUsers`/`apiFetch` don't take a
+    // signal, so this mirrors the cancelled-flag guard used for the same race
+    // in canyonUtils.ts's fetch hooks instead.
+    let cancelled = false;
     searchTimerRef.current = setTimeout(() => {
       searchUsers(friendSearch)
-        .then(setSearchResults)
-        .catch((err) => { console.error(err); toast.error(messageFromError(err, "Couldn't search users.")); });
+        .then((results) => { if (!cancelled) setSearchResults(results); })
+        .catch((err) => {
+          if (cancelled) return;
+          console.error(err);
+          toast.error(messageFromError(err, "Couldn't search users."));
+        });
     }, 300);
     return () => {
+      cancelled = true;
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     };
   }, [friendSearch, toast]);

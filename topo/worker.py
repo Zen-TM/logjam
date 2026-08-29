@@ -26,6 +26,7 @@ Optional environment variables:
 """
 
 import boto3
+import contextlib
 import json
 import logging
 import os
@@ -37,12 +38,16 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote
 
 import psycopg2
 import psycopg2.extras
 from pmtiles.convert import mbtiles_to_pmtiles
 
+from worker_common import (
+    compose_database_url,
+    create_notification,
+    get_user_email,
+)
 from email_send import send_email, wants_email
 
 logging.basicConfig(
@@ -68,41 +73,6 @@ def safe_error_message(e: Exception) -> str:
     if isinstance(e, (OSError, IOError)):
         return "Could not read input LiDAR data. Verify the ZIP contains Elvis DTM files."
     return f"Processing failed. Contact support with job ID {JOB_ID}."
-
-def compose_database_url() -> str:
-    """Compose a Postgres connection string from discrete DB_* env vars.
-
-    Mirrored in export_worker.py — keep both copies in sync. User and
-    password are URL-quoted (safe="") because RDS-generated passwords
-    contain characters like "!" that aren't valid unescaped in a URL.
-    Fails loud, listing missing var NAMES only (never values).
-    """
-    host = os.environ.get("DB_HOST")
-    name = os.environ.get("DB_NAME")
-    user = os.environ.get("DB_USER")
-    password = os.environ.get("DB_PASSWORD")
-    port = os.environ.get("DB_PORT", "5432")
-
-    missing = [
-        var_name
-        for var_name, value in (
-            ("DB_HOST", host),
-            ("DB_NAME", name),
-            ("DB_USER", user),
-            ("DB_PASSWORD", password),
-        )
-        if not value
-    ]
-    if missing:
-        raise RuntimeError(
-            f"Missing required environment variables for database connection: {', '.join(missing)}"
-        )
-
-    return (
-        f"postgresql://{quote(user, safe='')}:{quote(password, safe='')}"
-        f"@{host}:{port}/{name}"
-    )
-
 
 AWS_REGION   = os.environ.get("AWS_REGION", "ap-southeast-2")
 BUCKET       = os.environ["S3_BUCKET_TOPO"]
@@ -345,24 +315,6 @@ def get_job(conn, job_id: str) -> dict:
     return dict(row)
 
 
-def create_notification(conn, user_id: str, notif_type: str, payload: dict):
-    import uuid as _uuid
-    with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO notifications (id, user_id, type, payload, read, created_at) "
-            "VALUES (%s, %s, %s, %s, false, NOW())",
-            (str(_uuid.uuid4()), user_id, notif_type, json.dumps(payload)),
-        )
-    conn.commit()
-
-
-def get_user_email(conn, user_id: str) -> str | None:
-    with conn.cursor() as cur:
-        cur.execute("SELECT email FROM users WHERE id = %s", (user_id,))
-        row = cur.fetchone()
-    return row["email"] if row else None
-
-
 # ── Email ─────────────────────────────────────────────────────────────────────
 
 def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
@@ -413,6 +365,41 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
         "</html>",
     ])
     send_email(to_email, "Topo map ready — Logjam", text_body, html_body)
+
+
+def send_failure_email(to_email: str, job_id: str, error_message: str):
+    """Failure sibling of send_completion_email (APIC-005). Both are gated on the
+    same `topoEmail` preference, which means "finishes or fails" — the export
+    worker's send_completion_email carries ok/error in one function instead;
+    here a separate function keeps the osm-warning branches out of the way."""
+    if not FRONTEND_URL:
+        log.warning("FRONTEND_URL not set — skipping failure email")
+        return
+
+    base = FRONTEND_URL.rstrip("/")
+    open_url = f"{base}/?topoJob={job_id}"
+
+    text_body = "\n".join([
+        "Your topo map job failed.",
+        "",
+        error_message,
+        "",
+        f"Open it in Logjam: {open_url}",
+    ])
+
+    html_body = "\n".join([
+        "<html>",
+        "  <body>",
+        '    <p style="margin:0 0 16px">'
+        f'<img src="{base}/email-logo-lockup.png" alt="Logjam" width="212" '
+        'style="display:block" /></p>',
+        "    <p>Your topo map job failed.</p>",
+        f"    <p><strong>{error_message}</strong></p>",
+        f'    <p><a href="{open_url}">Open it in Logjam</a></p>',
+        "  </body>",
+        "</html>",
+    ])
+    send_email(to_email, "Topo map failed — Logjam", text_body, html_body)
 
 
 # ── Vector tile generation ────────────────────────────────────────────────────
@@ -711,7 +698,9 @@ def process_job(job: dict, tmp: str) -> tuple[list[dict], Path, bool, int, Optio
         # PMTiles for in-app display. Vector layers use the tippecanoe output;
         # raster layers reuse the styled MBTiles.
         pmtiles_source = vector_mbtiles_by_layer.get(name, styled_mbtiles)
-        with sqlite3.connect(str(pmtiles_source)) as _conn:
+        # closing(): sqlite3's own context manager commits but does NOT close,
+        # leaking an fd on a multi-hundred-MB MBTiles per layer (STP-009).
+        with contextlib.closing(sqlite3.connect(str(pmtiles_source))) as _conn:
             _row = _conn.execute("SELECT value FROM metadata WHERE name='maxzoom'").fetchone()
             maxzoom = int(_row[0]) if _row else 18
             tile_count = _conn.execute("SELECT COUNT(*) FROM tiles").fetchone()[0]
@@ -757,6 +746,11 @@ def main():
         conn.close()
         return
 
+    # Set once the `complete` flip has committed. After that point the job's
+    # outputs are referenced by the row and MUST NOT be self-cleaned, however
+    # the post-completion notification/push/email sequence fails (STP-001).
+    completed = False
+
     try:
         with tempfile.TemporaryDirectory() as tmp:
             output_keys, footprint_local, osm_failed, total_output_bytes, pipeline_metrics = process_job(job, tmp)
@@ -797,6 +791,7 @@ def main():
                         "cleaning up outputs and skipping notification/email.")
             delete_s3_prefix_best_effort(f"outputs/{JOB_ID}/")
             return
+        completed = True
 
         log.info(f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded"
                  + (" (OSM features missing — Overpass failed)" if osm_failed else ""))
@@ -817,10 +812,20 @@ def main():
             send_completion_email(email, JOB_ID, output_keys, osm_failed=osm_failed)
 
     except Exception as e:
+        if completed:
+            # The job IS complete and its outputs are live — only the
+            # best-effort notification/push/email tail raised (STP-001).
+            # Never self-clean here: the guarded `failed` write below would
+            # match 0 rows (status is `complete`, not `processing`) and the
+            # 0-rowcount branch would delete the finished job's outputs.
+            log.error(f"Job {JOB_ID} completed but post-completion "
+                      f"notification failed: {e}", exc_info=True)
+            return
         log.error(f"Job {JOB_ID} failed: {e}", exc_info=True)
+        error_text = safe_error_message(e)
         updated = update_status(conn, JOB_ID, "failed",
                                 expected_status="processing",
-                                error_message=safe_error_message(e))
+                                error_message=error_text)
         if updated == 0:
             # Already reaped/deleted — outcome is moot. Clean up any partial
             # uploads and exit 0 so ECS doesn't surface a duplicate failure.
@@ -835,6 +840,18 @@ def main():
         # Best-effort push — generic title + opaque IDs only.
         from push_send import send_push
         send_push(conn, job["user_id"], {"type": "topo_failed", "jobId": JOB_ID})
+
+        # Failure email (APIC-005), gated on the same `topoEmail` preference as
+        # the completion email. Wrapped for the same reason export_worker.py
+        # wraps its notification tail (STP-002): the row is already `failed`, so
+        # a mail problem must not change the job outcome or the exit code.
+        try:
+            email = get_user_email(conn, job["user_id"])
+            if email and wants_email(conn, job["user_id"], "topoEmail"):
+                send_failure_email(email, JOB_ID, error_text)
+        except Exception as mail_error:
+            log.warning(f"Job {JOB_ID}: failure email failed: {mail_error}")
+
         sys.exit(1)
 
     finally:

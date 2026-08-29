@@ -196,7 +196,17 @@ export function useAuth() {
     // root CLAUDE.md). Cleared before the network call so a signOut failure
     // can't strand it.
     clearTripDraft();
-    await amplifySignOut();
+    // amplifySignOut can reject (storage error, network hiccup during global
+    // revoke, an Amplify internal error) — without the try/catch, the
+    // rejection propagates into an onClick handler that ignores promises, so
+    // the reload never happens and the UI is stuck looking signed-in with the
+    // draft already gone (FECO-008). Reload unconditionally either way,
+    // matching RootErrorBoundary.handleSignOut's identical flow.
+    try {
+      await amplifySignOut();
+    } catch (err) {
+      console.error(err);
+    }
     window.location.reload();
   }, []);
 

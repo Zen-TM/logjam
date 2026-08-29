@@ -86,3 +86,24 @@ describe("assertCanSubmit", () => {
     expect(aggregate).not.toHaveBeenCalled();
   });
 });
+
+// APIR-010: a mistyped tileCount used to reach the arithmetic ("5" concatenates
+// rather than adds, so the quota never trips) and then Prisma, as a raw 500.
+describe("assertCanSubmit input validation", () => {
+  it("rejects a non-numeric tileCount with 400 before touching the DB", async () => {
+    for (const bad of ["5", {}, [], 1.5, -1, Number.NaN]) {
+      await expect(
+        assertCanSubmit({ id: "u1", monthlyTileQuota: 40 }, bad as unknown as number),
+      ).rejects.toMatchObject({ statusCode: 400 });
+    }
+    expect(aggregate).not.toHaveBeenCalled();
+  });
+
+  it("skips the quota read for absent or zero tile counts", async () => {
+    await assertCanSubmit({ id: "u1", monthlyTileQuota: 40 }, null);
+    await assertCanSubmit({ id: "u1", monthlyTileQuota: 40 }, undefined);
+    await assertCanSubmit({ id: "u1", monthlyTileQuota: 40 }, 0);
+    expect(aggregate).not.toHaveBeenCalled();
+  });
+});
+

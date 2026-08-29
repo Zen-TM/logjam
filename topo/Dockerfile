@@ -2,7 +2,9 @@
 # Dockerfile – pipeline
 # Base: Ubuntu 24.04 LTS
 # ============================================================
-FROM ubuntu:24.04
+# Pinned by digest so a rebuild is reproducible (tag `24.04` moves on every
+# point release). Refresh deliberately: `docker buildx imagetools inspect ubuntu:24.04`.
+FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 
 LABEL maintainer="pipeline"
 LABEL description="ELVIS LiDAR → Topo MBTiles for Gaia GPS"
@@ -15,6 +17,11 @@ ENV PYTHONUNBUFFERED=1
 # 1. Bootstrap: add UbuntuGIS PPA
 #    PDAL is NOT in Ubuntu 24.04's default apt repos.
 #    UbuntuGIS also provides a more up-to-date GDAL build.
+#    ubuntugis-*unstable* is not a preference: ubuntugis-stable publishes no
+#    `noble` suite at all (verified 2026-08-28 — its dists/noble 404s, while
+#    unstable's carries pdal). Residual reproducibility risk accepted: apt has
+#    no digest pin, so a PPA package bump still changes a rebuild. Snapshot the
+#    PPA or vendor .debs if a bad upstream build ever needs bisecting.
 # ------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
         software-properties-common \
@@ -58,8 +65,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 #     Used by the worker to produce vector tiles for contours
 #     and OSM features before merging into master PMTiles.
 # ------------------------------------------------------------
+#     Pinned to a released tag — `main` HEAD would silently change the
+#     vector-tile renderer on every rebuild with nothing to bisect.
+ARG TIPPECANOE_VERSION=2.79.0
 RUN mkdir -p /tmp/tippecanoe \
-    && curl -fsSL https://github.com/felt/tippecanoe/archive/refs/heads/main.tar.gz | tar -xz -C /tmp/tippecanoe --strip-components=1 \
+    && curl -fsSL https://github.com/felt/tippecanoe/archive/refs/tags/${TIPPECANOE_VERSION}.tar.gz | tar -xz -C /tmp/tippecanoe --strip-components=1 \
     && cd /tmp/tippecanoe \
     && make -j$(nproc) \
     && make install \
@@ -89,6 +99,8 @@ COPY worker.py /app/worker.py
 COPY pipeline.py /app/pipeline.py
 COPY export_worker.py /app/export_worker.py
 COPY email_send.py /app/email_send.py
+COPY push_send.py /app/push_send.py
+COPY worker_common.py /app/worker_common.py
 COPY renderers/ /app/renderers/
 COPY icons/ /app/icons/
 

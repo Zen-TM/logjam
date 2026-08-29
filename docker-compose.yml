@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: logjam
       POSTGRES_PASSWORD: logjam
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -30,7 +30,7 @@ services:
       # `postgres` and `ministack` by name. Must match the compose network below.
       DOCKER_NETWORK: logjam-local
     ports:
-      - "4566:4566"
+      - "127.0.0.1:4566:4566"
     volumes:
       - ministack-data:/var/lib/ministack
       # Required for ECS RunTask to spawn worker containers (Docker-out-of-Docker).

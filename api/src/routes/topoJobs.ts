@@ -39,6 +39,8 @@ const router = Router();
 
 const env = getEnv();
 const TOPO_BUCKET = env.S3_BUCKET_TOPO ?? "";
+/** A job's user-facing label. Same ceiling canyon names use. */
+export const TOPO_JOB_NAME_MAX_LENGTH = 200;
 
 // ── One job view, three surfaces ──────────────────────────────────────────
 //
@@ -170,6 +172,20 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
     const { tileCount, jobName, settings, autoExport } = req.body;
+
+    // Same class as APIR-010, on a route no finding named: a non-string
+    // jobName reached Prisma and came back as a raw 500. The name is a user
+    // label, so cap it alongside the type check rather than storing whatever
+    // fits in the body budget.
+    if (jobName !== undefined && jobName !== null) {
+      if (typeof jobName !== "string")
+        throw new AppError(400, "jobName must be a string");
+      if (jobName.length > TOPO_JOB_NAME_MAX_LENGTH)
+        throw new AppError(
+          400,
+          `jobName must be at most ${TOPO_JOB_NAME_MAX_LENGTH} characters`,
+        );
+    }
 
     await assertCanSubmit(user, tileCount);
     await assertHasStorageQuota(user.id);

@@ -36,6 +36,19 @@ export function tripTitle(trip: TTripLog): string {
   );
 }
 
+// Only http(s) URLs are safe to render as a clickable <a href> or store as a
+// canyon source link — any other scheme (javascript:, data:, vbscript:, ...)
+// is an XSS/hygiene sink. FEUI-012. Single source for both the save-time
+// reject in CanyonDialog and the render-time guard in CanyonDetailPanel.
+export function isHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export type TFriend = {
   id: string;
   username: string;
@@ -361,12 +374,17 @@ export function useCanyonTracks(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
+    // Guards against an earlier in-flight request landing after a newer one
+    // (e.g. a write bumps refetch mid-request) and overwriting fresh state
+    // with stale data — mirrors useTopoExports (FECO-001).
+    let cancelled = false;
     getCanyonTracks()
-      .then(setTracks)
+      .then((data) => { if (!cancelled) setTracks(data); })
       .catch((err) => {
         console.error(err);
-        setError(messageFromError(err, "Couldn't load canyon tracks."));
+        if (!cancelled) setError(messageFromError(err, "Couldn't load canyon tracks."));
       });
+    return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -444,13 +462,16 @@ export function useWaypoints(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     setLoading(true);
+    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    let cancelled = false;
     getWaypoints()
-      .then(setWaypoints)
+      .then((data) => { if (!cancelled) setWaypoints(data); })
       .catch((err) => {
         console.error(err);
-        setError(messageFromError(err, "Couldn't load waypoints."));
+        if (!cancelled) setError(messageFromError(err, "Couldn't load waypoints."));
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -582,12 +603,15 @@ export function useRoutes(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
+    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    let cancelled = false;
     getRoutes()
-      .then(setRoutes)
+      .then((data) => { if (!cancelled) setRoutes(data); })
       .catch((err) => {
         console.error(err);
-        setError(messageFromError(err, "Couldn't load routes."));
+        if (!cancelled) setError(messageFromError(err, "Couldn't load routes."));
       });
+    return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -607,16 +631,21 @@ export function useCanyons(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     setLoading(true);
+    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    let cancelled = false;
     apiFetchWithTotal<TCanyon[]>("/canyons")
       .then(({ data, total }) => {
+        if (cancelled) return;
         setCanyons(data);
         setTotal(total);
       })
-      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load canyons.")); })
+      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load canyons.")); })
       .finally(() => {
+        if (cancelled) return;
         setLoading(false);
         setLoaded(true);
       });
+    return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -633,10 +662,13 @@ export function useSharedCanyons(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     setLoading(true);
+    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    let cancelled = false;
     apiFetch<TCanyon[]>("/canyons/shared")
-      .then(setCanyons)
-      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load shared canyons.")); })
-      .finally(() => setLoading(false));
+      .then((data) => { if (!cancelled) setCanyons(data); })
+      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load shared canyons.")); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -930,13 +962,17 @@ export function useTripLogs(enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     setLoading(true);
+    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    let cancelled = false;
     apiFetchWithTotal<TTripLog[]>("/trips")
       .then(({ data, total }) => {
+        if (cancelled) return;
         setTripLogs(data);
         setTotal(total);
       })
-      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load trip logs.")); })
-      .finally(() => setLoading(false));
+      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load trip logs.")); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -1123,12 +1159,15 @@ export function useFriends(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
+    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    let cancelled = false;
     getFriends()
-      .then(setFriends)
-      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load friends.")); });
+      .then((data) => { if (!cancelled) setFriends(data); })
+      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load friends.")); });
     getFriendRequests()
-      .then(setRequests)
-      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load friend requests.")); });
+      .then((data) => { if (!cancelled) setRequests(data); })
+      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load friend requests.")); });
+    return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
@@ -1308,12 +1347,15 @@ export function useNotifications(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled) return;
+    // Guards a stale in-flight response landing after a newer one (FECO-001).
+    let cancelled = false;
     apiFetchWithTotal<TNotification[]>("/notifications")
-      .then(({ data, total }) => { setNotifications(data); setTotal(total); })
-      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load notifications.")); });
+      .then(({ data, total }) => { if (!cancelled) { setNotifications(data); setTotal(total); } })
+      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load notifications.")); });
     getUnreadCount()
-      .then((r) => setUnreadCount(r.count))
-      .catch((err) => { console.error(err); setError(messageFromError(err, "Couldn't load notifications.")); });
+      .then((r) => { if (!cancelled) setUnreadCount(r.count); })
+      .catch((err) => { console.error(err); if (!cancelled) setError(messageFromError(err, "Couldn't load notifications.")); });
+    return () => { cancelled = true; };
   }, [enabled, fetchCount]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);

@@ -20,6 +20,13 @@ TEMP_DB="logjam_snapshot_sanitize"
 
 mkdir -p "$SNAPSHOTS_DIR"
 
+# INF-011: set -e means a failure between the dump and the final `rm` below
+# (e.g. the sanitize psql block) previously left the raw, unsanitized prod
+# dump (real emails, Cognito ids) sitting unencrypted on disk indefinitely.
+# Trap covers every exit path, not just the happy one; -f makes it a no-op
+# once the happy-path rm below already removed the file.
+trap 'rm -f "$SNAPSHOTS_DIR/raw.sql"' EXIT
+
 echo "Dumping prod DB..."
 pg_dump --no-owner --no-acl -h "$DB_HOST_PROD" -p "$DB_PORT_PROD" -U "$DB_USER_PROD" "$DB_NAME_PROD" > "$SNAPSHOTS_DIR/raw.sql"
 

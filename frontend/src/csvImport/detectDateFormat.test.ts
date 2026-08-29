@@ -14,13 +14,14 @@ describe("parseWithFormat", () => {
     expect(parseWithFormat("2023/06/15", "DD/MM/YYYY")).toBeNull();
   });
 
-  it("rejects an impossible date (Feb 30 rolls over → reject)", () => {
-    // JS Date rolls 30/02 into March; the regex matches but the rolled date's
-    // day no longer equals input — parseWithFormat returns a Date, so verify
-    // the rollover is observable rather than silently wrong.
-    const d = parseWithFormat("30/02/2023", "DD/MM/YYYY");
-    expect(d).not.toBeNull();
-    expect(d!.getDate()).not.toBe(30); // rolled into March
+  it("rejects an impossible date instead of letting it roll forward (FECO-007)", () => {
+    // JS Date silently normalizes 30/02 into Mar 2 rather than failing — the
+    // regex matches, but the round-trip check must catch the rollover and
+    // return null instead of a wrong-but-valid-looking Date.
+    expect(parseWithFormat("30/02/2023", "DD/MM/YYYY")).toBeNull();
+    expect(parseWithFormat("31/04/2023", "DD/MM/YYYY")).toBeNull(); // April has 30 days
+    expect(parseWithFormat("29/02/2023", "DD/MM/YYYY")).toBeNull(); // 2023 not a leap year
+    expect(parseWithFormat("29/02/2024", "DD/MM/YYYY")).not.toBeNull(); // 2024 is a leap year
   });
 
   it("folds two-digit years", () => {

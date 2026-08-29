@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SYNC_PUSH_OPS_BY_ENTITY } from "@logjam/shared";
 
+import { tableSchema } from "./mirrorSchema";
+
 // The offline write path for routes: a route drawn with no signal has to land
 // in the mirror (so it draws immediately) AND in the outbox (so it reaches the
 // server later). Both halves in one transaction, or the map shows a route that
@@ -39,6 +41,9 @@ vi.mock("./syncDb", () => ({
 // react-native (Flow syntax vitest can't parse) — stub the module, not the
 // engine behind it.
 vi.mock("./mediaSyncBridge", () => ({ scheduleMutationSync: () => {} }));
+vi.mock("expo-file-system/legacy", () => ({
+  deleteAsync: () => Promise.resolve(),
+}));
 vi.mock("expo-crypto", () => ({
   randomUUID: () =>
     "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -182,5 +187,38 @@ describe("UPDATE_TARGETS", () => {
 
   it("has nothing to revert for a notification markRead", () => {
     expect(UPDATE_TARGETS.notification).toBeNull();
+  });
+});
+
+describe("UPDATE_TARGETS column maps vs the schema declaration", () => {
+  // mirrorSchema.test.ts scans hand-written SQL literals and deliberately
+  // EXCLUDES anything containing `${` — but `enqueueUpdate` builds its whole
+  // UPDATE by interpolating the column out of these maps, so none of the four
+  // was ever checked against mirrorSchema.ts. A rename or a typo surfaced only
+  // at runtime, on the first edit of that one field, on a device. Same
+  // parallel-list pair, same medicine.
+  it("names only columns the target table declares", () => {
+    const offences: string[] = [];
+    for (const [entity, target] of Object.entries(UPDATE_TARGETS)) {
+      if (target === null) continue;
+      const schema = tableSchema(target.table);
+      expect(schema, `${entity} → ${target.table}`).toBeDefined();
+      for (const [field, spec] of Object.entries(target.columns)) {
+        const column = typeof spec === "string" ? spec : spec.column;
+        if (!(column in schema!.columns)) {
+          offences.push(`${entity}.${field} → ${target.table}.${column}`);
+        }
+      }
+    }
+    expect(offences).toEqual([]);
+  });
+
+  it("actually inspects every map", () => {
+    // A totality guard that silently iterated nothing would pass forever.
+    const mapped = Object.values(UPDATE_TARGETS).filter((target) => target !== null);
+    expect(mapped).toHaveLength(4);
+    for (const target of mapped) {
+      expect(Object.keys(target!.columns).length).toBeGreaterThan(0);
+    }
   });
 });
