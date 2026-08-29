@@ -13,26 +13,23 @@
 // in the same app-private, backup-excluded store as basemap regions, behind
 // the app lock (any artifact row arms it). Progress/errors are surfaced as
 // state words and counts — never paths or job/layer labels.
+import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
 
 import type { TopoLayerFormat, TopoLayerKey } from "@logjam/shared";
 
 import type { MapArtifact } from "../map/sourceResolver";
-import { insertArtifact } from "./registryDb";
+import { insertArtifact, sweepOrphanFiles } from "./registryDb";
 import { assertSpaceFor, hasSpaceFor } from "./freeSpace";
 import { OVERLAY_DIR } from "./localStores";
 
 const PMTILES_MAGIC = "PMTiles";
 
-function randomId(): string {
-  // uuid-shaped id from the polyfilled crypto.getRandomValues (index.ts).
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
+// MOT-002: ids this process is mid-download on, so the orphan sweep below
+// never deletes a sibling download's file out from under it — a registry row
+// only lands on success, so without this a second concurrent
+// `downloadTopoOverlay` call would see the first's file as unowned.
+const inFlightIds = new Set<string>();
 
 export type OverlayDownloadProgress = {
   bytesDone: number;
@@ -56,8 +53,17 @@ export async function downloadTopoOverlay(
 ): Promise<MapArtifact> {
   const dir = OVERLAY_DIR;
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-  const id = randomId();
+  // MOT-002: a killed app leaves a stray `.pmtiles` with no registry row and
+  // no resumable state — sweep those before minting this run's own file, so
+  // orphans from a past kill don't accumulate indefinitely (nothing else
+  // walks this directory).
+  await sweepOrphanFiles(dir, ".pmtiles", inFlightIds).catch(() => {});
+  // MOT-010: this was a second hand-rolled UUIDv4 minter beside
+  // imports/vectorImports.ts's — expo-crypto is already an installed
+  // dependency, and mediaUpload.ts already mints ids the same way.
+  const id = Crypto.randomUUID();
   const fileUri = `${dir}${id}.pmtiles`;
+  inFlightIds.add(id);
 
   let expectedBytes = 0;
   // An overlay bundle's size is only knowable from the transfer itself (the
@@ -134,5 +140,7 @@ export async function downloadTopoOverlay(
   } catch (err) {
     await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => {});
     throw err;
+  } finally {
+    inFlightIds.delete(id);
   }
 }

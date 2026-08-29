@@ -27,6 +27,7 @@ import {
 import type { MapArtifact } from "../map/sourceResolver";
 
 import { REGION_DIR } from "./localStores";
+import { sweepOrphanFiles } from "./registryDb";
 
 /** expo-sqlite's `directory` argument is a plain path, not a file:// URI. */
 const REGION_DIR_PATH = REGION_DIR.replace(/^file:\/\//, "");
@@ -366,6 +367,11 @@ export async function listUnfinishedRegions(
 ): Promise<UnfinishedRegion[]> {
   const dir = await FileSystem.getInfoAsync(REGION_DIR);
   if (!dir.exists) return [];
+  // MOT-002: the single-file Protomaps clip (regionDownloads.ts) writes a
+  // `.pmtiles` here with no checkpoint of its own — an app kill mid-transfer
+  // leaves it with nothing to resume into, unlike the MBTiles below. This is
+  // the one place that already walks this directory on every Saved-tab open.
+  await sweepOrphanFiles(REGION_DIR, ".pmtiles", liveIds);
   const names = await FileSystem.readDirectoryAsync(REGION_DIR);
   const unfinished: UnfinishedRegion[] = [];
   for (const name of names) {

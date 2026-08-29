@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { connectionAllowsMetered, isExpensive } from "./networkPolicy";
+import { readPref } from "../prefsDb";
+import { connectionAllowsMetered, isExpensive, isMeteredAllowed } from "./networkPolicy";
 
 // The rule under test is pure; its module's two native neighbours are not.
 vi.mock("@react-native-community/netinfo", () => ({
@@ -56,5 +57,24 @@ describe("connectionAllowsMetered", () => {
     expect(
       connectionAllowsMetered({ isConnected: true, type: "ethernet" }, false),
     ).toBe(true);
+  });
+});
+
+describe("isMeteredAllowed", () => {
+  // MOT-006: media uploads (up to 30 MB an image, 500 MB a video) got the
+  // same "allowed on mobile data by default" treatment as a few kilobytes of
+  // sync JSON. Its default has to sit with its actually-large siblings, not
+  // with sync.
+  it("defaults every job the same way its cost class always has", () => {
+    vi.mocked(readPref).mockReturnValue(null);
+    expect(isMeteredAllowed("sync")).toBe(true);
+    expect(isMeteredAllowed("geoPdfDownload")).toBe(false);
+    expect(isMeteredAllowed("topoDownload")).toBe(false);
+    expect(isMeteredAllowed("mediaUpload")).toBe(false);
+  });
+
+  it("honours an explicit opt-in for the new job like every other one", () => {
+    vi.mocked(readPref).mockReturnValue("on");
+    expect(isMeteredAllowed("mediaUpload")).toBe(true);
   });
 });

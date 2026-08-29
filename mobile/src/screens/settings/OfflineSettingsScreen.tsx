@@ -67,6 +67,15 @@ const METERED_ROWS: {
     title: "Syncing trips and canyons",
     subtitle: "Usually a few kilobytes.",
   },
+  // MOT-006: media PUTs (up to 30 MB an image, 500 MB a video) used to ride
+  // the `sync` allowance above, sized for a few kilobytes of JSON. No
+  // `needs`: an attach isn't gated by either auto-download switch — it
+  // happens whenever the user attaches something.
+  {
+    job: "mediaUpload",
+    title: "Uploading photos and videos",
+    subtitle: "Up to 500 MB per video.",
+  },
 ];
 
 export function OfflineSettingsScreen({
@@ -94,6 +103,7 @@ export function OfflineSettingsScreen({
     geoPdfDownload: isMeteredAllowed("geoPdfDownload"),
     topoDownload: isMeteredAllowed("topoDownload"),
     sync: isMeteredAllowed("sync"),
+    mediaUpload: isMeteredAllowed("mediaUpload"),
   }));
 
   return (

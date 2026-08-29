@@ -36,6 +36,10 @@ vi.mock("./mediaSyncBridge", () => ({ scheduleMutationSync: () => {} }));
 // platform-specific roots — the constant is all this test needs.
 vi.mock("../offline/localStores", () => ({ MEDIA_CACHE_DIR: "file:///cache/" }));
 vi.mock("../api/apiFetch", () => ({ apiFetch: () => Promise.resolve() }));
+// MOT-006: mediaUpload.ts now imports networkPolicy.ts (NetInfo + prefsDb,
+// both native) for the metered-upload gate; deleteMediaLocal never reaches
+// it, so a bare stand-in is enough.
+vi.mock("../offline/networkPolicy", () => ({ canRunNow: () => Promise.resolve(true) }));
 vi.mock("expo-image-manipulator", () => ({ manipulateAsync: () => {}, SaveFormat: {} }));
 vi.mock("expo-video-thumbnails", () => ({ getThumbnailAsync: () => {} }));
 vi.mock("expo-crypto", () => ({

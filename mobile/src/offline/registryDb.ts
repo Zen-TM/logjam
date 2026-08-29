@@ -6,6 +6,7 @@
 // in app-private storage (expo-sqlite's default dir, under the app sandbox,
 // covered by allowBackup=false), is surfaced only behind the Stage 4 app
 // lock, and its contents must never reach logs, telemetry, or crash reports.
+import * as FileSystem from "expo-file-system/legacy";
 import * as SQLite from "expo-sqlite";
 
 import type { MapArtifact } from "../map/sourceResolver";
@@ -210,6 +211,34 @@ export async function setOverlayEnabled(
       "DELETE FROM overlay_enabled WHERE overlayKey = ?",
       overlayKey,
     );
+  }
+}
+
+/**
+ * Delete every file in `dir` ending in `extension` whose id (the filename
+ * minus that extension) has no row in the registry and is not in `liveIds`
+ * (a download this process is writing right now).
+ *
+ * MOT-002: unlike a tile-pyramid MBTiles, which checkpoints IN the file and
+ * is discovered by `listUnfinishedRegions`, a single-file pmtiles writer
+ * (regionDownloads.ts, overlayDownloads.ts) has no resumable state at all —
+ * an app kill mid-transfer leaves it with nothing pointing at it and nothing
+ * to resume into, so the only correct move on finding one is to delete it.
+ */
+export async function sweepOrphanFiles(
+  dir: string,
+  extension: string,
+  liveIds: ReadonlySet<string> = new Set(),
+): Promise<void> {
+  const info = await FileSystem.getInfoAsync(dir);
+  if (!info.exists) return;
+  const known = new Set((await listArtifacts()).map((artifact) => artifact.id));
+  const names = await FileSystem.readDirectoryAsync(dir);
+  for (const name of names) {
+    if (!name.endsWith(extension)) continue;
+    const id = name.slice(0, -extension.length);
+    if (known.has(id) || liveIds.has(id)) continue;
+    await FileSystem.deleteAsync(`${dir}${name}`, { idempotent: true }).catch(() => {});
   }
 }
 

@@ -152,9 +152,16 @@ export function RecordingSheet({
           text: "Discard",
           style: "destructive",
           onPress: () => {
+            // MOT-009: every sibling verb surfaces failure (finish alerts,
+            // pause/resume alerts above) — a discard that silently fails to
+            // delete left the user on a sheet whose subject may still exist,
+            // with nothing telling them it didn't work.
             discardTrackRecording(trackId).then(
               () => onClose(),
-              (err: unknown) => console.error(err),
+              (err: unknown) => {
+                console.error(err);
+                Alert.alert("Recording error", "Couldn't delete the recording.");
+              },
             );
           },
         },

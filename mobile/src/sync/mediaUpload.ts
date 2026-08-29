@@ -23,7 +23,8 @@ import { apiFetch } from "../api/apiFetch";
 import type { MirrorMedia } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
-import { MEDIA_CACHE_DIR as CACHE_DIR } from "../offline/localStores";
+import { MEDIA_CACHE_DIR as CACHE_DIR, WIPED_DIRS } from "../offline/localStores";
+import { canRunNow } from "../offline/networkPolicy";
 
 // Client thumbnail contract (mirrors the web): a downscaled JPEG. The server
 // only bounds thumbnailSizeBytes, not dimensions.
@@ -65,6 +66,22 @@ async function fileSize(uri: string): Promise<number> {
   const info = await FileSystem.getInfoAsync(uri);
   if (!info.exists) throw new Error("Captured file missing");
   return info.size ?? 0;
+}
+
+/**
+ * MOT-005/D6: a picker/camera source is safe (and, since nothing else
+ * declares or wipes it, necessary) to delete once `attachMediaLocal` has
+ * copied it. A path under one of OUR declared stores is not that — it's an
+ * asset whose lifecycle is governed elsewhere, e.g. a vector import's
+ * `sourcePath` reused by `saved/assetActions.ts`'s "attach to canyon" (the
+ * app's only kept original of a lossy GPX/KML derivation — see mobile/
+ * CLAUDE.md "Imports keep their ORIGINAL BYTES"). `localStores.test.ts`
+ * guarantees nothing outside `localStores.ts` names a filesystem root, so
+ * anything NOT under one of these prefixes can only be a native module's own
+ * cache path.
+ */
+function isOwnedStorePath(uri: string): boolean {
+  return WIPED_DIRS.some((dir) => uri.startsWith(dir));
 }
 
 function mintUuid(): string {
@@ -123,6 +140,15 @@ export async function attachMediaLocal(
       if (stillUri !== file.uri) {
         await FileSystem.deleteAsync(stillUri, { idempotent: true }).catch(() => {});
       }
+    }
+
+    // MOT-005/D6: the source has now been fully copied (display) and read
+    // (thumbnail extraction, if any) — delete it unless it's a path this app
+    // already owns the lifecycle of elsewhere (see isOwnedStorePath). A
+    // picker/camera source left alive here lives outside every declared
+    // store and outside the account-transition wipe until now.
+    if (!isOwnedStorePath(file.uri)) {
+      await FileSystem.deleteAsync(file.uri, { idempotent: true }).catch(() => {});
     }
 
     const sizeBytes = await fileSize(displayPath);
@@ -331,6 +357,22 @@ export async function runMediaCreateOp(row: MediaOpRow): Promise<MediaOpOutcome>
   if (!("displayUploadUrl" in presign)) {
     await finalizeConfirmed(db, row.seq, row.entity_id, presign);
     return "done";
+  }
+
+  // MOT-006: presign above is a few hundred bytes of JSON, fine on the
+  // `sync` allowance it always rode; the PUTs below are the actual media
+  // bytes (up to 30 MB an image, 500 MB a video) and answer to their own
+  // metered gate instead. Not allowed right now is not a failure — undo
+  // flush.ts's optimistic attempts bump and leave the op exactly where it
+  // was, so it waits for Wi-Fi like every other large transfer instead of
+  // burning through MEDIA_MAX_ATTEMPTS and parking as a Sync Issue.
+  if (!(await canRunNow("mediaUpload"))) {
+    await db.runAsync(
+      "UPDATE outbox SET state = 'queued', attempts = ? WHERE seq = ?",
+      row.attempts,
+      row.seq,
+    );
+    return "blocked";
   }
 
   // Phase 2: PUT display + thumbnail to S3 (no limiter cost).

@@ -50,6 +50,7 @@ const OFFLINE_TABLES = [
   "vector_import",
   "geo_pdf_import",
   "track_point",
+  "track_point_rejected",
   "track",
   // (No "waypoint": Stage 8 made waypoints a synced entity, so they live in
   // logjam.db and go with `wipeAllSyncData`. The legacy table is not created

@@ -235,9 +235,14 @@ export async function updateTrack(
 
 export async function deleteTrack(id: string): Promise<void> {
   const db = await getOfflineDb();
-  await db.runAsync("DELETE FROM track_point WHERE trackId = ?", id);
-  await db.runAsync("DELETE FROM track_point_rejected WHERE trackId = ?", id);
-  await db.runAsync("DELETE FROM track WHERE id = ?", id);
+  // MOT-003: all three or none — a crash between them used to leave orphaned
+  // track_point / track_point_rejected rows (location history) with no track
+  // row to ever delete them again.
+  await db.withTransactionAsync(async () => {
+    await db.runAsync("DELETE FROM track_point WHERE trackId = ?", id);
+    await db.runAsync("DELETE FROM track_point_rejected WHERE trackId = ?", id);
+    await db.runAsync("DELETE FROM track WHERE id = ?", id);
+  });
   notifyChanged();
 }
 

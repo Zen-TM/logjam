@@ -21,12 +21,16 @@ import NetInfo from "@react-native-community/netinfo";
 import { readPref, writePref } from "../prefsDb";
 
 /** The jobs whose data cost the user can govern. */
-export type MeteredJob = "geoPdfDownload" | "topoDownload" | "sync";
+export type MeteredJob = "geoPdfDownload" | "topoDownload" | "sync" | "mediaUpload";
 
 const KEYS: Record<MeteredJob, string> = {
   geoPdfDownload: "meteredGeoPdfDownload",
   topoDownload: "meteredTopoDownload",
   sync: "meteredSync",
+  // MOT-006: media PUTs ride this op, not `sync` — up to 30 MB an image, 500
+  // MB a video, nothing like the "a few kilobytes of JSON" `sync` was sized
+  // for.
+  mediaUpload: "meteredMediaUpload",
 };
 
 /** Per-job default for "may run on mobile data". */
@@ -34,6 +38,7 @@ const DEFAULTS: Record<MeteredJob, boolean> = {
   geoPdfDownload: false,
   topoDownload: false,
   sync: true,
+  mediaUpload: false,
 };
 
 /** True when this job may run on a metered connection. Synchronous. */
