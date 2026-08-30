@@ -53,12 +53,38 @@ export type NotificationBatch = {
   group: BatchGroup;
   /** Every member currently in the list, in list order. */
   items: TNotification[];
-  /** The one that stands for the batch while it is collapsed. */
+  /**
+   * The member whose POSITION the header takes, and whose payload it reads for
+   * the sender and the timestamp. It is not itself the header row — see
+   * `batchHeaderRow`.
+   */
   representative: TNotification;
   unreadCount: number;
   /** Resolved server-side; null when the sharer no longer resolves. */
   sender: string | null;
 };
+
+/**
+ * The header is its OWN row, not one of the members wearing the group's words.
+ *
+ * It was the representative at first, and that quietly hid an item: expanding
+ * "alice shared 2 items with you" listed only the OTHER one, because the row
+ * that would have named the first was busy being the header. A synthetic id
+ * gives the header a key of its own, so an expanded batch can list every member
+ * underneath it and the group's own row can go on saying only the count.
+ */
+const BATCH_ROW_PREFIX = "batch:";
+
+export function batchHeaderRow(batch: NotificationBatch): TNotification {
+  return { ...batch.representative, id: `${BATCH_ROW_PREFIX}${batch.key}` };
+}
+
+/** The batch a header row stands for, or null for an ordinary notification. */
+export function batchKeyFromRowId(id: string): string | null {
+  return id.startsWith(BATCH_ROW_PREFIX)
+    ? id.slice(BATCH_ROW_PREFIX.length)
+    : null;
+}
 
 function str(payload: Record<string, unknown>, key: string): string | null {
   const value = payload[key];
@@ -126,9 +152,13 @@ export function findNotificationBatches(
 }
 
 /**
- * The list to render: every non-batched row as it was, each batch reduced to
- * its representative, and an EXPANDED batch's other members restored directly
- * beneath it.
+ * The list to render: every non-batched row as it was, each batch replaced by
+ * one header row, and an EXPANDED batch's members restored in full directly
+ * beneath that header.
+ *
+ * "In full" includes the representative: the header is a synthetic row
+ * (`batchHeaderRow`), so nothing is spent being the group's label and every
+ * item is named when the group is opened.
  *
  * Members are pulled out of wherever they sat and re-inserted under the header
  * rather than left in place. Under unread-first sorting they are not adjacent —
@@ -148,15 +178,11 @@ export function collapseBatches(
       rows.push(notification);
       continue;
     }
-    // Only the representative survives; every other member is either dropped
-    // (collapsed) or emitted here as part of the expansion.
+    // The batch takes ONE slot, at the position of its first member; every
+    // other member is either dropped (collapsed) or emitted below.
     if (batch.representative.id !== notification.id) continue;
-    rows.push(notification);
-    if (expandedKeys.has(batch.key)) {
-      for (const member of batch.items) {
-        if (member.id !== batch.representative.id) rows.push(member);
-      }
-    }
+    rows.push(batchHeaderRow(batch));
+    if (expandedKeys.has(batch.key)) rows.push(...batch.items);
   }
   return rows;
 }

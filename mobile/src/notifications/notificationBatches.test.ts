@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TNotification } from "../api/types";
 import {
+  batchKeyFromRowId,
   batchKeyOf,
   batchLabel,
   batchPendingFileSends,
@@ -119,15 +120,30 @@ describe("collapseBatches", () => {
     shared("c", { batchId: BATCH, read: true }),
   ];
   const batches = findNotificationBatches(list);
+  const headerId = `batch:${BATCH}:shares`;
 
-  it("shows one row for a collapsed batch, in the representative's place", () => {
-    expect(collapseBatches(list, batches, new Set()).map((n) => n.id)).toEqual(["a", "x"]);
+  it("shows one HEADER row for a collapsed batch, in its first member's place", () => {
+    expect(collapseBatches(list, batches, new Set()).map((n) => n.id)).toEqual([
+      headerId,
+      "x",
+    ]);
   });
 
-  it("re-inserts an expanded batch's members UNDER the header, not where they sat", () => {
+  it("lists EVERY member when expanded — the header is not one of them", () => {
     const rows = collapseBatches(list, batches, new Set([`${BATCH}:shares`]));
-    // b and c were separated from a by an unrelated row; expanding gathers them.
-    expect(rows.map((n) => n.id)).toEqual(["a", "b", "c", "x"]);
+    // The bug this pins: with the first member doubling as the header, "alice
+    // shared 2 items" expanded to ONE named row and the other item was never
+    // shown. b and c were also separated from a by an unrelated row, so this
+    // asserts the gathering too.
+    expect(rows.map((n) => n.id)).toEqual([headerId, "a", "b", "c", "x"]);
+  });
+
+  it("gives the header an id of its own, so it cannot collide with a member", () => {
+    const rows = collapseBatches(list, batches, new Set([`${BATCH}:shares`]));
+    const ids = rows.map((n) => n.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(batchKeyFromRowId(headerId)).toBe(`${BATCH}:shares`);
+    expect(batchKeyFromRowId("a")).toBeNull();
   });
 
   it("leaves an unbatched list exactly as it was", () => {

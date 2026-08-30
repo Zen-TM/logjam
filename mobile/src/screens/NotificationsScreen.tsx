@@ -55,6 +55,7 @@ import {
   type BatchFileActionProgress,
 } from "../notifications/batchFileAction";
 import {
+  batchKeyFromRowId,
   batchKeyOf,
   batchLabel,
   batchPendingFileSends,
@@ -213,9 +214,8 @@ function expandBatchSelection(
 ): TNotification[] {
   const byId = new Map<string, TNotification>();
   for (const notification of selected) {
-    const key = batchKeyOf(notification);
-    const batch = key ? batches.get(key) : undefined;
-    if (batch && batch.representative.id === notification.id) {
+    const batch = batches.get(batchKeyFromRowId(notification.id) ?? "");
+    if (batch) {
       for (const member of batch.items) byId.set(member.id, member);
     } else {
       byId.set(notification.id, notification);
@@ -696,21 +696,21 @@ export function NotificationsScreen({
 
   const renderItem = useCallback(
     ({ item }: { item: TNotification }) => {
-      const key = batchKeyOf(item);
-      const batch = key ? batches.get(key) : undefined;
-      // Three shapes from one component: the HEADER of a batch (this row is
-      // the batch's representative), a MEMBER of an expanded one (indented,
+      // Three shapes from one component: the HEADER of a batch (a synthetic
+      // row standing for the group), a MEMBER of an expanded one (indented,
       // otherwise an ordinary row), and an ordinary row.
-      const isHeader = batch != null && batch.representative.id === item.id;
+      const headerKey = batchKeyFromRowId(item.id);
+      const batch = headerKey ? (batches.get(headerKey) ?? null) : null;
+      const memberKey = headerKey ? null : batchKeyOf(item);
       return (
         <NotificationRow
           item={item}
-          batch={isHeader ? batch : null}
-          expanded={isHeader ? expandedBatches.has(batch.key) : false}
-          member={batch != null && !isHeader}
+          batch={batch}
+          expanded={batch != null && expandedBatches.has(batch.key)}
+          member={memberKey != null && batches.has(memberKey)}
           onToggleBatch={toggleBatch}
           onBatchAction={requestBatchAction}
-          batchBusy={isHeader && batchBusy?.key === batch.key ? batchBusy : null}
+          batchBusy={batch != null && batchBusy?.key === batch.key ? batchBusy : null}
           onPress={openNotification}
           onAction={requestAction}
           onMenu={openMenu}
@@ -970,6 +970,7 @@ const NotificationRow = memo(function NotificationRow({
   if (batch) {
     return (
       <BatchRow
+        item={item}
         batch={batch}
         expanded={expanded}
         onToggleBatch={onToggleBatch}
@@ -1094,6 +1095,7 @@ const NotificationRow = memo(function NotificationRow({
  * a picked header selects as its whole batch.
  */
 const BatchRow = memo(function BatchRow({
+  item,
   batch,
   expanded,
   onToggleBatch,
@@ -1105,6 +1107,8 @@ const BatchRow = memo(function BatchRow({
   actionsDisabled,
   online,
 }: {
+  /** The SYNTHETIC header row — what the list and the selection key on. */
+  item: TNotification;
   batch: NotificationBatch;
   expanded: boolean;
   onToggleBatch: (key: string) => void;
@@ -1158,9 +1162,9 @@ const BatchRow = memo(function BatchRow({
       }
       selected={selected}
       onPress={() =>
-        selecting ? onToggle(batch.representative) : onToggleBatch(batch.key)
+        selecting ? onToggle(item) : onToggleBatch(batch.key)
       }
-      onLongPress={() => onToggle(batch.representative)}
+      onLongPress={() => onToggle(item)}
       style={batch.unreadCount > 0 || selected ? styles.rowEdgeAccent : styles.rowEdgeIdle}
       footer={
         // Shares have nothing to answer — a grant simply IS — so only a batch of

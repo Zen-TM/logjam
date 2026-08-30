@@ -108,6 +108,14 @@ export type SharePanelTarget =
  */
 const SHARE_BLURB =
   "Friends you pick can view and export it, but can't change it. You can stop sharing anytime.";
+/**
+ * The same promise, about a selection. Not `SHARE_BLURB` with an "s" bolted on
+ * by the caller: the two sentences are read in different places and either one
+ * changing alone is the drift this file exists to stop, so both are written
+ * here, in full, once.
+ */
+const BULK_SHARE_BLURB =
+  "Friends you pick can view and export these, but can't change them. You can stop sharing anytime.";
 const CANYON_SHARE_BLURB =
   "Friends you pick can see this canyon and its notes and photos. Your trip logs stay private. You can stop sharing at anytime.";
 
@@ -355,7 +363,10 @@ export function useSharePanel({
               single thing this whole feature could get wrong: a user who
               believes every one of the 23 can be taken back was misled here. */}
           {plan.shares.length > 0 ? (
-            <PromiseBanner tone="share" text={SHARE_BLURB} />
+            // The PLURAL promise. `SHARE_BLURB` says "view and export it",
+            // which is right above one item and wrong above twenty — the panel
+            // read "…can view and export it" over a list of 23.
+            <PromiseBanner tone="share" text={BULK_SHARE_BLURB} />
           ) : null}
           {plan.copies.length > 0 ? (
             <PromiseBanner
