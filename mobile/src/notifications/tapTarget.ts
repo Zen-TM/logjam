@@ -21,6 +21,11 @@ export type NotificationTapTarget =
  * Below the draft it is just the payload: a canyonId goes to that canyon, and
  * everything else — no id, an id that is not a string, a payload that is not an
  * object — falls back to the inbox, where every notification is listed anyway.
+ *
+ * That fallback carries the two ACTIONABLE kinds, and it is now the right
+ * destination rather than merely a safe one: a friend request and a file send
+ * are answered inline on their inbox row, so the tap lands the user exactly
+ * where the accept/decline is. Neither has a screen of its own to deep-link to.
  */
 export function notificationTapTarget(args: {
   data: unknown;

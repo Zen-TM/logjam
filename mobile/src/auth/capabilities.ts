@@ -37,10 +37,12 @@ export type Capability =
   | "sharing"
   /** Friend list, requests and search. */
   | "friends"
-  /** Files friends sent you. Needs the network — the list and the download
-   *  both live on the server, and there is no cache worth reading offline. */
-  | "receivedFiles"
-  /** Notification inbox. Cache-first once linked, so it reads offline. */
+  /**
+   * Notification inbox. Cache-first once linked, so it READS offline — but the
+   * accept/decline it now carries for friend requests and received files are
+   * online-only and dim themselves per row (NotificationsScreen), which is why
+   * the capability itself does not need a connection.
+   */
   | "inbox"
   /** Server-rendered LiDAR overlays (GET /topo-jobs/completed-overlays). */
   | "lidarOverlays"
@@ -75,7 +77,6 @@ export type UnavailableReason = "needs-account" | "needs-connection";
 const NEEDS_CONNECTION: Record<Capability, boolean> = {
   sharing: true,
   friends: true,
-  receivedFiles: true,
   inbox: false,
   lidarOverlays: true,
   accountGeoPdf: true,
@@ -116,7 +117,6 @@ export function unavailableReasonText(reason: UnavailableReason): string {
 const CAPABILITY_LABEL: Record<Capability, string> = {
   sharing: "Sharing",
   friends: "Friends",
-  receivedFiles: "Received files",
   inbox: "The inbox",
   lidarOverlays: "LiDAR overlays",
   accountGeoPdf: "Account GeoPDFs",

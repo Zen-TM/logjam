@@ -28,6 +28,22 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       return {
         text: `${str(p.sharedByUsername) ?? "Someone"} shared ${str(p.canyonName) ?? "a canyon"} with you`,
       };
+    // The filename is deliberately IN the label: the row carries Accept and
+    // Turn down, and nobody can answer that without knowing what is on offer.
+    // It is user text (routinely a canyon name), resolved from the live send at
+    // read time — rendered here, never logged.
+    case "file_sent":
+      return {
+        text: `${str(p.sentByUsername) ?? "Someone"} sent you ${str(p.filename) ?? "a file"}`,
+        // A send that lapsed before it was saved keeps its row and loses its
+        // buttons, so the row has to say why it can no longer be answered —
+        // otherwise the offer just disappears and the user is left looking for
+        // something a friend told them they had sent. Only ever shown for a
+        // send they never took: an accepted one is dropped server-side.
+        ...(p.fileSendStatus === "expired" && {
+          warning: `This file expired. Ask ${str(p.sentByUsername) ?? "them"} to send it again.`,
+        }),
+      };
     case "topo_complete":
       return {
         text: str(p.jobName) ? `${str(p.jobName)} topo complete` : "LiDAR topo processing complete",
@@ -80,6 +96,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
 
 export type NotificationKind =
   | "share"
+  | "file"
   | "people"
   | "topo"
   | "export"
@@ -94,6 +111,7 @@ export type NotificationMeta = {
 
 const KIND_META: Record<NotificationKind, { icon: NotificationMeta["icon"]; hue: string }> = {
   share: { icon: "share-2", hue: notificationHue.share },
+  file: { icon: "file-plus", hue: notificationHue.file },
   people: { icon: "users", hue: notificationHue.people },
   topo: { icon: "layers", hue: notificationHue.topo },
   export: { icon: "download", hue: notificationHue.export },
@@ -111,6 +129,10 @@ function notificationKind(n: TNotification): NotificationKind {
   switch (n.type) {
     case "canyon_shared":
       return "share";
+    // NOT "share": a sent file is a copy that becomes the recipient's own, and
+    // wearing the share hue is the one confusion the two verbs exist to prevent.
+    case "file_sent":
+      return "file";
     case "friend_request":
     case "friend_request_accepted":
       return "people";

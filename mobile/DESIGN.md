@@ -635,6 +635,21 @@ Never hardcode `rgba(255,255,255,…)`.
 - In-flight work uses `Row`'s `progress` bar on the row itself; a single
   exclusive operation with no row of its own gets one "active operation" `Row`
   pinned above the list, carrying label, percent and cancel.
+- **A row that asks a QUESTION puts its answer in `Row`'s `footer`, inside the
+  card.** The trailing order above runs out at one inline action, and a pair —
+  accept/decline, save/turn down — does not fit it. They go in the footer slot,
+  full width (`Button` `grow`), splitting the card between them. Inside is the
+  point: floating the pair under the card reads as a caption for the row BELOW,
+  and that is not hypothetical — it is how a "Download again" got pressed for a
+  file the user had just turned down. The inbox is the only surface with these
+  today (`screens/NotificationsScreen.tsx`, from
+  `notifications/notificationActions.ts`).
+- **A list a user acts on is ordered by TIME, never re-sorted by the state the
+  action changes.** The notifications endpoint returns unread-first, so
+  answering a row sent it to the bottom of the list mid-gesture and slid the
+  next one under the thumb. The screen sorts by `createdAt` itself. Whatever a
+  row's action changes — read, accepted, resolved — it stays where it was and
+  restyles in place.
 
 ## 6. Sheets, motion, and toasts
 

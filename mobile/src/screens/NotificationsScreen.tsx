@@ -14,21 +14,42 @@
 // canyon share opens the canyon. Previously every tap did nothing but mark the
 // row read, which made the inbox a dead end you had to navigate out of by hand.
 //
+// A notification that ASKS something is answered HERE, in the row (§5's inline
+// action slot): a friend request and a file a friend sent both carry accept /
+// decline under the row. Which pair a notification carries, and every word of
+// the copy, is `notifications/notificationActions.ts` — the screen renders what
+// that returns and knows nothing about friendships or sends. This is what
+// replaced the standalone "Received files" screen (deleted 2026-08-30): an
+// accepted file becomes an ordinary Saved import through the same pipeline any
+// picked file goes through, so it never needed a page of its own.
+//
 // PRIVACY: rows show the server-resolved label (which may include a canyon NAME —
 // user-supplied text, allowed) and a timestamp. Never a coordinate. Tapping
 // through passes an opaque id and the detail screen fetches over the authed API,
 // so a share revoked since the notification lands on the 404-not-403 path.
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
+import { Alert, RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
 import { messageFromError } from "@logjam/shared";
 
+import { acceptFriendRequest, declineFriendRequest } from "../api/friends";
+import { declineFileSend } from "../api/fileSends";
 import type { TNotification } from "../api/types";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
+import { acceptReceivedFile } from "../imports/acceptReceivedFile";
+import { useConnectivity } from "../map/connectivity";
+import {
+  isResolvedElsewhereError,
+  notificationActions,
+  type NotificationActionKind,
+  type NotificationActions,
+  type NotificationInlineAction,
+} from "../notifications/notificationActions";
 import { fontSize, fontWeight, spacing, theme } from "../theme";
 import { enqueueNotificationRead } from "../sync/outbox";
 import {
   fetchAndCacheNotifications,
+  patchCachedPayload,
   patchCachedRead,
   readNotificationsCache,
 } from "../sync/notificationsCache";
@@ -36,14 +57,15 @@ import { onMirrorChanged } from "../sync/syncDb";
 import {
   Button,
   EmptyState,
-  ErrorBanner,
   ErrorState,
   HeroHeader,
   LoadingState,
   Row,
   SegmentedControl,
   StatusPill,
+  Toast,
   type SegmentOption,
+  type ToastMessage,
 } from "../ui";
 import {
   groupNotificationsByDay,
@@ -143,9 +165,40 @@ export function NotificationsScreen({
     [accountState],
   );
   const query = useNotifications(guestBlock !== null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const refetch = query.refetch;
+  // ONE toast channel for every action outcome (DESIGN.md §6): an inline banner
+  // reflows the list under the user's thumb and then lingers with no owner, and
+  // on a scrolled list it lands off screen entirely — which is how accepting a
+  // file came to look like it did nothing.
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const notify = useCallback((text: string, tone: ToastMessage["tone"] = "info") => {
+    setToast({ text, tone, nonce: Date.now() });
+  }, []);
   const [bucket, setBucket] = useState<Bucket>("all");
-  const notifications = query.notifications;
+  // Accept / decline are ONLINE-ONLY and dimmed rather than hidden (§10): the
+  // list itself reads from the cache offline, so the row is there either way
+  // and a vanishing button would read as "this one can't be answered".
+  const online = useConnectivity() === "online";
+  const [busy, setBusy] = useState<{ id: string; kind: NotificationActionKind } | null>(
+    null,
+  );
+  // Rows whose question is answered, hidden before the refetch lands. Every
+  // action here except a file ACCEPT deletes the notification server-side, so
+  // without this the row sits with live buttons until the fetch returns.
+  const [actionedIds, setActionedIds] = useState<Set<string>>(new Set());
+  // NEWEST FIRST, and never re-sorted by read state. The server returns
+  // `read: asc` then `createdAt: desc`, which made acting on a row teleport it
+  // to the bottom of the list mid-gesture — and, because the day grouping runs
+  // over whatever order it is handed, it could also emit "Today" twice with a
+  // week in between. A list ordered by time stays put while you work down it.
+  const notifications = useMemo(
+    () =>
+      query.notifications
+        .filter((n) => !actionedIds.has(n.id))
+        .slice()
+        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+    [actionedIds, query.notifications],
+  );
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const readCount = notifications.length - unreadCount;
@@ -162,21 +215,19 @@ export function NotificationsScreen({
   const markRead = useCallback(
     async (n: TNotification) => {
       if (n.read) return;
-      setActionError(null);
       try {
         await patchCachedRead([n.id]);
         await enqueueNotificationRead([n.id]);
         onUnreadChanged?.();
       } catch (err) {
         console.error(err);
-        setActionError(messageFromError(err, "Couldn't mark that as read."));
+        notify(messageFromError(err, "Couldn't mark that as read."), "error");
       }
     },
-    [onUnreadChanged],
+    [notify, onUnreadChanged],
   );
 
   const markAll = useCallback(async () => {
-    setActionError(null);
     const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id);
     try {
       await patchCachedRead("all");
@@ -184,9 +235,93 @@ export function NotificationsScreen({
       onUnreadChanged?.();
     } catch (err) {
       console.error(err);
-      setActionError(messageFromError(err, "Couldn't mark those as read."));
+      notify(messageFromError(err, "Couldn't mark those as read."), "error");
     }
-  }, [notifications, onUnreadChanged]);
+  }, [notifications, notify, onUnreadChanged]);
+
+  /**
+   * Answer a notification's question, then let the refetch settle the row.
+   *
+   * Which call runs is the descriptor's `type`; nothing here knows what a
+   * friendship or a send IS beyond the id to pass. Only a file accept leaves
+   * the notification alive (as the "Download again" retry — the download URL
+   * is issued before the bytes land); the other three are purged server-side,
+   * so the row is hidden the moment the call succeeds.
+   */
+  const runAction = useCallback(
+    async (
+      n: TNotification,
+      target: NotificationActions,
+      action: NotificationInlineAction,
+    ) => {
+      setBusy({ id: n.id, kind: action.kind });
+      const survives = target.type === "file_sent" && action.kind === "accept";
+      const clear = () => setActionedIds((prev) => new Set([...prev, n.id]));
+      try {
+        if (target.type === "friend_request") {
+          await (action.kind === "accept" ? acceptFriendRequest : declineFriendRequest)(
+            target.targetId,
+          );
+        } else if (action.kind === "accept") {
+          await acceptReceivedFile(target.targetId, target.sender);
+        } else {
+          await declineFileSend(target.targetId);
+        }
+        if (survives) {
+          // Answering a notification IS reading it. Both patches go to the
+          // CACHE and there is deliberately no refetch: `GET /notifications` is
+          // the authority on `read`, so re-fetching here raced the outbox push
+          // and wrote `read: false` straight back over the mark-read. The row
+          // now settles in place — same position, "Saved", no longer New.
+          await patchCachedPayload(n.id, { fileSendStatus: "accepted" });
+          await markRead(n);
+        } else {
+          // The other three are purged server-side, so there is no row left to
+          // mark read — and queueing one for a deleted notification would park
+          // a 404 on the sync issues screen. Hiding it drops it out of the
+          // unread count immediately, which is the visible half anyway.
+          clear();
+          onUnreadChanged?.();
+          refetch();
+        }
+        notify(action.success);
+      } catch (err) {
+        console.error(err);
+        notify(messageFromError(err, action.failure), "error");
+        if (isResolvedElsewhereError(err)) {
+          // Answered somewhere else (the Friends screen, the web, another
+          // device), or the send is gone. The buttons are dead rather than
+          // retryable, so clear the row like a success would instead of
+          // restoring live buttons that will only fail again.
+          clear();
+          onUnreadChanged?.();
+          refetch();
+        }
+      } finally {
+        setBusy(null);
+      }
+    },
+    [markRead, notify, onUnreadChanged, refetch],
+  );
+
+  /** A destructive action is a dialog first, and the dialog carries the why (§7). */
+  const requestAction = useCallback(
+    (n: TNotification, target: NotificationActions, action: NotificationInlineAction) => {
+      if (!action.confirm) {
+        void runAction(n, target, action);
+        return;
+      }
+      Alert.alert(action.confirm.title, action.confirm.body, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: action.confirm.confirmLabel,
+          style: "destructive",
+          onPress: () => void runAction(n, target, action),
+        },
+      ]);
+    },
+    [runAction],
+  );
 
   // Reading it is what marks it read, so both happen on one tap; the canyon
   // then opens on top.
@@ -201,9 +336,16 @@ export function NotificationsScreen({
 
   const renderItem = useCallback(
     ({ item }: { item: TNotification }) => (
-      <NotificationRow item={item} onPress={openNotification} />
+      <NotificationRow
+        item={item}
+        onPress={openNotification}
+        onAction={requestAction}
+        busyKind={busy?.id === item.id ? busy.kind : null}
+        actionsDisabled={busy !== null || !online}
+        online={online}
+      />
     ),
-    [openNotification],
+    [busy, online, openNotification, requestAction],
   );
 
   const renderSectionHeader = useCallback(
@@ -264,12 +406,6 @@ export function NotificationsScreen({
         </View>
       ) : null}
 
-      {actionError ? (
-        <View style={styles.banner}>
-          <ErrorBanner message={actionError} />
-        </View>
-      ) : null}
-
       <SectionList
         style={styles.list}
         contentContainerStyle={styles.listContent}
@@ -286,6 +422,8 @@ export function NotificationsScreen({
         renderItem={renderItem}
         ListEmptyComponent={<EmptyPanel bucket={bucket} onShowAll={() => setBucket("all")} />}
       />
+
+      <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
 }
@@ -299,13 +437,35 @@ function keyExtractor(item: TNotification): string {
 const NotificationRow = memo(function NotificationRow({
   item,
   onPress,
+  onAction,
+  busyKind,
+  actionsDisabled,
+  online,
 }: {
   item: TNotification;
   onPress: (item: TNotification) => void;
+  onAction: (
+    item: TNotification,
+    target: NotificationActions,
+    action: NotificationInlineAction,
+  ) => void;
+  /** Which of this row's actions is in flight, if any. */
+  busyKind: NotificationActionKind | null;
+  /** Any action anywhere in the list is running, or there is no connection. */
+  actionsDisabled: boolean;
+  online: boolean;
 }) {
   const label = notificationLabel(item);
   const meta = notificationMeta(item);
+  const target = notificationActions(item);
   const subtitle = [label.warning, formatTime(item.createdAt)].filter(Boolean).join(" · ");
+  // The row's own STATE beats the unread flag in the one trailing slot: unread
+  // is already carried by the accent border, "Saved" is carried by nothing else.
+  const pill = target?.pill
+    ? <StatusPill label={target.pill} tone="muted" />
+    : !item.read
+      ? <StatusPill label="New" tone="accent" />
+      : undefined;
   return (
     <Row
       icon={meta.icon}
@@ -313,9 +473,39 @@ const NotificationRow = memo(function NotificationRow({
       title={label.text}
       subtitle={subtitle}
       titleNumberOfLines={2}
-      right={!item.read ? <StatusPill label="New" tone="accent" /> : undefined}
+      right={pill}
       onPress={() => onPress(item)}
       style={!item.read ? styles.rowUnread : undefined}
+      // INSIDE the card. Sitting below it, the pair read as a caption for the
+      // next notification down — which is how a "Download again" got pressed
+      // for a file the user had just turned down.
+      footer={
+        target ? (
+          <>
+            <View style={styles.actions}>
+              {target.actions.map((action) => (
+                <Button
+                  key={action.kind}
+                  label={action.label}
+                  // Decline is the outline: two filled buttons side by side
+                  // make "no" look like the thing to press.
+                  variant={action.kind === "decline" ? "outlineAccent" : undefined}
+                  compact
+                  // Split the card's width rather than shrink-wrapping the
+                  // label: a full-width target is the one that survives being
+                  // tapped with cold hands, and it belongs to the card it fills.
+                  grow
+                  disabled={actionsDisabled}
+                  loading={busyKind === action.kind}
+                  onPress={() => onAction(item, target, action)}
+                />
+              ))}
+            </View>
+            {/* The reason on the thing that is dimmed, not on the screen (§10). */}
+            {!online ? <Text style={styles.actionHint}>Needs a connection</Text> : null}
+          </>
+        ) : null
+      }
     />
   );
 });
@@ -357,7 +547,6 @@ function EmptyPanel({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.primary },
   rail: { paddingHorizontal: spacing(2), paddingTop: spacing(1.5), paddingBottom: spacing(1.5) },
-  banner: { paddingHorizontal: spacing(2), paddingBottom: spacing(1) },
   list: { flex: 1 },
   listContent: { paddingHorizontal: spacing(2), gap: spacing(1), paddingBottom: spacing(4) },
   // The page colour, so rows don't ghost through the sticky header.
@@ -377,6 +566,13 @@ const styles = StyleSheet.create({
   },
   dayCount: { color: theme.textMuted, fontSize: fontSize.xs },
   rowUnread: { borderColor: theme.accent },
+  actions: { flexDirection: "row", gap: spacing(1) },
+  actionHint: {
+    color: theme.textMuted,
+    fontSize: fontSize.xs,
+    textAlign: "center",
+    paddingTop: spacing(0.75),
+  },
   empty: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(6) },
   emptyTitle: { color: theme.textPrimary, fontSize: fontSize.base },
   emptyHint: {

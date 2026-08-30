@@ -111,6 +111,42 @@ export function fileSendExpiresAt(now: Date = new Date()): Date {
 }
 
 /**
+ * The recipient inbox filter: my non-declined rows on sends that have not
+ * expired. Expiry is repeated here rather than left to the sweep because the
+ * sweep is periodic — a row can outlive its usefulness by up to one interval.
+ *
+ * ONE DECLARATION, two readers. `GET /file-sends/inbox` uses it to build the
+ * list, and `GET /notifications` uses it to decide which `file_sent`
+ * notification still resolves — and, since those notifications now carry
+ * Accept/Decline actions, the two must agree or the inbox offers a verb the
+ * send endpoint answers with a 404.
+ */
+export function inboxWhere(userId: string, now: Date) {
+  return {
+    userId,
+    status: { not: "declined" },
+    fileSend: { expiresAt: { gt: now } },
+  };
+}
+
+/**
+ * Is this the S3 "the object is not there" answer, as opposed to a fault?
+ *
+ * The distinction is the whole point: a MISSING object means the send is over
+ * and the offer should be withdrawn, while a throttle, a timeout or a denied
+ * permission means try again later and must never be mistaken for the first.
+ * Pure so the branch has a test — it decides whether a user permanently loses
+ * access to a file.
+ */
+export function isMissingObjectError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const status = (err as { $metadata?: { httpStatusCode?: number } }).$metadata
+    ?.httpStatusCode;
+  const name = (err as { name?: string }).name;
+  return status === 404 || name === "NotFound" || name === "NoSuchKey";
+}
+
+/**
  * May this recipient download these bytes right now?
  *
  * THE GATE READS THE RECIPIENT'S ROW, never whether the S3 object exists. One

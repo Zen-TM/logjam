@@ -10,6 +10,7 @@ import {
   CAROL_ID,
   as,
 } from "./_actors";
+import prisma from "../services/prisma";
 
 // "Send a copy" (FileSend) from the RECIPIENT's side — the perspective
 // mocked-Prisma unit tests structurally cannot reach, and the sibling of
@@ -321,5 +322,184 @@ describe("file sends — sender boundary", () => {
       .set(CLIENT)
       .send({ filename: "test-send.gpx", sourceKind: "import", recipientIds: [BOB_ID] });
     expect(res.status).toBe(404);
+  });
+});
+
+// The `file_sent` notification is what mobile renders Accept / Turn down on
+// (there is no "Received files" screen any more), so it has to carry enough to
+// answer with — and stop carrying it the moment the answer is no.
+describe("file sends — the actionable notification", () => {
+  /**
+   * Age a send past its TTL. This is what expiry IS — `expiresAt` in the past —
+   * so the clock is moved rather than waiting seven days for it. It is also
+   * exactly what the accept path's missing-object guard writes when it finds
+   * the bytes gone, so both routes into the state are covered by one setup.
+   */
+  async function expireSend(fileSendId: string) {
+    await prisma.fileSend.update({
+      where: { id: fileSendId },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+  }
+
+  async function fileSentNotifications(sub: string) {
+    const res = await request(API_URL).get("/notifications").set(as(sub)).set(CLIENT);
+    expect(res.status).toBe(200);
+    return (res.body as { type: string; payload: Record<string, unknown> }[]).filter(
+      (n) => n.type === "file_sent",
+    );
+  }
+
+  // The recipient is entitled to know WHAT they are being offered before they
+  // accept it — but it is resolved from the live send, never stored in the
+  // payload (PRIV-005).
+  it("resolves the filename, sender and status onto the recipient's notification", async () => {
+    const id = await sendCopy(ALICE_SUB, [BOB_ID]);
+
+    const [notification] = (await fileSentNotifications(BOB_SUB)).filter(
+      (n) => n.payload.fileSendId === id,
+    );
+    expect(notification).toBeDefined();
+    expect(notification.payload.filename).toBe("test-send.gpx");
+    expect(notification.payload.sentByUsername).toBe("alice");
+    expect(notification.payload.fileSendStatus).toBe("pending");
+  });
+
+  it("flips the status to accepted, so the row keeps offering the download", async () => {
+    const id = await sendCopy(ALICE_SUB, [BOB_ID]);
+    const accept = await request(API_URL)
+      .post(`/file-sends/${id}/accept`)
+      .set(as(BOB_SUB))
+      .set(CLIENT);
+    expect(accept.status).toBe(200);
+
+    const [notification] = (await fileSentNotifications(BOB_SUB)).filter(
+      (n) => n.payload.fileSendId === id,
+    );
+    // Still there on purpose: "accepted" means the URL was ISSUED, not that the
+    // bytes landed, so the retry has to survive.
+    expect(notification.payload.fileSendStatus).toBe("accepted");
+    expect(notification.payload.filename).toBe("test-send.gpx");
+  });
+
+  it("drops the notification, filename and all, once turned down", async () => {
+    const id = await sendCopy(ALICE_SUB, [BOB_ID]);
+    const decline = await request(API_URL)
+      .post(`/file-sends/${id}/decline`)
+      .set(as(BOB_SUB))
+      .set(CLIENT);
+    expect(decline.status).toBe(204);
+
+    const remaining = (await fileSentNotifications(BOB_SUB)).filter(
+      (n) => n.payload.fileSendId === id,
+    );
+    expect(remaining).toHaveLength(0);
+  });
+
+  // Expiry is the state nothing covered, and it is the one a recipient meets
+  // days later with no other explanation available.
+  it("explains a send that lapsed before it was saved, and offers nothing", async () => {
+    const id = await sendCopy(ALICE_SUB, [BOB_ID]);
+    await expireSend(id);
+
+    // Nothing can be answered any more, and the endpoint says so.
+    const accept = await request(API_URL)
+      .post(`/file-sends/${id}/accept`)
+      .set(as(BOB_SUB))
+      .set(CLIENT);
+    expect(accept.status).toBe(404);
+
+    const [notification] = (await fileSentNotifications(BOB_SUB)).filter(
+      (n) => n.payload.fileSendId === id,
+    );
+    // Still THERE — the recipient never got the file, so the row has to say
+    // why it can no longer be answered rather than silently disappearing.
+    expect(notification).toBeDefined();
+    expect(notification.payload.fileSendStatus).toBe("expired");
+    expect(notification.payload.filename).toBe("test-send.gpx");
+    // And gone from the list of things that can be acted on.
+    expect((await inbox(BOB_SUB)).map((r) => r.fileSendId)).not.toContain(id);
+  });
+
+  // The state AFTER the reaper has been through: the row is gone, so nothing
+  // can be resolved from it — the name the recipient sees is the one the sweep
+  // stamped into the payload on its way past. Crafted directly here because the
+  // reaper's own behaviour is pinned in fileSendReaper.unit.test.ts; what this
+  // asserts is the READER's half of that contract.
+  it("still names the file after the send itself has been swept", async () => {
+    const id = await sendCopy(ALICE_SUB, [BOB_ID]);
+    const notification = await prisma.notification.findFirstOrThrow({
+      where: {
+        userId: BOB_ID,
+        type: "file_sent",
+        payload: { path: ["fileSendId"], equals: id },
+      },
+      select: { id: true, payload: true },
+    });
+    await prisma.notification.update({
+      where: { id: notification.id },
+      data: {
+        payload: { ...(notification.payload as object), filename: "test-send.gpx" },
+      },
+    });
+    await prisma.fileSend.delete({ where: { id } });
+
+    const [view] = (await fileSentNotifications(BOB_SUB)).filter(
+      (n) => n.payload.fileSendId === id,
+    );
+    expect(view).toBeDefined();
+    expect(view.payload.fileSendStatus).toBe("expired");
+    expect(view.payload.filename).toBe("test-send.gpx");
+    expect(view.payload.sentByUsername).toBe("alice");
+  });
+
+  // A send swept before the stamping existed carries no filename, and the label
+  // degrades rather than inventing one.
+  it("degrades to a nameless notice when no filename was ever stamped", async () => {
+    const id = await sendCopy(ALICE_SUB, [BOB_ID]);
+    await prisma.fileSend.delete({ where: { id } });
+
+    const [view] = (await fileSentNotifications(BOB_SUB)).filter(
+      (n) => n.payload.fileSendId === id,
+    );
+    expect(view.payload.fileSendStatus).toBe("expired");
+    expect(view.payload.filename).toBeUndefined();
+  });
+
+  // The other half of the same rule: someone who already took the copy is not
+  // told their download expired, because they have the file.
+  it("says nothing to a recipient who had already saved it", async () => {
+    const id = await sendCopy(ALICE_SUB, [BOB_ID]);
+    const first = await request(API_URL)
+      .post(`/file-sends/${id}/accept`)
+      .set(as(BOB_SUB))
+      .set(CLIENT);
+    expect(first.status).toBe(200);
+
+    await expireSend(id);
+
+    const remaining = (await fileSentNotifications(BOB_SUB)).filter(
+      (n) => n.payload.fileSendId === id,
+    );
+    expect(remaining).toHaveLength(0);
+  });
+
+  // The notification query is deliberately WIDER than the inbox endpoint — it
+  // keeps EXPIRED sends so the row can say so, where the inbox drops them. The
+  // invariant is therefore not "the two agree" but the thing that actually
+  // matters: anything still ACTIONABLE is something the endpoint would serve.
+  it("never offers an action the send endpoint would refuse", async () => {
+    const id = await sendCopy(ALICE_SUB, [BOB_ID]);
+    await request(API_URL).post(`/file-sends/${id}/decline`).set(as(BOB_SUB)).set(CLIENT);
+
+    const inboxIds = (await inbox(BOB_SUB)).map((row) => row.fileSendId);
+    const notified = await fileSentNotifications(BOB_SUB);
+    expect(inboxIds).not.toContain(id);
+    expect(notified.map((n) => n.payload.fileSendId)).not.toContain(id);
+    // Expired rows render no buttons (notificationActions returns null), so
+    // they are the one kind allowed to be present and absent from the inbox.
+    for (const n of notified.filter((row) => row.payload.fileSendStatus !== "expired")) {
+      expect(inboxIds).toContain(n.payload.fileSendId);
+    }
   });
 });

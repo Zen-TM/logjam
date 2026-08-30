@@ -63,3 +63,26 @@ describe("notificationCanyonId", () => {
     expect(notificationCanyonId(notification("canyon_shared", { canyonId: 7 }))).toBeNull();
   });
 });
+
+// NOT the share hue: a sent file is a copy that becomes the recipient's own,
+// and wearing the share colour is the one confusion the two verbs exist to
+// prevent (mobile/CLAUDE.md, "Sharing and sending").
+it("gives a received file its own kind, distinct from a share", () => {
+  const file = notificationMeta({
+    id: "n1",
+    type: "file_sent",
+    payload: { fileSendId: "s1" },
+    read: false,
+    createdAt: "2026-08-30T00:00:00Z",
+  });
+  const share = notificationMeta({
+    id: "n2",
+    type: "canyon_shared",
+    payload: { canyonId: "c1" },
+    read: false,
+    createdAt: "2026-08-30T00:00:00Z",
+  });
+  expect(file.kind).toBe("file");
+  expect(file.hue).not.toBe(share.hue);
+  expect(file.icon).not.toBe(share.icon);
+});

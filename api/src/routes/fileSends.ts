@@ -41,6 +41,8 @@ import {
   canRecipientDownload,
   fileSendExpiresAt,
   fileSendKey,
+  inboxWhere,
+  isMissingObjectError,
   sanitizeSendFilename,
   sendableExtension,
 } from "../lib/fileSendAccess";
@@ -178,7 +180,7 @@ router.post(
     });
     if (existing) {
       if (existing.senderId !== user.id) {
-        throw new AppError(404, "File send not found");
+        throw new AppError(404, "That file isn't available any more.");
       }
       res.status(200).json(toSentView(existing));
       return;
@@ -249,8 +251,10 @@ router.post(
           include: { recipients: { select: { userId: true, status: true } } },
         });
         // IDs ONLY in the payload — never the filename, which is user text and
-        // routinely names a canyon (PRIV-005). The sender's username is
-        // resolved from the live row at read time in notifications.ts.
+        // routinely names a canyon (PRIV-005). The sender's username AND the
+        // filename are both resolved from the live rows at read time in
+        // notifications.ts, which is also what makes them vanish when the send
+        // is declined or expires.
         await tx.notification.createMany({
           data: recipientIds
             .filter((id) => notifiable.has(id))
@@ -412,30 +416,24 @@ export function recipientRowWhere(userId: string, fileSendId: string) {
 }
 
 /**
- * The recipient inbox filter: my non-declined rows on sends that have not
- * expired. Expiry is repeated here rather than left to the sweep because the
- * sweep is periodic — a row can outlive its usefulness by up to one interval.
- */
-export function inboxWhere(userId: string, now: Date) {
-  return {
-    userId,
-    status: { not: "declined" },
-    fileSend: { expiresAt: { gt: now } },
-  };
-}
-
-/**
  * The recipient's own row for a send, or 404.
  *
  * A user who is not a recipient gets exactly what a non-existent id gets, so
  * the status cannot confirm that a send exists to someone it was not sent to.
+ *
+ * THE MESSAGE IS PART OF THAT. Every 404 on this surface says the same thing —
+ * not yours, never existed, expired, bytes gone — because a message that named
+ * the reason would tell a stranger probing an id that the id is real. It reads
+ * as user-facing copy ("File send not found" reached a toast verbatim, and
+ * "file send" is an internal word) while staying a single undifferentiated
+ * answer.
  */
 async function loadRecipientRow(userId: string, fileSendId: string) {
   const row = await prisma.fileSendRecipient.findFirst({
     where: recipientRowWhere(userId, fileSendId),
     include: { fileSend: true },
   });
-  if (!row) throw new AppError(404, "File send not found");
+  if (!row) throw new AppError(404, "That file isn't available any more.");
   return row;
 }
 
@@ -454,7 +452,7 @@ router.post(
     // declined recipient is refused while the same bytes stay downloadable for
     // everyone else on the send.
     if (!canRecipientDownload(row, row.fileSend)) {
-      throw new AppError(404, "File send not found");
+      throw new AppError(404, "That file isn't available any more.");
     }
 
     // Deliberately NOT deleting the object here, and there is no "everyone has
@@ -467,6 +465,44 @@ router.post(
         where: { id: row.id },
         data: { status: "accepted", respondedAt: new Date() },
       });
+    }
+
+    // DO NOT PROMISE BYTES THAT ARE NOT THERE. Everything above this point is
+    // a database answer, and the database is not the authority on whether the
+    // object still exists: the S3 lifecycle rule removes it on its own schedule
+    // ("at least" N days, not exactly N), an operator can delete it, and a
+    // restored database can point at a bucket that never held it. Without this
+    // check the recipient is handed a signed URL that 404s, gets "Couldn't save
+    // that file", and can retry it forever — which is exactly what a wiped
+    // local bucket produced on 2026-08-30.
+    //
+    // The prod ordering is still the primary guard and is unchanged: the
+    // lifecycle rule is deliberately one day LONGER than FILE_SEND_TTL_DAYS
+    // (infra/terraform/envs/prod/s3.tf) so the row, its notification and its
+    // buttons all go first. This is the belt to that braces — it turns "an
+    // offer that always fails" into "the offer is withdrawn".
+    try {
+      await s3.send(
+        new HeadObjectCommand({ Bucket: MEDIA_BUCKET, Key: row.fileSend.s3Key }),
+      );
+    } catch (err) {
+      // Only a definitively ABSENT object retires the send. A throttle or a
+      // permission fault is transient and must stay retryable, so it falls
+      // through to the error handler as a 5xx.
+      if (!isMissingObjectError(err)) throw err;
+      // Expire the send rather than special-casing this state anywhere else:
+      // `expiresAt` in the past is already what every filter reads — the inbox
+      // list, the notification resolve (so the row and its buttons disappear
+      // for EVERY recipient, not just this one), `canRecipientDownload`, and
+      // the reaper, which then refunds the sender for bytes they are no longer
+      // storing. One true fact, and the existing machinery does the rest.
+      await prisma.fileSend.update({
+        where: { id: row.fileSend.id },
+        data: { expiresAt: new Date() },
+      });
+      logger.warn({ fileSendId }, "file_send_object_missing");
+      // The same 404 a stranger's id gets: nothing here may confirm more.
+      throw new AppError(404, "That file isn't available any more.");
     }
 
     const downloadUrl = await getSignedUrl(

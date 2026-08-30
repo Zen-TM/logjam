@@ -499,9 +499,67 @@ prevent.
 **`accepted` means the download URL was ISSUED, not that the file arrived.**
 The row flips when accept returns, so a recipient who accepts on a flaky
 connection is `accepted` with no file. Accepted rows stay downloadable until
-the TTL and the inbox offers "Download again"; that is the mitigation, and
-closing the gap properly would need an S3 access-log read or a client confirm
-callback.
+the TTL and the notification keeps offering "Download again"; that is the
+mitigation, and closing the gap properly would need an S3 access-log read or a
+client confirm callback.
+
+**A lapsed send is REPORTED to whoever missed it, and to nobody else.** At
+expiry the reaper deletes the notification of every recipient who already saved
+the copy (nothing to tell them) and keeps it for everyone who did not, stamped
+with the filename. From then on a `file_sent` notification with no send row
+means exactly one thing — expired unsaved — because every other way a recipient
+row disappears deletes the notification in the same transaction (decline in
+`routes/fileSends.ts`, unfriending in `lib/shareAccess.ts`, account deletion in
+`routes/users.ts`). The inbox renders it with no buttons and the line "This file
+expired. Ask bob to send it again." Guards: `lib/fileSendReaper.unit.test.ts`,
+`__tests__/fileSends.test.ts`.
+
+**An offer to download is WITHDRAWN, never left to fail.** Two guards, in that
+order. The S3 lifecycle rule on `file-sends/` is deliberately one day longer
+than `FILE_SEND_TTL_DAYS` (`infra/terraform/envs/prod/s3.tf` — raising the TTL
+means raising the rule FIRST), so at day 7 the row expires and `inboxWhere`
+drops the notification, its buttons and all, while the bytes are still there.
+Belt to that braces: `POST /file-sends/:id/accept` HEADs the object before
+signing a URL for it, and a definitively missing one (`isMissingObjectError` —
+404/NotFound/NoSuchKey, never a throttle or a permission fault) sets
+`expiresAt = now`. That one true fact retires the send for EVERY recipient
+through the filters that already exist, and hands the sender's quota back. The
+client then sees a 404, which `isResolvedElsewhereError` already treats as dead
+rather than retryable, so the row clears instead of offering a button that
+cannot work.
+
+**A received file is answered in the INBOX, not on a page of its own.**
+`screens/ReceivedFilesScreen.tsx` and its More row are deleted (2026-08-30): a
+send is one accept/decline pair and an accepted file becomes an ordinary Saved
+import, so it never needed a screen. Two rules hold the replacement together.
+- **Which actions a notification carries, and every word of their copy, is
+  `notifications/notificationActions.ts`** — a pure, RN-free module with its
+  own test, exactly like `notifications/tapTarget.ts`. It covers BOTH actionable
+  kinds (`friend_request` and `file_sent`); `NotificationsScreen` renders what
+  it returns and knows nothing about friendships or sends. A third actionable
+  kind is a branch there, not a screen.
+- **Every decline confirms in a dialog, the friend request included** — even
+  though web and `FriendsScreen` do not ask. On those surfaces decline sits
+  behind an overflow sheet, which IS the "no is never a mis-tap away from yes"
+  guard; side by side in a list row there is no sheet left to be it.
+
+The accept pipeline itself is `imports/acceptReceivedFile.ts` (download to
+scratch → `runGeoPdfImport` for a PDF, `importVectorSource` otherwise → delete
+the scratch file), unchanged by the move and deliberately not the screen's
+business.
+
+**The recipient sees the FILENAME on the notification**, resolved at read time
+in `api/src/routes/notifications.ts` from the live send — never denormalised
+into the stored payload (PRIV-005), with ONE audited exception: when a send
+expires unsaved, `lib/fileSendReaper.ts` stamps the filename into that
+recipient's payload before deleting the last copy of it, so the row can still
+say *which* file lapsed. Scoped as tightly as the exception allows — only
+recipients who never took the copy (the ones who did have their notification
+deleted instead), only at expiry, only that one field. Nothing else writes it. It is there because nobody can answer "keep this?" without knowing what is
+on offer. That resolve step and `GET /file-sends/inbox` share ONE filter,
+`inboxWhere` in `api/src/lib/fileSendAccess.ts`: anything the notification
+admits that the inbox would not is a live Accept button whose endpoint answers
+404. Guard: `api/src/__tests__/fileSends.test.ts`, "the actionable notification".
 
 ## Battery (field constraint — a flat phone is a navigation failure)
 

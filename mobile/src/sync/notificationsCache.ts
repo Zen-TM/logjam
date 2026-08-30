@@ -72,6 +72,32 @@ export async function getCachedUnreadCount(): Promise<number | null> {
   return cache.notifications.filter((notification) => !notification.read).length;
 }
 
+/**
+ * Optimistically merge fields into ONE cached notification's payload, so a row
+ * the user just acted on restyles itself without a refetch.
+ *
+ * This exists because the refetch was the bug: `GET /notifications` is the
+ * authority on `read`, so re-fetching immediately after a mark-read raced the
+ * outbox push and wrote `read: false` back over it — the row the user had just
+ * answered went on saying "New". Patching the one field we already know the
+ * server will agree with (an accepted send is accepted) keeps the row in place,
+ * keeps it read, and costs no request.
+ */
+export async function patchCachedPayload(
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const cache = await readNotificationsCache();
+  if (!cache) return;
+  const next = cache.notifications.map((notification) =>
+    notification.id === id
+      ? { ...notification, payload: { ...notification.payload, ...patch } }
+      : notification,
+  );
+  await writeCache(next, cache.total);
+  notifyMirrorChanged();
+}
+
 /** Optimistically flip cached read flags so the inbox reflects a mark-read
  * before the next fetch (keeps offline reads consistent with the action).
  * `ids === "all"` marks everything read. */

@@ -70,3 +70,49 @@ describe("notificationLabel", () => {
     expect(notificationLabel(notification("future_type")).text).toBe("Notification");
   });
 });
+
+// A received file is the one notification whose label carries USER TEXT the
+// recipient has to act on — they cannot answer "keep this?" without it.
+describe("file_sent", () => {
+  it("names the sender and the file", () => {
+    expect(
+      notificationLabel(
+        notification("file_sent", {
+          fileSendId: "s1",
+          sentByUsername: "bob",
+          filename: "Exit notes.gpx",
+        }),
+      ).text,
+    ).toBe("bob sent you Exit notes.gpx");
+  });
+
+  it("says why a lapsed send can no longer be answered, and who to ask", () => {
+    const label = notificationLabel(
+      notification("file_sent", {
+        fileSendId: "s1",
+        sentByUsername: "bob",
+        filename: "Exit notes.gpx",
+        fileSendStatus: "expired",
+      }),
+    );
+    expect(label.text).toBe("bob sent you Exit notes.gpx");
+    expect(label.warning).toBe("This file expired. Ask bob to send it again.");
+  });
+
+  // Nothing to explain while it is still answerable.
+  it("carries no warning while the send is still live", () => {
+    for (const status of ["pending", "accepted"]) {
+      expect(
+        notificationLabel(
+          notification("file_sent", { fileSendId: "s1", fileSendStatus: status }),
+        ).warning,
+      ).toBeUndefined();
+    }
+  });
+
+  it("degrades rather than rendering 'undefined' when neither resolves", () => {
+    expect(notificationLabel(notification("file_sent", { fileSendId: "s1" })).text).toBe(
+      "Someone sent you a file",
+    );
+  });
+});

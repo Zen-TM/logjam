@@ -33,16 +33,40 @@ const row = {
   senderId: "sender-1",
   s3Key: "file-sends/sender-1/send-1/copy.gpx",
   sizeBytes: 4096n,
+  filename: "Ridge approach.gpx",
+  // One who took the copy and one who never did — the distinction the sweep
+  // has to settle before the rows that carry it are deleted.
+  recipients: [
+    { userId: "saved-it", status: "accepted" },
+    { userId: "never-took-it", status: "pending" },
+  ],
 };
+
+/** Notification writes issued by the last sweep, for the assertions below. */
+let notificationDeleteMany: Mock;
+let notificationFindMany: Mock;
+let notificationUpdate: Mock;
 
 /**
  * Run the sweep with a transaction whose `deleteMany` reports `count` rows
  * removed — the whole point of the claim being the delete itself.
  */
 function withDeleteCount(count: number) {
-  transaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
-    fn({ fileSend: { deleteMany: vi.fn().mockResolvedValue({ count }) } }),
-  );
+  transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => {
+    notificationDeleteMany = vi.fn().mockResolvedValue({ count: 1 });
+    notificationFindMany = vi.fn().mockResolvedValue([
+      { id: "notif-1", payload: { fileSendId: "send-1", sentById: "sender-1" } },
+    ]);
+    notificationUpdate = vi.fn().mockResolvedValue({});
+    return fn({
+      fileSend: { deleteMany: vi.fn().mockResolvedValue({ count }) },
+      notification: {
+        deleteMany: notificationDeleteMany,
+        findMany: notificationFindMany,
+        update: notificationUpdate,
+      },
+    });
+  });
 }
 
 beforeEach(() => {
@@ -97,6 +121,68 @@ describe("sweepExpiredFileSends", () => {
     s3Send.mockRejectedValueOnce(new Error("s3 down"));
     expect(await sweepExpiredFileSends(NOW)).toBe(1);
     expect(decrement).toHaveBeenCalledTimes(1);
+  });
+
+  // The inbox tells a recipient "this expired, ask them again" purely by
+  // INFERENCE — a file_sent notification whose row is gone. That inference is
+  // only true if the sweep clears the notifications of everyone who already has
+  // the file, and this is the last moment it can know who that was.
+  it("clears the notification for recipients who already saved the file", async () => {
+    await sweepExpiredFileSends(NOW);
+    expect(notificationDeleteMany).toHaveBeenCalledWith({
+      where: {
+        userId: { in: ["saved-it"] },
+        type: "file_sent",
+        payload: { path: ["fileSendId"], equals: "send-1" },
+      },
+    });
+  });
+
+  // The other half: a recipient who never took it KEEPS the notification, which
+  // is the only thing left to explain where the file went.
+  it("leaves the notification of a recipient who never took it", async () => {
+    findMany.mockResolvedValue([
+      { ...row, recipients: [{ userId: "never-took-it", status: "pending" }] },
+    ]);
+    await sweepExpiredFileSends(NOW);
+    expect(notificationDeleteMany).not.toHaveBeenCalled();
+  });
+
+  // The loser of the claim race must not touch notifications either — the
+  // winner has already settled them.
+  it("settles no notifications when another instance claimed the row", async () => {
+    withDeleteCount(0);
+    await sweepExpiredFileSends(NOW);
+    expect(notificationDeleteMany).not.toHaveBeenCalled();
+  });
+
+  // THE ONE PLACE A FILENAME MAY BE WRITTEN INTO A PAYLOAD. Everywhere else it
+  // is resolved from the live send (PRIV-005); here the row holding it is about
+  // to be deleted, and a recipient who never got the file is owed its name so
+  // they can ask for it again.
+  it("stamps the filename onto the notification of a recipient who missed it", async () => {
+    await sweepExpiredFileSends(NOW);
+    expect(notificationUpdate).toHaveBeenCalledWith({
+      where: { id: "notif-1" },
+      data: {
+        payload: {
+          fileSendId: "send-1",
+          sentById: "sender-1",
+          filename: "Ridge approach.gpx",
+        },
+      },
+    });
+  });
+
+  // It is scoped to the ones that need it: a recipient who took the copy has
+  // their notification DELETED, so no name is left at rest for them.
+  it("stamps nothing when every recipient already saved it", async () => {
+    findMany.mockResolvedValue([
+      { ...row, recipients: [{ userId: "saved-it", status: "accepted" }] },
+    ]);
+    await sweepExpiredFileSends(NOW);
+    expect(notificationUpdate).not.toHaveBeenCalled();
+    expect(notificationDeleteMany).toHaveBeenCalledTimes(1);
   });
 
   it("returns 0 and touches nothing when there is nothing expired", async () => {

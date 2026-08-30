@@ -19,6 +19,7 @@ import {
   type VectorImport,
 } from "./importsDb";
 import { IMPORTS_DIR } from "../offline/localStores";
+import { importDisplayName } from "./importName";
 import { stageIncomingFile } from "./stagedFile";
 
 // A phone-realistic ceiling; the parser's MAX_IMPORT_POSITIONS is the real
@@ -168,9 +169,12 @@ async function parseAndStore(
     await FileSystem.writeAsStringAsync(sourceUriStored, text);
     const record: VectorImport = {
       id,
-      // Fall back to the file name (minus extension) when the file itself
-      // is nameless.
-      name: parsed.name ?? displayName.replace(/\.[^.]+$/, ""),
+      // File name or content name — the rule, and why, is `./importName.ts`.
+      name: importDisplayName({
+        contentName: parsed.name ?? null,
+        filename: displayName,
+        sentBy,
+      }),
       color: pickImportColor(existingCount),
       visible: true,
       path: fileUri.replace(/^file:\/\//, ""),

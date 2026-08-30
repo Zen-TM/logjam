@@ -71,6 +71,7 @@
     "plugins": [
       "expo-dev-client",
       "./plugins/withSensorLogging.js",
+      "./plugins/withLocalApiCleartext.js",
       "expo-asset",
       [
         "expo-font",

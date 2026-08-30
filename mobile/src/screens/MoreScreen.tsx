@@ -54,7 +54,6 @@ export function MoreScreen({
   onOpenInbox,
   onOpenAccount,
   onOpenFriends,
-  onOpenReceivedFiles,
   onOpenSyncIssues,
   onOpenSettings,
 }: {
@@ -62,7 +61,6 @@ export function MoreScreen({
   onOpenInbox: () => void;
   onOpenAccount: () => void;
   onOpenFriends: () => void;
-  onOpenReceivedFiles: () => void;
   onOpenSyncIssues: () => void;
   onOpenSettings: () => void;
 }) {
@@ -138,6 +136,9 @@ export function MoreScreen({
       </HeroHeader>
 
       <ScreenScroll padded={false} contentStyle={styles.menu}>
+        {/* The ONE "something is waiting on you" signal. Files a friend sent
+            used to have a row of their own here; they are answered inline in
+            the inbox now, so their waiting count is part of this one. */}
         <Row
           icon="inbox"
           title="Inbox"
@@ -158,16 +159,6 @@ export function MoreScreen({
           // the tap (§10).
           onPress={onOpenFriends}
           {...capabilityRowProps("friends", accountState, online)}
-          right={<Trailing />}
-        />
-        {/* Sits beside Friends because that is who files come from. Its own
-            row rather than a section of the Inbox: the Inbox is notifications
-            you read, this is files waiting on a decision that expires. */}
-        <Row
-          icon="download"
-          title="Received files"
-          onPress={onOpenReceivedFiles}
-          {...capabilityRowProps("receivedFiles", accountState, online)}
           right={<Trailing />}
         />
         {/* Sync issues can only exist once something has tried to sync. */}

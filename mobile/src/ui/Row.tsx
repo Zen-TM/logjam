@@ -36,6 +36,7 @@ export function Row({
   icon,
   hue,
   right,
+  footer,
   progress,
   onPress,
   onLongPress,
@@ -63,6 +64,14 @@ export function Row({
   icon?: React.ComponentProps<typeof Feather>["name"];
   hue?: string;
   right?: React.ReactNode;
+  /**
+   * Full-width content pinned under the row's own line, INSIDE the card — the
+   * slot for per-row actions that don't fit the trailing accessory (§5's order
+   * runs out at one inline action). Keeping them inside the card is what says
+   * which row they belong to; floating them underneath reads as a caption for
+   * the row below.
+   */
+  footer?: React.ReactNode;
   progress?: number | null;
   onPress?: () => void;
   /** Press-and-hold — the way a multi-select starts (DESIGN.md §7). */
@@ -94,20 +103,27 @@ export function Row({
       </View>
     ) : null);
 
+  // The card is a COLUMN so a footer can sit under the line; the line keeps the
+  // horizontal layout every row has always had. `progress` stays a direct child
+  // of the card, not of the line: it is absolutely positioned against the card's
+  // padding box, and nesting it would inset the bar by the card's padding.
   const body = (
     <>
-      {lead != null ? <View style={styles.leading}>{lead}</View> : null}
-      <View style={styles.main}>
-        <Text style={styles.title} numberOfLines={titleNumberOfLines}>
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text style={styles.subtitle} numberOfLines={subtitleNumberOfLines}>
-            {subtitle}
+      <View style={styles.line}>
+        {lead != null ? <View style={styles.leading}>{lead}</View> : null}
+        <View style={styles.main}>
+          <Text style={styles.title} numberOfLines={titleNumberOfLines}>
+            {title}
           </Text>
-        ) : null}
+          {subtitle ? (
+            <Text style={styles.subtitle} numberOfLines={subtitleNumberOfLines}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+        {right != null ? <View style={styles.right}>{right}</View> : null}
       </View>
-      {right != null ? <View style={styles.right}>{right}</View> : null}
+      {footer != null ? <View style={styles.footer}>{footer}</View> : null}
       {progress != null ? (
         <View style={styles.progressTrack}>
           <View
@@ -155,9 +171,10 @@ export function Row({
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(1.5),
+    // Column + centred: with no footer this lays out exactly as the old
+    // flex-row card did (one full-width child, vertically centred when the
+    // 56pt floor bites).
+    justifyContent: "center",
     backgroundColor: surface.card,
     borderWidth: 1,
     borderColor: surface.border,
@@ -166,6 +183,8 @@ const styles = StyleSheet.create({
     minHeight: 56,
     overflow: "hidden",
   },
+  line: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
+  footer: { paddingTop: spacing(1.25) },
   pressed: { backgroundColor: surface.cardPressed },
   selected: {
     borderColor: theme.accent,

@@ -17,7 +17,12 @@ const NOTIFICATIONS_LIST_CAP = 500;
 //   friend_request / friend_request_accepted: payload.friendshipId (+ counterpart username)
 //   canyon_shared:                            payload.canyonId, payload.sharedById (+ canyonName, sharedByUsername)
 //   item_shared:                              payload.entityType, payload.entityId, payload.sharedById (+ sharedByUsername)
-//   file_sent:                                payload.fileSendId, payload.sentById (+ sentByUsername)
+//   file_sent:                                payload.fileSendId, payload.sentById (+ sentByUsername, filename, fileSendStatus)
+//     — filename is resolved from the live send while one exists. The single
+//       exception to "ids only" in this table: when a send EXPIRES unsaved the
+//       reaper stamps the filename into the payload before deleting the last
+//       copy of it (lib/fileSendReaper.ts), because the recipient is owed the
+//       name of the file they missed. Nothing else ever writes it.
 //   topo_complete / topo_failed / *_export:   self-only refs (jobId, jobName, footprint)
 // When the referenced canyon/share/friendship is gone (share revoked, canyon
 // deleted, friendship removed, or the other user's account deleted), there is
@@ -163,19 +168,39 @@ router.get(
     // notification is dropped below, exactly as a revoked share is. Note this
     // is NOT a revocation: the file was a copy and an accepted recipient keeps
     // it — only the notification stops being resolvable.
+    //
+    // DELIBERATELY WIDER than `inboxWhere`: this keeps EXPIRED sends, which the
+    // inbox endpoint drops. A send that lapsed before the recipient saved it is
+    // the one expiry worth reporting — without it the offer simply vanishes and
+    // the user is left knowing a friend sent them something they cannot find.
+    // The invariant that matters is not "the two queries agree" but "a
+    // notification never offers a button the endpoint would refuse", and it is
+    // held below instead: an expired row is labelled `expired`, and the client
+    // renders no actions for that (`notifications/notificationActions.ts`).
+    // Declined is still excluded here — that notification is deleted outright
+    // at decline time, and a user who said no is not owed a reminder.
     const liveFileSends =
       fileSendIds.size > 0
         ? await prisma.fileSendRecipient.findMany({
             where: {
               userId: user.id,
-              fileSendId: { in: [...fileSendIds] },
               status: { not: "declined" },
+              fileSendId: { in: [...fileSendIds] },
             },
-            select: { fileSendId: true },
+            // The filename is resolved from the live row like every other
+            // display string here (PRIV-005 — nothing denormalised into the
+            // stored payload). The recipient is entitled to know WHAT they are
+            // being offered before they accept it, and it is the one piece of
+            // user text on a send: rendered, never logged.
+            select: {
+              fileSendId: true,
+              status: true,
+              fileSend: { select: { filename: true, expiresAt: true } },
+            },
           })
         : [];
-    const liveFileSendIds = new Set(
-      liveFileSends.map((row) => row.fileSendId),
+    const liveFileSendById = new Map(
+      liveFileSends.map((row) => [row.fileSendId, row]),
     );
 
     const visible = notifications.flatMap((n) => {
@@ -202,7 +227,44 @@ router.get(
       }
       if (n.type === "file_sent") {
         const id = payloadString(n.payload, "fileSendId");
-        if (!id || !liveFileSendIds.has(id)) return [];
+        const recipientRow = id ? liveFileSendById.get(id) : undefined;
+        const sentByIdEarly = payloadString(n.payload, "sentById");
+        const senderEarly = sentByIdEarly ? sharerById.get(sentByIdEarly) : undefined;
+        if (!recipientRow) {
+          // NO ROW, BUT THE NOTIFICATION SURVIVED — and that combination means
+          // exactly one thing: the reaper swept an expired send this user never
+          // saved. Every other way a recipient row disappears takes the
+          // notification with it in the same transaction (decline in
+          // routes/fileSends.ts, unfriending in lib/shareAccess.ts, account
+          // deletion in routes/users.ts), and the reaper itself deletes the
+          // notifications of recipients who DID save the file
+          // (lib/fileSendReaper.ts). So this branch is the lapsed offer, and
+          // saying so is the whole point: without it a file a friend sent you
+          // simply vanishes and you are left looking for it.
+          //
+          // The filename comes from the payload here, not from a row — the
+          // reaper stamped it on the way past (see the header). It is the only
+          // notification kind that carries one at rest, and only in this state.
+          // A send swept before that behaviour existed has none, and the label
+          // degrades to "a file" rather than inventing one.
+          if (!senderEarly) return [];
+          return [
+            {
+              ...n,
+              payload: {
+                ...(n.payload as object),
+                fileSendStatus: "expired",
+                sentByUsername: senderEarly.username,
+              },
+            },
+          ];
+        }
+        const expired = recipientRow.fileSend.expiresAt.getTime() <= Date.now();
+        // An ACCEPTED send that has since lapsed is dropped, not reported: the
+        // recipient already has the file on their device, so "this expired"
+        // would be news about nothing. Only a send they never took is worth
+        // explaining.
+        if (expired && recipientRow.status === "accepted") return [];
         const sentById = payloadString(n.payload, "sentById");
         const sender = sentById ? sharerById.get(sentById) : undefined;
         return [
@@ -210,6 +272,13 @@ router.get(
             ...n,
             payload: {
               ...(n.payload as object),
+              filename: recipientRow.fileSend.filename,
+              // "accepted" means the download URL was ISSUED, not that the
+              // transfer landed, so the client keeps offering the download —
+              // it is the row's state, not a completion. "expired" is a state
+              // the row itself does not carry: it is the send's clock, and it
+              // means offer nothing and say why.
+              fileSendStatus: expired ? "expired" : recipientRow.status,
               ...(sender ? { sentByUsername: sender.username } : {}),
             },
           },

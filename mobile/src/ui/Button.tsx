@@ -15,6 +15,12 @@ type ButtonProps = {
   icon?: React.ComponentProps<typeof Feather>["name"];
   /** Shrink-wrap for use inside a header/row instead of as a block action. */
   compact?: boolean;
+  /**
+   * Take an equal share of the row it sits in. Two grown buttons split the
+   * width; the label is already centred, so they read as one control each
+   * rather than as a pair of tags floating at the left edge.
+   */
+  grow?: boolean;
 };
 
 // Mirrors the web button system (filled accent / outline accent / ghost —
@@ -28,6 +34,7 @@ export function Button({
   loading = false,
   icon,
   compact = false,
+  grow = false,
 }: ButtonProps) {
   const inactive = disabled || loading;
   const tint = variant === "filledAccent" ? theme.primary : theme.accent;
@@ -39,6 +46,7 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         compact && styles.compact,
+        grow && styles.grow,
         styles[variant],
         pressed && styles.pressed,
         inactive && styles.disabled,
@@ -70,6 +78,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   compact: { paddingVertical: spacing(0.75), paddingHorizontal: spacing(1.5), minHeight: 36 },
+  grow: { flex: 1 },
   filledAccent: { backgroundColor: theme.accent },
   outlineAccent: { borderWidth: 1, borderColor: theme.accent },
   ghost: {},

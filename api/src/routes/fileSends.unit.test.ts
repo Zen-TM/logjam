@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
-import { inboxWhere, recipientRowWhere } from "./fileSends";
+import { recipientRowWhere } from "./fileSends";
+import { inboxWhere, isMissingObjectError } from "../lib/fileSendAccess";
 
 const ME = "user-me";
 const STRANGER_SEND = "send-not-mine";
@@ -46,5 +47,25 @@ describe("inboxWhere", () => {
   // download gate would then refuse.
   it("filters expiry in the query rather than trusting the sweep", () => {
     expect(inboxWhere(ME, NOW).fileSend).toEqual({ expiresAt: { gt: NOW } });
+  });
+});
+
+// Whether a missing object retires a send or is retried is the difference
+// between "the offer is withdrawn" and "a user permanently loses a file to a
+// throttle", so the branch gets its own test.
+describe("isMissingObjectError", () => {
+  it("treats a definitively absent object as gone", () => {
+    expect(isMissingObjectError({ $metadata: { httpStatusCode: 404 } })).toBe(true);
+    expect(isMissingObjectError({ name: "NotFound" })).toBe(true);
+    expect(isMissingObjectError({ name: "NoSuchKey" })).toBe(true);
+  });
+
+  it("leaves a fault retryable rather than retiring the send", () => {
+    expect(isMissingObjectError({ $metadata: { httpStatusCode: 503 } })).toBe(false);
+    expect(isMissingObjectError({ name: "ThrottlingException" })).toBe(false);
+    expect(isMissingObjectError({ name: "AccessDenied" })).toBe(false);
+    expect(isMissingObjectError(new Error("socket hang up"))).toBe(false);
+    expect(isMissingObjectError(null)).toBe(false);
+    expect(isMissingObjectError(undefined)).toBe(false);
   });
 });

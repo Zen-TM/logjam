@@ -276,6 +276,9 @@ export const notificationHue = {
   export: assetHue.import,
   /** GeoPDFs — as in Saved. */
   geoPdf: assetHue.geoPdf,
+  /** A file a friend sent you — the waterhole blue an accepted copy wears in
+   *  Saved's Imports, because that is where accepting it puts it. */
+  file: assetHue.import,
   /** Anything that failed or was skipped. The one place a hue means "look". */
   problem: theme.warning,
 } as const;
