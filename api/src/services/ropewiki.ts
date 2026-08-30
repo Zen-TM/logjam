@@ -1,4 +1,5 @@
 import { parse } from "csv-parse/sync";
+import { AppError } from "../middleware/errorHandler";
 
 // notes is a Logjam user-only field — never sourced from RopeWiki.
 
@@ -294,6 +295,15 @@ function parseQuality(value: string): number | null {
   return null;
 }
 
+/**
+ * Fetch the NSW canyon CSV straight from RopeWiki.
+ *
+ * As of 2026-08-30 this cannot succeed from a server: RopeWiki sits behind a
+ * Cloudflare managed challenge that 403s every non-browser client on every
+ * path (`cf-mitigated: challenge`), regardless of User-Agent. Callers should
+ * go through getRopeWikiCanyons() in ./ropeWikiCache, which reads a
+ * hand-uploaded S3 snapshot by default and only comes here on ?fresh=true.
+ */
 export async function fetchAndParseRopeWiki(): Promise<{
   canyons: RopeWikiCanyon[];
   errors: string[];
@@ -306,11 +316,23 @@ export async function fetchAndParseRopeWiki(): Promise<{
     },
   });
   if (!response.ok) {
-    throw new Error(`RopeWiki returned HTTP ${response.status}`);
+    // 502, not a bare Error: an upstream refusal is not an internal fault, and
+    // errorHandler turns anything non-AppError into a generic 500 that tells
+    // the user nothing (this is exactly how the Cloudflare block presented).
+    throw new AppError(
+      502,
+      `RopeWiki returned HTTP ${response.status}`,
+    );
   }
 
-  const csvText = await response.text();
+  return parseRopeWikiCsv(await response.text());
+}
 
+/** Parse a RopeWiki Special:Ask CSV export into canyons plus per-row errors. */
+export function parseRopeWikiCsv(csvText: string): {
+  canyons: RopeWikiCanyon[];
+  errors: string[];
+} {
   const records: string[][] = parse(csvText, {
     skip_empty_lines: true,
     relax_column_count: true,
