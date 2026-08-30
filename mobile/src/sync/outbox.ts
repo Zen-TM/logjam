@@ -674,16 +674,21 @@ export async function deleteTripLocal(id: string): Promise<void> {
   scheduleMutationSync();
 }
 
-// ── notification markRead surface ────────────────────────────────────────────
+// ── notification read-state + delete surface ─────────────────────────────────
 //
-// Notifications aren't in the delta protocol (§4.7 refetch-and-cache), so a
-// markRead has no mirror row to touch — the inbox cache is patched separately
-// (patchCachedRead). This routes the read through the SAME outbox as every
-// other mutation so it survives offline: the op flushes on the next cycle, and
-// the server treats markRead as a monotonic no-op (idempotent, §6). The shared
-// planner dedups a markRead against an already-queued one for the same id.
+// Notifications aren't in the delta protocol (§4.7 refetch-and-cache), so none
+// of these has a mirror row to touch — the inbox cache is patched separately
+// (patchCachedRead / removeCachedNotifications). They route through the SAME
+// outbox as every other mutation so they survive offline: the ops flush on the
+// next cycle, and every one of them is idempotent server-side. The shared
+// planner keeps at most one read-state op per notification (the last one wins)
+// and lets a delete cancel it.
 
-export async function enqueueNotificationRead(ids: string[]): Promise<void> {
+export async function enqueueNotificationRead(
+  ids: string[],
+  /** False marks them UNREAD — the same op vocabulary in the other direction. */
+  read = true,
+): Promise<void> {
   if (ids.length === 0) return;
   const db = await getSyncDb();
   await withSyncTransaction(db, async () => {
@@ -691,7 +696,23 @@ export async function enqueueNotificationRead(ids: string[]): Promise<void> {
       await appendOp(db, {
         opId: mintUuid(),
         entity: "notification",
-        op: "markRead",
+        op: read ? "markRead" : "markUnread",
+        id,
+      });
+    }
+  });
+  scheduleMutationSync();
+}
+
+export async function enqueueNotificationDelete(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = await getSyncDb();
+  await withSyncTransaction(db, async () => {
+    for (const id of ids) {
+      await appendOp(db, {
+        opId: mintUuid(),
+        entity: "notification",
+        op: "delete",
         id,
       });
     }

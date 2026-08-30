@@ -384,6 +384,45 @@ describe("sync push — notification markRead", () => {
     ]);
     expect(res.body.results[0].status).toBe("alreadyApplied");
   });
+
+  // The same anti-oracle rule for the two ops mark-as-unread and delete added
+  // with the inbox's per-row menu: a notification that is not this user's is
+  // reported exactly as one that never existed.
+  it("markUnread and delete on a purged/foreign notification are alreadyApplied", async () => {
+    const res = await push(ALICE_SUB, [
+      { opId: "mu", entity: "notification", op: "markUnread", id: randomUUID() },
+      { opId: "nd", entity: "notification", op: "delete", id: randomUUID() },
+    ]);
+    expect(res.body.results.map((r: { status: string }) => r.status)).toEqual([
+      "alreadyApplied",
+      "alreadyApplied",
+    ]);
+  });
+
+  it("round-trips the read bit on a real notification", async () => {
+    // Whatever alice's inbox already holds, flipped and put back — deliberately
+    // NOT a delete: this suite runs against the seeded dev database, and a test
+    // that eats a seeded row is one that thins the fixture every time it runs.
+    const inbox = await request(API_URL).get("/notifications").set(as(ALICE_SUB));
+    const target = (inbox.body as { id: string; read: boolean }[])[0];
+    if (!target) return; // Nothing seeded to act on — the case above still covers the vocabulary.
+
+    const readOf = async (id: string) => {
+      const res = await request(API_URL).get("/notifications").set(as(ALICE_SUB));
+      return (res.body as { id: string; read: boolean }[]).find((n) => n.id === id)?.read;
+    };
+    const flip = (op: "markRead" | "markUnread") =>
+      push(ALICE_SUB, [
+        { opId: `${op}-${target.id}-${Date.now()}`, entity: "notification", op, id: target.id },
+      ]);
+
+    const flipped = await flip(target.read ? "markUnread" : "markRead");
+    expect(flipped.body.results[0].status).toBe("applied");
+    expect(await readOf(target.id)).toBe(!target.read);
+
+    await flip(target.read ? "markRead" : "markUnread");
+    expect(await readOf(target.id)).toBe(target.read);
+  });
 });
 
 describe("sync push — route anchors", () => {

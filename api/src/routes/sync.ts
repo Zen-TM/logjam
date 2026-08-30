@@ -1396,11 +1396,23 @@ async function applyNotificationOp(
   userId: string,
   op: PushOp,
 ): Promise<PushOpResult> {
-  // markRead is a monotonic one-way bit (§6): re-marking is a no-op, and a
-  // row purged by PRIV cleanup counts as success — nothing to distinguish.
+  // Owner-scoped by `userId` in the filter, so a foreign id is indistinguishable
+  // from a purged one and neither the status nor an error can confirm that a
+  // notification exists (the house anti-oracle rule, as in routes/notifications.ts).
+  //
+  // A row purged by PRIV cleanup counts as success — there is nothing left to
+  // apply. markRead/markUnread are idempotent writes of one bit rather than a
+  // monotonic latch, so a replayed op is harmless; the outbox's FIFO order is
+  // what makes the last flip the winner.
+  if (op.op === "delete") {
+    const { count } = await prisma.notification.deleteMany({
+      where: { id: op.id, userId },
+    });
+    return { opId: op.opId, status: count === 1 ? "applied" : "alreadyApplied" };
+  }
   const { count } = await prisma.notification.updateMany({
     where: { id: op.id, userId },
-    data: { read: true },
+    data: { read: op.op === "markRead" },
   });
   return { opId: op.opId, status: count === 1 ? "applied" : "alreadyApplied" };
 }

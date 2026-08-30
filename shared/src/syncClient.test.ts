@@ -151,6 +151,37 @@ describe("planOutboxEnqueue (§8.2 coalescing)", () => {
     );
     expect(plan).toEqual({ dropSeqs: [] });
   });
+
+  it("markUnread supersedes a queued markRead for the same notification", () => {
+    const first = op({ entity: "notification", op: "markRead", id: TRIP_A });
+    const unread = op({ entity: "notification", op: "markUnread", id: TRIP_A });
+    const plan = planOutboxEnqueue([entry(1, first)], unread);
+    expect(plan.dropSeqs).toEqual([1]);
+    expect(plan.append).toBe(unread);
+  });
+
+  it("a read/unread fiddle leaves exactly one queued op, the last one", () => {
+    // Enqueue three flips in a row, applying each plan as the outbox would.
+    let entries: OutboxEntry[] = [];
+    let seq = 0;
+    for (const kind of ["markRead", "markUnread", "markRead"] as const) {
+      const incoming = op({ entity: "notification", op: kind, id: TRIP_A });
+      const plan = planOutboxEnqueue(entries, incoming);
+      entries = entries.filter((e) => !plan.dropSeqs.includes(e.seq));
+      if (plan.append) entries = [...entries, entry((seq += 1), plan.append)];
+    }
+    expect(entries.map((e) => e.op.op)).toEqual(["markRead"]);
+  });
+
+  it("a notification delete cancels its queued read-state op", () => {
+    const del = op({ entity: "notification", op: "delete", id: TRIP_A });
+    const plan = planOutboxEnqueue(
+      [entry(1, op({ entity: "notification", op: "markRead", id: TRIP_A }))],
+      del,
+    );
+    expect(plan.dropSeqs).toEqual([1]);
+    expect(plan.append).toBe(del);
+  });
 });
 
 describe("selectFlushBatch (§8.3 dependency closure)", () => {

@@ -29,6 +29,8 @@
 // so a share revoked since the notification lands on the 404-not-403 path.
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { messageFromError } from "@logjam/shared";
 
 import { acceptFriendRequest, declineFriendRequest } from "../api/friends";
@@ -45,13 +47,16 @@ import {
   type NotificationActions,
   type NotificationInlineAction,
 } from "../notifications/notificationActions";
-import { fontSize, fontWeight, spacing, theme } from "../theme";
-import { enqueueNotificationRead } from "../sync/outbox";
+import { bulkReadAction, selectionCountLabel } from "../notifications/bulkReadAction";
+import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
+import { fontSize, fontWeight, spacing, surface, theme } from "../theme";
+import { enqueueNotificationDelete, enqueueNotificationRead } from "../sync/outbox";
 import {
   fetchAndCacheNotifications,
   patchCachedPayload,
   patchCachedRead,
   readNotificationsCache,
+  removeCachedNotifications,
 } from "../sync/notificationsCache";
 import { onMirrorChanged } from "../sync/syncDb";
 import {
@@ -59,23 +64,34 @@ import {
   EmptyState,
   ErrorState,
   HeroHeader,
+  IconButton,
   LoadingState,
   Row,
   SegmentedControl,
+  SelectionBar,
   StatusPill,
+  TextField,
   Toast,
+  useBulkSelection,
   type SegmentOption,
   type ToastMessage,
 } from "../ui";
 import {
   groupNotificationsByDay,
   notificationCanyonId,
+  notificationHaystack,
   notificationLabel,
   notificationMeta,
 } from "./notificationLabel";
 
 type NotificationsState = {
   notifications: TNotification[];
+  /**
+   * The server's count of EVERYTHING, which can exceed the list: the endpoint
+   * caps its response (500 rows) and reports the true total beside it. Null
+   * when nothing has been fetched yet.
+   */
+  total: number | null;
   loading: boolean;
   error: string | null;
   refetch: () => void;
@@ -91,6 +107,7 @@ type NotificationsState = {
 // decision made by the screen.
 function useNotifications(blocked: boolean): NotificationsState {
   const [notifications, setNotifications] = useState<TNotification[] | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -99,11 +116,15 @@ function useNotifications(blocked: boolean): NotificationsState {
     let cancelled = false;
     (async () => {
       const cache = await readNotificationsCache().catch(() => null);
-      if (!cancelled && cache) setNotifications(cache.notifications);
+      if (!cancelled && cache) {
+        setNotifications(cache.notifications);
+        setTotal(cache.total);
+      }
       try {
         const fresh = await fetchAndCacheNotifications();
         if (!cancelled) {
           setNotifications(fresh.notifications);
+          setTotal(fresh.total);
           setError(null);
         }
       } catch (err) {
@@ -123,7 +144,11 @@ function useNotifications(blocked: boolean): NotificationsState {
     if (blocked) return;
     const unsubscribe = onMirrorChanged(() => {
       readNotificationsCache()
-        .then((cache) => cache && setNotifications(cache.notifications))
+        .then((cache) => {
+          if (!cache) return;
+          setNotifications(cache.notifications);
+          setTotal(cache.total);
+        })
         // A failed cache read leaves a stale list on screen; say so somewhere
         // rather than losing the only trace of it.
         .catch(console.error);
@@ -134,6 +159,7 @@ function useNotifications(blocked: boolean): NotificationsState {
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
   return {
     notifications: notifications ?? [],
+    total,
     loading: notifications === null,
     error,
     refetch,
@@ -149,6 +175,12 @@ function formatTime(iso: string): string {
 }
 
 type Bucket = "all" | "unread" | "read";
+
+// Stable identities for the selection hook — an inline arrow rebuilds its
+// memos on every render of the screen.
+const notificationKey = (n: TNotification): string => n.id;
+/** Every notification can be picked: both group verbs act on any of them. */
+const alwaysSelectable = (): boolean => true;
 
 export function NotificationsScreen({
   onBack,
@@ -175,6 +207,10 @@ export function NotificationsScreen({
     setToast({ text, tone, nonce: Date.now() });
   }, []);
   const [bucket, setBucket] = useState<Bucket>("all");
+  const [search, setSearch] = useState("");
+  /** Which row's ⋯ sheet is open, by id — the row itself is looked up from the
+   *  live list, so a refetch can't leave the sheet holding a stale copy. */
+  const [menuId, setMenuId] = useState<string | null>(null);
   // Accept / decline are ONLINE-ONLY and dimmed rather than hidden (§10): the
   // list itself reads from the cache offline, so the row is there either way
   // and a vanishing button would read as "this one can't be answered".
@@ -200,32 +236,180 @@ export function NotificationsScreen({
     [actionedIds, query.notifications],
   );
 
+  const needle = search.trim().toLowerCase();
   const unreadCount = notifications.filter((n) => !n.read).length;
-  const readCount = notifications.length - unreadCount;
+
+  // The rail's tallies come from the OTHER axis only (the search), so a chip
+  // answers "how many would I get if I tapped this" rather than restating the
+  // bucket already showing — the rule the Canyons rail follows. The HERO keeps
+  // counting the whole inbox: it answers a question about the inbox, not about
+  // the filter being held.
+  const searched = useMemo(
+    () =>
+      needle === ""
+        ? notifications
+        : notifications.filter((n) => notificationHaystack(n).includes(needle)),
+    [needle, notifications],
+  );
+  const searchedUnread = searched.filter((n) => !n.read).length;
 
   const visible = useMemo(
     () =>
       bucket === "all"
-        ? notifications
-        : notifications.filter((n) => (bucket === "unread" ? !n.read : n.read)),
-    [bucket, notifications],
+        ? searched
+        : searched.filter((n) => (bucket === "unread" ? !n.read : n.read)),
+    [bucket, searched],
   );
   const sections = useMemo(() => groupNotificationsByDay(visible), [visible]);
 
-  const markRead = useCallback(
-    async (n: TNotification) => {
-      if (n.read) return;
+  // --- Multi-select (DESIGN.md §7) -----------------------------------------
+  // The same hook and the same bar as Canyons, Logs and Saved: press and hold a
+  // row to start, tap to toggle, the last row deselected leaves the mode. Every
+  // notification is selectable — unlike a shared canyon, there is no row the
+  // group verbs cannot act on.
+  const {
+    selectedKeys,
+    clearSelection,
+    selectItem,
+    selectAll,
+    selectedItems,
+    selectableItems,
+    selecting,
+  } = useBulkSelection({
+    items: visible,
+    keyOf: notificationKey,
+    isDeletable: alwaysSelectable,
+  });
+  // A selection is a transient mode over rows you can see (§7). Also drops the
+  // per-row sheet: a sheet does not outlive the tab.
+  useFocusEffect(
+    useCallback(() => {
+      clearSelection();
+      setMenuId(null);
+    }, [clearSelection]),
+  );
+  // A bucket change can narrow a selected row out of the list, which would let
+  // a bulk verb reach rows the user can no longer see — the same rule the other
+  // screens apply to a filter change.
+  const changeBucket = useCallback(
+    (next: Bucket) => {
+      clearSelection();
+      setBucket(next);
+    },
+    [clearSelection],
+  );
+
+  /**
+   * The server caps its list (500 rows) and reports the true total beside it,
+   * so an inbox past the cap is showing a WINDOW. Say so at the bottom of the
+   * list rather than letting the count in the hero quietly disagree with the
+   * rows — and compare against the fetched list, not the filtered one, or every
+   * search would claim to be truncated.
+   */
+  const truncated =
+    query.total !== null && query.total > query.notifications.length;
+
+  /** Which way the bar's single read/unread button goes for this selection. */
+  const readAction = useMemo(() => bulkReadAction(selectedItems), [selectedItems]);
+
+  // ONE read-state writer, in both directions and for any number of rows: the
+  // cache patch and the outbox op have to agree about which ids and which
+  // value, and a second copy of that pairing is how the badge and the list end
+  // up disagreeing. Marking is offline-safe — the op flushes later, and the
+  // next fetch replays the queue over the response rather than undoing it
+  // (`pendingInboxOps` in notificationsCache).
+  const setRead = useCallback(
+    async (ids: string[], read: boolean) => {
+      if (ids.length === 0) return;
       try {
-        await patchCachedRead([n.id]);
-        await enqueueNotificationRead([n.id]);
+        await patchCachedRead(ids, read);
+        await enqueueNotificationRead(ids, read);
         onUnreadChanged?.();
       } catch (err) {
         console.error(err);
-        notify(messageFromError(err, "Couldn't mark that as read."), "error");
+        notify(
+          messageFromError(
+            err,
+            read ? "Couldn't mark that as read." : "Couldn't mark that as unread.",
+          ),
+          "error",
+        );
       }
     },
     [notify, onUnreadChanged],
   );
+
+  const markRead = useCallback(
+    async (n: TNotification) => {
+      if (n.read) return;
+      await setRead([n.id], true);
+    },
+    [setRead],
+  );
+
+  /**
+   * Delete, for one row or a selection. The cache drops them first so the list
+   * answers the tap immediately, then the ops queue; nothing refetches, because
+   * the fetch is the authority on what exists and would simply hand the rows
+   * back until the queue flushes.
+   */
+  const deleteNotifications = useCallback(
+    async (targets: TNotification[]) => {
+      const ids = targets.map((n) => n.id);
+      if (ids.length === 0) return;
+      try {
+        await removeCachedNotifications(ids);
+        await enqueueNotificationDelete(ids);
+        onUnreadChanged?.();
+        notify(
+          ids.length === 1 ? "Notification deleted." : `Deleted ${ids.length} notifications.`,
+        );
+      } catch (err) {
+        console.error(err);
+        notify(messageFromError(err, "Couldn't delete that."), "error");
+      }
+    },
+    [notify, onUnreadChanged],
+  );
+
+  // --- The two group verbs, over the current selection ----------------------
+
+  // The selection SURVIVES this one. Marking is not destructive and the rows
+  // are all still there, so dropping the picks made the button feel like it had
+  // done something more than it had — and left the obvious follow-up (mark
+  // these, now delete them) needing the whole selection built again. Delete
+  // still clears, because those rows are gone.
+  const applyReadAction = useCallback(() => {
+    if (!readAction) return;
+    void (async () => {
+      await setRead(readAction.ids, readAction.read);
+      notify(readAction.success);
+    })();
+  }, [notify, readAction, setRead]);
+
+  const deleteSelected = useCallback(() => {
+    const targets = selectedItems;
+    const count = targets.length;
+    Alert.alert(
+      count === 1 ? "Delete this notification?" : `Delete ${count} notifications?`,
+      count === 1
+        ? "It goes from every device on your account. This can't be undone."
+        : "They go from every device on your account. This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              await deleteNotifications(targets);
+              clearSelection();
+            })();
+          },
+        },
+      ],
+    );
+  }, [clearSelection, deleteNotifications, selectedItems]);
 
   const markAll = useCallback(async () => {
     const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id);
@@ -334,18 +518,27 @@ export function NotificationsScreen({
     [markRead, onOpenCanyon],
   );
 
+  const openMenu = useCallback((n: TNotification) => setMenuId(n.id), []);
+
   const renderItem = useCallback(
     ({ item }: { item: TNotification }) => (
       <NotificationRow
         item={item}
         onPress={openNotification}
         onAction={requestAction}
+        onMenu={openMenu}
+        selecting={selecting}
+        selected={selectedKeys.includes(item.id)}
+        onToggle={selectItem}
         busyKind={busy?.id === item.id ? busy.kind : null}
-        actionsDisabled={busy !== null || !online}
+        // The row's own accept / decline go inert while a selection is running:
+        // a tap meant for a checkbox must not answer a friend request, and the
+        // pair stays mounted (dimmed) so the row cannot change height mid-mode.
+        actionsDisabled={busy !== null || !online || selecting}
         online={online}
       />
     ),
-    [busy, online, openNotification, requestAction],
+    [busy, online, openMenu, openNotification, requestAction, selectItem, selecting, selectedKeys],
   );
 
   const renderSectionHeader = useCallback(
@@ -359,9 +552,21 @@ export function NotificationsScreen({
   );
 
   const buckets: SegmentOption<Bucket>[] = [
-    { value: "all", label: "All", count: notifications.length },
-    { value: "unread", label: "Unread", count: unreadCount, disabled: unreadCount === 0 },
-    { value: "read", label: "Read", count: readCount, disabled: readCount === 0 },
+    { value: "all", label: "All", count: searched.length },
+    {
+      value: "unread",
+      label: "Unread",
+      count: searchedUnread,
+      // A bucket the search has emptied stays in place but is not a tap into a
+      // dead end — a rail that reshuffles on every keystroke is worse.
+      disabled: searchedUnread === 0 && bucket !== "unread",
+    },
+    {
+      value: "read",
+      label: "Read",
+      count: searched.length - searchedUnread,
+      disabled: searched.length - searchedUnread === 0 && bucket !== "read",
+    },
   ];
 
   // Before the loading branch: with both effects gated off nothing ever
@@ -384,10 +589,21 @@ export function NotificationsScreen({
     <View style={styles.root}>
       <HeroHeader
         eyebrow="Inbox"
-        title={unreadCount > 0 ? "Something new" : "All caught up"}
+        // The answer to "what happened while I was away?" is a NUMBER of things
+        // that did (§1). "Something new" was that answer rounded to a boolean —
+        // it said the same words for one notification and for forty, and read as
+        // a marketing line rather than a count. The tally below it stays the
+        // whole inbox, so the two lines never restate each other.
+        title={
+          unreadCount > 0
+            ? `${unreadCount} unread`
+            : notifications.length > 0
+              ? "All caught up"
+              : "Nothing yet"
+        }
         onBack={onBack}
-        value={unreadCount > 0 ? String(unreadCount) : String(notifications.length)}
-        valueSuffix={unreadCount > 0 ? "unread" : "read"}
+        value={String(notifications.length)}
+        valueSuffix={notifications.length === 1 ? "notification" : "notifications"}
         action={
           unreadCount > 0 ? (
             <Button
@@ -400,9 +616,46 @@ export function NotificationsScreen({
         }
       />
 
+      {/* The bulk bar takes the SegmentedControl's slot and only that slot, so
+          the rail's height cannot change when a selection starts (§7). */}
       {notifications.length > 0 ? (
         <View style={styles.rail}>
-          <SegmentedControl options={buckets} value={bucket} onChange={setBucket} scroll />
+          {selecting && readAction ? (
+            <SelectionBar
+              countLabel={selectionCountLabel(selectedItems)}
+              showSelectAll={selectedItems.length < selectableItems.length}
+              // ONE read/unread button, not a pair: which way it goes follows the
+              // selection (all read → unread, anything unread → read), and the
+              // bar's count line states the unread tally so the direction can be
+              // read off the screen rather than remembered.
+              extra={
+                <IconButton
+                  icon={readAction.icon}
+                  accessibilityLabel={readAction.label}
+                  color={theme.accent}
+                  onPress={applyReadAction}
+                />
+              }
+              onClear={clearSelection}
+              onSelectAll={selectAll}
+              onDelete={deleteSelected}
+            />
+          ) : (
+            <SegmentedControl options={buckets} value={bucket} onChange={changeBucket} scroll />
+          )}
+          {/* The name search, in the SAME place in both states so the rail's
+              height cannot differ between them (§7). It goes inert rather than
+              unmounting while picking — a keystroke could narrow a selected row
+              out of the list — and dims to say so, the treatment Saved's field
+              and the waypoint tag rail already use. */}
+          <View style={styles.searchField}>
+            <TextField
+              label="Search notifications"
+              value={search}
+              onChangeText={setSearch}
+              editable={!selecting}
+            />
+          </View>
         </View>
       ) : null}
 
@@ -420,7 +673,34 @@ export function NotificationsScreen({
         }
         renderSectionHeader={renderSectionHeader}
         renderItem={renderItem}
-        ListEmptyComponent={<EmptyPanel bucket={bucket} onShowAll={() => setBucket("all")} />}
+        ListEmptyComponent={
+          <EmptyPanel
+            bucket={bucket}
+            searching={needle !== ""}
+            onShowAll={() => {
+              setSearch("");
+              setBucket("all");
+            }}
+          />
+        }
+        ListFooterComponent={
+          truncated ? (
+            <Text style={styles.truncation}>
+              {`Showing the ${query.notifications.length} most recent of ${query.total}. Older ones aren't listed.`}
+            </Text>
+          ) : null
+        }
+      />
+
+      {/* Per-row verbs. Looked up from the live list, so a refetch that drops
+          or restyles the row cannot leave the sheet acting on a stale copy. */}
+      <NotificationOptionsSheet
+        notification={notifications.find((n) => n.id === menuId) ?? null}
+        visible={menuId !== null}
+        onClose={() => setMenuId(null)}
+        onOpen={openNotification}
+        onSetRead={(n, read) => void setRead([n.id], read)}
+        onDelete={(n) => void deleteNotifications([n])}
       />
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
@@ -438,6 +718,10 @@ const NotificationRow = memo(function NotificationRow({
   item,
   onPress,
   onAction,
+  onMenu,
+  selecting,
+  selected,
+  onToggle,
   busyKind,
   actionsDisabled,
   online,
@@ -449,6 +733,12 @@ const NotificationRow = memo(function NotificationRow({
     target: NotificationActions,
     action: NotificationInlineAction,
   ) => void;
+  /** Open this row's ⋯ sheet. */
+  onMenu: (item: TNotification) => void;
+  /** A selection is running somewhere in the list. */
+  selecting: boolean;
+  selected: boolean;
+  onToggle: (item: TNotification) => void;
   /** Which of this row's actions is in flight, if any. */
   busyKind: NotificationActionKind | null;
   /** Any action anywhere in the list is running, or there is no connection. */
@@ -460,7 +750,7 @@ const NotificationRow = memo(function NotificationRow({
   const target = notificationActions(item);
   const subtitle = [label.warning, formatTime(item.createdAt)].filter(Boolean).join(" · ");
   // The row's own STATE beats the unread flag in the one trailing slot: unread
-  // is already carried by the accent border, "Saved" is carried by nothing else.
+  // is already carried by the accent EDGE, "Saved" is carried by nothing else.
   const pill = target?.pill
     ? <StatusPill label={target.pill} tone="muted" />
     : !item.read
@@ -473,9 +763,40 @@ const NotificationRow = memo(function NotificationRow({
       title={label.text}
       subtitle={subtitle}
       titleNumberOfLines={2}
-      right={pill}
-      onPress={() => onPress(item)}
-      style={!item.read ? styles.rowUnread : undefined}
+      right={
+        <View style={styles.rowTrailing}>
+          {pill}
+          {selecting ? (
+            // Exactly the ⋯ button's box, so the row cannot resize when a
+            // selection starts.
+            <View style={styles.selectBox}>
+              <Feather
+                name={selected ? "check-circle" : "circle"}
+                size={22}
+                color={selected ? theme.accent : theme.textMuted}
+              />
+            </View>
+          ) : (
+            <IconButton
+              icon="more-vertical"
+              accessibilityLabel="Notification actions"
+              onPress={() => onMenu(item)}
+            />
+          )}
+        </View>
+      }
+      selected={selected}
+      onPress={() => (selecting ? onToggle(item) : onPress(item))}
+      onLongPress={() => onToggle(item)}
+      // EVERY row carries the 3pt left edge; only its COLOUR says unread. The
+      // width is deliberately constant: a row whose border width changed as it
+      // was marked read rendered as an empty card — frame, no content — until
+      // something else forced it to redraw (Fabric on Android re-derives the
+      // clip bounds of a rounded, `overflow: hidden` card from its border box,
+      // and drops the children when it does). Colour changes are free; widths
+      // are not. A selected row lights the edge too, so it never looks like the
+      // selection has un-marked it.
+      style={!item.read || selected ? styles.rowEdgeAccent : styles.rowEdgeIdle}
       // INSIDE the card. Sitting below it, the pair read as a caption for the
       // next notification down — which is how a "Download again" got pressed
       // for a file the user had just turned down.
@@ -513,11 +834,26 @@ const NotificationRow = memo(function NotificationRow({
 /** Per-bucket, and actionable where there is an action (§8). */
 function EmptyPanel({
   bucket,
+  searching,
   onShowAll,
 }: {
   bucket: Bucket;
+  /** Emptied by the search rather than by the bucket — a different problem
+   *  with a different way out, so it gets its own panel. */
+  searching: boolean;
   onShowAll: () => void;
 }) {
+  if (searching) {
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyTitle}>Nothing matches</Text>
+        <Text style={styles.emptyHint}>
+          The search runs over what a row says — a name, a canyon, a filename.
+        </Text>
+        <Button label="Clear search" variant="ghost" onPress={onShowAll} />
+      </View>
+    );
+  }
   if (bucket === "unread") {
     return (
       <View style={styles.empty}>
@@ -565,7 +901,28 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   dayCount: { color: theme.textMuted, fontSize: fontSize.xs },
-  rowUnread: { borderColor: theme.accent },
+  // The field carries its own right pad because the rail has none — the bucket
+  // chips are meant to scroll off the edge; an input running into it just looks
+  // clipped. Same treatment as Saved's search.
+  searchField: { paddingTop: spacing(1.5), paddingRight: spacing(2) },
+  truncation: {
+    color: theme.textMuted,
+    fontSize: fontSize.xs,
+    textAlign: "center",
+    paddingTop: spacing(1.5),
+  },
+  // Unread is an accent EDGE, not an accent border all round — that border is
+  // `Row`'s `selected` treatment, and while a multi-select is running the two
+  // states were drawn the same way on the same card. A left edge reads as a
+  // property of the row (and survives a row that is BOTH unread and picked,
+  // which is most of them), the way an unread marker does in any inbox. Both
+  // states declare the same WIDTH — see the note at the call site.
+  rowEdgeAccent: { borderLeftWidth: 3, borderLeftColor: theme.accent },
+  rowEdgeIdle: { borderLeftWidth: 3, borderLeftColor: surface.border },
+  rowTrailing: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
+  // `IconButton`'s own box, so the checkbox standing in for ⋯ occupies exactly
+  // what it replaced.
+  selectBox: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   actions: { flexDirection: "row", gap: spacing(1) },
   actionHint: {
     color: theme.textMuted,

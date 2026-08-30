@@ -36,7 +36,11 @@ export type OutboxEntry = {
 //  - update into the queue-tail update for the same row (adjacent merge);
 //  - delete cancels the row's queued ops (create+delete → drop both and the
 //    delete; update+delete → drop updates, keep delete);
-//  - duplicate notification markRead → drop (monotonic, §6).
+//  - a notification read-state op (markRead / markUnread) supersedes a queued
+//    one for the same row, and is dropped when the queue tail already says the
+//    same thing. It used to be a plain duplicate-drop, which was only right
+//    while the bit was monotonic; with mark-as-unread the LAST op wins, and a
+//    read→unread→read run must not leave the first two on the queue.
 // Ops not in `queued` state (inflight/parked) are never coalesced into — the
 // server may already have seen them.
 
@@ -51,6 +55,11 @@ export type EnqueuePlan = {
   append?: SyncPushOp;
 };
 
+/** The notification read bit, in either direction — one state, two ops. */
+function isReadStateOp(op: SyncPushOp["op"]): boolean {
+  return op === "markRead" || op === "markUnread";
+}
+
 export function planOutboxEnqueue(
   entries: OutboxEntry[],
   incoming: SyncPushOp,
@@ -62,9 +71,17 @@ export function planOutboxEnqueue(
       entry.op.id === incoming.id,
   );
 
-  if (incoming.op === "markRead") {
-    const duplicate = sameRowQueued.some((entry) => entry.op.op === "markRead");
-    return duplicate ? { dropSeqs: [] } : { dropSeqs: [], append: incoming };
+  if (isReadStateOp(incoming.op)) {
+    const queuedReadOps = sameRowQueued.filter((entry) =>
+      isReadStateOp(entry.op.op),
+    );
+    const last = queuedReadOps[queuedReadOps.length - 1];
+    // The queue already ends in this state: nothing to add, nothing to drop.
+    if (last?.op.op === incoming.op) return { dropSeqs: [] };
+    // Otherwise the newest op is the whole truth — the superseded ones carry no
+    // fields, so dropping them cannot lose anything, and one op per row keeps a
+    // read/unread fiddle from filling the outbox.
+    return { dropSeqs: queuedReadOps.map((entry) => entry.seq), append: incoming };
   }
 
   if (incoming.op === "delete") {
@@ -199,7 +216,7 @@ export function collectDirtyFields(
   for (const entry of entries) {
     if (entry.state === "deadRemote") continue;
     if (entry.op.entity !== entity || entry.op.id !== entityId) continue;
-    if (entry.op.op === "delete" || entry.op.op === "markRead") continue;
+    if (entry.op.op === "delete" || isReadStateOp(entry.op.op)) continue;
     Object.assign(dirty, entry.op.fields);
   }
   return dirty;

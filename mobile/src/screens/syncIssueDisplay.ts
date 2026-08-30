@@ -19,6 +19,7 @@ const OP_LABEL: Record<string, string> = {
   update: "edit",
   delete: "delete",
   markRead: "mark read",
+  markUnread: "mark unread",
 };
 
 // A media op's verbs are not the generic ones: you upload and remove a photo,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { notificationLabel } from "./notificationLabel";
+import { notificationHaystack, notificationLabel } from "./notificationLabel";
 import type { TNotification } from "../api/types";
 
 function notification(type: string, payload: Record<string, unknown> = {}): TNotification {
@@ -114,5 +114,29 @@ describe("file_sent", () => {
     expect(notificationLabel(notification("file_sent", { fileSendId: "s1" })).text).toBe(
       "Someone sent you a file",
     );
+  });
+});
+
+describe("notificationHaystack — what the inbox search matches", () => {
+  it("matches the words the row shows, case-insensitively", () => {
+    const haystack = notificationHaystack(
+      notification("canyon_shared", { sharedByUsername: "bob", canyonName: "Claustral" }),
+    );
+    expect(haystack).toContain("claustral");
+    expect(haystack).toContain("bob");
+  });
+
+  it("includes the warning line, which is the only place some rows say why", () => {
+    expect(
+      notificationHaystack(
+        notification("topo_export_skipped", { reason: "No layers were selected." }),
+      ),
+    ).toContain("no layers were selected");
+  });
+
+  it("carries nothing the row does not show — no ids", () => {
+    expect(
+      notificationHaystack(notification("file_sent", { fileSendId: "abc123", filename: "x.gpx" })),
+    ).not.toContain("abc123");
   });
 });

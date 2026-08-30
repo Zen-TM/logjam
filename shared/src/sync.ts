@@ -75,13 +75,19 @@ export const SYNC_DELTA_ROUTE_LIMIT = 50;
 // ── Push op wire shape (§8.1) ────────────────────────────────────────────────
 
 /** Entities the push endpoint accepts. Media is deliberately absent — the
- * three-phase presign flow owns media creation (§7.1). */
+ * three-phase presign flow owns media creation (§7.1).
+ *
+ * A notification has no create (the server raises them) and no update beyond
+ * its read bit, so it carries three ops: the read bit in both directions and a
+ * delete. `markRead` is NOT monotonic any more — `markUnread` exists — so the
+ * pair is last-writer-wins and the enqueue planner supersedes rather than
+ * dedups them (see planOutboxEnqueue). */
 export const SYNC_PUSH_OPS_BY_ENTITY = {
   canyon: ["create", "update", "delete"],
   tripLog: ["create", "update", "delete"],
   waypoint: ["create", "update", "delete"],
   route: ["create", "update", "delete"],
-  notification: ["markRead"],
+  notification: ["markRead", "markUnread", "delete"],
 } as const;
 
 export type SyncPushEntity = keyof typeof SYNC_PUSH_OPS_BY_ENTITY;

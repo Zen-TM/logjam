@@ -85,6 +85,20 @@ export function notificationLabel(n: TNotification): NotificationLabel {
   }
 }
 
+/**
+ * What the inbox's search field matches against — the row's own words, and
+ * only those.
+ *
+ * Derived from `notificationLabel` rather than from the payload, so it can only
+ * ever match text the user can actually see: searching a field that is not on
+ * screen produces a list whose rows have no visible reason to be there. That
+ * also keeps ids and timestamps out of it, which nobody types.
+ */
+export function notificationHaystack(n: TNotification): string {
+  const label = notificationLabel(n);
+  return `${label.text} ${label.warning ?? ""}`.toLowerCase();
+}
+
 // ── Identity: glyph + hue ────────────────────────────────────────────────────
 //
 // Notifications are a genuine open-ended vocabulary of KINDS, so they get the

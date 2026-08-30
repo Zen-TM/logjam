@@ -467,6 +467,15 @@ ordering aid inside one filtered list, not a second way to pick a subset. Use
 `SectionList` so the header stays pinned while its own rows pass under it, and
 give the header the page colour so rows don't ghost through it.
 
+### A list the server truncated says so, at the bottom
+
+`GET /notifications` caps its response (500 rows) and reports the true total
+beside it, so a long-lived inbox is showing a WINDOW. The list carries a footer
+line — "Showing the 500 most recent of 812. Older ones aren't listed." — because
+the alternative is a hero count that quietly disagrees with the rows under it.
+The comparison is against the FETCHED list, not the filtered one; otherwise
+every search would claim to be truncated.
+
 ### Filters over stacked sections
 
 Mixed content types get a **filter rail**, not a stack of `SectionHeader`
@@ -981,7 +990,30 @@ which subsystem is talking.
     selection does, so a shared route or waypoint (no `delete` descriptor) is
     skipped by select-all and answers a long press with the reason instead of a
     checkbox — silently ignoring the press reads as a missed tap, and picking it
-    would only teach the count to lie.
+    would only teach the count to lie. (Deleting is all it does on every screen
+    but the Inbox, which adds the one verb below.)
+  - **A screen may add ONE more group verb, in `SelectionBar`'s `extra` slot,
+    and only where bulk genuinely beats one-at-a-time.** The Inbox's read/unread
+    toggle is the only one: it is a SINGLE button whose direction follows the
+    selection — every row read marks them unread, anything unread marks the
+    unread ones read — because the pair would be two buttons of which one is
+    always a no-op. `notifications/bulkReadAction.ts` decides it (glyph `eye` /
+    `eye-off`, screen-reader label and toast from one place), and the bar's count
+    line carries the unread TALLY ("3 selected · 1 unread") so the direction can
+    be read off the screen instead of remembered. A second `extra` on the same
+    screen is a toolbar, which is the thing this rail exists not to be.
+  - **The group verb that is not destructive does not clear the selection.**
+    The read/unread toggle leaves the rows picked: they are all still there, the
+    obvious next move is another verb on the same set, and dropping the picks
+    read as the button having done more than it had. Delete clears, because
+    those rows are gone.
+  - **A row's own state must not be drawn the way SELECTION is drawn.** The
+    inbox marked unread with an accent border, which is `Row`'s `selected`
+    treatment, so starting a multi-select made picked and unread rows identical
+    — and most inbox rows are both. Unread is an accent LEFT EDGE now
+    (`rowUnread` in `NotificationsScreen`), which survives being selected and
+    also covers the row whose trailing pill slot is already spoken for by a
+    state pill ("Saved"), where the "New" pill never appears.
   - **Filter and selection are exclusive.** The category rail is gone while
     picking, any narrowing control that remains is inert, and any
     programmatic filter change clears the selection: a bulk delete that

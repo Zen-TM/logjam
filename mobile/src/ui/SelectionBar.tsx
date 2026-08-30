@@ -11,6 +11,7 @@ import { SEGMENTED_CONTROL_HEIGHT } from "./SegmentedControl";
 export function SelectionBar({
   countLabel,
   showSelectAll,
+  extra,
   onClear,
   onSelectAll,
   onDelete,
@@ -19,6 +20,15 @@ export function SelectionBar({
   countLabel: string;
   /** Hidden once everything selectable is picked (nothing left to add). */
   showSelectAll: boolean;
+  /**
+   * One more group verb, sitting between select-all and delete — an
+   * `IconButton`, sized like the two it stands among. The inbox's read/unread
+   * toggle is the only one so far, and the bar stays a fixed set of slots
+   * rather than an arbitrary toolbar: DESIGN.md §7 admits only verbs that are
+   * BETTER in bulk than one at a time, and a bar that grows a row per screen is
+   * how that rule stops being checkable.
+   */
+  extra?: React.ReactNode;
   onClear: () => void;
   onSelectAll: () => void;
   onDelete: () => void;
@@ -36,6 +46,7 @@ export function SelectionBar({
           onPress={onSelectAll}
         />
       ) : null}
+      {extra}
       <IconButton
         icon="trash-2"
         accessibilityLabel="Delete the selected items"
