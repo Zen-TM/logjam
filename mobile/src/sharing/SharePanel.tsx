@@ -389,12 +389,16 @@ export function useSharePanel({
         </View>
       ),
       footer: (
+        // No `loading`: `Button` replaces the label with a spinner, and the
+        // label is where the upload queue reports itself ("Sending 3 of 8 —
+        // Ranon.gpx"). A bulk send is minutes on trail signal, and a silent
+        // spinner for that long is indistinguishable from a hang. `disabled`
+        // still dims it and refuses taps.
         <Button
           label={bulkShareButtonLabel(plan, selected.size, bulkProgress)}
           icon="share-2"
           onPress={confirmBulk}
           disabled={selected.size === 0 || sending || plan.actionableCount === 0}
-          loading={sending}
         />
       ),
     };

@@ -1172,6 +1172,13 @@ const BatchRow = memo(function BatchRow({
         batch.group === "files" && pending.length > 0 ? (
           <>
             <View style={styles.actions}>
+              {/* THE COUNT IS THE PROGRESS INDICATOR, so neither of these
+                  passes `loading`: `Button` swaps the whole label out for a
+                  spinner, which threw away the one thing worth showing — a
+                  batch accept is a download queue, and "Saving 2 of 3" is the
+                  difference between waiting and wondering whether it hung.
+                  `actionsDisabled` covers the run, so the pair still dims and
+                  refuses taps. */}
               <Button
                 label={
                   batchBusy?.kind === "accept"
@@ -1181,7 +1188,6 @@ const BatchRow = memo(function BatchRow({
                 compact
                 grow
                 disabled={actionsDisabled}
-                loading={batchBusy?.kind === "accept"}
                 onPress={() => onBatchAction(batch, "accept")}
               />
               <Button
@@ -1190,7 +1196,6 @@ const BatchRow = memo(function BatchRow({
                 compact
                 grow
                 disabled={actionsDisabled}
-                loading={batchBusy?.kind === "decline"}
                 onPress={() => onBatchAction(batch, "decline")}
               />
             </View>
