@@ -88,3 +88,71 @@ export const FILE_SEND_MAX_BYTES = 64 * 1024 * 1024;
 
 /** Display filename cap. The one user-supplied string on a send — never logged. */
 export const FILE_SEND_FILENAME_MAX_LENGTH = 255;
+
+// ── Bulk share ───────────────────────────────────────────────────────────────
+//
+// ONE user action — "share these 23 things with these 3 friends" — spanning
+// BOTH verbs above. The mechanism is picked per item and never by the user:
+// a waypoint gets a Share, a recorded track gets a Send a copy, because that
+// is the only thing each kind supports. The UI's job is to say which items
+// went which way BEFORE the action runs (the confirm), not to make the user
+// choose.
+
+/**
+ * What one bulk-share line may point at.
+ *
+ * `canyon` is admitted HERE and nowhere else: a canyon share is a `CanyonShare`
+ * row, not a `Share` row (see `SHARABLE_ENTITY_TYPES` above), and the bulk
+ * endpoint is the one caller that fans a mixed list across both tables. Keeping
+ * the union bulk-only stops "canyon" leaking into `SHARABLE_ENTITY_TYPES`,
+ * where it would silently widen `/shares` to a table it cannot write.
+ */
+export const BULK_SHARE_ITEM_TYPES = [
+  ...SHARABLE_ENTITY_TYPES,
+  "canyon",
+] as const;
+
+export type BulkShareItemType = (typeof BULK_SHARE_ITEM_TYPES)[number];
+
+export function isBulkShareItemType(
+  value: unknown,
+): value is BulkShareItemType {
+  return (
+    typeof value === "string" &&
+    (BULK_SHARE_ITEM_TYPES as readonly string[]).includes(value)
+  );
+}
+
+export type BulkShareItem = {
+  entityType: BulkShareItemType;
+  entityId: string;
+};
+
+/**
+ * Cap on one bulk-share request.
+ *
+ * A bound, not a product decision — the same reason `MAX_RECIPIENTS_PER_SEND`
+ * exists. With the recipient cap this is 200 x 25 = 5000 share rows per
+ * request, which is one `createMany` per table, not 5000 round trips.
+ */
+export const MAX_BULK_SHARE_ITEMS = 200;
+
+/**
+ * What a bulk share DID, in counts and nothing else.
+ *
+ * Deliberately not per-id: an id-keyed result ("that one wasn't yours") is an
+ * existence oracle on ids the caller may have guessed, which is the rule
+ * `/shares` already follows by answering 404 rather than 403 (SEC-001). The
+ * caller supplied the list, so it can label its own rows from the totals.
+ */
+export type BulkShareResult = {
+  /** New share rows written, summed over items x recipients. */
+  granted: number;
+  /** Pairs that already existed — re-sharing is a no-op, never an error. */
+  alreadyShared: number;
+  /**
+   * Items the sender may not share (not theirs, or gone since the list was
+   * built), summed over recipients. Never says WHICH.
+   */
+  ineligible: number;
+};

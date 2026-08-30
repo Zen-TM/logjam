@@ -33,6 +33,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -59,6 +60,17 @@ import { FriendAvatar } from "./FriendAvatar";
 import { friendListLoadKey } from "./friendListLoad";
 import { friendMatches } from "./friendSearch";
 import {
+  bulkShareButtonLabel,
+  bulkShareConfirm,
+  bulkShareTitle,
+  bulkShareTriageLine,
+  type BulkShareCandidate,
+  type BulkShareOutcome,
+  type BulkSharePlan,
+  type BulkShareProgress,
+} from "./bulkShareTargets";
+import { runBulkShare } from "./runBulkShare";
+import {
   RecipientRows,
   SharingError,
   shareRowSubtitle,
@@ -75,7 +87,15 @@ import {
 export type SharePanelTarget =
   | { kind: "entity"; entityType: SharableEntityType; entityId: string }
   | { kind: "canyon"; canyonId: string }
-  | { kind: "copy"; sendCopy: NonNullable<AssetActions["sendCopy"]> };
+  | { kind: "copy"; sendCopy: NonNullable<AssetActions["sendCopy"]> }
+  /**
+   * A whole multi-selection, which may need BOTH verbs at once — some rows can
+   * only be shared, some can only be copied, and the user picked them in one
+   * gesture. It behaves like `copy`: ticks, then a footer button, then a
+   * confirm — because half of what it does cannot be taken back, and the rule
+   * is that the irrevocable half sets the interaction for the whole thing.
+   */
+  | { kind: "bulk"; plan: BulkSharePlan<BulkShareCandidate> };
 
 /**
  * THE PROMISE, per kind, and the only place either sentence is written.
@@ -120,6 +140,7 @@ export function useSharePanel({
   enabled = true,
   active = true,
   onSent,
+  onBulkDone,
 }: {
   /** Null while the caller has nothing selected — body and footer are null. */
   target: SharePanelTarget | null;
@@ -132,8 +153,16 @@ export function useSharePanel({
   active?: boolean;
   /** A copy left the device. The caller closes the sheet and says so. */
   onSent?: (recipientCount: number) => void;
+  /**
+   * A bulk share finished — wholly, partly, or not at all. The caller closes
+   * the sheet, clears the selection and reports; `bulkShareOutcomeMessage`
+   * writes the sentence so every surface says the same thing about a run where
+   * six of eight files went.
+   */
+  onBulkDone?: (outcome: BulkShareOutcome) => void;
 }): { title: string; body: React.ReactNode; footer: React.ReactNode | null; sharing: ReturnType<typeof useSharing> } {
   const isCopy = target?.kind === "copy";
+  const bulkPlan = target?.kind === "bulk" ? target.plan : null;
 
   // WHAT the target is, as primitives. Every caller builds `target` as an
   // object literal in its render, so its identity changes on every pass —
@@ -146,7 +175,16 @@ export function useSharePanel({
   const targetKey =
     target?.kind === "copy"
       ? `copy:${target.sendCopy.sourceKind}:${target.sendCopy.filename}`
-      : (canyonId ?? (entityId ? `${entityType}:${entityId}` : null));
+      : target?.kind === "bulk"
+        ? // The SELECTION is the identity, so changing what is picked clears
+          // the ticks exactly as switching items does. Derived from content
+          // rather than from the plan object, which the caller rebuilds on
+          // every render — the trap the note above is about.
+          `bulk:${[
+            ...target.plan.shares.map((item) => `${item.entityType}:${item.entityId}`),
+            ...target.plan.copies.map((candidate) => candidate.key),
+          ].join(",")}`
+        : (canyonId ?? (entityId ? `${entityType}:${entityId}` : null));
 
   // The API calls are the only per-kind part. A copy target has none, and its
   // sharing state is never read — `enabled` below keeps it from ever loading.
@@ -171,7 +209,9 @@ export function useSharePanel({
   const sharing = useSharing({
     calls,
     online,
-    enabled: enabled && target != null && !isCopy,
+    // Neither a copy nor a bulk has ONE item whose recipients could be listed,
+    // so neither ever loads share state.
+    enabled: enabled && target != null && !isCopy && bulkPlan === null,
     itemLabel,
     revokeBody: (): string =>
       canyonId
@@ -220,6 +260,50 @@ export function useSharePanel({
     }
   }, [onSent, selected, sendCopy]);
 
+  // Where the run has got to, so a multi-minute upload queue is not a spinner
+  // with nothing behind it. Null while nothing is running.
+  const [bulkProgress, setBulkProgress] = useState<BulkShareProgress | null>(null);
+  const runBulk = useCallback(async () => {
+    if (!bulkPlan) return;
+    setSending(true);
+    setSendError(null);
+    try {
+      const outcome = await runBulkShare({
+        plan: bulkPlan,
+        recipientIds: [...selected],
+        onProgress: setBulkProgress,
+      });
+      onBulkDone?.(outcome);
+    } catch (err) {
+      // `runBulkShare` reports per-leg rather than throwing, so reaching here
+      // means something outside both legs broke. Say so plainly rather than
+      // leaving the sheet looking busy forever.
+      console.error(err);
+      setSendError(messageFromError(err, "Couldn't share those items."));
+    } finally {
+      setBulkProgress(null);
+      setSending(false);
+    }
+  }, [bulkPlan, onBulkDone, selected]);
+
+  /**
+   * The confirm, and the only place a user is told that part of what they
+   * picked is going out for keeps. Destructive-styled because half of it is.
+   */
+  const confirmBulk = useCallback(() => {
+    if (!bulkPlan) return;
+    const confirm = bulkShareConfirm(bulkPlan, selected.size);
+    if (!confirm) return;
+    Alert.alert(confirm.title, confirm.body, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: confirm.confirmLabel,
+        style: bulkPlan.copies.length > 0 ? "destructive" : "default",
+        onPress: () => void runBulk(),
+      },
+    ]);
+  }, [bulkPlan, runBulk, selected.size]);
+
   const toggle = useCallback((id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -236,6 +320,74 @@ export function useSharePanel({
   const search = (
     <SearchField value={query} onChangeText={setQuery} disabled={sending} />
   );
+
+  if (target.kind === "bulk") {
+    const plan = target.plan;
+    const title = bulkShareTitle(plan);
+    if (friends.status.status === "unavailable") {
+      return {
+        title,
+        body: <ClosedDoor text={unavailableReasonText(friends.status.reason)} />,
+        footer: null,
+        sharing,
+      };
+    }
+    const shown = (friends.list ?? []).filter((friend) =>
+      friendMatches(friend.username, query),
+    );
+    const triage = bulkShareTriageLine(plan);
+    return {
+      title,
+      sharing,
+      body: (
+        <View style={styles.body}>
+          {sendError ? <ErrorBanner message={sendError} /> : null}
+          {friends.error ? (
+            <ErrorBanner message={friends.error} onRetry={friends.retry} />
+          ) : null}
+          {/* WHAT IS BEING SKIPPED, BEFORE THE BUTTON. Which rows a bulk share
+              cannot act on is entirely predictable from what is on screen, and
+              a predictable exclusion reported afterwards as a failure reads as
+              the feature being broken. */}
+          {triage ? <Text style={styles.muted}>{triage}</Text> : null}
+          {/* BOTH promises when the selection needs both verbs, each in its own
+              words and its own hue. Averaging them into one sentence is the
+              single thing this whole feature could get wrong: a user who
+              believes every one of the 23 can be taken back was misled here. */}
+          {plan.shares.length > 0 ? (
+            <PromiseBanner tone="share" text={SHARE_BLURB} />
+          ) : null}
+          {plan.copies.length > 0 ? (
+            <PromiseBanner
+              tone="copy"
+              text={`${plan.copies.length === 1 ? "One item" : `${plan.copies.length} of these`} can only be sent as a copy — those become theirs to keep, and you can't take them back.`}
+            />
+          ) : null}
+          {search}
+          <SectionHeader label="Send to" />
+          <FriendRows
+            friends={friends.list}
+            shown={shown}
+            query={query}
+            mode="select"
+            selectedIds={selected}
+            disabled={sending}
+            onPress={(friend) => toggle(friend.id)}
+            emptyText="No friends yet — add friends from the More tab."
+          />
+        </View>
+      ),
+      footer: (
+        <Button
+          label={bulkShareButtonLabel(plan, selected.size, bulkProgress)}
+          icon="share-2"
+          onPress={confirmBulk}
+          disabled={selected.size === 0 || sending || plan.actionableCount === 0}
+          loading={sending}
+        />
+      ),
+    };
+  }
 
   if (target.kind === "copy") {
     // The closed door names itself rather than the panel vanishing

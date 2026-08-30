@@ -31,6 +31,12 @@ const PUSH_TITLES: Record<string, string> = {
   geo_pdf_failed: "GeoPDF failed",
   item_shared: "Something was shared with you",
   file_sent: "A friend sent you a file",
+  // ONE buzz for a whole bulk action, whatever it contained. Deliberately says
+  // neither who nor how many: a count is not free text, but a title is built by
+  // lookup and never by interpolation, and keeping that true BY CONSTRUCTION is
+  // what stops the next call site reaching for a username. The inbox has the
+  // numbers; this only has to get the user there.
+  bulk_shared: "New things were shared with you",
 };
 
 const GENERIC_TITLE = "Logjam notification";
@@ -47,6 +53,8 @@ export type PushData = {
   entityType?: string;
   entityId?: string;
   fileSendId?: string;
+  /** Groups the notifications one bulk share created. Opaque uuid. */
+  batchId?: string;
 };
 
 const ALLOWED_DATA_KEYS = new Set([
@@ -60,6 +68,7 @@ const ALLOWED_DATA_KEYS = new Set([
   "entityType",
   "entityId",
   "fileSendId",
+  "batchId",
 ]);
 
 export type ExpoPushMessage = {

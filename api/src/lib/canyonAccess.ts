@@ -80,3 +80,29 @@ export function requireCanyonOwner(
 ): void {
   if (canyon.ownerId !== userId) throw denial;
 }
+
+/**
+ * Which of these canyon ids the user OWNS — the batch form of `getCanyonRole`'s
+ * owner arm, for the bulk-share endpoint.
+ *
+ * Here rather than in the caller because "what makes someone the owner of a
+ * canyon" is this file's answer and must stay this file's answer (SEC-001).
+ * Ownership is deliberately the ONLY arm batched: a sharee may not re-share, so
+ * the bulk path never needs the "shared" role, and a helper that returned it
+ * would invite a caller to accept it.
+ *
+ * Ids that do not exist are simply absent from the result — a caller must
+ * render that as the same outcome a foreign id gets, never as a distinct one
+ * (the 404-not-403 rule, in aggregate form).
+ */
+export async function filterOwnedCanyonIds(
+  userId: string,
+  canyonIds: string[],
+): Promise<Set<string>> {
+  if (canyonIds.length === 0) return new Set();
+  const owned = await prisma.canyon.findMany({
+    where: { id: { in: canyonIds }, ownerId: userId },
+    select: { id: true },
+  });
+  return new Set(owned.map((row) => row.id));
+}

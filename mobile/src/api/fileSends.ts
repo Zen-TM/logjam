@@ -67,11 +67,19 @@ export async function sendFileCopy({
   filename,
   sourceKind,
   recipientIds,
+  batchId,
 }: {
   fileUri: string;
   filename: string;
   sourceKind: FileSendSourceKind;
   recipientIds: string[];
+  /**
+   * Which bulk action this file was one of, when it was one of several. Groups
+   * the recipient's notifications so a bulk send is ONE inbox row they can
+   * expand, and suppresses this send's own push in favour of the batch's.
+   * Absent on an ordinary one-file send, which pushes as it always did.
+   */
+  batchId?: string;
 }): Promise<void> {
   const info = await FileSystem.getInfoAsync(fileUri);
   if (!info.exists) throw new Error("That file is no longer on this device.");
@@ -105,7 +113,10 @@ export async function sendFileCopy({
 
   await apiFetch(`/file-sends/${fileSendId}/confirm`, {
     method: "POST",
-    body: { filename, sourceKind, recipientIds },
+    // `batchId` also SILENCES this send's push — one bulk action is one buzz,
+    // fired by POST /bulk-share once every upload has landed. See its comment
+    // on the confirm route.
+    body: { filename, sourceKind, recipientIds, ...(batchId ? { batchId } : {}) },
   });
 }
 

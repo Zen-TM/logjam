@@ -48,6 +48,20 @@ import {
   type NotificationInlineAction,
 } from "../notifications/notificationActions";
 import { bulkReadAction, selectionCountLabel } from "../notifications/bulkReadAction";
+import {
+  batchFileActionMessage,
+  runBatchFileAction,
+  type BatchFileActionKind,
+  type BatchFileActionProgress,
+} from "../notifications/batchFileAction";
+import {
+  batchKeyOf,
+  batchLabel,
+  batchPendingFileSends,
+  collapseBatches,
+  findNotificationBatches,
+  type NotificationBatch,
+} from "../notifications/notificationBatches";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import { fontSize, fontWeight, spacing, surface, theme } from "../theme";
 import { enqueueNotificationDelete, enqueueNotificationRead } from "../sync/outbox";
@@ -182,6 +196,34 @@ const notificationKey = (n: TNotification): string => n.id;
 /** Every notification can be picked: both group verbs act on any of them. */
 const alwaysSelectable = (): boolean => true;
 
+const EMPTY_BATCH_KEYS: ReadonlySet<string> = new Set<string>();
+
+/**
+ * Replace every picked BATCH HEADER with the rows it stands for.
+ *
+ * The header is not a row of its own — it is one member of the batch wearing
+ * the batch's words — so a group verb that acted only on it would mark one of
+ * twelve read, or delete one of twelve and strand the rest. Deduped by id
+ * because an EXPANDED batch can have its header and its members picked
+ * separately.
+ */
+function expandBatchSelection(
+  selected: TNotification[],
+  batches: Map<string, NotificationBatch>,
+): TNotification[] {
+  const byId = new Map<string, TNotification>();
+  for (const notification of selected) {
+    const key = batchKeyOf(notification);
+    const batch = key ? batches.get(key) : undefined;
+    if (batch && batch.representative.id === notification.id) {
+      for (const member of batch.items) byId.set(member.id, member);
+    } else {
+      byId.set(notification.id, notification);
+    }
+  }
+  return [...byId.values()];
+}
+
 export function NotificationsScreen({
   onBack,
   onUnreadChanged,
@@ -260,7 +302,31 @@ export function NotificationsScreen({
         : searched.filter((n) => (bucket === "unread" ? !n.read : n.read)),
     [bucket, searched],
   );
-  const sections = useMemo(() => groupNotificationsByDay(visible), [visible]);
+  // --- Bulk-share batches ---------------------------------------------------
+  // A friend who shares 23 things in one gesture creates 23 notifications, and
+  // they stay 23 notifications — each is separately answerable and separately
+  // dropped when its share is revoked (see notifications/notificationBatches.ts
+  // for why an aggregate ROW server-side would break both). The collapse is
+  // here, over the ALREADY-FILTERED list, so a batch header counts the rows the
+  // user can actually see under it rather than promising twelve and opening on
+  // four.
+  const [expandedBatches, setExpandedBatches] = useState<ReadonlySet<string>>(
+    EMPTY_BATCH_KEYS,
+  );
+  const batches = useMemo(() => findNotificationBatches(visible), [visible]);
+  const rows = useMemo(
+    () => collapseBatches(visible, batches, expandedBatches),
+    [batches, expandedBatches, visible],
+  );
+  const toggleBatch = useCallback((key: string) => {
+    setExpandedBatches((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+  const sections = useMemo(() => groupNotificationsByDay(rows), [rows]);
 
   // --- Multi-select (DESIGN.md §7) -----------------------------------------
   // The same hook and the same bar as Canyons, Logs and Saved: press and hold a
@@ -276,10 +342,22 @@ export function NotificationsScreen({
     selectableItems,
     selecting,
   } = useBulkSelection({
-    items: visible,
+    items: rows,
     keyOf: notificationKey,
     isDeletable: alwaysSelectable,
   });
+  /**
+   * The selection as the group verbs act on it: a picked BATCH HEADER stands
+   * for every row under it, collapsed or not.
+   *
+   * Selecting a row that says "bob shared 12 items with you" and then deleting
+   * one notification would leave eleven orphans in the list with nothing left
+   * to group them — the header IS the twelve rows, so it has to select as them.
+   */
+  const selectedNotifications = useMemo(
+    () => expandBatchSelection(selectedItems, batches),
+    [batches, selectedItems],
+  );
   // A selection is a transient mode over rows you can see (§7). Also drops the
   // per-row sheet: a sheet does not outlive the tab.
   useFocusEffect(
@@ -310,7 +388,10 @@ export function NotificationsScreen({
     query.total !== null && query.total > query.notifications.length;
 
   /** Which way the bar's single read/unread button goes for this selection. */
-  const readAction = useMemo(() => bulkReadAction(selectedItems), [selectedItems]);
+  const readAction = useMemo(
+    () => bulkReadAction(selectedNotifications),
+    [selectedNotifications],
+  );
 
   // ONE read-state writer, in both directions and for any number of rows: the
   // cache patch and the outbox op have to agree about which ids and which
@@ -388,7 +469,7 @@ export function NotificationsScreen({
   }, [notify, readAction, setRead]);
 
   const deleteSelected = useCallback(() => {
-    const targets = selectedItems;
+    const targets = selectedNotifications;
     const count = targets.length;
     Alert.alert(
       count === 1 ? "Delete this notification?" : `Delete ${count} notifications?`,
@@ -409,7 +490,7 @@ export function NotificationsScreen({
         },
       ],
     );
-  }, [clearSelection, deleteNotifications, selectedItems]);
+  }, [clearSelection, deleteNotifications, selectedNotifications]);
 
   const markAll = useCallback(async () => {
     const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id);
@@ -431,12 +512,20 @@ export function NotificationsScreen({
    * the notification alive (as the "Download again" retry — the download URL
    * is issued before the bytes land); the other three are purged server-side,
    * so the row is hidden the moment the call succeeds.
+   *
+   * `silent` is for a batch run, which answers eight rows through this same
+   * path: eight toasts and eight refetches for one tap is noise, and the
+   * partial-run sentence can only be written once the whole queue has finished
+   * (`batchFileAction.ts`). It suppresses the REPORTING, never the cache
+   * patching or the read state — those are per row and must still happen — and
+   * it re-throws so the queue can count the failure.
    */
   const runAction = useCallback(
     async (
       n: TNotification,
       target: NotificationActions,
       action: NotificationInlineAction,
+      { silent = false }: { silent?: boolean } = {},
     ) => {
       setBusy({ id: n.id, kind: action.kind });
       const survives = target.type === "file_sent" && action.kind === "accept";
@@ -466,12 +555,12 @@ export function NotificationsScreen({
           // unread count immediately, which is the visible half anyway.
           clear();
           onUnreadChanged?.();
-          refetch();
+          if (!silent) refetch();
         }
-        notify(action.success);
+        if (!silent) notify(action.success);
       } catch (err) {
         console.error(err);
-        notify(messageFromError(err, action.failure), "error");
+        if (!silent) notify(messageFromError(err, action.failure), "error");
         if (isResolvedElsewhereError(err)) {
           // Answered somewhere else (the Friends screen, the web, another
           // device), or the send is gone. The buttons are dead rather than
@@ -479,8 +568,11 @@ export function NotificationsScreen({
           // restoring live buttons that will only fail again.
           clear();
           onUnreadChanged?.();
-          refetch();
+          if (!silent) refetch();
         }
+        // A batch run counts what failed and reports once at the end, so the
+        // failure has to reach it rather than being swallowed here.
+        if (silent) throw err;
       } finally {
         setBusy(null);
       }
@@ -507,6 +599,88 @@ export function NotificationsScreen({
     [runAction],
   );
 
+  // --- Answering a whole batch of sent files --------------------------------
+  //
+  // The other half of collapsing eight sends into one row: a grouped row that
+  // cannot be answered as a group just moves the tedium, and the recipient
+  // still opens eight rows and taps sixteen times.
+  //
+  // It runs through `runAction` per member (silently), so nothing about what an
+  // accept IS lives twice — only the queueing, the progress and the one
+  // sentence at the end are new.
+  const [batchBusy, setBatchBusy] = useState<{
+    key: string;
+    kind: BatchFileActionKind;
+    progress: BatchFileActionProgress;
+  } | null>(null);
+
+  const runBatch = useCallback(
+    async (batch: NotificationBatch, kind: BatchFileActionKind) => {
+      const pending = batchPendingFileSends(batch);
+      if (pending.length === 0) return;
+      setBatchBusy({ key: batch.key, kind, progress: { done: 0, total: pending.length } });
+      try {
+        const result = await runBatchFileAction({
+          items: pending,
+          onProgress: (progress) =>
+            setBatchBusy((prev) => (prev ? { ...prev, progress } : prev)),
+          run: async (notification) => {
+            const target = notificationActions(notification);
+            // No target means the row is not answerable any more (expired, or
+            // already taken) — nothing to do, and not a failure either.
+            if (!target) return;
+            const action = target.actions.find((candidate) => candidate.kind === kind);
+            if (!action) return;
+            await runAction(notification, target, action, { silent: true });
+          },
+        });
+        const report = batchFileActionMessage({ kind, ...result });
+        notify(report.text, report.tone === "error" ? "error" : undefined);
+      } finally {
+        setBatchBusy(null);
+        // ONE refetch for the whole run rather than one per file: the fetch is
+        // the authority on what still exists, and declines purge their rows
+        // server-side.
+        onUnreadChanged?.();
+        refetch();
+      }
+    },
+    [notify, onUnreadChanged, refetch, runAction],
+  );
+
+  /**
+   * Turning a whole batch down confirms; accepting does not.
+   *
+   * Same asymmetry every single send already has, and for the same reason —
+   * a decline cannot be undone and there is no way back but asking the sender
+   * again — except that here it is eight files at once, so the dialog says how
+   * many rather than which.
+   */
+  const requestBatchAction = useCallback(
+    (batch: NotificationBatch, kind: BatchFileActionKind) => {
+      const pending = batchPendingFileSends(batch);
+      if (pending.length === 0) return;
+      if (kind === "accept") {
+        void runBatch(batch, kind);
+        return;
+      }
+      const who = batch.sender ?? "them";
+      Alert.alert(
+        `Turn down ${pending.length} files?`,
+        `You won't get copies of any of them. If you want them, you'd have to ask ${who} to send them again.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Turn down",
+            style: "destructive",
+            onPress: () => void runBatch(batch, kind),
+          },
+        ],
+      );
+    },
+    [runBatch],
+  );
+
   // Reading it is what marks it read, so both happen on one tap; the canyon
   // then opens on top.
   const openNotification = useCallback(
@@ -521,24 +695,54 @@ export function NotificationsScreen({
   const openMenu = useCallback((n: TNotification) => setMenuId(n.id), []);
 
   const renderItem = useCallback(
-    ({ item }: { item: TNotification }) => (
-      <NotificationRow
-        item={item}
-        onPress={openNotification}
-        onAction={requestAction}
-        onMenu={openMenu}
-        selecting={selecting}
-        selected={selectedKeys.includes(item.id)}
-        onToggle={selectItem}
-        busyKind={busy?.id === item.id ? busy.kind : null}
-        // The row's own accept / decline go inert while a selection is running:
-        // a tap meant for a checkbox must not answer a friend request, and the
-        // pair stays mounted (dimmed) so the row cannot change height mid-mode.
-        actionsDisabled={busy !== null || !online || selecting}
-        online={online}
-      />
-    ),
-    [busy, online, openMenu, openNotification, requestAction, selectItem, selecting, selectedKeys],
+    ({ item }: { item: TNotification }) => {
+      const key = batchKeyOf(item);
+      const batch = key ? batches.get(key) : undefined;
+      // Three shapes from one component: the HEADER of a batch (this row is
+      // the batch's representative), a MEMBER of an expanded one (indented,
+      // otherwise an ordinary row), and an ordinary row.
+      const isHeader = batch != null && batch.representative.id === item.id;
+      return (
+        <NotificationRow
+          item={item}
+          batch={isHeader ? batch : null}
+          expanded={isHeader ? expandedBatches.has(batch.key) : false}
+          member={batch != null && !isHeader}
+          onToggleBatch={toggleBatch}
+          onBatchAction={requestBatchAction}
+          batchBusy={isHeader && batchBusy?.key === batch.key ? batchBusy : null}
+          onPress={openNotification}
+          onAction={requestAction}
+          onMenu={openMenu}
+          selecting={selecting}
+          selected={selectedKeys.includes(item.id)}
+          onToggle={selectItem}
+          busyKind={busy?.id === item.id ? busy.kind : null}
+          // The row's own accept / decline go inert while a selection is running:
+          // a tap meant for a checkbox must not answer a friend request, and the
+          // pair stays mounted (dimmed) so the row cannot change height mid-mode.
+          // A batch run disables every row's buttons for the same reason it
+          // disables the header's: one queue at a time.
+          actionsDisabled={busy !== null || batchBusy !== null || !online || selecting}
+          online={online}
+        />
+      );
+    },
+    [
+      batchBusy,
+      batches,
+      busy,
+      expandedBatches,
+      online,
+      openMenu,
+      openNotification,
+      requestAction,
+      requestBatchAction,
+      selectItem,
+      selecting,
+      selectedKeys,
+      toggleBatch,
+    ],
   );
 
   const renderSectionHeader = useCallback(
@@ -622,7 +826,7 @@ export function NotificationsScreen({
         <View style={styles.rail}>
           {selecting && readAction ? (
             <SelectionBar
-              countLabel={selectionCountLabel(selectedItems)}
+              countLabel={selectionCountLabel(selectedNotifications)}
               showSelectAll={selectedItems.length < selectableItems.length}
               // ONE read/unread button, not a pair: which way it goes follows the
               // selection (all read → unread, anything unread → read), and the
@@ -716,6 +920,12 @@ function keyExtractor(item: TNotification): string {
 // §9, the whole reason the Logs list stopped re-rendering every mounted cell.
 const NotificationRow = memo(function NotificationRow({
   item,
+  batch,
+  expanded,
+  member,
+  onToggleBatch,
+  onBatchAction,
+  batchBusy,
   onPress,
   onAction,
   onMenu,
@@ -727,6 +937,18 @@ const NotificationRow = memo(function NotificationRow({
   online,
 }: {
   item: TNotification;
+  /**
+   * Non-null when this row IS a batch — it stands for every notification one
+   * bulk share created, and wears the batch's words instead of its own.
+   */
+  batch: NotificationBatch | null;
+  expanded: boolean;
+  /** This row is one of an expanded batch's members: indented, otherwise itself. */
+  member: boolean;
+  onToggleBatch: (key: string) => void;
+  onBatchAction: (batch: NotificationBatch, kind: BatchFileActionKind) => void;
+  /** This batch's run, while one is going. */
+  batchBusy: { kind: BatchFileActionKind; progress: BatchFileActionProgress } | null;
   onPress: (item: TNotification) => void;
   onAction: (
     item: TNotification,
@@ -745,6 +967,22 @@ const NotificationRow = memo(function NotificationRow({
   actionsDisabled: boolean;
   online: boolean;
 }) {
+  if (batch) {
+    return (
+      <BatchRow
+        batch={batch}
+        expanded={expanded}
+        onToggleBatch={onToggleBatch}
+        onBatchAction={onBatchAction}
+        batchBusy={batchBusy}
+        selecting={selecting}
+        selected={selected}
+        onToggle={onToggle}
+        actionsDisabled={actionsDisabled}
+        online={online}
+      />
+    );
+  }
   const label = notificationLabel(item);
   const meta = notificationMeta(item);
   const target = notificationActions(item);
@@ -796,7 +1034,15 @@ const NotificationRow = memo(function NotificationRow({
       // and drops the children when it does). Colour changes are free; widths
       // are not. A selected row lights the edge too, so it never looks like the
       // selection has un-marked it.
-      style={!item.read || selected ? styles.rowEdgeAccent : styles.rowEdgeIdle}
+      // A member of an expanded batch is INDENTED, so the header above it reads
+      // as what the indented rows belong to. Under unread-first sorting the
+      // members were pulled out of wherever they had drifted to and re-inserted
+      // beneath the header (`collapseBatches`), and without the indent there is
+      // nothing on screen saying that is what happened.
+      style={[
+        !item.read || selected ? styles.rowEdgeAccent : styles.rowEdgeIdle,
+        ...(member ? [styles.batchMember] : []),
+      ]}
       // INSIDE the card. Sitting below it, the pair read as a caption for the
       // next notification down — which is how a "Download again" got pressed
       // for a file the user had just turned down.
@@ -823,6 +1069,130 @@ const NotificationRow = memo(function NotificationRow({
               ))}
             </View>
             {/* The reason on the thing that is dimmed, not on the screen (§10). */}
+            {!online ? <Text style={styles.actionHint}>Needs a connection</Text> : null}
+          </>
+        ) : null
+      }
+    />
+  );
+});
+
+/**
+ * The header of a collapsed bulk share — "bob sent you 8 files" — with the
+ * whole batch's answer under it.
+ *
+ * IT EXPANDS IN PLACE rather than opening a page of its own. The per-file rows
+ * already exist, complete with their own accept/decline, their "Saved" pill and
+ * their expired-with-a-reason state; a separate screen would have to
+ * re-implement all of that, and would then have to answer "what does the header
+ * say now?" for a batch where three are saved, two turned down and three still
+ * waiting. Expanded rows just show it.
+ *
+ * NO ⋯ MENU. That sheet's verbs (mark read, delete) act on one notification,
+ * and offering them from a row that stands for twelve would mean either a lie
+ * or a second set of copy. The bulk bar already does both over a selection, and
+ * a picked header selects as its whole batch.
+ */
+const BatchRow = memo(function BatchRow({
+  batch,
+  expanded,
+  onToggleBatch,
+  onBatchAction,
+  batchBusy,
+  selecting,
+  selected,
+  onToggle,
+  actionsDisabled,
+  online,
+}: {
+  batch: NotificationBatch;
+  expanded: boolean;
+  onToggleBatch: (key: string) => void;
+  onBatchAction: (batch: NotificationBatch, kind: BatchFileActionKind) => void;
+  batchBusy: { kind: BatchFileActionKind; progress: BatchFileActionProgress } | null;
+  selecting: boolean;
+  selected: boolean;
+  onToggle: (item: TNotification) => void;
+  actionsDisabled: boolean;
+  online: boolean;
+}) {
+  const meta = notificationMeta(batch.representative);
+  const pending = batchPendingFileSends(batch);
+  const subtitle = [
+    batch.unreadCount > 0 ? `${batch.unreadCount} unread` : null,
+    // Named, because a batch of files whose members are partly answered is
+    // otherwise a row whose buttons act on a number the user cannot see.
+    batch.group === "files" && pending.length !== batch.items.length
+      ? `${pending.length} still to answer`
+      : null,
+    formatTime(batch.representative.createdAt),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <Row
+      icon={meta.icon}
+      hue={meta.hue}
+      title={batchLabel(batch)}
+      subtitle={subtitle}
+      titleNumberOfLines={2}
+      right={
+        <View style={styles.rowTrailing}>
+          {batch.unreadCount > 0 ? <StatusPill label="New" tone="accent" /> : undefined}
+          {selecting ? (
+            <View style={styles.selectBox}>
+              <Feather
+                name={selected ? "check-circle" : "circle"}
+                size={22}
+                color={selected ? theme.accent : theme.textMuted}
+              />
+            </View>
+          ) : (
+            <IconButton
+              icon={expanded ? "chevron-up" : "chevron-down"}
+              accessibilityLabel={expanded ? "Collapse this group" : "Show each one"}
+              onPress={() => onToggleBatch(batch.key)}
+            />
+          )}
+        </View>
+      }
+      selected={selected}
+      onPress={() =>
+        selecting ? onToggle(batch.representative) : onToggleBatch(batch.key)
+      }
+      onLongPress={() => onToggle(batch.representative)}
+      style={batch.unreadCount > 0 || selected ? styles.rowEdgeAccent : styles.rowEdgeIdle}
+      footer={
+        // Shares have nothing to answer — a grant simply IS — so only a batch of
+        // sent files gets buttons, and only while some are still unanswered.
+        batch.group === "files" && pending.length > 0 ? (
+          <>
+            <View style={styles.actions}>
+              <Button
+                label={
+                  batchBusy?.kind === "accept"
+                    ? `Saving ${batchBusy.progress.done + 1} of ${batchBusy.progress.total}`
+                    : `Save all ${pending.length}`
+                }
+                compact
+                grow
+                disabled={actionsDisabled}
+                loading={batchBusy?.kind === "accept"}
+                onPress={() => onBatchAction(batch, "accept")}
+              />
+              <Button
+                label={batchBusy?.kind === "decline" ? "Turning down…" : "Turn all down"}
+                variant="outlineAccent"
+                compact
+                grow
+                disabled={actionsDisabled}
+                loading={batchBusy?.kind === "decline"}
+                onPress={() => onBatchAction(batch, "decline")}
+              />
+            </View>
+            {/* Accepting a batch is a DOWNLOAD QUEUE — each one presigns, pulls
+                the bytes and runs the import — so the row says so rather than
+                spinning silently for a minute on trail signal. */}
             {!online ? <Text style={styles.actionHint}>Needs a connection</Text> : null}
           </>
         ) : null
@@ -919,6 +1289,10 @@ const styles = StyleSheet.create({
   // states declare the same WIDTH — see the note at the call site.
   rowEdgeAccent: { borderLeftWidth: 3, borderLeftColor: theme.accent },
   rowEdgeIdle: { borderLeftWidth: 3, borderLeftColor: surface.border },
+  // One step in, so an expanded batch's rows read as belonging to the header
+  // above them. Margin, never a border width change — the row's left edge is
+  // 3pt in EVERY state for the Fabric clip-bounds reason at `rowEdgeIdle`.
+  batchMember: { marginLeft: spacing(2) },
   rowTrailing: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
   // `IconButton`'s own box, so the checkbox standing in for ⋯ occupies exactly
   // what it replaced.

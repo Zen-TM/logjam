@@ -22,11 +22,16 @@ export function SelectionBar({
   showSelectAll: boolean;
   /**
    * One more group verb, sitting between select-all and delete — an
-   * `IconButton`, sized like the two it stands among. The inbox's read/unread
-   * toggle is the only one so far, and the bar stays a fixed set of slots
-   * rather than an arbitrary toolbar: DESIGN.md §7 admits only verbs that are
-   * BETTER in bulk than one at a time, and a bar that grows a row per screen is
-   * how that rule stops being checkable.
+   * `IconButton`, sized like the two it stands among. Two exist: the inbox's
+   * read/unread toggle, and bulk share on Canyons and Saved. The bar stays a
+   * fixed set of slots rather than an arbitrary toolbar: DESIGN.md §7 admits
+   * only verbs that are BETTER in bulk than one at a time, and a bar that grows
+   * a row per screen is how that rule stops being checkable.
+   *
+   * Sharing clears that bar and then some — picking 23 rows and sharing them in
+   * one gesture is the whole point, and doing it one sheet at a time is what
+   * the feature replaces. Logs deliberately has none: a trip log is not
+   * shareable by any mechanism.
    */
   extra?: React.ReactNode;
   onClear: () => void;

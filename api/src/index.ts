@@ -29,6 +29,7 @@ import tripLogsBulkRouter from "./routes/tripLogsBulk";
 import canyonsBulkRouter from "./routes/canyonsBulk";
 import sharingRouter from "./routes/sharing";
 import sharesRouter from "./routes/shares";
+import bulkShareRouter from "./routes/bulkShare";
 import fileSendsRouter from "./routes/fileSends";
 import friendsRouter from "./routes/friends";
 import notificationsRouter from "./routes/notifications";
@@ -199,6 +200,10 @@ app.use("/imports", importsRouter);
 app.use("/trips", tripLogsGlobalRouter);
 app.use("/canyons", sharingRouter);
 app.use("/shares", sharesRouter);
+// Its own path, NOT /shares/bulk: it also ends a bulk action made entirely of
+// file copies, which grant no Share row at all, and mounting it under the
+// direct-share router would say otherwise.
+app.use("/bulk-share", bulkShareRouter);
 app.use("/file-sends", fileSendsRouter);
 app.use("/friends", friendsRouter);
 app.use("/notifications", notificationsRouter);

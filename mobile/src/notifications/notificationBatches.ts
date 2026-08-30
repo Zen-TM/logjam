@@ -1,0 +1,198 @@
+// COLLAPSING the notifications one bulk share created into a single expandable
+// row.
+//
+// The problem: a friend who shares 23 things in one gesture used to put 23 rows
+// in your inbox, and (before the server started batching the push) 23 buzzes in
+// your pocket. The buzz is fixed at the source — one push per bulk action. The
+// ROWS are fixed here, and deliberately NOT at the source.
+//
+// WHY NOT ONE AGGREGATE NOTIFICATION ROW SERVER-SIDE, which is the obvious fix:
+//
+//  1. A `file_sent` row is a QUESTION, not a report. It carries Accept and Turn
+//     down and the filename, because nobody can answer "keep this?" without
+//     knowing what is on offer. One row saying "bob sent you 8 files" deletes
+//     the surface those answers live on.
+//  2. A shared-item row is DROPPED at read time when its share is revoked
+//     (PRIV-001/003) — the payload holds ids and the display strings resolve
+//     from the live rows. One row holding 23 ids would have to partially
+//     resolve, recount its own label, and delete itself at zero.
+//
+// Both stay true with per-item rows and a client-side collapse, and the whole
+// cost is this file. The server's only part is stamping the same opaque
+// `batchId` on every notification one action creates.
+//
+// SPLIT BATCHES ARE NORMAL. The inbox sorts unread-first, so reading three of a
+// batch's rows moves them away from the other twenty; a filter or a search
+// narrows it further. So a batch is gathered over the WHOLE list rather than
+// from a run of adjacent rows, and it is the FIRST member in list order that
+// stands for it — which keeps an unread batch where the unread rows are.
+//
+// Its own RN-free module, like `notificationActions.ts` and `tapTarget.ts`:
+// mobile's vitest cannot parse React Native's Flow sources.
+//
+// PRIVACY: reads the same resolved payload the rows render. Usernames are
+// server-resolved and username-only; no id reaches a label.
+import type { TNotification } from "../api/types";
+
+/**
+ * Which verb's notifications these are — and the reason a batch is keyed on it
+ * as well as on the `batchId`.
+ *
+ * One bulk action can create both kinds at once (Saved's All tab mixes rows
+ * that can only be shared with rows that can only be copied), and the two
+ * cannot share a row: one has Accept/Turn down under it and the other has
+ * nothing to answer. So a mixed action shows as TWO grouped rows — "bob shared
+ * 5 items" and "bob sent you 3 files" — which is also the honest description of
+ * what happened.
+ */
+export type BatchGroup = "shares" | "files";
+
+export type NotificationBatch = {
+  /** `${batchId}:${group}` — the identity the expanded set is keyed on. */
+  key: string;
+  group: BatchGroup;
+  /** Every member currently in the list, in list order. */
+  items: TNotification[];
+  /** The one that stands for the batch while it is collapsed. */
+  representative: TNotification;
+  unreadCount: number;
+  /** Resolved server-side; null when the sharer no longer resolves. */
+  sender: string | null;
+};
+
+function str(payload: Record<string, unknown>, key: string): string | null {
+  const value = payload[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function groupOf(n: TNotification): BatchGroup | null {
+  if (n.type === "file_sent") return "files";
+  if (n.type === "item_shared" || n.type === "canyon_shared") return "shares";
+  return null;
+}
+
+/**
+ * The batch key of one notification, or null when it was not part of one.
+ *
+ * A notification with no `batchId` is an ordinary single row — every share made
+ * one at a time, and every notification created before this feature existed.
+ */
+export function batchKeyOf(n: TNotification): string | null {
+  const batchId = str(n.payload, "batchId");
+  if (!batchId) return null;
+  const group = groupOf(n);
+  return group ? `${batchId}:${group}` : null;
+}
+
+/**
+ * Gather the batches present in an already-filtered list.
+ *
+ * FILTERED, not the raw list: with the Unread bucket selected a batch's count
+ * has to be the number of rows the user can actually see under it, or the
+ * header promises twelve and expands to four.
+ *
+ * A batch of ONE is not a batch. It happens whenever a bulk share had a single
+ * shareable item in it, or a filter has narrowed a real batch down to one row —
+ * and a collapsed header over one row is strictly worse than the row.
+ */
+export function findNotificationBatches(
+  notifications: TNotification[],
+): Map<string, NotificationBatch> {
+  const batches = new Map<string, NotificationBatch>();
+  for (const notification of notifications) {
+    const key = batchKeyOf(notification);
+    if (!key) continue;
+    const existing = batches.get(key);
+    if (existing) {
+      existing.items.push(notification);
+      if (!notification.read) existing.unreadCount += 1;
+      continue;
+    }
+    batches.set(key, {
+      key,
+      group: groupOf(notification)!,
+      items: [notification],
+      representative: notification,
+      unreadCount: notification.read ? 0 : 1,
+      sender:
+        str(notification.payload, "sentByUsername") ??
+        str(notification.payload, "sharedByUsername"),
+    });
+  }
+  for (const [key, batch] of batches) {
+    if (batch.items.length < 2) batches.delete(key);
+  }
+  return batches;
+}
+
+/**
+ * The list to render: every non-batched row as it was, each batch reduced to
+ * its representative, and an EXPANDED batch's other members restored directly
+ * beneath it.
+ *
+ * Members are pulled out of wherever they sat and re-inserted under the header
+ * rather than left in place. Under unread-first sorting they are not adjacent —
+ * expanding a half-read batch would otherwise scatter its rows down the screen
+ * with nothing saying which belonged to what.
+ */
+export function collapseBatches(
+  notifications: TNotification[],
+  batches: Map<string, NotificationBatch>,
+  expandedKeys: ReadonlySet<string>,
+): TNotification[] {
+  const rows: TNotification[] = [];
+  for (const notification of notifications) {
+    const key = batchKeyOf(notification);
+    const batch = key ? batches.get(key) : undefined;
+    if (!batch) {
+      rows.push(notification);
+      continue;
+    }
+    // Only the representative survives; every other member is either dropped
+    // (collapsed) or emitted here as part of the expansion.
+    if (batch.representative.id !== notification.id) continue;
+    rows.push(notification);
+    if (expandedKeys.has(batch.key)) {
+      for (const member of batch.items) {
+        if (member.id !== batch.representative.id) rows.push(member);
+      }
+    }
+  }
+  return rows;
+}
+
+/**
+ * The grouped row's own sentence.
+ *
+ * Counts, never names: listing 23 canyon names in a header is both unreadable
+ * and the kind of plaintext this inbox keeps out of anything but a row the user
+ * has to act on. The two verbs keep their own word — "shared" is live and
+ * revocable, "sent" is a copy for keeps — which is the distinction the whole
+ * sharing feature exists to protect.
+ */
+export function batchLabel(batch: NotificationBatch): string {
+  const who = batch.sender ?? "Someone";
+  const count = batch.items.length;
+  if (batch.group === "files") {
+    return `${who} sent you ${count} files`;
+  }
+  return `${who} shared ${count} items with you`;
+}
+
+/**
+ * The Accept-all / Turn-down-all pair, or null when a batch has nothing to
+ * answer.
+ *
+ * Shares have no answer — a grant simply is — so only a file batch gets
+ * buttons. `pending` is what those buttons would act on: a member already
+ * accepted or expired is not offered again, so "Turn down all" on a batch where
+ * six are already saved acts on two and says so.
+ */
+export function batchPendingFileSends(batch: NotificationBatch): TNotification[] {
+  if (batch.group !== "files") return [];
+  return batch.items.filter(
+    (item) =>
+      item.payload.fileSendStatus !== "expired" &&
+      item.payload.fileSendStatus !== "accepted",
+  );
+}

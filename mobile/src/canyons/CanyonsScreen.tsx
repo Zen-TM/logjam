@@ -73,6 +73,7 @@ import { TripEditSheet } from "../logs/TripEditSheet";
 import { CanyonEditSheet } from "./CanyonEditSheet";
 import { takePickedPoint } from "../map/pickedPoint";
 import { CanyonOptionsSheet } from "./CanyonOptionsSheet";
+import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { CanyonFilterSheet, sortLabel } from "./CanyonFilterSheet";
 import {
   publishVisibleCanyons,
@@ -116,7 +117,7 @@ export function CanyonsScreen({
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<CanyonFilters>(EMPTY_CANYON_FILTERS);
   const [sort, setSort] = useState<CanyonSortKey>("name");
-  const [sheet, setSheet] = useState<"filters" | null>(null);
+  const [sheet, setSheet] = useState<"filters" | "bulkShare" | null>(null);
   const mapFilter = useCanyonMapFilter();
   const [menuCanyonId, setMenuCanyonId] = useState<string | null>(null);
   /** The sheet owns its own share sub-mode and forgets it on close. */
@@ -317,6 +318,18 @@ export function CanyonsScreen({
     );
   }, [selectedItems, clearSelection, fail, info]);
 
+  // Every selectable canyon is one this user OWNS (`isDeletable` above), so a
+  // bulk share never has to triage them — the plan's skip list is always empty
+  // here, and the shape exists for Saved, where a selection genuinely mixes.
+  const shareCandidates = useMemo(
+    () =>
+      selectedItems.map((canyon) => ({
+        key: canyon.id,
+        share: { entityType: "canyon" as const, entityId: canyon.id },
+      })),
+    [selectedItems],
+  );
+
   // Tallies come from the OTHER axes only, so a chip's count answers "how many
   // would I get if I tapped this" rather than restating the current view.
   const withoutBucket = useMemo(
@@ -499,6 +512,9 @@ export function CanyonsScreen({
               selectedItems.length === 1 ? "canyon" : "canyons"
             } selected`}
             showSelectAll={selectedItems.length < selectableItems.length}
+            extra={
+              <BulkShareButton online={online} onPress={() => setSheet("bulkShare")} />
+            }
             onClear={clearSelection}
             onSelectAll={selectAll}
             onDelete={deleteSelected}
@@ -578,6 +594,21 @@ export function CanyonsScreen({
         onEdit={startEditing}
         onInfo={info}
         onError={fail}
+      />
+
+      {/* Share the whole selection — one sheet, shared with Saved, so the two
+          screens cannot word a bulk share differently. */}
+      <BulkShareSheet
+        visible={sheet === "bulkShare"}
+        selection={shareCandidates}
+        online={online}
+        onClose={() => setSheet(null)}
+        onDone={(report) => {
+          setSheet(null);
+          clearSelection();
+          if (report.tone === "error") fail(report.text);
+          else info(report.text);
+        }}
       />
 
       <CanyonFilterSheet

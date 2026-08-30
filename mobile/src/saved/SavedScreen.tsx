@@ -137,6 +137,7 @@ import {
   type AssetActions,
 } from "./assetActions";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
+import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { useTracks } from "../tracks/useTracks";
 import type { Bbox } from "./bboxOfPoints";
 import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
@@ -424,6 +425,8 @@ export function SavedScreen({
     if (initialFilter) setFilter(initialFilter.category);
   }, [initialFilter?.nonce, initialFilter]);
   const [addSheetOpen, setAddSheetOpen] = useState(false);
+  /** The selection bar's share verb — its own sheet, over the whole selection. */
+  const [bulkShareOpen, setBulkShareOpen] = useState(false);
   // The per-item sheet has two faces: its action list, and the rename form the
   // "Rename" action swaps in. ONE sheet, not two — a second Modal opening while
   // the first closes never gets window focus, so the field's keyboard silently
@@ -1521,6 +1524,23 @@ export function SavedScreen({
   // Both verb rows below carry this: offline they dim and say why.
   const shareRowProps = useShareRowProps(online);
 
+  // The selection, as the bulk panel's triage takes it. A Saved selection is
+  // the one that genuinely MIXES: on the All tab it can hold a waypoint (a
+  // live share), a recorded track (a copy, for keeps), a downloaded region
+  // (neither) and a route shared WITH this user, all picked in one gesture —
+  // which is why the mechanism is never the user's choice and why the panel
+  // says which rows went which way before it runs.
+  const shareCandidates = useMemo(
+    () =>
+      selectedItems.map((item) => ({
+        key: item.key,
+        ...(item.sharedWithYou ? { sharedWithYou: item.sharedWithYou } : {}),
+        ...(item.share ? { share: item.share } : {}),
+        ...(item.sendCopy ? { sendCopy: item.sendCopy } : {}),
+      })),
+    [selectedItems],
+  );
+
 
   return (
     <View style={styles.screen}>
@@ -1555,6 +1575,7 @@ export function SavedScreen({
             // "Everything" means everything a selection can act on — a shared
             // route or waypoint is skipped rather than picked and then refused.
             showSelectAll={selectedItems.length < selectableItems.length}
+            extra={<BulkShareButton online={online} onPress={() => setBulkShareOpen(true)} />}
             onClear={clearSelection}
             onSelectAll={() => setSelectedKeys(selectableItems.map((item) => item.key))}
             onDelete={deleteSelected}
@@ -1952,6 +1973,21 @@ export function SavedScreen({
           />
         </View>
       </BottomSheet>
+
+      {/* Share the whole selection — the same sheet the Canyons screen opens,
+          so the two cannot word a bulk share differently. */}
+      <BulkShareSheet
+        visible={bulkShareOpen}
+        selection={shareCandidates}
+        online={online}
+        onClose={() => setBulkShareOpen(false)}
+        onDone={(report) => {
+          setBulkShareOpen(false);
+          clearSelection();
+          if (report.tone === "error") fail(report.text);
+          else info(report.text);
+        }}
+      />
 
       <BottomSheet
         visible={addSheetOpen}

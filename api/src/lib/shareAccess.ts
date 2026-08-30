@@ -438,3 +438,48 @@ export async function shareCountsFor(
   });
   return new Map(rows.map((row) => [row.entityId, row._count.entityId]));
 }
+
+/**
+ * Which of these entity ids the user OWNS, for one entity type — the batch form
+ * of the owner arm of `getWaypointRole` / `getRouteRole` / `getJobRole`, for the
+ * bulk-share endpoint.
+ *
+ * Here rather than in the caller for the reason the whole file exists: which
+ * column holds the owner (`Waypoint.ownerId` vs `TopoJob.userId`) is answered
+ * once, and a bulk path that re-derived it would be the second source SEC-001
+ * was about.
+ *
+ * Only the OWNER arm is batched. A sharee may not re-share, so bulk never needs
+ * the "shared" role, and a missing id is indistinguishable in the result from a
+ * foreign one — the aggregate form of 404-not-403.
+ */
+export async function filterOwnedEntityIds(
+  userId: string,
+  entityType: SharableEntityType,
+  entityIds: string[],
+): Promise<Set<string>> {
+  if (entityIds.length === 0) return new Set();
+  const where = { id: { in: entityIds } };
+  const select = { id: true };
+  const rows =
+    entityType === "waypoint"
+      ? await prisma.waypoint.findMany({
+          where: { ...where, ownerId: userId },
+          select,
+        })
+      : entityType === "route"
+        ? await prisma.route.findMany({
+            where: { ...where, ownerId: userId },
+            select,
+          })
+        : entityType === "topoJob"
+          ? await prisma.topoJob.findMany({
+              where: { ...where, userId },
+              select,
+            })
+          : await prisma.geoPdfJob.findMany({
+              where: { ...where, userId },
+              select,
+            });
+  return new Set(rows.map((row) => row.id));
+}

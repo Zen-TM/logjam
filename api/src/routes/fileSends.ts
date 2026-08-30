@@ -28,6 +28,8 @@ import { s3 } from "../services/awsClients";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
+import { parseFriendRecipientIds } from "../lib/friendRecipients";
+import { parseClientSuppliedId } from "../lib/clientSuppliedId";
 import { logger } from "../lib/logger";
 import { sendPushToUser } from "../services/push";
 import { deleteS3KeysBestEffort } from "../lib/s3Cleanup";
@@ -71,51 +73,22 @@ function parseSourceKind(value: unknown): FileSendSourceKind {
 /**
  * The recipient ids for a send, validated as accepted friends.
  *
- * Friends-only, the same rule canyon sharing and direct shares enforce. A
- * non-friend in the list fails the whole request rather than being silently
- * dropped — a partial send the user was never told about is worse than an
- * error.
+ * The rule and its anti-oracle ordering live in lib/friendRecipients.ts —
+ * bulk sharing is the second caller and neither may drift from the other.
+ * Only the wording is this verb's own: a send is not a share.
  */
 async function parseRecipientIds(
   senderId: string,
   value: unknown,
 ): Promise<string[]> {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new AppError(400, "recipientIds is required");
-  }
-  if (value.length > MAX_RECIPIENTS_PER_SEND) {
-    throw new AppError(
-      400,
-      `A file can be sent to at most ${MAX_RECIPIENTS_PER_SEND} friends at once`,
-    );
-  }
-  const ids = [...new Set(value)];
-  if (!ids.every((id): id is string => typeof id === "string" && id.length > 0)) {
-    throw new AppError(400, "recipientIds must be user ids");
-  }
-  if (ids.includes(senderId)) {
-    throw new AppError(400, "You cannot send a file to yourself");
-  }
-
-  const friendships = await prisma.friendship.findMany({
-    where: {
-      status: "accepted",
-      OR: [
-        { requesterId: senderId, addresseeId: { in: ids } },
-        { requesterId: { in: ids }, addresseeId: senderId },
-      ],
-    },
-    select: { requesterId: true, addresseeId: true },
+  return parseFriendRecipientIds({
+    senderId,
+    value,
+    maxRecipients: MAX_RECIPIENTS_PER_SEND,
+    tooManyMessage: `A file can be sent to at most ${MAX_RECIPIENTS_PER_SEND} friends at once`,
+    selfMessage: "You cannot send a file to yourself",
+    notFriendsMessage: "You can only send files to friends",
   });
-  const friendIds = new Set(
-    friendships.map((row) =>
-      row.requesterId === senderId ? row.addresseeId : row.requesterId,
-    ),
-  );
-  if (ids.some((id) => !friendIds.has(id))) {
-    throw new AppError(403, "You can only send files to friends");
-  }
-  return ids;
 }
 
 // ── POST /file-sends/presign ──────────────────────────────────
@@ -169,6 +142,12 @@ router.post(
     const extension = sendableExtension(filename);
     const sourceKind = parseSourceKind(body.sourceKind);
     const recipientIds = await parseRecipientIds(user.id, body.recipientIds);
+    // Which BULK action this send was one file of, if any. An opaque uuid the
+    // client mints per action and stamps on every notification that action
+    // creates — the inbox groups on it, so ten files sent in one go collapse to
+    // one expandable row instead of ten (lib/bulkShare.ts). An id and nothing
+    // else, like every other payload field: it names nothing (PRIV-005).
+    const batchId = parseClientSuppliedId(body.batchId, "batchId");
 
     // Idempotent confirm: a retried request returns the existing send rather
     // than charging quota twice. A foreign id is 404, never 403 — the id came
@@ -261,7 +240,11 @@ router.post(
             .map((id) => ({
               userId: id,
               type: "file_sent",
-              payload: { fileSendId, sentById: user.id },
+              payload: {
+                fileSendId,
+                sentById: user.id,
+                ...(batchId ? { batchId } : {}),
+              },
             })),
         });
         return created;
@@ -290,10 +273,19 @@ router.post(
       throw err;
     }
 
-    for (const id of recipientIds) {
-      if (notifiable.has(id)) {
-        // Best-effort push after commit; generic title + opaque id only.
-        void sendPushToUser(id, { type: "file_sent", fileSendId });
+    // ONE PUSH PER BULK ACTION, NOT PER FILE. Inside a batch this confirm stays
+    // silent and POST /bulk-share fires a single push per recipient once the
+    // whole action lands — the client calls it LAST, after every upload, so the
+    // buzz arrives when the files actually have. Ten files in one go used to be
+    // ten buzzes on the recipient's phone, which is where bulk sharing actually
+    // hurts them; the ten inbox ROWS are fine, and are what keeps each file
+    // individually answerable.
+    if (!batchId) {
+      for (const id of recipientIds) {
+        if (notifiable.has(id)) {
+          // Best-effort push after commit; generic title + opaque id only.
+          void sendPushToUser(id, { type: "file_sent", fileSendId });
+        }
       }
     }
 
