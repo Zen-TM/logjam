@@ -204,6 +204,8 @@ import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, type MapTool } from "./MapToolGroup";
 import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
+import { ROUTE_ARROW_SDF_URI } from "./routeArrowSdf";
+import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
 import type { MirrorCanyon, MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import { BottomSheet } from "../ui/BottomSheet";
@@ -596,6 +598,34 @@ const USER_MARKER_IMAGES: Record<`user-arrow-${MarkerColorId}`, { source: number
 
 const UserMarkerImages = memo(function UserMarkerImages() {
   return <Images images={USER_MARKER_IMAGES} />;
+});
+
+/**
+ * The route direction arrowhead, registered ONCE for every layer that draws
+ * one (saved routes and the draft alike) — a style image is global to the map,
+ * so two components defining `route-arrow` would race over the same name.
+ *
+ * `sdf: true`, unlike the marker images above, and the distinction is the
+ * reason that one is baked per colour and this one is not: the fringe problem
+ * described there came from feeding a RASTERISED shape — anti-aliased edge and
+ * all — through the SDF renderer, which treats that soft edge as distance data.
+ * `scripts/generate-route-arrow-sdf.mjs` computes the exact distance to the
+ * arrowhead's edges instead, so the field is a real one and the halo comes back
+ * clean. A route's colour is per-feature (`routeColor`), so baking one image
+ * per colour is not available here anyway.
+ *
+ * Inlined as a data URI rather than `require`d, unlike those: a locally-built
+ * debuggable release resolves every `require`d asset to an empty uri and draws
+ * nothing, silently (mobile/CLAUDE.local.md), which cost an evening of "the
+ * arrows render on the emulator and not on the phone". At 389 bytes the base64
+ * is cheaper than the asset entry would be.
+ */
+const ROUTE_ARROW_IMAGES = {
+  [ROUTE_ARROW_IMAGE]: { source: { uri: ROUTE_ARROW_SDF_URI }, sdf: true },
+};
+
+const RouteArrowImage = memo(function RouteArrowImage() {
+  return <Images images={ROUTE_ARROW_IMAGES} />;
 });
 
 /** The compass tape, on the same subscription and for the same reason. */
@@ -4127,6 +4157,8 @@ export function MapScreen({
             (see UserMarkerImages) — picked by iconImage, not recoloured at
             runtime. */}
         <UserMarkerImages />
+        {/* Direction arrowhead for saved routes and the draft line. */}
+        <RouteArrowImage />
 
         {/* layerIndex pins z-order across remounts: a swapped basemap source
             re-adds its layer at the TOP of the stack, burying the canyon

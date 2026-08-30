@@ -14,7 +14,6 @@ import {
   GeoJSONSource,
   Layer,
   ViewAnnotation,
-  type SymbolLayerStyle,
   type ViewAnnotationEvent,
 } from "@maplibre/maplibre-react-native";
 import type { NativeSyntheticEvent } from "react-native";
@@ -26,55 +25,14 @@ import {
 } from "@logjam/shared";
 
 import { dragIsTap } from "./anchorHit";
+import {
+  ARROW_LAYER_FILTER,
+  ROUTE_ARROW_MIN_ZOOM,
+  ROUTE_LAYER_FILTER,
+  arrowSegmentFeatures,
+  routeArrowStyle,
+} from "./routeArrowStyle";
 import { theme } from "../theme";
-
-/** Below this a route is a few pixels of line and arrows on it are just noise. */
-export const ROUTE_ARROW_MIN_ZOOM = 12;
-
-const ARROW_GLYPH = "\u203A";
-
-/**
- * Which way the line runs, as arrows along it — MapLibre spaces and rotates
- * them itself, so they re-space as you zoom and cost no React views (the
- * markers this replaced were re-created on every drag frame, which is what made
- * dragging an anchor stutter).
- *
- * A STYLE, not a component of ours, and two things here are load-bearing:
- *
- * - The layer has to be a DIRECT child of its `GeoJSONSource`. MLRN injects
- *   `source` onto the source's immediate children with `cloneElement`, so a
- *   layer wrapped in a component of ours never learns which source it belongs
- *   to, falls back to the default source id and draws nothing.
- * - `textFont` has to name a stack we actually ship. The bundled glyph pack
- *   (Protomaps basemap-assets, see `basemapAssets.ts`) carries Noto Sans only,
- *   while MapLibre's default fontstack is Open Sans — a symbol layer that omits
- *   the font asks for glyphs that 404 and renders no text at all, silently.
- *   Every other symbol layer in the app names this same stack.
- *
- * Overlap allowed and placement ignored so an arrow never loses a contest with
- * a street label, and `textKeepUpright` off because an arrow that flips itself
- * to stay readable is then pointing the wrong way.
- */
-export function routeArrowStyle(
-  color: SymbolLayerStyle["textColor"],
-  spacing = 90,
-): SymbolLayerStyle {
-  return {
-    symbolPlacement: "line",
-    symbolSpacing: spacing,
-    textField: ARROW_GLYPH,
-    textFont: ["Noto Sans Medium"],
-    textSize: 18,
-    textColor: color,
-    textHaloColor: theme.primary,
-    textHaloWidth: 1,
-    textAllowOverlap: true,
-    textIgnorePlacement: true,
-    textKeepUpright: false,
-    textRotationAlignment: "map",
-    textPitchAlignment: "map",
-  };
-}
 
 /**
  * Anchor sizes and fills.
@@ -223,6 +181,9 @@ export function RouteDraftLayer({
                 },
                 properties: {},
               },
+              // Drawn by the arrow layer alone: one line per segment is what
+              // keeps an arrow off the anchor handle you are about to drag.
+              ...arrowSegmentFeatures(previewPoints, {}),
             ],
           }
         : EMPTY_LINE_FEATURE,
@@ -244,6 +205,7 @@ export function RouteDraftLayer({
           key={`${idPrefix}-line-stroke`}
           type="line"
           id={`${idPrefix}-line-stroke`}
+          filter={ROUTE_LAYER_FILTER}
           style={{
             lineColor: color,
             lineWidth: 3,
@@ -257,6 +219,7 @@ export function RouteDraftLayer({
           type="symbol"
           id={`${idPrefix}-line-arrows`}
           minzoom={ROUTE_ARROW_MIN_ZOOM}
+          filter={ARROW_LAYER_FILTER}
           style={routeArrowStyle(color)}
         />
       </GeoJSONSource>
