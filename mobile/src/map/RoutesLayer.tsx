@@ -12,7 +12,13 @@ import { GeoJSONSource, Layer } from "@maplibre/maplibre-react-native";
 
 import { theme } from "../theme";
 import type { MirrorRoute } from "../sync/mirrorStore";
-import { ROUTE_ARROW_MIN_ZOOM, routeArrowStyle } from "./RouteDraftLayer";
+import {
+  ARROW_LAYER_FILTER,
+  ROUTE_ARROW_MIN_ZOOM,
+  ROUTE_LAYER_FILTER,
+  arrowSegmentFeatures,
+  routeArrowStyle,
+} from "./routeArrowStyle";
 import { stopSourcePress } from "./sourcePress";
 
 /**
@@ -46,17 +52,27 @@ export const RoutesLayer = memo(function RoutesLayer({
       type: "FeatureCollection",
       features: routes
         .filter((route) => route.id !== hiddenRouteId && route.points.length >= 2)
-        .map((route) => ({
-          type: "Feature" as const,
-          geometry: {
-            type: "LineString" as const,
-            coordinates: route.points as number[][],
-          },
-          properties: {
+        .flatMap((route) => {
+          const properties = {
             routeId: route.id,
             routeColor: route.color ?? UNSYNCED_ROUTE_COLOR,
-          },
-        })),
+          };
+          return [
+            {
+              type: "Feature" as const,
+              geometry: {
+                type: "LineString" as const,
+                coordinates: route.points as number[][],
+              },
+              properties,
+            },
+            // The arrow layer draws on these, not on the route above — see
+            // `arrowSegmentFeatures` for why the split is what keeps arrows off
+            // the anchors. They keep `routeId` so a tap on one still resolves
+            // to its route rather than falling through to the map.
+            ...arrowSegmentFeatures(route.points, properties),
+          ];
+        }),
     }),
     [routes, hiddenRouteId],
   );
@@ -91,6 +107,7 @@ export const RoutesLayer = memo(function RoutesLayer({
         type="line"
         id="saved-routes-casing"
         minzoom={SAVED_ROUTE_MIN_ZOOM}
+        filter={ROUTE_LAYER_FILTER}
         style={{
           lineColor: theme.primary,
           lineWidth: 6,
@@ -104,6 +121,7 @@ export const RoutesLayer = memo(function RoutesLayer({
         type="line"
         id="saved-routes-line"
         minzoom={SAVED_ROUTE_MIN_ZOOM}
+        filter={ROUTE_LAYER_FILTER}
         style={{
           lineColor: ["get", "routeColor"],
           lineWidth: 3,
@@ -125,13 +143,14 @@ export const RoutesLayer = memo(function RoutesLayer({
         }}
       />
       {/* Spaced wider than the draft's: several routes on screen at once is a
-          lot of chevrons, and here they only answer "which way does this run".
+          lot of arrows, and here they only answer "which way does this run".
           Colour is data-driven, so all of them are still one native layer. */}
       <Layer
         key="saved-routes-arrows"
         type="symbol"
         id="saved-routes-arrows"
         minzoom={ROUTE_ARROW_MIN_ZOOM}
+        filter={ARROW_LAYER_FILTER}
         style={routeArrowStyle(["get", "routeColor"], 140)}
       />
     </GeoJSONSource>

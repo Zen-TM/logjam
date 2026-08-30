@@ -63,15 +63,21 @@ export function MapToolGroup({
   // fade.
   //
   // k is MOVE ORDER, not final position: TOOLS[0] (measure) is always the
-  // one that starts moving first, in both directions — first to slide out,
-  // first to retreat. Because it leads, it also travels the farthest: it
-  // doesn't stop when it draws level with where a single tool would rest, it
-  // carries on outward while the next tool sets off k slots' worth of time
-  // behind it, and the two land in their final slots together. A tool's
-  // final rest slot is therefore the REVERSE of k (restSlot, below) — the
-  // one that led the whole way out ends up farthest from the +, not
-  // nearest — and its travel distance/duration follows the slot it's
-  // actually going to, not its move order.
+  // one that starts moving first when OPENING — first to slide out. Because
+  // it leads, it also travels the farthest: it doesn't stop when it draws
+  // level with where a single tool would rest, it carries on outward while
+  // the next tool sets off k slots' worth of time behind it, and the two
+  // land in their final slots together. A tool's final rest slot is
+  // therefore the REVERSE of k (restSlot, below) — the one that led the
+  // whole way out ends up farthest from the +, not nearest — and its travel
+  // distance/duration follows the slot it's actually going to, not its move
+  // order.
+  //
+  // CLOSING does not mirror this stagger: every tool sets off at once, at
+  // the same speed (duration still scales with the distance a tool has to
+  // cover, so px/ms is constant across tools) — each one just stops the
+  // moment it reaches behind the +, independently, rather than all landing
+  // together on a delay.
   const values = useRef(TOOLS.map(() => new Animated.Value(0))).current;
   const dir = side === "right" ? 1 : -1;
   useEffect(() => {
@@ -79,9 +85,7 @@ export function MapToolGroup({
       Animated.timing(values[k], {
         toValue: open ? 1 : 0,
         duration: (TOOLS.length - k) * SLOT_MS,
-        // Same delay either direction — see the comment above: TOOLS[0]
-        // leads the motion whether the group is opening or closing.
-        delay: k * SLOT_MS,
+        delay: open ? k * SLOT_MS : 0,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
@@ -90,76 +94,75 @@ export function MapToolGroup({
   }, [open, values]);
 
   // restSlot is where a tool actually RESTS when open (0 = nearest the +) —
-  // the reverse of k, per the move-order comment above. Both the tray's DOM
-  // order (below: a flex-packed row rests each child at its natural flex
-  // position, since translateX resolves to 0 there) and how far this value
-  // has to travel to hide fully behind the + (outputRange) come from it.
+  // the reverse of k, per the move-order comment above. It drives both how
+  // far this value has to travel to hide fully behind the + (outputRange)
+  // and its resting inset (below — each tool is its own absolutely
+  // positioned sibling of the +, not flex-packed inside a shared tray).
   const rendered = TOOLS.map((tool, k) => {
     const restSlot = TOOLS.length - 1 - k;
     return {
       ...tool,
       k,
+      restSlot,
       translateX: values[k].interpolate({
         inputRange: [0, 1],
         outputRange: [dir * (restSlot + 1) * (FAB_SIZE + CHROME_GAP), 0],
       }),
     };
   });
-  // DOM order is what actually places a tool in its resting slot — flex-end
-  // (side="right") packs the LAST array item nearest the +, flex-start
-  // (side="left") packs the FIRST item nearest the + — so whichever side
-  // packs toward the +, leave TOOLS order as-is (measure, the farthest-
-  // resting tool, first/outermost); the other side reverses it.
-  const ordered = side === "right" ? rendered : [...rendered].reverse();
 
   return (
     <View style={styles.row}>
-      <View
-        style={[
-          styles.tray,
-          side === "left"
-            ? { left: FAB_SIZE + CHROME_GAP, justifyContent: "flex-start" }
-            : { right: FAB_SIZE + CHROME_GAP, justifyContent: "flex-end" },
-        ]}
-        pointerEvents={open ? "auto" : "none"}
-      >
-        {ordered.map((tool) => (
-          <Animated.View
-            key={tool.id}
-            style={{ transform: [{ translateX: tool.translateX }] }}
+      {rendered.map((tool) => (
+        <Animated.View
+          key={tool.id}
+          pointerEvents={open ? "auto" : "none"}
+          style={[
+            styles.toolSlot,
+            side === "left"
+              ? { left: (tool.restSlot + 1) * (FAB_SIZE + CHROME_GAP) }
+              : { right: (tool.restSlot + 1) * (FAB_SIZE + CHROME_GAP) },
+            // While retracted, the ARMED tool ends up sitting exactly where
+            // the + is (translateX carries every tool there, open or not) —
+            // it needs to paint ABOVE the + so the user sees which tool is
+            // running instead of a bare +, not the other way round. An
+            // unarmed tool needs no such promotion: it only ever overlaps
+            // the + while closed, when it's fully hidden either way.
+            activeTool === tool.id && styles.armedToolSlot,
+            { transform: [{ translateX: tool.translateX }] },
+          ]}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={tool.label}
+            style={[
+              styles.controlButton,
+              activeTool === tool.id && styles.controlActive,
+            ]}
+            onPress={() => onPickTool(tool.id)}
           >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={tool.label}
-              style={[
-                styles.controlButton,
-                activeTool === tool.id && styles.controlActive,
-              ]}
-              onPress={() => onPickTool(tool.id)}
-            >
-              {tool.family === "material" ? (
-                <MaterialCommunityIcons
-                  name={tool.icon as never}
-                  size={FAB_ICON}
-                  color={theme.textPrimary}
-                />
-              ) : (
-                <Feather
-                  name={tool.icon as never}
-                  size={FAB_ICON}
-                  color={theme.textPrimary}
-                />
-              )}
-            </Pressable>
-          </Animated.View>
-        ))}
-      </View>
+            {tool.family === "material" ? (
+              <MaterialCommunityIcons
+                name={tool.icon as never}
+                size={FAB_ICON}
+                color={theme.textPrimary}
+              />
+            ) : (
+              <Feather
+                name={tool.icon as never}
+                size={FAB_ICON}
+                color={theme.textPrimary}
+              />
+            )}
+          </Pressable>
+        </Animated.View>
+      ))}
 
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={open ? "Hide map tools" : "Map tools"}
         accessibilityState={{ expanded: open }}
-        style={[styles.controlButton, (open || activeTool) && styles.controlActive]}
+        style={[styles.controlButton, (open || activeTool) && styles.controlActive, styles.plusButton]}
         onPress={onToggleOpen}
       >
         <Feather
@@ -173,33 +176,33 @@ export function MapToolGroup({
 }
 
 const styles = StyleSheet.create({
-  // The group occupies exactly one button's width in the column. The tray is
-  // ABSOLUTE so opening it can't widen the row: laid out in flow, its growth
-  // pushed the whole action column leftward and every other button visibly
-  // jumped when the tools opened.
+  // The group occupies exactly one button's width in the column. Every
+  // child (each tool, the +) is its own ABSOLUTE sibling so opening the
+  // group can't widen the row: laid out in flow, growth pushed the whole
+  // action column leftward and every other button visibly jumped when the
+  // tools opened. No overflow:hidden either — a closed tool's translateX
+  // target lands it exactly on the + button's own box, and it's zIndex
+  // (below), not a clip, that decides which one of the three shows.
   row: {
     width: FAB_SIZE,
     height: FAB_SIZE,
     alignItems: "center",
     justifyContent: "center",
   },
-  // The edge it hangs off and the direction it fills come from `side` at the
-  // call site; everything else about it is fixed.
-  tray: {
+  // Each tool's RESTING inset (left/right, set at the call site from
+  // restSlot) replaces what used to be flex-packing inside a shared tray —
+  // needed once the + had to become a plain sibling (see plusButton) rather
+  // than a parent tray's stacking context swallowing the tool's own zIndex.
+  toolSlot: {
     position: "absolute",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: CHROME_GAP,
-    width: TOOLS.length * FAB_SIZE + (TOOLS.length - 1) * CHROME_GAP,
-    // No overflow:hidden: a closed tool's translateX target lands it exactly
-    // on the + button's own box (outside the tray, which stops one gap
-    // short of it), and it's the + — rendered after this tray, so painted on
-    // top — that hides it, not a clip. Clipping at the tray's edge used to
-    // cut a tool off a full gap short of the +, which is what made the slide
-    // look like it started from empty space instead of from under the +.
+    top: 0,
+    width: FAB_SIZE,
+    height: FAB_SIZE,
+    zIndex: 0,
+    elevation: 0,
   },
-  // Mirrors MapScreen's controlButton/controlActive exactly — the tray has to
-  // read as the same column, not a lookalike.
+  // Mirrors MapScreen's controlButton/controlActive exactly — the tools have
+  // to read as the same column, not a lookalike.
   controlButton: {
     width: FAB_SIZE,
     height: FAB_SIZE,
@@ -209,4 +212,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   controlActive: { backgroundColor: theme.accent },
+  // The + sits between the two: above an unarmed tool retreating past it
+  // (so the bare + shows, not a stray dark circle), below the ARMED one
+  // (armedToolSlot) so the running tool's icon is what's left showing once
+  // it settles, not the +. All three need the SAME positioning scheme
+  // (absolute, explicit zIndex/elevation) for Android to honour the order —
+  // one of them left as a plain flow sibling still painted on top
+  // regardless of zIndex.
+  plusButton: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1,
+    elevation: 1,
+  },
+  armedToolSlot: { zIndex: 2, elevation: 2 },
 });
