@@ -29,7 +29,7 @@ import { adoptLocalFieldDefs } from "./customFields/fieldDefsStore";
 import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
 import { registerSyncTriggers } from "./sync/syncEngine";
-import { activeThemeSchemeId, persistThemeSchemeId, theme } from "./theme";
+import { activeThemeSchemeId, persistThemeSchemeId, theme, withAlpha } from "./theme";
 import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
 import type { BasemapId } from "./map/sourceResolver";
@@ -845,7 +845,11 @@ export function AppShell({
         }}
         screenOptions={{
           headerShown: false,
-          tabBarStyle: { backgroundColor: theme.secondary, borderTopColor: theme.secondary },
+          tabBarStyle: {
+            backgroundColor: theme.secondary,
+            borderTopColor: withAlpha(theme.textPrimary, 0.25),
+            borderTopWidth: 1,
+          },
           tabBarActiveTintColor: theme.accent,
           tabBarInactiveTintColor: theme.textMuted,
         }}
