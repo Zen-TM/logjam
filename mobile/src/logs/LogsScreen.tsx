@@ -297,7 +297,7 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
       setMenuTripId(null);
       Alert.alert(
         "Delete this trip?",
-        "The log entry and its photos are removed from this device and from your account. This can't be undone.",
+        "Deletes the log entry and its photos from this device and your account. Can't be undone.",
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -457,7 +457,7 @@ export function LogsScreen({ onOpenTrip }: { onOpenTrip: (trip: MirrorTrip) => v
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {
-                info("No connection — your changes will sync when you're back.");
+                info("Offline — changes sync when you're back.");
                 return;
               }
               query.refresh();
@@ -708,8 +708,8 @@ function EmptyPanel({
       </Text>
       <Text style={styles.emptyBody}>
         {filtering
-          ? "Nothing in this type, date range or search. Widen it to see the rest."
-          : "Log a trip and it lands here — date, canyons, notes and photos, all readable with no signal."}
+          ? "Nothing matches these filters. Widen or clear them to see the rest."
+          : "Log a trip and it lands here. Readable offline."}
       </Text>
       {filtering ? (
         <Button label="Clear filters" variant="outlineAccent" onPress={onClear} />
@@ -722,7 +722,7 @@ function EmptyPanel({
 
 function rangeLabel(from: string | null, to: string | null): string {
   const start = from ? formatDateKey(`${from}T00:00:00.000Z`) : "Any time";
-  const end = to ? formatDateKey(`${to}T00:00:00.000Z`) : "today";
+  const end = to ? formatDateKey(`${to}T00:00:00.000Z`) : "Today";
   return `${start} → ${end}`;
 }
 

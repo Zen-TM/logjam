@@ -279,7 +279,7 @@ export function CanyonDetailScreen({
             hue={statusMeta.hue}
           />
           {canyon.altNames.length > 0 ? (
-            <StatusPill label={`Also ${canyon.altNames.join(", ")}`} tone="outline" />
+            <StatusPill label={`A.K.A. ${canyon.altNames.join(", ")}`} tone="outline" />
           ) : null}
         </View>
       </HeroHeader>
@@ -305,7 +305,7 @@ export function CanyonDetailScreen({
         <Row
           icon="navigation"
           title="Open in a maps app"
-          subtitle="Hands the position to your navigation app"
+          subtitle="Opens your navigation app to this location."
           onPress={openInMapsApp}
         />
 
@@ -417,7 +417,7 @@ export function CanyonDetailScreen({
         {linkedWaypoints.length === 0 ? (
           <Text style={styles.muted}>
             {isOwner
-              ? "Link a waypoint to this canyon from the waypoint's own sheet on the map."
+              ? "Link a waypoint to this canyon."
               : "No waypoints on this canyon."}
           </Text>
         ) : (
@@ -448,7 +448,7 @@ export function CanyonDetailScreen({
           <Text style={styles.muted}>
             {isOwner
               ? "No trips logged here yet."
-              : "You haven't logged a trip here. Logging one adds it to your own logbook."}
+              : "Log a trip to this canyon and it will appear here."}
           </Text>
         ) : (
           linkedTrips
@@ -543,7 +543,7 @@ export function CanyonDetailScreen({
           />
           <Row
             title="Unlink from this canyon"
-            subtitle="The route itself is kept"
+            subtitle="The route is kept."
             icon="link-2"
             hue={theme.warning}
             onPress={() => {

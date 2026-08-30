@@ -104,7 +104,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
     stoppedInTime(stopGeoPdfImportRun()),
     stoppedInTime(stopTrackRecordingForWipe()),
   ]);
-  if (stopped.some((ok) => !ok)) failed.push("a download that wouldn't stop");
+  if (stopped.some((ok) => !ok)) failed.push("an active download");
 
   // In-memory DEM tiles, which are the terrain around the departing user's
   // saved areas. The files go with the region directory below; this is the copy

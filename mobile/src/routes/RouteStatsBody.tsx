@@ -63,7 +63,7 @@ export function RouteStatsBody({
             series={elevationSeries(profile)}
             formatValue={(elevationM) => `${Math.round(elevationM)} m`}
             formatX={formatDistanceM}
-            hint="Drag across for the height at a point along the route"
+            hint="Press or drag for heights."
             accessibilityLabel="Elevation profile"
           />
         </>
@@ -71,7 +71,7 @@ export function RouteStatsBody({
         <Text style={styles.pending}>
           {loading
             ? "Reading the terrain…"
-            : "Elevation needs a connection — distance is always available."}
+            : "Elevation needs a connection; distance always shows."}
         </Text>
       )}
 

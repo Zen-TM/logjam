@@ -440,8 +440,8 @@ const LOCATE_ICON: Record<FollowMode, "navigation" | "crosshair" | "compass"> = 
 
 const LOCATE_LABEL: Record<FollowMode, string> = {
   off: "Show where I am",
-  follow: "Following you — tap to face the way you are looking",
-  "course-up": "Facing your direction — tap to stop following",
+  follow: "Following — tap to face your direction",
+  "course-up": "Facing your direction — tap to stop",
 };
 
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
@@ -3587,7 +3587,7 @@ export function MapScreen({
       if (!dotWanted) handleLocateMe();
       // A pulsing dot is not a discoverable button. Said once, at the only
       // moment it is useful, rather than left as chrome for the whole trip.
-      notify("Recording — tap the dot for stats.", "info");
+      notify("Recording — tap your location dot for stats.", "info");
     } catch (err) {
       console.error(err);
       Alert.alert("Recording error", "Couldn't start recording.");
@@ -4005,7 +4005,7 @@ export function MapScreen({
     if (coverageHere.current) return null;
     return coverageHere.others.length > 0
       ? "Offline — switch to a basemap you saved for this area."
-      : "Offline — no downloaded basemap for this area.";
+      : "Offline — no map saved for this area.";
   })();
 
   const attributionText = basemapResolved
@@ -4606,7 +4606,7 @@ export function MapScreen({
         {offlineOnly ? (
           <View style={styles.notice}>
             <Text style={styles.noticeText}>
-              Simulating offline mode — using only what is saved on this phone
+              Offline mode — using only saved maps
             </Text>
           </View>
         ) : null}
@@ -4626,8 +4626,7 @@ export function MapScreen({
         {headingWanted && magneticInterference(fieldWindow) ? (
           <View style={styles.notice}>
             <Text style={styles.noticeText}>
-              Something magnetic is affecting the compass — move the phone away
-              from metal
+              Magnetic interference — move the phone away from metal
             </Text>
           </View>
         ) : headingWanted && compassCalibration.warning ? (

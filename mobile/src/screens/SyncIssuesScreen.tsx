@@ -82,8 +82,8 @@ export function SyncIssuesScreen({ onBack }: { onBack: () => void }) {
   const confirmResync = useCallback(() => {
     Alert.alert(
       "Get a fresh copy?",
-      "The app downloads your canyons, trips and photos again from scratch. " +
-        "Changes still waiting to upload are kept.",
+      "Re-downloads your canyons, trips and photos from scratch. " +
+        "Uploads still waiting are kept.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -212,8 +212,8 @@ export function SyncIssuesScreen({ onBack }: { onBack: () => void }) {
         ListHeaderComponent={
           bucket === "shelved" && shelf.length > 0 ? (
             <Text style={styles.sectionHint}>
-              Values overwritten by a change made elsewhere. Cleared automatically
-              after 30 days.
+              Your value was replaced by a change from another device. Cleared
+              automatically after 30 days.
             </Text>
           ) : null
         }
@@ -319,7 +319,7 @@ function EmptyPanel({ bucket }: { bucket: Bucket }) {
       <Text style={styles.emptyHint}>
         {bucket === "shelved"
           ? "A value replaced by an edit made elsewhere would be kept here."
-          : "Changes the server can't accept would wait here for you. Nothing does."}
+          : "Nothing needs a decision."}
       </Text>
     </View>
   );

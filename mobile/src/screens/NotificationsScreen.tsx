@@ -874,7 +874,7 @@ function EmptyPanel({
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>No notifications</Text>
       <Text style={styles.emptyHint}>
-        Shares, friend requests and finished map jobs land here.
+        Shares, friend requests and finished maps appear here.
       </Text>
     </View>
   );

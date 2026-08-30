@@ -66,7 +66,7 @@ import { LoadingState } from "./ui/ScreenStates";
 function alertFinishRouteFirst(): void {
   Alert.alert(
     "Finish your route first",
-    "Save it, or discard it with the bin, before leaving the map.",
+    "Save it, or delete the draft, before leaving the map.",
     [{ text: "OK" }],
   );
 }

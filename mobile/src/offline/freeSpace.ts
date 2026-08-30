@@ -30,7 +30,7 @@ export function fitsInFreeSpace(neededBytes: number, freeBytes: number): boolean
 /** Static, user-facing; the caller may show it as-is. */
 export function notEnoughSpaceMessage(neededBytes: number, freeBytes: number): string {
   const mb = (bytes: number) => `${Math.max(1, Math.round(bytes / 1024 / 1024))} MB`;
-  return `This needs about ${mb(neededBytes)} and the phone has ${mb(freeBytes)} free. Free some space and try again.`;
+  return `Needs about ${mb(neededBytes)}; the phone has ${mb(freeBytes)} free. Free some space and try again.`;
 }
 
 export class NotEnoughSpaceError extends Error {

@@ -113,7 +113,7 @@ export function OfflineSettingsScreen({
         <PreferenceRow
           icon="download"
           title="Finished GeoPDFs"
-          subtitle="GeoPDFs generated on the web are automatically downloaded to this device."
+          subtitle="GeoPDFs generated on Logjam Web download here automatically."
           value={autoDownload}
           ready
           onToggle={() => {
@@ -125,7 +125,7 @@ export function OfflineSettingsScreen({
         <PreferenceRow
           icon="layers"
           title="Finished LiDAR topos"
-          subtitle="LiDAR topos generated on the web are automatically downloaded to this device."
+          subtitle="LiDAR topos generated on Logjam Web download here automatically."
           value={topoAutoDownload}
           ready
           onToggle={() => {

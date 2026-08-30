@@ -64,7 +64,7 @@ const SORTS: { key: CanyonSortKey; label: string }[] = [
 const ROPEWIKI: { value: CanyonFilters["ropewiki"]; label: string }[] = [
   { value: "any", label: "Any" },
   { value: "linked", label: "From RopeWiki" },
-  { value: "unlinked", label: "Mine alone" },
+  { value: "unlinked", label: "Not from RopeWiki" },
 ];
 
 /** Presets are the shortcut, not the ceiling — "Custom" reaches everything else. */
@@ -225,7 +225,7 @@ export function CanyonFilterSheet({
         {/* Says where the missing axes went, so their absence reads as a
             decision rather than a gap. */}
         <Text style={styles.hint}>
-          Done, to do and shared are the chips above this sheet.
+          Done, to do and shared are filtered by the tabs above.
         </Text>
 
         <SectionHeader label="Sort" />
@@ -320,7 +320,7 @@ export function CanyonFilterSheet({
         <SectionHeader label="On the map" />
         <Row
           icon="map"
-          title="Show only these on the map"
+          title="Show filtered canyons on the map"
           subtitle={
             !showFilteredOnMap
               ? "The map shows every canyon"
@@ -339,14 +339,14 @@ export function CanyonFilterSheet({
           }
         />
 
-        <SectionHeader label="Gaps in the data" />
+        <SectionHeader label="Missing info" />
         <Row
           icon="help-circle"
-          title="Include canyons missing this data"
+          title="Include canyons missing this info"
           // Two lines: it has to fit beside a Toggle, and the one-line version
           // ellipsised. Also no longer says "grade" — this switch covers every
           // filtered field, not just the grades.
-          subtitle="Imported canyons often have gaps — filters would hide them."
+          subtitle="Imported canyons often lack it, so filters would hide them."
           subtitleNumberOfLines={2}
           right={
             <Toggle

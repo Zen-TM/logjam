@@ -82,8 +82,8 @@ export function RecordButton({
         state === null
           ? "Record track"
           : state === "recording"
-            ? "Recording — show stats. Press and hold to finish."
-            : "Recording paused — show stats. Press and hold to finish."
+            ? "Recording — tap for stats, hold to finish."
+            : "Recording paused — tap for stats, hold to finish."
       }
       style={styles.button}
       onPress={onPress}

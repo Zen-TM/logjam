@@ -182,7 +182,7 @@ export function MediaStrip({
         await attachMediaLocal(linkedType, linkedId, file);
       } catch (err) {
         console.error(err);
-        fail("That file couldn't be attached. Please try again.");
+        fail("That file couldn't be attached.");
       } finally {
         setBusy(false);
       }
@@ -304,7 +304,7 @@ export function MediaStrip({
         });
       } catch (err) {
         console.error(err);
-        fail("That track couldn't be attached. Please try again.");
+        fail("That track couldn't be attached.");
       } finally {
         if (scratch) {
           await FileSystem.deleteAsync(scratch, { idempotent: true }).catch(
@@ -403,7 +403,7 @@ export function MediaStrip({
           {atLimit ? (
             <Text style={styles.emptyHint}>
               {limit !== 1
-                ? `${limit} is the limit here.`
+                ? `This holds up to ${limit} attachments.`
                 : onAddWay
                   ? "One route per canyon."
                   : "One route per canyon. Press and hold to replace it."}
@@ -426,7 +426,7 @@ export function MediaStrip({
           // promise rejection and the button looked dead.
           void Promise.resolve(job()).catch((err: unknown) => {
             console.error(err);
-            fail("That didn't work. Please try again.");
+            fail("That action didn't work. Please try again.");
           });
         }}
         title={
@@ -483,8 +483,7 @@ export function MediaStrip({
               <ActivityIndicator color={theme.accent} />
             ) : tracks.length === 0 ? (
               <Text style={styles.emptyHint}>
-                No finished recordings yet. Start one from the map and it shows
-                up here once you stop it.
+                No finished recordings yet. Start one from the map — it will appear here once you stop it.
               </Text>
             ) : (
               <>

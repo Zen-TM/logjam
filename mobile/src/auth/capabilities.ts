@@ -147,7 +147,7 @@ export function capabilityScreenBlock(
   }
   return {
     title: unavailableReasonText("needs-account"),
-    hint: `${CAPABILITY_LABEL[capability]} lives on a Logjam account. Everything already on this phone keeps working without one.`,
+    hint: `${CAPABILITY_LABEL[capability]} needs a Logjam account. Your data on this phone still works.`,
   };
 }
 

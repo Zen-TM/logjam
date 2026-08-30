@@ -276,10 +276,10 @@ describe("reapStuckTopoJobs — topo_jobs", () => {
     exportUpdateMany.mockResolvedValue({ count: 1 });
     await reapStuckTopoJobs(NOW);
     expect(jobUpdateMany.mock.calls[0][0].data.errorMessage).toBe(
-      "Processing timed out — the job did not complete in the expected time and was marked failed. Submit a new job to retry.",
+      "This job was stopped because it took too long. Submit a new job to try again.",
     );
     expect(exportUpdateMany.mock.calls[0][0].data.errorMessage).toBe(
-      "The export did not complete in the expected time and was marked failed. Submit a new export to retry.",
+      "This export was stopped because it took too long. Submit a new export to try again.",
     );
   });
 
@@ -630,7 +630,7 @@ describe("reapStuckTopoJobs — emails the owners of reaped jobs", () => {
     expect(mail.subject).toBe("Topo map failed — Logjam");
     // The generic reaper message is the body's reason (intended: the reaper
     // knows nothing more than "it timed out").
-    expect(mail.text).toContain("did not complete in the expected time");
+    expect(mail.text).toContain("stopped because it took too long");
     expect(mail.html).toContain("<strong>");
     // Deep link + logo header only when FRONTEND_URL is configured.
     if (getEnv().FRONTEND_URL) {

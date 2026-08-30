@@ -283,7 +283,7 @@ export function CanyonEditSheet({
       onClose();
     } catch (err) {
       console.error(err);
-      onFailed("Couldn't save this canyon. Please try again.");
+      onFailed("Couldn't save this canyon.");
     } finally {
       setSaving(false);
     }
@@ -427,7 +427,7 @@ export function CanyonEditSheet({
           <View style={styles.fixNote}>
             <Feather name="map-pin" size={14} color={theme.accent} />
             <Text style={styles.hint}>
-              Filled in from the point you pressed — edit it if that&rsquo;s off.
+              Filled in from the point you pressed.
             </Text>
           </View>
         ) : null}
@@ -468,8 +468,7 @@ export function CanyonEditSheet({
             autoCapitalize="sentences"
           />
           <Text style={styles.hint}>
-            Anyone you share this canyon with can read these notes. Per-trip notes stay
-            private.
+            Visible to anyone you share the canyon with. Per-trip notes stay private.
           </Text>
         </View>
 
@@ -494,7 +493,7 @@ export function CanyonEditSheet({
           subtitle={
             fieldsBlocked ??
             (customFieldDefs.length === 0
-              ? "Add your own — access notes, permit, anything"
+              ? "Add your own — permits, access notes, anything."
               : `${customFieldDefs.length} field${customFieldDefs.length === 1 ? "" : "s"}`)
           }
           disabled={fieldsBlocked !== undefined}

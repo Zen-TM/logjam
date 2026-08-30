@@ -49,6 +49,6 @@ export function linkConfirmationMessage(counts: LocalEntityCounts): string | nul
   // limited — a few hundred takes hours, not minutes. Someone who expects it
   // to finish while they watch will conclude it has hung.
   return counts.media >= 25
-    ? `${base}\n\nUploading the photos will take a while, and needs a connection. You can keep using the app while it runs.`
+    ? `${base}\n\nUploading the photos will take a while, and needs a connection. You can keep using Logjam GPS while it runs.`
     : base;
 }

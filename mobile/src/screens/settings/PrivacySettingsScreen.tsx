@@ -122,9 +122,9 @@ export function PrivacySettingsScreen() {
 
         <SectionHeader label="What's on this phone" />
         <Text style={styles.note}>
-          {"Your canyons, trips, notes, photos and saved maps are stored on this " +
-            "device and kept out of your phone's cloud backup. The app lock is " +
-            "what protects them if someone else picks up your phone."}
+          {"Your canyons, trips, notes, photos and maps are stored on this device, " +
+            "outside your phone's cloud backup. The app lock protects them if " +
+            "someone else uses your phone."}
         </Text>
       </ScreenScroll>
 

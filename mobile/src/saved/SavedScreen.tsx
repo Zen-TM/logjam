@@ -621,7 +621,7 @@ export function SavedScreen({
   const discardOrphan = useCallback((region: UnfinishedRegion) => {
     Alert.alert(
       "Discard this download?",
-      "The tiles saved so far are deleted from this phone.",
+      "The download so far will be deleted from this phone.",
       [
         { text: "Keep it", style: "cancel" },
         {
@@ -646,7 +646,7 @@ export function SavedScreen({
     (group: { label: string; jobs: { spec: { id: string } }[] }) => {
       Alert.alert(
         "Stop saving these maps?",
-        "The tiles saved so far are deleted from this phone.",
+        "The download so far will be deleted from this phone.",
         [
           { text: "Keep going", style: "cancel" },
           {
@@ -1417,7 +1417,7 @@ export function SavedScreen({
     (member: { title: string; delete: () => Promise<unknown> }) => {
       Alert.alert(
         `Delete ${member.title}?`,
-        "This map is removed from the device. The rest of this one stays.",
+        "This map is removed from the device. The rest of this region stays.",
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -2351,11 +2351,11 @@ function EmptyPanel({
   const copy: Record<Category | "all", { title: string; hint: string }> = {
     route: {
       title: "No routes yet",
-      hint: "Draw one on the map with the pen tool — the approach, the creek, the exit.",
+      hint: "Draw one on the map with the draw tool.",
     },
     waypoint: {
       title: "No waypoints yet",
-      hint: "Press and hold anywhere on the map to mark a spot — the carpark, the exit, a good campsite.",
+      hint: "Press and hold the map to mark a spot.",
     },
     all: {
       title: "Nothing saved yet",
@@ -2368,15 +2368,15 @@ function EmptyPanel({
     overlay: {
       title: "No LiDAR topos here",
       hint: isGuest
-        ? "LiDAR topos are generated on the web and need a Logjam account."
+        ? "LiDAR topos are generated on Logjam Web and need a Logjam account."
         : online
-          ? "Topo overlays you generate on the web can be saved for offline use."
+          ? "Save topo overlays you make on Logjam Web for offline use."
           : "Connect to see the overlays on your account.",
     },
     geoPdf: {
       title: "No GeoPDF maps",
       hint: isGuest
-        ? "Import a GeoPDF from this phone. Pulling one from a Logjam account needs an account."
+        ? "Import a GeoPDF from this phone. An account is needed to pull one from Logjam Web."
         : "Import a GeoPDF from this phone, or pull one from your Logjam account.",
     },
     import: {

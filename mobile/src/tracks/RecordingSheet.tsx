@@ -131,7 +131,10 @@ export function RecordingSheet({
     };
     work().catch((err: unknown) => {
       console.error(err);
-      Alert.alert("Recording error", "Couldn't change the recording state.");
+      Alert.alert(
+        "Recording error",
+        recording ? "Couldn't pause the recording." : "Couldn't resume the recording.",
+      );
     });
   }, [activeTrack, recording]);
 
@@ -199,8 +202,8 @@ export function RecordingSheet({
       <View style={styles.body}>
         {writeFailing ? (
           <Text style={styles.writeWarning}>
-            Points aren&apos;t being saved — this phone&apos;s storage is
-            refusing writes. Finish and check free space.
+            Points aren&apos;t being saved — this phone&apos;s storage is full
+            or can&apos;t be written to. Finish, then free up space.
           </Text>
         ) : null}
         <TrackStatsBody

@@ -491,7 +491,7 @@ function OfflineTab({
         title="Save maps for offline use"
         subtitle={
           online
-            ? "Pick an area, choose the maps and the detail"
+            ? "Pick an area and the maps"
             : "Needs a connection"
         }
         disabled={!online}
@@ -501,7 +501,7 @@ function OfflineTab({
         icon="cloud-off"
         hue={assetHue.region}
         title="Offline maps only"
-        subtitle="Draw from this phone even when you have signal"
+        subtitle="Use only saved maps, even with signal"
         subtitleNumberOfLines={2}
         right={
           <Toggle
@@ -523,7 +523,7 @@ function OfflineTab({
         }
         subtitle={
           savedRegions.length === 0
-            ? "The map goes blank without one"
+            ? "Download an area to use maps offline"
             : `${(savedBytes / 1024 / 1024).toFixed(0)} MB · rename or delete in Saved`
         }
         // Lands on Saved's Regions filter, not its everything-list: a pointer

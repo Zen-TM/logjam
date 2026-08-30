@@ -75,7 +75,7 @@ import { ScreenScroll, SectionHeader, Toast, type ToastMessage } from "../../ui"
 import { ChoiceGroup, PreferenceRow } from "./settingsKit";
 
 const LONG_PRESS_LABELS: Record<LongPressAction, string> = {
-  ask: "Ask",
+  ask: "Ask each time",
   waypoint: "Waypoint",
   navigate: "Navigate",
   route: "Draw route",
@@ -123,8 +123,8 @@ function declinationHint(): string {
   const degrees = Math.abs(currentDeclinationDeg()).toFixed(1);
   const side = currentDeclinationDeg() >= 0 ? "east" : "west";
   return isDeclinationLearned()
-    ? `Magnetic north is ${degrees}° ${side} of true north where you are.`
-    : `Assuming ${degrees}° ${side} for NSW — the map has not had a location fix to work it out from yet.`;
+    ? `Magnetic north is ${degrees}° ${side} of true north here.`
+    : `Assuming ${degrees}° ${side} for NSW — no GPS fix yet to measure it.`;
 }
 
 const KEEP_AWAKE_LABELS: Record<KeepAwakeMode, string> = {
@@ -232,7 +232,7 @@ export function MapSettingsScreen() {
       <ScreenScroll>
         {/* ── Layout ────────────────────────────────────────────────────── */}
         <ChoiceGroup
-          label="Buttons on the"
+          label="Button side"
           options={[
             { value: "right", label: "Right" },
             { value: "left", label: "Left" },

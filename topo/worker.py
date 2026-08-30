@@ -330,24 +330,19 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
     open_url = f"{base}/?topoJob={job_id}"
 
     osm_warning_text = (
-        "\n\nNote: OSM features (tracks, waterways, peaks, etc.) are unavailable "
-        "for this map — the Overpass API request failed. Other layers are complete. "
-        "Retry the job to fetch features again."
+        "\n\nThe features layer (tracks, waterways, peaks) couldn't be included. "
+        "The rest is complete. Re-run the job if you need that layer."
     ) if osm_failed else ""
     osm_warning_html = (
-        '<p style="color:#a06000"><strong>Note:</strong> OSM features '
-        "(tracks, waterways, peaks, etc.) are unavailable for this map — "
-        "the Overpass API request failed. Other layers are complete. "
-        "Retry the job to fetch features again.</p>"
+        '<p style="color:#a06000">The features layer (tracks, waterways, '
+        "peaks) couldn't be included. The rest is complete. "
+        "Re-run the job if you need that layer.</p>"
     ) if osm_failed else ""
 
     text_body = "\n".join([
         "Your topo map job is complete.",
         "",
-        f"Open it in Logjam: {open_url}",
-        "",
-        "Use the Export… button on the job card to download MBTiles, GeoTIFF, "
-        "GeoPackage, GeoJSON, or GPX outputs.",
+        f"Open it in Logjam Web to download or export your map: {open_url}",
     ]) + osm_warning_text
 
     html_body = "\n".join([
@@ -357,9 +352,7 @@ def send_completion_email(to_email: str, job_id: str, output_keys: list[dict],
         f'<img src="{base}/email-logo-lockup.png" alt="Logjam" width="212" '
         'style="display:block" /></p>',
         "    <p>Your topo map job is complete.</p>",
-        f'    <p><a href="{open_url}">Open it in Logjam</a></p>',
-        "    <p>Use the <strong>Export…</strong> button on the job card to "
-        "download MBTiles, GeoTIFF, GeoPackage, GeoJSON, or GPX outputs.</p>",
+        f'    <p><a href="{open_url}">Open it in Logjam Web to download or export your map</a></p>',
         f"    {osm_warning_html}",
         "  </body>",
         "</html>",
@@ -384,7 +377,7 @@ def send_failure_email(to_email: str, job_id: str, error_message: str):
         "",
         error_message,
         "",
-        f"Open it in Logjam: {open_url}",
+        f"Open it in Logjam Web: {open_url}",
     ])
 
     html_body = "\n".join([
@@ -395,7 +388,7 @@ def send_failure_email(to_email: str, job_id: str, error_message: str):
         'style="display:block" /></p>',
         "    <p>Your topo map job failed.</p>",
         f"    <p><strong>{error_message}</strong></p>",
-        f'    <p><a href="{open_url}">Open it in Logjam</a></p>',
+        f'    <p><a href="{open_url}">Open it in Logjam Web</a></p>',
         "  </body>",
         "</html>",
     ])

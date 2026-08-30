@@ -27,7 +27,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
     if (state.kind === "queued") return "Waiting its turn";
     if (state.kind === "ready") {
       return state.gaps > 0
-        ? `Saved · ${state.gaps} tiles the provider doesn't have`
+        ? `Saved · ${state.gaps} tiles unavailable`
         : "Saved";
     }
     if (state.kind === "failed") {
@@ -35,19 +35,21 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
         case "provider-errors":
           return "Too many tiles wouldn't load. Try again later.";
         case "region-rejected":
-          return "The vector map only covers NSW, up to 40 km across. Pick a smaller area inside NSW.";
+          return state.detail === "too-large"
+            ? "Pick a smaller area — up to 40 km across."
+            : "Pick an area inside NSW.";
         case "source-unavailable":
           // Not the phone's fault and not fixable by retrying, so it doesn't
           // say "try again" — this is the vector clip's 5xx.
-          return "Logjam can't cut this map right now. The other maps still work.";
+          return "Logjam couldn't prepare this map right now. Other maps still work.";
         default:
           // The detail is the message from the exception that ended the run,
           // scrubbed (see failureDetail). Without it this row said only "that
           // didn't finish", which told the user nothing to act on and left a
           // developer with a logcat line nobody was attached to.
           return state.detail
-            ? `That didn't finish: ${state.detail}`
-            : "That didn't finish. Try again.";
+            ? `Download didn't finish: ${state.detail}`
+            : "Download didn't finish. Try again.";
       }
     }
     if (state.kind === "paused") {
@@ -57,7 +59,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
         case "background":
           return "Paused — Logjam has to stay open to download";
         case "provider-backoff":
-          return "Paused — the map service asked us to slow down";
+          return "Paused — the map service is busy";
         default:
           return "Paused";
       }
@@ -130,7 +132,7 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
                   state.kind === "failed"
                     ? "Discard this download?"
                     : "Stop this download?",
-                  "The tiles saved so far are deleted from this phone.",
+                  "The download so far will be deleted from this phone.",
                   [
                     { text: "Keep it", style: "cancel" },
                     {

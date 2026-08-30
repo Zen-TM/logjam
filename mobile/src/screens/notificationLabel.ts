@@ -46,14 +46,14 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       };
     case "topo_complete":
       return {
-        text: str(p.jobName) ? `${str(p.jobName)} topo complete` : "LiDAR topo processing complete",
+        text: str(p.jobName) ? `${str(p.jobName)} map ready` : "LiDAR map ready",
         ...(p.osmFailed === true && {
-          warning: "OSM features unavailable — Overpass API failed. Retry to fetch them.",
+          warning: "Roads and labels didn't download. Try again.",
         }),
       };
     case "topo_failed":
       return {
-        text: str(p.jobName) ? `${str(p.jobName)} topo failed` : "LiDAR topo processing failed",
+        text: str(p.jobName) ? `${str(p.jobName)} map failed` : "LiDAR map failed",
       };
     case "topo_export_complete": {
       const format = String(p.format ?? "Topo").toUpperCase();
@@ -75,7 +75,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     case "geo_pdf_complete":
       if (p.status === "failed") {
         return {
-          text: "GeoPDF generation failed",
+          text: "Couldn't create GeoPDF",
           ...(str(p.errorMessage) && { warning: str(p.errorMessage)! }),
         };
       }

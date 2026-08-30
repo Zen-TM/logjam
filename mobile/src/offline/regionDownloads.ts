@@ -87,7 +87,7 @@ export async function downloadProtomapsRegion(
     );
     const result = await resumable.downloadAsync();
     if (!result || result.status !== 200) {
-      throw new Error(`Region download failed (HTTP ${result?.status ?? "?"})`);
+      throw new Error("Region download failed");
     }
 
     // Verify: exact size + PMTiles magic bytes (stage4a §9 http-file verify).
@@ -102,7 +102,7 @@ export async function downloadProtomapsRegion(
     });
     // atob is available in Hermes (and polyfilled paths elsewhere in the app).
     if (atob(headBase64) !== PMTILES_MAGIC) {
-      throw new Error("Region file is not a valid map archive");
+      throw new Error("The downloaded file isn't a valid map");
     }
 
     const artifact: MapArtifact = {

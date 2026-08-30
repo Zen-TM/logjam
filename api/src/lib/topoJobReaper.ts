@@ -64,11 +64,11 @@ import { deleteSharesFor } from "./shareAccess";
 // Retry means submitting a new job/export — the reaper never re-launches
 // anything (see the attempt_count comment in schema.prisma, ARCH-008).
 const REAPER_JOB_MESSAGE =
-  "Processing timed out — the job did not complete in the expected time and was marked failed. Submit a new job to retry.";
+  "This job was stopped because it took too long. Submit a new job to try again.";
 const REAPER_EXPORT_MESSAGE =
-  "The export did not complete in the expected time and was marked failed. Submit a new export to retry.";
+  "This export was stopped because it took too long. Submit a new export to try again.";
 const REAPER_GEO_PDF_MESSAGE =
-  "GeoPDF generation timed out — the job did not complete in the expected time and was marked failed. Submit a new job to retry.";
+  "This job was stopped because it took too long. Submit a new job to try again.";
 
 // Headroom multiplier on the API's own duration estimate. A code constant,
 // not an env knob: if real runtimes drift from the estimate, fix the estimate
@@ -225,8 +225,8 @@ async function emailReaped(entries: ReapEntry[]): Promise<void> {
     const wanted = normalizeUserUiPreferences(recipient.uiPreferences).notifications;
     if (!wanted[entry.email.pref]) continue;
     const openUrl = base ? `${base}/?${entry.email.deepLink}` : "";
-    const openLink = openUrl ? `\n\nOpen Logjam: ${openUrl}` : "";
-    const openLinkHtml = openUrl ? `<p><a href="${openUrl}">Open Logjam</a></p>` : "";
+    const openLink = openUrl ? `\n\nOpen Logjam Web: ${openUrl}` : "";
+    const openLinkHtml = openUrl ? `<p><a href="${openUrl}">Open Logjam Web</a></p>` : "";
     await sendEmail({
       to: recipient.email,
       subject: entry.email.subject,

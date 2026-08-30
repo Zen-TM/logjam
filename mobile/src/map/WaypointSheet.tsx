@@ -280,7 +280,7 @@ export function WaypointSheet({
       footer={mode === "share" ? share.footer : undefined}
       header={
         mode === "canyons" ? (
-          <WaypointSubModeHeader hint="Anyone you share a canyon with can see its waypoints.">
+          <WaypointSubModeHeader hint="Waypoints are visible to people you share the canyon with.">
             <WaypointCanyonFilter value={canyonQuery} onChangeText={setCanyonQuery} />
           </WaypointSubModeHeader>
         ) : undefined

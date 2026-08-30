@@ -333,7 +333,15 @@ async function runProtomapsClip(
     // static and coordinate-free, but the copy the user reads is still ours
     // (DESIGN.md §11), and what it has to say is "reframe", not "retry".
     if (err instanceof ApiError && err.status >= 400) {
-      return { status: "failed", code: "region-rejected" };
+      // Two rejections share one 400 — outside the NSW extract, or over the
+      // 40 km clip cap. The endpoint's message says which (regionClip.ts),
+      // and it is static and coordinate-free, so the client can branch on it.
+      const overCap = err.serverMessage?.includes("too large") === true;
+      return {
+        status: "failed",
+        code: "region-rejected",
+        detail: overCap ? "too-large" : "outside-nsw",
+      };
     }
     return { status: "failed", code: "unknown", detail: failureDetail(err) };
   }

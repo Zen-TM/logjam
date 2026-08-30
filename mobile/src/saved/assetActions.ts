@@ -80,7 +80,7 @@ import { scratchFileUri } from "../offline/localStores";
  * undersold what they were given.
  */
 export const SHARED_READ_ONLY_HINT =
-  "Shared with you — you can view and export it, but only its owner can change it.";
+  "Shared with you — view and export, but not edit.";
 
 export type AssetActions = {
   /**
@@ -373,7 +373,7 @@ export function waypointActions(waypoint: MirrorWaypoint): AssetActions {
           delete: {
             confirmTitle: "Delete waypoint?",
             confirmBody:
-              "The waypoint is removed from every device on your account, and from anyone you shared its canyons with. This can't be undone.",
+              "The waypoint is removed from every device on your account and from anyone you shared it with. This can't be undone.",
             run: () => deleteWaypointLocal(waypoint.id),
           },
           share: { entityType: "waypoint", entityId: waypoint.id },

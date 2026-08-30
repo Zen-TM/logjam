@@ -49,7 +49,7 @@ const NOTIFICATION_ROWS: {
   title: string;
   group: "email" | "inApp";
 }[] = [
-  { key: "topoEmail", title: "A LiDAR topo job finishes or fails", group: "email" },
+  { key: "topoEmail", title: "A LiDAR map finishes or fails", group: "email" },
   { key: "exportEmail", title: "A topo export finishes or fails", group: "email" },
   { key: "geoPdfEmail", title: "A GeoPDF finishes or fails", group: "email" },
   { key: "friendRequestInApp", title: "Friend requests", group: "inApp" },
@@ -162,7 +162,7 @@ export function NotificationSettingsScreen() {
           />
         ))}
 
-        <SectionHeader label="Notify me in the app about" />
+        <SectionHeader label="Notify me in Logjam GPS about" />
         {NOTIFICATION_ROWS.filter((row) => row.group === "inApp").map((row) => (
           <PreferenceRow
             key={row.key}

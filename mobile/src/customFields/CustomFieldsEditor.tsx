@@ -68,8 +68,7 @@ export function CustomFieldList({
     <View style={styles.body}>
       {defs.length === 0 ? (
         <Text style={styles.hint}>
-          Your own fields go here — water level, party size, car shuttle, whatever
-          you want to record on every {noun.one}.
+          Add your own field to record on every {noun.one} — e.g. water level or party size.
         </Text>
       ) : (
         <>
@@ -92,8 +91,7 @@ export function CustomFieldList({
         <Row icon="plus" title="Add a field" onPress={onAdd} />
       ) : (
         <Text style={styles.hint}>
-          Adding or changing fields needs a connection. Your {noun.many} and their
-          values keep working offline.
+          Adding or changing fields needs a connection. Your {noun.many} still work offline.
         </Text>
       )}
     </View>
@@ -159,8 +157,8 @@ export function CustomFieldForm({
       console.error(err);
       onFailed(
         accountState === "guest"
-          ? "This phone wouldn't store that field."
-          : "Couldn't save that field. Account fields need a connection.",
+          ? "Couldn't save that field on this phone."
+          : "Couldn't save that field. Fields on your account need a connection.",
       );
     } finally {
       setSaving(false);
@@ -178,7 +176,7 @@ export function CustomFieldForm({
           `Delete “${editing.label}”?`,
           affected === 0
             ? `No ${noun.many} use this field yet. This can't be undone.`
-            : `${affected} ${affected === 1 ? noun.has : noun.have} a value for this field, and it will be cleared from ${affected === 1 ? "it" : "them"} too. This can't be undone.`,
+            : `This clears the value from ${affected} ${affected === 1 ? noun.one : noun.many}. This can't be undone.`,
           [
             { text: "Cancel", style: "cancel" },
             {
@@ -191,7 +189,7 @@ export function CustomFieldForm({
                       defs.filter((def) => def.key !== key),
                       removed === 0
                         ? "Field deleted."
-                        : `Field deleted, and cleared from ${removed} ${removed === 1 ? noun.one : noun.many}.`,
+                        : `Field deleted. Cleared from ${removed} ${removed === 1 ? noun.one : noun.many}.`,
                     );
                     onDone();
                   })
@@ -231,7 +229,7 @@ export function CustomFieldForm({
         />
         {editing ? (
           <Text style={styles.hint}>
-            Changing the type leaves values already recorded as they are.
+            Existing values are kept.
           </Text>
         ) : null}
       </View>
@@ -243,7 +241,7 @@ export function CustomFieldForm({
           <Row
             icon="sliders"
             title="Limit to a range"
-            subtitle={bounded ? "Values must fall between min and max" : "Any number"}
+            subtitle={bounded ? "Values must be between the min and max you set" : "Any number"}
             right={
               <Toggle
                 value={bounded}

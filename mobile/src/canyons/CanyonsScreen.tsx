@@ -436,7 +436,7 @@ export function CanyonsScreen({
               filled={search.trim() !== ""}
               onPress={() => (findOpen ? clearFind() : setFindOpen(true))}
             />
-            <Button label="Add" icon="plus" compact onPress={() => startEditing(null)} />
+            <Button label="Add canyon" icon="plus" compact onPress={() => startEditing(null)} />
           </View>
         }
       >
@@ -541,7 +541,7 @@ export function CanyonsScreen({
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {
-                info("No connection — your changes will sync when you're back.");
+                info("Offline — changes sync when you're back.");
                 return;
               }
               query.refresh();
@@ -723,25 +723,25 @@ function EmptyPanel({
     ? {
         icon: "filter" as const,
         title: "No canyons match",
-        body: "Nothing in this search and filter. Widen it to see the rest — or turn on “include canyons missing this data”, which hides most imported canyons when a grade filter is set.",
+        body: "Nothing matches your search and filters. Clear them to see the rest.",
       }
     : bucket === "done"
       ? {
           icon: "check-circle" as const,
           title: "Nothing ticked off yet",
-          body: "A canyon lands here once you log a trip that links to it.",
+          body: "Log a trip at a canyon and it moves here.",
         }
       : bucket === "shared"
         ? {
             icon: "users" as const,
             title: "Nothing shared with you",
-            body: "Canyons a friend shares appear here, with their notes and photos. You share yours from the canyon itself.",
+            body: "Canyons a friend shares appear here with notes and photos. Share your own from a canyon's page.",
           }
         : bucket === "todo"
           ? {
               icon: "map-pin" as const,
               title: "Your list is clear",
-              body: "Every canyon you own has a logged trip against it. Add another and it lands here.",
+              body: "You've logged a trip for every canyon. Add a new canyon and it appears here.",
             }
           : {
               icon: "map-pin" as const,
@@ -750,8 +750,8 @@ function EmptyPanel({
               // nothing will ever sync — promising both would be the first
               // thing a new guest reads, and wrong.
               body: isGuest
-                ? "Add the ones you want to run. Everything here is saved on this phone and works with no signal."
-                : "Add the ones you want to run, or import your list on the web. Everything here works with no signal once it has synced.",
+                ? "Add canyons to start. Everything is saved on this phone and works offline."
+                : "Add canyons, or import your list on Logjam Web. Once synced, they work offline.",
             };
   return (
     <View style={styles.empty}>

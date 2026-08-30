@@ -71,7 +71,7 @@ describe("opTitle", () => {
 
 describe("discardExplanation", () => {
   it("describes the shelf for a synced entity", () => {
-    expect(discardExplanation(parked({ entity: "canyon" }))).toMatch(/conflict shelf/);
+    expect(discardExplanation(parked({ entity: "canyon" }))).toMatch(/Your edits are kept/);
   });
 
   it("describes the deleted local copy for media, which is NOT shelved", () => {
@@ -85,7 +85,7 @@ describe("discardExplanation", () => {
 
 describe("opCause", () => {
   it("explains a lost edit↔delete race in the user's terms", () => {
-    expect(opCause(parked({ state: "deadRemote" }))).toMatch(/deleted elsewhere/);
+    expect(opCause(parked({ state: "deadRemote" }))).toMatch(/deleted on another device/);
   });
 
   it("shows the server's own domain message when there is one", () => {
@@ -96,6 +96,6 @@ describe("opCause", () => {
   });
 
   it("has a sentence of its own when the server sent none", () => {
-    expect(opCause(parked())).toBe("The server rejected this change.");
+    expect(opCause(parked())).toBe("This change couldn't be saved.");
   });
 });

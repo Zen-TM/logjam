@@ -151,13 +151,13 @@ function PointDetail({
       <StatGrid stats={stats} />
       {userCoord == null ? (
         <Text style={styles.note}>
-          Tap the locate button to see how far this is from you.
+          Tap the locate button to see the distance.
         </Text>
       ) : null}
       <Row
         icon="navigation"
         title="Navigate to this point"
-        subtitle="Live distance and bearing, without saving anything"
+        subtitle="Live distance and bearing — nothing saved"
         onPress={() => {
           onNavigate(point);
           onClose();
@@ -166,7 +166,7 @@ function PointDetail({
       <Row
         icon="flag"
         title="Drop a waypoint here"
-        subtitle="Kept in Saved, and it syncs"
+        subtitle="Saved, and synced"
         onPress={() => {
           onDropWaypoint(point);
           onClose();

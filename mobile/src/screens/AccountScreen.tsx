@@ -116,15 +116,14 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
         <Row
           icon="layers"
           title="LiDAR maps"
-          subtitle="Import the topo maps you generate on the web"
+          subtitle="Import topos from Logjam Web"
         />
 
-        <SectionHeader label="Get one" />
+        <SectionHeader label="Get an account" />
         <Button label="Sign in or create an account" icon="user-plus" onPress={startLinking} />
         <Text style={styles.guestNote}>
-          What&apos;s already on this phone comes with you — nothing is lost by
-          creating an account. It can&apos;t be undone afterwards, though: there
-          is no way to un-upload it.
+          What&apos;s on this phone comes with you. It can&apos;t be undone — there&apos;s
+          no way to un-upload it.
         </Text>
 
         <Text style={styles.version}>{CLIENT_VERSION}</Text>
@@ -241,7 +240,7 @@ function LinkedAccountScreen({
           <Text style={styles.meterHint}> · photos, videos and topo outputs</Text>
         </Text>
 
-        <SectionHeader label="LiDAR tiles this month" />
+        <SectionHeader label="LiDAR maps this month" />
         <CapacityBar
           segments={[
             {
@@ -364,7 +363,7 @@ function UsernameForm({
         autoCapitalize="none"
       />
       <Text style={styles.formHint}>
-        This is the name friends search for when they share a canyon with you.
+        Friends search this name when they share a canyon with you.
       </Text>
       {error ? <ErrorBanner message={error} /> : null}
       <Button

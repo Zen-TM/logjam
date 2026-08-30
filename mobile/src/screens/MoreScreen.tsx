@@ -169,7 +169,7 @@ export function MoreScreen({
             title="Sync issues"
             subtitle={
               issueCount > 0
-                ? `${issueCount} ${issueCount === 1 ? "change needs" : "changes need"} a decision`
+                ? `${issueCount} ${issueCount === 1 ? "needs" : "need"} your attention`
                 : "Nothing waiting on you"
             }
             onPress={onOpenSyncIssues}
