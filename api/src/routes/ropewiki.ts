@@ -164,8 +164,11 @@ router.post(
     const user = await loadUser(req.user!.sub);
 
     const fresh = req.query.fresh === "true";
-    const { canyons: parsed, errors: parseErrors } =
-      await getRopeWikiCanyons(fresh);
+    const {
+      canyons: parsed,
+      errors: parseErrors,
+      sourceUpdatedAt,
+    } = await getRopeWikiCanyons(fresh);
 
     const allUserCanyons = await prisma.canyon.findMany({
       where: { ownerId: user.id },
@@ -195,6 +198,7 @@ router.post(
       skipped,
       review: result.review,
       errors: parseErrors,
+      sourceUpdatedAt,
     });
   },
 );
@@ -239,8 +243,11 @@ router.post(
       };
     });
 
-    const { canyons: parsed, errors: parseErrors } =
-      await getRopeWikiCanyons(false);
+    const {
+      canyons: parsed,
+      errors: parseErrors,
+      sourceUpdatedAt,
+    } = await getRopeWikiCanyons(false);
     const parsedByRwId = new Map(parsed.map((c) => [c.ropeWikiId, c]));
 
     const targetIds = normalized
@@ -334,7 +341,7 @@ router.post(
       await prisma.$transaction(updates.slice(i, i + UPDATE_CHUNK_SIZE));
     }
 
-    res.json({ linked, created, skipped, errors });
+    res.json({ linked, created, skipped, errors, sourceUpdatedAt });
   },
 );
 
@@ -347,8 +354,11 @@ router.post(
     const user = await loadUser(req.user!.sub);
 
     const fresh = req.query.fresh === "true";
-    const { canyons: parsed, errors: parseErrors } =
-      await getRopeWikiCanyons(fresh);
+    const {
+      canyons: parsed,
+      errors: parseErrors,
+      sourceUpdatedAt,
+    } = await getRopeWikiCanyons(fresh);
 
     // Load all existing RopeWiki-sourced canyons for this user
     const existingCanyons = await prisma.canyon.findMany({
@@ -546,6 +556,7 @@ router.post(
       unchanged,
       userEdited: toUpdate.filter((u) => !u.canyonDataChanged).length,
       errors: parseErrors,
+      sourceUpdatedAt,
     });
   },
 );

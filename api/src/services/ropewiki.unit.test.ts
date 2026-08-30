@@ -64,9 +64,15 @@ describe("fetchAndParseRopeWiki", () => {
     expect(errors.some((e) => /could not parse coordinates/.test(e))).toBe(true);
   });
 
-  it("throws on a non-OK HTTP response", async () => {
+  // 502 rather than a bare Error: errorHandler renders any non-AppError as a
+  // generic 500 "Internal server error", which is how RopeWiki's Cloudflare
+  // 403 reached users with nothing to act on.
+  it("throws a 502 AppError on a non-OK HTTP response", async () => {
     mockFetchCsv("", false, 503);
-    await expect(fetchAndParseRopeWiki()).rejects.toThrow(/HTTP 503/);
+    await expect(fetchAndParseRopeWiki()).rejects.toMatchObject({
+      statusCode: 502,
+      message: expect.stringMatching(/HTTP 503/),
+    });
   });
 
   it("throws when a required column is missing", async () => {
