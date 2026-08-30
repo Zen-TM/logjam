@@ -117,9 +117,9 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   //      full bars to go looking for signal.
   if (input.errorKind === "applyFailed") {
     return {
-      headline: "This phone couldn't apply an update",
+      headline: "Couldn't download new data on this phone",
       detail:
-        "Retrying won't fix it. Open Sync issues to get a fresh copy of your data.",
+        "Retrying won't fix it. Open Sync issues to download a fresh copy.",
       tone: "problem",
     };
   }
@@ -131,9 +131,9 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   //      everything else because a queue that cannot drain is not "queued".
   if (input.errorKind === "unsupported") {
     return {
-      headline: "This server can't sync yet",
+      headline: "The server isn't ready to sync",
       detail:
-        "Your changes are safe on this phone and will upload once the server is updated.",
+        "Your changes are safe on this phone and will upload once it is.",
       tone: "problem",
     };
   }
@@ -174,7 +174,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
     if (pendingCount >= BULK_UPLOAD_THRESHOLD && online) {
       return {
         headline: `${plural(pendingCount, "change", "changes")} to upload`,
-        detail: "It goes up in batches. This can take a while.",
+        detail: "They upload in batches. This can take a while.",
         tone: "pending",
       };
     }

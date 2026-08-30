@@ -102,7 +102,7 @@ export function routeSlotDisplaceConfirm(
     confirmTitle: `${canyonName} already has a route`,
     confirmBody:
       occupant.kind === "route"
-        ? `“${occupant.name}” will be unlinked and kept as a standalone route.`
+        ? `“${occupant.name}” will be unlinked, but the route is kept.`
         : `The attached file “${occupant.media.filename ?? "route"}” will be deleted. That can't be undone.`,
   };
 }

@@ -47,8 +47,8 @@ export function ConsentGate({
     >
       <Text style={styles.title}>Terms & privacy</Text>
       <Text style={styles.body}>
-        Logjam&apos;s terms of service or privacy policy have changed since you
-        last agreed. Please review them at logjamnsw.com and agree to continue.
+        Logjam&apos;s terms or privacy policy changed. Review them on Logjam Web
+        to continue.
       </Text>
       {error ? <ErrorBanner message={error} onRetry={agree} /> : null}
       <Button label="Agree and continue" onPress={agree} loading={submitting} />

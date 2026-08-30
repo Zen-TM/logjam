@@ -198,7 +198,7 @@ export function TripEditSheet({
           return current.filter((link) => link.id !== canyon.id);
         }
         if (current.length >= MAX_CANYONS_PER_TRIP) {
-          onFailed(`A trip can link at most ${MAX_CANYONS_PER_TRIP} canyons.`);
+          onFailed(`A trip can have at most ${MAX_CANYONS_PER_TRIP} canyons.`);
           return current;
         }
         return [...current, { id: canyon.id, name: canyon.name }];
@@ -262,7 +262,7 @@ export function TripEditSheet({
       // The message is ours, not the error's: an error string could carry a
       // canyon name into a toast (and from there a screenshot).
       console.error(err);
-      onFailed("Couldn't save this trip. Please try again.");
+      onFailed("Couldn't save this trip.");
     } finally {
       setSaving(false);
     }
@@ -526,7 +526,7 @@ function CanyonPicker({
               icon="check"
               hue={theme.accent}
               title={canyon.name}
-              subtitle={`${index + 1} of ${pinned.length} in the title`}
+              subtitle={`${index + 1} of ${pinned.length}`}
               onPress={() => onToggle(canyon)}
               accessibilityLabel={`Remove ${canyon.name} from this trip`}
             />
@@ -538,7 +538,7 @@ function CanyonPicker({
       {matches.length === 0 ? (
         <Text style={styles.hint}>
           {canyons.length === 0
-            ? "No canyons synced to this device yet. You can log the trip without one and link it later."
+            ? "No canyons saved on this device yet. You can log the trip now and link a canyon later."
             : "Nothing matches that name."}
         </Text>
       ) : (

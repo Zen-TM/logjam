@@ -23,7 +23,7 @@ describe("bulkDeleteConfirmBody", () => {
     expect(
       bulkDeleteConfirmBody({ onDeviceCount: 0, syncedCount: 4, onDeviceBytes: 0 }),
     ).toBe(
-      "They are removed from every device on your account, and from anyone you shared their canyons with. This can't be undone.",
+      "They are removed from your account and from any friends they're shared with. This can't be undone.",
     );
   });
 
@@ -31,7 +31,7 @@ describe("bulkDeleteConfirmBody", () => {
     expect(
       bulkDeleteConfirmBody({ onDeviceCount: 1, syncedCount: 4, onDeviceBytes: 684032 }),
     ).toBe(
-      "4 of them are routes and waypoints, removed from every device on your account, and from anyone you shared their canyons with. The other one is deleted from this phone, freeing 668 KB. This can't be undone.",
+      "4 of them are routes and waypoints, removed from your account and from any friends they're shared with. The other one is deleted from this phone, freeing 668 KB. This can't be undone.",
     );
   });
 
@@ -39,7 +39,7 @@ describe("bulkDeleteConfirmBody", () => {
     expect(
       bulkDeleteConfirmBody({ onDeviceCount: 1, syncedCount: 1, onDeviceBytes: 0 }),
     ).toBe(
-      "One of them is a route or waypoint, removed from every device on your account, and from anyone you shared their canyons with. The other one is deleted from this phone. This can't be undone.",
+      "One of them is a route or waypoint, removed from your account and from any friends they're shared with. The other one is deleted from this phone. This can't be undone.",
     );
   });
 
@@ -47,7 +47,7 @@ describe("bulkDeleteConfirmBody", () => {
     expect(
       bulkDeleteConfirmBody({ onDeviceCount: 2, syncedCount: 1, onDeviceBytes: 2097152 }),
     ).toBe(
-      "One of them is a route or waypoint, removed from every device on your account, and from anyone you shared their canyons with. The other 2 are deleted from this phone, freeing 2 MB. This can't be undone.",
+      "One of them is a route or waypoint, removed from your account and from any friends they're shared with. The other 2 are deleted from this phone, freeing 2 MB. This can't be undone.",
     );
   });
 });

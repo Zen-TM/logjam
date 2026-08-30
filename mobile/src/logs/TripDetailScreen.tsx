@@ -138,7 +138,7 @@ export function TripDetailScreen({
         />
         {current.canyons.length === 0 ? (
           <Text style={styles.muted}>
-            No canyons linked. Edit the trip to link one from your library.
+            No canyons linked. Edit the trip to add one.
           </Text>
         ) : (
           current.canyons.map((canyon) => (
@@ -173,7 +173,7 @@ export function TripDetailScreen({
           linkedType="tripLog"
           linkedId={current.id}
           media={attachments}
-          emptyHint="Attach a .gpx or .kml."
+          emptyHint="Add a route, a file or a recording."
           onFailed={(text) => notify(text, "error")}
           onShowRoute={(item) => {
             resolveRouteAttachmentBbox({
@@ -198,7 +198,7 @@ export function TripDetailScreen({
         {current.notes ? (
           <Text style={styles.notes}>{current.notes}</Text>
         ) : (
-          <Text style={styles.muted}>Nothing written down.</Text>
+          <Text style={styles.muted}>No notes</Text>
         )}
 
         {customFields.length > 0 ? (

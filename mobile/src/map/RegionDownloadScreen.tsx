@@ -455,7 +455,7 @@ export function RegionDownloadScreen({
         if (connection.isConnected === false) {
           Alert.alert(
             "No connection",
-            "Saving maps needs a connection. Try again once you have one.",
+            "Saving maps needs a connection. Try again when you have one.",
           );
           return;
         }
@@ -466,7 +466,7 @@ export function RegionDownloadScreen({
           allowCellular = await new Promise<boolean>((resolve) => {
             Alert.alert(
               "Use mobile data?",
-              "You're not on Wi-Fi. This download will use your mobile data.",
+              "This download will use your mobile data.",
               [
                 { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
                 { text: "Download", onPress: () => resolve(true) },
@@ -555,7 +555,7 @@ export function RegionDownloadScreen({
           }
           valueSuffix={
             job && job.totalTiles === 0 && includesVector
-              ? "the vector map's size is known once it starts"
+              ? "size shown once download starts"
               : undefined
           }
         />
@@ -619,14 +619,13 @@ export function RegionDownloadScreen({
         {overCap ? (
           <View style={styles.mapWarning} pointerEvents="none">
             <Text style={styles.mapWarningText}>
-              Download too large. Reduce the area or detail, or pick fewer map
-              layers.
+              Too large — reduce the area or detail, or pick fewer maps.
             </Text>
           </View>
         ) : null}
         <View style={styles.mapHint} pointerEvents="none">
           <Text style={styles.mapHintText}>
-            Move the map to position it · drag an edge to reshape
+            Move the map · drag edges to resize
           </Text>
         </View>
       </View>
@@ -664,8 +663,7 @@ export function RegionDownloadScreen({
 
         {isGuest ? (
           <Text style={styles.guestSourceNote}>
-            The detailed vector basemap needs an account. These topographic and
-            aerial maps download without one.
+            The detailed map needs an account. These download without one.
           </Text>
         ) : null}
 

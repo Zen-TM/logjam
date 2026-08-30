@@ -109,7 +109,7 @@ describe("syncHealth", () => {
     // one — that nothing new will ever arrive until this is fixed — was nowhere.
     it("does not blame the connection", () => {
       const health = syncHealth(input({ state: "error", errorKind: "applyFailed" }));
-      expect(health.headline).toBe("This phone couldn't apply an update");
+      expect(health.headline).toBe("Couldn't download new data on this phone");
       expect(health.headline).not.toMatch(/reach/i);
       expect(health.tone).toBe("problem");
     });
@@ -125,7 +125,7 @@ describe("syncHealth", () => {
       const health = syncHealth(
         input({ state: "error", errorKind: "applyFailed", issueCount: 3, pendingCount: 9 }),
       );
-      expect(health.headline).toBe("This phone couldn't apply an update");
+      expect(health.headline).toBe("Couldn't download new data on this phone");
     });
 
     it("still says 'unreachable' when that is what happened", () => {
@@ -139,7 +139,7 @@ describe("syncHealth", () => {
     // that nothing can move until the server catches up.
     it("names a server that has no sync endpoints, and promises no retry", () => {
       const health = syncHealth(input({ state: "error", errorKind: "unsupported" }));
-      expect(health.headline).toBe("This server can't sync yet");
+      expect(health.headline).toBe("The server isn't ready to sync");
       expect(health.headline).not.toMatch(/reach/i);
       expect(health.detail).not.toMatch(/retry/i);
       expect(health.tone).toBe("problem");
@@ -149,11 +149,11 @@ describe("syncHealth", () => {
       expect(
         syncHealth(input({ state: "error", errorKind: "unsupported", pendingCount: 9 }))
           .headline,
-      ).toBe("This server can't sync yet");
+      ).toBe("The server isn't ready to sync");
       // applyFailed has a repair; this doesn't, so that one stays the answer.
       expect(
         syncHealth(input({ state: "error", errorKind: "applyFailed" })).headline,
-      ).toBe("This phone couldn't apply an update");
+      ).toBe("Couldn't download new data on this phone");
     });
 
     it("leaves a guest out of it — they have no account either way", () => {

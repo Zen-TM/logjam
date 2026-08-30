@@ -253,7 +253,7 @@ export function AddWaySheet({
       }}
       title={
         mode === "routes"
-          ? "Use a route you drew"
+          ? "Choose a route you drew"
           : mode === "imports"
             ? "Use an imported file"
             : mode === "tracks"
@@ -284,7 +284,7 @@ export function AddWaySheet({
           <Row
             icon="edit-3"
             hue={assetHue.route}
-            title="Use a route you drew"
+            title="Choose a route you drew"
             subtitle="One of your saved routes"
             disabled={busy}
             onPress={() => setMode("routes")}
@@ -294,7 +294,7 @@ export function AddWaySheet({
               icon="pen-tool"
               hue={assetHue.route}
               title="Draw a route on the map"
-              subtitle="Opens the map with the pen ready"
+              subtitle="Opens the map to draw a route"
               disabled={busy}
               onPress={() => {
                 close();
@@ -424,7 +424,7 @@ export function AddWaySheet({
                       // RDP always throws points away; saying how many survived
                       // is what stops the user concluding the app lost their
                       // recording.
-                      return `Saved “${name}” — ${pointCount} points — as this canyon's route. The recording is unchanged.`;
+                      return `Saved “${name}” — ${pointCount} points — as this canyon's route.`;
                     })
                   }
                 />

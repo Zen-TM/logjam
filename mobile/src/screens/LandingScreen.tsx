@@ -155,14 +155,13 @@ function GuestExplainer({
     <View style={styles.form}>
       <Text style={styles.heading}>Without an account</Text>
       <Text style={styles.body}>
-        Everything you record stays on this phone and is never uploaded. It is
-        not backed up anywhere — if you lose this phone, you lose it. Creating an
-        account later keeps what you&apos;ve already recorded.
+        Everything you record stays on this phone and is never uploaded or
+        backed up. If you lose the phone, it&apos;s gone. An account later keeps
+        what you&apos;ve already recorded.
       </Text>
       <Text style={styles.body}>
-        Sharing canyons with friends, LiDAR maps from your web account, and the
-        detailed vector basemap download all need an account. Downloaded
-        topographic and aerial maps work without one.
+        Sharing with friends and LiDAR maps from Logjam Web need an account.
+        Downloaded topos work without one.
       </Text>
       <View style={styles.secondary}>
         <Button label="Continue anyway" variant="outlineAccent" onPress={onContinue} />

@@ -242,7 +242,7 @@ function AccountPanel({
         </>
       )}
 
-      <span className={classes.sectionLabel} title="Monthly quota for LiDAR map tiles served to the browser. Resets on the date shown.">LiDAR Processing</span>
+      <span className={classes.sectionLabel} title="Monthly quota for LiDAR map tiles served to Logjam Web. Resets on the date shown.">LiDAR Processing</span>
       <div className={classes.divider} />
       {!currentUser ? (
         <p className={classes.state}>Loading...</p>

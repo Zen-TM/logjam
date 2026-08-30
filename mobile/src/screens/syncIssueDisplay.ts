@@ -55,12 +55,12 @@ export function opTitle(op: ParkedOp): string {
 
 export function opCause(op: ParkedOp): string {
   if (op.state === "deadRemote") {
-    return "The item was deleted elsewhere while you were editing it.";
+    return "It was deleted on another device while you were editing it.";
   }
   // The server's rejection reason is a domain message we wrote server-side
   // (409 "This canyon already has a track"), which is worth showing. The
   // fallback covers anything that arrived without one.
-  return op.error?.message ?? "The server rejected this change.";
+  return op.error?.message ?? "This change couldn't be saved.";
 }
 
 /**
@@ -73,9 +73,9 @@ export function opCause(op: ParkedOp): string {
  */
 export function discardExplanation(op: ParkedOp): string {
   if (op.entity === "media") {
-    return "The copy waiting to upload is deleted from this phone. Whatever you picked it from is untouched.";
+    return "The pending upload is deleted from this phone. The original file is untouched.";
   }
-  return "Your field data is kept in the conflict shelf, so you can still read what you had typed.";
+  return "Your edits are kept so you can still read what you typed.";
 }
 
 export function shelfTitle(entry: ShelfEntry): string {

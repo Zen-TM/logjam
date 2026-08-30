@@ -137,7 +137,7 @@ export function DatePicker({
           if (!pickingYear) setYearPageStart(yearBlockStart(visibleMonth.year, YEARS_PER_PAGE));
           setPickingYear(!pickingYear);
         }}
-        labelAccessibility={pickingYear ? "Back to the month grid" : "Pick a year"}
+        labelAccessibility={pickingYear ? "Back to months" : "Pick a year"}
         expanded={pickingYear}
       />
 

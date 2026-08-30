@@ -101,7 +101,7 @@ describe("routeSlotDisplaceConfirm", () => {
       }),
     ).toEqual({
       confirmTitle: "Claustral already has a route",
-      confirmBody: "“Old line” will be unlinked and kept as a standalone route.",
+      confirmBody: "“Old line” will be unlinked, but the route is kept.",
     });
   });
 

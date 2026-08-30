@@ -18,7 +18,7 @@ export async function ensureForegroundLocationPermission(): Promise<boolean> {
     title: "Location permission needed",
     askAgainMessage: "Allow location access to show your position on the map.",
     settingsMessage:
-      "Location was previously denied. Enable it for Logjam in system settings.",
+      "Location is off. Turn it on for Logjam in system settings.",
     canAskAgain,
   });
   return false;

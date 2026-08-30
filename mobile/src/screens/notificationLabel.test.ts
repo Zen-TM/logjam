@@ -29,12 +29,12 @@ describe("notificationLabel", () => {
 
   it("labels topo completion, with OSM warning when flagged", () => {
     expect(notificationLabel(notification("topo_complete", { jobName: "Kanangra" }))).toEqual({
-      text: "Kanangra topo complete",
+      text: "Kanangra map ready",
     });
     const withWarning = notificationLabel(
       notification("topo_complete", { jobName: "Kanangra", osmFailed: true }),
     );
-    expect(withWarning.warning).toMatch(/OSM features unavailable/);
+    expect(withWarning.warning).toMatch(/Roads and labels/);
   });
 
   it("labels export completion and failure", () => {
@@ -54,7 +54,7 @@ describe("notificationLabel", () => {
     expect(notificationLabel(notification("geo_pdf_complete", {})).text).toBe("GeoPDF ready");
     expect(
       notificationLabel(notification("geo_pdf_complete", { status: "failed", errorMessage: "no extent" })),
-    ).toEqual({ text: "GeoPDF generation failed", warning: "no extent" });
+    ).toEqual({ text: "Couldn't create GeoPDF", warning: "no extent" });
   });
 
   it("degrades gracefully on missing payload fields", () => {

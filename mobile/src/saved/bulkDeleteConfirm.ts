@@ -23,7 +23,7 @@ export function bulkDeleteConfirmBody({
 }): string {
   const freed = onDeviceBytes > 0 ? `, freeing ${formatBytes(onDeviceBytes)}` : "";
   const accountReach =
-    "removed from every device on your account, and from anyone you shared their canyons with";
+    "removed from your account and from any friends they're shared with";
   const undone = "This can't be undone.";
 
   // Single-kind selections talk about the whole thing, so they take a pronoun

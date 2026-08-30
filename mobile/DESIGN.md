@@ -1547,3 +1547,28 @@ What the implementation must keep true:
   2×, which is where the row layouts stop fitting. Type scales, spacing and radius
   do not — growing the padding with the text pushes a row's content off the edge
   instead of making its words bigger.
+
+## 13. Copy
+
+Voice for user-facing strings. The same three failures — verbosity, internal
+jargon, and restated reassurance — account for almost every copy defect caught
+in review.
+
+- **Name the thing that failed, never "That".** `That didn't finish` / `That
+  didn't work` start by asking "what?" — say the object: `Download didn't
+  finish`, `That action didn't work`. No device anthropomorphism: `Couldn't save
+  X`, not `This phone wouldn't remember X`.
+- **"Try again", never "Retry", and only where retrying helps.** A transient
+  network/server failure is retryable; a wrong password, an expired code or a
+  corrupt file is not — a retry hint there is noise (§8 already uses "Try
+  again").
+- **One clause beats three.** Collapse redundant reassurance and restated
+  warnings: `They'll keep their own copy — you can't take it back.`, not three
+  ways of saying "irreversible".
+- **No internal vocabulary leaks.** `basemap`, `vector map`, `tiles`, `map
+  archive`, `topo processing`, `conflict shelf`, `standalone route`, `pen tool`,
+  `the server` are our terms, not the user's. `link`, `sync`, `bound` and
+  `lands here` are established product words and stay.
+- **Empty and zero states: one short declarative sentence, lead with the
+  action.** `Log a trip at a canyon and it moves here.`, not a four-feature
+  pitch.

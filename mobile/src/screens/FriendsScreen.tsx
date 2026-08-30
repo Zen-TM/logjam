@@ -148,7 +148,7 @@ export function FriendsScreen({ onBack }: { onBack: () => void }) {
       // verb suggests (§7).
       Alert.alert(
         `Remove ${item.username}?`,
-        "This also revokes every canyon shared between you, both directions.",
+        "This also revokes every canyon you've shared with them.",
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -521,8 +521,7 @@ function EmptyPanel({ bucket, onAdd }: { bucket: Bucket; onAdd: () => void }) {
     <View style={styles.empty}>
       <Text style={styles.emptyTitle}>No friends yet</Text>
       <Text style={styles.emptyHint}>
-        Sharing a canyon needs a friendship first — it is the only way another
-        account can see one of yours.
+        You need to be friends to share a canyon.
       </Text>
       <Button label="Add a friend" icon="user-plus" onPress={onAdd} />
     </View>

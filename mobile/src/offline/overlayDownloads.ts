@@ -102,7 +102,7 @@ export async function downloadTopoOverlay(
       await assertSpaceFor(expectedBytes);
     }
     if (!result || result.status !== 200) {
-      throw new Error(`Overlay download failed (HTTP ${result?.status ?? "?"})`);
+      throw new Error("Overlay download failed");
     }
 
     // Verify: content-length match when known + PMTiles magic bytes
@@ -117,7 +117,7 @@ export async function downloadTopoOverlay(
       length: PMTILES_MAGIC.length,
     });
     if (atob(headBase64) !== PMTILES_MAGIC) {
-      throw new Error("Overlay file is not a valid map archive");
+      throw new Error("The downloaded file isn't a valid map");
     }
 
     const artifact: MapArtifact = {

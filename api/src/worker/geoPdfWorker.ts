@@ -216,9 +216,9 @@ export async function processGeoPdfJob(jobId: string): Promise<number> {
   if (recipient?.email && wantsEmail) {
     const base = (env.FRONTEND_URL ?? "").replace(/\/$/, "");
     const openUrl = base ? `${base}/?geoPdfJob=${jobId}` : "";
-    const openLink = openUrl ? `\n\nOpen Logjam: ${openUrl}` : "";
+    const openLink = openUrl ? `\n\nOpen Logjam Web: ${openUrl}` : "";
     const openLinkHtml = openUrl
-      ? `<p><a href="${openUrl}">Open Logjam</a></p>`
+      ? `<p><a href="${openUrl}">Open Logjam Web</a></p>`
       : "";
     // Logo header is served by the frontend SPA bucket, so it only resolves
     // when FRONTEND_URL is configured (unset in local dev).

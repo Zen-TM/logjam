@@ -218,7 +218,7 @@ export function ImportOptionsSheet({
             demProfile={demProfile}
             demLoading={demLoading}
             emptyMessage={
-              error ?? "No lines in this file — stats describe a walked line."
+              error ?? "This file has no track, so there are no stats to show."
             }
           />
         </View>

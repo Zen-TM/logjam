@@ -147,7 +147,7 @@ export function TrackStatsBody({
             series={elevationSeries(elevation, detail.distanceM)}
             formatValue={(elevationM) => `${Math.round(elevationM)} m`}
             formatX={formatDistanceM}
-            hint="Drag across for the height at a point along the track"
+            hint="Press or drag for heights."
             accessibilityLabel="Elevation profile"
           />
           {/* Which surface these heights came from. Said out loud because the
@@ -160,8 +160,8 @@ export function TrackStatsBody({
               : demProfile
                 ? "Terrain data incomplete — heights from this phone's GPS"
                 : demLoading
-                  ? "Heights from this phone's GPS — reading the terrain…"
-                  : "Heights from this phone's GPS — no terrain data for here"}
+                  ? "Heights from GPS — loading terrain…"
+                  : "Heights from GPS — no terrain data here"}
           </Text>
         </View>
       ) : (
@@ -169,8 +169,8 @@ export function TrackStatsBody({
           {demLoading
             ? "Reading the terrain…"
             : detail.maxAltitudeM == null
-              ? "No heights for this track — distance and time are unaffected."
-              : "Not enough height readings to chart — distance and time are unaffected."}
+              ? "No heights for this track"
+              : "Not enough height readings to chart"}
         </Text>
       )}
 
@@ -185,7 +185,7 @@ export function TrackStatsBody({
             // The speed series runs on a CLOCK, not a tape measure — its x is
             // time into the recording (see SpeedSample).
             formatX={formatDurationMs}
-            hint="Drag across for the speed at a time into the trip"
+            hint="Press or drag for speeds."
             accessibilityLabel="Speed profile"
           />
         </View>

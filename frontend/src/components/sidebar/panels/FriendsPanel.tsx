@@ -312,8 +312,8 @@ function FriendsPanel({
             </div>
             <span className={classes.caption}>
               These are copies. Downloading keeps the file on your computer —
-              Logjam on the web doesn&rsquo;t import GPX or KML, so open it in
-              the mobile app or another tool.
+              Logjam Web doesn&rsquo;t import GPX or KML, so open it in
+              Logjam GPS or another tool.
             </span>
           </>
         )}

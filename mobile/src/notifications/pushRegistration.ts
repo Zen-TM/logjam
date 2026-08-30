@@ -50,7 +50,7 @@ async function registerGrantedDevice(): Promise<void> {
   try {
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {
-        name: "Default",
+        name: "Updates",
         importance: Notifications.AndroidImportance.DEFAULT,
       });
     }

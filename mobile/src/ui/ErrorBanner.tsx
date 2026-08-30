@@ -16,7 +16,7 @@ export function ErrorBanner({ message, onRetry }: ErrorBannerProps) {
       <Text style={styles.message}>{message}</Text>
       {onRetry ? (
         <Pressable onPress={onRetry} accessibilityRole="button">
-          <Text style={styles.retry}>Retry</Text>
+          <Text style={styles.retry}>Try again</Text>
         </Pressable>
       ) : null}
     </View>

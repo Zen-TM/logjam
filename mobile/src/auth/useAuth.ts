@@ -238,7 +238,7 @@ export function useAuth() {
               // this branch exists to prevent.
               await amplifySignOut().catch(console.error);
               setError(
-                `Couldn't clear the previous account's ${wiped.failed.join(" and ")} from this phone. Sign-in stopped so the two accounts don't mix.`,
+                `Couldn't clear the previous account's ${wiped.failed.join(" and ")} from this phone, so sign-in was cancelled.`,
               );
               return false;
             }
@@ -256,7 +256,7 @@ export function useAuth() {
         return true;
       } catch (err) {
         console.error(err);
-        setError(messageFromError(err, "Sign in failed. Please try again."));
+        setError(messageFromError(err, "Sign in failed."));
         return false;
       }
     },
@@ -282,7 +282,7 @@ export function useAuth() {
         }
       } catch (err) {
         console.error(err);
-        setError(messageFromError(err, "Sign up failed. Please try again."));
+        setError(messageFromError(err, "Sign up failed."));
       }
     },
     [],
@@ -298,7 +298,7 @@ export function useAuth() {
         });
       } catch (err) {
         console.error(err);
-        setError(messageFromError(err, "Confirmation failed. Please try again."));
+        setError(messageFromError(err, "Confirmation failed."));
         return;
       }
       // Verified — sign straight in; fall back to the sign-in form only if
@@ -317,7 +317,7 @@ export function useAuth() {
       console.error(err);
       return {
         ok: false,
-        error: messageFromError(err, "Couldn't resend code. Please try again."),
+        error: messageFromError(err, "Couldn't resend code."),
       };
     }
   }, [pendingUsername]);
@@ -332,7 +332,7 @@ export function useAuth() {
       }
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't send reset code. Please try again."));
+      setError(messageFromError(err, "Couldn't send reset code."));
     }
   }, []);
 
@@ -349,7 +349,7 @@ export function useAuth() {
         return true;
       } catch (err) {
         console.error(err);
-        setError(messageFromError(err, "Couldn't reset password. Please try again."));
+        setError(messageFromError(err, "Couldn't reset password."));
         return false;
       }
     },
@@ -386,7 +386,7 @@ export function useAuth() {
     if (!writeEntryChoice("guest")) {
       // A choice that didn't stick means the next cold start throws them back
       // here with their data apparently gone. Say so instead of proceeding.
-      setError("This phone wouldn't remember that choice. Please try again.");
+      setError("Couldn't save that choice. Try again.");
       return false;
     }
     setError(null);

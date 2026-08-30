@@ -87,9 +87,9 @@ export type SharePanelTarget =
  * and says what stays private.
  */
 const SHARE_BLURB =
-  "Friends you pick can view and export this. They can't change it, and you can stop sharing whenever you like.";
+  "Friends you pick can view and export it, but can't change it. You can stop sharing anytime.";
 const CANYON_SHARE_BLURB =
-  "Friends you pick can see this canyon, its notes and its photos. Your trip logs stay private. You can stop sharing whenever you like.";
+  "Friends you pick can see this canyon and its notes and photos. Your trip logs stay private. You can stop sharing at anytime.";
 
 /**
  * Row props for a Share / Send a copy verb: `disabled` plus the REASON as a
@@ -266,7 +266,7 @@ export function useSharePanel({
               cannot be undone: this is where a user learns Send is not Share. */}
           <PromiseBanner
             tone="copy"
-            text={`They'll get their own copy of ${target.sendCopy.filename} to keep. It becomes theirs — you can't take it back, and changes you make later won't reach them.`}
+            text={`They'll keep their own copy — you can't take it back.`}
           />
           {search}
           <SectionHeader label="Send to" />

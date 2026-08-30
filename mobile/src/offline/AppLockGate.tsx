@@ -173,9 +173,6 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Locked</Text>
-      <Text style={styles.line}>
-        Your canyons, trips and maps are on this device. Unlock to continue.
-      </Text>
       {authFailed ? (
         <Text style={styles.line}>Authentication didn&apos;t complete — try again.</Text>
       ) : null}

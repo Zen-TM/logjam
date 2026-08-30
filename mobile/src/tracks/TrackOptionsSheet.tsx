@@ -129,7 +129,7 @@ export function TrackOptionsSheet({
       // the user concluding the app lost their recording.
       const { name, pointCount } = await actions.createRouteFrom(canyonId);
       onInfo(
-        `Saved “${name}” — ${pointCount} points — as ${canyonName}'s route. The recording is unchanged.`,
+        `Saved “${name}” — ${pointCount} points — as ${canyonName}'s route.`,
       );
     },
     onDone: () => {
@@ -341,7 +341,7 @@ export function TrackOptionsSheet({
                   // what stops the user concluding the app lost their track.
                   ({ name, pointCount }) =>
                     onInfo(
-                      `Saved “${name}” — ${pointCount} points. The recording is unchanged.`,
+                      `Saved “${name}” — ${pointCount} points.`,
                     ),
                   (err: unknown) => {
                     console.error(err);

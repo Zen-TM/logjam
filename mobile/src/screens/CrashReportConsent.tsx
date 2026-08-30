@@ -55,13 +55,11 @@ export function CrashReportConsent() {
       }
     >
       <Text style={styles.body}>
-        If Logjam crashes, we can be sent the technical details of what went
-        wrong. Reports are anonymous and scrubbed of canyon names and
-        coordinates — nothing you record leaves this phone.
+        If Logjam crashes, we get the technical details. Reports are anonymous
+        and stripped of canyon names and coordinates.
       </Text>
       <Text style={styles.body}>
-        This is off unless you turn it on, and you can change it any time in
-        Settings › Privacy and security.
+        Off by default. Change it any time in Settings › Privacy and security.
       </Text>
     </BottomSheet>
   );

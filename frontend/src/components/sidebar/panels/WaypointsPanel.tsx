@@ -155,7 +155,7 @@ export default function WaypointsPanel({
         <span className={classes.caption}>Loading…</span>
       ) : waypoints.length === 0 ? (
         <span className={classes.caption}>
-          No waypoints yet. Drop one on the phone, or add one from coordinates
+          No waypoints yet. Drop one in Logjam GPS, or add one from coordinates
           above.
         </span>
       ) : (

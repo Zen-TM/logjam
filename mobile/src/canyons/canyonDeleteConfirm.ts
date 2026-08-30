@@ -22,7 +22,7 @@ export function canyonDeleteConfirm(
   return {
     confirmTitle: `Delete ${canyonName}?`,
     confirmBody: [
-      "The canyon, its notes and its photos are removed from this device and from your account.",
+      "This removes the canyon, its notes and photos from this device and your account.",
       linkedTripCount > 0
         ? `${linkedTripCount} logged ${linkedTripCount === 1 ? "trip" : "trips"} will stay, but lose the link to it.`
         : null,

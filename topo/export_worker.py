@@ -183,26 +183,22 @@ def send_completion_email(to_email: str, export_job_id: str, format_: str, ok: b
         subject = f"Topo export ready — {format_.upper()}"
         text = (
             "Your topo export is ready.\n\n"
-            f"Open Logjam to download: {base}/?export={export_job_id}\n\n"
-            "Downloads expire after 24 hours; re-open the export dialog to "
-            "re-presign if needed."
+            f"Open Logjam Web to download: {base}/?export={export_job_id}"
         )
         html = (
             f"{logo_html}"
             f"<p>Your topo export is ready.</p>"
-            f'<p><a href="{base}/?export={export_job_id}">Open Logjam to download</a></p>'
-            f"<p>Downloads expire after 24 hours; re-open the export dialog to "
-            f"re-presign if needed.</p>"
+            f'<p><a href="{base}/?export={export_job_id}">Open Logjam Web to download</a></p>'
         )
     else:
         subject = f"Topo export failed — {format_.upper()}"
         safe_error = error or "Unknown error"
-        text = f"Your topo export failed.\n\n{safe_error}\n\nOpen Logjam to retry: {base}"
+        text = f"Your topo export failed.\n\n{safe_error}\n\nOpen Logjam Web to retry: {base}"
         html = (
             f"{logo_html}"
             f"<p>Your topo export failed.</p>"
             f"<p><strong>{safe_error}</strong></p>"
-            f'<p><a href="{base}">Open Logjam to retry</a></p>'
+            f'<p><a href="{base}">Open Logjam Web to retry</a></p>'
         )
     send_email(to_email, subject, text, html)
 

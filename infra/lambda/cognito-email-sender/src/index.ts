@@ -129,11 +129,11 @@ function buildEmail(
       if (!code) throw new Error(`${triggerSource} without code`);
       return {
         subject: "Confirm your Logjam email change",
-        text: `Your Logjam confirmation code is ${code}. It expires in 24 hours.`,
+        text: `Your Logjam confirmation code is ${code}. It expires in 24 hours. If you didn't request this, ignore this email.`,
         html: wrap(
           `<p>Your Logjam confirmation code is:</p>${codeBlock(
             code,
-          )}<p style="font-size:13px;color:#666">It expires in 24 hours.</p>`,
+          )}<p style="font-size:13px;color:#666">It expires in 24 hours. If you didn't request this, ignore this email.</p>`,
         ),
       };
     }
@@ -141,9 +141,9 @@ function buildEmail(
       if (!code) throw new Error(`${triggerSource} without code`);
       return {
         subject: "You've been invited to Logjam",
-        text: `You've been added to Logjam. Your temporary password is ${code}. Sign in and you'll be prompted to set a new one.`,
+        text: `You've been invited to Logjam. Your temporary password is ${code}. Sign in and you'll be prompted to set a new one.`,
         html: wrap(
-          `<p>You've been added to Logjam. Your temporary password is:</p>${codeBlock(
+          `<p>You've been invited to Logjam. Your temporary password is:</p>${codeBlock(
             code,
           )}<p style="font-size:13px;color:#666">Sign in and you'll be prompted to set a new one.</p>`,
         ),
@@ -153,9 +153,9 @@ function buildEmail(
       // Security notification — no code in the payload.
       return {
         subject: "Security alert for your Logjam account",
-        text: "We detected a sign-in to your Logjam account that looked unusual. If this was you, no action is needed. If not, reset your password.",
+        text: "We detected a sign-in to your Logjam account that looked unusual. If this was you, no action is needed. If this wasn't you, reset your password now.",
         html: wrap(
-          `<p>We detected a sign-in to your Logjam account that looked unusual.</p><p style="font-size:13px;color:#666">If this was you, no action is needed. If not, reset your password.</p>`,
+          `<p>We detected a sign-in to your Logjam account that looked unusual.</p><p style="font-size:13px;color:#666">If this was you, no action is needed. If this wasn't you, reset your password now.</p>`,
         ),
       };
     }
