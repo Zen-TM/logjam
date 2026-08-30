@@ -702,7 +702,13 @@ function CanyonsPanel({
         result.review.length > 0
           ? ` · ${result.review.length} possible duplicate${result.review.length === 1 ? "" : "s"} to review`
           : "";
-      toast.success(`RopeWiki import: ${summary}${reviewSuffix}`);
+      // The corpus is a periodically hand-refreshed snapshot (RopeWiki blocks
+      // server-side fetches), so date it — otherwise a months-old import is
+      // indistinguishable from a live one.
+      const sourceSuffix = result.sourceUpdatedAt
+        ? ` · source ${new Date(result.sourceUpdatedAt).toLocaleDateString()}`
+        : "";
+      toast.success(`RopeWiki import: ${summary}${reviewSuffix}${sourceSuffix}`);
     } catch (err) {
       console.error(err);
       setRefreshResult(null);

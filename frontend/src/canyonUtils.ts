@@ -349,6 +349,8 @@ export type ImportResult = {
   skipped: number;
   review: RopeWikiCandidatePayload[];
   errors: string[];
+  /** ISO timestamp of the RopeWiki corpus the server used. Null if unknown. */
+  sourceUpdatedAt: string | null;
 };
 
 export type RefreshResult = {
@@ -359,6 +361,8 @@ export type RefreshResult = {
   unchanged: number;
   userEdited: number;
   errors: string[];
+  /** ISO timestamp of the RopeWiki corpus the server used. Null if unknown. */
+  sourceUpdatedAt: string | null;
 };
 
 export type RopeWikiApplyDecision = {
@@ -372,6 +376,8 @@ export type RopeWikiApplyResult = {
   created: number;
   skipped: number;
   errors: string[];
+  /** ISO timestamp of the RopeWiki corpus the server used. Null if unknown. */
+  sourceUpdatedAt: string | null;
 };
 
 export function importFromRopeWiki(): Promise<ImportResult> {
