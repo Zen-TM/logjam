@@ -62,6 +62,7 @@ import {
   collapseBatches,
   countBatchRows,
   findNotificationBatches,
+  tallyNotifications,
   type NotificationBatch,
 } from "../notifications/notificationBatches";
 import type { NotificationDestination } from "../notifications/notificationDestination";
@@ -292,7 +293,13 @@ export function NotificationsScreen({
   );
 
   const needle = search.trim().toLowerCase();
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  // EVERY COUNT ON THIS SCREEN COLLAPSES BATCHES, because the list does: a
+  // friend sharing twelve items leaves one row, so a hero saying "12 unread"
+  // over a single row is the screen disagreeing with itself. Same arithmetic
+  // behind the tab badge (`getCachedUnreadCount`) and the day headers
+  // (`countBatchRows`).
+  const tally = useMemo(() => tallyNotifications(notifications), [notifications]);
+  const unreadCount = tally.unread;
 
   // The rail's tallies come from the OTHER axis only (the search), so a chip
   // answers "how many would I get if I tapped this" rather than restating the
@@ -306,7 +313,17 @@ export function NotificationsScreen({
         : notifications.filter((n) => notificationHaystack(n).includes(needle)),
     [needle, notifications],
   );
-  const searchedUnread = searched.filter((n) => !n.read).length;
+  // One per bucket, each counting the list that bucket will actually show, so a
+  // chip answers "how many would I get if I tapped this" in the same units the
+  // rows are in.
+  const bucketCounts = useMemo(
+    () => ({
+      all: tallyNotifications(searched).total,
+      unread: tallyNotifications(searched.filter((n) => !n.read)).total,
+      read: tallyNotifications(searched.filter((n) => n.read)).total,
+    }),
+    [searched],
+  );
 
   const visible = useMemo(
     () =>
@@ -817,21 +834,26 @@ export function NotificationsScreen({
     [batches],
   );
 
+  // UNREAD + READ CAN EXCEED ALL, and that is correct rather than a rounding
+  // slip: a batch with some of its members read appears in both buckets, as one
+  // row in each, because a group that is partly read is genuinely still in both
+  // piles. The collapsed row already says so — it keeps its New pill while any
+  // member is unread.
   const buckets: SegmentOption<Bucket>[] = [
-    { value: "all", label: "All", count: searched.length },
+    { value: "all", label: "All", count: bucketCounts.all },
     {
       value: "unread",
       label: "Unread",
-      count: searchedUnread,
+      count: bucketCounts.unread,
       // A bucket the search has emptied stays in place but is not a tap into a
       // dead end — a rail that reshuffles on every keystroke is worse.
-      disabled: searchedUnread === 0 && bucket !== "unread",
+      disabled: bucketCounts.unread === 0 && bucket !== "unread",
     },
     {
       value: "read",
       label: "Read",
-      count: searched.length - searchedUnread,
-      disabled: searched.length - searchedUnread === 0 && bucket !== "read",
+      count: bucketCounts.read,
+      disabled: bucketCounts.read === 0 && bucket !== "read",
     },
   ];
 
@@ -868,8 +890,8 @@ export function NotificationsScreen({
               : "Nothing yet"
         }
         onBack={onBack}
-        value={String(notifications.length)}
-        valueSuffix={notifications.length === 1 ? "notification" : "notifications"}
+        value={String(tally.total)}
+        valueSuffix={tally.total === 1 ? "notification" : "notifications"}
         action={
           unreadCount > 0 ? (
             <Button

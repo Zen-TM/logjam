@@ -14,6 +14,7 @@ import {
   collapseBatches,
   countBatchRows,
   findNotificationBatches,
+  tallyNotifications,
 } from "./notificationBatches";
 
 const BATCH = "11111111-1111-4111-8111-111111111111";
@@ -212,5 +213,65 @@ describe("countBatchRows", () => {
   it("counts an ordinary list as itself", () => {
     const list = [shared("a"), sent("b"), shared("c")];
     expect(countBatchRows(list, findNotificationBatches(list))).toBe(3);
+  });
+});
+
+describe("tallyNotifications", () => {
+  it("counts a batch as ONE thing, read or unread", () => {
+    const list = [
+      shared("a", { batchId: BATCH }),
+      shared("b", { batchId: BATCH }),
+      shared("c", { batchId: BATCH }),
+      shared("loner"),
+      shared("seen", { read: true }),
+    ];
+    // Four rows of batch + two singles = 5 rows, but 3 things happened.
+    expect(tallyNotifications(list)).toEqual({ total: 3, unread: 2 });
+  });
+
+  it("keeps a batch unread while ANY member is — the New pill's own test", () => {
+    const list = [
+      shared("a", { batchId: BATCH, read: true }),
+      shared("b", { batchId: BATCH, read: true }),
+      shared("c", { batchId: BATCH }),
+    ];
+    expect(tallyNotifications(list)).toEqual({ total: 1, unread: 1 });
+  });
+
+  it("drops a batch to zero unread only when every member is read", () => {
+    const list = [
+      shared("a", { batchId: BATCH, read: true }),
+      shared("b", { batchId: BATCH, read: true }),
+    ];
+    expect(tallyNotifications(list)).toEqual({ total: 1, unread: 0 });
+  });
+
+  it("counts an unbatched list as itself", () => {
+    expect(tallyNotifications([shared("a"), sent("b"), shared("c", { read: true })])).toEqual(
+      { total: 3, unread: 2 },
+    );
+  });
+
+  it("counts a mixed action as the two rows it shows", () => {
+    // One gesture, both verbs: the inbox renders a shares header AND a files
+    // header, so the tally has to say two.
+    const list = [
+      shared("a", { batchId: BATCH }),
+      shared("b", { batchId: BATCH }),
+      sent("c", { batchId: BATCH }),
+      sent("d", { batchId: BATCH }),
+    ];
+    expect(tallyNotifications(list)).toEqual({ total: 2, unread: 2 });
+  });
+
+  it("agrees with the rows the day headers count", () => {
+    const list = [
+      shared("a", { batchId: BATCH }),
+      shared("b", { batchId: BATCH }),
+      shared("loner"),
+    ];
+    const batches = findNotificationBatches(list);
+    const rows = collapseBatches(list, batches, new Set([`${BATCH}:shares`]));
+    expect(countBatchRows(rows, batches)).toBe(tallyNotifications(list).total);
   });
 });

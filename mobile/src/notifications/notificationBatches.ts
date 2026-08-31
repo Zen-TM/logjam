@@ -248,3 +248,45 @@ export function countBatchRows(
     return key === null || !batches.has(key);
   }).length;
 }
+
+/** What a list of notifications amounts to once batches count as one thing. */
+export type NotificationTally = { total: number; unread: number };
+
+/**
+ * Count a list the way the user sees it: ONE bulk share is one thing that
+ * happened, however many rows it left behind.
+ *
+ * The inbox already collapsed a batch into a single row and `countBatchRows`
+ * already made the day headers agree — but the tab badge, the hero and the
+ * bucket chips were still counting members, so a friend sharing twelve items
+ * put "12" on the More tab and opened an inbox showing one row. The badge is
+ * the number a user acts on ("is there anything new?"), so it has to mean the
+ * same thing the list does.
+ *
+ * A batch is UNREAD when any member is — the same test the collapsed row's
+ * "New" pill uses, so the pill and the badge cannot disagree.
+ *
+ * Counts the raw list, unlike `countBatchRows`, which counts rows that have
+ * already been through `collapseBatches` (and so may include synthetic header
+ * rows). Both derive their idea of a batch from `findNotificationBatches`,
+ * which is what keeps them agreeing.
+ */
+export function tallyNotifications(
+  notifications: TNotification[],
+): NotificationTally {
+  const batches = findNotificationBatches(notifications);
+  let total = 0;
+  let unread = 0;
+  for (const notification of notifications) {
+    const key = batchKeyOf(notification);
+    // A member is counted through its batch, below — never on its own.
+    if (key && batches.has(key)) continue;
+    total += 1;
+    if (!notification.read) unread += 1;
+  }
+  for (const batch of batches.values()) {
+    total += 1;
+    if (batch.unreadCount > 0) unread += 1;
+  }
+  return { total, unread };
+}

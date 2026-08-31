@@ -8,6 +8,7 @@
 // app lock, never logged.
 import type { TNotification } from "../api/types";
 import { getNotifications } from "../api/queries";
+import { tallyNotifications } from "../notifications/notificationBatches";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
 
 export type NotificationsCache = {
@@ -122,11 +123,18 @@ export async function fetchAndCacheNotifications(): Promise<NotificationsCache> 
 /** Unread count derived from the cache — drives the inbox tab badge so it
  * drops immediately on a (possibly offline) mark-read and stays correct
  * offline. Null when no cache exists yet (first launch, inbox never opened);
- * callers fall back to the server count then. */
+ * callers fall back to the server count then.
+ *
+ * ONE BULK SHARE IS ONE UNREAD THING, not the twelve rows it created
+ * (`tallyNotifications`) — the badge has to mean what the list shows, and the
+ * list collapses a batch to a single row. Note the server fallback above cannot:
+ * `GET /notifications/unread-count` counts rows and knows nothing about
+ * batches. It is only ever used before the first inbox fetch, and the first
+ * fetch replaces it. */
 export async function getCachedUnreadCount(): Promise<number | null> {
   const cache = await readNotificationsCache();
   if (!cache) return null;
-  return cache.notifications.filter((notification) => !notification.read).length;
+  return tallyNotifications(cache.notifications).unread;
 }
 
 /**
