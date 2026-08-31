@@ -222,3 +222,29 @@ export function batchPendingFileSends(batch: NotificationBatch): TNotification[]
       item.payload.fileSendStatus !== "accepted",
   );
 }
+
+/**
+ * How many notifications a run of rows REPRESENTS — a batch being one of them.
+ *
+ * The day headers count the list, and the list is rows: expanding a group of
+ * twelve turned "3" into "14" and collapsing it turned it back, which reads as
+ * notifications arriving and leaving while the user looks at them. A batch is
+ * one thing that happened — one friend, one gesture, one push — so it counts as
+ * one, and the tally holds still while the group opens and shuts.
+ *
+ * That makes the header a count of EVENTS, not of rows on screen. The
+ * alternative (always the member count) would have been just as stable, and was
+ * rejected because it makes the number disagree with the rows in the collapsed
+ * state, which is the state it is in nearly always.
+ */
+export function countBatchRows(
+  rows: TNotification[],
+  batches: Map<string, NotificationBatch>,
+): number {
+  return rows.filter((row) => {
+    // The synthetic header row IS the batch: count it, and nothing else.
+    if (batchKeyFromRowId(row.id) !== null) return true;
+    const key = batchKeyOf(row);
+    return key === null || !batches.has(key);
+  }).length;
+}

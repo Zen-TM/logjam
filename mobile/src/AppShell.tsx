@@ -39,6 +39,7 @@ import { BackgroundToast } from "./BackgroundToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { notificationTapTarget } from "./notifications/tapTarget";
 import { SavedScreen, type SavedItemReveal } from "./saved/SavedScreen";
+import type { SavedCategory } from "./saved/savedKeys";
 import { AccountScreen } from "./screens/AccountScreen";
 import { CanyonDetailScreen } from "./canyons/CanyonDetailScreen";
 import { CanyonsScreen } from "./canyons/CanyonsScreen";
@@ -162,7 +163,12 @@ type SavedStackParams = {
   // `filter` lands the screen on one category — the map's layer sheet points
   // at the regions it manages, and "All" would make the user find them again.
   // `nonce` so following the same pointer twice re-selects it.
-  SavedHome: { filter?: "region"; nonce?: number } | undefined;
+  // `highlightKey` names ONE row to pulse on arrival: the inbox's "View in
+  // Saved" knows which item its notification was about, and a filter alone does
+  // not answer "which of these forty".
+  SavedHome:
+    | { filter?: SavedCategory; nonce?: number; highlightKey?: string }
+    | undefined;
   /**
    * The point picker for the "waypoint from coordinates" form — the same screen
    * the Canyons stack registers, because a stack can only push its own routes
@@ -377,6 +383,11 @@ function SavedStackNav() {
             initialFilter={
               route.params?.filter
                 ? { category: route.params.filter, nonce: route.params.nonce ?? 0 }
+                : undefined
+            }
+            initialHighlight={
+              route.params?.highlightKey
+                ? { key: route.params.highlightKey, nonce: route.params.nonce ?? 0 }
                 : undefined
             }
             onOpenMap={(bbox, basemapId, reveal) =>
@@ -757,6 +768,13 @@ export function AppShell({
           alertFinishRouteFirst();
           return;
         }
+        // A TAP DELIBERATELY DOES NOT MARK THE NOTIFICATION READ. It was built
+        // that way once (the push carried the row's id for exactly that) and
+        // reverted: a banner is a glance, often from a lock screen, and read
+        // means "seen, nothing left to do here". The unread list is the queue of
+        // things the user still has to deal with, and emptying it on the
+        // strength of a tap-through takes rows out of the one list they are
+        // looked for in. Opening the row is what reads it.
         if (target.kind === "canyon") {
           nav.navigate("Canyons", {
             screen: "CanyonDetail",
@@ -915,6 +933,23 @@ export function AppShell({
                     onOpenCanyon={(canyonId) =>
                       navigation.navigate("MoreCanyonDetail", { canyonId })
                     }
+                    // A notification about a saved item is a way in to that
+                    // item: the Saved tab, on its filter, with the row pulsed.
+                    // The filter alone when the notification names the thing
+                    // but not the row (see notificationDestination.ts).
+                    onOpenSaved={(filter, highlightKey) =>
+                      navigation.getParent()?.navigate("Saved", {
+                        screen: "SavedHome",
+                        params: {
+                          filter,
+                          nonce: Date.now(),
+                          ...(highlightKey ? { highlightKey } : {}),
+                        },
+                      })
+                    }
+                    // Pushed INSIDE the More stack, like the canyon above, so
+                    // Back returns to the inbox rather than to another tab.
+                    onOpenFriends={() => navigation.navigate("Friends")}
                   />
                 )}
               </MoreStack.Screen>

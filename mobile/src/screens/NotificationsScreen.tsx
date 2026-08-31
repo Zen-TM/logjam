@@ -60,10 +60,13 @@ import {
   batchLabel,
   batchPendingFileSends,
   collapseBatches,
+  countBatchRows,
   findNotificationBatches,
   type NotificationBatch,
 } from "../notifications/notificationBatches";
+import type { NotificationDestination } from "../notifications/notificationDestination";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
+import type { SavedCategory } from "../saved/savedKeys";
 import { fontSize, fontWeight, spacing, surface, theme } from "../theme";
 import { enqueueNotificationDelete, enqueueNotificationRead } from "../sync/outbox";
 import {
@@ -228,10 +231,20 @@ export function NotificationsScreen({
   onBack,
   onUnreadChanged,
   onOpenCanyon,
+  onOpenSaved,
+  onOpenFriends,
 }: {
   onBack: () => void;
   onUnreadChanged?: () => void;
   onOpenCanyon: (canyonId: string) => void;
+  /**
+   * "View in Saved" — the tab, on the filter the subject lives under, with that
+   * row pulsed on arrival. `highlightKey` is null when the notification names
+   * the thing but not the row (see `notificationDestination.ts`), and the
+   * filter alone is then the whole pointer.
+   */
+  onOpenSaved: (filter: SavedCategory, highlightKey: string | null) => void;
+  onOpenFriends: () => void;
 }) {
   const { accountState } = useAccountState();
   const guestBlock = useMemo(
@@ -318,14 +331,6 @@ export function NotificationsScreen({
     () => collapseBatches(visible, batches, expandedBatches),
     [batches, expandedBatches, visible],
   );
-  const toggleBatch = useCallback((key: string) => {
-    setExpandedBatches((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
   const sections = useMemo(() => groupNotificationsByDay(rows), [rows]);
 
   // --- Multi-select (DESIGN.md §7) -----------------------------------------
@@ -426,6 +431,42 @@ export function NotificationsScreen({
       await setRead([n.id], true);
     },
     [setRead],
+  );
+
+  /**
+   * Open or shut a batch — and, opening it, READ it.
+   *
+   * Expanding is the group's version of tapping a row, and a tap has always
+   * marked a notification read. Every member's own words are on screen from
+   * that moment, so leaving twelve of them New would mean the badge counting
+   * things the user is looking at. Collapsing marks nothing: shutting a drawer
+   * is not unreading what was in it.
+   *
+   * NOT IN THE UNREAD BUCKET. That filter is live — a row marked read leaves
+   * the list — so marking here would delete the twelve rows the user just asked
+   * to see, header and all, as the animation opened them. A single row's tap
+   * gets away with the same thing only because it is on its way somewhere else.
+   * Working through the Unread bucket is the one case where the user is telling
+   * us they will say when they are done.
+   */
+  const toggleBatch = useCallback(
+    (key: string) => {
+      const expanding = !expandedBatches.has(key);
+      setExpandedBatches((prev) => {
+        const next = new Set(prev);
+        if (expanding) next.add(key);
+        else next.delete(key);
+        return next;
+      });
+      if (!expanding || bucket === "unread") return;
+      const unreadIds =
+        batches
+          .get(key)
+          ?.items.filter((item) => !item.read)
+          .map((item) => item.id) ?? [];
+      void setRead(unreadIds, true);
+    },
+    [batches, bucket, expandedBatches, setRead],
   );
 
   /**
@@ -692,6 +733,23 @@ export function NotificationsScreen({
     [markRead, onOpenCanyon],
   );
 
+  /**
+   * "View in Saved" / "View in Friends" — the other half of a notification
+   * being a way in to the thing it is about.
+   *
+   * Reading it is what marks it read, exactly as the row's own tap does: the
+   * user has followed this notification through to its subject, which is the
+   * most complete thing they can do with it short of answering it.
+   */
+  const viewNotification = useCallback(
+    (n: TNotification, destination: NotificationDestination) => {
+      void markRead(n);
+      if (destination.tab === "friends") onOpenFriends();
+      else onOpenSaved(destination.filter, destination.highlightKey);
+    },
+    [markRead, onOpenFriends, onOpenSaved],
+  );
+
   const openMenu = useCallback((n: TNotification) => setMenuId(n.id), []);
 
   const renderItem = useCallback(
@@ -749,10 +807,14 @@ export function NotificationsScreen({
     ({ section }: { section: { title: string; data: TNotification[] } }) => (
       <View style={styles.dayHeader}>
         <Text style={styles.dayLabel}>{section.title}</Text>
-        <Text style={styles.dayCount}>{section.data.length}</Text>
+        {/* Rows, with a batch counted as the ONE thing that happened rather
+            than as its members — otherwise opening a group of twelve took the
+            day from 3 to 14 and shutting it took it back, which reads as
+            notifications arriving while you look at them. */}
+        <Text style={styles.dayCount}>{countBatchRows(section.data, batches)}</Text>
       </View>
     ),
-    [],
+    [batches],
   );
 
   const buckets: SegmentOption<Bucket>[] = [
@@ -903,6 +965,7 @@ export function NotificationsScreen({
         visible={menuId !== null}
         onClose={() => setMenuId(null)}
         onOpen={openNotification}
+        onView={viewNotification}
         onSetRead={(n, read) => void setRead([n.id], read)}
         onDelete={(n) => void deleteNotifications([n])}
       />

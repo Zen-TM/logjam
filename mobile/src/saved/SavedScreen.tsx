@@ -35,7 +35,7 @@
 // through navigation params to MapScreen's camera; in memory only, never
 // logged, never persisted.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Animated, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import NetInfo from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
@@ -55,6 +55,11 @@ import {
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
+import {
+  savedOverlayKey,
+  savedRegionKey,
+  type SavedCategory,
+} from "./savedKeys";
 import { formatBytes, formatMinutes } from "../format";
 import { getGeoPdfJob, listGeoPdfJobs, type GeoPdfJobView } from "../api/geoPdfJobs";
 import { useApiQuery } from "../api/queries";
@@ -63,7 +68,7 @@ import {
   useMirrorWaypoints,
   usePendingSyncCount,
 } from "../sync/useSyncQueries";
-import { assetHue, fontSize, fontWeight, spacing, theme } from "../theme";
+import { assetHue, fontSize, fontWeight, radius, spacing, theme } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -186,14 +191,10 @@ function countOf(count: number, noun: string): string {
 // --- Category model -------------------------------------------------------
 // One entry per asset kind: the filter rail, the capacity meter and every
 // row's glyph/hue all read from here, so a new asset kind is one addition.
-export type Category =
-  | "region"
-  | "overlay"
-  | "geoPdf"
-  | "route"
-  | "waypoint"
-  | "import"
-  | "track";
+/** Re-exported so the many uses below (and this file's importers) read the same
+ *  as they always did; the SET itself lives in `savedKeys.ts`, which the inbox
+ *  and the navigator also need and neither may import a screen. */
+export type Category = SavedCategory;
 
 /** Enough to turn a saved item's layer on when it is shown on the map. */
 export type SavedItemReveal = {
@@ -336,7 +337,19 @@ export function SavedScreen({
   onDrawRoute,
   onNavigateToWaypoint,
   initialFilter,
+  initialHighlight,
 }: {
+  /**
+   * One row to point at on arrival, from a notification's "View in Saved". The
+   * key is a `SavedItem.key` — see `savedKeys.ts` for how the prefixed ones are
+   * spelled — and `nonce` is what makes following the same pointer twice pulse
+   * twice, since this tab stays mounted.
+   *
+   * A key that matches nothing (an item deleted since, a GeoPDF job already
+   * imported under a local id) simply does not pulse: the filter beside it is
+   * still the right place to be looking.
+   */
+  initialHighlight?: { key: string; nonce: number };
   onOpenMap: (bbox?: Bbox, basemapId?: BasemapId, reveal?: SavedItemReveal) => void;
   onDownloadRegion: () => void;
   /** Open the map's draw tool on an existing route. Editing is a map gesture,
@@ -424,6 +437,29 @@ export function SavedScreen({
   useEffect(() => {
     if (initialFilter) setFilter(initialFilter.category);
   }, [initialFilter?.nonce, initialFilter]);
+  // --- Arrival highlight, part 1: the state the rows read --------------------
+  // The rest of it (when to blink, and what to load first) is below the lists
+  // it has to wait for — see "Arrival highlight, part 2".
+  //
+  // Scalars rather than the object itself: the parent builds `initialHighlight`
+  // inline from route params, so a re-render would restart the animation on an
+  // identity change that means nothing happened.
+  const highlightKey = initialHighlight?.key ?? null;
+  const highlightNonce = initialHighlight?.nonce ?? 0;
+  const [pulsingKey, setPulsingKey] = useState<string | null>(null);
+  const pulse = useRef(new Animated.Value(1)).current;
+  const scrollRef = useRef<ScrollView>(null);
+  /** One scroll per arrival — `onLayout` fires again on every relayout. */
+  const scrolledForNonce = useRef<number | null>(null);
+  const scrollToPulse = useCallback(
+    (y: number) => {
+      if (scrolledForNonce.current === highlightNonce) return;
+      scrolledForNonce.current = highlightNonce;
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing(2)), animated: true });
+    },
+    [highlightNonce],
+  );
+
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   /** The selection bar's share verb — its own sheet, over the whole selection. */
   const [bulkShareOpen, setBulkShareOpen] = useState(false);
@@ -888,7 +924,7 @@ export function SavedScreen({
       // when they picked two.
       const basemapMembers = group.members.filter((a) => a.kind !== "dem-region");
       rows.push({
-        key: `region:${group.key}`,
+        key: savedRegionKey(group.key),
         category: "region",
         title: group.label ?? "Offline map region",
         subtitle: `${countOf(basemapMembers.length, "map")} · saved ${formatDay(first.downloadedAt)}`,
@@ -925,7 +961,7 @@ export function SavedScreen({
     for (const group of groupArtifacts(savedOverlayArtifacts, overlayJobId)) {
       const job = mergedOverlays.jobs.find((candidate) => candidate.jobId === group.key);
       rows.push({
-        key: `overlay:${group.key}`,
+        key: savedOverlayKey(group.key),
         category: "overlay",
         title: group.label ?? job?.name ?? `Topo ${group.key.slice(0, 8)}`,
         subtitle: countOf(group.members.length, "layer"),
@@ -1261,6 +1297,58 @@ export function SavedScreen({
   // Whether the current tab is empty because a search/tag narrowed it there,
   // as against genuinely holding nothing — the two need different copy below.
   const searching = needle !== "" || (filter === "waypoint" && waypointTag != null);
+
+  // --- Arrival highlight, part 2: blink the row a notification pointed at ---
+  //
+  // A filter narrows the tab to the right KIND; in a list of forty waypoints it
+  // does not say which one. So the row blinks three times and the list scrolls
+  // to it, and then it is an ordinary row again — nothing persists, because a
+  // highlight that outstays the glance becomes a second selection state to
+  // reason about.
+  //
+  // IT WAITS FOR THE ROW. Blinking on arrival looked right until the GeoPDF
+  // case, where the account's job list is fetched on a tap rather than on mount
+  // and the target simply was not on screen yet — and the same is true of a
+  // just-shared waypoint that has not finished syncing. So the trigger is the
+  // row APPEARING, per arrival, which covers all three lists it could be in.
+  const highlightPresent =
+    highlightKey != null &&
+    (visibleItems.some((item) => item.key === highlightKey) ||
+      downloadableJobs.some((job) => savedOverlayKey(job.jobId) === highlightKey) ||
+      (accountJobs ?? []).some((job) => job.id === highlightKey));
+  const pulsedForNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!highlightPresent || pulsedForNonce.current === highlightNonce) return;
+    pulsedForNonce.current = highlightNonce;
+    setPulsingKey(highlightKey);
+    scrolledForNonce.current = null;
+    pulse.setValue(0);
+    // ONE WASH THAT DECAYS, not a blink and not three of them. The first
+    // version flashed the row's whole opacity down and back three times, and it
+    // read as an alarm rather than as a pointer — worst on a filter holding a
+    // single row, where the scroll has nothing to do and the flashing is the
+    // only thing that happens. This lands the tint fast (the eye needs to catch
+    // it), holds it long enough to be seen as a state, then takes a second to
+    // let go: "this one", said once.
+    Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 140, useNativeDriver: true }),
+      Animated.delay(500),
+      Animated.timing(pulse, { toValue: 0, duration: 900, useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      // Interrupted means something else took the value over; leaving the wash
+      // half-lit would strand a tint on the row.
+      if (!finished) pulse.setValue(0);
+      setPulsingKey(null);
+    });
+  }, [highlightKey, highlightNonce, highlightPresent, pulse]);
+
+  // An arrival that NAMES a row is the tap the lazy account list was waiting
+  // for. Without this the GeoPDF a notification points at is behind an "Import
+  // a GeoPDF" button, on a tab whose empty state says there is nothing here.
+  useEffect(() => {
+    if (!highlightKey || filter !== "geoPdf" || accountJobs != null) return;
+    void loadAccountGeoPdfs();
+  }, [accountJobs, filter, highlightKey, highlightNonce, loadAccountGeoPdfs]);
   // The search field itself follows the same "nothing to search" rule the tag
   // rail already did: hidden when the active tab holds no rows, so an empty
   // panel gets the whole screen body.
@@ -1644,6 +1732,7 @@ export function SavedScreen({
       {/* Hero + rail stay pinned; only the inventory scrolls, so the filter
           you are working in never scrolls out of reach. */}
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -1791,8 +1880,13 @@ export function SavedScreen({
         {visibleItems.map((item) => {
           const picked = selectedKeys.includes(item.key);
           return (
-          <Row
+          <PulseSlot
             key={item.key}
+            active={pulsingKey === item.key}
+            opacity={pulse}
+            onMeasure={scrollToPulse}
+          >
+          <Row
             title={item.title}
             subtitle={item.subtitle}
             icon={CATEGORY_META[item.category].icon}
@@ -1870,6 +1964,7 @@ export function SavedScreen({
               </View>
             }
           />
+          </PulseSlot>
           );
         })}
 
@@ -1899,8 +1994,16 @@ export function SavedScreen({
           <>
             <SectionHeader label="Available to download" />
             {downloadableJobs.map((job) => (
-              <Row
+              // The same key a downloaded topo's row carries, so a "LiDAR map
+              // ready" notification points at the job whichever side of the
+              // download it is currently on.
+              <PulseSlot
                 key={job.jobId}
+                active={pulsingKey === savedOverlayKey(job.jobId)}
+                opacity={pulse}
+                onMeasure={scrollToPulse}
+              >
+              <Row
                 title={job.label}
                 // "Not on this device" restated the section header it sits
                 // under; the layer count does not.
@@ -1921,6 +2024,7 @@ export function SavedScreen({
                   />
                 }
               />
+              </PulseSlot>
             ))}
           </>
         ) : null}
@@ -1929,8 +2033,17 @@ export function SavedScreen({
           <>
             <SectionHeader label="In your Logjam account" />
             {accountJobs.map((job) => (
-              <Row
+              // Keyed by the JOB id, which is what a "GeoPDF ready"
+              // notification carries. Once imported the row is a local import
+              // with an id of its own and the pointer stops matching — the
+              // filter is still right, and nothing pulses.
+              <PulseSlot
                 key={job.id}
+                active={pulsingKey === job.id}
+                opacity={pulse}
+                onMeasure={scrollToPulse}
+              >
+              <Row
                 title={job.title ?? "Untitled GeoPDF"}
                 subtitle={
                   job.resultBytes != null ? formatBytes(job.resultBytes) : undefined
@@ -1947,6 +2060,7 @@ export function SavedScreen({
                   />
                 }
               />
+              </PulseSlot>
             ))}
           </>
         ) : null}
@@ -2449,7 +2563,62 @@ function EmptyPanel({
  * Mounted only while the sub-mode is open, which is what makes the hook's load
  * fire on open rather than for every row in the list.
  */
+/**
+ * The row a notification pointed at, washed in accent for a moment on arrival.
+ *
+ * A TINT LAID OVER THE CARD, rather than the card's own opacity being animated.
+ * Fading the row itself makes it the one thing on screen that is dimmer than
+ * everything else, which reads as "disabled" for as long as it lasts; a wash in
+ * the colour the app already uses for "this one" reads as selection, and it can
+ * decay to nothing instead of having to come back.
+ *
+ * It renders its child UNTOUCHED when inactive, rather than always wrapping: an
+ * extra pair of views per row, paid by every list, to serve the one row in
+ * forty that is ever highlighted, is the wrong trade. Swapping the wrapper in
+ * and out remounts the row, which costs nothing here — a `Row` holds no state.
+ *
+ * `onMeasure` is how the list finds the row to scroll to. These rows are direct
+ * children of the scroll container's content view, so the `y` in their layout
+ * is already the offset to scroll to; nothing has to measure against a ref.
+ */
+function PulseSlot({
+  active,
+  opacity,
+  onMeasure,
+  children,
+}: {
+  active: boolean;
+  opacity: Animated.Value;
+  onMeasure: (y: number) => void;
+  children: React.ReactNode;
+}) {
+  if (!active) return <>{children}</>;
+  return (
+    <View onLayout={(event) => onMeasure(event.nativeEvent.layout.y)}>
+      {children}
+      <Animated.View
+        // Never in the way of a tap: the row underneath stays live throughout,
+        // so a user who has already found the row can act on it mid-wash.
+        pointerEvents="none"
+        style={[
+          styles.pulseWash,
+          // `opacity` runs 0 → 1 and the peak alpha lives here, so the tint can
+          // be tuned without touching the animation.
+          { opacity: opacity.interpolate({ inputRange: [0, 1], outputRange: [0, 0.22] }) },
+        ]}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  // Matches `Row`'s own card radius, so the tint stops where the card does
+  // rather than squaring off its corners.
+  pulseWash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: theme.accent,
+    borderRadius: radius.lg,
+  },
   screen: { flex: 1, backgroundColor: theme.primary },
   // The rail's own bottom pad is the gap the list scrolls against — without it
   // rows slide flush into the chips.

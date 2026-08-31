@@ -2,12 +2,16 @@
 // (DESIGN.md §7: per-item actions live in an overflow sheet, titled with the
 // item, so rows stay clean and a mis-tap can't destroy anything).
 //
-// Three verbs, and no more. "Open" is the row's own tap, repeated here because
+// Four verbs, and no more. "Open" is the row's own tap, repeated here because
 // a menu that cannot do the obvious thing reads as a menu that is missing
 // something; it is absent when the notification is about nothing openable (a
-// finished topo job, a friend request answered in the row itself). Read/unread
-// is ONE row whose direction follows the notification's current state. Delete
-// is last and warning-hued, as everywhere else.
+// finished topo job, a friend request answered in the row itself). "View in
+// Saved" / "View in Friends" is the SAME idea for a notification whose subject
+// lives in a tab rather than on a screen of its own — where that is, and
+// whether there is one at all, is `notificationDestination.ts`; the two never
+// both appear, because a canyon share is the only kind with an Open. Read/
+// unread is ONE row whose direction follows the notification's current state.
+// Delete is last and warning-hued, as everywhere else.
 //
 // Accept / Turn down are deliberately NOT here: they already sit in the row, and
 // a question with two answers in two places is how one of them goes stale
@@ -18,6 +22,10 @@
 import { Alert, StyleSheet, View } from "react-native";
 
 import type { TNotification } from "../api/types";
+import {
+  notificationDestination,
+  type NotificationDestination,
+} from "./notificationDestination";
 import { theme, spacing } from "../theme";
 import { BottomSheet, Row } from "../ui";
 import { notificationCanyonId, notificationLabel } from "../screens/notificationLabel";
@@ -27,6 +35,7 @@ export function NotificationOptionsSheet({
   visible,
   onClose,
   onOpen,
+  onView,
   onSetRead,
   onDelete,
 }: {
@@ -35,6 +44,8 @@ export function NotificationOptionsSheet({
   onClose: () => void;
   /** Follow the notification through to the thing it is about. */
   onOpen: (notification: TNotification) => void;
+  /** Go to the tab its subject lives in, with that row pulsed on arrival. */
+  onView: (notification: TNotification, destination: NotificationDestination) => void;
   onSetRead: (notification: TNotification, read: boolean) => void;
   onDelete: (notification: TNotification) => void;
 }) {
@@ -42,6 +53,7 @@ export function NotificationOptionsSheet({
 
   const label = notificationLabel(notification);
   const openable = notificationCanyonId(notification) !== null;
+  const destination = notificationDestination(notification);
 
   const act = (run: () => void) => {
     onClose();
@@ -71,6 +83,14 @@ export function NotificationOptionsSheet({
             icon="external-link"
             title="Open"
             onPress={() => act(() => onOpen(notification))}
+          />
+        ) : null}
+        {destination ? (
+          <Row
+            // The tab's own glyph, so the row looks like where it goes.
+            icon={destination.tab === "friends" ? "users" : "download"}
+            title={destination.label}
+            onPress={() => act(() => onView(notification, destination))}
           />
         ) : null}
         <Row

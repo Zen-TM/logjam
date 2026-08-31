@@ -12,6 +12,7 @@ import {
   batchLabel,
   batchPendingFileSends,
   collapseBatches,
+  countBatchRows,
   findNotificationBatches,
 } from "./notificationBatches";
 
@@ -185,5 +186,31 @@ describe("batchPendingFileSends", () => {
       sent("d", { batchId: BATCH }),
     ]).get(`${BATCH}:files`)!;
     expect(batchPendingFileSends(files).map((n) => n.id)).toEqual(["a", "d"]);
+  });
+});
+
+describe("countBatchRows", () => {
+  it("counts a batch as ONE whether it is open or shut", () => {
+    const list = [
+      shared("a", { batchId: BATCH }),
+      shared("b", { batchId: BATCH }),
+      shared("c", { batchId: BATCH }),
+      shared("loner"),
+    ];
+    const batches = findNotificationBatches(list);
+    const shut = collapseBatches(list, batches, new Set());
+    const open = collapseBatches(list, batches, new Set([`${BATCH}:shares`]));
+
+    // The rows genuinely differ — that is the bug this exists to hide from the
+    // day header, not a reason for the tally to move.
+    expect(shut).toHaveLength(2);
+    expect(open).toHaveLength(5);
+    expect(countBatchRows(shut, batches)).toBe(2);
+    expect(countBatchRows(open, batches)).toBe(2);
+  });
+
+  it("counts an ordinary list as itself", () => {
+    const list = [shared("a"), sent("b"), shared("c")];
+    expect(countBatchRows(list, findNotificationBatches(list))).toBe(3);
   });
 });
