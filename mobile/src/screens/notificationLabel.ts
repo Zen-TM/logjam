@@ -17,6 +17,22 @@ function str(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+/**
+ * What a shared entity is CALLED in a sentence, by its `entityType`.
+ *
+ * Indefinite articles included because the label never names the item — see the
+ * `item_shared` branch below. Keyed loosely (a `string` index) rather than by
+ * `SharableEntityType` on purpose: this reads a payload off the wire, and an
+ * entity type this build has never heard of must fall back to "an item" rather
+ * than render a raw enum name.
+ */
+const SHARED_ITEM_NOUN: Record<string, string> = {
+  waypoint: "a waypoint",
+  route: "a route",
+  topoJob: "a LiDAR topo",
+  geoPdfJob: "a GeoPDF",
+};
+
 export function notificationLabel(n: TNotification): NotificationLabel {
   const p = n.payload;
   switch (n.type) {
@@ -27,6 +43,17 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     case "canyon_shared":
       return {
         text: `${str(p.sharedByUsername) ?? "Someone"} shared ${str(p.canyonName) ?? "a canyon"} with you`,
+      };
+    // A directly-shared saved item. The payload carries the entity's TYPE and
+    // its id, and deliberately no name: the recipient already holds the row
+    // through delta sync or its own list endpoint, so resolving a waypoint's
+    // name into a notification payload would put user text on the wire for
+    // nothing (api/src/routes/notifications.ts says so at the resolve site).
+    // The row therefore names the KIND, and the ⋯ sheet's "View in Saved" is
+    // what shows which one.
+    case "item_shared":
+      return {
+        text: `${str(p.sharedByUsername) ?? "Someone"} shared ${SHARED_ITEM_NOUN[String(p.entityType)] ?? "an item"} with you`,
       };
     // The filename is deliberately IN the label: the row carries Accept and
     // Turn down, and nobody can answer that without knowing what is on offer.
@@ -142,6 +169,8 @@ function notificationKind(n: TNotification): NotificationKind {
   const failed = n.payload.status === "failed";
   switch (n.type) {
     case "canyon_shared":
+    // Same verb, same promise: a live view of a row someone else still owns.
+    case "item_shared":
       return "share";
     // NOT "share": a sent file is a copy that becomes the recipient's own, and
     // wearing the share hue is the one confusion the two verbs exist to prevent.

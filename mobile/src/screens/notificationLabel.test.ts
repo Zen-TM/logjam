@@ -27,6 +27,30 @@ describe("notificationLabel", () => {
     ).toEqual({ text: "bob shared Claustral with you" });
   });
 
+  it("labels a directly-shared item by its KIND, never by its name", () => {
+    expect(
+      notificationLabel(
+        notification("item_shared", {
+          sharedByUsername: "bob",
+          entityType: "waypoint",
+          entityId: "w1",
+        }),
+      ),
+    ).toEqual({ text: "bob shared a waypoint with you" });
+    expect(
+      notificationLabel(
+        notification("item_shared", { sharedByUsername: "bob", entityType: "topoJob" }),
+      ).text,
+    ).toBe("bob shared a LiDAR topo with you");
+    // An entity type this build has never heard of still reads as a sentence
+    // rather than leaking a raw enum name.
+    expect(
+      notificationLabel(
+        notification("item_shared", { sharedByUsername: "bob", entityType: "sasquatch" }),
+      ).text,
+    ).toBe("bob shared an item with you");
+  });
+
   it("labels topo completion, with OSM warning when flagged", () => {
     expect(notificationLabel(notification("topo_complete", { jobName: "Kanangra" }))).toEqual({
       text: "Kanangra map ready",
