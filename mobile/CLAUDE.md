@@ -1121,13 +1121,22 @@ EAS-managed (`appVersionSource: "remote"` + `autoIncrement`) — don't hand-set 
   screenshot loop via `adb exec-out screencap -p`; mock GPS via `adb emu geo fix`;
   Maestro flows in `e2e/`. iOS = EAS build + real device (no local iOS on the
   Linux dev host).
-- **To read data off a build that behaves like a real one, add `debuggable true`
-  to `buildTypes.release`.** A debug build loads its JS from Metro and dies
-  silently on the first headless relaunch out of signal; a plain release build
-  refuses `run-as`. The debuggable-release APK is both trip-safe and readable.
-  `android/` is gitignored so it ships nowhere, and release signs with
+- **To read data off a build that behaves like a real one, the
+  `withLocalDebuggableRelease` plugin sets `debuggable true` + `buildConfigField
+  "boolean", "DEBUG", "false"` on `buildTypes.release` (when `LOGJAM_LOCAL_API=1`,
+  which `build-local-apk.sh` sets).** A debug build loads its JS from Metro and
+  dies silently on the first headless relaunch out of signal; a plain release
+  build refuses `run-as`. The debuggable-release APK is both trip-safe and
+  readable. `android/` is gitignored so it ships nowhere, and release signs with
   `signingConfigs.debug` — so local debug/release swaps PRESERVE on-device
   tracks, and only an EAS build (different keystore) forces an uninstall.
+  **The `DEBUG=false` half is load-bearing, not cosmetic:** `debuggable true`
+  flips `BuildConfig.DEBUG` (AGP keys it to the flag, not the build-type name),
+  which makes `getUseDeveloperSupport()` true and sends expo-updates down the
+  dev-client path — it never loads the embedded update, so every `require()`d
+  asset resolves to an empty URI and a fresh install renders no labels, glyphs
+  or location marker. See `plugins/withLocalDebuggableRelease.js` and
+  `private/todo/local-release-asset.resolution.md`.
 - **Reading the on-device mirror: copy the `-wal` file too.** `logjam.db` runs in
   WAL mode, so `adb exec-out run-as com.logjamnsw.mobile cat files/SQLite/logjam.db`
   alone gives a snapshot missing every recent commit — which reads as "the write
