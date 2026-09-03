@@ -31,6 +31,8 @@ const PUSH_TITLES: Record<string, string> = {
   geo_pdf_failed: "GeoPDF failed",
   item_shared: "Something was shared with you",
   file_sent: "A friend sent you a file",
+  egress_quota_warning: "Approaching your monthly download limit",
+  egress_quota_exceeded: "Monthly download limit reached",
   // ONE buzz for a whole bulk action, whatever it contained. Deliberately says
   // neither who nor how many: a count is not free text, but a title is built by
   // lookup and never by interpolation, and keeping that true BY CONSTRUCTION is

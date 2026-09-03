@@ -14,6 +14,7 @@ export * from "./canyonValidation.js";
 export * from "./canyonMatch.js";
 export * from "./mergeCanyon.js";
 export * from "./monthlyQuota.js";
+export * from "./computeCredits.js";
 export * from "./topoSettings.js";
 export * from "./topoExport.js";
 export * from "./ozUltimate.js";

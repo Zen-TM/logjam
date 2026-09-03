@@ -33,6 +33,7 @@ import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { launchFargateTask } from "../lib/ecsRunTask";
 import { assertHasStorageQuota } from "../lib/storageQuota";
+import { assertHasEgressQuota } from "../lib/egressQuota";
 import { Prisma } from "@prisma/client";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import {
@@ -43,6 +44,8 @@ import {
   requireShareOwner,
 } from "../lib/shareAccess";
 import { estimateGeoPdfSeconds } from "../lib/runtimeEstimates";
+import { assertHasCredits } from "../lib/computeCredits";
+import { assertGlobalCapacity } from "../lib/fargateCapacity";
 
 const router = Router();
 
@@ -198,11 +201,17 @@ router.post(
       logger.warn({ err: safeErrorForLog(err) }, "geo_pdf_estimate_failed");
     }
 
+    // Account-wide capacity before anything is persisted, so a refusal leaves
+    // no queued row for the reaper to clean up.
+    await assertGlobalCapacity("geoPdf");
+
     // Count + create in one transaction so concurrent submissions can't both
     // pass the per-user cap. The user-row lock closes the read-committed
     // double-read window the same way topo-exports does (ARCH-009).
     const job = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
+      // Monthly allowance, inside the same lock as the concurrency cap.
+      await assertHasCredits(user, "geoPdf", estimatedSeconds, tx);
       const inFlight = await tx.geoPdfJob.count({
         where: { userId: user.id, status: { in: ["queued", "running"] } },
       });
@@ -323,6 +332,11 @@ router.get(
     // The presigned download below rides this decision — a sharee may download,
     // which is the whole point of sharing a rendered PDF.
     requireShareAccess(await getJobRole(user.id, "geoPdfJob", row), "geoPdfJob");
+    // Charged to the job's OWNER, not the caller: a sharee downloading a
+    // rendered PDF spends the owner's allowance, because S3 attributes the
+    // object to the owner. Gating on the caller instead would leave the
+    // owner's allowance drainable by anyone they shared with.
+    if (row.status === "completed") await assertHasEgressQuota(row.userId);
     const download =
       row.status === "completed"
         ? await presignResult(row.resultKey, geoPdfDownloadFilename(row.config, row.createdAt))

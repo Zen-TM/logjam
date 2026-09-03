@@ -19,6 +19,7 @@ import {
 import { deleteS3Keys, deleteS3KeysBestEffort } from "../lib/s3Cleanup";
 import { validateUploadSizes } from "../lib/mediaUploadValidation";
 import { toMediaItem } from "../lib/mediaPresign";
+import { exhaustedEgressOwnerIds } from "../lib/egressQuota";
 import { requireCanyonOwnerAccess } from "../lib/canyonAccess";
 import { mediaDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
 import {
@@ -404,8 +405,21 @@ router.post(
         (m.linkedType === "canyon" && sharedCanyonIds.has(m.linkedId)),
     );
 
+    // Monthly egress cap. This is the bulk media pull (the mobile blob cache
+    // asks for up to 100 blobs at a time), so it is where a download loop would
+    // actually live — the inline presigns on canyon/trip reads are small and
+    // interactive and are deliberately left ungated.
+    //
+    // Charged to the media's OWNER, so rows belonging to an exhausted owner are
+    // dropped. Omitting rather than erroring matches this endpoint's existing
+    // contract, which already omits rows the caller may not see.
+    const exhausted = await exhaustedEgressOwnerIds(
+      Array.from(new Set(visible.map((m) => m.ownerId))),
+    );
+    const servable = visible.filter((m) => !exhausted.has(m.ownerId));
+
     const items = await Promise.all(
-      visible.map(async (row) => {
+      servable.map(async (row) => {
         const item = await toMediaItem(row);
         return {
           id: item.id,

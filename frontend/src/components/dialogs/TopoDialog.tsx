@@ -27,7 +27,12 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import { apiFetch, fetchCurrentUser, putToPresignedUrl } from "../../canyonUtils";
+import {
+  apiFetch,
+  fetchComputeEstimate,
+  fetchCurrentUser,
+  putToPresignedUrl,
+} from "../../canyonUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { ErrorBanner } from "../feedback/ErrorBanner";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
@@ -43,6 +48,7 @@ import {
   slopeBandsError,
   hillshadeSettingsError,
   estimateElvisTileCount,
+  formatCredits,
   regionNameFromSurvey,
   type ElvisStats,
   type RasterTemplateSettings,
@@ -409,9 +415,17 @@ export default function TopoDialog({
   const [topoName, setTopoName] = useState("");
   const [topoNameTouched, setTopoNameTouched] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [tileUsed, setTileUsed] = useState<number | null>(null);
-  const [tileQuota, setTileQuota] = useState<number | null>(null);
-  const [tileResetAt, setTileResetAt] = useState<string | null>(null);
+  const [creditsUsed, setCreditsUsed] = useState<number | null>(null);
+  const [creditsQuota, setCreditsQuota] = useState<number | null>(null);
+  const [creditsResetAt, setCreditsResetAt] = useState<string | null>(null);
+  // What THIS job is projected to cost, from POST /compute-estimate. Null until
+  // the ZIP has been validated (the tile count is the estimator's only input),
+  // or when the server has too little history to have an opinion.
+  const [jobCredits, setJobCredits] = useState<number | null>(null);
+  // The server's own verdict on whether this submission would be refused.
+  // Preferred over recomputing used + cost > quota on the client, so there is
+  // one rule for the decision rather than two that can disagree.
+  const [jobWouldExceed, setJobWouldExceed] = useState(false);
   const [storageUsed, setStorageUsed] = useState<number | null>(null);
   const [storageQuota, setStorageQuota] = useState<number | null>(null);
 
@@ -504,18 +518,55 @@ export default function TopoDialog({
     }
   }
 
+  // Tile count driving the cost projection: the ZIP's verified count once one
+  // has been validated, else the drawn area's conservative estimate so the
+  // warning appears before the user goes off to download gigabytes from ELVIS.
+  const area = pendingBbox ? bboxAreaKm2(pendingBbox) : null;
+  const estimatedTiles = area != null ? estimateElvisTileCount(area) : null;
+  const activeTileCount = stats?.tileCount ?? estimatedTiles;
+
+  // Credits are not derivable client-side: the tiles-to-seconds rate is fitted
+  // server-side from recent real runtimes, so the projection has to be asked
+  // for. Cheap (two DB reads, nothing written) and re-asked whenever the tile
+  // count changes.
+  useEffect(() => {
+    if (!open || !activeTileCount) {
+      setJobCredits(null);
+      setJobWouldExceed(false);
+      return;
+    }
+    let cancelled = false;
+    fetchComputeEstimate({ kind: "topo", tileCount: activeTileCount })
+      .then((estimate) => {
+        if (cancelled) return;
+        setJobCredits(estimate.credits);
+        setJobWouldExceed(estimate.wouldExceed);
+        // The estimate response carries a fresher balance than the one loaded
+        // when the dialog opened, so adopt it rather than keeping two views.
+        setCreditsUsed(estimate.used);
+        setCreditsQuota(estimate.quota);
+        setCreditsResetAt(estimate.resetAt);
+      })
+      // Same best-effort stance as the balance fetch below: display and
+      // client-side gating only, the server still enforces on submit.
+      .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [open, activeTileCount]);
+
   useEffect(() => {
     if (!open) return;
     fetchCurrentUser()
       .then((u) => {
-        setTileUsed(u.monthlyTileUsage);
-        setTileQuota(u.monthlyTileQuota);
-        setTileResetAt(u.monthlyTileResetAt);
+        setCreditsUsed(u.monthlyComputeUsage);
+        setCreditsQuota(u.monthlyComputeCredits);
+        setCreditsResetAt(u.monthlyComputeResetAt);
         setStorageUsed(u.storageUsedBytes);
         setStorageQuota(u.storageQuotaBytes);
       })
       // Best-effort: quota display/gating only — a failure here leaves
-      // tileUsed/tileQuota null (the client-side over-quota checks then skip,
+      // creditsUsed/creditsQuota null (the client-side checks then skip,
       // and the server still enforces the quota on submit), so it's not worth
       // a toast, but FEUI-011 wants the failure at least visible in the console
       // rather than fully silent.
@@ -613,14 +664,14 @@ export default function TopoDialog({
       return;
     }
 
-    if (tileUsed !== null && tileQuota !== null && stats.tileCount) {
-      if (tileUsed + stats.tileCount > tileQuota) {
-        const remaining = Math.max(0, tileQuota - tileUsed);
-        const resetStr = tileResetAt
-          ? ` Quota resets ${new Date(tileResetAt).toLocaleDateString("en-AU", { month: "short", day: "numeric" })}.`
+    if (creditsUsed !== null && creditsQuota !== null && jobCredits !== null) {
+      if (creditsUsed + jobCredits > creditsQuota) {
+        const remaining = Math.max(0, creditsQuota - creditsUsed);
+        const resetStr = creditsResetAt
+          ? ` Allowance resets ${new Date(creditsResetAt).toLocaleDateString("en-AU", { month: "short", day: "numeric" })}.`
           : "";
         setError(
-          `Monthly tile quota exceeded. This job needs ${stats.tileCount} tiles but only ${remaining} remain.${resetStr}`,
+          `Not enough processing credits. This job needs about ${formatCredits(jobCredits)} but only ${formatCredits(remaining)} remain.${resetStr}`,
         );
         return;
       }
@@ -681,12 +732,6 @@ export default function TopoDialog({
   const isDirty = phase === "form" && file != null;
   const guard = useUnsavedChangesGuard(isDirty, performClose);
 
-  const area = pendingBbox ? bboxAreaKm2(pendingBbox) : null;
-  const estimatedTiles = area != null ? estimateElvisTileCount(area) : null;
-  const remainingTiles =
-    tileUsed !== null && tileQuota !== null ? Math.max(0, tileQuota - tileUsed) : null;
-  const estimateOverQuota =
-    estimatedTiles !== null && remainingTiles !== null && estimatedTiles > remainingTiles;
   const uploadPct = totalBytes > 0 ? Math.min(100, Math.round((uploadedBytes / totalBytes) * 100)) : 0;
 
   return (
@@ -877,7 +922,7 @@ export default function TopoDialog({
               )}
             </Box>
 
-            {estimateOverQuota && (
+            {jobWouldExceed && stats === null && (
               <Typography
                 variant="body2"
                 sx={{
@@ -887,7 +932,8 @@ export default function TopoDialog({
                   mt: -0.5,
                 }}
               >
-                This area may exceed your monthly tile quota — try a smaller area.
+                This area may exceed your remaining processing credits — try a
+                smaller area.
               </Typography>
             )}
 
@@ -1096,14 +1142,16 @@ export default function TopoDialog({
                     ]
                   : null,
                 ["Size", formatBytes(stats.uncompressedBytes)],
-                // Unambiguous quota copy (TOPO-8): tileUsed already includes
+                // Unambiguous quota copy (TOPO-8): creditsUsed already includes
                 // any queued/running jobs (the server sums non-failed jobs
                 // this month), so show the current figure and the projection
                 // side by side instead of a bare "N / Q after this job".
-                tileUsed !== null && tileQuota !== null
+                creditsUsed !== null && creditsQuota !== null
                   ? [
-                      "Monthly tiles",
-                      `${tileUsed} of ${tileQuota} used · ${tileUsed + (stats.tileCount || 0)} after this job`,
+                      "Processing credits",
+                      jobCredits !== null
+                        ? `${formatCredits(creditsUsed)} of ${formatCredits(creditsQuota)} used · about ${formatCredits(jobCredits)} for this job`
+                        : `${formatCredits(creditsUsed)} of ${formatCredits(creditsQuota)} used · cost for this job not yet known`,
                     ]
                   : null,
               ] as ([string, string] | null)[]
@@ -1320,7 +1368,10 @@ export default function TopoDialog({
                 !!validationError ||
                 slopeBandsError(settings.slope.bands) != null ||
                 hillshadeSettingsError(settings.hillshade) != null ||
-                (tileUsed !== null && tileQuota !== null && !!stats?.tileCount && tileUsed + stats.tileCount > tileQuota)
+                (creditsUsed !== null &&
+                  creditsQuota !== null &&
+                  jobCredits !== null &&
+                  creditsUsed + jobCredits > creditsQuota)
               }
             >
               Submit

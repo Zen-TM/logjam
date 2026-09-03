@@ -260,6 +260,13 @@ function NotificationsPanel({
                       "GeoPDF ready — view in the GeoPDF panel"
                     )
                   )}
+                  {/* Egress has no meter anywhere in the UI — the allowance
+                      sits far above real use, so these two notifications are
+                      its entire user-facing surface. */}
+                  {n.type === "egress_quota_warning" &&
+                    "You're approaching your monthly download limit. Downloads will pause if you reach it."}
+                  {n.type === "egress_quota_exceeded" &&
+                    "Monthly download limit reached. Downloads resume when the limit resets next month."}
                 </div>
                 <div className={classes.notificationTime}>
                   {new Date(n.createdAt).toLocaleDateString("en-AU", {

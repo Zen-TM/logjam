@@ -28,6 +28,7 @@ import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { createAndLaunchTopoExport } from "../lib/topoExportLauncher";
 import { assertHasStorageQuota } from "../lib/storageQuota";
+import { assertHasEgressQuota } from "../lib/egressQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import { directlySharedIds } from "../lib/shareAccess";
 
@@ -180,6 +181,7 @@ router.post(
       // zod pins sourceJobIds to length 1 (exportRequestSchema above) — if that
       // ever loosens to multiple source jobs, sum their tileCounts here instead.
       sourceTileCount: jobs[0].tileCount ?? null,
+      monthlyComputeCredits: user.monthlyComputeCredits,
     });
 
     res.status(201).json({ id: exportJobId });
@@ -223,6 +225,11 @@ router.get(
       where: { id: getParam(req.params.id), userId: user.id },
     });
     if (!row) throw new AppError(404, "Export not found");
+    // An export artefact is one of the largest single objects the app serves,
+    // and this endpoint exists to re-mint an expired URL — i.e. it is the
+    // deliberate "download it again" action. Owner-scoped above, so the caller
+    // is the owner whose allowance pays for it.
+    if (row.status === "completed") await assertHasEgressQuota(user.id);
     const download = row.status === "completed" ? await presignResult(row.resultKey) : null;
     res.json(rowToView(row, download));
   },

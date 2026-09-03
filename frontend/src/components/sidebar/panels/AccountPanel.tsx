@@ -8,6 +8,7 @@ import {
 } from "../../../canyonUtils";
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
+  formatCredits,
   type NotificationPreferences,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
@@ -242,7 +243,12 @@ function AccountPanel({
         </>
       )}
 
-      <span className={classes.sectionLabel} title="Monthly quota for LiDAR map tiles served to Logjam Web. Resets on the date shown.">LiDAR Processing</span>
+      <span
+        className={classes.sectionLabel}
+        title="Monthly allowance for processing jobs — LiDAR topo generation, topo exports and GeoPDFs all draw on it. One credit is a minute of one processor core, so a bigger job costs more. Resets on the date shown."
+      >
+        Processing Credits
+      </span>
       <div className={classes.divider} />
       {!currentUser ? (
         <p className={classes.state}>Loading...</p>
@@ -250,12 +256,13 @@ function AccountPanel({
         <>
           <progress
             className={classes.storageBar}
-            value={currentUser.monthlyTileUsage}
-            max={currentUser.monthlyTileQuota}
+            value={currentUser.monthlyComputeUsage}
+            max={currentUser.monthlyComputeCredits}
           />
           <span className={classes.storageLabel}>
-            {currentUser.monthlyTileUsage} / {currentUser.monthlyTileQuota} tiles this month
-            {currentUser.monthlyTileResetAt ? ` · resets ${new Date(currentUser.monthlyTileResetAt).toLocaleDateString("en-AU", { month: "short", day: "numeric" })}` : ""}
+            {formatCredits(currentUser.monthlyComputeUsage)} of{" "}
+            {formatCredits(currentUser.monthlyComputeCredits)} used this month
+            {currentUser.monthlyComputeResetAt ? ` · resets ${new Date(currentUser.monthlyComputeResetAt).toLocaleDateString("en-AU", { month: "short", day: "numeric" })}` : ""}
           </span>
         </>
       )}
