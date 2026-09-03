@@ -119,7 +119,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
     return {
       headline: "Couldn't download new data on this phone",
       detail:
-        "Retrying won't fix it. Open Sync issues to download a fresh copy.",
+        "Retrying won't fix it. Open Account sync issues to download a fresh copy.",
       tone: "problem",
     };
   }

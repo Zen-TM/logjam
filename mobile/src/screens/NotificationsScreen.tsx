@@ -29,7 +29,6 @@
 // so a share revoked since the notification lands on the 404-not-403 path.
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, RefreshControl, SectionList, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { messageFromError } from "@logjam/shared";
 
@@ -88,6 +87,7 @@ import {
   Row,
   SegmentedControl,
   SelectionBar,
+  SelectionMark,
   StatusPill,
   TextField,
   Toast,
@@ -1093,13 +1093,7 @@ const NotificationRow = memo(function NotificationRow({
           {selecting ? (
             // Exactly the ⋯ button's box, so the row cannot resize when a
             // selection starts.
-            <View style={styles.selectBox}>
-              <Feather
-                name={selected ? "check-circle" : "circle"}
-                size={22}
-                color={selected ? theme.accent : theme.textMuted}
-              />
-            </View>
+            <SelectionMark selected={selected} />
           ) : (
             <IconButton
               icon="more-vertical"
@@ -1229,13 +1223,7 @@ const BatchRow = memo(function BatchRow({
         <View style={styles.rowTrailing}>
           {batch.unreadCount > 0 ? <StatusPill label="New" tone="accent" /> : undefined}
           {selecting ? (
-            <View style={styles.selectBox}>
-              <Feather
-                name={selected ? "check-circle" : "circle"}
-                size={22}
-                color={selected ? theme.accent : theme.textMuted}
-              />
-            </View>
+            <SelectionMark selected={selected} />
           ) : (
             <IconButton
               icon={expanded ? "chevron-up" : "chevron-down"}
@@ -1390,7 +1378,6 @@ const styles = StyleSheet.create({
   rowTrailing: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
   // `IconButton`'s own box, so the checkbox standing in for ⋯ occupies exactly
   // what it replaced.
-  selectBox: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   actions: { flexDirection: "row", gap: spacing(1) },
   actionHint: {
     color: theme.textMuted,

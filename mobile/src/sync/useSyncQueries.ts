@@ -199,7 +199,7 @@ export function usePendingSyncCount(): number {
   return count;
 }
 
-/** Live count of parked ops + shelf entries for the "Sync issues (N)" row. */
+/** Live count of everything on the Account sync issues screen. */
 export function useSyncIssueCount(): number {
   const [count, setCount] = useState(0);
   useEffect(() => {

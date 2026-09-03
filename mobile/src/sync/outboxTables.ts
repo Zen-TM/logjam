@@ -52,14 +52,3 @@ export function outboxMirrorTable(entity: OutboxEntity): string | null {
       return null;
   }
 }
-
-/**
- * Whether a discarded op's field values are worth keeping on the conflict shelf.
- *
- * For the synced entities they are the user's typing — the whole point of the
- * shelf. A media op's "fields" are a filename, a byte count and two cache paths:
- * nothing a person could want back, and the paths are about to be deleted.
- */
-export function shelvesDiscardedFields(entity: OutboxEntity): boolean {
-  return entity !== "media";
-}

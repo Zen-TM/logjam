@@ -75,6 +75,14 @@ export const SYNC_TABLES: readonly TableSchema[] = [
       shelved_json: "TEXT",
       server_json: "TEXT",
       at: "TEXT NOT NULL",
+      // The name of the row this value belongs to, captured WHEN IT IS SHELVED
+      // rather than read from the mirror at display time. The mirror row can be
+      // deleted afterwards, and then the only thing left saying which canyon a
+      // rescued paragraph of notes came from is gone with it — every such entry
+      // read "Your notes on a canyon". Added after the table shipped, so it
+      // reaches existing installs through `ensureLocalColumns` (syncDb.ts), not
+      // the mirror's drop-and-rebuild lever.
+      entity_name: "TEXT",
     },
   },
   // Mirrors: typed columns for list/filter/map-critical fields; extra_json

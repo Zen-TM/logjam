@@ -37,6 +37,8 @@ let pushCalls: string[][] = [];
 let resultCountDelta = 0;
 /** Media ops whose runner throws (a file the OS reclaimed). */
 let deadMedia = new Set<number>();
+/** Per-op rejections the fake server answers with, by opId. */
+let rejections = new Map<string, { code: number; message: string }>();
 let mediaRuns: number[] = [];
 
 function mediaRow(seq: number, extra: Partial<Row> = {}): Row {
@@ -84,17 +86,33 @@ function run(sql: string, args: unknown[]): void {
       : rows.map((row) => row.seq);
   for (const row of rows) {
     if (!targets.includes(row.seq)) continue;
-    // `WHERE … state = 'inflight'` (crash recovery, the requeue guard) must
-    // not touch a row that has since parked.
-    if (/WHERE[\s\S]*state = 'inflight'/.test(sql) && row.state !== "inflight") continue;
+    // `WHERE … state = 'inflight'` (the requeue guard) must not touch a row
+    // that has since parked; the pass-opening reset additionally sweeps up
+    // `retrying`, which is how an op the server refused temporarily gets its
+    // ONE attempt per pass.
+    const stateIn = sql.match(/state IN \(([^)]*)\)/);
+    if (stateIn) {
+      const allowed = [...stateIn[1].matchAll(/'(\w+)'/g)].map((match) => match[1]);
+      if (!allowed.includes(row.state)) continue;
+    } else if (/WHERE[\s\S]*state = 'inflight'/.test(sql) && row.state !== "inflight") {
+      continue;
+    }
     if (sql.startsWith("DELETE FROM outbox")) {
       rows = rows.filter((candidate) => candidate.seq !== row.seq);
       continue;
     }
     const setState = sql.match(/SET state = '(\w+)'/);
     if (setState) row.state = setState[1];
+    // The per-op verdict binds both columns positionally
+    // (`SET state = ?, error_json = ?`), which is how a rejection is recorded —
+    // the literal-state form above cannot express it.
+    if (/SET state = \?, error_json = \?/.test(sql)) {
+      row.state = String(args[0]);
+      row.error_json = String(args[1]);
+    } else if (sql.includes("error_json = ?")) {
+      row.error_json = String(args[0]);
+    }
     if (sql.includes("attempts = attempts + 1")) row.attempts += 1;
-    if (sql.includes("error_json = ?")) row.error_json = String(args[0]);
   }
 }
 
@@ -103,7 +121,12 @@ const db = {
     run(sql, args);
     return Promise.resolve({ changes: 1, lastInsertRowId: 1 });
   },
-  getFirstAsync: () => Promise.resolve({ n: 0 }),
+  getFirstAsync: (sql: string) =>
+    Promise.resolve({
+      n: sql.includes("'retrying'")
+        ? rows.filter((row) => row.state === "retrying").length
+        : 0,
+    }),
   getAllAsync: (sql: string) =>
     Promise.resolve(
       sql.includes("entity = 'media'")
@@ -143,7 +166,12 @@ vi.mock("../api/apiFetch", () => ({
     if (opIds.some((opId) => poison.has(opId))) {
       return Promise.reject(Object.assign(new Error("bad op"), { status: 400 }));
     }
-    const results = opIds.map((opId) => ({ opId, status: "applied" }));
+    const results = opIds.map((opId) => {
+      const error = rejections.get(opId);
+      return error
+        ? { opId, status: "rejected", error }
+        : { opId, status: "applied" };
+    });
     if (resultCountDelta > 0) {
       results.push({ opId: "op-ghost", status: "applied" });
     } else if (resultCountDelta < 0) {
@@ -162,6 +190,67 @@ beforeEach(() => {
   deadMedia = new Set();
   mediaRuns = [];
   resultCountDelta = 0;
+  rejections = new Map();
+});
+
+describe("who owns a rejection", () => {
+  // The user's question, answered in the engine rather than on the screen: if
+  // pressing Try again might work, why didn't the app press it? It does now.
+  // Only a refusal a retry cannot fix reaches Sync issues.
+  it("retries a rejection the server may answer differently, without telling the user", async () => {
+    rows = [pushRow(1)];
+    rejections.set("op-1", { code: 503, message: "upstream unavailable" });
+
+    const summary = await flushOutbox();
+
+    expect(rows[0].state).toBe("retrying");
+    expect(summary.retrying).toBe(1);
+  });
+
+  it("parks a refusal about the request itself", async () => {
+    rows = [pushRow(1)];
+    rejections.set("op-1", { code: 409, message: "This canyon already has a track." });
+
+    const summary = await flushOutbox();
+
+    expect(rows[0].state).toBe("blocked");
+    expect(summary.retrying).toBe(0);
+  });
+
+  it("still parks an edit whose row was deleted, however the code classifies", async () => {
+    // 404 on an update is delete-wins (§6), not a flaky server.
+    rows = [pushRow(1)];
+    rejections.set("op-1", { code: 404, message: "not found" });
+
+    await flushOutbox();
+
+    expect(rows[0].state).toBe("deadRemote");
+  });
+
+  it("gives up after the attempt cap and hands it to the user", async () => {
+    // The backstop: "temporary" forever is not temporary, and an op retried
+    // silently for ever is one nobody is ever told about.
+    rows = [{ ...pushRow(1), attempts: 4 }];
+    rejections.set("op-1", { code: 503, message: "upstream unavailable" });
+
+    await flushOutbox();
+
+    expect(rows[0].state).toBe("blocked");
+  });
+
+  it("retries a retrying op exactly once per pass, not in a loop", async () => {
+    rows = [pushRow(1)];
+    rejections.set("op-1", { code: 503, message: "upstream unavailable" });
+
+    await flushOutbox();
+    expect(pushCalls).toHaveLength(1);
+
+    // The next pass picks it up again — that is the whole mechanism — and the
+    // pass it failed in does not.
+    await flushOutbox();
+    expect(pushCalls).toHaveLength(2);
+    expect(rows[0].attempts).toBe(2);
+  });
 });
 
 describe("push result correlation", () => {

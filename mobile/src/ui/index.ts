@@ -23,6 +23,7 @@ export {
 } from "./SegmentedControl";
 export { BottomSheet } from "./BottomSheet";
 export { SelectionBar } from "./SelectionBar";
+export { SelectionMark } from "./SelectionMark";
 export { useBulkSelection } from "./useBulkSelection";
 export { TextField } from "./TextField";
 export { EmptyState, ErrorState, LoadingState } from "./ScreenStates";

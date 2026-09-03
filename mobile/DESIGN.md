@@ -943,6 +943,13 @@ which subsystem is talking.
   the row above it read "Show on map" — one draws the line, the other flies to
   it, and two rows a word apart are read as the same thing twice. The toggles
   say "Visible on the map".
+- **A status pill that repeats the row's own subtitle costs the TITLE.** Every
+  row on Account sync issues carried one ("Needs a decision", "Replaced") beside
+  the ⋯, and between them they squeezed the one thing the user scans for — the
+  name of the canyon or file that failed — into an ellipsis. The subtitle
+  already said the cause and the rail already said which kind, so the pills went
+  and the title got the width. A pill earns its place by saying something no
+  other part of the row says.
 - **A selection is a STATE of the row, not a label on it.** The basemap list used
   to hang a "Showing" pill off the active row; it now lights the whole card (accent
   border, accent tint, a filled check). One row looking different is read before any
@@ -986,22 +993,55 @@ which subsystem is talking.
   flying to the union of five extents is not what any of the five meant, and
   the single-item verb already does the thing the user wanted. Reference:
   `saved/SavedScreen.tsx`.
+  - **The checkbox is `ui/SelectionMark`, and it takes the ⋯ button's box.**
+    Three screens had hand-rolled the same 40pt box around the same 22pt
+    `circle`/`check-circle`, and the fourth (Account sync issues) shipped
+    without one at all — its rows simply dropped the ⋯ while picking, so the
+    trailing slot emptied, the title column took the width back and every row
+    changed height the moment a selection started. One component, one box,
+    `selectable={false}` for a row a group verb cannot act on.
+  - **A screen with no SegmentedControl still needs the rail, at the bar's
+    height.** The multi-select bar takes the rail's slot, so a screen whose rail
+    is empty when idle grows one the moment a selection starts and the list
+    jumps under the finger that started it — the same bug `SelectionMark` fixes
+    one level down. Put the screen's one-line hint there instead, in a container
+    of `SEGMENTED_CONTROL_HEIGHT`, and let the bar swap into it (Account sync
+    issues).
   - **A row the group verb cannot act on is not selectable.** Deleting is all a
     selection does, so a shared route or waypoint (no `delete` descriptor) is
     skipped by select-all and answers a long press with the reason instead of a
     checkbox — silently ignoring the press reads as a missed tap, and picking it
     would only teach the count to lie. (Deleting is all it does on every screen
     but the Inbox, which adds the one verb below.)
-  - **A screen may add ONE more group verb, in `SelectionBar`'s `extra` slot,
-    and only where bulk genuinely beats one-at-a-time.** The Inbox's read/unread
-    toggle is the only one: it is a SINGLE button whose direction follows the
-    selection — every row read marks them unread, anything unread marks the
-    unread ones read — because the pair would be two buttons of which one is
-    always a no-op. `notifications/bulkReadAction.ts` decides it (glyph `eye` /
-    `eye-off`, screen-reader label and toast from one place), and the bar's count
-    line carries the unread TALLY ("3 selected · 1 unread") so the direction can
-    be read off the screen instead of remembered. A second `extra` on the same
-    screen is a toolbar, which is the thing this rail exists not to be.
+  - **A screen may add group verbs to `SelectionBar`'s `extra` slot — ONE PER
+    KIND OF ROW IN THE LIST, never one per idea.** The rule is a ceiling on
+    variety, not on count: a bar with a button for every clever thing the screen
+    could do is the toolbar this rail exists not to be, but a list holding two
+    kinds of row needs a verb for each or the bulk mode is dead the moment the
+    user picks across kinds.
+    - The Inbox has one, and it is a SINGLE button whose direction follows the
+      selection — every row read marks them unread, anything unread marks the
+      unread ones read — because the pair would be two buttons of which one is
+      always a no-op. `notifications/bulkReadAction.ts` decides it (glyph `eye` /
+      `eye-off`, screen-reader label and toast from one place).
+    - Account sync issues has two, because after the tabs came out its ONE list
+      holds two kinds: a stuck change (Try again re-queues it) and a lost value
+      (Restore overwrites a live value on the account). These are not one verb
+      with a direction, so a single button choosing between them by majority is
+      one nobody trusts twice. Each appears only when the selection contains
+      rows it can act on, and disappears when it doesn't.
+    - **The count line carries a TALLY PER VERB, because each acts on a
+      SUBSET.** The bar's buttons are glyphs and cannot say "3 of your 5", so
+      the line does it before the press: "5 selected · 2 retry · 3 restore",
+      "3 selected · 1 unread". One derivation per screen —
+      `selectionCountLabel` in `screens/syncIssueDisplay.ts`.
+    - **A verb the group cannot perform on a row is decided BEFORE the bar is
+      drawn, not at the tap.** A lost value whose canyon has since been deleted
+      cannot be restored — the write would be refused and would park as a NEW
+      stuck op, which is a recovery action manufacturing the problem it recovers
+      from. The block is resolved when the list is built (`restoreBlock` on each
+      entry) so the tally is true and the per-row sheet can state the reason
+      where the verb would have been.
   - **The group verb that is not destructive does not clear the selection.**
     The read/unread toggle leaves the rows picked: they are all still there, the
     obvious next move is another verb on the same set, and dropping the picks
@@ -1102,6 +1142,19 @@ which subsystem is talking.
   used". Where there is no state to report (Settings, Friends) there is NO
   subtitle, and the slot is free for the §10 "Needs a connection" reason when the
   destination is online-only.
+- **A screen nobody visits twice may spend prose; a screen used daily may
+  not.** Account sync issues is the exception that proves the rule: a user who
+  reaches it is confused by definition, the vocabulary is ours (stuck, lost,
+  discarded, restored), and the decisions are destructive. So its SHEETS say
+  what the change was (`opChanges` — the row's own field values, coordinates
+  excepted), why it failed, what happens if it is ignored, and how many
+  attempts the app already spent; and where the explanation names an action
+  ("open it and change it a way that works"), that action is a ROW in the same
+  sheet rather than an instruction to go and find the screen. The LIST rows
+  stay one line of cause: explaining belongs where deciding happens. This is
+  not licence to caption the app — every line still has to say something no
+  other line does, and the test is whether removing it changes what the user
+  does next.
 - **No explanatory subtitles on actions.** A glyph plus a verb ("Show on map",
   "Rename") is the whole affordance; if it needs a sentence to be understood,
   the label or the icon is wrong. Reserve subtitles for entries where something

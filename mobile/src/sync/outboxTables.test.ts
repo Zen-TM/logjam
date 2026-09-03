@@ -5,8 +5,6 @@ import {
   OUTBOX_ENTITIES,
   isOutboxEntity,
   outboxMirrorTable,
-  shelvesDiscardedFields,
-  type OutboxEntity,
 } from "./outboxTables";
 
 describe("OUTBOX_ENTITIES", () => {
@@ -49,20 +47,5 @@ describe("isOutboxEntity", () => {
     expect(isOutboxEntity("canyon")).toBe(true);
     expect(isOutboxEntity("canyons")).toBe(false);
     expect(isOutboxEntity("")).toBe(false);
-  });
-});
-
-describe("shelvesDiscardedFields", () => {
-  it("shelves the user's typing, not a media op's bookkeeping", () => {
-    expect(shelvesDiscardedFields("canyon")).toBe(true);
-    expect(shelvesDiscardedFields("tripLog")).toBe(true);
-    // A filename, a byte count and two cache paths about to be deleted.
-    expect(shelvesDiscardedFields("media")).toBe(false);
-  });
-
-  it("has an answer for every entity", () => {
-    for (const entity of OUTBOX_ENTITIES as OutboxEntity[]) {
-      expect(typeof shelvesDiscardedFields(entity)).toBe("boolean");
-    }
   });
 });

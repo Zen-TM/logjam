@@ -38,7 +38,9 @@ vi.mock("../api/queries", () => ({
   fetchCurrentUser: () => Promise.resolve({ id: "user-1" }),
 }));
 vi.mock("../offline/networkPolicy", () => ({ canRunNow: () => Promise.resolve(true) }));
-vi.mock("./flush", () => ({ flushOutbox: () => Promise.resolve() }));
+// The flush reports what it left behind; a pass with nothing retrying is the
+// ordinary case and the one these tests are about.
+vi.mock("./flush", () => ({ flushOutbox: () => Promise.resolve({ retrying: 0 }) }));
 vi.mock("./mediaCache", () => ({ syncThumbnailCache: () => Promise.resolve() }));
 vi.mock("./mediaSyncBridge", () => ({ setMutationSyncHandler: () => {} }));
 vi.mock("./outbox", () => ({ migrateLegacyWaypoints: () => Promise.resolve() }));

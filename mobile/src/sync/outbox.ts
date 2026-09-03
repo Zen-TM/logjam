@@ -16,6 +16,7 @@ import {
 } from "@logjam/shared";
 
 import type { TripCanyonLink } from "./canyonLinks";
+import { isOutboxEntity, outboxMirrorTable } from "./outboxTables";
 import { cascadeCanyonDelete } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged, withSyncTransaction } from "./syncDb";
 import { scheduleMutationSync } from "./mediaSyncBridge";
@@ -66,8 +67,11 @@ export async function countPendingOps(): Promise<number> {
   // deadRemote, so including 'blocked' here made one stuck op render as
   // "1 change needs you / 1 other change is still queued" — the same op,
   // twice, on the line the user reads to decide whether their work is safe.
+  // `retrying` IS pending: the app will send it again by itself, so it belongs
+  // on "3 changes waiting to send" and not on the screen for things only the
+  // user can resolve.
   const row = await db.getFirstAsync<{ n: number }>(
-    "SELECT COUNT(*) AS n FROM outbox WHERE state IN ('queued', 'inflight')",
+    "SELECT COUNT(*) AS n FROM outbox WHERE state IN ('queued', 'inflight', 'retrying')",
   );
   return row?.n ?? 0;
 }
@@ -1026,4 +1030,83 @@ async function canyonLinksColumnFromMirror(
     if (canyon) links.push({ id: canyonId, name: canyon.name });
   }
   return canyonLinksColumn(links);
+}
+
+// ── restoring one shelved field ─────────────────────────────────────────────
+
+/**
+ * The update surface each entity actually has, keyed off the SAME column maps
+ * the typed helpers above pass to `enqueueUpdate`. Deriving it is the point: a
+ * field this map claimed and `enqueueUpdate` didn't would throw "Unknown field"
+ * from inside a transaction, at the moment the user tapped Put this value back.
+ *
+ * `notification` has no updatable field (its ops are markRead/markUnread), and
+ * a trip's `canyonIds` is deliberately absent — its column is built per call
+ * from resolved link names (`updateTripLocal`), so it is not restorable from a
+ * shelved value alone and `canRestoreField` says so rather than guessing.
+ */
+const UPDATE_COLUMNS_BY_ENTITY: Record<
+  SyncPushEntity,
+  Record<string, ColumnSpec> | null
+> = {
+  canyon: CANYON_UPDATE_COLUMNS,
+  tripLog: TRIP_UPDATE_COLUMNS,
+  waypoint: WAYPOINT_UPDATE_COLUMNS,
+  route: ROUTE_UPDATE_COLUMNS,
+  notification: null,
+};
+
+/** Whether one field of one entity can be written by a local update op. */
+export function canRestoreField(entity: string, field: string): boolean {
+  const columns = UPDATE_COLUMNS_BY_ENTITY[entity as SyncPushEntity];
+  return columns != null && Object.hasOwn(columns, field);
+}
+
+/**
+ * The fields whose two conflicting values can be CONCATENATED instead of one
+ * beating the other — the whole of "Keep both".
+ *
+ * Only `notes` qualifies, and that is a fact about the protocol rather than a
+ * choice: joining two values with a blank line has to produce something the
+ * field's own editor would have accepted, and every other conflictable field is
+ * a name (a two-line canyon name is a broken canyon name), a number, or a blob.
+ * Custom fields are not addressable here at all — a canyon's live inside
+ * `attributes` and a trip's inside `customFields`, so a conflict on one is a
+ * conflict on the WHOLE object and merging it is a key-by-key affair, not a
+ * concatenation. That is the deferred case, not this one.
+ *
+ * Guarded by `outbox.unit.test.ts`: every entry must be a field
+ * `canRestoreField` accepts for some entity, because Keep both writes through
+ * `updateEntityFieldLocal` and a field only this set knew about would throw
+ * from inside the transaction the user's tap opened.
+ */
+const MERGEABLE_TEXT_FIELDS = new Set(["notes"]);
+
+/** Whether "Keep both" can join two values of this field with a blank line. */
+export function canKeepBothField(entity: string, field: string): boolean {
+  return MERGEABLE_TEXT_FIELDS.has(field) && canRestoreField(entity, field);
+}
+
+/** The mergeable field names, for the test that keeps the two lists honest. */
+export function mergeableTextFields(): string[] {
+  return [...MERGEABLE_TEXT_FIELDS];
+}
+
+/**
+ * Write one field locally and queue the update — the generic behind
+ * "Restore" and "Keep both". Callers gate first (`canRestoreField`, plus the
+ * row's existence); this throws rather than guessing if they didn't.
+ */
+export async function updateEntityFieldLocal(
+  entity: string,
+  id: string,
+  field: string,
+  value: unknown,
+): Promise<void> {
+  const columns = UPDATE_COLUMNS_BY_ENTITY[entity as SyncPushEntity];
+  const table = isOutboxEntity(entity) ? outboxMirrorTable(entity) : null;
+  if (!columns || !table || !Object.hasOwn(columns, field)) {
+    throw new Error(`Cannot restore ${entity}.${field}`);
+  }
+  await enqueueUpdate(entity as SyncPushEntity, table, id, { [field]: value }, columns);
 }

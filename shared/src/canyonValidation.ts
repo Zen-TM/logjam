@@ -137,3 +137,39 @@ export function validateCanyonPayload(
 
   return null;
 }
+
+/**
+ * WHICH fields of a canyon payload are out of range — the per-field answer
+ * `validateCanyonPayload` deliberately does not give (it stops at the first
+ * error, because an API rejection is one message).
+ *
+ * The client needs the field NAMES rather than a sentence: a parked op carries
+ * several dirty fields and only one of them is usually the problem, so knowing
+ * which lets the good ones be sent on instead of the whole edit sitting on the
+ * sync-issues screen. Derived from the SAME constraint table as the sentence,
+ * so the two can never disagree about what is valid.
+ *
+ * Only range/type violations are visible here. A rejection for any other reason
+ * (an unknown field, a server-side rule) yields an empty list, which callers
+ * must read as "can't tell", not as "everything is fine".
+ */
+export function invalidCanyonFields(fields: Record<string, unknown>): string[] {
+  const invalid: string[] = [];
+  if ("latitude" in fields && !isValidLatitude(fields.latitude)) invalid.push("latitude");
+  if ("longitude" in fields && !isValidLongitude(fields.longitude)) {
+    invalid.push("longitude");
+  }
+  for (const field of Object.keys(CANYON_NUMERIC_CONSTRAINTS) as CanyonNumericFieldName[]) {
+    if (!(field in fields)) continue;
+    const value = fields[field];
+    if (value === undefined || value === null) continue;
+    if (typeof value !== "number") {
+      invalid.push(field);
+      continue;
+    }
+    if (numericConstraintError(value, CANYON_NUMERIC_CONSTRAINTS[field])) {
+      invalid.push(field);
+    }
+  }
+  return invalid;
+}

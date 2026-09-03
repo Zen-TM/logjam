@@ -36,7 +36,6 @@
 // logged, never persisted.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Animated, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import NetInfo from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
@@ -80,6 +79,7 @@ import {
   SectionHeader,
   SegmentedControl,
   SelectionBar,
+  SelectionMark,
   StatusPill,
   SyncStatusPills,
   TextField,
@@ -1945,15 +1945,7 @@ export function SavedScreen({
                   // on a row that cannot be picked — an empty checkbox is a
                   // promise that tapping it does something — but the box stays,
                   // so an unpickable row is still the height it was.
-                  <View style={styles.selectBox}>
-                    {item.delete ? (
-                      <Feather
-                        name={picked ? "check-circle" : "circle"}
-                        size={22}
-                        color={picked ? theme.accent : theme.textMuted}
-                      />
-                    ) : null}
-                  </View>
+                  <SelectionMark selected={picked} selectable={item.delete != null} />
                 ) : (
                   <IconButton
                     icon="more-vertical"
@@ -2637,7 +2629,6 @@ const styles = StyleSheet.create({
   rowActions: { flexDirection: "row", alignItems: "center", gap: spacing(0.75) },
   // IconButton's own box, so the checkbox that stands in for the ⋯ button
   // occupies exactly what it replaced and the row cannot resize on selection.
-  selectBox: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   size: { color: theme.textMuted, fontSize: fontSize.xs, fontWeight: fontWeight.medium },
   sheetBody: { gap: spacing(1) },
   // Same treatment as the map's waypoint sheet hint: a footnote above the

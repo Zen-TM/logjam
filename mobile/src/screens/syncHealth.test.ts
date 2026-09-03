@@ -117,7 +117,7 @@ describe("syncHealth", () => {
     it("promises no retry, and points at the thing that does fix it", () => {
       const health = syncHealth(input({ state: "error", errorKind: "applyFailed" }));
       expect(health.detail).not.toMatch(/keep retrying/i);
-      expect(health.detail).toContain("Sync issues");
+      expect(health.detail).toContain("Account sync issues");
     });
 
     it("outranks the queue and the issue list", () => {

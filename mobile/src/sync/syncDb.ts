@@ -54,11 +54,41 @@ export async function getSyncDb(): Promise<SQLite.SQLiteDatabase> {
     dbPromise = (async () => {
       const db = await SQLite.openDatabaseAsync("logjam.db");
       await db.execAsync(`PRAGMA journal_mode = WAL;\n${createSchemaSql()}`);
+      await ensureLocalColumns(db);
       await applySchemaVersion(db);
       return db;
     })();
   }
   return dbPromise;
+}
+
+/**
+ * The `local` tables' migration, and the only one they get.
+ *
+ * `CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists, and
+ * the version lever above deliberately refuses to touch these three — dropping
+ * the outbox would destroy writes the server has never seen. So a column added
+ * to a local table after it shipped reaches an existing install only here:
+ * every declared column missing from `PRAGMA table_info` is added.
+ *
+ * Derived from SYNC_TABLES rather than a hand-kept ladder, so a new local
+ * column cannot join the declaration and miss the migration (the parallel-list
+ * rule in CLAUDE.md — `mirrorSchema.test.ts` is the check). ADD COLUMN is the
+ * only shape supported: SQLite cannot drop or retype in place, and a local
+ * table that needs either needs a written migration, not this.
+ */
+async function ensureLocalColumns(db: SQLite.SQLiteDatabase): Promise<void> {
+  for (const table of SYNC_TABLES) {
+    if (table.kind !== "local") continue;
+    const existing = await db.getAllAsync<{ name: string }>(
+      `PRAGMA table_info(${table.name})`,
+    );
+    const present = new Set(existing.map((column) => column.name));
+    for (const [name, decl] of Object.entries(table.columns)) {
+      if (present.has(name)) continue;
+      await db.execAsync(`ALTER TABLE ${table.name} ADD COLUMN ${name} ${decl}`);
+    }
+  }
 }
 
 /**

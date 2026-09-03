@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   isValidLatitude,
   isValidLongitude,
+  invalidCanyonFields,
   numericConstraintError,
   validateCanyonPayload,
   CANYON_NUMERIC_CONSTRAINTS,
@@ -144,3 +145,40 @@ describe("validateCanyonPayload", () => {
     ).toBe("Quality must be a number");
   });
 });
+
+describe("invalidCanyonFields", () => {
+  it("names every out-of-range field, not just the first", () => {
+    // validateCanyonPayload answers with ONE sentence because an API rejection
+    // is one message. The client needs the names: a parked op carries several
+    // dirty fields and usually only one is the problem.
+    expect(invalidCanyonFields({ vGrade: 9, quality: 3, hours: -1 })).toEqual([
+      "vGrade",
+      "hours",
+    ]);
+  });
+
+  it("passes a payload the API would accept", () => {
+    expect(
+      invalidCanyonFields({ notes: "rebolted", vGrade: 4, longestAbseil: 32 }),
+    ).toEqual([]);
+  });
+
+  it("says nothing about fields it has no constraint for", () => {
+    // An empty list means "can't tell", never "everything is fine" — a
+    // rejection for an unknown field or a server-side rule looks like this.
+    expect(invalidCanyonFields({ notes: "x", name: "y" })).toEqual([]);
+  });
+
+  it("catches a coordinate, which is the one a create op carries", () => {
+    expect(invalidCanyonFields({ latitude: 91, longitude: 150 })).toEqual(["latitude"]);
+  });
+
+  it("treats a non-number in a numeric field as invalid", () => {
+    expect(invalidCanyonFields({ hours: "six" })).toEqual(["hours"]);
+  });
+
+  it("ignores an explicit null, which clears the field rather than setting it", () => {
+    expect(invalidCanyonFields({ vGrade: null })).toEqual([]);
+  });
+});
+

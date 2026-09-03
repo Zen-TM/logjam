@@ -11,11 +11,33 @@ import {
 
 /** Outbox op lifecycle (§9 outbox.state). `queued` is flushable; `inflight`
  * is mid-flush (crash recovery resets it to queued — replay is safe by
- * §8.1's idempotency); `blocked` is parked on a terminal rejection;
- * `deadRemote` is parked because the server row was deleted (§6 delete-wins).
- * Media macro-ops additionally persist three-phase progress (§7.1) in
- * `mediaPhase`, not in `state`. */
-export type OutboxState = "queued" | "inflight" | "blocked" | "deadRemote";
+ * §8.1's idempotency); `retrying` is a rejection the SERVER may answer
+ * differently next time, waiting for the next cycle; `blocked` is parked on a
+ * terminal rejection; `deadRemote` is parked because the server row was
+ * deleted (§6 delete-wins). Media macro-ops additionally persist three-phase
+ * progress (§7.1) in `mediaPhase`, not in `state`. */
+export type OutboxState =
+  | "queued"
+  | "inflight"
+  | "retrying"
+  | "blocked"
+  | "deadRemote";
+
+/**
+ * Whether a rejection is about THIS REQUEST or about the moment it was made.
+ *
+ * One declaration, two readers, and they must agree: the flush engine uses it
+ * to decide whether to retry an op by itself, and the mobile Sync issues
+ * screen uses it to decide whether to offer the user a Retry at all. If the
+ * two ever disagreed, the screen would either offer a button for something the
+ * engine had already given up on, or park an op the engine would have fixed.
+ *
+ * Code 0 is the client's own "no HTTP status at all" — a dropped connection
+ * mid-transfer — which is the most retryable failure there is.
+ */
+export function isTransientSyncError(code: number): boolean {
+  return code === 0 || code === 401 || code === 408 || code === 429 || code >= 500;
+}
 
 export type OutboxEntry = {
   /** Local monotonic FIFO sequence — never reordered (§8.2). */
@@ -150,7 +172,15 @@ export function selectFlushBatch(
 ): BatchSelection {
   const blockedIds = new Set<string>();
   for (const entry of entries) {
-    if (entry.state === "blocked" || entry.state === "deadRemote") {
+    // `retrying` counts as blocking for DEPENDENTS even though the op itself
+    // will be sent again unasked: until it lands, the row it creates does not
+    // exist server-side, so an op that depends on it would 404 exactly as it
+    // would behind a parked one.
+    if (
+      entry.state === "blocked" ||
+      entry.state === "deadRemote" ||
+      entry.state === "retrying"
+    ) {
       blockedIds.add(entry.op.id);
     }
   }

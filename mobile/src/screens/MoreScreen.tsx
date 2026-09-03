@@ -166,11 +166,13 @@ export function MoreScreen({
           <Row
             icon="alert-triangle"
             hue={issueCount > 0 ? theme.warning : undefined}
-            title="Sync issues"
+            title="Account sync issues"
             subtitle={
               issueCount > 0
-                ? `${issueCount} ${issueCount === 1 ? "needs" : "need"} your attention`
-                : "Nothing waiting on you"
+                ? issueCount === 1
+                  ? "1 change needs you"
+                  : `${issueCount} changes need you`
+                : "Everything's synced"
             }
             onPress={onOpenSyncIssues}
             right={

@@ -1020,7 +1020,19 @@ export function AppShell({
                 {({ navigation }) => <FriendsScreen onBack={() => navigation.goBack()} />}
               </MoreStack.Screen>
               <MoreStack.Screen name="SyncIssues" options={{ headerShown: false }}>
-                {({ navigation }) => <SyncIssuesScreen onBack={() => navigation.goBack()} />}
+                {({ navigation }) => (
+                  <SyncIssuesScreen
+                    onBack={() => navigation.goBack()}
+                    // A stuck change is a way IN to the thing it failed on: the
+                    // permanent-failure sheet offers "open it and change it a
+                    // way that works". Pushed inside the More stack, like the
+                    // inbox's own canyon route, so Back returns to the issue.
+                    onOpenCanyon={(canyonId) =>
+                      navigation.navigate("MoreCanyonDetail", { canyonId })
+                    }
+                    onOpenTrip={(trip) => navigation.navigate("MoreTripDetail", { trip })}
+                  />
+                )}
               </MoreStack.Screen>
               {/* Settings and its sub-pages are plain preference lists, so they
                   keep the native header and its back button (DESIGN.md §2). */}

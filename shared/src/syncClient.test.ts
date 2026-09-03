@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   collectDirtyFields,
   computeBackoffMs,
+  isTransientSyncError,
   filterSelfConflicts,
   planOutboxEnqueue,
   rebaseRow,
@@ -218,6 +219,21 @@ describe("selectFlushBatch (§8.3 dependency closure)", () => {
     expect(deferred.map((e) => e.seq)).toEqual([2]);
   });
 
+  it("a retrying op blocks its dependents, though it is not the user's problem", () => {
+    // `retrying` is the engine's own business — it will be sent again unasked —
+    // but until it lands the row does not exist server-side, so an op that
+    // depends on it would 404 exactly as it would behind a parked one. Sending
+    // the dependent first is how one flaky 503 turns into a real sync issue on
+    // a different row.
+    const entries = [
+      entry(1, op({ entity: "canyon", op: "create", id: CANYON_A, fields: {} }), "retrying"),
+      entry(2, op({ entity: "tripLog", op: "create", id: TRIP_A, fields: { canyonIds: [CANYON_A] } })),
+    ];
+    const { ready, deferred } = selectFlushBatch(entries, 50);
+    expect(ready).toEqual([]);
+    expect(deferred.map((e) => e.seq)).toEqual([2]);
+  });
+
   it("a delete of the blocked row itself stays ready (discard path)", () => {
     const entries = [
       entry(1, op({ entity: "canyon", op: "update", id: CANYON_A, fields: {} }), "blocked"),
@@ -286,6 +302,24 @@ describe("collectDirtyFields + rebaseRow (§8.5)", () => {
       name: "w",
       latitude: -33.6,
     });
+  });
+});
+
+describe("isTransientSyncError", () => {
+  // One classifier, two readers: the flush engine decides whether to retry an
+  // op by itself, and the mobile Sync issues screen decides whether to offer a
+  // Retry button at all. Disagreement means either a button for something
+  // already given up on, or an op parked that the engine would have fixed.
+  it("is true for the failures a later attempt can survive", () => {
+    for (const code of [0, 401, 408, 429, 500, 502, 503]) {
+      expect(isTransientSyncError(code)).toBe(true);
+    }
+  });
+
+  it("is false for a refusal about the request itself", () => {
+    for (const code of [400, 403, 404, 409, 413, 422]) {
+      expect(isTransientSyncError(code)).toBe(false);
+    }
   });
 });
 

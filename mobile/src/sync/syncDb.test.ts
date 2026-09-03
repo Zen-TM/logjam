@@ -6,19 +6,37 @@ import { describe, expect, it, vi } from "vitest";
 // the one connection, so the STATEMENTS can be asserted (which is where the
 // mirror-wipe bugs lived).
 const wipeCalls: string[] = [];
+const execCalls: string[] = [];
+/** Columns this stand-in database claims each table already has. The one gap —
+ * conflict_shelf.entity_name — is an install that predates the shelf storing
+ * the name of the row a value belongs to, which is the case the local-table
+ * migration exists for. */
+const existingColumns = (table: string): { name: string }[] => {
+  const declared = Object.keys(tableSchema(table)?.columns ?? {});
+  return declared
+    .filter((name) => !(table === "conflict_shelf" && name === "entity_name"))
+    .map((name) => ({ name }));
+};
 const nativeDb = {
-  execAsync: () => Promise.resolve(),
+  execAsync: (sql: string) => {
+    execCalls.push(sql);
+    return Promise.resolve();
+  },
   runAsync: (sql: string) => {
     wipeCalls.push(sql);
     return Promise.resolve({ changes: 0, lastInsertRowId: 0 });
   },
   getFirstAsync: () => Promise.resolve(null),
-  getAllAsync: () => Promise.resolve([]),
+  getAllAsync: (sql: string) => {
+    const pragma = /^PRAGMA table_info\((\w+)\)$/.exec(sql);
+    return Promise.resolve(pragma ? existingColumns(pragma[1]) : []);
+  },
   withTransactionAsync: async (task: () => Promise<void>) => task(),
 };
 vi.mock("expo-sqlite", () => ({ openDatabaseAsync: () => Promise.resolve(nativeDb) }));
 
-const { withSyncTransaction, wipeMirror } = await import("./syncDb");
+const { tableSchema } = await import("./mirrorSchema");
+const { getSyncDb, withSyncTransaction, wipeMirror } = await import("./syncDb");
 
 /** A stand-in for the one shared connection: BEGIN/COMMIT with no isolation,
  * exactly like expo-sqlite's own implementation. `depth > 1` is the nested
@@ -149,5 +167,28 @@ describe("wipeMirror", () => {
     wipeCalls.length = 0;
     await wipeMirror();
     expect(wipeCalls).toContain("DELETE FROM notifications_cache");
+  });
+});
+
+describe("local-table migration", () => {
+  // The mirror's drop-and-rebuild lever deliberately cannot touch the outbox,
+  // the shelf or sync_state — dropping the outbox would destroy writes the
+  // server has never seen — and CREATE TABLE IF NOT EXISTS does nothing to a
+  // table that already exists. So a column added to a local table after it
+  // shipped reaches an upgraded install through this path or not at all, and
+  // "not at all" is silent: every read of it returns undefined.
+  it("adds a declared local column the database is missing", async () => {
+    await getSyncDb();
+    const alters = execCalls.filter((sql) => sql.startsWith("ALTER TABLE"));
+    expect(alters).toEqual(["ALTER TABLE conflict_shelf ADD COLUMN entity_name TEXT"]);
+  });
+
+  it("leaves the mirror tables to the version lever", async () => {
+    // A mirror table is rebuildable, so it is dropped and recreated rather than
+    // altered; altering it here would be a second, divergent migration path.
+    await getSyncDb();
+    for (const sql of execCalls.filter((call) => call.startsWith("ALTER TABLE"))) {
+      expect(sql).toMatch(/^ALTER TABLE (outbox|conflict_shelf|sync_state) /);
+    }
   });
 });

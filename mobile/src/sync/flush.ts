@@ -5,6 +5,7 @@
 import {
   collectDirtyFields,
   filterSelfConflicts,
+  isTransientSyncError,
   parseSyncDeltaCanyonRow,
   parseSyncDeltaTripRow,
   parseSyncDeltaWaypointRow,
@@ -31,16 +32,38 @@ import {
 import { upsertCanyon, upsertTrip, upsertWaypoint } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
 
+/**
+ * After this many rejections a push op is parked for the user even if the
+ * server's answer looked temporary. Same backstop, and the same number, as
+ * `MEDIA_MAX_ATTEMPTS` below: something failing this often is not going to
+ * start working, and an op retried forever is one the user is never told
+ * about.
+ */
+const PUSH_MAX_ATTEMPTS = 5;
+
+/** What one flush pass left behind, for the engine to act on. */
+export type FlushSummary = {
+  /** Ops the server refused for a reason that may not hold next time. They are
+   *  NOT the user's problem yet, and the engine schedules another cycle. */
+  retrying: number;
+};
+
 /** Flush to drain (or until only parked/deferred ops remain). Serialized by
  * the sync engine — never call concurrently. Push ops (canyon/trip/waypoint/
  * notification) go through POST /sync/push in dependency-closure batches;
  * media ops run their own three-phase / REST flow (§7.1, §8.3 interleave). */
-export async function flushOutbox(): Promise<void> {
+export async function flushOutbox(): Promise<FlushSummary> {
   const db = await getSyncDb();
 
   // Crash recovery: ops stranded inflight by a killed process are replay-
   // safe (§8.1 idempotency) — requeue them.
-  await db.runAsync("UPDATE outbox SET state = 'queued' WHERE state = 'inflight'");
+  //
+  // `retrying` is requeued in the same statement, and this is the ONLY place it
+  // happens: one attempt per flush pass. Requeuing inside the loop below would
+  // spin the same op against the same server for as long as it keeps failing.
+  await db.runAsync(
+    "UPDATE outbox SET state = 'queued' WHERE state IN ('inflight', 'retrying')",
+  );
 
   for (;;) {
     const rows = await loadOutboxRows();
@@ -57,7 +80,7 @@ export async function flushOutbox(): Promise<void> {
       // otherwise the outbox is drained-or-parked and we're done.
       const progressed = await flushMediaOps();
       if (progressed) continue;
-      return;
+      return { retrying: await countRetrying(db) };
     }
 
     await sendBatch(db, ready, byOpId);
@@ -186,24 +209,33 @@ async function applyOpResult(
         const real = filterSelfConflicts(result.conflicts, base);
         const at = new Date().toISOString();
         // `shelved_json` is what the USER wrote and `server_json` is what won
-        // — the Sync Issues screen renders them as "Yours:" and "Kept:".
+        // — the Sync Issues screen renders them as "Discarded" and "Kept".
         // Both columns used to be filled from serverValue, so the user was
         // shown the other device's value labelled as their own, and their own
         // was never recorded anywhere.
         const ownFields = row.fields_json
           ? (JSON.parse(row.fields_json) as Record<string, unknown>)
           : {};
+        // The server's own confirmed row is the name's source, and this is the
+        // only moment it is guaranteed to be in hand: the mirror row can be
+        // deleted later, taking with it the only answer to "which canyon was
+        // this?" for a shelf entry the user may read weeks from now.
+        const confirmed = result.row as
+          | { name?: string | null; displayName?: string | null }
+          | undefined;
+        const entityName = confirmed?.name ?? confirmed?.displayName ?? null;
         for (const receipt of real) {
           await db.runAsync(
             `INSERT INTO conflict_shelf
-               (entity, entity_id, field, shelved_json, server_json, at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
+               (entity, entity_id, field, shelved_json, server_json, at, entity_name)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
             row.entity,
             row.entity_id,
             receipt.field,
             JSON.stringify(ownFields[receipt.field] ?? null),
             JSON.stringify(receipt.serverValue ?? null),
             at,
+            entityName,
           );
         }
       }
@@ -215,13 +247,28 @@ async function applyOpResult(
       return true;
     }
     case "rejected": {
-      const isGone = result.error?.code === 404 && entry.op.op !== "create";
+      const error = result.error ?? { code: 400, message: "rejected" };
+      const isGone = error.code === 404 && entry.op.op !== "create";
+      // A rejection the server may answer differently next time is OURS to
+      // retry, not the user's. Parking every rejection put "Try again" in
+      // front of someone for a 503 — asking them to press a button the app
+      // could have pressed itself, and teaching them that the screen is full
+      // of things that fix themselves. What reaches the user is what a retry
+      // cannot fix: a refusal about the request (400/409/…), a row deleted
+      // under the edit, or an op that has now failed PUSH_MAX_ATTEMPTS times
+      // however temporary each failure claimed to be.
+      // `row` was read BEFORE `sendBatch` bumped the counter, so the attempt
+      // that just failed is `row.attempts + 1` — the same off-by-one the media
+      // path spells out below.
+      const attempts = row.attempts + 1;
+      const retryable =
+        !isGone && isTransientSyncError(error.code) && attempts < PUSH_MAX_ATTEMPTS;
       await db.runAsync(
         "UPDATE outbox SET state = ?, error_json = ? WHERE seq = ?",
         // Edit-on-deleted (§6 delete-wins): park as deadRemote so the UI
-        // offers "recreate"; other rejections park blocked.
-        isGone ? "deadRemote" : "blocked",
-        JSON.stringify(result.error ?? { code: 400, message: "rejected" }),
+        // offers "recreate"; other terminal rejections park blocked.
+        isGone ? "deadRemote" : retryable ? "retrying" : "blocked",
+        JSON.stringify(error),
         row.seq,
       );
       return false;
@@ -304,6 +351,15 @@ async function applyConfirmedRow(
  * in a five-minute retry loop forever.
  */
 const MEDIA_MAX_ATTEMPTS = 5;
+
+async function countRetrying(
+  db: Awaited<ReturnType<typeof getSyncDb>>,
+): Promise<number> {
+  const row = await db.getFirstAsync<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM outbox WHERE state = 'retrying'",
+  );
+  return row?.n ?? 0;
+}
 
 async function flushMediaOps(): Promise<boolean> {
   const db = await getSyncDb();

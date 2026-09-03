@@ -100,8 +100,9 @@ async function runCycleOnce(): Promise<void> {
   // receiving ANY server change, for as long as that op sat in the outbox.
   // Push failure is still a cycle failure; it just isn't a pull failure.
   let flushError: unknown = null;
+  let retryingOps = 0;
   try {
-    await flushOutbox();
+    retryingOps = (await flushOutbox()).retrying;
   } catch (err) {
     flushError = err;
   }
@@ -110,7 +111,6 @@ async function runCycleOnce(): Promise<void> {
   // Eager thumbnail cache (§7.3): best-effort — an offline-again failure
   // must not mark the whole cycle failed (rows retry next pass).
   await syncThumbnailCache().catch(() => {});
-  retryAttempt = 0;
   await clearSyncStateValue(APPLY_FAILED_KEY);
   setStatus({
     state: "idle",
@@ -118,6 +118,18 @@ async function runCycleOnce(): Promise<void> {
     errorMessage: null,
     errorKind: null,
   });
+  // Ops the server refused for a reason that may not hold next time. The cycle
+  // SUCCEEDED — the mirror is current and the status says so — but work is
+  // still waiting, and nothing else would come back for it: the ladder arms on
+  // a failed cycle, and this one didn't fail. The counter is deliberately NOT
+  // reset here, so a server that keeps saying 503 is asked at growing
+  // intervals rather than every few seconds until the attempt cap parks the
+  // op in front of the user.
+  if (retryingOps > 0) {
+    scheduleBackoffRetry();
+    return;
+  }
+  retryAttempt = 0;
 }
 
 // APPLY_FAILED_KEY lives in syncDb (with the other sync_state keys) because
