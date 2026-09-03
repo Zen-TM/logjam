@@ -140,7 +140,7 @@ async function addEgress(userId: string, bytes: bigint): Promise<void> {
         WHEN egress_period_start < ${monthStart} THEN ${monthStart}
         ELSE egress_period_start
       END
-    WHERE id = ${userId}::uuid
+    WHERE id = ${userId}
   `;
 }
 

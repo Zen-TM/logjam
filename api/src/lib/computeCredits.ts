@@ -69,7 +69,7 @@ export async function getMonthlyCreditUsage(
         ) / 60.0
       ) AS credits
       FROM topo_jobs
-      WHERE user_id = ${userId}::uuid
+      WHERE user_id = ${userId}
         AND started_at IS NOT NULL
         AND started_at >= ${monthStart}
 
@@ -81,7 +81,7 @@ export async function getMonthlyCreditUsage(
         / 60.0
       )
       FROM topo_export_jobs
-      WHERE user_id = ${userId}::uuid
+      WHERE user_id = ${userId}
         AND started_at IS NOT NULL
         AND started_at >= ${monthStart}
 
@@ -93,7 +93,7 @@ export async function getMonthlyCreditUsage(
         / 60.0
       )
       FROM geo_pdf_jobs
-      WHERE user_id = ${userId}::uuid
+      WHERE user_id = ${userId}
         AND started_at IS NOT NULL
         AND started_at >= ${monthStart}
     ) AS per_job
