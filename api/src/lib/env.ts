@@ -100,6 +100,14 @@ const baseSchema = z.object({
   // Falls back to this cold-start rate below MIN_SAMPLES.
   GEO_PDF_ESTIMATE_DEFAULT_SECONDS_PER_MEGAPIXEL: z.coerce.number().positive().default(6),
   GEO_PDF_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
+  // Account-wide ceiling on concurrently running worker vCPUs
+  // (lib/fargateCapacity.ts). Sits BELOW the AWS Fargate On-Demand vCPU
+  // service quota (30 in ap-southeast-2) so excess load becomes a retryable
+  // 429 rather than a RunTask placement failure, which this codebase treats as
+  // a job failure. The 6 vCPU of headroom absorbs the api_migrate one-shot and
+  // any task ECS has not finished reaping. Raise this only alongside the AWS
+  // quota; 0 disables the check.
+  MAX_CONCURRENT_WORKER_VCPUS: z.coerce.number().int().nonnegative().default(24),
   // TopoExportJob sweeps (ARCH-002): queued rows older than the QUEUED timeout
   // (task never placed/started) and running rows older than the RUNNING
   // timeout (worker SIGKILLed before its except path ran) are force-failed.
