@@ -53,3 +53,12 @@ variable "lifecycle_rules" {
   default     = []
   description = "Object-expiry lifecycle rules. Empty = no lifecycle config managed."
 }
+
+variable "log_target" {
+  type = object({
+    bucket = string
+    prefix = string
+  })
+  default     = null
+  description = "S3 server access logging destination. null = do not manage a logging config. The target bucket must live in the same region and grant s3:PutObject to logging.s3.amazonaws.com; never point a bucket at itself (the delivery writes are themselves logged, which never terminates)."
+}
