@@ -47,3 +47,8 @@ CLAUDE.local.md
 
 # Personal kiosk dev helper (not shared)
 scripts/kiosk-dev.sh
+
+# Syncthing's in-flight temp copies. This checkout is mirrored to the kiosk dev
+# box (CLAUDE.local.md), so a sync landing mid-commit drops these beside the
+# real files — one reached a commit that way.
+.syncthing.*.tmp
