@@ -42,7 +42,12 @@ import {
   linkStandaloneMediaLocal,
   renameStandaloneMediaLocal,
 } from "../sync/mediaUpload";
-import { getMediaById, type MirrorMedia } from "../sync/mirrorStore";
+import {
+  getMediaById,
+  type MirrorMedia,
+  type MirrorRoute,
+  type MirrorWaypoint,
+} from "../sync/mirrorStore";
 import { deleteTrack, listTrackPoints, updateTrack, type Track } from "../tracks/tracksDb";
 import {
   createRouteLocal,
@@ -54,18 +59,14 @@ import {
 import {
   type FileSendSourceKind,
   type SharableEntityType,
-  MEDIA_EXTENSION_BY_MIME,
   MIN_ROUTE_POINTS,
   ROUTE_NAME_MAX_LENGTH,
-  TRACK_MIME_TYPES,
   exportFilename,
   trackPointsToGpx,
   simplifyToFit,
   type RoutePoint,
 } from "@logjam/shared";
-import type { MirrorRoute, MirrorWaypoint } from "../sync/mirrorStore";
 import { exportStoredFile, exportTrack } from "../fileExport";
-import { attachMediaLocal } from "../sync/mediaUpload";
 import { bboxOfPoints, type Bbox } from "./bboxOfPoints";
 // Narrow imports rather than the namespace: this module is pure descriptors
 // and the only filesystem work in it is the track scratch file below.
@@ -257,14 +258,6 @@ function geoJsonSource(
 
 export function vectorImportActions(imported: VectorImport): AssetActions {
   const sourceFormat = sourceFormatOf(imported);
-  // Derived from the extension table rather than restated: two lists that must
-  // agree are one declaration (mobile CLAUDE.md). GeoJSON now IS in
-  // TRACK_MIME_TYPES — a canyon's way may be any of the three formats an import
-  // can be — so the only thing that withholds the verb here is having no
-  // original to attach.
-  const trackMimeType = TRACK_MIME_TYPES.find(
-    (mime) => MEDIA_EXTENSION_BY_MIME[mime] === sourceFormat,
-  );
   // The original, when it is not already GeoJSON. A GeoJSON source collapses
   // into the row below rather than offering the same file twice under two
   // names — and it is the ORIGINAL that survives the collapse, since the
