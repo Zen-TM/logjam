@@ -13,7 +13,7 @@ import {
   type RouteSlotOccupant,
   type WaySource,
 } from "./routeSlot";
-import { deleteMediaLocal } from "../sync/mediaUpload";
+import { linkStandaloneMediaLocal } from "../sync/mediaUpload";
 import { updateRouteLocal } from "../sync/outbox";
 
 /** The user's answer to "this canyon already has a route". */
@@ -28,9 +28,9 @@ function confirmDisplacement(
       { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
       {
         text: "Replace",
-        // Only the file case destroys something; an unlinked route is still
-        // there afterwards, and a red button would say otherwise.
-        style: occupant?.kind === "file" ? "destructive" : "default",
+        // Nothing here destroys anything any more — both occupants are
+        // unlinked and both survive — so the button is never the red one.
+        style: "default",
         onPress: () => resolve(true),
       },
     ]);
@@ -69,7 +69,10 @@ export async function fillRouteSlot({
             // until the next delta pull it would otherwise show two routes on
             // the one canyon — the state the confirm just said would not exist.
             updateRouteLocal(occupant.id, { canyonId: null })
-          : deleteMediaLocal(occupant.media)
+          : // UNLINK, never delete: the file is the user's own import or
+            // recording and lives on in Saved. Deleting it here is what the
+            // copy-into-the-canyon model used to have to do.
+            linkStandaloneMediaLocal(occupant.media.id, null)
     : null;
 
   const writes = waySourceWrites(source);

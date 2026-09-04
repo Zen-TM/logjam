@@ -4,21 +4,26 @@
 // A canyon holds AT MOST ONE route, and that slot has two possible occupants
 // which nothing server-side knows about together:
 //
-//   - a drawn Route row (`Route.canyonId`, unique) — displaced by UNLINKING,
-//     and the route survives standalone, so this is recoverable;
-//   - an attached track MEDIA file (a .gpx/.kml uploaded against the canyon) —
-//     displaced by DELETING it, which is not.
+//   - a drawn Route row (`Route.canyonId`, unique);
+//   - a standalone FILE linked as the canyon's way (`Media.linkedId`) — an
+//     import the user brought in, or a recording.
 //
-// Five sources now fill that slot (a route you drew, an import, a recorded
-// track, a file off the phone, a line drawn on the map). Each of them deciding
-// for itself what to warn about is how one ends up silently deleting a file,
-// so they all read the occupant, the sentence and the write order from here.
+// BOTH are displaced by UNLINKING now, and both survive it. That is the change
+// that made this file smaller: a file used to be COPIED into the canyon, so
+// displacing one deleted the copy and the confirm had to say so. A file is
+// linked, so replacing a way costs nothing and destroys nothing — the same
+// promise `Route.canyonId`'s SetNull always made.
+//
+// Five sources fill that slot (a route you drew, an import, a recorded track, a
+// file off the phone, a line drawn on the map). Each of them deciding for
+// itself what to warn about is how one ended up silently deleting a file, so
+// they all read the occupant, the sentence and the write order from here.
 // `fillRouteSlot.ts` is the runner that acts on them.
 //
 // PRIVACY: the canyon name and the attachment's filename appear only in a
 // confirm the user opened for that canyon (DESIGN.md §11) — never in a log or
 // an error string.
-import { mediaCategory } from "@logjam/shared";
+import { mediaCategory, mediaDisplayName } from "@logjam/shared";
 
 import type { DeleteConfirmCopy } from "./canyonDeleteConfirm";
 import type { MirrorMedia } from "../sync/mirrorStore";
@@ -29,8 +34,11 @@ export type WaySource = "route" | "track" | "import" | "file" | "draw";
 /**
  * What a source actually WRITES into the slot. A recorded track is converted
  * into a Route first (the recording is an immutable observation and is never
- * linked), so it writes a link like a drawn route does; an import and a picked
- * file are uploaded as canyon media.
+ * linked), so it writes a route link; an import and a picked file link the
+ * media row itself.
+ *
+ * Both are links now. The distinction survives only because the two live in
+ * different tables and the swap has to know which one to unlink.
  */
 export function waySourceWrites(source: WaySource): "route" | "media" {
   return source === "import" || source === "file" ? "media" : "route";
@@ -44,7 +52,7 @@ export function waySourceWrites(source: WaySource): "route" | "media" {
 export const TRACK_TO_ROUTE_PROMISE =
   "A route is created from the recording and linked to the canyon. The recording itself is left alone.";
 export const IMPORT_TO_CANYON_PROMISE =
-  "A copy of the file is attached to the canyon, so anyone you share it with can see it. The import stays in Saved.";
+  "The file is linked to the canyon, so anyone you share it with can see it. It stays in Saved, and unlinking it later leaves it there.";
 
 export type RouteSlotOccupant =
   | { kind: "route"; id: string; name: string }
@@ -103,7 +111,7 @@ export function routeSlotDisplaceConfirm(
     confirmBody:
       occupant.kind === "route"
         ? `“${occupant.name}” will be unlinked, but the route is kept.`
-        : `The attached file “${occupant.media.filename ?? "route"}” will be deleted. That can't be undone.`,
+        : `“${mediaDisplayName(occupant.media)}” will be unlinked, but the file is kept in Saved.`,
   };
 }
 
@@ -112,12 +120,13 @@ export function routeSlotDisplaceConfirm(
  *
  * Normally no: the link is written first and the incumbent removed second, so
  * a failed removal leaves the canyon briefly showing both (visible, fixable)
- * where the other order can lose the file and not land the replacement.
+ * rather than neither.
  *
  * The ONE exception is file-over-file. `assertCanyonTrackSlotFree`
- * (api/src/routes/media.ts) answers a second track attachment on a canyon with
- * 409, so writing first doesn't leave two — it parks a dead upload in the
- * outbox and lands nothing at all.
+ * (api/src/routes/media.ts) answers a second track on a canyon with 409, so
+ * writing first doesn't leave two — it parks the link op and lands nothing at
+ * all. Unlinking first is cheap and reversible now that it destroys nothing,
+ * which is what makes this ordering safe rather than merely necessary.
  */
 export function removeOccupantFirst(
   writes: "route" | "media",

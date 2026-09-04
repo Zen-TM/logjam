@@ -37,20 +37,32 @@ export const SCHEMA_SQL = `
         );
         CREATE INDEX IF NOT EXISTS idx_map_artifact_lookup
           ON map_artifact(kind, logicalKey);
-        CREATE TABLE IF NOT EXISTS vector_import (
-          id            TEXT PRIMARY KEY,
-          name          TEXT NOT NULL,
-          color         TEXT NOT NULL,
+        -- An import USED to be a device-only record: this table held its name,
+        -- colour, bbox and counts, and nothing left the phone. An import is now
+        -- a standalone media row (linked_type "none"), so all of that is
+        -- server-authoritative and lives in the sync mirror instead. Dropped
+        -- rather than migrated: its rows describe files that were never
+        -- uploaded, and the app is not released, so there is nothing in the
+        -- field to carry across. The statement is a no-op after the first open.
+        DROP TABLE IF EXISTS vector_import;
+        -- What is true about an import ON THIS PHONE, and only here: whether it
+        -- is currently drawn, and where its bytes are.
+        --
+        -- Deliberately NOT synced. Visibility is a property of the map you are
+        -- looking at, not of the file — toggling a layer off on the phone must
+        -- not blank it on the laptop — and the paths are meaningless anywhere
+        -- else. Keyed by the media id, so the row and its device state cannot
+        -- drift apart.
+        --
+        -- Both paths are NULLABLE: a file imported on another device arrives as
+        -- a row long before its bytes do. Null means "not on this phone yet",
+        -- which is a normal state, not a broken one.
+        CREATE TABLE IF NOT EXISTS import_view_state (
+          mediaId       TEXT PRIMARY KEY,
           visible       INTEGER NOT NULL DEFAULT 1,
-          path          TEXT NOT NULL,
+          path          TEXT,
           sourcePath    TEXT,
-          sentBy        TEXT,
-          west REAL NOT NULL, south REAL NOT NULL,
-          east REAL NOT NULL, north REAL NOT NULL,
-          featureCount  INTEGER NOT NULL,
-          positionCount INTEGER NOT NULL,
-          sizeBytes     INTEGER NOT NULL,
-          createdAt     TEXT NOT NULL
+          sentBy        TEXT
         );
         CREATE TABLE IF NOT EXISTS geo_pdf_import (
           id              TEXT PRIMARY KEY,
@@ -87,6 +99,7 @@ export const SCHEMA_SQL = `
           endedAt        TEXT,
           pausedMs       INTEGER NOT NULL DEFAULT 0,
           pausedAt       TEXT,
+          mediaId        TEXT,
           updatedAt      TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS track_point (
@@ -183,6 +196,16 @@ export const ADDED_COLUMNS: { table: string; column: string; definition: string 
   // Pauses are now accumulated explicitly at the pause/resume taps.
   { table: "track", column: "pausedMs", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "track", column: "pausedAt", definition: "TEXT" },
+  // The standalone media row this finished recording was serialised into
+  // (`sync/mediaUpload.createStandaloneMediaLocal`, origin "track"). NULL means
+  // "not backed up yet" — a live recording, an empty one, or a finish whose
+  // GPX write or registration failed and is waiting to be retried.
+  //
+  // The `track` + `track_point` tables stay the recorder's own store: the
+  // points here are what the stats and the map line are computed from, and the
+  // media row is a copy that syncs. This column is what stops the two being
+  // shown as two recordings.
+  { table: "track", column: "mediaId", definition: "TEXT" },
   // What the recorder REFUSED after this point: fixes too close to it to be
   // progress, and how long they kept arriving. Positive evidence of standing
   // still — the only thing that separates a stop from slow travel once the
@@ -200,16 +223,5 @@ export const ADDED_COLUMNS: { table: string; column: string; definition: string 
   { table: "track_point", column: "speedMps", definition: "REAL" },
   { table: "track_point", column: "headingDeg", definition: "REAL" },
   { table: "track_point", column: "altitudeAccuracyM", definition: "REAL" },
-  // The file the user actually picked, kept beside the GeoJSON derived from
-  // it. The derivation is LOSSY — ImportedFeature.properties keeps only `name`
-  // and `coordTimes`, so <desc>, <sym>, <extensions>, <metadata>, the rte/trk
-  // distinction and multi-trkseg grouping are all gone — which makes a GeoJSON
-  // round trip the wrong thing to hand anyone. Nullable: rows written before
-  // this landed have no original, and their export offers GeoJSON only.
-  { table: "vector_import", column: "sourcePath", definition: "TEXT" },
-  // Username of the friend this import arrived from, when it came in through
-  // "Send a copy" rather than the picker. Provenance only: the file is the
-  // recipient's own from the moment they accept it — editable, permanent, and
-  // not revocable — so this labels the row and grants nothing.
-  { table: "vector_import", column: "sentBy", definition: "TEXT" },
+
 ];

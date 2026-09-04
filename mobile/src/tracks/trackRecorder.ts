@@ -36,6 +36,7 @@ import {
   readFixRate,
 } from "./recordingPreferences";
 import { startSensorLog, stopSensorLog } from "./sensorLog";
+import { backUpFinishedTrack } from "./trackBackup";
 import {
   enqueueTrackWrite,
   resetTrackWriteHealth,
@@ -329,6 +330,8 @@ export async function startTrackRecording(): Promise<Track> {
   const now = new Date();
   const track: Track = {
     id: randomId(),
+    // Set when the recording finishes and is serialised for backup.
+    mediaId: null,
     // Default label from the local date — user can rename on finish.
     name: `Track ${now.toLocaleDateString()}`,
     state: "recording",
@@ -459,17 +462,41 @@ export async function continueTrackRecording(track: Track): Promise<void> {
   void startSensorLog(track.id);
 }
 
-export async function finishTrackRecording(trackId: string): Promise<void> {
+/**
+ * Stop the recorder, settle the stats, and back the finished recording up as a
+ * standalone file on the account (`tracks/trackBackup.ts`).
+ *
+ * ORDER IS THE SAFETY PROPERTY. The row is finished FIRST and never touched
+ * again, so a backup that cannot be written or queued costs the user nothing
+ * but a retry: someone who has just walked a canyon must not lose their track
+ * because an upload could not be enqueued. The failure is still loud — it
+ * arrives as a `TrackBackupError`, which says the track is saved and the backup
+ * is not, and `retryTrackBackup` runs the same work again.
+ *
+ * Returns the new media id, or null when there was nothing to back up (a
+ * recording that accepted no fixes).
+ */
+export async function finishTrackRecording(trackId: string): Promise<string | null> {
   await stopLocationUpdatesIfRunning();
   const track = await getTrack(trackId);
   if (!track) throw new Error(`finishTrackRecording: no track ${trackId}`);
   const endedAt = new Date();
-  const stats = computeTrackStats(await listTrackPoints(trackId));
+  const points = await listTrackPoints(trackId);
+  const stats = {
+    ...computeTrackStats(points),
+    durationMs: trackDurationMs(track, endedAt.getTime()),
+  };
   await updateTrack(trackId, {
     state: "done",
     endedAt: endedAt.toISOString(),
-    stats: { ...stats, durationMs: trackDurationMs(track, endedAt.getTime()) },
+    stats,
   });
+  // The same row the update just wrote — `updateTrack` returns nothing, and
+  // re-reading it would be a second query for numbers already in hand.
+  return backUpFinishedTrack(
+    { ...track, ...stats, state: "done", endedAt: endedAt.toISOString() },
+    points,
+  );
 }
 
 /**

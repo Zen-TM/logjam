@@ -21,9 +21,13 @@ vi.mock("../prefsDb", () => ({
 
 vi.mock("expo-location", () => ({ Accuracy: { High: 4 } }));
 
-const { FIX_RATE_OPTIONS, readFixRate, writeFixRate } = await import(
-  "./recordingPreferences"
-);
+const {
+  FIX_RATE_OPTIONS,
+  markTrackBackupNoticeShown,
+  needsTrackBackupNotice,
+  readFixRate,
+  writeFixRate,
+} = await import("./recordingPreferences");
 
 beforeEach(() => {
   prefs = {};
@@ -83,5 +87,24 @@ describe("fix rate preference", () => {
   it("asks for positions less often as the rate gets cheaper", () => {
     const intervals = Object.values(FIX_RATE_OPTIONS).map((o) => o.timeInterval);
     expect(intervals).toEqual([...intervals].sort((a, b) => Number(a) - Number(b)));
+  });
+});
+
+// Recordings used to stay on the handset. They sync now, and that is said ONCE
+// — a notice that reappears after every trip is one the user stops reading, and
+// one that is never shown is a change made behind their back.
+describe("the one-time backup notice", () => {
+  it("is due on a fresh install and never again after it is said", () => {
+    expect(needsTrackBackupNotice()).toBe(true);
+    markTrackBackupNoticeShown();
+    expect(needsTrackBackupNotice()).toBe(false);
+  });
+
+  it("stays due when the device could not store the flag", () => {
+    // Shown twice beats silently never shown: the notice is the whole point.
+    prefs = new Proxy({} as Record<string, string>, { set: () => true });
+    expect(needsTrackBackupNotice()).toBe(true);
+    markTrackBackupNoticeShown();
+    expect(needsTrackBackupNotice()).toBe(true);
   });
 });

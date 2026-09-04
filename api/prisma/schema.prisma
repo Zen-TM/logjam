@@ -185,6 +185,14 @@ model Media {
   // GPX from a recorded one, which are the same MIME type but different rows
   // in the Saved list.
   origin         String?
+  // The user-facing LABEL of a standalone file, as opposed to `filename`,
+  // which is the file's own name and must keep its extension (the track-format
+  // check and the download filename both read it). Set at import time from the
+  // file's content name where it has one (mobile/src/imports/importName.ts) and
+  // by a rename thereafter; null falls back to the filename. Same shape as
+  // TripLog.displayName. Null for canyon/trip attachments — a photo is
+  // labelled by what it hangs off.
+  displayName    String?  @map("display_name")
   // Row-level stats (bbox, distance, duration, counts) so another device can
   // LIST the file without downloading the blob. Shape is enforced by
   // parseMediaMetadata (shared/src/mediaMetadata.ts), not by the column — see

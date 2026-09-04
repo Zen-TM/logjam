@@ -28,6 +28,18 @@ export const OVERLAY_DIR = `${FileSystem.documentDirectory}offline/overlays/`;
 /** Imported files: vector sources, and `geopdf/` beneath it. */
 export const IMPORTS_DIR = `${FileSystem.documentDirectory}imports/`;
 /**
+ * GPX serialised from a FINISHED recording, one file per backed-up track.
+ *
+ * `documentDirectory`, not the scratch: the file is the body of a standalone
+ * media row and has to outlive the finish tap — the upload may not run for
+ * days if the phone is out of signal, and a cache the OS reclaims in the
+ * meantime would leave a media row with nothing to send. Deleted with
+ * everything else on an account transition, because a recording is precise
+ * location history.
+ */
+export const RECORDED_TRACK_DIR = `${FileSystem.documentDirectory}recorded-tracks/`;
+
+/**
  * Short-lived working files (staged share-sheet PDFs, GPX written out for an
  * attachment). Its own subdirectory rather than `cacheDirectory` itself so the
  * wipe can delete Logjam's scratch without touching other libraries' caches —
@@ -76,6 +88,7 @@ export const WIPED_DIRS = [
   REGION_DIR,
   OVERLAY_DIR,
   IMPORTS_DIR,
+  RECORDED_TRACK_DIR,
   SCRATCH_DIR,
   SENSOR_LOG_DIR,
 ] as const;

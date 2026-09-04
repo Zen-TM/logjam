@@ -282,6 +282,7 @@ export type SyncDeltaMediaRow = {
   fileSizeBytes: string;
   color: string | null;
   origin: string | null;
+  displayName: string | null;
   metadata: unknown;
   createdAt: string;
   updatedAt: string;
@@ -454,6 +455,7 @@ const MEDIA_ROW_SPEC: Record<string, FieldCheck> = {
   fileSizeBytes: isString,
   color: nullable(isString),
   origin: nullable(isString),
+  displayName: nullable(isString),
   // Shape-checked on the way IN (parseMediaMetadata, server-side) rather than
   // here: a client that rejected the whole delta page over one malformed stats
   // object would stop syncing everything else too. Readers go through

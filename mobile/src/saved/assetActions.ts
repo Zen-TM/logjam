@@ -35,8 +35,14 @@
 // per-item row in the layer sheet, and their verbs stay inline in SavedScreen.
 import { deleteGeoPdfImport } from "../geopdf/importPipeline";
 import { updateGeoPdfImport, type GeoPdfImport } from "../geopdf/geoPdfImportsDb";
-import { renameVectorImport, type VectorImport } from "../imports/importsDb";
+import { type VectorImport } from "../imports/importsDb";
 import { deleteVectorImport } from "../imports/vectorImports";
+import {
+  deleteMediaLocal,
+  linkStandaloneMediaLocal,
+  renameStandaloneMediaLocal,
+} from "../sync/mediaUpload";
+import { getMediaById, type MirrorMedia } from "../sync/mirrorStore";
 import { deleteTrack, listTrackPoints, updateTrack, type Track } from "../tracks/tracksDb";
 import {
   createRouteLocal,
@@ -148,10 +154,10 @@ export type AssetActions = {
    * and the import row stays exactly as it was.
    *
    * Present only where there IS an original and it is a .gpx/.kml: a canyon
-   * route attachment is TRACK media and the API takes nothing else, so a
-   * GeoJSON import and a row predating retained originals both withhold the
-   * verb rather than offering a broken one — the same absence `sendCopy` makes
-   * over the same file.
+   * route attachment is TRACK media and the API takes nothing else. An import
+   * is always one of those, so the verb is now unconditional on imports — it
+   * LINKS the file rather than uploading a copy of it, which is also why it no
+   * longer needs a retained original to work from.
    */
   attachToCanyon?: (canyonId: string) => Promise<unknown>;
   /**
@@ -240,11 +246,22 @@ function sourceFormatOf(imported: VectorImport): "gpx" | "kml" | "geojson" | nul
   return "geojson";
 }
 
+/** The bytes an "Export as GeoJSON" would ship, or null if none are here. */
+function geoJsonSource(
+  imported: VectorImport,
+  sourceFormat: "gpx" | "kml" | "geojson" | null,
+): string | null {
+  if (sourceFormat === "geojson" && imported.sourcePath) return imported.sourcePath;
+  return imported.path;
+}
+
 export function vectorImportActions(imported: VectorImport): AssetActions {
   const sourceFormat = sourceFormatOf(imported);
   // Derived from the extension table rather than restated: two lists that must
-  // agree are one declaration (mobile CLAUDE.md). GeoJSON is deliberately not
-  // in TRACK_MIME_TYPES, so it falls out here and the attach verb is withheld.
+  // agree are one declaration (mobile CLAUDE.md). GeoJSON now IS in
+  // TRACK_MIME_TYPES — a canyon's way may be any of the three formats an import
+  // can be — so the only thing that withholds the verb here is having no
+  // original to attach.
   const trackMimeType = TRACK_MIME_TYPES.find(
     (mime) => MEDIA_EXTENSION_BY_MIME[mime] === sourceFormat,
   );
@@ -268,21 +285,28 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
   return {
     locatable: true,
     resolveBbox: async () => imported.bbox,
-    rename: (name) => renameVectorImport(imported.id, name),
+    // Renaming an import is a change to the FILE, not to this phone's view of
+    // it, so it goes through the media row and reaches every device.
+    rename: (name) => renameStandaloneMediaLocal(imported.id, name),
     exports: [
       ...originalRow,
-      {
-        title: "Export as GeoJSON",
-        run: () =>
-          exportStoredFile(
-            // A GeoJSON source ships its own bytes; anything else ships the
-            // derived collection, which is all the GeoJSON there is.
-            sourceFormat === "geojson" && imported.sourcePath
-              ? imported.sourcePath
-              : imported.path,
-            exportFilename(imported.name, "geojson", "import"),
-          ),
-      },
+      // A GeoJSON source ships its own bytes; anything else ships the derived
+      // collection, which is all the GeoJSON there is. Withheld entirely when
+      // NEITHER is on this phone — a file that synced as a row but has not been
+      // downloaded here has nothing to export, and the row that can only fail
+      // is absent rather than offered (DESIGN.md §7).
+      ...geoJsonSource(imported, sourceFormat)
+        ? [
+            {
+              title: "Export as GeoJSON",
+              run: () =>
+                exportStoredFile(
+                  geoJsonSource(imported, sourceFormat)!,
+                  exportFilename(imported.name, "geojson", "import"),
+                ),
+            },
+          ]
+        : [],
     ],
     // The ORIGINAL bytes, never the derived GeoJSON — the derivation is lossy
     // (shared/src/vectorImport.ts keeps only `name` and `coordTimes`), which is
@@ -297,24 +321,45 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
           },
         }
       : {}),
-    // The canyon's route slot takes the ORIGINAL bytes, for the same reason a
-    // send does: the derived GeoJSON has thrown away everything but `name` and
-    // `coordTimes`. The filename carries the matching extension because the API
-    // validates the two against each other (validateMediaType).
-    ...(imported.sourcePath && trackMimeType && sourceFormat
-      ? {
-          attachToCanyon: (canyonId: string) =>
-            attachMediaLocal("canyon", canyonId, {
-              uri: `file://${imported.sourcePath}`,
-              mimeType: trackMimeType,
-              fileName: exportFilename(imported.name, sourceFormat, "import"),
-            }),
-        }
-      : {}),
+    // Attaching LINKS this file to the canyon; it does not upload a copy of it.
+    // The import stays in Saved, keeps its identity, and survives both being
+    // replaced and the canyon being deleted — which is why the promise the
+    // panel makes could change from "a copy of the file is attached" to what it
+    // says now (routeSlot.ts, IMPORT_TO_CANYON_PROMISE).
+    attachToCanyon: (canyonId: string) =>
+      linkStandaloneMediaLocal(imported.id, canyonId),
     delete: {
       confirmTitle: "Delete this import?",
-      confirmBody: "The imported features are removed from the device and the map.",
+      // Imports sync now, so this is not a local tidy-up: it removes the file
+      // from the account and therefore from every device. The old copy said
+      // "removed from the device", which after sync would have been a lie.
+      confirmBody:
+        "This deletes the file from your account, so it goes from Logjam Web and your other devices too.",
       run: () => deleteVectorImport(imported.id),
+    },
+  };
+}
+
+/**
+ * A recording made on ANOTHER device: a standalone media row with no local
+ * track behind it, so there are no points here to fly to, resume, or export.
+ *
+ * A deliberately thin descriptor. Everything a recording can do on the phone
+ * that made it needs its point series, and downloading a GPX to rebuild one is
+ * a feature nobody has asked for — what this row is for is knowing the trip is
+ * safe, being able to name it, and being able to get rid of it.
+ */
+export function remoteTrackActions(file: MirrorMedia): AssetActions {
+  const bbox = file.metadata.bbox ?? null;
+  return {
+    locatable: bbox !== null,
+    resolveBbox: async () => bbox,
+    rename: (name) => renameStandaloneMediaLocal(file.id, name),
+    delete: {
+      confirmTitle: "Delete this recording?",
+      confirmBody:
+        "This deletes it from your account, so it goes from Logjam Web and the phone that recorded it too.",
+      run: () => deleteMediaLocal(file),
     },
   };
 }
@@ -451,8 +496,29 @@ export function trackActions(track: Track): AssetActions {
       : {}),
     delete: {
       confirmTitle: "Delete track?",
-      confirmBody: "The recorded points are deleted. This can't be undone.",
-      run: () => deleteTrack(track.id),
+      // A finished recording is backed up to the account as a file, so deleting
+      // it here is not a local tidy-up any more — leaving the backup behind
+      // would put the same trip straight back in this list as a
+      // recorded-elsewhere row, which reads as the delete having failed.
+      confirmBody:
+        "The recorded points and the backup in your account are both deleted. This can't be undone.",
+      run: () => deleteRecordedTrack(track),
     },
   };
+}
+
+/**
+ * Delete a recording and its backup together.
+ *
+ * Order matters: the media row goes FIRST. If that fails the local track
+ * survives with its `mediaId` intact and the delete can be retried; the other
+ * way round loses the points and leaves an orphan file in the account that
+ * nothing on this phone still points at.
+ */
+async function deleteRecordedTrack(track: Track): Promise<void> {
+  if (track.mediaId) {
+    const backup = await getMediaById(track.mediaId);
+    if (backup) await deleteMediaLocal(backup);
+  }
+  await deleteTrack(track.id);
 }

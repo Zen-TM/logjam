@@ -14,9 +14,18 @@ vi.mock("expo-file-system/legacy", () => ({
 }));
 vi.mock("expo-file-system", () => ({ File: class {} }));
 vi.mock("./importsDb", () => ({
-  deleteVectorImportRow: vi.fn(),
-  insertVectorImport: vi.fn(),
+  deleteImportViewState: vi.fn(),
+  getVectorImport: vi.fn(),
+  upsertImportViewState: vi.fn(),
 }));
+// An import is a standalone media row now, so this module reaches the sync
+// layer — which reaches react-native. Stubbed to the two calls it makes.
+vi.mock("../sync/mediaUpload", () => ({
+  createStandaloneMediaLocal: vi.fn(),
+  deleteMediaLocal: vi.fn(),
+}));
+vi.mock("../sync/mirrorStore", () => ({ getMediaById: vi.fn() }));
+vi.mock("../sync/mediaCache", () => ({ ensureDisplayCached: vi.fn() }));
 vi.mock("../offline/localStores", () => ({
   IMPORTS_DIR: "file:///imports/",
   scratchFileUri: vi.fn(async (name: string) => `file:///scratch/${name}`),

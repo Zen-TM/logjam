@@ -26,6 +26,10 @@ const media = (
   mediaType,
   filename,
   color: null,
+  displayName: null,
+  origin: null,
+  metadata: {},
+  fileSizeBytes: null,
   createdAt: "2026-08-22T00:00:00.000Z",
   syncState: "synced",
   localThumbPath: null,
@@ -105,22 +109,26 @@ describe("routeSlotDisplaceConfirm", () => {
     });
   });
 
-  it("says a displaced file is gone for good", () => {
+  it("promises a displaced file is KEPT — it is unlinked, not deleted", () => {
+    // The whole point of linking rather than copying. This sentence used to
+    // say the file would be deleted and that can't be undone, because it was
+    // true: the canyon held a COPY and displacing it destroyed it.
     const confirm = routeSlotDisplaceConfirm("Claustral", {
       kind: "file",
       media: media("m1", "c1", GPX, "old.gpx"),
     });
     expect(confirm?.confirmBody).toBe(
-      "The attached file “old.gpx” will be deleted. That can't be undone.",
+      "“old.gpx” will be unlinked, but the file is kept in Saved.",
     );
+    expect(confirm?.confirmBody).not.toContain("deleted");
   });
 
-  it("names an unnamed attachment rather than saying “null”", () => {
+  it("names an unnamed file rather than saying “null”", () => {
     const confirm = routeSlotDisplaceConfirm("Claustral", {
       kind: "file",
       media: media("m1", "c1", GPX, null),
     });
-    expect(confirm?.confirmBody).toContain("“route”");
+    expect(confirm?.confirmBody).toContain("“Untitled file”");
   });
 });
 

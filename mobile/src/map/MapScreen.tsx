@@ -2049,8 +2049,11 @@ export function MapScreen({
   // independent asset management. This screen keeps only the per-asset
   // visibility toggles (registry/hooks below feed both screens).
   const { imports } = useVectorImports();
+  // `path` null means the file synced as a row but its bytes are not on this
+  // phone yet — there is nothing to draw. Filtered here rather than guarded at
+  // the source below, so the layer indices stay contiguous.
   const visibleImports = showVectorImports
-    ? imports.filter((imported) => imported.visible)
+    ? imports.filter((imported) => imported.visible && imported.path !== null)
     : [];
 
   // Stage 6: GeoPDF imports. Import/resume/account-import/delete relocated

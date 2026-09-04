@@ -24,6 +24,32 @@ export const SAVED_CATEGORIES = [
 export type SavedCategory = (typeof SAVED_CATEGORIES)[number];
 
 /**
+ * Which kinds live in the user's ACCOUNT and which live only on this handset.
+ *
+ * One rule, and it fits in a sentence the user can hold: **things you made
+ * sync, maps you downloaded stay on this device.** Waypoints, routes, imports
+ * and recordings are the user's own records. Regions, LiDAR topos and GeoPDFs
+ * are map material obtained from somewhere else — re-downloadable anywhere,
+ * enormous, and pointless to copy between devices.
+ *
+ * It is a `Record<SavedCategory, …>` so a new category cannot be added without
+ * answering the question; `savedKeys.test.ts` is the other half, pinning the
+ * actual split rather than only its completeness. It lives HERE rather than in
+ * SavedScreen's `CATEGORY_META` because this file is RN-free and therefore
+ * testable, and because the boundary is a fact about the product, not about one
+ * screen's presentation of it.
+ */
+export const CATEGORY_SYNCS: Record<SavedCategory, boolean> = {
+  region: false,
+  overlay: false,
+  geoPdf: false,
+  route: true,
+  waypoint: true,
+  import: true,
+  track: true,
+};
+
+/**
  * A LiDAR topo job's row key.
  *
  * A topo job is many artifacts (one per layer) shown as one card, so its row is

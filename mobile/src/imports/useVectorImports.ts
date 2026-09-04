@@ -7,6 +7,7 @@ import {
   onImportsChanged,
   type VectorImport,
 } from "./importsDb";
+import { ensureImportOnDevice } from "./vectorImports";
 
 export type VectorImportsState = {
   imports: VectorImport[];
@@ -24,7 +25,21 @@ export function useVectorImports(): VectorImportsState {
     const refresh = () => {
       listVectorImports()
         .then((rows) => {
-          if (mounted) setState({ imports: rows, loaded: true });
+          if (!mounted) return;
+          setState({ imports: rows, loaded: true });
+          // A file imported on another device arrives as a row with no bytes.
+          // Fetching them for the ones the user has switched ON is what turns
+          // "it is in your list" into "it is on your map"; the rest wait until
+          // they are asked for. Fire-and-forget: `ensureImportOnDevice` writes
+          // through the registry, which notifies this hook again.
+          for (const row of rows) {
+            if (row.visible && row.path === null) {
+              void ensureImportOnDevice(row.id).catch(() => {
+                // Offline, most often. The row stays listed without a line,
+                // and the next refresh tries again.
+              });
+            }
+          }
         })
         .catch(console.error);
     };

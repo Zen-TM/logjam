@@ -16,7 +16,7 @@ import type { VectorImport } from "../imports/importsDb";
 // about which verbs the descriptor OFFERS, so they are stubbed wholesale.
 vi.mock("../geopdf/importPipeline", () => ({ deleteGeoPdfImport: vi.fn() }));
 vi.mock("../geopdf/geoPdfImportsDb", () => ({ updateGeoPdfImport: vi.fn() }));
-vi.mock("../imports/importsDb", () => ({ renameVectorImport: vi.fn() }));
+vi.mock("../imports/importsDb", () => ({}));
 vi.mock("../imports/vectorImports", () => ({ deleteVectorImport: vi.fn() }));
 vi.mock("../tracks/tracksDb", () => ({
   deleteTrack: vi.fn(),
@@ -31,7 +31,13 @@ vi.mock("../sync/outbox", () => ({
   updateWaypointLocal: vi.fn(),
 }));
 vi.mock("../fileExport", () => ({ exportTrack: vi.fn(), exportStoredFile: vi.fn() }));
-vi.mock("../sync/mediaUpload", () => ({ attachMediaLocal: vi.fn() }));
+vi.mock("../sync/mediaUpload", () => ({
+  attachMediaLocal: vi.fn(),
+  deleteMediaLocal: vi.fn(),
+  linkStandaloneMediaLocal: vi.fn(),
+  renameStandaloneMediaLocal: vi.fn(),
+}));
+vi.mock("../sync/mirrorStore", () => ({ getMediaById: vi.fn() }));
 // Both reach expo-file-system, whose Flow sources vitest cannot parse — the
 // same wall shareRowSubtitle.ts and map/elevationSources.ts were split out to
 // stay behind.
@@ -250,20 +256,20 @@ describe("the share / send-a-copy verb matrix", () => {
   // A canyon's route slot takes TRACK media and nothing else, so this verb has
   // a narrower gate than Send a copy over the very same file — the row that can
   // only fail is absent, not offered (DESIGN.md §7).
-  it("gives an import with a GPX or KML original Attach to a canyon", () => {
-    for (const sourcePath of ["/imports/i1-source.gpx", "/imports/i1-source.kml"]) {
+  it("gives EVERY import Attach to a canyon — attaching links the row", () => {
+    for (const sourcePath of [
+      "/imports/i1-source.gpx",
+      "/imports/i1-source.kml",
+      // GeoJSON joined TRACK_MIME_TYPES when standalone imports became media —
+      // a canyon's way may be any format an import may be.
+      "/imports/i1-source.geojson",
+      // No bytes on this phone at all: a file that synced from another device
+      // and has not been downloaded here. Linking is a row change, so there is
+      // nothing for it to need locally.
+      null,
+    ]) {
       expect(vectorImportActions(importRow({ sourcePath })).attachToCanyon).toBeDefined();
     }
-  });
-
-  it("withholds Attach to a canyon on a GeoJSON import and on one with no original", () => {
-    expect(
-      vectorImportActions(importRow({ sourcePath: "/imports/i1-source.geojson" }))
-        .attachToCanyon,
-    ).toBeUndefined();
-    expect(
-      vectorImportActions(importRow({ sourcePath: null })).attachToCanyon,
-    ).toBeUndefined();
   });
 
   it("never offers Attach to a canyon on the kinds that are not files", () => {

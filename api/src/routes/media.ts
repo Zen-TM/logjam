@@ -41,6 +41,9 @@ import {
   type MediaOrigin,
   pickNextTrackColor,
   MEDIA_SIZE_CAPS,
+  MEDIA_DISPLAY_NAME_MAX,
+  readMediaMetadata,
+  type StandaloneFile,
   MEDIA_EXTENSION_BY_MIME,
   TRACK_MIME_TYPES,
   type MediaCategory,
@@ -149,6 +152,22 @@ async function assertCanyonTrackSlotFree(
     },
   });
   if (existing > 0) throw new AppError(409, "This canyon already has a track");
+}
+
+/**
+ * A user-supplied label, or null. Capped like a trip title: an uncapped label
+ * persists something the rename endpoint would then refuse, stranding the file
+ * at a name its own edit screen cannot save.
+ */
+function parseMediaDisplayName(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") throw new AppError(400, "displayName must be a string");
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > MEDIA_DISPLAY_NAME_MAX) {
+    throw new AppError(400, `displayName must be ${MEDIA_DISPLAY_NAME_MAX} characters or fewer`);
+  }
+  return trimmed;
 }
 
 /** parseMediaMetadata, with its shape complaint turned into a 400. The message
@@ -387,6 +406,7 @@ router.post(
             linkedType,
             linkedId,
             origin,
+            displayName: parseMediaDisplayName(body.displayName),
             metadata,
             s3KeyDisplay: displayKey,
             s3KeyThumbnail: expectThumb ? thumbnailKey : null,
@@ -517,6 +537,81 @@ router.post(
 
 // DELETE /media/:id — remove a single media item (owner only). Bulk/cascade
 // deletes on canyon/trip/account live in their respective routes.
+// GET /media/standalone — the caller's own imports and recorded tracks.
+//
+// For the web app, which is not delta-synced and so has no other way to see a
+// file that hangs off no canyon. Metadata only: presigning every row would put
+// the whole list through the egress meter on page load, whether or not anything
+// was opened. Content comes from POST /media/download-urls, which is gated.
+//
+// Owner-scoped by construction — a standalone file is visible to nobody else,
+// and one LINKED to a canyon is reported here for its owner only (a sharee
+// sees it as that canyon's way, through the canyon).
+router.get(
+  "/standalone",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const rows = await prisma.media.findMany({
+      where: { ownerId: user.id, origin: { not: null } },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+    });
+    const files: StandaloneFile[] = rows.flatMap((row) => {
+      if (!isMediaOrigin(row.origin)) return [];
+      return [
+        {
+          id: row.id,
+          mediaType: row.mediaType,
+          filename: row.filename,
+          displayName: row.displayName,
+          fileSizeBytes: Number(row.fileSizeBytes),
+          color: row.color,
+          origin: row.origin,
+          metadata: readMediaMetadata(row.origin, row.metadata),
+          linkedCanyonId: canyonIdOfMedia(row),
+          createdAt: row.createdAt.toISOString(),
+          updatedAt: row.updatedAt.toISOString(),
+        },
+      ];
+    });
+    res.json(files);
+  },
+);
+
+// PATCH /media/:id — rename a standalone file.
+//
+// The label has to sync or it diverges per device, which is the inconsistency
+// this whole change exists to remove. Only `displayName` is editable: the
+// filename is what the download is called and what pins the track format, and
+// nothing about the bytes can change once they are confirmed.
+router.patch(
+  "/:id",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const id = getParam(req.params.id);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    if (!("displayName" in body)) {
+      throw new AppError(400, "displayName is required");
+    }
+    const displayName = parseMediaDisplayName(body.displayName);
+
+    // Owner-scoped; a foreign id gets the same 404 a missing one gets (the
+    // anti-oracle this file's other handlers argue).
+    const media = await prisma.media.findFirst({ where: { id, ownerId: user.id } });
+    if (!media) throw new AppError(404, "Media not found");
+    if (media.origin === null) {
+      throw new AppError(400, "Only an import or a recorded track can be renamed");
+    }
+
+    const updated = await prisma.media.update({
+      where: { id },
+      data: { displayName },
+    });
+    res.json(await toMediaItem(updated));
+  },
+);
+
 // PATCH /media/:id/link — move a standalone file between "nobody" and a canyon.
 //
 // This is what makes a canyon's way a LINK rather than a copy. Attaching an

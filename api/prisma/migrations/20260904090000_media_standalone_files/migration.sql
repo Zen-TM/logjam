@@ -29,3 +29,8 @@ ALTER TABLE "media" ADD COLUMN "updated_at" TIMESTAMP(3);
 UPDATE "media" SET "updated_at" = "created_at" WHERE "updated_at" IS NULL;
 ALTER TABLE "media" ALTER COLUMN "updated_at" SET NOT NULL;
 ALTER TABLE "media" ALTER COLUMN "updated_at" SET DEFAULT CURRENT_TIMESTAMP;
+
+-- The user-facing label of a standalone file. `filename` cannot serve: it is
+-- the file's own name, must keep its extension, and a rename must not change
+-- what the download is called. Null falls back to the filename.
+ALTER TABLE "media" ADD COLUMN "display_name" TEXT;

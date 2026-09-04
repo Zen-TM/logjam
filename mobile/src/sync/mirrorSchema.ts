@@ -187,23 +187,41 @@ export const SYNC_TABLES: readonly TableSchema[] = [
     indexes: [{ name: "routes_canyon", on: "routes(canyon_id)" }],
   },
   {
+    // Every file this account owns. `linked_id` is NULL on a standalone file
+    // (`linked_type = 'none'`): an import the user brought in or a track they
+    // recorded, which belongs to no canyon. That is the row that makes those
+    // two things sync at all.
+    //
+    // `metadata_json` carries the stats (bbox, distance, counts) so the Saved
+    // list can render a file this device has never downloaded — the blob is
+    // fetched on demand, the row always arrives. `local_display_path` NULL
+    // therefore means "not on this phone", not "broken".
     name: "media",
     kind: "mirror",
     columns: {
       id: "TEXT PRIMARY KEY",
       linked_type: "TEXT NOT NULL",
-      linked_id: "TEXT NOT NULL",
+      linked_id: "TEXT",
       media_type: "TEXT NOT NULL",
       filename: "TEXT",
+      display_name: "TEXT",
       file_size_bytes: "TEXT",
       color: "TEXT",
+      origin: "TEXT",
+      metadata_json: "TEXT",
       created_at: "TEXT",
+      updated_at: "TEXT",
       extra_json: "TEXT",
       sync_state: "TEXT NOT NULL DEFAULT 'synced'",
       local_display_path: "TEXT",
       local_thumb_path: "TEXT",
     },
-    indexes: [{ name: "media_linked", on: "media(linked_type, linked_id)" }],
+    indexes: [
+      { name: "media_linked", on: "media(linked_type, linked_id)" },
+      // The Saved tab's two standalone lists, which read by origin rather than
+      // by parent.
+      { name: "media_origin", on: "media(origin)" },
+    ],
   },
   {
     name: "canyon_shares",

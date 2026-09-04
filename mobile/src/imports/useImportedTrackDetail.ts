@@ -34,6 +34,15 @@ export function useImportedTrackDetail(
       setLoading(false);
       return;
     }
+    // No bytes on this phone yet — the row synced ahead of its file. Not an
+    // error: nothing to read until the user downloads it.
+    if (imported.path === null) {
+      setDetail(null);
+      setLine([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     let current = true;
     setLoading(true);
     setError(null);

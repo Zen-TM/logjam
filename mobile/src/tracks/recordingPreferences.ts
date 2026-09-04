@@ -157,3 +157,31 @@ export function readFixRate(): FixRate {
 export function writeFixRate(rate: FixRate): boolean {
   return writePref(FIX_RATE_KEY, rate);
 }
+
+// --- The one-time "your recordings are backed up" notice ---
+//
+// A recording is precise location history, and until this change it never left
+// the phone. Finished tracks now serialise to a GPX standalone file that syncs
+// with the account, which is a deliberate decision the user is told about ONCE
+// rather than having it switched on silently behind them.
+//
+// Device-scoped like the two knobs above, and for the same reason: it records
+// that this handset has said it, not something about the account.
+
+const BACKUP_NOTICE_KEY = "trackBackupNoticeShown";
+
+/**
+ * True until the notice has been shown once.
+ *
+ * A failed write (`writePref` returns false on a device with no preference
+ * store) means the notice is shown again next time — annoying, and the honest
+ * failure: the alternative is a "shown" flag that only exists in memory and
+ * silently drops the notice on a phone that could never record having seen it.
+ */
+export function needsTrackBackupNotice(): boolean {
+  return readPref(BACKUP_NOTICE_KEY) !== "yes";
+}
+
+export function markTrackBackupNoticeShown(): boolean {
+  return writePref(BACKUP_NOTICE_KEY, "yes");
+}

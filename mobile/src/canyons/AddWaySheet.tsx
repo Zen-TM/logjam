@@ -40,7 +40,8 @@ import { formatDistanceM, messageFromError, routeLengthM } from "@logjam/shared"
 
 import { assetHue, fontSize, spacing, theme } from "../theme";
 import { BottomSheet, Row, SectionHeader, TextField } from "../ui";
-import { attachMediaLocal } from "../sync/mediaUpload";
+import { linkStandaloneMediaLocal } from "../sync/mediaUpload";
+import { importVectorSource } from "../imports/vectorImports";
 import { updateRouteLocal } from "../sync/outbox";
 import { useMirrorRoutes } from "../sync/useSyncQueries";
 import type { MirrorMedia } from "../sync/mirrorStore";
@@ -204,16 +205,23 @@ export function AddWaySheet({
       return;
     }
     // The confirm comes AFTER the file is chosen: a user who backs out of the
-    // picker must not have agreed to delete anything.
+    // picker must not have agreed to displace anything.
+    //
+    // A picked file becomes an IMPORT and is then linked, rather than being
+    // uploaded straight onto the canyon. One kind of file, one row, one place
+    // it lives — it appears in Saved like every other import, survives being
+    // replaced here, and can be put on another canyon later. The old path
+    // uploaded canyon-only media that existed nowhere the user could see.
     fill("file", async () => {
-      await attachMediaLocal("canyon", canyonId, {
-        uri: asset.uri,
-        mimeType,
-        fileName: asset.name,
-      });
-      return "Route file attached to this canyon.";
+      const record = await importVectorSource(
+        asset.uri,
+        asset.name,
+        imports?.length ?? 0,
+      );
+      await linkStandaloneMediaLocal(record.id, canyonId);
+      return "Route file linked to this canyon.";
     });
-  }, [canyonId, fill, onError]);
+  }, [canyonId, fill, imports, onError]);
 
   const drawnRoutes = (routes.data ?? [])
     // A route shared with you belongs to someone else; the API refuses the

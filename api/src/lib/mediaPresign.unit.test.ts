@@ -26,6 +26,7 @@ function imageRow(overrides: Partial<MediaRow> = {}): MediaRow {
     s3KeyThumbnail: "thumb/m1.jpg",
     color: null,
     origin: null,
+    displayName: null,
     metadata: {},
     ...overrides,
   };

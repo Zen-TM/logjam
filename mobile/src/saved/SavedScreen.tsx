@@ -44,6 +44,7 @@ import {
   BASEMAP_CATALOG,
   TOPO_LAYERS,
   formatDistanceM,
+  mediaDisplayName,
   isValidLatitude,
   isValidLongitude,
   routeLengthM,
@@ -56,6 +57,7 @@ import {
 import { apiFetch } from "../api/apiFetch";
 import {
   savedOverlayKey,
+  CATEGORY_SYNCS,
   savedRegionKey,
   type SavedCategory,
 } from "./savedKeys";
@@ -135,6 +137,7 @@ import { ImportOptionsSheet } from "../imports/ImportOptionsSheet";
 import {
   SHARED_READ_ONLY_HINT,
   geoPdfActions,
+  remoteTrackActions,
   trackActions,
   routeActions,
   vectorImportActions,
@@ -142,6 +145,7 @@ import {
   type AssetActions,
 } from "./assetActions";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
+import { useStandaloneTrackMedia } from "../tracks/useRemoteTracks";
 import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { useTracks } from "../tracks/useTracks";
 import type { Bbox } from "./bboxOfPoints";
@@ -203,6 +207,10 @@ export type SavedItemReveal = {
   key: string;
 };
 
+// Whether a kind syncs is NOT declared here — it is `CATEGORY_SYNCS` in
+// `savedKeys.ts`, which is RN-free and has a test pinning the split. This
+// screen is where it is SAID (the hero line below, and the per-row pill); the
+// rule itself is a fact about the product rather than about this screen.
 const CATEGORY_META: Record<
   Category,
   {
@@ -222,13 +230,14 @@ const CATEGORY_META: Record<
   overlay: { label: "LiDAR topo", plural: "LiDAR Topos", icon: "layers" },
   geoPdf: { label: "GeoPDF", plural: "GeoPDFs", icon: "file-text" },
   // Routes you drew, as opposed to files you brought in. Kept a separate
-  // category rather than folded into "import": they behave differently (a route
-  // is editable and syncs; an import is an opaque file on this device), and a
-  // list that mixes them would need to explain which rows can be edited.
+  // category rather than folded into "import": a route is editable in place and
+  // an import is an opaque file, and a list that mixes them would need to
+  // explain which rows can be edited. (Both sync now — that used to be the
+  // other half of the distinction, and is not any more.)
   route: { label: "Route", plural: "Routes", icon: "edit-3" },
-  // Marked points. Like routes they are synced records rather than files on
-  // this device, and they are the one kind here that can be SEARCHED and
-  // filtered by tag — see the waypoint filter rail below.
+  // Marked points. Like routes they are records rather than files, and they are
+  // the one kind here that can be SEARCHED and filtered by tag — see the
+  // waypoint filter rail below.
   waypoint: { label: "Waypoint", plural: "Waypoints", icon: "flag" },
   // NOT named for a format ("GPX & KML") and not for lines ("Ways"): a row
   // here is a whole FILE the user brought in from another app, and it may hold
@@ -907,6 +916,7 @@ export function SavedScreen({
   // --- Tracks ---
   const { tracks } = useTracks();
   const savedTracks = tracks.filter((track) => track.state === "done");
+  const remoteTracks = useStandaloneTrackMedia();
 
   // --- Unified on-device item list ---
   const items = useMemo<SavedItem[]>(() => {
@@ -1157,6 +1167,32 @@ export function SavedScreen({
       });
     }
 
+    // Recordings made on ANOTHER device. They arrive as standalone media rows
+    // with no local track and no points, so nothing above would list them —
+    // which would make "your recordings are backed up" true and invisible at
+    // the same time.
+    //
+    // Deduped against the local recordings by `track.mediaId`, which is exactly
+    // what that column is for: the same trip must not appear twice because this
+    // phone happens to hold both halves of it.
+    const localTrackMediaIds = new Set(
+      savedTracks.map((track) => track.mediaId).filter((id): id is string => id !== null),
+    );
+    for (const file of remoteTracks) {
+      if (localTrackMediaIds.has(file.id)) continue;
+      rows.push({
+        key: file.id,
+        category: "track",
+        title: mediaDisplayName(file),
+        subtitle:
+          file.metadata.distanceM != null && file.metadata.startedAt
+            ? `${formatDistanceM(file.metadata.distanceM)} · recorded ${formatDay(file.metadata.startedAt)}`
+            : "Recorded on another device",
+        sizeBytes: file.fileSizeBytes ?? 0,
+        ...remoteTrackActions(file),
+      });
+    }
+
     // Every row is now searchable by name (item 8) — the waypoint rows above
     // already set a richer haystack (name + notes + tags, notes deliberately
     // searchable though never shown), so this only fills the other six kinds.
@@ -1164,7 +1200,16 @@ export function SavedScreen({
       if (!row.search) row.search = { haystack: row.title.toLowerCase(), tags: [] };
     }
 
-    return rows;
+    // The sync boundary, said on the row rather than in a settings screen the
+    // user would have to go and find. Applied centrally so no builder above has
+    // to remember it, and only where the row has nothing more specific to say —
+    // a failed GeoPDF import has a more urgent thing to report than where it
+    // lives.
+    return rows.map((row) =>
+      CATEGORY_SYNCS[row.category] || row.pill
+        ? row
+        : { ...row, pill: { label: "This device", tone: "muted" as const } },
+    );
   }, [
     artifacts,
     geoPdfBusy,
@@ -1178,6 +1223,7 @@ export function SavedScreen({
     savedOverlayArtifacts,
     regionArtifacts,
     savedTracks,
+    remoteTracks,
   ]);
 
   const counts = useMemo(() => {
@@ -1640,6 +1686,14 @@ export function SavedScreen({
         action={<Button label="Add" icon="plus" compact onPress={() => setAddSheetOpen(true)} />}
       >
         <CapacityBar segments={segments} />
+        {/* The rule in one line, under the breakdown it explains. Without it
+            the bar mixes two very different kinds of storage — files that come
+            back on a new phone, and files that do not — with nothing saying
+            which is which. */}
+        <Text style={styles.syncRule}>
+          Waypoints, routes, imports and recordings are backed up to your
+          account. Maps you downloaded stay on this device.
+        </Text>
         {/* Offline is a normal state here — everything already on the device
             still works — so it sits beside what is still waiting to leave
             rather than reading as an error. */}
@@ -2619,6 +2673,12 @@ const styles = StyleSheet.create({
   // label, and search input → tag chips. Without it the controls read as one
   // dense block.
   searchField: { paddingTop: spacing(1.5), paddingRight: spacing(2) },
+  syncRule: {
+    color: theme.textMuted,
+    fontSize: fontSize.xs,
+    lineHeight: fontSize.xs * 1.4,
+    paddingTop: spacing(1),
+  },
   waypointTags: { paddingTop: spacing(1.5) },
   // Dims the tag rail while selecting, same treatment as TextField's own
   // `disabled` state — a control that still looks pressable but silently

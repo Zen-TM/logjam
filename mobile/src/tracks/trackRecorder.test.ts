@@ -56,6 +56,14 @@ vi.mock("./sensorLog", () => ({
   stopSensorLog: () => stopSensorLog(),
 }));
 
+// The finish path now serialises the recording into a standalone media row.
+// That pulls the whole sync/upload stack, none of which exists in this process
+// — and none of which these tests are about. `trackBackup.test.ts` covers it.
+const backUpFinishedTrack = vi.fn(async () => "media-1");
+vi.mock("./trackBackup", () => ({
+  backUpFinishedTrack: (...args: unknown[]) => backUpFinishedTrack(...(args as [])),
+}));
+
 vi.mock("./recordingPreferences", () => ({
   FIX_RATE_OPTIONS: { balanced: { timeInterval: 30_000 } },
   readFixRate: () => "balanced",

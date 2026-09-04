@@ -47,7 +47,7 @@ import { getOfflineDb, notifyRegistryChanged } from "./registryDb";
 /** Every table in `logjam-offline.db`. */
 const OFFLINE_TABLES = [
   "map_artifact",
-  "vector_import",
+  "import_view_state",
   "geo_pdf_import",
   "track_point",
   "track_point_rejected",

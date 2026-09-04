@@ -31,6 +31,7 @@ export type MediaRow = {
   s3KeyThumbnail: string | null;
   color: string | null;
   origin: string | null;
+  displayName: string | null;
   metadata: unknown;
 };
 
@@ -79,6 +80,7 @@ export async function toMediaItem(row: MediaRow): Promise<MediaItem> {
     thumbnailUrl,
     color: row.color,
     origin: isMediaOrigin(row.origin) ? row.origin : null,
+    displayName: row.displayName,
     metadata: readMediaMetadata(row.origin, row.metadata),
   };
 }

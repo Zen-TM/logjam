@@ -148,6 +148,52 @@ export interface MediaItem {
   color: string | null;
   /** How a standalone file came to exist; null for canyon/trip attachments. */
   origin: MediaOrigin | null;
+  /** User-facing label; null falls back to `filename`. See mediaDisplayName. */
+  displayName: string | null;
   /** Row-level stats — see shared/src/mediaMetadata.ts. `{}` when origin is null. */
   metadata: MediaMetadata;
+}
+
+/**
+ * What to CALL a file in the UI.
+ *
+ * One derivation, in the shape the trip-title rule already takes: the user's
+ * own label if there is one, else the file's name. Never store the result —
+ * `displayName` stays null until something sets it, so a fallback that got
+ * persisted would freeze a name the user never chose.
+ */
+export function mediaDisplayName(media: {
+  displayName?: string | null;
+  filename?: string | null;
+}): string {
+  const label = media.displayName?.trim();
+  if (label) return label;
+  return media.filename?.trim() || "Untitled file";
+}
+
+/** Cap for a user-supplied media label, matching the trip-title cap. */
+export const MEDIA_DISPLAY_NAME_MAX = 200;
+
+/**
+ * A standalone file as listed for a client that is NOT delta-synced (the web
+ * app). Metadata only — no presigned URLs.
+ *
+ * Deliberately without them: minting a URL per row would put the whole list
+ * through the egress meter every time the page loaded, whether or not anything
+ * was opened. Content comes from POST /media/download-urls, which is where the
+ * gate lives.
+ */
+export interface StandaloneFile {
+  id: string;
+  mediaType: string;
+  filename: string;
+  displayName: string | null;
+  fileSizeBytes: number;
+  color: string | null;
+  origin: MediaOrigin;
+  metadata: MediaMetadata;
+  /** The canyon it is linked to as that canyon's way, or null. */
+  linkedCanyonId: string | null;
+  createdAt: string;
+  updatedAt: string;
 }

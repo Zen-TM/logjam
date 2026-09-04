@@ -616,6 +616,7 @@ router.get(
           fileSizeBytes: String(row.fileSizeBytes),
           color: row.color,
           origin: row.origin,
+          displayName: row.displayName,
           // Row-level stats, so the other device can LIST an import or a
           // recording without downloading its blob (§7.3).
           metadata: readMediaMetadata(row.origin, row.metadata),

@@ -11,13 +11,26 @@ import * as FileSystem from "expo-file-system/legacy";
 import { File } from "expo-file-system";
 import { unzipSync } from "fflate";
 
-import { parseVectorImport, IMPORT_ERRORS, pickTrackColorByIndex } from "@logjam/shared";
+import {
+  parseVectorImport,
+  IMPORT_ERRORS,
+  pickTrackColorByIndex,
+  MEDIA_EXTENSION_BY_MIME,
+  TRACK_MIME_TYPES,
+} from "@logjam/shared";
 
 import {
-  deleteVectorImportRow,
-  insertVectorImport,
+  deleteImportViewState,
+  getVectorImport,
+  upsertImportViewState,
   type VectorImport,
 } from "./importsDb";
+import {
+  createStandaloneMediaLocal,
+  deleteMediaLocal,
+} from "../sync/mediaUpload";
+import { getMediaById } from "../sync/mirrorStore";
+import { ensureDisplayCached } from "../sync/mediaCache";
 import { IMPORTS_DIR } from "../offline/localStores";
 import { importDisplayName } from "./importName";
 import { stageIncomingFile } from "./stagedFile";
@@ -149,9 +162,13 @@ async function parseAndStore(
 
   const dir = IMPORTS_DIR;
   await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+  // A staging id for the two files. The row's real identity is the media id,
+  // minted by createStandaloneMediaLocal below — the files are named from this
+  // one because they have to exist before there is a row to name them after.
   const id = randomId();
   const fileUri = `${dir}${id}.geojson`;
-  const sourceUriStored = `${dir}${id}-source.${sourceExtension(sourceName)}`;
+  const format = sourceExtension(sourceName);
+  const sourceUriStored = `${dir}${id}-source.${format}`;
   const collection = JSON.stringify({
     type: "FeatureCollection",
     features: parsed.features,
@@ -167,29 +184,40 @@ async function parseAndStore(
     // were; keeping the zip needs a binary-safe SAF write, do it when someone
     // asks for those assets back.
     await FileSystem.writeAsStringAsync(sourceUriStored, text);
-    const record: VectorImport = {
-      id,
-      // File name or content name — the rule, and why, is `./importName.ts`.
-      name: importDisplayName({
-        contentName: parsed.name ?? null,
-        filename: displayName,
-        sentBy,
-      }),
+
+    // The ORIGINAL is what uploads, never the GeoJSON beside it: the
+    // derivation is lossy (only `name` and `coordTimes` survive), so a second
+    // device rebuilding from it would hold strictly less than this one does.
+    // The GeoJSON stays a local convenience, re-derivable from the bytes.
+    const name = importDisplayName({
+      contentName: parsed.name ?? null,
+      filename: displayName,
+      sentBy,
+    });
+    const mediaId = await createStandaloneMediaLocal({
+      filePath: sourceUriStored,
+      filename: `${name}.${format}`,
+      mediaType: MIME_BY_FORMAT[format],
+      origin: "import",
+      displayName: name,
+      // A local guess so the line draws before the upload lands; the server
+      // reassigns authoritatively at confirm (see finalizeConfirmed).
       color: pickImportColor(existingCount),
+      metadata: {
+        bbox: parsed.bbox,
+        featureCount: parsed.features.length,
+        positionCount: parsed.stats.positions,
+      },
+    });
+    await upsertImportViewState({
+      mediaId,
       visible: true,
       path: fileUri.replace(/^file:\/\//, ""),
       sourcePath: sourceUriStored.replace(/^file:\/\//, ""),
       sentBy,
-      bbox: parsed.bbox,
-      featureCount: parsed.features.length,
-      positionCount: parsed.stats.positions,
-      // Both files are on the device, so both count against the Saved tab's
-      // capacity meter — reporting only the GeoJSON would under-report by
-      // roughly the size of the file the user picked.
-      sizeBytes: collection.length + text.length,
-      createdAt: new Date().toISOString(),
-    };
-    await insertVectorImport(record);
+    });
+    const record = await getVectorImport(mediaId);
+    if (!record) throw new Error("Import row vanished immediately after writing it");
     return record;
   } catch (err) {
     await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => {});
@@ -199,6 +227,15 @@ async function parseAndStore(
     throw err;
   }
 }
+
+/**
+ * Extension → MIME, inverted from the shared table rather than restated: two
+ * lists that must agree are one declaration (root CLAUDE.md). A format the
+ * server does not accept cannot appear here, because it would have no entry.
+ */
+const MIME_BY_FORMAT: Record<"gpx" | "kml" | "geojson", string> = Object.fromEntries(
+  TRACK_MIME_TYPES.map((mime) => [MEDIA_EXTENSION_BY_MIME[mime], mime]),
+) as Record<"gpx" | "kml" | "geojson", string>;
 
 /**
  * The stored original's extension: the picked file's own, narrowed to the
@@ -235,13 +272,69 @@ export async function importVectorFileFromPicker(
   return { status: "imported", record };
 }
 
-/** Delete an import: row + stored GeoJSON + the original it was derived from. */
+/**
+ * Make sure an import's bytes are on THIS phone, deriving the GeoJSON the map
+ * draws from.
+ *
+ * A file imported on another device arrives as a row long before its bytes do
+ * (§7.3: rows sync eagerly, blobs are fetched on demand), so this is the step
+ * between "it is in your list" and "it is on your map". Returns the GeoJSON
+ * path, or null when the file could not be fetched — offline, most often,
+ * which is not an error worth a dialog on a screen full of other files.
+ *
+ * Idempotent and safe to call on every render pass: it short-circuits the
+ * moment the derived file exists.
+ */
+export async function ensureImportOnDevice(mediaId: string): Promise<string | null> {
+  const existing = await getVectorImport(mediaId);
+  if (!existing) return null;
+  if (existing.path) {
+    const info = await FileSystem.getInfoAsync(`file://${existing.path}`);
+    if (info.exists) return existing.path;
+  }
+
+  // The ORIGINAL is the media blob; the GeoJSON is derived from it here, the
+  // same way the importing device derived its own.
+  const sourceUri = await ensureDisplayCached(mediaId);
+  if (!sourceUri) return null;
+
+  const media = await getMediaById(mediaId);
+  if (!media) return null;
+  const text = await FileSystem.readAsStringAsync(sourceUri);
+  const parsed = parseVectorImport(media.filename ?? "import.geojson", text);
+
+  await FileSystem.makeDirectoryAsync(IMPORTS_DIR, { intermediates: true });
+  const fileUri = `${IMPORTS_DIR}${mediaId}.geojson`;
+  await FileSystem.writeAsStringAsync(
+    fileUri,
+    JSON.stringify({ type: "FeatureCollection", features: parsed.features }),
+  );
+  const path = fileUri.replace(/^file:\/\//, "");
+  await upsertImportViewState({
+    mediaId,
+    visible: existing.visible,
+    path,
+    sourcePath: sourceUri.replace(/^file:\/\//, ""),
+    sentBy: existing.sentBy,
+  });
+  return path;
+}
+
+/**
+ * Delete an import everywhere: the media row (which syncs, so it goes from
+ * every device), this phone's view state, and the derived GeoJSON.
+ *
+ * The ORIGINAL is not deleted here — it is the media row's cached blob, and
+ * `deleteMediaLocal`'s op owns unlinking it along with the server row. Deleting
+ * it twice is harmless; deleting it here and then failing to delete the row
+ * would leave an upload pointing at bytes that are gone.
+ */
 export async function deleteVectorImport(id: string): Promise<void> {
-  const record = await deleteVectorImportRow(id);
-  if (!record) return;
-  for (const path of [record.path, record.sourcePath]) {
-    if (!path) continue;
-    await FileSystem.deleteAsync(`file://${path}`, {
+  const media = await getMediaById(id);
+  const view = await deleteImportViewState(id);
+  if (media) await deleteMediaLocal(media);
+  if (view?.path) {
+    await FileSystem.deleteAsync(`file://${view.path}`, {
       idempotent: true,
     }).catch(() => {});
   }
