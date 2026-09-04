@@ -1011,6 +1011,9 @@ describe("queueAutoExports", () => {
       { name: "contours", cogKey: null, pmtilesKey: "k/contours.pmtiles" },
     ],
     vectorStyleSnapshot: { contours: {}, features: {} },
+    // The auto-export path spends the owner's monthly credit allowance, so the
+    // launcher needs it on the row (see queueAutoExports' select).
+    user: { monthlyComputeCredits: 1200 },
   };
 
   it("claims the job and launches an export for an enabled config", async () => {

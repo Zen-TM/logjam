@@ -16,7 +16,17 @@ model User {
   vectorStyle          Json?               @map("vector_style")
   storageUsedBytes     BigInt              @default(0) @map("storage_used_bytes")
   storageQuotaBytes    BigInt              @default(5368709120) @map("storage_quota_bytes")
-  monthlyTileQuota     Int                 @default(40) @map("monthly_tile_quota")
+  // Monthly worker allowance in credits (= vCPU-minutes; see
+  // shared/src/computeCredits.ts). Replaced monthly_tile_quota, which only
+  // constrained one of the three workers and did not measure cost.
+  monthlyComputeCredits   Int      @default(1200) @map("monthly_compute_credits")
+  // Monthly S3 download allowance. usedBytes is written by the egress sweeper
+  // from S3 access logs, and periodStart is what makes the reset lazy: the
+  // sweeper zeroes usedBytes when it sees periodStart belongs to a past month,
+  // so no scheduled job is needed to roll everyone over at midnight on the 1st.
+  monthlyEgressQuotaBytes BigInt   @default(53687091200) @map("monthly_egress_quota_bytes")
+  monthlyEgressUsedBytes  BigInt   @default(0) @map("monthly_egress_used_bytes")
+  egressPeriodStart       DateTime @default(now()) @map("egress_period_start")
   consentedAt          DateTime?           @map("consented_at")
   consentVersion       String?             @map("consent_version")
   createdAt            DateTime            @default(now()) @map("created_at")
@@ -605,4 +615,23 @@ model FileSendRecipient {
   @@unique([fileSendId, userId])
   @@index([userId, status])
   @@map("file_send_recipients")
+}
+
+// How far the egress sweeper has read into each S3 server-access-log prefix.
+//
+// One row per log prefix ("media/", "topo-jobs/"), holding the last object key
+// consumed. Access-log keys embed a UTC timestamp and therefore sort
+// lexicographically by time, so resuming is a ListObjectsV2 with StartAfter —
+// no per-object bookkeeping table that would grow without bound.
+//
+// KNOWN CEILING: S3 access-log delivery is best-effort and can be out of order,
+// so a record delivered under a key that sorts BEFORE lastKey is never counted.
+// That under-counts egress slightly and never over-counts, which is the right
+// direction for a limit that refuses service — see lib/egressMeter.ts.
+model EgressLogCursor {
+  prefix    String   @id
+  lastKey   String   @map("last_key")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("egress_log_cursors")
 }

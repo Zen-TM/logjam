@@ -107,6 +107,15 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         };
       }
       return { text: "GeoPDF ready" };
+    // Egress has no meter in the app - the allowance sits far above real use,
+    // so these two rows are its entire user-facing surface.
+    case "egress_quota_warning":
+      return { text: "Approaching your monthly download limit" };
+    case "egress_quota_exceeded":
+      return {
+        text: "Monthly download limit reached",
+        warning: "Downloads resume when the limit resets next month.",
+      };
     default:
       return { text: "Notification" };
   }
@@ -190,6 +199,9 @@ function notificationKind(n: TNotification): NotificationKind {
       return "problem";
     case "geo_pdf_complete":
       return failed ? "problem" : "geoPdf";
+    case "egress_quota_warning":
+    case "egress_quota_exceeded":
+      return "problem";
     default:
       return "people";
   }

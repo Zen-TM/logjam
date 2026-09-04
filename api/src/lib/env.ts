@@ -115,6 +115,31 @@ const baseSchema = z.object({
   // Falls back to this cold-start rate below MIN_SAMPLES.
   GEO_PDF_ESTIMATE_DEFAULT_SECONDS_PER_MEGAPIXEL: z.coerce.number().positive().default(6),
   GEO_PDF_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
+  // Account-wide ceiling on concurrently running worker vCPUs
+  // (lib/fargateCapacity.ts). Sits BELOW the AWS Fargate On-Demand vCPU
+  // service quota (30 in ap-southeast-2) so excess load becomes a retryable
+  // 429 rather than a RunTask placement failure, which this codebase treats as
+  // a job failure. The 6 vCPU of headroom absorbs the api_migrate one-shot and
+  // any task ECS has not finished reaping. Raise this only alongside the AWS
+  // quota; 0 disables the check.
+  MAX_CONCURRENT_WORKER_VCPUS: z.coerce.number().int().nonnegative().default(24),
+  // Egress meter (lib/egressMeter.ts). The sweep rides the topo reaper's
+  // existing interval rather than owning a timer — it is incremental and does
+  // nothing when no new log objects have been delivered.
+  //
+  // Empty bucket name disables the sweep, which also means the monthly egress
+  // cap stops advancing and therefore stops biting. Local dev has no access
+  // logs and leaves it empty.
+  S3_BUCKET_ACCESS_LOGS: z.string().default(""),
+  // Substring identifying the API's own IAM principal in an access log's
+  // requester field. Only requests signed by the API are user downloads; the
+  // workers' same-region reads and CloudFront's basemap reads share the same
+  // buckets and must not be charged to anyone. An empty value matches nothing
+  // (fail closed — under-count rather than bill users for worker traffic).
+  EGRESS_API_REQUESTER_PATTERN: z.string().default("logjam-eb-role"),
+  // Ceiling on access-log objects consumed per sweep, so a backlog is worked
+  // through over several passes instead of one unbounded run.
+  EGRESS_MAX_LOG_OBJECTS_PER_SWEEP: z.coerce.number().int().positive().default(500),
   // TopoExportJob sweeps (ARCH-002): queued rows older than the QUEUED timeout
   // (task never placed/started) and running rows older than the RUNNING
   // timeout (worker SIGKILLed before its except path ran) are force-failed.

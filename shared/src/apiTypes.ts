@@ -63,9 +63,16 @@ export type TUser = {
   email: string;
   storageUsedBytes: number;
   storageQuotaBytes: number;
-  monthlyTileQuota: number;
-  monthlyTileUsage: number;
-  monthlyTileResetAt: string;
+  /** Monthly worker allowance and usage, in credits (= vCPU-minutes). See
+   * computeCredits.ts. Replaced the tile quota, which only covered the topo
+   * worker and did not measure cost. */
+  monthlyComputeCredits: number;
+  monthlyComputeUsage: number;
+  monthlyComputeResetAt: string;
+  /** Monthly download allowance, as decimal strings — these exceed Number's
+   * safe integer range in principle and are only ever compared or formatted. */
+  monthlyEgressQuotaBytes: string;
+  monthlyEgressUsedBytes: string;
   consentedAt: string | null;
   consentVersion: string | null;
   uiPreferences?: {

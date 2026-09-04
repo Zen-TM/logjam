@@ -26,6 +26,7 @@ import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { s3 } from "../services/awsClients";
 import { getEnv } from "../lib/env";
+import { assertHasEgressQuota } from "../lib/egressQuota";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import { parseFriendRecipientIds } from "../lib/friendRecipients";
@@ -496,6 +497,12 @@ router.post(
       // The same 404 a stranger's id gets: nothing here may confirm more.
       throw new AppError(404, "That file isn't available any more.");
     }
+
+    // The sender's allowance pays for this: the object lives under
+    // file-sends/<senderId>/ and S3 attributes it to them. Charging the
+    // recipient would let anyone drain a stranger's allowance by repeatedly
+    // accepting what that stranger sent.
+    await assertHasEgressQuota(row.fileSend.senderId);
 
     const downloadUrl = await getSignedUrl(
       s3,

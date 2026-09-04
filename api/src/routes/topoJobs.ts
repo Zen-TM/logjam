@@ -22,7 +22,9 @@ import {
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { launchFargateTask } from "../lib/ecsRunTask";
-import { assertCanSubmit } from "../lib/tileQuota";
+import { assertHasCredits } from "../lib/computeCredits";
+import { estimateTopoSeconds } from "../lib/runtimeEstimates";
+import { assertGlobalCapacity } from "../lib/fargateCapacity";
 import { assertHasStorageQuota, decrementStorageUsed } from "../lib/storageQuota";
 import { deleteS3Prefix } from "../lib/s3Cleanup";
 import { logger } from "../lib/logger";
@@ -111,60 +113,6 @@ const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 // disables the launch and leaves the job pending.
 const ECS_SUBNETS = env.ECS_SUBNETS_LIST;
 
-/**
- * Adaptive processing-time estimate (seconds) for a job of `inputTileCount`
- * ELVIS tiles. Fits a per-input-tile rate from recent completed jobs' real
- * runtimes (TopoJob.pipeline_metrics / startedAt→updatedAt), falling back to a
- * configurable cold-start default below TOPO_ESTIMATE_MIN_SAMPLES so the
- * estimate self-corrects as the pipeline's performance changes.
- *
- * Privacy: reads only aggregate timing + tile counts across jobs — never canyon
- * names, coordinates, or footprints.
- */
-async function computeEstimatedSeconds(
-  inputTileCount: number | null,
-): Promise<number | null> {
-  if (!inputTileCount) return null;
-  const recent = await prisma.topoJob.findMany({
-    where: {
-      status: "complete",
-      outputTileCount: { not: null },
-      tileCount: { not: null },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-    select: {
-      tileCount: true,
-      outputTileCount: true,
-      pipelineMetrics: true,
-      startedAt: true,
-      updatedAt: true,
-    },
-  });
-  const actuals: JobActual[] = [];
-  for (const job of recent) {
-    if (!job.tileCount) continue;
-    const metrics = job.pipelineMetrics as { wallSeconds?: number } | null;
-    const wallSeconds =
-      typeof metrics?.wallSeconds === "number"
-        ? metrics.wallSeconds
-        : job.startedAt
-          ? (job.updatedAt.getTime() - job.startedAt.getTime()) / 1000
-          : null;
-    if (wallSeconds && wallSeconds > 0) {
-      actuals.push({
-        inputTileCount: job.tileCount,
-        outputTileCount: job.outputTileCount ?? undefined,
-        wallSeconds,
-      });
-    }
-  }
-  return estimateRuntimeSeconds(actuals, inputTileCount, {
-    defaultSecondsPerInputTile: env.TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE,
-    minSamples: env.TOPO_ESTIMATE_MIN_SAMPLES,
-  });
-}
-
 // POST /topo-jobs — create job + return presigned S3 upload URL
 router.post(
   "/",
@@ -187,7 +135,10 @@ router.post(
         );
     }
 
-    await assertCanSubmit(user, tileCount);
+    // Advisory pre-check so an over-allowance user is told before uploading a
+    // multi-GB ZIP rather than after. The authoritative, serialised check runs
+    // in /start against the server-verified tile count.
+    await assertHasCredits(user, "topo", await estimateTopoSeconds(tileCount ?? null));
     await assertHasStorageQuota(user.id);
 
     // Optional raster template settings. Worker falls back to its built-in
@@ -218,7 +169,7 @@ router.post(
     // independently. Falls back to defaults if the column is null.
     const vectorStyleSnapshot = (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
 
-    const estimatedSeconds = await computeEstimatedSeconds(tileCount ?? null);
+    const estimatedSeconds = await estimateTopoSeconds(tileCount ?? null);
 
     const job = await prisma.topoJob.create({
       data: {
@@ -330,10 +281,18 @@ router.post(
     // DB transactions); the earlier checks above remain advisory pre-checks.
     // Adaptive estimate from server-verified tile count. Computed before the
     // transaction — it's a DB read, kept out of the FOR UPDATE critical section.
-    const verifiedEstimate = await computeEstimatedSeconds(verifiedTileCount);
+    const verifiedEstimate = await estimateTopoSeconds(verifiedTileCount);
+
+    // Account-wide capacity, checked BEFORE the status flip: refusing after the
+    // row goes `pending` would leave a job nobody launches, waiting 15 minutes
+    // for the reaper to fail it. Deliberately not serialised — it is a coarse
+    // ceiling with headroom under the AWS quota, so a rare concurrent overshoot
+    // of one task is harmless.
+    await assertGlobalCapacity("topo");
+
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT id FROM users WHERE id = ${user.id} FOR UPDATE`;
-      await assertCanSubmit(user, verifiedTileCount, tx);
+      await assertHasCredits(user, "topo", verifiedEstimate, tx);
       await assertHasStorageQuota(user.id, 0n, tx);
       const flipped = await tx.topoJob.updateMany({
         // Status guard doubles as a double-/start race close: a concurrent

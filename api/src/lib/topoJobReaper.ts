@@ -8,6 +8,7 @@ import { ecs, s3 } from "../services/awsClients";
 import { decrementStorageUsed } from "./storageQuota";
 import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
 import { sweepExpiredFileSends } from "./fileSendReaper";
+import { sweepEgress } from "./egressMeter";
 import { createAndLaunchTopoExport } from "./topoExportLauncher";
 import { AppError } from "../middleware/errorHandler";
 import {
@@ -686,6 +687,9 @@ export async function queueAutoExports(now: Date = new Date()): Promise<number> 
       vectorStyleSnapshot: true,
       footprint: true,
       tileCount: true,
+      // The auto-export path spends the owner's monthly allowance just as a
+      // manual export does — an auto-export must not be a way around the cap.
+      user: { select: { monthlyComputeCredits: true } },
     },
   });
 
@@ -738,6 +742,7 @@ export async function queueAutoExports(now: Date = new Date()): Promise<number> 
           bundling: selection.bundling,
           vectorStyleSnapshot: (job.vectorStyleSnapshot as object | null) ?? VECTOR_STYLE_DEFAULTS,
           sourceTileCount: job.tileCount ?? null,
+          monthlyComputeCredits: job.user.monthlyComputeCredits,
         });
         queued += 1;
       } catch (err) {
@@ -836,6 +841,12 @@ export function startTopoJobReaper(): () => void {
       .catch((err) => {
         logger.error({ err: safeErrorForLog(err) }, "file_send_sweep_failed");
       });
+    // Rides this interval rather than owning a timer: the sweep is incremental
+    // and does nothing when no new access-log objects have been delivered.
+    // It logs and swallows its own per-prefix failures.
+    sweepEgress().catch((err) => {
+      logger.error({ err: safeErrorForLog(err) }, "egress_sweep_failed");
+    });
   };
 
   // Run once shortly after boot (catches jobs stranded while the API was down),

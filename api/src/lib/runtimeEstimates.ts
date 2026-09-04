@@ -1,5 +1,5 @@
-// Adaptive runtime estimators for topo exports and GeoPDF jobs. Mirrors
-// computeEstimatedSeconds in routes/topoJobs.ts: fit a per-unit rate from
+// Adaptive runtime estimators for all three worker pipelines: fit a per-unit
+// rate from
 // recent completed jobs' actual runtimes, falling back to a configurable
 // cold-start default below a minimum-samples threshold, so the estimate
 // self-corrects as the pipeline's performance changes.
@@ -121,5 +121,59 @@ export async function estimateGeoPdfSeconds(config: GeoPdfConfig): Promise<numbe
     defaultSecondsPerInputTile: env.GEO_PDF_ESTIMATE_DEFAULT_SECONDS_PER_MEGAPIXEL,
     minSamples: env.GEO_PDF_ESTIMATE_MIN_SAMPLES,
     overheadSeconds: GEO_PDF_OVERHEAD_SECONDS,
+  });
+}
+
+/**
+ * Adaptive processing-time estimate (seconds) for a job of `inputTileCount`
+ * ELVIS tiles. Fits a per-input-tile rate from recent completed jobs' real
+ * runtimes (TopoJob.pipeline_metrics / startedAt→updatedAt), falling back to a
+ * configurable cold-start default below TOPO_ESTIMATE_MIN_SAMPLES so the
+ * estimate self-corrects as the pipeline's performance changes.
+ *
+ * Privacy: reads only aggregate timing + tile counts across jobs — never canyon
+ * names, coordinates, or footprints.
+ */
+export async function estimateTopoSeconds(
+  inputTileCount: number | null,
+): Promise<number | null> {
+  if (!inputTileCount) return null;
+  const recent = await prisma.topoJob.findMany({
+    where: {
+      status: "complete",
+      outputTileCount: { not: null },
+      tileCount: { not: null },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: {
+      tileCount: true,
+      outputTileCount: true,
+      pipelineMetrics: true,
+      startedAt: true,
+      updatedAt: true,
+    },
+  });
+  const actuals: JobActual[] = [];
+  for (const job of recent) {
+    if (!job.tileCount) continue;
+    const metrics = job.pipelineMetrics as { wallSeconds?: number } | null;
+    const wallSeconds =
+      typeof metrics?.wallSeconds === "number"
+        ? metrics.wallSeconds
+        : job.startedAt
+          ? (job.updatedAt.getTime() - job.startedAt.getTime()) / 1000
+          : null;
+    if (wallSeconds && wallSeconds > 0) {
+      actuals.push({
+        inputTileCount: job.tileCount,
+        outputTileCount: job.outputTileCount ?? undefined,
+        wallSeconds,
+      });
+    }
+  }
+  return estimateRuntimeSeconds(actuals, inputTileCount, {
+    defaultSecondsPerInputTile: env.TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE,
+    minSamples: env.TOPO_ESTIMATE_MIN_SAMPLES,
   });
 }

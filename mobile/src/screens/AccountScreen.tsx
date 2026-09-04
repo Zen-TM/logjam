@@ -19,7 +19,7 @@ import {
   confirmUserAttribute,
   updateUserAttribute,
 } from "aws-amplify/auth";
-import { messageFromError } from "@logjam/shared";
+import { formatCredits, messageFromError } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
@@ -193,8 +193,8 @@ function LinkedAccountScreen({
   }
   const user = query.data;
 
-  const tileResetLabel = user.monthlyTileResetAt
-    ? new Date(user.monthlyTileResetAt).toLocaleDateString(undefined, {
+  const creditsResetLabel = user.monthlyComputeResetAt
+    ? new Date(user.monthlyComputeResetAt).toLocaleDateString(undefined, {
         day: "numeric",
         month: "short",
       })
@@ -240,24 +240,26 @@ function LinkedAccountScreen({
           <Text style={styles.meterHint}> · photos, videos and topo outputs</Text>
         </Text>
 
-        <SectionHeader label="LiDAR maps this month" />
+        <SectionHeader label="Processing credits this month" />
         <CapacityBar
           segments={[
             {
-              label: "Rendered",
-              value: user.monthlyTileUsage,
+              label: "Used",
+              value: user.monthlyComputeUsage,
               color: assetHue.overlay,
-              display: String(user.monthlyTileUsage),
+              display: formatCredits(user.monthlyComputeUsage),
             },
           ]}
-          total={user.monthlyTileQuota}
+          total={user.monthlyComputeCredits}
           legend={false}
         />
         <Text style={styles.meterLabel}>
-          {user.monthlyTileUsage} of {user.monthlyTileQuota}
-          {tileResetLabel ? (
-            <Text style={styles.meterHint}> · resets {tileResetLabel}</Text>
+          {formatCredits(user.monthlyComputeUsage)} of{" "}
+          {formatCredits(user.monthlyComputeCredits)}
+          {creditsResetLabel ? (
+            <Text style={styles.meterHint}> · resets {creditsResetLabel}</Text>
           ) : null}
+          <Text style={styles.meterHint}> · topo, exports and GeoPDFs</Text>
         </Text>
 
         <SectionHeader label="Sign-in" />

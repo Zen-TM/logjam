@@ -15,7 +15,8 @@ import { AppError } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 import { userPatchLimiter } from "../middleware/rateLimit";
 import { cognitoIdp } from "../services/awsClients";
-import { getMonthlyTileUsage } from "../lib/tileQuota";
+import { getMonthlyCreditUsage } from "../lib/computeCredits";
+import { getEgressUsage } from "../lib/egressQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
@@ -154,22 +155,33 @@ function serializeUserForResponse(
   };
 }
 
-// serializeUserForResponse + the derived monthly-tile-usage fields
-// (monthlyTileUsage/monthlyTileResetAt are NOT columns — they're a live _sum
-// over TopoJob.tileCount). Both GET and PATCH /me return this so the cached
-// user the frontend keeps never loses tile usage after a profile update.
-async function serializeUserWithTileUsage(
+// serializeUserForResponse + the derived monthly-usage fields.
+//
+// None of these are columns: credit usage is a live sum over the three worker
+// job tables (see lib/computeCredits.ts), and egress applies the same lazy
+// month rollover the sweeper's write does. Both GET and PATCH /me return them
+// so the cached user the frontend keeps never loses its meters after a
+// profile update.
+async function serializeUserWithUsage(
   user: Parameters<typeof serializeUserForResponse>[0] & {
     id: string;
-    monthlyTileQuota: number;
+    monthlyComputeCredits: number;
   },
 ) {
-  const tileUsage = await getMonthlyTileUsage(user.id, user.monthlyTileQuota);
+  const [credits, egress] = await Promise.all([
+    getMonthlyCreditUsage(user.id, user.monthlyComputeCredits),
+    getEgressUsage(user.id),
+  ]);
   return {
     ...serializeUserForResponse(user),
-    monthlyTileQuota: tileUsage.quota,
-    monthlyTileUsage: tileUsage.used,
-    monthlyTileResetAt: tileUsage.resetAt,
+    monthlyComputeCredits: credits.quota,
+    monthlyComputeUsage: credits.used,
+    monthlyComputeResetAt: credits.resetAt,
+    // Egress has no progress bar in the UI — the cap sits far above real use
+    // and is surfaced only by notification. These ship anyway so a client can
+    // explain a 429 without a second round trip.
+    monthlyEgressQuotaBytes: egress.quota.toString(),
+    monthlyEgressUsedBytes: egress.used.toString(),
   };
 }
 
@@ -257,7 +269,7 @@ router.get(
       }
     }
 
-    res.json(await serializeUserWithTileUsage(user));
+    res.json(await serializeUserWithUsage(user));
   },
 );
 
@@ -388,7 +400,7 @@ router.patch(
       throw e;
     }
 
-    res.json(await serializeUserWithTileUsage(updated));
+    res.json(await serializeUserWithUsage(updated));
   },
 );
 

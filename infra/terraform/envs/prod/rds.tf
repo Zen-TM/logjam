@@ -63,9 +63,14 @@ resource "aws_db_instance" "main" {
   final_snapshot_identifier = "logjam-db-enc-final"
   storage_encrypted         = true
   kms_key_id                = "arn:aws:kms:ap-southeast-2:620853681701:key/abe78b2a-98e6-40a6-bafc-b8b4c2e7d577"
-  storage_type              = "gp2"
-  username                  = "logjam_admin"
-  vpc_security_group_ids    = ["sg-06cc0aaa310968aa4"]
+  # gp3, not gp2: cheaper per GB AND faster at this size. gp2 derives IOPS from
+  # volume size (3 IOPS/GB — just 60 provisioned IOPS on a 20 GB volume, leaning
+  # on burst credits), while gp3's 3000 IOPS baseline is included at no extra
+  # cost below 400 GB. The switch is an online ModifyDBInstance with no
+  # downtime, though the volume spends a while in `optimizing` afterwards.
+  storage_type           = "gp3"
+  username               = "logjam_admin"
+  vpc_security_group_ids = ["sg-06cc0aaa310968aa4"]
 
   lifecycle {
     prevent_destroy = true

@@ -4,12 +4,47 @@
 # M5 once that distribution is a Terraform resource. Leaving them undeclared
 # means Terraform does not touch the live policies.
 
+# S3 server access logs for the two buckets users can pull bytes out of. This
+# is the ONLY source of real egress volume: the API hands out presigned GET
+# URLs far more often than they are fetched (lib/mediaPresign.ts mints one per
+# photo on every canyon read), so minting cannot be used as a proxy for
+# downloading. The per-user monthly egress meter reads these.
+#
+# No logging config on this bucket itself — delivery writes here would be
+# logged here, which does not terminate.
+#
+# 30-day expiry: the meter only ever reads the current and previous month's
+# partial data, and raw access logs are high-volume and low-value once summed.
+module "access_logs" {
+  source        = "../../modules/storage"
+  bucket_name   = "logjam-access-logs-620853681701"
+  sse_algorithm = "AES256"
+
+  public_access_block = {
+    block_public_acls       = true
+    block_public_policy     = true
+    ignore_public_acls      = true
+    restrict_public_buckets = true
+  }
+
+  lifecycle_rules = [{
+    id              = "expire-access-logs"
+    prefix          = ""
+    expiration_days = 30
+  }]
+}
+
 # User media uploads. Fully private (presigned URLs only); browser-direct
 # uploads need the CORS rule.
 module "media" {
   source        = "../../modules/storage"
   bucket_name   = "logjam-media"
   sse_algorithm = "AES256"
+
+  log_target = {
+    bucket = module.access_logs.bucket_id
+    prefix = "media/"
+  }
 
   public_access_block = {
     block_public_acls       = true
@@ -58,6 +93,11 @@ module "topo_jobs" {
   bucket_name            = "logjam-topo-jobs"
   sse_algorithm          = "AES256"
   sse_bucket_key_enabled = true
+
+  log_target = {
+    bucket = module.access_logs.bucket_id
+    prefix = "topo-jobs/"
+  }
 
   public_access_block = {
     block_public_acls       = true

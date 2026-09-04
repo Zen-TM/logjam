@@ -688,6 +688,35 @@ export function fetchCurrentUser(): Promise<TUser> {
   return apiFetch<TUser>("/users/me");
 }
 
+// ── Processing credits ────────────────────────────────────────
+
+/** What a worker job would cost, and what the caller has left this month.
+ * `credits` is null when the server's adaptive estimator has too little
+ * history to have an opinion — render that as unknown, never as free. */
+export type ComputeEstimate = {
+  estimatedSeconds: number | null;
+  credits: number | null;
+  used: number;
+  quota: number;
+  remaining: number;
+  resetAt: string;
+  wouldExceed: boolean;
+};
+
+export type ComputeEstimateRequest =
+  | { kind: "topo"; tileCount: number | null }
+  | { kind: "topoExport"; sourceJobId: string; format: string; bundling: string }
+  | { kind: "geoPdf"; config: unknown };
+
+export function fetchComputeEstimate(
+  request: ComputeEstimateRequest,
+): Promise<ComputeEstimate> {
+  return apiFetch<ComputeEstimate>("/compute-estimate", {
+    method: "POST",
+    body: JSON.stringify(request),
+  });
+}
+
 export function useCurrentUser(enabled: boolean) {
   const [currentUser, setCurrentUser] = useState<TUser | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
