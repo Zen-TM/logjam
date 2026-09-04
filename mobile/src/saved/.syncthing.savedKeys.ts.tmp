@@ -38,6 +38,11 @@ export type SavedCategory = (typeof SAVED_CATEGORIES)[number];
  * SavedScreen's `CATEGORY_META` because this file is RN-free and therefore
  * testable, and because the boundary is a fact about the product, not about one
  * screen's presentation of it.
+ *
+ * What the user SEES of it is a cloud on the rows that are backed up — the
+ * positive, per item — plus the sentence in Settings → Offline and storage.
+ * Saved deliberately says nothing at the top of the screen: that is the most
+ * valuable space on the tab and the rule is read once.
  */
 export const CATEGORY_SYNCS: Record<SavedCategory, boolean> = {
   region: false,

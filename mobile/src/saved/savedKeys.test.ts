@@ -11,9 +11,9 @@ describe("the sync boundary", () => {
   });
 
   it("splits on what the user MADE versus what they downloaded", () => {
-    // The sentence the Saved tab shows, as an assertion. If a change here is
-    // deliberate, the hero copy in SavedScreen.tsx has to move with it —
-    // the screen states this rule in words and would otherwise start lying.
+    // The split, as an assertion. If a change here is deliberate, the sentence
+    // in Settings → Offline and storage ("What gets backed up") has to move
+    // with it — that page states this rule in words and would otherwise lie.
     const synced = SAVED_CATEGORIES.filter((c) => CATEGORY_SYNCS[c]);
     const deviceOnly = SAVED_CATEGORIES.filter((c) => !CATEGORY_SYNCS[c]);
     expect(synced.sort()).toEqual(["import", "route", "track", "waypoint"]);

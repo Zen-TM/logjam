@@ -163,6 +163,21 @@ export function OfflineSettingsScreen({
           subtitle="Managed on the Saved tab"
           onPress={onOpenSaved}
         />
+        {/* The sync boundary, stated once, where someone goes LOOKING for it.
+            It lived at the top of the Saved tab and cost two lines of the most
+            valuable space on that screen for a sentence read once — while the
+            answer a user actually wants there is per item, which the cloud mark
+            on a synced row now gives them. */}
+        <Row
+          icon="cloud"
+          title="What gets backed up"
+          subtitle={
+            "Waypoints, routes, imports and recorded tracks are saved to your " +
+            "Logjam account, so they survive this phone and appear on Logjam Web. " +
+            "Offline map regions, LiDAR topos and GeoPDFs stay on this phone — " +
+            "they are large, and you can download them again anywhere."
+          }
+        />
       </ScreenScroll>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />

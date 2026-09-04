@@ -37,6 +37,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Animated, ScrollView, StyleSheet, Text, View } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
+import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
 
@@ -67,6 +68,7 @@ import { useApiQuery } from "../api/queries";
 import {
   useMirrorRoutes,
   useMirrorWaypoints,
+  usePendingCreateIds,
   usePendingSyncCount,
 } from "../sync/useSyncQueries";
 import { assetHue, fontSize, fontWeight, radius, spacing, theme } from "../theme";
@@ -278,6 +280,20 @@ type SavedItem = {
   subtitle?: string;
   sizeBytes: number;
   pill?: { label: string; tone: "accent" | "outline" | "warning" | "muted" };
+  /**
+   * This row has a copy in the user's account. Set centrally, never by a
+   * builder — see the note where it is applied.
+   */
+  backedUp?: boolean;
+  /**
+   * The id the OUTBOX would name for this row, when that is not `key`.
+   *
+   * Only a recorded track needs it: the row is keyed by the track, and its
+   * account copy is a media row with an id of its own. `null` means the row has
+   * no account copy at all (a recording whose backup has not been made yet), as
+   * opposed to `undefined`, which means "the key is the id".
+   */
+  syncEntityId?: string | null;
   /** Recovery/primary inline action shown left of the overflow button. */
   inlineAction?: { icon: "refresh-cw"; label: string; onPress: () => void };
   /** False when the asset has no geographic extent to fly to. */
@@ -417,6 +433,7 @@ export function SavedScreen({
   const accountGeoPdfReady =
     capabilityStatus("accountGeoPdf", accountState, online).status === "available";
   const pendingCount = usePendingSyncCount();
+  const pendingCreates = usePendingCreateIds();
 
   // One toast channel for every async outcome on the screen (import, save,
   // rename, account list). Transient and out of the layout — a banner in the
@@ -1163,6 +1180,9 @@ export function SavedScreen({
         // Tracks are DB rows, not files — they carry no meaningful on-disk
         // size, so they stay out of the capacity meter.
         sizeBytes: 0,
+        // The recording's account copy is the GPX it was backed up as; null
+        // until that upload is registered.
+        syncEntityId: track.mediaId,
         ...trackActions(track),
       });
     }
@@ -1200,16 +1220,25 @@ export function SavedScreen({
       if (!row.search) row.search = { haystack: row.title.toLowerCase(), tags: [] };
     }
 
-    // The sync boundary, said on the row rather than in a settings screen the
-    // user would have to go and find. Applied centrally so no builder above has
-    // to remember it, and only where the row has nothing more specific to say —
-    // a failed GeoPDF import has a more urgent thing to report than where it
-    // lives.
-    return rows.map((row) =>
-      CATEGORY_SYNCS[row.category] || row.pill
-        ? row
-        : { ...row, pill: { label: "This device", tone: "muted" as const } },
-    );
+    // The sync boundary, marked on the row — as a small cloud on what IS in the
+    // account, never as a label on what is not.
+    //
+    // It ran the other way round first ("This device" on every region, topo and
+    // GeoPDF) and that was the wrong statement in two ways: it spent a whole
+    // pill saying something reassuring in the language of a warning, on the
+    // rows that are least at risk, and it left the rows a user actually worries
+    // about — their own imports and recordings — saying nothing at all.
+    //
+    // The mark is per ITEM, not per category, because the category only says
+    // what SHOULD be in the account. `pendingCreates` says what is.
+    return rows.map((row) => {
+      const entityId = row.syncEntityId === undefined ? row.key : row.syncEntityId;
+      const backedUp =
+        CATEGORY_SYNCS[row.category] &&
+        entityId !== null &&
+        !pendingCreates.has(entityId);
+      return backedUp ? { ...row, backedUp } : row;
+    });
   }, [
     artifacts,
     geoPdfBusy,
@@ -1224,6 +1253,7 @@ export function SavedScreen({
     regionArtifacts,
     savedTracks,
     remoteTracks,
+    pendingCreates,
   ]);
 
   const counts = useMemo(() => {
@@ -1686,14 +1716,6 @@ export function SavedScreen({
         action={<Button label="Add" icon="plus" compact onPress={() => setAddSheetOpen(true)} />}
       >
         <CapacityBar segments={segments} />
-        {/* The rule in one line, under the breakdown it explains. Without it
-            the bar mixes two very different kinds of storage — files that come
-            back on a new phone, and files that do not — with nothing saying
-            which is which. */}
-        <Text style={styles.syncRule}>
-          Waypoints, routes, imports and recordings are backed up to your
-          account. Maps you downloaded stay on this device.
-        </Text>
         {/* Offline is a normal state here — everything already on the device
             still works — so it sits beside what is still waiting to leave
             rather than reading as an error. */}
@@ -1981,6 +2003,19 @@ export function SavedScreen({
                   <View>
                     <StatusPill label={item.pill.label} tone={item.pill.tone} />
                   </View>
+                ) : null}
+                {/* Backed up. A glyph rather than a pill: it is on most rows
+                    most of the time, and a word repeated down a list stops
+                    being read. It marks the POSITIVE — a row with no cloud is
+                    on this phone only, which is the ordinary state of a
+                    downloaded map and needs no announcement. */}
+                {item.backedUp ? (
+                  <Feather
+                    name="cloud"
+                    size={15}
+                    color={theme.success}
+                    accessibilityLabel="Backed up to your account"
+                  />
                 ) : null}
                 {item.inlineAction ? (
                   <IconButton
@@ -2673,12 +2708,6 @@ const styles = StyleSheet.create({
   // label, and search input → tag chips. Without it the controls read as one
   // dense block.
   searchField: { paddingTop: spacing(1.5), paddingRight: spacing(2) },
-  syncRule: {
-    color: theme.textMuted,
-    fontSize: fontSize.xs,
-    lineHeight: fontSize.xs * 1.4,
-    paddingTop: spacing(1),
-  },
   waypointTags: { paddingTop: spacing(1.5) },
   // Dims the tag rail while selecting, same treatment as TextField's own
   // `disabled` state — a control that still looks pressable but silently
