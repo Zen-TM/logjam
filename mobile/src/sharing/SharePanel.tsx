@@ -46,10 +46,12 @@ import { messageFromError, type SharableEntityType } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
 import {
-  capabilityRowProps,
   capabilityStatus,
+  shareCapabilityStatus,
+  statusRowProps,
   unavailableReasonText,
 } from "../auth/capabilities";
+import { usePendingCreateIds } from "../sync/useSyncQueries";
 import { getFriends, getCanyonShares, shareCanyon, unshareCanyon, type Friend } from "../api/friends";
 import { getShares, shareItem, unshareItem } from "../api/shares";
 import { sendFileCopy } from "../api/fileSends";
@@ -132,13 +134,24 @@ const CANYON_SHARE_BLURB =
  * One helper rather than six call sites reaching for `capabilityRowProps`,
  * because six sites is six chances to pick a different capability or forget the
  * guest case (`needs-account` beats `needs-connection`).
+ *
+ * `shareEntityId` is the SERVER ROW the live Share verb would grant access to.
+ * A row still sitting in the outbox has none, so the verb is dimmed with
+ * "Needs to sync first" — same rule, third reason. Pass NOTHING on a "Send a
+ * copy" row: a copy ships a local file and works the moment the thing exists on
+ * the phone, so gating it on the upload would withhold a verb that works.
  */
-export function useShareRowProps(online: boolean): {
+export function useShareRowProps(
+  online: boolean,
+  shareEntityId?: string | null,
+): {
   disabled: boolean;
   subtitle?: string;
 } {
   const { accountState } = useAccountState();
-  return capabilityRowProps("sharing", accountState, online);
+  const pendingCreates = usePendingCreateIds();
+  const onServer = shareEntityId == null || !pendingCreates.has(shareEntityId);
+  return statusRowProps(shareCapabilityStatus(accountState, online, onServer));
 }
 
 export function useSharePanel({
@@ -214,9 +227,19 @@ export function useSharePanel({
     return NO_CALLS;
   }, [canyonId, entityId, entityType]);
 
+  // Does the account hold this row yet? A route drawn in the field, a waypoint
+  // dropped on the trail or a canyon added offline has a `create` op still in
+  // the outbox, so `/shares/<kind>/<id>` 404s — the panel's door closes with
+  // the reason, AND `useSharing` never fires the doomed lookup. Kinds the phone
+  // cannot create (a LiDAR topo, a GeoPDF job) are never in this set.
+  const pendingCreates = usePendingCreateIds();
+  const shareRowId = canyonId ?? entityId;
+  const onServer = shareRowId == null || !pendingCreates.has(shareRowId);
+
   const sharing = useSharing({
     calls,
     online,
+    onServer,
     // Neither a copy nor a bulk has ONE item whose recipients could be listed,
     // so neither ever loads share state.
     enabled: enabled && target != null && !isCopy && bulkPlan === null,

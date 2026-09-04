@@ -89,8 +89,11 @@ export function RouteOptionsSheet({
   }, [visible]);
   const online = useConnectivity() === "online";
 
-  const shareRowProps = useShareRowProps(online);
   const actions = route ? routeActions(route) : null;
+  // The route's own id: a route drawn in the field is not on the server until
+  // the outbox flushes, and the verb dims with the reason rather than firing a
+  // grant at a row that isn't there.
+  const shareRowProps = useShareRowProps(online, actions?.share?.entityId);
   // THE sharing panel — the same one Saved, the waypoint sheet and the canyon
   // screen render. Called unconditionally; a closed sheet passes a null target
   // and issues no request.

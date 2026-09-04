@@ -49,7 +49,15 @@ export type BulkShareCandidate = {
   sendCopy?: SendCopyDescriptor;
 };
 
-export type BulkShareSkipReason = "shared-with-you" | "not-shareable";
+export type BulkShareSkipReason =
+  | "shared-with-you"
+  | "not-shareable"
+  /**
+   * The account does not hold it yet — its `create` op is still in the outbox,
+   * so there is no server row to grant anyone access to. Temporary, unlike the
+   * other two, and it clears itself the moment the queue drains.
+   */
+  | "not-uploaded";
 
 export type BulkSharePlan<C extends BulkShareCandidate = BulkShareCandidate> = {
   /** Rows that get a live, revocable share, as the API's item list. */
@@ -72,6 +80,13 @@ export type BulkSharePlan<C extends BulkShareCandidate = BulkShareCandidate> = {
  */
 export function planBulkShareSelection<C extends BulkShareCandidate>(
   candidates: C[],
+  /**
+   * Ids the SERVER has never seen (`sync/outbox.ts` `pendingCreateIds`). A live
+   * share is a grant on a server row, so a route drawn ten minutes ago is
+   * skipped here rather than sent to an endpoint that answers 404 and reported
+   * afterwards as a failure. Copies are unaffected — they ship a local file.
+   */
+  notUploadedIds: ReadonlySet<string>,
 ): BulkSharePlan<C> {
   const shares: BulkShareItem[] = [];
   const copies: C[] = [];
@@ -83,7 +98,11 @@ export function planBulkShareSelection<C extends BulkShareCandidate>(
       continue;
     }
     if (candidate.share) {
-      shares.push(candidate.share);
+      if (notUploadedIds.has(candidate.share.entityId)) {
+        skipped.push({ candidate, reason: "not-uploaded" });
+      } else {
+        shares.push(candidate.share);
+      }
       continue;
     }
     if (candidate.sendCopy) {
@@ -146,18 +165,23 @@ export function bulkShareTriageLine(plan: BulkSharePlan): string | null {
   const notMine = plan.skipped.filter(
     (row) => row.reason === "shared-with-you",
   ).length;
-  const cannot = plan.skipped.length - notMine;
-  // Both reasons named when both are present: "5 skipped" alone leaves the user
-  // hunting through the list for which five, and the two have different
-  // remedies (one is permanent, one usually means "wait for it to finish").
+  const waiting = plan.skipped.filter(
+    (row) => row.reason === "not-uploaded",
+  ).length;
+  const cannot = plan.skipped.length - notMine - waiting;
+  // Every reason named when several are present: "5 skipped" alone leaves the
+  // user hunting through the list for which five, and the three have different
+  // remedies — one is permanent, one usually means "wait for it to finish", and
+  // the third clears itself as soon as the queue drains.
   const reasons = [
     notMine > 0 ? `${notMine} shared with you` : null,
+    waiting > 0 ? `${waiting} not synced yet` : null,
     cannot > 0 ? `${cannot} can't be shared` : null,
   ].filter((part): part is string => part !== null);
   if (plan.actionableCount === 0) {
-    return `None of these ${total} can be shared — ${reasons.join(", ")}.`;
+    return `None of these ${total} can be shared — ${joinReasons(reasons)}.`;
   }
-  return `${plan.actionableCount} of ${total} can be shared — skipping ${reasons.join(" and ")}.`;
+  return `${plan.actionableCount} of ${total} can be shared — skipping ${joinReasons(reasons)}.`;
 }
 
 /**
@@ -283,6 +307,12 @@ export function bulkShareOutcomeMessage(
     return { text: `${done} ${outcome.shareError}`, tone: "error" };
   }
   return { text: done, tone: "info" };
+}
+
+/** "a", "a and b", "a, b and c" — a third reason made a bare join unreadable. */
+function joinReasons(parts: string[]): string {
+  if (parts.length < 2) return parts.join("");
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
 function countOf(count: number, noun: string, plural = `${noun}s`): string {

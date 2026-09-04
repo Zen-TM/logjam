@@ -16,6 +16,9 @@
 // they can be on full-strength wifi and the feature still won't work — so the
 // account reason is reported even when the device is also offline.
 //
+// Sharing has a THIRD axis nobody else has — `needs-upload`, below — and it
+// sits LAST in that order. See `shareCapabilityStatus`.
+//
 // Pure and storage-free on purpose: mobile's test setup is plain vitest with no
 // jsdom or testing-library, so this branching is only testable if it lives away
 // from the React tree. Callers pass the two facts in; this file holds no state.
@@ -67,7 +70,15 @@ export type CapabilityStatus =
   | { status: "available" }
   | { status: "unavailable"; reason: UnavailableReason };
 
-export type UnavailableReason = "needs-account" | "needs-connection";
+export type UnavailableReason =
+  | "needs-account"
+  | "needs-connection"
+  /**
+   * The row exists on THIS PHONE only: its `create` op is still in the outbox,
+   * so the server has never heard of it. Sharing-specific — see
+   * `shareCapabilityStatus`. Temporary, and it resolves itself.
+   */
+  | "needs-upload";
 
 /**
  * Every gated capability needs an account. They differ only in whether they
@@ -107,7 +118,14 @@ export function capabilityStatus(
  * across every screen (mobile/DESIGN.md §10 reason-in-subtitle).
  */
 export function unavailableReasonText(reason: UnavailableReason): string {
-  return reason === "needs-account" ? "Needs an account" : "Needs a connection";
+  switch (reason) {
+    case "needs-account":
+      return "Needs an account";
+    case "needs-connection":
+      return "Needs a connection";
+    case "needs-upload":
+      return "Needs to sync first";
+  }
 }
 
 /**
@@ -161,10 +179,56 @@ export function capabilityRowProps(
   accountState: AccountState,
   online: boolean,
 ): { disabled: boolean; subtitle?: string } {
-  const result = capabilityStatus(capability, accountState, online);
-  return result.status === "available"
+  return statusRowProps(capabilityStatus(capability, accountState, online));
+}
+
+/**
+ * The same `Row` shape for a status that did NOT come from `capabilityStatus` —
+ * today only sharing's, which has an axis the capability matrix cannot express.
+ * One implementation, so a third reason can never render as a dimmed row with
+ * no subtitle on one surface and a worded one on another.
+ */
+export function statusRowProps(
+  status: CapabilityStatus,
+): { disabled: boolean; subtitle?: string } {
+  return status.status === "available"
     ? { disabled: false }
-    : { disabled: true, subtitle: unavailableReasonText(result.reason) };
+    : { disabled: true, subtitle: unavailableReasonText(status.reason) };
+}
+
+/**
+ * Sharing's own status, with the third axis: does the ACCOUNT hold this row
+ * yet?
+ *
+ * A live share is a grant on a server row (`POST /shares`, `/canyons/:id/share`),
+ * so a route drawn in the field whose `create` op is still in the outbox has
+ * nothing to grant access to — the recipients lookup 404s and the grant would
+ * too. Callers pass the fact in (`sync/outbox.ts` `pendingCreateIds`); this
+ * file stays storage-free.
+ *
+ * NOT "Send a copy". That verb ships a local FILE and never needs the entity to
+ * exist server-side, so a recording made ten seconds ago can be sent — routing
+ * it through here would withhold a verb that works.
+ *
+ * PRECEDENCE: account, then connection, then upload. `needs-connection` wins
+ * over `needs-upload` because offline BOTH are true and only one of them is
+ * something the user can act on: the outbox is waiting on the same connection,
+ * so "wait for it to sync" is advice with no next step, and it would have one
+ * sheet giving two different explanations for one outage. `needs-upload` is
+ * therefore only ever reported when connectivity is NOT the blocker — online,
+ * account linked, queue not yet drained — which is the only state where "it
+ * hasn't gone up yet" is news.
+ */
+export function shareCapabilityStatus(
+  accountState: AccountState,
+  online: boolean,
+  onServer: boolean,
+): CapabilityStatus {
+  const base = capabilityStatus("sharing", accountState, online);
+  if (base.status !== "available") return base;
+  return onServer
+    ? base
+    : { status: "unavailable", reason: "needs-upload" };
 }
 
 /**

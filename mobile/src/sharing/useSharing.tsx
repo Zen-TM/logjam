@@ -28,7 +28,7 @@ import { ActivityIndicator, Alert } from "react-native";
 import { messageFromError } from "@logjam/shared";
 
 import { useAccountState } from "../auth/AccountStateContext";
-import { capabilityStatus } from "../auth/capabilities";
+import { shareCapabilityStatus } from "../auth/capabilities";
 import type { Friend } from "../api/friends";
 import type { ShareRecipient } from "../api/shares";
 import { ErrorBanner, IconButton, Row } from "../ui";
@@ -63,12 +63,22 @@ export { shareRowSubtitle } from "./shareRowSubtitle";
 export function useSharing({
   calls,
   online,
+  onServer = true,
   enabled = true,
   itemLabel,
   revokeBody,
 }: {
   calls: SharingCalls;
   online: boolean;
+  /**
+   * Does the ACCOUNT hold this row yet? False while its `create` op is still in
+   * the outbox — the item exists on this phone only, so every endpoint below
+   * answers 404. It closes the door with `needs-upload` in place of the
+   * subtitle AND keeps the load from firing: a dimmed row that still fetches
+   * has fixed half of it. Defaults true for the kinds that can only come from
+   * the server (a LiDAR topo, a GeoPDF job).
+   */
+  onServer?: boolean;
   enabled?: boolean;
   /** The item's name, for the revoke confirm. */
   itemLabel: string;
@@ -81,7 +91,7 @@ export function useSharing({
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const { accountState } = useAccountState();
-  const shareStatus = capabilityStatus("sharing", accountState, online);
+  const shareStatus = shareCapabilityStatus(accountState, online, onServer);
   const canShare = shareStatus.status === "available";
 
   const load = useCallback(async () => {

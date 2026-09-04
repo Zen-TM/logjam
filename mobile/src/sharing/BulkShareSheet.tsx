@@ -16,6 +16,7 @@
 // `BottomSheet` and the panel's footer goes in the pinned slot (DESIGN.md §6).
 import { useMemo } from "react";
 
+import { usePendingCreateIds } from "../sync/useSyncQueries";
 import { BottomSheet, IconButton } from "../ui";
 import { theme } from "../theme";
 import { useShareRowProps, useSharePanel } from "./SharePanel";
@@ -77,10 +78,19 @@ export function BulkShareSheet<C extends BulkShareCandidate>({
    */
   onDone: (report: { text: string; tone: "info" | "error" }) => void;
 }) {
+  // Which of the picked rows the account does not hold yet. Read here rather
+  // than in each screen so Saved and Canyons cannot disagree about it: a row
+  // whose `create` op is still in the outbox has no server row to grant access
+  // to, and the plan skips it with its own reason instead of sending it to an
+  // endpoint that answers 404.
+  const pendingCreates = usePendingCreateIds();
   // Memoised on the selection, not rebuilt per render: `useSharePanel` keys its
   // reset effect on the plan's CONTENT for that reason, and an unstable plan
   // would also re-run the triage on every keystroke in the friend search.
-  const plan = useMemo(() => planBulkShareSelection(selection), [selection]);
+  const plan = useMemo(
+    () => planBulkShareSelection(selection, pendingCreates),
+    [selection, pendingCreates],
+  );
 
   const panel = useSharePanel({
     target: visible ? { kind: "bulk", plan } : null,
