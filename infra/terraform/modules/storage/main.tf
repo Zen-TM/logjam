@@ -69,3 +69,15 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
     }
   }
 }
+
+# Server access logs. These are the only record of how many BYTES actually left
+# a bucket: a presigned URL is minted far more often than it is fetched (every
+# media list mints one per photo), so nothing on the API side can measure real
+# egress. Delivery is best-effort and lags by up to a few hours, which is why
+# the consumer treats it as an after-the-fact meter, not an admission gate.
+resource "aws_s3_bucket_logging" "this" {
+  count         = var.log_target != null ? 1 : 0
+  bucket        = aws_s3_bucket.this.id
+  target_bucket = var.log_target.bucket
+  target_prefix = var.log_target.prefix
+}

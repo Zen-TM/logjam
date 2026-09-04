@@ -366,6 +366,19 @@ resource "aws_iam_role_policy" "eb_instance_s3_scoped" {
         ]
       },
       {
+        # READ-ONLY, and deliberately so: the egress sweeper (lib/egressMeter.ts)
+        # only ever lists and reads access-log objects to sum bytes_sent. It has
+        # no reason to write or delete here, and the 30-day lifecycle rule —
+        # not the API — is what reclaims the space.
+        Sid    = "AccessLogsRead"
+        Effect = "Allow"
+        Action = ["s3:GetObject", "s3:ListBucket"]
+        Resource = [
+          "arn:aws:s3:::logjam-access-logs-620853681701",
+          "arn:aws:s3:::logjam-access-logs-620853681701/*",
+        ]
+      },
+      {
         # PLATFORM, not app data. logjam-eb-role has NO AWSElasticBeanstalkWebTier
         # policy attached — AmazonS3FullAccess is currently the ONLY grant that
         # covers the EB platform bucket. EB uses the instance role to download the
