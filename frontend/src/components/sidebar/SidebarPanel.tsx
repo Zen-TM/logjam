@@ -107,6 +107,8 @@ function SidebarPanel({
   onRefetch,
   filters,
   onChangeFilters,
+  onDrawFilterArea,
+  onFilterToMapView,
   filtersAccordionSignal,
   onFlyToCanyon,
   // GeoPDFs
@@ -217,6 +219,10 @@ function SidebarPanel({
   onRefetch: () => void;
   filters: TFilters;
   onChangeFilters: (f: TFilters) => void;
+  /** Close the panel and arm the map's box-draw for the area filter. */
+  onDrawFilterArea: () => void;
+  /** Set the area filter to whatever the map is currently showing. */
+  onFilterToMapView: () => void;
   filtersAccordionSignal: number;
   onFlyToCanyon: (lat: number, lng: number) => void;
   // GeoPDFs
@@ -416,6 +422,8 @@ function SidebarPanel({
             onRefetch={onRefetch}
             filters={filters}
             onChangeFilters={onChangeFilters}
+            onDrawFilterArea={onDrawFilterArea}
+            onFilterToMapView={onFilterToMapView}
             filtersAccordionSignal={filtersAccordionSignal}
             onFlyToCanyon={onFlyToCanyon}
             setSelectedCanyonID={setSelectedCanyonID}

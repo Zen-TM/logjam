@@ -2,11 +2,14 @@ import { describe, it, expect } from "vitest";
 
 import {
   activeCanyonFilterCount as activeFilterCount,
+  COUNTED_FILTER_KEYS,
+  UNCOUNTED_FILTER_KEYS,
   canyonMatchesSearch,
   compareCanyons,
   EMPTY_CANYON_FILTERS as emptyFilters,
   hasActiveCanyonFilters as hasActiveFilters,
   isCanyonDoneByViewer,
+  isCanyonInArea,
   passesCanyonFilters as passesFilters,
   reconcileCustomFilters,
 } from "./canyonFilter.js";
@@ -196,6 +199,63 @@ describe("passesFilters — ropewiki link", () => {
   });
 });
 
+describe("passesFilters — area", () => {
+  // A box around the canyon fixture at -33.5, 150.3.
+  const around = { west: 150.2, south: -33.6, east: 150.4, north: -33.4 };
+
+  it("keeps a canyon inside the box and drops one outside", () => {
+    const f = filters({ area: around });
+    expect(passesFilters(canyon(), f, true)).toBe(true);
+    expect(
+      passesFilters(canyon({ latitude: -34.2, longitude: 150.3 }), f, true),
+    ).toBe(false);
+    expect(
+      passesFilters(canyon({ latitude: -33.5, longitude: 151.1 }), f, true),
+    ).toBe(false);
+  });
+
+  it("is inclusive on every edge", () => {
+    const f = filters({ area: around });
+    for (const corner of [
+      { latitude: around.north, longitude: around.west },
+      { latitude: around.north, longitude: around.east },
+      { latitude: around.south, longitude: around.west },
+      { latitude: around.south, longitude: around.east },
+    ]) {
+      expect(passesFilters(canyon(corner), f, true)).toBe(true);
+    }
+  });
+
+  it("does not treat a position outside the box as an unknown", () => {
+    // include_unknowns rescues canyons with a MISSING value; a canyon that has
+    // a position and sits outside the box is a known miss, not a gap.
+    const f = filters({ area: around, include_unknowns: true });
+    expect(
+      passesFilters(canyon({ latitude: -34.2, longitude: 150.3 }), f, true),
+    ).toBe(false);
+  });
+
+  it("counts as one active filter", () => {
+    expect(activeFilterCount(filters({ area: around }))).toBe(1);
+    expect(activeFilterCount(filters())).toBe(0);
+    expect(hasActiveFilters(filters({ area: around }))).toBe(true);
+  });
+
+  it("is inactive when null", () => {
+    expect(
+      passesFilters(canyon({ latitude: -40, longitude: 120 }), filters(), true),
+    ).toBe(true);
+  });
+});
+
+describe("isCanyonInArea", () => {
+  it("is the comparison passesFilters uses", () => {
+    const area = { west: 150.2, south: -33.6, east: 150.4, north: -33.4 };
+    expect(isCanyonInArea({ latitude: -33.5, longitude: 150.3 }, area)).toBe(true);
+    expect(isCanyonInArea({ latitude: -33.5, longitude: 150.5 }, area)).toBe(false);
+  });
+});
+
 describe("passesFilters — date range", () => {
   it("created_at start bound excludes earlier canyons", () => {
     const f = filters({ created_at: ["2026-02-01", null] });
@@ -267,6 +327,25 @@ describe("activeFilterCount", () => {
   it("does not count name or include_unknowns", () => {
     const f = filters({ name: "empress", include_unknowns: true });
     expect(activeFilterCount(f)).toBe(0);
+  });
+});
+
+// Two lists that must agree, with nothing in the type system making them: the
+// fields of CanyonFilters, and the keys the badge counts. A filter added to the
+// type but missed here hides canyons while the badge reads zero — so the
+// "Clear filters" affordance never appears and the user is left with a list
+// that is quietly short. This fails the moment a field joins one list and not
+// the other, which is the only point at which anyone is looking.
+describe("filter keys — counted and uncounted partition the type", () => {
+  it("assigns every CanyonFilters field to exactly one list", () => {
+    const declared = Object.keys(emptyFilters).sort();
+    const accounted = [...COUNTED_FILTER_KEYS, ...UNCOUNTED_FILTER_KEYS].sort();
+    expect(accounted).toEqual(declared);
+  });
+
+  it("lists no key twice", () => {
+    const accounted = [...COUNTED_FILTER_KEYS, ...UNCOUNTED_FILTER_KEYS];
+    expect(new Set(accounted).size).toBe(accounted.length);
   });
 });
 

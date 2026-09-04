@@ -64,6 +64,57 @@ export function frameToBbox(view: FrameViewport, frame: FrameInsets): RegionBbox
 }
 
 /**
+ * The inverse of `frameToBbox`: where the frame has to sit, in this viewport,
+ * to describe an area the user chose earlier.
+ *
+ * Exists so re-opening the area picker shows the box you already have instead
+ * of a blank default. Without it the only way to adjust a saved area is to draw
+ * it again from scratch, and there is no way at all to SEE which area a filter
+ * is currently applying — every other filter shows its own value back.
+ *
+ * Clamped to the viewport and to MIN_FRAME_PX, so a bbox that is partly (or
+ * entirely) off-screen still yields a usable frame rather than handles the user
+ * cannot reach. Callers put the camera on the bbox first; the clamp is the
+ * fail-safe for when that lands slightly off, not the normal path. Clamping can
+ * only ever WIDEN the area, never silently narrow it past what was saved.
+ */
+export function bboxToFrame(view: FrameViewport, bbox: RegionBbox): FrameInsets {
+  const lonSpan = view.east - view.west;
+  const yNorth = mercatorY(view.north);
+  const ySpan = mercatorY(view.south) - yNorth;
+
+  // A degenerate viewport (zero span) has no mapping to invert; the map has not
+  // settled yet, so the opening frame is the honest answer.
+  if (lonSpan === 0 || ySpan === 0) return defaultFrameInsets(view);
+
+  const left = ((bbox.west - view.west) / lonSpan) * view.width;
+  const right = view.width - ((bbox.east - view.west) / lonSpan) * view.width;
+  const top = ((mercatorY(bbox.north) - yNorth) / ySpan) * view.height;
+  const bottom =
+    view.height - ((mercatorY(bbox.south) - yNorth) / ySpan) * view.height;
+
+  // Opposite insets are clamped as a pair: each is allowed at most whatever the
+  // other leaves, minus the minimum frame. Clamping them independently against
+  // the full extent lets both edges of one axis cross over each other and
+  // produces a negative-width frame.
+  const fit = (near: number, far: number, extent: number): [number, number] => {
+    const room = Math.max(0, extent - MIN_FRAME_PX);
+    const a = Math.min(Math.max(near, 0), room);
+    const b = Math.min(Math.max(far, 0), room - a);
+    return [a, b];
+  };
+  const [clampedLeft, clampedRight] = fit(left, right, view.width);
+  const [clampedTop, clampedBottom] = fit(top, bottom, view.height);
+
+  return {
+    top: clampedTop,
+    bottom: clampedBottom,
+    left: clampedLeft,
+    right: clampedRight,
+  };
+}
+
+/**
  * Move one edge by a drag delta, keeping the frame inside the view and no
  * smaller than MIN_FRAME_PX. Each handle is a one-dimensional constraint, which
  * is why edges are the handles rather than corners: there is no anchor to track

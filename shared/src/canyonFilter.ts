@@ -8,7 +8,11 @@
 // original names, so web callers are unchanged.
 //
 // PRIVACY: pure predicates over values the caller already holds. Nothing here
-// logs, and no function takes or returns a coordinate.
+// logs. The `area` filter is the one place a coordinate reaches this module —
+// it is a box the user drew on their own map, compared against canyon
+// positions the caller already has in memory. It is never logged and never
+// sent anywhere; the clients decide what they persist (see the `area` field).
+import type { RegionBbox } from "./mapRegionEstimate.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
 /** [start, end] inclusive ISO-date bounds (yyyy-mm-dd); either bound nullable. */
@@ -55,6 +59,14 @@ export type CanyonFilters = {
   updated_at: CanyonDateRange | null;
   ropewiki: "any" | "linked" | "unlinked";
   /**
+   * Keep only canyons whose position falls inside this box (inclusive on all
+   * four edges). Drawn by the user on a map; null when no area is set.
+   *
+   * NSW-only product, so no antimeridian case: `west <= east` always holds and
+   * a box that wrapped 180° would need a different comparison.
+   */
+  area: RegionBbox | null;
+  /**
    * Active custom-field filters keyed by field key. Only active filters are
    * present; clearing a field deletes its key. Empty {} means none active.
    */
@@ -78,6 +90,13 @@ export type CanyonFilters = {
 export type CanyonFilterFields = {
   name: string;
   altNames?: string[];
+  /**
+   * Required, not optional: `Canyon.latitude`/`longitude` are non-null in the
+   * schema and on the mobile mirror, so the `area` filter has no unknown case
+   * to fold into `include_unknowns` the way the graded axes do.
+   */
+  latitude: number;
+  longitude: number;
   numAbseils?: number | null;
   longestAbseil?: number | null;
   vGrade?: number | null;
@@ -107,6 +126,7 @@ export const EMPTY_CANYON_FILTERS: CanyonFilters = {
   created_at: null,
   updated_at: null,
   ropewiki: "any",
+  area: null,
   custom: {},
   include_unknowns: false,
 };
@@ -140,6 +160,7 @@ function isFilterActive(filters: CanyonFilters, key: keyof CanyonFilters): boole
   if (key === "shared_by_me") return filters.shared_by_me;
   if (key === "completion") return filters.completion !== "any";
   if (key === "ropewiki") return filters.ropewiki !== "any";
+  if (key === "area") return filters.area != null;
   if (key === "include_unknowns") return false; // a modifier, not a filter
   if ((RANGE_KEYS as string[]).includes(key)) {
     const [min, max] = CANYON_RANGE_BOUNDS[key as CanyonRangeKey];
@@ -159,7 +180,14 @@ function isFilterActive(filters: CanyonFilters, key: keyof CanyonFilters): boole
 
 // Everything a badge counts: the filters that hide canyons (excluding `name`,
 // which lives in its own search box, and include_unknowns).
-const COUNTED_FILTER_KEYS: (keyof CanyonFilters)[] = [
+//
+// Exported for its guard test, not for callers: this list and the fields of
+// `CanyonFilters` must agree, and nothing in the type system makes them. A key
+// added to the type and forgotten here hides canyons while the badge reads
+// zero and "Clear filters" looks like it has nothing to clear.
+// `UNCOUNTED_FILTER_KEYS` is the other half of that pair — every field is in
+// exactly one of the two, and `canyonFilter.test.ts` fails when one isn't.
+export const COUNTED_FILTER_KEYS: (keyof CanyonFilters)[] = [
   ...RANGE_KEYS,
   ...CANYON_THRESHOLD_KEYS,
   ...DATE_FILTER_KEYS,
@@ -167,6 +195,18 @@ const COUNTED_FILTER_KEYS: (keyof CanyonFilters)[] = [
   "shared_by_me",
   "completion",
   "ropewiki",
+  "area",
+];
+
+/**
+ * The fields a badge deliberately does NOT count: `name` has its own search
+ * box, `include_unknowns` widens rather than hides, and `custom` is counted by
+ * its entries instead of as one field.
+ */
+export const UNCOUNTED_FILTER_KEYS: (keyof CanyonFilters)[] = [
+  "name",
+  "include_unknowns",
+  "custom",
 ];
 
 /**
@@ -229,6 +269,23 @@ export function isCanyonDoneByViewer(
   isOwned: boolean,
 ): boolean {
   return isOwned && (canyon._count?.tripLogLinks ?? 0) > 0;
+}
+
+/**
+ * Inclusive on all four edges. Exported because the box is drawn on one screen
+ * and applied on another: any surface that wants "is this canyon in the area"
+ * asks here rather than re-deriving the comparison and getting an edge wrong.
+ */
+export function isCanyonInArea(
+  canyon: Pick<CanyonFilterFields, "latitude" | "longitude">,
+  area: RegionBbox,
+): boolean {
+  return (
+    canyon.latitude >= area.south &&
+    canyon.latitude <= area.north &&
+    canyon.longitude >= area.west &&
+    canyon.longitude <= area.east
+  );
 }
 
 export function passesCanyonFilters(
@@ -309,6 +366,8 @@ export function passesCanyonFilters(
 
   if (filters.ropewiki === "linked" && canyon.ropeWikiId == null) return false;
   if (filters.ropewiki === "unlinked" && canyon.ropeWikiId != null) return false;
+
+  if (filters.area && !isCanyonInArea(canyon, filters.area)) return false;
 
   if (filters.name && filters.name.trim() !== "") {
     if (!canyonMatchesSearch(canyon, filters.name)) return false;

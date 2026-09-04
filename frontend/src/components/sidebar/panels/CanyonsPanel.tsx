@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { ChevronDown, X } from "lucide-react";
-import { Slider, Switch } from "@mui/material";
+import { Button, Slider, Switch } from "@mui/material";
 import classes from "./CanyonsPanel.module.css";
 import type {
   TCanyon,
@@ -16,7 +16,11 @@ import {
 } from "../../../canyonUtils";
 // The graded axes' bounds double as the "inactive" value, so they come from
 // the same place the predicate reads them (shared/src/canyonFilter.ts).
-import { CANYON_RANGE_BOUNDS as SLIDER_RANGES, type CanyonRangeKey } from "@logjam/shared";
+import {
+  CANYON_RANGE_BOUNDS as SLIDER_RANGES,
+  regionEdgesKm,
+  type CanyonRangeKey,
+} from "@logjam/shared";
 import type { RefreshResult } from "../../../canyonUtils";
 import { useStoredState } from "../../../useStoredState";
 import type { PanelId } from "../panels";
@@ -78,6 +82,8 @@ function CanyonsPanel({
   selectingArea,
   onRefetch,
   filters,
+  onDrawFilterArea,
+  onFilterToMapView,
   onChangeFilters,
   filtersAccordionSignal,
   onFlyToCanyon,
@@ -99,6 +105,10 @@ function CanyonsPanel({
   selectingArea: boolean;
   onRefetch: () => void;
   filters: TFilters;
+  /** Close the panel and arm the map's box-draw for the area filter. */
+  onDrawFilterArea: () => void;
+  /** Set the area filter to whatever the map is currently showing. */
+  onFilterToMapView: () => void;
   onChangeFilters: (f: TFilters) => void;
   filtersAccordionSignal: number;
   onFlyToCanyon: (lat: number, lng: number) => void;
@@ -800,6 +810,46 @@ function CanyonsPanel({
                   {thresholdCell("pitches", "Pitches")}
                   {thresholdCell("longest_pitch", "Longest pitch (m)")}
                   {thresholdCell("hours", "Hours (h)")}
+                </div>
+              </div>
+              {/* Location. Two ways in, because they answer different
+                  questions: most of the time the user has already panned to the
+                  country they mean, and "This view" is that with no gesture at
+                  all — drawing a box is for when the area they want is not the
+                  one they are looking at. The active state names the box's SIZE
+                  rather than its position: a coordinate pair would be both
+                  unreadable and the one value on this panel worth not printing.
+                  Redraw is how you see where it is. */}
+              <div className={classes.section}>
+                <div className={classes.sectionHeader}>Location</div>
+                <div className={classes.selectCell}>
+                  <div className={classes.selectLabel}>
+                    <span>Area</span>
+                    {filters.area != null &&
+                      clearButton(() => clearFilter("area", null))}
+                  </div>
+                  <div className={classes.areaButtons}>
+                    <Button
+                      size="small"
+                      variant={filters.area ? "contained" : "outlined"}
+                      color="secondary"
+                      onClick={onDrawFilterArea}
+                    >
+                      {filters.area
+                        ? `${Math.round(regionEdgesKm(filters.area)[0])} × ${Math.round(
+                            regionEdgesKm(filters.area)[1],
+                          )} km`
+                        : "Draw on map"}
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="secondary"
+                      onClick={onFilterToMapView}
+                    >
+                      This view
+                    </Button>
+                  </div>
                 </div>
               </div>
               <div className={classes.section}>

@@ -44,6 +44,8 @@ import { AccountScreen } from "./screens/AccountScreen";
 import { CanyonDetailScreen } from "./canyons/CanyonDetailScreen";
 import { CanyonsScreen } from "./canyons/CanyonsScreen";
 import { PickPointScreen } from "./map/PickPointScreen";
+import { PickAreaScreen } from "./map/PickAreaScreen";
+import { readAreaPickerStart, setPickedArea } from "./map/pickedArea";
 import { setPickedPoint } from "./map/pickedPoint";
 import { ConsentGate } from "./screens/ConsentGate";
 import { FriendsScreen } from "./screens/FriendsScreen";
@@ -151,6 +153,13 @@ type CanyonsStackParams = {
    * in front of them.
    */
   CanyonPickPoint: { latitude: number; longitude: number } | undefined;
+  /**
+   * The full-screen area picker for the canyon filter. NOTHING travels here —
+   * not even where to open. A drawn box is a region of canyons, which is the
+   * kind of value the point picker's params comment carves out an exception
+   * AGAINST: both directions go through `map/pickedArea.ts` in memory.
+   */
+  CanyonPickArea: undefined;
 };
 
 type TripsStackParams = {
@@ -500,6 +509,22 @@ function CanyonsStackNav() {
             onPickPoint={(from) =>
               navigation.navigate("CanyonPickPoint", from ?? undefined)
             }
+            onPickArea={() => navigation.navigate("CanyonPickArea")}
+          />
+        )}
+      </CanyonsStack.Screen>
+      {/* Registered on the Canyons stack alone: the filter that opens it lives
+          on the Canyons list, unlike the point picker, which three stacks
+          reach. */}
+      <CanyonsStack.Screen name="CanyonPickArea" options={{ headerShown: false }}>
+        {({ navigation }) => (
+          <PickAreaScreen
+            initialArea={readAreaPickerStart()}
+            onCancel={() => navigation.goBack()}
+            onConfirm={(area) => {
+              setPickedArea(area);
+              navigation.goBack();
+            }}
           />
         )}
       </CanyonsStack.Screen>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   MIN_FRAME_PX,
+  bboxToFrame,
   defaultFrameInsets,
   frameToBbox,
   metresPerPixel,
@@ -51,6 +52,75 @@ describe("frameToBbox", () => {
     const bbox = frameToBbox(VIEW, { top: 300, right: 150, bottom: 200, left: 50 });
     expect(bbox.west).toBeLessThan(bbox.east);
     expect(bbox.south).toBeLessThan(bbox.north);
+  });
+});
+
+describe("bboxToFrame", () => {
+  const expectInsets = (actual: FrameInsets, expected: FrameInsets) => {
+    expect(actual.top).toBeCloseTo(expected.top, 6);
+    expect(actual.right).toBeCloseTo(expected.right, 6);
+    expect(actual.bottom).toBeCloseTo(expected.bottom, 6);
+    expect(actual.left).toBeCloseTo(expected.left, 6);
+  };
+
+  it("round-trips every frame back through frameToBbox", () => {
+    // The property that matters: re-opening the picker puts the handles exactly
+    // where the user left them, not approximately.
+    for (const frame of [
+      { top: 0, right: 0, bottom: 0, left: 0 },
+      { top: 100, right: 50, bottom: 200, left: 80 },
+      { top: 400, right: 0, bottom: 300, left: 120 },
+      defaultFrameInsets(VIEW),
+    ]) {
+      expectInsets(bboxToFrame(VIEW, frameToBbox(VIEW, frame)), frame);
+    }
+  });
+
+  it("inverts the Mercator mapping, not a linear one in degrees", () => {
+    // The degree midpoint sits at a different pixel than the Mercator midpoint;
+    // an inverse written in degrees would land the handle in the wrong place.
+    const degreeMidpoint = (VIEW.north + VIEW.south) / 2;
+    const frame = bboxToFrame(VIEW, { ...VIEW, north: degreeMidpoint });
+    expect(frame.top).not.toBeCloseTo(VIEW.height / 2, 6);
+    expect(frame.top).toBeCloseTo(VIEW.height / 2, 0);
+  });
+
+  it("clamps a bbox that overflows the viewport to a full-bleed frame", () => {
+    const frame = bboxToFrame(VIEW, {
+      west: VIEW.west - 1,
+      east: VIEW.east + 1,
+      south: VIEW.south - 1,
+      north: VIEW.north + 1,
+    });
+    expectInsets(frame, { top: 0, right: 0, bottom: 0, left: 0 });
+  });
+
+  it("keeps the frame at least MIN_FRAME_PX when the bbox is tiny", () => {
+    const speck = { west: 150.3, east: 150.3, south: -33.7, north: -33.7 };
+    const frame = bboxToFrame(VIEW, speck);
+    expect(VIEW.width - frame.left - frame.right).toBeGreaterThanOrEqual(MIN_FRAME_PX);
+    expect(VIEW.height - frame.top - frame.bottom).toBeGreaterThanOrEqual(MIN_FRAME_PX);
+  });
+
+  it("keeps the frame on screen when the bbox is entirely outside the view", () => {
+    // Clamping each inset independently against the full extent would let the
+    // two edges of an axis cross and produce a negative-width frame.
+    const frame = bboxToFrame(VIEW, {
+      west: VIEW.east + 1,
+      east: VIEW.east + 2,
+      south: VIEW.south - 2,
+      north: VIEW.south - 1,
+    });
+    expect(frame.left).toBeGreaterThanOrEqual(0);
+    expect(frame.right).toBeGreaterThanOrEqual(0);
+    expect(VIEW.width - frame.left - frame.right).toBeGreaterThanOrEqual(MIN_FRAME_PX);
+    expect(VIEW.height - frame.top - frame.bottom).toBeGreaterThanOrEqual(MIN_FRAME_PX);
+  });
+
+  it("falls back to the opening frame on a viewport with no extent", () => {
+    // The map has not settled; there is no mapping to invert yet.
+    const flat: FrameViewport = { ...VIEW, north: -33.7, south: -33.7 };
+    expectInsets(bboxToFrame(flat, VIEW), defaultFrameInsets(flat));
   });
 });
 
