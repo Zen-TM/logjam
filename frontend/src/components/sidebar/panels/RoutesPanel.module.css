@@ -61,3 +61,23 @@
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
+
+/* Standalone files: checkbox + inline-rename input + actions on one row. */
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.2em 0.3em;
+}
+
+.fileName {
+  composes: input from '@styles/shared.module.css';
+  flex: 1;
+  min-width: 0;
+}
+
+.iconBtn {
+  composes: btn btnGhost btnSm from '@styles/shared.module.css';
+  padding: 0.25em;
+  flex-shrink: 0;
+}

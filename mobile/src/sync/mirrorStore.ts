@@ -13,7 +13,9 @@ import type {
   SyncDeltaTripRow,
   SyncDeltaWaypointRow,
   SyncDeltaRouteRow,
+  MediaMetadata,
 } from "@logjam/shared";
+import { readMediaMetadata } from "@logjam/shared";
 
 import type { TCanyon, TTripLog } from "../api/types";
 import { withoutCanyonId, withoutCanyonLink } from "./canyonLinks";
@@ -60,8 +62,8 @@ const ROUTE_KNOWN = [
 ] as const;
 
 const MEDIA_KNOWN = [
-  "id", "linkedType", "linkedId", "mediaType", "filename",
-  "fileSizeBytes", "color", "createdAt",
+  "id", "linkedType", "linkedId", "mediaType", "filename", "displayName",
+  "fileSizeBytes", "color", "origin", "metadata", "createdAt", "updatedAt",
 ] as const;
 
 // ── upserts (called inside the delta-apply transaction) ─────────────────────
@@ -257,33 +259,43 @@ export async function upsertMedia(
   // REPLACE would null local_display_path etc., so update-then-insert.
   const updated = await db.runAsync(
     `UPDATE media SET linked_type = ?, linked_id = ?, media_type = ?,
-       filename = ?, file_size_bytes = ?, color = ?, created_at = ?,
+       filename = ?, display_name = ?, file_size_bytes = ?, color = ?,
+       origin = ?, metadata_json = ?, created_at = ?, updated_at = ?,
        extra_json = ?, sync_state = 'synced'
      WHERE id = ?`,
     row.linkedType,
     row.linkedId,
     row.mediaType,
     row.filename,
+    row.displayName,
     row.fileSizeBytes,
     row.color,
+    row.origin,
+    JSON.stringify(row.metadata ?? {}),
     row.createdAt,
+    row.updatedAt,
     splitExtras(row, MEDIA_KNOWN),
     row.id,
   );
   if (updated.changes === 0) {
     await db.runAsync(
       `INSERT INTO media
-         (id, linked_type, linked_id, media_type, filename, file_size_bytes,
-          color, created_at, extra_json, sync_state)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')`,
+         (id, linked_type, linked_id, media_type, filename, display_name,
+          file_size_bytes, color, origin, metadata_json, created_at, updated_at,
+          extra_json, sync_state)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')`,
       row.id,
       row.linkedType,
       row.linkedId,
       row.mediaType,
       row.filename,
+      row.displayName,
       row.fileSizeBytes,
       row.color,
+      row.origin,
+      JSON.stringify(row.metadata ?? {}),
       row.createdAt,
+      row.updatedAt,
       splitExtras(row, MEDIA_KNOWN),
     );
   }
@@ -653,13 +665,24 @@ export async function getMirrorTrip(id: string): Promise<MirrorTrip | null> {
 export type MirrorMedia = {
   id: string;
   linkedType: string;
-  linkedId: string;
+  /** Null on a standalone file — an import or a recording, owned by nobody
+   *  but this account. */
+  linkedId: string | null;
   mediaType: string;
   filename: string | null;
+  /** User-facing label; null falls back to the filename (mediaDisplayName). */
+  displayName: string | null;
   color: string | null;
+  /** "import" | "track" on a standalone file, null on an attachment. */
+  origin: string | null;
+  /** Row-level stats — bbox, distance, counts. `{}` when there are none. */
+  metadata: MediaMetadata;
+  fileSizeBytes: number | null;
   createdAt: string;
   syncState: string;
   localThumbPath: string | null;
+  /** Null means the blob is not on THIS phone yet, not that it is missing:
+   *  rows sync eagerly and bytes are fetched on demand (§7.3). */
   localDisplayPath: string | null;
 };
 
@@ -688,6 +711,65 @@ export async function countOutgoingSharesByCanyon(): Promise<Record<string, numb
   return Object.fromEntries(rows.map((row) => [row.canyon_id, row.n]));
 }
 
+// ── media rows ──────────────────────────────────────────────────────────────
+//
+// One column list and one mapper for every media read. Three call sites spelled
+// the same SELECT and the same row→object map by hand, so adding a column meant
+// finding all three — and a reader that missed one returned a MirrorMedia with
+// the new field silently undefined.
+
+/** Every media column the app reads, in one place. */
+const MEDIA_SELECT = `id, linked_type, linked_id, media_type, filename,
+            display_name, file_size_bytes, color, origin, metadata_json,
+            created_at, sync_state, local_thumb_path, local_display_path`;
+
+type MediaSqlRow = {
+  id: string;
+  linked_type: string;
+  linked_id: string | null;
+  media_type: string;
+  filename: string | null;
+  display_name: string | null;
+  file_size_bytes: string | null;
+  color: string | null;
+  origin: string | null;
+  metadata_json: string | null;
+  created_at: string | null;
+  sync_state: string;
+  local_thumb_path: string | null;
+  local_display_path: string | null;
+};
+
+function rowToMirrorMedia(row: MediaSqlRow): MirrorMedia {
+  let metadata: MediaMetadata = {};
+  if (row.metadata_json) {
+    try {
+      metadata = readMediaMetadata(row.origin, JSON.parse(row.metadata_json));
+    } catch {
+      // A row written by a build that stored something else. Stats are
+      // decoration; the file still has a name and a size, and a list that
+      // threw here would take the whole Saved tab down.
+      metadata = {};
+    }
+  }
+  return {
+    id: row.id,
+    linkedType: row.linked_type,
+    linkedId: row.linked_id,
+    mediaType: row.media_type,
+    filename: row.filename,
+    displayName: row.display_name,
+    color: row.color,
+    origin: row.origin,
+    metadata,
+    fileSizeBytes: row.file_size_bytes === null ? null : Number(row.file_size_bytes),
+    createdAt: row.created_at ?? "",
+    syncState: row.sync_state,
+    localThumbPath: row.local_thumb_path,
+    localDisplayPath: row.local_display_path,
+  };
+}
+
 export async function countMediaByLinkedId(
   linkedType: string,
 ): Promise<Record<string, number>> {
@@ -706,38 +788,47 @@ export async function listMediaForLinked(
   linkedId: string,
 ): Promise<MirrorMedia[]> {
   const db = await getSyncDb();
-  const rows = await db.getAllAsync<{
-    id: string;
-    linked_type: string;
-    linked_id: string;
-    media_type: string;
-    filename: string | null;
-    color: string | null;
-    created_at: string | null;
-    sync_state: string;
-    local_thumb_path: string | null;
-    local_display_path: string | null;
-  }>(
-    `SELECT id, linked_type, linked_id, media_type, filename, color,
-            created_at, sync_state, local_thumb_path, local_display_path
+  const rows = await db.getAllAsync<MediaSqlRow>(
+    `SELECT ${MEDIA_SELECT}
      FROM media WHERE linked_type = ? AND linked_id = ?
        AND sync_state != 'pendingDelete'
      ORDER BY created_at ASC`,
     linkedType,
     linkedId,
   );
-  return rows.map((row) => ({
-    id: row.id,
-    linkedType: row.linked_type,
-    linkedId: row.linked_id,
-    mediaType: row.media_type,
-    filename: row.filename,
-    color: row.color,
-    createdAt: row.created_at ?? "",
-    syncState: row.sync_state,
-    localThumbPath: row.local_thumb_path,
-    localDisplayPath: row.local_display_path,
-  }));
+  return rows.map(rowToMirrorMedia);
+}
+
+/**
+ * The account's standalone files of one kind — the Saved tab's Imports and
+ * Tracks lists.
+ *
+ * Rows arrive from the delta whether or not their blob has been downloaded, so
+ * a file imported on another device lists here with `localDisplayPath` null.
+ * That is the intended state, not a broken row: the bytes are fetched when the
+ * user opens it or puts it on the map.
+ */
+export async function listStandaloneMedia(
+  origin: "import" | "track",
+): Promise<MirrorMedia[]> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<MediaSqlRow>(
+    `SELECT ${MEDIA_SELECT}
+     FROM media WHERE origin = ? AND sync_state != 'pendingDelete'
+     ORDER BY created_at DESC`,
+    origin,
+  );
+  return rows.map(rowToMirrorMedia);
+}
+
+/** One media row by id, or null. */
+export async function getMediaById(id: string): Promise<MirrorMedia | null> {
+  const db = await getSyncDb();
+  const row = await db.getFirstAsync<MediaSqlRow>(
+    `SELECT ${MEDIA_SELECT} FROM media WHERE id = ?`,
+    id,
+  );
+  return row ? rowToMirrorMedia(row) : null;
 }
 
 /**
@@ -754,38 +845,15 @@ export async function listCanyonTrackMedia(
 ): Promise<MirrorMedia[]> {
   const db = await getSyncDb();
   const placeholders = trackMimeTypes.map(() => "?").join(", ");
-  const rows = await db.getAllAsync<{
-    id: string;
-    linked_type: string;
-    linked_id: string;
-    media_type: string;
-    filename: string | null;
-    color: string | null;
-    created_at: string | null;
-    sync_state: string;
-    local_thumb_path: string | null;
-    local_display_path: string | null;
-  }>(
-    `SELECT id, linked_type, linked_id, media_type, filename, color,
-            created_at, sync_state, local_thumb_path, local_display_path
+  const rows = await db.getAllAsync<MediaSqlRow>(
+    `SELECT ${MEDIA_SELECT}
      FROM media
      WHERE linked_type = 'canyon' AND media_type IN (${placeholders})
        AND sync_state != 'pendingDelete'
      ORDER BY created_at ASC`,
     ...trackMimeTypes,
   );
-  return rows.map((row) => ({
-    id: row.id,
-    linkedType: row.linked_type,
-    linkedId: row.linked_id,
-    mediaType: row.media_type,
-    filename: row.filename,
-    color: row.color,
-    createdAt: row.created_at ?? "",
-    syncState: row.sync_state,
-    localThumbPath: row.local_thumb_path,
-    localDisplayPath: row.local_display_path,
-  }));
+  return rows.map(rowToMirrorMedia);
 }
 
 type WaypointRow = {

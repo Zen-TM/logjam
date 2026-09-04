@@ -41,6 +41,17 @@ export type Track = {
   pausedMs: number;
   /** Start of the pause in progress, else null. */
   pausedAt: string | null;
+  /**
+   * The standalone media row this finished recording was serialised into
+   * (tracks/trackBackup.ts). Null while it is still recording, when it holds no
+   * points, or when the backup failed and has not been retried yet.
+   *
+   * It is here so the recording is shown ONCE: this table is the recorder's own
+   * store and stays the source of the map line and the stats, while the media
+   * row is the copy that syncs, and a surface listing both has to be able to
+   * tell that they are the same trip.
+   */
+  mediaId: string | null;
   updatedAt: string;
 };
 
@@ -81,6 +92,7 @@ type TrackRow = {
   endedAt: string | null;
   pausedMs: number;
   pausedAt: string | null;
+  mediaId: string | null;
   updatedAt: string;
 };
 
@@ -101,6 +113,7 @@ function rowToTrack(row: TrackRow): Track {
     endedAt: row.endedAt,
     pausedMs: row.pausedMs,
     pausedAt: row.pausedAt,
+    mediaId: row.mediaId,
     updatedAt: row.updatedAt,
   };
 }
@@ -109,6 +122,26 @@ export async function listTracks(): Promise<Track[]> {
   const db = await getOfflineDb();
   const rows = await db.getAllAsync<TrackRow>(
     "SELECT * FROM track ORDER BY startedAt DESC",
+  );
+  return rows.map(rowToTrack);
+}
+
+/**
+ * Finished recordings with no account copy yet — what the backup sweep picks up.
+ *
+ * `pointCount > 0` because an empty recording has nothing to serialise:
+ * `backUpFinishedTrack` returns null for one, leaving `mediaId` null, so
+ * without this filter the sweep would re-select it every cycle for ever.
+ *
+ * Oldest first: if several are owed, the one the user is most likely to have
+ * given up on is the one that has been waiting longest.
+ */
+export async function listTracksNeedingBackup(): Promise<Track[]> {
+  const db = await getOfflineDb();
+  const rows = await db.getAllAsync<TrackRow>(
+    `SELECT * FROM track
+     WHERE state = 'done' AND mediaId IS NULL AND pointCount > 0
+     ORDER BY endedAt ASC`,
   );
   return rows.map(rowToTrack);
 }
@@ -173,6 +206,7 @@ export async function updateTrack(
       | "pausedMs"
       | "pausedAt"
       | "color"
+      | "mediaId"
     >
   > & { stats?: TrackStats },
 ): Promise<void> {
@@ -210,6 +244,10 @@ export async function updateTrack(
   if (patch.pausedAt !== undefined) {
     sets.push("pausedAt = ?");
     args.push(patch.pausedAt);
+  }
+  if (patch.mediaId !== undefined) {
+    sets.push("mediaId = ?");
+    args.push(patch.mediaId);
   }
   if (patch.stats !== undefined) {
     // `pointCount` is deliberately NOT written here, even though TrackStats

@@ -17,7 +17,7 @@ import type {
   TWaypoint,
   CanyonTrack,
 } from "../../canyonUtils";
-import type { TripLogCustomFieldDef, VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
+import type { StandaloneFile, TripLogCustomFieldDef, VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
 import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
@@ -148,6 +148,13 @@ function SidebarPanel({
   selectedRoute,
   allRoutes,
   canyonTracks,
+  standaloneFiles,
+  standaloneFilesError,
+  shownStandaloneIds,
+  onToggleStandaloneFile,
+  onRenameStandaloneFile,
+  onDeleteStandaloneFile,
+  onFlyToStandaloneFile,
   onSelectRoute,
   onRouteHoverPosition,
   currentUserId,
@@ -278,6 +285,13 @@ function SidebarPanel({
   selectedRoute: TRoute | null;
   allRoutes: TRoute[];
   canyonTracks: CanyonTrack[];
+  standaloneFiles: StandaloneFile[];
+  standaloneFilesError: string | null;
+  shownStandaloneIds: string[];
+  onToggleStandaloneFile: (id: string) => void;
+  onRenameStandaloneFile: (id: string, displayName: string) => void;
+  onDeleteStandaloneFile: (file: StandaloneFile) => Promise<void>;
+  onFlyToStandaloneFile: (file: StandaloneFile) => void;
   onSelectRoute: (id: string) => void;
   onRouteHoverPosition: (position: [number, number] | null) => void;
   currentUserId: string | null;
@@ -555,6 +569,13 @@ function SidebarPanel({
             routes={allRoutes}
             currentUserId={currentUserId}
             canyonTracks={canyonTracks}
+            standaloneFiles={standaloneFiles}
+            standaloneFilesError={standaloneFilesError}
+            shownStandaloneIds={shownStandaloneIds}
+            onToggleStandaloneFile={onToggleStandaloneFile}
+            onRenameStandaloneFile={onRenameStandaloneFile}
+            onDeleteStandaloneFile={onDeleteStandaloneFile}
+            onFlyToStandaloneFile={onFlyToStandaloneFile}
             canyons={[...canyons, ...sharedCanyons]}
             onStartDrawingRoute={onStartDrawingRoute}
             onSelectRoute={onSelectRoute}

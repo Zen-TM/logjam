@@ -8,6 +8,7 @@ import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
 import { toMediaItems, mediaItemsByLinkedId } from "../lib/mediaPresign";
+import { partitionCanyonMedia, unlinkStandaloneMedia } from "../lib/mediaLink";
 import { requireCanyonAccess, requireCanyonOwnerAccess } from "../lib/canyonAccess";
 import { resolveUser } from "../lib/resolveUser";
 import { canyonDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
@@ -534,20 +535,27 @@ router.delete(
 
     const id = getParam(req.params.id);
 
-    const media = await prisma.media.findMany({
+    const canyonMediaRows = await prisma.media.findMany({
       where: { linkedType: "canyon", linkedId: id },
       select: {
         id: true,
+        origin: true,
         s3KeyDisplay: true,
         s3KeyThumbnail: true,
         fileSizeBytes: true,
       },
     });
+    // A standalone file linked as this canyon's way (an import, a recorded
+    // track) is UNLINKED, never deleted — it is the user's own file and lives
+    // on in Saved. Only the canyon's own attachments die with it. Same rule the
+    // linked route already follows; lib/mediaLink.ts owns the decision.
+    const { deleted: media, unlinked: unlinkedMedia } =
+      partitionCanyonMedia(canyonMediaRows);
 
-    // S3-first (ARCH-004): the media S3 keys are already captured in `media`
-    // above, so delete the blobs before the DB rows. deleteS3Keys throws on
-    // failure (CH-002), aborting before any row is removed — no orphaned blobs,
-    // and the DB still holds the canyon/media if a retry is needed.
+    // S3-first (ARCH-004): the media S3 keys are already captured above, so
+    // delete the blobs before the DB rows. deleteS3Keys throws on failure
+    // (CH-002), aborting before any row is removed — no orphaned blobs, and the
+    // DB still holds the canyon/media if a retry is needed.
     const s3Keys = media.flatMap((m) =>
       [m.s3KeyDisplay, m.s3KeyThumbnail].filter((k): k is string => Boolean(k)),
     );
@@ -564,8 +572,12 @@ router.delete(
     // quota now — per-trip media survives with its trip).
     await prisma.$transaction(async (tx) => {
       await tx.media.deleteMany({
-        where: { linkedType: "canyon", linkedId: id },
+        where: { id: { in: media.map((m) => m.id) } },
       });
+      await unlinkStandaloneMedia(
+        tx,
+        unlinkedMedia.map((m) => m.id),
+      );
       // Preserve the (about-to-be-deleted) canyon's name on trips for which
       // this was their ONLY linked canyon, so they still carry a label once
       // the join row cascades away. Trips that keep another linked canyon
@@ -612,6 +624,7 @@ router.delete(
           mediaIds: media.map((m) => m.id),
           shares,
           routeId: linkedRoute?.id ?? null,
+          unlinkedMediaIds: unlinkedMedia.map((m) => m.id),
         }),
       );
       await tx.canyonShare.deleteMany({ where: { canyonId: id } });

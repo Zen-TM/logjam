@@ -27,7 +27,10 @@ import {
 import {
   runMediaCreateOp,
   runMediaDeleteOp,
+  runMediaLinkOp,
+  runMediaRenameOp,
   type MediaOpRow,
+  type MediaOpOutcome,
 } from "./mediaUpload";
 import { upsertCanyon, upsertTrip, upsertWaypoint } from "./mirrorStore";
 import { getSyncDb, notifyMirrorChanged } from "./syncDb";
@@ -379,10 +382,7 @@ async function flushMediaOps(): Promise<boolean> {
       row.seq,
     );
     try {
-      const outcome =
-        row.op === "delete"
-          ? await runMediaDeleteOp(row)
-          : await runMediaCreateOp(row);
+      const outcome = await runMediaOp(row);
       if (outcome === "done") {
         progressed = true;
         mirrorTouched = true;
@@ -419,6 +419,24 @@ async function flushMediaOps(): Promise<boolean> {
   // transient outage — but every op got its turn first.
   if (firstError) throw firstError;
   return progressed;
+}
+
+/**
+ * Dispatch one media op. Media is not a push entity (§8.1) — creation is the
+ * three-phase presign flow — but a standalone file can also be renamed and
+ * re-parented, and those are plain REST calls on the same row.
+ */
+function runMediaOp(row: MediaOpRow & { op: string }): Promise<MediaOpOutcome> {
+  switch (row.op) {
+    case "delete":
+      return runMediaDeleteOp(row);
+    case "rename":
+      return runMediaRenameOp(row);
+    case "link":
+      return runMediaLinkOp(row);
+    default:
+      return runMediaCreateOp(row);
+  }
 }
 
 /** A media create must wait for its linked entity's create to fully flush:

@@ -1,6 +1,7 @@
 import { Router, Response } from "express";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
+import { canyonIdOfMedia } from "../lib/mediaLink";
 import { AppError } from "../middleware/errorHandler";
 import { friendsSearchLimiter } from "../middleware/rateLimit";
 import { getParam } from "../lib/getParam";
@@ -322,14 +323,16 @@ router.delete(
       revokedCanyonIds.length > 0
         ? await prisma.media.findMany({
             where: { linkedType: "canyon", linkedId: { in: revokedCanyonIds } },
-            select: { id: true, linkedId: true },
+            select: { id: true, linkedType: true, linkedId: true },
           })
         : [];
     const mediaIdsByCanyon = new Map<string, string[]>();
     for (const m of revokedCanyonMedia) {
-      const list = mediaIdsByCanyon.get(m.linkedId) ?? [];
+      const canyonId = canyonIdOfMedia(m);
+      if (canyonId === null) continue;
+      const list = mediaIdsByCanyon.get(canyonId) ?? [];
       list.push(m.id);
-      mediaIdsByCanyon.set(m.linkedId, list);
+      mediaIdsByCanyon.set(canyonId, list);
     }
     // A linked route rides with the shared canyon record, so unfriending
     // revokes it too.
@@ -556,13 +559,15 @@ router.delete(
           linkedType: "canyon",
           linkedId: { in: revoked.map((r) => r.canyonId) },
         },
-        select: { id: true, linkedId: true },
+        select: { id: true, linkedType: true, linkedId: true },
       });
       const mediaIdsByCanyon = new Map<string, string[]>();
       for (const m of canyonMedia) {
-        const list = mediaIdsByCanyon.get(m.linkedId) ?? [];
+        const canyonId = canyonIdOfMedia(m);
+        if (canyonId === null) continue;
+        const list = mediaIdsByCanyon.get(canyonId) ?? [];
         list.push(m.id);
-        mediaIdsByCanyon.set(m.linkedId, list);
+        mediaIdsByCanyon.set(canyonId, list);
       }
       // A linked route rides with the shared canyon record.
       const revokedRoutes = await prisma.route.findMany({

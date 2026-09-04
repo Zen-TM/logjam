@@ -11,6 +11,7 @@ import {
 } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
+import { canyonIdOfMedia } from "../lib/mediaLink";
 import { AppError } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 import { userPatchLimiter } from "../middleware/rateLimit";
@@ -630,10 +631,11 @@ router.delete(
     // counterpart. Ids only — never names/coords.
     const mediaIdsByCanyon = new Map<string, string[]>();
     for (const m of media) {
-      if (m.linkedType !== "canyon") continue;
-      const list = mediaIdsByCanyon.get(m.linkedId) ?? [];
+      const canyonId = canyonIdOfMedia(m);
+      if (canyonId === null) continue;
+      const list = mediaIdsByCanyon.get(canyonId) ?? [];
       list.push(m.id);
-      mediaIdsByCanyon.set(m.linkedId, list);
+      mediaIdsByCanyon.set(canyonId, list);
     }
     // Who can currently see each owned waypoint through a canyon share. Reuses
     // the one helper that answers that question (lib/waypointLink.ts) rather

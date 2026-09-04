@@ -12,7 +12,7 @@ import { seedId, cid } from "../../prisma/seedIds";
 // right. The rule was a comment until this test.
 describe("hand-minted seed ids", () => {
   it("seedId mints real UUIDv4s across every prefix and index", () => {
-    for (const prefix of ["0", "1", "2", "3"]) {
+    for (const prefix of ["0", "1", "2", "3", "4"]) {
       for (const n of [1, 5, 28, 999, 999999999999]) {
         expect(seedId(prefix, n)).toMatch(UUID_V4_REGEX);
       }

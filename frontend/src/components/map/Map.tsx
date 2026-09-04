@@ -64,6 +64,7 @@ import type {
   TCanyon,
   TFilters,
   CanyonTrack,
+  StandaloneTrack,
   TRoute,
   TWaypoint,
 } from "../../canyonUtils";
@@ -507,6 +508,7 @@ function Map({
   showSharedCanyons,
   showCanyonTracks,
   canyonTracks,
+  standaloneTracks,
   showRoutes,
   routes,
   selectRoute,
@@ -561,6 +563,11 @@ function Map({
   showSharedCanyons: boolean;
   showCanyonTracks: boolean;
   canyonTracks: CanyonTrack[];
+  // Standalone files (the user's own imports and recorded tracks) currently
+  // toggled onto the map, already resolved to a presigned URL. Same
+  // fetch-and-parse treatment as canyonTracks; the list IS the visibility, so
+  // there is no separate layer toggle.
+  standaloneTracks: StandaloneTrack[];
   // User-authored routes. Geometry arrives inline, so unlike canyonTracks
   // there is nothing to fetch and parse per feature.
   showRoutes: boolean;
@@ -957,6 +964,32 @@ function Map({
           "line-cap": "round",
           "line-join": "round",
         },
+        paint: {
+          "line-color": [
+            "coalesce",
+            ["get", "color"],
+            readCssVar("--theme-accent", "#3b82f6"),
+          ],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 7, 2, 14, 4],
+          "line-opacity": 0.9,
+        },
+      });
+
+      // Standalone files: the user's own imports and the tracks Logjam GPS
+      // recorded. Same source/layer shape as canyon-tracks — a different origin
+      // for the list, the same line on the map. No zoom floor, for the same
+      // reason canyon tracks have none: a track file is the thing you came to
+      // look at, not incidental detail. Visibility is the list itself (an
+      // untoggled file is not in the source), so this layer stays visible.
+      map.addSource("standalone-tracks", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer({
+        id: "standalone-tracks-lines",
+        type: "line",
+        source: "standalone-tracks",
+        layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": [
             "coalesce",
@@ -1413,43 +1446,73 @@ function Map({
   // Media ids whose load failure was already surfaced — one toast per track
   // per session, not one per re-render (LAYERS-2 silent-404 fix).
   const failedTrackToastedRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (!mapLoaded || !mapRef.current || !showCanyonTracks) return;
-    let cancelled = false;
-    void (async () => {
+
+  // Fetch + parse a set of track files into features for one of the track
+  // layers. Shared by both: a canyon's attached track and a standalone file are
+  // the same file treated the same way, differing only in the id stamped on
+  // the features and in which source the caller drops them.
+  const loadTrackSource = useCallback(
+    async (
+      entries: {
+        mediaId: string;
+        color: string | null;
+        displayUrl: string;
+        stamp: Record<string, string>;
+      }[],
+      failureMessage: string,
+    ): Promise<GeoJSON.Feature[]> => {
       const cache = trackGeoCacheRef.current;
       const collections = await Promise.all(
-        canyonTracks.map((track) => {
-          let entry = cache[track.mediaId];
+        entries.map((entry) => {
+          // Keyed by id AND stamp: a standalone file LINKED to a canyon appears
+          // in both lists with different stamps, and one cache entry per key
+          // keeps each layer's features stamped for its own layer.
+          const cacheKey = `${entry.mediaId}|${JSON.stringify(entry.stamp)}`;
+          let cached = cache[cacheKey];
           // Discard a cached entry whose presigned URL has rotated so the fresh
           // URL retries; same-URL failures stay cached (LAYERS-2).
-          if (!entry || entry.url !== track.displayUrl) {
+          if (!cached || cached.url !== entry.displayUrl) {
             const promise = fetchTrackGeoJSON(
-              track.displayUrl,
-              track.color,
-              track.canyonId,
+              entry.displayUrl,
+              entry.color,
+              entry.stamp,
             ).catch((err: unknown) => {
               // One bad track must not blank the whole layer. The thrown error
               // carries only the HTTP status — never log the presigned URL,
               // whose canyon-name-derived filename must stay out of logs
               // (privacy rule).
               console.error(err);
-              if (!failedTrackToastedRef.current.has(track.mediaId)) {
-                failedTrackToastedRef.current.add(track.mediaId);
-                toast.error(
-                  messageFromError(err, "Couldn't load a canyon track file."),
-                );
+              if (!failedTrackToastedRef.current.has(entry.mediaId)) {
+                failedTrackToastedRef.current.add(entry.mediaId);
+                toast.error(messageFromError(err, failureMessage));
               }
               return null;
             });
-            entry = { url: track.displayUrl, promise };
-            cache[track.mediaId] = entry;
+            cached = { url: entry.displayUrl, promise };
+            cache[cacheKey] = cached;
           }
-          return entry.promise;
+          return cached.promise;
         }),
       );
+      return collections.flatMap((fc) => (fc ? fc.features : []));
+    },
+    [toast],
+  );
+
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || !showCanyonTracks) return;
+    let cancelled = false;
+    void (async () => {
+      const features = await loadTrackSource(
+        canyonTracks.map((track) => ({
+          mediaId: track.mediaId,
+          color: track.color,
+          displayUrl: track.displayUrl,
+          stamp: { canyonId: track.canyonId },
+        })),
+        "Couldn't load a canyon track file.",
+      );
       if (cancelled) return;
-      const features = collections.flatMap((fc) => (fc ? fc.features : []));
       const source = mapRef.current?.getSource("canyon-tracks") as
         | maplibregl.GeoJSONSource
         | undefined;
@@ -1458,7 +1521,33 @@ function Map({
     return () => {
       cancelled = true;
     };
-  }, [showCanyonTracks, canyonTracks, mapLoaded, toast]);
+  }, [showCanyonTracks, canyonTracks, mapLoaded, loadTrackSource]);
+
+  // Standalone files. The list is the visibility: whatever the user has toggled
+  // on is what gets fetched and drawn.
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    let cancelled = false;
+    void (async () => {
+      const features = await loadTrackSource(
+        standaloneTracks.map((track) => ({
+          mediaId: track.mediaId,
+          color: track.color,
+          displayUrl: track.displayUrl,
+          stamp: { mediaId: track.mediaId },
+        })),
+        "Couldn't load one of your files.",
+      );
+      if (cancelled) return;
+      const source = mapRef.current?.getSource("standalone-tracks") as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      source?.setData({ type: "FeatureCollection", features });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [standaloneTracks, mapLoaded, loadTrackSource]);
 
   // Coordinate picking mode
   const onCoordsPickedRef = useRef(onCoordsPicked);

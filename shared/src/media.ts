@@ -1,12 +1,22 @@
+import type { MediaMetadata, MediaOrigin } from "./mediaMetadata.js";
+
 // Media (object storage) shared types + validation.
 //
-// Media rows link an uploaded file (image/video/track) to either a Canyon or a
-// TripLog. Each image/video stores two S3 objects — a full-res "display" copy
-// and a client-generated "thumbnail"; track files (GPX/KML) store the display
-// copy only. The category drives both server-side validation and client-side
-// rendering (image → <img>, video → <video>, track → download link).
+// A media row is ONE uploaded file belonging to one account. It may hang off a
+// Canyon or a TripLog, or off nothing at all — a `"none"` row is the user's own
+// standalone file (an import they brought in, a track they recorded), which is
+// what lets those sync at all. Each image/video stores two S3 objects — a
+// full-res "display" copy and a client-generated "thumbnail"; track files
+// (GPX/KML/GeoJSON) store the display copy only. The category drives both
+// server-side validation and client-side rendering (image → <img>,
+// video → <video>, track → line on the map + download).
+//
+// A standalone file becomes a canyon's way by having its PARENT set, never by
+// being copied (api/src/routes/media.ts, PATCH /:id/link). Linking and
+// unlinking are therefore visibility changes on one file, and unlinking a
+// shared canyon's way must tombstone it for that canyon's sharees.
 
-export type MediaLinkedType = "canyon" | "tripLog";
+export type MediaLinkedType = "canyon" | "tripLog" | "none";
 export type MediaCategory = "image" | "video" | "track";
 
 export const IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
@@ -14,6 +24,7 @@ export const VIDEO_MIME_TYPES = ["video/mp4", "video/quicktime", "video/webm"] a
 export const TRACK_MIME_TYPES = [
   "application/gpx+xml",
   "application/vnd.google-earth.kml+xml",
+  "application/geo+json",
 ] as const;
 
 // Per-category upload size caps, enforced authoritatively server-side against
@@ -35,6 +46,7 @@ export const MEDIA_EXTENSION_BY_MIME: Record<string, string> = {
   "video/webm": "webm",
   "application/gpx+xml": "gpx",
   "application/vnd.google-earth.kml+xml": "kml",
+  "application/geo+json": "geojson",
 };
 
 // Palette assigned to canyon/trip-log tracks at upload time and reused for the
@@ -121,14 +133,67 @@ export function categoryHasThumbnail(category: MediaCategory): boolean {
 export interface MediaItem {
   id: string;
   linkedType: MediaLinkedType;
-  linkedId: string;
+  /** Null exactly when `linkedType` is `"none"` — a standalone file. */
+  linkedId: string | null;
   mediaType: string; // MIME type
   filename: string;
   fileSizeBytes: number;
   createdAt: string;
+  /** Bumped by a link/unlink; the delta pull keysets on it. */
+  updatedAt: string;
   displayUrl: string;
   thumbnailUrl: string | null;
-  // Assigned only for track (GPX/KML) media; null for image/video. Drives the
-  // track card icon tint and the map track layer colour.
+  // Assigned only for track (GPX/KML/GeoJSON) media; null for image/video.
+  // Drives the track card icon tint and the map track layer colour.
   color: string | null;
+  /** How a standalone file came to exist; null for canyon/trip attachments. */
+  origin: MediaOrigin | null;
+  /** User-facing label; null falls back to `filename`. See mediaDisplayName. */
+  displayName: string | null;
+  /** Row-level stats — see shared/src/mediaMetadata.ts. `{}` when origin is null. */
+  metadata: MediaMetadata;
+}
+
+/**
+ * What to CALL a file in the UI.
+ *
+ * One derivation, in the shape the trip-title rule already takes: the user's
+ * own label if there is one, else the file's name. Never store the result —
+ * `displayName` stays null until something sets it, so a fallback that got
+ * persisted would freeze a name the user never chose.
+ */
+export function mediaDisplayName(media: {
+  displayName?: string | null;
+  filename?: string | null;
+}): string {
+  const label = media.displayName?.trim();
+  if (label) return label;
+  return media.filename?.trim() || "Untitled file";
+}
+
+/** Cap for a user-supplied media label, matching the trip-title cap. */
+export const MEDIA_DISPLAY_NAME_MAX = 200;
+
+/**
+ * A standalone file as listed for a client that is NOT delta-synced (the web
+ * app). Metadata only — no presigned URLs.
+ *
+ * Deliberately without them: minting a URL per row would put the whole list
+ * through the egress meter every time the page loaded, whether or not anything
+ * was opened. Content comes from POST /media/download-urls, which is where the
+ * gate lives.
+ */
+export interface StandaloneFile {
+  id: string;
+  mediaType: string;
+  filename: string;
+  displayName: string | null;
+  fileSizeBytes: number;
+  color: string | null;
+  origin: MediaOrigin;
+  metadata: MediaMetadata;
+  /** The canyon it is linked to as that canyon's way, or null. */
+  linkedCanyonId: string | null;
+  createdAt: string;
+  updatedAt: string;
 }

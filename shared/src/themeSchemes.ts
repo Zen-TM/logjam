@@ -13,6 +13,16 @@ export type ThemeTokens = {
   textPrimary: string;
   textMuted: string;
   warning: string;
+  /**
+   * Something is in a good state — the counterpart to `warning`, and the only
+   * green in the palette that means "fine" rather than "this kind of thing".
+   *
+   * Deliberately muted in every scheme: it marks the ORDINARY case (a file that
+   * is backed up, which is most of them), so it has to be readable at a glance
+   * and invisible when scanned past. A saturated green would pull the eye to
+   * every row that is working.
+   */
+  success: string;
   bonus1: string;
   bonus2: string;
   bonus3: string;
@@ -100,6 +110,7 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       textPrimary: "#F7F3EC",
       textMuted: "#D8CCB9",
       warning: "#F5A693",
+      success: "#93B183",
       bonus1: "#D9CBB8",
       bonus2: "#6B5F4B",
       bonus3: "#9C5A2E",
@@ -116,6 +127,7 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       textPrimary: "#EAF1F6",
       textMuted: "#A7BBC9",
       warning: "#EB8D99",
+      success: "#74C295",
       bonus1: "#97AAB8",
       bonus2: "#16232D",
       bonus3: "#E4AA61",
@@ -132,6 +144,7 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       textPrimary: "#EAF2EC",
       textMuted: "#B4C8BC",
       warning: "#E6AAA3",
+      success: "#8FBE86",
       bonus1: "#A8C4A1",
       bonus2: "#22372B",
       bonus3: "#DCE7DA",
@@ -148,6 +161,7 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       textPrimary: "#ECF2EF",
       textMuted: "#A7B8B2",
       warning: "#F18B77",
+      success: "#8CB79A",
       bonus1: "#CAD7CF",
       bonus2: "#7FA48F",
       bonus3: "#B9C99D",

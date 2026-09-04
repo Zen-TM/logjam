@@ -21,12 +21,17 @@ import SelectedCanyonsDialog from "./dialogs/SelectedCanyonsDialog";
 import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
 import type { TFilters, TCanyon, GeoPdfJobView, TWaypoint } from "../canyonUtils";
+import type { StandaloneFile } from "@logjam/shared";
 import type { PanelId } from "./sidebar/panels";
 import { TOPO_LAYERS } from "../topoLayerTypes";
 import type { CompletedTopoJob, CompletedOverlaysResponse } from "../topoLayerTypes";
 import {
   useCanyons,
   useCanyonTracks,
+  useStandaloneFiles,
+  useStandaloneTracks,
+  renameMedia,
+  deleteMedia,
   useRoutes,
   useWaypoints,
   createWaypoint,
@@ -477,6 +482,49 @@ function App() {
   const { tracks: canyonTracks, refetch: refetchCanyonTracks } = useCanyonTracks(
     loadsUserData && (showCanyonTracks || activePanel === "routes"),
   );
+  // Standalone files: the user's own imports and Logjam GPS recordings. They
+  // hang off no canyon, so the Routes panel is the only place they surface.
+  // Presigned URLs are minted only for the ones toggled onto the map (the
+  // egress gate lives on POST /media/download-urls).
+  const [shownStandaloneIds, setShownStandaloneIds] = useState<string[]>([]);
+  const {
+    files: standaloneFiles,
+    error: standaloneFilesError,
+    refetch: refetchStandaloneFiles,
+  } = useStandaloneFiles(
+    loadsUserData && (activePanel === "routes" || shownStandaloneIds.length > 0),
+  );
+  const { tracks: standaloneTracks } = useStandaloneTracks(
+    standaloneFiles,
+    shownStandaloneIds,
+  );
+
+  const handleRenameStandaloneFile = useCallback(
+    (id: string, displayName: string) => {
+      renameMedia(id, displayName)
+        .then(refetchStandaloneFiles)
+        .catch((err: unknown) => {
+          console.error(err);
+          toast.error(messageFromError(err, "Couldn't rename that file."));
+        });
+    },
+    [refetchStandaloneFiles, toast],
+  );
+
+  const handleDeleteStandaloneFile = useCallback(
+    async (file: StandaloneFile) => {
+      try {
+        await deleteMedia(file.id);
+        setShownStandaloneIds((ids) => ids.filter((id) => id !== file.id));
+        refetchStandaloneFiles();
+      } catch (err) {
+        console.error(err);
+        toast.error(messageFromError(err, "Couldn't delete that file."));
+      }
+    },
+    [refetchStandaloneFiles, toast],
+  );
+
   // Routes load whenever the layer is on OR a draw/edit session is live (the
   // editor needs the row it is editing even with the layer toggled off).
   const { routes, refetch: refetchRoutes } = useRoutes(
@@ -1204,6 +1252,22 @@ function App() {
           selectedRoute={selectedRoute}
           allRoutes={routes}
           canyonTracks={canyonTracks}
+          standaloneFiles={standaloneFiles}
+          standaloneFilesError={standaloneFilesError}
+          shownStandaloneIds={shownStandaloneIds}
+          onToggleStandaloneFile={(id) =>
+            setShownStandaloneIds((ids) =>
+              ids.includes(id) ? ids.filter((current) => current !== id) : [...ids, id],
+            )
+          }
+          onRenameStandaloneFile={handleRenameStandaloneFile}
+          onDeleteStandaloneFile={handleDeleteStandaloneFile}
+          onFlyToStandaloneFile={(file) => {
+            const bbox = file.metadata.bbox;
+            if (!bbox) return;
+            const [west, south, east, north] = bbox;
+            setFlyToCanyon({ lat: (south + north) / 2, lng: (west + east) / 2 });
+          }}
           onSelectRoute={(id) => {
             setSelectedRouteID(id);
             setActivePanel("route-detail");
@@ -1321,6 +1385,7 @@ function App() {
         showSharedCanyons={showSharedCanyons}
         showCanyonTracks={showCanyonTracks}
         canyonTracks={canyonTracks}
+        standaloneTracks={standaloneTracks}
         showRoutes={showRoutes}
         waypoints={waypoints}
         showWaypoints={showWaypoints}

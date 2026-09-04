@@ -12,6 +12,7 @@
 import { Router, Response, NextFunction } from "express";
 import { Prisma } from "@prisma/client";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
+import { readMediaMetadata } from "@logjam/shared";
 import prisma from "../services/prisma";
 import { AppError } from "../middleware/errorHandler";
 import { getEnv } from "../lib/env";
@@ -381,10 +382,12 @@ router.get(
           where: {
             AND: [
               {
-                // Own media, plus canyon-level media of canyons shared with
-                // me — exactly what a sharee can already fetch via
-                // GET /canyons/:id. Trip media of other owners can never
-                // match (its linkedType is "tripLog").
+                // Own media — including standalone files (imports, recorded
+                // tracks), which have no parent at all — plus canyon-level
+                // media of canyons shared with me, exactly what a sharee can
+                // already fetch via GET /canyons/:id. Trip media of other
+                // owners can never match (its linkedType is "tripLog"), and
+                // neither can anyone else's standalone files ("none").
                 OR: [
                   { ownerId: user.id },
                   {
@@ -393,13 +396,17 @@ router.get(
                   },
                 ],
               },
-              keysetWhere("createdAt", since, after),
+              // Keysets on updatedAt, not createdAt. A media row used to be
+              // immutable; linking a file to a canyon and unlinking it again
+              // mutates one, and a createdAt keyset would never redeliver it —
+              // the other device would show a stale parent forever.
+              keysetWhere("updatedAt", since, after),
             ],
           },
-          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
           take,
         }),
-      (row) => row.createdAt,
+      (row) => row.updatedAt,
     );
 
     const canyonShares = await fill(
@@ -608,7 +615,13 @@ router.get(
           filename: row.filename,
           fileSizeBytes: String(row.fileSizeBytes),
           color: row.color,
+          origin: row.origin,
+          displayName: row.displayName,
+          // Row-level stats, so the other device can LIST an import or a
+          // recording without downloading its blob (§7.3).
+          metadata: readMediaMetadata(row.origin, row.metadata),
           createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
         })),
         canyonShares,
         friendships: friendships.map((f) => ({

@@ -21,6 +21,7 @@
 //
 // PRIVACY: five booleans. No canyon names, no regions named.
 import { useCallback, useState } from "react";
+import { StyleSheet, View } from "react-native";
 
 import {
   isAutoDownloadEnabled,
@@ -36,7 +37,8 @@ import {
   setTopoAutoDownloadEnabled,
 } from "../../offline/topoAutoDownload";
 import { Row, ScreenScroll, SectionHeader, Toast, type ToastMessage } from "../../ui";
-import { PreferenceRow } from "./settingsKit";
+import { Hint, PreferenceRow } from "./settingsKit";
+import { spacing } from "../../theme";
 
 /**
  * `needs` names the auto-download switch a row is meaningless without: a data
@@ -163,9 +165,28 @@ export function OfflineSettingsScreen({
           subtitle="Managed on the Saved tab"
           onPress={onOpenSaved}
         />
+        {/* The sync boundary, stated once, where someone goes LOOKING for it.
+            It lived at the top of the Saved tab and cost two lines of the most
+            valuable space on that screen for a sentence read once — while the
+            answer a user actually wants there is per item, which the cloud mark
+            on a synced Saved row now gives them.
+
+            A FOOTNOTE, not a Row: a row on this page is a control, and three of
+            the four above it are switches. Wrapping a statement of fact in the
+            same card promises a tap that does nothing. */}
+        <View style={styles.footnote}>
+          <Hint text="Waypoints, routes, imports and recordings are backed up to your account. Maps you downloaded stay on this device." />
+        </View>
       </ScreenScroll>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  // Clears the Hint's own negative top margin (it is built to tuck under the
+  // control it belongs to) and sets this one off from the row above, which it
+  // is a note about the page for rather than a note about that row.
+  footnote: { paddingTop: spacing(2.5), paddingBottom: spacing(1) },
+});

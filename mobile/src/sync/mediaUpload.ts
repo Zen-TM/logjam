@@ -17,6 +17,8 @@ import {
   isUuidV4,
   mediaCategory,
   MEDIA_EXTENSION_BY_MIME,
+  type MediaMetadata,
+  type MediaOrigin,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -49,12 +51,15 @@ type PresignResponse = {
 type ConfirmedMedia = {
   id: string;
   linkedType: string;
-  linkedId: string;
+  linkedId: string | null;
   mediaType: string;
   filename: string | null;
+  displayName: string | null;
   fileSizeBytes: number | string;
   color: string | null;
+  origin: string | null;
   createdAt: string;
+  updatedAt: string;
 };
 
 async function ensureCacheDir(): Promise<void> {
@@ -211,6 +216,171 @@ export async function attachMediaLocal(
   return mediaId;
 }
 
+/**
+ * Register a file this account OWNS — an import the user brought in, or a track
+ * they recorded — as a standalone media row, and queue its upload.
+ *
+ * Unlike `attachMediaLocal` this does NOT copy the file. The caller's path is
+ * already inside one of our declared stores (localStores.ts), so a copy would
+ * be a third identical file on the phone and a second thing to keep in step
+ * with the row. The path becomes the row's cached blob directly.
+ *
+ * The colour is a LOCAL GUESS so the line draws before the upload finishes; the
+ * server reassigns authoritatively at confirm (see finalizeConfirmed).
+ */
+export async function createStandaloneMediaLocal(args: {
+  /** Scheme-less or file:// path inside an owned store. Not copied. */
+  filePath: string;
+  filename: string;
+  mediaType: string;
+  origin: MediaOrigin;
+  displayName: string | null;
+  metadata: MediaMetadata;
+  color: string | null;
+}): Promise<string> {
+  const category = mediaCategory(args.mediaType);
+  if (category === null) {
+    throw new Error(`Unsupported media type for upload: ${args.mediaType}`);
+  }
+  const displayPath = args.filePath.startsWith("file://")
+    ? args.filePath
+    : `file://${args.filePath}`;
+  if (!isOwnedStorePath(displayPath)) {
+    // A path outside our stores has a lifecycle nobody here controls: the OS
+    // can reclaim it, and the account wipe would never reach it. Copying it
+    // would be the fix, and `attachMediaLocal` is the function that copies.
+    throw new Error("A standalone file must already live in an owned store");
+  }
+  const mediaId = mintUuid();
+  const sizeBytes = await fileSize(displayPath);
+  const now = new Date().toISOString();
+
+  const db = await getSyncDb();
+  await withSyncTransaction(db, async () => {
+    await db.runAsync(
+      `INSERT INTO media
+         (id, linked_type, linked_id, media_type, filename, display_name,
+          file_size_bytes, color, origin, metadata_json, created_at, updated_at,
+          extra_json, sync_state, local_display_path, local_thumb_path)
+       VALUES (?, 'none', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL,
+               'pendingUpload', ?, NULL)`,
+      mediaId,
+      args.mediaType,
+      args.filename,
+      args.displayName,
+      String(sizeBytes),
+      args.color,
+      args.origin,
+      JSON.stringify(args.metadata),
+      now,
+      now,
+      displayPath,
+    );
+    await db.runAsync(
+      `INSERT INTO outbox
+         (op_id, entity, op, entity_id, fields_json, state, attempts, created_at)
+       VALUES (?, 'media', 'create', ?, ?, 'queued', 0, ?)`,
+      mintUuid(),
+      mediaId,
+      JSON.stringify({
+        linkedType: "none",
+        linkedId: null,
+        filename: args.filename,
+        mediaType: args.mediaType,
+        sizeBytes,
+        origin: args.origin,
+        displayName: args.displayName,
+        metadata: args.metadata,
+        localDisplayPath: displayPath,
+        localThumbPath: null,
+      } satisfies MediaFields),
+      now,
+    );
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+  return mediaId;
+}
+
+/**
+ * Rename a standalone file. Optimistic: the label changes locally at once and
+ * the op carries it to the server.
+ *
+ * Supersedes rather than queues: two renames of the same file are not two
+ * facts, they are one label, and sending both would have the server briefly
+ * hold a name the user already replaced.
+ */
+export async function renameStandaloneMediaLocal(
+  mediaId: string,
+  displayName: string | null,
+): Promise<void> {
+  const db = await getSyncDb();
+  await withSyncTransaction(db, async () => {
+    await db.runAsync(
+      "UPDATE media SET display_name = ? WHERE id = ?",
+      displayName,
+      mediaId,
+    );
+    await db.runAsync(
+      `DELETE FROM outbox
+       WHERE entity = 'media' AND op = 'rename' AND entity_id = ?
+         AND state = 'queued'`,
+      mediaId,
+    );
+    await db.runAsync(
+      `INSERT INTO outbox
+         (op_id, entity, op, entity_id, fields_json, state, attempts, created_at)
+       VALUES (?, 'media', 'rename', ?, ?, 'queued', 0, ?)`,
+      mintUuid(),
+      mediaId,
+      JSON.stringify({ displayName } satisfies RenameFields),
+      new Date().toISOString(),
+    );
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+}
+
+/**
+ * Link a standalone file to a canyon as its way, or unlink it (`canyonId`
+ * null). The mirror moves immediately; the op carries the move to the server.
+ *
+ * Supersedes a queued link for the same file for the same reason a rename does:
+ * a file has one parent, and replaying the intermediate ones would make a
+ * sharee's mirror flicker through canyons the user never left it on.
+ */
+export async function linkStandaloneMediaLocal(
+  mediaId: string,
+  canyonId: string | null,
+): Promise<void> {
+  const db = await getSyncDb();
+  await withSyncTransaction(db, async () => {
+    await db.runAsync(
+      "UPDATE media SET linked_type = ?, linked_id = ? WHERE id = ?",
+      canyonId === null ? "none" : "canyon",
+      canyonId,
+      mediaId,
+    );
+    await db.runAsync(
+      `DELETE FROM outbox
+       WHERE entity = 'media' AND op = 'link' AND entity_id = ?
+         AND state = 'queued'`,
+      mediaId,
+    );
+    await db.runAsync(
+      `INSERT INTO outbox
+         (op_id, entity, op, entity_id, fields_json, state, attempts, created_at)
+       VALUES (?, 'media', 'link', ?, ?, 'queued', 0, ?)`,
+      mintUuid(),
+      mediaId,
+      JSON.stringify({ canyonId } satisfies LinkFields),
+      new Date().toISOString(),
+    );
+  });
+  notifyMirrorChanged();
+  scheduleMutationSync();
+}
+
 // ── flush-side: the three-phase resumable flow (§7.1) ───────────────────────
 
 export type MediaOpRow = {
@@ -229,15 +399,26 @@ export type MediaOpRow = {
 export type MediaOpOutcome = "done" | "blocked";
 
 type MediaFields = {
-  linkedType: "canyon" | "tripLog";
-  linkedId: string;
+  linkedType: "canyon" | "tripLog" | "none";
+  /** Null on a standalone file — it belongs to no canyon or trip. */
+  linkedId: string | null;
   filename: string;
   mediaType: string;
   sizeBytes: number;
   thumbnailSizeBytes?: number;
   localDisplayPath: string;
   localThumbPath: string | null;
+  /** Standalone files only: what kind it is, and its row-level stats. */
+  origin?: MediaOrigin;
+  displayName?: string | null;
+  metadata?: MediaMetadata;
 };
+
+/** Fields of a rename op (`op = 'rename'`). */
+type RenameFields = { displayName: string | null };
+
+/** Fields of a link/unlink op (`op = 'link'`). */
+type LinkFields = { canyonId: string | null };
 
 /** The first of the op's local blobs that has gone missing, or null. */
 async function firstMissingFile(fields: MediaFields): Promise<string | null> {
@@ -276,14 +457,21 @@ async function finalizeConfirmed(
   confirmed: ConfirmedMedia,
 ): Promise<void> {
   // The uploaded local files become the offline cache blobs (§7.3).
+  // The server owns the colour: it picks the next one avoiding collisions
+  // across every device, which this phone cannot see. The local row carried a
+  // guess so the line drew immediately, and this is where the two reconcile —
+  // usually to the same value, since both run pickNextTrackColor over nearly
+  // the same set.
   await db.runAsync(
     `UPDATE media SET sync_state = 'synced', color = ?, file_size_bytes = ?,
-       media_type = ?, filename = ?
+       media_type = ?, filename = ?, display_name = ?, updated_at = ?
      WHERE id = ?`,
     confirmed.color,
     String(confirmed.fileSizeBytes),
     confirmed.mediaType,
     confirmed.filename,
+    confirmed.displayName,
+    confirmed.updatedAt ?? null,
     mediaId,
   );
   await db.runAsync("DELETE FROM outbox WHERE seq = ?", seq);
@@ -331,8 +519,7 @@ export async function runMediaCreateOp(row: MediaOpRow): Promise<MediaOpOutcome>
       method: "POST",
       body: {
         mediaId: row.entity_id,
-        linkedType: fields.linkedType,
-        linkedId: fields.linkedId,
+        ...linkBody(fields),
         filename: fields.filename,
         mediaType: fields.mediaType,
         sizeBytes: fields.sizeBytes,
@@ -397,14 +584,97 @@ export async function runMediaCreateOp(row: MediaOpRow): Promise<MediaOpOutcome>
     {
       method: "POST",
       body: {
-        linkedType: fields.linkedType,
-        linkedId: fields.linkedId,
+        ...linkBody(fields),
         filename: fields.filename,
         mediaType: fields.mediaType,
       },
     },
   );
   await finalizeConfirmed(db, row.seq, row.entity_id, confirmed);
+  return "done";
+}
+
+/**
+ * The parent (and, for a standalone file, its identity) as the API wants it.
+ *
+ * Spelled once because presign and confirm must agree exactly: they validate
+ * the same pair and the same stats, and a body that differed between the two
+ * would pass the fail-fast check and then 400 after the bytes were already up.
+ * `linkedId` is OMITTED rather than sent as null on a standalone file — the
+ * server rejects a "none" that carries one.
+ */
+function linkBody(fields: MediaFields): Record<string, unknown> {
+  if (fields.linkedType !== "none") {
+    return { linkedType: fields.linkedType, linkedId: fields.linkedId };
+  }
+  return {
+    linkedType: "none",
+    origin: fields.origin,
+    displayName: fields.displayName ?? undefined,
+    metadata: fields.metadata ?? {},
+  };
+}
+
+/**
+ * Rename a standalone file server-side. Idempotent: the row already carries the
+ * new label locally, and PATCH is last-writer-wins, so a retry re-sends the
+ * same value. A 404 means the file is gone — the goal state — and the op is
+ * dropped rather than parked.
+ */
+export async function runMediaRenameOp(row: MediaOpRow): Promise<MediaOpOutcome> {
+  const db = await getSyncDb();
+  const fields = JSON.parse(row.fields_json ?? "{}") as RenameFields;
+  try {
+    await apiFetch<ConfirmedMedia>(`/media/${row.entity_id}`, {
+      method: "PATCH",
+      body: { displayName: fields.displayName },
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status !== 404) throw err;
+  }
+  await db.runAsync("DELETE FROM outbox WHERE seq = ?", row.seq);
+  return "done";
+}
+
+/**
+ * Link a standalone file to a canyon as its way, or unlink it.
+ *
+ * This is what replaced uploading a COPY of an import into a canyon. The local
+ * mirror row has already moved (the UI showed the change immediately), so a
+ * success needs no further write; a 404 means the file is gone and the op has
+ * nothing left to do. A 409 is the canyon's track slot being taken by
+ * something this device has not pulled yet — a real conflict the user has to
+ * see, so it parks rather than retrying forever.
+ */
+export async function runMediaLinkOp(row: MediaOpRow): Promise<MediaOpOutcome> {
+  const db = await getSyncDb();
+  const fields = JSON.parse(row.fields_json ?? "{}") as LinkFields;
+  try {
+    await apiFetch<ConfirmedMedia>(`/media/${row.entity_id}/link`, {
+      method: "PATCH",
+      body:
+        fields.canyonId === null
+          ? { linkedType: "none" }
+          : { linkedType: "canyon", linkedId: fields.canyonId },
+    });
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status === 404) {
+      await db.runAsync("DELETE FROM outbox WHERE seq = ?", row.seq);
+      return "done";
+    }
+    if (typeof status === "number" && PERMANENT_PRESIGN_STATUSES.has(status)) {
+      await db.runAsync(
+        "UPDATE outbox SET state = 'blocked', error_json = ? WHERE seq = ?",
+        JSON.stringify({ code: status, message: messageForBlock(status) }),
+        row.seq,
+      );
+      return "blocked";
+    }
+    throw err;
+  }
+  await db.runAsync("DELETE FROM outbox WHERE seq = ?", row.seq);
   return "done";
 }
 

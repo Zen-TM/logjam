@@ -11,6 +11,7 @@ import { getEnv } from "../lib/env";
 import { deleteS3Keys } from "../lib/s3Cleanup";
 import { decrementStorageUsed } from "../lib/storageQuota";
 import { formatTripCanyonNames, TRIP_NAME_MAX_LENGTH } from "@logjam/shared";
+import { partitionCanyonMedia, unlinkStandaloneMedia } from "./mediaLink";
 import {
   canyonDeleteTombstones,
   tripDeleteTombstones,
@@ -57,16 +58,22 @@ export async function deleteCanyonsCascade(
   const ownedIds = owned.map((c) => c.id);
   if (ownedIds.length === 0) return [];
 
-  const media = await prisma.media.findMany({
+  const canyonMediaRows = await prisma.media.findMany({
     where: { linkedType: "canyon", linkedId: { in: ownedIds } },
     select: {
       id: true,
       linkedId: true,
+      origin: true,
       s3KeyDisplay: true,
       s3KeyThumbnail: true,
       fileSizeBytes: true,
     },
   });
+  // Standalone files linked as a canyon's way survive the canyon (they are the
+  // user's own imports and recordings); only its own attachments die with it.
+  // Same rule as the single delete — lib/mediaLink.ts owns it.
+  const { deleted: media, unlinked: unlinkedMedia } =
+    partitionCanyonMedia(canyonMediaRows);
 
   // S3-first (ARCH-004): blobs before rows.
   const s3Keys = media.flatMap((m) =>
@@ -77,8 +84,12 @@ export async function deleteCanyonsCascade(
 
   await prisma.$transaction(async (tx) => {
     await tx.media.deleteMany({
-      where: { linkedType: "canyon", linkedId: { in: ownedIds } },
+      where: { id: { in: media.map((m) => m.id) } },
     });
+    await unlinkStandaloneMedia(
+      tx,
+      unlinkedMedia.map((m) => m.id),
+    );
     // Preserve the (about-to-be-deleted) canyons' names on trips for which
     // these were their ONLY linked canyons, so they still carry a label once
     // the join rows cascade away. Trips that keep another linked canyon need
@@ -153,6 +164,9 @@ export async function deleteCanyonsCascade(
         shares: shares.filter((s) => s.canyonId === canyonId),
         routeId:
           linkedRoutes.find((route) => route.canyonId === canyonId)?.id ?? null,
+        unlinkedMediaIds: unlinkedMedia
+          .filter((m) => m.linkedId === canyonId)
+          .map((m) => m.id),
       }),
     );
     await writeTombstones(tx, tombstones);

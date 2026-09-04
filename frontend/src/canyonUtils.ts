@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
-import type { ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, CanyonMergePolicy, ElevationProfile, SharableEntityType, FileSendStatus, FileSendSourceKind } from "@logjam/shared";
+import type { StandaloneFile, ThemeSchemeId, TripLogCustomFieldDef, NotificationPreferences, MediaItem, MediaLinkedType, CanyonMergePolicy, ElevationProfile, SharableEntityType, FileSendStatus, FileSendSourceKind } from "@logjam/shared";
 import { formatTripCanyonNames } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
@@ -1100,6 +1100,106 @@ export async function uploadMedia(params: {
 
 export function deleteMedia(id: string): Promise<void> {
   return apiFetch<void>(`/media/${id}`, { method: "DELETE" });
+}
+
+// ── Standalone files ──────────────────────────────────────────
+// A file that belongs to nobody but the user: a GPX/KML/GeoJSON they imported,
+// or a track Logjam GPS recorded. The list is metadata only — blob content
+// comes from POST /media/download-urls, which is where the egress gate lives,
+// so a URL is minted only for the files actually being drawn.
+
+export function getStandaloneFiles(): Promise<StandaloneFile[]> {
+  return apiFetch<StandaloneFile[]>("/media/standalone");
+}
+
+export function useStandaloneFiles(enabled: boolean) {
+  const [files, setFiles] = useState<StandaloneFile[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [fetchCount, setFetchCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    getStandaloneFiles()
+      .then((data) => { if (!cancelled) setFiles(data); })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setError(messageFromError(err, "Couldn't load your files."));
+      });
+    return () => { cancelled = true; };
+  }, [enabled, fetchCount]);
+
+  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
+
+  return { files, error, refetch };
+}
+
+export function renameMedia(id: string, displayName: string): Promise<MediaItem> {
+  return apiFetch<MediaItem>(`/media/${id}`, {
+    method: "PATCH",
+    body: { displayName },
+  });
+}
+
+export function getMediaDownloadUrls(
+  ids: string[],
+): Promise<{ items: { id: string; displayUrl: string; thumbnailUrl: string | null }[] }> {
+  return apiFetch<{
+    items: { id: string; displayUrl: string; thumbnailUrl: string | null }[];
+  }>("/media/download-urls", { method: "POST", body: { ids } });
+}
+
+/** A standalone file resolved to something the map track layer can fetch. */
+export type StandaloneTrack = {
+  mediaId: string;
+  color: string | null;
+  displayUrl: string;
+};
+
+/**
+ * Presigned URLs for the standalone files currently toggled onto the map.
+ * Ids the server won't serve (egress cap, deleted row) are simply absent from
+ * the response — they drop off the map rather than erroring the whole layer.
+ *
+ * A file LINKED to a canyon is excluded: it is that canyon's way, and the
+ * canyon-tracks layer already draws it. Without this the same geometry is
+ * fetched twice, presigned twice against the egress meter, and stacked on
+ * itself — invisible until two colours disagree.
+ */
+export function useStandaloneTracks(files: StandaloneFile[], shownIds: string[]) {
+  const [tracks, setTracks] = useState<StandaloneTrack[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const shown = files.filter(
+      (file) => file.linkedCanyonId === null && shownIds.includes(file.id),
+    );
+    if (shown.length === 0) {
+      setTracks([]);
+      return;
+    }
+    let cancelled = false;
+    getMediaDownloadUrls(shown.map((file) => file.id))
+      .then(({ items }) => {
+        if (cancelled) return;
+        const colorById = new Map(shown.map((file) => [file.id, file.color]));
+        setTracks(
+          items.map((item) => ({
+            mediaId: item.id,
+            color: colorById.get(item.id) ?? null,
+            displayUrl: item.displayUrl,
+          })),
+        );
+        setError(null);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setError(messageFromError(err, "Couldn't load your files."));
+      });
+    return () => { cancelled = true; };
+  }, [files, shownIds]);
+
+  return { tracks, error };
 }
 
 // ── Analytics ─────────────────────────────────────────────────
