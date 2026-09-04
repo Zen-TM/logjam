@@ -40,15 +40,21 @@ vi.mock("../sync/mirrorStore", () => ({
 }));
 
 const updateTrack = vi.fn(async () => {});
+const listTracksNeedingBackup = vi.fn(async () => [] as unknown[]);
+const listTrackPoints = vi.fn(async () => [] as unknown[]);
 vi.mock("./tracksDb", () => ({
   updateTrack: (...args: unknown[]) => updateTrack(...(args as [])),
   getTrack: vi.fn(async () => null),
-  listTrackPoints: vi.fn(async () => []),
+  listTrackPoints: (...args: unknown[]) => listTrackPoints(...(args as [])),
+  listTracksNeedingBackup: () => listTracksNeedingBackup(),
 }));
 
-const { backUpFinishedTrack, trackBackupMetadata, TrackBackupError } = await import(
-  "./trackBackup"
-);
+const {
+  backUpFinishedTrack,
+  sweepTrackBackups,
+  trackBackupMetadata,
+  TrackBackupError,
+} = await import("./trackBackup");
 type Track = Parameters<typeof backUpFinishedTrack>[0];
 
 const STARTED = "2026-09-01T00:00:00.000Z";
@@ -103,6 +109,8 @@ beforeEach(() => {
   written.length = 0;
   deleted.length = 0;
   createStandaloneMediaLocal.mockResolvedValue("media-1");
+  listTracksNeedingBackup.mockResolvedValue([]);
+  listTrackPoints.mockResolvedValue(points());
 });
 
 describe("the stats a backed-up recording carries", () => {
@@ -212,5 +220,65 @@ describe("a failure leaves the recording alone", () => {
     await expect(backUpFinishedTrack(finishedTrack(), points())).rejects.toMatchObject({
       cause,
     });
+  });
+});
+
+// The hole this closes: the finish-time backup can fail, and its alert offers
+// "Try again". A user who taps "Not now" used to be the end of it — that
+// recording was never backed up and nothing mentioned it again.
+describe("the backup sweep", () => {
+  it("registers every finished recording that has no account copy", async () => {
+    listTracksNeedingBackup.mockResolvedValue([
+      finishedTrack({ id: "a" }),
+      finishedTrack({ id: "b" }),
+    ]);
+    createStandaloneMediaLocal
+      .mockResolvedValueOnce("media-a")
+      .mockResolvedValueOnce("media-b");
+
+    expect(await sweepTrackBackups()).toBe(2);
+    expect(updateTrack).toHaveBeenCalledWith("a", { mediaId: "media-a" });
+    expect(updateTrack).toHaveBeenCalledWith("b", { mediaId: "media-b" });
+  });
+
+  it("does nothing when every recording is already backed up", async () => {
+    expect(await sweepTrackBackups()).toBe(0);
+    expect(createStandaloneMediaLocal).not.toHaveBeenCalled();
+  });
+
+  it("stops on the first failure instead of working the list", async () => {
+    // A registration failure is a fact about the DEVICE — no disk, no
+    // directory — so it will hold for every track behind this one, and
+    // grinding on would write and delete a GPX each for nothing.
+    listTracksNeedingBackup.mockResolvedValue([
+      finishedTrack({ id: "a" }),
+      finishedTrack({ id: "b" }),
+      finishedTrack({ id: "c" }),
+    ]);
+    createStandaloneMediaLocal.mockRejectedValueOnce(new Error("no space"));
+
+    expect(await sweepTrackBackups()).toBe(0);
+    expect(createStandaloneMediaLocal).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a failure recoverable — the track keeps its null mediaId", async () => {
+    listTracksNeedingBackup.mockResolvedValue([finishedTrack({ id: "a" })]);
+    createStandaloneMediaLocal.mockRejectedValueOnce(new Error("no space"));
+
+    await sweepTrackBackups();
+    // Nothing claims the backup happened, so the next cycle finds it owed
+    // again — the sweep IS the retry.
+    expect(updateTrack).not.toHaveBeenCalled();
+    expect(deleted).toEqual([`${STORE}a-${Date.parse(ENDED)}.gpx`]);
+  });
+
+  it("lets a failure to even LIST propagate, for the caller to swallow", async () => {
+    // Deliberately not caught here: the sweep cannot tell a transient DB fault
+    // from a broken one, and hiding it would leave the caller believing the
+    // sweep ran. `syncEngine` is where it is made harmless — the call there is
+    // `.catch(() => {})` for exactly the reason the thumbnail cache beside it
+    // is, so a cycle never fails over a recording.
+    listTracksNeedingBackup.mockRejectedValueOnce(new Error("db gone"));
+    await expect(sweepTrackBackups()).rejects.toThrow();
   });
 });

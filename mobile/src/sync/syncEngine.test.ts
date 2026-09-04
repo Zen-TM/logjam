@@ -42,6 +42,12 @@ vi.mock("../offline/networkPolicy", () => ({ canRunNow: () => Promise.resolve(tr
 // ordinary case and the one these tests are about.
 vi.mock("./flush", () => ({ flushOutbox: () => Promise.resolve({ retrying: 0 }) }));
 vi.mock("./mediaCache", () => ({ syncThumbnailCache: () => Promise.resolve() }));
+// The cycle registers any recording that owes a backup before it flushes. Stubbed
+// here for the same reason the media cache is: the real module reaches the
+// filesystem, and what this suite tests is the cycle's ORDER and its backoff.
+vi.mock("../tracks/trackBackup", () => ({
+  sweepTrackBackups: () => Promise.resolve(0),
+}));
 vi.mock("./mediaSyncBridge", () => ({ setMutationSyncHandler: () => {} }));
 vi.mock("./outbox", () => ({ migrateLegacyWaypoints: () => Promise.resolve() }));
 vi.mock("./deltaPull", () => ({

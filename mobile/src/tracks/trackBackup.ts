@@ -28,7 +28,13 @@ import { RECORDED_TRACK_DIR } from "../offline/localStores";
 import { bboxOfPoints } from "../saved/bboxOfPoints";
 import { createStandaloneMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
 import { getMediaById } from "../sync/mirrorStore";
-import { getTrack, listTrackPoints, updateTrack, type Track } from "./tracksDb";
+import {
+  getTrack,
+  listTrackPoints,
+  listTracksNeedingBackup,
+  updateTrack,
+  type Track,
+} from "./tracksDb";
 
 /**
  * The backup failed; the RECORDING DID NOT. Thrown only after the track row is
@@ -142,13 +148,51 @@ export async function backUpFinishedTrack(
  * retry is just the same call again, and it is safe to run on a track that
  * already succeeded (it re-serialises and supersedes).
  *
- * ponytail: driven from the finish alert's "Try again" only — there is no
- * sweeper re-backing-up every finished track with a null `mediaId`, deliberately,
- * because that would also hoover up every recording made before this existed and
- * upload it without asking. Add one if backups are seen to fail in the field.
+ * Also what `sweepTrackBackups` calls, so the two paths cannot diverge.
  */
 export async function retryTrackBackup(trackId: string): Promise<string | null> {
   const track = await getTrack(trackId);
   if (!track || track.state !== "done") return null;
   return backUpFinishedTrack(track, await listTrackPoints(trackId));
+}
+
+/**
+ * Register every finished recording that has no account copy yet.
+ *
+ * The finish-time backup can fail — a full disk, a write refused, a media row
+ * the outbox would not take — and the alert it raises offers "Try again". A
+ * user who taps "Not now" was, until this existed, the end of the story: that
+ * recording was never backed up and nothing ever mentioned it again. A silent
+ * hole exactly where the feature's whole promise is, which is not something a
+ * dismissible dialog should be the only guard for.
+ *
+ * NO METERED GATE HERE, deliberately. This writes a GPX and a mirror row; the
+ * bytes leave the phone through the ordinary media outbox, which already checks
+ * `canRunNow("mediaUpload")` before its PUTs (mediaUpload.ts). Gating here as
+ * well would delay the one step whose failure this exists to recover from, to
+ * no benefit — the upload waits for Wi-Fi either way.
+ *
+ * STOPS ON THE FIRST FAILURE rather than working the list. If registration is
+ * failing it is failing for a reason that applies to all of them (no disk, no
+ * directory), and grinding through would write and delete a file per track for
+ * nothing. The next cycle tries again from the top.
+ *
+ * Returns how many it registered, for the caller's log line — never a name, a
+ * path or a count of points.
+ */
+export async function sweepTrackBackups(): Promise<number> {
+  const owed = await listTracksNeedingBackup();
+  let registered = 0;
+  for (const track of owed) {
+    try {
+      const mediaId = await backUpFinishedTrack(track, await listTrackPoints(track.id));
+      if (mediaId !== null) registered += 1;
+    } catch {
+      // The recording is intact — `backUpFinishedTrack` only throws after the
+      // track row is safely finished — so there is nothing to repair, and the
+      // next cycle will find this track still owed.
+      break;
+    }
+  }
+  return registered;
 }

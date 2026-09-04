@@ -126,6 +126,26 @@ export async function listTracks(): Promise<Track[]> {
   return rows.map(rowToTrack);
 }
 
+/**
+ * Finished recordings with no account copy yet — what the backup sweep picks up.
+ *
+ * `pointCount > 0` because an empty recording has nothing to serialise:
+ * `backUpFinishedTrack` returns null for one, leaving `mediaId` null, so
+ * without this filter the sweep would re-select it every cycle for ever.
+ *
+ * Oldest first: if several are owed, the one the user is most likely to have
+ * given up on is the one that has been waiting longest.
+ */
+export async function listTracksNeedingBackup(): Promise<Track[]> {
+  const db = await getOfflineDb();
+  const rows = await db.getAllAsync<TrackRow>(
+    `SELECT * FROM track
+     WHERE state = 'done' AND mediaId IS NULL AND pointCount > 0
+     ORDER BY endedAt ASC`,
+  );
+  return rows.map(rowToTrack);
+}
+
 /** The single recording/paused track, if any. */
 export async function findActiveTrack(): Promise<Track | null> {
   const db = await getOfflineDb();

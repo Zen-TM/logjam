@@ -13,6 +13,7 @@ import { canRunNow } from "../offline/networkPolicy";
 import { runDeltaPull, SyncApplyError } from "./deltaPull";
 import { flushOutbox } from "./flush";
 import { syncThumbnailCache } from "./mediaCache";
+import { sweepTrackBackups } from "../tracks/trackBackup";
 import { setMutationSyncHandler } from "./mediaSyncBridge";
 import {
   APPLY_FAILED_KEY,
@@ -99,6 +100,11 @@ async function runCycleOnce(): Promise<void> {
   // parked — used to abort the cycle before the pull and stop the mirror
   // receiving ANY server change, for as long as that op sat in the outbox.
   // Push failure is still a cycle failure; it just isn't a pull failure.
+  // BEFORE the flush, so anything it registers goes up in this same cycle
+  // rather than waiting for the next one. Best-effort like the thumbnail cache
+  // below: a recording that cannot be written to disk is not a reason to stop
+  // the mirror receiving server changes, and the sweep itself is the retry.
+  await sweepTrackBackups().catch(() => {});
   let flushError: unknown = null;
   let retryingOps = 0;
   try {
