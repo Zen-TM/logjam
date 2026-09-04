@@ -24,6 +24,7 @@ import VectorFeaturesForm from "./vectorStyles/VectorFeaturesForm";
 import VectorLabelSizeForm from "./vectorStyles/VectorLabelSizeForm";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
+import RemoveSharedButton from "../../common/RemoveSharedButton";
 import type { VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
 
 /** Descriptor for the shared confirm dialog — one delete kind at a time. */
@@ -556,6 +557,20 @@ function LidarPanel({
                     >
                       <Trash2 size={14} />
                     </button>
+                  )}
+                  {/* A topo is only ever shared DIRECTLY — it has no canyon to
+                      inherit visibility from — so a shared row always carries a
+                      share of its own for the recipient to drop. */}
+                  {!isOwner && (
+                    <RemoveSharedButton
+                      kindLabel="topo"
+                      itemName={label}
+                      className={classes.actionButton}
+                      remove={() => unshareEntityWith("topoJob", job.jobId, "me")}
+                      onRemoved={onRefetchCompletedTopoJobs}
+                    >
+                      Remove
+                    </RemoveSharedButton>
                   )}
                 </div>
               );

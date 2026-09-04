@@ -50,6 +50,7 @@ import {
   isValidLongitude,
   routeLengthM,
   messageFromError,
+  removeShareConfirm,
   type SharableEntityType,
   type TopoLayerFormat,
   type TopoLayerName,
@@ -146,6 +147,7 @@ import {
   waypointActions,
   type AssetActions,
 } from "./assetActions";
+import { removeSharedEntity } from "../sharing/removeShare";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useStandaloneTrackMedia } from "../tracks/useRemoteTracks";
 import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
@@ -327,6 +329,9 @@ type SavedItem = {
   /** Someone else owns it — see `AssetActions.sharedWithYou`. Drives the
    *  read-only hint, and is why the write verbs below are missing. */
   sharedWithYou?: true;
+  /** Hand a DIRECT share back — see `AssetActions.removeShare`. The one verb a
+   *  row someone else owns does get, and not a delete. */
+  removeShare?: { confirmTitle: string; confirmBody: string; run: () => Promise<unknown> };
   /** Absent on an asset this user may not delete — see `AssetActions.delete`.
    *  Such a row offers no Delete in its sheet and cannot be multi-selected,
    *  because deleting is the only thing a selection does. */
@@ -361,6 +366,7 @@ export function SavedScreen({
   onRecordTrack,
   onDrawRoute,
   onNavigateToWaypoint,
+  onOpenCanyon,
   initialFilter,
   initialHighlight,
 }: {
@@ -410,6 +416,13 @@ export function SavedScreen({
    * off this surface (DESIGN.md §7).
    */
   onNavigateToWaypoint: (waypointId: string) => void;
+  /**
+   * Open a canyon's detail screen. Used by the waypoint and route sheets for
+   * ONE case: a row that is on this phone because it is linked to a canyon
+   * shared with the user has no share of its own to hand back, so the sheet
+   * sends them to the canyon, which is where that share ends.
+   */
+  onOpenCanyon: (canyonId: string, name: string) => void;
   /**
    * Land on one category rather than "All". The map's layer sheet points at
    * this screen for region management ("3 saved areas ›"), and dropping the
@@ -1002,7 +1015,32 @@ export function SavedScreen({
         // when the signal did. It is present and DIMMED instead, with the
         // reason in its subtitle (DESIGN.md §10).
         ...(job?.syncRole === "shared"
-          ? { sharedWithYou: true as const }
+          ? {
+              sharedWithYou: true as const,
+              // A topo has no canyon above it, so a shared one is always a
+              // DIRECT share the recipient can hand back. The downloaded layers
+              // go with it: keeping tiles for an overlay this account can no
+              // longer be granted leaves a card that cannot be re-downloaded
+              // and cannot say why.
+              removeShare: {
+                confirmTitle: removeShareConfirm({
+                  kindLabel: "topo",
+                  itemName: group.label ?? job?.name ?? "This topo",
+                }).title,
+                confirmBody: `${
+                  removeShareConfirm({
+                    kindLabel: "topo",
+                    itemName: group.label ?? job?.name ?? "This topo",
+                  }).body
+                } The ${countOf(group.members.length, "layer")} downloaded here are deleted too.`,
+                run: async () => {
+                  await removeSharedEntity("topoJob", group.key);
+                  for (const artifact of group.members) {
+                    await deleteDownloadedArtifact(artifact.id);
+                  }
+                },
+              },
+            }
           : { share: { entityType: "topoJob" as const, entityId: group.key } }),
         locatable: group.bbox != null,
         resolveBbox: async () => group.bbox,
@@ -1571,6 +1609,34 @@ export function SavedScreen({
               .catch((err: unknown) => {
                 console.error(err);
                 fail(messageFromError(err, "Couldn't delete that."));
+              });
+          },
+        },
+      ]);
+    },
+    [fail, refreshFreeSpace],
+  );
+
+  /**
+   * Hand back something a friend shared with you. Not a delete: the owner keeps
+   * theirs, so the button is plain rather than `destructive` and the copy comes
+   * from the one source that words this (`removeShareConfirm`).
+   */
+  const removeSharedItem = useCallback(
+    (item: SavedItem) => {
+      const removal = item.removeShare;
+      if (!removal) return;
+      Alert.alert(removal.confirmTitle, removal.confirmBody, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          onPress: () => {
+            removal
+              .run()
+              .then(refreshFreeSpace)
+              .catch((err: unknown) => {
+                console.error(err);
+                fail(messageFromError(err, "Couldn't remove that."));
               });
           },
         },
@@ -2424,6 +2490,26 @@ export function SavedScreen({
                   }}
                 />
               ) : null}
+              {/* Two DIFFERENT verbs on a shared topo, and the row above is not
+                  the one that ends the share: deleting the downloaded layers
+                  frees the space and leaves the overlay still granted to this
+                  account, ready to download again. This is the one that hands
+                  it back — and because the layers on the handset would then be
+                  a map nothing can grant, it takes them with it (the confirm
+                  says so). */}
+              {menuItem.removeShare ? (
+                <Row
+                  title="Remove from my account"
+                  icon="x-circle"
+                  hue={theme.warning}
+                  {...shareRowProps}
+                  onPress={() => {
+                    const target = menuItem;
+                    closeItemSheet();
+                    removeSharedItem(target);
+                  }}
+                />
+              ) : null}
               {/* What this card is actually made of — the area's basemaps, the
                   topo job's layers — each with its own size and its own
                   delete, so one map can go without losing the rest. */}
@@ -2514,6 +2600,7 @@ export function SavedScreen({
         }}
         onClose={closeItemSheet}
         onNavigate={(waypoint) => onNavigateToWaypoint(waypoint.id)}
+        onOpenCanyon={onOpenCanyon}
         onInfo={info}
         onError={fail}
       />
@@ -2532,6 +2619,7 @@ export function SavedScreen({
           closeItemSheet();
           if (routeId) onEditRoute(routeId);
         }}
+        onOpenCanyon={onOpenCanyon}
         onInfo={info}
         onError={fail}
       />

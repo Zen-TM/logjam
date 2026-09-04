@@ -24,12 +24,13 @@ import { useEffect, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import { messageFromError } from "@logjam/shared";
 
-import { assetHue, fontSize, theme } from "../theme";
+import { assetHue, canyonHue, fontSize, theme } from "../theme";
 import { BottomSheet, RenameForm, Row } from "../ui";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useConnectivity } from "../map/connectivity";
 import { SHARED_READ_ONLY_HINT, routeActions } from "../saved/assetActions";
 import { useCanyonPicker } from "../canyons/useCanyonPicker";
+import { useMirrorCanyons } from "../sync/useSyncQueries";
 import { updateRouteLocal } from "../sync/outbox";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import { exportRoute, ExportUnsupportedError } from "../fileExport";
@@ -41,6 +42,7 @@ export function RouteOptionsSheet({
   onClose,
   onShowOnMap,
   onEdit,
+  onOpenCanyon,
   onInfo,
   onError,
   allowNetwork = true,
@@ -48,6 +50,12 @@ export function RouteOptionsSheet({
   route: MirrorRoute | null;
   visible: boolean;
   onClose: () => void;
+  /**
+   * Open the canyon a SHARED route came with. Not a share verb of its own: a
+   * route on this phone because its canyon is shared has no share row to drop,
+   * and the canyon's screen is where that ends (saved/assetActions.ts).
+   */
+  onOpenCanyon?: (canyonId: string, name: string) => void;
   /**
    * Fly the map to this route. Saved-only — the map surface omits it, because
    * the user got here by tapping the line and is already looking at it
@@ -90,7 +98,14 @@ export function RouteOptionsSheet({
   const online = useConnectivity() === "online";
 
   const shareRowProps = useShareRowProps(online);
-  const actions = route ? routeActions(route) : null;
+  // The canyons this phone can see, so a shared route can tell a share of its
+  // own from one it inherited (assetActions.routeActions says why).
+  const canyons = useMirrorCanyons();
+  const visibleCanyonIds = (canyons.data ?? []).map((canyon) => canyon.id);
+  const actions = route ? routeActions(route, visibleCanyonIds) : null;
+  const viaCanyons = (canyons.data ?? []).filter((canyon) =>
+    (actions?.sharedViaCanyonIds ?? []).includes(canyon.id),
+  );
   // THE sharing panel — the same one Saved, the waypoint sheet and the canyon
   // screen render. Called unconditionally; a closed sheet passes a null target
   // and issues no request.
@@ -155,6 +170,28 @@ export function RouteOptionsSheet({
         onError("Couldn't save that file.");
       })
       .finally(() => setBusy(false));
+  };
+
+  const confirmRemoveShare = () => {
+    const removal = actions.removeShare;
+    if (!removal) return;
+    close();
+    Alert.alert(removal.confirmTitle, removal.confirmBody, [
+      { text: "Cancel", style: "cancel" },
+      {
+        // NOT `destructive`: the owner keeps the route, and the red button the
+        // delete confirm uses would say otherwise.
+        text: "Remove",
+        onPress: () =>
+          removal
+            .run()
+            .then(() => onInfo("Removed."))
+            .catch((err: unknown) => {
+              console.error(err);
+              onError(messageFromError(err, "Couldn't remove that route."));
+            }),
+      },
+    ]);
   };
 
   const confirmDelete = () => {
@@ -339,6 +376,37 @@ export function RouteOptionsSheet({
           // two only coincide for kinds whose delete is the owner's.
           <Text style={styles.sharedHint}>{SHARED_READ_ONLY_HINT}</Text>
         ) : null}
+        {/* The recipient's own verb. Present only on a DIRECT share; it needs a
+            connection for the same reason granting one does, so it is dimmed
+            offline with the reason in place of its subtitle, never hidden. */}
+        {actions.removeShare ? (
+          <Row
+            title="Remove from my account"
+            icon="x-circle"
+            hue={theme.warning}
+            {...shareRowProps}
+            disabled={busy || shareRowProps.disabled}
+            onPress={confirmRemoveShare}
+          />
+        ) : null}
+        {/* Nothing to remove here — this route came with a canyon. Say which,
+            and go there, rather than offering a verb the server would refuse. */}
+        {viaCanyons.length > 0 && onOpenCanyon
+          ? viaCanyons.map((canyon) => (
+              <Row
+                key={canyon.id}
+                title={`Open ${canyon.name}`}
+                subtitle="This route came with that shared canyon — remove it there."
+                icon="map-pin"
+                hue={canyonHue.shared}
+                disabled={busy}
+                onPress={() => {
+                  close();
+                  onOpenCanyon(canyon.id, canyon.name);
+                }}
+              />
+            ))
+          : null}
       </View>
       )}
     </BottomSheet>

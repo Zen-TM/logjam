@@ -8,6 +8,7 @@ import ShareDialog from "../../dialogs/ShareDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import TripLogViewDialog from "../../dialogs/TripLogViewDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import RemoveSharedButton from "../../common/RemoveSharedButton";
 import type { TCanyon, TFriend, TTripLog, TCanyonShare } from "../../../canyonUtils";
 import { mediaCategory, type TripLogCustomFieldDef, type MediaItem } from "@logjam/shared";
 import {
@@ -21,6 +22,7 @@ import {
   getCanyonDetail,
   getCanyonShares,
   isHttpUrl,
+  ownerUsername,
 } from "../../../canyonUtils";
 import CanyonSlideshow from "../../media/CanyonSlideshow";
 import TrackIcon from "../../media/TrackIcon";
@@ -250,20 +252,10 @@ function CanyonDetailPanel({
     }
   }
 
-  async function handleRemoveShared() {
-    if (!canyon) return;
-    setCopying(true);
-    try {
-      await unshareCanyonWith(canyon.id, "me");
-      onRefetchShared();
-      setSelectedCanyonID(null);
-    } catch (err) {
-      console.error(err);
-      toast.error(messageFromError(err, "Couldn't remove shared canyon. Please try again."));
-    } finally {
-      setCopying(false);
-    }
-  }
+  // Plain "remove my access" is RemoveSharedButton below — it owns the confirm
+  // the whole app shares. This is only the copy-then-remove pairing, where the
+  // user keeps a copy of their own and the confirm would be asking about a loss
+  // that isn't happening.
 
   // Re-pull canyon-level media after the edit dialog uploads/deletes, so the
   // slideshow + track card reflect changes without waiting for a Save.
@@ -576,18 +568,27 @@ function CanyonDetailPanel({
                 >
                   Copy
                 </button>
-                <button
+                {/* Same control, same confirm, as every other shared thing in
+                    the app — this surface used to revoke on a single click
+                    with no confirmation at all. */}
+                <RemoveSharedButton
+                  kindLabel="canyon"
+                  itemName={canyon.name}
+                  ownerName={ownerUsername(friends, canyon.ownerId)}
                   className={classes.ghostBtn}
-                  title="Remove from Shared"
-                  onClick={handleRemoveShared}
                   disabled={copying}
+                  remove={() => unshareCanyonWith(canyon.id, "me")}
+                  onRemoved={() => {
+                    onRefetchShared();
+                    setSelectedCanyonID(null);
+                  }}
                 >
-                  Remove from Shared
-                </button>
+                  Remove
+                </RemoveSharedButton>
               </div>
               <button
                 className={classes.ghostBtnFull}
-                title="Copy to My Canyons and remove from Shared"
+                title="Copy to My Canyons, then remove the share"
                 onClick={() => handleCopyCanyon(true)}
                 disabled={copying}
               >

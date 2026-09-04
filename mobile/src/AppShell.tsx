@@ -449,6 +449,16 @@ function SavedStackNav() {
                 params: { navigateWaypoint: { waypointId, nonce: Date.now() } },
               })
             }
+            // A cross-tab jump rather than a canyon screen of this stack's own:
+            // the Saved tab has never held one, and the only thing that sends a
+            // user there from here is a waypoint or route asking "which shared
+            // canyon brought me?".
+            onOpenCanyon={(canyonId, name) =>
+              navigation.getParent()?.navigate("Canyons", {
+                screen: "CanyonDetail",
+                params: { canyonId, name },
+              })
+            }
           />
         )}
       </SavedStack.Screen>

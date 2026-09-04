@@ -30,6 +30,7 @@ import {
   formatDistanceM,
   mediaCategory,
   messageFromError,
+  removeShareConfirm,
   routeLengthM,
 } from "@logjam/shared";
 
@@ -39,7 +40,8 @@ import {
   shareRowSubtitle,
   SharingError,
 } from "../sharing/useSharing";
-import { useSharePanel } from "../sharing/SharePanel";
+import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
+import { removeSharedCanyon } from "../sharing/removeShare";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { useConnectivity } from "../map/connectivity";
 import { MediaStrip } from "../media/MediaStrip";
@@ -129,6 +131,9 @@ export function CanyonDetailScreen({
   const waypoints = useMirrorWaypoints();
   const canyonsQuery = useMirrorCanyons();
   const online = useConnectivity() === "online";
+  // The same capability gating every Share row spreads — removing a share is
+  // the same online-and-signed-in action, seen from the other end.
+  const shareRowProps = useShareRowProps(online);
   // Definitions give each stored value its real label; a guest's come off the
   // device, an account's off the user record. Without them (offline with an
   // account, or a field deleted since) the key renders un-slugged.
@@ -136,6 +141,7 @@ export function CanyonDetailScreen({
 
   const [editing, setEditing] = useState(false);
   const [logging, setLogging] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [shareOpenRequest, setShareOpenRequest] = useState(0);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
@@ -224,6 +230,36 @@ export function CanyonDetailScreen({
     Linking.openURL(url).catch(() => {
       Alert.alert("Couldn't open maps", "No maps app is available on this device.");
     });
+  };
+
+  const confirmRemoveShare = () => {
+    const confirm = removeShareConfirm({
+      kindLabel: "canyon",
+      itemName: canyon.name,
+    });
+    Alert.alert(confirm.title, confirm.body, [
+      { text: "Cancel", style: "cancel" },
+      {
+        // Not `destructive`: the owner keeps the canyon, its notes and its
+        // photos. Only this account's view of them goes.
+        text: "Remove",
+        onPress: () => {
+          setRemoving(true);
+          removeSharedCanyon(canyon.id)
+            // Same exit as a delete: the screen is showing a canyon this
+            // account can no longer see.
+            .then(onDeleted)
+            .catch((err: unknown) => {
+              console.error(err);
+              notify(
+                messageFromError(err, "Couldn't remove this shared canyon."),
+                "error",
+              );
+              setRemoving(false);
+            });
+        },
+      },
+    ]);
   };
 
   const confirmDelete = () => {
@@ -498,7 +534,23 @@ export function CanyonDetailScreen({
               onPress={confirmDelete}
             />
           </>
-        ) : null}
+        ) : (
+          <>
+            {/* The recipient's half. A canyon share is always DIRECT — there is
+                nothing above a canyon for it to be inherited from — so this row
+                is offered on every shared canyon. Online-only, like every other
+                share action, and dimmed with the reason rather than hidden. */}
+            <SectionHeader label="Shared with you" />
+            <Row
+              icon="x-circle"
+              hue={theme.warning}
+              title="Remove from my account"
+              {...shareRowProps}
+              disabled={removing || shareRowProps.disabled}
+              onPress={confirmRemoveShare}
+            />
+          </>
+        )}
       </ScrollView>
 
       <CanyonEditSheet

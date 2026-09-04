@@ -361,6 +361,18 @@ function SidebarPanel({
     if (isMobile) setSheetSnap("full");
   }, [isMobile]);
 
+  // The same two calls CanyonsPanel and the inbox make. Handed to the waypoint
+  // and route surfaces so a row that is only visible BECAUSE of a shared canyon
+  // can send the user to the canyon that brought it — the one place its share
+  // can actually be removed.
+  const openCanyonDetail = useCallback(
+    (canyonId: string) => {
+      setSelectedCanyonID(canyonId);
+      setActivePanel("canyon-detail");
+    },
+    [setSelectedCanyonID, setActivePanel],
+  );
+
   if (!activePanel) return null;
 
   const title =
@@ -539,11 +551,13 @@ function SidebarPanel({
             route={selectedRoute}
             currentUserId={currentUserId}
             ownedCanyons={canyons}
+            sharedCanyons={sharedCanyons}
             friends={friends}
             allRoutes={allRoutes}
             onEdit={onEditRoute}
             onChanged={onRoutesChanged}
             onClose={() => setActivePanel(null)}
+            onOpenCanyon={openCanyonDetail}
             onHoverPosition={onRouteHoverPosition}
           />
         )}
@@ -562,6 +576,7 @@ function SidebarPanel({
             onUpdate={onUpdateWaypoint}
             onDelete={onDeleteWaypoint}
             onAdd={onAddWaypoint}
+            onOpenCanyon={openCanyonDetail}
           />
         )}
         {activePanel === "routes" && (

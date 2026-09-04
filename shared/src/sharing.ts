@@ -156,3 +156,81 @@ export type BulkShareResult = {
    */
   ineligible: number;
 };
+
+// ── Getting rid of something shared WITH you ─────────────────────────────────
+//
+// The recipient's half of both share tables. `DELETE /canyons/:id/share/me` and
+// `DELETE /shares/:entityType/:entityId/me` have always accepted a recipient
+// revoking their own access; what follows is the ONE statement of when a client
+// may offer that, and the one wording it offers it with.
+//
+// Why it is not simply "is this row shared with me": a waypoint or a route can
+// be visible for TWO unrelated reasons (api/src/lib/shareAccess.ts) — a direct
+// `Share` row, or a link to a canyon shared with the caller. Revoking the
+// direct row leaves the canyon arm standing, so a Remove offered on an
+// inherited row would appear to work and bring the row straight back on the
+// next pull. What came with a canyon is removed by removing THAT canyon, and
+// the surfaces say so rather than offering a verb that cannot deliver.
+
+/**
+ * Why a row someone else owns is visible to this user — and therefore what, if
+ * anything, they can do about it.
+ *
+ * "direct"     → a share row of their own: Remove is theirs to use.
+ * "via-canyon" → it arrived with a shared canyon: point at that canyon.
+ * "owned"      → theirs; not a share at all.
+ */
+export type SharedRowVisibility = "owned" | "direct" | "via-canyon";
+
+export function sharedRowVisibility(row: {
+  /**
+   * The server's own word for the caller's relationship to the row. Typed wide
+   * because the mobile mirror stores it as a nullable text column (a row synced
+   * before the field existed, or one rebuilt offline, carries no role) —
+   * anything that is not exactly "shared" is treated as the caller's own, so an
+   * unknown role never produces a Remove that the server would refuse.
+   */
+  syncRole: string | null | undefined;
+  /**
+   * Canyons THE CALLER CAN SEE that this row is linked to. Empty — or omitted,
+   * for the kinds with no canyon link at all (topo and GeoPDF jobs) — means no
+   * inherited arm exists, so a direct share is the whole reason it is here.
+   *
+   * Both clients already hold this: a waypoint's `canyonIds` is server-scoped
+   * to canyons the caller can see, and a route's single `canyonId` counts only
+   * when that canyon is in the caller's own canyon list.
+   */
+  visibleLinkedCanyonIds?: readonly string[];
+}): SharedRowVisibility {
+  if (row.syncRole !== "shared") return "owned";
+  return (row.visibleLinkedCanyonIds ?? []).length > 0 ? "via-canyon" : "direct";
+}
+
+/**
+ * The confirm every surface shows before a recipient removes a share.
+ *
+ * ONE wording, because six surfaces ask this question and the promise is easy
+ * to get wrong in either direction: it is NOT a delete (the owner's row is
+ * untouched, so nothing here may say "permanently" or "cannot be undone"), and
+ * it is NOT local (the revoke is server-side, so it reaches every device, and
+ * neither Logjam Web nor Logjam GPS may be named as the place it happens).
+ *
+ * The verb is Remove everywhere, never Delete: a recipient tapping Delete on
+ * someone else's canyon has every reason to fear they are destroying the
+ * original.
+ */
+export function removeShareConfirm(args: {
+  /** Lower-case kind as it reads mid-sentence: "canyon", "waypoint", "topo". */
+  kindLabel: string;
+  itemName: string;
+  /** The owner's username, on the surfaces that know it. */
+  ownerName?: string | null;
+}): { title: string; body: string } {
+  const owner = args.ownerName ?? "The owner";
+  return {
+    title: `Remove shared ${args.kindLabel}?`,
+    body:
+      `“${args.itemName}” goes from your account, on every device. ` +
+      `${owner} keeps the original — ask them to share it again if you want it back.`,
+  };
+}
