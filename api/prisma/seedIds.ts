@@ -6,7 +6,8 @@
 // row parks blocked with a 400 nothing in the app surfaces.
 //
 // `prefix` is one hex digit naming the owner/space: "0" users, "1" alice's
-// canyons, "2" bob's, "3" carol's. Guarded by src/lib/seedIds.unit.test.ts.
+// canyons, "2" bob's, "3" carol's, "4" media. Guarded by
+// src/lib/seedIds.unit.test.ts.
 export const seedId = (prefix: string, n: number) =>
   `${prefix}0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 

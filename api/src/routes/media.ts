@@ -21,7 +21,12 @@ import { validateUploadSizes } from "../lib/mediaUploadValidation";
 import { toMediaItem } from "../lib/mediaPresign";
 import { exhaustedEgressOwnerIds } from "../lib/egressQuota";
 import { requireCanyonOwnerAccess } from "../lib/canyonAccess";
-import { mediaDeleteTombstones, writeTombstones } from "../lib/syncTombstones";
+import { canyonIdOfMedia } from "../lib/mediaLink";
+import {
+  mediaDeleteTombstones,
+  mediaUnlinkTombstones,
+  writeTombstones,
+} from "../lib/syncTombstones";
 import {
   assertClientIdReplayable,
   parseClientSuppliedId,
@@ -29,6 +34,11 @@ import {
 import {
   mediaCategory,
   categoryHasThumbnail,
+  isMediaOrigin,
+  parseMediaMetadata,
+  MediaMetadataError,
+  type MediaLinkedType,
+  type MediaOrigin,
   pickNextTrackColor,
   MEDIA_SIZE_CAPS,
   MEDIA_EXTENSION_BY_MIME,
@@ -42,13 +52,56 @@ const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const UPLOAD_URL_TTL_SECONDS = 900; // 15 minutes
 const THUMBNAIL_MIME = "image/jpeg";
 
+/**
+ * The parent a file is being uploaded or moved to, validated as a pair.
+ *
+ * The two columns only make sense together — `"none"` with an id is a
+ * standalone file that claims a parent, and a parent type with a null id is an
+ * attachment attached to nothing. Both would pass a field-at-a-time check and
+ * neither is a state anything downstream can read.
+ *
+ * `origin` is required on a standalone file: it is what puts the row in the
+ * Saved list's Imports or Tracks category, and a row with neither a parent nor
+ * an origin is invisible in every surface the user has.
+ */
+function parseLinkTarget(body: Record<string, unknown>): {
+  linkedType: MediaLinkedType;
+  linkedId: string | null;
+  origin: MediaOrigin | null;
+} {
+  const { linkedType, linkedId, origin } = body;
+  if (linkedType !== "canyon" && linkedType !== "tripLog" && linkedType !== "none") {
+    throw new AppError(400, "Invalid linkedType");
+  }
+  if (origin !== undefined && origin !== null && !isMediaOrigin(origin)) {
+    throw new AppError(400, "Invalid origin");
+  }
+  const parsedOrigin = isMediaOrigin(origin) ? origin : null;
+  if (linkedType === "none") {
+    if (linkedId !== undefined && linkedId !== null) {
+      throw new AppError(400, "A standalone file must not carry a linkedId");
+    }
+    if (parsedOrigin === null) {
+      throw new AppError(400, "A standalone file requires an origin");
+    }
+    return { linkedType, linkedId: null, origin: parsedOrigin };
+  }
+  if (typeof linkedId !== "string" || !linkedId) {
+    throw new AppError(400, "linkedId is required");
+  }
+  return { linkedType, linkedId, origin: parsedOrigin };
+}
+
 // Only the owner of the target canyon (or the canyon owning the trip log) may
-// attach media — even on canyons shared with them.
+// attach media — even on canyons shared with them. A standalone file's target
+// is the caller themselves, so there is nothing to check.
 async function assertOwnsTarget(
   userId: string,
   linkedType: string,
-  linkedId: string,
+  linkedId: string | null,
 ) {
+  if (linkedType === "none") return;
+  if (linkedId === null) throw new AppError(400, "linkedId is required");
   if (linkedType === "canyon") {
     const canyon = await prisma.canyon.findUnique({
       where: { id: linkedId },
@@ -81,39 +134,61 @@ async function assertOwnsTarget(
 // check can race; the orphan sweeper reclaims a blob whose confirm is rejected).
 async function assertCanyonTrackSlotFree(
   linkedType: string,
-  linkedId: string,
+  linkedId: string | null,
   category: MediaCategory,
+  /** The row being MOVED, on a re-link: it is otherwise its own incumbent. */
+  ignoreMediaId?: string,
 ) {
-  if (linkedType !== "canyon" || category !== "track") return;
+  if (linkedType !== "canyon" || linkedId === null || category !== "track") return;
   const existing = await prisma.media.count({
     where: {
       linkedType: "canyon",
       linkedId,
       mediaType: { in: TRACK_MIME_TYPES as unknown as string[] },
+      ...(ignoreMediaId ? { id: { not: ignoreMediaId } } : {}),
     },
   });
   if (existing > 0) throw new AppError(409, "This canyon already has a track");
 }
 
-function validateMediaType(mediaType: unknown, filename: unknown): MediaCategory {
+/** parseMediaMetadata, with its shape complaint turned into a 400. The message
+ * names the offending FIELD and never its value — metadata holds coordinates. */
+function parseMediaMetadataOr400(origin: MediaOrigin | null, value: unknown) {
+  try {
+    return parseMediaMetadata(origin, value);
+  } catch (err) {
+    if (err instanceof MediaMetadataError) throw new AppError(400, err.message);
+    throw err;
+  }
+}
+
+/** Validates the file's type and name together and hands both back narrowed —
+ * callers need the strings, and re-asserting them at each use is how one site
+ * ends up trusting an unvalidated one. */
+function validateMediaType(
+  rawMediaType: unknown,
+  rawFilename: unknown,
+): { category: MediaCategory; mediaType: string; filename: string } {
   if (
-    typeof mediaType !== "string" ||
-    typeof filename !== "string" ||
-    !filename.trim()
+    typeof rawMediaType !== "string" ||
+    typeof rawFilename !== "string" ||
+    !rawFilename.trim()
   ) {
     throw new AppError(400, "filename and mediaType are required");
   }
+  const mediaType = rawMediaType;
+  const filename = rawFilename;
   const category = mediaCategory(mediaType);
   if (!category) throw new AppError(400, `Unsupported media type: ${mediaType}`);
-  // Browsers report inconsistent MIME types for GPX/KML, so require a matching
-  // extension to pin down the format.
+  // Clients report inconsistent MIME types for GPX/KML/GeoJSON, so require a
+  // matching extension to pin down the format.
   if (category === "track") {
     const ext = filename.split(".").pop()?.toLowerCase();
     const expected = MEDIA_EXTENSION_BY_MIME[mediaType];
     if (ext !== expected)
       throw new AppError(400, `Track file must have a .${expected} extension`);
   }
-  return category;
+  return { category, mediaType, filename };
 }
 
 // Keys are derived entirely from server-side values (ownerId + mediaId + MIME),
@@ -133,11 +208,13 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const { linkedType, linkedId, filename, mediaType, sizeBytes, thumbnailSizeBytes } =
-      req.body ?? {};
-    if (typeof linkedId !== "string")
-      throw new AppError(400, "linkedId is required");
-    const category = validateMediaType(mediaType, filename);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const { sizeBytes, thumbnailSizeBytes } = body;
+    const { linkedType, linkedId, origin } = parseLinkTarget(body);
+    const { category, mediaType } = validateMediaType(body.mediaType, body.filename);
+    // Shape-checked here as well as at confirm so a bad stats object costs a
+    // 400 rather than a wasted upload of the blob it describes.
+    parseMediaMetadataOr400(origin, body.metadata);
     // Declared sizes bound the presigned PUTs (SEC-003): they are signed into
     // Content-Length below, so S3 rejects uploads that exceed the declaration.
     const sizes = validateUploadSizes(category, sizeBytes, thumbnailSizeBytes);
@@ -209,10 +286,13 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
     const mediaId = getParam(req.params.mediaId);
-    const { linkedType, linkedId, filename, mediaType } = req.body ?? {};
-    if (typeof linkedId !== "string")
-      throw new AppError(400, "linkedId is required");
-    const category = validateMediaType(mediaType, filename);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const { linkedType, linkedId, origin } = parseLinkTarget(body);
+    const metadata = parseMediaMetadataOr400(origin, body.metadata);
+    const { category, mediaType, filename } = validateMediaType(
+      body.mediaType,
+      body.filename,
+    );
     await assertOwnsTarget(user.id, linkedType, linkedId);
 
     // Idempotent confirm (ARCH-005): if the row already exists, this confirm
@@ -306,6 +386,8 @@ router.post(
             ownerId: user.id,
             linkedType,
             linkedId,
+            origin,
+            metadata,
             s3KeyDisplay: displayKey,
             s3KeyThumbnail: expectThumb ? thumbnailKey : null,
             mediaType,
@@ -382,8 +464,9 @@ router.post(
     const candidateCanyonIds = Array.from(
       new Set(
         rows
-          .filter((m) => m.ownerId !== user.id && m.linkedType === "canyon")
-          .map((m) => m.linkedId),
+          .filter((m) => m.ownerId !== user.id)
+          .map(canyonIdOfMedia)
+          .filter((canyonId): canyonId is string => canyonId !== null),
       ),
     );
     const sharedCanyonIds = new Set(
@@ -399,11 +482,11 @@ router.post(
           ).map((s) => s.canyonId)
         : [],
     );
-    const visible = rows.filter(
-      (m) =>
-        m.ownerId === user.id ||
-        (m.linkedType === "canyon" && sharedCanyonIds.has(m.linkedId)),
-    );
+    const visible = rows.filter((m) => {
+      if (m.ownerId === user.id) return true;
+      const canyonId = canyonIdOfMedia(m);
+      return canyonId !== null && sharedCanyonIds.has(canyonId);
+    });
 
     // Monthly egress cap. This is the bulk media pull (the mobile blob cache
     // asks for up to 100 blobs at a time), so it is where a download loop would
@@ -434,6 +517,88 @@ router.post(
 
 // DELETE /media/:id — remove a single media item (owner only). Bulk/cascade
 // deletes on canyon/trip/account live in their respective routes.
+// PATCH /media/:id/link — move a standalone file between "nobody" and a canyon.
+//
+// This is what makes a canyon's way a LINK rather than a copy. Attaching an
+// import used to upload a second copy of it, so the user held two files, only
+// one of which was in their Saved list, and replacing the way DELETED the copy.
+// Now the same row changes parent, and detaching leaves the file standing.
+//
+// Only a standalone file (one with an `origin`) may be moved: a photo has no
+// existence apart from what it is attached to, and moving one is not a thing
+// any surface offers.
+router.patch(
+  "/:id/link",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await getUser(req.user!.sub);
+    const id = getParam(req.params.id);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    const { linkedType, linkedId } = body;
+    if (linkedType !== "canyon" && linkedType !== "none") {
+      // Deliberately narrower than parseLinkTarget: a file is linked to a
+      // canyon or to nothing. Trip logs hold attachments, not ways.
+      throw new AppError(400, "linkedType must be \"canyon\" or \"none\"");
+    }
+    if (linkedType === "canyon" && (typeof linkedId !== "string" || !linkedId)) {
+      throw new AppError(400, "linkedId is required");
+    }
+    if (linkedType === "none" && linkedId !== undefined && linkedId !== null) {
+      throw new AppError(400, "Unlinking must not carry a linkedId");
+    }
+    const nextLinkedId = linkedType === "canyon" ? (linkedId as string) : null;
+
+    // Owner-scoped lookup, and a foreign id gets the SAME 404 a missing one
+    // gets — a sharee sees canyon-level media ids in a shared canyon payload,
+    // so a 403 here would confirm which of them are real (the anti-oracle this
+    // file's DELETE and presign already argue).
+    const media = await prisma.media.findFirst({ where: { id, ownerId: user.id } });
+    if (!media) throw new AppError(404, "Media not found");
+    if (media.origin === null) {
+      throw new AppError(400, "Only an import or a recorded track can be linked");
+    }
+
+    const category = mediaCategory(media.mediaType);
+    if (!category) throw new AppError(400, "Unsupported media type");
+    await assertOwnsTarget(user.id, linkedType, nextLinkedId);
+    await assertCanyonTrackSlotFree(linkedType, nextLinkedId, category, id);
+
+    // Whoever could see this file only through its OLD canyon must be told to
+    // forget it, in the same transaction as the move (the tombstone rule). A
+    // LINK needs no tombstone in the other direction: the new canyon's sharees
+    // simply gain the row on their next delta.
+    const previousCanyonId = canyonIdOfMedia(media);
+    const losingCanyonId =
+      previousCanyonId !== null && previousCanyonId !== nextLinkedId
+        ? previousCanyonId
+        : null;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.media.update({
+        where: { id },
+        data: { linkedType, linkedId: nextLinkedId },
+      });
+      if (losingCanyonId !== null) {
+        const sharees = await tx.canyonShare.findMany({
+          where: { canyonId: losingCanyonId },
+          select: { sharedWithId: true },
+        });
+        await writeTombstones(
+          tx,
+          mediaUnlinkTombstones({
+            mediaId: id,
+            shareeIds: sharees.map((share) => share.sharedWithId),
+          }),
+        );
+      }
+      return row;
+    });
+
+    res.json(await toMediaItem(updated));
+  },
+);
+
 router.delete(
   "/:id",
   requireAuth,
@@ -463,10 +628,11 @@ router.delete(
       // Canyon-level media is visible to the canyon's sharees (hybrid model),
       // so they must be told to forget it too. Trip media is owner-private —
       // no fan-out (sync tombstone rule, same transaction as the delete).
+      const deletedFromCanyonId = canyonIdOfMedia(media);
       const sharees =
-        media.linkedType === "canyon"
+        deletedFromCanyonId !== null
           ? await tx.canyonShare.findMany({
-              where: { canyonId: media.linkedId },
+              where: { canyonId: deletedFromCanyonId },
               select: { sharedWithId: true },
             })
           : [];

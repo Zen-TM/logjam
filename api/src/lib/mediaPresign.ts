@@ -2,7 +2,13 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3 } from "../services/awsClients";
 import { getEnv } from "./env";
-import { mediaCategory, type MediaItem, type MediaLinkedType } from "@logjam/shared";
+import {
+  isMediaOrigin,
+  mediaCategory,
+  readMediaMetadata,
+  type MediaItem,
+  type MediaLinkedType,
+} from "@logjam/shared";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -15,14 +21,17 @@ export const MEDIA_PRESIGN_TTL_SECONDS = 3600; // 1 hour
 export type MediaRow = {
   id: string;
   linkedType: string;
-  linkedId: string;
+  linkedId: string | null;
   mediaType: string;
   filename: string;
   fileSizeBytes: bigint;
   createdAt: Date;
+  updatedAt: Date;
   s3KeyDisplay: string;
   s3KeyThumbnail: string | null;
   color: string | null;
+  origin: string | null;
+  metadata: unknown;
 };
 
 async function presignGet(
@@ -65,9 +74,12 @@ export async function toMediaItem(row: MediaRow): Promise<MediaItem> {
     filename: row.filename,
     fileSizeBytes: Number(row.fileSizeBytes),
     createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
     displayUrl,
     thumbnailUrl,
     color: row.color,
+    origin: isMediaOrigin(row.origin) ? row.origin : null,
+    metadata: readMediaMetadata(row.origin, row.metadata),
   };
 }
 
@@ -76,13 +88,17 @@ export async function toMediaItems(rows: MediaRow[]): Promise<MediaItem[]> {
 }
 
 // Presigns a batch of rows and groups the resulting DTOs by linkedId — used to
-// attach per-trip media when reading a canyon or a list of trip logs.
+// attach per-trip media when reading a canyon or a list of trip logs. Rows with
+// no parent (standalone files) belong to no group and are skipped; they reach
+// the client through the delta pull and the Saved list, never as somebody's
+// attachments.
 export async function mediaItemsByLinkedId(
   rows: MediaRow[],
 ): Promise<Map<string, MediaItem[]>> {
   const items = await toMediaItems(rows);
   const grouped = new Map<string, MediaItem[]>();
   for (const item of items) {
+    if (item.linkedId === null) continue;
     const list = grouped.get(item.linkedId) ?? [];
     list.push(item);
     grouped.set(item.linkedId, list);

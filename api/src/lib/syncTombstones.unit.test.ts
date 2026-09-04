@@ -5,6 +5,7 @@ import {
   directShareRevokeTombstones,
   friendshipDeleteTombstones,
   mediaDeleteTombstones,
+  mediaUnlinkTombstones,
   routeDeleteTombstones,
   routeUnlinkTombstones,
   shareRevokeTombstones,
@@ -141,6 +142,70 @@ describe("routeUnlinkTombstones", () => {
 
   it("is empty when the canyon had no sharees", () => {
     expect(routeUnlinkTombstones({ routeId: "r1", shareeIds: [] })).toEqual([]);
+  });
+});
+
+describe("standalone files linked as a canyon's way", () => {
+  it("canyon delete revokes an unlinked file from sharees but not the owner", () => {
+    // The file is the user's own import/recording and survives the canyon it
+    // was attached to, exactly as a linked route does. An owner tombstone here
+    // would make every one of their devices delete their own file.
+    const rows = canyonDeleteTombstones({
+      ownerId: "alice",
+      canyonId: "c1",
+      mediaIds: [],
+      shares: [{ id: "s1", sharedWithId: "bob" }],
+      unlinkedMediaIds: ["import-1"],
+    });
+    expect(has(rows, { userId: "bob", entityType: "media", entityId: "import-1" })).toBe(
+      true,
+    );
+    expect(
+      has(rows, { userId: "alice", entityType: "media", entityId: "import-1" }),
+    ).toBe(false);
+  });
+
+  it("still destroys the canyon's own attachments for both parties", () => {
+    const rows = canyonDeleteTombstones({
+      ownerId: "alice",
+      canyonId: "c1",
+      mediaIds: ["photo-1"],
+      shares: [{ id: "s1", sharedWithId: "bob" }],
+      unlinkedMediaIds: ["import-1"],
+    });
+    expect(has(rows, { userId: "alice", entityType: "media", entityId: "photo-1" })).toBe(
+      true,
+    );
+    expect(has(rows, { userId: "bob", entityType: "media", entityId: "photo-1" })).toBe(
+      true,
+    );
+  });
+
+  it("omitting unlinkedMediaIds emits nothing extra", () => {
+    const rows = canyonDeleteTombstones({
+      ownerId: "alice",
+      canyonId: "c1",
+      mediaIds: [],
+      shares: [{ id: "s1", sharedWithId: "bob" }],
+    });
+    expect(rows.some((r) => r.entityType === "media")).toBe(false);
+  });
+});
+
+describe("mediaUnlinkTombstones", () => {
+  it("tells only the sharees to forget it — the owner keeps the file", () => {
+    const rows = mediaUnlinkTombstones({
+      mediaId: "import-1",
+      shareeIds: ["bob", "carol"],
+    });
+    expect(rows).toEqual([
+      { userId: "bob", entityType: "media", entityId: "import-1" },
+      { userId: "carol", entityType: "media", entityId: "import-1" },
+    ]);
+  });
+
+  it("emits nothing when the canyon was not shared", () => {
+    expect(mediaUnlinkTombstones({ mediaId: "import-1", shareeIds: [] })).toEqual([]);
   });
 });
 

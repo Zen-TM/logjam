@@ -263,16 +263,28 @@ export type SyncDeltaRouteRow = {
   updatedAt: string;
 };
 
-/** Metadata only — blobs come via POST /media/download-urls (§7.3). */
+/** Metadata only — blobs come via POST /media/download-urls (§7.3).
+ *
+ * `linkedId` is null on a standalone file (`linkedType: "none"`): the user's
+ * own import or recording, which belongs to no canyon. `metadata` is what lets
+ * such a row be LISTED without downloading the blob — see mediaMetadata.ts.
+ *
+ * Keysets on `updatedAt`, not `createdAt`: a media row used to be immutable, so
+ * creation time was a sufficient watermark. Linking a file to a canyon (and
+ * unlinking it again) mutates the row, and a createdAt keyset would never
+ * redeliver it — the other device would keep showing a stale parent forever. */
 export type SyncDeltaMediaRow = {
   id: string;
   linkedType: string;
-  linkedId: string;
+  linkedId: string | null;
   mediaType: string;
   filename: string | null;
   fileSizeBytes: string;
   color: string | null;
+  origin: string | null;
+  metadata: unknown;
   createdAt: string;
+  updatedAt: string;
 };
 
 export type SyncDeltaShareRow = {
@@ -434,14 +446,21 @@ const ROUTE_ROW_SPEC: Record<string, FieldCheck> = {
 const MEDIA_ROW_SPEC: Record<string, FieldCheck> = {
   id: isString,
   linkedType: isString,
-  linkedId: isString,
+  linkedId: nullable(isString),
   mediaType: isString,
   filename: nullable(isString),
   // A string, not a number: it is a BigInt on the server and JSON-encoded as
   // text so it survives the round trip.
   fileSizeBytes: isString,
   color: nullable(isString),
+  origin: nullable(isString),
+  // Shape-checked on the way IN (parseMediaMetadata, server-side) rather than
+  // here: a client that rejected the whole delta page over one malformed stats
+  // object would stop syncing everything else too. Readers go through
+  // readMediaMetadata, which degrades to {}.
+  metadata: isPlainObject,
   createdAt: isString,
+  updatedAt: isString,
 };
 
 const SHARE_ROW_SPEC: Record<string, FieldCheck> = {

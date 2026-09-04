@@ -322,10 +322,19 @@ async function main() {
 
   // Media (metadata only — no S3 objects exist locally, so thumbnails won't
   // load; the rows exist to populate media-list code paths).
+  //
+  // Covers all three parent states, because they behave differently and only
+  // the first one used to exist: a photo ATTACHED to a canyon (dies with it), a
+  // standalone import LINKED as a canyon's way (survives the canyon, and is the
+  // shape a sharee sees), and an unlinked recording (owner-private, in Saved
+  // and nowhere else). A seed with only attachments leaves every standalone
+  // path untested by the integration suite.
   await prisma.media.createMany({
     data: [
-      { ownerId: ALICE_ID, linkedType: "canyon", linkedId: CANYON_IDS[0], s3KeyDisplay: "media/seed/grand-1.jpg", s3KeyThumbnail: "media/seed/grand-1-thumb.jpg", mediaType: "image/jpeg", filename: "grand-canyon.jpg", fileSizeBytes: BigInt(2_048_000) },
-      { ownerId: ALICE_ID, linkedType: "canyon", linkedId: CANYON_IDS[1], s3KeyDisplay: "media/seed/claustral.gpx", mediaType: "application/gpx+xml", filename: "claustral-track.gpx", fileSizeBytes: BigInt(48_000), color: TRACK_COLORS[0] },
+      { id: seedId("4", 1), ownerId: ALICE_ID, linkedType: "canyon", linkedId: CANYON_IDS[0], s3KeyDisplay: "media/seed/grand-1.jpg", s3KeyThumbnail: "media/seed/grand-1-thumb.jpg", mediaType: "image/jpeg", filename: "grand-canyon.jpg", fileSizeBytes: BigInt(2_048_000) },
+      { id: seedId("4", 2), ownerId: ALICE_ID, linkedType: "canyon", linkedId: CANYON_IDS[1], s3KeyDisplay: "media/seed/claustral.gpx", mediaType: "application/gpx+xml", filename: "claustral-track.gpx", fileSizeBytes: BigInt(48_000), color: TRACK_COLORS[0], origin: "import", metadata: { bbox: [150.32, -33.42, 150.38, -33.36], featureCount: 1, positionCount: 812 } },
+      { id: seedId("4", 3), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: "media/seed/du-faur.kml", mediaType: "application/vnd.google-earth.kml+xml", filename: "du-faur-approach.kml", fileSizeBytes: BigInt(21_000), color: TRACK_COLORS[1], origin: "import", metadata: { bbox: [150.29, -33.45, 150.34, -33.41], featureCount: 3, positionCount: 240 } },
+      { id: seedId("4", 4), ownerId: ALICE_ID, linkedType: "none", linkedId: null, s3KeyDisplay: "media/seed/recording-2026-08-02.gpx", mediaType: "application/gpx+xml", filename: "Wollangambe, 2 Aug.gpx", fileSizeBytes: BigInt(184_000), color: TRACK_COLORS[2], origin: "track", metadata: { bbox: [150.25, -33.52, 150.31, -33.47], distanceM: 7420, durationMs: 19_800_000, elevationGainM: 265, elevationLossM: 310, pointCount: 6_140, startedAt: "2026-08-02T22:05:00.000Z", endedAt: "2026-08-03T03:35:00.000Z" } },
     ],
   });
 
@@ -344,7 +353,7 @@ async function main() {
 
   const canyonCount = ALL_CANYONS.length;
   console.log(
-    `Seed complete: 3 users, ${canyonCount} canyons (1 fork), 4 shares, ${trips.length} trip logs, 2 media, 3 notifications, 0 topo jobs`,
+    `Seed complete: 3 users, ${canyonCount} canyons (1 fork), 4 shares, ${trips.length} trip logs, 4 media, 3 notifications, 0 topo jobs`,
   );
 }
 

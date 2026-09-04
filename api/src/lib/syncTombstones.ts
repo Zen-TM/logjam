@@ -54,6 +54,8 @@ export function tripDeleteTombstones(args: {
 export function canyonDeleteTombstones(args: {
   ownerId: string;
   canyonId: string;
+  /** Media DESTROYED with the canyon — its own attachments (photos, videos).
+   * The owner forgets these as well as the sharees. */
   mediaIds: string[];
   shares: { id: string; sharedWithId: string }[];
   /** The canyon's linked route, if it had one. The ROUTE ITSELF SURVIVES —
@@ -61,8 +63,15 @@ export function canyonDeleteTombstones(args: {
    * than destroying it. Only the sharees lose sight of it; the owner keeps it
    * as a standalone route and gets no tombstone. */
   routeId?: string | null;
+  /** Standalone files (an import, a recorded track) that were linked as this
+   * canyon's way. Same shape of survival as `routeId`: the file lives on in
+   * the owner's Saved list, so the OWNER GETS NO TOMBSTONE — one here would
+   * make every device delete the user's own file — and only the sharees, who
+   * could see it solely through this canyon, are told to forget it. */
+  unlinkedMediaIds?: string[];
 }): TombstoneRow[] {
   const { ownerId, canyonId, mediaIds, shares, routeId } = args;
+  const unlinkedMediaIds = args.unlinkedMediaIds ?? [];
   const rows: TombstoneRow[] = [
     { userId: ownerId, entityType: "canyon", entityId: canyonId },
     ...mediaIds.map(
@@ -84,8 +93,29 @@ export function canyonDeleteTombstones(args: {
     if (routeId) {
       rows.push({ userId: share.sharedWithId, entityType: "route", entityId: routeId });
     }
+    for (const id of unlinkedMediaIds) {
+      rows.push({ userId: share.sharedWithId, entityType: "media", entityId: id });
+    }
   }
   return rows;
+}
+
+/** PATCH /media/:id/link, unlinking a standalone file from a canyon (a way
+ * being replaced, or detached outright). The file survives — the owner keeps it
+ * in Saved and gets NO tombstone — but every current sharee of that canyon
+ * could see it only through the canyon, so each must forget it. The mirror of
+ * a link, which needs no tombstone at all: a sharee simply gains a row on their
+ * next delta. */
+export function mediaUnlinkTombstones(args: {
+  mediaId: string;
+  shareeIds: string[];
+}): TombstoneRow[] {
+  const { mediaId, shareeIds } = args;
+  return shareeIds.map((userId): TombstoneRow => ({
+    userId,
+    entityType: "media",
+    entityId: mediaId,
+  }));
 }
 
 /** DELETE /media/:id: the owner forgets it; if it was canyon-level media of a

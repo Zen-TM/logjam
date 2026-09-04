@@ -146,25 +146,55 @@ model TripLogCanyon {
   @@map("trip_log_canyons")
 }
 
+// One uploaded file belonging to one account.
+//
+// It may hang off a Canyon or a TripLog, or off NOTHING — `linkedType: "none"`
+// with a null `linkedId` is the user's own standalone file: an import they
+// brought in, or a track they recorded. That third state is what lets imports
+// and recordings sync at all; before it, every file needed a parent, so a file
+// the user simply owned had nowhere to live and stayed on the phone.
+//
+// A standalone file becomes a canyon's way by having its parent SET (PATCH
+// /media/:id/link), never by being copied. So linking and unlinking are
+// visibility changes on one file — unlinking from a shared canyon must
+// tombstone it for that canyon's sharees, and deleting a canyon UNLINKS its
+// standalone way rather than destroying it (the Route.canyonId SetNull rule,
+// which this now matches deliberately).
 model Media {
   id             String   @id @default(uuid())
   ownerId        String   @map("owner_id")
-  // Polymorphic link to a Canyon or TripLog. Deliberately NO database foreign
-  // key on linkedId: a single column cannot FK two tables (the previous schema
-  // declared FKs to both canyons and trip_logs, which made every insert fail).
-  // Integrity is enforced in the route layer (ownership checks on attach) and
-  // cleaned up explicitly on canyon/trip/account deletion.
+  // Polymorphic link to a Canyon or TripLog, or "none". Deliberately NO
+  // database foreign key on linkedId: a single column cannot FK two tables (the
+  // previous schema declared FKs to both canyons and trip_logs, which made
+  // every insert fail). Integrity is enforced in the route layer (ownership
+  // checks on attach) and cleaned up explicitly on canyon/trip/account deletion.
   linkedType     String   @map("linked_type")
-  linkedId       String   @map("linked_id")
+  // Null exactly when linkedType is "none".
+  linkedId       String?  @map("linked_id")
   s3KeyThumbnail String?  @map("s3_key_thumbnail")
   s3KeyDisplay   String   @map("s3_key_display")
   mediaType      String   @map("media_type")
   filename       String
   fileSizeBytes  BigInt   @map("file_size_bytes")
-  // Assigned only for track (GPX/KML) media from the shared TRACK_COLORS palette;
-  // null for image/video. Drives the track card icon tint and map track layer.
+  // Assigned only for track (GPX/KML/GeoJSON) media from the shared TRACK_COLORS
+  // palette; null for image/video. Drives the track card icon tint and map track layer.
   color          String?
+  // "import" | "track" for a standalone file, null for a canyon/trip
+  // attachment. Vocabulary is MEDIA_ORIGINS (shared/src/mediaMetadata.ts) —
+  // the same two kinds FileSend.sourceKind names. Distinguishes an imported
+  // GPX from a recorded one, which are the same MIME type but different rows
+  // in the Saved list.
+  origin         String?
+  // Row-level stats (bbox, distance, duration, counts) so another device can
+  // LIST the file without downloading the blob. Shape is enforced by
+  // parseMediaMetadata (shared/src/mediaMetadata.ts), not by the column — see
+  // that file. Always {} when origin is null.
+  metadata       Json     @default("{}")
   createdAt      DateTime @default(now()) @map("created_at")
+  // Delta-sync watermark. Backfilled from created_at by migration. A media row
+  // used to be immutable, so the delta keyset ran on created_at; link/unlink
+  // makes rows mutable and a created_at keyset would never redeliver one.
+  updatedAt      DateTime @updatedAt @map("updated_at")
   owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
